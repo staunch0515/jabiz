@@ -1,4 +1,5 @@
 package com.example.app;
 
-public class CreateTodo {
-}
+import jakarta.validation.constraints.NotBlank;
+
+record CreateTodo(@NotBlank String title) {}

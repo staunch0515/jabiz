@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: app
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5436/app
+    username: app
+    password: ${DB_PASSWORD:app}
+  flyway:
+    url: jdbc:postgresql://localhost:5436/app
+    user: app
+    password: ${DB_PASSWORD:app}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
