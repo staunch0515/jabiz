@@ -1,3 +1,4 @@
+```java
 my-app/
 ├── backend/
 │   ├── build.gradle.kts
@@ -11,6 +12,7 @@ my-app/
 ├── .github/workflows/ci.yml
 ├── docker-compose.yml
 └── .gitignore
+```
 
 
 docker compose up -d                                  # 数据库
@@ -23,3 +25,11 @@ curl localhost:8080/api/todos
 curl localhost:8080/actuator/health
 
 生产打包：cd backend && ./gradlew bootJar，得到的 build/libs/app-0.0.1-SNAPSHOT.jar 已包含前端静态资源，java -jar 即可单进程同时提供 API 和页面。
+
+PgAdmin 14:
+
+`http://localhost:5050`
+
+Email： `admin@admin.com` 
+
+password ：admin
