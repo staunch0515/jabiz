@@ -1,0 +1,222 @@
+# 04 只追加的双时态模型
+
+## 1. 目标
+
+- 启用时态的实体，其业务表**只做 INSERT，从不 UPDATE / DELETE**。
+- 修改 = 插入一个新版本；删除 = 插入一个墓碑版本。
+- 用 `effect_start_time`（业务生效时间）决定某一时刻哪个版本生效；不预定时它等于 `created_time`（记录时间）。
+- 每个版本通过 `process_seq_id` 关联到一次操作（`op_process`）；操作表记录本次操作涉及的全部数据范围（`op_process_item`）。
+- 由此获得：完整历史、按时间点查询、预定生效、更正而不篡改、天然审计、按操作撤销。
+
+业界对应概念：双时态数据（bitemporal）——`effect_start_time` 是有效时间（valid time），`created_time` 是事务时间（transaction time）。
+与事件溯源不同：每个版本存完整状态，查询简单。
+
+时态按实体选择开启：`eb.temporal()`。高频计数、纯日志类实体不开启。
+
+## 2. 表结构
+
+### 2.1 时态实体的业务表
+
+平台为时态实体约定以下系统字段（逻辑名固定，物理列名可在元数据中映射）：
+
+| 逻辑字段 | 默认物理列 | 类型 | 语义 | 说明 |
+|---|---|---|---|---|
+| `rowId` | `row_id` | `bigint identity` | — | 每个版本一行的物理主键，不对外暴露 |
+| 实体主键（如 `priceId`） | 由元数据声明 | `uuid` | `SemanticIdentity` | 业务标识，所有版本共用 |
+| `versionNo` | `version_no` | `integer` | `Version` | 该实体按记录顺序的版本号 1, 2, 3 … |
+| `effectStartTime` | `effect_start_time` | `timestamptz` | `Temporal(VALID_FROM)` | 业务生效时间 |
+| `createdTime` | `created_time` | `timestamptz` | `Temporal(SYSTEM_RECORDED)` | 记录时间 = 本次操作的 `op_time` |
+| `processSeqId` | `process_seq_id` | `bigint` | — | 外键 → `op_process` |
+| `deleted` | `is_deleted` | `boolean` | `Bool` | 墓碑标记 |
+
+约束与索引（由迁移脚本创建，启动自检检查）：
+
+```sql
+PRIMARY KEY (row_id)
+UNIQUE (entity_id, version_no)                                    -- 并发控制
+INDEX (entity_id, effect_start_time DESC, version_no DESC)        -- 当前版本查询
+INDEX (process_seq_id)
+FOREIGN KEY (process_seq_id) REFERENCES op_process (process_seq_id)
+FOREIGN KEY (entity_id)      REFERENCES entity_registry (entity_id)
+```
+
+数据库层防护：对时态表创建触发器，**拒绝 UPDATE 和 DELETE**（归档与合规清除走专用的受控流程，见第 10 节）。
+
+### 2.2 操作表（相当于一次 commit，本身也只追加）
+
+```sql
+CREATE SEQUENCE op_process_seq;
+
+CREATE TABLE op_process (
+    process_seq_id   bigint      PRIMARY KEY,           -- nextval('op_process_seq')
+    parent_seq_id    bigint      REFERENCES op_process,  -- 子流程指向父流程
+    reverts_seq_id   bigint      REFERENCES op_process,  -- 撤销操作指向被撤销的操作
+    process_name     text        NOT NULL,
+    process_version  int         NOT NULL,
+    actor_id         text        NOT NULL,
+    tenant_id        text,
+    request_id       text,
+    idempotency_key  text,
+    reason           text,
+    input_summary    jsonb,                              -- 敏感字段遮蔽
+    op_time          timestamptz NOT NULL,               -- 本次操作的统一时间（来自 Clock）
+    UNIQUE (actor_id, idempotency_key)
+);
+
+CREATE TABLE op_process_item (
+    process_seq_id   bigint  NOT NULL REFERENCES op_process,
+    entity_type      text    NOT NULL,
+    entity_id        uuid    NOT NULL,
+    version_no       int     NOT NULL,
+    base_version_no  int,                                -- 本次基于哪个版本修改（插入时为 null）
+    action           text    NOT NULL,                   -- INSERT / UPDATE / DELETE / REBASE / REVERT
+    effect_start_time timestamptz NOT NULL,
+    changed_fields   text[]  NOT NULL,                   -- 本次变更的逻辑字段名（用于变基和撤销）
+    PRIMARY KEY (process_seq_id, entity_type, entity_id, version_no)
+);
+CREATE INDEX ON op_process_item (entity_type, entity_id);   -- 反查"谁改过这条数据"
+```
+
+- 操作表不更新状态：撤销是一个新的操作（`reverts_seq_id` 指向原操作），不是把原操作改成"已撤销"。
+- 失败的操作随事务回滚，不会留在 `op_process` 中（失败审计如有需要，另写日志，不在本表）。
+
+### 2.3 实体登记表
+
+```sql
+CREATE TABLE entity_registry (
+    entity_id        uuid PRIMARY KEY,         -- UUIDv7，全局唯一
+    entity_type      text NOT NULL,
+    created_seq_id   bigint NOT NULL REFERENCES op_process
+);
+```
+
+- 时态实体第一次插入时登记。
+- 其他表引用时态实体时，外键指向 `entity_registry(entity_id)`（实体类型由平台检查）。
+
+## 3. 写入规则
+
+| 操作 | 行为 |
+|---|---|
+| 插入 | `version_no = 1`；`effect_start_time` 默认 = `op_time`；登记 `entity_registry` |
+| 更新 | 调用方提供读到的 `versionNo = n`；平台以"截至生效时间的状态 ⊕ 本次变更"构造完整新版本，插入 `version_no = n + 1` |
+| 删除 | 插入墓碑版本（`is_deleted = true`，其余字段沿用上一状态），`version_no = n + 1` |
+
+- **并发控制**：两个请求都基于 `n` 修改时，第二个插入 `n + 1` 违反唯一约束，平台转为 `ConcurrentUpdateException`（409）。
+  这与现有非时态实体的 CAS 更新语义一致。
+- **同一操作的统一时间**：同一个 `process_seq_id` 下写入的所有行，`created_time` 都等于 `op_process.op_time`。一次操作在时间上是原子的。
+- **只保存真正的变化**：与现有写入流程一致，没有变化的更新不产生新版本。
+- 不可变字段、状态迁移、迁移守卫、字段规则全部照常执行（判断依据是"生效时间点上的当前状态"）。
+- 每写一个版本，同一事务内写入一条 `op_process_item`。
+
+### 3.1 生效时间
+
+| 情况 | `effect_start_time` | 要求 |
+|---|---|---|
+| 普通修改 | = `op_time` | — |
+| 预定修改 | > `op_time` | 实体元数据允许预定（`eb.temporal(t -> t.allowScheduled(true))`） |
+| 追溯更正 | < `op_time` | 需要权限 `temporal.backdate`，且必须填写 `reason` |
+
+## 4. 预定修改与变基（rebase）
+
+问题：实体有一个将在 T2 生效的预定版本 V（完整快照）。之后在 T1（T1 < T2）又做了一次修改，改了字段 A。
+如果不处理，到了 T2，V 会把字段 A 恢复成旧值。
+
+规则：
+1. 写入生效时间为 T 的新版本时，平台找出所有生效时间 > T 且尚未被覆盖的版本（按生效时间顺序）。
+2. 对每个这样的版本 V，用 `op_process_item.changed_fields` 取得 V 当初修改的字段集合 F(V)：
+   - 若本次变更的字段与 F(V) **无交集**：插入 V 的变基副本 = "新的前一状态 ⊕ V 的 F(V) 字段值"，
+     `effect_start_time` 与 V 相同，`version_no` 更大（因此在相同生效时间上胜出），`action = REBASE`。
+   - 若 **有交集**：拒绝本次写入（409），错误中列出冲突的预定版本。调用方必须先取消或修改该预定。
+3. 变基副本与本次写入属于同一个操作（同一个 `process_seq_id`）。
+
+### 4.1 取消预定
+
+插入一个与预定版本生效时间相同、`version_no` 更大的版本，其内容为"该生效时间点上、去掉该预定后的状态"。
+取消本身也是一个操作，留有记录。
+
+## 5. 查询
+
+### 5.1 当前版本（及按时间点）
+
+```sql
+SELECT v.*
+FROM (
+    SELECT DISTINCT ON (entity_id) *
+    FROM   <table>
+    WHERE  effect_start_time <= :__asOf
+      AND  created_time      <= :__knownAt
+    ORDER  BY entity_id, effect_start_time DESC, version_no DESC
+) v
+WHERE NOT v.is_deleted
+  AND <数据视图范围条件>          -- ★ 必须在取得当前版本之后过滤
+  AND <查询条件>
+```
+
+- `:__asOf` 默认为当前时间（来自 `Clock`），`:__knownAt` 默认不限（使用 `'infinity'`）。
+- **范围条件必须在外层**：若放在内层，一个已经被移出范围的实体会"退回"显示它还在范围内时的旧版本。
+- `QueryCompiler` 对时态实体自动生成上述包装；SQL 模板中的 `{{Entity}}` 同样渲染为该子查询（见 05）。
+- `__` 前缀的参数名为平台保留。
+
+### 5.2 历史
+
+- `GET .../entities/{id}/history`：按 `version_no` 返回全部版本，附带 `op_process` 的操作人、操作名、时间、原因。
+- "谁改过这条数据"：`op_process_item` 按 `(entity_type, entity_id)` 查询。
+- "这次操作改了什么"：`op_process_item` 按 `process_seq_id` 查询，再取各版本与其 `base_version_no` 的差异。
+
+### 5.3 性能
+
+- 第一阶段只用 `DISTINCT ON` + 复合索引。
+- 列表数据量大时，再引入"当前快照投影表"：它是**可更新的派生缓存**（不是真相来源），在同一事务内维护；
+  由于预定版本到期时投影需要切换，必须配套一个"到期提升"定时任务。此优化不在 MVP 范围内。
+
+## 6. 撤销一次操作
+
+`revert(process_seq_id, reason)` 是一个新的操作：
+1. 读取原操作的全部 `op_process_item`。
+2. 对每个实体，检查原操作之后是否有其他操作修改过**相同字段**：
+   - 有：拒绝撤销（409），列出阻塞的后续操作；
+   - 无：插入一个新版本，把原操作改动的字段恢复为 `base_version_no` 时的值（新插入的实体则插入墓碑）。
+3. 新操作的 `reverts_seq_id` 指向原操作；`action = REVERT`。
+4. 子流程：撤销父操作时，一并撤销其全部子操作（按相反顺序）。
+
+## 7. 唯一性
+
+时态表上不能直接建业务唯一索引（历史版本会冲突）。对 `eb.unique(...)`：
+1. 在事务内对 `(entity_type, 约束名, 规范化后的值)` 取 `pg_advisory_xact_lock(hash)`；
+2. 查询当前版本中是否已存在相同值（排除自身）；
+3. 存在则返回违规 `UNIQUE_VIOLATION`。
+
+## 8. 与现有代码的衔接
+
+| 现有 | 改动 |
+|---|---|
+| `DatasetPolicy.temporalTracking`（预留） | 删除；改由实体元数据 `eb.temporal()` 决定 |
+| `TemporalRole.VALID_FROM / VALID_TO / SYSTEM_RECORDED` | 用于声明 `effectStartTime`、`createdTime` |
+| `ProcessContext.processSeqId()`、`ProcessSequence` | 序列改为数据库 `op_process_seq`；流程开始时写 `op_process` |
+| `DatasetEntityManager.update/delete` | 时态实体改为插入版本；非时态实体保持 CAS 更新 |
+| `StorageEngine` | 新增 `insertVersion(...)`（唯一约束冲突 → `ConcurrentUpdateException`） |
+| `EntityInstance.version` | 时态实体中即 `versionNo` |
+| `MetaModelConsistencyChecker` | 检查时态表的系统列、唯一约束、索引、禁止更新的触发器 |
+
+## 9. 业务参数
+
+带生效时间的业务参数（费率、阈值等）直接使用时态实体实现：`sys_param(param_key, value, value_kind, ...)`，开启时态和预定。
+`ParamService.get(key, asOf)` 返回 `asOf` 时刻生效的值；规则中应使用"业务发生时间"作为 `asOf`，而不是当前时间。
+
+## 10. 归档与个人信息
+
+- 数据增长：按 `created_time` 分区；冷分区归档到只读存储。
+- 个人信息删除权（《个人信息保护法》等）与"永不修改"冲突，处理方式二选一，并必须形成操作记录：
+  - **加密粉碎**：个人敏感字段用按主体划分的密钥加密，删除时销毁密钥；
+  - **受控清除**：专用流程，在受审计的会话中临时解除触发器，清除指定主体的敏感字段，并写入清除记录。
+- 以上不在 MVP 范围内，但表结构设计时要为敏感字段预留加密方案。
+
+## 11. 测试要求（阶段 4 验收）
+
+- 并发：两个基于同一版本的更新，只有一个成功，另一个得到 409。
+- 预定：到期前查询得到旧值，到期后（推进可控时钟）得到新值，期间没有任何定时任务参与。
+- 变基：预定存在时修改其他字段，到期后两者的修改都保留；修改同一字段被拒绝。
+- 更正：相同生效时间、更晚记录时间的版本胜出；`knownAt` 设为更正之前时，得到更正前的值。
+- 撤销：撤销后状态恢复；存在后续冲突修改时撤销被拒绝。
+- 范围：实体被移出范围后，按当前时间查询不可见，且不会退回显示旧版本。
+- 断言：时态表上没有执行过 UPDATE / DELETE（触发器 + SQL 日志双重检查）。
