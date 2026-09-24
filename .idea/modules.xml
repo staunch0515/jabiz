@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/jabiz.iml" filepath="$PROJECT_DIR$/.idea/jabiz.iml" />
+      <module fileurl="file://$PROJECT_DIR$/tools/coverFileByAI/coverFileByAI.iml" filepath="$PROJECT_DIR$/tools/coverFileByAI/coverFileByAI.iml" />
+      <module fileurl="file://$PROJECT_DIR$/jabiz.iml" filepath="$PROJECT_DIR$/jabiz.iml" />
     </modules>
   </component>
 </project>

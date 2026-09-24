@@ -1,0 +1,18 @@
+curl localhost:8080/api/meta/entities/CustomsDeclaration
+
+
+# 引用不存在:400 REFERENCE_NOT_FOUND
+curl -X POST localhost:8080/api/entities/CustomsDeclaration -H 'Content-Type: application/json' \
+  -d '{"declarationId":"CD-1","waybillRef":"NOPE"}'
+
+# 建 Waybill 和 Customs:两个都是 201
+curl -X POST localhost:8080/api/entities/WaybillTracking -H 'Content-Type: application/json' -d '{"waybillId":"WB-1"}'
+curl -X POST localhost:8080/api/entities/CustomsDeclaration -H 'Content-Type: application/json' \
+  -d '{"declarationId":"CD-1","waybillRef":"WB-1"}'
+
+# 删被引用的 Waybill:422
+curl -X DELETE 'localhost:8080/api/entities/WaybillTracking/WB-1?version=1'
+
+# 先删 Customs,再删 Waybill:都是 204
+curl -X DELETE 'localhost:8080/api/entities/CustomsDeclaration/CD-1?version=1'
+curl -X DELETE 'localhost:8080/api/entities/WaybillTracking/WB-1?version=1'

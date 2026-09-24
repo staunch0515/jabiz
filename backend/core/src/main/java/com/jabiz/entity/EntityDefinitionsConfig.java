@@ -1,0 +1,19 @@
+package com.jabiz.entity;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Publishes entity definitions as beans so that {@link EntityDefinitionRegistry} can collect them. */
+@Configuration
+class EntityDefinitionsConfig {
+
+    @Bean
+    EntityDefinition waybillEntityDefinition() {
+        return WaybillEntityDefinitions.WAYBILL;
+    }
+
+    @Bean
+    EntityDefinition customsDeclarationEntityDefinition() {
+        return CustomsDeclarationEntityDefinitions.CUSTOMS_DECLARATION;
+    }
+}

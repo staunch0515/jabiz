@@ -1,1 +1,3 @@
-rootProject.name = "jabiz"
+rootProject.name = "backend"
+include("core")
+include("app")

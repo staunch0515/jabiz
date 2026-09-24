@@ -1,10 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="CompilerConfiguration">
+    <bytecodeTargetLevel>
+      <module name="backend.jabiz" target="25" />
+      <module name="backend.jabiz.main" target="25" />
+      <module name="backend.jabiz.test" target="25" />
+      <module name="com.example.jabiz" target="21" />
+      <module name="com.example.jabiz.main" target="21" />
+      <module name="com.example.jabiz.test" target="21" />
+      <module name="com.jabiz.app" target="21" />
+      <module name="jabiz.app" target="21" />
+      <module name="jabiz.app.main" target="21" />
+      <module name="jabiz.app.test" target="21" />
+      <module name="jabiz.core" target="21" />
+      <module name="jabiz.core.main" target="21" />
+      <module name="jabiz.core.test" target="21" />
+    </bytecodeTargetLevel>
+  </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="backend.app" options="-parameters" />
+      <module name="backend.app.main" options="-parameters" />
+      <module name="backend.app.test" options="-parameters" />
+      <module name="backend.core" options="-parameters" />
+      <module name="backend.core.main" options="-parameters" />
+      <module name="backend.core.test" options="-parameters" />
       <module name="com.example.jabiz" options="-parameters" />
       <module name="com.example.jabiz.main" options="-parameters" />
       <module name="com.example.jabiz.test" options="-parameters" />
+      <module name="com.jabiz.app" options="-parameters" />
+      <module name="jabiz.app" options="-parameters" />
+      <module name="jabiz.app.main" options="-parameters" />
+      <module name="jabiz.app.test" options="-parameters" />
+      <module name="jabiz.core" options="-parameters" />
+      <module name="jabiz.core.main" options="-parameters" />
+      <module name="jabiz.core.test" options="-parameters" />
     </option>
   </component>
 </project>
