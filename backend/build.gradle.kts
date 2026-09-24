@@ -40,6 +40,7 @@ subprojects {
         "runtimeOnly"("org.postgresql:postgresql")
         "runtimeOnly"("org.postgresql:r2dbc-postgresql")
 
+        "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testImplementation"("org.springframework.boot:spring-boot-starter-webflux-test")
         "testImplementation"("org.springframework.boot:spring-boot-starter-data-r2dbc-test")
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
@@ -47,7 +48,21 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+        // Integration tests connect to a local PostgreSQL when these are set, otherwise to Testcontainers.
+        listOf("JABIZ_TEST_DB_URL", "JABIZ_TEST_DB_USER", "JABIZ_TEST_DB_PASSWORD").forEach { name ->
+            System.getenv(name)?.let { environment(name, it) }
+        }
+        testLogging {
+            events("failed", "skipped")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
+}
+
+// core is a library, not an application: it has no main class, so only the plain jar is built.
+project(":core") {
+    tasks.named("bootJar") { enabled = false }
+    tasks.named<Jar>("jar") { enabled = true }
 }
 
 // 针对实际运行和打包前端的启动模块（假设名字叫 app）

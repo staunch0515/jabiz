@@ -96,7 +96,9 @@ snapshot:
 ## 7. 数据库测试环境
 
 - 默认使用 Testcontainers（`postgres:16`）。
-- 无 Docker 的环境（如部分云端开发环境）：设置 `JABIZ_TEST_DB_URL` 等环境变量，测试改连本地 PostgreSQL；每个测试类使用独立 schema，结束后删除。
+- 无 Docker 的环境（如部分云端开发环境）：设置 `JABIZ_TEST_DB_URL`（JDBC URL）、`JABIZ_TEST_DB_USER`、`JABIZ_TEST_DB_PASSWORD`，
+  测试改连本地 PostgreSQL；每个测试类使用独立 schema，结束后删除。
+- 实现：`app` 测试源中的 `PostgresTestDatabase` / `PostgresIntegrationTest`（阶段 2 拆模块后随运行时层迁移）。
 
 ## 8. 覆盖率与门禁
 
