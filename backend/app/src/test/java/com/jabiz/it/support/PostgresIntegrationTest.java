@@ -48,8 +48,7 @@ public abstract class PostgresIntegrationTest {
     static void database(DynamicPropertyRegistry registry) {
         String current = "it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         schema = current;
-        String separator = DB.r2dbcUrl().contains("?") ? "&" : "?";
-        registry.add("spring.r2dbc.url", () -> DB.r2dbcUrl() + separator + "schema=" + current);
+        registry.add("spring.r2dbc.url", () -> DB.r2dbcUrl() + "?schema=" + current);
         registry.add("spring.r2dbc.username", DB::username);
         registry.add("spring.r2dbc.password", DB::password);
         registry.add("spring.flyway.url", DB::jdbcUrl);

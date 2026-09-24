@@ -53,9 +53,14 @@ public final class PostgresTestDatabase {
         return jdbcUrl;
     }
 
-    /** The same server and database as {@link #jdbcUrl()}, addressed through R2DBC. */
+    /**
+     * The same server and database as {@link #jdbcUrl()}, addressed through R2DBC. JDBC driver options
+     * (for example Testcontainers' {@code loggerLevel}) mean nothing to R2DBC and are dropped.
+     */
     public String r2dbcUrl() {
-        return "r2dbc:" + jdbcUrl.substring("jdbc:".length());
+        String withoutPrefix = jdbcUrl.substring("jdbc:".length());
+        int query = withoutPrefix.indexOf('?');
+        return "r2dbc:" + (query < 0 ? withoutPrefix : withoutPrefix.substring(0, query));
     }
 
     public String username() {
