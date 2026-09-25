@@ -34,6 +34,12 @@ subprojects {
         }
     }
 
+    // Spring resolves @PathVariable/@RequestParam names from parameter metadata. The Boot plugin adds this
+    // flag only where it is applied (app), so it is set for every module here.
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     dependencies {
         "testImplementation"("org.junit.jupiter:junit-jupiter")
         "testImplementation"("org.assertj:assertj-core")

@@ -1,5 +1,6 @@
 package com.jabiz.entity;
 
+import com.jabiz.context.RequestContext;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -8,6 +9,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -18,7 +20,8 @@ import static org.assertj.core.api.Assertions.tuple;
 class EntityValidatorTest {
 
     private static final Instant NOW = Instant.parse("2026-01-31T09:00:00Z");
-    private static final ValidationContext CTX = new ValidationContext(Clock.fixed(NOW, ZoneOffset.UTC));
+    private static final ValidationContext CTX = new ValidationContext(
+        Clock.fixed(NOW, ZoneOffset.UTC), RequestContext.system(Locale.ENGLISH, "test"));
 
     private static final EntityDefinition ORDER = EntityDefinition.define("Order", eb -> {
         eb.physicalTable("t_order");
@@ -134,6 +137,41 @@ class EntityValidatorTest {
     }
 
     @Test
+    void failedExportedRuleCarriesItsParametersForTheMessage() {
+        Map<String, Object> raw = validInsert();
+        raw.put("amount", -1);
+
+        assertThat(EntityValidator.check(ORDER, raw, CTX, true).violations())
+            .singleElement()
+            .satisfies(v -> assertThat(v.params()).containsExactlyEntriesOf(Map.of("min", 0)));
+    }
+
+    @Test
+    void serverOnlyRuleHasNoParameters() {
+        Map<String, Object> raw = validInsert();
+        raw.put("placedAt", NOW.plusSeconds(1));
+
+        assertThat(EntityValidator.check(ORDER, raw, CTX, true).violations())
+            .singleElement()
+            .satisfies(v -> assertThat(v.params()).isEmpty());
+    }
+
+    @Test
+    void rulesReceiveTheRequestContext() {
+        AtomicReference<Object> seen = new AtomicReference<>();
+        EntityDefinition def = EntityDefinition.define("Probe", eb -> {
+            eb.physicalTable("t_probe");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id")
+                .rule("PROBE", (v, ctx) -> { seen.set(ctx.request().actorId()); return true; }));
+        });
+
+        EntityValidator.check(def, Map.of("id", "x"), CTX, true);
+
+        assertThat(seen.get()).isEqualTo(RequestContext.SYSTEM_ACTOR);
+    }
+
+    @Test
     void rulesReceiveTheClockFromTheValidationContext() {
         Map<String, Object> raw = validInsert();
         raw.put("placedAt", NOW.plusSeconds(1));
@@ -173,6 +211,7 @@ class EntityValidatorTest {
             .satisfies(v -> {
                 assertThat(v.ruleCode()).isEqualTo("RULE_EVALUATION_FAILED");
                 assertThat(v.message()).contains("EXPLODES").contains("boom");
+                assertThat(v.params()).containsEntry("rule", "EXPLODES");
             });
     }
 

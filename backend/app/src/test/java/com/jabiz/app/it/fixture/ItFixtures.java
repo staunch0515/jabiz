@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Entities and datasets used by the integration tests, one per dataset policy under test.
@@ -24,12 +25,19 @@ public final class ItFixtures extends BaseEntityDefinitions {
     public static final int TICKET_MAX_WRITE_BATCH = 3;
     public static final int TICKET_MAX_QUERY_BATCH = 5;
 
+    /** Actor seen by the last evaluation of ItTicket's title rule; shows what rules receive. */
+    public static final AtomicReference<String> LAST_TITLE_ACTOR = new AtomicReference<>();
+
     /** Lifecycle OPEN -> IN_PROGRESS -> DONE; OPEN is the only initial state. */
     public static final EntityDefinition TICKET = EntityDefinition.define("ItTicket", eb -> {
         eb.physicalTable("it_ticket");
         eb.primaryKey("ticketId");
         eb.field("ticketId", semanticIdentity("f_id", "urn:jabiz:entity:it:ticket"));
-        eb.field("title", f -> f.physicalColumn("f_title").required(true));
+        eb.field("title", f -> f.physicalColumn("f_title").required(true)
+            .rule("IT_ACTOR_PROBE", (v, ctx) -> {
+                LAST_TITLE_ACTOR.set(ctx.request().actorId());
+                return true;
+            }));
         eb.field("amount", nonNegativeMonetary("f_amount", "NON_NEGATIVE_AMOUNT", "JPY", 0));
         eb.field("status", f -> f.physicalColumn("f_status")
             .asCode("urn:jabiz:dict:it_ticket_status", "OPEN", "IN_PROGRESS", "DONE"));

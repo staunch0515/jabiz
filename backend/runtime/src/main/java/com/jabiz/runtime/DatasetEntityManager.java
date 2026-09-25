@@ -13,14 +13,18 @@ import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.ValidationContext;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -28,6 +32,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -41,9 +46,15 @@ import java.util.Objects;
  * Writes go to the dataset's primary storage engine; reads go to the read replica when one
  * is configured. Reads of the dataset's target entity always honour the dataset scope
  * (default partition filter, soft-delete exclusion).
+ *
+ * Writes need a {@link com.jabiz.context.RequestContext} in the Reactor context; rules receive it through
+ * their {@link ValidationContext}. The business rules of one change (scope, immutability, state
+ * transitions, guards) are all evaluated and reported together as one {@link BusinessRuleViolationException}.
  */
 @Component
 public class DatasetEntityManager {
+
+    private static final Logger log = LoggerFactory.getLogger(DatasetEntityManager.class);
 
     private static final long INITIAL_VERSION = 1L;
 
@@ -52,7 +63,6 @@ public class DatasetEntityManager {
     private final DatasetRegistry datasetRegistry;
     private final QueryCompiler queryCompiler;
     private final Clock clock;
-    private final ValidationContext validationContext;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -66,7 +76,6 @@ public class DatasetEntityManager {
         this.datasetRegistry = Objects.requireNonNull(datasetRegistry, "DatasetRegistry cannot be null");
         this.queryCompiler = Objects.requireNonNull(queryCompiler, "QueryCompiler cannot be null");
         this.clock = Objects.requireNonNull(clock, "Clock cannot be null");
-        this.validationContext = new ValidationContext(clock);
     }
 
     // ================= Writes =================
@@ -83,27 +92,33 @@ public class DatasetEntityManager {
         if (changes == null || changes.isEmpty()) {
             return Mono.just(List.of());
         }
-        return Mono.defer(() -> {
+        return RequestContexts.current().flatMap(request -> {
             ensureDatasetWritable(dataset);
             int maxBatch = dataset.policy().maxWriteBatchSize();
             if (changes.size() > maxBatch) {
-                throw new BusinessRuleViolationException(String.format(
-                    "Batch size [%d] exceeds dataset limit [%d]", changes.size(), maxBatch));
+                throw new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.BATCH_TOO_LARGE,
+                    String.format("Batch size [%d] exceeds dataset limit [%d]", changes.size(), maxBatch),
+                    Map.of("size", changes.size(), "limit", maxBatch)));
             }
 
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             List<EntityChange> ordered = List.copyOf(changes);
+            ValidationContext validation = new ValidationContext(clock, request);
 
             Mono<List<EntityInstance>> work = Flux.fromIterable(ordered)
-                .concatMap(change -> applyChange(engine, dataset, change))
+                .concatMap(change -> applyChange(engine, dataset, change, validation))
                 .collectList()
                 .map(Collections::unmodifiableList);
 
-            return engine.inTransaction(work);
+            return engine.inTransaction(work)
+                .doOnSuccess(committed -> log.debug("Committed {} change(s) through dataset {}",
+                    ordered.size(), dataset.resourceId()));
         });
     }
 
-    private Mono<EntityInstance> applyChange(StorageEngine engine, DatasetDefinition dataset, EntityChange change) {
+    private Mono<EntityInstance> applyChange(
+        StorageEngine engine, DatasetDefinition dataset, EntityChange change, ValidationContext validation
+    ) {
         return Mono.defer(() -> {
             EntityInstance instance = change.instance();
             String entityType = instance.entityType();
@@ -114,8 +129,8 @@ public class DatasetEntityManager {
             EntityDefinition def = entityRegistry.getOrThrow(entityType);
 
             Mono<EntityInstance> result = switch (change.action()) {
-                case INSERT -> insert(engine, dataset, def, instance);
-                case UPDATE -> update(engine, dataset, def, instance);
+                case INSERT -> insert(engine, dataset, def, instance, validation);
+                case UPDATE -> update(engine, dataset, def, instance, validation);
                 case DELETE -> delete(engine, dataset, def, instance).then(Mono.<EntityInstance>empty());
             };
             return result;
@@ -123,7 +138,8 @@ public class DatasetEntityManager {
     }
 
     private Mono<EntityInstance> insert(
-        StorageEngine engine, DatasetDefinition dataset, EntityDefinition def, EntityInstance instance
+        StorageEngine engine, DatasetDefinition dataset, EntityDefinition def, EntityInstance instance,
+        ValidationContext validation
     ) {
         return Mono.defer(() -> {
             requireWritable(def);
@@ -131,14 +147,16 @@ public class DatasetEntityManager {
             Map<String, Object> raw = new LinkedHashMap<>(instance.attributes());
             raw.putIfAbsent(def.primaryKey, instance.id());
             Map<String, Object> attrs = new LinkedHashMap<>(
-                EntityValidator.requireValid(def, raw, validationContext, true));
+                EntityValidator.requireValid(def, raw, validation, true));
 
             verifyIdMatches(def, instance, attrs);
-            enforceScope(dataset, def, attrs, true);
-            String state = resolveInitialState(def, attrs, instance.state());
+            List<Violation> violations = new ArrayList<>();
+            enforceScope(dataset, def, attrs, true, violations);
+            String state = resolveInitialState(def, attrs, instance.state(), violations);
             if (state != null) {
-                evaluateSpatialGuards(def, state, attrs, Map.of());
+                evaluateSpatialGuards(def, state, attrs, Map.of(), violations);
             }
+            rejectIfAny(violations);
 
             Instant now = clock.instant();
             Map<String, Object> row = new LinkedHashMap<>();
@@ -163,19 +181,22 @@ public class DatasetEntityManager {
     }
 
     private Mono<EntityInstance> update(
-        StorageEngine engine, DatasetDefinition dataset, EntityDefinition def, EntityInstance instance
+        StorageEngine engine, DatasetDefinition dataset, EntityDefinition def, EntityInstance instance,
+        ValidationContext validation
     ) {
         return Mono.defer(() -> {
             String versionColumn = requireWritable(def);
 
             Map<String, Object> incoming = EntityValidator.requireValid(
-                def, instance.attributes(), validationContext, false);
-            enforceScope(dataset, def, incoming, false);
+                def, instance.attributes(), validation, false);
+            List<Violation> scopeViolations = new ArrayList<>();
+            enforceScope(dataset, def, incoming, false, scopeViolations);
 
             String table = queryCompiler.resolveTable(dataset, def);
             return findInScope(engine, dataset, def, instance.id())
                 .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
-                .flatMap(current -> applyUpdate(engine, def, table, versionColumn, instance, current, incoming));
+                .flatMap(current -> applyUpdate(
+                    engine, def, table, versionColumn, instance, current, incoming, scopeViolations));
         });
     }
 
@@ -186,7 +207,8 @@ public class DatasetEntityManager {
         String versionColumn,
         EntityInstance instance,
         EntityInstance current,
-        Map<String, Object> incoming
+        Map<String, Object> incoming,
+        List<Violation> scopeViolations
     ) {
         if (current.version() != instance.version()) {
             return Mono.error(new ConcurrentUpdateException(String.format(
@@ -194,7 +216,9 @@ public class DatasetEntityManager {
                 def.name, instance.id(), instance.version(), current.version())));
         }
 
-        // Keep only real changes; an attempt to change an immutable field is rejected.
+        // Keep only real changes; attempts to change immutable fields are collected and rejected together
+        // with every other rule this change breaks.
+        List<Violation> violations = new ArrayList<>(scopeViolations);
         Map<String, Object> changes = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : incoming.entrySet()) {
             String fieldName = entry.getKey();
@@ -202,12 +226,13 @@ public class DatasetEntityManager {
                 continue;
             }
             if (def.field(fieldName).immutable() || fieldName.equals(def.primaryKey)) {
-                return Mono.error(new BusinessRuleViolationException(String.format(
+                violations.add(new Violation(fieldName, PlatformErrorCodes.IMMUTABLE_FIELD, String.format(
                     "Immutability violation on %s: field [%s] cannot be altered", def.name, fieldName)));
+                continue;
             }
             changes.put(fieldName, entry.getValue());
         }
-        if (changes.isEmpty()) {
+        if (changes.isEmpty() && violations.isEmpty()) {
             return Mono.just(current);
         }
 
@@ -215,17 +240,23 @@ public class DatasetEntityManager {
         if (def.stateField != null && changes.containsKey(def.stateField)) {
             Object candidate = changes.get(def.stateField);
             if (candidate == null) {
-                return Mono.error(new BusinessRuleViolationException(
+                violations.add(new Violation(def.stateField, PlatformErrorCodes.STATE_CLEARED,
                     "The state of " + def.name + " [ID: " + instance.id() + "] cannot be cleared"));
+            } else {
+                String candidateState = candidate.toString();
+                if (!def.allowsTransition(current.state(), candidateState)) {
+                    violations.add(new Violation(def.stateField, PlatformErrorCodes.ILLEGAL_TRANSITION,
+                        String.format("Illegal transition from [%s] to [%s] on %s [ID: %s]",
+                            current.state(), candidateState, def.name, instance.id()),
+                        Map.of("from", String.valueOf(current.state()), "to", candidateState)));
+                } else {
+                    evaluateSpatialGuards(def, candidateState, changes, current.attributes(), violations);
+                    nextState = candidateState;
+                }
             }
-            String candidateState = candidate.toString();
-            if (!def.allowsTransition(current.state(), candidateState)) {
-                return Mono.error(new BusinessRuleViolationException(String.format(
-                    "Illegal transition from [%s] to [%s] on %s [ID: %s]",
-                    current.state(), candidateState, def.name, instance.id())));
-            }
-            evaluateSpatialGuards(def, candidateState, changes, current.attributes());
-            nextState = candidateState;
+        }
+        if (!violations.isEmpty()) {
+            return Mono.error(new BusinessRuleViolationException(violations));
         }
 
         Map<String, Object> physicalUpdates = new LinkedHashMap<>();
@@ -326,9 +357,10 @@ public class DatasetEntityManager {
                 Object target = values.get(ref.sourceField());
                 return referenceExists(ref, target)
                     .filter(exists -> !exists)
-                    .map(missing -> new Violation(ref.sourceField(), "REFERENCE_NOT_FOUND", String.format(
-                        "%s [ID: %s] referenced by field '%s' does not exist",
-                        ref.targetEntity(), target, ref.sourceField())));
+                    .map(missing -> new Violation(ref.sourceField(), PlatformErrorCodes.REFERENCE_NOT_FOUND,
+                        String.format("%s [ID: %s] referenced by field '%s' does not exist",
+                            ref.targetEntity(), target, ref.sourceField()),
+                        Map.of("target", ref.targetEntity(), "id", String.valueOf(target))));
             })
             .collectList()
             .flatMap(violations -> violations.isEmpty()
@@ -353,9 +385,11 @@ public class DatasetEntityManager {
                 .filter(referenced -> referenced)
                 .map(referenced -> incoming))
             .next()
-            .flatMap(incoming -> Mono.<Void>error(new BusinessRuleViolationException(String.format(
-                "Cannot delete %s [ID: %s]: still referenced by %s.%s",
-                def.name, current.id(), incoming.source().name, incoming.reference().sourceField()))));
+            .flatMap(incoming -> Mono.<Void>error(new BusinessRuleViolationException(new Violation(
+                null, PlatformErrorCodes.STILL_REFERENCED, String.format(
+                    "Cannot delete %s [ID: %s]: still referenced by %s.%s",
+                    def.name, current.id(), incoming.source().name, incoming.reference().sourceField()),
+                Map.of("entity", def.name, "source", incoming.source().name)))));
     }
 
     private Mono<Boolean> isReferenced(EntityDefinitionRegistry.IncomingReference incoming, EntityDefinition target, Object id) {
@@ -382,14 +416,16 @@ public class DatasetEntityManager {
     // ================= Rules =================
 
     private String requireWritable(EntityDefinition def) {
-        return def.versionColumn().orElseThrow(() -> new BusinessRuleViolationException(
-            "Entity " + def.name + " declares no Version field and is read-only"));
+        return def.versionColumn().orElseThrow(() -> new BusinessRuleViolationException(new Violation(
+            null, PlatformErrorCodes.ENTITY_READ_ONLY,
+            "Entity " + def.name + " declares no Version field and is read-only", Map.of("entity", def.name))));
     }
 
     private void ensureDatasetWritable(DatasetDefinition dataset) {
         if (dataset.policy().readOnly()) {
-            throw new BusinessRuleViolationException(
-                "Write rejected: dataset " + dataset.resourceId() + " is read-only");
+            throw new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.DATASET_READ_ONLY,
+                "Write rejected: dataset " + dataset.resourceId() + " is read-only",
+                Map.of("dataset", dataset.resourceId())));
         }
     }
 
@@ -422,7 +458,10 @@ public class DatasetEntityManager {
      * Inserts into the target entity must lie within the dataset's partition filter; missing
      * partition values are filled in when {@code fillMissing} is set.
      */
-    private void enforceScope(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> attrs, boolean fillMissing) {
+    private void enforceScope(
+        DatasetDefinition dataset, EntityDefinition def, Map<String, Object> attrs, boolean fillMissing,
+        List<Violation> violations
+    ) {
         if (!dataset.isTarget(def.name)) {
             return;
         }
@@ -431,9 +470,10 @@ public class DatasetEntityManager {
             Object expected = FieldValueCoercer.coerce(field, filter.getValue(), false);
             if (attrs.containsKey(filter.getKey())) {
                 if (!sameValue(expected, attrs.get(filter.getKey()))) {
-                    throw new BusinessRuleViolationException(String.format(
+                    violations.add(new Violation(filter.getKey(), PlatformErrorCodes.OUT_OF_SCOPE, String.format(
                         "Write rejected: field [%s] of %s must be [%s] within dataset %s",
-                        filter.getKey(), def.name, expected, dataset.resourceId()));
+                        filter.getKey(), def.name, expected, dataset.resourceId()),
+                        Map.of("expected", String.valueOf(expected))));
                 }
             } else if (fillMissing) {
                 attrs.put(filter.getKey(), expected);
@@ -441,8 +481,13 @@ public class DatasetEntityManager {
         }
     }
 
-    /** Determines the state of a new entity and stores it in the attributes; null if the entity has no lifecycle. */
-    private String resolveInitialState(EntityDefinition def, Map<String, Object> attrs, String hint) {
+    /**
+     * Determines the state of a new entity and stores it in the attributes; null if the entity has no
+     * lifecycle or no valid initial state could be determined (then a violation has been recorded).
+     */
+    private String resolveInitialState(
+        EntityDefinition def, Map<String, Object> attrs, String hint, List<Violation> violations
+    ) {
         if (def.stateField == null) {
             return null;
         }
@@ -454,35 +499,49 @@ public class DatasetEntityManager {
             } else if (def.initialStates.isEmpty()) {
                 return null;
             } else {
-                throw new BusinessRuleViolationException(
-                    "State is required on insert of " + def.name + "; allowed initial states: " + def.initialStates);
+                violations.add(new Violation(def.stateField, PlatformErrorCodes.STATE_REQUIRED,
+                    "State is required on insert of " + def.name + "; allowed initial states: " + def.initialStates,
+                    Map.of("allowed", String.join(", ", def.initialStates))));
+                return null;
             }
         }
         if (!def.initialStates.isEmpty() && !def.initialStates.contains(state)) {
-            throw new BusinessRuleViolationException(String.format(
-                "Illegal initial state [%s] on %s; allowed: %s", state, def.name, def.initialStates));
+            violations.add(new Violation(def.stateField, PlatformErrorCodes.INVALID_INITIAL_STATE, String.format(
+                "Illegal initial state [%s] on %s; allowed: %s", state, def.name, def.initialStates),
+                Map.of("state", state, "allowed", String.join(", ", def.initialStates))));
+            return null;
         }
         attrs.put(def.stateField, state);
         return state;
     }
 
     private void evaluateSpatialGuards(
-        EntityDefinition def, String targetState, Map<String, Object> incoming, Map<String, Object> current
+        EntityDefinition def, String targetState, Map<String, Object> incoming, Map<String, Object> current,
+        List<Violation> violations
     ) {
         for (SpatialGuardRule guard : def.guardsFor(targetState)) {
             String locationField = guard.locationField();
             Object cell = incoming.containsKey(locationField) ? incoming.get(locationField) : current.get(locationField);
             if (cell == null) {
-                throw new BusinessRuleViolationException(String.format(
-                    "Spatial guard rejected: missing coordinate [%s] on %s for status [%s]",
-                    locationField, def.name, targetState));
+                violations.add(new Violation(locationField, PlatformErrorCodes.SPATIAL_GUARD_LOCATION_MISSING,
+                    String.format("Spatial guard rejected: missing coordinate [%s] on %s for status [%s]",
+                        locationField, def.name, targetState),
+                    Map.of("status", targetState)));
+                continue;
             }
             long h3Cell = ((Number) cell).longValue();
             if (!guard.guard().test(h3Cell)) {
-                throw new BusinessRuleViolationException(String.format(
-                    "Spatial guard rejected: cell [0x%x] not authorized on %s for status [%s]",
-                    h3Cell, def.name, targetState));
+                violations.add(new Violation(locationField, PlatformErrorCodes.SPATIAL_GUARD_REJECTED,
+                    String.format("Spatial guard rejected: cell [0x%x] not authorized on %s for status [%s]",
+                        h3Cell, def.name, targetState),
+                    Map.of("status", targetState)));
             }
+        }
+    }
+
+    private static void rejectIfAny(List<Violation> violations) {
+        if (!violations.isEmpty()) {
+            throw new BusinessRuleViolationException(violations);
         }
     }
 

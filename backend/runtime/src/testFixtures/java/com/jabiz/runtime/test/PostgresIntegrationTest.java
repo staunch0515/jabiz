@@ -1,5 +1,7 @@
 package com.jabiz.runtime.test;
 
+import com.jabiz.context.RequestContext;
+import com.jabiz.runtime.context.RequestContexts;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import reactor.core.publisher.Mono;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -37,6 +41,10 @@ public abstract class PostgresIntegrationTest {
     public static final Instant START = Instant.parse("2026-01-31T09:00:00Z");
 
     protected static final PostgresTestDatabase DB = PostgresTestDatabase.get();
+
+    /** Request context of calls made directly by tests; platform writes refuse to run without one. */
+    protected static final RequestContext TEST_REQUEST = new RequestContext(
+        "it-user", null, Locale.ENGLISH, "it-request", Set.of(), Set.of());
 
     /** Schema of the test class currently running; test classes run one after another. */
     private static String schema;
@@ -60,6 +68,11 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testmigration");
     }
 
+    /** Schema of the running test class, for tests that open their own connections. */
+    protected static String schema() {
+        return schema;
+    }
+
     @AfterAll
     static void dropSchema() {
         if (schema != null) {
@@ -74,6 +87,11 @@ public abstract class PostgresIntegrationTest {
     }
 
     /** Runs a query with positional parameters and returns rows keyed by lower-case column label. */
+    /** Runs a pipeline the way a request would, with {@link #TEST_REQUEST} in its Reactor context. */
+    protected static <T> Mono<T> asTestRequest(Mono<T> pipeline) {
+        return pipeline.contextWrite(view -> RequestContexts.put(view, TEST_REQUEST));
+    }
+
     protected static List<Map<String, Object>> query(String sql, Object... params) {
         try (Connection connection = DB.connect(schema);
              PreparedStatement statement = prepare(connection, sql, params);

@@ -37,6 +37,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** Write and read paths of {@link DatasetEntityManager} against a real PostgreSQL (ROADMAP phase 1, item 3). */
 class DatasetEntityManagerIT extends PostgresIntegrationTest {
@@ -62,7 +63,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
     }
 
     private List<EntityInstance> commit(String datasetId, EntityChange... changes) {
-        return manager.commitBatch(dataset(datasetId), List.of(changes)).block();
+        return asTestRequest(manager.commitBatch(dataset(datasetId), List.of(changes))).block();
     }
 
     private static EntityInstance instance(EntityDefinition def, Object id, long version, Map<String, Object> attrs) {
@@ -231,8 +232,8 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         DatasetDefinition tickets = dataset(ItFixtures.TICKET_DATASET);
 
         List<Object> outcomes = Flux.merge(
-                Flux.range(1, 2).map(i -> manager.commitBatch(tickets, List.of(EntityChange.update(
-                        instance(ItFixtures.TICKET, "T-1", 1, attrs("title", "writer " + i)))))
+                Flux.range(1, 2).map(i -> asTestRequest(manager.commitBatch(tickets, List.of(EntityChange.update(
+                        instance(ItFixtures.TICKET, "T-1", 1, attrs("title", "writer " + i))))))
                     .<Object>map(result -> result.get(0))
                     .onErrorResume(Mono::just)
                     .subscribeOn(Schedulers.parallel())))
@@ -337,6 +338,54 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> updateTicket("T-1", 1, "status", null))
             .isInstanceOf(BusinessRuleViolationException.class)
             .hasMessageContaining("cannot be cleared");
+    }
+
+    // ---------------------------------------------------------------- Rule accumulation (02 §3.1)
+
+    @Test
+    void allBusinessRulesBrokenByOneUpdateAreReportedTogether() {
+        insertTicket("T-1", "owner", "alice");
+
+        assertThatThrownBy(() -> updateTicket("T-1", 1, "owner", "bob", "ticketId", "T-2", "status", "DONE"))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .extracting(Violation::field, Violation::ruleCode)
+                .containsExactlyInAnyOrder(
+                    tuple("owner", "IMMUTABLE_FIELD"),
+                    tuple("ticketId", "IMMUTABLE_FIELD"),
+                    tuple("status", "ILLEGAL_TRANSITION")));
+        assertThat(ticketRow("T-1")).containsEntry("f_owner", "alice").containsEntry("f_status", "OPEN");
+    }
+
+    @Test
+    void scopeAndInitialStateViolationsOfAnInsertAreReportedTogether() {
+        assertThatThrownBy(() -> commit(ItFixtures.REGIONAL_DATASET, insert("US-9", "region", "US")))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .singleElement()
+                .satisfies(v -> {
+                    assertThat(v.ruleCode()).isEqualTo("OUT_OF_SCOPE");
+                    assertThat(v.params()).containsEntry("expected", "JP");
+                }));
+        assertThatThrownBy(() -> insertTicket("T-9", "status", "DONE"))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .extracting(Violation::ruleCode).containsExactly("INVALID_INITIAL_STATE"));
+    }
+
+    @Test
+    void writesRequireARequestContext() {
+        DatasetDefinition tickets = dataset(ItFixtures.TICKET_DATASET);
+        EntityChange change = EntityChange.insert(instance(ItFixtures.TICKET, "T-1", 0, attrs("title", "t")));
+
+        assertThatThrownBy(() -> manager.commitBatch(tickets, List.of(change)).block())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No RequestContext");
+        assertThat(count("it_ticket")).isZero();
+    }
+
+    @Test
+    void rulesSeeTheCallersRequestContext() {
+        ItFixtures.LAST_TITLE_ACTOR.set(null);
+        insertTicket("T-1");
+        assertThat(ItFixtures.LAST_TITLE_ACTOR.get()).isEqualTo(TEST_REQUEST.actorId());
     }
 
     // ---------------------------------------------------------------- Delete

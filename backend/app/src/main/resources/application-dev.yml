@@ -1,0 +1,4 @@
+# Development only: lets requests name their actor through X-Jabiz-* headers (01 section 5).
+jabiz:
+  dev:
+    actor-headers: true

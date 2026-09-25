@@ -64,15 +64,25 @@ public final class EntityValidator {
                 try {
                     if (!rule.isSatisfiedBy(value, ctx)) {
                         violations.add(new Violation(field.name(), rule.code(),
-                            "Field '" + field.name() + "' failed rule " + rule.code()));
+                            "Field '" + field.name() + "' failed rule " + rule.code(), ruleParams(field, rule)));
                     }
                 } catch (RuntimeException e) {
                     violations.add(new Violation(field.name(), "RULE_EVALUATION_FAILED",
-                        "Rule " + rule.code() + " could not be evaluated: " + e.getMessage()));
+                        "Rule " + rule.code() + " could not be evaluated: " + e.getMessage(),
+                        Map.of("rule", rule.code())));
                 }
             }
         }
         return new Result(normalized, violations);
+    }
+
+    /** Parameters of the exported rule with the same code, which fill the placeholders of its message. */
+    private static Map<String, Object> ruleParams(FieldDefinition field, FieldRule rule) {
+        return field.ruleSpecs().stream()
+            .filter(spec -> spec.code().equals(rule.code()) && spec.params() != null)
+            .findFirst()
+            .map(RuleSpec::params)
+            .orElse(Map.of());
     }
 
     /**

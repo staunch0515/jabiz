@@ -10,6 +10,16 @@ spring:
     user: app
     password: ${DB_PASSWORD:app}
 
+jabiz:
+  i18n:
+    # Language of error messages when Accept-Language names none of zh, ja, en.
+    default-locale: en
+
+logging:
+  pattern:
+    # Every line carries the request id (docs/design/01-core-vs-runtime.md section 5); "-" outside requests.
+    level: "%5p [requestId=%X{requestId:--}]"
+
 management:
   endpoints:
     web:
