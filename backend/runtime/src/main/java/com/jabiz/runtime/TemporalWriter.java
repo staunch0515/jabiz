@@ -116,6 +116,7 @@ final class TemporalWriter {
         return rules.dictionaryLookup(def, raw).flatMap(lookup -> Mono.defer(() -> {
             Map<String, Object> attrs = new LinkedHashMap<>(
                 EntityValidator.requireValid(def, raw, w.validation(), true, lookup));
+            rules.normalizeReferences(def, attrs);
             rules.verifyIdMatches(def, instance, attrs);
             UUID id = id(def, attrs.get(def.primaryKey));
             attrs.put(def.primaryKey, id);
@@ -151,8 +152,9 @@ final class TemporalWriter {
         return Mono.defer(() -> {
             rules.requireWritable(def);
             UUID id = id(def, instance.id());
-            Map<String, Object> incoming = EntityValidator.requireValid(def, instance.attributes(), w.validation(),
-                false);
+            Map<String, Object> incoming = new LinkedHashMap<>(
+                EntityValidator.requireValid(def, instance.attributes(), w.validation(), false));
+            rules.normalizeReferences(def, incoming);
             List<Violation> scopeViolations = new ArrayList<>();
             rules.enforceScope(w.dataset(), def, w.scope(), incoming, false, scopeViolations);
 
@@ -200,8 +202,9 @@ final class TemporalWriter {
             rules.requireWritable(def);
             UUID id = id(def, instance.id());
             return timeline(w, id).flatMap(timeline -> {
+                // Something must still take effect then: a cancelled schedule cannot be cancelled again.
                 EntityVersion scheduled = timeline.effectiveExactlyAt(w.effective())
-                    .filter(version -> inScope(w, version.state()))
+                    .filter(version -> timeline.hasChangeAt(w.effective()) && inScope(w, version.state()))
                     .orElseThrow(() -> new BusinessRuleViolationException(new Violation("effectiveTime",
                         PlatformErrorCodes.NOT_SCHEDULED,
                         def.name + " [ID: " + id + "] has no version scheduled at " + w.effective(),

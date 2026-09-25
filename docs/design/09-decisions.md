@@ -175,10 +175,16 @@ CREATE TABLE op_process_result (
 8. **受控清除**（补充 D5）：维护角色固定名为 `jabiz_maintenance`，由运维创建（迁移脚本不建角色）；触发器拒绝时抛出 SQLSTATE `JZ001`，
    平台转为 `AppendOnlyViolationException`（500，记录 error 日志）。时态表用 `SELECT jabiz_protect_append_only('<表>')` 安装两个触发器。
 9. **操作的产生**（阶段 6 之前）：数据视图 `commit` 及现有通用增删改流程只在本批包含时态实体时写 `op_process`；
-   已有操作（Reactor Context 中的 `Operation`）时加入该操作。`op_time` 取 `Clock` 并截断到微秒（与数据库精度一致）。
-   通用流程沿用自己的 `processSeqId` 与流程名。`commit` 的输出写入 `op_process_result`。
+   已有操作（Reactor Context 中的 `Operation`）时加入该操作（此时不能再给出不同的 `reason`：操作记录不可更新）。
+   `op_time` 取 `Clock` 并截断到微秒（与数据库精度一致）。通用流程沿用自己的 `processSeqId` 与流程名，同一流程的多次提交加入同一操作。
+   自行开始操作的 `commit` 把输出摘要（实体类型、主键、版本号，不含字段值）写入 `op_process_result`；
+   完整输出与遮蔽随阶段 6、7 接入。
 10. **数据库字典**：时态表为 `sys_dict_item_version`（平台实体 `SysDictItem`，允许预定，唯一约束 `(dictUrn, itemCode)`）；
-    `sys_dict_item` 改为当前项的只读视图，`INSERT` 经 `jabiz_dict_put(...)` 写入**基础数据**（生效时间为 1970-01-01，用于迁移种子），
+    `sys_dict_item` 改为当前项的只读视图，`INSERT` 经 `jabiz_dict_put(...)` 写入**基础数据**（生效时间与记录时间都为 1970-01-01，
+    不读取数据库时钟；用于迁移种子），
     已有更晚版本的项拒绝经 SQL 修改。`labels` 使用扩展语义类型 `jabiz.labels`（jsonb）。缓存到下一个预定版本生效时自动过期。
+
+11. **存储与引用**：时态实体不能使用 `physicalTableOverride`（版本、操作条目与撤销都指向实体自己的表，启动时检查）。
+    指向时态实体的引用字段以 UUID 保存与比较（写入与查询时转换）。删除前的"仍被引用"检查同时查看引用方的当前版本与预定版本。
 
 **理由**：这些都是 D1–D6 在真实数据上成立所必需的细节；写明以便后续阶段（流程引擎、账本、前端）遵守同一语义。

@@ -160,7 +160,15 @@ public class DatasetEntityManager {
                 .map(Collections::unmodifiableList);
 
             Mono<List<EntityInstance>> work = Operations.current().flatMap(existing -> {
-                if (existing.isPresent() || ordered.stream().noneMatch(this::isTemporal)) {
+                if (existing.isPresent()) {
+                    // The operation is recorded already and never updated, so its reason cannot change here.
+                    if (reason != null && !reason.equals(existing.get().reason())) {
+                        return Mono.error(new IllegalArgumentException("A reason can only be given when an "
+                            + "operation starts; operation " + existing.get().processSeqId() + " is running"));
+                    }
+                    return apply;
+                }
+                if (ordered.stream().noneMatch(this::isTemporal)) {
                     return apply;
                 }
                 return Operations.requested().flatMap(requested -> {
@@ -169,10 +177,16 @@ public class DatasetEntityManager {
                     if (reason != null) {
                         operation = operation.withReason(reason);
                     }
-                    return operations.begin(engine, operation, request).flatMap(started -> apply
-                        .contextWrite(view -> Operations.with(view, started))
-                        .flatMap(result -> operations.recordResult(engine, started.processSeqId(),
-                            json.writeValueAsString(result)).thenReturn(result)));
+                    // Operations numbered by a process are joined by its later commits; only a commit that owns its
+                    // operation records the output.
+                    boolean owned = operation.processSeqId() == null;
+                    return operations.beginOrJoin(engine, operation, request).flatMap(started -> {
+                        Mono<List<EntityInstance>> run = apply.contextWrite(view -> Operations.with(view, started));
+                        return owned
+                            ? run.flatMap(result -> operations.recordResult(engine, started.processSeqId(),
+                                json.writeValueAsString(outputSummary(result))).thenReturn(result))
+                            : run;
+                    });
                 });
             });
 
@@ -180,6 +194,20 @@ public class DatasetEntityManager {
                 .doOnSuccess(committed -> log.debug("Committed {} change(s) through dataset {}",
                     ordered.size(), dataset.resourceId()));
         });
+    }
+
+    /**
+     * What a commit records as its output: which versions it wrote, without their values. Field values may be
+     * sensitive, and masking arrives with the security phase (ROADMAP phase 7).
+     */
+    private static List<Map<String, Object>> outputSummary(List<EntityInstance> result) {
+        return result.stream().map(instance -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("entityType", instance.entityType());
+            entry.put("id", String.valueOf(instance.id()));
+            entry.put("version", instance.version());
+            return entry;
+        }).toList();
     }
 
     TemporalStore temporalStore() {
@@ -232,6 +260,7 @@ public class DatasetEntityManager {
 
             Map<String, Object> attrs = new LinkedHashMap<>(
                 EntityValidator.requireValid(def, raw, validation, true, lookup));
+            normalizeReferences(def, attrs);
 
             verifyIdMatches(def, instance, attrs);
             List<Violation> violations = new ArrayList<>();
@@ -273,7 +302,9 @@ public class DatasetEntityManager {
         return Mono.defer(() -> {
             String versionColumn = requireWritable(def);
 
-            Map<String, Object> incoming = EntityValidator.requireValid(def, instance.attributes(), validation, false);
+            Map<String, Object> incoming = new LinkedHashMap<>(
+                EntityValidator.requireValid(def, instance.attributes(), validation, false));
+            normalizeReferences(def, incoming);
             List<Violation> scopeViolations = new ArrayList<>();
             enforceScope(dataset, def, scope, incoming, false, scopeViolations);
 
@@ -503,14 +534,14 @@ public class DatasetEntityManager {
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             String table = queryCompiler.resolveTable(dataset, def);
             Map<String, Object> scope = dataset.scope().resolve(request);
-            return temporalStore.load(engine, table, def, uuid).flatMap(versions -> {
-                Timeline timeline = Timeline.of(versions);
+            return temporalStore.history(engine, table, def, uuid).flatMap(entries -> {
+                Timeline timeline = Timeline.of(entries.stream().map(TemporalStore.HistoryEntry::version).toList());
                 Optional<EntityVersion> latest = timeline.at(clock.instant())
                     .or(() -> timeline.winners().stream().findFirst());
                 if (latest.isEmpty() || !withinScope(dataset, def, scope, latest.get().state())) {
                     return Mono.empty();
                 }
-                return temporalStore.history(engine, table, def, uuid);
+                return Mono.just(entries.stream().map(TemporalStore.HistoryEntry::describe).toList());
             });
         });
     }
@@ -589,6 +620,30 @@ public class DatasetEntityManager {
     // ================= References =================
 
     /**
+     * References to temporal entities hold their UUIDs (the key of {@code entity_registry}); values given as text
+     * are converted, invalid ones rejected.
+     */
+    void normalizeReferences(EntityDefinition def, Map<String, Object> values) {
+        List<Violation> violations = new ArrayList<>();
+        for (ReferenceDefinition ref : def.references) {
+            Object value = values.get(ref.sourceField());
+            if (value == null) {
+                continue;
+            }
+            entityRegistry.find(ref.targetEntity()).filter(target -> target.temporal).ifPresent(target -> {
+                try {
+                    values.put(ref.sourceField(), target.normalizeId(value));
+                } catch (IllegalArgumentException e) {
+                    violations.add(new Violation(ref.sourceField(), PlatformErrorCodes.INVALID_VALUE, e.getMessage()));
+                }
+            });
+        }
+        if (!violations.isEmpty()) {
+            throw new ValidationException(violations);
+        }
+    }
+
+    /**
      * Verifies that every reference field among {@code changedFields} points at an existing instance
      * of its target entity. Fields that are not written, or are set to null, are not checked.
      * All missing targets are reported together.
@@ -651,8 +706,16 @@ public class DatasetEntityManager {
             }
             EntityQuery query = EntityQuery.builder().where(where).limit(1).build();
             // Referrers outside the caller's scope still block the deletion, so the scope is not applied here.
-            return engine.executeQuery(queryCompiler.compile(sourceDataset, source, query, Map.of(),
+            Mono<Boolean> now = engine.executeQuery(queryCompiler.compile(sourceDataset, source, query, Map.of(),
                 currentSlice(source, null, null))).hasElements();
+            if (!source.temporal) {
+                return now;
+            }
+            // A referrer whose scheduled version will refer to the target blocks the deletion as well.
+            Object self = source.name.equals(target.name) ? id : null;
+            return now.flatMap(referenced -> referenced ? Mono.just(true)
+                : temporalStore.referencedLater(engine, queryCompiler.resolveTable(sourceDataset, source), source,
+                    incoming.reference().sourceField(), id, self, clock.instant()));
         });
     }
 

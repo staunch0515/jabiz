@@ -11,6 +11,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
+import com.jabiz.runtime.operation.Operations;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
@@ -215,5 +216,54 @@ class TemporalWriteIT extends TemporalItSupport {
         // The key is unique per actor.
         assertThatThrownBy(() -> asRequest(ADMIN, engine.inTransaction(operations.begin(engine, request, ADMIN))).block())
             .isInstanceOf(UniqueKeyViolationException.class);
+    }
+
+    /** Review finding: a referrer's scheduled version that will refer to the target blocks its deletion. */
+    @Test
+    void scheduledReferencesBlockTheDeletionToo() {
+        EntityInstance old = newPrice(sku(), 100);
+        EntityInstance successor = newPrice(sku(), 120);
+        commit(update(successor.id(), 1, attrs("replacesRef", old.id()), now().plus(Duration.ofDays(1))));
+
+        assertThatThrownBy(() -> commit(delete(old.id(), 1, null)))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .extracting(v -> v.ruleCode()).containsExactly("STILL_REFERENCED"));
+    }
+
+    /** Review finding: the commits of one process execution share its operation. */
+    @Test
+    void theCommitsOfOneProcessShareItsOperation() {
+        EntityInstance a = newPrice(sku(), 100);
+        EntityInstance b = newPrice(sku(), 100);
+        advance(Duration.ofMinutes(1));
+        long seq = ((Number) query("SELECT nextval('op_process_seq') AS s").getFirst().get("s")).longValue();
+        OperationRequest process = new OperationRequest("IT_PROCESS", 1, seq, null, null, null, null, null);
+
+        for (EntityInstance price : List.of(a, b)) {
+            asRequest(ADMIN, entities.commitBatch(dataset(ItTemporalFixtures.PRICE_DATASET),
+                    List.of(update(price.id(), 1, attrs("note", "process"), null)))
+                .contextWrite(view -> Operations.withRequest(view, process))).block();
+        }
+
+        assertThat(query("SELECT process_name FROM op_process WHERE process_seq_id = ?", seq))
+            .containsExactly(Map.of("process_name", "IT_PROCESS"));
+        assertThat(query("SELECT count(*) AS n FROM op_process_item WHERE process_seq_id = ?", seq).getFirst().get("n"))
+            .isEqualTo(2L);
+        assertThat(query("SELECT count(*) AS n FROM op_process_result WHERE process_seq_id = ?", seq).getFirst().get("n"))
+            .isEqualTo(0L);
+    }
+
+    /** Review finding: a reason cannot be attached to an operation that is already recorded. */
+    @Test
+    void aReasonCannotBeAddedToARunningOperation() {
+        EntityInstance price = newPrice(sku(), 100);
+        StorageEngine engine = storages.getEngine("default");
+        assertThatThrownBy(() -> asRequest(ADMIN, engine.inTransaction(
+            operations.begin(engine, OperationRequest.named("it.running", 1), ADMIN)
+                .flatMap(op -> entities.commitBatch(dataset(ItTemporalFixtures.PRICE_DATASET),
+                        List.of(update(price.id(), 1, attrs("note", "x"), null)), "late reason")
+                    .contextWrite(view -> Operations.with(view, op))))).block())
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("reason");
+        assertThat(versions(price.id())).hasSize(1);
     }
 }

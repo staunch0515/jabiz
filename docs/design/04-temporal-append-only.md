@@ -102,7 +102,8 @@ CREATE TABLE entity_registry (
 ```
 
 - 时态实体第一次插入时登记。
-- 其他表引用时态实体时，外键指向 `entity_registry(entity_id)`（实体类型由平台检查）。
+- 其他表引用时态实体时，外键指向 `entity_registry(entity_id)`（实体类型由平台检查）；引用值为 UUID。
+  删除时态实体前，引用方的当前版本与预定版本都不能再引用它【D9】。
 
 ## 3. 写入规则
 

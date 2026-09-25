@@ -139,4 +139,26 @@ class DatasetRegistryTest {
         assertThatThrownBy(() -> registry(open)).hasMessageContaining("permissions are not declared");
         assertThatCode(() -> registry("dev", new EntityDefinition[] {ORDER}, open)).doesNotThrowAnyException();
     }
+
+    /** Temporal targets: no soft delete (deletion writes a tombstone) and no override table (reverts need one table). */
+    @Test
+    void temporalTargetsHaveNoSoftDeleteAndNoOverrideTable() {
+        EntityDefinition price = EntityDefinition.define("Price", eb -> {
+            eb.physicalTable("t_price");
+            eb.primaryKey("priceId");
+            eb.field("priceId", f -> f.physicalColumn("price_id").asSemanticIdentity("urn:price"));
+            eb.field("hidden", f -> f.physicalColumn("hidden").asBool());
+            eb.temporal();
+        });
+        DatasetDefinition soft = DatasetDefinition.define("urn:ds:soft:Price", d -> d.targetEntityType("Price")
+            .asDefault().permissions("p.read", "p.write").storage(s -> s.connectionPoolRef("default"))
+            .policy(p -> p.softDelete("hidden")));
+        DatasetDefinition archive = DatasetDefinition.define("urn:ds:archive:Price", d -> d.targetEntityType("Price")
+            .permissions("p.read", "p.write")
+            .storage(s -> s.connectionPoolRef("default").physicalTableOverride("t_price_archive")));
+
+        assertThatThrownBy(() -> registry(null, new EntityDefinition[] {price}, soft, archive))
+            .hasMessageContaining("urn:ds:soft:Price: soft delete is not available for temporal entity Price")
+            .hasMessageContaining("urn:ds:archive:Price: temporal entity Price cannot be stored in an override table");
+    }
 }

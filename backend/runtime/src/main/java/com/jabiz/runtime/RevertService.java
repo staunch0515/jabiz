@@ -16,6 +16,7 @@ import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.storage.UniqueKeyViolationException;
 import com.jabiz.runtime.temporal.TemporalPermissions;
 import com.jabiz.runtime.temporal.TemporalStore;
 import com.jabiz.runtime.temporal.VersionAppender;
@@ -254,6 +255,8 @@ public class RevertService {
                         current.processSeqId(), current.recordedAt()))
                     : Mono.empty();
                 return referenced.then(versions.append(engine, table, def, id, timeline, write, operation, true))
+                    .onErrorMap(UniqueKeyViolationException.class, e -> new ConcurrentUpdateException(
+                        def.name + " [ID: " + id + "] was changed concurrently; retry the revert"))
                     .then();
             });
         });

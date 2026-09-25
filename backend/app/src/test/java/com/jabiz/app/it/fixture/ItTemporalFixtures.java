@@ -22,7 +22,7 @@ public final class ItTemporalFixtures extends BaseEntityDefinitions {
     public static final String PRICE_CURRENT_DATASET = "urn:jabiz:dataset:it:ItPriceCurrent";
     public static final String NOTE_DATASET = "urn:jabiz:dataset:it:ItNote";
 
-    /** Schedulable prices; SKUs are unique; lifecycle DRAFT -> ACTIVE -> RETIRED. */
+    /** Schedulable prices; SKUs are unique; lifecycle DRAFT -> ACTIVE -> RETIRED; may replace another price. */
     public static final EntityDefinition PRICE = EntityDefinition.define("ItPrice", eb -> {
         eb.physicalTable("it_price");
         eb.primaryKey("priceId");
@@ -34,6 +34,7 @@ public final class ItTemporalFixtures extends BaseEntityDefinitions {
         eb.field("note", f -> f.physicalColumn("note").asText(200));
         eb.field("status", f -> f.physicalColumn("status")
             .asCode("urn:jabiz:dict:it_price_status", "DRAFT", "ACTIVE", "RETIRED"));
+        eb.field("replacesRef", f -> f.physicalColumn("replaces_ref").asReference("ItPrice"));
         eb.stateTransitions("status", st -> {
             st.from("DRAFT").to("ACTIVE");
             st.from("ACTIVE").to("RETIRED");

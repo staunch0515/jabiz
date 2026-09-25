@@ -59,31 +59,42 @@ public class TemporalStore {
         return select(engine, table, def, id, "").map(row -> toVersion(def, row)).collectList();
     }
 
+    /** A version with the operation that wrote it. */
+    public record HistoryEntry(EntityVersion version, String actorId, String processName, Instant opTime,
+        String reason) {
+
+        /** The entry as returned by the history API. */
+        public Map<String, Object> describe() {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("versionNo", version.versionNo());
+            entry.put("effectStartTime", version.effectiveFrom());
+            entry.put("createdTime", version.recordedAt());
+            entry.put("deleted", version.deleted());
+            entry.put("action", version.action());
+            entry.put("baseVersionNo", version.baseVersionNo());
+            entry.put("changedFields", version.changedFields().stream().sorted().toList());
+            entry.put("processSeqId", version.processSeqId());
+            entry.put("actorId", actorId);
+            entry.put("processName", processName);
+            entry.put("opTime", opTime);
+            entry.put("reason", reason);
+            entry.put("attributes", version.state());
+            return entry;
+        }
+    }
+
     /**
      * History of an instance: every version by number with the item and the operation that wrote it
      * (docs/design/04-temporal-append-only.md section 5.2).
      */
-    public Mono<List<Map<String, Object>>> history(StorageEngine engine, String table, EntityDefinition def, UUID id) {
+    public Mono<List<HistoryEntry>> history(StorageEngine engine, String table, EntityDefinition def, UUID id) {
         return select(engine, table, def, id, ", p.actor_id AS jabiz_actor_id, p.process_name AS jabiz_process_name, "
                 + "p.op_time AS jabiz_op_time, p.reason AS jabiz_reason")
-            .map(row -> {
-                EntityVersion version = toVersion(def, row);
-                Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("versionNo", version.versionNo());
-                entry.put("effectStartTime", version.effectiveFrom());
-                entry.put("createdTime", version.recordedAt());
-                entry.put("deleted", version.deleted());
-                entry.put("action", version.action());
-                entry.put("baseVersionNo", version.baseVersionNo());
-                entry.put("changedFields", version.changedFields().stream().sorted().toList());
-                entry.put("processSeqId", version.processSeqId());
-                entry.put("actorId", Rows.string(row.get("jabiz_actor_id")));
-                entry.put("processName", Rows.string(row.get("jabiz_process_name")));
-                entry.put("opTime", row.get("jabiz_op_time") == null ? null : Rows.instant(row.get("jabiz_op_time")));
-                entry.put("reason", Rows.string(row.get("jabiz_reason")));
-                entry.put("attributes", version.state());
-                return entry;
-            })
+            .map(row -> new HistoryEntry(toVersion(def, row),
+                Rows.string(row.get("jabiz_actor_id")),
+                Rows.string(row.get("jabiz_process_name")),
+                row.get("jabiz_op_time") == null ? null : Rows.instant(row.get("jabiz_op_time")),
+                Rows.string(row.get("jabiz_reason"))))
             .collectList();
     }
 
@@ -114,8 +125,7 @@ public class TemporalStore {
         for (String field : def.stateFields()) {
             // Explicit NULLs: a version copies its state exactly, column defaults must not fill in.
             Object value = version.state().get(field);
-            row.put(def.physicalColumn(field), value != null ? value
-                : BoundValue.nullOf(FieldValueCoercer.javaType(def.field(field).kind())));
+            row.put(def.physicalColumn(field), value != null ? value : StorageEngine.NULL);
         }
         row.put(def.primaryKeyColumn(), id);
         row.put(def.systemColumn(TemporalSpec.VERSION_NO), Math.toIntExact(version.versionNo()));
@@ -196,6 +206,29 @@ public class TemporalStore {
             + " WHERE " + effective + " > :now ORDER BY " + id + ", " + effective + ", " + version + " DESC) s"
             + " WHERE " + condition + " LIMIT 1";
         return engine.select(sql, params).hasElements();
+    }
+
+    /**
+     * Whether a version scheduled after {@code now} (the winner of its effective time, not a tombstone) refers to
+     * {@code targetId} through {@code field}; {@code excludeId}, if given, is an instance that does not count.
+     */
+    public Mono<Boolean> referencedLater(StorageEngine engine, String table, EntityDefinition def, String field,
+        Object targetId, Object excludeId, Instant now) {
+        String id = SqlIdentifiers.require(def.primaryKeyColumn());
+        String effective = SqlIdentifiers.require(def.systemColumn(TemporalSpec.EFFECT_START_TIME));
+        String version = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        params.put("now", BoundValue.of(now));
+        params.put("target", BoundValue.of(targetId));
+        String sql = "SELECT 1 AS hit FROM (SELECT DISTINCT ON (" + id + ", " + effective + ") * FROM "
+            + SqlIdentifiers.require(table) + " WHERE " + effective + " > :now ORDER BY " + id + ", " + effective
+            + ", " + version + " DESC) s WHERE NOT " + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED))
+            + " AND " + SqlIdentifiers.require(def.physicalColumn(field)) + " = :target";
+        if (excludeId != null) {
+            sql += " AND " + id + " <> :self";
+            params.put("self", BoundValue.of(excludeId));
+        }
+        return engine.select(sql + " LIMIT 1", params).hasElements();
     }
 
     private static Violation violation(EntityDefinition def, UniqueConstraint unique) {

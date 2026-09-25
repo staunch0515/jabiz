@@ -19,9 +19,17 @@ import java.util.Map;
  */
 public interface StorageEngine {
 
+    /** Value of {@link #insert} that stores NULL even where the column has a default. */
+    Object NULL = new Object() {
+        @Override
+        public String toString() {
+            return "NULL";
+        }
+    };
+
     /**
-     * Inserts a new record; null values are omitted so that column defaults apply. A {@link BoundValue} whose value
-     * is null is inserted as an explicit, typed NULL instead.
+     * Inserts a new record; null values are omitted so that column defaults apply, {@link #NULL} is inserted as an
+     * explicit NULL instead.
      * A unique index violation fails with {@link UniqueKeyViolationException}, as do the updates below.
      */
     Mono<Void> insert(String table, Map<String, Object> record);

@@ -29,8 +29,10 @@ CREATE TRIGGER sys_dict_item_version_changed
     AFTER INSERT ON sys_dict_item_version
     FOR EACH ROW EXECUTE FUNCTION jabiz_notify_dict_changed();
 
--- Records base data of a dictionary from SQL (migrations, seeding). The version is effective from the epoch, so
--- base data applies at every business time; putting an existing item corrects its base version. Items that
+-- Records base data of a dictionary from SQL (migrations, seeding). The version is effective and recorded at the
+-- epoch, so base data applies at every business time and every knownAt; putting an existing item corrects its base
+-- version. No clock is read here: the database clock is not business time, and there is no application clock.
+-- (When the data arrived is recorded by the migration history.) Items that
 -- already have versions effective later (written through the dictionary's dataset) are refused: such changes need
 -- the rebase of the application (decision D1). All puts of one transaction form one operation 'jabiz.sql'.
 CREATE FUNCTION jabiz_dict_put(p_urn varchar, p_code varchar, p_labels jsonb, p_sort_order integer,
@@ -48,7 +50,7 @@ BEGIN
     IF seq IS NULL OR NOT EXISTS (SELECT 1 FROM op_process WHERE process_seq_id = seq) THEN
         seq := nextval('op_process_seq');
         INSERT INTO op_process (process_seq_id, process_name, process_version, actor_id, op_time)
-        VALUES (seq, 'jabiz.sql', 1, current_user, date_trunc('microseconds', clock_timestamp()));
+        VALUES (seq, 'jabiz.sql', 1, current_user, base_time);
         PERFORM set_config('jabiz.sql_operation', seq::text, true);
     END IF;
 

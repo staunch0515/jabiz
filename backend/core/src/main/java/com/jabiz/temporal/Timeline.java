@@ -111,6 +111,20 @@ public final class Timeline {
         return Set.copyOf(changes);
     }
 
+    /**
+     * Whether something takes effect at {@code time}: the entity comes into or goes out of existence, or a field
+     * changes ({@link #changesAt}). False when nothing is effective exactly then, or when what was scheduled has
+     * been cancelled.
+     */
+    public boolean hasChangeAt(Instant time) {
+        EntityVersion winner = winners.get(time);
+        if (winner == null) {
+            return false;
+        }
+        boolean deletedBefore = before(time).map(EntityVersion::deleted).orElse(true);
+        return winner.deleted() != deletedBefore || (!winner.deleted() && !changesAt(time).isEmpty());
+    }
+
     private static boolean sameValue(Object a, Object b) {
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             return x.compareTo(y) == 0;

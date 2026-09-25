@@ -147,6 +147,10 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         assertThat(enabled(PORTS)).containsExactlyInAnyOrder("JPTYO", "JPYOK", "JPOSA");
         assertThat(items(PORTS, Locale.JAPANESE)).extracting(DictItem::label)
             .containsExactly("東京港", "横浜港", "大阪港");
+        // Seeded from SQL: effective and recorded at the epoch, no database clock involved.
+        assertThat(query("SELECT DISTINCT extract(epoch FROM created_time) AS t, extract(epoch FROM effect_start_time) AS e "
+            + "FROM sys_dict_item_version WHERE dict_urn = ?", PORTS)).singleElement()
+            .satisfies(row -> assertThat(row.values()).allSatisfy(v -> assertThat(((Number) v).intValue()).isZero()));
     }
 
     @Test

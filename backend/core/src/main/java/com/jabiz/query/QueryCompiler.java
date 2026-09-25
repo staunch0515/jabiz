@@ -5,6 +5,7 @@ import com.jabiz.dataset.DatasetPolicy;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
+import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.SemanticKinds;
 import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.ValidationException;
@@ -15,6 +16,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Compiles logical queries into physical query plans for SQL dialects.
@@ -24,6 +28,18 @@ import java.util.Map;
  * type) are reported as {@link ValidationException}.
  */
 public class QueryCompiler {
+
+    /** Finds the definitions of referenced entities; references to temporal entities are compared as UUIDs. */
+    private final Function<String, Optional<EntityDefinition>> entities;
+
+    /** A compiler that does not know other entities: reference values are bound as given. */
+    public QueryCompiler() {
+        this(name -> Optional.empty());
+    }
+
+    public QueryCompiler(Function<String, Optional<EntityDefinition>> entities) {
+        this.entities = Objects.requireNonNull(entities, "entities must not be null");
+    }
 
     /** Allocates unique named parameters and remembers their values. */
     public static final class Binder {
@@ -333,7 +349,13 @@ public class QueryCompiler {
     private Object coerce(EntityDefinition def, FieldDefinition fd, Object value) {
         try {
             Object coerced = FieldValueCoercer.coerce(fd, value, false);
-            return fd.name().equals(def.primaryKey) ? def.normalizeId(coerced) : coerced;
+            if (fd.name().equals(def.primaryKey)) {
+                return def.normalizeId(coerced);
+            }
+            if (fd.kind() instanceof SemanticKind.Reference ref) {
+                return entities.apply(ref.targetEntity()).map(target -> target.normalizeId(coerced)).orElse(coerced);
+            }
+            return coerced;
         } catch (IllegalArgumentException e) {
             throw invalidValue(fd, e.getMessage());
         }

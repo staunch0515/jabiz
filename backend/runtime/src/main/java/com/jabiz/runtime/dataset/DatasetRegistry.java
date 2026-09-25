@@ -120,6 +120,11 @@ public final class DatasetRegistry {
             }
         }
         DatasetPolicy policy = dataset.policy();
+        String override = dataset.storage().physicalTableOverride();
+        if (entity.temporal && override != null && !override.isBlank()) {
+            problems.add(label + ": temporal entity " + entity.name + " cannot be stored in an override table; "
+                + "its versions, operation items and reverts all refer to " + entity.physicalTable);
+        }
         if (policy.softDelete() && entity.temporal) {
             problems.add(label + ": soft delete is not available for temporal entity " + entity.name
                 + "; deleting it writes a tombstone version");

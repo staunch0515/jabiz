@@ -55,8 +55,13 @@ public final class R2dbcStorageEngine implements StorageEngine {
                     continue;
                 }
                 columns.add(SqlIdentifiers.require(e.getKey()));
-                markers.add(":v" + values.size());
-                values.add(e.getValue() instanceof BoundValue bound ? bound : toStorage(e.getValue()));
+                if (e.getValue() == StorageEngine.NULL) {
+                    // An untyped literal takes the column's type, which a bound NULL would have to name.
+                    markers.add("NULL");
+                } else {
+                    markers.add(":v" + values.size());
+                    values.add(toStorage(e.getValue()));
+                }
             }
             if (columns.isEmpty()) {
                 return Mono.error(new IllegalArgumentException("Insert into " + table + " has no values"));
@@ -66,14 +71,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
             DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
             for (int i = 0; i < values.size(); i++) {
-                Object value = values.get(i);
-                if (value instanceof BoundValue bound) {
-                    spec = bound.value() == null
-                        ? spec.bindNull("v" + i, storageType(bound.type()))
-                        : spec.bind("v" + i, toStorage(bound.value()));
-                } else {
-                    spec = spec.bind("v" + i, value);
-                }
+                spec = spec.bind("v" + i, values.get(i));
             }
             return spec.fetch().rowsUpdated().then().onErrorMap(R2dbcStorageEngine::translate);
         });

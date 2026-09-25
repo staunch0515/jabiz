@@ -213,6 +213,11 @@ class TemporalScheduleIT extends TemporalItSupport {
         assertThat(query("SELECT action FROM op_process_item WHERE entity_id = ? ORDER BY version_no", price.id()))
             .extracting(r -> r.get("action")).containsExactly("INSERT", "UPDATE", "UPDATE", "CANCEL", "REBASE");
 
+        // Review finding: a cancelled schedule cannot be cancelled again.
+        assertThatThrownBy(() -> commit(cancel(price.id(), 4, t1)))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .extracting(v -> v.ruleCode()).containsExactly("NOT_SCHEDULED"));
+
         // The cancelled schedule no longer blocks changes of the amount.
         assertThat(commit(update(price.id(), 1, attrs("amount", 110), null))).hasSize(1);
         assertThat(amount(read(price.id(), t2))).isEqualByComparingTo("110");
@@ -233,6 +238,8 @@ class TemporalScheduleIT extends TemporalItSupport {
         assertThat(read(later)).isNull();
         // Cancelling a scheduled insertion leaves nothing.
         assertThat(commit(cancel(later, 1, now().plus(DAY)))).isEmpty();
+        assertThatThrownBy(() -> commit(cancel(later, 2, now().plus(DAY))))
+            .isInstanceOf(BusinessRuleViolationException.class);
         advance(DAY.multipliedBy(2));
         assertThat(read(later)).isNull();
     }

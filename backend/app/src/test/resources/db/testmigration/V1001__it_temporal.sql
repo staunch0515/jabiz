@@ -13,6 +13,7 @@ CREATE TABLE it_price (
     amount            numeric(19,0),
     note              varchar(200),
     status            varchar(16),
+    replaces_ref      uuid         REFERENCES entity_registry (entity_id),
     CONSTRAINT it_price_version_uk UNIQUE (price_id, version_no)
 );
 CREATE INDEX it_price_current_idx ON it_price (price_id, effect_start_time DESC, version_no DESC);

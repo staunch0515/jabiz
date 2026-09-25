@@ -67,6 +67,20 @@ public class OperationRecorder {
         });
     }
 
+    /**
+     * Joins the operation numbered {@code request.processSeqId()} when it is recorded already (a process whose
+     * earlier step started it), otherwise records it as {@link #begin} does.
+     */
+    public Mono<Operation> beginOrJoin(StorageEngine engine, OperationRequest request, RequestContext context) {
+        if (request.processSeqId() == null) {
+            return begin(engine, request, context);
+        }
+        return find(engine, request.processSeqId())
+            .map(record -> new Operation(record.processSeqId(), record.opTime(), record.processName(),
+                record.processVersion(), record.actorId(), record.reason(), record.parentSeqId(), record.revertsSeqId()))
+            .switchIfEmpty(Mono.defer(() -> begin(engine, request, context)));
+    }
+
     /** Registers a new instance of a temporal entity ({@code entity_registry}). */
     public Mono<Void> registerEntity(StorageEngine engine, Operation operation, String entityType, UUID entityId) {
         Map<String, Object> row = new LinkedHashMap<>();

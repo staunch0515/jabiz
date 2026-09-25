@@ -2,6 +2,7 @@ package com.jabiz.runtime.config;
 
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.runtime.JabizApplication;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -23,8 +24,8 @@ public class JabizRuntimeAutoConfiguration {
 
     /** jabiz-core is framework free, so its stateless services are published as beans here. */
     @Bean
-    QueryCompiler queryCompiler() {
-        return new QueryCompiler();
+    QueryCompiler queryCompiler(EntityDefinitionRegistry entities) {
+        return new QueryCompiler(entities::find);
     }
 
     /**

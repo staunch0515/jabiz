@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -108,5 +109,24 @@ class TemporalQueryCompilerTest {
             .isEqualTo("t_plain");
         assertThat(compiler.compile(dataset, plain, EntityQuery.builder().build(), Map.of(), TimeSlice.asOf(AS_OF))
             .source()).isEqualTo("t_plain");
+    }
+
+    @Test
+    void referencesToTemporalEntitiesAreComparedAsUuids() {
+        EntityDefinition note = EntityDefinition.define("Note", eb -> {
+            eb.physicalTable("t_note");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("id"));
+            eb.field("priceRef", f -> f.physicalColumn("price_ref").asReference("Price"));
+        });
+        DatasetDefinition notes = DatasetDefinition.define("urn:jabiz:dataset:test:Note", d -> d
+            .targetEntityType("Note").storage(s -> s.connectionPoolRef("default")));
+        UUID id = UUID.randomUUID();
+        EntityQuery byPrice = EntityQuery.builder().where(new QueryPredicate.Eq("priceRef", id.toString())).build();
+
+        QueryCompiler knowing = new QueryCompiler(name -> "Price".equals(name) ? Optional.of(PRICE) : Optional.empty());
+        assertThat(knowing.compile(notes, note, byPrice, Map.of()).bindParams().get("p0").value()).isEqualTo(id);
+        assertThat(compiler.compile(notes, note, byPrice, Map.of()).bindParams().get("p0").value())
+            .isEqualTo(id.toString());
     }
 }
