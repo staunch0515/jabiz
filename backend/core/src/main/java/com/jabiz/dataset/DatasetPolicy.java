@@ -13,6 +13,8 @@ import java.util.Objects;
  * @param maxQueryBatchSize   upper bound of rows returned by one query
  * @param maxWriteBatchSize   upper bound of changes accepted by one commit
  * @param queryTimeout        upper bound of query duration
+ * @param allowTimeTravel     whether callers may read temporal entities at other points in time and read their
+ *                            history (docs/design/03-dataset.md section 2.5)
  */
 public record DatasetPolicy(
     boolean readOnly,
@@ -21,7 +23,8 @@ public record DatasetPolicy(
     String softDeleteTimeField,
     int maxQueryBatchSize,
     int maxWriteBatchSize,
-    Duration queryTimeout
+    Duration queryTimeout,
+    boolean allowTimeTravel
 ) {
     public DatasetPolicy {
         if (softDelete && (softDeleteField == null || softDeleteField.isBlank())) {

@@ -120,6 +120,10 @@ public final class DatasetRegistry {
             }
         }
         DatasetPolicy policy = dataset.policy();
+        if (policy.softDelete() && entity.temporal) {
+            problems.add(label + ": soft delete is not available for temporal entity " + entity.name
+                + "; deleting it writes a tombstone version");
+        }
         if (policy.softDelete()) {
             requireFieldKind(entity, policy.softDeleteField(), SemanticKind.Bool.class::isInstance,
                 "soft-delete field", "Bool", label, problems);

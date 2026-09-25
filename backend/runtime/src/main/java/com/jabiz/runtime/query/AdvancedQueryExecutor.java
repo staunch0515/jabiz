@@ -7,6 +7,7 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
+import com.jabiz.query.TimeSlice;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.QueryParameter;
@@ -18,6 +19,7 @@ import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,7 +35,8 @@ import java.util.regex.Pattern;
  *
  * Dataset rules (scope, soft-delete exclusion, table override) are applied to the dataset's target entity by
  * rendering its placeholder as a scoped sub-select, so the custom SQL cannot see rows the dataset hides. The
- * scope is resolved from the {@link com.jabiz.context.RequestContext} of the caller.
+ * scope is resolved from the {@link com.jabiz.context.RequestContext} of the caller. Temporal entities render as
+ * their versions in effect now, without tombstones, and only then restricted to the scope (decision D3).
  */
 @Component
 public class AdvancedQueryExecutor {
@@ -41,17 +44,22 @@ public class AdvancedQueryExecutor {
     private static final Pattern PLACEHOLDER =
         Pattern.compile("\\{\\{\\s*([A-Za-z0-9_]+)(?:\\.([A-Za-z0-9_]+))?\\s*\\}\\}");
     private static final String SCOPE_PARAM_PREFIX = "scope_";
+    /** Prefix of the platform's parameters, such as the time of temporal reads. */
+    private static final String RESERVED_PARAM_PREFIX = "__";
 
     private final StorageAdapterRegistry storageRegistry;
     private final EntityDefinitionRegistry entityRegistry;
     private final QueryCompiler queryCompiler;
+    private final Clock clock;
 
     public AdvancedQueryExecutor(StorageAdapterRegistry storageRegistry,
         EntityDefinitionRegistry entityRegistry,
-        QueryCompiler queryCompiler) {
+        QueryCompiler queryCompiler,
+        Clock clock) {
         this.storageRegistry = Objects.requireNonNull(storageRegistry);
         this.entityRegistry = Objects.requireNonNull(entityRegistry);
         this.queryCompiler = Objects.requireNonNull(queryCompiler);
+        this.clock = Objects.requireNonNull(clock);
     }
 
     /**
@@ -69,7 +77,8 @@ public class AdvancedQueryExecutor {
             Map<String, Object> scope = dataset.scope().resolve(request);
 
             QueryCompiler.Binder scopeBinder = new QueryCompiler.Binder(SCOPE_PARAM_PREFIX);
-            String sql = renderTemplate(queryDef.sqlTemplate(), dataset, scope, entities, scopeBinder);
+            TimeSlice now = TimeSlice.asOf(clock.instant());
+            String sql = renderTemplate(queryDef.sqlTemplate(), dataset, scope, now, entities, scopeBinder);
 
             Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(queryDef, inputParams));
             params.putAll(scopeBinder.params());
@@ -105,6 +114,7 @@ public class AdvancedQueryExecutor {
         String template,
         DatasetDefinition dataset,
         Map<String, Object> scope,
+        TimeSlice slice,
         Map<String, EntityDefinition> entities,
         QueryCompiler.Binder scopeBinder
     ) {
@@ -119,7 +129,7 @@ public class AdvancedQueryExecutor {
                                                    + "] that is not declared in fromEntities");
             }
             String replacement = fieldName == null
-                ? tableExpression(dataset, scope, def, scopeBinder)
+                ? queryCompiler.templateExpression(dataset, def, scope, slice, scopeBinder)
                 : SqlIdentifiers.require(def.physicalColumn(fieldName));
             matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
@@ -127,20 +137,13 @@ public class AdvancedQueryExecutor {
         return out.toString();
     }
 
-    private String tableExpression(DatasetDefinition dataset, Map<String, Object> scopeValues, EntityDefinition def,
-        QueryCompiler.Binder scopeBinder) {
-        String table = queryCompiler.resolveTable(dataset, def);
-        String scope = queryCompiler.scopeCondition(dataset, def, scopeValues, scopeBinder);
-        return scope.isBlank() ? table : "(SELECT * FROM " + table + " WHERE " + scope + ")";
-    }
-
     private Map<String, BoundValue> bindInputs(AdvancedQueryDefinition queryDef, Map<String, Object> inputs) {
         Map<String, BoundValue> result = new LinkedHashMap<>();
         for (QueryParameter spec : queryDef.parameters()) {
             String name = spec.name();
-            if (name.startsWith(SCOPE_PARAM_PREFIX)) {
-                throw new IllegalArgumentException("Parameter name [" + name + "] uses the reserved prefix "
-                                                   + SCOPE_PARAM_PREFIX);
+            if (name.startsWith(SCOPE_PARAM_PREFIX) || name.startsWith(RESERVED_PARAM_PREFIX)) {
+                throw new IllegalArgumentException("Parameter name [" + name + "] uses a reserved prefix ("
+                                                   + SCOPE_PARAM_PREFIX + ", " + RESERVED_PARAM_PREFIX + ")");
             }
             Object value = inputs != null ? inputs.get(name) : null;
             if (value == null) {

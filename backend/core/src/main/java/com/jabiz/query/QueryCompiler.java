@@ -6,6 +6,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.SemanticKinds;
+import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
@@ -41,24 +42,60 @@ public class QueryCompiler {
             return name;
         }
 
+        /**
+         * Registers a value under a fixed name, used for the platform's reserved parameters ({@code __asOf},
+         * {@code __knownAt}). Binding the same name again must supply the same value.
+         */
+        public String bindNamed(String name, BoundValue value) {
+            BoundValue existing = params.putIfAbsent(name, value);
+            if (existing != null && !existing.equals(value)) {
+                throw new IllegalStateException("Parameter " + name + " is already bound to another value");
+            }
+            return name;
+        }
+
         public Map<String, BoundValue> params() {
             return params;
         }
     }
 
+    /** Reserved parameter of the business time of a temporal read. */
+    public static final String AS_OF_PARAM = "__asOf";
+    /** Reserved parameter of the recording time of a temporal read. */
+    public static final String KNOWN_AT_PARAM = "__knownAt";
+    /** Alias of the sub-select of the versions in effect. */
+    public static final String VERSIONS_ALIAS = "v";
+
     /**
      * Compiles an entity query against the dataset, applying the dataset scope and limits.
+     * The entity must not be temporal: temporal reads need a {@link TimeSlice}.
      *
      * @param scopeValues the dataset scope resolved for the current request
      *                    ({@link com.jabiz.dataset.DatasetScope#resolve})
      */
     public PhysicalQueryPlan compile(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
         Map<String, Object> scopeValues) {
-        String physicalTable = resolveTable(dataset, def);
+        return compile(dataset, def, query, scopeValues, null);
+    }
+
+    /**
+     * Compiles an entity query against the dataset, applying the dataset scope and limits. For a temporal entity the
+     * query reads the versions in effect at {@code slice} (decision D3): tombstones are excluded, then the scope and
+     * then the query's own conditions are applied, all outside the sub-select that picks the versions, so an
+     * entity moved out of the scope never shows an older version that was still within it.
+     *
+     * @param slice required for temporal entities, ignored for others
+     */
+    public PhysicalQueryPlan compile(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        Map<String, Object> scopeValues, TimeSlice slice) {
         int safeLimit = Math.min(query.limit(), dataset.policy().maxQueryBatchSize());
 
         Binder binder = new Binder("p");
         List<String> fragments = new ArrayList<>();
+        String source = source(dataset, def, slice, binder);
+        if (def.temporal) {
+            fragments.add(notDeleted(def));
+        }
 
         String scope = scopeCondition(dataset, def, scopeValues, binder);
         if (!scope.isBlank()) {
@@ -83,7 +120,7 @@ public class QueryCompiler {
         }
 
         return new PhysicalQueryPlan(
-            physicalTable,
+            source,
             String.join(" AND ", fragments),
             binder.params(),
             sorts,
@@ -102,6 +139,60 @@ public class QueryCompiler {
             }
         }
         return SqlIdentifiers.require(def.physicalTable);
+    }
+
+    /**
+     * FROM item of a read: the table, or for a temporal entity the sub-select of the versions in effect at
+     * {@code slice}, aliased {@value #VERSIONS_ALIAS}. The sub-select filters by time only.
+     */
+    public String source(DatasetDefinition dataset, EntityDefinition def, TimeSlice slice, Binder binder) {
+        String table = resolveTable(dataset, def);
+        if (!def.temporal) {
+            return table;
+        }
+        if (slice == null) {
+            throw new IllegalArgumentException("Reading temporal entity " + def.name + " needs a time slice");
+        }
+        String id = SqlIdentifiers.require(def.primaryKeyColumn());
+        String effective = SqlIdentifiers.require(def.systemColumn(TemporalSpec.EFFECT_START_TIME));
+        String version = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
+        StringBuilder sql = new StringBuilder("(SELECT DISTINCT ON (").append(id).append(") * FROM ").append(table)
+            .append(" WHERE ").append(effective).append(" <= :")
+            .append(binder.bindNamed(AS_OF_PARAM, BoundValue.of(slice.asOf())));
+        if (slice.knownAt() != null) {
+            sql.append(" AND ").append(SqlIdentifiers.require(def.systemColumn(TemporalSpec.CREATED_TIME)))
+                .append(" <= :").append(binder.bindNamed(KNOWN_AT_PARAM, BoundValue.of(slice.knownAt())));
+        }
+        sql.append(" ORDER BY ").append(id).append(", ").append(effective).append(" DESC, ").append(version)
+            .append(" DESC) ").append(VERSIONS_ALIAS);
+        return sql.toString();
+    }
+
+    /** Excludes tombstones of a temporal entity; the first condition applied to its versions in effect. */
+    public String notDeleted(EntityDefinition def) {
+        return "NOT " + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED));
+    }
+
+    /**
+     * Expression that stands for the entity in a SQL template ({@code {{Entity}}}, docs/design/05-sql-template.md
+     * section 3): the table, the table restricted to the scope, or for a temporal entity the versions in effect
+     * without tombstones, restricted to the scope in that order (decision D3).
+     */
+    public String templateExpression(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scopeValues,
+        TimeSlice slice, Binder binder) {
+        String source = source(dataset, def, slice, binder);
+        List<String> conditions = new ArrayList<>();
+        if (def.temporal) {
+            conditions.add(notDeleted(def));
+        }
+        String scope = scopeCondition(dataset, def, scopeValues, binder);
+        if (!scope.isBlank()) {
+            conditions.add(scope);
+        }
+        if (conditions.isEmpty()) {
+            return source;
+        }
+        return "(SELECT * FROM " + source + " WHERE " + String.join(" AND ", conditions) + ")";
     }
 
     /**
@@ -190,7 +281,7 @@ public class QueryCompiler {
             if (value == null) {
                 throw invalidValue(fd, "IN list must not contain null");
             }
-            coerced.add(coerce(fd, value));
+            coerced.add(coerce(def, fd, value));
         }
         String param = binder.bind(BoundValue.of(coerced));
         return SqlIdentifiers.require(fd.physicalColumn()) + " IN (:" + param + ")";
@@ -209,8 +300,8 @@ public class QueryCompiler {
         if (between.low() == null || between.high() == null) {
             throw invalidValue(fd, "BETWEEN needs both bounds");
         }
-        String low = binder.bind(BoundValue.of(coerce(fd, between.low())));
-        String high = binder.bind(BoundValue.of(coerce(fd, between.high())));
+        String low = binder.bind(BoundValue.of(coerce(def, fd, between.low())));
+        String high = binder.bind(BoundValue.of(coerce(def, fd, between.high())));
         return SqlIdentifiers.require(fd.physicalColumn()) + " BETWEEN :" + low + " AND :" + high;
     }
 
@@ -226,7 +317,7 @@ public class QueryCompiler {
         if (value == null) {
             throw invalidValue(fd, "comparison " + operator + " with null is undefined");
         }
-        return SqlIdentifiers.require(fd.physicalColumn()) + " " + sql + " :" + binder.bind(BoundValue.of(coerce(fd, value)));
+        return SqlIdentifiers.require(fd.physicalColumn()) + " " + sql + " :" + binder.bind(BoundValue.of(coerce(def, fd, value)));
     }
 
     private FieldDefinition requireOperator(EntityDefinition def, String field, QueryOperator operator) {
@@ -239,9 +330,10 @@ public class QueryCompiler {
         return fd;
     }
 
-    private static Object coerce(FieldDefinition fd, Object value) {
+    private Object coerce(EntityDefinition def, FieldDefinition fd, Object value) {
         try {
-            return FieldValueCoercer.coerce(fd, value, false);
+            Object coerced = FieldValueCoercer.coerce(fd, value, false);
+            return fd.name().equals(def.primaryKey) ? def.normalizeId(coerced) : coerced;
         } catch (IllegalArgumentException e) {
             throw invalidValue(fd, e.getMessage());
         }

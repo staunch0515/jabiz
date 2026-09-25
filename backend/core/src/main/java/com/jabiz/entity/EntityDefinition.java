@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -34,11 +35,10 @@ public final class EntityDefinition {
     public final List<UniqueConstraint> uniqueConstraints;
     /** List views by name, in declaration order. */
     public final Map<String, ListViewDefinition> listViews;
-    /**
-     * Whether the entity keeps append-only bitemporal history (docs/design/04-temporal-append-only.md).
-     * Always false until phase 4 introduces {@code eb.temporal()}; exported so clients can rely on the flag.
-     */
-    public final boolean temporal = false;
+    /** Whether the entity keeps append-only bitemporal history (docs/design/04-temporal-append-only.md). */
+    public final boolean temporal;
+    /** Temporal settings; null unless {@link #temporal}. */
+    public final TemporalSpec temporalSpec;
 
     EntityDefinition(String name, String physicalTable, String primaryKey,
         Map<String, FieldDefinition> fields,
@@ -47,7 +47,8 @@ public final class EntityDefinition {
         List<GuardDefinition> guards,
         List<ReferenceDefinition> references,
         List<UniqueConstraint> uniqueConstraints,
-        Map<String, ListViewDefinition> listViews) {
+        Map<String, ListViewDefinition> listViews,
+        TemporalSpec temporalSpec) {
         this.name = name;
         this.physicalTable = physicalTable;
         this.primaryKey = primaryKey;
@@ -58,6 +59,8 @@ public final class EntityDefinition {
         this.references = references;
         this.uniqueConstraints = uniqueConstraints;
         this.listViews = listViews;
+        this.temporalSpec = temporalSpec;
+        this.temporal = temporalSpec != null;
         this.versionField = fields.values().stream()
             .filter(f -> f.kind() instanceof SemanticKind.Version)
             .map(FieldDefinition::name)
@@ -103,7 +106,54 @@ public final class EntityDefinition {
     /** Fields whose values are issued by the system and are never accepted from callers. */
     public boolean isSystemManaged(FieldDefinition field) {
         return field.kind() instanceof SemanticKind.Version
-               || (field.kind() instanceof SemanticKind.Temporal t && t.role() == TemporalRole.SYSTEM_RECORDED);
+               || (field.kind() instanceof SemanticKind.Temporal t && t.role() == TemporalRole.SYSTEM_RECORDED)
+               || (temporal && TemporalSpec.isSystemField(field.name()));
+    }
+
+    /**
+     * Fields that make up the business state of a version: every field except the temporal system fields.
+     * For entities that are not temporal these are all fields.
+     */
+    public List<String> stateFields() {
+        return fields.keySet().stream()
+            .filter(name -> !temporal || !TemporalSpec.isSystemField(name))
+            .toList();
+    }
+
+    /**
+     * Fields a caller can change: the state fields except the primary key and system-managed fields. On a temporal
+     * entity an insert or a deletion counts as a change of all of them (docs/design/09-decisions.md D9).
+     */
+    public List<String> changeableFields() {
+        return fields.values().stream()
+            .filter(f -> !f.name().equals(primaryKey) && !isSystemManaged(f))
+            .map(FieldDefinition::name)
+            .toList();
+    }
+
+    /**
+     * Normalizes an instance id: temporal entities are identified by UUIDs (they are registered in
+     * {@code entity_registry}); other entities keep the id as given.
+     *
+     * @throws IllegalArgumentException if the id of a temporal entity is not a UUID
+     */
+    public Object normalizeId(Object id) {
+        if (!temporal || id == null || id instanceof UUID) {
+            return id;
+        }
+        try {
+            return UUID.fromString(id.toString().trim());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("'" + id + "' is not a UUID; " + name + " is identified by UUIDs", e);
+        }
+    }
+
+    /** Physical column of a temporal system field. */
+    public String systemColumn(String systemField) {
+        if (!temporal) {
+            throw new IllegalStateException(name + " is not temporal");
+        }
+        return physicalColumn(systemField);
     }
 
     public boolean allowsTransition(String from, String to) {

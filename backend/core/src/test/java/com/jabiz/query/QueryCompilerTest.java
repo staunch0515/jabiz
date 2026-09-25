@@ -292,7 +292,7 @@ class QueryCompilerTest {
 
         assertThat(plan.whereClause()).isEmpty();
         assertThat(plan.sorts()).containsExactly(new PhysicalQueryPlan.PhysicalSort("f_id", true));
-        assertThat(plan.targetTable()).isEqualTo("t_item");
+        assertThat(plan.source()).isEqualTo("t_item");
     }
 
     @Test
@@ -370,7 +370,7 @@ class QueryCompilerTest {
             .isEmpty();
 
         PhysicalQueryPlan other = compiler.compile(scoped, OTHER, EntityQuery.builder().build(), Map.of("region", "JP"));
-        assertThat(other.targetTable()).isEqualTo("t_other");
+        assertThat(other.source()).isEqualTo("t_other");
         assertThat(other.whereClause()).isEmpty();
         assertThat(other.sorts()).containsExactly(new PhysicalQueryPlan.PhysicalSort("f_other_id", true));
     }

@@ -5,6 +5,7 @@ import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
 import io.r2dbc.postgresql.api.PostgresqlException;
+import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -13,6 +14,7 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,6 +33,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     /** SQLSTATE of unique_violation. */
     private static final String UNIQUE_VIOLATION = "23505";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final DatabaseClient db;
     private final TransactionalOperator tx;
@@ -52,7 +56,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
                 }
                 columns.add(SqlIdentifiers.require(e.getKey()));
                 markers.add(":v" + values.size());
-                values.add(e.getValue());
+                values.add(e.getValue() instanceof BoundValue bound ? bound : toStorage(e.getValue()));
             }
             if (columns.isEmpty()) {
                 return Mono.error(new IllegalArgumentException("Insert into " + table + " has no values"));
@@ -62,7 +66,14 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
             DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
             for (int i = 0; i < values.size(); i++) {
-                spec = spec.bind("v" + i, values.get(i));
+                Object value = values.get(i);
+                if (value instanceof BoundValue bound) {
+                    spec = bound.value() == null
+                        ? spec.bindNull("v" + i, storageType(bound.type()))
+                        : spec.bind("v" + i, toStorage(bound.value()));
+                } else {
+                    spec = spec.bind("v" + i, value);
+                }
             }
             return spec.fetch().rowsUpdated().then().onErrorMap(R2dbcStorageEngine::translate);
         });
@@ -84,7 +95,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
                     assignments.add(column + " = NULL");
                 } else {
                     assignments.add(column + " = :u" + values.size());
-                    values.add(e.getValue());
+                    values.add(toStorage(e.getValue()));
                 }
             }
             assignments.add(versionCol + " = " + versionCol + " + 1");
@@ -113,14 +124,16 @@ public final class R2dbcStorageEngine implements StorageEngine {
                 .bind("pk", id)
                 .bind("expectedVersion", expectedVersion)
                 .fetch().rowsUpdated()
-                .map(count -> count > 0);
+                .map(count -> count > 0)
+                .onErrorMap(R2dbcStorageEngine::translate);
         });
     }
 
     @Override
     public Flux<Map<String, Object>> executeQuery(PhysicalQueryPlan plan) {
         return Flux.defer(() -> {
-            StringBuilder sql = new StringBuilder("SELECT * FROM ").append(SqlIdentifiers.require(plan.targetTable()));
+            // The source is a table or the versions sub-select, built by QueryCompiler from validated identifiers.
+            StringBuilder sql = new StringBuilder("SELECT * FROM ").append(plan.source());
             if (plan.whereClause() != null && !plan.whereClause().isBlank()) {
                 sql.append(" WHERE ").append(plan.whereClause());
             }
@@ -139,14 +152,27 @@ public final class R2dbcStorageEngine implements StorageEngine {
     @Override
     public Mono<Long> count(PhysicalQueryPlan plan) {
         return Mono.defer(() -> {
-            StringBuilder sql = new StringBuilder("SELECT count(*) AS total FROM ")
-                .append(SqlIdentifiers.require(plan.targetTable()));
+            StringBuilder sql = new StringBuilder("SELECT count(*) AS total FROM ").append(plan.source());
             if (plan.whereClause() != null && !plan.whereClause().isBlank()) {
                 sql.append(" WHERE ").append(plan.whereClause());
             }
             return run(sql.toString(), plan.bindParams(), plan.timeout())
                 .next()
                 .map(row -> ((Number) row.get("total")).longValue());
+        });
+    }
+
+    @Override
+    public Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params) {
+        return Flux.defer(() -> {
+            DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
+            for (Map.Entry<String, BoundValue> e : params.entrySet()) {
+                BoundValue bound = e.getValue();
+                spec = bound.value() == null
+                    ? spec.bindNull(e.getKey(), storageType(bound.type()))
+                    : spec.bind(e.getKey(), toStorage(bound.value()));
+            }
+            return spec.map(R2dbcStorageEngine::toMap).all().onErrorMap(R2dbcStorageEngine::translate);
         });
     }
 
@@ -171,8 +197,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
         for (Map.Entry<String, BoundValue> e : params.entrySet()) {
             BoundValue bound = e.getValue();
             spec = bound.value() == null
-                ? spec.bindNull(e.getKey(), bound.type())
-                : spec.bind(e.getKey(), bound.value());
+                ? spec.bindNull(e.getKey(), storageType(bound.type()))
+                : spec.bind(e.getKey(), toStorage(bound.value()));
         }
         // The timeout covers the whole result, not the gap between rows.
         return spec.map(R2dbcStorageEngine::toMap)
@@ -180,25 +206,51 @@ public final class R2dbcStorageEngine implements StorageEngine {
             .collectList()
             .timeout(timeout)
             .onErrorMap(TimeoutException.class, ex -> new QueryTimeoutException("Query exceeded " + timeout, ex))
+            .onErrorMap(R2dbcStorageEngine::translate)
             .flatMapMany(Flux::fromIterable);
     }
 
-    /** Unique index violations become {@link UniqueKeyViolationException} carrying the index name. */
+    /**
+     * Unique index violations become {@link UniqueKeyViolationException} carrying the index name; refusals of the
+     * append-only guard become {@link AppendOnlyViolationException}.
+     */
     private static Throwable translate(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-            if (cause instanceof PostgresqlException pg
-                && UNIQUE_VIOLATION.equals(pg.getErrorDetails().getCode())) {
-                return new UniqueKeyViolationException(pg.getErrorDetails().getConstraintName().orElse(null), error);
+            if (cause instanceof PostgresqlException pg) {
+                String code = pg.getErrorDetails().getCode();
+                if (UNIQUE_VIOLATION.equals(code)) {
+                    return new UniqueKeyViolationException(pg.getErrorDetails().getConstraintName().orElse(null), error);
+                }
+                if (AppendOnlyViolationException.SQL_STATE.equals(code)) {
+                    return new AppendOnlyViolationException(pg.getErrorDetails().getMessage(), error);
+                }
             }
         }
         return error;
+    }
+
+    /** Type of a NULL: JSON for values stored as JSON. */
+    private static Class<?> storageType(Class<?> type) {
+        return Map.class.isAssignableFrom(type) || type == JsonText.class ? Json.class : type;
+    }
+
+    /** JSON values are sent as JSON; everything else as it is. */
+    private static Object toStorage(Object value) {
+        if (value instanceof JsonText text) {
+            return Json.of(text.json());
+        }
+        if (value instanceof Map<?, ?> map) {
+            return Json.of(JSON.writeValueAsString(map));
+        }
+        return value;
     }
 
     private static Map<String, Object> toMap(Row row, RowMetadata metadata) {
         Map<String, Object> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         int index = 0;
         for (ColumnMetadata column : metadata.getColumnMetadatas()) {
-            result.put(column.getName(), row.get(index++));
+            Object value = row.get(index++);
+            result.put(column.getName(), value instanceof Json json ? json.asString() : value);
         }
         return result;
     }

@@ -21,9 +21,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -47,13 +49,24 @@ class DatasetController {
 
     record Sort(String field, Boolean asc) {}
 
-    record QueryRequest(List<Filter> filters, List<Sort> sorts, Integer offset, Integer limit) {}
+    /**
+     * {@code asOf} and {@code knownAt} read temporal entities at another point in time
+     * (docs/design/04-temporal-append-only.md section 5.1); the default is the current state.
+     */
+    record QueryRequest(List<Filter> filters, List<Sort> sorts, Integer offset, Integer limit, Instant asOf,
+        Instant knownAt) {}
 
     record QueryResponse(List<EntityInstance> items, long total, int offset, int limit) {}
 
-    record Change(EntityAction action, Object id, Long version, Map<String, Object> attributes) {}
+    /**
+     * One change. {@code effectiveTime} applies to temporal entities only: when the change takes effect (default:
+     * the time of the operation); for {@code CANCEL_SCHEDULED} the time of the scheduled version to cancel.
+     */
+    record Change(EntityAction action, Object id, Long version, Map<String, Object> attributes,
+        Instant effectiveTime) {}
 
-    record CommitRequest(List<Change> changes) {}
+    /** {@code reason} is recorded with the operation; corrections of the past require it. */
+    record CommitRequest(List<Change> changes, String reason) {}
 
     private static final int DEFAULT_LIMIT = 50;
 
@@ -71,11 +84,12 @@ class DatasetController {
     }
 
     @GetMapping("/entities/{id}")
-    Mono<EntityInstance> read(@PathVariable String resourceId, @PathVariable String id) {
+    Mono<EntityInstance> read(@PathVariable String resourceId, @PathVariable String id,
+        @RequestParam(required = false) Instant asOf, @RequestParam(required = false) Instant knownAt) {
         return Mono.defer(() -> {
             DatasetDefinition dataset = dataset(resourceId);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
-            return entityManager.findById(dataset, def, id)
+            return entityManager.findById(dataset, def, id, asOf, knownAt)
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
                     def.name + " [ID: " + id + "] not found in dataset " + resourceId)));
         });
@@ -86,7 +100,7 @@ class DatasetController {
         return Mono.defer(() -> {
             DatasetDefinition dataset = dataset(resourceId);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
-            QueryRequest body = request == null ? new QueryRequest(null, null, null, null) : request;
+            QueryRequest body = request == null ? new QueryRequest(null, null, null, null, null, null) : request;
             ListViewDefinition view = def.listView(dataset.listView()).orElse(null);
 
             int offset = body.offset() == null ? 0 : body.offset();
@@ -103,8 +117,8 @@ class DatasetController {
             EntityQuery compiled = query.build();
             int effectiveLimit = Math.min(limit, dataset.policy().maxQueryBatchSize());
 
-            return entityManager.query(dataset, def, compiled).collectList()
-                .zipWith(entityManager.count(dataset, def, compiled))
+            return entityManager.query(dataset, def, compiled, body.asOf(), body.knownAt()).collectList()
+                .zipWith(entityManager.count(dataset, def, compiled, body.asOf(), body.knownAt()))
                 .map(result -> new QueryResponse(result.getT1(), result.getT2(), offset, effectiveLimit));
         });
     }
@@ -134,9 +148,25 @@ class DatasetController {
                 }
                 // Only the dataset's own entity: other entity types would escape their own datasets' scope.
                 changes.add(new EntityChange(change.action(), new EntityInstance(
-                    id, dataset.targetEntityType(), version, null, attributes)));
+                    id, dataset.targetEntityType(), version, null, attributes), change.effectiveTime()));
             }
-            return entityManager.commitBatch(dataset, changes);
+            return entityManager.commitBatch(dataset, changes, request.reason());
+        });
+    }
+
+    /**
+     * All versions of a temporal entity, with the operations that wrote them (docs/design/04-temporal-append-only.md
+     * section 5.2). Available when the dataset allows time travel and the latest state of the entity lies within
+     * its scope.
+     */
+    @GetMapping("/entities/{id}/history")
+    Mono<List<Map<String, Object>>> history(@PathVariable String resourceId, @PathVariable String id) {
+        return Mono.defer(() -> {
+            DatasetDefinition dataset = dataset(resourceId);
+            EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
+            return entityManager.history(dataset, def, id)
+                .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
+                    def.name + " [ID: " + id + "] not found in dataset " + resourceId)));
         });
     }
 

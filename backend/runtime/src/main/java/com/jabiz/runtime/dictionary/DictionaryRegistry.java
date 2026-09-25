@@ -20,7 +20,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -41,10 +44,12 @@ import java.util.stream.Collectors;
  *       {@code boundedElastic} because they are synchronous and may block;</li>
  *   <li>the fixed values of {@code Code} fields (labels are the codes);</li>
  *   <li>{@link SqlDictionary} beans;</li>
- *   <li>the platform table {@code sys_dict_item}.</li>
+ *   <li>the platform's temporal entity {@code SysDictItem} (table {@code sys_dict_item_version}), read at the
+ *       time of the clock.</li>
  * </ol>
  * Entries are cached per dictionary, in every supported language at once. The cache of a dictionary is evicted
- * by {@link #invalidate} (driven by {@link DictionaryChangeListener}); SQL dictionaries also expire after their TTL.
+ * by {@link #invalidate} (driven by {@link DictionaryChangeListener}); SQL dictionaries also expire after their TTL,
+ * database dictionaries when their next scheduled version takes effect.
  */
 @Component
 public class DictionaryRegistry {
@@ -61,7 +66,19 @@ public class DictionaryRegistry {
     private final ObjectProvider<AdvancedQueryExecutor> queries;
     private final DatasetRegistry datasets;
     private final MessageCatalog messages;
-    private final Map<String, Mono<Map<Locale, List<DictItem>>>> cache = new ConcurrentHashMap<>();
+    private final Clock clock;
+    private final Map<String, Mono<Loaded>> cache = new ConcurrentHashMap<>();
+
+    /** Entries of a dictionary in every language; {@code expiresAt} (clock time) is null when they do not expire. */
+    private record Loaded(Map<Locale, List<DictItem>> items, Instant expiresAt) {
+        static Loaded forever(Map<Locale, List<DictItem>> items) {
+            return new Loaded(items, null);
+        }
+
+        boolean expiredAt(Instant now) {
+            return expiresAt != null && !now.isBefore(expiresAt);
+        }
+    }
 
     public DictionaryRegistry(
         ObjectProvider<DictionaryProvider> providers,
@@ -70,7 +87,8 @@ public class DictionaryRegistry {
         DatasetRegistry datasets,
         DatabaseClient db,
         ObjectProvider<AdvancedQueryExecutor> queries,
-        MessageCatalog messages
+        MessageCatalog messages,
+        Clock clock
     ) {
         this.providers = providers.orderedStream().toList();
         sqlDictionaries.orderedStream().forEach(dict -> {
@@ -104,6 +122,7 @@ public class DictionaryRegistry {
         this.db = db;
         this.queries = queries;
         this.messages = messages;
+        this.clock = clock;
     }
 
     /** Entries of the dictionary labelled in the supported language closest to {@code locale}. */
@@ -155,47 +174,54 @@ public class DictionaryRegistry {
         return Optional.empty();
     }
 
-    /** Dictionaries present in {@code sys_dict_item}. */
+    /** Dictionaries that have items in {@code sys_dict_item_version}. */
     public Flux<String> databaseDictionaries() {
-        return db.sql("SELECT DISTINCT dict_urn FROM sys_dict_item")
+        return db.sql("SELECT DISTINCT dict_urn FROM sys_dict_item_version")
             .map((row, meta) -> row.get("dict_urn", String.class))
             .all();
     }
 
     private Mono<Map<Locale, List<DictItem>>> load(String dictUrn) {
-        Mono<Map<Locale, List<DictItem>>> cached = cache.get(dictUrn);
+        Mono<Loaded> cached = cache.get(dictUrn);
         if (cached != null) {
-            return cached;
+            return cached.flatMap(loaded -> {
+                if (loaded.expiredAt(clock.instant())) {
+                    // A scheduled version has taken effect since the entries were read.
+                    cache.remove(dictUrn, cached);
+                    return load(dictUrn);
+                }
+                return Mono.just(loaded.items());
+            });
         }
         if (declaredSource(dictUrn).isEmpty()) {
             // Only the table can know this URN. The URN may come straight from a request, so it is cached only
             // once the table actually has entries; otherwise made-up URNs would grow the cache without bound.
-            return fromTable(dictUrn).doOnNext(all -> {
-                if (all.values().stream().anyMatch(items -> !items.isEmpty())) {
-                    cache.putIfAbsent(dictUrn, Mono.just(all));
+            return fromTable(dictUrn).doOnNext(loaded -> {
+                if (loaded.items().values().stream().anyMatch(items -> !items.isEmpty())) {
+                    cache.putIfAbsent(dictUrn, Mono.just(loaded));
                 }
-            });
+            }).map(Loaded::items);
         }
         return cache.computeIfAbsent(dictUrn, urn -> {
-            Mono<Map<Locale, List<DictItem>>> loading = Mono.defer(() -> source(urn));
+            Mono<Loaded> loading = Mono.defer(() -> source(urn));
             SqlDictionary sql = providers.stream().noneMatch(p -> p.supports(urn)) && !implicit.containsKey(urn)
                 ? sqlDictionaries.get(urn) : null;
             // A failed load is not cached, so the next call retries.
             Duration ttl = sql != null ? sql.ttl() : FOREVER;
             return loading.cache(value -> ttl, error -> Duration.ZERO, () -> Duration.ZERO);
-        });
+        }).map(Loaded::items);
     }
 
-    private Mono<Map<Locale, List<DictItem>>> source(String urn) {
+    private Mono<Loaded> source(String urn) {
         Optional<DictionaryProvider> provider = providers.stream().filter(p -> p.supports(urn)).findFirst();
         if (provider.isPresent()) {
-            return fromProvider(provider.get(), urn).subscribeOn(Schedulers.boundedElastic());
+            return fromProvider(provider.get(), urn).subscribeOn(Schedulers.boundedElastic()).map(Loaded::forever);
         }
         if (implicit.containsKey(urn)) {
-            return fromProvider(implicit.get(urn), urn);
+            return fromProvider(implicit.get(urn), urn).map(Loaded::forever);
         }
         if (sqlDictionaries.containsKey(urn)) {
-            return fromSql(sqlDictionaries.get(urn));
+            return fromSql(sqlDictionaries.get(urn)).map(Loaded::forever);
         }
         return fromTable(urn);
     }
@@ -237,22 +263,29 @@ public class DictionaryRegistry {
     }
 
     /**
-     * Entries of {@code sys_dict_item}. The label of each language falls back to the default language; without
-     * either the code is shown.
+     * Items of the dictionary in {@code sys_dict_item_version}: the versions in effect at the time of the clock,
+     * without tombstones. The label of each language falls back to the default language; without either the code is
+     * shown. The entries expire when the next scheduled version of the dictionary takes effect.
      */
-    private Mono<Map<Locale, List<DictItem>>> fromTable(String urn) {
+    private Mono<Loaded> fromTable(String urn) {
         List<Locale> locales = messages.supportedLocales();
         String fallback = messages.defaultLocale().getLanguage();
+        Instant now = clock.instant();
         StringBuilder sql = new StringBuilder("SELECT item_code, sort_order, enabled");
         for (int i = 0; i < locales.size(); i++) {
             sql.append(", COALESCE(labels ->> :lang").append(i).append(", labels ->> :fallback) AS label_").append(i);
         }
-        sql.append(" FROM sys_dict_item WHERE dict_urn = :urn ORDER BY sort_order, item_code");
-        DatabaseClient.GenericExecuteSpec spec = db.sql(sql.toString()).bind("urn", urn).bind("fallback", fallback);
+        // dict_urn never changes within an item, so it may restrict the versions before the current one is chosen.
+        sql.append(" FROM (SELECT DISTINCT ON (dict_item_id) * FROM sys_dict_item_version")
+            .append(" WHERE dict_urn = :urn AND effect_start_time <= :asOf")
+            .append(" ORDER BY dict_item_id, effect_start_time DESC, version_no DESC) v")
+            .append(" WHERE NOT is_deleted ORDER BY sort_order, item_code");
+        DatabaseClient.GenericExecuteSpec spec = db.sql(sql.toString())
+            .bind("urn", urn).bind("fallback", fallback).bind("asOf", now);
         for (int i = 0; i < locales.size(); i++) {
             spec = spec.bind("lang" + i, locales.get(i).getLanguage());
         }
-        return spec
+        Mono<Map<Locale, List<DictItem>>> items = spec
             .map((row, meta) -> {
                 String code = row.get("item_code", String.class);
                 Integer sortOrder = row.get("sort_order", Integer.class);
@@ -274,6 +307,13 @@ public class DictionaryRegistry {
                 }
                 return all;
             });
+        Mono<Optional<Instant>> nextChange = db.sql("SELECT min(effect_start_time) AS next FROM sys_dict_item_version "
+                + "WHERE dict_urn = :urn AND effect_start_time > :asOf")
+            .bind("urn", urn).bind("asOf", now)
+            .map((row, meta) -> Optional.ofNullable(row.get("next", OffsetDateTime.class)).map(OffsetDateTime::toInstant))
+            .one()
+            .defaultIfEmpty(Optional.empty());
+        return items.zipWith(nextChange, (all, next) -> new Loaded(all, next.orElse(null)));
     }
 
     private static List<DictItem> sorted(List<DictItem> items) {

@@ -20,10 +20,18 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.query.TimeSlice;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.operation.OperationRecorder;
+import com.jabiz.runtime.operation.OperationRequest;
+import com.jabiz.runtime.operation.Operations;
+import com.jabiz.runtime.temporal.TemporalStore;
+import com.jabiz.runtime.temporal.VersionAppender;
+import com.jabiz.temporal.EntityVersion;
+import com.jabiz.temporal.Timeline;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
@@ -32,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -71,6 +80,10 @@ public class DatasetEntityManager {
     private final QueryCompiler queryCompiler;
     private final DictionaryRegistry dictionaries;
     private final Clock clock;
+    private final OperationRecorder operations;
+    private final TemporalWriter temporalWriter;
+    private final TemporalStore temporalStore;
+    private final JsonMapper json;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -78,7 +91,11 @@ public class DatasetEntityManager {
         DatasetRegistry datasetRegistry,
         QueryCompiler queryCompiler,
         DictionaryRegistry dictionaries,
-        Clock clock
+        Clock clock,
+        OperationRecorder operations,
+        TemporalStore temporalStore,
+        VersionAppender versions,
+        JsonMapper json
     ) {
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
         this.entityRegistry = Objects.requireNonNull(entityRegistry, "EntityDefinitionRegistry cannot be null");
@@ -86,6 +103,11 @@ public class DatasetEntityManager {
         this.queryCompiler = Objects.requireNonNull(queryCompiler, "QueryCompiler cannot be null");
         this.dictionaries = Objects.requireNonNull(dictionaries, "DictionaryRegistry cannot be null");
         this.clock = Objects.requireNonNull(clock, "Clock cannot be null");
+        this.operations = Objects.requireNonNull(operations, "OperationRecorder cannot be null");
+        this.temporalStore = Objects.requireNonNull(temporalStore, "TemporalStore cannot be null");
+        this.temporalWriter = new TemporalWriter(this, Objects.requireNonNull(versions, "VersionAppender cannot be null"),
+            queryCompiler);
+        this.json = Objects.requireNonNull(json, "JsonMapper cannot be null");
     }
 
     // ================= Writes =================
@@ -99,6 +121,22 @@ public class DatasetEntityManager {
      * @return snapshots of the inserted and updated entities in change order (deleted entities are not included)
      */
     public Mono<List<EntityInstance>> commitBatch(DatasetDefinition dataset, Collection<EntityChange> changes) {
+        return commitBatch(dataset, changes, null);
+    }
+
+    /**
+     * Applies a batch of changes in a single transaction, as {@link #commitBatch(DatasetDefinition, Collection)}.
+     *
+     * <p>Changes of temporal entities are appended as versions of one operation
+     * (docs/design/04-temporal-append-only.md): the operation of the pipeline if there is one, otherwise one this
+     * call records, named by the {@link OperationRequest} in the Reactor context or else
+     * {@value OperationRequest#DATASET_COMMIT}. An operation it records also stores the returned snapshots as its
+     * output. Batches of other entities are not recorded as operations.
+     *
+     * @param reason why the changes are made; required when a change corrects the past
+     */
+    public Mono<List<EntityInstance>> commitBatch(DatasetDefinition dataset, Collection<EntityChange> changes,
+        String reason) {
         if (changes == null || changes.isEmpty()) {
             return Mono.just(List.of());
         }
@@ -116,15 +154,41 @@ public class DatasetEntityManager {
             ValidationContext validation = new ValidationContext(clock, request);
             Map<String, Object> scope = dataset.scope().resolve(request);
 
-            Mono<List<EntityInstance>> work = Flux.fromIterable(ordered)
+            Mono<List<EntityInstance>> apply = Flux.fromIterable(ordered)
                 .concatMap(change -> applyChange(engine, dataset, scope, change, validation))
                 .collectList()
                 .map(Collections::unmodifiableList);
+
+            Mono<List<EntityInstance>> work = Operations.current().flatMap(existing -> {
+                if (existing.isPresent() || ordered.stream().noneMatch(this::isTemporal)) {
+                    return apply;
+                }
+                return Operations.requested().flatMap(requested -> {
+                    OperationRequest operation = requested
+                        .orElseGet(() -> OperationRequest.named(OperationRequest.DATASET_COMMIT, 1));
+                    if (reason != null) {
+                        operation = operation.withReason(reason);
+                    }
+                    return operations.begin(engine, operation, request).flatMap(started -> apply
+                        .contextWrite(view -> Operations.with(view, started))
+                        .flatMap(result -> operations.recordResult(engine, started.processSeqId(),
+                            json.writeValueAsString(result)).thenReturn(result)));
+                });
+            });
 
             return engine.inTransaction(work)
                 .doOnSuccess(committed -> log.debug("Committed {} change(s) through dataset {}",
                     ordered.size(), dataset.resourceId()));
         });
+    }
+
+    TemporalStore temporalStore() {
+        return temporalStore;
+    }
+
+    private boolean isTemporal(EntityChange change) {
+        String type = change.instance().entityType();
+        return type != null && entityRegistry.find(type).map(def -> def.temporal).orElse(false);
     }
 
     private Mono<EntityInstance> applyChange(
@@ -139,11 +203,19 @@ public class DatasetEntityManager {
                     "entityType", "REQUIRED", "EntityInstance has a missing or blank entityType")));
             }
             EntityDefinition def = entityRegistry.getOrThrow(entityType);
+            if (def.temporal) {
+                return temporalWriter.apply(engine, dataset, scope, def, change, validation)
+                    .onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e));
+            }
+            if (change.effectiveTime() != null || change.action() == EntityAction.CANCEL_SCHEDULED) {
+                throw notTemporal(def);
+            }
 
             Mono<EntityInstance> result = switch (change.action()) {
                 case INSERT -> insert(engine, dataset, scope, def, instance, validation);
                 case UPDATE -> update(engine, dataset, scope, def, instance, validation);
                 case DELETE -> delete(engine, dataset, scope, def, instance).then(Mono.<EntityInstance>empty());
+                case CANCEL_SCHEDULED -> throw notTemporal(def);
             };
             return result.onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e));
         });
@@ -218,7 +290,7 @@ public class DatasetEntityManager {
      * Dictionary codes are checked only where the update changes them: a stored code that has been disabled
      * since does not block updates of other fields (docs/design/02-metamodel.md section 5).
      */
-    private Mono<Void> verifyChangedCodes(
+    Mono<Void> verifyChangedCodes(
         EntityDefinition def, Map<String, Object> incoming, EntityInstance current, ValidationContext validation
     ) {
         Map<String, Object> changed = new LinkedHashMap<>();
@@ -254,46 +326,12 @@ public class DatasetEntityManager {
                 def.name, instance.id(), instance.version(), current.version())));
         }
 
-        // Keep only real changes; attempts to change immutable fields are collected and rejected together
-        // with every other rule this change breaks.
         List<Violation> violations = new ArrayList<>(scopeViolations);
         Map<String, Object> changes = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : incoming.entrySet()) {
-            String fieldName = entry.getKey();
-            if (sameValue(current.attributes().get(fieldName), entry.getValue())) {
-                continue;
-            }
-            if (def.field(fieldName).immutable() || fieldName.equals(def.primaryKey)) {
-                violations.add(new Violation(fieldName, PlatformErrorCodes.IMMUTABLE_FIELD, String.format(
-                    "Immutability violation on %s: field [%s] cannot be altered", def.name, fieldName)));
-                continue;
-            }
-            changes.put(fieldName, entry.getValue());
-        }
-        rejectSoftDeleteFields(dataset, def, changes, current.attributes(), violations);
+        String nextState = evaluateUpdate(dataset, def, instance.id(), current.attributes(), current.state(), incoming,
+            changes, violations, validation);
         if (changes.isEmpty() && violations.isEmpty()) {
             return Mono.just(current);
-        }
-
-        String nextState = current.state();
-        if (def.stateField != null && changes.containsKey(def.stateField)) {
-            Object candidate = changes.get(def.stateField);
-            if (candidate == null) {
-                violations.add(new Violation(def.stateField, PlatformErrorCodes.STATE_CLEARED,
-                    "The state of " + def.name + " [ID: " + instance.id() + "] cannot be cleared"));
-            } else {
-                String candidateState = candidate.toString();
-                if (!def.allowsTransition(current.state(), candidateState)) {
-                    violations.add(new Violation(def.stateField, PlatformErrorCodes.ILLEGAL_TRANSITION,
-                        String.format("Illegal transition from [%s] to [%s] on %s [ID: %s]",
-                            current.state(), candidateState, def.name, instance.id()),
-                        Map.of("from", String.valueOf(current.state()), "to", candidateState)));
-                } else {
-                    evaluateGuards(def, current.state(), candidateState, changes, current.attributes(),
-                        validation, violations);
-                    nextState = candidateState;
-                }
-            }
         }
         if (!violations.isEmpty()) {
             return Mono.error(new BusinessRuleViolationException(violations));
@@ -313,6 +351,56 @@ public class DatasetEntityManager {
                 .flatMap(applied -> applied
                     ? Mono.just(updated)
                     : Mono.<EntityInstance>error(conflict(def, instance.id())))));
+    }
+
+    /**
+     * Collects the real changes of an update into {@code changes} and every rule they break into
+     * {@code violations}: immutable fields, soft-delete fields, the lifecycle and its guards. Attempts to change
+     * immutable fields are not kept as changes.
+     *
+     * @param current      stored values before the update
+     * @param currentState stored lifecycle state
+     * @return the lifecycle state after the update
+     */
+    String evaluateUpdate(
+        DatasetDefinition dataset, EntityDefinition def, Object id, Map<String, Object> current, String currentState,
+        Map<String, Object> incoming, Map<String, Object> changes, List<Violation> violations,
+        ValidationContext validation
+    ) {
+        for (Map.Entry<String, Object> entry : incoming.entrySet()) {
+            String fieldName = entry.getKey();
+            if (sameValue(current.get(fieldName), entry.getValue())) {
+                continue;
+            }
+            if (def.field(fieldName).immutable() || fieldName.equals(def.primaryKey)) {
+                violations.add(new Violation(fieldName, PlatformErrorCodes.IMMUTABLE_FIELD, String.format(
+                    "Immutability violation on %s: field [%s] cannot be altered", def.name, fieldName)));
+                continue;
+            }
+            changes.put(fieldName, entry.getValue());
+        }
+        rejectSoftDeleteFields(dataset, def, changes, current, violations);
+
+        String nextState = currentState;
+        if (def.stateField != null && changes.containsKey(def.stateField)) {
+            Object candidate = changes.get(def.stateField);
+            if (candidate == null) {
+                violations.add(new Violation(def.stateField, PlatformErrorCodes.STATE_CLEARED,
+                    "The state of " + def.name + " [ID: " + id + "] cannot be cleared"));
+            } else {
+                String candidateState = candidate.toString();
+                if (!def.allowsTransition(currentState, candidateState)) {
+                    violations.add(new Violation(def.stateField, PlatformErrorCodes.ILLEGAL_TRANSITION,
+                        String.format("Illegal transition from [%s] to [%s] on %s [ID: %s]",
+                            currentState, candidateState, def.name, id),
+                        Map.of("from", String.valueOf(currentState), "to", candidateState)));
+                } else {
+                    evaluateGuards(def, currentState, candidateState, changes, current, validation, violations);
+                    nextState = candidateState;
+                }
+            }
+        }
+        return nextState;
     }
 
     private Mono<Void> delete(
@@ -348,23 +436,122 @@ public class DatasetEntityManager {
 
     /** Finds an entity by id within the dataset scope, reading from the primary engine. */
     public Mono<EntityInstance> findById(DatasetDefinition dataset, EntityDefinition def, Object id) {
+        return findById(dataset, def, id, null, null);
+    }
+
+    /**
+     * Finds an entity by id within the dataset scope, reading from the primary engine. A temporal entity is read
+     * in the version in effect at {@code asOf} (default: now) as recorded until {@code knownAt} (default: all).
+     */
+    public Mono<EntityInstance> findById(DatasetDefinition dataset, EntityDefinition def, Object id, Instant asOf,
+        Instant knownAt) {
         return RequestContexts.current().flatMap(request -> findInScope(
             storageRegistry.getEngine(dataset.storage().connectionPoolRef()), dataset,
-            dataset.scope().resolve(request), def, id));
+            dataset.scope().resolve(request), def, id, timeSlice(dataset, def, asOf, knownAt)));
     }
 
     /** Runs a query within the dataset scope, reading from the read replica when one is configured. */
     public Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query) {
+        return query(dataset, def, query, null, null);
+    }
+
+    /** As {@link #query(DatasetDefinition, EntityDefinition, EntityQuery)}, at a point in time for temporal entities. */
+    public Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        Instant asOf, Instant knownAt) {
         return RequestContexts.current().flatMapMany(request -> {
-            PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request));
+            PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                timeSlice(dataset, def, asOf, knownAt));
             return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
         });
     }
 
     /** Number of entities the query matches within the dataset scope, ignoring its paging. */
     public Mono<Long> count(DatasetDefinition dataset, EntityDefinition def, EntityQuery query) {
+        return count(dataset, def, query, null, null);
+    }
+
+    /** As {@link #count(DatasetDefinition, EntityDefinition, EntityQuery)}, at a point in time for temporal entities. */
+    public Mono<Long> count(DatasetDefinition dataset, EntityDefinition def, EntityQuery query, Instant asOf,
+        Instant knownAt) {
         return RequestContexts.current().flatMap(request -> readEngine(dataset)
-            .count(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request))));
+            .count(queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                timeSlice(dataset, def, asOf, knownAt))));
+    }
+
+    /**
+     * History of a temporal entity: all its versions with the operations that wrote them. Empty when the entity
+     * does not exist or its latest state (a tombstone included) lies outside the dataset scope; refused when the
+     * dataset does not allow time travel.
+     */
+    public Mono<List<Map<String, Object>>> history(DatasetDefinition dataset, EntityDefinition def, Object id) {
+        return RequestContexts.current().flatMap(request -> {
+            if (!def.temporal) {
+                throw notTemporal(def);
+            }
+            if (!dataset.policy().allowTimeTravel()) {
+                throw new ValidationException(List.of(new Violation(null, PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED,
+                    "Dataset " + dataset.resourceId() + " shows the current state only")));
+            }
+            Object key;
+            try {
+                key = def.normalizeId(id);
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException(List.of(new Violation(def.primaryKey, PlatformErrorCodes.INVALID_VALUE,
+                    e.getMessage())));
+            }
+            java.util.UUID uuid = (java.util.UUID) key;
+            StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
+            String table = queryCompiler.resolveTable(dataset, def);
+            Map<String, Object> scope = dataset.scope().resolve(request);
+            return temporalStore.load(engine, table, def, uuid).flatMap(versions -> {
+                Timeline timeline = Timeline.of(versions);
+                Optional<EntityVersion> latest = timeline.at(clock.instant())
+                    .or(() -> timeline.winners().stream().findFirst());
+                if (latest.isEmpty() || !withinScope(dataset, def, scope, latest.get().state())) {
+                    return Mono.empty();
+                }
+                return temporalStore.history(engine, table, def, uuid);
+            });
+        });
+    }
+
+    /** Whether values lie within the resolved scope of the dataset (always true for other entities). */
+    static boolean withinScope(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scope,
+        Map<String, Object> values) {
+        if (!dataset.isTarget(def.name)) {
+            return true;
+        }
+        for (Map.Entry<String, Object> filter : scope.entrySet()) {
+            Object expected = FieldValueCoercer.coerce(def.field(filter.getKey()), filter.getValue(), false);
+            if (!sameValue(expected, values.get(filter.getKey()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Point of view of a read requested by a caller: the current state unless {@code asOf} or {@code knownAt} is
+     * given, which only temporal entities of datasets allowing time travel accept (docs/design/03-dataset.md
+     * section 2.5).
+     */
+    private TimeSlice timeSlice(DatasetDefinition dataset, EntityDefinition def, Instant asOf, Instant knownAt) {
+        if (asOf != null || knownAt != null) {
+            if (!def.temporal) {
+                throw notTemporal(def);
+            }
+            if (!dataset.policy().allowTimeTravel()) {
+                throw new ValidationException(List.of(new Violation(asOf != null ? "asOf" : "knownAt",
+                    PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED,
+                    "Dataset " + dataset.resourceId() + " shows the current state only")));
+            }
+        }
+        return currentSlice(def, asOf, knownAt);
+    }
+
+    /** The given point of view, or now; null for entities that are not temporal. */
+    TimeSlice currentSlice(EntityDefinition def, Instant asOf, Instant knownAt) {
+        return def.temporal ? new TimeSlice(asOf != null ? asOf : clock.instant(), knownAt) : null;
     }
 
     private StorageEngine readEngine(DatasetDefinition dataset) {
@@ -378,6 +565,13 @@ public class DatasetEntityManager {
     private Mono<EntityInstance> findInScope(
         StorageEngine engine, DatasetDefinition dataset, Map<String, Object> scope, EntityDefinition def, Object id
     ) {
+        return findInScope(engine, dataset, scope, def, id, currentSlice(def, null, null));
+    }
+
+    private Mono<EntityInstance> findInScope(
+        StorageEngine engine, DatasetDefinition dataset, Map<String, Object> scope, EntityDefinition def, Object id,
+        TimeSlice slice
+    ) {
         return Mono.defer(() -> {
             if (id == null) {
                 throw new ValidationException(List.of(new Violation(
@@ -387,7 +581,7 @@ public class DatasetEntityManager {
                 .where(new QueryPredicate.Eq(def.primaryKey, id))
                 .limit(1)
                 .build();
-            PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, scope);
+            PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, scope, slice);
             return engine.executeQuery(plan).next().map(row -> hydrate(def, row));
         });
     }
@@ -399,7 +593,7 @@ public class DatasetEntityManager {
      * of its target entity. Fields that are not written, or are set to null, are not checked.
      * All missing targets are reported together.
      */
-    private Mono<Void> verifyReferences(
+    Mono<Void> verifyReferences(
         EntityDefinition def, Map<String, Object> values, Collection<String> changedFields
     ) {
         return Flux.fromIterable(def.references)
@@ -431,7 +625,7 @@ public class DatasetEntityManager {
     }
 
     /** Rejects the deletion of an instance that other entities still refer to. */
-    private Mono<Void> ensureNotReferenced(EntityDefinition def, EntityInstance current) {
+    Mono<Void> ensureNotReferenced(EntityDefinition def, EntityInstance current) {
         return Flux.fromIterable(entityRegistry.referencesTo(def.name))
             .concatMap(incoming -> isReferenced(incoming, def, current.id())
                 .filter(referenced -> referenced)
@@ -457,7 +651,8 @@ public class DatasetEntityManager {
             }
             EntityQuery query = EntityQuery.builder().where(where).limit(1).build();
             // Referrers outside the caller's scope still block the deletion, so the scope is not applied here.
-            return engine.executeQuery(queryCompiler.compile(sourceDataset, source, query, Map.of())).hasElements();
+            return engine.executeQuery(queryCompiler.compile(sourceDataset, source, query, Map.of(),
+                currentSlice(source, null, null))).hasElements();
         });
     }
 
@@ -468,7 +663,7 @@ public class DatasetEntityManager {
 
     // ================= Rules =================
 
-    private String requireWritable(EntityDefinition def) {
+    String requireWritable(EntityDefinition def) {
         return def.versionColumn().orElseThrow(() -> new BusinessRuleViolationException(new Violation(
             null, PlatformErrorCodes.ENTITY_READ_ONLY,
             "Entity " + def.name + " declares no Version field and is read-only", Map.of("entity", def.name))));
@@ -496,7 +691,7 @@ public class DatasetEntityManager {
     }
 
     /** The soft-delete fields of the dataset are maintained by deletions only, never by callers. */
-    private static void rejectSoftDeleteFields(
+    static void rejectSoftDeleteFields(
         DatasetDefinition dataset, EntityDefinition def, Map<String, Object> values, Map<String, Object> current,
         List<Violation> violations
     ) {
@@ -519,7 +714,7 @@ public class DatasetEntityManager {
         }
     }
 
-    private void verifyIdMatches(EntityDefinition def, EntityInstance instance, Map<String, Object> attrs) {
+    void verifyIdMatches(EntityDefinition def, EntityInstance instance, Map<String, Object> attrs) {
         if (instance.id() == null) {
             return;
         }
@@ -534,7 +729,7 @@ public class DatasetEntityManager {
      * Writes to the target entity must lie within the dataset's scope; missing scope values are filled in when
      * {@code fillMissing} is set.
      */
-    private void enforceScope(
+    void enforceScope(
         DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scope, Map<String, Object> attrs,
         boolean fillMissing, List<Violation> violations
     ) {
@@ -561,7 +756,7 @@ public class DatasetEntityManager {
      * Determines the state of a new entity and stores it in the attributes; null if the entity has no
      * lifecycle or no valid initial state could be determined (then a violation has been recorded).
      */
-    private String resolveInitialState(
+    String resolveInitialState(
         EntityDefinition def, Map<String, Object> attrs, String hint, List<Violation> violations
     ) {
         if (def.stateField == null) {
@@ -592,7 +787,7 @@ public class DatasetEntityManager {
     }
 
     /** Runs the transition guards of {@code from -> to} (from is null on insert) and collects their violations. */
-    private static void evaluateGuards(
+    static void evaluateGuards(
         EntityDefinition def, String from, String to, Map<String, Object> incoming, Map<String, Object> current,
         ValidationContext validation, List<Violation> violations
     ) {
@@ -617,7 +812,7 @@ public class DatasetEntityManager {
      * Enabled codes of the dictionaries behind the supplied Code values that have no fixed values, loaded
      * before validation so that the validator itself stays synchronous.
      */
-    private Mono<DictionaryLookup> dictionaryLookup(EntityDefinition def, Map<String, Object> raw) {
+    Mono<DictionaryLookup> dictionaryLookup(EntityDefinition def, Map<String, Object> raw) {
         List<String> urns = new ArrayList<>();
         for (Map.Entry<String, Object> entry : raw.entrySet()) {
             FieldDefinition field = def.fields.get(entry.getKey());
@@ -636,7 +831,7 @@ public class DatasetEntityManager {
      * A declared unique constraint becomes a validation error; any other unique index (the primary key of an
      * insert with a caller-supplied id, for example) is a conflict with existing data.
      */
-    private static Throwable uniqueViolation(EntityDefinition def, UniqueKeyViolationException e) {
+    static Throwable uniqueViolation(EntityDefinition def, UniqueKeyViolationException e) {
         for (UniqueConstraint unique : def.uniqueConstraints) {
             if (unique.name().equalsIgnoreCase(e.constraintName())) {
                 return new ValidationException(List.of(new Violation(unique.fields().getFirst(),
@@ -649,7 +844,7 @@ public class DatasetEntityManager {
             + e.constraintName() + ")");
     }
 
-    private static void rejectIfAny(List<Violation> violations) {
+    static void rejectIfAny(List<Violation> violations) {
         if (!violations.isEmpty()) {
             throw new BusinessRuleViolationException(violations);
         }
@@ -657,7 +852,7 @@ public class DatasetEntityManager {
 
     // ================= Helpers =================
 
-    private EntityInstance hydrate(EntityDefinition def, Map<String, Object> raw) {
+    EntityInstance hydrate(EntityDefinition def, Map<String, Object> raw) {
         Map<String, Object> attributes = new LinkedHashMap<>();
         for (FieldDefinition field : def.fields.values()) {
             if (field.kind() instanceof SemanticKind.Version || !raw.containsKey(field.physicalColumn())) {
@@ -697,15 +892,21 @@ public class DatasetEntityManager {
         return field.kind() instanceof SemanticKind.Temporal t && t.role() == TemporalRole.SYSTEM_RECORDED;
     }
 
-    private static boolean sameValue(Object a, Object b) {
+    static boolean sameValue(Object a, Object b) {
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             return x.compareTo(y) == 0;
         }
         return Objects.equals(a, b);
     }
 
-    private static EntityNotFoundException notFound(EntityDefinition def, Object id) {
+    static EntityNotFoundException notFound(EntityDefinition def, Object id) {
         return new EntityNotFoundException(def.name + " [ID: " + id + "] not found");
+    }
+
+    static ValidationException notTemporal(EntityDefinition def) {
+        return new ValidationException(List.of(new Violation(null, PlatformErrorCodes.NOT_TEMPORAL,
+            def.name + " is not temporal: it has no effective times, schedules or history",
+            Map.of("entity", def.name))));
     }
 
     private static ConcurrentUpdateException conflict(EntityDefinition def, Object id) {

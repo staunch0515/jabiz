@@ -1,6 +1,7 @@
 package com.jabiz.runtime.entity;
 
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.UniqueConstraint;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -10,6 +11,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -17,7 +19,8 @@ import java.util.Set;
 
 /**
  * Startup check that every physicalColumn declared in an EntityDefinition exists in its
- * physicalTable, and that every declared unique constraint is backed by a unique index of the same name
+ * physicalTable, that temporal tables and the operation tables have their constraints, indexes and append-only
+ * guard (docs/design/04-temporal-append-only.md section 8), and that every declared unique constraint is backed by a unique index of the same name
  * over exactly its columns (docs/design/02-metamodel.md section 6). It prevents silent drift between the Java metamodel and the actual schema
  * (which other systems or manual DDL may change): without it, drift only surfaces when a
  * request happens to touch the affected field.
@@ -44,10 +47,15 @@ public class MetaModelConsistencyChecker implements SmartInitializingSingleton {
         this.registry = registry;
     }
 
+    /** Operation tables, append-only like every temporal table (decision D4). */
+    static final List<String> OPERATION_TABLES = List.of("op_process", "op_process_item", "op_process_result",
+        "entity_registry");
+
     @Override
     public void afterSingletonsInstantiated() {
-        List<String> problems = Flux.fromIterable(registry.all())
-            .concatMap(this::checkEntity)
+        List<String> problems = Flux.fromIterable(OPERATION_TABLES)
+            .concatMap(table -> checkAppendOnlyGuard("Operation table " + table, table))
+            .concatWith(Flux.fromIterable(registry.all()).concatMap(this::checkEntity))
             .collectList()
             .block(CHECK_TIMEOUT);
 
@@ -68,9 +76,153 @@ public class MetaModelConsistencyChecker implements SmartInitializingSingleton {
                 .map(field -> "Entity " + def.name + ": field " + field.name()
                               + " -> missing column " + field.physicalColumn()
                               + " in table " + def.physicalTable);
+            if (def.temporal) {
+                // Uniqueness of temporal entities is enforced by locks, not indexes (decision D6).
+                Flux<String> rowId = actual.contains(def.temporalSpec.rowIdColumn().toLowerCase(Locale.ROOT))
+                    ? Flux.empty()
+                    : Flux.just("Entity " + def.name + ": missing row id column " + def.temporalSpec.rowIdColumn()
+                                + " in table " + def.physicalTable);
+                return columns.concatWith(rowId).concatWith(checkTemporalTable(def));
+            }
             return columns.concatWith(Flux.fromIterable(def.uniqueConstraints)
                 .concatMap(unique -> checkUniqueIndex(def, unique)));
         });
+    }
+
+    /**
+     * What a temporal table needs (docs/design/04-temporal-append-only.md section 2.1): the unique version number
+     * per entity, the index of the current-version query, the index of the operation, the foreign keys to
+     * {@code op_process} and {@code entity_registry}, and the append-only guard.
+     */
+    private Flux<String> checkTemporalTable(EntityDefinition def) {
+        String label = "Entity " + def.name + " (temporal)";
+        String id = def.primaryKeyColumn().toLowerCase(Locale.ROOT);
+        String version = def.systemColumn(TemporalSpec.VERSION_NO).toLowerCase(Locale.ROOT);
+        String effective = def.systemColumn(TemporalSpec.EFFECT_START_TIME).toLowerCase(Locale.ROOT);
+        String process = def.systemColumn(TemporalSpec.PROCESS_SEQ_ID).toLowerCase(Locale.ROOT);
+
+        Flux<String> indexes = fetchIndexes(def.physicalTable).collectList().flatMapMany(found -> {
+            List<String> problems = new ArrayList<>();
+            if (found.stream().noneMatch(ix -> ix.unique() && ix.full() && ix.columns().size() == 2
+                && Set.copyOf(ix.columns()).equals(Set.of(id, version)))) {
+                problems.add(label + " -> no unique index on (" + id + ", " + version + ")");
+            }
+            if (found.stream().noneMatch(ix -> ix.full() && ix.startsWith(id, false)
+                && ix.columns().size() >= 3 && ix.columns().get(1).equals(effective) && ix.descending(1)
+                && ix.columns().get(2).equals(version) && ix.descending(2))) {
+                problems.add(label + " -> no index on (" + id + ", " + effective + " DESC, " + version + " DESC)");
+            }
+            if (found.stream().noneMatch(ix -> ix.startsWith(process, false))) {
+                problems.add(label + " -> no index on (" + process + ")");
+            }
+            return Flux.fromIterable(problems);
+        });
+        Flux<String> foreignKeys = fetchForeignKeys(def.physicalTable).collectList().flatMapMany(found -> {
+            List<String> problems = new ArrayList<>();
+            if (!found.contains(process + "->op_process")) {
+                problems.add(label + " -> no foreign key (" + process + ") to op_process");
+            }
+            if (!found.contains(id + "->entity_registry")) {
+                problems.add(label + " -> no foreign key (" + id + ") to entity_registry");
+            }
+            return Flux.fromIterable(problems);
+        });
+        return indexes.concatWith(foreignKeys).concatWith(checkAppendOnlyGuard(label, def.physicalTable));
+    }
+
+    /**
+     * The table must have enabled triggers of {@code jabiz_reject_mutation()} rejecting row updates and deletions
+     * and truncation (decision D5).
+     */
+    private Flux<String> checkAppendOnlyGuard(String label, String table) {
+        return db.sql("""
+                select t.tgtype as tgtype
+                from pg_trigger t
+                join pg_proc p on p.oid = t.tgfoid
+                where t.tgrelid = to_regclass(:tableName) and not t.tgisinternal and t.tgenabled <> 'D'
+                  and p.proname = 'jabiz_reject_mutation'
+                """)
+            .bind("tableName", table)
+            .map((row, meta) -> ((Number) row.get("tgtype")).intValue())
+            .all()
+            .collectList()
+            .flatMapMany(types -> {
+                boolean update = false;
+                boolean delete = false;
+                boolean truncate = false;
+                for (int type : types) {
+                    boolean row = (type & 1) != 0;
+                    boolean before = (type & 2) != 0;
+                    if (row && before) {
+                        delete |= (type & 8) != 0;
+                        update |= (type & 16) != 0;
+                    }
+                    if (!row && before) {
+                        truncate |= (type & 32) != 0;
+                    }
+                }
+                List<String> problems = new ArrayList<>();
+                if (!update || !delete) {
+                    problems.add(label + " -> table " + table + " lacks the row trigger BEFORE UPDATE OR DELETE "
+                                 + "executing jabiz_reject_mutation() (SELECT jabiz_protect_append_only(...))");
+                }
+                if (!truncate) {
+                    problems.add(label + " -> table " + table + " lacks the statement trigger BEFORE TRUNCATE "
+                                 + "executing jabiz_reject_mutation()");
+                }
+                return Flux.fromIterable(problems);
+            });
+    }
+
+    private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full) {
+        boolean startsWith(String column, boolean descending) {
+            return !columns.isEmpty() && columns.getFirst().equals(column) && descending(0) == descending;
+        }
+
+        boolean descending(int position) {
+            return position < options.size() && (options.get(position) & 1) != 0;
+        }
+    }
+
+    /** Indexes of the table with their key columns in order and per-column options (bit 1: DESC). */
+    private Flux<IndexInfo> fetchIndexes(String table) {
+        return db.sql("""
+                select array_to_string(array(
+                           select a.attname from unnest(i.indkey) with ordinality k(attnum, ord)
+                           left join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
+                           order by k.ord), ',') as cols,
+                       array_to_string(i.indoption::int2[], ',') as opts,
+                       i.indisunique as is_unique,
+                       (i.indpred is null and i.indexprs is null) as is_full
+                from pg_index i
+                where i.indrelid = to_regclass(:tableName)
+                """)
+            .bind("tableName", table)
+            .map((row, meta) -> new IndexInfo(
+                split(row.get("cols", String.class)).stream().map(c -> c.toLowerCase(Locale.ROOT)).toList(),
+                split(row.get("opts", String.class)).stream().map(Integer::valueOf).toList(),
+                Boolean.TRUE.equals(row.get("is_unique", Boolean.class)),
+                Boolean.TRUE.equals(row.get("is_full", Boolean.class))))
+            .all();
+    }
+
+    /** Single-column foreign keys of the table as {@code column->referenced table}. */
+    private Flux<String> fetchForeignKeys(String table) {
+        return db.sql("""
+                select a.attname as column_name, rt.relname as target
+                from pg_constraint c
+                join pg_class rt on rt.oid = c.confrelid
+                join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+                where c.contype = 'f' and c.conrelid = to_regclass(:tableName) and cardinality(c.conkey) = 1
+                """)
+            .bind("tableName", table)
+            .map((row, meta) -> row.get("column_name", String.class).toLowerCase(Locale.ROOT) + "->"
+                                + row.get("target", String.class).toLowerCase(Locale.ROOT))
+            .all();
+    }
+
+    private static List<String> split(String text) {
+        return text == null || text.isEmpty() ? List.of() : List.of(text.split(","));
     }
 
     private Mono<String> checkUniqueIndex(EntityDefinition def, UniqueConstraint unique) {

@@ -1,5 +1,6 @@
 package com.jabiz.runtime.storage;
 
+import com.jabiz.query.BoundValue;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import reactor.core.publisher.Flux;
@@ -11,11 +12,16 @@ import java.util.Map;
  * Reactive contract of a physical storage engine (R2DBC, or other backends that can
  * offer the same semantics). Rows are returned as maps keyed by column name; key lookup
  * is case-insensitive.
+ *
+ * <p>Values are bound as they are, except that a {@link java.util.Map} or a {@link JsonText} is stored as JSON;
+ * JSON columns are read back as their text. A write the append-only guard of the database rejects (decision
+ * D5) fails with {@link AppendOnlyViolationException}.
  */
 public interface StorageEngine {
 
     /**
-     * Inserts a new record; null values are omitted so that column defaults apply.
+     * Inserts a new record; null values are omitted so that column defaults apply. A {@link BoundValue} whose value
+     * is null is inserted as an explicit, typed NULL instead.
      * A unique index violation fails with {@link UniqueKeyViolationException}, as do the updates below.
      */
     Mono<Void> insert(String table, Map<String, Object> record);
@@ -48,6 +54,13 @@ public interface StorageEngine {
 
     /** Number of rows matching the plan's condition; sorting and paging of the plan are ignored. */
     Mono<Long> count(PhysicalQueryPlan plan);
+
+    /**
+     * Runs a query the platform itself built (operation records, versions of temporal entities, advisory locks)
+     * in the same transaction as the other calls of the pipeline. Identifiers in {@code sql} come from metadata
+     * only and all values are bound; no row limit is added.
+     */
+    Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params);
 
     /** Executes a fully rendered SQL statement. */
     Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan);

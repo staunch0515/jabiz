@@ -267,7 +267,12 @@ class DatasetApiIT extends PostgresIntegrationTest {
                 HttpStatus.BAD_REQUEST)).extracting(v -> v.get("ruleCode")).containsExactly("NOT_IN_DICTIONARY");
         } finally {
             execute("DELETE FROM t_customs_declaration");
-            execute("DELETE FROM sys_dict_item WHERE item_code = 'JPTEMP'");
+            // Dictionary items are append-only: the item is removed by a tombstone written through its dataset.
+            Map<String, Object> item = query("SELECT dict_item_id, max(version_no) AS version_no "
+                + "FROM sys_dict_item_version WHERE item_code = 'JPTEMP' GROUP BY dict_item_id").getFirst();
+            commit("urn:jabiz:dataset:platform:SysDictItem", "admin", change("DELETE",
+                item.get("dict_item_id").toString(), ((Number) item.get("version_no")).longValue(), Map.of()))
+                .expectStatus().isOk();
         }
     }
 

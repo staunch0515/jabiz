@@ -11,6 +11,10 @@ import com.jabiz.resource.ResourceNotFoundException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.RebaseConflictException;
+import com.jabiz.runtime.RevertConflictException;
+import com.jabiz.runtime.storage.AppendOnlyViolationException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,6 +94,55 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConcurrentUpdateException.class)
     ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    /** Later versions changed the same fields (decision D1): lists them so the caller can cancel or change them. */
+    @ExceptionHandler(RebaseConflictException.class)
+    ProblemDetail handleRebaseConflict(RebaseConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("conflicts", ex.conflicts().stream().map(c -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("entityType", c.entityType());
+            entry.put("entityId", String.valueOf(c.entityId()));
+            entry.put("versionNo", c.versionNo());
+            entry.put("effectStartTime", c.effectiveFrom().toString());
+            entry.put("processSeqId", c.processSeqId());
+            entry.put("fields", c.fields().stream().sorted().toList());
+            return entry;
+        }).toList());
+        return problem;
+    }
+
+    /** Later operations block a revert (decision D2): lists them, newest first. */
+    @ExceptionHandler(RevertConflictException.class)
+    ProblemDetail handleRevertConflict(RevertConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("blockingOperations", ex.blocking().stream().map(b -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("processSeqId", b.processSeqId());
+            entry.put("entityType", b.entityType());
+            entry.put("entityId", String.valueOf(b.entityId()));
+            entry.put("fields", b.fields());
+            return entry;
+        }).toList());
+        return problem;
+    }
+
+    @ExceptionHandler(PermissionDeniedException.class)
+    ProblemDetail handlePermissionDenied(PermissionDeniedException ex, ServerWebExchange exchange) {
+        Violation violation = new Violation(null, PlatformErrorCodes.PERMISSION_DENIED, ex.getMessage(),
+            Map.of("permission", ex.permission()));
+        return withViolations(HttpStatus.FORBIDDEN, ex.getMessage(), List.of(violation), exchange);
+    }
+
+    /**
+     * The database refused to change an append-only table (decision D5). The platform never asks for that, so this
+     * is a defect: logged as an error, answered as a plain 500.
+     */
+    @ExceptionHandler(AppendOnlyViolationException.class)
+    ProblemDetail handleAppendOnlyViolation(AppendOnlyViolationException ex) {
+        log.error("SEVERE: append-only guard rejected a write; this is a defect", ex);
+        return ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     private ProblemDetail withViolations(

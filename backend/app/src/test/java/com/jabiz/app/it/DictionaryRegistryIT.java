@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +33,10 @@ import static org.assertj.core.api.Assertions.tuple;
 class DictionaryRegistryIT extends PostgresIntegrationTest {
 
     private static final String PORTS = "urn:jabiz:dict:customs_port";
-    private static final String UNITS = "urn:jabiz:dict:it_unit";
+    private static final AtomicInteger RUN = new AtomicInteger();
+
+    /** Dictionary items are append-only, so every test works with a dictionary of its own. */
+    private String units;
 
     @Autowired
     DictionaryRegistry dictionaries;
@@ -48,7 +52,7 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
 
     @BeforeEach
     void reset() {
-        execute("DELETE FROM sys_dict_item WHERE dict_urn = ?", UNITS);
+        units = "urn:jabiz:dict:it_unit_" + RUN.incrementAndGet();
         execute("DELETE FROM it_ticket");
         dictionaries.invalidate("*");
     }
@@ -66,14 +70,14 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels, sort_order, enabled) VALUES "
             + "(?, 'KG', '{\"en\": \"Kilogram\", \"ja\": \"キログラム\"}', 2, true), "
             + "(?, 'LB', '{\"en\": \"Pound\"}', 1, false), "
-            + "(?, 'T', '{}', 3, true)", UNITS, UNITS, UNITS);
+            + "(?, 'T', '{}', 3, true)", units, units, units);
 
-        assertThat(items(UNITS, Locale.JAPANESE)).extracting(DictItem::code, DictItem::label, DictItem::enabled)
+        assertThat(items(units, Locale.JAPANESE)).extracting(DictItem::code, DictItem::label, DictItem::enabled)
             .containsExactly(tuple("LB", "Pound", false), tuple("KG", "キログラム", true), tuple("T", "T", true));
-        assertThat(items(UNITS, Locale.forLanguageTag("fr"))).extracting(DictItem::label)
+        assertThat(items(units, Locale.forLanguageTag("fr"))).extracting(DictItem::label)
             .containsExactly("Pound", "Kilogram", "T");
         // Disabled codes stay readable but are not accepted as input.
-        assertThat(enabled(UNITS)).containsExactlyInAnyOrder("KG", "T");
+        assertThat(enabled(units)).containsExactlyInAnyOrder("KG", "T");
     }
 
     @Test
@@ -108,8 +112,8 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         }
         assertThat(dictionaries.cachedDictionaries()).isEqualTo(before);
 
-        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'KG')", UNITS);
-        assertThat(enabled(UNITS)).containsExactly("KG");
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'KG')", units);
+        assertThat(enabled(units)).containsExactly("KG");
         assertThat(dictionaries.cachedDictionaries()).isEqualTo(before + 1);
     }
 
@@ -125,36 +129,59 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> new DictionaryRegistry(beans.getBeanProvider(DictionaryProvider.class),
             beans.getBeanProvider(SqlDictionary.class), entities, datasets, null,
-            beans.getBeanProvider(AdvancedQueryExecutor.class), messages))
+            beans.getBeanProvider(AdvancedQueryExecutor.class), messages, clock))
             .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unknown dataset urn:jabiz:dataset:nope")
             .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unregistered entity Ghost");
     }
 
     @Test
-    void changesOfTheTableEvictTheCacheThroughNotify() {
+    void seededPortsAreBaseData() {
         assertThat(enabled(PORTS)).containsExactlyInAnyOrder("JPTYO", "JPYOK", "JPOSA");
+        assertThat(items(PORTS, Locale.JAPANESE)).extracting(DictItem::label)
+            .containsExactly("東京港", "横浜港", "大阪港");
+    }
 
-        execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels) VALUES (?, 'JPNGO', '{\"en\": \"Nagoya\"}')",
-            PORTS);
-        awaitTrue(() -> enabled(PORTS).contains("JPNGO"));
+    @Test
+    void changesOfTheTableEvictTheCacheThroughNotify() {
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels) VALUES (?, 'KG', '{\"en\": \"Kilogram\"}')",
+            units);
+        assertThat(enabled(units)).containsExactly("KG");
 
-        execute("UPDATE sys_dict_item SET enabled = false WHERE dict_urn = ? AND item_code = 'JPNGO'", PORTS);
-        awaitTrue(() -> !enabled(PORTS).contains("JPNGO"));
-        execute("DELETE FROM sys_dict_item WHERE dict_urn = ? AND item_code = 'JPNGO'", PORTS);
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels) VALUES (?, 'LB', '{\"en\": \"Pound\"}')",
+            units);
+        awaitTrue(() -> enabled(units).contains("LB"));
+
+        // Putting an existing item again appends a corrected version of its base data.
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels, enabled) VALUES (?, 'LB', '{}', false)",
+            units);
+        awaitTrue(() -> !enabled(units).contains("LB"));
+        assertThat(query("SELECT version_no FROM sys_dict_item_version WHERE dict_urn = ? AND item_code = 'LB' "
+            + "ORDER BY version_no", units)).extracting(row -> row.get("version_no")).containsExactly(1, 2);
+    }
+
+    @Test
+    void theViewRefusesUpdatesAndDeletions() {
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'KG')", units);
+        assertThatThrownBy(() -> execute("UPDATE sys_dict_item SET enabled = false WHERE dict_urn = ?", units))
+            .hasMessageContaining("sys_dict_item");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_dict_item WHERE dict_urn = ?", units))
+            .hasMessageContaining("sys_dict_item");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_dict_item_version WHERE dict_urn = ?", units))
+            .hasMessageContaining("append-only");
     }
 
     @Test
     void theListenerReconnectsAfterLosingItsConnection() {
-        assertThat(enabled(UNITS)).isEmpty();
+        assertThat(enabled(units)).isEmpty();
         List<?> terminated = query("SELECT pg_terminate_backend(pid) AS done FROM pg_stat_activity "
             + "WHERE query = 'LISTEN " + DictionaryRegistry.CHANNEL + "' AND pid <> pg_backend_pid()");
         assertThat(terminated).isNotEmpty();
 
         // Once reconnected, the listener evicts everything and then follows new notifications again.
-        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'M')", UNITS);
-        awaitTrue(() -> enabled(UNITS).contains("M"));
-        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'CM')", UNITS);
-        awaitTrue(() -> enabled(UNITS).contains("CM"));
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'M')", units);
+        awaitTrue(() -> enabled(units).contains("M"));
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'CM')", units);
+        awaitTrue(() -> enabled(units).contains("CM"));
     }
 
     private static void awaitTrue(Supplier<Boolean> condition) {

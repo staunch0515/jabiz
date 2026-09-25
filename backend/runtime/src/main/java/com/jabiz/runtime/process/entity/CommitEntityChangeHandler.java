@@ -5,6 +5,8 @@ import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityAction;
 import com.jabiz.runtime.EntityChange;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.operation.OperationRequest;
+import com.jabiz.runtime.operation.Operations;
 import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -20,6 +22,11 @@ import java.util.Map;
 @Component
 public class CommitEntityChangeHandler implements StepHandler<CommitEntityChangeMetadata, EntityChangeContext> {
 
+    private static final Map<EntityAction, String> PROCESS_NAMES = Map.of(
+        EntityAction.INSERT, AddProcessDefinition.DEFINITION.name(),
+        EntityAction.UPDATE, UpdateProcessDefinition.DEFINITION.name(),
+        EntityAction.DELETE, DeleteProcessDefinition.DEFINITION.name());
+
     private final DatasetEntityManager entityManager;
 
     public CommitEntityChangeHandler(DatasetEntityManager entityManager) {
@@ -30,12 +37,16 @@ public class CommitEntityChangeHandler implements StepHandler<CommitEntityChange
     public Mono<Void> execute(CommitEntityChangeMetadata metadata, EntityChangeContext ctx) {
         return Mono.defer(() -> {
             EntityChange change = new EntityChange(metadata.action(), instanceFor(metadata.action(), ctx));
+            // Writes of temporal entities are recorded as the operation of this process execution.
+            OperationRequest operation = new OperationRequest(PROCESS_NAMES.get(metadata.action()), 1,
+                ctx.processSeqId(), null, null, null, null, null);
             return entityManager.commitBatch(ctx.dataset(), List.of(change))
                 .doOnNext(saved -> {
                     if (!saved.isEmpty()) {
                         ctx.setResult(saved.get(0));
                     }
                 })
+                .contextWrite(view -> Operations.withRequest(view, operation))
                 .then();
         });
     }
@@ -49,6 +60,8 @@ public class CommitEntityChangeHandler implements StepHandler<CommitEntityChange
                 ctx.id(), definition.name, ctx.version(), null, ctx.attributes());
             case DELETE -> new EntityInstance(
                 ctx.id(), definition.name, ctx.version(), null, Map.of());
+            case CANCEL_SCHEDULED -> throw new IllegalArgumentException("The generic entity processes cannot cancel "
+                + "scheduled versions; use the dataset API");
         };
     }
 }

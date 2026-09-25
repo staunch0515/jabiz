@@ -135,6 +135,7 @@ public record DatasetDefinition(
         private int queryBatch = 100;
         private int writeBatch = 100;
         private Duration timeout = Duration.ofSeconds(5);
+        private boolean allowTimeTravel = true;
 
         public PolicyBuilder readOnly(boolean ro) { this.readOnly = ro; return this; }
 
@@ -151,9 +152,15 @@ public record DatasetDefinition(
         public PolicyBuilder maxWriteBatchSize(int b) { this.writeBatch = b; return this; }
         public PolicyBuilder queryTimeout(Duration d) { this.timeout = d; return this; }
 
+        /**
+         * Whether callers may read temporal entities at another point in time ({@code asOf}, {@code knownAt}) and
+         * read their history; when false they see the current state only.
+         */
+        public PolicyBuilder allowTimeTravel(boolean allowed) { this.allowTimeTravel = allowed; return this; }
+
         public DatasetPolicy build() {
             return new DatasetPolicy(readOnly, softDelete, softDeleteField, softDeleteTimeField,
-                queryBatch, writeBatch, timeout);
+                queryBatch, writeBatch, timeout, allowTimeTravel);
         }
     }
 }

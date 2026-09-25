@@ -22,6 +22,7 @@ public final class EntityBuilder {
     private final List<ReferenceDefinition> references = new ArrayList<>();
     private final List<UniqueConstraint> uniqueConstraints = new ArrayList<>();
     private final Map<String, ListViewDefinition> listViews = new LinkedHashMap<>();
+    private TemporalBuilder temporal;
 
     EntityBuilder(String name) { this.name = name; }
 
@@ -73,6 +74,23 @@ public final class EntityBuilder {
         uniqueConstraints.add(new UniqueConstraint(constraintName, List.of(fieldNames)));
     }
 
+    /** Makes the entity append-only and bitemporal with default settings (docs/design/04-temporal-append-only.md). */
+    public void temporal() {
+        temporal(t -> { });
+    }
+
+    /**
+     * Makes the entity append-only and bitemporal. The system fields ({@link TemporalSpec#SYSTEM_FIELDS}) are
+     * added by the platform and must not be declared.
+     */
+    public void temporal(Consumer<TemporalBuilder> block) {
+        if (temporal != null) {
+            throw invalid("temporal() is declared twice");
+        }
+        temporal = new TemporalBuilder();
+        block.accept(temporal);
+    }
+
     /** Declares a list view (docs/design/02-metamodel.md section 7). */
     public void listView(String viewName, Consumer<ListViewDefinition.Builder> block) {
         if (listViews.containsKey(viewName)) {
@@ -89,7 +107,8 @@ public final class EntityBuilder {
         if (!fields.containsKey(primaryKey)) {
             throw invalid("primary key '" + primaryKey + "' is not a declared field");
         }
-        validateUniqueColumns();
+        TemporalSpec temporalSpec = temporal == null ? null : buildTemporal();
+        validateUniqueColumns(temporalSpec);
         validateVersionField();
         validateLifecycle();
         addImplicitReferences();
@@ -107,12 +126,66 @@ public final class EntityBuilder {
             List.copyOf(guards),
             List.copyOf(references),
             List.copyOf(uniqueConstraints),
-            Collections.unmodifiableMap(new LinkedHashMap<>(listViews))
+            Collections.unmodifiableMap(new LinkedHashMap<>(listViews)),
+            temporalSpec
         );
     }
 
-    private void validateUniqueColumns() {
+    /**
+     * Checks what a temporal entity must not declare itself and adds its system fields. The identity has to be a
+     * {@link SemanticKind.SemanticIdentity}: all versions of an instance share it and it is registered in
+     * {@code entity_registry}, whose key is a UUID.
+     */
+    private TemporalSpec buildTemporal() {
+        FieldDefinition key = fields.get(primaryKey);
+        if (!(key.kind() instanceof SemanticKind.SemanticIdentity)) {
+            throw invalid("the primary key of a temporal entity must be a SemanticIdentity (a UUID)");
+        }
+        for (FieldDefinition field : fields.values()) {
+            if (TemporalSpec.isSystemField(field.name())) {
+                throw invalid("field '" + field.name() + "' is a temporal system field and is added by the platform");
+            }
+            if (field.kind() instanceof SemanticKind.Version) {
+                throw invalid("a temporal entity must not declare a Version field; versionNo is added by the platform");
+            }
+            if (field.kind() instanceof SemanticKind.Temporal t && t.role() == TemporalRole.SYSTEM_RECORDED) {
+                throw invalid("a temporal entity must not declare a SYSTEM_RECORDED field; createdTime is added "
+                    + "by the platform");
+            }
+        }
+        TemporalSpec spec = temporal.build();
+        requireIdentifier(spec.rowIdColumn(), "row id column");
+        Map<String, String> columns = temporal.columns();
+        addSystemField(TemporalSpec.VERSION_NO, columns, f -> f.immutable(true).asVersion());
+        addSystemField(TemporalSpec.EFFECT_START_TIME, columns, f -> f.asTemporal(TemporalRole.VALID_FROM));
+        addSystemField(TemporalSpec.CREATED_TIME, columns, f -> f.asTemporal(TemporalRole.SYSTEM_RECORDED));
+        addSystemField(TemporalSpec.PROCESS_SEQ_ID, columns, f -> f.asNumeric(19, 0));
+        addSystemField(TemporalSpec.DELETED, columns, FieldBuilder::asBool);
+        return spec;
+    }
+
+    private void addSystemField(String name, Map<String, String> columns, Consumer<FieldBuilder> kind) {
+        String column = columns.get(name);
+        requireIdentifier(column, "column of system field '" + name + "'");
+        FieldBuilder fb = new FieldBuilder(name);
+        fb.physicalColumn(column);
+        kind.accept(fb);
+        fields.put(name, fb.build());
+    }
+
+    private void requireIdentifier(String value, String what) {
+        try {
+            SqlIdentifiers.require(value);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw invalid(what + " '" + value + "' is not a valid SQL identifier");
+        }
+    }
+
+    private void validateUniqueColumns(TemporalSpec temporalSpec) {
         Set<String> seen = new HashSet<>();
+        if (temporalSpec != null) {
+            seen.add(temporalSpec.rowIdColumn().toLowerCase());
+        }
         for (FieldDefinition f : fields.values()) {
             if (!seen.add(f.physicalColumn().toLowerCase())) {
                 throw invalid("physical column '" + f.physicalColumn() + "' is mapped by more than one field");
