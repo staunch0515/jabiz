@@ -68,10 +68,17 @@ public interface CustomKindSupport {
 
 ### 3.1 错误累积与多语言
 
-- 校验阶段已累积全部违规（`EntityValidator`）；**业务规则阶段也改为累积**：同一次写入中的守卫失败、不可变字段违规等，收集后一次抛出。
-- `Violation(field, ruleCode, message)` 的 `message` 按 `RequestContext.locale` 从资源 `messages_{zh,ja,en}.properties` 解析，
-  支持参数占位（来自 `RuleSpec.params`）。
-- 找不到文案时使用 `ruleCode` 本身，并在启动自检中报告缺失。
+- 校验阶段已累积全部违规（`EntityValidator`）；**业务规则阶段也改为累积**：同一个变更（一次 INSERT / UPDATE / DELETE）中的
+  范围违规、不可变字段违规、非法状态迁移、初始状态违规、迁移守卫失败，收集后一次抛出。
+  前一个变更失败时不再执行后续变更（它们可能依赖前者的结果）。
+- `Violation(field, ruleCode, message, params)`：`field` 可为 null（与字段无关的违规，如只读视图）；`params` 是文案占位参数。
+- 异常与状态码：`ValidationException`（400）与 `BusinessRuleViolationException`（422）都携带 `violations`，
+  `ProblemDetail` 中的 `violations[]` 为 `{field, ruleCode, message}`。
+- `message` 按 `RequestContext.locale` 从资源 `messages_{zh,ja,en}.properties` 解析（core 的 `MessageCatalog`，UTF-8）：
+  - 平台错误码在 `jabiz/messages_*.properties`（jabiz-core 提供）；业务错误码在业务模块的 `messages_*.properties`；
+  - 占位符为命名形式 `{name}`，取值来自 `Violation.params`（规则违规时即 `RuleSpec.params`），`{field}` 为字段逻辑名；
+  - 找不到文案时使用 `ruleCode` 本身。
+- 启动自检：平台错误码和所有已注册实体的规则代码，在 zh、ja、en 三种语言中都必须有文案，缺失时一次性列出并拒绝启动。
 
 ## 4. 状态机与迁移守卫
 

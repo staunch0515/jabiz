@@ -98,7 +98,9 @@ snapshot:
 - 默认使用 Testcontainers（`postgres:16`）。
 - 无 Docker 的环境（如部分云端开发环境）：设置 `JABIZ_TEST_DB_URL`（JDBC URL）、`JABIZ_TEST_DB_USER`、`JABIZ_TEST_DB_PASSWORD`，
   测试改连本地 PostgreSQL；每个测试类使用独立 schema，结束后删除。
-- 实现：`app` 测试源中的 `PostgresTestDatabase` / `PostgresIntegrationTest`（阶段 2 拆模块后随运行时层迁移）。
+- 实现：`runtime` 的 `testFixtures` 源集中的 `PostgresTestDatabase` / `PostgresIntegrationTest` / `MutableClock`；
+  其他模块通过 `testImplementation(testFixtures(project(":runtime")))` 使用。
+- BlockHound 同样由该源集引入（`blockhound-junit-platform` 自动安装）；放行清单为 `JabizBlockHoundIntegration`。
 
 ## 8. 覆盖率与门禁
 
