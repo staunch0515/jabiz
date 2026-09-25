@@ -59,7 +59,7 @@ public class ProcessContext {
 ## 4. 事务与阶段
 
 - 默认：**整个流程（含子流程）在一个数据库事务中**执行，由 `TransactionalOperator` 包裹。
-- `op_process` 行在流程开始时（同一事务内）写入；事务回滚时一并消失。
+- `op_process` 行在流程开始时（同一事务内）写入，之后不再更新；输出在流程结束时写入 `op_process_result`【决策 D4】。事务回滚时一并消失。
 - 步骤可以声明阶段：
   - `IN_TX`（默认）：在事务内执行；
   - `AFTER_COMMIT`：事务成功提交后执行（用于调用外部系统、发送通知）；失败不影响已提交的数据，由平台记录并按策略重试。
@@ -99,7 +99,8 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 | GET | `/api/processes/executions/{processSeqId}` | 操作详情（`op_process` + `op_process_item`） |
 | POST | `/api/processes/executions/{processSeqId}/revert` | 撤销（需要权限，必须填写原因） |
 
-- 支持 `Idempotency-Key` 请求头：同一操作人、同一键的重复请求返回第一次的结果，不重复执行（`op_process` 唯一约束）。
+- 支持 `Idempotency-Key` 请求头：同一操作人、同一键的重复请求返回第一次的结果，不重复执行。
+  实现【决策 D4】：`op_process` 上 `(actor_id, idempotency_key)` 唯一；流程输出在结束时写入 `op_process_result`（同一事务），重放时从中读取。
 - 每个流程声明执行权限码；未声明 → 非开发环境启动失败。
 - 同一流程执行器也被定时任务和场景测试调用（传输方式无关）。
 

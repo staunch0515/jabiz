@@ -67,7 +67,7 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
 
 | 占位符 | 渲染结果 |
 |---|---|
-| `{{Entity}}` | 该实体在当前数据视图中的表达式：普通实体为表名，或 `(SELECT * FROM 表 WHERE 范围条件)`；时态实体为 04 第 5.1 节的"当前版本"子查询（范围条件在外层） |
+| `{{Entity}}` | 该实体在当前数据视图中的表达式：普通实体为表名，或 `(SELECT * FROM 表 WHERE 范围条件)`；时态实体为 04 第 5.1 节的"当前版本"子查询（范围条件在外层【决策 D3】） |
 | `{{Entity.field}}` | 该逻辑字段的物理列名（不带表别名），经 `SqlIdentifiers` 校验 |
 
 - 模板中必须给 `{{Entity}}` 起别名。
@@ -76,7 +76,9 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
 ## 4. 参数
 
 - 使用命名参数 `:name`；值按参数的语义类型转换和校验（现有 `FieldValueCoercer`），`Code` 类型会校验字典。
-- **列表参数统一写 `= ANY(:name)`**（PostgreSQL 数组绑定），不使用 `IN (:name)` 展开，便于预编译校验。
+- **列表参数统一写 `= ANY(:name)`**（取反写 `<> ALL(:name)`），头部声明 `list: true`【决策 D7】。
+  平台按语义类型把列表转为对应数组（`String[]`、`UUID[]`、`BigDecimal[]`、`Instant[]` 等）后绑定。
+  禁止 `IN (:name)`，`platformCheck` 发现即报错。空数组时 `= ANY` 为假、`<> ALL` 为真，平台不做特殊处理。
 - 平台保留的参数：`scope_` 前缀（数据视图范围）、`__` 前缀（时态：`__asOf`、`__knownAt`；分页）。业务参数不得使用。
 
 ## 5. 外层分页、筛选、排序

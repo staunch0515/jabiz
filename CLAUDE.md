@@ -3,6 +3,9 @@
 本文件是在本仓库工作的长期规则。开始任何任务前，先读完本文件、`docs/design/` 下全部文档和 `docs/ROADMAP.md`。
 设计文档是约定，代码是实现：两者冲突时，**先提出并修改设计文档，再改代码**，不要在代码里悄悄偏离设计。
 
+`docs/design/09-decisions.md` 中的决策（D1–D8 …）**具有约束力**。任何实现不得违反；确需改变时，
+先在该文件新增一条决策（注明取代哪一条）并获得确认，再改代码。
+
 ## 1. 平台是什么
 
 jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体、语义类型、规则、状态机、数据视图、SQL 模板和流程，
@@ -61,19 +64,12 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 
 ## 6. 构建与运行
 
-Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`、`app`）。以下命令都在 `backend/` 下执行。
+> 首个会话请根据仓库实际情况补全本节（构建工具、命令、端口），之后保持更新。
 
-- 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建和 `bootJar`；前端目前编译失败，阶段 10 重建前端）。
-  只编译和测试：`./gradlew check`（CI 执行的就是这个）
-- 全部测试：`./gradlew test`；只跑核心层单元测试：`./gradlew :core:test`；单个类：`./gradlew :app:test --tests '*DatasetEntityManagerIT'`
-- 覆盖率：`./gradlew :core:jacocoTestReport` → `core/build/reports/jacoco/test/html/index.html`；
-  `check` 包含 `:core:jacocoTestCoverageVerification`（阶段 1 列出的核心类行覆盖率 ≥ 80%）
-- 集成测试数据库：默认 Testcontainers `postgres:16`（需要 Docker）；无 Docker 时设置
-  `JABIZ_TEST_DB_URL`（JDBC URL，如 `jdbc:postgresql://localhost:5432/jabiz_test`）、`JABIZ_TEST_DB_USER`、`JABIZ_TEST_DB_PASSWORD`。
-  每个测试类使用独立 schema，结束后删除
+- 构建：`<待补全>`
+- 全部测试：`<待补全>`
 - 静态校验：`platformCheck`（阶段 5 引入）
-- 本地启动：仓库根目录 `docker compose up -d`（数据库，端口 5436；pgAdmin 5050）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
-  启动时 Flyway 迁移）→ `frontend/` 下 `npm install && npm run dev`（5173，`/api` 代理到 8080）
+- 本地启动：`<待补全>`
 - 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**。
 
 ## 7. 每个阶段的交付方式
