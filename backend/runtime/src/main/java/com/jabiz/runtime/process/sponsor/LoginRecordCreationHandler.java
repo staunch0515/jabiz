@@ -1,6 +1,6 @@
-package com.jabiz.process.sponsor;
+package com.jabiz.runtime.process.sponsor;
 
-import com.jabiz.process.StepHandler;
+import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

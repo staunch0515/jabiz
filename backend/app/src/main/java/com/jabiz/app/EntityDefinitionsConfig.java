@@ -1,5 +1,6 @@
-package com.jabiz.entity;
+package com.jabiz.app;
 
+import com.jabiz.entity.EntityDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

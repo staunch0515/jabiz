@@ -1,4 +1,8 @@
-package com.jabiz.entity;
+package com.jabiz.app;
+
+import com.jabiz.entity.BaseEntityDefinitions;
+import com.jabiz.entity.DimensionType;
+import com.jabiz.entity.EntityDefinition;
 
 import java.util.Set;
 

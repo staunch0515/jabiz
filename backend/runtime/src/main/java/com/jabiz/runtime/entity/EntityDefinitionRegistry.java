@@ -1,5 +1,7 @@
-package com.jabiz.entity;
+package com.jabiz.runtime.entity;
 
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.ReferenceDefinition;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 

@@ -1,5 +1,8 @@
-package com.jabiz.entity;
+package com.jabiz.runtime.entity;
 
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.FieldDefinition;
+import com.jabiz.entity.FieldValueCoercer;
 import io.r2dbc.spi.Row;
 
 import java.util.LinkedHashMap;

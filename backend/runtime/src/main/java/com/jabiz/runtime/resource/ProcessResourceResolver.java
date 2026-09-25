@@ -1,7 +1,12 @@
-package com.jabiz.resource;
+package com.jabiz.runtime.resource;
 
 import com.jabiz.process.ProcessDefinition;
-import com.jabiz.process.ProcessRegistry;
+import com.jabiz.resource.InvalidResourceIdException;
+import com.jabiz.resource.ProcessResource;
+import com.jabiz.resource.Resource;
+import com.jabiz.resource.ResourceId;
+import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.process.ProcessRegistry;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

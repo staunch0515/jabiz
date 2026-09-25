@@ -1,5 +1,6 @@
-package com.jabiz.entity;
+package com.jabiz.runtime.entity;
 
+import com.jabiz.entity.EntityDefinition;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;

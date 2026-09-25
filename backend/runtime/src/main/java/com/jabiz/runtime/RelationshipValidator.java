@@ -1,10 +1,10 @@
 package com.jabiz.runtime;
 
-import com.jabiz.dataset.DatasetRegistry;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
 import com.jabiz.entity.ReferenceDefinition;
 import com.jabiz.entity.SemanticKind;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 

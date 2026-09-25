@@ -1,4 +1,4 @@
-package com.jabiz.process.sponsor;
+package com.jabiz.runtime.process.sponsor;
 
 import com.jabiz.process.ProcessContext;
 

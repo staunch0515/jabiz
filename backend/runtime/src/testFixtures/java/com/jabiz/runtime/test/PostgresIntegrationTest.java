@@ -1,6 +1,5 @@
-package com.jabiz.it.support;
+package com.jabiz.runtime.test;
 
-import com.jabiz.app.App;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,11 +25,12 @@ import java.util.UUID;
  * Base class of integration tests against a real PostgreSQL.
  *
  * <p>Every test class gets a fresh application context bound to its own schema: Flyway migrates the
- * production scripts plus the test fixtures ({@code db/testmigration}) into it, and the schema is
- * dropped after the class. Tests inspect raw table contents through {@link #query} so that assertions
+ * platform scripts ({@code db/jabiz}), the application scripts ({@code db/migration}) and the test
+ * fixtures ({@code db/testmigration}) into it, and the schema is dropped after the class. The application
+ * class is found the Spring Boot way, by searching upwards from the test's package. Tests inspect raw table contents through {@link #query} so that assertions
  * do not depend on the code under test.
  */
-@SpringBootTest(classes = App.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class PostgresIntegrationTest {
 

@@ -1,4 +1,4 @@
-package com.jabiz.storage;
+package com.jabiz.runtime.storage;
 
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;

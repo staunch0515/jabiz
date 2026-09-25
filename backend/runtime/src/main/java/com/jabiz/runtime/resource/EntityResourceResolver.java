@@ -1,12 +1,16 @@
-package com.jabiz.resource;
+package com.jabiz.runtime.resource;
 
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.dataset.DatasetRegistry;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
+import com.jabiz.resource.GenericResource;
+import com.jabiz.resource.Resource;
+import com.jabiz.resource.ResourceId;
+import com.jabiz.resource.ResourceNotFoundException;
 import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

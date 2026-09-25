@@ -1,11 +1,11 @@
-package com.jabiz.process.entity;
+package com.jabiz.runtime.process.entity;
 
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.process.StepHandler;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityAction;
 import com.jabiz.runtime.EntityChange;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

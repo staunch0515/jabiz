@@ -1,4 +1,4 @@
-package com.jabiz.storage;
+package com.jabiz.runtime.storage;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

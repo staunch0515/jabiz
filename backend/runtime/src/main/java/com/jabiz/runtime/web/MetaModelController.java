@@ -1,9 +1,9 @@
-package com.jabiz;
+package com.jabiz.runtime.web;
 
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
 import com.jabiz.entity.MetaModelExporter;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;

@@ -1,5 +1,6 @@
-package com.jabiz.process;
+package com.jabiz.runtime.process;
 
+import com.jabiz.process.ProcessDefinition;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 

@@ -1,7 +1,8 @@
-package com.jabiz.dataset;
+package com.jabiz.runtime.dataset;
 
-import com.jabiz.entity.EntityDefinitionRegistry;
-import com.jabiz.storage.StorageAdapterRegistry;
+import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 

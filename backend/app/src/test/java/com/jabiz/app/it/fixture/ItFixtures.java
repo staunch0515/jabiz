@@ -1,4 +1,4 @@
-package com.jabiz.it.fixture;
+package com.jabiz.app.it.fixture;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.BaseEntityDefinitions;

@@ -1,5 +1,8 @@
-package com.jabiz.resource;
+package com.jabiz.runtime.resource;
 
+import com.jabiz.resource.Resource;
+import com.jabiz.resource.ResourceId;
+import com.jabiz.resource.ResourceNotFoundException;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

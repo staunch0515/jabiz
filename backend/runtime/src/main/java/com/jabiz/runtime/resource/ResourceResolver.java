@@ -1,5 +1,7 @@
-package com.jabiz.resource;
+package com.jabiz.runtime.resource;
 
+import com.jabiz.resource.Resource;
+import com.jabiz.resource.ResourceId;
 import reactor.core.publisher.Mono;
 
 /** Resolves resources of one kind. Exactly one resolver may be registered per kind. */

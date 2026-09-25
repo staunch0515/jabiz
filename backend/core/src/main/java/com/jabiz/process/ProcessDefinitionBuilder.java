@@ -49,7 +49,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
      * type and runs against this process's context type.
      */
     public <M> ProcessDefinitionBuilder<I, O, C> step(
-        String stepName, Class<? extends StepHandler<M, C>> handlerClass, M metadata
+        String stepName, Class<? extends StepImplementation<M, C>> handlerClass, M metadata
     ) {
         StepDefinition<M, C> step = new StepDefinition<>(stepName, handlerClass, metadata);
         if (!stepNames.add(stepName)) {

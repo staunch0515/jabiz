@@ -1,5 +1,8 @@
-package com.jabiz.process;
+package com.jabiz.runtime.process;
 
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.StepDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -38,6 +41,11 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     public void afterSingletonsInstantiated() {
         for (ProcessDefinition<?, ?, ?> definition : registry.all()) {
             for (StepDefinition<?, ?> step : definition.steps()) {
+                if (!StepHandler.class.isAssignableFrom(step.handlerClass())) {
+                    throw new IllegalStateException("Process " + definition.name() + " v" + definition.version()
+                        + ", step '" + step.stepName() + "': " + step.handlerClass().getName()
+                        + " is not a " + StepHandler.class.getSimpleName() + "; no executor supports this step type");
+                }
                 int count = beans.getBeanNamesForType(step.handlerClass()).length;
                 if (count != 1) {
                     throw new IllegalStateException("Process " + definition.name() + " v" + definition.version()
@@ -65,7 +73,9 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         ProcessDefinition<?, ?, C> definition, StepDefinition<M, C> step, C ctx
     ) {
         return Mono.defer(() -> {
-            StepHandler<M, C> handler = beans.getBean(step.handlerClass());
+            // Checked at startup: every step implementation is a StepHandler.
+            @SuppressWarnings("unchecked")
+            StepHandler<M, C> handler = (StepHandler<M, C>) beans.getBean(step.handlerClass());
             return handler.execute(step.metadata(), ctx);
         }).doOnError(error -> log.warn("Process {} v{} (seq {}) failed at step '{}': {}",
             definition.name(), definition.version(), ctx.processSeqId(), step.stepName(), error.toString()));

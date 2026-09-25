@@ -1,4 +1,4 @@
-package com.jabiz.process.entity;
+package com.jabiz.runtime.process.entity;
 
 import com.jabiz.entity.EntityDefinition;
 

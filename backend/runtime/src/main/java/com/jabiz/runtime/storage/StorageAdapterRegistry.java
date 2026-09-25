@@ -1,4 +1,4 @@
-package com.jabiz.storage;
+package com.jabiz.runtime.storage;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;

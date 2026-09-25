@@ -1,10 +1,13 @@
 plugins {
-    id("java")
+    `java-library`
     jacoco
 }
 
-group = "com.jabiz"
-version = "0.0.1-SNAPSHOT"
+// jabiz-core: pure Java. No main dependencies at all, so Spring, Reactor and R2DBC cannot even be
+// referenced here; ArchitectureTest in app states the same rules explicitly.
+base {
+    archivesName.set("jabiz-core")
+}
 
 // Phase 1 acceptance: the core classes below must keep at least 80% line coverage.
 val coverageGatedClasses = listOf(
@@ -14,6 +17,10 @@ val coverageGatedClasses = listOf(
     "com.jabiz.query.QueryCompiler",
     "com.jabiz.resource.ResourceId",
     "com.jabiz.process.ProcessDefinitionBuilder",
+    // Phase 2
+    "com.jabiz.context.RequestContext",
+    "com.jabiz.i18n.MessageCatalog",
+    "com.jabiz.i18n.MessageTemplate",
 )
 
 tasks.test {

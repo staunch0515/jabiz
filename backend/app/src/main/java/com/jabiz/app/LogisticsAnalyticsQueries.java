@@ -1,8 +1,9 @@
-package com.jabiz.query.custom;
+package com.jabiz.app;
 
 import com.jabiz.entity.DimensionType;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
 
 import java.util.List;
 

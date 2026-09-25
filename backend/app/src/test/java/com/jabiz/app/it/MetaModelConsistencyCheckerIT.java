@@ -1,10 +1,10 @@
-package com.jabiz.it;
+package com.jabiz.app.it;
 
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
-import com.jabiz.entity.MetaModelConsistencyChecker;
-import com.jabiz.entity.MetaModelConsistencyChecker.MetaModelInconsistencyException;
-import com.jabiz.it.support.PostgresIntegrationTest;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.entity.MetaModelConsistencyChecker.MetaModelInconsistencyException;
+import com.jabiz.runtime.entity.MetaModelConsistencyChecker;
+import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;

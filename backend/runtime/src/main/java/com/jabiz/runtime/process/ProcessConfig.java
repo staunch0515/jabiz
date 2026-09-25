@@ -1,14 +1,14 @@
-package com.jabiz.process;
+package com.jabiz.runtime.process;
 
-import com.jabiz.process.sponsor.LoginContext;
-import com.jabiz.process.sponsor.SponsorSignInInput;
-import com.jabiz.process.sponsor.SponsorSignInOutput;
-import com.jabiz.process.sponsor.SponsorSignInProcess;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.process.sponsor.LoginContext;
+import com.jabiz.runtime.process.sponsor.SponsorSignInInput;
+import com.jabiz.runtime.process.sponsor.SponsorSignInOutput;
+import com.jabiz.runtime.process.sponsor.SponsorSignInProcess;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.time.Clock;
+import org.springframework.r2dbc.core.DatabaseClient;
 
 /** Publishes process definitions as beans and provides the default process sequence. */
 @Configuration
@@ -21,7 +21,7 @@ class ProcessConfig {
 
     @Bean
     @ConditionalOnMissingBean(ProcessSequence.class)
-    ProcessSequence processSequence(Clock clock) {
-        return new ClockProcessSequence(clock);
+    ProcessSequence processSequence(DatabaseClient databaseClient) {
+        return new DatabaseProcessSequence(databaseClient);
     }
 }

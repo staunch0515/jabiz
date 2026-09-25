@@ -1,4 +1,4 @@
-package com.jabiz.web;
+package com.jabiz.runtime.web;
 
 import com.jabiz.entity.ValidationException;
 import com.jabiz.resource.InvalidResourceIdException;

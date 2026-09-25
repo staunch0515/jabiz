@@ -1,14 +1,12 @@
-package com.jabiz.it;
+package com.jabiz.app.it;
 
+import com.jabiz.app.CustomsDeclarationEntityDefinitions;
+import com.jabiz.app.WaybillEntityDefinitions;
+import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.dataset.DatasetRegistry;
-import com.jabiz.entity.CustomsDeclarationEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
-import com.jabiz.entity.WaybillEntityDefinitions;
-import com.jabiz.it.fixture.ItFixtures;
-import com.jabiz.it.support.PostgresIntegrationTest;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.BusinessRuleViolationException;
@@ -17,6 +15,8 @@ import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityChange;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;

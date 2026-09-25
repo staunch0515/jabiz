@@ -1,4 +1,4 @@
-package com.jabiz.process.sponsor;
+package com.jabiz.runtime.process.sponsor;
 
 /** Credentials submitted to the sponsor sign-in process. */
 public record SponsorSignInInput(String usernameOrEmail, String password) {

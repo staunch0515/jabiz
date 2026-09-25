@@ -1,13 +1,13 @@
-package com.jabiz.it;
+package com.jabiz.app.it;
 
+import com.jabiz.app.LogisticsAnalyticsQueries;
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.dataset.DatasetRegistry;
 import com.jabiz.entity.DimensionType;
 import com.jabiz.entity.SemanticKind;
-import com.jabiz.it.support.PostgresIntegrationTest;
-import com.jabiz.query.custom.AdvancedQueryExecutor;
-import com.jabiz.query.custom.LogisticsAnalyticsQueries;
 import com.jabiz.query.custom.SemanticRow;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.query.AdvancedQueryExecutor;
+import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

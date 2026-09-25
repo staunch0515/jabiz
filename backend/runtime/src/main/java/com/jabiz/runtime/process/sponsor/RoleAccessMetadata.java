@@ -1,4 +1,4 @@
-package com.jabiz.process.sponsor;
+package com.jabiz.runtime.process.sponsor;
 
 /**
  * @param targetUserEntityKey  context key of the user whose role is checked

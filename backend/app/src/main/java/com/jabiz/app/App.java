@@ -1,12 +1,11 @@
 package com.jabiz.app;
 
-import org.springframework.boot.SpringApplication;
+import com.jabiz.runtime.JabizApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication(scanBasePackages = "com.jabiz")
+@SpringBootApplication
 public class App {
     public static void main(String[] args) {
-        SpringApplication.run(App.class, args);
+        JabizApplication.run(App.class, args);
     }
 }
-

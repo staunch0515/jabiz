@@ -271,11 +271,4 @@ class EntityBuilderTest {
         assertThatThrownBy(() -> new FieldRule("C", null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> FieldRule.of("C", null)).isInstanceOf(NullPointerException.class);
     }
-
-    @Test
-    void sampleEntityDefinitionsAreValid() {
-        assertThat(WaybillEntityDefinitions.WAYBILL.initialStates).containsExactly("CREATED");
-        assertThat(CustomsDeclarationEntityDefinitions.CUSTOMS_DECLARATION.references).hasSize(1);
-        assertThat(PriceEntityDefinitions.PRICE.versionField).isEqualTo("rowVersion");
-    }
 }

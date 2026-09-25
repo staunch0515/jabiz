@@ -1,9 +1,9 @@
-package com.jabiz.process.entity;
+package com.jabiz.runtime.process.entity;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.process.NoMetadata;
-import com.jabiz.process.StepHandler;
+import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

@@ -1,4 +1,4 @@
-package com.jabiz.it.support;
+package com.jabiz.runtime.test;
 
 import org.testcontainers.postgresql.PostgreSQLContainer;
 

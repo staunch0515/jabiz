@@ -1,5 +1,6 @@
-package com.jabiz.dataset;
+package com.jabiz.app;
 
+import com.jabiz.dataset.DatasetDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

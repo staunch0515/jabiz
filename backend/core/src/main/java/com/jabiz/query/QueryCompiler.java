@@ -6,7 +6,6 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.SemanticKind;
-import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,7 +17,6 @@ import java.util.Optional;
  * Compiles logical queries into physical query plans for SQL dialects.
  * All values are bound as named parameters; identifiers come from metadata only.
  */
-@Component
 public class QueryCompiler {
 
     /** Allocates unique named parameters and remembers their values. */

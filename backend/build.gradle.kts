@@ -1,4 +1,5 @@
 import com.github.gradle.node.npm.task.NpmTask
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
     java
@@ -7,17 +8,15 @@ plugins {
     id("com.github.node-gradle.node") version "7.1.0" apply false
 }
 
-// 所有子模块（包括 core 和 app）共享依赖与 Java 环境
+// Settings shared by all modules. Dependencies are declared per module: core is pure Java and must not
+// see Spring, Reactor or R2DBC on its compile classpath (docs/design/01-core-vs-runtime.md).
 subprojects {
-    // 1. 显式为子模块应用插件，彻底解决 "Extension with name 'java' does not exist"
     apply(plugin = "java")
-    apply(plugin = "org.springframework.boot")
     apply(plugin = "io.spring.dependency-management")
 
-    group = "com.example"
+    group = "com.jabiz"
     version = "0.0.1-SNAPSHOT"
 
-    // 2. 配置 Java 21 Toolchain
     configure<JavaPluginExtension> {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
@@ -28,21 +27,16 @@ subprojects {
         mavenCentral()
     }
 
-    // 3. 所有子模块都享有这些核心依赖（WebFlux, R2DBC, Validation 等）
-    dependencies {
-        "implementation"("org.springframework.boot:spring-boot-starter-webflux")
-        "implementation"("org.springframework.boot:spring-boot-starter-data-r2dbc")
-        "implementation"("org.springframework.boot:spring-boot-starter-validation")
-        "implementation"("org.springframework.boot:spring-boot-starter-actuator")
-        "implementation"("org.springframework.boot:spring-boot-starter-flyway")
-        "implementation"("org.springframework:spring-jdbc")
-        "runtimeOnly"("org.flywaydb:flyway-database-postgresql")
-        "runtimeOnly"("org.postgresql:postgresql")
-        "runtimeOnly"("org.postgresql:r2dbc-postgresql")
+    // The Spring Boot BOM only aligns versions; it adds no dependencies by itself.
+    configure<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension> {
+        imports {
+            mavenBom(SpringBootPlugin.BOM_COORDINATES)
+        }
+    }
 
-        "testImplementation"("org.springframework.boot:spring-boot-starter-test")
-        "testImplementation"("org.springframework.boot:spring-boot-starter-webflux-test")
-        "testImplementation"("org.springframework.boot:spring-boot-starter-data-r2dbc-test")
+    dependencies {
+        "testImplementation"("org.junit.jupiter:junit-jupiter")
+        "testImplementation"("org.assertj:assertj-core")
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
 
@@ -52,6 +46,10 @@ subprojects {
         listOf("JABIZ_TEST_DB_URL", "JABIZ_TEST_DB_USER", "JABIZ_TEST_DB_PASSWORD").forEach { name ->
             System.getenv(name)?.let { environment(name, it) }
         }
+        // Must be set before Reactor's Schedulers class loads, hence a JVM property rather than Spring config.
+        systemProperty("reactor.schedulers.defaultBoundedElasticOnVirtualThreads", "true")
+        // BlockHound instruments JDK classes; JDK 13+ requires this flag for it.
+        jvmArgs("-XX:+AllowRedefinitionToAddDeleteMethods")
         testLogging {
             events("failed", "skipped")
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
@@ -59,20 +57,10 @@ subprojects {
     }
 }
 
-// core is a library, not an application: it has no main class, so only the plain jar is built.
-project(":core") {
-    tasks.named("bootJar") { enabled = false }
-    tasks.named<Jar>("jar") { enabled = true }
-}
-
-// 针对实际运行和打包前端的启动模块（假设名字叫 app）
+// Boot application: runtime + business declarations, packaged together with the frontend.
 project(":app") {
+    apply(plugin = "org.springframework.boot")
     apply(plugin = "com.github.node-gradle.node")
-
-    dependencies {
-        // app 依赖 core
-        "implementation"(project(":core"))
-    }
 
     configure<com.github.gradle.node.NodeExtension> {
         download.set(true)
@@ -97,5 +85,9 @@ project(":app") {
         from("${rootProject.projectDir}/../frontend/dist") {
             into("BOOT-INF/classes/static")
         }
+    }
+
+    tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+        systemProperty("reactor.schedulers.defaultBoundedElasticOnVirtualThreads", "true")
     }
 }

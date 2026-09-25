@@ -1,12 +1,12 @@
-package com.jabiz.process.entity;
+package com.jabiz.runtime.process.entity;
 
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.dataset.DatasetRegistry;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
 import com.jabiz.process.NoMetadata;
-import com.jabiz.process.StepHandler;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 

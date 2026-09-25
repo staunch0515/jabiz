@@ -11,7 +11,7 @@ import java.util.Objects;
  */
 public record StepDefinition<M, C extends ProcessContext>(
     String stepName,
-    Class<? extends StepHandler<M, C>> handlerClass,
+    Class<? extends StepImplementation<M, C>> handlerClass,
     M metadata
 ) {
     public StepDefinition {

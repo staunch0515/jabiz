@@ -1,15 +1,19 @@
-package com.jabiz.query.custom;
+package com.jabiz.runtime.query;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.EntityDefinitionRegistry;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.query.BoundValue;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
-import com.jabiz.storage.StorageAdapterRegistry;
-import com.jabiz.storage.StorageEngine;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.query.custom.ProjectedField;
+import com.jabiz.query.custom.QueryParameter;
+import com.jabiz.query.custom.SemanticRow;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 

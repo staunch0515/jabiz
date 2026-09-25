@@ -1,7 +1,6 @@
 package com.jabiz.process;
 
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -12,19 +11,9 @@ class ProcessDefinitionBuilderTest {
     record Out(long seq) {}
     record Tag(String name) {}
 
-    static final class NoopStep implements StepHandler<NoMetadata, ProcessContext> {
-        @Override
-        public Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
-            return Mono.empty();
-        }
-    }
+    static final class NoopStep implements StepImplementation<NoMetadata, ProcessContext> {}
 
-    static final class TagStep implements StepHandler<Tag, ProcessContext> {
-        @Override
-        public Mono<Void> execute(Tag metadata, ProcessContext ctx) {
-            return Mono.fromRunnable(() -> ctx.put(metadata.name(), true));
-        }
-    }
+    static final class TagStep implements StepImplementation<Tag, ProcessContext> {}
 
     private static ProcessDefinition<In, Out, ProcessContext> define(
         java.util.function.Consumer<ProcessDefinitionBuilder<In, Out, ProcessContext>> block) {

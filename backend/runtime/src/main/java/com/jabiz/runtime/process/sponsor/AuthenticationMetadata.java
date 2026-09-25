@@ -1,4 +1,4 @@
-package com.jabiz.process.sponsor;
+package com.jabiz.runtime.process.sponsor;
 
 /**
  * @param inputKeyUsername    context key holding the submitted username or e-mail

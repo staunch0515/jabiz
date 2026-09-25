@@ -1,4 +1,4 @@
-package com.jabiz.app;
+package com.jabiz.runtime.web;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
