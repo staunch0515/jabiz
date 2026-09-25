@@ -59,7 +59,9 @@ d.scope(s -> s
 ### 2.5 时态相关参数
 
 对时态实体，视图的查询接受 `asOf` 和 `knownAt`（默认：`asOf = 当前时间`，`knownAt = 不限`），见 04。
-可以在策略中禁止外部传入 `asOf`（例如会员视图只能看当前）：`policy.allowTimeTravel(false)`。
+可以在策略中禁止外部传入 `asOf`（例如会员视图只能看当前）：`policy.allowTimeTravel(false)`，此时 `asOf`、`knownAt`
+与历史接口都被拒绝（400 `TIME_TRAVEL_NOT_ALLOWED`）【D9】。非时态实体传入它们时 400 `NOT_TEMPORAL`。
+时态实体的数据视图不能开启逻辑删除（启动失败）：删除即写墓碑。
 
 ## 3. 数据视图 API（运行时）
 
@@ -70,12 +72,18 @@ d.scope(s -> s
 | POST | `/api/datasets/{resourceId}/commit` | 批量变更（INSERT / UPDATE / DELETE），一个事务，返回快照 |
 | GET | `/api/datasets/{resourceId}/entities/{id}/history` | 时态实体的版本历史（含 `process_seq_id`） |
 
-请求与响应（阶段 3 实现前三个接口）：
+请求与响应（阶段 3 实现前三个接口，阶段 4 加入时态参数与历史接口）：
 - `query` 请求体：`{filters: [{field, op, value | values | from, to}], sorts: [{field, asc}], offset, limit}`；
   `op` 为 `eq ne gt gte lt lte in like isNull isNotNull between`，多个条件为 AND；字段须在列表视图白名单中，运算符按语义类型检查。
   响应：`{items, total, offset, limit}`（`limit` 为实际生效值，不超过 `maxQueryBatchSize`）。
+  时态实体另可带 `asOf`、`knownAt`（ISO-8601）。
 - `commit` 请求体：`{changes: [{action: INSERT | UPDATE | DELETE, id, version, attributes}]}`，返回插入/更新后的快照。
   **只接受该视图的目标实体**（变更的实体类型一律取视图目标），否则会绕过其他实体自身视图的范围；主键为生成字段时由平台生成（UUIDv7）。
+  时态实体：每个变更可带 `effectiveTime`（缺省为操作时间；更晚为预定，更早为追溯更正），动作另有 `CANCEL_SCHEDULED`
+  （取消 `effectiveTime` 上的预定版本，`version` 为该版本号）；请求体可带 `reason`（追溯更正必填），记入 `op_process`。
+  `version` 为生效时间点上生效的版本号（见 04 §3）。
+- `history` 响应：版本数组，每项含 `versionNo`、`effectStartTime`、`createdTime`、`deleted`、`action`、`baseVersionNo`、
+  `changedFields`、`processSeqId`、`actorId`、`processName`、`opTime`、`reason`、`attributes`。
 
 说明：复杂业务写入应走流程（06），`commit` 接口主要服务于元数据生成的通用增删改页面。
 

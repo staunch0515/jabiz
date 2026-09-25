@@ -70,7 +70,7 @@ CREATE TABLE op_process_item (
     entity_id        uuid    NOT NULL,
     version_no       int     NOT NULL,
     base_version_no  int,                                -- 本次基于哪个版本修改（插入时为 null）
-    action           text    NOT NULL,                   -- INSERT / UPDATE / DELETE / REBASE / REVERT
+    action           text    NOT NULL,                   -- INSERT / UPDATE / DELETE / REBASE / REVERT / CANCEL【D9】
     effect_start_time timestamptz NOT NULL,
     changed_fields   text[]  NOT NULL,                   -- 本次变更的逻辑字段名（用于变基和撤销）
     PRIMARY KEY (process_seq_id, entity_type, entity_id, version_no)
@@ -86,6 +86,10 @@ CREATE TABLE op_process_result (                         -- 流程结束时插�
 - 操作表不更新状态：撤销是一个新的操作（`reverts_seq_id` 指向原操作），不是把原操作改成"已撤销"。
 - `op_process`、`op_process_item`、`op_process_result`、`entity_registry` 同样受 D5 的触发器保护。
 - 失败的操作随事务回滚，不会留在 `op_process` 中（失败审计如有需要，另写日志，不在本表）。
+- 平台表由 runtime 迁移 `db/jabiz/V3__operations.sql` 创建；时态业务表在自己的迁移中调用
+  `SELECT jabiz_protect_append_only('<表>')` 安装两个触发器（启动自检检查）。
+- 阶段 6 之前，操作由数据视图 `commit`（名为 `jabiz.dataset.commit`）和通用增删改流程产生，仅当变更包含时态实体时写入；
+  已在 Reactor Context 中的操作（`Operation`）被加入而不新建【D9】。
 
 ### 2.3 实体登记表
 
@@ -105,11 +109,12 @@ CREATE TABLE entity_registry (
 | 操作 | 行为 |
 |---|---|
 | 插入 | `version_no = 1`；`effect_start_time` 默认 = `op_time`；登记 `entity_registry` |
-| 更新 | 调用方提供读到的 `versionNo = n`；平台以"截至生效时间的状态 ⊕ 本次变更"构造完整新版本，插入 `version_no = n + 1` |
-| 删除 | 插入墓碑版本（`is_deleted = true`，其余字段沿用上一状态），`version_no = n + 1` |
+| 更新 | 调用方提供读到的 `versionNo = n`（生效时间点上生效的版本）；平台以"截至生效时间的状态 ⊕ 本次变更"构造完整新版本，插入 `version_no = 最大值 + 1`【D9】 |
+| 删除 | 插入墓碑版本（`is_deleted = true`，其余字段沿用上一状态），`version_no = 最大值 + 1` |
 
-- **并发控制**：两个请求都基于 `n` 修改时，第二个插入 `n + 1` 违反唯一约束，平台转为 `ConcurrentUpdateException`（409）。
-  这与现有非时态实体的 CAS 更新语义一致。
+- **并发控制**：调用方的 `n` 与生效时间点上的版本不一致时 409；两个请求同时写同一实体时都插入"最大值 + 1"，
+  第二个违反唯一约束，平台转为 `ConcurrentUpdateException`（409）。这与现有非时态实体的 CAS 更新语义一致。
+  （预定版本存在时 `n + 1` 可能已被占用，因此取最大值 + 1【D9】。）
 - **同一操作的统一时间**：同一个 `process_seq_id` 下写入的所有行，`created_time` 都等于 `op_process.op_time`。一次操作在时间上是原子的。
 - **只保存真正的变化**：与现有写入流程一致，没有变化的更新不产生新版本。
 - 不可变字段、状态迁移、迁移守卫、字段规则全部照常执行（判断依据是"生效时间点上的当前状态"）。
@@ -121,7 +126,9 @@ CREATE TABLE entity_registry (
 |---|---|---|
 | 普通修改 | = `op_time` | — |
 | 预定修改 | > `op_time` | 实体元数据允许预定（`eb.temporal(t -> t.allowScheduled(true))`） |
-| 追溯更正 | < `op_time` | 需要权限 `temporal.backdate`，且必须填写 `reason` |
+| 追溯更正 | < `op_time` | 需要权限 `temporal.backdate`（否则 403），且必须填写 `reason`（否则 400 `REASON_REQUIRED`） |
+
+预定而实体不允许时 422 `SCHEDULING_NOT_ALLOWED`；非时态实体带生效时间时 400 `NOT_TEMPORAL`。
 
 ## 4. 预定修改与变基（rebase）【决策 D1】
 
@@ -139,10 +146,16 @@ CREATE TABLE entity_registry (
 3. **墓碑版本不参与字段冲突判断**：它的变基副本仍然是墓碑，不会因为前面的修改而复活。
 4. 变基副本与本次写入属于同一个操作（同一个 `process_seq_id`），同样写入 `op_process_item`。
 
+实现细则【D9】：同一生效时间的多个版本彼此叠加，F 取它们 `changed_fields` 的并集（`CANCEL` 处重新开始），
+且只保留在该时间点确实改变了值的字段；删除之后若还有非墓碑版本，按冲突拒绝。纯逻辑在 core 的 `com.jabiz.temporal`
+（`Timeline`、`VersionPlanner`），由 jqwik 属性测试覆盖。冲突响应为 409，`conflicts[]` 列出版本号、生效时间、操作、字段。
+
 ### 4.1 取消预定
 
 插入一个与预定版本生效时间相同、`version_no` 更大的版本，其内容为"该生效时间点上、去掉该预定后的状态"。
-取消本身也是一个操作，留有记录。
+取消本身也是一个操作，留有记录（`action = CANCEL`；取消预定的插入即写墓碑）。
+数据视图 API 中为变更动作 `CANCEL_SCHEDULED`，`effectiveTime` 为预定的生效时间，`version` 为该预定版本的版本号；
+只能取消生效时间晚于操作时间的版本（否则 422 `NOT_SCHEDULED`）。
 
 ## 5. 查询
 
@@ -170,7 +183,10 @@ WHERE NOT v.is_deleted
 
 ### 5.2 历史
 
-- `GET .../entities/{id}/history`：按 `version_no` 返回全部版本，附带 `op_process` 的操作人、操作名、时间、原因。
+- `GET .../entities/{id}/history`：按 `version_no` 返回全部版本，附带 `op_process` 的操作人、操作名、时间、原因，
+  以及 `action`、`changedFields`、`baseVersionNo`。实体最新状态（含墓碑）不在数据视图范围内时 404；
+  `allowTimeTravel(false)` 的视图不提供历史【D9】。
+- 操作详情：`GET /api/processes/executions/{processSeqId}`（权限 `operation.read`），返回 `op_process`、`op_process_item` 与直接子操作。
 - "谁改过这条数据"：`op_process_item` 按 `(entity_type, entity_id)` 查询。
 - "这次操作改了什么"：`op_process_item` 按 `process_seq_id` 查询，再取各版本与其 `base_version_no` 的差异。
 
@@ -182,7 +198,8 @@ WHERE NOT v.is_deleted
 
 ## 6. 撤销一次操作【决策 D2】
 
-`revert(process_seq_id, reason)` 是一个新的操作（需要专用权限，原因必填）：
+`revert(process_seq_id, reason)` 是一个新的操作（权限 `temporal.revert`，原因必填；
+`POST /api/processes/executions/{processSeqId}/revert`，实现为 `RevertService`）：
 1. 读取原操作 P 的全部 `op_process_item`（含其 `REBASE` 版本）。
 2. 冲突判断以字段为粒度：对 P 写入的每个实体，若 P 之后（按 `process_seq_id` 顺序）有其他操作修改过 P 所修改的任一字段，
    拒绝整个撤销（409），列出阻塞的后续操作。调用方可以先按从新到旧的顺序撤销这些后续操作，再撤销 P。
@@ -194,6 +211,9 @@ WHERE NOT v.is_deleted
 5. P 若有子操作，按相反顺序一并撤销，全部在一个事务内完成；任一冲突则整体拒绝。
 6. 撤销一个撤销操作（重做）按同样规则处理，允许。
 
+实现细则【D9】：后续操作的 `REBASE` 条目不算修改；已被撤销的后续操作与撤销它的操作一起抵消；撤销按实体的默认数据视图定位存储，
+不施加范围；恢复版本写成墓碑时同样检查"仍被引用"。冲突响应为 409，`blockingOperations[]` 从新到旧列出。
+
 ## 7. 唯一性【决策 D6】
 
 时态表上不能直接建业务唯一索引（历史版本会冲突）。对 `eb.unique(...)`：
@@ -201,17 +221,20 @@ WHERE NOT v.is_deleted
 2. **取锁之后**用新的语句查询：是否有**当前生效版本或尚未生效的预定版本**使用了相同的值（排除自身、排除墓碑）；
 3. 存在则返回违规 `UNIQUE_VIOLATION`（400，与其他违规一起累积返回）。
 
+检查对象为本次写入产生的、在操作时间当前生效或之后生效的非墓碑版本（含变基副本）；更新只在改动了约束字段时检查，
+取消与撤销总是检查。
+
 哈希冲突只会让不相干的写入多等待，不影响正确性。把预定版本纳入检查，是为了防止到期时出现重复。
 
 ## 8. 与现有代码的衔接
 
 | 现有 | 改动 |
 |---|---|
-| `DatasetPolicy.temporalTracking`（预留） | 已在阶段 3 删除；改由实体元数据 `eb.temporal()` 决定（`EntityDefinition.temporal` 阶段 3 恒为 false） |
+| `DatasetPolicy.temporalTracking`（预留） | 已在阶段 3 删除；由实体元数据 `eb.temporal(t -> t.allowScheduled(..).column(..))` 决定，系统字段由平台加入，主键须为 `SemanticIdentity`（UUID） |
 | `TemporalRole.VALID_FROM / VALID_TO / SYSTEM_RECORDED` | 用于声明 `effectStartTime`、`createdTime` |
 | `ProcessContext.processSeqId()`、`ProcessSequence` | 序列改为数据库 `op_process_seq`；流程开始时写 `op_process` |
 | `DatasetEntityManager.update/delete` | 时态实体改为插入版本；非时态实体保持 CAS 更新 |
-| `StorageEngine` | 新增 `insertVersion(...)`（唯一约束冲突 → `ConcurrentUpdateException`） |
+| `StorageEngine` | 版本经 `insert` 写入（唯一约束冲突 → `ConcurrentUpdateException`）；新增 `select`（平台内部 SQL，与写入同一事务）；时态逻辑在 `TemporalWriter`、`TemporalStore`、`VersionAppender`、`RevertService` |
 | `EntityInstance.version` | 时态实体中即 `versionNo` |
 | `MetaModelConsistencyChecker` | 检查时态表的系统列、唯一约束、索引、禁止更新的触发器 |
 
@@ -226,7 +249,7 @@ WHERE NOT v.is_deleted
 - 个人信息删除权（《个人信息保护法》等）与"永不修改"冲突，处理方式二选一，并必须形成操作记录：
   - **加密粉碎**：个人敏感字段用按主体划分的密钥加密，删除时销毁密钥；
   - **受控清除**【决策 D5】：专用流程在事务内执行 `SET LOCAL jabiz.maintenance_mode = 'purge'`，
-    触发器仅在该变量为 `purge` 且当前数据库角色属于维护角色时放行；清除指定主体的敏感字段，并写入清除记录（本身也是一次操作）。
+    触发器仅在该变量为 `purge` 且当前数据库角色属于维护角色 `jabiz_maintenance`（由运维创建）时放行【D9】；清除指定主体的敏感字段，并写入清除记录（本身也是一次操作）。
     普通业务数据库账号不授予维护角色。
 - 以上不在 MVP 范围内，但表结构设计时要为敏感字段预留加密方案。
 

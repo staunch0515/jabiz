@@ -99,6 +99,9 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 | GET | `/api/processes/executions/{processSeqId}` | 操作详情（`op_process` + `op_process_item`） |
 | POST | `/api/processes/executions/{processSeqId}/revert` | 撤销（需要权限，必须填写原因） |
 
+操作详情（权限 `operation.read`）与撤销（权限 `temporal.revert`，请求体 `{reason}`）已在阶段 4 实现（`OperationController`、
+`RevertService`）；执行接口与 `Idempotency-Key` 在阶段 6 接入，存储与查找（`OperationRecorder.recordResult / findResult`）已就绪。
+
 - 支持 `Idempotency-Key` 请求头：同一操作人、同一键的重复请求返回第一次的结果，不重复执行。
   实现【决策 D4】：`op_process` 上 `(actor_id, idempotency_key)` 唯一；流程输出在结束时写入 `op_process_result`（同一事务），重放时从中读取。
 - 每个流程声明执行权限码；未声明 → 非开发环境启动失败。

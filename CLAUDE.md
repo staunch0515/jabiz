@@ -47,6 +47,10 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝。错误码可多语言（见设计文档）。
+- **时态实体**（`eb.temporal()`，见 04 与决策 D9）：表只 INSERT；建表迁移中必须建 `UNIQUE(实体主键, version_no)`、
+  `(实体主键, effect_start_time DESC, version_no DESC)` 与 `process_seq_id` 索引、指向 `op_process` / `entity_registry` 的外键，
+  并执行 `SELECT jabiz_protect_append_only('<表>')` 安装禁止 UPDATE/DELETE/TRUNCATE 的触发器（启动自检检查）。
+  测试中不能 `DELETE` 这类表：用各测试独有的数据（或写墓碑）隔离。
 - **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。

@@ -139,15 +139,20 @@ public interface DictionaryProvider {
 
 - 来源（按此顺序匹配）：业务 `DictionaryProvider` Bean（含 `StaticDictionary`：代码中声明、带 zh/ja/en 标签）→
   `Code.allowedValues` 隐含的静态字典（标签即编码）→ `SqlDictionary` Bean（SQL 模板返回 `code`、`label`，可选 `sortOrder`、`enabled`；
-  声明参数 `locale` 时按语言分别执行）→ 数据库字典表 `sys_dict_item(dict_urn, item_code, labels jsonb, sort_order, enabled)`。
+  声明参数 `locale` 时按语言分别执行）→ 数据库字典：平台时态实体 `SysDictItem`，表 `sys_dict_item_version(dict_urn, item_code,
+  labels jsonb, sort_order, enabled + 时态系统列)`，按 `Clock` 的当前时间读取【D9】。
 - 标签：请求语言 → 默认语言 → 编码本身。
-- 数据库字典本身是时态实体（见 04），因此字典项也有生效时间和历史（阶段 3 先用普通表，阶段 4 改为时态实体）。
+- 数据库字典本身是时态实体（见 04），因此字典项也有生效时间和历史，可以预定（经数据视图 `urn:jabiz:dataset:platform:SysDictItem`
+  修改，唯一约束 `(dictUrn, itemCode)`）。`labels` 的语义类型为扩展类型 `jabiz.labels`（runtime 提供，`Map<语言, 标签>`，存为 jsonb）。
+- `sys_dict_item` 是当前字典项的视图（供人工查看与迁移种子）：`INSERT` 经 `jabiz_dict_put(...)` 写入**基础数据**
+  （生效时间 1970-01-01，同一事务的写入为一个操作 `jabiz.sql`），不接受 UPDATE / DELETE。
 - 输入校验时 `Code` 值必须属于字典的**启用**项（`NOT_IN_DICTIONARY`，400）；读取已存储的值时不校验（历史值可能已停用）；
   更新时只校验本次**改变**的编码，已存储的停用编码不妨碍修改其他字段。
   校验保持同步：运行时先加载所需字典，再以 `DictionaryLookup` 传给 `EntityValidator`。
-- 注册表按字典缓存全部语言；`sys_dict_item` 的触发器在变更时 `pg_notify('jabiz_dict_changed', dict_urn)`，
+- 注册表按字典缓存全部语言；`sys_dict_item_version` 的触发器在插入时 `pg_notify('jabiz_dict_changed', dict_urn)`，
   `DictionaryChangeListener` 独占一个连接 `LISTEN` 并失效缓存（多实例）；断线后按退避重连，重连后清空全部缓存。
-  其他来源的变更可自行 `NOTIFY jabiz_dict_changed, '<urn>'`（`*` 表示全部）。SQL 字典另有 TTL（默认 5 分钟）。
+  其他来源的变更可自行 `NOTIFY jabiz_dict_changed, '<urn>'`（`*` 表示全部）。SQL 字典另有 TTL（默认 5 分钟）；
+  数据库字典的缓存在该字典下一个预定版本生效时（按 `Clock`）自动过期。
   只有数据库表能提供、且表中没有条目的 URN 不缓存（URN 可能直接来自请求）。
 - 启动自检：`Code` 字段引用的字典必须有来源；`SqlDictionary` 引用的数据视图、实体必须存在。
 - API：`GET /api/dictionaries/{urn}`，按 `Accept-Language` 返回 `[{code, label, sortOrder, enabled}]`。
@@ -180,7 +185,7 @@ eb.listView("default", lv -> lv
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回：实体名、主键、是否时态（`temporal`，阶段 4 之前恒为 false）、字段（逻辑名、
+`GET /api/meta/entities/{name}` 返回：实体名、主键、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
 语义类型及参数、必填、不可变、系统维护、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
 列表视图、字典引用（`dictionaries`）。
 
