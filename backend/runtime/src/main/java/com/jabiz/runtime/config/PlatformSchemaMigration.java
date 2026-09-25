@@ -4,6 +4,14 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.Configuration;
 import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Runs the platform's migrations before the application's (docs/design/01-core-vs-runtime.md section 8).
  *
@@ -12,18 +20,30 @@ import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
  * through {@code spring.flyway.*}. Separate histories let both sides number their scripts independently.
  * Running the platform first lets application tables reference platform tables.
  *
- * <p>Each side sees the other's objects as a "non-empty schema without history", which Flyway rejects
- * unless it may baseline; both baseline at version 0 so that every real script (version 1 and up) still
- * runs. An explicit baseline configured for the application is left untouched.
+ * <p>Flyway refuses a "non-empty schema without history" unless it may baseline. The two sides are
+ * handled differently because only the application's own objects say anything about its history:
+ * <ul>
+ *   <li>The platform always baselines at version 0, so on a database that predates it every platform
+ *       script (version 1 and up) still runs.</li>
+ *   <li>The application is baselined at version 0 only when it is new to the database: no history table
+ *       and no tables besides the platform's. Then all its scripts run, whatever baseline settings it has
+ *       (a configured baseline would otherwise skip scripts just because platform objects exist). In every
+ *       other case its configuration applies unchanged, exactly as without the platform.</li>
+ * </ul>
  */
 public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
 
     public static final String PLATFORM_LOCATION = "classpath:db/jabiz";
     public static final String PLATFORM_HISTORY_TABLE = "jabiz_schema_history";
 
+    /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
+    public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE);
+
     @Override
     public void migrate(Flyway application) {
         Configuration config = application.getConfiguration();
+        boolean applicationIsNew = isNewToApplication(config);
+
         Flyway.configure()
             .configuration(config)
             .locations(PLATFORM_LOCATION)
@@ -33,9 +53,45 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
             .load()
             .migrate();
 
-        Flyway applicationWithBaseline = config.isBaselineOnMigrate()
-            ? application
-            : Flyway.configure().configuration(config).baselineOnMigrate(true).baselineVersion("0").load();
-        applicationWithBaseline.migrate();
+        Flyway applicationMigration = applicationIsNew
+            ? Flyway.configure().configuration(config).baselineOnMigrate(true).baselineVersion("0").load()
+            : application;
+        applicationMigration.migrate();
+    }
+
+    /** No application history and no tables other than the platform's in the application's schema. */
+    private static boolean isNewToApplication(Configuration config) {
+        try (Connection connection = config.getDataSource().getConnection()) {
+            String schema = defaultSchema(config, connection);
+            Set<String> tables = new HashSet<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = ?")) {
+                statement.setString(1, schema);
+                try (ResultSet rs = statement.executeQuery()) {
+                    while (rs.next()) {
+                        tables.add(rs.getString(1));
+                    }
+                }
+            }
+            tables.removeAll(PLATFORM_TABLES);
+            return tables.isEmpty();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not inspect the schema before migrating", e);
+        }
+    }
+
+    /** The schema Flyway will migrate: its default schema, else the first listed, else the connection's. */
+    private static String defaultSchema(Configuration config, Connection connection) throws SQLException {
+        if (config.getDefaultSchema() != null) {
+            return config.getDefaultSchema();
+        }
+        if (config.getSchemas().length > 0) {
+            return config.getSchemas()[0];
+        }
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT current_schema()")) {
+            rs.next();
+            return rs.getString(1);
+        }
     }
 }

@@ -71,6 +71,7 @@ public interface CustomKindSupport {
 - 校验阶段已累积全部违规（`EntityValidator`）；**业务规则阶段也改为累积**：同一个变更（一次 INSERT / UPDATE / DELETE）中的
   范围违规、不可变字段违规、非法状态迁移、初始状态违规、迁移守卫失败，收集后一次抛出。
   前一个变更失败时不再执行后续变更（它们可能依赖前者的结果）。
+  实体不存在（404）和版本冲突（409）先于业务规则判断：对过期或不存在的数据不报告规则违规。
 - `Violation(field, ruleCode, message, params)`：`field` 可为 null（与字段无关的违规，如只读视图）；`params` 是文案占位参数。
 - 异常与状态码：`ValidationException`（400）与 `BusinessRuleViolationException`（422）都携带 `violations`，
   `ProblemDetail` 中的 `violations[]` 为 `{field, ruleCode, message}`。

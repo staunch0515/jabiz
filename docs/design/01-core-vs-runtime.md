@@ -115,5 +115,9 @@ public record RequestContext(
 - 平台自己的表、序列、函数由 runtime 提供迁移脚本：`classpath:db/jabiz/V<n>__*.sql`，历史表 `jabiz_schema_history`。
 - 业务表由业务模块提供：`classpath:db/migration`（`spring.flyway.*` 配置），历史表为 Flyway 默认的 `flyway_schema_history`。
 - 两套脚本各自编号，互不占用版本号；启动时**先平台、后业务**（`PlatformSchemaMigration`），因此业务表可以引用平台表。
-- 双方都允许在"非空 schema"上以版本 0 建立基线，因此已有数据库和全新数据库都能正确迁移（所有真实脚本版本 ≥ 1）。
+- 基线规则（所有真实脚本版本 ≥ 1）：
+  - 平台总是允许以版本 0 建立基线，因此在平台出现之前就存在的数据库上，平台脚本也会全部执行；
+  - 业务侧只有在"对业务而言是新库"（没有业务历史表，且除平台的表外没有其他表）时才以版本 0 建立基线并执行全部脚本，
+    不受业务自己的 `baseline-*` 配置影响（否则平台对象会让 Flyway 误以为是旧库而跳过脚本）；
+    其他情况完全按业务自己的配置执行，与没有平台时相同。平台建的表登记在 `PlatformSchemaMigration.PLATFORM_TABLES`，由测试核对。
 - Flyway 使用 JDBC，只在启动时运行，不在请求路径上。

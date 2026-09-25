@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Platform and application scripts keep separate histories; platform first, on new and existing schemas. */
 class PlatformSchemaMigrationTest {
@@ -62,6 +63,34 @@ class PlatformSchemaMigrationTest {
         assertThat(single("SELECT nextval('op_process_seq')")).isEqualTo(1L);
     }
 
+    /** Spring Boot's default baseline version is 1; a new database must still run the application's V1. */
+    @Test
+    void applicationBaselineSettingsDoNotSkipScriptsOnANewDatabase() {
+        new PlatformSchemaMigration().migrate(application().baselineOnMigrate(true).baselineVersion("1").load());
+
+        assertThat(versions("flyway_schema_history")).containsExactly("0", "1");
+        assertThat(single("SELECT count(*) FROM legacy_item")).isEqualTo(0L);
+    }
+
+    @Test
+    void existingApplicationSchemaKeepsItsOwnBaselineSettings() {
+        Flyway.configure().configuration(application()).locations("classpath:db/legacyapp-v1").load().migrate();
+        execute("DROP TABLE flyway_schema_history");
+
+        // Application tables but no application history: Flyway's usual rule applies (refuse without baseline).
+        assertThatThrownBy(() ->
+                new PlatformSchemaMigration().migrate(application().locations("classpath:db/legacyapp-v1").load()))
+            .hasMessageContaining("non-empty schema");
+    }
+
+    @Test
+    void platformTablesAreDeclared() {
+        Flyway.configure().configuration(application()).locations(PlatformSchemaMigration.PLATFORM_LOCATION)
+            .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE).load().migrate();
+
+        assertThat(tables()).containsExactlyInAnyOrderElementsOf(PlatformSchemaMigration.PLATFORM_TABLES);
+    }
+
     @Test
     void migratingTwiceChangesNothing() {
         new PlatformSchemaMigration().migrate(application().load());
@@ -87,6 +116,30 @@ class PlatformSchemaMigrationTest {
             throw new IllegalStateException(e);
         }
         return versions;
+    }
+
+    private List<String> tables() {
+        List<String> tables = new ArrayList<>();
+        try (Connection connection = DB.connect(schema);
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(
+                 "SELECT table_name FROM information_schema.tables WHERE table_schema = '" + schema + "'")) {
+            while (rs.next()) {
+                tables.add(rs.getString(1));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+        return tables;
+    }
+
+    private void execute(String sql) {
+        try (Connection connection = DB.connect(schema);
+             Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private Object single(String sql) {
