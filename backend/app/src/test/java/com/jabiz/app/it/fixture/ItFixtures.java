@@ -2,12 +2,20 @@ package com.jabiz.app.it.fixture;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dictionary.DictItem;
+import com.jabiz.dictionary.DictionaryProvider;
+import com.jabiz.entity.SemanticKind;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.runtime.dictionary.SqlDictionary;
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -23,6 +31,8 @@ public final class ItFixtures extends BaseEntityDefinitions {
     public static final String READONLY_DATASET = "urn:jabiz:dataset:it:ItReadonly";
     public static final String TENANT_DATASET = "urn:jabiz:dataset:it:ItTenant";
     public static final String UNIQUE_DATASET = "urn:jabiz:dataset:it:ItUnique";
+    public static final String COLOR_DICTIONARY = "urn:jabiz:dict:it_color";
+    public static final String TICKET_TITLE_DICTIONARY = "urn:jabiz:dict:it_ticket_title";
 
     public static final int TICKET_MAX_WRITE_BATCH = 3;
     public static final int TICKET_MAX_QUERY_BATCH = 5;
@@ -182,6 +192,42 @@ public final class ItFixtures extends BaseEntityDefinitions {
                 .permissions("it.read", "it.write")
                 .storage(s -> s.connectionPoolRef(pool))
                 .scope(s -> s.fromContext("tenantId", RequestContext::tenantId)));
+        }
+
+        /** A business dictionary provider, called off the event loop. */
+        @Bean
+        DictionaryProvider itColorDictionary() {
+            return new DictionaryProvider() {
+                @Override
+                public boolean supports(String dictUrn) {
+                    return COLOR_DICTIONARY.equals(dictUrn);
+                }
+
+                @Override
+                public List<DictItem> items(String dictUrn, Locale locale) {
+                    boolean ja = locale.getLanguage().equals("ja");
+                    return List.of(new DictItem("RED", ja ? "赤" : "Red", 1, true),
+                        new DictItem("BLUE", ja ? "青" : "Blue", 2, false));
+                }
+            };
+        }
+
+        /** An SQL dictionary: ticket ids labelled with their titles, the label naming the requested language. */
+        @Bean
+        SqlDictionary itTicketTitleDictionary() {
+            return new SqlDictionary(TICKET_TITLE_DICTIONARY, TICKET_DATASET,
+                AdvancedQueryDefinition.define("it.ticket_titles", q -> q
+                    .fromEntities("ItTicket")
+                    .parameter("locale", new SemanticKind.Text(8, false), true)
+                    .returns("code", new SemanticKind.SemanticIdentity("urn:jabiz:entity:it:ticket"))
+                    .returns("label", new SemanticKind.Text(null, false))
+                    .sqlTemplate("""
+                        SELECT t.{{ItTicket.ticketId}} AS code,
+                               t.{{ItTicket.title}} || ' [' || CAST(:locale AS text) || ']' AS label
+                        FROM {{ItTicket}} t
+                        ORDER BY t.{{ItTicket.ticketId}}
+                        """)),
+                Duration.ofMinutes(5));
         }
 
         @Bean

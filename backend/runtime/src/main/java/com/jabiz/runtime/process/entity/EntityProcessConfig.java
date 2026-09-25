@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.UUID;
+import java.time.Clock;
 
 /** Publishes the generic entity processes as beans and provides the default identity generator. */
 @Configuration
@@ -29,7 +29,7 @@ class EntityProcessConfig {
 
     @Bean
     @ConditionalOnMissingBean(EntityIdGenerator.class)
-    EntityIdGenerator entityIdGenerator() {
-        return definition -> UUID.randomUUID().toString();
+    EntityIdGenerator entityIdGenerator(Clock clock) {
+        return new UuidV7Generator(clock);
     }
 }

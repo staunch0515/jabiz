@@ -21,6 +21,16 @@ val coverageGatedClasses = listOf(
     "com.jabiz.context.RequestContext",
     "com.jabiz.i18n.MessageCatalog",
     "com.jabiz.i18n.MessageTemplate",
+    // Phase 3
+    "com.jabiz.entity.SemanticKinds",
+    "com.jabiz.entity.CustomKinds",
+    "com.jabiz.entity.GuardDefinition",
+    "com.jabiz.entity.ListViewDefinition",
+    "com.jabiz.entity.MetaModelExporter",
+    "com.jabiz.entity.JsonSchemaExporter",
+    "com.jabiz.dataset.DatasetDefinition",
+    "com.jabiz.dataset.DatasetScope",
+    "com.jabiz.dictionary.StaticDictionary",
 )
 
 tasks.test {

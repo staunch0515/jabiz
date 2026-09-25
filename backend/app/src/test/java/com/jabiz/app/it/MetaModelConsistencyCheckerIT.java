@@ -85,4 +85,29 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             .isInstanceOf(MetaModelInconsistencyException.class)
             .hasMessageContaining("field extra -> missing column f_extra");
     }
+
+    @Test
+    void uniqueConstraintsNeedAMatchingUniqueIndex() {
+        execute("CREATE TABLE it_uniq (f_id varchar(10), f_code varchar(10), f_region varchar(10))");
+        execute("CREATE UNIQUE INDEX uk_uniq_wrong ON it_uniq (f_code, f_region)");
+        execute("CREATE INDEX uk_uniq_plain ON it_uniq (f_code)");
+        execute("CREATE UNIQUE INDEX uk_uniq_ok ON it_uniq (f_region, f_code)");
+        EntityDefinition uniq = EntityDefinition.define("Uniq", eb -> {
+            eb.physicalTable("it_uniq");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id"));
+            eb.field("code", f -> f.physicalColumn("f_code"));
+            eb.field("region", f -> f.physicalColumn("f_region"));
+            eb.unique("uk_uniq_missing", "code");
+            eb.unique("uk_uniq_wrong", "code");
+            eb.unique("uk_uniq_plain", "code");
+            eb.unique("uk_uniq_ok", "code", "region");
+        });
+
+        assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf(uniq))::afterSingletonsInstantiated)
+            .hasMessageContaining("unique constraint uk_uniq_missing -> no unique index named uk_uniq_missing")
+            .hasMessageContaining("unique constraint uk_uniq_wrong -> index covers")
+            .hasMessageContaining("unique constraint uk_uniq_plain -> no unique index named uk_uniq_plain")
+            .satisfies(e -> assertThat(e.getMessage()).doesNotContain("uk_uniq_ok"));
+    }
 }

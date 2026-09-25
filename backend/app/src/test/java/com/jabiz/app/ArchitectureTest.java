@@ -22,13 +22,15 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
  * Layering rules of docs/design/01-core-vs-runtime.md section 7 and docs/design/07-quality.md section 4.
  *
  * <p>Layers are told apart by package: jabiz-core is {@code com.jabiz..} outside {@code com.jabiz.runtime..}
- * and the business module {@code com.jabiz.app..}. Rules whose subject is empty fail (ArchUnit's default),
+ * and the business module {@code com.jabiz.app..}; extension modules such as ext-geo ({@code com.jabiz.ext..})
+ * obey the same rules as the core, which they extend. Rules whose subject is empty fail (ArchUnit's default),
  * so a package rename cannot silently turn a rule into a no-op.
  */
 class ArchitectureTest {
 
     private static final String RUNTIME = "com.jabiz.runtime..";
     private static final String BUSINESS = "com.jabiz.app..";
+    private static final String EXTENSIONS = "com.jabiz.ext..";
 
     private static final JavaClasses CLASSES = new ClassFileImporter()
         .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
@@ -49,6 +51,14 @@ class ArchitectureTest {
     @Test
     void coreDependsNeitherOnRuntimeNorOnBusinessModules() {
         coreClasses().should().dependOnClassesThat().resideInAnyPackage(RUNTIME, BUSINESS).check(CLASSES);
+    }
+
+    /** Extensions plug into the core through its SPIs; the platform works (and compiles) without them. */
+    @Test
+    void coreAndRuntimeDoNotDependOnExtensions() {
+        noClasses().that().resideInAPackage("com.jabiz..").and().resideOutsideOfPackages(EXTENSIONS, BUSINESS)
+            .should().dependOnClassesThat().resideInAPackage(EXTENSIONS)
+            .check(CLASSES);
     }
 
     @Test
