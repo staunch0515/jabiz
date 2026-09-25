@@ -1,40 +1,39 @@
 package com.jabiz.dataset;
 
+import com.jabiz.entity.ListViewDefinition;
+
 import java.time.Duration;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * A scoped, policy-controlled view over the storage of one target entity type.
+ * A scoped, policy-controlled view over the storage of one target entity type (docs/design/03-dataset.md).
+ * An entity may have several datasets; exactly one of them is its default, used for generic lookups.
  *
- * Dataset-level rules (table override, default partition filter, soft delete) apply to the
- * target entity. Other entity types handled through the same dataset use their own
- * tables without those rules.
+ * Dataset-level rules (table override, scope, soft delete) apply to the target entity. Other entity types
+ * reached through the same dataset (reference checks) use their own default dataset.
  *
- * @param defaultPartitionFilter logical field name -> required value, applied to every read of,
- *                               and enforced on every write to, the target entity
+ * @param defaultView whether this is the default dataset of its target entity
+ * @param listView    name of the target entity's list view that whitelists filters and sorts of queries
  */
 public record DatasetDefinition(
     String resourceId,
     String targetEntityType,
     StorageRouting storage,
     DatasetPolicy policy,
-    Map<String, Object> defaultPartitionFilter
+    DatasetScope scope,
+    boolean defaultView,
+    DatasetPermissions permissions,
+    String listView
 ) {
     public DatasetDefinition {
         requireNotBlank(resourceId, "resourceId");
         requireNotBlank(targetEntityType, "targetEntityType");
         Objects.requireNonNull(storage, "storage must not be null");
         Objects.requireNonNull(policy, "policy must not be null");
-        Map<String, Object> copy = new LinkedHashMap<>();
-        if (defaultPartitionFilter != null) {
-            defaultPartitionFilter.forEach((k, v) ->
-                copy.put(k, Objects.requireNonNull(v, "partition filter value must not be null: " + k)));
-        }
-        defaultPartitionFilter = Collections.unmodifiableMap(copy);
+        scope = scope == null ? DatasetScope.NONE : scope;
+        permissions = permissions == null ? DatasetPermissions.UNDECLARED : permissions;
+        listView = listView == null || listView.isBlank() ? ListViewDefinition.DEFAULT : listView;
     }
 
     public static DatasetDefinition define(String resourceId, Consumer<Builder> consumer) {
@@ -48,6 +47,10 @@ public record DatasetDefinition(
         return targetEntityType.equals(entityType);
     }
 
+    public boolean isDefault() {
+        return defaultView;
+    }
+
     private static void requireNotBlank(String value, String what) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(what + " must not be blank");
@@ -59,7 +62,10 @@ public record DatasetDefinition(
         private String targetEntityType;
         private StorageRouting storage;
         private DatasetPolicy policy = new PolicyBuilder().build();
-        private Map<String, Object> partitionFilter = Map.of();
+        private DatasetScope scope = DatasetScope.NONE;
+        private boolean defaultView;
+        private DatasetPermissions permissions = DatasetPermissions.UNDECLARED;
+        private String listView;
 
         public Builder(String resourceId) { this.resourceId = resourceId; }
 
@@ -79,10 +85,29 @@ public record DatasetDefinition(
             return this;
         }
 
-        public Builder defaultPartitionFilter(Map<String, Object> filter) { this.partitionFilter = filter; return this; }
+        /** Declares the range of the dataset (docs/design/03-dataset.md section 2.2). */
+        public Builder scope(Consumer<DatasetScope.Builder> c) {
+            DatasetScope.Builder sb = new DatasetScope.Builder();
+            c.accept(sb);
+            this.scope = sb.build();
+            return this;
+        }
+
+        /** Makes this the default dataset of its target entity. */
+        public Builder asDefault() { this.defaultView = true; return this; }
+
+        /** Permission codes needed to read and to write through this dataset. */
+        public Builder permissions(String read, String write) {
+            this.permissions = new DatasetPermissions(read, write);
+            return this;
+        }
+
+        /** List view of the target entity whose whitelists apply to queries; defaults to {@code "default"}. */
+        public Builder listView(String name) { this.listView = name; return this; }
 
         public DatasetDefinition build() {
-            return new DatasetDefinition(resourceId, targetEntityType, storage, policy, partitionFilter);
+            return new DatasetDefinition(resourceId, targetEntityType, storage, policy, scope, defaultView,
+                permissions, listView);
         }
     }
 
@@ -105,30 +130,30 @@ public record DatasetDefinition(
     public static class PolicyBuilder {
         private boolean readOnly;
         private boolean softDelete;
-        private String softDeleteColumn;
-        private String softDeleteTimeColumn;
+        private String softDeleteField;
+        private String softDeleteTimeField;
         private int queryBatch = 100;
         private int writeBatch = 100;
         private Duration timeout = Duration.ofSeconds(5);
-        private boolean temporal;
 
         public PolicyBuilder readOnly(boolean ro) { this.readOnly = ro; return this; }
 
-        public PolicyBuilder softDelete(boolean sd, String column) {
-            this.softDelete = sd;
-            this.softDeleteColumn = column;
+        /** Deletes mark rows through the given logical Bool field instead of removing them. */
+        public PolicyBuilder softDelete(String field) {
+            this.softDelete = true;
+            this.softDeleteField = field;
             return this;
         }
 
-        public PolicyBuilder softDeleteTimeColumn(String column) { this.softDeleteTimeColumn = column; return this; }
+        /** Logical {@code Temporal(SYSTEM_RECORDED)} field that receives the deletion time. */
+        public PolicyBuilder softDeleteTimeField(String field) { this.softDeleteTimeField = field; return this; }
         public PolicyBuilder maxQueryBatchSize(int b) { this.queryBatch = b; return this; }
         public PolicyBuilder maxWriteBatchSize(int b) { this.writeBatch = b; return this; }
         public PolicyBuilder queryTimeout(Duration d) { this.timeout = d; return this; }
-        public PolicyBuilder temporalTracking(boolean t) { this.temporal = t; return this; }
 
         public DatasetPolicy build() {
-            return new DatasetPolicy(readOnly, softDelete, softDeleteColumn, softDeleteTimeColumn,
-                queryBatch, writeBatch, timeout, temporal);
+            return new DatasetPolicy(readOnly, softDelete, softDeleteField, softDeleteTimeField,
+                queryBatch, writeBatch, timeout);
         }
     }
 }

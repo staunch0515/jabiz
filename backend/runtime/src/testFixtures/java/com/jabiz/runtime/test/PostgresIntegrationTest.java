@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.sql.Connection;
@@ -86,12 +87,22 @@ public abstract class PostgresIntegrationTest {
         clock.set(START);
     }
 
-    /** Runs a query with positional parameters and returns rows keyed by lower-case column label. */
     /** Runs a pipeline the way a request would, with {@link #TEST_REQUEST} in its Reactor context. */
     protected static <T> Mono<T> asTestRequest(Mono<T> pipeline) {
+        return asRequest(TEST_REQUEST, pipeline);
+    }
+
+    /** Runs a pipeline the way a request would, with {@link #TEST_REQUEST} in its Reactor context. */
+    protected static <T> Flux<T> asTestRequest(Flux<T> pipeline) {
         return pipeline.contextWrite(view -> RequestContexts.put(view, TEST_REQUEST));
     }
 
+    /** Runs a pipeline the way a request of the given context would. */
+    protected static <T> Mono<T> asRequest(RequestContext request, Mono<T> pipeline) {
+        return pipeline.contextWrite(view -> RequestContexts.put(view, request));
+    }
+
+    /** Runs a query with positional parameters and returns rows keyed by lower-case column label. */
     protected static List<Map<String, Object>> query(String sql, Object... params) {
         try (Connection connection = DB.connect(schema);
              PreparedStatement statement = prepare(connection, sql, params);

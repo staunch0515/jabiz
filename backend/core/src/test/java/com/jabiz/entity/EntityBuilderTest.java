@@ -1,5 +1,6 @@
 package com.jabiz.entity;
 
+import com.jabiz.testkinds.TestCellKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -119,36 +120,109 @@ class EntityBuilderTest {
     }
 
     @Test
-    void spatialGuardRequiresLifecycle() {
-        assertInvalid(eb -> {
-            eb.field("cell", f -> f.physicalColumn("f_cell").asSpatialH3(8));
-            eb.spatialGuard("SHIPPED", "cell", cell -> true);
-        }, "spatial guards require a lifecycle");
+    void guardsRequireALifecycle() {
+        assertInvalid(eb -> eb.guard("G", "*", "SHIPPED", (f, t, c, i, ctx) -> List.of()),
+            "transition guards require a lifecycle");
     }
 
     @Test
-    void spatialGuardTargetMustBeAKnownState() {
+    void guardStatesMustBelongToTheDictionary() {
         assertInvalid(eb -> {
             statusField(eb);
-            eb.field("cell", f -> f.physicalColumn("f_cell").asSpatialH3(8));
             eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED"));
-            eb.spatialGuard("TELEPORTED", "cell", cell -> true);
+            eb.guard("G", "*", "TELEPORTED", (f, t, c, i, ctx) -> List.of());
         }, "state 'TELEPORTED' is not among the allowed values");
+        assertInvalid(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED"));
+            eb.guard("G", "LIMBO", "SHIPPED", (f, t, c, i, ctx) -> List.of());
+        }, "state 'LIMBO' is not among the allowed values");
     }
 
     @Test
-    void spatialGuardLocationMustBeASpatialH3Field() {
+    void guardCodesAreUnique() {
         assertInvalid(eb -> {
             statusField(eb);
             eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED"));
-            eb.spatialGuard("SHIPPED", "missing", cell -> true);
-        }, "spatial guard location 'missing' must be a declared SpatialH3 field");
+            eb.guard("G", "*", "SHIPPED", (f, t, c, i, ctx) -> List.of());
+            eb.guard("G", "NEW", "SHIPPED", (f, t, c, i, ctx) -> List.of());
+        }, "guard code 'G' is declared twice");
+    }
+
+    @Test
+    void guardDefinitionMatchesSourceAndTarget() {
+        GuardDefinition any = new GuardDefinition("G", "*", "SHIPPED", (f, t, c, i, ctx) -> List.of());
+        GuardDefinition fromNew = new GuardDefinition("H", "NEW", "SHIPPED", (f, t, c, i, ctx) -> List.of());
+
+        assertThat(any.appliesTo(null, "SHIPPED")).isTrue();
+        assertThat(any.appliesTo("NEW", "SHIPPED")).isTrue();
+        assertThat(any.appliesTo("NEW", "DELIVERED")).isFalse();
+        assertThat(fromNew.appliesTo("NEW", "SHIPPED")).isTrue();
+        assertThat(fromNew.appliesTo(null, "SHIPPED")).isFalse();
+        assertThatThrownBy(() -> new GuardDefinition(" ", "*", "X", (f, t, c, i, ctx) -> List.of()))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new GuardDefinition("G", "*", null, (f, t, c, i, ctx) -> List.of()))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new GuardDefinition("G", "*", "X", null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void referenceKindDeclaresTheReference() {
+        EntityDefinition def = define(eb -> eb.field("ownerId", f -> f.physicalColumn("f_owner").asReference("Owner")));
+
+        assertThat(def.references).containsExactly(new ReferenceDefinition("ownerId", "Owner"));
         assertInvalid(eb -> {
+            eb.field("ownerId", f -> f.physicalColumn("f_owner").asReference("Owner"));
+            eb.reference("ownerId", "Owner");
+        }, "is a Reference and must not also be declared with reference()");
+    }
+
+    @Test
+    void uniqueConstraintsAreValidated() {
+        EntityDefinition def = define(eb -> {
+            eb.field("code", f -> f.physicalColumn("f_code"));
+            eb.unique("uk_parcel_code", "code", "parcelId");
+        });
+        assertThat(def.uniqueConstraints).containsExactly(new UniqueConstraint("uk_parcel_code", List.of("code", "parcelId")));
+
+        assertInvalid(eb -> eb.unique("uk_x", "missing"), "unique constraint 'uk_x' refers to unknown field 'missing'");
+        assertInvalid(eb -> eb.unique("uk x", "parcelId"), "is not a valid SQL identifier");
+        assertInvalid(eb -> {
+            eb.unique("uk_x", "parcelId");
+            eb.unique("UK_X", "parcelId");
+        }, "unique constraint 'UK_X' is declared twice");
+        assertInvalid(eb -> eb.unique("uk_x", "parcelId", "parcelId"), "lists a field twice");
+        assertThatThrownBy(() -> new UniqueConstraint("uk", List.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new UniqueConstraint(null, List.of("a"))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void listViewsAreValidated() {
+        EntityDefinition def = define(eb -> {
             statusField(eb);
-            eb.field("cell", f -> f.physicalColumn("f_cell"));
-            eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED"));
-            eb.spatialGuard("SHIPPED", "cell", cell -> true);
-        }, "must be a declared SpatialH3 field");
+            eb.listView("default", lv -> lv.columns("parcelId", "status").filters("status").sorts("parcelId")
+                .defaultSort("parcelId", false));
+            eb.listView("compact", lv -> lv.columns("parcelId"));
+        });
+
+        ListViewDefinition view = def.listView("default").orElseThrow();
+        assertThat(def.listViews.keySet()).containsExactly("default", "compact");
+        assertThat(view.allowsFilter("status")).isTrue();
+        assertThat(view.allowsFilter("parcelId")).isFalse();
+        assertThat(view.allowsSort("parcelId")).isTrue();
+        assertThat(view.defaultSort()).isEqualTo(new ListViewDefinition.Sort("parcelId", false));
+        assertThat(def.listView("compact").orElseThrow().defaultSort()).isNull();
+        assertThat(def.listView("missing")).isEmpty();
+
+        assertInvalid(eb -> eb.listView("v", lv -> lv.filters("nope")), "list view 'v' refers to unknown field 'nope'");
+        assertInvalid(eb -> eb.listView("v", lv -> lv.sorts("parcelId").defaultSort("other", true)),
+            "default sort 'other' is not among its sorts");
+        assertInvalid(eb -> {
+            eb.listView("v", lv -> {});
+            eb.listView("v", lv -> {});
+        }, "list view 'v' is declared twice");
+        assertThatThrownBy(() -> new ListViewDefinition(" ", List.of(), List.of(), List.of(), null))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -175,7 +249,7 @@ class EntityBuilderTest {
     void validDefinitionExposesDerivedMetadata() {
         EntityDefinition def = define(eb -> {
             statusField(eb);
-            eb.field("cell", f -> f.physicalColumn("f_cell").asSpatialH3(8));
+            eb.field("cell", f -> f.physicalColumn("f_cell").kind(TestCellKind.of(8)));
             eb.field("ownerId", f -> f.physicalColumn("f_owner").required(true).immutable(true));
             eb.field("recordedAt", f -> f.physicalColumn("f_recorded").asTemporal(TemporalRole.SYSTEM_RECORDED));
             eb.field("eventAt", f -> f.physicalColumn("f_event").asTemporal(TemporalRole.EVENT_TIME));
@@ -184,7 +258,7 @@ class EntityBuilderTest {
                 st.from("NEW").to("SHIPPED", "CANCELLED");
                 st.from("SHIPPED").to("DELIVERED");
             });
-            eb.spatialGuard("DELIVERED", "cell", cell -> cell > 0);
+            eb.guard("IN_AREA", "*", "DELIVERED", (from, to, current, incoming, ctx) -> List.of());
             eb.reference("ownerId", "Owner");
         });
 
@@ -198,9 +272,11 @@ class EntityBuilderTest {
         assertThat(def.allowsTransition("NEW", "CANCELLED")).isTrue();
         assertThat(def.allowsTransition("NEW", "DELIVERED")).isFalse();
         assertThat(def.allowsTransition("DELIVERED", "NEW")).isFalse();
-        assertThat(def.guardsFor("DELIVERED")).singleElement()
-            .satisfies(g -> assertThat(g.locationField()).isEqualTo("cell"));
-        assertThat(def.guardsFor("SHIPPED")).isEmpty();
+        assertThat(def.guardsFor("SHIPPED", "DELIVERED")).singleElement()
+            .satisfies(g -> assertThat(g.code()).isEqualTo("IN_AREA"));
+        assertThat(def.guardsFor("NEW", "SHIPPED")).isEmpty();
+        assertThat(def.temporal).isFalse();
+        assertThat(def.dictionaryUrns()).containsExactly("urn:test:dict:parcel_status");
         assertThat(def.references).containsExactly(new ReferenceDefinition("ownerId", "Owner"));
         assertThat(def.isSystemManaged(def.field("rowVersion"))).isTrue();
         assertThat(def.isSystemManaged(def.field("recordedAt"))).isTrue();
@@ -238,7 +314,7 @@ class EntityBuilderTest {
     void fieldBuilderRecordsFlagsKindAndExportableRules() {
         EntityDefinition def = define(eb -> eb.field("weight", f -> f.physicalColumn("f_weight")
             .required(true).immutable(true).generated(true)
-            .asPhysicalQuantity(DimensionType.MASS, "urn:unit:si:kilogram")
+            .asNumeric(9, 3)
             .rule("MIN_WEIGHT", "RANGE", Map.of("min", 1), (v, ctx) -> true)
             .rule("MAX_WEIGHT", "RANGE", Map.of("max", 9), v -> true)
             .rule("SERVER_ONLY_CTX", (v, ctx) -> true)
@@ -248,7 +324,7 @@ class EntityBuilderTest {
         assertThat(weight.required()).isTrue();
         assertThat(weight.immutable()).isTrue();
         assertThat(weight.generated()).isTrue();
-        assertThat(weight.kind()).isEqualTo(new SemanticKind.PhysicalQuantity(DimensionType.MASS, "urn:unit:si:kilogram"));
+        assertThat(weight.kind()).isEqualTo(new SemanticKind.Numeric(9, 3));
         assertThat(weight.rules()).extracting(FieldRule::code)
             .containsExactly("MIN_WEIGHT", "MAX_WEIGHT", "SERVER_ONLY_CTX", "SERVER_ONLY");
         // Only rules declared with a kind and parameters are exported to clients.

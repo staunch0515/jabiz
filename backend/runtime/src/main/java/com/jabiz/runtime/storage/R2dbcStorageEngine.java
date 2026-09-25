@@ -4,6 +4,7 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
+import io.r2dbc.postgresql.api.PostgresqlException;
 import io.r2dbc.spi.ColumnMetadata;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -27,6 +28,9 @@ import java.util.concurrent.TimeoutException;
  * Transactions are propagated through the Reactor context by the {@link TransactionalOperator}.
  */
 public final class R2dbcStorageEngine implements StorageEngine {
+
+    /** SQLSTATE of unique_violation. */
+    private static final String UNIQUE_VIOLATION = "23505";
 
     private final DatabaseClient db;
     private final TransactionalOperator tx;
@@ -60,7 +64,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
             for (int i = 0; i < values.size(); i++) {
                 spec = spec.bind("v" + i, values.get(i));
             }
-            return spec.fetch().rowsUpdated().then();
+            return spec.fetch().rowsUpdated().then().onErrorMap(R2dbcStorageEngine::translate);
         });
     }
 
@@ -95,7 +99,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
                 spec = spec.bind("u" + i, values.get(i));
             }
             spec = spec.bind("pk", id).bind("expectedVersion", expectedVersion);
-            return spec.fetch().rowsUpdated().map(count -> count > 0);
+            return spec.fetch().rowsUpdated().map(count -> count > 0).onErrorMap(R2dbcStorageEngine::translate);
         });
     }
 
@@ -133,6 +137,20 @@ public final class R2dbcStorageEngine implements StorageEngine {
     }
 
     @Override
+    public Mono<Long> count(PhysicalQueryPlan plan) {
+        return Mono.defer(() -> {
+            StringBuilder sql = new StringBuilder("SELECT count(*) AS total FROM ")
+                .append(SqlIdentifiers.require(plan.targetTable()));
+            if (plan.whereClause() != null && !plan.whereClause().isBlank()) {
+                sql.append(" WHERE ").append(plan.whereClause());
+            }
+            return run(sql.toString(), plan.bindParams(), plan.timeout())
+                .next()
+                .map(row -> ((Number) row.get("total")).longValue());
+        });
+    }
+
+    @Override
     public Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan) {
         return Flux.defer(() -> {
             String sql = plan.sql().strip();
@@ -163,6 +181,17 @@ public final class R2dbcStorageEngine implements StorageEngine {
             .timeout(timeout)
             .onErrorMap(TimeoutException.class, ex -> new QueryTimeoutException("Query exceeded " + timeout, ex))
             .flatMapMany(Flux::fromIterable);
+    }
+
+    /** Unique index violations become {@link UniqueKeyViolationException} carrying the index name. */
+    private static Throwable translate(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof PostgresqlException pg
+                && UNIQUE_VIOLATION.equals(pg.getErrorDetails().getCode())) {
+                return new UniqueKeyViolationException(pg.getErrorDetails().getConstraintName().orElse(null), error);
+            }
+        }
+        return error;
     }
 
     private static Map<String, Object> toMap(Row row, RowMetadata metadata) {

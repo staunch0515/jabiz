@@ -22,28 +22,42 @@ public final class EntityDefinition {
     /** Logical name of the lifecycle status field, or null if the entity has no lifecycle. */
     public final String stateField;
     public final List<StateTransitionRule> transitions;
-    public final List<SpatialGuardRule> spatialGuards;
+    /** Guards of lifecycle transitions. */
+    public final List<GuardDefinition> guards;
     /** Many-to-one references to other entities, enforced as data constraints. */
     public final List<ReferenceDefinition> references;
     /** Logical name of the optimistic-lock version field, or null if the entity is not writable. */
     public final String versionField;
     /** States that have outgoing transitions but no incoming ones; the only valid states on insert. */
     public final Set<String> initialStates;
+    /** Unique value combinations. */
+    public final List<UniqueConstraint> uniqueConstraints;
+    /** List views by name, in declaration order. */
+    public final Map<String, ListViewDefinition> listViews;
+    /**
+     * Whether the entity keeps append-only bitemporal history (docs/design/04-temporal-append-only.md).
+     * Always false until phase 4 introduces {@code eb.temporal()}; exported so clients can rely on the flag.
+     */
+    public final boolean temporal = false;
 
     EntityDefinition(String name, String physicalTable, String primaryKey,
         Map<String, FieldDefinition> fields,
         String stateField,
         List<StateTransitionRule> transitions,
-        List<SpatialGuardRule> spatialGuards,
-        List<ReferenceDefinition> references) {
+        List<GuardDefinition> guards,
+        List<ReferenceDefinition> references,
+        List<UniqueConstraint> uniqueConstraints,
+        Map<String, ListViewDefinition> listViews) {
         this.name = name;
         this.physicalTable = physicalTable;
         this.primaryKey = primaryKey;
         this.fields = fields;
         this.stateField = stateField;
         this.transitions = transitions;
-        this.spatialGuards = spatialGuards;
+        this.guards = guards;
         this.references = references;
+        this.uniqueConstraints = uniqueConstraints;
+        this.listViews = listViews;
         this.versionField = fields.values().stream()
             .filter(f -> f.kind() instanceof SemanticKind.Version)
             .map(FieldDefinition::name)
@@ -98,9 +112,22 @@ public final class EntityDefinition {
             .anyMatch(rule -> rule.canTransitionTo(to));
     }
 
-    public List<SpatialGuardRule> guardsFor(String status) {
-        return spatialGuards.stream()
-            .filter(g -> g.targetStatus().equals(status))
+    /** Guards of the change from {@code from} (null on insert) to {@code to}, in declaration order. */
+    public List<GuardDefinition> guardsFor(String from, String to) {
+        return guards.stream().filter(g -> g.appliesTo(from, to)).toList();
+    }
+
+    public Optional<ListViewDefinition> listView(String viewName) {
+        return Optional.ofNullable(listViews.get(viewName));
+    }
+
+    /** Dictionaries referenced by the Code fields, in declaration order. */
+    public List<String> dictionaryUrns() {
+        return fields.values().stream()
+            .map(FieldDefinition::kind)
+            .filter(SemanticKind.Code.class::isInstance)
+            .map(k -> ((SemanticKind.Code) k).dictUrn())
+            .distinct()
             .toList();
     }
 

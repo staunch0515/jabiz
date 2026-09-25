@@ -69,6 +69,7 @@ public class RelationshipValidator implements SmartInitializingSingleton {
     }
 
     private static boolean isPlain(SemanticKind kind) {
-        return kind instanceof SemanticKind.None || kind instanceof SemanticKind.SemanticIdentity;
+        return kind instanceof SemanticKind.None || kind instanceof SemanticKind.SemanticIdentity
+            || kind instanceof SemanticKind.Reference;
     }
 }

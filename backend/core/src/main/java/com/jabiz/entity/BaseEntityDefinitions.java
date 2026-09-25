@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  *
  * Rule predicates receive values already normalized to their canonical types
  * (see {@link FieldValueCoercer}): Instant for temporal fields, BigDecimal for monetary
- * and physical quantity fields.
+ * fields. Domain specific patterns (physical quantities, spatial cells) live in extension modules.
  */
 public abstract class BaseEntityDefinitions {
 
@@ -61,19 +61,5 @@ public abstract class BaseEntityDefinitions {
                 (v, ctx) -> v instanceof BigDecimal d && d.signum() >= 0)
             .rule(ruleCode + "_SCALE", "SCALE", Map.of("scale", scale),
                 (v, ctx) -> v instanceof BigDecimal d && d.stripTrailingZeros().scale() <= scale);
-    }
-
-    /** Physical quantity of the given dimension constrained to the closed range [min, max]. */
-    protected static Consumer<FieldBuilder> rangeQuantity(String physicalColumn, String ruleCode,
-        DimensionType dimension, String unitUrn,
-        double min, double max) {
-        BigDecimal lower = BigDecimal.valueOf(min);
-        BigDecimal upper = BigDecimal.valueOf(max);
-        return f -> f.physicalColumn(physicalColumn)
-            .asPhysicalQuantity(dimension, unitUrn)
-            .rule(ruleCode, "RANGE", Map.of("min", min, "max", max),
-                (v, ctx) -> v instanceof BigDecimal d
-                            && d.compareTo(lower) >= 0
-                            && d.compareTo(upper) <= 0);
     }
 }

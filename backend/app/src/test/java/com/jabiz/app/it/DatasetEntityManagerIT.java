@@ -66,6 +66,15 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         return asTestRequest(manager.commitBatch(dataset(datasetId), List.of(changes))).block();
     }
 
+    /** Reads, like writes, run with the test request context: dataset scopes may depend on it. */
+    private Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query) {
+        return asTestRequest(manager.query(dataset, def, query));
+    }
+
+    private Mono<EntityInstance> findById(DatasetDefinition dataset, EntityDefinition def, Object id) {
+        return asTestRequest(manager.findById(dataset, def, id));
+    }
+
     private static EntityInstance instance(EntityDefinition def, Object id, long version, Map<String, Object> attrs) {
         return new EntityInstance(id, def.name, version, null, attrs);
     }
@@ -399,7 +408,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
 
         assertThat(result).isEmpty();
         assertThat(count("it_ticket")).isZero();
-        assertThat(manager.findById(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET, "T-1").blockOptional())
+        assertThat(findById(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET, "T-1").blockOptional())
             .isEmpty();
     }
 
@@ -430,8 +439,8 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         assertThat(instant(row.get("deleted_at"))).isEqualTo(START.plus(Duration.ofMinutes(5)));
 
         DatasetDefinition soft = dataset(ItFixtures.SOFT_DATASET);
-        assertThat(manager.findById(soft, ItFixtures.SOFT, "S-1").blockOptional()).isEmpty();
-        assertThat(manager.query(soft, ItFixtures.SOFT, EntityQuery.builder().build()).collectList().block())
+        assertThat(findById(soft, ItFixtures.SOFT, "S-1").blockOptional()).isEmpty();
+        assertThat(query(soft, ItFixtures.SOFT, EntityQuery.builder().build()).collectList().block())
             .extracting(EntityInstance::id).containsExactly("S-2");
     }
 
@@ -465,13 +474,13 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
     @Test
     void readsSeeOnlyThePartition() {
         seedBothRegions();
-        assertThat(manager.query(regional(), ItFixtures.REGIONAL, EntityQuery.builder().build()).collectList().block())
+        assertThat(query(regional(), ItFixtures.REGIONAL, EntityQuery.builder().build()).collectList().block())
             .extracting(EntityInstance::id).containsExactly("JP-1");
-        assertThat(manager.query(regional(), ItFixtures.REGIONAL, EntityQuery.builder()
+        assertThat(query(regional(), ItFixtures.REGIONAL, EntityQuery.builder()
                 .where(new QueryPredicate.Eq("region", "US")).build()).collectList().block())
             .isEmpty();
-        assertThat(manager.findById(regional(), ItFixtures.REGIONAL, "US-1").blockOptional()).isEmpty();
-        assertThat(manager.findById(regional(), ItFixtures.REGIONAL, "JP-1").blockOptional()).isPresent();
+        assertThat(findById(regional(), ItFixtures.REGIONAL, "US-1").blockOptional()).isEmpty();
+        assertThat(findById(regional(), ItFixtures.REGIONAL, "JP-1").blockOptional()).isPresent();
     }
 
     @Test
@@ -559,7 +568,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
     void queryRowCountIsCappedByTheDataset() {
         IntStream.rangeClosed(1, 7).forEach(i -> insertTicket("T-" + i));
 
-        List<EntityInstance> page = manager.query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
+        List<EntityInstance> page = query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
             EntityQuery.builder().limit(100).build()).collectList().block();
 
         assertThat(page).extracting(EntityInstance::id).containsExactly("T-1", "T-2", "T-3", "T-4", "T-5");
@@ -572,7 +581,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         insertTicket("T-3", "amount", 200);
         insertTicket("T-4", "amount", 50);
 
-        List<EntityInstance> page = manager.query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
+        List<EntityInstance> page = query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
             EntityQuery.builder()
                 .where(new QueryPredicate.Gte("amount", 100))
                 .orderBy("amount", false)
@@ -589,7 +598,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         insertTicket("T-2");
         insertTicket("T-3");
 
-        List<EntityInstance> found = manager.query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
+        List<EntityInstance> found = query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
             EntityQuery.builder().where(new QueryPredicate.In("ticketId", List.<Object>of("T-1", "T-3", "T-9"))).build())
             .collectList().block();
 
@@ -603,7 +612,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
         insertTicket("T-1", "amount", 10);
         insertTicket("T-2", "amount", 20);
 
-        List<EntityInstance> found = manager.query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
+        List<EntityInstance> found = query(dataset(ItFixtures.TICKET_DATASET), ItFixtures.TICKET,
             EntityQuery.builder().where(new QueryPredicate.Or(List.of(
                 new QueryPredicate.Eq("amount", 10),
                 new QueryPredicate.And(List.of())))).build())
@@ -638,7 +647,7 @@ class DatasetEntityManagerIT extends PostgresIntegrationTest {
     @Test
     void readsAreAllowed() {
         seedReadonly();
-        assertThat(manager.findById(dataset(ItFixtures.READONLY_DATASET), ItFixtures.READONLY, "R-1").block())
+        assertThat(findById(dataset(ItFixtures.READONLY_DATASET), ItFixtures.READONLY, "R-1").block())
             .extracting(EntityInstance::version)
             .isEqualTo(1L);
     }

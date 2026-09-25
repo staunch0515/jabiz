@@ -23,11 +23,18 @@ public final class FieldBuilder {
     public FieldBuilder generated(boolean v) { this.generated = v; return this; }
     public FieldBuilder asSemanticIdentity(String urn) { kind = new SemanticKind.SemanticIdentity(urn); return this; }
     public FieldBuilder asMonetary(String currency, int scale) { kind = new SemanticKind.Monetary(currency, scale); return this; }
-    public FieldBuilder asPhysicalQuantity(DimensionType dim, String unitUrn) { kind = new SemanticKind.PhysicalQuantity(dim, unitUrn); return this; }
     public FieldBuilder asTemporal(TemporalRole role) { kind = new SemanticKind.Temporal(role); return this; }
-    public FieldBuilder asSpatialH3(int resolution) { kind = new SemanticKind.SpatialH3(resolution); return this; }
     public FieldBuilder asCode(String dictUrn, String... values) { kind = new SemanticKind.Code(dictUrn, List.of(values)); return this; }
     public FieldBuilder asVersion() { kind = new SemanticKind.Version(); return this; }
+    public FieldBuilder asText(int maxLength) { kind = new SemanticKind.Text(maxLength, false); return this; }
+    public FieldBuilder asText(Integer maxLength, boolean multiline) { kind = new SemanticKind.Text(maxLength, multiline); return this; }
+    public FieldBuilder asNumeric(int precision, int scale) { kind = new SemanticKind.Numeric(precision, scale); return this; }
+    public FieldBuilder asBool() { kind = new SemanticKind.Bool(); return this; }
+    /** The field holds the primary key of an instance of {@code targetEntity}; the reference is enforced on write. */
+    public FieldBuilder asReference(String targetEntity) { kind = new SemanticKind.Reference(targetEntity); return this; }
+    public FieldBuilder asCustom(String kindId, Map<String, Object> params) { kind = new SemanticKind.Custom(kindId, params); return this; }
+    /** Sets any kind, typically one built by an extension module (for example a custom kind factory). */
+    public FieldBuilder kind(SemanticKind semanticKind) { kind = java.util.Objects.requireNonNull(semanticKind); return this; }
 
     /**
      * Rule that can be exported to clients: the parameters (a {@link RuleSpec}, plain data)

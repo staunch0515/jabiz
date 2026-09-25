@@ -2,8 +2,9 @@ package com.jabiz.app.it;
 
 import com.jabiz.app.LogisticsAnalyticsQueries;
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.entity.DimensionType;
 import com.jabiz.entity.SemanticKind;
+import com.jabiz.ext.geo.DimensionType;
+import com.jabiz.ext.geo.GeoKinds;
 import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
@@ -67,8 +68,8 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
     }
 
     private List<SemanticRow> run(Map<String, Object> params) {
-        return executor.execute(waybills, LogisticsAnalyticsQueries.TOKYO_PORT_WAYBILL_CUSTOMS_AUDIT, params)
-            .collectList().block();
+        return asTestRequest(executor.execute(waybills, LogisticsAnalyticsQueries.TOKYO_PORT_WAYBILL_CUSTOMS_AUDIT, params)
+            .collectList()).block();
     }
 
     private static Map<String, Object> params(Object... keyValues) {
@@ -97,7 +98,7 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
         assertThat(row.get("finalFreight").kind()).isEqualTo(new SemanticKind.Monetary("JPY", 0));
         assertThat(row.get("finalFreight").as(BigDecimal.class)).isEqualByComparingTo("5000");
         assertThat(row.get("clearedWeightKg").kind())
-            .isEqualTo(new SemanticKind.PhysicalQuantity(DimensionType.MASS, "urn:unit:si:kilogram"));
+            .isEqualTo(GeoKinds.quantity(DimensionType.MASS, "urn:unit:si:kilogram"));
         assertThat(row.get("clearedWeightKg").as(BigDecimal.class)).isEqualByComparingTo("12.5");
         assertThat(row.get("customsPortCell").as(Long.class)).isEqualTo(PORT_CELL);
         assertThat(row.get("dutyPaid").as(BigDecimal.class)).isEqualByComparingTo("300");

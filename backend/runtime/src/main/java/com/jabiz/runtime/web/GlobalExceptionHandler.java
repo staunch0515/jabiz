@@ -1,6 +1,8 @@
 package com.jabiz.runtime.web;
 
 import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.ScopeUnavailableException;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
@@ -64,6 +66,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessRuleViolationException.class)
     ProblemDetail handleBusinessRule(BusinessRuleViolationException ex, ServerWebExchange exchange) {
         return withViolations(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage(), ex.violations(), exchange);
+    }
+
+    /** A dataset scope needs a value the caller's context lacks: access is refused, not widened. */
+    @ExceptionHandler(ScopeUnavailableException.class)
+    ProblemDetail handleScopeUnavailable(ScopeUnavailableException ex, ServerWebExchange exchange) {
+        Violation violation = new Violation(ex.field(), PlatformErrorCodes.SCOPE_UNAVAILABLE, ex.getMessage(),
+            Map.of("source", ex.source()));
+        return withViolations(HttpStatus.FORBIDDEN, ex.getMessage(), List.of(violation), exchange);
     }
 
     @ExceptionHandler(Exception.class)

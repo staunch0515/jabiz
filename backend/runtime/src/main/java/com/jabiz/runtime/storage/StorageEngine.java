@@ -14,7 +14,10 @@ import java.util.Map;
  */
 public interface StorageEngine {
 
-    /** Inserts a new record; null values are omitted so that column defaults apply. */
+    /**
+     * Inserts a new record; null values are omitted so that column defaults apply.
+     * A unique index violation fails with {@link UniqueKeyViolationException}, as do the updates below.
+     */
     Mono<Void> insert(String table, Map<String, Object> record);
 
     /**
@@ -42,6 +45,9 @@ public interface StorageEngine {
 
     /** Executes a compiled entity query. */
     Flux<Map<String, Object>> executeQuery(PhysicalQueryPlan plan);
+
+    /** Number of rows matching the plan's condition; sorting and paging of the plan are ignored. */
+    Mono<Long> count(PhysicalQueryPlan plan);
 
     /** Executes a fully rendered SQL statement. */
     Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan);

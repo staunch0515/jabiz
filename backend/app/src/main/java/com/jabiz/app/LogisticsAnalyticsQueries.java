@@ -1,8 +1,9 @@
 package com.jabiz.app;
 
-import com.jabiz.entity.DimensionType;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.ext.geo.DimensionType;
+import com.jabiz.ext.geo.GeoKinds;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 
 import java.util.List;
@@ -36,11 +37,11 @@ public final class LogisticsAnalyticsQueries {
                 "WaybillTracking", "freightCharge");
 
             qb.returns("clearedWeightKg",
-                new SemanticKind.PhysicalQuantity(DimensionType.MASS, "urn:unit:si:kilogram"),
+                GeoKinds.quantity(DimensionType.MASS, "urn:unit:si:kilogram"),
                 "WaybillTracking", "totalWeight");
 
             qb.returns("customsPortCell",
-                new SemanticKind.SpatialH3(8),
+                GeoKinds.h3(8),
                 "WaybillTracking", "currentLocation");
 
             qb.returns("declarationNo",

@@ -12,6 +12,13 @@ public final class PlatformErrorCodes {
     public static final String RULE_EVALUATION_FAILED = "RULE_EVALUATION_FAILED";
     public static final String REFERENCE_NOT_FOUND = "REFERENCE_NOT_FOUND";
     public static final String ID_MISMATCH = "ID_MISMATCH";
+    public static final String TOO_LONG = "TOO_LONG";
+    public static final String NUMERIC_PRECISION = "NUMERIC_PRECISION";
+    public static final String NOT_IN_DICTIONARY = "NOT_IN_DICTIONARY";
+    public static final String UNIQUE_VIOLATION = "UNIQUE_VIOLATION";
+    public static final String OPERATOR_NOT_ALLOWED = "OPERATOR_NOT_ALLOWED";
+    public static final String FILTER_NOT_ALLOWED = "FILTER_NOT_ALLOWED";
+    public static final String SORT_NOT_ALLOWED = "SORT_NOT_ALLOWED";
 
     // Business rules (422)
     public static final String IMMUTABLE_FIELD = "IMMUTABLE_FIELD";
@@ -20,18 +27,22 @@ public final class PlatformErrorCodes {
     public static final String STATE_REQUIRED = "STATE_REQUIRED";
     public static final String STATE_CLEARED = "STATE_CLEARED";
     public static final String OUT_OF_SCOPE = "OUT_OF_SCOPE";
-    public static final String SPATIAL_GUARD_REJECTED = "SPATIAL_GUARD_REJECTED";
-    public static final String SPATIAL_GUARD_LOCATION_MISSING = "SPATIAL_GUARD_LOCATION_MISSING";
+    public static final String GUARD_EVALUATION_FAILED = "GUARD_EVALUATION_FAILED";
     public static final String DATASET_READ_ONLY = "DATASET_READ_ONLY";
     public static final String ENTITY_READ_ONLY = "ENTITY_READ_ONLY";
     public static final String BATCH_TOO_LARGE = "BATCH_TOO_LARGE";
     public static final String STILL_REFERENCED = "STILL_REFERENCED";
 
+    // Access (403)
+    public static final String SCOPE_UNAVAILABLE = "SCOPE_UNAVAILABLE";
+
     public static final List<String> ALL = List.of(
         UNKNOWN_FIELD, INVALID_VALUE, REQUIRED, RULE_EVALUATION_FAILED, REFERENCE_NOT_FOUND, ID_MISMATCH,
+        TOO_LONG, NUMERIC_PRECISION, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
+        SORT_NOT_ALLOWED,
         IMMUTABLE_FIELD, ILLEGAL_TRANSITION, INVALID_INITIAL_STATE, STATE_REQUIRED, STATE_CLEARED, OUT_OF_SCOPE,
-        SPATIAL_GUARD_REJECTED, SPATIAL_GUARD_LOCATION_MISSING, DATASET_READ_ONLY, ENTITY_READ_ONLY,
-        BATCH_TOO_LARGE, STILL_REFERENCED);
+        GUARD_EVALUATION_FAILED, DATASET_READ_ONLY, ENTITY_READ_ONLY, BATCH_TOO_LARGE, STILL_REFERENCED,
+        SCOPE_UNAVAILABLE);
 
     private PlatformErrorCodes() {}
 }

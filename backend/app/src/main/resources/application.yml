@@ -14,6 +14,8 @@ jabiz:
   i18n:
     # Language of error messages when Accept-Language names none of zh, ja, en.
     default-locale: en
+    # Application bundles after the platform's: the app's own codes, then the geo extension's.
+    bundles: messages,jabiz/ext/geo/messages
 
 logging:
   pattern:

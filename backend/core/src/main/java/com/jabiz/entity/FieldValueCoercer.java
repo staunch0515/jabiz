@@ -16,10 +16,12 @@ import java.util.Date;
  *
  * <ul>
  *   <li>Temporal: {@link Instant} (a timestamp without zone is interpreted as UTC)</li>
- *   <li>Monetary, PhysicalQuantity: {@link BigDecimal}</li>
- *   <li>SpatialH3, Version: {@link Long}</li>
- *   <li>Code: {@link String}</li>
- *   <li>SemanticIdentity, None: unchanged</li>
+ *   <li>Monetary, Numeric: {@link BigDecimal}</li>
+ *   <li>Version: {@link Long}</li>
+ *   <li>Code, Text: {@link String}</li>
+ *   <li>Bool: {@link Boolean}</li>
+ *   <li>Custom: whatever its {@link CustomKindSupport} returns</li>
+ *   <li>SemanticIdentity, Reference, None: unchanged</li>
  * </ul>
  *
  * Working on canonical types makes rules, immutability checks and query binding
@@ -49,11 +51,14 @@ public final class FieldValueCoercer {
         return switch (kind) {
             case SemanticKind.Temporal t -> toInstant(raw);
             case SemanticKind.Monetary m -> toDecimal(raw);
-            case SemanticKind.PhysicalQuantity q -> toDecimal(raw);
-            case SemanticKind.SpatialH3 h -> toLong(raw);
+            case SemanticKind.Numeric n -> toDecimal(raw);
             case SemanticKind.Version v -> toLong(raw);
             case SemanticKind.Code c -> toCode(c, raw, enforceDictionary);
+            case SemanticKind.Text t -> toText(raw);
+            case SemanticKind.Bool b -> toBoolean(raw);
+            case SemanticKind.Custom c -> CustomKinds.require(c.kindId()).coerce(c.params(), raw, enforceDictionary);
             case SemanticKind.SemanticIdentity s -> raw;
+            case SemanticKind.Reference r -> raw;
             case SemanticKind.None n -> raw;
         };
     }
@@ -63,11 +68,14 @@ public final class FieldValueCoercer {
         return switch (kind) {
             case SemanticKind.Temporal t -> Instant.class;
             case SemanticKind.Monetary m -> BigDecimal.class;
-            case SemanticKind.PhysicalQuantity q -> BigDecimal.class;
-            case SemanticKind.SpatialH3 h -> Long.class;
+            case SemanticKind.Numeric n -> BigDecimal.class;
             case SemanticKind.Version v -> Long.class;
             case SemanticKind.Code c -> String.class;
+            case SemanticKind.Text t -> String.class;
+            case SemanticKind.Bool b -> Boolean.class;
+            case SemanticKind.Custom c -> CustomKinds.require(c.kindId()).javaType(c.params());
             case SemanticKind.SemanticIdentity s -> String.class;
+            case SemanticKind.Reference r -> String.class;
             case SemanticKind.None n -> String.class;
         };
     }
@@ -94,7 +102,8 @@ public final class FieldValueCoercer {
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to a timestamp");
     }
 
-    private static BigDecimal toDecimal(Object raw) {
+    /** Canonical decimal conversion, shared with custom kinds. */
+    public static BigDecimal toDecimal(Object raw) {
         if (raw instanceof BigDecimal d) return d;
         if (raw instanceof BigInteger b) return new BigDecimal(b);
         if (raw instanceof Long || raw instanceof Integer || raw instanceof Short || raw instanceof Byte) {
@@ -117,7 +126,8 @@ public final class FieldValueCoercer {
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to a decimal");
     }
 
-    private static Long toLong(Object raw) {
+    /** Canonical 64-bit integer conversion (decimal or 0x-prefixed hexadecimal text), shared with custom kinds. */
+    public static Long toLong(Object raw) {
         if (raw instanceof Long l) return l;
         if (raw instanceof Integer || raw instanceof Short || raw instanceof Byte) {
             return ((Number) raw).longValue();
@@ -147,6 +157,22 @@ public final class FieldValueCoercer {
             }
         }
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to an integer");
+    }
+
+    private static String toText(Object raw) {
+        if (raw instanceof CharSequence s) return s.toString();
+        throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to text");
+    }
+
+    private static Boolean toBoolean(Object raw) {
+        if (raw instanceof Boolean b) return b;
+        if (raw instanceof CharSequence s) {
+            String text = s.toString().trim();
+            if (text.equalsIgnoreCase("true")) return Boolean.TRUE;
+            if (text.equalsIgnoreCase("false")) return Boolean.FALSE;
+            throw new IllegalArgumentException("not a boolean: '" + text + "'");
+        }
+        throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to a boolean");
     }
 
     private static String toCode(SemanticKind.Code code, Object raw, boolean enforceDictionary) {

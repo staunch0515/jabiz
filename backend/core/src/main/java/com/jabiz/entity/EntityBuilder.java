@@ -1,5 +1,7 @@
 package com.jabiz.entity;
 
+import com.jabiz.query.SqlIdentifiers;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -8,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.LongPredicate;
 
 public final class EntityBuilder {
     private final String name;
@@ -17,8 +18,10 @@ public final class EntityBuilder {
     private String stateField;
     private final Map<String, FieldDefinition> fields = new LinkedHashMap<>();
     private final List<StateTransitionRule> transitions = new ArrayList<>();
-    private final List<SpatialGuardRule> spatialGuards = new ArrayList<>();
+    private final List<GuardDefinition> guards = new ArrayList<>();
     private final List<ReferenceDefinition> references = new ArrayList<>();
+    private final List<UniqueConstraint> uniqueConstraints = new ArrayList<>();
+    private final Map<String, ListViewDefinition> listViews = new LinkedHashMap<>();
 
     EntityBuilder(String name) { this.name = name; }
 
@@ -46,18 +49,38 @@ public final class EntityBuilder {
         transitions.addAll(stb.build());
     }
 
-    public void spatialGuard(String targetStatus, String locationField, LongPredicate guard) {
-        spatialGuards.add(new SpatialGuardRule(targetStatus, locationField, guard));
+    /**
+     * Attaches a guard to the transitions {@code from -> to} (docs/design/02-metamodel.md section 4).
+     *
+     * @param from source state, or {@link GuardDefinition#ANY} for every source state including insertion
+     */
+    public void guard(String code, String from, String to, TransitionGuard guard) {
+        guards.add(new GuardDefinition(code, from, to, guard));
     }
 
     /**
      * Declares that {@code sourceField} holds the primary key of an instance of {@code targetEntity}.
      * The reference is verified whenever the field is written, and the target cannot be deleted while
      * instances still refer to it. Whether a value is mandatory is decided by the field's own
-     * {@code required} flag.
+     * {@code required} flag. Fields of kind {@link SemanticKind.Reference} declare this implicitly.
      */
     public void reference(String sourceField, String targetEntity) {
         references.add(new ReferenceDefinition(sourceField, targetEntity));
+    }
+
+    /** Declares that the combination of {@code fieldNames} is unique (docs/design/02-metamodel.md section 6). */
+    public void unique(String constraintName, String... fieldNames) {
+        uniqueConstraints.add(new UniqueConstraint(constraintName, List.of(fieldNames)));
+    }
+
+    /** Declares a list view (docs/design/02-metamodel.md section 7). */
+    public void listView(String viewName, Consumer<ListViewDefinition.Builder> block) {
+        if (listViews.containsKey(viewName)) {
+            throw invalid("list view '" + viewName + "' is declared twice");
+        }
+        ListViewDefinition.Builder builder = new ListViewDefinition.Builder(viewName);
+        block.accept(builder);
+        listViews.put(viewName, builder.build());
     }
 
     EntityDefinition build() {
@@ -69,7 +92,10 @@ public final class EntityBuilder {
         validateUniqueColumns();
         validateVersionField();
         validateLifecycle();
+        addImplicitReferences();
         validateReferences();
+        validateUniqueConstraints();
+        validateListViews();
 
         return new EntityDefinition(
             name,
@@ -78,8 +104,10 @@ public final class EntityBuilder {
             Collections.unmodifiableMap(new LinkedHashMap<>(fields)),
             stateField,
             List.copyOf(transitions),
-            List.copyOf(spatialGuards),
-            List.copyOf(references)
+            List.copyOf(guards),
+            List.copyOf(references),
+            List.copyOf(uniqueConstraints),
+            Collections.unmodifiableMap(new LinkedHashMap<>(listViews))
         );
     }
 
@@ -101,8 +129,8 @@ public final class EntityBuilder {
 
     private void validateLifecycle() {
         if (stateField == null) {
-            if (!spatialGuards.isEmpty()) {
-                throw invalid("spatial guards require a lifecycle (stateTransitions)");
+            if (!guards.isEmpty()) {
+                throw invalid("transition guards require a lifecycle (stateTransitions)");
             }
             return;
         }
@@ -114,11 +142,27 @@ public final class EntityBuilder {
             requireAllowedState(code, rule.from());
             rule.to().forEach(target -> requireAllowedState(code, target));
         }
-        for (SpatialGuardRule guard : spatialGuards) {
-            requireAllowedState(code, guard.targetStatus());
-            FieldDefinition location = fields.get(guard.locationField());
-            if (location == null || !(location.kind() instanceof SemanticKind.SpatialH3)) {
-                throw invalid("spatial guard location '" + guard.locationField() + "' must be a declared SpatialH3 field");
+        Set<String> codes = new HashSet<>();
+        for (GuardDefinition guard : guards) {
+            if (!codes.add(guard.code())) {
+                throw invalid("guard code '" + guard.code() + "' is declared twice");
+            }
+            if (!GuardDefinition.ANY.equals(guard.from())) {
+                requireAllowedState(code, guard.from());
+            }
+            requireAllowedState(code, guard.to());
+        }
+    }
+
+    private void addImplicitReferences() {
+        Set<String> explicit = new HashSet<>();
+        references.forEach(ref -> explicit.add(ref.sourceField()));
+        for (FieldDefinition field : fields.values()) {
+            if (field.kind() instanceof SemanticKind.Reference ref) {
+                if (explicit.contains(field.name())) {
+                    throw invalid("field '" + field.name() + "' is a Reference and must not also be declared with reference()");
+                }
+                references.add(new ReferenceDefinition(field.name(), ref.targetEntity()));
             }
         }
     }
@@ -132,6 +176,42 @@ public final class EntityBuilder {
             if (!sources.add(ref.sourceField())) {
                 throw invalid("field '" + ref.sourceField() + "' declares more than one reference");
             }
+        }
+    }
+
+    private void validateUniqueConstraints() {
+        Set<String> names = new HashSet<>();
+        for (UniqueConstraint unique : uniqueConstraints) {
+            try {
+                SqlIdentifiers.require(unique.name());
+            } catch (IllegalArgumentException e) {
+                throw invalid("unique constraint name '" + unique.name() + "' is not a valid SQL identifier");
+            }
+            if (!names.add(unique.name().toLowerCase())) {
+                throw invalid("unique constraint '" + unique.name() + "' is declared twice");
+            }
+            if (new HashSet<>(unique.fields()).size() != unique.fields().size()) {
+                throw invalid("unique constraint '" + unique.name() + "' lists a field twice");
+            }
+            unique.fields().forEach(f -> requireField(f, "unique constraint '" + unique.name() + "'"));
+        }
+    }
+
+    private void validateListViews() {
+        for (ListViewDefinition view : listViews.values()) {
+            String where = "list view '" + view.name() + "'";
+            view.columns().forEach(f -> requireField(f, where));
+            view.filters().forEach(f -> requireField(f, where));
+            view.sorts().forEach(f -> requireField(f, where));
+            if (view.defaultSort() != null && !view.sorts().contains(view.defaultSort().field())) {
+                throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is not among its sorts");
+            }
+        }
+    }
+
+    private void requireField(String field, String where) {
+        if (!fields.containsKey(field)) {
+            throw invalid(where + " refers to unknown field '" + field + "'");
         }
     }
 
@@ -151,4 +231,3 @@ public final class EntityBuilder {
         return new IllegalStateException("Invalid entity definition '" + name + "': " + message);
     }
 }
-

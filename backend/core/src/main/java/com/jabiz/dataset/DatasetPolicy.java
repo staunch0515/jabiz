@@ -8,26 +8,27 @@ import java.util.Objects;
  *
  * @param readOnly            reject all writes
  * @param softDelete          mark rows as deleted instead of removing them; deleted rows are hidden from reads
- * @param softDeleteColumn    boolean column that marks a row as deleted (required when softDelete is true)
- * @param softDeleteTimeColumn optional timestamp column set to the deletion time
+ * @param softDeleteField     logical Bool field that marks a row as deleted (required when softDelete is true)
+ * @param softDeleteTimeField optional logical {@code Temporal(SYSTEM_RECORDED)} field set to the deletion time
  * @param maxQueryBatchSize   upper bound of rows returned by one query
  * @param maxWriteBatchSize   upper bound of changes accepted by one commit
  * @param queryTimeout        upper bound of query duration
- * @param temporalTracking    reserved for bitemporal tracking
  */
 public record DatasetPolicy(
     boolean readOnly,
     boolean softDelete,
-    String softDeleteColumn,
-    String softDeleteTimeColumn,
+    String softDeleteField,
+    String softDeleteTimeField,
     int maxQueryBatchSize,
     int maxWriteBatchSize,
-    Duration queryTimeout,
-    boolean temporalTracking
+    Duration queryTimeout
 ) {
     public DatasetPolicy {
-        if (softDelete && (softDeleteColumn == null || softDeleteColumn.isBlank())) {
-            throw new IllegalArgumentException("softDeleteColumn is required when softDelete is enabled");
+        if (softDelete && (softDeleteField == null || softDeleteField.isBlank())) {
+            throw new IllegalArgumentException("softDeleteField is required when softDelete is enabled");
+        }
+        if (!softDelete && softDeleteTimeField != null) {
+            throw new IllegalArgumentException("softDeleteTimeField requires softDelete");
         }
         if (maxQueryBatchSize <= 0) {
             throw new IllegalArgumentException("maxQueryBatchSize must be positive");

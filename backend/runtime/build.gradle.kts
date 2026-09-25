@@ -18,7 +18,7 @@ dependencies {
     implementation("io.micrometer:context-propagation")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
-    runtimeOnly("org.postgresql:r2dbc-postgresql")
+    implementation("org.postgresql:r2dbc-postgresql")
 
     // Shared by the integration tests of runtime and app (docs/design/07-quality.md section 7).
     testFixturesApi("org.springframework.boot:spring-boot-starter-test")

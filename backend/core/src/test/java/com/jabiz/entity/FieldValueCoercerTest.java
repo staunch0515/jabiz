@@ -1,5 +1,6 @@
 package com.jabiz.entity;
 
+import com.jabiz.testkinds.TestCellKind;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,9 +26,12 @@ class FieldValueCoercerTest {
 
     private static final SemanticKind TEMPORAL = new SemanticKind.Temporal(TemporalRole.EVENT_TIME);
     private static final SemanticKind MONETARY = new SemanticKind.Monetary("JPY", 0);
-    private static final SemanticKind QUANTITY =
-        new SemanticKind.PhysicalQuantity(DimensionType.MASS, "urn:unit:si:kilogram");
-    private static final SemanticKind H3 = new SemanticKind.SpatialH3(8);
+    private static final SemanticKind QUANTITY = new SemanticKind.Numeric(12, 3);
+    /** A custom kind whose support converts to Long, like the geo extension's H3 cells. */
+    private static final SemanticKind H3 = TestCellKind.of(8);
+    private static final SemanticKind TEXT = new SemanticKind.Text(10, false);
+    private static final SemanticKind BOOL = new SemanticKind.Bool();
+    private static final SemanticKind REFERENCE = new SemanticKind.Reference("Owner");
     private static final SemanticKind VERSION = new SemanticKind.Version();
     private static final SemanticKind.Code STATUS =
         new SemanticKind.Code("urn:test:dict:status", List.of("OPEN", "DONE"));
@@ -38,7 +42,7 @@ class FieldValueCoercerTest {
 
     @Test
     void nullStaysNullForEveryKind() {
-        Stream.of(TEMPORAL, MONETARY, QUANTITY, H3, VERSION, STATUS,
+        Stream.of(TEMPORAL, MONETARY, QUANTITY, H3, VERSION, STATUS, TEXT, BOOL, REFERENCE,
                 new SemanticKind.SemanticIdentity("urn:x"), new SemanticKind.None())
             .forEach(kind -> assertThat(coerce(kind, null)).isNull());
     }
@@ -240,5 +244,61 @@ class FieldValueCoercerTest {
     void offsetDateTimeAtUtcRoundTrips() {
         Instant now = Instant.parse("2026-09-24T00:00:00Z");
         assertThat(coerce(TEMPORAL, now.atOffset(ZoneOffset.UTC).toString())).isEqualTo(now);
+    }
+
+    @Nested
+    class NewKinds {
+
+        @Test
+        void textAcceptsCharacterSequencesOnly() {
+            assertThat(coerce(TEXT, new StringBuilder("abc"))).isEqualTo("abc");
+            assertThatThrownBy(() -> coerce(TEXT, 42))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("to text");
+        }
+
+        @Test
+        void boolAcceptsBooleansAndTheirNames() {
+            assertThat(coerce(BOOL, true)).isEqualTo(Boolean.TRUE);
+            assertThat(coerce(BOOL, " TRUE ")).isEqualTo(Boolean.TRUE);
+            assertThat(coerce(BOOL, "false")).isEqualTo(Boolean.FALSE);
+            assertThatThrownBy(() -> coerce(BOOL, "yes")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> coerce(BOOL, 1)).isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        void numericIsDecimal() {
+            assertThat(coerce(QUANTITY, "1.250")).isEqualTo(new BigDecimal("1.250"));
+        }
+
+        @Test
+        void referenceKeepsTheKeyAsIs() {
+            assertThat(coerce(REFERENCE, "WB-1")).isEqualTo("WB-1");
+        }
+
+        @Test
+        void customKindDelegatesToItsSupport() {
+            assertThat(coerce(H3, "0x10")).isEqualTo(16L);
+            assertThatThrownBy(() -> coerce(new SemanticKind.Custom("test.unregistered", Map.of()), 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No CustomKindSupport is registered for kind 'test.unregistered'");
+        }
+
+        @Test
+        void javaTypesOfTheNewKinds() {
+            assertThat(FieldValueCoercer.javaType(TEXT)).isEqualTo(String.class);
+            assertThat(FieldValueCoercer.javaType(BOOL)).isEqualTo(Boolean.class);
+            assertThat(FieldValueCoercer.javaType(REFERENCE)).isEqualTo(String.class);
+            assertThat(FieldValueCoercer.javaType(new SemanticKind.Numeric(5, 2))).isEqualTo(BigDecimal.class);
+        }
+
+        @Test
+        void kindParametersAreValidated() {
+            assertThatThrownBy(() -> new SemanticKind.Text(0, false)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new SemanticKind.Numeric(2, 3)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new SemanticKind.Reference(" ")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new SemanticKind.Custom("", Map.of())).isInstanceOf(IllegalArgumentException.class);
+            assertThat(new SemanticKind.Code("urn:x", null).allowedValues()).isEmpty();
+        }
     }
 }

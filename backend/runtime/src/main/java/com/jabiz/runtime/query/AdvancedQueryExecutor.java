@@ -11,6 +11,7 @@ import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.QueryParameter;
 import com.jabiz.query.custom.SemanticRow;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -30,9 +31,9 @@ import java.util.regex.Pattern;
 /**
  * Executes custom multi-entity queries.
  *
- * Dataset rules (default partition filter, soft-delete exclusion, table override) are applied to
- * the dataset's target entity by rendering its placeholder as a scoped sub-select, so the custom
- * SQL cannot see rows the dataset hides.
+ * Dataset rules (scope, soft-delete exclusion, table override) are applied to the dataset's target entity by
+ * rendering its placeholder as a scoped sub-select, so the custom SQL cannot see rows the dataset hides. The
+ * scope is resolved from the {@link com.jabiz.context.RequestContext} of the caller.
  */
 @Component
 public class AdvancedQueryExecutor {
@@ -63,11 +64,12 @@ public class AdvancedQueryExecutor {
         AdvancedQueryDefinition queryDef,
         Map<String, Object> inputParams
     ) {
-        return Flux.defer(() -> {
+        return RequestContexts.current().flatMapMany(request -> {
             Map<String, EntityDefinition> entities = resolveParticipatingEntities(queryDef);
+            Map<String, Object> scope = dataset.scope().resolve(request);
 
             QueryCompiler.Binder scopeBinder = new QueryCompiler.Binder(SCOPE_PARAM_PREFIX);
-            String sql = renderTemplate(queryDef.sqlTemplate(), dataset, entities, scopeBinder);
+            String sql = renderTemplate(queryDef.sqlTemplate(), dataset, scope, entities, scopeBinder);
 
             Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(queryDef, inputParams));
             params.putAll(scopeBinder.params());
@@ -102,6 +104,7 @@ public class AdvancedQueryExecutor {
     private String renderTemplate(
         String template,
         DatasetDefinition dataset,
+        Map<String, Object> scope,
         Map<String, EntityDefinition> entities,
         QueryCompiler.Binder scopeBinder
     ) {
@@ -116,7 +119,7 @@ public class AdvancedQueryExecutor {
                                                    + "] that is not declared in fromEntities");
             }
             String replacement = fieldName == null
-                ? tableExpression(dataset, def, scopeBinder)
+                ? tableExpression(dataset, scope, def, scopeBinder)
                 : SqlIdentifiers.require(def.physicalColumn(fieldName));
             matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
@@ -124,9 +127,10 @@ public class AdvancedQueryExecutor {
         return out.toString();
     }
 
-    private String tableExpression(DatasetDefinition dataset, EntityDefinition def, QueryCompiler.Binder scopeBinder) {
+    private String tableExpression(DatasetDefinition dataset, Map<String, Object> scopeValues, EntityDefinition def,
+        QueryCompiler.Binder scopeBinder) {
         String table = queryCompiler.resolveTable(dataset, def);
-        String scope = queryCompiler.scopeCondition(dataset, def, scopeBinder);
+        String scope = queryCompiler.scopeCondition(dataset, def, scopeValues, scopeBinder);
         return scope.isBlank() ? table : "(SELECT * FROM " + table + " WHERE " + scope + ")";
     }
 
