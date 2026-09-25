@@ -2,11 +2,20 @@ package com.jabiz.app.it;
 
 import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.dictionary.DictItem;
+import com.jabiz.dictionary.DictionaryProvider;
+import com.jabiz.entity.SemanticKind;
+import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.dictionary.DictionaryRegistry;
+import com.jabiz.runtime.dictionary.SqlDictionary;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -16,6 +25,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 /** Dictionary registry (docs/design/02-metamodel.md section 5): sources, labels, caching and invalidation. */
@@ -26,6 +36,15 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
 
     @Autowired
     DictionaryRegistry dictionaries;
+
+    @Autowired
+    EntityDefinitionRegistry entities;
+
+    @Autowired
+    DatasetRegistry datasets;
+
+    @Autowired
+    MessageCatalog messages;
 
     @BeforeEach
     void reset() {
@@ -78,6 +97,37 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
             .extracting(DictItem::code, DictItem::label)
             .containsExactly(tuple("T-1", "First [ja]"), tuple("T-2", "Second [ja]"));
         assertThat(items(ItFixtures.TICKET_TITLE_DICTIONARY, Locale.CHINESE).getFirst().label()).isEqualTo("First [zh]");
+    }
+
+    /** Review finding: URNs from requests must not grow the cache unless the table knows them. */
+    @Test
+    void unknownDictionariesAreNotCached() {
+        int before = dictionaries.cachedDictionaries();
+        for (int i = 0; i < 20; i++) {
+            assertThat(items("urn:made:up:" + i, Locale.ENGLISH)).isEmpty();
+        }
+        assertThat(dictionaries.cachedDictionaries()).isEqualTo(before);
+
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'KG')", UNITS);
+        assertThat(enabled(UNITS)).containsExactly("KG");
+        assertThat(dictionaries.cachedDictionaries()).isEqualTo(before + 1);
+    }
+
+    /** Review finding: an SQL dictionary naming an unknown dataset or entity fails at startup, not on first use. */
+    @Test
+    void sqlDictionariesAreCheckedWhenTheRegistryIsBuilt() {
+        DefaultListableBeanFactory beans = new DefaultListableBeanFactory();
+        beans.registerSingleton("broken", new SqlDictionary("urn:jabiz:dict:broken", "urn:jabiz:dataset:nope",
+            AdvancedQueryDefinition.define("broken", q -> q.fromEntities("Ghost")
+                .returns("code", new SemanticKind.Text(null, false))
+                .returns("label", new SemanticKind.Text(null, false))
+                .sqlTemplate("SELECT 1")), null));
+
+        assertThatThrownBy(() -> new DictionaryRegistry(beans.getBeanProvider(DictionaryProvider.class),
+            beans.getBeanProvider(SqlDictionary.class), entities, datasets, null,
+            beans.getBeanProvider(AdvancedQueryExecutor.class), messages))
+            .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unknown dataset urn:jabiz:dataset:nope")
+            .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unregistered entity Ghost");
     }
 
     @Test

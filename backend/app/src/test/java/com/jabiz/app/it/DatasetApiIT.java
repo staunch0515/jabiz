@@ -249,6 +249,56 @@ class DatasetApiIT extends PostgresIntegrationTest {
             Map.of("declarationId", "D-1", "waybillRef", "WB-1", "portCode", "JPTYO"))).expectStatus().isOk();
     }
 
+    /** Review finding: a code disabled after it was stored must not block updates of other fields. */
+    @Test
+    void disabledCodesStillStoredDoNotBlockUnrelatedUpdates() {
+        insertWaybill("WB-1", "CREATED", "2026-01-01T00:00:00Z", null);
+        execute("INSERT INTO t_customs_declaration (f_decl_no, f_wb_ref_sn, f_duty_amt, f_port_code) "
+            + "VALUES ('D-1', 'WB-1', 10, 'JPTEMP')");
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code, enabled) VALUES (?, 'JPTEMP', false)",
+            "urn:jabiz:dict:customs_port");
+        try {
+            // The full record is sent back, as a generic form does; only the duty changes.
+            commit(CUSTOMS, "admin", change("UPDATE", "D-1", 1,
+                Map.of("waybillRef", "WB-1", "dutyAmount", 20, "portCode", "JPTEMP"))).expectStatus().isOk();
+            // Choosing the disabled code anew is still rejected.
+            execute("UPDATE t_customs_declaration SET f_port_code = 'JPTYO' WHERE f_decl_no = 'D-1'");
+            assertThat(violations(commit(CUSTOMS, "admin", change("UPDATE", "D-1", 2, Map.of("portCode", "JPTEMP"))),
+                HttpStatus.BAD_REQUEST)).extracting(v -> v.get("ruleCode")).containsExactly("NOT_IN_DICTIONARY");
+        } finally {
+            execute("DELETE FROM t_customs_declaration");
+            execute("DELETE FROM sys_dict_item WHERE item_code = 'JPTEMP'");
+        }
+    }
+
+    @Test
+    void softDeleteFieldsAreMaintainedByDeletionsOnly() {
+        commit(ItFixtures.SOFT_DATASET, "admin", change("INSERT", "S-1", 0,
+            Map.of("softId", "S-1", "name", "n", "deleted", false))).expectStatus().isOk();
+        assertThat(violations(commit(ItFixtures.SOFT_DATASET, "admin", change("INSERT", "S-2", 0,
+            Map.of("softId", "S-2", "deleted", true))), HttpStatus.UNPROCESSABLE_CONTENT))
+            .extracting(v -> v.get("field"), v -> v.get("ruleCode"))
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("deleted", "IMMUTABLE_FIELD"));
+        assertThat(violations(commit(ItFixtures.SOFT_DATASET, "admin", change("UPDATE", "S-1", 1,
+            Map.of("deleted", true))), HttpStatus.UNPROCESSABLE_CONTENT))
+            .extracting(v -> v.get("ruleCode")).containsExactly("IMMUTABLE_FIELD");
+        // The deletion time is system-recorded, so a supplied value is ignored like any other system field.
+        commit(ItFixtures.SOFT_DATASET, "admin", change("UPDATE", "S-1", 1, Map.of("deletedAt", "2026-01-01T00:00:00Z")))
+            .expectStatus().isOk();
+        assertThat(query("SELECT deleted_at, is_deleted FROM it_soft WHERE f_id = 'S-1'").get(0))
+            .containsEntry("deleted_at", null).containsEntry("is_deleted", false);
+        execute("DELETE FROM it_soft");
+    }
+
+    /** Review finding: a duplicate key outside the declared unique constraints is a conflict, not a 500. */
+    @Test
+    void duplicatePrimaryKeyIsAConflict() {
+        commit(ItFixtures.UNIQUE_DATASET, "admin", change("INSERT", "U-1", 0, Map.of("uniqueId", "U-1", "code", "A")))
+            .expectStatus().isOk();
+        commit(ItFixtures.UNIQUE_DATASET, "admin", change("INSERT", "U-1", 0, Map.of("uniqueId", "U-1", "code", "B")))
+            .expectStatus().isEqualTo(HttpStatus.CONFLICT);
+    }
+
     @Test
     void duplicateUniqueValuesAreAValidationError() {
         commit(ItFixtures.UNIQUE_DATASET, "admin", change("INSERT", "U-1", 0, Map.of("uniqueId", "U-1", "code", "A")))

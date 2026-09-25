@@ -198,20 +198,42 @@ public class DatasetEntityManager {
         StorageEngine engine, DatasetDefinition dataset, Map<String, Object> scope, EntityDefinition def,
         EntityInstance instance, ValidationContext validation
     ) {
-        return dictionaryLookup(def, instance.attributes()).flatMap(lookup -> Mono.defer(() -> {
+        return Mono.defer(() -> {
             String versionColumn = requireWritable(def);
 
-            Map<String, Object> incoming = EntityValidator.requireValid(
-                def, instance.attributes(), validation, false, lookup);
+            Map<String, Object> incoming = EntityValidator.requireValid(def, instance.attributes(), validation, false);
             List<Violation> scopeViolations = new ArrayList<>();
             enforceScope(dataset, def, scope, incoming, false, scopeViolations);
 
             String table = queryCompiler.resolveTable(dataset, def);
             return findInScope(engine, dataset, scope, def, instance.id())
                 .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
-                .flatMap(current -> applyUpdate(engine, dataset, def, table, versionColumn, instance, current,
-                    incoming, scopeViolations, validation));
-        }));
+                .flatMap(current -> verifyChangedCodes(def, incoming, current, validation)
+                    .then(Mono.defer(() -> applyUpdate(engine, dataset, def, table, versionColumn, instance,
+                        current, incoming, scopeViolations, validation))));
+        });
+    }
+
+    /**
+     * Dictionary codes are checked only where the update changes them: a stored code that has been disabled
+     * since does not block updates of other fields (docs/design/02-metamodel.md section 5).
+     */
+    private Mono<Void> verifyChangedCodes(
+        EntityDefinition def, Map<String, Object> incoming, EntityInstance current, ValidationContext validation
+    ) {
+        Map<String, Object> changed = new LinkedHashMap<>();
+        incoming.forEach((field, value) -> {
+            if (!sameValue(current.attributes().get(field), value)) {
+                changed.put(field, value);
+            }
+        });
+        return dictionaryLookup(def, changed).flatMap(lookup -> {
+            if (lookup == DictionaryLookup.NONE) {
+                return Mono.empty();
+            }
+            EntityValidator.requireValid(def, changed, validation, false, lookup);
+            return Mono.empty();
+        });
     }
 
     private Mono<EntityInstance> applyUpdate(
@@ -483,11 +505,17 @@ public class DatasetEntityManager {
             return;
         }
         for (String field : new String[] {policy.softDeleteField(), policy.softDeleteTimeField()}) {
-            if (field != null && values.containsKey(field) && !sameValue(values.get(field), current.get(field))) {
-                values.remove(field);
+            if (field == null || !values.containsKey(field)) {
+                continue;
+            }
+            Object value = values.get(field);
+            // "Not deleted" (false or no value) is what every visible row already is, so stating it is harmless.
+            boolean notDeleted = value == null || Boolean.FALSE.equals(value);
+            if (!notDeleted && !sameValue(value, current.get(field))) {
                 violations.add(new Violation(field, PlatformErrorCodes.IMMUTABLE_FIELD,
                     "Field [" + field + "] of " + def.name + " is maintained by deletions only"));
             }
+            values.remove(field);
         }
     }
 
@@ -604,7 +632,10 @@ public class DatasetEntityManager {
         return dictionaries.enabledCodes(urns).map(codes -> urn -> Optional.ofNullable(codes.get(urn)));
     }
 
-    /** A declared unique constraint becomes a validation error; any other index violation stays an error. */
+    /**
+     * A declared unique constraint becomes a validation error; any other unique index (the primary key of an
+     * insert with a caller-supplied id, for example) is a conflict with existing data.
+     */
     private static Throwable uniqueViolation(EntityDefinition def, UniqueKeyViolationException e) {
         for (UniqueConstraint unique : def.uniqueConstraints) {
             if (unique.name().equalsIgnoreCase(e.constraintName())) {
@@ -614,7 +645,8 @@ public class DatasetEntityManager {
                     Map.of("constraint", unique.name(), "fields", String.join(", ", unique.fields())))));
             }
         }
-        return e;
+        return new ConcurrentUpdateException("Write to " + def.name + " conflicts with existing data ("
+            + e.constraintName() + ")");
     }
 
     private static void rejectIfAny(List<Violation> violations) {

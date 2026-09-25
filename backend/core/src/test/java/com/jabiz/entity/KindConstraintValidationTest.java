@@ -68,6 +68,22 @@ class KindConstraintValidationTest {
     }
 
     @Test
+    void numericWithoutIntegerDigitsAcceptsZeroAndFractions() {
+        EntityDefinition fraction = EntityDefinition.define("Fraction", eb -> {
+            eb.physicalTable("t_fraction");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id"));
+            eb.field("share", f -> f.physicalColumn("f_share").asNumeric(3, 3));
+        });
+
+        for (String ok : new String[] {"0", "0.000", "0.5", "-0.999"}) {
+            assertThat(EntityValidator.check(fraction, Map.of("share", ok), CTX, false).isValid()).as(ok).isTrue();
+        }
+        assertThat(EntityValidator.check(fraction, Map.of("share", "1"), CTX, false).violations())
+            .extracting(Violation::ruleCode).containsExactly("NUMERIC_PRECISION");
+    }
+
+    @Test
     void dictionaryCodesAreCheckedAgainstTheLookup() {
         assertThat(check(Map.of("port", "JPTYO"), PORTS).isValid()).isTrue();
         assertThat(check(Map.of("port", "XXAAA"), PORTS).violations())

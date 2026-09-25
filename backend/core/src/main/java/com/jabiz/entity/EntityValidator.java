@@ -126,7 +126,8 @@ public final class EntityValidator {
     private static boolean fits(BigDecimal value, SemanticKind.Numeric kind) {
         BigDecimal stripped = value.stripTrailingZeros();
         int scale = Math.max(stripped.scale(), 0);
-        int integerDigits = stripped.precision() - stripped.scale();
+        // Zero and pure fractions have no integer digits (BigDecimal counts one for 0).
+        int integerDigits = stripped.signum() == 0 ? 0 : Math.max(stripped.precision() - stripped.scale(), 0);
         return scale <= kind.scale() && integerDigits <= kind.precision() - kind.scale();
     }
 

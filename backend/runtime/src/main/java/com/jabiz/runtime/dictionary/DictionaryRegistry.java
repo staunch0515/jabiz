@@ -86,6 +86,20 @@ public class DictionaryRegistry {
                 }
             }
         }
+        List<String> problems = new ArrayList<>();
+        for (SqlDictionary dict : this.sqlDictionaries.values()) {
+            if (datasets.findById(dict.datasetId()).isEmpty()) {
+                problems.add("SQL dictionary " + dict.urn() + " refers to unknown dataset " + dict.datasetId());
+            }
+            for (String entity : dict.query().participatingEntities()) {
+                if (!entities.contains(entity)) {
+                    problems.add("SQL dictionary " + dict.urn() + " refers to unregistered entity " + entity);
+                }
+            }
+        }
+        if (!problems.isEmpty()) {
+            throw new IllegalStateException("Invalid SQL dictionaries:\n - " + String.join("\n - ", problems));
+        }
         this.datasets = datasets;
         this.db = db;
         this.queries = queries;
@@ -122,6 +136,11 @@ public class DictionaryRegistry {
         }
     }
 
+    /** Number of dictionaries currently cached (for monitoring). */
+    public int cachedDictionaries() {
+        return cache.size();
+    }
+
     /** Where the dictionary comes from, or empty when only the database table could provide it. */
     public Optional<String> declaredSource(String dictUrn) {
         if (providers.stream().anyMatch(p -> p.supports(dictUrn))) {
@@ -144,6 +163,19 @@ public class DictionaryRegistry {
     }
 
     private Mono<Map<Locale, List<DictItem>>> load(String dictUrn) {
+        Mono<Map<Locale, List<DictItem>>> cached = cache.get(dictUrn);
+        if (cached != null) {
+            return cached;
+        }
+        if (declaredSource(dictUrn).isEmpty()) {
+            // Only the table can know this URN. The URN may come straight from a request, so it is cached only
+            // once the table actually has entries; otherwise made-up URNs would grow the cache without bound.
+            return fromTable(dictUrn).doOnNext(all -> {
+                if (all.values().stream().anyMatch(items -> !items.isEmpty())) {
+                    cache.putIfAbsent(dictUrn, Mono.just(all));
+                }
+            });
+        }
         return cache.computeIfAbsent(dictUrn, urn -> {
             Mono<Map<Locale, List<DictItem>>> loading = Mono.defer(() -> source(urn));
             SqlDictionary sql = providers.stream().noneMatch(p -> p.supports(urn)) && !implicit.containsKey(urn)
