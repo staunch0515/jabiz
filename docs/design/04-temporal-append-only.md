@@ -207,7 +207,7 @@ WHERE NOT v.is_deleted
 
 | 现有 | 改动 |
 |---|---|
-| `DatasetPolicy.temporalTracking`（预留） | 删除；改由实体元数据 `eb.temporal()` 决定 |
+| `DatasetPolicy.temporalTracking`（预留） | 已在阶段 3 删除；改由实体元数据 `eb.temporal()` 决定（`EntityDefinition.temporal` 阶段 3 恒为 false） |
 | `TemporalRole.VALID_FROM / VALID_TO / SYSTEM_RECORDED` | 用于声明 `effectStartTime`、`createdTime` |
 | `ProcessContext.processSeqId()`、`ProcessSequence` | 序列改为数据库 `op_process_seq`；流程开始时写 `op_process` |
 | `DatasetEntityManager.update/delete` | 时态实体改为插入版本；非时态实体保持 CAS 更新 |

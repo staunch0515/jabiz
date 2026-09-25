@@ -15,7 +15,8 @@
 ### 2.1 一个实体可以有多个视图
 
 - 取消 `DatasetRegistry` 中"一个实体只能被一个视图覆盖"的限制。
-- 每个实体必须且只能有一个**默认视图**（`DatasetDefinition.isDefault = true`），用于通用查找（如资源解析）。
+- 每个实体必须且只能有一个**默认视图**（`d.asDefault()`，`DatasetDefinition.isDefault()`），用于通用查找
+  （资源解析、引用检查、`/api/entities/{type}`）；没有或有多个默认视图时启动失败。
 - 典型用法：
   - `urn:jabiz:dataset:admin:Order` —— 后台，全部订单；
   - `urn:jabiz:dataset:member:Order` —— 会员，只能看到自己的订单（范围取自请求上下文）；
@@ -32,21 +33,28 @@ d.scope(s -> s
     .fromContext("ownerId",  RequestContext::actorId));
 ```
 
-- `fromContext` 取值为 null 时：**拒绝请求**（默认拒绝），不能退化为"不过滤"。
+- `fromContext` 取值为 null（或空白）时：**拒绝请求**（默认拒绝），不能退化为"不过滤"：
+  `ScopeUnavailableException` → 403，违规 `SCOPE_UNAVAILABLE`（参数 `source`，即上下文属性名，可用
+  `fromContext(field, source, fn)` 指定）。读、写、SQL 模板一律如此。
+- 范围值由运行时从 `RequestContext` 解析（`DatasetScope.resolve`）后传给 `QueryCompiler`；
+  引用存在性检查使用目标实体默认视图的范围；删除前的"仍被引用"检查**不**使用范围（范围外的引用同样阻止删除）。
 - 范围同样作用于写入：插入时自动填充，更新时不允许把数据移出范围。
 - 范围作用于时态实体时，**在取得当前版本之后再过滤**【决策 D3】（见 04 第 5.1 节），否则会读到已经移出范围的旧版本。
 
 ### 2.3 逻辑删除引用逻辑字段
 
 - `DatasetPolicy.softDeleteColumn` / `softDeleteTimeColumn`（物理列名）改为 `softDeleteField` / `softDeleteTimeField`（逻辑字段名）。
-- 构建时校验：字段存在，前者是 `Bool`，后者是 `Temporal(SYSTEM_RECORDED)`。
+- 启动时校验：字段存在，前者是 `Bool`，后者是 `Temporal(SYSTEM_RECORDED)`。
+- 这两个字段只由删除维护：写入时把标记设为 true 被拒绝（`IMMUTABLE_FIELD`）；写入 false / 不填是允许的；
+  插入时不为删除时间字段盖记录时间。
 - **时态实体不使用这两个字段**：删除即插入墓碑版本（见 04）。
 
 ### 2.4 权限
 
 - 每个数据视图声明读、写权限码：`d.permissions("order.read", "order.write")`。
 - 未声明权限的视图在非开发环境下启动失败（默认拒绝）。
-- 权限检查在运行时层进行，读取 `RequestContext.permissions`。
+- 权限检查在运行时层进行，读取 `RequestContext.permissions`。**阶段 3 只做声明和启动自检**（`dev` profile 下为警告）；
+  请求时的检查随认证在阶段 7 接入（ROADMAP 阶段 7 要求 4）。
 
 ### 2.5 时态相关参数
 
@@ -62,10 +70,18 @@ d.scope(s -> s
 | POST | `/api/datasets/{resourceId}/commit` | 批量变更（INSERT / UPDATE / DELETE），一个事务，返回快照 |
 | GET | `/api/datasets/{resourceId}/entities/{id}/history` | 时态实体的版本历史（含 `process_seq_id`） |
 
+请求与响应（阶段 3 实现前三个接口）：
+- `query` 请求体：`{filters: [{field, op, value | values | from, to}], sorts: [{field, asc}], offset, limit}`；
+  `op` 为 `eq ne gt gte lt lte in like isNull isNotNull between`，多个条件为 AND；字段须在列表视图白名单中，运算符按语义类型检查。
+  响应：`{items, total, offset, limit}`（`limit` 为实际生效值，不超过 `maxQueryBatchSize`）。
+- `commit` 请求体：`{changes: [{action: INSERT | UPDATE | DELETE, id, version, attributes}]}`，返回插入/更新后的快照。
+  **只接受该视图的目标实体**（变更的实体类型一律取视图目标），否则会绕过其他实体自身视图的范围；主键为生成字段时由平台生成（UUIDv7）。
+
 说明：复杂业务写入应走流程（06），`commit` 接口主要服务于元数据生成的通用增删改页面。
 
 ## 4. 启动自检
 
-- 每个视图的目标实体已注册；存储引擎已注册；默认视图唯一；权限已声明。
-- 范围字段在目标实体中存在，且语义类型允许 `=` 比较。
+- 每个视图的目标实体已注册；存储引擎已注册；默认视图唯一且每个实体都有；权限已声明（`dev` 下为警告）。
+- 范围字段在目标实体中存在，且语义类型允许 `=` 比较；逻辑删除字段类型正确；显式指定的列表视图存在。
+- 全部问题一次性报告（`DatasetRegistry`）。
 - `physicalTableOverride` 指向的表存在，并包含目标实体的全部物理列。

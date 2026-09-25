@@ -43,7 +43,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **默认拒绝**：未实现、未配置的安全检查一律报错，绝不放行（参考现有 `AuthenticationHandler` 的写法）。
 - **时间**：只能来自注入的 `java.time.Clock`，禁止 `Instant.now()` / `System.currentTimeMillis()` / 数据库 `now()` 作为业务时间。
 - **金额**：只用 `BigDecimal`，由 `SemanticKind.Monetary` 声明币种和小数位。禁止 `double` / `float` 表示金额。
-- **标识**：新实体主键使用 UUIDv7；`process_seq_id` 来自数据库序列。
+- **标识**：新实体主键使用 UUIDv7（默认 `EntityIdGenerator` 即 `UuidV7Generator`）；`process_seq_id` 来自数据库序列。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝。错误码可多语言（见设计文档）。
@@ -64,11 +64,11 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 
 ## 6. 构建与运行
 
-Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`runtime` = jabiz-runtime、`app`）。以下命令都在 `backend/` 下执行。
+Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`ext-geo`（地理/物理量扩展语义类型，只依赖 core）、`runtime` = jabiz-runtime、`app`）。以下命令都在 `backend/` 下执行。
 
 - 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建和 `bootJar`；前端目前编译失败，阶段 10 重建前端）。
   只编译和测试：`./gradlew check`（CI 执行的就是这个）
-- 全部测试：`./gradlew test`；单个模块：`./gradlew :core:test`、`:runtime:test`、`:app:test`；
+- 全部测试：`./gradlew test`；单个模块：`./gradlew :core:test`、`:ext-geo:test`、`:runtime:test`、`:app:test`；
   单个类：`./gradlew :app:test --tests '*DatasetEntityManagerIT'`
 - 覆盖率：`./gradlew :core:jacocoTestReport` → `core/build/reports/jacoco/test/html/index.html`；
   `check` 包含 `:core:jacocoTestCoverageVerification`（门禁类的行覆盖率 ≥ 80%）

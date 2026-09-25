@@ -39,12 +39,29 @@ public interface CustomKindSupport {
 ```
 
 - `FieldValueCoercer`、`QueryCompiler`、`MetaModelExporter` 对 `Custom` 委托给注册的 `CustomKindSupport`；
-  启动时若有字段使用了未注册的 `kindId`，启动失败。
+  启动时若有字段使用了未注册的 `kindId`，启动失败（`SemanticKindChecker`）。
+- 注册方式：`java.util.ServiceLoader`（`META-INF/services/com.jabiz.entity.CustomKindSupport`），由 core 的 `CustomKinds`
+  发现；`CustomKinds.register(...)` 供测试等场合手动注册。同一 `kindId` 只能由一个实现注册。
+- `ext-geo` 提供 `geo.quantity`（`BigDecimal`，参数 `dimension`、`unit`）与 `geo.h3`（`Long`，参数 `resolution`）、
+  字段模式 `GeoFields`、迁移守卫 `H3AreaGuard`，错误文案在 `jabiz/ext/geo/messages_*.properties`（应用在 `jabiz.i18n.bundles` 中加入）。
+  core 与 runtime 不依赖 ext-geo（ArchUnit 检查）；移除 ext-geo 后二者仍可编译并通过测试。
 
 ### 1.3 查询约束
 
-每种语义类型声明允许的查询运算符（例如 `Code` 只允许 `=`、`<>`、`IN`；`Text` 允许 `LIKE`）。
-`QueryCompiler` 和 SQL 模板外层筛选都按此约束检查。
+每种语义类型声明允许的查询运算符（`SemanticKinds.allowedOperators`，运算符为 `QueryOperator`）。
+`QueryCompiler` 和 SQL 模板外层筛选都按此约束检查；不允许时报 `OPERATOR_NOT_ALLOWED`（400，参数 `operator`）。
+
+| 类型 | 允许的运算符 |
+|---|---|
+| `SemanticIdentity`、`Reference`、`Code` | `EQ` `NE` `IN` `IS_NULL` `IS_NOT_NULL` |
+| `Text` | 以上 + `LIKE` |
+| `Monetary`、`Numeric`、`Temporal`、`Version` | 除 `LIKE` 外全部（含 `GT` `GTE` `LT` `LTE` `BETWEEN`） |
+| `Bool` | `EQ` `NE` `IS_NULL` `IS_NOT_NULL` |
+| `Custom` | 由 `CustomKindSupport.allowedOperators` 决定 |
+| `None`（过渡） | 全部 |
+
+语义类型本身带来的输入约束由 `EntityValidator` 检查：`Text.maxLength`（按字符计）→ `TOO_LONG`；
+`Numeric(precision, scale)` → `NUMERIC_PRECISION`；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）。
 
 ## 2. 逻辑名与物理名分离
 
@@ -102,6 +119,10 @@ public interface TransitionGuard {
 eb.guard("guardCode", fromOrAny, to, guard);   // from 可以是 "*"
 ```
 
+- 插入时以 `from = null` 评估 `from = "*"` 且 `to = 初始状态` 的守卫；更新时只在状态改变时评估。
+- 守卫返回的违规与同一变更的其他业务规则违规一起累积（422）；守卫抛出异常时记为 `GUARD_EVALUATION_FAILED`（参数 `guard`）。
+- 构建期校验：必须有状态机；`from`（非 `*`）与 `to` 属于状态字典；同一实体内守卫代码唯一。
+
 - 空间守卫改为 `ext-geo` 提供的一个 `TransitionGuard` 实现。
 - 守卫是同步的；需要数据库数据的判断应在流程中先加载，再放入上下文，守卫只读上下文。
 
@@ -116,10 +137,20 @@ public interface DictionaryProvider {
 }
 ```
 
-- 内置提供者：代码中的静态字典（`allowedValues` 非空时）、数据库字典表 `sys_dict_item`、SQL 字典（SQL 模板返回 code/label）。
-- 数据库字典本身是时态实体（见 04），因此字典项也有生效时间和历史。
-- 输入校验时 `Code` 值必须属于字典的有效项；读取已存储的值时不校验（历史值可能已停用）。
-- 注册表带缓存；字典变更时通过 PostgreSQL `LISTEN/NOTIFY` 失效缓存（多实例）。
+- 来源（按此顺序匹配）：业务 `DictionaryProvider` Bean（含 `StaticDictionary`：代码中声明、带 zh/ja/en 标签）→
+  `Code.allowedValues` 隐含的静态字典（标签即编码）→ `SqlDictionary` Bean（SQL 模板返回 `code`、`label`，可选 `sortOrder`、`enabled`；
+  声明参数 `locale` 时按语言分别执行）→ 数据库字典表 `sys_dict_item(dict_urn, item_code, labels jsonb, sort_order, enabled)`。
+- 标签：请求语言 → 默认语言 → 编码本身。
+- 数据库字典本身是时态实体（见 04），因此字典项也有生效时间和历史（阶段 3 先用普通表，阶段 4 改为时态实体）。
+- 输入校验时 `Code` 值必须属于字典的**启用**项（`NOT_IN_DICTIONARY`，400）；读取已存储的值时不校验（历史值可能已停用）；
+  更新时只校验本次**改变**的编码，已存储的停用编码不妨碍修改其他字段。
+  校验保持同步：运行时先加载所需字典，再以 `DictionaryLookup` 传给 `EntityValidator`。
+- 注册表按字典缓存全部语言；`sys_dict_item` 的触发器在变更时 `pg_notify('jabiz_dict_changed', dict_urn)`，
+  `DictionaryChangeListener` 独占一个连接 `LISTEN` 并失效缓存（多实例）；断线后按退避重连，重连后清空全部缓存。
+  其他来源的变更可自行 `NOTIFY jabiz_dict_changed, '<urn>'`（`*` 表示全部）。SQL 字典另有 TTL（默认 5 分钟）。
+  只有数据库表能提供、且表中没有条目的 URN 不缓存（URN 可能直接来自请求）。
+- 启动自检：`Code` 字段引用的字典必须有来源；`SqlDictionary` 引用的数据视图、实体必须存在。
+- API：`GET /api/dictionaries/{urn}`，按 `Accept-Language` 返回 `[{code, label, sortOrder, enabled}]`。
 
 ## 6. 唯一性声明
 
@@ -127,7 +158,8 @@ public interface DictionaryProvider {
 eb.unique("uk_user_name", "userName");            // 可多字段
 ```
 
-- 普通实体：建数据库唯一索引，启动自检检查索引存在。
+- 普通实体：建与约束**同名**的数据库唯一索引，启动自检检查索引存在且列集合一致（非部分索引、非表达式索引）。
+  写入违反该索引时返回 `UNIQUE_VIOLATION`（400，字段为约束的第一个字段）；违反未声明的唯一索引（如重复主键）返回 409。
 - 时态实体：见 04 第 7 节（咨询锁 + 当前版本检查）。
 
 ## 7. 列表视图元数据
@@ -142,10 +174,16 @@ eb.listView("default", lv -> lv
     .defaultSort("shippedTime", false));
 ```
 
-- 只有列在 `filters` / `sorts` 中的字段允许被筛选、排序（白名单）。
-- 未指定排序时，按主键升序（保证分页稳定，现有 `QueryCompiler` 已实现）。
+- 只有列在 `filters` / `sorts` 中的字段允许被筛选、排序（白名单；违反时 `FILTER_NOT_ALLOWED` / `SORT_NOT_ALLOWED`，400）。
+- 未指定排序时用 `defaultSort`；`QueryCompiler` 总是在最后追加主键升序（已按主键排序时除外），保证分页稳定。
+- 数据视图用 `d.listView(name)` 选择列表视图，缺省为 `default`；实体没有该列表视图时，查询不允许任何筛选和排序。
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回：实体名、主键、字段（逻辑名、语义类型及参数、必填、不可变、可导出规则）、
-状态机、列表视图、是否时态、字典引用。另提供 `GET /api/meta/schema/{name}` 返回 JSON Schema。
+`GET /api/meta/entities/{name}` 返回：实体名、主键、是否时态（`temporal`，阶段 4 之前恒为 false）、字段（逻辑名、
+语义类型及参数、必填、不可变、系统维护、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
+列表视图、字典引用（`dictionaries`）。
+
+另提供 `GET /api/meta/schema/{name}` 返回实例属性的 JSON Schema（draft 2020-12，`JsonSchemaExporter`）：
+系统维护与生成的字段 `readOnly`；必填（非生成、非系统）字段列入 `required`；非必填字段允许 null；
+`additionalProperties: false`；平台扩展关键字 `x-jabiz-dictionary`、`x-jabiz-reference`、`x-jabiz-kind`。

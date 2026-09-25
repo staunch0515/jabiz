@@ -57,7 +57,7 @@ runtime 通过 Spring Boot 自动配置（`JabizRuntimeAutoConfiguration`）进�
 | 迁移守卫 | `TransitionGuard#check(from, to, current, incoming, ValidationContext)` | 取代 `SpatialGuardRule` |
 | 计算步骤 | `ComputeStep<M, C>#compute(M, C)` | 纯计算，读写上下文、登记变更 |
 | 阻塞步骤 | `BlockingStep<M, C>#run(M, C)` | 调用只有阻塞 SDK 的外部服务，由平台在虚拟线程上执行 |
-| 字典提供者 | `DictionaryProvider#values(dictUrn, locale)` | 同步；平台负责缓存 |
+| 字典提供者 | `DictionaryProvider#items(dictUrn, locale)` | 同步；平台在 `boundedElastic` 上调用并缓存 |
 | 语义类型扩展 | `SemanticKind.Custom` + `CustomKindSupport` SPI | 同步的转换、校验、导出 |
 
 平台内部的 `StepHandler<M, C>`（返回 `Mono<Void>`）只用于平台提供的 I/O 步骤，**不作为业务扩展点公开**。
