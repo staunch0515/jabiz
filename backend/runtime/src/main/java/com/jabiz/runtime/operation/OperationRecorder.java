@@ -143,15 +143,19 @@ public class OperationRecorder {
             .map(OperationRecorder::toItem);
     }
 
-    /** Versions of one entity written by operations after {@code processSeqId}. */
-    public Flux<OperationItem> laterItems(StorageEngine engine, String entityType, UUID entityId, long processSeqId) {
+    /** A version written by a later operation, with the operation that operation reverts, if any. */
+    public record LaterItem(OperationItem item, Long revertsSeqId) {}
+
+    /** Versions of one entity written by operations after {@code processSeqId}, newest operation first. */
+    public Flux<LaterItem> laterItems(StorageEngine engine, String entityType, UUID entityId, long processSeqId) {
         return engine.select("""
-                SELECT * FROM op_process_item
-                WHERE entity_type = :type AND entity_id = :id AND process_seq_id > :seq
-                ORDER BY process_seq_id, version_no""",
+                SELECT i.*, p.reverts_seq_id AS jabiz_reverts_seq_id
+                FROM op_process_item i JOIN op_process p ON p.process_seq_id = i.process_seq_id
+                WHERE i.entity_type = :type AND i.entity_id = :id AND i.process_seq_id > :seq
+                ORDER BY i.process_seq_id DESC, i.version_no""",
                 Map.of("type", BoundValue.of(entityType), "id", BoundValue.of(entityId),
                     "seq", BoundValue.of(processSeqId)))
-            .map(OperationRecorder::toItem);
+            .map(row -> new LaterItem(toItem(row), Rows.longValue(row.get("jabiz_reverts_seq_id"))));
     }
 
     private static OperationRecord toRecord(Map<String, Object> row) {

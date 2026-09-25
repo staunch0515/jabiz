@@ -10,6 +10,7 @@ class SampleEntityDefinitionsTest {
     void sampleEntityDefinitionsAreValid() {
         assertThat(WaybillEntityDefinitions.WAYBILL.initialStates).containsExactly("CREATED");
         assertThat(CustomsDeclarationEntityDefinitions.CUSTOMS_DECLARATION.references).hasSize(1);
-        assertThat(PriceEntityDefinitions.PRICE.versionField).isEqualTo("rowVersion");
+        assertThat(PriceEntityDefinitions.PRICE.temporal).isTrue();
+        assertThat(PriceEntityDefinitions.PRICE.versionField).isEqualTo("versionNo");
     }
 }

@@ -6,6 +6,10 @@ import com.jabiz.dictionary.DictionaryProvider;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.EntityAction;
+import com.jabiz.runtime.EntityChange;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.dictionary.SqlDictionary;
@@ -21,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -49,6 +54,9 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
 
     @Autowired
     MessageCatalog messages;
+
+    @Autowired
+    DatasetEntityManager entityManager;
 
     @BeforeEach
     void reset() {
@@ -157,6 +165,29 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         awaitTrue(() -> !enabled(units).contains("LB"));
         assertThat(query("SELECT version_no FROM sys_dict_item_version WHERE dict_urn = ? AND item_code = 'LB' "
             + "ORDER BY version_no", units)).extracting(row -> row.get("version_no")).containsExactly(1, 2);
+    }
+
+    /** Dictionary items are temporal: a scheduled label takes effect with the clock, without an eviction. */
+    @Test
+    void scheduledChangesOfDatabaseDictionariesTakeEffectOnTime() {
+        execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels) VALUES (?, 'KG', '{\"en\": \"Kilogram\"}')",
+            units);
+        assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilogram");
+        Map<String, Object> item = query("SELECT dict_item_id, version_no FROM sys_dict_item_version WHERE dict_urn = ?",
+            units).getFirst();
+        int cached = dictionaries.cachedDictionaries();
+
+        Instant tomorrow = clock.instant().plus(Duration.ofDays(1));
+        asTestRequest(entityManager.commitBatch(datasets.findById("urn:jabiz:dataset:platform:SysDictItem").orElseThrow(),
+            List.of(new EntityChange(EntityAction.UPDATE, new EntityInstance(item.get("dict_item_id"), "SysDictItem",
+                ((Number) item.get("version_no")).longValue(), null, Map.of("labels", Map.of("en", "Kilo"))), tomorrow))))
+            .block();
+        // The write is announced; once the entry is evicted it is read again, now knowing when it expires.
+        awaitTrue(() -> dictionaries.cachedDictionaries() == cached - 1);
+        assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilogram");
+
+        clock.advance(Duration.ofDays(1));
+        assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilo");
     }
 
     @Test

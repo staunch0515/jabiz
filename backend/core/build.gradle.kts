@@ -31,7 +31,18 @@ val coverageGatedClasses = listOf(
     "com.jabiz.dataset.DatasetDefinition",
     "com.jabiz.dataset.DatasetScope",
     "com.jabiz.dictionary.StaticDictionary",
+    // Phase 4
+    "com.jabiz.temporal.Timeline",
+    "com.jabiz.temporal.VersionPlanner",
+    "com.jabiz.temporal.EntityVersion",
+    "com.jabiz.entity.TemporalBuilder",
+    "com.jabiz.entity.EntityDefinition",
 )
+
+dependencies {
+    // Property tests of the temporal invariants (docs/design/07-quality.md section 6).
+    testImplementation("net.jqwik:jqwik:1.9.3")
+}
 
 tasks.test {
     finalizedBy(tasks.jacocoTestReport)

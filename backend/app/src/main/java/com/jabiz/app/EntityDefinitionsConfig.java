@@ -17,4 +17,9 @@ class EntityDefinitionsConfig {
     EntityDefinition customsDeclarationEntityDefinition() {
         return CustomsDeclarationEntityDefinitions.CUSTOMS_DECLARATION;
     }
+
+    @Bean
+    EntityDefinition priceEntityDefinition() {
+        return PriceEntityDefinitions.PRICE;
+    }
 }

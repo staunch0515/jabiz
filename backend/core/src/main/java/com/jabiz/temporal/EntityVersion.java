@@ -40,13 +40,4 @@ public record EntityVersion(
         state = Collections.unmodifiableMap(new LinkedHashMap<>(state));
         changedFields = Set.copyOf(changedFields);
     }
-
-    /**
-     * Fields this version contributes when a write with an earlier effective time is carried over it
-     * (decision D1): a cancellation contributes none, since its content is the state that precedes the
-     * version it cancels.
-     */
-    public Set<String> rebaseFields() {
-        return action == VersionAction.CANCEL ? Set.of() : changedFields;
-    }
 }

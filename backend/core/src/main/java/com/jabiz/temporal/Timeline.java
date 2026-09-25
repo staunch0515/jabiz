@@ -1,10 +1,14 @@
 package com.jabiz.temporal;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -69,6 +73,49 @@ public final class Timeline {
     /** Winning versions that take effect strictly after {@code time}, in order of effective time. */
     public List<EntityVersion> after(Instant time) {
         return new ArrayList<>(winners.tailMap(time, false).values());
+    }
+
+    /**
+     * Fields the versions at effective time {@code time} change, as far as a write with an earlier effective time
+     * has to carry them over (decision D1, refined by D9): the fields recorded as changed by all versions at that time
+     * (corrections and rebased copies build on each other; a cancellation starts over), keeping only those whose value
+     * in effect at that time differs from the value just before it. Changes that were undone at the same time, by a
+     * revert for example, therefore no longer count. Only versions visible in this timeline count.
+     */
+    public Set<String> changesAt(Instant time) {
+        EntityVersion winner = winners.get(time);
+        if (winner == null) {
+            return Set.of();
+        }
+        Set<String> recorded = new LinkedHashSet<>();
+        for (EntityVersion version : versions) {
+            if (!version.effectiveFrom().equals(time) || version.versionNo() > winner.versionNo()) {
+                continue;
+            }
+            if (version.action() == VersionAction.CANCEL) {
+                recorded.clear();
+            } else {
+                recorded.addAll(version.changedFields());
+            }
+        }
+        EntityVersion previous = before(time).orElse(null);
+        if (previous == null) {
+            return Set.copyOf(recorded);
+        }
+        Set<String> changes = new LinkedHashSet<>();
+        for (String field : recorded) {
+            if (!sameValue(winner.state().get(field), previous.state().get(field))) {
+                changes.add(field);
+            }
+        }
+        return Set.copyOf(changes);
+    }
+
+    private static boolean sameValue(Object a, Object b) {
+        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
+            return x.compareTo(y) == 0;
+        }
+        return Objects.equals(a, b);
     }
 
     /** Highest version number recorded, 0 if there is none. */

@@ -15,8 +15,9 @@ import java.util.Set;
  *
  * <p>Versions are numbered after the highest number recorded so far. The copies take the effective time of
  * the version they carry over and win over it because their number is higher. A later version is carried over
- * as "previous state ⊕ its own changes"; a tombstone stays a tombstone; a later version that changed a field the
- * write also changes is a conflict, and so is a later non-tombstone after a write that deletes the entity.
+ * as "previous state ⊕ the changes at its effective time" ({@link Timeline#changesAt}); a tombstone stays a
+ * tombstone; a later version whose changes include a field the write also changes is a conflict, and so is a
+ * later non-tombstone after a write that deletes the entity.
  * Conflicts are collected for the whole timeline so that callers can report all of them.
  */
 public final class VersionPlanner {
@@ -147,7 +148,7 @@ public final class VersionPlanner {
         planned.add(previous);
 
         for (EntityVersion later : timeline.after(write.effectiveFrom())) {
-            Set<String> contributed = later.rebaseFields();
+            Set<String> contributed = timeline.changesAt(later.effectiveFrom());
             Map<String, Object> state = new LinkedHashMap<>(previous.state());
             boolean deleted;
             Set<String> recorded;

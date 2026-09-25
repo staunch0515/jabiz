@@ -25,6 +25,11 @@ class DatasetsConfig {
             "customs.declaration", poolRef);
     }
 
+    @Bean
+    DatasetDefinition priceDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return defaultDataset("urn:jabiz:dataset:default:Price", "Price", "pricing.price", poolRef);
+    }
+
     private static DatasetDefinition defaultDataset(String resourceId, String entityType, String permission,
         String poolRef) {
         return DatasetDefinition.define(resourceId, d -> d

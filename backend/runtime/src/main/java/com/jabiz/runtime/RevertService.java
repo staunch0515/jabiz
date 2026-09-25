@@ -171,14 +171,15 @@ public class RevertService {
                     inserted |= item.action() == VersionAction.INSERT;
                 }
                 boolean anyChangeBlocks = inserted;
-                checks.add(operations.laterItems(engine, first.entityType(), first.entityId(),
-                        entry.getKey().processSeqId())
-                    .filter(later -> !inTree.contains(later.processSeqId()) && later.action() != VersionAction.REBASE)
-                    .filter(later -> anyChangeBlocks || later.changedFields().stream().anyMatch(fields::contains))
-                    .map(later -> new RevertConflictException.Blocking(later.processSeqId(), later.entityType(),
-                        later.entityId(), anyChangeBlocks ? later.changedFields()
-                            : later.changedFields().stream().filter(fields::contains).sorted().toList()))
-                    .collectList());
+                long seq = entry.getKey().processSeqId();
+                checks.add(operations.laterItems(engine, first.entityType(), first.entityId(), seq)
+                    .collectList()
+                    .map(later -> effectiveLaterChanges(later, seq, inTree).stream()
+                        .filter(item -> anyChangeBlocks || item.changedFields().stream().anyMatch(fields::contains))
+                        .map(item -> new RevertConflictException.Blocking(item.processSeqId(), item.entityType(),
+                            item.entityId(), anyChangeBlocks ? item.changedFields()
+                                : item.changedFields().stream().filter(fields::contains).sorted().toList()))
+                        .toList()));
             }
         }
         return Flux.concat(checks)
@@ -186,6 +187,35 @@ public class RevertService {
             .distinct(b -> b.processSeqId() + "/" + b.entityType() + "/" + b.entityId())
             .sort(Comparator.comparingLong(RevertConflictException.Blocking::processSeqId).reversed())
             .collectList();
+    }
+
+    /**
+     * The later changes that still count: rebased copies only carry versions over, and a later operation that
+     * was itself reverted afterwards cancels out with its revert (the caller reverted it first, as decision D2
+     * suggests). A revert of a revert (redo) cancels the revert, so the redone operation counts again.
+     *
+     * @param later versions written after {@code since}, newest operation first
+     */
+    static List<OperationItem> effectiveLaterChanges(List<OperationRecorder.LaterItem> later, long since,
+        Set<Long> inTree) {
+        Set<Long> cancelled = new HashSet<>();
+        List<OperationItem> effective = new ArrayList<>();
+        for (OperationRecorder.LaterItem entry : later) {
+            OperationItem item = entry.item();
+            long seq = item.processSeqId();
+            if (inTree.contains(seq) || cancelled.contains(seq)) {
+                continue;
+            }
+            Long reverted = entry.revertsSeqId();
+            if (reverted != null && reverted > since) {
+                cancelled.add(reverted);
+                continue;
+            }
+            if (item.action() != VersionAction.REBASE) {
+                effective.add(item);
+            }
+        }
+        return effective;
     }
 
     /** Undoes the versions one operation wrote, newest first. */

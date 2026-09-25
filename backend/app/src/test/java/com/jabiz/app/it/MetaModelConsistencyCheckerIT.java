@@ -110,4 +110,45 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             .hasMessageContaining("unique constraint uk_uniq_plain -> no unique index named uk_uniq_plain")
             .satisfies(e -> assertThat(e.getMessage()).doesNotContain("uk_uniq_ok"));
     }
+
+    /** docs/design/04-temporal-append-only.md section 8: what a temporal table needs is checked at startup. */
+    @Test
+    void temporalTablesNeedTheirIndexesKeysAndGuard() {
+        execute("""
+            CREATE TABLE it_sloppy (
+                row_id bigint, sloppy_id uuid, version_no integer, effect_start_time timestamptz,
+                created_time timestamptz, process_seq_id bigint, is_deleted boolean, name text)""");
+        execute("CREATE INDEX it_sloppy_wrong_order ON it_sloppy (sloppy_id, effect_start_time, version_no)");
+        EntityDefinition sloppy = EntityDefinition.define("Sloppy", eb -> {
+            eb.physicalTable("it_sloppy");
+            eb.primaryKey("sloppyId");
+            eb.field("sloppyId", f -> f.physicalColumn("sloppy_id").asSemanticIdentity("urn:test:sloppy"));
+            eb.field("name", f -> f.physicalColumn("name"));
+            eb.unique("uk_sloppy_name", "name");
+            eb.temporal();
+        });
+
+        assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf(sloppy))::afterSingletonsInstantiated)
+            .hasMessageContaining("Entity Sloppy (temporal) -> no unique index on (sloppy_id, version_no)")
+            .hasMessageContaining("no index on (sloppy_id, effect_start_time DESC, version_no DESC)")
+            .hasMessageContaining("no index on (process_seq_id)")
+            .hasMessageContaining("no foreign key (process_seq_id) to op_process")
+            .hasMessageContaining("no foreign key (sloppy_id) to entity_registry")
+            .hasMessageContaining("table it_sloppy lacks the row trigger BEFORE UPDATE OR DELETE")
+            .hasMessageContaining("table it_sloppy lacks the statement trigger BEFORE TRUNCATE")
+            // Temporal uniqueness is enforced by locks, not by an index (decision D6).
+            .satisfies(e -> assertThat(e.getMessage()).doesNotContain("uk_sloppy_name"));
+    }
+
+    @Test
+    void theOperationTablesMustKeepTheirGuard() {
+        execute("ALTER TABLE op_process_result DISABLE TRIGGER op_process_result_no_truncate");
+        try {
+            assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf())::afterSingletonsInstantiated)
+                .hasMessageContaining("Operation table op_process_result -> table op_process_result lacks the "
+                    + "statement trigger BEFORE TRUNCATE");
+        } finally {
+            execute("ALTER TABLE op_process_result ENABLE TRIGGER op_process_result_no_truncate");
+        }
+    }
 }
