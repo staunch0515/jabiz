@@ -168,5 +168,7 @@ class SqlTemplateRegistryTest {
         assertThatThrownBy(() -> registry.datasetsOf(AdvancedQueryDefinition.define("q.none", q -> q
             .fromEntities("Ghost").returns("x", new SemanticKind.Bool()).sqlTemplate("SELECT 1 AS x"))))
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("no dataset for [Ghost]");
+        assertThatThrownBy(() -> registry.datasetsOf(query("q.wrong", q -> q.dataset("Order", "urn:ds:Line"))))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("no dataset for [Order]");
     }
 }

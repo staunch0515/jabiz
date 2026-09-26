@@ -132,13 +132,14 @@ public class SqlTemplateRegistry implements PlatformCheck {
      * The dataset each participating entity is read through: the one the query names, else the entity's default
      * dataset (decision D10).
      *
-     * @throws IllegalStateException if an entity has no such dataset
+     * @throws IllegalStateException if an entity has no such dataset, or the named one serves another entity (its scope
+     *                               would not apply)
      */
     public Map<String, DatasetDefinition> datasetsOf(AdvancedQueryDefinition query) {
         Map<String, DatasetDefinition> result = new LinkedHashMap<>();
         List<String> missing = new ArrayList<>();
         for (String entity : query.participatingEntities()) {
-            Optional<DatasetDefinition> dataset = datasetFor(query, entity);
+            Optional<DatasetDefinition> dataset = datasetFor(query, entity).filter(d -> d.isTarget(entity));
             dataset.ifPresentOrElse(d -> result.put(entity, d), () -> missing.add(entity));
         }
         if (!missing.isEmpty()) {
