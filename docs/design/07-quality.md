@@ -122,6 +122,8 @@ snapshot:
 | 前端单元测试（Vitest）与端到端测试（Playwright） | 元数据渲染、关键后台流程（阶段 10 起，12 §8） |
 | 前后端共享校验用例（`spec/validation-cases.json`） | 同一输入两端报出相同的错误码（core `ValidationCasesTest` 与前端 `validation.cases.test.ts`，D15） |
 | OpenAPI 快照（`frontend/openapi/openapi.json`） | 前端生成的类型与接口一致（`OpenApiSnapshotIT`、`pnpm check:api`） |
+| 观测（`ObservabilityIT`） | 平台观测的名称、嵌套、结果标签，且标签中没有主键、操作人与值（13 §6） |
+| 压测（`:app:loadTest`，不在 `check` 中） | 典型查询与写入流程的吞吐与延迟、并发下单不超卖（`docs/perf/phase-11-load-test.md`） |
 
 ## 7. 数据库测试环境
 

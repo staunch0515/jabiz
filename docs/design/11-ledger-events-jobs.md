@@ -125,6 +125,14 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   以子流程 `LEDGER_POST` 过账：借 应收账款 `1130` / 贷 运费收入 `4110`，记账时间为该月最后一刻；无运费的月份不过账（`CallProcess.when`）。
 - 场景 `scenarios/freight/monthly_close.yml` 覆盖：开立科目、任务关账、投递事件、按时间点查询余额。
 
+## 5a. 示范：订单与库存（阶段 11，`app` 的 `com.jabiz.app.commerce`）
+
+- 时态实体 `Product`、`Warehouse`、`StockLevel`、`SalesOrder`、`SalesOrderLine`；库存与订单的视图 `processOnlyWrites`【D16】。
+- 流程 `STOCK_RECEIVE`、`PRODUCT_REPRICE`（预定调价）、`ORDER_PLACE`（按下单时价格计价、预留库存，全部违规一次返回）、`ORDER_CANCEL`（释放预留）、
+  `ORDER_SHIP`（出库，可关联物流示例的运单，并以子流程 `LEDGER_POST` 过账：借 应收账款 `1130` / 贷 销售收入 `4120`，记账时间为发货时间）。
+- SQL 模板 `commerce.stock_availability`、`commerce.order_summary`；订单发布实体变更事件。
+- 测试：`CommerceIT`（生命周期、违规累积、只经流程写入、权限、并发下单不超卖、只追加）、`CommerceProcessesTest`、场景 `scenarios/commerce/order_lifecycle.yml`。
+
 ## 6. 测试（阶段 9 验收）
 
 | 验收标准 | 测试 |

@@ -27,6 +27,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 事件、审计、定时任务 | 实体变更事件（Outbox，至少一次投递、消费端只处理一次）、基于操作表的审计、多实例安全的定时任务 | 11 |
 | 前端 | 由元数据生成列表、表单、菜单、权限；数据历史时间线 | 12 |
 | 质量保障 | 启动自检、`platformCheck`、场景回放 + 可控时钟 + 快照、ArchUnit、BlockHound | 07 |
+| 可观测性与运行 | 流程、数据视图、模板等的指标与链路（OTLP），结构化日志，本地 Grafana LGTM，Docker Compose 一条命令启动 | 13 |
 
 **目标开发体验**：新增一个业务对象（建表到后台可用）半天到一天，主要工作是写声明；
 一次调整上百条 SQL，由静态校验和场景回放保证安全；业务开发者不接触响应式代码。
@@ -68,7 +69,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | `backend/core` → `jabiz-core` | 纯 Java 核心（见 01） |
 | `backend/runtime` → `jabiz-runtime` | 响应式运行时 |
 | `backend/ext-geo` | H3 空间编码、物理量等领域扩展语义类型（从核心移出） |
-| `backend/app` | 启动模块和示范业务 |
+| `backend/app` | 启动模块和示范业务（物流运单、报关、运费月结；订单与库存 `com.jabiz.app.commerce`，阶段 11） |
 | `frontend/` | 前端工作区 |
 | `docs/` | 设计文档与路线图 |
 
@@ -88,6 +89,10 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 10-security | 认证、令牌与会话、RBAC 与菜单、登录锁定、权限检查位置、敏感数据遮蔽 |
 | 11-ledger-events-jobs | 复式记账、Outbox 与实体变更事件、审计视图、定时任务 |
 | 12-frontend | 元数据驱动的前端：目录接口、适配层、前后端校验一致、令牌存放、OpenAPI、测试 |
+| 13-observability-ops | 指标、链路、结构化日志、本地观测环境、Docker Compose 一条命令启动 |
+
+使用指南（`docs/guide/`）：`quickstart.md`（快速开始）、`new-business-object.md`（新增一个业务对象）；
+示范业务的开发用时与压测报告：`docs/demo/dev-time-log.md`、`docs/perf/phase-11-load-test.md`。
 
 ## 7. 术语
 

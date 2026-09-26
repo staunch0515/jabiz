@@ -124,3 +124,19 @@ jobs:
             frontend/test-results/
             app.log
           retention-days: 7
+
+  # One command starts the whole system (ROADMAP phase 11): the image is built from source, the first administrator's
+  # password is generated on first start, and the demo seed signs in and places and ships an order through the API.
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build --wait --wait-timeout 300 app
+      - name: Sign in and use the system
+        run: |
+          PASSWORD=$(docker compose exec -T app cat /var/lib/jabiz/secrets/admin-password)
+          JABIZ_PASSWORD="$PASSWORD" tools/demo/seed.sh
+          curl -sf localhost:8080/ | grep -q '<div id="root">'
+      - if: failure()
+        run: docker compose logs app
