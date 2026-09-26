@@ -1,6 +1,11 @@
 package com.jabiz.process;
 
+import com.jabiz.context.RequestContext;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,7 +27,7 @@ class ProcessDefinitionBuilderTest {
 
     private static ProcessDefinitionBuilder<In, Out, ProcessContext> complete(
         ProcessDefinitionBuilder<In, Out, ProcessContext> pb) {
-        return pb.contextFactory((seq, in) -> new ProcessContext(seq))
+        return pb.contextFactory((start, in) -> new ProcessContext(start))
             .outputMapper(ctx -> new Out(ctx.processSeqId()));
     }
 
@@ -42,8 +47,8 @@ class ProcessDefinitionBuilderTest {
         assertThat(def.steps()).extracting(StepDefinition::stepName).containsExactly("First", "Second");
         assertThat(def.steps().get(1).handlerClass()).isEqualTo(TagStep.class);
         assertThat(def.steps().get(1).metadata()).isEqualTo(new Tag("seen"));
-        assertThat(def.contextFactory().create(7L, new In("x")).processSeqId()).isEqualTo(7L);
-        assertThat(def.outputMapper().apply(new ProcessContext(9L))).isEqualTo(new Out(9L));
+        assertThat(def.contextFactory().create(start(7L), new In("x")).processSeqId()).isEqualTo(7L);
+        assertThat(def.outputMapper().apply(new ProcessContext(start(9L)))).isEqualTo(new Out(9L));
     }
 
     @Test
@@ -93,7 +98,7 @@ class ProcessDefinitionBuilderTest {
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("contextFactory");
         assertThatThrownBy(() -> define(pb -> pb
-            .contextFactory((seq, in) -> new ProcessContext(seq))
+            .contextFactory((start, in) -> new ProcessContext(start))
             .step("S", NoopStep.class, NoMetadata.INSTANCE)))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("outputMapper");
@@ -110,15 +115,99 @@ class ProcessDefinitionBuilderTest {
             .isInstanceOf(NullPointerException.class);
     }
 
+    static ProcessStart start(long seq) {
+        return new ProcessStart(seq, Instant.parse("2026-01-01T00:00:00Z"),
+            RequestContext.system(Locale.ENGLISH, "test"), IdAssigner.NONE);
+    }
+
     @Test
-    void processContextStoresTypedValues() {
-        ProcessContext ctx = new ProcessContext(1L);
-        ctx.put("n", 5);
-        assertThat(ctx.get("n", Integer.class)).isEqualTo(5);
-        assertThat(ctx.contains("n")).isTrue();
-        assertThatThrownBy(() -> ctx.get("n", String.class)).isInstanceOf(IllegalStateException.class);
-        ctx.put("n", null);
-        assertThat(ctx.get("n")).isNull();
-        assertThat(ctx.get("n", String.class)).isNull();
+    void stepsDefaultToTheTransactionAndAfterCommitStepsAreRetried() {
+        RetryPolicy once = new RetryPolicy(1, Duration.ZERO);
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .step("In", NoopStep.class, NoMetadata.INSTANCE)
+            .afterCommit("Notify", TagStep.class, new Tag("n"))
+            .afterCommit("Notify once", TagStep.class, new Tag("o"), once)
+            .afterCommit("Spec", StepSpec.of(NoopStep.class, NoMetadata.INSTANCE)));
+
+        assertThat(def.steps()).extracting(StepDefinition::phase).containsExactly(
+            StepPhase.IN_TX, StepPhase.AFTER_COMMIT, StepPhase.AFTER_COMMIT, StepPhase.AFTER_COMMIT);
+        assertThat(def.steps()).extracting(StepDefinition::retryPolicy).containsExactly(
+            RetryPolicy.NONE, RetryPolicy.DEFAULT, once, RetryPolicy.DEFAULT);
+        assertThat(def.steps()).allSatisfy(step -> assertThat(step.isInline()).isFalse());
+    }
+
+    @Test
+    void inTransactionStepsAreNotRetried() {
+        assertThatThrownBy(() -> new StepDefinition<>("S", NoopStep.class, NoMetadata.INSTANCE, StepPhase.IN_TX,
+            RetryPolicy.DEFAULT, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("only after-commit steps are retried");
+    }
+
+    @Test
+    void specStepsAndInlineComputations() {
+        ComputeStep<NoMetadata, ProcessContext> body = (metadata, ctx) -> ctx.put("done", true);
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .step("Spec", StepSpec.of(TagStep.class, new Tag("t")))
+            .compute("Inline", body));
+
+        assertThat(def.steps().get(0).handlerClass()).isEqualTo(TagStep.class);
+        assertThat(def.steps().get(0).metadata()).isEqualTo(new Tag("t"));
+        StepDefinition<?, ProcessContext> inline = def.steps().get(1);
+        assertThat(inline.isInline()).isTrue();
+        assertThat(inline.inline()).isSameAs(body);
+        assertThat(inline.handlerClass()).isEqualTo(ComputeStep.class);
+    }
+
+    @Test
+    void permissionsAndDeprecation() {
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .permissions("a.run", "b.run")
+            .deprecated()
+            .step("S", NoopStep.class, NoMetadata.INSTANCE));
+
+        assertThat(def.permissions()).containsExactlyInAnyOrder("a.run", "b.run");
+        assertThat(def.deprecated()).isTrue();
+        assertThat(def.withPermissions("c.run").permissions()).containsExactly("c.run");
+        assertThat(def.withPermissions("c.run").deprecated()).isTrue();
+        assertThatThrownBy(() -> def.withPermissions(" "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("must not be blank");
+        assertThat(define(pb -> complete(pb).step("S", NoopStep.class, NoMetadata.INSTANCE)).permissions()).isEmpty();
+    }
+
+    @Test
+    void singleProcessComputesItsOutputFromInputAndContext() {
+        ProcessDefinition<In, Out, ProcessContext> def = ProcessDefinition.single("ONE", 2, In.class, Out.class,
+            (in, ctx) -> {
+                ctx.changes().update("Thing", in.value(), 1L, java.util.Map.of("x", 1));
+                return new Out(ctx.processSeqId());
+            }).withPermissions("one.run");
+
+        assertThat(def.name()).isEqualTo("ONE");
+        assertThat(def.version()).isEqualTo(2);
+        assertThat(def.contextType()).isEqualTo(ProcessContext.class);
+        assertThat(def.permissions()).containsExactly("one.run");
+        assertThat(def.steps()).singleElement().satisfies(step -> assertThat(step.isInline()).isTrue());
+
+        ProcessContext ctx = def.contextFactory().create(start(5L), new In("t-1"));
+        @SuppressWarnings("unchecked")
+        ComputeStep<NoMetadata, ProcessContext> step =
+            (ComputeStep<NoMetadata, ProcessContext>) def.steps().getFirst().inline();
+        step.compute(NoMetadata.INSTANCE, ctx);
+        assertThat(def.outputMapper().apply(ctx)).isEqualTo(new Out(5L));
+        assertThat(ctx.changes().pending()).singleElement()
+            .extracting(ChangeSet.Change::id).isEqualTo("t-1");
+    }
+
+    @Test
+    void retryPolicyBacksOffExponentially() {
+        RetryPolicy policy = new RetryPolicy(4, Duration.ofMillis(100));
+        assertThat(policy.backoffBefore(1)).isEqualTo(Duration.ZERO);
+        assertThat(policy.backoffBefore(2)).isEqualTo(Duration.ofMillis(100));
+        assertThat(policy.backoffBefore(3)).isEqualTo(Duration.ofMillis(200));
+        assertThat(policy.backoffBefore(4)).isEqualTo(Duration.ofMillis(400));
+        assertThatThrownBy(() -> new RetryPolicy(0, Duration.ZERO)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new RetryPolicy(1, Duration.ofMillis(-1))).isInstanceOf(IllegalArgumentException.class);
     }
 }

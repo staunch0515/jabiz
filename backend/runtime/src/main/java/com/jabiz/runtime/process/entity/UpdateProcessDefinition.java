@@ -13,8 +13,9 @@ public final class UpdateProcessDefinition {
             UpdateEntityInput.class, EntityInstance.class, EntityChangeContext.class, pb -> pb
                 .description("Applies the given field changes to an instance of the requested entity type "
                     + "under optimistic locking and returns the resulting state.")
-                .contextFactory((processSeqId, input) -> new EntityChangeContext(
-                    processSeqId, input.entityType(), input.id(), input.version(), input.attributes()))
+                .permissions(EntityProcessPermissions.ENTITY_WRITE)
+                .contextFactory((start, input) -> new EntityChangeContext(
+                    start, input.entityType(), input.id(), input.version(), input.attributes()))
                 .outputMapper(EntityChangeContext::result)
 
                 .step("Resolve Entity", ResolveEntityHandler.class, NoMetadata.INSTANCE)

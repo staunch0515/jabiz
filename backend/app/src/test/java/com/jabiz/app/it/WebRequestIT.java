@@ -16,6 +16,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -99,7 +100,7 @@ class WebRequestIT extends PostgresIntegrationTest {
     // ---------------------------------------------------------------- Request id
 
     @Test
-    void everyLogLineOfARequestCarriesItsRequestId(CapturedOutput output) {
+    void everyLogLineOfARequestCarriesItsRequestId(CapturedOutput output) throws InterruptedException {
         int before = output.getOut().length();
 
         client.post().uri("/api/entities/ItTicket")
@@ -110,6 +111,12 @@ class WebRequestIT extends PostgresIntegrationTest {
             .expectStatus().isCreated()
             .expectHeader().valueEquals("X-Request-Id", "log-it-1");
 
+        // The completion line is written in doFinally, which may run just after the client has the response.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (!output.getOut().substring(before).contains("POST /api/entities/ItTicket -> 201")
+            && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
         List<String> lines = Arrays.stream(output.getOut().substring(before).split("\\R"))
             .filter(line -> !line.isBlank())
             .toList();

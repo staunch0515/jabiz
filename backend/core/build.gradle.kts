@@ -47,6 +47,13 @@ val coverageGatedClasses = listOf(
     "com.jabiz.query.template.TemplateValues",
     "com.jabiz.query.template.SqlTypeCompatibility",
     "com.jabiz.query.custom.AdvancedQueryDefinition",
+    // Phase 6
+    "com.jabiz.process.ProcessDefinition",
+    "com.jabiz.process.ProcessContext",
+    "com.jabiz.process.ChangeSet",
+    "com.jabiz.process.ChangeSet\$Target",
+    "com.jabiz.process.StepDefinition",
+    "com.jabiz.process.RetryPolicy",
 )
 
 dependencies {

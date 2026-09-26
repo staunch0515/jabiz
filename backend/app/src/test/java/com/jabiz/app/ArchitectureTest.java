@@ -1,5 +1,6 @@
 package com.jabiz.app;
 
+import com.jabiz.runtime.process.StepHandler;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -72,6 +73,17 @@ class ArchitectureTest {
     void businessModuleDoesNotUseReactor() {
         noClasses().that().resideInAPackage(BUSINESS)
             .should().dependOnClassesThat().resideInAnyPackage("reactor..", "org.reactivestreams..")
+            .check(CLASSES);
+    }
+
+    /**
+     * Business steps are ComputeStep or BlockingStep (synchronous); the reactive StepHandler is for the platform's own
+     * I/O steps only (docs/design/06-process.md section 2).
+     */
+    @Test
+    void businessStepsAreNeverStepHandlers() {
+        noClasses().that().resideInAPackage(BUSINESS)
+            .should().implement(StepHandler.class)
             .check(CLASSES);
     }
 

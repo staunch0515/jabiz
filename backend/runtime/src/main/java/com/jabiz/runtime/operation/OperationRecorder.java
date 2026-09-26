@@ -111,6 +111,37 @@ public class OperationRecorder {
         return engine.insert("op_process_result", row);
     }
 
+    /** An earlier operation of an actor with an idempotency key, and its output. */
+    public record IdempotentResult(long processSeqId, String processName, String output) {}
+
+    /** The actor's earlier operation with the given idempotency key and its output, if there is one. */
+    public Mono<IdempotentResult> findByIdempotencyKey(StorageEngine engine, String actorId, String idempotencyKey) {
+        return engine.select("""
+                SELECT p.process_seq_id, p.process_name, r.output
+                FROM op_process p JOIN op_process_result r ON r.process_seq_id = p.process_seq_id
+                WHERE p.actor_id = :actor AND p.idempotency_key = :key""",
+                Map.of("actor", BoundValue.of(actorId), "key", BoundValue.of(idempotencyKey)))
+            .next()
+            .map(row -> new IdempotentResult(Rows.longValue(row.get("process_seq_id")),
+                Rows.string(row.get("process_name")), Rows.string(row.get("output"))));
+    }
+
+    /**
+     * Records one attempt of a step that runs after its operation committed ({@code op_process_after_commit},
+     * append-only like the other operation tables). Runs outside the operation's transaction, which is over.
+     */
+    public Mono<Void> recordAfterCommitAttempt(StorageEngine engine, long processSeqId, String stepName, int attempt,
+        String error) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("process_seq_id", processSeqId);
+        row.put("step_name", stepName);
+        row.put("attempt", attempt);
+        row.put("succeeded", error == null);
+        row.put("error", error);
+        row.put("attempted_at", clock.instant().truncatedTo(ChronoUnit.MICROS));
+        return engine.insert("op_process_after_commit", row);
+    }
+
     /** Output of the actor's earlier operation with the same idempotency key, if there is one. */
     public Mono<String> findResult(StorageEngine engine, String actorId, String idempotencyKey) {
         return engine.select("""

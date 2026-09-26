@@ -12,7 +12,8 @@ dependencies {
     api(project(":core"))
     api("org.springframework.boot:spring-boot-starter-webflux")
     api("org.springframework.boot:spring-boot-starter-data-r2dbc")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
+    // Business modules annotate process inputs with Bean Validation constraints (docs/design/06-process.md section 8).
+    api("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("io.micrometer:context-propagation")

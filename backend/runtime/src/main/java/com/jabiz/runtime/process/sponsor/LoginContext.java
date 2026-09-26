@@ -1,6 +1,7 @@
 package com.jabiz.runtime.process.sponsor;
 
 import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessStart;
 
 /**
  * Context of the sponsor sign-in process. It offers typed access to the values that steps hand
@@ -13,8 +14,8 @@ public class LoginContext extends ProcessContext {
     public static final String KEY_AUTHENTICATED_USER = "authenticated_user";
     public static final String KEY_LOGIN_RECORD_ID = "login_record_id";
 
-    public LoginContext(long processSeqId) {
-        super(processSeqId);
+    public LoginContext(ProcessStart start) {
+        super(start);
     }
 
     public void setAuthenticatedUser(AuthenticatedUser user) {

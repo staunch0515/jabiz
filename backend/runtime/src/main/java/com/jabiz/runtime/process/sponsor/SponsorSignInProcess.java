@@ -15,8 +15,9 @@ public final class SponsorSignInProcess {
             SponsorSignInInput.class, SponsorSignInOutput.class, LoginContext.class, pb -> pb
                 .description("Sponsor user sign-in: verifies credentials, checks role validity and "
                     + "creates a login audit record.")
-                .contextFactory((processSeqId, input) -> {
-                    LoginContext ctx = new LoginContext(processSeqId);
+                .permissions("sponsor.sign-in")
+                .contextFactory((start, input) -> {
+                    LoginContext ctx = new LoginContext(start);
                     ctx.put(LoginContext.INPUT_USERNAME_OR_EMAIL, input.usernameOrEmail());
                     ctx.put(LoginContext.INPUT_PASSWORD, input.password());
                     return ctx;

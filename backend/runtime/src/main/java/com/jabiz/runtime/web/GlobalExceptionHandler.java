@@ -11,6 +11,7 @@ import com.jabiz.resource.ResourceNotFoundException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RebaseConflictException;
 import com.jabiz.runtime.RevertConflictException;
@@ -126,6 +127,13 @@ public class GlobalExceptionHandler {
             return entry;
         }).toList());
         return problem;
+    }
+
+    /** An idempotency key reused for another process (decision D11). */
+    @ExceptionHandler(IdempotencyConflictException.class)
+    ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex, ServerWebExchange exchange) {
+        Violation violation = new Violation(null, PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, ex.getMessage());
+        return withViolations(HttpStatus.CONFLICT, ex.getMessage(), List.of(violation), exchange);
     }
 
     @ExceptionHandler(PermissionDeniedException.class)

@@ -3,6 +3,7 @@ package com.jabiz.runtime.process.entity;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessStart;
 import com.jabiz.runtime.EntityInstance;
 
 import java.util.Collections;
@@ -27,9 +28,9 @@ public class EntityChangeContext extends ProcessContext {
     private volatile Map<String, Object> attributes;
 
     public EntityChangeContext(
-        long processSeqId, String entityType, Object id, long version, Map<String, Object> attributes
+        ProcessStart start, String entityType, Object id, long version, Map<String, Object> attributes
     ) {
-        super(processSeqId);
+        super(start);
         this.entityType = Objects.requireNonNull(entityType, "entityType must not be null");
         this.id = id;
         this.version = version;
