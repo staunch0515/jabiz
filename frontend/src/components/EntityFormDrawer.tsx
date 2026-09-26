@@ -144,6 +144,9 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
         onOpenChange(next)
       }}
       initialValues={initialValues}
+      // Dates reach onFinish as Dayjs, converted to ISO-8601 with offset by the adapter (toWireValue, effective time).
+      // ProForm's default formats them as local text without a zone, which the server rejects.
+      dateFormatter={false}
       drawerProps={{ destroyOnHidden: true, width: 560 }}
       submitter={{ searchConfig: { submitText: t('form.submit'), resetText: t('form.cancel') } }}
       onValuesChange={(changed: Record<string, unknown>, all: Record<string, unknown>) => {

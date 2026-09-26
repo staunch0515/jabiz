@@ -44,3 +44,23 @@ test('the commerce sample has generated pages and an order is placed from its ge
   await expect(page.getByTestId('process-result')).toContainText(code)
   await expect(page.getByTestId('process-result')).toContainText('500')
 })
+
+// Regression: date-time inputs of a process form were sent as local text without a zone, which the server rejects.
+test('a price change is scheduled from the generated process form', async ({ page, request }) => {
+  const token = await adminToken(request)
+  const code = unique('R')
+  await insert(request, token, PRODUCTS, { sku: code, productName: `Product ${code}`, unitPrice: 100, active: true })
+
+  await signIn(page)
+  await page.goto('/processes')
+  await page.getByTestId('process-PRODUCT_REPRICE-1').click()
+  await page.getByLabel('sku').fill(code)
+  await page.getByLabel('unitPrice').fill('120')
+  await page.getByLabel('effectiveTime').fill('2031-04-01 00:00:00')
+  await page.getByLabel('effectiveTime').press('Enter')
+  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await expect(page.getByTestId('process-result')).toContainText(code)
+  const expected = await page.evaluate(() => new Date(2031, 3, 1, 0, 0, 0).toISOString())
+  await expect(page.getByTestId('process-result')).toContainText(expected.replace('.000Z', 'Z'))
+})
+

@@ -122,6 +122,8 @@ export default function ProcessFormPage() {
         )}
         <ProForm
           name="process"
+          // Dates stay Dayjs until processForm converts them (ISO-8601 with offset, or YYYY-MM-DD for dates).
+          dateFormatter={false}
           submitter={{ searchConfig: { submitText: t('process.run') }, resetButtonProps: false }}
           onFinish={async (values: Record<string, unknown>) => {
             setViolations([])
