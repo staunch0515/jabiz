@@ -24,6 +24,7 @@ public final class EntityBuilder {
     private final List<UniqueConstraint> uniqueConstraints = new ArrayList<>();
     private final Map<String, ListViewDefinition> listViews = new LinkedHashMap<>();
     private TemporalBuilder temporal;
+    private boolean publishChanges;
 
     EntityBuilder(String name) { this.name = name; }
 
@@ -104,6 +105,14 @@ public final class EntityBuilder {
         block.accept(temporal);
     }
 
+    /**
+     * Makes every committed write of the entity publish an entity change event through the outbox
+     * (docs/design/11-ledger-events-jobs.md section 2): the event names the changed fields, never their values.
+     */
+    public void publishChanges() {
+        publishChanges = true;
+    }
+
     /** Declares a list view (docs/design/02-metamodel.md section 7). */
     public void listView(String viewName, Consumer<ListViewDefinition.Builder> block) {
         if (listViews.containsKey(viewName)) {
@@ -141,7 +150,8 @@ public final class EntityBuilder {
             List.copyOf(references),
             List.copyOf(uniqueConstraints),
             Collections.unmodifiableMap(new LinkedHashMap<>(listViews)),
-            temporalSpec
+            temporalSpec,
+            publishChanges
         );
     }
 

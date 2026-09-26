@@ -8,6 +8,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.runtime.RebaseConflictException;
+import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.temporal.EntityVersion;
@@ -38,10 +39,12 @@ public class VersionAppender {
 
     private final TemporalStore store;
     private final Clock clock;
+    private final Outbox outbox;
 
-    public VersionAppender(TemporalStore store, Clock clock) {
+    public VersionAppender(TemporalStore store, Clock clock, Outbox outbox) {
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.outbox = Objects.requireNonNull(outbox, "outbox must not be null");
     }
 
     /**
@@ -80,8 +83,20 @@ public class VersionAppender {
             return unique
                 .thenMany(Flux.fromIterable(plan.versions())
                     .concatMap(version -> store.append(engine, table, def, id, version, operation)))
+                .then(Mono.defer(() -> plan.versions().isEmpty()
+                    ? Mono.<Void>empty()
+                    : published(engine, def, id, plan.versions().getFirst())))
                 .then(Mono.just(plan.versions()));
         });
+    }
+
+    /**
+     * The change event of the written version (the first planned one); rebased copies only carry later versions
+     * over and publish nothing of their own.
+     */
+    private Mono<Void> published(StorageEngine engine, EntityDefinition def, UUID id, PlannedVersion written) {
+        return outbox.entityChanged(engine, def, id, written.action().name(), written.versionNo(),
+            written.effectiveFrom(), written.changedFields());
     }
 
     /**

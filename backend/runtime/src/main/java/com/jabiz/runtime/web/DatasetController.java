@@ -134,6 +134,7 @@ class DatasetController {
             DatasetDefinition dataset = dataset(resourceId);
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing through dataset " + resourceId);
+            DatasetEntityManager.rejectDirectWrites(dataset);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             boolean generatedKey = def.field(def.primaryKey).generated();
             if (request == null || request.changes() == null) {

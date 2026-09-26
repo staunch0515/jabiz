@@ -57,6 +57,15 @@ val coverageGatedClasses = listOf(
     // Phase 7
     "com.jabiz.security.LoginAttemptPolicy",
     "com.jabiz.security.LoginOutcome",
+    // Phase 9
+    "com.jabiz.ledger.LedgerPosting",
+    "com.jabiz.ledger.LedgerBalances",
+    "com.jabiz.ledger.PostingLine",
+    "com.jabiz.ledger.Direction",
+    "com.jabiz.event.EventSubscription",
+    "com.jabiz.event.DomainEvent",
+    "com.jabiz.job.JobDefinition",
+    "com.jabiz.dataset.DatasetPolicy",
 )
 
 dependencies {

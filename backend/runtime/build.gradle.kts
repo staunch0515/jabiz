@@ -19,6 +19,10 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-security")
     implementation("com.nimbusds:nimbus-jose-jwt:10.10")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    // Scheduled jobs (docs/design/11-ledger-events-jobs.md section 4): one instance per run, locked through R2DBC.
+    // JobRunner takes a LockProvider, so the core API is part of runtime's.
+    api("net.javacrumbs.shedlock:shedlock-core:7.10.1")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-r2dbc:7.10.1")
     implementation("io.micrometer:context-propagation")
     // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")

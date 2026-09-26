@@ -110,7 +110,7 @@ public class ProcessExecutor {
         return RequestContexts.current().flatMap(request -> {
             String key = options.idempotencyKey();
             if (key == null) {
-                return executeRoot(definition, input, request, null);
+                return executeRoot(definition, input, request, null, options);
             }
             if (!ExecutionOptions.KEY_PATTERN.matcher(key).matches()) {
                 return Mono.error(new ValidationException(List.of(new Violation("Idempotency-Key",
@@ -118,7 +118,7 @@ public class ProcessExecutor {
                         + "letters, digits, '.', '_', ':' and '-'"))));
             }
             Mono<ProcessResult<O>> replay = replay(definition, request, key);
-            return replay.switchIfEmpty(Mono.defer(() -> executeRoot(definition, input, request, key)
+            return replay.switchIfEmpty(Mono.defer(() -> executeRoot(definition, input, request, key, options)
                 .onErrorResume(ProcessExecutor::isIdempotencyRace,
                     race -> replay.switchIfEmpty(Mono.error(race)))));
         });
@@ -142,7 +142,8 @@ public class ProcessExecutor {
     }
 
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> executeRoot(
-        ProcessDefinition<I, O, C> definition, I input, RequestContext request, String idempotencyKey
+        ProcessDefinition<I, O, C> definition, I input, RequestContext request, String idempotencyKey,
+        ExecutionOptions options
     ) {
         StorageEngine engine = engine();
         List<PendingStep<?>> afterCommit = Collections.synchronizedList(new ArrayList<>());
@@ -150,8 +151,8 @@ public class ProcessExecutor {
             OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq, null,
                 null, null, idempotencyKey, null, masker.summary(input));
             return operations.begin(engine, operation, request)
-                .flatMap(started -> runProcess(definition, input, started, request, afterCommit,
-                    idempotencyKey != null));
+                .flatMap(started -> options.beforeSteps().apply(started)
+                    .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)));
         });
         return engine.inTransaction(transaction)
             .flatMap(result -> Mono.deferContextual(view -> {

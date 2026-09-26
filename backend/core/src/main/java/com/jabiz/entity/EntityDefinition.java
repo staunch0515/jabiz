@@ -41,6 +41,8 @@ public final class EntityDefinition {
     public final boolean temporal;
     /** Temporal settings; null unless {@link #temporal}. */
     public final TemporalSpec temporalSpec;
+    /** Whether committed writes publish entity change events ({@link EntityBuilder#publishChanges()}). */
+    public final boolean publishesChanges;
 
     EntityDefinition(String name, String physicalTable, String primaryKey,
         Map<String, FieldDefinition> fields,
@@ -51,7 +53,8 @@ public final class EntityDefinition {
         List<ReferenceDefinition> references,
         List<UniqueConstraint> uniqueConstraints,
         Map<String, ListViewDefinition> listViews,
-        TemporalSpec temporalSpec) {
+        TemporalSpec temporalSpec,
+        boolean publishesChanges) {
         this.name = name;
         this.physicalTable = physicalTable;
         this.primaryKey = primaryKey;
@@ -65,6 +68,7 @@ public final class EntityDefinition {
         this.listViews = listViews;
         this.temporalSpec = temporalSpec;
         this.temporal = temporalSpec != null;
+        this.publishesChanges = publishesChanges;
         this.versionField = fields.values().stream()
             .filter(f -> f.kind() instanceof SemanticKind.Version)
             .map(FieldDefinition::name)

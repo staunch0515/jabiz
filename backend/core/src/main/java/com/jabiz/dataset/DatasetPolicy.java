@@ -15,6 +15,9 @@ import java.util.Objects;
  * @param queryTimeout        upper bound of query duration
  * @param allowTimeTravel     whether callers may read temporal entities at other points in time and read their
  *                            history (docs/design/03-dataset.md section 2.5)
+ * @param processOnlyWrites   writes come only from processes ({@code ChangeSet}); the dataset API and the generic
+ *                            entity processes refuse them, and operations that wrote through it cannot be reverted
+ *                            (docs/design/03-dataset.md section 2.6)
  */
 public record DatasetPolicy(
     boolean readOnly,
@@ -24,7 +27,8 @@ public record DatasetPolicy(
     int maxQueryBatchSize,
     int maxWriteBatchSize,
     Duration queryTimeout,
-    boolean allowTimeTravel
+    boolean allowTimeTravel,
+    boolean processOnlyWrites
 ) {
     public DatasetPolicy {
         if (softDelete && (softDeleteField == null || softDeleteField.isBlank())) {
@@ -40,5 +44,8 @@ public record DatasetPolicy(
             throw new IllegalArgumentException("maxWriteBatchSize must be positive");
         }
         Objects.requireNonNull(queryTimeout, "queryTimeout must not be null");
+        if (readOnly && processOnlyWrites) {
+            throw new IllegalArgumentException("A read-only dataset takes no writes, not even from processes");
+        }
     }
 }

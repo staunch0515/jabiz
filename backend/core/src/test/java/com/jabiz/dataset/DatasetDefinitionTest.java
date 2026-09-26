@@ -32,6 +32,18 @@ class DatasetDefinitionTest {
         assertThat(dataset.isTarget("Order")).isTrue();
         assertThat(dataset.isTarget("Other")).isFalse();
         assertThat(dataset.policy().maxQueryBatchSize()).isEqualTo(100);
+        assertThat(dataset.policy().processOnlyWrites()).isFalse();
+    }
+
+    @Test
+    void processOnlyWritesCannotBeReadOnly() {
+        DatasetDefinition dataset = DatasetDefinition.define("urn:ds:Order", d -> base(d)
+            .policy(p -> p.processOnlyWrites()));
+
+        assertThat(dataset.policy().processOnlyWrites()).isTrue();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> DatasetDefinition.define("urn:ds:Order",
+                d -> base(d).policy(p -> p.processOnlyWrites().readOnly(true))))
+            .hasMessageContaining("read-only");
     }
 
     @Test

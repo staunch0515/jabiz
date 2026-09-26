@@ -3,6 +3,7 @@ package com.jabiz.runtime.process.entity;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.process.NoMetadata;
+import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
@@ -44,6 +45,7 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
                 () -> new EntityNotFoundException("No dataset serves entity type: " + type));
             Permissions.requireDeclared(ctx.request(), dataset.permissions().write(), development,
                 "Writing " + type + " through dataset " + dataset.resourceId());
+            DatasetEntityManager.rejectDirectWrites(dataset);
             // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());
             ctx.setDefinition(definition);

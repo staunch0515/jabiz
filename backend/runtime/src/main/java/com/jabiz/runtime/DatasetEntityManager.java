@@ -26,6 +26,7 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
@@ -85,6 +86,7 @@ public class DatasetEntityManager {
     private final TemporalWriter temporalWriter;
     private final TemporalStore temporalStore;
     private final JsonMapper json;
+    private final Outbox outbox;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -96,7 +98,8 @@ public class DatasetEntityManager {
         OperationRecorder operations,
         TemporalStore temporalStore,
         VersionAppender versions,
-        JsonMapper json
+        JsonMapper json,
+        Outbox outbox
     ) {
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
         this.entityRegistry = Objects.requireNonNull(entityRegistry, "EntityDefinitionRegistry cannot be null");
@@ -109,6 +112,7 @@ public class DatasetEntityManager {
         this.temporalWriter = new TemporalWriter(this, Objects.requireNonNull(versions, "VersionAppender cannot be null"),
             queryCompiler);
         this.json = Objects.requireNonNull(json, "JsonMapper cannot be null");
+        this.outbox = Objects.requireNonNull(outbox, "Outbox cannot be null");
     }
 
     // ================= Writes =================
@@ -312,7 +316,10 @@ public class DatasetEntityManager {
             EntityInstance created = new EntityInstance(
                 attrs.get(def.primaryKey), def.name, INITIAL_VERSION, state, snapshot);
             return verifyReferences(def, attrs, attrs.keySet())
-                .then(Mono.defer(() -> engine.insert(table, row).thenReturn(created)));
+                .then(Mono.defer(() -> engine.insert(table, row)))
+                .then(Mono.defer(() -> outbox.entityChanged(engine, def, created.id(), EntityAction.INSERT.name(),
+                    INITIAL_VERSION, null, attrs.keySet().stream().filter(def.changeableFields()::contains).toList())))
+                .thenReturn(created);
         }));
     }
 
@@ -406,7 +413,8 @@ public class DatasetEntityManager {
             .then(Mono.defer(() -> engine
                 .casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(), versionColumn, physicalUpdates)
                 .flatMap(applied -> applied
-                    ? Mono.just(updated)
+                    ? outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(),
+                        null, changes.keySet()).thenReturn(updated)
                     : Mono.<EntityInstance>error(conflict(def, instance.id())))));
     }
 
@@ -482,7 +490,8 @@ public class DatasetEntityManager {
                                 versionColumn, softDeleteAssignments(def, dataset.policy()))
                             : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
                         return removed.flatMap(done -> done
-                            ? Mono.<Void>empty()
+                            ? outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
+                                current.version(), null, def.changeableFields())
                             : Mono.<Void>error(conflict(def, instance.id())));
                     }));
                 });
@@ -756,6 +765,18 @@ public class DatasetEntityManager {
         return def.versionColumn().orElseThrow(() -> new BusinessRuleViolationException(new Violation(
             null, PlatformErrorCodes.ENTITY_READ_ONLY,
             "Entity " + def.name + " declares no Version field and is read-only", Map.of("entity", def.name))));
+    }
+
+    /**
+     * Datasets whose writes come from processes only (decision D14) refuse the entry points that write what the
+     * caller sends: the dataset API and the generic entity processes (422 {@code PROCESS_ONLY_DATASET}).
+     */
+    public static void rejectDirectWrites(DatasetDefinition dataset) {
+        if (dataset.policy().processOnlyWrites()) {
+            throw new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.PROCESS_ONLY_DATASET,
+                "Dataset " + dataset.resourceId() + " is written by its processes only",
+                Map.of("dataset", dataset.resourceId())));
+        }
     }
 
     private void ensureDatasetWritable(DatasetDefinition dataset) {

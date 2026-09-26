@@ -136,6 +136,7 @@ public record DatasetDefinition(
         private int writeBatch = 100;
         private Duration timeout = Duration.ofSeconds(5);
         private boolean allowTimeTravel = true;
+        private boolean processOnlyWrites;
 
         public PolicyBuilder readOnly(boolean ro) { this.readOnly = ro; return this; }
 
@@ -158,9 +159,15 @@ public record DatasetDefinition(
          */
         public PolicyBuilder allowTimeTravel(boolean allowed) { this.allowTimeTravel = allowed; return this; }
 
+        /**
+         * Only processes write through the dataset: the dataset API and the generic entity processes are refused,
+         * so rules that span several instances (such as balanced ledger transactions) cannot be bypassed.
+         */
+        public PolicyBuilder processOnlyWrites() { this.processOnlyWrites = true; return this; }
+
         public DatasetPolicy build() {
             return new DatasetPolicy(readOnly, softDelete, softDeleteField, softDeleteTimeField,
-                queryBatch, writeBatch, timeout, allowTimeTravel);
+                queryBatch, writeBatch, timeout, allowTimeTravel, processOnlyWrites);
         }
     }
 }

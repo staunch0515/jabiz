@@ -244,6 +244,14 @@ public class RevertService {
                         () -> new IllegalStateException("No default dataset for " + def.name));
                     Permissions.requireDeclared(request, dataset.permissions().write(), development,
                         "Reverting changes of " + def.name + " through dataset " + dataset.resourceId());
+                    // Written by processes only (decision D14): such data is corrected by the process that owns
+                    // it (a reversing ledger transaction), never by restoring older versions.
+                    if (dataset.policy().processOnlyWrites()) {
+                        throw new BusinessRuleViolationException(new Violation(null,
+                            PlatformErrorCodes.REVERT_NOT_ALLOWED, "Operation " + entry.getKey().processSeqId()
+                                + " wrote " + def.name + ", which only its processes change",
+                            Map.of("operation", entry.getKey().processSeqId(), "entity", def.name)));
+                    }
                 }
                 if (item.action() == VersionAction.UPDATE) {
                     def.sensitiveFields().stream().filter(item.changedFields()::contains)

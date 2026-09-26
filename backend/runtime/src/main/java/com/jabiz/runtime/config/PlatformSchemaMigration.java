@@ -41,7 +41,9 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_dict_item_version", "op_process", "op_process_item", "op_process_result", "entity_registry",
         "op_process_after_commit", "sec_user_version", "sec_role_version", "sec_role_permission_version",
         "sec_user_role_version", "sec_menu_version", "sec_login_record_version", "sec_refresh_token",
-        "sec_refresh_token_use", "sec_refresh_family_revocation", "sys_param_version");
+        "sec_refresh_token_use", "sec_refresh_family_revocation", "sys_param_version", "ledger_account_version",
+        "ledger_transaction_version", "ledger_entry_version", "sys_outbox_event", "sys_event_consumption",
+        "sys_outbox_attempt", "shedlock", "sys_job_run");
 
     @Override
     public void migrate(Flyway application) {

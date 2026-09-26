@@ -16,6 +16,7 @@ class MetaModelExportTest {
     private static final EntityDefinition ORDER = EntityDefinition.define("Order", eb -> {
         eb.physicalTable("t_order");
         eb.primaryKey("orderId");
+        eb.publishChanges();
         eb.field("orderId", f -> f.physicalColumn("f_id").required(true).generated(true).asSemanticIdentity("urn:order"));
         eb.field("customerId", f -> f.physicalColumn("f_customer").required(true).asReference("Customer"));
         eb.field("note", f -> f.physicalColumn("f_note").asText(200, true));
@@ -48,6 +49,7 @@ class MetaModelExportTest {
         Map<String, Object> export = MetaModelExporter.export(ORDER);
 
         assertThat(export).containsEntry("entity", "Order").containsEntry("temporal", false)
+            .containsEntry("publishesChanges", true)
             .containsEntry("stateField", "status");
         assertThat(export.get("dictionaries")).isEqualTo(List.of("urn:dict:status", "urn:dict:channel"));
         assertThat(export.get("guards")).isEqualTo(List.of(Map.of("code", "PAID", "from", "*", "to", "DONE")));

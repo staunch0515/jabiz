@@ -36,6 +36,7 @@ public final class MetaModelExporter {
         root.put("entity", def.name);
         root.put("primaryKey", def.primaryKey);
         root.put("temporal", def.temporal);
+        root.put("publishesChanges", def.publishesChanges);
         if (def.temporal) {
             root.put("allowScheduled", def.temporalSpec.allowScheduled());
         }

@@ -153,6 +153,15 @@ class ProcessChecksTest {
             .permissions("e").step("Emit", PublishEvent.of("order.created", ctx -> "payload")));
 
         assertThat(check(false, definition)).extracting(CheckProblem::message).containsExactly(
-            "publishes order.created but no EventPublisher is configured (outbox: phase 9)");
+            "publishes order.created but no EventPublisher is configured");
+    }
+
+    @Test
+    void eventTypesMustBeNames() {
+        ProcessDefinition<String, Out, ProcessContext> definition = process("EMIT", 1, pb -> pb
+            .permissions("e").step("Emit", PublishEvent.of("order created!", ctx -> "payload")));
+
+        assertThat(check(false, definition)).extracting(CheckProblem::message).contains(
+            "event type 'order created!' must match [A-Za-z0-9._:-]{1,100}");
     }
 }

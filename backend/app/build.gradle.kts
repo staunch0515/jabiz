@@ -5,6 +5,10 @@ dependencies {
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     // Records every SQL statement, to show that temporal writes never update or delete (ROADMAP phase 4).
     testImplementation("io.r2dbc:r2dbc-proxy")
+    // A second application instance's cluster lock in the job tests (ROADMAP phase 9).
+    testImplementation("net.javacrumbs.shedlock:shedlock-provider-r2dbc:7.10.1")
+    // Random transaction sequences for the ledger's balance invariant against the database (ROADMAP phase 9).
+    testImplementation("net.jqwik:jqwik:1.9.3")
 }
 
 // platformCheck (docs/design/07-quality.md section 2): the startup self-checks, run against a freshly migrated
