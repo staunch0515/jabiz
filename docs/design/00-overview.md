@@ -70,8 +70,11 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | `backend/runtime` → `jabiz-runtime` | 响应式运行时 |
 | `backend/ext-geo` | H3 空间编码、物理量等领域扩展语义类型（从核心移出） |
 | `backend/app` | 启动模块和示范业务（物流运单、报关、运费月结；订单与库存 `com.jabiz.app.commerce`，阶段 11） |
-| `frontend/` | 前端工作区 |
+| `frontend/` | 通用后台前端（可挂在子路径，16 §5） |
+| `backend/build-logic` | 约定插件 `jabiz.boot-app`（阶段 13a，17 §3） |
 | `docs/` | 设计文档与路线图 |
+
+平台与应用分开开发：`platform` 分支只含上表内容；具体项目（如 culture）在各自的应用分支上增加自己的模块、公开前端与文档（17、D19）。
 
 ## 6. 文档索引
 
@@ -90,6 +93,10 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 11-ledger-events-jobs | 复式记账、Outbox 与实体变更事件、审计视图、定时任务 |
 | 12-frontend | 元数据驱动的前端：目录接口、适配层、前后端校验一致、令牌存放、OpenAPI、测试 |
 | 13-observability-ops | 指标、链路、结构化日志、本地观测环境、Docker Compose 一条命令启动 |
+| 14-files | 文件存储：上传、按内容判定类型、图片去元数据与变体、`jabiz.file` 类型、清扫与删除 |
+| 15-public-access | 公开只读访问：公开数据视图、公开模板、公开文件、缓存与限流 |
+| 16-content-authoring | 内容编辑：多语言文本类型、引用显示与选择、流程行操作、子实体列表、后台子路径 |
+| 17-apps-and-branches | 平台与应用：分支模型、应用目录检查、多应用构建、多 SPA、公开前端 |
 
 使用指南（`docs/guide/`）：`quickstart.md`（快速开始）、`new-business-object.md`（新增一个业务对象）；
 示范业务的开发用时与压测报告：`docs/demo/dev-time-log.md`、`docs/perf/phase-11-load-test.md`。

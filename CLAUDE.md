@@ -133,3 +133,11 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 5. 创建 PR，描述中**逐条对照验收标准**说明如何满足，并列出未完成项和已知问题。
 6. 如果实现中改变了约定，同步更新本文件和 `docs/design/`。
 7. 在 `docs/ROADMAP.md` 中更新该阶段的状态。
+
+## 8. 平台与应用的分支（见 17 与决策 D19，待确认）
+
+- `platform`：公共分支，只含平台（`core`、`runtime`、`ext-geo`）、示范应用 `app`、通用后台 `frontend/`、`spec/`、`docs/design/`、`docs/guide/`。
+  平台工作分支 `phase-<N><x>-<名>` 从 `platform` 拉出并合回。
+- 应用分支（如 `culture`）= `platform` + 应用专有目录（列在应用分支根目录的 `.jabiz-app-paths` 中）；应用工作分支 `<应用>-<N>-<名>`。
+  **合并方向只有 `platform` → 应用分支**；应用分支不修改平台目录（CI 检查），平台需要的改动先在平台分支上完成（带平台自己的测试与示范）。
+- 应用自己的规则写在应用目录内的 `CLAUDE.md` 与 `docs/<应用>/`，不改本文件。
