@@ -1,0 +1,100 @@
+# Orders and inventory across a month end (ROADMAP phase 11): stock is received, orders reserve it, a price rise
+# scheduled for 1 April (Japan time) applies to orders placed from then on without any job, a cancel releases its
+# reservation, a shipment takes the goods out on a waybill of the logistics sample and posts the sale to the ledger.
+name: Orders and inventory across a month end
+clock: 2026-03-30T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - note: The ledger accounts the sale postings use.
+    process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1130", accountName: Accounts receivable, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4120", accountName: Sales revenue, accountType: REVENUE }
+
+  - note: Master data is maintained through the generic entity processes, like the generated pages do.
+    process: ADD_ENTITY@latest
+    input: { entityType: Warehouse, attributes: { warehouseCode: TKY, warehouseName: Tokyo, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: APPLE-1, productName: Apple, unitPrice: 120, active: true } }
+    save: { apple: $.id }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: PEAR-1, productName: Pear, unitPrice: 300, active: true } }
+
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: TKY, sku: APPLE-1, quantity: 10 }
+    expectOutput: { onHand: 10, reserved: 0 }
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: TKY, sku: PEAR-1, quantity: 5 }
+
+  - note: Apples go up to 150 yen on 1 April 00:00 Japan time.
+    process: PRODUCT_REPRICE@latest
+    input: { sku: APPLE-1, unitPrice: 150, effectiveTime: 2026-03-31T15:00:00Z }
+  - expectError:
+      process: PRODUCT_REPRICE@latest
+      input: { sku: APPLE-1, unitPrice: 90, effectiveTime: 2026-03-01T00:00:00Z }
+      status: 422
+      ruleCode: COMMERCE_PRICE_TIME_PAST
+
+  - note: "Still March: the old price applies."
+    process: ORDER_PLACE@latest
+    input:
+      orderNo: SO-1
+      customerCode: CUST-1
+      warehouseCode: TKY
+      lines: [{ sku: APPLE-1, quantity: 3 }, { sku: PEAR-1, quantity: 1 }]
+    save: { orderOne: $.orderId }
+    expectOutput: { totalAmount: 660, lines: [{ lineNo: 1, unitPrice: 120 }, { lineNo: 2, unitPrice: 300 }] }
+  - note: Seven apples are left to promise.
+    expectError:
+      process: ORDER_PLACE@latest
+      input: { orderNo: SO-2, customerCode: CUST-2, warehouseCode: TKY, lines: [{ sku: APPLE-1, quantity: 8 }] }
+      status: 422
+      ruleCode: COMMERCE_STOCK_INSUFFICIENT
+      field: lines[0].quantity
+
+  - note: Two days later it is April in Japan; the new price is in effect.
+    advanceClock: P2D
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-3, customerCode: CUST-2, warehouseCode: TKY, lines: [{ sku: APPLE-1, quantity: 2 }] }
+    save: { orderThree: $.orderId }
+    expectOutput: { totalAmount: 300, lines: [{ unitPrice: 150, lineAmount: 300 }] }
+  - process: ORDER_CANCEL@latest
+    input: { orderId: "${orderOne}" }
+    expectOutput: { status: CANCELLED }
+
+  - note: SO-3 leaves on a waybill of the logistics sample.
+    process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-SO-3, freightCharge: 800, shippedTime: 2026-04-01T00:00:00Z, status: CREATED }
+  - process: ORDER_SHIP@latest
+    input: { orderId: "${orderThree}", waybillId: WB-SO-3 }
+    expectOutput: { status: SHIPPED, shippedTime: 2026-04-01T00:00:00Z }
+  - expectError:
+      process: ORDER_CANCEL@latest
+      input: { orderId: "${orderThree}" }
+      status: 422
+      ruleCode: COMMERCE_ORDER_NOT_PLACED
+
+  - expect:
+      query: commerce.stock_availability
+      params: { warehouseCode: TKY }
+      rows: 2
+      values:
+        - { sku: APPLE-1, onHand: 8, reserved: 0, available: 8 }
+        - { sku: PEAR-1, onHand: 5, reserved: 0, available: 5 }
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-04-02T00:00:00Z }
+      values: [{ accountCode: "1130", balance: 300 }, { accountCode: "4120", balance: -300 }]
+  - expect:
+      query: commerce.order_summary
+      params: { customerCode: CUST-2 }
+      rows: 1
+      values: [{ orderNo: SO-3, status: SHIPPED, lineCount: 1, totalQuantity: 2 }]
+  - note: The product keeps both prices; before 1 April (Japan time) the old one was in effect.
+    expect: { entity: Product, id: "${apple}", asOf: 2026-03-31T14:59:59Z, fields: { unitPrice: 120 } }
+  - expect: { entity: Product, id: "${apple}", fields: { unitPrice: 150 } }
+snapshot:
+  entities: [Warehouse, Product, StockLevel, SalesOrder, SalesOrderLine, LedgerTransaction, LedgerEntry]
+  asOf: end

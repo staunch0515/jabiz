@@ -1,0 +1,158 @@
+{
+  "scenario" : "Orders and inventory across a month end",
+  "asOf" : "2026-04-01T00:00:00Z",
+  "entities" : {
+    "Warehouse" : [ {
+      "warehouseId" : "#uuid:1",
+      "warehouseCode" : "TKY",
+      "warehouseName" : "Tokyo",
+      "active" : true,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-30T00:00:00Z",
+      "createdTime" : "2026-03-30T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "Product" : [ {
+      "productId" : "#uuid:2",
+      "sku" : "APPLE-1",
+      "productName" : "Apple",
+      "unitPrice" : "150",
+      "active" : true,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-03-31T15:00:00Z",
+      "createdTime" : "2026-03-30T00:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "productId" : "#uuid:3",
+      "sku" : "PEAR-1",
+      "productName" : "Pear",
+      "unitPrice" : "300",
+      "active" : true,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-30T00:00:00Z",
+      "createdTime" : "2026-03-30T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "StockLevel" : [ {
+      "stockLevelId" : "#uuid:4",
+      "warehouseId" : "#uuid:1",
+      "productId" : "#uuid:2",
+      "onHand" : "8",
+      "reserved" : "0",
+      "versionNo" : 5,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:7"
+    }, {
+      "stockLevelId" : "#uuid:5",
+      "warehouseId" : "#uuid:1",
+      "productId" : "#uuid:3",
+      "onHand" : "5",
+      "reserved" : "0",
+      "versionNo" : 3,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:6"
+    } ],
+    "SalesOrder" : [ {
+      "orderId" : "#uuid:6",
+      "orderNo" : "SO-1",
+      "customerCode" : "CUST-1",
+      "warehouseId" : "#uuid:1",
+      "orderedTime" : "2026-03-30T00:00:00Z",
+      "status" : "CANCELLED",
+      "totalAmount" : "660",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "orderId" : "#uuid:7",
+      "orderNo" : "SO-3",
+      "customerCode" : "CUST-2",
+      "warehouseId" : "#uuid:1",
+      "orderedTime" : "2026-04-01T00:00:00Z",
+      "status" : "SHIPPED",
+      "totalAmount" : "300",
+      "shippedTime" : "2026-04-01T00:00:00Z",
+      "waybillId" : "WB-SO-3",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:7"
+    } ],
+    "SalesOrderLine" : [ {
+      "orderLineId" : "#uuid:8",
+      "orderId" : "#uuid:6",
+      "lineNo" : "1",
+      "productId" : "#uuid:2",
+      "quantity" : "3",
+      "unitPrice" : "120",
+      "lineAmount" : "360",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-30T00:00:00Z",
+      "createdTime" : "2026-03-30T00:00:00Z",
+      "processSeqId" : "#op:4"
+    }, {
+      "orderLineId" : "#uuid:9",
+      "orderId" : "#uuid:6",
+      "lineNo" : "2",
+      "productId" : "#uuid:3",
+      "quantity" : "1",
+      "unitPrice" : "300",
+      "lineAmount" : "300",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-30T00:00:00Z",
+      "createdTime" : "2026-03-30T00:00:00Z",
+      "processSeqId" : "#op:4"
+    }, {
+      "orderLineId" : "#uuid:10",
+      "orderId" : "#uuid:7",
+      "lineNo" : "1",
+      "productId" : "#uuid:2",
+      "quantity" : "2",
+      "unitPrice" : "150",
+      "lineAmount" : "300",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:5"
+    } ],
+    "LedgerTransaction" : [ {
+      "transactionId" : "#uuid:11",
+      "bookingTime" : "2026-04-01T00:00:00Z",
+      "description" : "Sale SO-3",
+      "reference" : "#uuid:7",
+      "reversesTransactionId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:8"
+    } ],
+    "LedgerEntry" : [ {
+      "entryId" : "#uuid:12",
+      "transactionId" : "#uuid:11",
+      "accountId" : "#uuid:13",
+      "lineNo" : "1",
+      "direction" : "DEBIT",
+      "amount" : "300.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:8"
+    }, {
+      "entryId" : "#uuid:14",
+      "transactionId" : "#uuid:11",
+      "accountId" : "#uuid:15",
+      "lineNo" : "2",
+      "direction" : "CREDIT",
+      "amount" : "300.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:8"
+    } ]
+  }
+}
