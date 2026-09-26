@@ -108,12 +108,12 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   把 cron 指定的时刻作为"计划时刻"交给 `JobRunner`。实例停机期间错过的时刻不补跑。`jabiz.jobs.scheduler.enabled=false` 时不自动触发
   （测试、场景回放以显式调用代替）。选择声明式而不是在业务 Bean 上写 `@Scheduled` 方法：任务是元数据，可以启动检查、列出、在场景中调用【D14】。
 - 执行（`JobRunner.run(job, scheduledTime)`，阻塞，只在调度线程或测试线程上调用）：
-  1. ShedLock（`shedlock-provider-r2dbc`，表 `shedlock`）取该任务的集群锁：别的实例持有时什么也不做（`LOCKED`）；
+  1. ShedLock（`shedlock-provider-r2dbc`，表 `jabiz_shedlock`）取该任务的集群锁：别的实例持有时什么也不做（`LOCKED`）；
      锁在运行结束后至少保持 `jabiz.jobs.lock-at-least-for`（默认 30 s），时钟略慢的实例不会再跑同一时刻。
   2. 以系统身份执行流程，幂等键 `job:<名称>:<计划时刻>`（D4/D11）：即使锁已过期或各实例时钟不同，**同一计划时刻至多执行一次**，
      重复的执行重放第一次的结果（`REPLAYED`）。
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
-- 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
+- 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
 - `GET /api/jobs`（权限 `job.read`）：任务、cron、时区、流程、下一次计划时刻、最近 10 次执行。
 - 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean。
 - 场景回放：步骤 `runJob: {job, at, outcome}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`）与 `deliverEvents: true`（07 §3.1）。

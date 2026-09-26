@@ -88,7 +88,9 @@ public class JobScheduler {
             } catch (RuntimeException e) {
                 log.error("Job {} at {} could not run", job.name(), next, e);
             } finally {
-                scheduleNext(job, next);
+                // From now, not from the time just run: times missed by a long run or a pause are skipped.
+                Instant now = clock.instant();
+                scheduleNext(job, now.isAfter(next) ? now : next);
             }
         }, next);
     }

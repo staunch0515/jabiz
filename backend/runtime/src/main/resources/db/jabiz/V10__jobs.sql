@@ -1,8 +1,9 @@
 -- Scheduled jobs (docs/design/11-ledger-events-jobs.md section 4; decision D14).
 
 -- ShedLock's cluster lock (https://github.com/lukas-krecan/ShedLock): one row per job, updated in place by ShedLock.
--- Infrastructure, not business data, hence not append-only.
-CREATE TABLE shedlock (
+-- Infrastructure, not business data, hence not append-only. Named for the platform so that an application's own
+-- ShedLock table (usually "shedlock") does not collide with it.
+CREATE TABLE jabiz_shedlock (
     name       varchar(64)  PRIMARY KEY,
     lock_until timestamptz  NOT NULL,
     locked_at  timestamptz  NOT NULL,

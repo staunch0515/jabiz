@@ -51,6 +51,7 @@ public final class ItEventFixtures extends BaseEntityDefinitions {
         eb.primaryKey("memoId");
         eb.field("memoId", semanticIdentity("f_id", "urn:jabiz:entity:it:memo"));
         eb.field("text", f -> f.physicalColumn("f_text").required(true).asText(1000));
+        eb.field("deleted", f -> f.physicalColumn("f_deleted").asBool());
         eb.field("rowVersion", rowVersion("f_version"));
         eb.publishChanges();
     });
@@ -181,6 +182,14 @@ public final class ItEventFixtures extends BaseEntityDefinitions {
         DatasetDefinition itMemoDataset(@Value("${jabiz.storage.default-pool-ref:default}") String pool) {
             return DatasetDefinition.define("urn:jabiz:dataset:it:ItMemo", d -> d.targetEntityType("ItMemo")
                 .asDefault().permissions("it.read", "it.write").storage(s -> s.connectionPoolRef(pool)));
+        }
+
+        /** Deletes mark the memo instead of removing it. */
+        @Bean
+        DatasetDefinition itMemoSoftDataset(@Value("${jabiz.storage.default-pool-ref:default}") String pool) {
+            return DatasetDefinition.define("urn:jabiz:dataset:it:ItMemoSoft", d -> d.targetEntityType("ItMemo")
+                .permissions("it.read", "it.write").policy(p -> p.softDelete("deleted"))
+                .storage(s -> s.connectionPoolRef(pool)));
         }
 
         @Bean

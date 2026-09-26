@@ -128,6 +128,22 @@ class OutboxIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void aSoftDeletePublishesTheVersionItWrote() {
+        String id = id();
+        com.jabiz.dataset.DatasetDefinition soft = datasets.findById("urn:jabiz:dataset:it:ItMemoSoft").orElseThrow();
+        asRequest(WRITER, entities.commitBatch(soft, List.of(new EntityChange(EntityAction.INSERT,
+            new EntityInstance(id, "ItMemo", 0, null, Map.of("memoId", id, "text", "soft")), null)))).block();
+        asRequest(WRITER, entities.commitBatch(soft, List.of(new EntityChange(EntityAction.DELETE,
+            new EntityInstance(id, "ItMemo", 1, null, Map.of()), null)))).block();
+
+        assertThat(query("SELECT f_version, f_deleted FROM it_memo WHERE f_id = ?", id).getFirst())
+            .containsEntry("f_version", 2L).containsEntry("f_deleted", true);
+        assertThat(query("SELECT payload FROM sys_outbox_event WHERE entity_id = ? ORDER BY event_seq", id))
+            .extracting(row -> String.valueOf(row.get("payload")))
+            .last().satisfies(delete -> assertThat(delete).contains("\"DELETE\"", "\"version\": 2"));
+    }
+
+    @Test
     void temporalEntitiesPublishTheirWrittenVersions() {
         // LedgerTransaction declares publishChanges(); postings are written as versions of an operation.
         String code = "OB" + id().substring(0, 6);

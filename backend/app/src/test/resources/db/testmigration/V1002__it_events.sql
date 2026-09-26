@@ -2,6 +2,7 @@
 CREATE TABLE it_memo (
     f_id      varchar(64) PRIMARY KEY,
     f_text    text        NOT NULL,
+    f_deleted boolean     NOT NULL DEFAULT false,
     f_version bigint      NOT NULL DEFAULT 1
 );
 

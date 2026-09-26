@@ -18,10 +18,13 @@ import java.time.Duration;
 @Configuration
 public class JobConfig {
 
-    /** ShedLock over R2DBC, on the table {@code shedlock} of the platform migrations. */
+    /** Table of the cluster locks (platform migration V10). */
+    public static final String LOCK_TABLE = "jabiz_shedlock";
+
+    /** ShedLock over R2DBC, on the platform's own lock table. */
     @Bean
     LockProvider jobLockProvider(ConnectionFactory connections) {
-        return new R2dbcLockProvider(connections);
+        return new R2dbcLockProvider(connections, LOCK_TABLE);
     }
 
     /**

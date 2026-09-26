@@ -489,9 +489,11 @@ public class DatasetEntityManager {
                             ? engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
                                 versionColumn, softDeleteAssignments(def, dataset.policy()))
                             : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
+                        // A soft delete is an update and raises the version; a hard delete leaves the last one.
+                        long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
                         return removed.flatMap(done -> done
                             ? outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
-                                current.version(), null, def.changeableFields())
+                                versionAfter, null, def.changeableFields())
                             : Mono.<Void>error(conflict(def, instance.id())));
                     }));
                 });
