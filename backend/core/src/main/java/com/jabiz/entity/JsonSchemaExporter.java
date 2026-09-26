@@ -26,6 +26,10 @@ public final class JsonSchemaExporter {
             if (systemManaged || field.generated()) {
                 property.put("readOnly", true);
             }
+            if (field.sensitive()) {
+                // Accepted by the processes that set it, never returned.
+                property.put("writeOnly", true);
+            }
             if (field.required() && !systemManaged && !field.generated()) {
                 required.add(field.name());
             } else if (!field.required()) {

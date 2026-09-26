@@ -6,10 +6,10 @@ import com.jabiz.query.SortOrder;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.EntityNotFoundException;
-import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
+import com.jabiz.runtime.security.Permissions;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -81,15 +81,7 @@ class QueryController {
      * in the dev profile (registration reports it as an error elsewhere, but the startup check can be turned off).
      */
     static void requirePermissions(AdvancedQueryDefinition query, RequestContext context, boolean development) {
-        if (query.permissions().isEmpty() && !development) {
-            throw new PermissionDeniedException("-", "Query " + query.queryId() + " declares no permissions");
-        }
-        for (String permission : query.permissions()) {
-            if (!context.hasPermission(permission)) {
-                throw new PermissionDeniedException(permission,
-                    "Running query " + query.queryId() + " requires permission " + permission);
-            }
-        }
+        Permissions.requireAll(context, query.permissions(), development, "Running query " + query.queryId());
     }
 
     private static QueryPredicate filter(List<ListRequests.Filter> filters) {

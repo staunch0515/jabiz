@@ -54,6 +54,9 @@ val coverageGatedClasses = listOf(
     "com.jabiz.process.ChangeSet\$Target",
     "com.jabiz.process.StepDefinition",
     "com.jabiz.process.RetryPolicy",
+    // Phase 7
+    "com.jabiz.security.LoginAttemptPolicy",
+    "com.jabiz.security.LoginOutcome",
 )
 
 dependencies {

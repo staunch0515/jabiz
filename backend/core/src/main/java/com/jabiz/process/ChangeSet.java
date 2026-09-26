@@ -37,6 +37,13 @@ public final class ChangeSet {
             requireText(entityType, "entityType");
             attributes = attributes == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
         }
+
+        /** Without the values, which may be personal or secret: safe in logs. */
+        @Override
+        public String toString() {
+            return "Change[" + action + " " + entityType + " " + id + " v" + version + ", fields="
+                + attributes.keySet() + "]";
+        }
     }
 
     /** Stored state of a committed insert or update. */
@@ -44,6 +51,12 @@ public final class ChangeSet {
 
         public Saved {
             attributes = attributes == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
+        }
+
+        /** Without the values, which may be personal or secret: safe in logs. */
+        @Override
+        public String toString() {
+            return "Saved[" + entityType + " " + id + " v" + version + ", fields=" + attributes.keySet() + "]";
         }
     }
 

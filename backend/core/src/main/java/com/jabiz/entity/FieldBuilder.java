@@ -11,6 +11,7 @@ public final class FieldBuilder {
     private boolean immutable = false;
     private boolean required = false;
     private boolean generated = false;
+    private boolean sensitive = false;
     private SemanticKind kind = new SemanticKind.None();
     private final List<FieldRule> rules = new ArrayList<>();
     private final List<RuleSpec> ruleSpecs = new ArrayList<>();
@@ -21,6 +22,11 @@ public final class FieldBuilder {
     public FieldBuilder immutable(boolean v) { this.immutable = v; return this; }
     public FieldBuilder required(boolean v) { this.required = v; return this; }
     public FieldBuilder generated(boolean v) { this.generated = v; return this; }
+    /**
+     * Marks a secret (for example a password hash): read APIs leave it out, the dataset API refuses to write it,
+     * logs and operation records mask it. Only processes can set it.
+     */
+    public FieldBuilder sensitive() { this.sensitive = true; return this; }
     public FieldBuilder asSemanticIdentity(String urn) { kind = new SemanticKind.SemanticIdentity(urn); return this; }
     public FieldBuilder asMonetary(String currency, int scale) { kind = new SemanticKind.Monetary(currency, scale); return this; }
     public FieldBuilder asTemporal(TemporalRole role) { kind = new SemanticKind.Temporal(role); return this; }
@@ -77,7 +83,8 @@ public final class FieldBuilder {
             generated,
             kind,
             List.copyOf(rules),
-            List.copyOf(ruleSpecs)
+            List.copyOf(ruleSpecs),
+            sensitive
         );
     }
 }

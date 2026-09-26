@@ -39,7 +39,9 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
     /** Every table the platform scripts create; PlatformSchemaMigrationTest keeps this list honest. */
     public static final Set<String> PLATFORM_TABLES = Set.of(PLATFORM_HISTORY_TABLE, "sys_dict_item",
         "sys_dict_item_version", "op_process", "op_process_item", "op_process_result", "entity_registry",
-        "op_process_after_commit");
+        "op_process_after_commit", "sec_user_version", "sec_role_version", "sec_role_permission_version",
+        "sec_user_role_version", "sec_menu_version", "sec_login_record_version", "sec_refresh_token",
+        "sec_refresh_token_use", "sec_refresh_family_revocation");
 
     @Override
     public void migrate(Flyway application) {

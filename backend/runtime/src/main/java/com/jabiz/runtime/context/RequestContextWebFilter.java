@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -28,6 +27,9 @@ import java.util.regex.Pattern;
  * puts it into the Reactor context of the rest of the chain, and into the exchange attributes for code
  * that only sees the exchange (exception handlers). Runs first so that every later log line of the
  * request carries its id.
+ *
+ * <p>The context starts out anonymous; once Spring Security has authenticated the request,
+ * {@link AuthenticatedRequestContextWebFilter} replaces the actor (docs/design/10-security.md section 5).
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -44,11 +46,9 @@ public class RequestContextWebFilter implements WebFilter {
     private static final Pattern VALID_REQUEST_ID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
 
     private final MessageCatalog messages;
-    private final ActorResolver actors;
 
-    public RequestContextWebFilter(MessageCatalog messages, ActorResolver actors) {
+    public RequestContextWebFilter(MessageCatalog messages) {
         this.messages = Objects.requireNonNull(messages, "messages must not be null");
-        this.actors = Objects.requireNonNull(actors, "actors must not be null");
     }
 
     /** The context the filter stored for this exchange, if it ran. */
@@ -62,15 +62,7 @@ public class RequestContextWebFilter implements WebFilter {
         String requestId = requestId(request);
         exchange.getResponse().getHeaders().set(REQUEST_ID_HEADER, requestId);
 
-        Actor actor;
-        try {
-            actor = actors.resolve(request);
-        } catch (IllegalArgumentException e) {
-            log.warn("Rejected request {} {}: {}", request.getMethod(), request.getPath(), e.getMessage());
-            exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
-            return exchange.getResponse().setComplete();
-        }
-
+        Actor actor = Actor.ANONYMOUS;
         RequestContext context = new RequestContext(actor.actorId(), actor.tenantId(), locale(request), requestId,
             actor.roles(), actor.permissions());
         exchange.getAttributes().put(ATTRIBUTE, context);

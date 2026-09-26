@@ -9,9 +9,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Development only: takes the actor from request headers, so that permissions and scopes can be tried
- * out before authentication exists. Anyone can send these headers, which is why the resolver can only be
- * enabled together with the {@code dev} profile (see {@link RequestContextConfig}).
+ * Development only: takes the actor from request headers, so that permissions and scopes can be tried out without
+ * signing in. Anyone can send these headers, which is why the resolver can only be enabled together with the
+ * {@code dev} profile (see {@link RequestContextConfig}); a request with an access token is authenticated by the token
+ * alone.
  */
 public final class DevHeaderActorResolver implements ActorResolver {
 
@@ -27,7 +28,7 @@ public final class DevHeaderActorResolver implements ActorResolver {
         HttpHeaders headers = request.getHeaders();
         String actorId = token(headers.getFirst(ACTOR_HEADER), ACTOR_HEADER);
         if (actorId == null) {
-            return Actor.ANONYMOUS;
+            return null;
         }
         return new Actor(actorId,
             token(headers.getFirst(TENANT_HEADER), TENANT_HEADER),

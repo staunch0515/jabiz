@@ -110,6 +110,11 @@ public final class EntityDefinition {
                || (temporal && TemporalSpec.isSystemField(field.name()));
     }
 
+    /** Names of the fields marked {@linkplain FieldBuilder#sensitive() sensitive}, in declaration order. */
+    public List<String> sensitiveFields() {
+        return fields.values().stream().filter(FieldDefinition::sensitive).map(FieldDefinition::name).toList();
+    }
+
     /**
      * Fields that make up the business state of a version: every field except the temporal system fields.
      * For entities that are not temporal these are all fields.

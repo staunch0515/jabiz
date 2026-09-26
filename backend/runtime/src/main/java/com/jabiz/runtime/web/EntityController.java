@@ -17,6 +17,12 @@ import com.jabiz.runtime.process.entity.DeleteEntityInput;
 import com.jabiz.runtime.process.entity.DeleteProcessDefinition;
 import com.jabiz.runtime.process.entity.UpdateEntityInput;
 import com.jabiz.runtime.process.entity.UpdateProcessDefinition;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.security.Permissions;
+import com.jabiz.runtime.security.SensitiveDataMasker;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,7 +44,8 @@ import java.util.Map;
  * Entity-independent HTTP API. Writes run the generic add, update and delete processes; the
  * list endpoint reads through the dataset that serves the entity type.
  *
- * Every entity type that has a dataset and a version field is writable through this API.
+ * Every entity type that has a dataset and a version field is writable through this API. Reads need the read
+ * permission of the entity's default dataset; writes its write permission and the permissions of the generic process.
  */
 @RestController
 @RequestMapping("/api/entities/{entityType}")
@@ -51,17 +58,23 @@ class EntityController {
     private final EntityDefinitionRegistry entities;
     private final DatasetRegistry datasets;
     private final DatasetEntityManager entityManager;
+    private final SensitiveDataMasker masker;
+    private final boolean development;
 
     EntityController(
         ProcessExecutor processes,
         EntityDefinitionRegistry entities,
         DatasetRegistry datasets,
-        DatasetEntityManager entityManager
+        DatasetEntityManager entityManager,
+        SensitiveDataMasker masker,
+        Environment environment
     ) {
         this.processes = processes;
         this.entities = entities;
         this.datasets = datasets;
         this.entityManager = entityManager;
+        this.masker = masker;
+        this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
     /** Lists instances; {@code sort} is a field name, prefixed with '-' for descending order. */
@@ -72,11 +85,12 @@ class EntityController {
         @RequestParam(defaultValue = "0") int offset,
         @RequestParam(required = false) String sort
     ) {
-        return Flux.defer(() -> {
+        return RequestContexts.current().flatMapMany(context -> {
             EntityDefinition definition = entities.find(entityType).orElseThrow(
                 () -> new EntityNotFoundException("Unregistered entity type: " + entityType));
-            DatasetDefinition dataset = datasets.findForEntity(entityType).orElseThrow(
-                () -> new EntityNotFoundException("No dataset serves entity type: " + entityType));
+            DatasetDefinition dataset = defaultDataset(entityType);
+            Permissions.requireDeclared(context, dataset.permissions().read(), development,
+                "Reading " + entityType + " through dataset " + dataset.resourceId());
             if (limit <= 0) {
                 throw invalid("limit", "limit must be positive");
             }
@@ -93,24 +107,28 @@ class EntityController {
                 }
                 query.orderBy(field, ascending);
             }
-            return entityManager.query(dataset, definition, query.build());
+            return entityManager.query(dataset, definition, query.build()).map(masker::hide);
         });
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     Mono<EntityInstance> add(@PathVariable String entityType, @RequestBody Map<String, Object> attributes) {
-        return Mono.defer(() -> processes.execute(
-            AddProcessDefinition.DEFINITION, new AddEntityInput(entityType, attributes)));
+        return write(entityType, AddProcessDefinition.DEFINITION)
+            .then(Mono.defer(() -> processes.execute(
+                AddProcessDefinition.DEFINITION, new AddEntityInput(entityType, attributes))))
+            .map(masker::hide);
     }
 
     @PatchMapping("/{id}")
     Mono<EntityInstance> update(
         @PathVariable String entityType, @PathVariable String id, @RequestBody UpdateRequest request
     ) {
-        return Mono.defer(() -> processes.execute(
-            UpdateProcessDefinition.DEFINITION,
-            new UpdateEntityInput(entityType, id, request.version(), request.attributes())));
+        return write(entityType, UpdateProcessDefinition.DEFINITION)
+            .then(Mono.defer(() -> processes.execute(
+                UpdateProcessDefinition.DEFINITION,
+                new UpdateEntityInput(entityType, id, request.version(), request.attributes()))))
+            .map(masker::hide);
     }
 
     @DeleteMapping("/{id}")
@@ -118,9 +136,28 @@ class EntityController {
     Mono<Void> delete(
         @PathVariable String entityType, @PathVariable String id, @RequestParam(required = false) Long version
     ) {
-        return Mono.defer(() -> processes.execute(
-                DeleteProcessDefinition.DEFINITION, new DeleteEntityInput(entityType, id, version)))
+        return write(entityType, DeleteProcessDefinition.DEFINITION)
+            .then(Mono.defer(() -> processes.execute(
+                DeleteProcessDefinition.DEFINITION, new DeleteEntityInput(entityType, id, version))))
             .then();
+    }
+
+    /**
+     * Writes run a generic process through the entity's default dataset: the caller needs the process's permissions
+     * and the dataset's write permission.
+     */
+    private Mono<Void> write(String entityType, ProcessDefinition<?, ?, ?> process) {
+        return RequestContexts.current().doOnNext(context -> {
+            Permissions.requireAll(context, process.permissions(), development, "Process " + process.name());
+            DatasetDefinition dataset = defaultDataset(entityType);
+            Permissions.requireDeclared(context, dataset.permissions().write(), development,
+                "Writing " + entityType + " through dataset " + dataset.resourceId());
+        }).then();
+    }
+
+    private DatasetDefinition defaultDataset(String entityType) {
+        return datasets.findForEntity(entityType).orElseThrow(
+            () -> new EntityNotFoundException("No dataset serves entity type: " + entityType));
     }
 
     private static ValidationException invalid(String field, String message) {

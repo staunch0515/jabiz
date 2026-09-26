@@ -96,7 +96,7 @@ final class TemporalWriter {
                 Map.of("entity", def.name)));
         }
         if (effective.isBefore(opTime)) {
-            if (!request.permissions().contains(TemporalPermissions.BACKDATE)) {
+            if (!request.hasPermission(TemporalPermissions.BACKDATE)) {
                 throw new PermissionDeniedException(TemporalPermissions.BACKDATE,
                     "Changes effective before the time of the operation need permission "
                         + TemporalPermissions.BACKDATE);

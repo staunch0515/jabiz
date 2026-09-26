@@ -7,12 +7,13 @@ import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityNotFoundException;
-import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
+import com.jabiz.runtime.security.Permissions;
+import com.jabiz.runtime.security.SensitiveDataMasker;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.core.env.Environment;
@@ -56,9 +57,11 @@ class ProcessController {
     private final Validator validator;
     private final JsonMapper json;
     private final boolean development;
+    private final SensitiveDataMasker masker;
 
     ProcessController(ProcessRegistry registry, ProcessExecutor executor, Validator validator, JsonMapper json,
-        Environment environment) {
+        Environment environment, SensitiveDataMasker masker) {
+        this.masker = masker;
         this.registry = registry;
         this.executor = executor;
         this.validator = validator;
@@ -86,7 +89,8 @@ class ProcessController {
                     if (result.replayed()) {
                         response.header(REPLAYED, "true");
                     }
-                    return response.body(new ExecuteResponse(result.processSeqId(), result.output()));
+                    return response.body(new ExecuteResponse(result.processSeqId(),
+                        masker.toJsonWithoutSecrets(result.output())));
                 });
         });
     }
@@ -151,14 +155,6 @@ class ProcessController {
      */
     static void requirePermissions(ProcessDefinition<?, ?, ?> definition, RequestContext context,
         boolean development) {
-        if (definition.permissions().isEmpty() && !development) {
-            throw new PermissionDeniedException("-", "Process " + definition.name() + " declares no permissions");
-        }
-        for (String permission : definition.permissions().stream().sorted().toList()) {
-            if (!context.hasPermission(permission)) {
-                throw new PermissionDeniedException(permission,
-                    "Running process " + definition.name() + " requires permission " + permission);
-            }
-        }
+        Permissions.requireAll(context, definition.permissions(), development, "Running process " + definition.name());
     }
 }

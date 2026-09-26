@@ -3,7 +3,9 @@ package com.jabiz.runtime.test;
 import com.jabiz.runtime.check.PlatformCheckMain;
 
 import java.io.PrintStream;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,12 +24,20 @@ public final class PlatformCheckLauncher {
     public static int run(Class<?> application, List<String> extraArgs, PrintStream out) {
         String schema = newSchema();
         List<String> args = new ArrayList<>(databaseArgs(schema));
+        // The check serves no requests, but the application refuses to start without a token key: a throwaway one.
+        args.add("--jabiz.security.jwt.secret=" + throwawayKey());
         args.addAll(extraArgs);
         try {
             return PlatformCheckMain.run(application, args, out);
         } finally {
             PostgresTestDatabase.get().dropSchema(schema);
         }
+    }
+
+    private static String throwawayKey() {
+        byte[] key = new byte[48];
+        new SecureRandom().nextBytes(key);
+        return Base64.getEncoder().encodeToString(key);
     }
 
     /** A schema name for one run; the schema is created by Flyway. */

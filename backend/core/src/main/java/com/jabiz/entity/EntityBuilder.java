@@ -276,6 +276,11 @@ public final class EntityBuilder {
             view.columns().forEach(f -> requireField(f, where));
             view.filters().forEach(f -> requireField(f, where));
             view.sorts().forEach(f -> requireField(f, where));
+            for (List<String> names : List.of(view.columns(), view.filters(), view.sorts())) {
+                names.stream().filter(f -> fields.get(f).sensitive()).findFirst().ifPresent(f -> {
+                    throw invalid(where + " shows, filters or sorts sensitive field '" + f + "'");
+                });
+            }
             if (view.defaultSort() != null && !view.sorts().contains(view.defaultSort().field())) {
                 throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is not among its sorts");
             }

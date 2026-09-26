@@ -41,7 +41,7 @@ class OperationController {
     @GetMapping
     Mono<Map<String, Object>> detail(@PathVariable long processSeqId) {
         return RequestContexts.current().flatMap(request -> {
-            if (!request.permissions().contains(TemporalPermissions.OPERATION_READ)) {
+            if (!request.hasPermission(TemporalPermissions.OPERATION_READ)) {
                 return Mono.error(new PermissionDeniedException(TemporalPermissions.OPERATION_READ,
                     "Reading operations needs permission " + TemporalPermissions.OPERATION_READ));
             }

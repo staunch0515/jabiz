@@ -8,6 +8,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.resource.InvalidResourceIdException;
 import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.AuthenticationFailedException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -19,6 +20,7 @@ import com.jabiz.runtime.storage.AppendOnlyViolationException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -134,6 +136,15 @@ public class GlobalExceptionHandler {
     ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex, ServerWebExchange exchange) {
         Violation violation = new Violation(null, PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, ex.getMessage());
         return withViolations(HttpStatus.CONFLICT, ex.getMessage(), List.of(violation), exchange);
+    }
+
+    /** Signing in or refreshing failed (docs/design/10-security.md section 4); tells no more than the code. */
+    @ExceptionHandler(AuthenticationFailedException.class)
+    ResponseEntity<ProblemDetail> handleAuthenticationFailed(AuthenticationFailedException ex,
+        ServerWebExchange exchange) {
+        Violation violation = new Violation(null, ex.code(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+            .body(withViolations(HttpStatus.UNAUTHORIZED, "Authentication failed", List.of(violation), exchange));
     }
 
     @ExceptionHandler(PermissionDeniedException.class)

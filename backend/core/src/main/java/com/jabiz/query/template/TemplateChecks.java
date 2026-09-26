@@ -102,6 +102,11 @@ public final class TemplateChecks {
                 && known.get(placeholder.entity()).findField(placeholder.field()).isEmpty()) {
                 problems.add(TemplateProblem.error(placeholder.start(),
                     "unknown field " + placeholder.entity() + "." + placeholder.field()));
+            } else if (placeholder.field() != null && known.containsKey(placeholder.entity())
+                && known.get(placeholder.entity()).field(placeholder.field()).sensitive()) {
+                // Sensitive values never leave through a read (docs/design/10-security.md).
+                problems.add(TemplateProblem.error(placeholder.start(),
+                    "field " + placeholder.entity() + "." + placeholder.field() + " is sensitive and cannot be read"));
             }
         }
         checkParameters(query, masked, problems);
@@ -268,6 +273,8 @@ public final class TemplateChecks {
         Optional<FieldDefinition> found = def.get().findField(field);
         if (found.isEmpty()) {
             problems.add(TemplateProblem.header(what + " refers to unknown field " + entity + "." + field));
+        } else if (found.get().sensitive()) {
+            problems.add(TemplateProblem.header(what + " refers to sensitive field " + entity + "." + field));
         }
         return found;
     }

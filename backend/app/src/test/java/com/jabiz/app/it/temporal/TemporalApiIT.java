@@ -28,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TemporalApiIT extends TemporalItSupport {
 
     private static final String PRICES = ItTemporalFixtures.PRICE_DATASET;
-    private static final String ALL_PERMISSIONS = "temporal.backdate,temporal.revert,operation.read";
+    /** Reading and writing the fixtures' datasets. */
+    private static final String DATA = "it.read,it.write";
+    private static final String ALL_PERMISSIONS = DATA + ",temporal.backdate,temporal.revert,operation.read";
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static final Class<Map<String, Object>> MAP = (Class) Map.class;
 
@@ -39,7 +41,9 @@ class TemporalApiIT extends TemporalItSupport {
 
     @BeforeEach
     void client() {
-        client = WebTestClient.bindToApplicationContext(context).build();
+        // Reads name no actor: they come from a reader of the fixtures' datasets.
+        client = WebTestClient.bindToApplicationContext(context).configureClient()
+            .defaultHeader("X-Jabiz-Actor", "reader").defaultHeader("X-Jabiz-Permissions", DATA).build();
     }
 
     private WebTestClient.ResponseSpec commit(String permissions, String reason, Map<String, Object> change) {
@@ -47,7 +51,8 @@ class TemporalApiIT extends TemporalItSupport {
         body.put("changes", List.of(change));
         body.put("reason", reason);
         return client.post().uri("/api/datasets/{id}/commit", PRICES)
-            .header("X-Jabiz-Actor", "alice").header("X-Jabiz-Permissions", permissions)
+            .header("X-Jabiz-Actor", "alice")
+            .header("X-Jabiz-Permissions", permissions.isEmpty() ? DATA : DATA + "," + permissions)
             .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
     }
 

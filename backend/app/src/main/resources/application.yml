@@ -11,6 +11,16 @@ spring:
     password: ${DB_PASSWORD:app}
 
 jabiz:
+  security:
+    # Authentication (docs/design/10-security.md). The key signing access tokens comes from the environment only:
+    # a Base64 value of at least 32 bytes (for example: openssl rand -base64 48). Startup fails without it, except in
+    # the dev profile. Lifetimes, lock rules and password rules have defaults (see SecurityConfig).
+    jwt:
+      secret: ${JABIZ_JWT_SECRET:}
+    # The first administrator, created at startup when both are set and no user exists yet.
+    bootstrap-admin:
+      user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
+      password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
   i18n:
     # Language of error messages when Accept-Language names none of zh, ja, en.
     default-locale: en

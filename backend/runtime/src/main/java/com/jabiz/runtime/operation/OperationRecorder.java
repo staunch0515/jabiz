@@ -59,6 +59,7 @@ public class OperationRecorder {
             row.put("request_id", context.requestId());
             row.put("idempotency_key", request.idempotencyKey());
             row.put("reason", request.reason());
+            row.put("input_summary", request.inputSummary() == null ? null : new JsonText(request.inputSummary()));
             row.put("op_time", opTime);
             Operation operation = new Operation(processSeqId, opTime, request.processName(),
                 request.processVersion(), context.actorId(), request.reason(), request.parentSeqId(),

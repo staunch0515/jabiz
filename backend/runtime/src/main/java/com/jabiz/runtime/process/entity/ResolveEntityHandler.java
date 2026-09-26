@@ -7,6 +7,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -30,6 +31,8 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
                 () -> new EntityNotFoundException("Unregistered entity type: " + type));
             DatasetDefinition dataset = datasets.findForEntity(type).orElseThrow(
                 () -> new EntityNotFoundException("No dataset serves entity type: " + type));
+            // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
+            SensitiveDataMasker.rejectWrites(definition, ctx.attributes());
             ctx.setDefinition(definition);
             ctx.setDataset(dataset);
         });

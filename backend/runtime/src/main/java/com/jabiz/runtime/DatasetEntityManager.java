@@ -173,7 +173,8 @@ public class DatasetEntityManager {
                 }
                 return Operations.requested().flatMap(requested -> {
                     OperationRequest operation = requested
-                        .orElseGet(() -> OperationRequest.named(OperationRequest.DATASET_COMMIT, 1));
+                        .orElseGet(() -> OperationRequest.named(OperationRequest.DATASET_COMMIT, 1)
+                            .withInputSummary(json.writeValueAsString(inputSummary(dataset, ordered))));
                     if (reason != null) {
                         operation = operation.withReason(reason);
                     }
@@ -197,9 +198,27 @@ public class DatasetEntityManager {
     }
 
     /**
-     * What a commit records as its output: which versions it wrote, without their values. Field values may be
-     * sensitive, and masking arrives with the security phase (ROADMAP phase 7).
+     * What a commit records as its input ({@code op_process.input_summary}): the dataset and, per change, the action,
+     * entity, id and the names of the fields it sets, never their values, which may be personal or secret.
      */
+    private static Map<String, Object> inputSummary(DatasetDefinition dataset, List<EntityChange> changes) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("dataset", dataset.resourceId());
+        summary.put("changes", changes.stream().map(change -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("action", change.action().name());
+            entry.put("entityType", change.instance().entityType());
+            entry.put("id", change.instance().id() == null ? null : String.valueOf(change.instance().id()));
+            entry.put("fields", change.instance().attributes().keySet().stream().sorted().toList());
+            if (change.effectiveTime() != null) {
+                entry.put("effectiveTime", change.effectiveTime().toString());
+            }
+            return entry;
+        }).toList());
+        return summary;
+    }
+
+    /** What a commit records as its output: which versions it wrote, without their values. */
     private static List<Map<String, Object>> outputSummary(List<EntityInstance> result) {
         return result.stream().map(instance -> {
             Map<String, Object> entry = new LinkedHashMap<>();

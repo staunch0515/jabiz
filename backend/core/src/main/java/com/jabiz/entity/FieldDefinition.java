@@ -15,6 +15,8 @@ import java.util.List;
  * @param kind           semantic type of the field
  * @param rules          server-side rules evaluated on write
  * @param ruleSpecs      exportable descriptions of the rules that can be checked client-side
+ * @param sensitive      true for secrets (password hashes and the like): never returned by read APIs, never written
+ *                       through the dataset API, masked in logs and operation records (docs/design/10-security.md)
  */
 public record FieldDefinition(
     String name,
@@ -24,6 +26,12 @@ public record FieldDefinition(
     boolean generated,
     SemanticKind kind,
     List<FieldRule> rules,
-    List<RuleSpec> ruleSpecs
-) {}
+    List<RuleSpec> ruleSpecs,
+    boolean sensitive
+) {
+    public FieldDefinition(String name, String physicalColumn, boolean immutable, boolean required, boolean generated,
+        SemanticKind kind, List<FieldRule> rules, List<RuleSpec> ruleSpecs) {
+        this(name, physicalColumn, immutable, required, generated, kind, rules, ruleSpecs, false);
+    }
+}
 

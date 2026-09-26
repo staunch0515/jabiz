@@ -1,0 +1,201 @@
+package com.jabiz.runtime.security;
+
+import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.storage.Rows;
+import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * Refresh tokens (decision D12): random, opaque, single use. The database keeps their SHA-256 only, so a leaked
+ * table does not leak usable tokens. Every refresh consumes a token and issues the next one of the same family (the
+ * family is one sign-in); presenting a consumed token again means it was stolen or replayed, and revokes the whole
+ * family. All three tables are append-only.
+ */
+public class RefreshTokenStore {
+
+    private static final Logger log = LoggerFactory.getLogger(RefreshTokenStore.class);
+
+    /** A token as handed to the client, and when it expires. */
+    public record Issued(String token, UUID familyId, Instant expiresAt) {}
+
+    /** The user a valid token was issued to, and its family. */
+    public record Grant(UUID userId, UUID familyId) {}
+
+    /** The token is unknown, expired, consumed or of a revoked family. */
+    public static final class InvalidRefreshTokenException extends RuntimeException {
+        InvalidRefreshTokenException(String message) {
+            super(message);
+        }
+    }
+
+    static final String REASON_LOGOUT = "LOGOUT";
+    static final String REASON_REUSE = "REUSE";
+
+    private static final int TOKEN_BYTES = 32;
+    private static final int MAX_TOKEN_LENGTH = 128;
+
+    private final Supplier<StorageEngine> engine;
+    private final Duration ttl;
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+
+    public RefreshTokenStore(Supplier<StorageEngine> engine, Duration ttl, Clock clock) {
+        this.engine = Objects.requireNonNull(engine, "engine must not be null");
+        if (ttl == null || ttl.isNegative() || ttl.isZero()) {
+            throw new IllegalArgumentException("The refresh token lifetime must be positive");
+        }
+        this.ttl = ttl;
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    }
+
+    public Duration ttl() {
+        return ttl;
+    }
+
+    /** A token of a new family: one per sign-in. */
+    public Mono<Issued> issue(UUID userId) {
+        return randomBytes(16).flatMap(bytes -> {
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            return issue(userId, new UUID(buffer.getLong(), buffer.getLong()));
+        });
+    }
+
+    /**
+     * Consumes a token: each token can be used once. A token presented a second time was stolen or replayed, and its
+     * whole family is revoked. The next token of the family comes from {@link #issueNext}.
+     *
+     * @throws InvalidRefreshTokenException (as the error of the Mono) when the token cannot be used
+     */
+    public Mono<Grant> consume(String token) {
+        return inTransaction(token, this::use);
+    }
+
+    /**
+     * Runs work that consumes the token in a transaction. A second use of a token breaks the primary key of its use;
+     * that aborts the transaction, and the family is revoked afterwards, on its own.
+     */
+    private <T> Mono<T> inTransaction(String token, java.util.function.Function<String, Mono<T>> work) {
+        return Mono.defer(() -> {
+            String hash = hash(token);
+            return engine.get().inTransaction(work.apply(hash))
+                .onErrorResume(UniqueKeyViolationException.class, reused -> find(hash)
+                    .flatMap(found -> {
+                        log.warn("Refresh token of user {} presented twice; revoking its session",
+                            found.grant().userId());
+                        return revokeFamily(found.grant().familyId(), REASON_REUSE);
+                    })
+                    .then(Mono.error(new InvalidRefreshTokenException("Refresh token used twice"))));
+        });
+    }
+
+    private Mono<Grant> use(String hash) {
+        Instant now = now();
+        return find(hash).flatMap(found -> {
+            if (found.revoked()) {
+                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
+            }
+            if (!now.isBefore(found.expiresAt())) {
+                return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("token_hash", hash);
+            row.put("used_at", now);
+            return engine.get().insert("sec_refresh_token_use", row).thenReturn(found.grant());
+        }).switchIfEmpty(Mono.error(() -> new InvalidRefreshTokenException("Unknown refresh token")));
+    }
+
+    /** Ends the session the token belongs to. Unknown or already revoked tokens are ignored. */
+    public Mono<Void> revoke(String token) {
+        return Mono.defer(() -> find(hash(token))
+            .flatMap(found -> revokeFamily(found.grant().familyId(), REASON_LOGOUT)));
+    }
+
+    /** The next token of the family of a consumed token. */
+    public Mono<Issued> issueNext(Grant grant) {
+        return issue(grant.userId(), grant.familyId());
+    }
+
+    private Mono<Issued> issue(UUID userId, UUID familyId) {
+        return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
+            String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+            Instant now = now();
+            Instant expires = now.plus(ttl);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("token_hash", hash(token));
+            row.put("family_id", familyId);
+            row.put("user_id", userId);
+            row.put("issued_at", now);
+            row.put("expires_at", expires);
+            return engine.get().insert("sec_refresh_token", row).thenReturn(new Issued(token, familyId, expires));
+        });
+    }
+
+    private Mono<Void> revokeFamily(UUID familyId, String reason) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("family_id", familyId);
+        row.put("revoked_at", now());
+        row.put("reason", reason);
+        return engine.get().insert("sec_refresh_family_revocation", row)
+            // Revoked already: the first revocation stands.
+            .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
+    }
+
+    private record Found(Grant grant, Instant expiresAt, boolean revoked) {}
+
+    private Mono<Found> find(String hash) {
+        return engine.get().select("""
+                SELECT t.user_id, t.family_id, t.expires_at, r.family_id IS NOT NULL AS revoked
+                FROM sec_refresh_token t LEFT JOIN sec_refresh_family_revocation r ON r.family_id = t.family_id
+                WHERE t.token_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
+            .next()
+            .map(row -> new Found(new Grant(Rows.uuid(row.get("user_id")), Rows.uuid(row.get("family_id"))),
+                Rows.instant(row.get("expires_at")), Boolean.TRUE.equals(row.get("revoked"))));
+    }
+
+    /** SecureRandom may read the operating system's entropy source, which blocks: never on an event loop. */
+    private Mono<byte[]> randomBytes(int length) {
+        return Mono.fromCallable(() -> {
+            byte[] bytes = new byte[length];
+            random.nextBytes(bytes);
+            return bytes;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /** Hex SHA-256; tokens that cannot be ours (absent, oversized) are refused before they reach the database. */
+    static String hash(String token) {
+        if (token == null || token.isBlank() || token.length() > MAX_TOKEN_LENGTH) {
+            throw new InvalidRefreshTokenException("Missing or malformed refresh token");
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
+    }
+}

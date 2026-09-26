@@ -220,7 +220,7 @@ class QueryTemplateApiIT extends PostgresIntegrationTest {
 
     private WebTestClient.ResponseSpec commit(String dataset, Map<String, Object> change) {
         return client.post().uri("/api/datasets/{id}/commit", dataset)
-            .header("X-Jabiz-Actor", "admin")
+            .header("X-Jabiz-Actor", "admin").header("X-Jabiz-Permissions", "*")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(Map.of("changes", List.of(change)))
             .exchange();

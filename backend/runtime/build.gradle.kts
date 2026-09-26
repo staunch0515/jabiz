@@ -15,6 +15,9 @@ dependencies {
     // Business modules annotate process inputs with Bean Validation constraints (docs/design/06-process.md section 8).
     api("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Authentication (docs/design/10-security.md): Spring Security for WebFlux, JWT access tokens, BCrypt.
+    api("org.springframework.boot:spring-boot-starter-security")
+    implementation("com.nimbusds:nimbus-jose-jwt:10.10")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("io.micrometer:context-propagation")
     // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).

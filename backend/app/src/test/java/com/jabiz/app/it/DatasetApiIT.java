@@ -42,7 +42,9 @@ class DatasetApiIT extends PostgresIntegrationTest {
 
     @BeforeEach
     void reset() {
-        client = WebTestClient.bindToApplicationContext(context).build();
+        // Requests that name no actor act as an administrator; this class is not about permissions.
+        client = WebTestClient.bindToApplicationContext(context).configureClient()
+            .defaultHeader("X-Jabiz-Actor", "tester").defaultHeader("X-Jabiz-Permissions", "*").build();
         execute("DELETE FROM todo");
         execute("DELETE FROM t_customs_declaration");
         execute("DELETE FROM t_legacy_waybill_2026");

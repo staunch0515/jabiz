@@ -15,7 +15,13 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.context.RequestContext;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
+import com.jabiz.runtime.security.Permissions;
+import com.jabiz.runtime.security.SensitiveDataMasker;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,6 +40,9 @@ import java.util.Map;
  * Dataset API (docs/design/03-dataset.md section 3): reads, queries and batch changes through one dataset, so its
  * scope, soft delete, limits and list-view whitelists always apply. Complex business writes belong in processes;
  * {@code commit} serves the generic pages generated from metadata.
+ *
+ * <p>Reading needs the dataset's read permission, committing its write permission (403 otherwise; default deny for
+ * datasets that declare none, outside the dev profile). Sensitive fields are neither returned nor accepted.
  */
 @RestController
 @RequestMapping("/api/datasets/{resourceId}")
@@ -64,22 +73,27 @@ class DatasetController {
     private final EntityDefinitionRegistry entities;
     private final DatasetEntityManager entityManager;
     private final EntityIdGenerator ids;
+    private final SensitiveDataMasker masker;
+    private final boolean development;
 
     DatasetController(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager,
-        EntityIdGenerator ids) {
+        EntityIdGenerator ids, SensitiveDataMasker masker, Environment environment) {
         this.datasets = datasets;
         this.entities = entities;
         this.entityManager = entityManager;
         this.ids = ids;
+        this.masker = masker;
+        this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
     @GetMapping("/entities/{id}")
     Mono<EntityInstance> read(@PathVariable String resourceId, @PathVariable String id,
         @RequestParam(required = false) Instant asOf, @RequestParam(required = false) Instant knownAt) {
-        return Mono.defer(() -> {
-            DatasetDefinition dataset = dataset(resourceId);
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             return entityManager.findById(dataset, def, id, asOf, knownAt)
+                .map(masker::hide)
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
                     def.name + " [ID: " + id + "] not found in dataset " + resourceId)));
         });
@@ -87,8 +101,8 @@ class DatasetController {
 
     @PostMapping("/query")
     Mono<QueryResponse> query(@PathVariable String resourceId, @RequestBody(required = false) QueryRequest request) {
-        return Mono.defer(() -> {
-            DatasetDefinition dataset = dataset(resourceId);
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             QueryRequest body = request == null ? new QueryRequest(null, null, null, null, null, null) : request;
             ListViewDefinition view = def.listView(dataset.listView()).orElse(null);
@@ -107,7 +121,8 @@ class DatasetController {
             EntityQuery compiled = query.build();
             int effectiveLimit = Math.min(limit, dataset.policy().maxQueryBatchSize());
 
-            return entityManager.query(dataset, def, compiled, body.asOf(), body.knownAt()).collectList()
+            return entityManager.query(dataset, def, compiled, body.asOf(), body.knownAt()).map(masker::hide)
+                .collectList()
                 .zipWith(entityManager.count(dataset, def, compiled, body.asOf(), body.knownAt()))
                 .map(result -> new QueryResponse(result.getT1(), result.getT2(), offset, effectiveLimit));
         });
@@ -115,8 +130,10 @@ class DatasetController {
 
     @PostMapping("/commit")
     Mono<List<EntityInstance>> commit(@PathVariable String resourceId, @RequestBody CommitRequest request) {
-        return Mono.defer(() -> {
+        return RequestContexts.current().flatMap(context -> {
             DatasetDefinition dataset = dataset(resourceId);
+            Permissions.requireDeclared(context, dataset.permissions().write(), development,
+                "Writing through dataset " + resourceId);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             boolean generatedKey = def.field(def.primaryKey).generated();
             if (request == null || request.changes() == null) {
@@ -129,6 +146,7 @@ class DatasetController {
                 }
                 long version = change.version() == null ? 0L : change.version();
                 Map<String, Object> attributes = change.attributes() == null ? Map.of() : change.attributes();
+                SensitiveDataMasker.rejectWrites(def, attributes);
                 Object id = change.id();
                 if (change.action() == EntityAction.INSERT && generatedKey) {
                     // As in the generic add process: a generated key is issued here, never taken from the caller.
@@ -140,7 +158,8 @@ class DatasetController {
                 changes.add(new EntityChange(change.action(), new EntityInstance(
                     id, dataset.targetEntityType(), version, null, attributes), change.effectiveTime()));
             }
-            return entityManager.commitBatch(dataset, changes, request.reason());
+            return entityManager.commitBatch(dataset, changes, request.reason())
+                .map(saved -> saved.stream().map(masker::hide).toList());
         });
     }
 
@@ -151,13 +170,33 @@ class DatasetController {
      */
     @GetMapping("/entities/{id}/history")
     Mono<List<Map<String, Object>>> history(@PathVariable String resourceId, @PathVariable String id) {
-        return Mono.defer(() -> {
-            DatasetDefinition dataset = dataset(resourceId);
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             return entityManager.history(dataset, def, id)
+                .map(versions -> versions.stream().map(version -> hideInVersion(def, version)).toList())
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
                     def.name + " [ID: " + id + "] not found in dataset " + resourceId)));
         });
+    }
+
+    /** The dataset, when the caller may read through it (default deny, docs/design/10-security.md section 5). */
+    private DatasetDefinition readable(String resourceId, RequestContext context) {
+        DatasetDefinition dataset = dataset(resourceId);
+        Permissions.requireDeclared(context, dataset.permissions().read(), development,
+            "Reading through dataset " + resourceId);
+        return dataset;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> hideInVersion(EntityDefinition def, Map<String, Object> version) {
+        Object attributes = version.get("attributes");
+        if (!(attributes instanceof Map<?, ?>) || def.sensitiveFields().isEmpty()) {
+            return version;
+        }
+        Map<String, Object> visible = new java.util.LinkedHashMap<>(version);
+        visible.put("attributes", masker.hide(def, (Map<String, Object>) attributes));
+        return visible;
     }
 
     private DatasetDefinition dataset(String resourceId) {

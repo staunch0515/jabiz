@@ -31,6 +31,9 @@ public record RequestContext(
     /** Actor id of work the platform performs on its own behalf. */
     public static final String SYSTEM_ACTOR = "system";
 
+    /** Permission code that grants every permission (administrators, scenario replays). */
+    public static final String ALL_PERMISSIONS = "*";
+
     public RequestContext {
         requireText(actorId, "actorId");
         Objects.requireNonNull(locale, "locale must not be null");
@@ -44,8 +47,9 @@ public record RequestContext(
         return new RequestContext(SYSTEM_ACTOR, null, locale, requestId, Set.of(), Set.of());
     }
 
+    /** Whether the actor holds the permission, directly or through {@link #ALL_PERMISSIONS}. */
     public boolean hasPermission(String permission) {
-        return permissions.contains(permission);
+        return permissions.contains(permission) || permissions.contains(ALL_PERMISSIONS);
     }
 
     private static void requireText(String value, String name) {

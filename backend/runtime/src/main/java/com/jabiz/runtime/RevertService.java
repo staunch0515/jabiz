@@ -94,7 +94,7 @@ public class RevertService {
      */
     public Mono<OperationRecord> revert(long processSeqId, String reason) {
         return RequestContexts.current().flatMap(request -> {
-            if (!request.permissions().contains(TemporalPermissions.REVERT)) {
+            if (!request.hasPermission(TemporalPermissions.REVERT)) {
                 return Mono.error(new PermissionDeniedException(TemporalPermissions.REVERT,
                     "Reverting operations needs permission " + TemporalPermissions.REVERT));
             }

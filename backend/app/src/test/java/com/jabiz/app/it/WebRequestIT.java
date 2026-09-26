@@ -1,6 +1,8 @@
 package com.jabiz.app.it;
 
+import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
+import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ApplicationContext;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -32,11 +35,16 @@ class WebRequestIT extends PostgresIntegrationTest {
     @Autowired
     ApplicationContext context;
 
+    @Autowired
+    JwtService tokens;
+
     private WebTestClient client;
 
     @BeforeEach
     void client() {
-        client = WebTestClient.bindToApplicationContext(context).build();
+        // An authenticated administrator: this class is about messages and request ids, not permissions.
+        client = WebTestClient.bindToApplicationContext(context).configureClient()
+            .defaultHeader(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "web-user", "*")).build();
     }
 
     private WebTestClient.ResponseSpec createTicket(String language, Map<String, Object> body) {

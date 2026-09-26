@@ -25,6 +25,15 @@ class RequestContextTest {
     }
 
     @Test
+    void theWildcardGrantsEveryPermission() {
+        RequestContext admin = new RequestContext("root", null, Locale.ENGLISH, "r-2", Set.of(),
+            Set.of(RequestContext.ALL_PERMISSIONS));
+
+        assertThat(admin.hasPermission("order.read")).isTrue();
+        assertThat(admin.hasPermission("temporal.revert")).isTrue();
+    }
+
+    @Test
     void systemContextHasNoPrivileges() {
         RequestContext ctx = RequestContext.system(Locale.ENGLISH, "job-1");
 

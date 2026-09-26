@@ -17,7 +17,7 @@ class RequestContextConfigTest {
     void devHeadersAreIgnoredUnlessEnabled() {
         MockEnvironment dev = new MockEnvironment();
         dev.setActiveProfiles("dev");
-        assertThat(config.actorResolver(dev, false).resolve(request)).isEqualTo(Actor.ANONYMOUS);
+        assertThat(config.actorResolver(dev, false).resolve(request)).isNull();
     }
 
     @Test

@@ -29,7 +29,7 @@ class RequestContextConfig {
     }
 
     /**
-     * Anonymous callers unless development headers are explicitly enabled. Enabling them outside the
+     * Names no actor unless development headers are explicitly enabled. Enabling them outside the
      * {@code dev} profile is a configuration error, not something to tolerate silently: the headers let
      * any caller claim any identity.
      */
@@ -37,7 +37,7 @@ class RequestContextConfig {
     ActorResolver actorResolver(Environment environment,
         @Value("${jabiz.dev.actor-headers:false}") boolean devActorHeaders) {
         if (!devActorHeaders) {
-            return request -> Actor.ANONYMOUS;
+            return ActorResolver.NONE;
         }
         if (!environment.matchesProfiles(DEV_PROFILE)) {
             throw new IllegalStateException("jabiz.dev.actor-headers=true is only allowed with the '"

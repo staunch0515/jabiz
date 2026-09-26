@@ -19,6 +19,7 @@ import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
+import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
@@ -74,11 +75,13 @@ public class ProcessExecutor {
     private final ChangeSetCommitter committer;
     private final StorageAdapterRegistry storages;
     private final JsonMapper json;
+    private final SensitiveDataMasker masker;
     private final String poolRef;
 
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
-        ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json,
+        ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        this.masker = masker;
         this.beans = beans;
         this.sequence = sequence;
         this.operations = operations;
@@ -145,7 +148,7 @@ public class ProcessExecutor {
         List<PendingStep<?>> afterCommit = Collections.synchronizedList(new ArrayList<>());
         Mono<ProcessResult<O>> transaction = sequence.next().flatMap(seq -> {
             OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq, null,
-                null, null, idempotencyKey, null);
+                null, null, idempotencyKey, null, masker.summary(input));
             return operations.begin(engine, operation, request)
                 .flatMap(started -> runProcess(definition, input, started, request, afterCommit,
                     idempotencyKey != null));
@@ -174,7 +177,7 @@ public class ProcessExecutor {
             }
             return RequestContexts.current().flatMap(request -> sequence.next().flatMap(seq -> {
                 OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
-                    parent.processSeqId(), null, null, null, parent.opTime());
+                    parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
                 return operations.begin(engine(), operation, request)
                     .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
             })).map(ProcessResult::output);
@@ -208,10 +211,10 @@ public class ProcessExecutor {
                 }))
                 .then(Mono.fromCallable(() -> Objects.requireNonNull(definition.outputMapper().apply(ctx),
                     "Process " + definition.name() + ": output mapper returned null")))
-                // The output is kept only where a replay needs it: op_process_result cannot be purged, and outputs
-                // may carry field values that masking (ROADMAP phase 7) does not cover yet.
+                // The output is kept only where a replay needs it: op_process_result cannot be purged. Secrets are
+                // left out (null), so a replay returns them as null.
                 .flatMap(output -> (keepOutput
-                        ? operations.recordResult(engine, operation.processSeqId(), json.writeValueAsString(output))
+                        ? operations.recordResult(engine, operation.processSeqId(), masker.withoutSecrets(output))
                         : Mono.<Void>empty())
                     .thenReturn(new ProcessResult<>(operation.processSeqId(), output, false)))
                 .doOnSuccess(result -> definition.steps().stream()

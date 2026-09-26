@@ -24,6 +24,7 @@ public final class MetaModelExporter {
             json.put("required", f.required());
             json.put("generated", f.generated());
             json.put("systemManaged", def.isSystemManaged(f));
+            json.put("sensitive", f.sensitive());
             json.putAll(kindToJson(f.kind()));
             json.put("operators", SemanticKinds.allowedOperators(f.kind()).stream()
                 .map(QueryOperator::name).sorted().toList());

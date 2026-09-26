@@ -26,6 +26,13 @@ public record EntityInstance(
             : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 
+    /** Identifies the instance without its values, which may be personal or secret: safe in logs. */
+    @Override
+    public String toString() {
+        return "EntityInstance[entityType=" + entityType + ", id=" + id + ", version=" + version + ", state=" + state
+            + ", fields=" + attributes.keySet() + "]";
+    }
+
     @SuppressWarnings("unchecked")
     public <T> T get(String logicalFieldName) {
         return (T) attributes.get(logicalFieldName);
