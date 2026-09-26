@@ -75,6 +75,8 @@ DROP FUNCTION jabiz_create_temporal_table(text, text, text);
 
 -- Refresh tokens (decision D12). Only hashes are stored. Nothing is updated: using a token inserts its use (the
 -- primary key refuses a second use, which revokes the family), logging out inserts a revocation of the family.
+-- Reuse detection and revocation rely on these rows staying, so the tables are guarded like the operation tables
+-- (decision D5); expired rows are removed by the controlled purge only.
 CREATE TABLE sec_refresh_token (
     token_hash char(64)    PRIMARY KEY,                   -- hex SHA-256 of the token
     family_id  uuid        NOT NULL,                      -- all tokens that descend from one sign-in
@@ -92,5 +94,9 @@ CREATE TABLE sec_refresh_token_use (
 CREATE TABLE sec_refresh_family_revocation (
     family_id  uuid        PRIMARY KEY,
     revoked_at timestamptz NOT NULL,
-    reason     text        NOT NULL                       -- LOGOUT, REUSE
+    reason     text        NOT NULL                       -- LOGOUT, REUSE, PASSWORD
 );
+
+SELECT jabiz_protect_append_only('sec_refresh_token');
+SELECT jabiz_protect_append_only('sec_refresh_token_use');
+SELECT jabiz_protect_append_only('sec_refresh_family_revocation');

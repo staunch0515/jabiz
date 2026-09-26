@@ -222,6 +222,8 @@ public class SecurityEntities {
             .targetEntityType(entity)
             .asDefault()
             .permissions(read, write)
+            // Access and menus are read whole (Rbac.MAX_ROWS), never a first page of them.
+            .policy(p -> p.maxQueryBatchSize(Rbac.MAX_ROWS))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 }

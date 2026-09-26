@@ -15,6 +15,7 @@
 - Spring Security（WebFlux）只负责"是谁"和"`/api/**` 必须已认证"；"能做什么"由各入口按元数据声明检查（D11 第 2 条的位置不变）。
 - 无状态：不建会话、不存安全上下文、不保存请求；不用 Cookie，因此关闭 CSRF。保留 Spring Security 默认的安全响应头。
 - 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`，以及 `/api` 以外的静态资源与 `/actuator/health`。
+  认证过滤器不处理这三个会话接口：客户端随手带上的过期访问令牌不会妨碍刷新与登录。
 - 401、403 与控制器的错误一样是 `ProblemDetail`，带按 `Accept-Language` 本地化的 `violations`（`UNAUTHENTICATED`、`PERMISSION_DENIED`），
   401 带 `WWW-Authenticate: Bearer`。
 - 开发用请求头（01 §5）：仅当 `dev` profile 且 `jabiz.dev.actor-headers=true` 时，**没有 `Authorization` 头**的请求可以用
@@ -31,12 +32,15 @@
 
 - 签名密钥 `jabiz.security.jwt.secret`（环境变量 `JABIZ_JWT_SECRET`，Base64，至少 32 字节）。缺失、非法或过短 → **启动失败**；
   只有 `dev` profile 可以缺省（启动时随机生成并告警，重启后旧令牌全部失效）。`platformCheck` 不接收请求，启动器传入一次性随机密钥。
-- **刷新即轮换**：`POST /api/auth/refresh {refreshToken}` 消费该令牌（插入 `sec_refresh_token_use`，主键保证只能用一次），
-  重新读取用户（存在、启用、未锁定、至少一个生效角色）与权限，签发新的访问令牌和同族的下一个刷新令牌。
+- **刷新即轮换**：`POST /api/auth/refresh {refreshToken}` 在**一个事务**中消费该令牌（插入 `sec_refresh_token_use`，主键保证只能用一次）、
+  重新读取用户（存在、启用、未锁定、至少一个生效角色）与权限、签发同族的下一个刷新令牌；用户检查不通过时什么也不消费。之后签发新的访问令牌。
   同一刷新令牌第二次出现 = 被盗用或重放 → 吊销整个令牌族（`sec_refresh_family_revocation`，原因 `REUSE`），返回 401 `INVALID_REFRESH_TOKEN`。
 - `POST /api/auth/logout {refreshToken}` 吊销该令牌所在的族（原因 `LOGOUT`），204；未知令牌同样 204。
-- 三张令牌表**只插入**（不需要 UPDATE）；过期数据的清理留给阶段 9 的定时任务。
-- 已知限制：访问令牌无状态，禁用用户、收回权限、改密码在下一次刷新时生效（最长为访问令牌有效期）。需要更快生效时缩短有效期。
+- 改密码（`SEC_USER_SET_PASSWORD`）在同一事务中吊销该用户的全部令牌族（原因 `PASSWORD`）：旧密码建立的会话不能再刷新。
+- 三张令牌表**只插入**，与操作表一样由 `jabiz_protect_append_only` 触发器保护（D5）：重用检测与吊销依赖这些行不被改动；
+  过期数据的清理经受控清除（阶段 9 的定时任务）。
+- 已知限制：访问令牌无状态，已签发的访问令牌在到期前（最长为其有效期）仍然有效；禁用用户、收回权限在下一次刷新时生效。
+  刷新的响应在传输中丢失后，客户端用同一令牌重试会被视为重用而吊销会话（轮换方案的固有代价），需要重新登录。
 
 ## 3. 用户、角色、权限、菜单（平台实体）
 
@@ -55,6 +59,7 @@
 - **权限码**就是数据视图、SQL 模板、流程、平台操作声明的字符串；角色通过 `SecRolePermission` 授予。`*` 表示全部权限
   （`RequestContext.hasPermission`；供管理员角色与场景回放使用）。
 - 用户的有效权限 = 其**当前生效**的角色分配中、**启用**的角色所授予的权限之并集（`Rbac`，登录与刷新共用）。没有这样的角色则不能登录。
+  这些查询读取全部匹配行（上限 `Rbac.MAX_ROWS` = 5000，达到即报错），绝不从截断的列表计算权限；菜单同样。
 - 菜单：`GET /api/auth/menus` 返回启用、且当前操作人具备其 `permission` 的菜单项，按 `sortOrder` 组成树，标签按请求语言（→ 英语 → 编码）。
   父项不可见时子项也不可见（默认拒绝）。菜单只影响导航，接口本身仍各自检查权限。
 - `GET /api/auth/me` 返回当前操作人的 `userId`、`tenantId`、`roles`、`permissions`。
@@ -97,6 +102,7 @@
 | 数据视图 API `commit` | 视图的写权限 |
 | `/api/entities/{type}` 列表 | 实体默认视图的读权限 |
 | `/api/entities/{type}` 增、改、删 | 通用流程的权限（`entity.write`）+ 默认视图的写权限 |
+| 通用实体流程 `ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`（任何入口） | 流程内再查一次默认视图的写权限：这些流程写入输入所指定的实体，流程自身的权限说明不了能改哪些数据 |
 | `POST /api/queries/{id}` | 模板声明的全部权限 |
 | `POST /api/processes/{name}/{version}` | 流程声明的全部权限 |
 | 操作详情 / 撤销 / 追溯更正 | `operation.read` / `temporal.revert` / `temporal.backdate`（D9 第 6 条） |
@@ -112,7 +118,8 @@
 - **敏感字段**：`FieldBuilder.sensitive()`（例如 `SecUser.passwordHash`）。
   - 读接口（数据视图读 / 查询 / `commit` 返回 / 历史，`/api/entities` 列表与写入返回）不返回它；历史的 `changedFields` 仍列出字段名（说明"改过"，不说明"改成什么"）。
   - 数据视图 `commit` 与通用实体流程拒绝写入它（400 `SENSITIVE_FIELD`）；只有专用流程经 `ChangeSet` 写入。
-  - 列表视图不得显示、筛选、排序它（构建期报错）；SQL 模板不得用占位符读取它、不得 `from` 它（启动检查报错）。
+  - 列表视图不得显示、筛选、排序它（构建期报错）；`/api/entities/{type}?sort=` 不能按它排序（400 `SORT_NOT_ALLOWED`）；
+    SQL 模板不得用占位符读取它、不得 `from` 它（启动检查报错）。
   - 元模型导出 `sensitive: true`，JSON Schema 为 `writeOnly: true`。
 - **`@Sensitive`**（core `com.jabiz.security.Sensitive`）：标在流程输入 / 输出 record 的组件上（如登录的 `password`）；这些 record 的 `toString()` 也自行遮蔽。
 - **遮蔽器**（`SensitiveDataMasker`）按**属性名**遮蔽 JSON 的任意深度：敏感字段名、`@Sensitive` 组件名、以及包含配置片段的名字
@@ -125,8 +132,9 @@
 
 ## 7. 首个管理员
 
-设置了 `jabiz.security.bootstrap-admin.user-name` 与 `.password`（环境变量 `JABIZ_BOOTSTRAP_ADMIN_USER` / `…_PASSWORD`，不写入仓库）且库中还没有任何用户时，
-启动后以系统身份执行 `SEC_BOOTSTRAP_ADMIN`：建角色 `ADMIN`（权限 `*`）、该用户与角色分配。否则什么也不做。
+设置了 `jabiz.security.bootstrap-admin.user-name` 与 `.password`（环境变量 `JABIZ_BOOTSTRAP_ADMIN_USER` / `…_PASSWORD`，不写入仓库）、
+库中还没有任何用户、也没有 `ADMIN` 角色时，启动后以系统身份执行 `SEC_BOOTSTRAP_ADMIN`：建角色 `ADMIN`（权限 `*`）、该用户与角色分配。
+否则什么也不做。多个实例同时启动时，后来者在唯一约束上失败，记 info 日志后照常启动。
 
 ## 8. 测试
 

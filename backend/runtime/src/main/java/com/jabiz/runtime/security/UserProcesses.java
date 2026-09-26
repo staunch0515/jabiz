@@ -49,6 +49,7 @@ public class UserProcesses {
     static final String USER_ID = "user_id";
     static final String USER = "user";
     static final String LATEST_RECORD = "latest_login_record";
+    static final String NEW_USER = "new_user";
 
     private static final HashPasswordStep.Metadata HASH_PASSWORD =
         new HashPasswordStep.Metadata(PASSWORD, HASH, PASSWORD);
@@ -60,19 +61,22 @@ public class UserProcesses {
                 .permissions(SecurityPermissions.USER_CREATE)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
-                    ctx.put("input", input);
+                    // The fields one by one: the input record holds the plain password, which only the hashing
+                    // step may see (and removes).
+                    Map<String, Object> user = new LinkedHashMap<>();
+                    user.put("userName", input.userName());
+                    user.put("displayName", input.displayName());
+                    user.put("tenantId", input.tenantId());
+                    user.put("enabled", input.enabled() == null || input.enabled());
+                    ctx.put(NEW_USER, user);
                     ctx.put(PASSWORD, input.password());
                     return ctx;
                 })
                 .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
                 .step("Hash the password", HashPasswordStep.class, HASH_PASSWORD)
                 .compute("Register the user", (metadata, ctx) -> {
-                    CreateUserInput input = ctx.get("input", CreateUserInput.class);
-                    Map<String, Object> user = new LinkedHashMap<>();
-                    user.put("userName", input.userName());
-                    user.put("displayName", input.displayName());
-                    user.put("tenantId", input.tenantId());
-                    user.put("enabled", input.enabled() == null || input.enabled());
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> user = new LinkedHashMap<>((Map<String, Object>) ctx.get(NEW_USER));
                     user.put("passwordHash", ctx.get(HASH, String.class));
                     ctx.put(USER_ID, ctx.changes().insert(SecurityEntities.USER, user));
                 }));
@@ -95,7 +99,9 @@ public class UserProcesses {
                     EntityInstance user = ctx.get(USER, EntityInstance.class);
                     ctx.changes().update(SecurityEntities.USER, user.id(), user.version(),
                         Map.of("passwordHash", ctx.get(HASH, String.class)));
-                }));
+                })
+                .step("End the user's sessions", RevokeSessionsStep.class,
+                    new RevokeSessionsStep.Metadata(USER, RefreshTokenStore.REASON_PASSWORD)));
 
     public static final ProcessDefinition<UserIdInput, UserIdOutput, ProcessContext> UNLOCK =
         ProcessDefinition.define("SEC_USER_UNLOCK", 1, UserIdInput.class, UserIdOutput.class,

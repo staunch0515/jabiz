@@ -3,7 +3,10 @@ package com.jabiz.runtime.security;
 import com.jabiz.context.RequestContext;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
@@ -16,6 +19,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Mono;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -33,6 +37,8 @@ public class BootstrapAdmin {
 
     public static final String ADMIN_ROLE = "ADMIN";
 
+    private static final String USER_NAME = "user_name";
+
     public record Input(String userName, @Sensitive String password) {
         @Override
         public String toString() {
@@ -48,7 +54,7 @@ public class BootstrapAdmin {
             .permissions(SecurityPermissions.BOOTSTRAP)
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
-                ctx.put("input", input);
+                ctx.put(USER_NAME, input.userName());
                 ctx.put(UserProcesses.PASSWORD, input.password());
                 return ctx;
             })
@@ -56,14 +62,14 @@ public class BootstrapAdmin {
             .step("Hash the password", HashPasswordStep.class,
                 new HashPasswordStep.Metadata(UserProcesses.PASSWORD, UserProcesses.HASH, UserProcesses.PASSWORD))
             .compute("Register the administrator", (metadata, ctx) -> {
-                Input input = ctx.get("input", Input.class);
+                String userName = ctx.get(USER_NAME, String.class);
                 Object roleId = ctx.changes().insert(SecurityEntities.ROLE, Map.of("roleCode", ADMIN_ROLE,
                     "labels", Map.of("en", "Administrator", "zh", "管理员", "ja", "管理者"), "enabled", true));
                 ctx.changes().insert(SecurityEntities.ROLE_PERMISSION,
                     Map.of("roleId", roleId, "permission", RequestContext.ALL_PERMISSIONS));
                 Map<String, Object> user = new LinkedHashMap<>();
-                user.put("userName", input.userName());
-                user.put("displayName", input.userName());
+                user.put("userName", userName);
+                user.put("displayName", userName);
                 user.put("enabled", true);
                 user.put("passwordHash", ctx.get(UserProcesses.HASH, String.class));
                 Object userId = ctx.changes().insert(SecurityEntities.USER, user);
@@ -86,19 +92,32 @@ public class BootstrapAdmin {
                 return;
             }
             RequestContext system = RequestContext.system(Locale.ENGLISH, "bootstrap-admin");
-            boolean anyUser = Boolean.TRUE.equals(entities.query(
+            // Only on a database without users, and without the role this would create (users may all be deleted).
+            boolean initialized = Boolean.TRUE.equals(entities.query(
                     datasets.findById(SecurityEntities.USER_DATASET).orElseThrow(), SecurityEntities.SEC_USER,
                     EntityQuery.builder().limit(1).build())
                 .hasElements()
+                .flatMap(anyUser -> anyUser ? Mono.just(true) : entities.query(
+                        datasets.findById(SecurityEntities.ROLE_DATASET).orElseThrow(), SecurityEntities.SEC_ROLE,
+                        EntityQuery.builder().where(new QueryPredicate.Eq("roleCode", ADMIN_ROLE)).limit(1).build())
+                    .hasElements())
                 .contextWrite(view -> RequestContexts.put(view, system))
                 .block());
-            if (anyUser) {
+            if (initialized) {
                 return;
             }
-            Output created = processes.execute(PROCESS, new Input(userName.trim(), password))
-                .contextWrite(view -> RequestContexts.put(view, system))
-                .block();
-            log.info("Created the first administrator {} (user {})", userName.trim(), created.userId());
+            try {
+                Output created = processes.execute(PROCESS, new Input(userName.trim(), password))
+                    .contextWrite(view -> RequestContexts.put(view, system))
+                    .block();
+                log.info("Created the first administrator {} (user {})", userName.trim(), created.userId());
+            } catch (ValidationException e) {
+                // Instances starting together: another one created the administrator first (decision D6 unique keys).
+                if (e.violations().stream().noneMatch(v -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(v.ruleCode()))) {
+                    throw e;
+                }
+                log.info("The first administrator was created by another instance");
+            }
         };
     }
 }

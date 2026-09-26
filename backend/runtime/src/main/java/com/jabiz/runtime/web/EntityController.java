@@ -4,6 +4,7 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
@@ -104,6 +105,11 @@ class EntityController {
                 String field = ascending ? sort : sort.substring(1);
                 if (definition.findField(field).isEmpty()) {
                     throw invalid("sort", "Entity '" + entityType + "' has no field '" + field + "'");
+                }
+                if (definition.field(field).sensitive()) {
+                    // Even the order of secrets tells something about them (docs/design/10-security.md section 6).
+                    throw new ValidationException(List.of(new Violation(field, PlatformErrorCodes.SORT_NOT_ALLOWED,
+                        "Sorting by [" + field + "] is not allowed")));
                 }
                 query.orderBy(field, ascending);
             }

@@ -31,6 +31,9 @@ import org.springframework.security.web.server.authentication.ServerAuthenticati
 import org.springframework.security.web.server.authentication.ServerAuthenticationEntryPointFailureHandler;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
+import org.springframework.security.web.server.util.matcher.NegatedServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -56,6 +59,10 @@ public class SecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     static final String BEARER = "Bearer ";
+
+    /** The session endpoints, open to everyone. */
+    static final ServerWebExchangeMatcher PUBLIC = ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST,
+        AuthController.LOGIN, AuthController.REFRESH, AuthController.LOGOUT);
 
     @Bean
     JwtService jwtService(Environment environment, Clock clock,
@@ -144,6 +151,8 @@ public class SecurityConfig {
         authentication.setServerAuthenticationConverter(converter(devActors));
         authentication.setAuthenticationFailureHandler(new ServerAuthenticationEntryPointFailureHandler(problems));
         authentication.setSecurityContextRepository(NoOpServerSecurityContextRepository.getInstance());
+        // Signing in, refreshing and signing out need no access token, and a stale one sent along must not stop them.
+        authentication.setRequiresAuthenticationMatcher(new NegatedServerWebExchangeMatcher(PUBLIC));
 
         return http
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
@@ -155,8 +164,7 @@ public class SecurityConfig {
             .exceptionHandling(handling -> handling.authenticationEntryPoint(problems).accessDeniedHandler(problems))
             .addFilterAt(authentication, SecurityWebFiltersOrder.AUTHENTICATION)
             .authorizeExchange(exchanges -> exchanges
-                .pathMatchers(HttpMethod.POST, AuthController.LOGIN, AuthController.REFRESH, AuthController.LOGOUT)
-                .permitAll()
+                .matchers(PUBLIC).permitAll()
                 .pathMatchers("/api", "/api/**").authenticated()
                 // The single-page application and health: public.
                 .anyExchange().permitAll())

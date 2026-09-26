@@ -191,6 +191,61 @@ class SignInIT extends SecurityItSupport {
     }
 
     @Test
+    void aStaleAccessTokenSentAlongDoesNotStopRefreshingOrSigningIn() {
+        String name = unique("nick");
+        userWith(name, PASSWORD, "p");
+        Map<String, Object> session = signIn(name, PASSWORD);
+        clock.advance(Duration.ofMinutes(20));
+
+        String stale = bearerOf(session);
+        get("/api/auth/me", stale).expectStatus().isUnauthorized();
+        Map<String, Object> renewed = post("/api/auth/refresh", stale, Map.of("refreshToken", session.get("refreshToken")))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        get("/api/auth/me", bearerOf(renewed)).expectStatus().isOk();
+        post("/api/auth/login", "Bearer garbage", Map.of("userName", name, "password", PASSWORD)).expectStatus().isOk();
+        post("/api/auth/logout", "Bearer garbage", Map.of("refreshToken", renewed.get("refreshToken")))
+            .expectStatus().isNoContent();
+    }
+
+    @Test
+    void aNewPasswordEndsTheUsersSessions() {
+        String name = unique("olivia");
+        String userId = userWith(name, PASSWORD, "p");
+        Map<String, Object> first = signIn(name, PASSWORD);
+        Map<String, Object> second = signIn(name, PASSWORD);
+
+        post("/api/processes/SEC_USER_SET_PASSWORD/latest", bearer("security.user.password"),
+            Map.of("userId", userId, "password", "a brand new password")).expectStatus().isOk();
+
+        for (Map<String, Object> session : List.of(first, second)) {
+            post("/api/auth/refresh", null, Map.of("refreshToken", session.get("refreshToken")))
+                .expectStatus().isUnauthorized();
+        }
+        login(name, PASSWORD).expectStatus().isUnauthorized();
+        signIn(name, "a brand new password");
+        assertThat(query("SELECT reason FROM sec_refresh_family_revocation r JOIN sec_refresh_token t "
+            + "ON t.family_id = r.family_id WHERE t.user_id = ?::uuid", userId))
+            .extracting(r -> r.get("reason")).containsOnly("PASSWORD");
+    }
+
+    @Test
+    void theTokenTablesRefuseUpdatesAndDeletes() {
+        String name = unique("peggy");
+        userWith(name, PASSWORD, "p");
+        // A row in each table: a token, its use, a revocation.
+        Map<String, Object> next = post("/api/auth/refresh", null,
+            Map.of("refreshToken", signIn(name, PASSWORD).get("refreshToken")))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        post("/api/auth/logout", null, Map.of("refreshToken", next.get("refreshToken"))).expectStatus().isNoContent();
+
+        for (String sql : List.of("UPDATE sec_refresh_token SET expires_at = expires_at",
+            "DELETE FROM sec_refresh_token_use", "DELETE FROM sec_refresh_family_revocation")) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> execute(sql))
+                .hasMessageContaining("append-only");
+        }
+    }
+
+    @Test
     void signingOutAndExpiryEndTheSession() {
         String name = unique("ken");
         String userId = userWith(name, PASSWORD, "p");

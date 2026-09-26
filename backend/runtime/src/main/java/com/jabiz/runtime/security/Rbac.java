@@ -29,24 +29,44 @@ public final class Rbac {
         }
     }
 
+    /**
+     * Most rows one security query reads (also the query limit of the security datasets). Access is never computed
+     * from a truncated list: reaching the limit is an error ({@link #complete}).
+     */
+    public static final int MAX_ROWS = 5000;
+
     private Rbac() {}
 
     /** The user's role assignments in effect. */
     public static EntityQuery assignmentsOf(Object userId) {
-        return EntityQuery.builder().where(userId == null
+        return all(userId == null
             ? new QueryPredicate.In("userId", List.of())
-            : new QueryPredicate.Eq("userId", userId)).build();
+            : new QueryPredicate.Eq("userId", userId), "roleId");
     }
 
     /** The roles of the assignments. */
     public static EntityQuery rolesOf(Collection<EntityInstance> assignments) {
-        return EntityQuery.builder().where(new QueryPredicate.In("roleId", ids(assignments, "roleId"))).build();
+        return all(new QueryPredicate.In("roleId", ids(complete(assignments), "roleId")), "roleCode");
     }
 
     /** The permissions granted to the enabled roles among {@code roles}. */
     public static EntityQuery permissionsOf(Collection<EntityInstance> roles) {
-        List<Object> enabled = roles.stream().filter(Rbac::enabled).map(EntityInstance::id).toList();
-        return EntityQuery.builder().where(new QueryPredicate.In("roleId", enabled)).build();
+        List<Object> enabled = complete(roles).stream().filter(Rbac::enabled).map(EntityInstance::id).toList();
+        return all(new QueryPredicate.In("roleId", enabled), "permission");
+    }
+
+    /** Every match, in a stable order; see {@link #complete}. */
+    public static EntityQuery all(QueryPredicate where, String orderBy) {
+        return EntityQuery.builder().where(where).orderBy(orderBy, true).limit(MAX_ROWS).build();
+    }
+
+    /** The rows of a query built by {@link #all}; fails when they may have been cut off at {@link #MAX_ROWS}. */
+    public static <T extends Collection<EntityInstance>> T complete(T rows) {
+        if (rows.size() >= MAX_ROWS) {
+            throw new IllegalStateException("A security query reached " + MAX_ROWS + " rows; access is not computed "
+                + "from a truncated list");
+        }
+        return rows;
     }
 
     /** The latest login record of a user: it holds the failure counter and lock in force. */
@@ -60,6 +80,8 @@ public final class Rbac {
 
     /** Codes of the enabled roles and the permissions they grant. */
     public static Access access(Collection<EntityInstance> roles, Collection<EntityInstance> rolePermissions) {
+        complete(roles);
+        complete(rolePermissions);
         Set<Object> enabledIds = new LinkedHashSet<>();
         Set<String> codes = new TreeSet<>();
         for (EntityInstance role : roles) {

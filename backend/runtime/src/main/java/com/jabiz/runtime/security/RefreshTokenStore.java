@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -37,7 +38,12 @@ public class RefreshTokenStore {
     private static final Logger log = LoggerFactory.getLogger(RefreshTokenStore.class);
 
     /** A token as handed to the client, and when it expires. */
-    public record Issued(String token, UUID familyId, Instant expiresAt) {}
+    public record Issued(String token, UUID familyId, Instant expiresAt) {
+        @Override
+        public String toString() {
+            return "Issued[token=***, familyId=" + familyId + ", expiresAt=" + expiresAt + "]";
+        }
+    }
 
     /** The user a valid token was issued to, and its family. */
     public record Grant(UUID userId, UUID familyId) {}
@@ -51,6 +57,7 @@ public class RefreshTokenStore {
 
     static final String REASON_LOGOUT = "LOGOUT";
     static final String REASON_REUSE = "REUSE";
+    public static final String REASON_PASSWORD = "PASSWORD";
 
     private static final int TOKEN_BYTES = 32;
     private static final int MAX_TOKEN_LENGTH = 128;
@@ -81,21 +88,27 @@ public class RefreshTokenStore {
         });
     }
 
+    /** A consumed token, what the check made of it, and the next token of its family. */
+    public record Rotated<T>(Grant grant, T value, Issued next) {}
+
     /**
-     * Consumes a token: each token can be used once. A token presented a second time was stolen or replayed, and its
-     * whole family is revoked. The next token of the family comes from {@link #issueNext}.
+     * Consumes a token and issues the next one of its family, in one transaction: each token can be used once. The
+     * check runs in between (for example: may the user still sign in?); when it fails, nothing is consumed or issued.
+     * A token presented a second time was stolen or replayed, and its whole family is revoked.
      *
      * @throws InvalidRefreshTokenException (as the error of the Mono) when the token cannot be used
      */
-    public Mono<Grant> consume(String token) {
-        return inTransaction(token, this::use);
+    public <T> Mono<Rotated<T>> rotate(String token, Function<Grant, Mono<T>> check) {
+        return inTransaction(token, hash -> use(hash).flatMap(grant -> check.apply(grant)
+            .flatMap(value -> issue(grant.userId(), grant.familyId())
+                .map(next -> new Rotated<>(grant, value, next)))));
     }
 
     /**
      * Runs work that consumes the token in a transaction. A second use of a token breaks the primary key of its use;
      * that aborts the transaction, and the family is revoked afterwards, on its own.
      */
-    private <T> Mono<T> inTransaction(String token, java.util.function.Function<String, Mono<T>> work) {
+    private <T> Mono<T> inTransaction(String token, Function<String, Mono<T>> work) {
         return Mono.defer(() -> {
             String hash = hash(token);
             return engine.get().inTransaction(work.apply(hash))
@@ -125,15 +138,24 @@ public class RefreshTokenStore {
         }).switchIfEmpty(Mono.error(() -> new InvalidRefreshTokenException("Unknown refresh token")));
     }
 
+    /**
+     * Ends every session of a user, for example when the password changes. Runs in the caller's transaction when
+     * there is one.
+     */
+    public Mono<Void> revokeUser(UUID userId, String reason) {
+        return engine.get().select("""
+                SELECT DISTINCT t.family_id FROM sec_refresh_token t
+                WHERE t.user_id = :user AND NOT EXISTS (
+                    SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
+                Map.of("user", BoundValue.of(userId)))
+            .concatMap(row -> revokeFamily(Rows.uuid(row.get("family_id")), reason))
+            .then();
+    }
+
     /** Ends the session the token belongs to. Unknown or already revoked tokens are ignored. */
     public Mono<Void> revoke(String token) {
         return Mono.defer(() -> find(hash(token))
             .flatMap(found -> revokeFamily(found.grant().familyId(), REASON_LOGOUT)));
-    }
-
-    /** The next token of the family of a consumed token. */
-    public Mono<Issued> issueNext(Grant grant) {
-        return issue(grant.userId(), grant.familyId());
     }
 
     private Mono<Issued> issue(UUID userId, UUID familyId) {

@@ -140,6 +140,20 @@ class AccessControlIT extends SecurityItSupport {
             .expectStatus().value(status -> assertThat(status).isNotEqualTo(HttpStatus.FORBIDDEN.value()));
     }
 
+    /** The generic processes write any entity: whatever the entry point, the entity's dataset decides. */
+    @Test
+    void theGenericProcessesNeedTheWritePermissionOfTheEntitysDataset() {
+        String roleId = createRole(unique("ADMINISH"), "*");
+        Map<String, Object> input = Map.of("entityType", SecurityEntities.USER_ROLE,
+            "attributes", Map.of("userId", createUser(unique("mallory"), "long enough password"), "roleId", roleId));
+
+        Map<String, Object> problem = post("/api/processes/ADD_ENTITY/latest", bearer("entity.write"), input)
+            .expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(violations(problem).getFirst().get("message").toString()).contains("security.user-role.write");
+        post("/api/processes/ADD_ENTITY/latest", bearer("entity.write", "security.user-role.write"), input)
+            .expectStatus().isOk();
+    }
+
     @Test
     void theSecurityDatasetsAreProtectedLikeAnyOther() {
         post("/api/datasets/" + SecurityEntities.USER_DATASET + "/query", bearer("pricing.price.read"), Map.of())

@@ -97,18 +97,19 @@ class AuthController {
                         log.info("Sign-in of '{}' refused: {}", request.userName().trim(), result.outcome());
                         return Mono.error(loginFailed("Sign-in refused"));
                     }
-                    return session(actor(result), UUID.fromString(result.userId()), null);
+                    return session(actor(result), UUID.fromString(result.userId()));
                 });
         });
     }
 
     @PostMapping(REFRESH)
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request) {
-        return Mono.defer(() -> refreshTokens.consume(request == null ? null : request.refreshToken()))
+        // Consuming the old token, checking the user and issuing the next token form one transaction.
+        return Mono.defer(() -> refreshTokens.rotate(request == null ? null : request.refreshToken(),
+                grant -> rbac.currentActor(grant.userId()).flatMap(actor -> actor.map(Mono::just)
+                    .orElseGet(() -> Mono.error(invalidRefresh("The user can no longer sign in"))))))
             .onErrorMap(RefreshTokenStore.InvalidRefreshTokenException.class, e -> invalidRefresh(e.getMessage()))
-            .flatMap(grant -> rbac.currentActor(grant.userId()).flatMap(actor -> actor
-                .map(a -> session(a, grant.userId(), grant))
-                .orElseGet(() -> Mono.error(invalidRefresh("The user can no longer sign in")))));
+            .map(rotated -> response(tokens.issue(rotated.value()), rotated.value(), rotated.next()));
     }
 
     @PostMapping(LOGOUT)
@@ -129,15 +130,14 @@ class AuthController {
         return RequestContexts.current().flatMap(menus::menuOf);
     }
 
-    /** New tokens: of a new session, or (with {@code grant}) the next ones of a refreshed session. */
-    private Mono<TokenResponse> session(Actor actor, UUID userId, RefreshTokenStore.Grant grant) {
-        JwtService.Issued access = tokens.issue(actor);
-        Mono<RefreshTokenStore.Issued> refresh = grant == null
-            ? refreshTokens.issue(userId)
-            : refreshTokens.issueNext(grant);
-        return refresh.map(next -> new TokenResponse("Bearer", access.token(), access.expiresAt(), next.token(),
-            next.expiresAt(), actor.actorId(), actor.roles().stream().sorted().toList(),
-            actor.permissions().stream().sorted().toList()));
+    /** Tokens of a new session. */
+    private Mono<TokenResponse> session(Actor actor, UUID userId) {
+        return refreshTokens.issue(userId).map(next -> response(tokens.issue(actor), actor, next));
+    }
+
+    private static TokenResponse response(JwtService.Issued access, Actor actor, RefreshTokenStore.Issued refresh) {
+        return new TokenResponse("Bearer", access.token(), access.expiresAt(), refresh.token(), refresh.expiresAt(),
+            actor.actorId(), actor.roles().stream().sorted().toList(), actor.permissions().stream().sorted().toList());
     }
 
     private static Actor actor(SponsorSignInOutput result) {

@@ -7,20 +7,31 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-/** Resolves the entity definition and the dataset that serves the requested entity type. */
+/**
+ * Resolves the entity definition and the dataset that serves the requested entity type.
+ *
+ * <p>The generic processes write whatever entity their input names, so their own permission ({@code entity.write})
+ * cannot say which data they may change: the caller also needs the write permission of the entity's default dataset,
+ * whichever entry point started the process (docs/design/10-security.md section 5).
+ */
 @Component
 public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChangeContext> {
 
     private final EntityDefinitionRegistry entities;
     private final DatasetRegistry datasets;
+    private final boolean development;
 
-    public ResolveEntityHandler(EntityDefinitionRegistry entities, DatasetRegistry datasets) {
+    public ResolveEntityHandler(EntityDefinitionRegistry entities, DatasetRegistry datasets, Environment environment) {
         this.entities = entities;
         this.datasets = datasets;
+        this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
     @Override
@@ -31,6 +42,8 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
                 () -> new EntityNotFoundException("Unregistered entity type: " + type));
             DatasetDefinition dataset = datasets.findForEntity(type).orElseThrow(
                 () -> new EntityNotFoundException("No dataset serves entity type: " + type));
+            Permissions.requireDeclared(ctx.request(), dataset.permissions().write(), development,
+                "Writing " + type + " through dataset " + dataset.resourceId());
             // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());
             ctx.setDefinition(definition);

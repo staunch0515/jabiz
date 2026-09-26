@@ -27,7 +27,12 @@ import java.util.Set;
 public final class JwtService {
 
     /** An access token and when it expires. */
-    public record Issued(String token, Instant expiresAt) {}
+    public record Issued(String token, Instant expiresAt) {
+        @Override
+        public String toString() {
+            return "Issued[token=***, expiresAt=" + expiresAt + "]";
+        }
+    }
 
     /** A token that is malformed, forged, of another issuer or expired. */
     public static final class InvalidTokenException extends RuntimeException {

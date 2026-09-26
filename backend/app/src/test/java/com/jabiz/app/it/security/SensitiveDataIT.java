@@ -84,6 +84,7 @@ class SensitiveDataIT extends SecurityItSupport {
         String list = get("/api/entities/SecUser", admin()).expectStatus().isOk()
             .expectBody(String.class).returnResult().getResponseBody();
         assertThat(list).contains(name).doesNotContain("passwordHash", "$2a$");
+        get("/api/entities/SecUser?sort=passwordHash", admin()).expectStatus().isBadRequest();
         String meta = get("/api/meta/schema/SecUser", admin()).expectStatus().isOk()
             .expectBody(String.class).returnResult().getResponseBody();
         assertThat(meta).contains("\"writeOnly\":true");

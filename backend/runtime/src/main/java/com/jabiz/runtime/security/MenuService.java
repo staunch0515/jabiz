@@ -38,13 +38,13 @@ public class MenuService {
     }
 
     public Mono<List<MenuItem>> menuOf(RequestContext request) {
-        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq("enabled", true))
-            .orderBy("sortOrder", true).orderBy("menuCode", true).build();
+        EntityQuery query = Rbac.all(new QueryPredicate.Eq("enabled", true), "menuCode");
         return entities.query(datasets.findById(SecurityEntities.MENU_DATASET).orElseThrow(),
                 SecurityEntities.SEC_MENU, query)
-            .filter(entry -> request.hasPermission(entry.get("permission")))
             .collectList()
-            .map(visible -> tree(visible, request.locale().getLanguage()));
+            .map(Rbac::complete)
+            .map(menu -> tree(menu.stream().filter(entry -> request.hasPermission(entry.get("permission"))).toList(),
+                request.locale().getLanguage()));
     }
 
     static List<MenuItem> tree(List<EntityInstance> visible, String language) {
