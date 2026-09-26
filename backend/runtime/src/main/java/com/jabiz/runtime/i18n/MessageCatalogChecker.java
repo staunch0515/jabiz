@@ -1,5 +1,6 @@
 package com.jabiz.runtime.i18n;
 
+import com.jabiz.entity.CheckDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldRule;
@@ -15,7 +16,7 @@ import java.util.List;
 
 /**
  * Startup self-check (docs/design/07-quality.md section 1): every platform error code and every rule
- * code of a registered entity has a text in every supported language. All gaps are reported at once.
+ * and check code of a registered entity has a text in every supported language. All gaps are reported at once.
  */
 @Component
 public class MessageCatalogChecker implements PlatformCheck {
@@ -41,6 +42,7 @@ public class MessageCatalogChecker implements PlatformCheck {
             for (FieldDefinition field : entity.fields.values()) {
                 field.rules().stream().map(FieldRule::code).forEach(codes::add);
             }
+            entity.checks.stream().map(CheckDefinition::code).forEach(codes::add);
         }
         return codes;
     }

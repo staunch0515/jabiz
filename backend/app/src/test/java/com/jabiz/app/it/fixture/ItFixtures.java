@@ -9,6 +9,7 @@ import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.runtime.dictionary.SqlDictionary;
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.Violation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +40,9 @@ public final class ItFixtures extends BaseEntityDefinitions {
 
     /** Actor seen by the last evaluation of ItTicket's title rule; shows what rules receive. */
     public static final AtomicReference<String> LAST_TITLE_ACTOR = new AtomicReference<>();
+
+    /** Rule code of ItTenant's entity check. */
+    public static final String NAME_IS_TENANT = "IT_NAME_IS_TENANT";
 
     /** Lifecycle OPEN -> IN_PROGRESS -> DONE; OPEN is the only initial state. */
     public static final EntityDefinition TICKET = EntityDefinition.define("ItTicket", eb -> {
@@ -80,6 +84,11 @@ public final class ItFixtures extends BaseEntityDefinitions {
         eb.field("tenantId", f -> f.physicalColumn("f_tenant").asText(64));
         eb.field("name", f -> f.physicalColumn("f_name").asText(200));
         eb.field("rowVersion", rowVersion("f_version"));
+        // A rule over two fields (docs/design/02-metamodel.md section 4.1).
+        eb.check(NAME_IS_TENANT, (state, ctx) -> state.get("name") != null
+            && state.get("name").equals(state.get("tenantId"))
+            ? List.of(new Violation("name", NAME_IS_TENANT, "The name must differ from the tenant"))
+            : List.of());
     });
 
     /** Codes are unique (index uk_it_unique_code). */

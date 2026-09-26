@@ -19,6 +19,7 @@ public final class EntityBuilder {
     private final Map<String, FieldDefinition> fields = new LinkedHashMap<>();
     private final List<StateTransitionRule> transitions = new ArrayList<>();
     private final List<GuardDefinition> guards = new ArrayList<>();
+    private final List<CheckDefinition> checks = new ArrayList<>();
     private final List<ReferenceDefinition> references = new ArrayList<>();
     private final List<UniqueConstraint> uniqueConstraints = new ArrayList<>();
     private final Map<String, ListViewDefinition> listViews = new LinkedHashMap<>();
@@ -57,6 +58,18 @@ public final class EntityBuilder {
      */
     public void guard(String code, String from, String to, TransitionGuard guard) {
         guards.add(new GuardDefinition(code, from, to, guard));
+    }
+
+    /**
+     * Attaches a rule over the whole state of the entity, evaluated on every insert and every update that changes
+     * something (docs/design/02-metamodel.md section 4.1). Codes are unique within the entity.
+     */
+    public void check(String code, EntityCheck check) {
+        CheckDefinition definition = new CheckDefinition(code, check);
+        if (checks.stream().anyMatch(existing -> existing.code().equals(code))) {
+            throw invalid("check '" + code + "' is declared twice");
+        }
+        checks.add(definition);
     }
 
     /**
@@ -124,6 +137,7 @@ public final class EntityBuilder {
             stateField,
             List.copyOf(transitions),
             List.copyOf(guards),
+            List.copyOf(checks),
             List.copyOf(references),
             List.copyOf(uniqueConstraints),
             Collections.unmodifiableMap(new LinkedHashMap<>(listViews)),

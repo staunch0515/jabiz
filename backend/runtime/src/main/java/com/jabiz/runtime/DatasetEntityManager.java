@@ -9,6 +9,7 @@ import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.ReferenceDefinition;
 import com.jabiz.entity.SemanticKind;
+import com.jabiz.entity.CheckDefinition;
 import com.jabiz.entity.GuardDefinition;
 import com.jabiz.entity.UniqueConstraint;
 import com.jabiz.entity.TemporalRole;
@@ -289,6 +290,7 @@ public class DatasetEntityManager {
             if (state != null) {
                 evaluateGuards(def, null, state, attrs, Map.of(), validation, violations);
             }
+            CheckDefinition.evaluate(def, attrs, validation, violations);
             rejectIfAny(violations);
 
             Instant now = clock.instant();
@@ -380,6 +382,11 @@ public class DatasetEntityManager {
         Map<String, Object> changes = new LinkedHashMap<>();
         String nextState = evaluateUpdate(dataset, def, instance.id(), current.attributes(), current.state(), incoming,
             changes, violations, validation);
+        if (!changes.isEmpty()) {
+            Map<String, Object> candidate = new LinkedHashMap<>(current.attributes());
+            candidate.putAll(changes);
+            CheckDefinition.evaluate(def, candidate, validation, violations);
+        }
         if (changes.isEmpty() && violations.isEmpty()) {
             return Mono.just(current);
         }

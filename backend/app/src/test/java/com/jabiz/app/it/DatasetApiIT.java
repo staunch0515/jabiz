@@ -218,6 +218,27 @@ class DatasetApiIT extends PostgresIntegrationTest {
         assertThat(items(page)).extracting(i -> i.get("id")).containsExactly("T-1");
     }
 
+    @Test
+    void entityChecksSeeTheWholeStateOnInsertAndUpdate() {
+        // ItTenant declares eb.check: the name must differ from the tenant (docs/design/02-metamodel.md 4.1).
+        List<Map<String, Object>> rejected = violations(
+            tenantCommit("t3", Map.of("tenantRowId", "T-3", "name", "t3")), HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(rejected).singleElement().satisfies(v -> assertThat(v)
+            .containsEntry("ruleCode", ItFixtures.NAME_IS_TENANT).containsEntry("field", "name"));
+
+        tenantCommit("t4", Map.of("tenantRowId", "T-4", "name", "four")).expectStatus().isOk();
+        // The update names only the name; the tenant comes from the stored state.
+        List<Map<String, Object>> updateRejected = violations(client.post().uri("/api/datasets/{id}/commit",
+                ItFixtures.TENANT_DATASET)
+            .header("X-Jabiz-Actor", "alice").header("X-Jabiz-Tenant", "t4")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("changes", List.of(change("UPDATE", "T-4", 1, Map.of("name", "t4"))))).exchange(),
+            HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(updateRejected).extracting(v -> v.get("ruleCode")).containsExactly(ItFixtures.NAME_IS_TENANT);
+        assertThat(query("SELECT f_name FROM it_tenant WHERE f_id = 'T-4'"))
+            .extracting(row -> row.get("f_name")).containsExactly("four");
+    }
+
     // ---------------------------------------------------------------- Dictionaries, unique, guards
 
     @Test

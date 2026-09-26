@@ -1,21 +1,17 @@
 package com.jabiz.runtime.web;
 
 import com.jabiz.context.RequestContext;
-import com.jabiz.entity.ValidationException;
-import com.jabiz.entity.Violation;
-import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.Validator;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.ResponseEntity;
@@ -26,13 +22,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.json.JsonMapper;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Process API (docs/design/06-process.md section 8): {@code POST /api/processes/{name}/{version|latest}} runs a
@@ -54,24 +45,18 @@ class ProcessController {
 
     private final ProcessRegistry registry;
     private final ProcessExecutor executor;
-    private final Validator validator;
-    private final JsonMapper json;
+    private final ProcessInputs inputs;
     private final boolean development;
     private final SensitiveDataMasker masker;
 
-    ProcessController(ProcessRegistry registry, ProcessExecutor executor, Validator validator, JsonMapper json,
+    ProcessController(ProcessRegistry registry, ProcessExecutor executor, ProcessInputs inputs,
         Environment environment, SensitiveDataMasker masker) {
         this.masker = masker;
         this.registry = registry;
         this.executor = executor;
-        this.validator = validator;
-        this.json = json;
+        this.inputs = inputs;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
-        // The first validation loads message bundles from the classpath; do it here rather than on an event loop.
-        validator.validate(new Warmup(null));
     }
-
-    private record Warmup(@jakarta.validation.constraints.NotNull String value) {}
 
     @PostMapping("/{name}/{version}")
     Mono<ResponseEntity<ExecuteResponse>> execute(
@@ -98,7 +83,7 @@ class ProcessController {
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> run(
         ProcessDefinition<I, O, C> definition, Map<String, Object> body, ExecutionOptions options
     ) {
-        return Mono.defer(() -> executor.run(definition, input(definition.inputType(), body), options));
+        return Mono.defer(() -> executor.run(definition, inputs.convert(definition.inputType(), body), options));
     }
 
     private ProcessDefinition<?, ?, ?> find(String name, String version) {
@@ -114,39 +99,6 @@ class ProcessController {
         }
         return registry.find(name, number)
             .orElseThrow(() -> new EntityNotFoundException("Unknown process " + name + " version " + number));
-    }
-
-    private <I> I input(Class<I> type, Map<String, Object> body) {
-        I input;
-        try {
-            input = json.convertValue(body, type);
-        } catch (JacksonException | IllegalArgumentException e) {
-            throw new ValidationException(List.of(new Violation(null, PlatformErrorCodes.INVALID_VALUE,
-                "The request body is not a valid input of this process")));
-        }
-        if (input == null) {
-            throw new ValidationException(List.of(new Violation(null, PlatformErrorCodes.REQUIRED,
-                "The process needs an input")));
-        }
-        Set<ConstraintViolation<I>> broken = validator.validate(input);
-        if (!broken.isEmpty()) {
-            throw new ValidationException(broken.stream()
-                .sorted(Comparator.comparing(v -> v.getPropertyPath().toString()))
-                .map(ProcessController::toViolation)
-                .toList());
-        }
-        return input;
-    }
-
-    private static Violation toViolation(ConstraintViolation<?> violation) {
-        String constraint = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
-        String code = switch (constraint) {
-            case "NotNull", "NotBlank", "NotEmpty" -> PlatformErrorCodes.REQUIRED;
-            default -> PlatformErrorCodes.INVALID_VALUE;
-        };
-        String field = violation.getPropertyPath().toString();
-        return new Violation(field.isEmpty() ? null : field, code, field + " " + violation.getMessage(),
-            Map.of("constraint", constraint));
     }
 
     /**

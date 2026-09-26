@@ -25,6 +25,8 @@ public final class EntityDefinition {
     public final List<StateTransitionRule> transitions;
     /** Guards of lifecycle transitions. */
     public final List<GuardDefinition> guards;
+    /** Rules over the whole state (docs/design/02-metamodel.md section 4.1). */
+    public final List<CheckDefinition> checks;
     /** Many-to-one references to other entities, enforced as data constraints. */
     public final List<ReferenceDefinition> references;
     /** Logical name of the optimistic-lock version field, or null if the entity is not writable. */
@@ -45,6 +47,7 @@ public final class EntityDefinition {
         String stateField,
         List<StateTransitionRule> transitions,
         List<GuardDefinition> guards,
+        List<CheckDefinition> checks,
         List<ReferenceDefinition> references,
         List<UniqueConstraint> uniqueConstraints,
         Map<String, ListViewDefinition> listViews,
@@ -56,6 +59,7 @@ public final class EntityDefinition {
         this.stateField = stateField;
         this.transitions = transitions;
         this.guards = guards;
+        this.checks = checks;
         this.references = references;
         this.uniqueConstraints = uniqueConstraints;
         this.listViews = listViews;

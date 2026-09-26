@@ -1,0 +1,144 @@
+{
+  "scenario" : "Freight billing across a month end",
+  "asOf" : "2026-03-02T00:00:00Z",
+  "entities" : {
+    "SysParam" : [ {
+      "paramId" : "#uuid:1",
+      "paramKey" : "logistics.fuel-surcharge-rate",
+      "valueKind" : {
+        "precision" : 5,
+        "scale" : 4,
+        "type" : "numeric"
+      },
+      "value" : "0.1500",
+      "description" : "Fuel surcharge as a fraction of the freight",
+      "versionNo" : 4,
+      "effectStartTime" : "2026-02-28T15:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "WaybillTracking" : [ {
+      "waybillId" : "WB-A",
+      "freightCharge" : "20000",
+      "totalWeight" : null,
+      "shippedTime" : "2026-01-10T01:00:00Z",
+      "recordedTime" : "2026-01-10T01:00:00Z",
+      "rowVersion" : 1,
+      "currentLocation" : null,
+      "status" : "CREATED"
+    }, {
+      "waybillId" : "WB-B",
+      "freightCharge" : "15000",
+      "totalWeight" : null,
+      "shippedTime" : "2026-01-31T14:00:00Z",
+      "recordedTime" : "2026-01-31T14:00:00Z",
+      "rowVersion" : 1,
+      "currentLocation" : null,
+      "status" : "CREATED"
+    }, {
+      "waybillId" : "WB-C",
+      "freightCharge" : "30000",
+      "totalWeight" : null,
+      "shippedTime" : "2026-01-31T16:00:00Z",
+      "recordedTime" : "2026-01-31T16:00:00Z",
+      "rowVersion" : 1,
+      "currentLocation" : null,
+      "status" : "CREATED"
+    }, {
+      "waybillId" : "WB-D",
+      "freightCharge" : "10000",
+      "totalWeight" : null,
+      "shippedTime" : "2026-01-30T03:00:00Z",
+      "recordedTime" : "2026-01-31T16:00:00Z",
+      "rowVersion" : 1,
+      "currentLocation" : null,
+      "status" : "CREATED"
+    }, {
+      "waybillId" : "WB-E",
+      "freightCharge" : "10000",
+      "totalWeight" : null,
+      "shippedTime" : "2026-03-02T00:00:00Z",
+      "recordedTime" : "2026-03-02T00:00:00Z",
+      "rowVersion" : 1,
+      "currentLocation" : null,
+      "status" : "CREATED"
+    } ],
+    "FreightCharge" : [ {
+      "chargeId" : "#uuid:2",
+      "waybillId" : "WB-A",
+      "chargeMonth" : "2026-01",
+      "shippedTime" : "2026-01-10T01:00:00Z",
+      "baseAmount" : "20000",
+      "surchargeRate" : "0.1000",
+      "surchargeAmount" : "2000",
+      "totalAmount" : "22000",
+      "settled" : true,
+      "recordedTime" : "2026-01-10T01:00:00Z",
+      "rowVersion" : 2
+    }, {
+      "chargeId" : "#uuid:3",
+      "waybillId" : "WB-C",
+      "chargeMonth" : "2026-02",
+      "shippedTime" : "2026-01-31T16:00:00Z",
+      "baseAmount" : "30000",
+      "surchargeRate" : "0.1500",
+      "surchargeAmount" : "4500",
+      "totalAmount" : "34500",
+      "settled" : true,
+      "recordedTime" : "2026-01-31T16:00:00Z",
+      "rowVersion" : 2
+    }, {
+      "chargeId" : "#uuid:4",
+      "waybillId" : "WB-B",
+      "chargeMonth" : "2026-01",
+      "shippedTime" : "2026-01-31T14:00:00Z",
+      "baseAmount" : "15000",
+      "surchargeRate" : "0.1000",
+      "surchargeAmount" : "1500",
+      "totalAmount" : "16500",
+      "settled" : true,
+      "recordedTime" : "2026-01-31T16:00:00Z",
+      "rowVersion" : 2
+    }, {
+      "chargeId" : "#uuid:5",
+      "waybillId" : "WB-E",
+      "chargeMonth" : "2026-03",
+      "shippedTime" : "2026-03-02T00:00:00Z",
+      "baseAmount" : "10000",
+      "surchargeRate" : "0.1500",
+      "surchargeAmount" : "1500",
+      "totalAmount" : "11500",
+      "settled" : false,
+      "recordedTime" : "2026-03-02T00:00:00Z",
+      "rowVersion" : 1
+    } ],
+    "FreightStatement" : [ {
+      "statementId" : "#uuid:6",
+      "statementMonth" : "2026-01",
+      "chargeCount" : "2",
+      "totalAmount" : "38500",
+      "closed" : true,
+      "closedTime" : "2026-01-31T16:00:00Z",
+      "recordedTime" : "2026-01-10T01:00:00Z",
+      "rowVersion" : 3
+    }, {
+      "statementId" : "#uuid:7",
+      "statementMonth" : "2026-02",
+      "chargeCount" : "1",
+      "totalAmount" : "34500",
+      "closed" : true,
+      "closedTime" : "2026-03-02T00:00:00Z",
+      "recordedTime" : "2026-01-31T16:00:00Z",
+      "rowVersion" : 2
+    }, {
+      "statementId" : "#uuid:8",
+      "statementMonth" : "2026-03",
+      "chargeCount" : "1",
+      "totalAmount" : "11500",
+      "closed" : false,
+      "closedTime" : null,
+      "recordedTime" : "2026-03-02T00:00:00Z",
+      "rowVersion" : 1
+    } ]
+  }
+}

@@ -40,4 +40,6 @@ dependencies {
     testFixturesApi("io.projectreactor.tools:blockhound:1.0.17.RELEASE")
     testFixturesRuntimeOnly("io.projectreactor.tools:blockhound-junit-platform:1.0.17.RELEASE")
     testFixturesRuntimeOnly("org.postgresql:r2dbc-postgresql")
+    // Scenario replay (docs/design/07-quality.md section 3): scenario files are YAML.
+    testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 }

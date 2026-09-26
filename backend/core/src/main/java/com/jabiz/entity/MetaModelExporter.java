@@ -50,6 +50,7 @@ public final class MetaModelExporter {
         root.put("guards", def.guards.stream()
             .map(g -> Map.of("code", g.code(), "from", g.from(), "to", g.to()))
             .toList());
+        root.put("checks", def.checks.stream().map(CheckDefinition::code).toList());
         root.put("unique", def.uniqueConstraints.stream()
             .map(u -> Map.of("name", u.name(), "fields", u.fields()))
             .toList());

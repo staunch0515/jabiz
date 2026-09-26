@@ -2,7 +2,6 @@ package com.jabiz.runtime.web;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.ScopeUnavailableException;
-import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
@@ -57,30 +56,28 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({EntityNotFoundException.class, ResourceNotFoundException.class})
     ProblemDetail handleNotFound(RuntimeException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        return ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
     }
 
     @ExceptionHandler(InvalidResourceIdException.class)
     ProblemDetail handleInvalidResourceId(InvalidResourceIdException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
     }
 
     @ExceptionHandler(ValidationException.class)
     ProblemDetail handleValidation(ValidationException ex, ServerWebExchange exchange) {
-        return withViolations(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.violations(), exchange);
+        return withViolations(statusOf(ex), ex.getMessage(), ex.violations(), exchange);
     }
 
     @ExceptionHandler(BusinessRuleViolationException.class)
     ProblemDetail handleBusinessRule(BusinessRuleViolationException ex, ServerWebExchange exchange) {
-        return withViolations(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage(), ex.violations(), exchange);
+        return withViolations(statusOf(ex), ex.getMessage(), ex.violations(), exchange);
     }
 
     /** A dataset scope needs a value the caller's context lacks: access is refused, not widened. */
     @ExceptionHandler(ScopeUnavailableException.class)
     ProblemDetail handleScopeUnavailable(ScopeUnavailableException ex, ServerWebExchange exchange) {
-        Violation violation = new Violation(ex.field(), PlatformErrorCodes.SCOPE_UNAVAILABLE, ex.getMessage(),
-            Map.of("source", ex.source()));
-        return withViolations(HttpStatus.FORBIDDEN, ex.getMessage(), List.of(violation), exchange);
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
     }
 
     @ExceptionHandler(Exception.class)
@@ -96,13 +93,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConcurrentUpdateException.class)
     ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        return ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
     }
 
     /** Later versions changed the same fields (decision D1): lists them so the caller can cancel or change them. */
     @ExceptionHandler(RebaseConflictException.class)
     ProblemDetail handleRebaseConflict(RebaseConflictException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
         problem.setProperty("conflicts", ex.conflicts().stream().map(c -> {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("entityType", c.entityType());
@@ -119,7 +116,7 @@ public class GlobalExceptionHandler {
     /** Later operations block a revert (decision D2): lists them, newest first. */
     @ExceptionHandler(RevertConflictException.class)
     ProblemDetail handleRevertConflict(RevertConflictException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
         problem.setProperty("blockingOperations", ex.blocking().stream().map(b -> {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("processSeqId", b.processSeqId());
@@ -134,24 +131,21 @@ public class GlobalExceptionHandler {
     /** An idempotency key reused for another process (decision D11). */
     @ExceptionHandler(IdempotencyConflictException.class)
     ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex, ServerWebExchange exchange) {
-        Violation violation = new Violation(null, PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, ex.getMessage());
-        return withViolations(HttpStatus.CONFLICT, ex.getMessage(), List.of(violation), exchange);
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
     }
 
     /** Signing in or refreshing failed (docs/design/10-security.md section 4); tells no more than the code. */
     @ExceptionHandler(AuthenticationFailedException.class)
     ResponseEntity<ProblemDetail> handleAuthenticationFailed(AuthenticationFailedException ex,
         ServerWebExchange exchange) {
-        Violation violation = new Violation(null, ex.code(), ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
-            .body(withViolations(HttpStatus.UNAUTHORIZED, "Authentication failed", List.of(violation), exchange));
+        return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+            .body(withViolations(statusOf(ex), "Authentication failed", ProblemStatuses.violations(ex),
+                exchange));
     }
 
     @ExceptionHandler(PermissionDeniedException.class)
     ProblemDetail handlePermissionDenied(PermissionDeniedException ex, ServerWebExchange exchange) {
-        Violation violation = new Violation(null, PlatformErrorCodes.PERMISSION_DENIED, ex.getMessage(),
-            Map.of("permission", ex.permission()));
-        return withViolations(HttpStatus.FORBIDDEN, ex.getMessage(), List.of(violation), exchange);
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
     }
 
     /**
@@ -162,6 +156,11 @@ public class GlobalExceptionHandler {
     ProblemDetail handleAppendOnlyViolation(AppendOnlyViolationException ex) {
         log.error("SEVERE: append-only guard rejected a write; this is a defect", ex);
         return ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    /** The status of a domain exception; {@link ProblemStatuses} is the one table of them. */
+    private static HttpStatus statusOf(Throwable ex) {
+        return HttpStatus.valueOf(ProblemStatuses.status(ex));
     }
 
     private ProblemDetail withViolations(

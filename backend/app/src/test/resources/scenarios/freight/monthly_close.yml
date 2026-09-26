@@ -1,0 +1,121 @@
+# Freight billing across a month end (ROADMAP phase 8): the fuel surcharge rate changes on 1 February (Japan time)
+# by a scheduled parameter change; each waybill is charged at the rate in effect when it was shipped, whenever it is
+# charged; January is closed in February and takes no more charges afterwards.
+name: Freight billing across a month end
+clock: 2026-01-05T00:00:00Z
+actor: { id: billing-admin, permissions: ["*"] }
+steps:
+  - note: The rate starts at 10 % and is scheduled to rise to 15 % on 1 February 00:00 Japan time.
+    process: PARAM_CREATE@latest
+    input:
+      key: logistics.fuel-surcharge-rate
+      valueKind: { type: numeric, precision: 5, scale: 4 }
+      value: "0.1"
+      description: Fuel surcharge as a fraction of the freight
+    expectOutput: { value: "0.1000" }
+  - process: PARAM_SCHEDULE@latest
+    input: { key: logistics.fuel-surcharge-rate, value: "0.15", effectiveTime: 2026-01-31T15:00:00Z }
+    expectOutput: { value: "0.1500", effectiveTime: 2026-01-31T15:00:00Z }
+  - expect: { param: logistics.fuel-surcharge-rate, value: 0.1 }
+  - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-02-01T00:00:00+09:00, value: 0.15 }
+
+  - note: Waybill A ships on 10 January and is charged at once.
+    setClock: 2026-01-10T01:00:00Z
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-A, freightCharge: 20000, shippedTime: 2026-01-10T01:00:00Z, status: CREATED }
+  - process: FREIGHT_CHARGE@latest
+    input: { waybillId: WB-A }
+    save: { chargeA: $.chargeId }
+    expectOutput: { chargeMonth: 2026-01, surchargeRate: 0.1, surchargeAmount: 2000, totalAmount: 22000 }
+
+  - note: Waybill B ships on 31 January 23:00 Japan time, the last hour at the old rate.
+    setClock: 2026-01-31T14:00:00Z
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-B, freightCharge: 15000, shippedTime: 2026-01-31T14:00:00Z, status: CREATED }
+
+  - note: Two hours later it is February in Japan; the scheduled rate is in effect without any job running.
+    advanceClock: PT2H
+  - expect: { param: logistics.fuel-surcharge-rate, value: 0.15 }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-C, freightCharge: 30000, shippedTime: 2026-01-31T16:00:00Z, status: CREATED }
+  - process: FREIGHT_CHARGE@latest
+    input: { waybillId: WB-C }
+    expectOutput: { chargeMonth: 2026-02, surchargeRate: 0.15, surchargeAmount: 4500, totalAmount: 34500 }
+  - note: B is charged now, in February, but shipped in January, so the January rate applies.
+    process: FREIGHT_CHARGE@latest
+    input: { waybillId: WB-B }
+    expectOutput: { chargeMonth: 2026-01, surchargeRate: 0.1, surchargeAmount: 1500, totalAmount: 16500 }
+
+  - expectError:
+      process: FREIGHT_MONTH_CLOSE@latest
+      input: { month: 2026-02 }
+      status: 422
+      ruleCode: FREIGHT_MONTH_NOT_ENDED
+  - process: FREIGHT_MONTH_CLOSE@latest
+    input: { month: 2026-01 }
+    save: { januaryStatement: $.statementId }
+    expectOutput: { month: 2026-01, chargeCount: 2, totalAmount: 38500 }
+  - expect: { entity: FreightCharge, id: "${chargeA}", fields: { settled: true, surchargeAmount: 2000 } }
+
+  - note: A waybill shipped in January but registered late cannot be charged into the closed month.
+    process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-D, freightCharge: 10000, shippedTime: 2026-01-30T03:00:00Z, status: CREATED }
+  - expectError:
+      process: FREIGHT_CHARGE@latest
+      input: { waybillId: WB-D }
+      status: 422
+      ruleCode: FREIGHT_MONTH_CLOSED
+      field: waybillId
+
+  - note: A rise to 20 % from March is scheduled, then cancelled; cancelling twice finds nothing scheduled.
+    process: PARAM_SCHEDULE@latest
+    input: { key: logistics.fuel-surcharge-rate, value: "0.2", effectiveTime: 2026-02-28T15:00:00Z }
+  - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-03-01T00:00:00+09:00, value: 0.2 }
+  - process: PARAM_CANCEL_SCHEDULED@latest
+    input: { key: logistics.fuel-surcharge-rate, effectiveTime: 2026-02-28T15:00:00Z }
+  - expectError:
+      process: PARAM_CANCEL_SCHEDULED@latest
+      input: { key: logistics.fuel-surcharge-rate, effectiveTime: 2026-02-28T15:00:00Z }
+      status: 422
+      ruleCode: NOT_SCHEDULED
+  - expectError:
+      process: PARAM_SCHEDULE@latest
+      input: { key: logistics.fuel-surcharge-rate, value: "0.2", effectiveTime: 2026-01-01T00:00:00Z }
+      status: 422
+      ruleCode: EFFECTIVE_TIME_NOT_FUTURE
+  - expectError:
+      process: PARAM_SET@latest
+      input: { key: logistics.fuel-surcharge-rate, value: "12.5" }
+      status: 422
+      ruleCode: PARAM_VALUE_INVALID
+
+  - note: In March the rate is still 15 %; February is closed.
+    setClock: 2026-03-02T00:00:00Z
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: WaybillTracking
+      attributes: { waybillId: WB-E, freightCharge: 10000, shippedTime: 2026-03-02T00:00:00Z, status: CREATED }
+  - process: FREIGHT_CHARGE@latest
+    input: { waybillId: WB-E }
+    expectOutput: { chargeMonth: 2026-03, surchargeRate: 0.15, surchargeAmount: 1500 }
+  - process: FREIGHT_MONTH_CLOSE@latest
+    input: { month: 2026-02 }
+    expectOutput: { chargeCount: 1, totalAmount: 34500 }
+  - expect:
+      query: logistics.freight_charges
+      params: { month: 2026-01 }
+      rows: 2
+      values:
+        - { waybillId: WB-A, surchargeRate: 0.1, surchargeAmount: 2000, settled: true }
+        - { waybillId: WB-B, surchargeRate: 0.1, surchargeAmount: 1500, settled: true }
+snapshot:
+  entities: [SysParam, WaybillTracking, FreightCharge, FreightStatement]
+  asOf: end

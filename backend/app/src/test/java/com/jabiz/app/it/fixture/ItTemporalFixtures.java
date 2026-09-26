@@ -4,10 +4,14 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.SemanticKind;
+import com.jabiz.entity.Violation;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Temporal entities of the integration tests (docs/design/04-temporal-append-only.md). Tables are created by
@@ -21,6 +25,9 @@ public final class ItTemporalFixtures extends BaseEntityDefinitions {
     /** No time travel. */
     public static final String PRICE_CURRENT_DATASET = "urn:jabiz:dataset:it:ItPriceCurrent";
     public static final String NOTE_DATASET = "urn:jabiz:dataset:it:ItNote";
+
+    /** Rule code of ItPrice's entity check: the note "cheap" does not go with an amount above 1000. */
+    public static final String CHEAP_NOTE = "IT_CHEAP_NOTE";
 
     /** Schedulable prices; SKUs are unique; lifecycle DRAFT -> ACTIVE -> RETIRED; may replace another price. */
     public static final EntityDefinition PRICE = EntityDefinition.define("ItPrice", eb -> {
@@ -40,6 +47,11 @@ public final class ItTemporalFixtures extends BaseEntityDefinitions {
             st.from("ACTIVE").to("RETIRED");
         });
         eb.unique("uk_it_price_sku", "sku");
+        // Over two fields, so that a rebased copy can break it (docs/design/02-metamodel.md section 4.1).
+        eb.check(CHEAP_NOTE, (state, ctx) -> "cheap".equals(state.get("note"))
+            && state.get("amount") instanceof BigDecimal amount && amount.compareTo(BigDecimal.valueOf(1000)) > 0
+            ? List.of(new Violation("note", CHEAP_NOTE, "An amount above 1000 is not cheap"))
+            : List.of());
         eb.listView("default", lv -> lv
             .columns("sku", "region", "amount", "status")
             .filters("sku", "region", "amount")

@@ -31,3 +31,14 @@ val platformCheck = tasks.register<JavaExec>("platformCheck") {
 tasks.named("check") {
     dependsOn(platformCheck)
 }
+
+// Scenario replay (docs/design/07-quality.md section 3): snapshots live next to the scenarios in the source tree;
+// -Dscenario.update-snapshots=true (given to Gradle) rewrites the ones that differ.
+tasks.test {
+    val updateSnapshots = providers.systemProperty("scenario.update-snapshots").orElse("false")
+    systemProperty("scenario.resources-dir", layout.projectDirectory.dir("src/test/resources").asFile.absolutePath)
+    systemProperty("scenario.update-snapshots", updateSnapshots.get())
+    if (updateSnapshots.get() == "true") {
+        outputs.upToDateWhen { false }
+    }
+}

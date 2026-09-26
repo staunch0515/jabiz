@@ -1,6 +1,7 @@
 package com.jabiz.app.it.temporal;
 
 import com.jabiz.entity.ValidationException;
+import com.jabiz.entity.Violation;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityInstance;
@@ -242,5 +243,20 @@ class TemporalScheduleIT extends TemporalItSupport {
             .isInstanceOf(BusinessRuleViolationException.class);
         advance(DAY.multipliedBy(2));
         assertThat(read(later)).isNull();
+    }
+
+    @Test
+    void entityChecksApplyToRebasedCopies() {
+        EntityInstance price = newPrice(sku(), 500);
+        Instant later = now().plus(Duration.ofDays(1));
+        commit(update(price.id(), 1, attrs("amount", 2000), later));
+        long versions = query("SELECT 1 FROM it_price WHERE price_id = ?", price.id()).size();
+
+        // Valid now (500 is cheap), but the rebased copy of the schedule would say "cheap" at 2000.
+        assertThatThrownBy(() -> commit(update(price.id(), 1, attrs("note", "cheap"), null)))
+            .isInstanceOfSatisfying(BusinessRuleViolationException.class, e -> assertThat(e.violations())
+                .extracting(Violation::ruleCode).containsExactly(ItTemporalFixtures.CHEAP_NOTE));
+        assertThat(query("SELECT 1 FROM it_price WHERE price_id = ?", price.id())).hasSize((int) versions);
+        assertThat((Object) read(price.id()).get("note")).isNull();
     }
 }

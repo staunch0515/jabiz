@@ -2,6 +2,7 @@ package com.jabiz.runtime;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.entity.CheckDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.EntityValidator;
 import com.jabiz.entity.TemporalSpec;
@@ -127,6 +128,7 @@ final class TemporalWriter {
             if (state != null) {
                 DatasetEntityManager.evaluateGuards(def, null, state, attrs, Map.of(), w.validation(), violations);
             }
+            CheckDefinition.evaluate(def, attrs, w.validation(), violations);
             DatasetEntityManager.rejectIfAny(violations);
 
             Map<String, Object> newState = new LinkedHashMap<>();
@@ -168,6 +170,11 @@ final class TemporalWriter {
                         violations, w.validation());
                     if (changes.isEmpty() && violations.isEmpty()) {
                         return Mono.just(current);
+                    }
+                    if (!changes.isEmpty()) {
+                        Map<String, Object> candidate = new LinkedHashMap<>(base.state());
+                        candidate.putAll(changes);
+                        CheckDefinition.evaluate(def, candidate, w.validation(), violations);
                     }
                     DatasetEntityManager.rejectIfAny(violations);
                     VersionPlanner.Write write = VersionPlanner.Write.update(base, w.effective(), changes);
