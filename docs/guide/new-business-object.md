@@ -181,7 +181,7 @@ class SupplierIT extends PostgresIntegrationTest {   // 每个测试类一个独
 2. 在"数据视图目录"中打开 `SecRole`，新建角色（例如 `BUYER`），在 `SecRolePermission` 中授予 `commerce.supplier.read`、`commerce.supplier.write`；
    在 `SecUserRole` 中把角色分配给用户（可以预定生效时间）。管理员角色 `ADMIN` 有 `*`，无需授权。
 3. 打开 `Supplier`：列表（筛选、排序、分页）、新建 / 编辑表单（前端校验与服务端错误码一致）、历史时间线（回看任意时间点、撤销）都已可用。
-   **不需要写前端代码**；想出现在菜单里，在 `SecMenu` 中加一项（`path` 为 `/data/urn:jabiz:dataset:default:Supplier`，并指定查看所需的权限）。
+   **不需要写前端代码**；想出现在菜单里，在 `SecMenu` 中加一项（`path` 为 `/data/urn%3Ajabiz%3Adataset%3Adefault%3ASupplier`（数据视图 id 经 URL 编码），并指定查看所需的权限）。
 
 ## 8. （可选）业务流程、SQL 模板、场景回放
 

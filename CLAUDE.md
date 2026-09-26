@@ -66,6 +66,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   依赖服务端状态的判断写成仅服务端规则。新增规则种类或语义约束时，先在 `spec/validation-cases.json` 加用例，前后端都要通过。
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
+- **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
+  绝不放主键、操作人、字段值。遥测默认不外发，只经 OTLP 推送，不开放匿名的指标端点。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
@@ -82,7 +84,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 
 ## 6. 构建与运行
 
-Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`ext-geo`（地理/物理量扩展语义类型，只依赖 core）、`runtime` = jabiz-runtime、`app`）。以下命令都在 `backend/` 下执行。
+Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`ext-geo`（地理/物理量扩展语义类型，只依赖 core）、`runtime` = jabiz-runtime、`app`（示范业务：物流、运费月结、订单与库存 `com.jabiz.app.commerce`））。
+新增业务对象的步骤见 `docs/guide/new-business-object.md`。以下命令都在 `backend/` 下执行。
 
 - 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建（pnpm，经 node-gradle）和 `bootJar`，jar 同时提供页面与接口）。
   只编译和测试：`./gradlew check`（CI 执行的就是这个）
@@ -94,7 +97,9 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   `JABIZ_TEST_DB_URL`（JDBC URL，如 `jdbc:postgresql://localhost:5432/jabiz_test`）、`JABIZ_TEST_DB_USER`、`JABIZ_TEST_DB_PASSWORD`。
   每个测试类使用独立 schema，结束后删除。测试中 BlockHound 始终开启
 - 静态校验：`./gradlew :app:platformCheck`（启动检查全部跑一遍，输出 `类别 | 定位 | 描述`，有错误退出码非 0；数据库同集成测试；`check` 包含它）
-- 本地启动：仓库根目录 `docker compose up -d`（数据库，端口 5436；pgAdmin 5050）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
+- 一条命令启动整套系统：仓库根目录 `docker compose up -d --build`（`db` 5436、`app` 8080（后端内含前端）、`lgtm` Grafana 3000；
+  首次启动生成的管理员密码见 `docker compose logs app`；pgAdmin 用 `--profile tools`）；演示数据 `JABIZ_PASSWORD=… tools/demo/seed.sh`。见 `docs/guide/quickstart.md`
+- 本地开发：仓库根目录 `docker compose up -d db`（数据库，端口 5436）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`（Base64，≥32 字节，
   如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）
@@ -113,7 +118,11 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此
-- 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**。
+- 可观测性（13）：OTLP 默认关闭；设置 `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`、`MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=true` +
+  `MANAGEMENT_OTLP_METRICS_EXPORT_URL`、`MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT` 开启；JSON 日志 `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`
+- 压测（不在 `check` 中）：对运行中的应用 `LOAD_USER=admin LOAD_PASSWORD=… ./gradlew :app:loadTest`（`LOAD_PRODUCTS`、`LOAD_ORDERS`、
+  `LOAD_CONCURRENCY`、`LOAD_DURATION`、`LOAD_REPORT` 等），报告见 `docs/perf/phase-11-load-test.md`
+- 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**（`docker-compose.yml` 中只有本机演示用的账号）。
 
 ## 7. 每个阶段的交付方式
 
