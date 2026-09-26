@@ -10,10 +10,10 @@ import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.SemanticKinds;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.query.QueryOperator;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -35,15 +35,17 @@ import java.util.Optional;
  * entity type (URN resolution, reference checks) use the default. Misconfiguration is reported at startup, all
  * problems at once (section 4): unknown target entity or storage engine, missing or duplicate default,
  * scope fields that do not exist or cannot be compared for equality, soft-delete fields of the wrong kind,
- * unknown list views, and undeclared permissions (a warning in the {@code dev} profile).
+ * unknown list views, and undeclared permissions (a warning in the {@code dev} profile). The problems are reported
+ * by {@link com.jabiz.runtime.check.PlatformCheckRunner} together with those of the other startup checks.
  */
 @Component
-public final class DatasetRegistry {
-
-    private static final Logger log = LoggerFactory.getLogger(DatasetRegistry.class);
+public final class DatasetRegistry implements PlatformCheck {
 
     private final Map<String, DatasetDefinition> byResourceId = new LinkedHashMap<>();
     private final Map<String, DatasetDefinition> defaults = new LinkedHashMap<>();
+    private final List<CheckProblem> problems;
+
+    public static final String CATEGORY = "DATASET";
 
     public DatasetRegistry(
         ObjectProvider<DatasetDefinition> beans,
@@ -53,6 +55,7 @@ public final class DatasetRegistry {
     ) {
         boolean development = environment.acceptsProfiles(Profiles.of("dev"));
         List<String> problems = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         beans.orderedStream().forEach(dataset -> {
             String label = "Dataset " + dataset.resourceId();
             if (byResourceId.putIfAbsent(dataset.resourceId(), dataset) != null) {
@@ -80,7 +83,7 @@ public final class DatasetRegistry {
             if (!dataset.permissions().isDeclared()) {
                 String message = label + ": read and write permissions are not declared";
                 if (development) {
-                    log.warn("{} (allowed in the dev profile only)", message);
+                    warnings.add(message + " (allowed in the dev profile only)");
                 } else {
                     problems.add(message);
                 }
@@ -91,9 +94,19 @@ public final class DatasetRegistry {
                 problems.add("Entity " + entity.name + " has no default dataset");
             }
         }
-        if (!problems.isEmpty()) {
-            throw new IllegalStateException("Invalid dataset definitions:\n - " + String.join("\n - ", problems));
-        }
+        List<CheckProblem> found = new ArrayList<>();
+        problems.forEach(text -> found.add(CheckProblem.error(CATEGORY, text)));
+        warnings.forEach(text -> {
+            CheckProblem error = CheckProblem.error(CATEGORY, text);
+            found.add(CheckProblem.warning(CATEGORY, error.location(), error.message()));
+        });
+        this.problems = List.copyOf(found);
+    }
+
+    /** Problems of the definitions, reported with the other startup checks rather than failing bean creation. */
+    @Override
+    public List<CheckProblem> check() {
+        return problems;
     }
 
     public Optional<DatasetDefinition> findById(String resourceId) {

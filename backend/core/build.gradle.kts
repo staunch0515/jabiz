@@ -37,6 +37,16 @@ val coverageGatedClasses = listOf(
     "com.jabiz.temporal.EntityVersion",
     "com.jabiz.entity.TemporalBuilder",
     "com.jabiz.entity.EntityDefinition",
+    // Phase 5
+    "com.jabiz.entity.SemanticKindParser",
+    "com.jabiz.query.template.SqlText",
+    "com.jabiz.query.template.SqlTemplateRenderer",
+    "com.jabiz.query.template.SqlTemplateFile",
+    "com.jabiz.query.template.TemplateChecks",
+    "com.jabiz.query.template.OuterQueryCompiler",
+    "com.jabiz.query.template.TemplateValues",
+    "com.jabiz.query.template.SqlTypeCompatibility",
+    "com.jabiz.query.custom.AdvancedQueryDefinition",
 )
 
 dependencies {

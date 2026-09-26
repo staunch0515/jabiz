@@ -4,7 +4,8 @@ import com.jabiz.entity.CustomKinds;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.SemanticKind;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -16,7 +17,7 @@ import java.util.List;
  * queried, so the application refuses to start rather than failing on the first request.
  */
 @Component
-public class SemanticKindChecker implements SmartInitializingSingleton {
+public class SemanticKindChecker implements PlatformCheck {
 
     private final EntityDefinitionRegistry entities;
 
@@ -25,18 +26,16 @@ public class SemanticKindChecker implements SmartInitializingSingleton {
     }
 
     @Override
-    public void afterSingletonsInstantiated() {
-        List<String> problems = new ArrayList<>();
+    public List<CheckProblem> check() {
+        List<CheckProblem> problems = new ArrayList<>();
         for (EntityDefinition entity : entities.all()) {
             for (FieldDefinition field : entity.fields.values()) {
                 if (field.kind() instanceof SemanticKind.Custom custom && CustomKinds.find(custom.kindId()).isEmpty()) {
-                    problems.add("Entity " + entity.name + ": field " + field.name() + " uses custom kind "
-                        + custom.kindId() + ", which has no registered CustomKindSupport");
+                    problems.add(CheckProblem.error("SEMANTIC_KIND", entity.name + "." + field.name(),
+                        "uses custom kind " + custom.kindId() + ", which has no registered CustomKindSupport"));
                 }
             }
         }
-        if (!problems.isEmpty()) {
-            throw new IllegalStateException("Unsupported semantic kinds:\n - " + String.join("\n - ", problems));
-        }
+        return problems;
     }
 }

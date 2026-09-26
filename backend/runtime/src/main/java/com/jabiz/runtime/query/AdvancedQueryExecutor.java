@@ -1,185 +1,191 @@
 package com.jabiz.runtime.query;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
-import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldValueCoercer;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.BoundValue;
 import com.jabiz.query.QueryCompiler;
+import com.jabiz.query.QueryPredicate;
 import com.jabiz.query.RawQueryPlan;
-import com.jabiz.query.SqlIdentifiers;
+import com.jabiz.query.SortOrder;
 import com.jabiz.query.TimeSlice;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.QueryParameter;
 import com.jabiz.query.custom.SemanticRow;
+import com.jabiz.query.template.OuterQueryCompiler;
+import com.jabiz.query.template.SqlTemplateRenderer;
+import com.jabiz.query.template.TemplateChecks;
+import com.jabiz.query.template.TemplateValues;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Executes custom multi-entity queries.
- *
- * Dataset rules (scope, soft-delete exclusion, table override) are applied to the dataset's target entity by
- * rendering its placeholder as a scoped sub-select, so the custom SQL cannot see rows the dataset hides. The
- * scope is resolved from the {@link com.jabiz.context.RequestContext} of the caller. Temporal entities render as
- * their versions in effect now, without tombstones, and only then restricted to the scope (decision D3).
+ * Executes SQL templates (docs/design/05-sql-template.md). Every participating entity is rendered as its dataset
+ * shows it - scope, soft-delete exclusion, for temporal entities the versions in effect now without tombstones, the
+ * scope applied after picking the versions (decisions D3, D10) - so hand-written SQL cannot see rows a dataset hides.
+ * Scopes are resolved from the caller's {@link RequestContext}. The template is then wrapped for outer filtering,
+ * sorting and paging, which the caller controls within the template's whitelist.
  */
 @Component
 public class AdvancedQueryExecutor {
 
-    private static final Pattern PLACEHOLDER =
-        Pattern.compile("\\{\\{\\s*([A-Za-z0-9_]+)(?:\\.([A-Za-z0-9_]+))?\\s*\\}\\}");
-    private static final String SCOPE_PARAM_PREFIX = "scope_";
-    /** Prefix of the platform's parameters, such as the time of temporal reads. */
-    private static final String RESERVED_PARAM_PREFIX = "__";
+    /** One page of a template's result. {@code total} is null when counting was not asked for. */
+    public record Page(List<SemanticRow> items, Long total, int offset, int limit) {}
 
     private final StorageAdapterRegistry storageRegistry;
     private final EntityDefinitionRegistry entityRegistry;
-    private final QueryCompiler queryCompiler;
+    private final SqlTemplateRegistry templates;
+    private final SqlTemplateRenderer renderer;
     private final Clock clock;
 
     public AdvancedQueryExecutor(StorageAdapterRegistry storageRegistry,
         EntityDefinitionRegistry entityRegistry,
+        SqlTemplateRegistry templates,
         QueryCompiler queryCompiler,
         Clock clock) {
         this.storageRegistry = Objects.requireNonNull(storageRegistry);
         this.entityRegistry = Objects.requireNonNull(entityRegistry);
-        this.queryCompiler = Objects.requireNonNull(queryCompiler);
+        this.templates = Objects.requireNonNull(templates);
+        this.renderer = new SqlTemplateRenderer(Objects.requireNonNull(queryCompiler));
         this.clock = Objects.requireNonNull(clock);
     }
 
     /**
-     * @param dataset     dataset context (storage routing, scope, limits)
-     * @param queryDef    the query to run
+     * Rows of the template, at most as many as its datasets allow in one query, in the template's default order.
+     *
      * @param inputParams caller-supplied parameter values by name
      */
-    public Flux<SemanticRow> execute(
-        DatasetDefinition dataset,
-        AdvancedQueryDefinition queryDef,
-        Map<String, Object> inputParams
-    ) {
-        return RequestContexts.current().flatMapMany(request -> {
-            Map<String, EntityDefinition> entities = resolveParticipatingEntities(queryDef);
-            Map<String, Object> scope = dataset.scope().resolve(request);
+    public Flux<SemanticRow> execute(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams) {
+        return page(queryDef, inputParams, null, List.of(), 0, Integer.MAX_VALUE, false)
+            .flatMapMany(page -> Flux.fromIterable(page.items()));
+    }
 
-            QueryCompiler.Binder scopeBinder = new QueryCompiler.Binder(SCOPE_PARAM_PREFIX);
-            TimeSlice now = TimeSlice.asOf(clock.instant());
-            String sql = renderTemplate(queryDef.sqlTemplate(), dataset, scope, now, entities, scopeBinder);
+    /** As {@link #execute(AdvancedQueryDefinition, Map)}, reading the dataset's entity through that dataset. */
+    public Flux<SemanticRow> execute(DatasetDefinition dataset, AdvancedQueryDefinition queryDef,
+        Map<String, Object> inputParams) {
+        return execute(queryDef.withDataset(dataset.targetEntityType(), dataset.resourceId()), inputParams);
+    }
 
-            Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(queryDef, inputParams));
-            params.putAll(scopeBinder.params());
+    /**
+     * One page of the template's result.
+     *
+     * @param filter conditions on result columns (whitelisted by the template's {@code list}), or null
+     * @param sorts  sorts by result columns; empty for the template's default sort
+     * @param limit  requested page size; capped by the datasets' {@code maxQueryBatchSize}
+     * @param count  whether to compute the total number of rows as well
+     * @throws ValidationException (as the error of the returned Mono) for missing, unknown or malformed parameters
+     *                             and filters or sorts the template does not allow
+     */
+    public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, QueryPredicate filter,
+        List<SortOrder> sorts, int offset, int limit, boolean count) {
+        return RequestContexts.current().flatMap(request -> {
+            AdvancedQueryDefinition query = templates.prepare(queryDef);
+            Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);
+            Map<String, SqlTemplateRenderer.EntityBinding> bindings = new LinkedHashMap<>();
+            datasets.forEach((entity, dataset) -> bindings.put(entity, new SqlTemplateRenderer.EntityBinding(
+                entityRegistry.getOrThrow(entity), dataset, dataset.scope().resolve(request))));
 
-            String pool = dataset.storage().readReplicaRef();
-            if (pool == null || pool.isBlank()) {
-                pool = dataset.storage().connectionPoolRef();
+            Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(query, inputParams));
+            QueryCompiler.Binder platform = new QueryCompiler.Binder(TemplateChecks.SCOPE_PREFIX);
+            String sql = renderer.render(query, bindings, TimeSlice.asOf(clock.instant()), platform).sql();
+            params.putAll(platform.params());
+
+            int maxRows = datasets.values().stream().mapToInt(d -> d.policy().maxQueryBatchSize()).min().orElseThrow();
+            int effectiveLimit = Math.min(limit, maxRows);
+            OuterQueryCompiler.OuterQuery outer = OuterQueryCompiler.compile(query, sql, filter, sorts, offset,
+                effectiveLimit, entityRegistry::find);
+
+            StorageEngine engine = storageRegistry.getEngine(pool(datasets.values().iterator().next()));
+            Duration timeout = effectiveTimeout(datasets.values(), query);
+            Map<String, BoundValue> listParams = new LinkedHashMap<>(params);
+            listParams.putAll(outer.listParams());
+            Mono<List<SemanticRow>> rows = engine.executeRawQuery(new RawQueryPlan(outer.listSql(), listParams, timeout))
+                .map(row -> toSemanticRow(query, row))
+                .collectList();
+            if (!count) {
+                return rows.map(items -> new Page(items, null, offset, effectiveLimit));
             }
-            StorageEngine engine = storageRegistry.getEngine(pool);
-
-            RawQueryPlan plan = new RawQueryPlan(
-                sql, params, dataset.policy().maxQueryBatchSize(), effectiveTimeout(dataset, queryDef));
-
-            return engine.executeRawQuery(plan).map(row -> toSemanticRow(queryDef, row));
+            Map<String, BoundValue> countParams = new LinkedHashMap<>(params);
+            countParams.putAll(outer.countParams());
+            Mono<Long> total = engine.executeRawQuery(new RawQueryPlan(outer.countSql(), countParams, timeout))
+                .next()
+                .map(row -> ((Number) row.get("total")).longValue());
+            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit));
         });
     }
 
-    private Duration effectiveTimeout(DatasetDefinition dataset, AdvancedQueryDefinition queryDef) {
-        Duration datasetTimeout = dataset.policy().queryTimeout();
-        Duration override = queryDef.timeoutOverride();
-        return override != null && override.compareTo(datasetTimeout) < 0 ? override : datasetTimeout;
+    /** Templates read the read replica when their datasets have one (all share the storage, checked at startup). */
+    private static String pool(DatasetDefinition dataset) {
+        String replica = dataset.storage().readReplicaRef();
+        return replica == null || replica.isBlank() ? dataset.storage().connectionPoolRef() : replica;
     }
 
-    private Map<String, EntityDefinition> resolveParticipatingEntities(AdvancedQueryDefinition queryDef) {
-        Map<String, EntityDefinition> entities = new LinkedHashMap<>();
-        for (String name : queryDef.participatingEntities()) {
-            entities.put(name, entityRegistry.getOrThrow(name));
+    private static Duration effectiveTimeout(Iterable<DatasetDefinition> datasets, AdvancedQueryDefinition query) {
+        Duration timeout = query.timeoutOverride();
+        for (DatasetDefinition dataset : datasets) {
+            Duration own = dataset.policy().queryTimeout();
+            timeout = timeout == null || own.compareTo(timeout) < 0 ? own : timeout;
         }
-        return entities;
+        return timeout;
     }
 
-    private String renderTemplate(
-        String template,
-        DatasetDefinition dataset,
-        Map<String, Object> scope,
-        TimeSlice slice,
-        Map<String, EntityDefinition> entities,
-        QueryCompiler.Binder scopeBinder
-    ) {
-        Matcher matcher = PLACEHOLDER.matcher(template);
-        StringBuilder out = new StringBuilder();
-        while (matcher.find()) {
-            String entityName = matcher.group(1);
-            String fieldName = matcher.group(2);
-            EntityDefinition def = entities.get(entityName);
-            if (def == null) {
-                throw new IllegalArgumentException("Template references entity [" + entityName
-                                                   + "] that is not declared in fromEntities");
+    /** Converts every declared parameter; all problems are reported together. */
+    private Map<String, BoundValue> bindInputs(AdvancedQueryDefinition query, Map<String, Object> inputs) {
+        Map<String, Object> given = inputs == null ? Map.of() : inputs;
+        List<Violation> violations = new ArrayList<>();
+        for (String name : given.keySet()) {
+            if (query.parameters().stream().noneMatch(p -> p.name().equals(name))) {
+                violations.add(new Violation(name, PlatformErrorCodes.UNKNOWN_FIELD,
+                    "Query " + query.queryId() + " has no parameter [" + name + "]"));
             }
-            String replacement = fieldName == null
-                ? queryCompiler.templateExpression(dataset, def, scope, slice, scopeBinder)
-                : SqlIdentifiers.require(def.physicalColumn(fieldName));
-            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
-        matcher.appendTail(out);
-        return out.toString();
-    }
-
-    private Map<String, BoundValue> bindInputs(AdvancedQueryDefinition queryDef, Map<String, Object> inputs) {
         Map<String, BoundValue> result = new LinkedHashMap<>();
-        for (QueryParameter spec : queryDef.parameters()) {
-            String name = spec.name();
-            if (name.startsWith(SCOPE_PARAM_PREFIX) || name.startsWith(RESERVED_PARAM_PREFIX)) {
-                throw new IllegalArgumentException("Parameter name [" + name + "] uses a reserved prefix ("
-                                                   + SCOPE_PARAM_PREFIX + ", " + RESERVED_PARAM_PREFIX + ")");
-            }
-            Object value = inputs != null ? inputs.get(name) : null;
+        for (QueryParameter spec : query.parameters()) {
+            Object value = given.get(spec.name());
             if (value == null) {
                 if (spec.required()) {
-                    throw new IllegalArgumentException("Missing required query parameter: " + name);
+                    violations.add(new Violation(spec.name(), PlatformErrorCodes.REQUIRED,
+                        "Missing required query parameter: " + spec.name()));
+                    continue;
                 }
                 value = spec.defaultValue();
             }
+            Class<?> type = TemplateValues.bindingType(spec, entityRegistry::find);
             if (value == null) {
-                result.put(name, BoundValue.nullOf(FieldValueCoercer.javaType(spec.kind())));
-            } else {
-                result.put(name, BoundValue.of(coerceParameter(spec, value)));
+                result.put(spec.name(), BoundValue.nullOf(spec.list() ? type.arrayType() : type));
+                continue;
             }
+            try {
+                result.put(spec.name(), BoundValue.of(TemplateValues.bindable(spec, value, entityRegistry::find)));
+            } catch (IllegalArgumentException e) {
+                violations.add(new Violation(spec.name(), PlatformErrorCodes.INVALID_VALUE,
+                    "Parameter [" + spec.name() + "]: " + e.getMessage()));
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new ValidationException(violations);
         }
         return result;
     }
 
-    private Object coerceParameter(QueryParameter spec, Object value) {
-        try {
-            if (value instanceof Collection<?> collection) {
-                List<Object> coerced = new ArrayList<>(collection.size());
-                for (Object item : collection) {
-                    if (item == null) {
-                        throw new IllegalArgumentException("list must not contain null");
-                    }
-                    coerced.add(FieldValueCoercer.coerce(spec.kind(), item, true));
-                }
-                return coerced;
-            }
-            return FieldValueCoercer.coerce(spec.kind(), value, true);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Parameter [" + spec.name() + "]: " + e.getMessage(), e);
-        }
-    }
-
-    private SemanticRow toSemanticRow(AdvancedQueryDefinition queryDef, Map<String, Object> rawRow) {
+    private static SemanticRow toSemanticRow(AdvancedQueryDefinition queryDef, Map<String, Object> rawRow) {
         SemanticRow semanticRow = new SemanticRow();
         for (ProjectedField field : queryDef.resultFields()) {
             Object raw = rawRow.get(field.name());

@@ -4,6 +4,7 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.runtime.check.PlatformCheckRunner;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -66,9 +67,12 @@ class DatasetRegistryTest {
         if (profile != null) {
             environment.setActiveProfiles(profile);
         }
-        return new DatasetRegistry(beans.getBeanProvider(DatasetDefinition.class),
+        DatasetRegistry registry = new DatasetRegistry(beans.getBeanProvider(DatasetDefinition.class),
             new EntityDefinitionRegistry(beans.getBeanProvider(EntityDefinition.class)),
             new StorageAdapterRegistry(beans.getBeanProvider(StorageEngineBinding.class)), environment);
+        // Problems are reported by the startup check run, as the application would.
+        PlatformCheckRunner.verify(registry);
+        return registry;
     }
 
     private static DatasetRegistry registry(DatasetDefinition... datasets) {
@@ -98,15 +102,15 @@ class DatasetRegistryTest {
             dataset("urn:ds:d", d -> d.targetEntityType("Ghost")),
             dataset("urn:ds:e", d -> d.storage(s -> s.connectionPoolRef("elsewhere").readReplicaRef("replica")))))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Dataset urn:ds:a: scope field missing does not exist on Order")
-            .hasMessageContaining("Dataset urn:ds:b: entity type Order already has default dataset urn:ds:a")
-            .hasMessageContaining("Dataset urn:ds:b: soft-delete field note must be Bool")
-            .hasMessageContaining("Dataset urn:ds:b: soft-delete time field placedAt must be Temporal(SYSTEM_RECORDED)")
-            .hasMessageContaining("Dataset urn:ds:c: list view compact does not exist on Order")
-            .hasMessageContaining("Dataset urn:ds:c: read and write permissions are not declared")
-            .hasMessageContaining("Dataset urn:ds:d: targets unregistered entity type Ghost")
-            .hasMessageContaining("Dataset urn:ds:e: refers to unregistered storage engine elsewhere")
-            .hasMessageContaining("Dataset urn:ds:e: refers to unregistered storage engine replica")
+            .hasMessageContaining("Dataset urn:ds:a | scope field missing does not exist on Order")
+            .hasMessageContaining("Dataset urn:ds:b | entity type Order already has default dataset urn:ds:a")
+            .hasMessageContaining("Dataset urn:ds:b | soft-delete field note must be Bool")
+            .hasMessageContaining("Dataset urn:ds:b | soft-delete time field placedAt must be Temporal(SYSTEM_RECORDED)")
+            .hasMessageContaining("Dataset urn:ds:c | list view compact does not exist on Order")
+            .hasMessageContaining("Dataset urn:ds:c | read and write permissions are not declared")
+            .hasMessageContaining("Dataset urn:ds:d | targets unregistered entity type Ghost")
+            .hasMessageContaining("Dataset urn:ds:e | refers to unregistered storage engine elsewhere")
+            .hasMessageContaining("Dataset urn:ds:e | refers to unregistered storage engine replica")
             .hasMessageContaining("Entity Other has no default dataset")
             // A Bool can be compared for equality, so it may scope a dataset.
             .satisfies(e -> assertThat(e.getMessage()).doesNotContain("scope field express"));
@@ -129,7 +133,7 @@ class DatasetRegistryTest {
     void duplicateResourceIdsAreRejected() {
         assertThatThrownBy(() -> registry(
             dataset("urn:ds", DatasetDefinition.Builder::asDefault), dataset("urn:ds", d -> {})))
-            .hasMessageContaining("Dataset urn:ds: duplicate resourceId");
+            .hasMessageContaining("Dataset urn:ds | duplicate resourceId");
     }
 
     @Test
@@ -158,7 +162,7 @@ class DatasetRegistryTest {
             .storage(s -> s.connectionPoolRef("default").physicalTableOverride("t_price_archive")));
 
         assertThatThrownBy(() -> registry(null, new EntityDefinition[] {price}, soft, archive))
-            .hasMessageContaining("urn:ds:soft:Price: soft delete is not available for temporal entity Price")
-            .hasMessageContaining("urn:ds:archive:Price: temporal entity Price cannot be stored in an override table");
+            .hasMessageContaining("urn:ds:soft:Price | soft delete is not available for temporal entity Price")
+            .hasMessageContaining("urn:ds:archive:Price | temporal entity Price cannot be stored in an override table");
     }
 }

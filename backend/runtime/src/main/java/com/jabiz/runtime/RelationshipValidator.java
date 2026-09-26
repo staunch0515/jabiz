@@ -5,7 +5,8 @@ import com.jabiz.entity.ReferenceDefinition;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ import java.util.Optional;
  * All problems are collected and reported together.
  */
 @Component
-public class RelationshipValidator implements SmartInitializingSingleton {
+public class RelationshipValidator implements PlatformCheck {
 
     private final EntityDefinitionRegistry entities;
     private final DatasetRegistry datasets;
@@ -30,16 +31,14 @@ public class RelationshipValidator implements SmartInitializingSingleton {
     }
 
     @Override
-    public void afterSingletonsInstantiated() {
+    public List<CheckProblem> check() {
         List<String> problems = new ArrayList<>();
         for (EntityDefinition source : entities.all()) {
             for (ReferenceDefinition reference : source.references) {
                 check(source, reference, problems);
             }
         }
-        if (!problems.isEmpty()) {
-            throw new IllegalStateException("Invalid entity relationships:\n - " + String.join("\n - ", problems));
-        }
+        return problems.stream().map(text -> CheckProblem.error("RELATIONSHIP", text)).toList();
     }
 
     private void check(EntityDefinition source, ReferenceDefinition reference, List<String> problems) {

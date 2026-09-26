@@ -53,6 +53,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   测试中不能 `DELETE` 这类表：用各测试独有的数据（或写墓碑）隔离。
 - **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
+  新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
+- **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。
@@ -79,7 +81,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 集成测试数据库：默认 Testcontainers `postgres:16`（需要 Docker）；无 Docker 时设置
   `JABIZ_TEST_DB_URL`（JDBC URL，如 `jdbc:postgresql://localhost:5432/jabiz_test`）、`JABIZ_TEST_DB_USER`、`JABIZ_TEST_DB_PASSWORD`。
   每个测试类使用独立 schema，结束后删除。测试中 BlockHound 始终开启
-- 静态校验：`platformCheck`（阶段 5 引入）
+- 静态校验：`./gradlew :app:platformCheck`（启动检查全部跑一遍，输出 `类别 | 定位 | 描述`，有错误退出码非 0；数据库同集成测试；`check` 包含它）
 - 本地启动：仓库根目录 `docker compose up -d`（数据库，端口 5436；pgAdmin 5050）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `npm install && npm run dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）

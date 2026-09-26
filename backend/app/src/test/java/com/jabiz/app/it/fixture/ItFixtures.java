@@ -225,7 +225,6 @@ public final class ItFixtures extends BaseEntityDefinitions {
                         SELECT t.{{ItTicket.ticketId}} AS code,
                                t.{{ItTicket.title}} || ' [' || CAST(:locale AS text) || ']' AS label
                         FROM {{ItTicket}} t
-                        ORDER BY t.{{ItTicket.ticketId}}
                         """)),
                 Duration.ofMinutes(5));
         }

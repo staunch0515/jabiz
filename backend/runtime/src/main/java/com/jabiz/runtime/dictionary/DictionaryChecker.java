@@ -2,7 +2,8 @@ package com.jabiz.runtime.dictionary;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ import java.util.Set;
 @Component
 @ConditionalOnProperty(prefix = "jabiz.metamodel.consistency-check", name = "enabled",
     havingValue = "true", matchIfMissing = true)
-public class DictionaryChecker implements SmartInitializingSingleton {
+public class DictionaryChecker implements PlatformCheck {
 
     private final EntityDefinitionRegistry entities;
     private final DictionaryRegistry dictionaries;
@@ -32,19 +33,18 @@ public class DictionaryChecker implements SmartInitializingSingleton {
     }
 
     @Override
-    public void afterSingletonsInstantiated() {
+    public List<CheckProblem> check() {
         List<String> stored = dictionaries.databaseDictionaries().collectList().block(Duration.ofSeconds(30));
         Set<String> inTable = new HashSet<>(stored == null ? List.of() : stored);
-        List<String> problems = new ArrayList<>();
+        List<CheckProblem> problems = new ArrayList<>();
         for (EntityDefinition entity : entities.all()) {
             for (String urn : entity.dictionaryUrns()) {
                 if (dictionaries.declaredSource(urn).isEmpty() && !inTable.contains(urn)) {
-                    problems.add("Entity " + entity.name + ": dictionary " + urn + " has no provider");
+                    problems.add(CheckProblem.error("DICTIONARY", "Entity " + entity.name,
+                        "dictionary " + urn + " has no provider"));
                 }
             }
         }
-        if (!problems.isEmpty()) {
-            throw new IllegalStateException("Unresolvable dictionaries:\n - " + String.join("\n - ", problems));
-        }
+        return problems;
     }
 }

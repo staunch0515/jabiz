@@ -10,4 +10,5 @@ frontend/dist/
 .idea/
 *.iml
 .vscode/
-.env.jqwik-database
+.env
+.jqwik-database

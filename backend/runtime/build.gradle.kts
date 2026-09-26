@@ -16,8 +16,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("io.micrometer:context-propagation")
+    // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).
+    implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
+    implementation("com.networknt:json-schema-validator:3.0.0")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
-    runtimeOnly("org.postgresql:postgresql")
+    // JDBC: Flyway, and the precompile check of SQL templates (reads server error positions).
+    implementation("org.postgresql:postgresql")
     implementation("org.postgresql:r2dbc-postgresql")
 
     // Shared by the integration tests of runtime and app (docs/design/07-quality.md section 7).

@@ -59,11 +59,11 @@ public final class ItTemporalFixtures extends BaseEntityDefinitions {
         eb.temporal();
     });
 
-    /** SKUs of the prices a dataset shows, through a hand-written template. */
+    /** SKUs of the prices a dataset shows, through a hand-written template (sorted by the platform, by sku). */
     public static final AdvancedQueryDefinition SKUS = AdvancedQueryDefinition.define("it.price_skus", q -> q
         .fromEntities("ItPrice")
         .returns("sku", new SemanticKind.Text(32, false))
-        .sqlTemplate("SELECT p.{{ItPrice.sku}} AS sku FROM {{ItPrice}} p ORDER BY p.{{ItPrice.sku}}"));
+        .sqlTemplate("SELECT p.{{ItPrice.sku}} AS sku FROM {{ItPrice}} p"));
 
     private ItTemporalFixtures() {}
 

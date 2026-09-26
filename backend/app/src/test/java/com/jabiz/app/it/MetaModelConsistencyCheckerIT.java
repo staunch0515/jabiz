@@ -2,7 +2,8 @@ package com.jabiz.app.it;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
-import com.jabiz.runtime.entity.MetaModelConsistencyChecker.MetaModelInconsistencyException;
+import com.jabiz.runtime.check.PlatformCheckFailedException;
+import com.jabiz.runtime.check.PlatformCheckRunner;
 import com.jabiz.runtime.entity.MetaModelConsistencyChecker;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -45,8 +46,8 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
     @Test
     void applicationMetamodelMatchesTheMigratedSchema() {
         // The context started, so the checker already ran once; run it again explicitly.
-        assertThatCode(() -> new MetaModelConsistencyChecker(databaseClient, applicationRegistry)
-            .afterSingletonsInstantiated()).doesNotThrowAnyException();
+        assertThatCode(() -> PlatformCheckRunner.verify(
+            new MetaModelConsistencyChecker(databaseClient, applicationRegistry))).doesNotThrowAnyException();
     }
 
     @Test
@@ -61,11 +62,11 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
         MetaModelConsistencyChecker checker =
             new MetaModelConsistencyChecker(databaseClient, registryOf(drift(), ghost));
 
-        assertThatThrownBy(checker::afterSingletonsInstantiated)
-            .isInstanceOf(MetaModelInconsistencyException.class)
-            .hasMessageContaining("Entity Drift: field amount -> missing column f_amount in table it_drift")
-            .hasMessageContaining("Entity Drift: field note -> missing column f_note in table it_drift")
-            .hasMessageContaining("Entity Ghost: table it_ghost was not found or has no columns")
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(checker))
+            .isInstanceOf(PlatformCheckFailedException.class)
+            .hasMessageContaining("Entity Drift | field amount -> missing column f_amount in table it_drift")
+            .hasMessageContaining("Entity Drift | field note -> missing column f_note in table it_drift")
+            .hasMessageContaining("Entity Ghost | table it_ghost was not found or has no columns")
             // Column names are compared case-insensitively.
             .satisfies(e -> assertThat(e.getMessage()).doesNotContain("field name"));
     }
@@ -81,8 +82,9 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             eb.field("extra", f -> f.physicalColumn("f_extra"));
         });
 
-        assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf(qualified))::afterSingletonsInstantiated)
-            .isInstanceOf(MetaModelInconsistencyException.class)
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(
+            new MetaModelConsistencyChecker(databaseClient, registryOf(qualified))))
+            .isInstanceOf(PlatformCheckFailedException.class)
             .hasMessageContaining("field extra -> missing column f_extra");
     }
 
@@ -104,7 +106,8 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             eb.unique("uk_uniq_ok", "code", "region");
         });
 
-        assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf(uniq))::afterSingletonsInstantiated)
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(
+            new MetaModelConsistencyChecker(databaseClient, registryOf(uniq))))
             .hasMessageContaining("unique constraint uk_uniq_missing -> no unique index named uk_uniq_missing")
             .hasMessageContaining("unique constraint uk_uniq_wrong -> index covers")
             .hasMessageContaining("unique constraint uk_uniq_plain -> no unique index named uk_uniq_plain")
@@ -128,8 +131,9 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             eb.temporal();
         });
 
-        assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf(sloppy))::afterSingletonsInstantiated)
-            .hasMessageContaining("Entity Sloppy (temporal) -> no unique index on (sloppy_id, version_no)")
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(
+            new MetaModelConsistencyChecker(databaseClient, registryOf(sloppy))))
+            .hasMessageContaining("Entity Sloppy (temporal) | no unique index on (sloppy_id, version_no)")
             .hasMessageContaining("no index on (sloppy_id, effect_start_time DESC, version_no DESC)")
             .hasMessageContaining("no index on (process_seq_id)")
             .hasMessageContaining("no foreign key (process_seq_id) to op_process")
@@ -144,8 +148,9 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
     void theOperationTablesMustKeepTheirGuard() {
         execute("ALTER TABLE op_process_result DISABLE TRIGGER op_process_result_no_truncate");
         try {
-            assertThatThrownBy(new MetaModelConsistencyChecker(databaseClient, registryOf())::afterSingletonsInstantiated)
-                .hasMessageContaining("Operation table op_process_result -> table op_process_result lacks the "
+            assertThatThrownBy(() -> PlatformCheckRunner.verify(
+            new MetaModelConsistencyChecker(databaseClient, registryOf())))
+                .hasMessageContaining("Operation table op_process_result | table op_process_result lacks the "
                     + "statement trigger BEFORE TRUNCATE");
         } finally {
             execute("ALTER TABLE op_process_result ENABLE TRIGGER op_process_result_no_truncate");

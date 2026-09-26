@@ -35,7 +35,7 @@
 | `query.QueryCompiler`、`QueryPredicate`、`EntityQuery`、`PhysicalQueryPlan`、`RawQueryPlan`、`BoundValue`、`SqlIdentifiers` | core（`QueryCompiler` 由 runtime 的自动配置注册为 Bean） |
 | `query.custom.AdvancedQueryDefinition`、`QueryParameter`、`ProjectedField`、`SemanticRow/Value` | core |
 | `query.custom.LogisticsAnalyticsQueries` | 业务模块（`app`） |
-| `query.custom.AdvancedQueryExecutor` | runtime（`runtime.query`；模板渲染逻辑在阶段 5 抽到 core 的 `SqlTemplateRenderer`） |
+| `query.custom.AdvancedQueryExecutor` | runtime（`runtime.query`；模板渲染、静态检查、外层分页在 core 的 `com.jabiz.query.template`，阶段 5） |
 | `runtime.*`（`DatasetEntityManager`、领域异常、`EntityInstance/EntityChange/EntityAction`）、`storage.*` | runtime（`runtime`、`runtime.storage`） |
 | `process.ProcessDefinition`、`ProcessDefinitionBuilder`、`StepDefinition`、`ProcessContext`、`NoMetadata`；新增 `StepImplementation` | core |
 | `process.ProcessExecutor`、`ProcessRegistry`、`ProcessSequence` 及其实现、`StepHandler` | runtime（`runtime.process`） |

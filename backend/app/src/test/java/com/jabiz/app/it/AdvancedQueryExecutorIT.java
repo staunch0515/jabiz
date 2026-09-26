@@ -1,17 +1,19 @@
 package com.jabiz.app.it;
 
-import com.jabiz.app.LogisticsAnalyticsQueries;
-import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.app.it.fixture.SqlStatementLog;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.ext.geo.DimensionType;
 import com.jabiz.ext.geo.GeoKinds;
 import com.jabiz.query.custom.SemanticRow;
-import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
+import com.jabiz.runtime.query.SqlTemplateRegistry;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -24,7 +26,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Runs the sample multi-entity query {@link LogisticsAnalyticsQueries#TOKYO_PORT_WAYBILL_CUSTOMS_AUDIT}. */
+/** Runs the sample multi-entity template {@code queries/logistics/tokyo_port_audit.sql}. */
+@TestPropertySource(properties = "it.sql-log.enabled=true")
 class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
 
     private static final long PORT_CELL = 0x882f516a23ffffL;
@@ -33,13 +36,13 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
     AdvancedQueryExecutor executor;
 
     @Autowired
-    DatasetRegistry datasets;
+    SqlTemplateRegistry templates;
 
-    private DatasetDefinition waybills;
+    private AdvancedQueryDefinition audit;
 
     @BeforeEach
     void seed() {
-        waybills = datasets.findById("urn:jabiz:dataset:default:WaybillTracking").orElseThrow();
+        audit = templates.find("logistics.tokyo_port_audit").orElseThrow();
         execute("DELETE FROM t_customs_declaration");
         execute("DELETE FROM t_legacy_waybill_2026");
         waybill("WB-1", "CUSTOMS_CLEARED", 5000, START.minus(Duration.ofDays(2)));
@@ -68,7 +71,7 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
     }
 
     private List<SemanticRow> run(Map<String, Object> params) {
-        return asTestRequest(executor.execute(waybills, LogisticsAnalyticsQueries.TOKYO_PORT_WAYBILL_CUSTOMS_AUDIT, params)
+        return asTestRequest(executor.execute(audit, params)
             .collectList()).block();
     }
 
@@ -94,7 +97,8 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
         SemanticRow row = run(params("minFreight", "4000", "allowedStatuses", List.of("CUSTOMS_CLEARED"))).get(0);
 
         assertThat(row.getAllColumns().keySet()).containsExactly(
-            "waybillSn", "finalFreight", "clearedWeightKg", "customsPortCell", "declarationNo", "dutyPaid");
+            "waybillSn", "finalFreight", "clearedWeightKg", "customsPortCell", "shippedTime", "declarationNo",
+            "dutyPaid");
         assertThat(row.get("finalFreight").kind()).isEqualTo(new SemanticKind.Monetary("JPY", 0));
         assertThat(row.get("finalFreight").as(BigDecimal.class)).isEqualByComparingTo("5000");
         assertThat(row.get("clearedWeightKg").kind())
@@ -117,17 +121,49 @@ class AdvancedQueryExecutorIT extends PostgresIntegrationTest {
     @Test
     void missingRequiredParameterIsRejected() {
         assertThatThrownBy(() -> run(params("allowedStatuses", List.of("DELIVERED"))))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Missing required query parameter: minFreight");
+            .isInstanceOf(ValidationException.class)
+            .satisfies(e -> assertThat(((ValidationException) e).violations())
+                .extracting(v -> v.field() + ":" + v.ruleCode()).containsExactly("minFreight:REQUIRED"));
     }
 
     @Test
     void parameterValuesAreCheckedAgainstTheirSemanticKind() {
-        assertThatThrownBy(() -> run(params("minFreight", 1000, "allowedStatuses", List.of("LOST"))))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Parameter [allowedStatuses]");
-        assertThatThrownBy(() -> run(params("minFreight", "a lot", "allowedStatuses", List.of("DELIVERED"))))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Parameter [minFreight]");
+        assertThatThrownBy(() -> run(params("minFreight", "a lot", "allowedStatuses", List.of("LOST"))))
+            .isInstanceOf(ValidationException.class)
+            .satisfies(e -> assertThat(((ValidationException) e).violations())
+                .extracting(v -> v.field() + ":" + v.ruleCode())
+                .containsExactlyInAnyOrder("minFreight:INVALID_VALUE", "allowedStatuses:INVALID_VALUE"));
+    }
+
+    @Test
+    void unknownParametersAreRejected() {
+        assertThatThrownBy(() -> run(params("minFreight", 1, "allowedStatuses", List.of("DELIVERED"), "extra", 1)))
+            .isInstanceOf(ValidationException.class)
+            .hasMessageContaining("extra");
+    }
+
+    /** Decision D7: a list is bound as one array; an empty one matches nothing. */
+    @Test
+    void listParametersAreBoundAsOneArray() {
+        SqlStatementLog.STATEMENTS.clear();
+
+        assertThat(run(params("minFreight", 0, "allowedStatuses", List.of()))).isEmpty();
+        assertThat(run(params("minFreight", 0, "allowedStatuses", List.of("DELIVERED"))))
+            .extracting(r -> r.getRaw("waybillSn")).containsExactly("WB-2", "WB-4");
+
+        assertThat(SqlStatementLog.STATEMENTS).isNotEmpty()
+            .allSatisfy(sql -> assertThat(sql).doesNotContainIgnoringCase(" IN ("))
+            .anySatisfy(sql -> assertThat(sql).contains("= ANY($"));
+    }
+
+    /** The template is wrapped for paging; nothing is appended to the template itself. */
+    @Test
+    void pagingIsDoneByTheOuterQuery() {
+        SqlStatementLog.STATEMENTS.clear();
+
+        run(params("minFreight", 0, "allowedStatuses", List.of("DELIVERED")));
+
+        assertThat(SqlStatementLog.STATEMENTS).anySatisfy(sql -> assertThat(sql)
+            .startsWith("SELECT * FROM (").contains(") q ORDER BY q.shippedtime DESC").containsPattern("LIMIT \\$\\d+ OFFSET \\$\\d+$"));
     }
 }

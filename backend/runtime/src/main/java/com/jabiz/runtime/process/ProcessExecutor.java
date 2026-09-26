@@ -5,12 +5,15 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.StepDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -19,11 +22,11 @@ import java.util.Objects;
  * aborts the execution and its error is propagated unchanged, so domain exceptions keep their
  * type.
  *
- * At startup the executor verifies that every step handler of every registered process is
+ * At startup (as a {@link PlatformCheck}) the executor verifies that every step handler of every registered process is
  * available as exactly one bean.
  */
 @Component
-public class ProcessExecutor implements SmartInitializingSingleton {
+public class ProcessExecutor implements PlatformCheck {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessExecutor.class);
 
@@ -38,22 +41,24 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     }
 
     @Override
-    public void afterSingletonsInstantiated() {
+    public List<CheckProblem> check() {
+        List<CheckProblem> problems = new ArrayList<>();
         for (ProcessDefinition<?, ?, ?> definition : registry.all()) {
             for (StepDefinition<?, ?> step : definition.steps()) {
+                String location = definition.name() + " v" + definition.version() + " step '" + step.stepName() + "'";
                 if (!StepHandler.class.isAssignableFrom(step.handlerClass())) {
-                    throw new IllegalStateException("Process " + definition.name() + " v" + definition.version()
-                        + ", step '" + step.stepName() + "': " + step.handlerClass().getName()
-                        + " is not a " + StepHandler.class.getSimpleName() + "; no executor supports this step type");
+                    problems.add(CheckProblem.error("PROCESS", location, step.handlerClass().getName()
+                        + " is not a " + StepHandler.class.getSimpleName() + "; no executor supports this step type"));
+                    continue;
                 }
                 int count = beans.getBeanNamesForType(step.handlerClass()).length;
                 if (count != 1) {
-                    throw new IllegalStateException("Process " + definition.name() + " v" + definition.version()
-                        + ", step '" + step.stepName() + "': expected exactly one bean of type "
-                        + step.handlerClass().getName() + " but found " + count);
+                    problems.add(CheckProblem.error("PROCESS", location, "expected exactly one bean of type "
+                        + step.handlerClass().getName() + " but found " + count));
                 }
             }
         }
+        return problems;
     }
 
     public <I, O, C extends ProcessContext> Mono<O> execute(ProcessDefinition<I, O, C> definition, I input) {

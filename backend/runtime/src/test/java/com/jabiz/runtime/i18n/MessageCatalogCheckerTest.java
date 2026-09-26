@@ -2,6 +2,7 @@ package com.jabiz.runtime.i18n;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.runtime.check.PlatformCheckRunner;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -37,7 +38,7 @@ class MessageCatalogCheckerTest {
 
     @Test
     void platformCodesAloneAreComplete() {
-        assertThatCode(() -> new MessageCatalogChecker(PLATFORM_ONLY, registryOf()).afterSingletonsInstantiated())
+        assertThatCode(() -> PlatformCheckRunner.verify(new MessageCatalogChecker(PLATFORM_ONLY, registryOf())))
             .doesNotThrowAnyException();
     }
 
@@ -46,9 +47,9 @@ class MessageCatalogCheckerTest {
         MessageCatalogChecker checker = new MessageCatalogChecker(PLATFORM_ONLY, registryOf(WITH_RULES));
 
         assertThat(checker.requiredCodes()).contains("REQUIRED", "QTY_POSITIVE", "QTY_SERVER_ONLY");
-        assertThatThrownBy(checker::afterSingletonsInstantiated)
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(checker))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Missing error messages (6)")
+            .hasMessageContaining("(6 problems)")
             .hasMessageContaining("QTY_POSITIVE [zh]")
             .hasMessageContaining("QTY_POSITIVE [ja]")
             .hasMessageContaining("QTY_SERVER_ONLY [en]");

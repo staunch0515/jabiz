@@ -28,7 +28,6 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -41,20 +40,11 @@ import java.util.Map;
 class DatasetController {
 
     /**
-     * One filter condition. {@code op} is one of eq, ne, gt, gte, lt, lte, in, like, isNull, isNotNull, between;
-     * {@code value} is the operand, {@code values} the list of {@code in}, {@code from}/{@code to} the bounds of
-     * {@code between}.
-     */
-    record Filter(String field, String op, Object value, List<Object> values, Object from, Object to) {}
-
-    record Sort(String field, Boolean asc) {}
-
-    /**
      * {@code asOf} and {@code knownAt} read temporal entities at another point in time
      * (docs/design/04-temporal-append-only.md section 5.1); the default is the current state.
      */
-    record QueryRequest(List<Filter> filters, List<Sort> sorts, Integer offset, Integer limit, Instant asOf,
-        Instant knownAt) {}
+    record QueryRequest(List<ListRequests.Filter> filters, List<ListRequests.Sort> sorts, Integer offset,
+        Integer limit, Instant asOf, Instant knownAt) {}
 
     record QueryResponse(List<EntityInstance> items, long total, int offset, int limit) {}
 
@@ -176,12 +166,13 @@ class DatasetController {
     }
 
     /** Conjunction of the filters; each field must be whitelisted by the list view. */
-    private static QueryPredicate predicate(EntityDefinition def, ListViewDefinition view, List<Filter> filters) {
+    private static QueryPredicate predicate(EntityDefinition def, ListViewDefinition view,
+        List<ListRequests.Filter> filters) {
         if (filters == null || filters.isEmpty()) {
             return null;
         }
         List<QueryPredicate> parts = new ArrayList<>(filters.size());
-        for (Filter filter : filters) {
+        for (ListRequests.Filter filter : filters) {
             if (filter == null || filter.field() == null || filter.op() == null) {
                 throw invalid("filters", "every filter needs a field and an op");
             }
@@ -190,43 +181,21 @@ class DatasetController {
                     PlatformErrorCodes.FILTER_NOT_ALLOWED,
                     "Filtering " + def.name + " by [" + filter.field() + "] is not allowed")));
             }
-            parts.add(toPredicate(filter));
+            parts.add(ListRequests.toPredicate(filter));
         }
         return parts.size() == 1 ? parts.getFirst() : new QueryPredicate.And(parts);
     }
 
-    private static QueryPredicate toPredicate(Filter filter) {
-        String field = filter.field();
-        return switch (filter.op().toLowerCase(Locale.ROOT)) {
-            case "eq" -> new QueryPredicate.Eq(field, filter.value());
-            case "ne" -> new QueryPredicate.Ne(field, filter.value());
-            case "gt" -> new QueryPredicate.Gt(field, filter.value());
-            case "gte" -> new QueryPredicate.Gte(field, filter.value());
-            case "lt" -> new QueryPredicate.Lt(field, filter.value());
-            case "lte" -> new QueryPredicate.Lte(field, filter.value());
-            case "in" -> new QueryPredicate.In(field, filter.values() == null ? List.of() : filter.values());
-            case "like" -> {
-                if (!(filter.value() instanceof String pattern)) {
-                    throw invalid(field, "like needs a text pattern");
-                }
-                yield new QueryPredicate.Like(field, pattern);
-            }
-            case "isnull" -> new QueryPredicate.IsNull(field);
-            case "isnotnull" -> new QueryPredicate.IsNotNull(field);
-            case "between" -> new QueryPredicate.Between(field, filter.from(), filter.to());
-            default -> throw invalid(field, "unknown operator " + filter.op());
-        };
-    }
-
     /** Requested sorts, each whitelisted by the list view; otherwise the view's default sort. */
-    private static void applySorts(ListViewDefinition view, List<Sort> sorts, EntityQuery.Builder query) {
+    private static void applySorts(ListViewDefinition view, List<ListRequests.Sort> sorts,
+        EntityQuery.Builder query) {
         if (sorts == null || sorts.isEmpty()) {
             if (view != null && view.defaultSort() != null) {
                 query.orderBy(view.defaultSort().field(), view.defaultSort().ascending());
             }
             return;
         }
-        for (Sort sort : sorts) {
+        for (ListRequests.Sort sort : sorts) {
             if (sort == null || sort.field() == null) {
                 throw invalid("sorts", "every sort needs a field");
             }
@@ -239,6 +208,6 @@ class DatasetController {
     }
 
     private static ValidationException invalid(String field, String message) {
-        return new ValidationException(List.of(new Violation(field, PlatformErrorCodes.INVALID_VALUE, message)));
+        return ListRequests.invalid(field, message);
     }
 }

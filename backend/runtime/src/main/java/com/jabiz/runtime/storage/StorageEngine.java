@@ -70,7 +70,7 @@ public interface StorageEngine {
      */
     Flux<Map<String, Object>> select(String sql, Map<String, BoundValue> params);
 
-    /** Executes a fully rendered SQL statement. */
+    /** Executes a fully rendered SQL statement as given; list values are bound as arrays. */
     Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan);
 
     /**

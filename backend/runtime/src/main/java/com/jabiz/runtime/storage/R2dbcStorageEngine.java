@@ -176,13 +176,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     @Override
     public Flux<Map<String, Object>> executeRawQuery(RawQueryPlan plan) {
-        return Flux.defer(() -> {
-            String sql = plan.sql().strip();
-            while (sql.endsWith(";")) {
-                sql = sql.substring(0, sql.length() - 1).stripTrailing();
-            }
-            return run(sql + " LIMIT " + plan.limit(), plan.bindParams(), plan.timeout());
-        });
+        // Run as given: paging is part of the statement (docs/design/05-sql-template.md section 5).
+        return Flux.defer(() -> run(plan.sql(), plan.bindParams(), plan.timeout()));
     }
 
     @Override

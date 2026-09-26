@@ -4,6 +4,7 @@ import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.StepImplementation;
+import com.jabiz.runtime.check.PlatformCheckRunner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.context.support.StaticApplicationContext;
@@ -53,7 +54,7 @@ class ProcessExecutorTest {
     void stepHandlersRunWithTheSequenceNumber() {
         ProcessDefinition<String, Out, ProcessContext> definition = process(MarkStep.class);
         ProcessExecutor executor = executor(definition);
-        executor.afterSingletonsInstantiated();
+        PlatformCheckRunner.verify(executor);
 
         assertThat(executor.execute(definition, "in").block()).isEqualTo(new Out(42, true));
     }
@@ -62,7 +63,7 @@ class ProcessExecutorTest {
     void stepTypesWithoutExecutorFailAtStartup() {
         ProcessExecutor executor = executor(process(UnsupportedStep.class));
 
-        assertThatThrownBy(executor::afterSingletonsInstantiated)
+        assertThatThrownBy(() -> PlatformCheckRunner.verify(executor))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("UnsupportedStep is not a StepHandler");
     }

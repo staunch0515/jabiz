@@ -16,7 +16,8 @@ jobs:
           java-version: 21
       # Caches the Gradle wrapper and dependencies.
       - uses: gradle/actions/setup-gradle@v4
-      # Compile, unit tests, integration tests (Testcontainers postgres:16) and the core coverage gate.
+      # Compile, unit tests, integration tests (Testcontainers postgres:16), the core coverage gate and
+      # platformCheck (the startup self-checks against a freshly migrated database, docs/design/07-quality.md).
       # Packaging (bootJar, which also builds the frontend) is not part of CI yet: the frontend does not
       # compile today and is rebuilt in ROADMAP phase 10.
       - run: ./gradlew check

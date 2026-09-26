@@ -6,7 +6,8 @@ import com.jabiz.entity.FieldRule;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,7 +18,7 @@ import java.util.List;
  * code of a registered entity has a text in every supported language. All gaps are reported at once.
  */
 @Component
-public class MessageCatalogChecker implements SmartInitializingSingleton {
+public class MessageCatalogChecker implements PlatformCheck {
 
     private final MessageCatalog messages;
     private final EntityDefinitionRegistry entities;
@@ -28,12 +29,10 @@ public class MessageCatalogChecker implements SmartInitializingSingleton {
     }
 
     @Override
-    public void afterSingletonsInstantiated() {
-        List<String> missing = messages.missing(requiredCodes());
-        if (!missing.isEmpty()) {
-            throw new IllegalStateException("Missing error messages (" + missing.size() + "):\n  "
-                + String.join("\n  ", missing));
-        }
+    public List<CheckProblem> check() {
+        return messages.missing(requiredCodes()).stream()
+            .map(missing -> CheckProblem.error("MESSAGES", missing, "no error message"))
+            .toList();
     }
 
     List<String> requiredCodes() {

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jabiz:schema:sql-template-header",
+  "title": "SQL template header",
+  "description": "Header of a queries/**/*.sql template (docs/design/05-sql-template.md section 2).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "entities", "results"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]+$" },
+    "description": { "type": "string" },
+    "entities": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/name" }
+    },
+    "datasets": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "params": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/param" }
+    },
+    "results": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/result" }
+    },
+    "list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filters": { "$ref": "#/$defs/names" },
+        "sorts": { "$ref": "#/$defs/names" },
+        "key": { "$ref": "#/$defs/names" },
+        "defaultSort": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["field"],
+          "properties": { "field": { "$ref": "#/$defs/name" }, "asc": { "type": "boolean" } }
+        }
+      }
+    },
+    "permissions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "timeoutMs": { "type": "integer", "minimum": 1 }
+  },
+  "$defs": {
+    "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "names": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } },
+    "fieldRef": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$" },
+    "kind": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["semanticIdentity", "monetary", "temporal", "code", "version", "text", "numeric", "bool",
+                   "reference", "custom"]
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [ { "required": ["like"] }, { "required": ["kind"] } ],
+      "properties": {
+        "like": { "$ref": "#/$defs/fieldRef" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "list": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "default": {},
+        "description": { "type": "string" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [ { "required": ["from"] }, { "required": ["kind"] } ],
+      "properties": {
+        "from": { "$ref": "#/$defs/fieldRef" },
+        "kind": { "$ref": "#/$defs/kind" }
+      }
+    }
+  }
+}

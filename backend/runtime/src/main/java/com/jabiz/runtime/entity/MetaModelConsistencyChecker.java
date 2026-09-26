@@ -3,7 +3,8 @@ package com.jabiz.runtime.entity;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.UniqueConstraint;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
@@ -25,8 +26,8 @@ import java.util.Set;
  * (which other systems or manual DDL may change): without it, drift only surfaces when a
  * request happens to touch the affected field.
  *
- * The check runs after all singletons are created and before the web server starts
- * accepting traffic. It blocks on the reactive client, which is acceptable here because
+ * The check runs, with the other {@link PlatformCheck}s, after all singletons are created and before the web
+ * server starts accepting traffic. It blocks on the reactive client, which is acceptable here because
  * it executes on the startup thread and never on the request path. All inconsistencies
  * are collected and reported together.
  *
@@ -35,7 +36,7 @@ import java.util.Set;
 @Component
 @ConditionalOnProperty(prefix = "jabiz.metamodel.consistency-check", name = "enabled",
     havingValue = "true", matchIfMissing = true)
-public class MetaModelConsistencyChecker implements SmartInitializingSingleton {
+public class MetaModelConsistencyChecker implements PlatformCheck {
 
     private static final Duration CHECK_TIMEOUT = Duration.ofSeconds(30);
 
@@ -51,18 +52,18 @@ public class MetaModelConsistencyChecker implements SmartInitializingSingleton {
     static final List<String> OPERATION_TABLES = List.of("op_process", "op_process_item", "op_process_result",
         "entity_registry");
 
+    public static final String CATEGORY = "METAMODEL";
+
     @Override
-    public void afterSingletonsInstantiated() {
+    public List<CheckProblem> check() {
         List<String> problems = Flux.fromIterable(OPERATION_TABLES)
             .concatMap(table -> checkAppendOnlyGuard("Operation table " + table, table))
             .concatWith(Flux.fromIterable(registry.all()).concatMap(this::checkEntity))
             .collectList()
             .block(CHECK_TIMEOUT);
 
-        if (problems != null && !problems.isEmpty()) {
-            throw new MetaModelInconsistencyException(
-                "Metamodel does not match the database schema:\n - " + String.join("\n - ", problems));
-        }
+        return problems == null ? List.of()
+            : problems.stream().map(text -> CheckProblem.error(CATEGORY, text)).toList();
     }
 
     private Flux<String> checkEntity(EntityDefinition def) {
@@ -293,11 +294,5 @@ public class MetaModelConsistencyChecker implements SmartInitializingSingleton {
             .all()
             .map(name -> name.toLowerCase(Locale.ROOT))
             .collect(HashSet::new, Set::add);
-    }
-
-    public static class MetaModelInconsistencyException extends IllegalStateException {
-        public MetaModelInconsistencyException(String message) {
-            super(message);
-        }
     }
 }

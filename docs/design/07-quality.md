@@ -6,6 +6,11 @@
 
 应用启动时（所有 Bean 创建后、开始接收请求前）执行全部检查，**汇总所有问题一次性报告**，任何一项失败则拒绝启动。
 
+实现：每项检查是一个 `PlatformCheck` Bean（runtime `com.jabiz.runtime.check`，返回 `CheckProblem(级别, 类别, 定位, 描述)` 列表，不抛异常）；
+`PlatformCheckRunner` 在启动时运行全部检查，警告写日志，有错误时抛出 `PlatformCheckFailedException` 列出全部错误
+（`jabiz.platform-check.on-startup=false` 跳过，`platformCheck` 即如此后自行运行）。注册表（如 `DatasetRegistry`、`SqlTemplateRegistry`）
+在构造时只收集问题，同样经此报告，因此不同来源的问题一次性出现。
+
 | 检查项 | 内容 |
 |---|---|
 | 元模型与表结构 | 每个物理表存在；每个物理列存在（现有 `MetaModelConsistencyChecker`）；列的数据库类型与语义类型兼容 |
@@ -22,8 +27,13 @@
 ## 2. `platformCheck`（CI 静态校验）
 
 - 构建任务 `platformCheck`：启动一个不开放端口的最小上下文，连接执行过 Flyway 迁移的测试数据库，运行第 1 节全部检查后退出。
-- 输出格式：每行一个问题，`类别 | 定位（文件或实体.字段）| 描述`；存在问题时退出码非 0。
-- CI 中必须运行；PR 不允许在 `platformCheck` 失败时合并。
+  实现为 `:app:platformCheck`（`JavaExec`）：`PlatformCheckLauncher`（runtime testFixtures）在测试数据库中建一个新 schema
+  （`JABIZ_TEST_DB_URL`，否则 Testcontainers），`PlatformCheckMain` 以 `WebApplicationType.NONE` 启动应用（Flyway 先迁移），
+  调用 `PlatformCheckRunner.runAll()`，结束后删除 schema。`check` 依赖它。
+- 输出格式：每行一个问题，`类别 | 定位（文件:行号、实体.字段、数据视图）| 描述`，警告行以 `WARNING` 开头；最后一行为汇总；
+  存在错误时退出码非 0。上下文本身无法启动时输出一行 `CONTEXT | - | 原因`。
+  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS`（`CHECK` 为检查本身失败）。
+- CI 中必须运行（`./gradlew check` 包含它）；PR 不允许在 `platformCheck` 失败时合并。
 - 元模型导出 JSON Schema（`/api/meta/schema/*` 与构建产物），SQL 模板头部按 JSON Schema 校验。
 
 ## 3. 场景回放测试
