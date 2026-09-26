@@ -1,0 +1,9 @@
+# Paths owned by the culture application (docs/design/17-apps-and-branches.md section 2).
+# Everything else belongs to the platform branch and must not be changed here.
+.jabiz-app-paths
+backend/culture/**
+site/**
+docs/culture/**
+deploy/culture/**
+tools/culture/**
+.github/workflows/culture.yml
