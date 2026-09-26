@@ -24,6 +24,8 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.common.KeyValues;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -54,12 +56,15 @@ public class AdvancedQueryExecutor {
     private final SqlTemplateRegistry templates;
     private final SqlTemplateRenderer renderer;
     private final Clock clock;
+    private final PlatformObservations observations;
 
     public AdvancedQueryExecutor(StorageAdapterRegistry storageRegistry,
         EntityDefinitionRegistry entityRegistry,
         SqlTemplateRegistry templates,
         QueryCompiler queryCompiler,
-        Clock clock) {
+        Clock clock,
+        PlatformObservations observations) {
+        this.observations = Objects.requireNonNull(observations);
         this.storageRegistry = Objects.requireNonNull(storageRegistry);
         this.entityRegistry = Objects.requireNonNull(entityRegistry);
         this.templates = Objects.requireNonNull(templates);
@@ -95,6 +100,12 @@ public class AdvancedQueryExecutor {
      */
     public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, QueryPredicate filter,
         List<SortOrder> sorts, int offset, int limit, boolean count) {
+        return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
+            KeyValues.of("template", queryDef.queryId()), pageOf(queryDef, inputParams, filter, sorts, offset, limit, count));
+    }
+
+    private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams,
+        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count) {
         return RequestContexts.current().flatMap(request -> {
             AdvancedQueryDefinition query = templates.prepare(queryDef);
             Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);

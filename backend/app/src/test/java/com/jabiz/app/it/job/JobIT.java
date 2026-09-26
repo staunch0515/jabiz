@@ -2,6 +2,7 @@ package com.jabiz.app.it.job;
 
 import com.jabiz.app.it.fixture.ItEventFixtures;
 import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.job.JobConfig;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.process.ProcessExecutor;
@@ -181,7 +182,7 @@ class JobIT extends PostgresIntegrationTest {
             .maxSize(4).build());
         pools.add(pool);
         return new JobRunner(new R2dbcLockProvider(pool, JobConfig.LOCK_TABLE), executor, storages, ids, clock, "default", instanceId,
-            lockAtLeastFor);
+            lockAtLeastFor, PlatformObservations.NOOP);
     }
 
     @SafeVarargs

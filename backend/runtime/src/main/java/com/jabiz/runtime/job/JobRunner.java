@@ -14,6 +14,8 @@ import net.javacrumbs.shedlock.core.DefaultLockingTaskExecutor;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.core.LockingTaskExecutor;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,9 +66,12 @@ public class JobRunner {
     private final String poolRef;
     private final String instanceId;
     private final Duration lockAtLeastFor;
+    private final PlatformObservations observations;
 
     public JobRunner(LockProvider lockProvider, ProcessExecutor executor, StorageAdapterRegistry storages,
-        EntityIdGenerator ids, Clock clock, String poolRef, String instanceId, Duration lockAtLeastFor) {
+        EntityIdGenerator ids, Clock clock, String poolRef, String instanceId, Duration lockAtLeastFor,
+        PlatformObservations observations) {
+        this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.locks = new DefaultLockingTaskExecutor(Objects.requireNonNull(lockProvider, "lockProvider"));
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
         this.storages = Objects.requireNonNull(storages, "storages must not be null");
@@ -84,6 +89,11 @@ public class JobRunner {
 
     /** Runs the job for its scheduled time if no other instance holds its lock; blocks until done. */
     public <I> Outcome run(JobDefinition<I> job, Instant scheduledTime) {
+        return observations.blocking(PlatformObservations.JOB, "job " + job.name(),
+            KeyValues.of("job", job.name()), () -> runOnce(job, scheduledTime), Outcome::name);
+    }
+
+    private <I> Outcome runOnce(JobDefinition<I> job, Instant scheduledTime) {
         // Lock times are infrastructure time: ShedLock compares them with the real clock of every instance.
         LockConfiguration lock = new LockConfiguration(ClockProvider.now(), job.name(), job.lockAtMostFor(),
             lockAtLeastFor.compareTo(job.lockAtMostFor()) < 0 ? lockAtLeastFor : job.lockAtMostFor());

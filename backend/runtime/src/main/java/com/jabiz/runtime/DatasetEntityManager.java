@@ -37,6 +37,8 @@ import com.jabiz.temporal.Timeline;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -87,6 +89,7 @@ public class DatasetEntityManager {
     private final TemporalStore temporalStore;
     private final JsonMapper json;
     private final Outbox outbox;
+    private final PlatformObservations observations;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -99,8 +102,10 @@ public class DatasetEntityManager {
         TemporalStore temporalStore,
         VersionAppender versions,
         JsonMapper json,
-        Outbox outbox
+        Outbox outbox,
+        PlatformObservations observations
     ) {
+        this.observations = Objects.requireNonNull(observations, "PlatformObservations cannot be null");
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
         this.entityRegistry = Objects.requireNonNull(entityRegistry, "EntityDefinitionRegistry cannot be null");
         this.datasetRegistry = Objects.requireNonNull(datasetRegistry, "DatasetRegistry cannot be null");
@@ -145,6 +150,16 @@ public class DatasetEntityManager {
         if (changes == null || changes.isEmpty()) {
             return Mono.just(List.of());
         }
+        return observations.mono(PlatformObservations.DATASET_COMMIT, "commit " + dataset.targetEntityType(),
+            tags(dataset), commit(dataset, changes, reason));
+    }
+
+    private static KeyValues tags(DatasetDefinition dataset) {
+        return KeyValues.of("dataset", dataset.resourceId(), "entity", dataset.targetEntityType());
+    }
+
+    private Mono<List<EntityInstance>> commit(DatasetDefinition dataset, Collection<EntityChange> changes,
+        String reason) {
         return RequestContexts.current().flatMap(request -> {
             ensureDatasetWritable(dataset);
             int maxBatch = dataset.policy().maxWriteBatchSize();
@@ -513,9 +528,10 @@ public class DatasetEntityManager {
      */
     public Mono<EntityInstance> findById(DatasetDefinition dataset, EntityDefinition def, Object id, Instant asOf,
         Instant knownAt) {
-        return RequestContexts.current().flatMap(request -> findInScope(
-            storageRegistry.getEngine(dataset.storage().connectionPoolRef()), dataset,
-            dataset.scope().resolve(request), def, id, timeSlice(dataset, def, asOf, knownAt)));
+        return observations.mono(PlatformObservations.DATASET_READ, "read " + def.name, tags(dataset),
+            RequestContexts.current().flatMap(request -> findInScope(
+                storageRegistry.getEngine(dataset.storage().connectionPoolRef()), dataset,
+                dataset.scope().resolve(request), def, id, timeSlice(dataset, def, asOf, knownAt))));
     }
 
     /** Runs a query within the dataset scope, reading from the read replica when one is configured. */
@@ -526,11 +542,12 @@ public class DatasetEntityManager {
     /** As {@link #query(DatasetDefinition, EntityDefinition, EntityQuery)}, at a point in time for temporal entities. */
     public Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
         Instant asOf, Instant knownAt) {
-        return RequestContexts.current().flatMapMany(request -> {
-            PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
-                timeSlice(dataset, def, asOf, knownAt));
-            return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
-        });
+        return observations.flux(PlatformObservations.DATASET_QUERY, "query " + def.name, tags(dataset),
+            RequestContexts.current().flatMapMany(request -> {
+                PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                    timeSlice(dataset, def, asOf, knownAt));
+                return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
+            }));
     }
 
     /** Number of entities the query matches within the dataset scope, ignoring its paging. */

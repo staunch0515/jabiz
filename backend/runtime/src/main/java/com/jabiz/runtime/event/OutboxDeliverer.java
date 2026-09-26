@@ -12,6 +12,8 @@ import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -76,6 +78,7 @@ public class OutboxDeliverer {
     private final int maxAttempts;
     private final Duration initialBackoff;
     private final Duration maxBackoff;
+    private final PlatformObservations observations;
     private volatile Disposable polling;
 
     public OutboxDeliverer(ObjectProvider<EventSubscription<?>> subscriptions, ProcessExecutor executor,
@@ -86,7 +89,9 @@ public class OutboxDeliverer {
         @Value("${jabiz.events.delivery.batch-size:20}") int batchSize,
         @Value("${jabiz.events.delivery.max-attempts:10}") int maxAttempts,
         @Value("${jabiz.events.delivery.initial-backoff:5s}") Duration initialBackoff,
-        @Value("${jabiz.events.delivery.max-backoff:1h}") Duration maxBackoff) {
+        @Value("${jabiz.events.delivery.max-backoff:1h}") Duration maxBackoff,
+        PlatformObservations observations) {
+        this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.subscriptions = subscriptions;
         this.executor = executor;
         this.storages = storages;
@@ -192,7 +197,9 @@ public class OutboxDeliverer {
      */
     public <I> Mono<Outcome> deliver(EventSubscription<I> subscription, DomainEvent event, int attempt) {
         RequestContext system = RequestContext.system(Locale.ENGLISH, "evt-" + event.eventId());
-        return Mono.fromCallable(() -> subscription.input().apply(event))
+        return observations.mono(PlatformObservations.DELIVERY, "deliver " + event.eventType(),
+            KeyValues.of("consumer", subscription.consumer(), "event", event.eventType()),
+            Mono.fromCallable(() -> subscription.input().apply(event))
             .flatMap(input -> executor.run(subscription.process(), input, ExecutionOptions.NONE
                 .withBeforeSteps(operation -> consume(subscription, event, operation))))
             .thenReturn(Outcome.CONSUMED)
@@ -204,6 +211,8 @@ public class OutboxDeliverer {
                 }
                 return recordFailure(subscription, event, attempt, error).thenReturn(Outcome.FAILED);
             })
+            // Failures are recorded and retried, not errors of the delivery: the result tells them apart.
+            .flatMap(outcome -> PlatformObservations.tag(PlatformObservations.RESULT, outcome.name()).thenReturn(outcome)))
             .contextWrite(view -> RequestContexts.put(view, system));
     }
 

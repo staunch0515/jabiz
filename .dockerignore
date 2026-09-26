@@ -1,0 +1,10 @@
+# Only sources go into the build context; build output and dependencies are rebuilt inside the image.
+.git
+.idea
+**/build
+**/.gradle
+frontend/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+.env

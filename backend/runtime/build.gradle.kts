@@ -24,6 +24,11 @@ dependencies {
     api("net.javacrumbs.shedlock:shedlock-core:7.10.1")
     implementation("net.javacrumbs.shedlock:shedlock-provider-r2dbc:7.10.1")
     implementation("io.micrometer:context-propagation")
+    // Observability (docs/design/13-observability-ops.md): Micrometer observations of requests, R2DBC statements and
+    // the platform's own units of work, exported as OTLP metrics, traces and logs when an endpoint is configured.
+    implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+    implementation("io.r2dbc:r2dbc-proxy")
+    implementation("io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0:2.21.0-alpha")
     // OpenAPI description of the web API; the frontend generates its types from it (docs/design/12-frontend.md).
     // 3.0.1 is the release built against Spring Boot 4.0.1. No UI: the document is served at /api/meta/openapi.
     implementation("org.springdoc:springdoc-openapi-starter-webflux-api:3.0.1")

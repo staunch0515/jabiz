@@ -15,6 +15,7 @@ import com.jabiz.process.StepPhase;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
@@ -23,6 +24,7 @@ import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,10 +79,12 @@ public class ProcessExecutor {
     private final JsonMapper json;
     private final SensitiveDataMasker masker;
     private final String poolRef;
+    private final PlatformObservations observations;
 
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations) {
+        this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.masker = masker;
         this.beans = beans;
         this.sequence = sequence;
@@ -107,21 +111,26 @@ public class ProcessExecutor {
         Objects.requireNonNull(definition, "definition must not be null");
         Objects.requireNonNull(input, "input must not be null");
         Objects.requireNonNull(options, "options must not be null");
-        return RequestContexts.current().flatMap(request -> {
-            String key = options.idempotencyKey();
-            if (key == null) {
-                return executeRoot(definition, input, request, null, options);
-            }
-            if (!ExecutionOptions.KEY_PATTERN.matcher(key).matches()) {
-                return Mono.error(new ValidationException(List.of(new Violation("Idempotency-Key",
-                    PlatformErrorCodes.INVALID_IDEMPOTENCY_KEY, "Idempotency keys are 1 to 128 characters of "
-                        + "letters, digits, '.', '_', ':' and '-'"))));
-            }
-            Mono<ProcessResult<O>> replay = replay(definition, request, key);
-            return replay.switchIfEmpty(Mono.defer(() -> executeRoot(definition, input, request, key, options)
-                .onErrorResume(ProcessExecutor::isIdempotencyRace,
-                    race -> replay.switchIfEmpty(Mono.error(race)))));
-        });
+        return observations.mono(PlatformObservations.PROCESS, "process " + definition.name(), tags(definition),
+            RequestContexts.current().flatMap(request -> {
+                String key = options.idempotencyKey();
+                if (key == null) {
+                    return executeRoot(definition, input, request, null, options);
+                }
+                if (!ExecutionOptions.KEY_PATTERN.matcher(key).matches()) {
+                    return Mono.error(new ValidationException(List.of(new Violation("Idempotency-Key",
+                        PlatformErrorCodes.INVALID_IDEMPOTENCY_KEY, "Idempotency keys are 1 to 128 characters of "
+                            + "letters, digits, '.', '_', ':' and '-'"))));
+                }
+                Mono<ProcessResult<O>> replay = replay(definition, request, key);
+                return replay.switchIfEmpty(Mono.defer(() -> executeRoot(definition, input, request, key, options)
+                    .onErrorResume(ProcessExecutor::isIdempotencyRace,
+                        race -> replay.switchIfEmpty(Mono.error(race)))));
+            }));
+    }
+
+    private static KeyValues tags(ProcessDefinition<?, ?, ?> definition) {
+        return KeyValues.of("process", definition.name(), "version", String.valueOf(definition.version()));
     }
 
     private static boolean isIdempotencyRace(Throwable error) {
@@ -169,20 +178,21 @@ public class ProcessExecutor {
     public <I, O, C extends ProcessContext> Mono<O> executeChild(ProcessDefinition<I, O, C> definition, I input) {
         Objects.requireNonNull(definition, "definition must not be null");
         Objects.requireNonNull(input, "input must not be null");
-        return Mono.deferContextual(view -> {
-            Frame frame = view.getOrDefault(Frame.class, null);
-            Operation parent = view.getOrDefault(Operation.class, null);
-            if (frame == null || parent == null) {
-                return Mono.error(new IllegalStateException("Process " + definition.name()
-                    + " can only be called as a sub-process from a step of a running process"));
-            }
-            return RequestContexts.current().flatMap(request -> sequence.next().flatMap(seq -> {
-                OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
-                    parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
-                return operations.begin(engine(), operation, request)
-                    .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
-            })).map(ProcessResult::output);
-        });
+        return observations.mono(PlatformObservations.PROCESS, "sub-process " + definition.name(), tags(definition),
+            Mono.deferContextual(view -> {
+                Frame frame = view.getOrDefault(Frame.class, null);
+                Operation parent = view.getOrDefault(Operation.class, null);
+                if (frame == null || parent == null) {
+                    return Mono.error(new IllegalStateException("Process " + definition.name()
+                        + " can only be called as a sub-process from a step of a running process"));
+                }
+                return RequestContexts.current().flatMap(request -> sequence.next().flatMap(seq -> {
+                    OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
+                        parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
+                    return operations.begin(engine(), operation, request)
+                        .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
+                })).map(ProcessResult::output);
+            }));
     }
 
     /** The storage of the operation tables, where every process transaction runs. */

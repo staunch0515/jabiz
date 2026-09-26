@@ -1,10 +1,19 @@
+# The whole system with one command (ROADMAP phase 11; docs/guide/quickstart.md):
+#
+#   docker compose up -d --build
+#
+# then open http://localhost:8080 and sign in as the administrator printed by `docker compose logs app`
+# (generated on first start, see docker/app-entrypoint.sh). Grafana with metrics, traces and logs: http://localhost:3000.
+#
+# The database credentials below are for this local setup only; deployments pass their own through the environment.
 services:
   db:
-    image: postgres:17
+    image: postgres:16
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
+    # Also reachable from the host, for `./gradlew :app:bootRun` and pgAdmin.
     ports: ["5436:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
@@ -12,15 +21,53 @@ services:
       interval: 5s
       retries: 10
 
+  # Backend and frontend: the frontend is packaged into the backend's jar and served on the same port.
+  app:
+    build: .
+    image: jabiz-app:local
+    depends_on:
+      db: { condition: service_healthy }
+      lgtm: { condition: service_started }
+    ports: ["8080:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_APPLICATION_NAME: jabiz
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/app
+      SPRING_R2DBC_USERNAME: app
+      SPRING_R2DBC_PASSWORD: app
+      SPRING_FLYWAY_URL: jdbc:postgresql://db:5432/app
+      SPRING_FLYWAY_USER: app
+      SPRING_FLYWAY_PASSWORD: app
+      # Observability (docs/design/13-observability-ops.md): JSON logs on the console, and metrics, traces and logs
+      # pushed over OTLP to the LGTM container. All of it is off unless configured like this.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://lgtm:4318/v1/traces
+      MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT: http://lgtm:4318/v1/logs
+      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://lgtm:4318/v1/metrics
+      MANAGEMENT_OTLP_METRICS_EXPORT_STEP: 10s
+    volumes: [jabiz-secrets:/var/lib/jabiz/secrets]
+
+  # Grafana, Prometheus, Tempo, Loki and an OpenTelemetry collector in one container, for development only.
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    ports: ["3000:3000"]
+    volumes:
+      - ./docker/grafana/jabiz-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/jabiz-dashboards.yaml:ro
+      - ./docker/grafana/jabiz-platform.json:/otel-lgtm/jabiz-platform.json:ro
+
   pgadmin:
     image: dpage/pgadmin4
+    profiles: [tools]
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
+    ports: ["5050:80"]
+    depends_on: [db]
 
 volumes:
   pgdata:
+  jabiz-secrets:

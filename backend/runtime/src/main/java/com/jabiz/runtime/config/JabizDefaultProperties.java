@@ -26,6 +26,11 @@ public class JabizDefaultProperties implements EnvironmentPostProcessor {
             "springdoc.writer-with-order-by-keys", "true",
             "springdoc.default-produces-media-type", "application/json",
             // Built once at startup: building it scans the classpath, which must not happen on the event loop.
-            "springdoc.pre-loading-enabled", "true")));
+            "springdoc.pre-loading-enabled", "true",
+            "management.otlp.metrics.export.enabled", "false",
+            // Latency percentiles of the platform's units of work and of requests, computed by the metrics backend.
+            "management.metrics.distribution.percentiles-histogram.jabiz", "true",
+            "management.metrics.distribution.percentiles-histogram.http.server.requests", "true",
+            "management.observations.r2dbc.include-parameter-values", "false")));
     }
 }
