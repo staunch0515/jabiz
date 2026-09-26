@@ -64,6 +64,12 @@ d.scope(s -> s
 与历史接口都被拒绝（400 `TIME_TRAVEL_NOT_ALLOWED`）【D9】。非时态实体传入它们时 400 `NOT_TEMPORAL`。
 时态实体的数据视图不能开启逻辑删除（启动失败）：删除即写墓碑。
 
+### 2.6 只经流程写入【D14】
+
+`policy(p -> p.processOnlyWrites())`：该视图只接受流程（`ChangeSet`）的写入；数据视图 API 的 `commit` 与通用实体流程一律拒绝
+（422 `PROCESS_ONLY_DATASET`，在检查写权限之后）。用于跨多个实例的规则（例如账本交易的借贷平衡，11 §1）不能被绕过的数据。
+以这类视图为默认视图的实体，其操作不能撤销（422 `REVERT_NOT_ALLOWED`）。不能与 `readOnly` 同时使用。
+
 ## 3. 数据视图 API（运行时）
 
 | 方法 | 路径 | 说明 |

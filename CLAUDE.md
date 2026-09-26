@@ -59,6 +59,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   未声明即拒绝。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
+- **账本、事件、定时任务**（见 11 与决策 D14）：账本交易只经 `LEDGER_POST` / `LEDGER_REVERSE` 写入，更正即冲正；
+  需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
+  消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
@@ -93,6 +96,8 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
+- 事件与定时任务：测试配置关闭后台投递与调度（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`），
+  测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)`，场景中用 `deliverEvents: true` / `runJob` 步骤
 - 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）

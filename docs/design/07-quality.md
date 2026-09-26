@@ -22,6 +22,7 @@
 | 数据视图 | 见 03 第 4 节 |
 | SQL 模板 | 见 05 第 6 节（预编译） |
 | 流程 | 见 06 第 9 节 |
+| 事件与定时任务 | 消费者名、任务名唯一；cron 合法；引用的流程已注册（11 §2.3、§4） |
 | 权限 | 数据视图、SQL 模板、流程都声明了权限（开发环境可降级为警告）；SQL 模板不读取敏感字段 |
 | 安全配置 | 访问令牌的签名密钥已配置且足够长（缺失时 Bean 创建失败即拒绝启动，`dev` 除外；见 10 §2） |
 
@@ -33,7 +34,7 @@
   调用 `PlatformCheckRunner.runAll()`，结束后删除 schema。`check` 依赖它。
 - 输出格式：每行一个问题，`类别 | 定位（文件:行号、实体.字段、数据视图）| 描述`，警告行以 `WARNING` 开头；最后一行为汇总；
   存在错误时退出码非 0。上下文本身无法启动时输出一行 `CONTEXT | - | 原因`。
-  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS`（`CHECK` 为检查本身失败）。
+  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS` `EVENT` `JOB`（`CHECK` 为检查本身失败）。
 - CI 中必须运行（`./gradlew check` 包含它）；PR 不允许在 `platformCheck` 失败时合并。
 - 元模型导出 JSON Schema（`/api/meta/schema/*` 与构建产物），SQL 模板头部按 JSON Schema 校验。
 
@@ -74,7 +75,8 @@ snapshot:
 `SnapshotStore`）；业务模块用 `ScenarioReplay.resources("scenarios")` + `ScenarioReplay.verify(App.class, 资源)` 生成动态测试（示范：`app` 的 `ScenarioTest`）。
 
 - 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
-  `setClock`；`expect` 三种：`{query, params, rows, values}`（SQL 模板的行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
+  `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
+  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, rows, values}`（SQL 模板的行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
   `expectError: {process, input, status, ruleCode, field}`。未知键即报错（拼错的期望不会静默通过）。
 - 变量：`save: {名: $.a.b[0]}` 从输出（遮蔽后的 JSON）中取值，`$` 为整个输出；`${名}` 整串引用保留类型，嵌在字符串中时插值；未定义即报错。
 - 比较按含义：数值按大小（`0.1` 与 `0.1000` 相等）、时间按时刻（不论偏移）、映射按包含、列表逐项。

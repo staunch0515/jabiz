@@ -36,9 +36,9 @@
 | `QueryEntities.of(datasetId, ctx -> EntityQuery, targetKey)` | `List<EntityInstance>` |
 | `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】） |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
-| `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` | 子流程输出 |
+| `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
-| `PublishEvent.of(eventType, ctx -> 载荷)` | —；委托给 `EventPublisher`，阶段 9 之前没有实现，使用它的流程启动检查报错 |
+| `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
 
@@ -138,12 +138,14 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 每个流程声明执行权限码（`pb.permissions(...)`，全部具备才可执行）；未声明 → 非开发环境启动失败。权限由流程 API 检查，执行器本身不检查【D11】。
   通用实体流程（`ADD_ENTITY` 等）声明 `entity.write`；`SPONSOR_SIGN_IN` 声明 `auth.sign-in`，只经公开的 `POST /api/auth/login` 执行（10 §3、§4）。
 - 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
-- 同一流程执行器也被定时任务和场景测试调用（传输方式无关）。
+- 同一流程执行器也被定时任务、事件消费者和场景测试调用（传输方式无关，11 §2.3、§4）。
+- `ExecutionOptions`（平台内部）：`idempotencyKey`，以及 `beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
+  （事件投递用它写消费标记，与消费效果同一事务）【D14】。
 
 ## 9. 启动自检
 
 - 每个步骤的处理器恰好有一个 Bean（现有检查保留）；计算步骤和阻塞步骤同样检查（就地写的计算步骤除外）；步骤类必须是三种之一。
-- 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`。
+- 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`，事件类型名合法（11 §2.2）。
 - 调用已废弃（`pb.deprecated()`）的版本给出警告。
 - 权限已声明（`dev` 下为警告）。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。

@@ -193,6 +193,11 @@ eb.unique("uk_user_name", "userName");            // 可多字段
 列表视图不得显示、筛选、排序它，SQL 模板不得读取它；导出为 `sensitive: true`，JSON Schema 中 `writeOnly: true`。
 日志与操作记录中按名字遮蔽（10 §6）。
 
+### 6.2 变更事件【D14】
+
+`eb.publishChanges()`：该实体每次提交的写入都在同一事务中向 Outbox 追加实体变更事件 `jabiz.entity-changed.<实体>`
+（载荷只含字段名，不含值；11 §2.2）。导出为 `publishesChanges`。
+
 ## 7. 列表视图元数据
 
 为前端和 SQL 模板外层筛选提供统一描述：
@@ -211,7 +216,7 @@ eb.listView("default", lv -> lv
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回：实体名、主键、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
+`GET /api/meta/entities/{name}` 返回：实体名、主键、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
 语义类型及参数、必填、不可变、系统维护、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
 列表视图、字典引用（`dictionaries`）。
 
