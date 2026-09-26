@@ -38,6 +38,38 @@ class ScenarioParserTest {
         """;
 
     @Test
+    void readsJobAndEventSteps() {
+        Scenario scenario = Scenario.parse("""
+            name: Jobs
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - runJob: month-close
+              - runJob: { job: month-close, at: 2026-02-01T00:05:00+09:00, outcome: REPLAYED }
+              - deliverEvents: true
+            """, "scenarios/jobs.yml");
+
+        assertThat(scenario.steps()).containsExactly(
+            new Scenario.RunJob(1, "month-close", null, "SUCCEEDED"),
+            new Scenario.RunJob(2, "month-close", Instant.parse("2026-01-31T15:05:00Z"), "REPLAYED"),
+            new Scenario.DeliverEvents(3));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - runJob: { job: x, when: now }
+            """, "scenarios/bad.yml")).hasMessageContaining("when");
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - deliverEvents: false
+            """, "scenarios/bad.yml")).hasMessageContaining("deliverEvents must be true");
+    }
+
+    @Test
     void readsEveryKindOfStep() {
         Scenario scenario = Scenario.parse(FULL, "scenarios/sample.yml");
         assertThat(scenario.name()).isEqualTo("Sample");

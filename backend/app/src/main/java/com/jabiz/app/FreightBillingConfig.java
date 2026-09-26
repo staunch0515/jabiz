@@ -2,6 +2,8 @@ package com.jabiz.app;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.event.EventSubscription;
+import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,5 +46,25 @@ class FreightBillingConfig {
     ProcessDefinition<FreightBilling.CloseInput, FreightBilling.CloseOutput, ProcessContext>
         freightMonthCloseProcess() {
         return FreightBilling.CLOSE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<FreightBilling.RevenueInput, FreightBilling.RevenueOutput, ProcessContext>
+        freightPostRevenueProcess() {
+        return FreightBilling.REVENUE_PROCESS;
+    }
+
+    /** Closes the previous month at 00:05 on the first of each month, Japan time. */
+    @Bean
+    JobDefinition<FreightBilling.CloseInput> freightMonthCloseJob() {
+        return JobDefinition.cron(FreightBilling.CLOSE_JOB, "0 5 0 1 * *", FreightBilling.ZONE,
+            FreightBilling.CLOSE_PROCESS, FreightBilling::previousMonth);
+    }
+
+    /** Posts each closed month's revenue to the ledger. */
+    @Bean
+    EventSubscription<FreightBilling.RevenueInput> freightRevenueSubscription() {
+        return EventSubscription.of(FreightBilling.REVENUE_CONSUMER, FreightBilling.MONTH_CLOSED_EVENT,
+            FreightBilling.REVENUE_PROCESS, FreightBilling::revenueOf);
     }
 }

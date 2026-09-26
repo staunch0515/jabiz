@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Calls another process as a sub-process (docs/design/06-process.md section 5): same transaction, its own
@@ -27,11 +28,19 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
      * @param version   version to call; null for the latest one
      * @param input     builds the sub-process input from the caller's context
      * @param outputKey context key receiving the sub-process output; null to discard it
+     * @param condition whether to call at all, decided on the caller's context when the step is reached (for
+     *                  example: only when there is something to post); always, if null
      */
-    public record Metadata<C>(String processName, Integer version, Function<C, ?> input, String outputKey) {
+    public record Metadata<C>(String processName, Integer version, Function<C, ?> input, String outputKey,
+        Predicate<C> condition) {
         public Metadata {
             Objects.requireNonNull(processName, "processName must not be null");
             Objects.requireNonNull(input, "input must not be null");
+            condition = condition == null ? ctx -> true : condition;
+        }
+
+        public Metadata(String processName, Integer version, Function<C, ?> input, String outputKey) {
+            this(processName, version, input, outputKey, null);
         }
 
         public String target() {
@@ -42,6 +51,13 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String processName, int version,
         Function<C, ?> input, String outputKey) {
         return StepSpec.of(CallProcess.class, new Metadata<>(processName, version, input, outputKey));
+    }
+
+    /** Calls the process only when {@code condition} holds on the caller's context; otherwise the step does nothing. */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> when(Predicate<C> condition, String processName,
+        int version, Function<C, ?> input, String outputKey) {
+        return StepSpec.of(CallProcess.class, new Metadata<>(processName, version, input, outputKey,
+            Objects.requireNonNull(condition, "condition must not be null")));
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> latest(String processName,
@@ -67,6 +83,9 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
+            if (!metadata.condition().test(ctx)) {
+                return Mono.empty();
+            }
             ProcessDefinition<?, ?, ?> target = resolve(registry, metadata).orElseThrow(
                 () -> new IllegalStateException("Unknown process " + metadata.target()));
             return call(target, metadata.input().apply(ctx))

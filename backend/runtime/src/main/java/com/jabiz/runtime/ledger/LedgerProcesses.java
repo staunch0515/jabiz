@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 /**
  * The only writers of ledger transactions (docs/design/11-ledger-events-jobs.md section 1; decision D14):
  * <ul>
+ *   <li>{@code LEDGER_ACCOUNT_OPEN} opens an enabled account (accounts are also maintained through their
+ *       dataset);</li>
  *   <li>{@code LEDGER_POST} books a balanced transaction on enabled accounts; every violation of the posting rules
  *       ({@link LedgerPosting}) and every unknown or closed account is reported at once (422) and nothing is
  *       written;</li>
@@ -44,8 +46,14 @@ import java.util.stream.Collectors;
 @Configuration
 public class LedgerProcesses {
 
+    public static final String OPEN_ACCOUNT = "LEDGER_ACCOUNT_OPEN";
     public static final String POST = "LEDGER_POST";
     public static final String REVERSE = "LEDGER_REVERSE";
+
+    public record OpenAccountInput(@NotBlank String accountCode, @NotBlank String accountName,
+        @NotBlank String accountType) {}
+
+    public record OpenAccountOutput(String accountId, String accountCode) {}
 
     /** One entry to post. */
     public record Line(@NotBlank String accountCode, @NotNull Direction direction, @NotNull BigDecimal amount) {}
@@ -70,6 +78,29 @@ public class LedgerProcesses {
     static final String ENTRIES = "entries";
     static final String REVERSALS = "reversals";
     static final String OUTPUT = "output";
+
+    public static ProcessDefinition<OpenAccountInput, OpenAccountOutput, ProcessContext> openAccount() {
+        return ProcessDefinition.define(OPEN_ACCOUNT, 1, OpenAccountInput.class, OpenAccountOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Opens a ledger account.")
+                .permissions(LedgerPermissions.ACCOUNT_WRITE)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, OpenAccountOutput.class))
+                .compute("Register the account", (metadata, ctx) -> {
+                    OpenAccountInput input = ctx.get("input", OpenAccountInput.class);
+                    Map<String, Object> account = new LinkedHashMap<>();
+                    account.put("accountCode", input.accountCode());
+                    account.put("accountName", input.accountName());
+                    account.put("accountType", input.accountType());
+                    account.put("enabled", true);
+                    Object id = ctx.changes().insert(LedgerEntities.ACCOUNT, account);
+                    ctx.put(OUTPUT, new OpenAccountOutput(String.valueOf(id), input.accountCode()));
+                }));
+    }
 
     public static ProcessDefinition<PostInput, PostOutput, ProcessContext> post(LedgerEntities.Settings settings) {
         return ProcessDefinition.define(POST, 1, PostInput.class, PostOutput.class, ProcessContext.class, pb -> pb
@@ -203,6 +234,11 @@ public class LedgerProcesses {
     @SuppressWarnings("unchecked")
     private static List<EntityInstance> entities(ProcessContext ctx, String key) {
         return (List<EntityInstance>) ctx.get(key);
+    }
+
+    @Bean
+    ProcessDefinition<OpenAccountInput, OpenAccountOutput, ProcessContext> ledgerOpenAccountProcess() {
+        return openAccount();
     }
 
     @Bean

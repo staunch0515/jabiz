@@ -15,7 +15,7 @@
       "versionNo" : 4,
       "effectStartTime" : "2026-02-28T15:00:00Z",
       "createdTime" : "2026-01-31T16:00:00Z",
-      "processSeqId" : "#op:1"
+      "processSeqId" : "#op:4"
     } ],
     "WaybillTracking" : [ {
       "waybillId" : "WB-A",
@@ -139,6 +139,93 @@
       "closedTime" : null,
       "recordedTime" : "2026-03-02T00:00:00Z",
       "rowVersion" : 1
+    } ],
+    "LedgerAccount" : [ {
+      "accountId" : "#uuid:9",
+      "accountCode" : "1130",
+      "accountName" : "Accounts receivable",
+      "accountType" : "ASSET",
+      "enabled" : true,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-05T00:00:00Z",
+      "createdTime" : "2026-01-05T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "accountId" : "#uuid:10",
+      "accountCode" : "4110",
+      "accountName" : "Freight revenue",
+      "accountType" : "REVENUE",
+      "enabled" : true,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-05T00:00:00Z",
+      "createdTime" : "2026-01-05T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "LedgerTransaction" : [ {
+      "transactionId" : "#uuid:11",
+      "bookingTime" : "2026-01-31T14:59:59Z",
+      "description" : "Freight revenue 2026-01",
+      "reference" : "#uuid:6",
+      "reversesTransactionId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "transactionId" : "#uuid:12",
+      "bookingTime" : "2026-02-28T14:59:59Z",
+      "description" : "Freight revenue 2026-02",
+      "reference" : "#uuid:7",
+      "reversesTransactionId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-02T00:00:00Z",
+      "createdTime" : "2026-03-02T00:00:00Z",
+      "processSeqId" : "#op:5"
+    } ],
+    "LedgerEntry" : [ {
+      "entryId" : "#uuid:13",
+      "transactionId" : "#uuid:11",
+      "accountId" : "#uuid:9",
+      "lineNo" : "1",
+      "direction" : "DEBIT",
+      "amount" : "38500.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "entryId" : "#uuid:14",
+      "transactionId" : "#uuid:11",
+      "accountId" : "#uuid:10",
+      "lineNo" : "2",
+      "direction" : "CREDIT",
+      "amount" : "38500.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "entryId" : "#uuid:15",
+      "transactionId" : "#uuid:12",
+      "accountId" : "#uuid:9",
+      "lineNo" : "1",
+      "direction" : "DEBIT",
+      "amount" : "34500.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-02T00:00:00Z",
+      "createdTime" : "2026-03-02T00:00:00Z",
+      "processSeqId" : "#op:5"
+    }, {
+      "entryId" : "#uuid:16",
+      "transactionId" : "#uuid:12",
+      "accountId" : "#uuid:10",
+      "lineNo" : "2",
+      "direction" : "CREDIT",
+      "amount" : "34500.0000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-03-02T00:00:00Z",
+      "createdTime" : "2026-03-02T00:00:00Z",
+      "processSeqId" : "#op:5"
     } ]
   }
 }

@@ -18,6 +18,10 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.param.ParamService;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.runtime.job.JobRegistry;
+import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
@@ -71,6 +75,9 @@ public final class ScenarioRunner {
     private final DatasetEntityManager entityManager;
     private final ParamService params;
     private final MutableClock clock;
+    private final JobRegistry jobs;
+    private final JobRunner jobRunner;
+    private final OutboxDeliverer deliverer;
 
     public ScenarioRunner(ApplicationContext context) {
         this.processes = context.getBean(ProcessRegistry.class);
@@ -84,6 +91,9 @@ public final class ScenarioRunner {
         this.entityManager = context.getBean(DatasetEntityManager.class);
         this.params = context.getBean(ParamService.class);
         this.clock = context.getBean(MutableClock.class);
+        this.jobs = context.getBean(JobRegistry.class);
+        this.jobRunner = context.getBean(JobRunner.class);
+        this.deliverer = context.getBean(OutboxDeliverer.class);
     }
 
     public Result run(Scenario scenario) {
@@ -131,6 +141,21 @@ public final class ScenarioRunner {
             }
             case Scenario.AdvanceClock a -> clock.set(advance(clock.instant(), a.amount()));
             case Scenario.SetClock s -> clock.set(s.time());
+            case Scenario.RunJob j -> {
+                JobDefinition<?> job = jobs.find(j.job())
+                    .orElseThrow(() -> failure(scenario, step, "unknown job " + j.job(), null));
+                JobRunner.Outcome outcome = jobRunner.run(job, j.at() == null ? clock.instant() : j.at());
+                if (!outcome.name().equals(j.outcome())) {
+                    throw failure(scenario, step, "job " + j.job() + " ended " + outcome + ", not " + j.outcome(),
+                        null);
+                }
+            }
+            case Scenario.DeliverEvents d -> {
+                // Until nothing is due; failed deliveries wait for their backoff, so this ends.
+                for (int round = 0; round < 100 && deliverer.deliverPending().block() > 0; round++) {
+                    // deliver again: consumers may publish events of their own
+                }
+            }
             case Scenario.Expect e -> expect(scenario, step, e.expectation(), variables);
             case Scenario.ExpectError e -> expectError(scenario, e, variables);
         }

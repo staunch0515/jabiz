@@ -65,6 +65,15 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     public record SetClock(int number, Instant time) implements Step {}
 
+    /**
+     * Runs a scheduled job for {@code at} (default: now) as the scheduler would, and checks the outcome
+     * ({@code SUCCEEDED} by default; docs/design/11-ledger-events-jobs.md section 4).
+     */
+    public record RunJob(int number, String job, Instant at, String outcome) implements Step {}
+
+    /** Delivers the pending outbox events to their consumers until nothing is due. */
+    public record DeliverEvents(int number) implements Step {}
+
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
@@ -145,13 +154,20 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         }
         if (keys.size() != 1) {
             throw new IllegalArgumentException(where + " must have exactly one of process, advanceClock, setClock, "
-                + "expect, expectError (besides note); found " + keys.keySet());
+                + "runJob, deliverEvents, expect, expectError (besides note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();
         Object body = keys.get(kind);
         return switch (kind) {
             case "advanceClock" -> new AdvanceClock(number, String.valueOf(body));
             case "setClock" -> new SetClock(number, instant(body, where + ".setClock"));
+            case "runJob" -> runJob(number, body, where + ".runJob");
+            case "deliverEvents" -> {
+                if (!Boolean.TRUE.equals(body)) {
+                    throw new IllegalArgumentException(where + ".deliverEvents must be true");
+                }
+                yield new DeliverEvents(number);
+            }
             case "expect" -> new Expect(number, expectation(map(body, where + ".expect"), where + ".expect"));
             case "expectError" -> expectError(number, map(body, where + ".expectError"), where + ".expectError");
             default -> throw new IllegalArgumentException(where + ": unknown step '" + kind + "'");
@@ -184,6 +200,18 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
                 asOf == null ? null : instant(asOf, where + ".asOf"), required(expect, "value", where));
         }
         throw new IllegalArgumentException(where + " needs query, entity or param");
+    }
+
+    private static RunJob runJob(int number, Object body, String where) {
+        if (body instanceof String name) {
+            return new RunJob(number, name, null, "SUCCEEDED");
+        }
+        Map<String, Object> job = map(body, where);
+        onlyKeys(job, where, Set.of("job", "at", "outcome"));
+        Object at = job.get("at");
+        String outcome = text(job, "outcome", false);
+        return new RunJob(number, text(job, "job", true), at == null ? null : instant(at, where + ".at"),
+            outcome == null ? "SUCCEEDED" : outcome);
     }
 
     private static ExpectError expectError(int number, Map<String, Object> error, String where) {

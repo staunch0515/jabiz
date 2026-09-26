@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Publishes an event built from the context through the {@link EventPublisher} (docs/design/06-process.md section
@@ -21,15 +22,29 @@ import java.util.function.Function;
 public class PublishEvent<C extends ProcessContext> implements StepHandler<PublishEvent.Metadata<C>, C>,
     CheckedStep<PublishEvent.Metadata<C>> {
 
-    public record Metadata<C>(String eventType, Function<C, ?> payload) {
+    /**
+     * @param condition whether to publish at all, decided on the context when the step is reached; always, if null
+     */
+    public record Metadata<C>(String eventType, Function<C, ?> payload, Predicate<C> condition) {
         public Metadata {
             Objects.requireNonNull(eventType, "eventType must not be null");
             Objects.requireNonNull(payload, "payload must not be null");
+            condition = condition == null ? ctx -> true : condition;
         }
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String eventType, Function<C, ?> payload) {
-        return StepSpec.of(PublishEvent.class, new Metadata<>(eventType, payload));
+        return StepSpec.of(PublishEvent.class, new Metadata<>(eventType, payload, null));
+    }
+
+    /**
+     * Publishes only when {@code condition} holds, for example only when an earlier step produced a result (a step
+     * after a rejecting one still runs; the process fails once all steps ran).
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> when(Predicate<C> condition, String eventType,
+        Function<C, ?> payload) {
+        return StepSpec.of(PublishEvent.class, new Metadata<>(eventType, payload,
+            Objects.requireNonNull(condition, "condition must not be null")));
     }
 
     private final ObjectProvider<EventPublisher> publisher;
@@ -41,6 +56,9 @@ public class PublishEvent<C extends ProcessContext> implements StepHandler<Publi
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
+            if (!metadata.condition().test(ctx)) {
+                return Mono.empty();
+            }
             EventPublisher target = publisher.getIfUnique();
             if (target == null) {
                 return Mono.error(new IllegalStateException("No EventPublisher is configured"));

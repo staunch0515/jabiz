@@ -1,10 +1,17 @@
 # Freight billing across a month end (ROADMAP phase 8): the fuel surcharge rate changes on 1 February (Japan time)
 # by a scheduled parameter change; each waybill is charged at the rate in effect when it was shipped, whenever it is
-# charged; January is closed in February and takes no more charges afterwards.
+# charged; January is closed in February and takes no more charges afterwards. Since ROADMAP phase 9 the monthly job
+# closes January, each close publishes an event, and its consumer posts the month's revenue to the ledger.
 name: Freight billing across a month end
 clock: 2026-01-05T00:00:00Z
 actor: { id: billing-admin, permissions: ["*"] }
 steps:
+  - note: The ledger accounts the revenue postings use.
+    process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1130", accountName: Accounts receivable, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4110", accountName: Freight revenue, accountType: REVENUE }
+
   - note: The rate starts at 10 % and is scheduled to rise to 15 % on 1 February 00:00 Japan time.
     process: PARAM_CREATE@latest
     input:
@@ -57,11 +64,22 @@ steps:
       input: { month: 2026-02 }
       status: 422
       ruleCode: FREIGHT_MONTH_NOT_ENDED
-  - process: FREIGHT_MONTH_CLOSE@latest
-    input: { month: 2026-01 }
-    save: { januaryStatement: $.statementId }
-    expectOutput: { month: 2026-01, chargeCount: 2, totalAmount: 38500 }
+  - note: The monthly job fires for 1 February 00:05 Japan time and closes January.
+    runJob: { job: logistics.freight-month-close, at: 2026-01-31T15:05:00Z }
   - expect: { entity: FreightCharge, id: "${chargeA}", fields: { settled: true, surchargeAmount: 2000 } }
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-01T00:00:00+09:00 }
+      values: [{ accountCode: "1130", balance: 0 }, { accountCode: "4110", balance: 0 }]
+  - note: The close published its event; delivering it posts January's revenue, booked on 31 January.
+    deliverEvents: true
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-01T00:00:00+09:00 }
+      rows: 2
+      values:
+        - { accountCode: "1130", debitTotal: 38500, creditTotal: 0, balance: 38500 }
+        - { accountCode: "4110", debitTotal: 0, creditTotal: 38500, balance: -38500 }
 
   - note: A waybill shipped in January but registered late cannot be charged into the closed month.
     process: ADD_ENTITY@latest
@@ -109,6 +127,16 @@ steps:
   - process: FREIGHT_MONTH_CLOSE@latest
     input: { month: 2026-02 }
     expectOutput: { chargeCount: 1, totalAmount: 34500 }
+  - deliverEvents: true
+  - note: February's revenue is booked on 28 February; as of the end of January only January's counts.
+    expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-03-02T00:00:00Z }
+      values: [{ accountCode: "1130", balance: 73000 }, { accountCode: "4110", balance: -73000 }]
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-01T00:00:00+09:00 }
+      values: [{ accountCode: "1130", balance: 38500 }, { accountCode: "4110", balance: -38500 }]
   - expect:
       query: logistics.freight_charges
       params: { month: 2026-01 }
@@ -117,5 +145,6 @@ steps:
         - { waybillId: WB-A, surchargeRate: 0.1, surchargeAmount: 2000, settled: true }
         - { waybillId: WB-B, surchargeRate: 0.1, surchargeAmount: 1500, settled: true }
 snapshot:
-  entities: [SysParam, WaybillTracking, FreightCharge, FreightStatement]
+  entities: [SysParam, WaybillTracking, FreightCharge, FreightStatement, LedgerAccount, LedgerTransaction,
+             LedgerEntry]
   asOf: end

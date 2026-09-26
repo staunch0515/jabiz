@@ -23,6 +23,7 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
@@ -177,7 +178,10 @@ public class OutboxDeliverer {
     private DomainEvent toEvent(Map<String, Object> row) {
         String payload = Rows.string(row.get("payload"));
         return new DomainEvent(Rows.uuid(row.get("event_id")), Rows.string(row.get("event_type")),
-            json.readValue(payload, new TypeReference<Map<String, Object>>() {}),
+            // Decimals stay exact (amounts), rather than becoming doubles.
+            json.readerFor(new TypeReference<Map<String, Object>>() {})
+                .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+                .<Map<String, Object>>readValue(payload),
             Rows.longValue(row.get("process_seq_id")), Rows.instant(row.get("created_time")));
     }
 

@@ -12,10 +12,16 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.event.DomainEvent;
+import com.jabiz.ledger.Direction;
+import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
@@ -37,7 +43,11 @@ import java.util.Map;
  *       thus applies to waybills shipped from then on, even those charged earlier or later.</li>
  *   <li>Each month has one statement, kept up to date by every charge of the month (number and total).</li>
  *   <li>{@code FREIGHT_MONTH_CLOSE} closes a month (Japan time) once it has ended: the statement is closed with the
- *       number and total of its charges, which are marked settled. A closed month takes no more charges.</li>
+ *       number and total of its charges, which are marked settled. A closed month takes no more charges. The job
+ *       {@value #CLOSE_JOB} runs it for the previous month on the first of each month; a successful close publishes
+ *       {@value #MONTH_CLOSED_EVENT}.</li>
+ *   <li>{@code FREIGHT_POST_REVENUE}, the consumer of that event, posts the month's total to the ledger (accounts
+ *       receivable to freight revenue), booked at the end of the month (ROADMAP phase 9).</li>
  * </ul>
  * Charges and the close both update the month's statement under its optimistic lock (or insert it, under its unique
  * month), so a charge racing a close of the same month makes one of them fail (409 or 400 {@code UNIQUE_VIOLATION})
@@ -56,6 +66,16 @@ public final class FreightBilling extends BaseEntityDefinitions {
 
     /** Months are business months in Japan. */
     public static final ZoneId ZONE = ZoneId.of("Asia/Tokyo");
+
+    /** Published by a successful close (ROADMAP phase 9): its payload is the {@link CloseOutput}. */
+    public static final String MONTH_CLOSED_EVENT = "logistics.freight-month-closed";
+    /** Consumer of {@link #MONTH_CLOSED_EVENT} that posts the month's revenue to the ledger. */
+    public static final String REVENUE_CONSUMER = "logistics.freight-revenue";
+    /** The job that closes the previous month shortly after midnight on the first of each month (Japan time). */
+    public static final String CLOSE_JOB = "logistics.freight-month-close";
+    /** Ledger accounts of the revenue posting: accounts receivable (debit) and freight revenue (credit). */
+    public static final String RECEIVABLE_ACCOUNT = "1130";
+    public static final String REVENUE_ACCOUNT = "4110";
 
     public static final String MONTH_CLOSED = "FREIGHT_MONTH_CLOSED";
     public static final String MONTH_NOT_ENDED = "FREIGHT_MONTH_NOT_ENDED";
@@ -128,6 +148,12 @@ public final class FreightBilling extends BaseEntityDefinitions {
 
     public record CloseOutput(String statementId, String month, int chargeCount, BigDecimal totalAmount) {}
 
+    /** @param totalAmount the month's total, as published by the close */
+    public record RevenueInput(@NotBlank String month, String statementId, @NotNull BigDecimal totalAmount) {}
+
+    /** @param transactionId the ledger transaction; null for a month without charges */
+    public record RevenueOutput(String month, String transactionId) {}
+
     /** What the charging steps hand each other. */
     public static final class ChargeContext extends ProcessContext {
 
@@ -196,7 +222,49 @@ public final class FreightBilling extends BaseEntityDefinitions {
                             new QueryPredicate.Eq("settled", false))))
                         .limit(CLOSE_QUERY_LIMIT)
                         .build(), "charges"))
-                .compute("Close the month", (metadata, ctx) -> close(ctx)));
+                .compute("Close the month", (metadata, ctx) -> close(ctx))
+                .step("Publish the closed month", PublishEvent.<ProcessContext>when(ctx -> ctx.contains("output"),
+                    MONTH_CLOSED_EVENT, ctx -> ctx.get("output", CloseOutput.class))));
+
+    public static final ProcessDefinition<RevenueInput, RevenueOutput, ProcessContext> REVENUE_PROCESS =
+        ProcessDefinition.define("FREIGHT_POST_REVENUE", 1, RevenueInput.class, RevenueOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Posts the freight revenue of a closed month to the ledger.")
+                .permissions("logistics.freight.post")
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> new RevenueOutput(ctx.get("input", RevenueInput.class).month(),
+                    ctx.contains("posting") ? ctx.get("posting", LedgerProcesses.PostOutput.class).transactionId()
+                        : null))
+                .step("Post the revenue", CallProcess.<ProcessContext>when(
+                    ctx -> ctx.get("input", RevenueInput.class).totalAmount().signum() > 0,
+                    LedgerProcesses.POST, 1, FreightBilling::revenuePosting, "posting")));
+
+    /** Accounts receivable to freight revenue, booked at the last moment of the month (Japan time). */
+    static LedgerProcesses.PostInput revenuePosting(ProcessContext ctx) {
+        RevenueInput input = ctx.get("input", RevenueInput.class);
+        Instant monthEnd = YearMonth.parse(input.month()).plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant()
+            .minusSeconds(1);
+        return new LedgerProcesses.PostInput(monthEnd, "Freight revenue " + input.month(), input.statementId(),
+            List.of(new LedgerProcesses.Line(RECEIVABLE_ACCOUNT, Direction.DEBIT, input.totalAmount()),
+                new LedgerProcesses.Line(REVENUE_ACCOUNT, Direction.CREDIT, input.totalAmount())));
+    }
+
+    /** The close of the previous month, for the job firing at {@code scheduledTime}. */
+    static CloseInput previousMonth(Instant scheduledTime) {
+        return new CloseInput(YearMonth.from(scheduledTime.atZone(ZONE)).minusMonths(1).toString());
+    }
+
+    /** The revenue posting for a {@link #MONTH_CLOSED_EVENT}; the payload is the close's output. */
+    static RevenueInput revenueOf(DomainEvent event) {
+        Map<String, Object> payload = event.payload();
+        return new RevenueInput(String.valueOf(payload.get("month")),
+            payload.get("statementId") == null ? null : String.valueOf(payload.get("statementId")),
+            new BigDecimal(String.valueOf(payload.get("totalAmount"))));
+    }
 
     private static EntityQuery statementOf(String month) {
         return EntityQuery.builder().where(new QueryPredicate.Eq("statementMonth", month)).limit(1).build();
