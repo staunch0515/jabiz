@@ -3,6 +3,7 @@ package com.jabiz.app.it.fixture;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.BlockingStep;
 import com.jabiz.process.ChangeSet;
+import com.jabiz.process.ComputeStep;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -276,6 +277,29 @@ public final class ItProcessFixtures {
                 .step("Child", CallProcess.latest("IT_PRICE",
                     ctx -> new PriceInput(ctx.get("in", PriceFamilyInput.class).childSku(), 20L, null, 0L), null)));
 
+    /** Wrongly registers a change after the commit: attempted once, since a retry cannot help. */
+    public static final ProcessDefinition<ChildInput, TicketOutput, ProcessContext> LATE_CHANGE =
+        ProcessDefinition.define("IT_LATE_CHANGE", 1, ChildInput.class, TicketOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, in) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("ticketId", in.id());
+                    return ctx;
+                })
+                .outputMapper(ctx -> new TicketOutput(ctx.get("ticketId", String.class), 0L, ctx.processSeqId()))
+                .compute("Nothing", (metadata, ctx) -> {})
+                .afterCommit("Register late", LateRegistrar.class, NoMetadata.INSTANCE,
+                    new RetryPolicy(3, Duration.ofMillis(10))));
+
+    @Component
+    public static class LateRegistrar implements ComputeStep<NoMetadata, ProcessContext> {
+        @Override
+        public void compute(NoMetadata metadata, ProcessContext ctx) {
+            ctx.changes().insert("ItTicket", ticket(ctx.get("ticketId", String.class), "late", 1L));
+        }
+    }
+
     /** A service with a blocking client only: sleeps, and records whether it ran on a virtual thread. */
     @Component
     public static class SlowService implements BlockingStep<NoMetadata, ProcessContext> {
@@ -349,6 +373,11 @@ public final class ItProcessFixtures {
         @Bean
         ProcessDefinition<ChildInput, TicketOutput, ProcessContext> itNotify() {
             return NOTIFY;
+        }
+
+        @Bean
+        ProcessDefinition<ChildInput, TicketOutput, ProcessContext> itLateChange() {
+            return LATE_CHANGE;
         }
 
         @Bean

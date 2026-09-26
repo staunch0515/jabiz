@@ -30,6 +30,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.ContextView;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
@@ -44,9 +45,10 @@ import java.util.Objects;
  *   <li>the in-transaction steps run one after another; sub-processes ({@code CallProcess}) run in the same
  *       transaction as operations of their own, with the parent's operation time;</li>
  *   <li>violations the steps collected fail the process as a whole (422), before anything is committed;</li>
- *   <li>the registered changes are committed, the output is computed and stored in {@code op_process_result};</li>
- *   <li>after the commit, the after-commit steps of the process and its sub-processes run, each retried by its
- *       policy with every attempt recorded; their failures no longer affect the result.</li>
+ *   <li>the registered changes are committed and the output is computed; with an idempotency key it is stored in
+ *       {@code op_process_result} for replay;</li>
+ *   <li>after the commit, the after-commit steps of the process and its sub-processes start on their own, each
+ *       retried by its policy with every attempt recorded; the result does not wait for them or depend on them.</li>
  * </ol>
  * Any failure before the commit rolls everything back, the operation records included. Domain exceptions propagate
  * unchanged. The caller's {@link RequestContext} must be in the Reactor context; permissions are checked by the
@@ -145,10 +147,14 @@ public class ProcessExecutor {
             OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq, null,
                 null, null, idempotencyKey, null);
             return operations.begin(engine, operation, request)
-                .flatMap(started -> runProcess(definition, input, started, request, afterCommit));
+                .flatMap(started -> runProcess(definition, input, started, request, afterCommit,
+                    idempotencyKey != null));
         });
         return engine.inTransaction(transaction)
-            .flatMap(result -> runAfterCommit(engine, List.copyOf(afterCommit)).thenReturn(result));
+            .flatMap(result -> Mono.deferContextual(view -> {
+                startAfterCommit(engine, List.copyOf(afterCommit), view);
+                return Mono.just(result);
+            }));
     }
 
     /**
@@ -170,7 +176,7 @@ public class ProcessExecutor {
                 OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
                     parent.processSeqId(), null, null, null, parent.opTime());
                 return operations.begin(engine(), operation, request)
-                    .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit()));
+                    .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
             })).map(ProcessResult::output);
         });
     }
@@ -182,7 +188,7 @@ public class ProcessExecutor {
 
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> runProcess(
         ProcessDefinition<I, O, C> definition, I input, Operation operation, RequestContext request,
-        List<PendingStep<?>> afterCommit
+        List<PendingStep<?>> afterCommit, boolean keepOutput
     ) {
         return Mono.defer(() -> {
             ProcessStart start = new ProcessStart(operation.processSeqId(), operation.opTime(), request,
@@ -202,8 +208,11 @@ public class ProcessExecutor {
                 }))
                 .then(Mono.fromCallable(() -> Objects.requireNonNull(definition.outputMapper().apply(ctx),
                     "Process " + definition.name() + ": output mapper returned null")))
-                .flatMap(output -> operations.recordResult(engine, operation.processSeqId(),
-                        json.writeValueAsString(output))
+                // The output is kept only where a replay needs it: op_process_result cannot be purged, and outputs
+                // may carry field values that masking (ROADMAP phase 7) does not cover yet.
+                .flatMap(output -> (keepOutput
+                        ? operations.recordResult(engine, operation.processSeqId(), json.writeValueAsString(output))
+                        : Mono.<Void>empty())
                     .thenReturn(new ProcessResult<>(operation.processSeqId(), output, false)))
                 .doOnSuccess(result -> definition.steps().stream()
                     .filter(step -> step.phase() == StepPhase.AFTER_COMMIT)
@@ -262,8 +271,26 @@ public class ProcessExecutor {
     private record PendingStep<C extends ProcessContext>(
         ProcessDefinition<?, ?, C> definition, StepDefinition<?, C> step, C ctx) {}
 
-    private Mono<Void> runAfterCommit(StorageEngine engine, List<PendingStep<?>> steps) {
-        return Flux.fromIterable(steps).concatMap(pending -> attempt(engine, pending, 1)).then();
+    /**
+     * Runs the after-commit steps on their own, so that the response does not wait for their retries and a caller
+     * that goes away cannot cancel them: the data is committed either way. They keep the caller's Reactor context
+     * (request context, request id in the logs).
+     */
+    private void startAfterCommit(StorageEngine engine, List<PendingStep<?>> steps, ContextView view) {
+        if (steps.isEmpty()) {
+            return;
+        }
+        Flux.fromIterable(steps)
+            .concatMap(pending -> attempt(engine, pending, 1))
+            .contextWrite(view)
+            .subscribe(null, error -> log.error("After-commit steps stopped unexpectedly", error));
+    }
+
+    /** An after-commit step registered changes, which can no longer be committed; retrying would not help. */
+    private static final class ChangesAfterCommit extends IllegalStateException {
+        ChangesAfterCommit(String message) {
+            super(message);
+        }
     }
 
     private <C extends ProcessContext> Mono<Void> attempt(StorageEngine engine, PendingStep<C> pending, int attempt) {
@@ -272,15 +299,15 @@ public class ProcessExecutor {
         return Mono.delay(step.retryPolicy().backoffBefore(attempt))
             .then(runStep(pending.definition(), step, pending.ctx()))
             .then(Mono.fromRunnable(() -> {
-                if (!pending.ctx().changes().isEmpty()) {
-                    throw new IllegalStateException("After-commit step '" + step.stepName()
+                if (!pending.ctx().changes().drain().isEmpty()) {
+                    throw new ChangesAfterCommit("After-commit step '" + step.stepName()
                         + "' registered changes; its transaction is over, so they cannot be committed");
                 }
             }))
             .then(record(engine, seq, step.stepName(), attempt, null))
             .onErrorResume(error -> record(engine, seq, step.stepName(), attempt, describe(error))
                 .then(Mono.defer(() -> {
-                    if (attempt < step.retryPolicy().maxAttempts()) {
+                    if (attempt < step.retryPolicy().maxAttempts() && !(error instanceof ChangesAfterCommit)) {
                         return attempt(engine, pending, attempt + 1);
                     }
                     log.error("After-commit step '{}' of process {} v{} (seq {}) failed after {} attempt(s)",

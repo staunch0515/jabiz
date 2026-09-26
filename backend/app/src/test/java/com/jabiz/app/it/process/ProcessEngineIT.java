@@ -109,9 +109,8 @@ class ProcessEngineIT extends PostgresIntegrationTest {
             .containsEntry("actor_id", "it-user").containsEntry("request_id", "it-request");
         assertThat(((Timestamp) operation.get("op_time")).toInstant()).isEqualTo(START);
         assertThat(operation.get("parent_seq_id")).isNull();
-        String output = String.valueOf(query("SELECT output FROM op_process_result WHERE process_seq_id = ?",
-            out.processSeqId()).getFirst().get("output"));
-        assertThat(output).contains("\"id\"").contains(id);
+        // Without an idempotency key there is nothing to replay, so the output is not kept.
+        assertThat(query("SELECT 1 FROM op_process_result WHERE process_seq_id = ?", out.processSeqId())).isEmpty();
         assertThat(query("SELECT f_title, f_owner FROM it_ticket WHERE f_id = ?", id).getFirst())
             .containsEntry("f_title", "first").containsEntry("f_owner", "it-owner");
     }
@@ -242,6 +241,27 @@ class ProcessEngineIT extends PostgresIntegrationTest {
 
     // ---------------------------------------------------------------- after commit
 
+    /** After-commit steps run on their own after the response; waits until the given number of attempts is logged. */
+    private static List<Map<String, Object>> awaitAttempts(long processSeqId, int count) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        List<Map<String, Object>> attempts;
+        do {
+            attempts = query("""
+                SELECT attempt, succeeded, error FROM op_process_after_commit WHERE process_seq_id = ?
+                ORDER BY attempt""", processSeqId);
+            if (attempts.size() >= count) {
+                return attempts;
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        } while (System.nanoTime() < deadline);
+        return attempts;
+    }
+
     @Test
     void afterCommitStepsRunOnceCommittedAndAreRetriedWithEveryAttemptRecorded() {
         String id = id();
@@ -250,14 +270,12 @@ class ProcessEngineIT extends PostgresIntegrationTest {
         TicketOutput out = asTestRequest(executor.execute(ItProcessFixtures.NOTIFY, new ChildInput(id, false)))
             .block();
 
-        assertThat(ItProcessFixtures.NOTIFIED).containsExactly(id + ":committed", id + ":committed",
-            id + ":committed");
-        assertThat(query("""
-            SELECT attempt, succeeded, error FROM op_process_after_commit WHERE process_seq_id = ? ORDER BY attempt""",
-            out.processSeqId()))
+        assertThat(awaitAttempts(out.processSeqId(), 3))
             .extracting(row -> row.get("attempt"), row -> row.get("succeeded"))
             .containsExactly(tuple(1, false), tuple(2, false),
                 tuple(3, true));
+        assertThat(ItProcessFixtures.NOTIFIED).containsExactly(id + ":committed", id + ":committed",
+            id + ":committed");
         assertThat(query("SELECT error FROM op_process_after_commit WHERE process_seq_id = ? AND attempt = 1",
             out.processSeqId()).getFirst().get("error").toString()).contains("notification service unavailable");
     }
@@ -271,16 +289,33 @@ class ProcessEngineIT extends PostgresIntegrationTest {
             .block();
 
         assertThat(ticketExists(id)).isTrue();
-        assertThat(query("SELECT succeeded FROM op_process_after_commit WHERE process_seq_id = ?", out.processSeqId()))
+        assertThat(awaitAttempts(out.processSeqId(), 3))
             .hasSize(3).allSatisfy(row -> assertThat(row.get("succeeded")).isEqualTo(false));
+    }
+
+    @Test
+    void anAfterCommitStepThatRegistersChangesFailsWithoutRetryAndWritesNothing() {
+        String id = id();
+
+        TicketOutput out = asTestRequest(executor.execute(ItProcessFixtures.LATE_CHANGE, new ChildInput(id, false)))
+            .block();
+
+        List<Map<String, Object>> attempts = awaitAttempts(out.processSeqId(), 1);
+        assertThat(attempts).singleElement().satisfies(row -> {
+            assertThat(row.get("succeeded")).isEqualTo(false);
+            assertThat(row.get("error").toString()).contains("registered changes");
+        });
+        assertThat(ticketExists(id)).isFalse();
     }
 
     @Test
     void afterCommitStepsDoNotRunWhenTheTransactionRollsBack() {
         String id = id();
 
+        long before = operations();
         assertThatThrownBy(() -> asTestRequest(executor.execute(ItProcessFixtures.NOTIFY, new ChildInput(id, true)))
             .block()).hasMessageContaining("fails after the after-commit step was declared");
+        assertThat(operations()).isEqualTo(before);
 
         assertThat(ItProcessFixtures.NOTIFIED).isEmpty();
         assertThat(ticketExists(id)).isFalse();
@@ -300,6 +335,8 @@ class ProcessEngineIT extends PostgresIntegrationTest {
             ExecutionOptions.idempotent(key))).block();
 
         assertThat(first.replayed()).isFalse();
+        assertThat(String.valueOf(query("SELECT output FROM op_process_result WHERE process_seq_id = ?",
+            first.processSeqId()).getFirst().get("output"))).contains(input.id());
         assertThat(second.replayed()).isTrue();
         assertThat(second.processSeqId()).isEqualTo(first.processSeqId());
         assertThat(second.output()).isEqualTo(first.output());

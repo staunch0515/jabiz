@@ -79,12 +79,12 @@ public class ProcessContext {
 ## 4. 事务与阶段
 
 - 默认：**整个流程（含子流程）在一个数据库事务中**执行，由 `TransactionalOperator` 包裹。
-- `op_process` 行在流程开始时（同一事务内）写入，之后不再更新；输出在流程结束时写入 `op_process_result`【决策 D4】。事务回滚时一并消失。
+- `op_process` 行在流程开始时（同一事务内）写入，之后不再更新；带 `Idempotency-Key` 时，输出在流程结束时写入 `op_process_result`【决策 D4、D11】。事务回滚时一并消失。
 - 步骤可以声明阶段：
   - `IN_TX`（默认）：在事务内执行；
   - `AFTER_COMMIT`：事务成功提交后执行（用于调用外部系统、发送通知）；失败不影响已提交的数据，由平台记录并按策略重试。
 - `AFTER_COMMIT` 的实现【D11】：声明为 `.afterCommit(名称, 步骤类, 元数据[, RetryPolicy])`；在根流程提交后按顺序执行（子流程的推迟到根流程提交后），
-  按 `RetryPolicy`（默认 3 次、200 ms 起指数退避）在进程内重试，每次尝试追加到只追加表 `op_process_after_commit`，用尽后记 error 日志；
+  独立于响应运行（响应不等待，调用方断开也不取消），按 `RetryPolicy`（默认 3 次、200 ms 起指数退避）在进程内重试，每次尝试追加到只追加表 `op_process_after_commit`，用尽后记 error 日志；
   不做持久化重试（可靠投递用 `PublishEvent`）。
 - 步骤的执行方式：`ComputeStep` 在当前（非阻塞）线程同步执行，BlockHound 会拦下其中的阻塞调用；`BlockingStep` 在 `boundedElastic`（虚拟线程）上执行，
   之后切回非阻塞线程继续。
@@ -98,7 +98,7 @@ public class ProcessContext {
 - 子流程失败 → 整个父流程失败并回滚。
 - 撤销父操作时，按相反顺序一并撤销子操作（见 04 第 6 节）。
 - 禁止递归调用同一流程（启动时检查调用图有无环）。
-- 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出写入它自己的 `op_process_result`。
+- 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出放入父流程上下文（`outputKey`）。
 
 ## 6. 版本化
 
