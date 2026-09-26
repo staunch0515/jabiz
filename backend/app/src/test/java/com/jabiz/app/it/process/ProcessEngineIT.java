@@ -54,7 +54,8 @@ import static org.assertj.core.api.Assertions.tuple;
 class ProcessEngineIT extends PostgresIntegrationTest {
 
     private static final RequestContext ADMIN = new RequestContext("it-admin", null, Locale.ENGLISH, "it-admin-req",
-        Set.of(), Set.of(TemporalPermissions.REVERT));
+        // A revert also needs the write permission of what it changes (docs/design/10-security.md section 5).
+        Set.of(), Set.of(TemporalPermissions.REVERT, "it.write"));
 
     @Autowired
     ProcessExecutor executor;

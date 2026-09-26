@@ -106,6 +106,7 @@
 | `POST /api/queries/{id}` | 模板声明的全部权限 |
 | `POST /api/processes/{name}/{version}` | 流程声明的全部权限 |
 | 操作详情 / 撤销 / 追溯更正 | `operation.read` / `temporal.revert` / `temporal.backdate`（D9 第 6 条） |
+| 撤销（另加） | 被撤销操作涉及的每个实体的默认视图写权限；撤销不得写回敏感字段的旧值（`UPDATE` 改过敏感字段的操作不能撤销，422 `SENSITIVE_FIELD`） |
 | 字典、元模型导出、`/api/auth/me`、`/api/auth/menus` | 只要求已认证 |
 
 - 未声明权限的数据视图、模板、流程：非 `dev` 下启动失败（`DatasetRegistry`、`SqlTemplateRegistry`、`ProcessChecks`，`dev` 下为警告）；

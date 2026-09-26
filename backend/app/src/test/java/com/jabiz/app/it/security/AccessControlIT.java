@@ -137,6 +137,9 @@ class AccessControlIT extends SecurityItSupport {
         post("/api/processes/executions/" + seq + "/revert", writer, Map.of("reason", "undo"))
             .expectStatus().isForbidden();
         post("/api/processes/executions/" + seq + "/revert", bearer("temporal.revert"), Map.of("reason", "undo"))
+            .expectStatus().isForbidden();
+        post("/api/processes/executions/" + seq + "/revert", bearer("temporal.revert", "it.write"),
+            Map.of("reason", "undo"))
             .expectStatus().value(status -> assertThat(status).isNotEqualTo(HttpStatus.FORBIDDEN.value()));
     }
 
@@ -152,6 +155,26 @@ class AccessControlIT extends SecurityItSupport {
         assertThat(violations(problem).getFirst().get("message").toString()).contains("security.user-role.write");
         post("/api/processes/ADD_ENTITY/latest", bearer("entity.write", "security.user-role.write"), input)
             .expectStatus().isOk();
+    }
+
+    /** A revert writes like any other change: temporal.revert alone cannot undo changes to security data. */
+    @Test
+    void revertsNeedTheWritePermissionOfWhatTheyChange() {
+        String userId = createUser(unique("trent"), "long enough password");
+        Map<String, Object> reset = post("/api/processes/SEC_USER_SET_PASSWORD/latest", admin(),
+            Map.of("userId", userId, "password", "the replacement password"))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        long seq = ((Number) reset.get("processSeqId")).longValue();
+
+        post("/api/processes/executions/" + seq + "/revert", bearer("temporal.revert"), Map.of("reason", "undo"))
+            .expectStatus().isForbidden();
+        // Even with the dataset's permission, an earlier password hash is never written back.
+        Map<String, Object> problem = post("/api/processes/executions/" + seq + "/revert",
+            bearer("temporal.revert", "security.user.write"), Map.of("reason", "undo"))
+            .expectStatus().isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT).expectBody(MAP).returnResult()
+            .getResponseBody();
+        assertThat(violations(problem)).singleElement().satisfies(v -> assertThat(v)
+            .containsEntry("field", "passwordHash").containsEntry("ruleCode", "SENSITIVE_FIELD"));
     }
 
     @Test

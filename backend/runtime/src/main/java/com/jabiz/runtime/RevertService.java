@@ -25,6 +25,9 @@ import com.jabiz.temporal.Timeline;
 import com.jabiz.temporal.VersionAction;
 import com.jabiz.temporal.VersionPlanner;
 import org.springframework.beans.factory.annotation.Value;
+import com.jabiz.runtime.security.Permissions;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -66,11 +69,13 @@ public class RevertService {
     private final QueryCompiler queryCompiler;
     private final DatasetEntityManager entityManager;
     private final String poolRef;
+    private final boolean development;
 
     public RevertService(OperationRecorder operations, TemporalStore store, VersionAppender versions,
         EntityDefinitionRegistry entities, DatasetRegistry datasets, StorageAdapterRegistry storages,
-        QueryCompiler queryCompiler, DatasetEntityManager entityManager,
+        QueryCompiler queryCompiler, DatasetEntityManager entityManager, Environment environment,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        this.development = environment.acceptsProfiles(Profiles.of("dev"));
         this.operations = Objects.requireNonNull(operations);
         this.store = Objects.requireNonNull(store);
         this.versions = Objects.requireNonNull(versions);
@@ -127,6 +132,7 @@ public class RevertService {
                 PlatformErrorCodes.NOTHING_TO_REVERT, "Operation " + rootSeq + " wrote no versions",
                 Map.of("operation", rootSeq))));
         }
+        requireWriteAccess(request, entries);
         Set<Long> inTree = new HashSet<>();
         tree.forEach(op -> inTree.add(op.processSeqId()));
 
@@ -220,6 +226,37 @@ public class RevertService {
     }
 
     /** Undoes the versions one operation wrote, newest first. */
+    /**
+     * A revert writes versions of every entity the operation touched: the caller needs the write permission of each
+     * entity's default dataset, as for any other write (docs/design/10-security.md section 5), besides
+     * {@code temporal.revert}. An older value of a sensitive field (a password hash) is never written back: only its
+     * own process sets it.
+     */
+    private void requireWriteAccess(com.jabiz.context.RequestContext request,
+        List<Map.Entry<OperationRecord, List<OperationItem>>> entries) {
+        Set<String> checked = new HashSet<>();
+        List<Violation> sensitive = new java.util.ArrayList<>();
+        for (Map.Entry<OperationRecord, List<OperationItem>> entry : entries) {
+            for (OperationItem item : entry.getValue()) {
+                EntityDefinition def = entities.getOrThrow(item.entityType());
+                if (checked.add(def.name)) {
+                    DatasetDefinition dataset = datasets.findForEntity(def.name).orElseThrow(
+                        () -> new IllegalStateException("No default dataset for " + def.name));
+                    Permissions.requireDeclared(request, dataset.permissions().write(), development,
+                        "Reverting changes of " + def.name + " through dataset " + dataset.resourceId());
+                }
+                if (item.action() == VersionAction.UPDATE) {
+                    def.sensitiveFields().stream().filter(item.changedFields()::contains)
+                        .forEach(field -> sensitive.add(new Violation(field, PlatformErrorCodes.SENSITIVE_FIELD,
+                            "A revert cannot restore an earlier value of " + def.name + "." + field)));
+                }
+            }
+        }
+        if (!sensitive.isEmpty()) {
+            throw new BusinessRuleViolationException(sensitive);
+        }
+    }
+
     private Mono<Void> restore(StorageEngine engine, List<OperationItem> items, Operation operation) {
         List<OperationItem> newestFirst = items.stream()
             .sorted(Comparator.comparingLong(OperationItem::versionNo).reversed())

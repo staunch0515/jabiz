@@ -32,9 +32,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Shared steps of the temporal integration tests; all writes go through the dataset API of the runtime. */
 abstract class TemporalItSupport extends PostgresIntegrationTest {
 
-    /** May correct the past, revert and read operations. */
+    /** May write the fixtures, correct the past, revert and read operations. */
     static final RequestContext ADMIN = new RequestContext("it-admin", null, Locale.ENGLISH, "it-admin-request",
-        Set.of(), Set.of(TemporalPermissions.BACKDATE, TemporalPermissions.REVERT, TemporalPermissions.OPERATION_READ));
+        Set.of(), Set.of("it.read", "it.write", TemporalPermissions.BACKDATE, TemporalPermissions.REVERT,
+            TemporalPermissions.OPERATION_READ));
 
     static final EntityDefinition PRICE = ItTemporalFixtures.PRICE;
 
