@@ -248,6 +248,20 @@ WHERE NOT v.is_deleted
 带生效时间的业务参数（费率、阈值等）直接使用时态实体实现：`sys_param(param_key, value, value_kind, ...)`，开启时态和预定。
 `ParamService.get(key, asOf)` 返回 `asOf` 时刻生效的值；规则中应使用"业务发生时间"作为 `asOf`，而不是当前时间。
 
+实现（阶段 8，【D13】）：
+- 平台时态实体 `SysParam`（runtime `com.jabiz.runtime.param`，表 `sys_param_version`，迁移 `db/jabiz/V7__sys_param.sql`，允许预定）：
+  `paramKey`（唯一，不可变）、`valueKind`（不可变）、`value`（规范文本）、`description`。默认数据视图 `urn:jabiz:dataset:platform:SysParam`，
+  权限 `platform.param.read` / `platform.param.write`。
+- `valueKind` 用 SQL 模板头 `kind:` 的写法（`{type: numeric, precision: 5, scale: 4}`），扩展语义类型 `jabiz.param-kind`（jsonb）。
+  支持 `text` `numeric` `monetary` `bool` `temporal`，以及列出 `allowedValues` 的 `code`（同步校验不能查字典）；其他类型 400 `INVALID_VALUE`（数据视图与 `PARAM_CREATE` 相同）。
+- 值与类型是否相符、且是否为规范文本，由实体级校验（02 §4.1）检查，因此任何写入途径都不能写入不合类型或非规范的值（422 `PARAM_VALUE_INVALID`；
+  流程会先把输入规范化，数据视图的调用方须直接写规范文本）。规范文本：小数按声明的小数位（`0.1` → `0.1000`，超出精度或小数位即拒绝）、时间为 UTC ISO-8601。core 的 `ParamKinds` 负责解析、规范化与读取。
+- 读取：`ParamService.get(key, asOf)` / `load(keys, asOf)`（平台代码，返回 `Mono`）；流程中用平台步骤
+  `LoadParams.of(ctx -> 业务时间, 结果键, key…)` 把 core 的 `ParamValues` 放入上下文，计算步骤 `get(key, BigDecimal.class)` 读取。
+  `asOf` 时没有生效值的键一次性全部列出：422 `PARAM_NOT_FOUND`（参数 `key`、`asOf`）。
+- 维护流程（权限都是 `platform.param.write`：数据视图本身也能插入参数，另设“建参数”权限并不能成立）：`PARAM_CREATE`（建参数与首个值，立即生效）、`PARAM_SET`（立即生效）、
+  `PARAM_SCHEDULE`（生效时间须晚于操作时间，否则 422 `EFFECTIVE_TIME_NOT_FUTURE`）、`PARAM_CANCEL_SCHEDULED`（无预定 → 422 `NOT_SCHEDULED`）。修改按 D1 变基：存在修改同一值的预定时 `PARAM_SET` 被拒绝（409），先取消预定。
+
 ## 10. 归档与个人信息
 
 - 数据增长：按 `created_time` 分区；冷分区归档到只读存储。

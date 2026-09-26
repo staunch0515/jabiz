@@ -35,7 +35,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 3. **业务扩展点全部同步**：字段规则（`RulePredicate`）、迁移守卫、流程计算步骤（`ComputeStep`）、阻塞步骤（`BlockingStep`）。
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
    业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`）
-   做 I/O，用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
+   做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
 4. 业务模块（`app` 及以后的业务模块）**禁止引用 `reactor.*`**。以上规则由 ArchUnit 测试强制执行。
 5. 请求路径上禁止阻塞调用；测试环境启用 BlockHound 检测。
 
@@ -93,6 +93,9 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
+- 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
+  `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
+  每次回放使用新的 schema 与应用上下文（数据库同集成测试）
 - 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**。
 
 ## 7. 每个阶段的交付方式

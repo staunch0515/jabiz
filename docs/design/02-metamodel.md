@@ -126,6 +126,26 @@ eb.guard("guardCode", fromOrAny, to, guard);   // from 可以是 "*"
 - 空间守卫改为 `ext-geo` 提供的一个 `TransitionGuard` 实现。
 - 守卫是同步的；需要数据库数据的判断应在流程中先加载，再放入上下文，守卫只读上下文。
 
+### 4.1 实体级校验（跨字段规则）【D13】
+
+字段规则只看一个字段，迁移守卫只在状态改变时评估。"一个字段的值是否合法取决于另一个字段"这类规则用实体级校验：
+
+```java
+@FunctionalInterface
+public interface EntityCheck {
+    /** state 为本次写入后将要存储的完整状态（只读）；返回违规列表，空表示通过。 */
+    List<Violation> check(Map<String, Object> state, ValidationContext ctx);
+}
+
+eb.check("PARAM_VALUE_INVALID", (state, ctx) -> ...);   // 代码在实体内唯一
+```
+
+- 每次插入、以及每次确实改变了值的更新，在完整候选状态（存储状态 ⊕ 本次变更）上评估；时态实体用生效时间点上的状态。
+  所有写入途径（数据视图 API、流程、通用实体流程）都经过它；违规与同一变更的其他业务规则一起累积（422）。
+- 校验抛出异常时记为 `CHECK_EVALUATION_FAILED`（参数 `check`）。同步、禁止 I/O（与守卫相同）。
+- 校验代码按约定即其违规的 `ruleCode`，启动自检要求它在三种语言中都有文案；元模型导出 `checks`（仅代码）。
+- 时态实体的变基副本（D1）与撤销写入的版本（D2）组合了不同写入的值，同样逐一评估；违反时整个写入被拒绝（422）。
+
 ## 5. 字典注册表
 
 - `Code.dictUrn` 由字典注册表解析：

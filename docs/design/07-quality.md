@@ -70,6 +70,18 @@ snapshot:
   asOf: end                            # 回放结束时的状态；也可指定时间点
 ```
 
+实现（阶段 8，【D13】）：runtime testFixtures 的 `com.jabiz.runtime.test.scenario`（`Scenario`、`ScenarioRunner`、`ScenarioReplay`、
+`SnapshotStore`）；业务模块用 `ScenarioReplay.resources("scenarios")` + `ScenarioReplay.verify(App.class, 资源)` 生成动态测试（示范：`app` 的 `ScenarioTest`）。
+
+- 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
+  `setClock`；`expect` 三种：`{query, params, rows, values}`（SQL 模板的行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
+  `expectError: {process, input, status, ruleCode, field}`。未知键即报错（拼错的期望不会静默通过）。
+- 变量：`save: {名: $.a.b[0]}` 从输出（遮蔽后的 JSON）中取值，`$` 为整个输出；`${名}` 整串引用保留类型，嵌在字符串中时插值；未定义即报错。
+- 比较按含义：数值按大小（`0.1` 与 `0.1000` 相等）、时间按时刻（不论偏移）、映射按包含、列表逐项。
+- 流程经 `ProcessExecutor` 以场景的操作人（显式 `RequestContext`）执行，不经 HTTP，入口权限不检查（D11 第 2 条），流程内部的检查照常；
+  输入转换与 Bean Validation 与流程 API 相同（`ProcessInputs`），失败的状态码与违规与 API 相同（`ProblemStatuses`）。
+- 隔离：每次回放在**新 schema + 新应用上下文**中执行（迁移与集成测试相同），因此操作号、行号从头开始；主键由确定性的 UUIDv7 生成器按时钟与计数生成。
+
 ### 3.2 可控时钟
 
 - 测试注入 `MutableClock`（实现 `java.time.Clock`），`advanceClock` 推进它；平台所有业务时间都来自 `Clock`，因此回放完全确定。
@@ -77,9 +89,12 @@ snapshot:
 
 ### 3.3 快照对比
 
-- 快照：按实体导出当前（或指定时间点）版本，按主键排序；UUID、`process_seq_id`、时间戳等不确定值规范化为序号占位。
+- 快照：经各实体的默认数据视图导出当前（或指定时间点，时态实体）版本，不含敏感字段，按主键排序；UUID 规范化为 `#uuid:N`（按首次出现编号，
+  同一 UUID 同一编号，引用保持可辨认），`processSeqId` 规范化为 `#op:N`（按操作顺序编号）；时间全部来自可控时钟，是确定的且有业务含义，
+  **保留**为 ISO-8601【D13】；小数保留为文本（显示小数位）。
 - 快照文件与场景文件同目录：`<场景名>.snapshot.json`。
-- 首次运行生成快照；之后不一致时测试失败并输出可读的差异。
+- 首次运行生成快照（写入源目录，路径由 Gradle 以 `scenario.resources-dir` 传入）；环境变量 `CI` 存在时缺少快照即失败，快照必须随变更提交。
+  之后不一致时测试失败并输出可读的差异，每行一处：`~ 实体[#uuid:3].字段: 旧 → 新`、`+ 实体[…] {…}`、`- 实体[…] {…}`。
 - 确认变更正确后，用 `-Dscenario.update-snapshots=true` 一键更新。
 - 快照纳入代码审查：规则调整的 PR 中，快照差异就是"业务行为变化"的直接证据。
 

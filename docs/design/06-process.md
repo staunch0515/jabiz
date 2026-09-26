@@ -37,6 +37,7 @@
 | `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】） |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` | 子流程输出 |
+| `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
 | `PublishEvent.of(eventType, ctx -> 载荷)` | —；委托给 `EventPublisher`，阶段 9 之前没有实现，使用它的流程启动检查报错 |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
