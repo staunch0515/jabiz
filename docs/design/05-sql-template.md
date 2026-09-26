@@ -130,7 +130,7 @@ LIMIT :__limit OFFSET :__offset
 对每个模板：
 1. 解析头部（按 JSON Schema 校验）；检查 `entities`、`datasets`、`like`、`from`、`list` 引用都存在；
    占位符的实体与字段存在；参数都已声明且都被使用、不用保留前缀；无 `IN (:name)`；无外层 `LIMIT`；视图同一存储、`timeoutMs` 更短；
-   权限已声明（`SqlTemplateRegistry`，core 的 `TemplateChecks`）。
+   权限已声明；不读取敏感字段（占位符与 `from` 都不行，10 §6）（`SqlTemplateRegistry`，core 的 `TemplateChecks`）。
 2. 用每个相关数据视图的范围（取自请求的范围用取样值）渲染 SQL。
 3. 将 `:name` 转为 `?`，通过 **JDBC** `PreparedStatement.getMetaData()` 与 `getParameterMetaData()` 在真实数据库上预编译（不执行）
    （`SqlTemplatePrecompileCheck`，连接参数取 `spring.flyway.*`；平台外层分页查询同样预编译一次）。

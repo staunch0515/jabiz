@@ -135,7 +135,8 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
   重放的响应带 `Idempotency-Replayed: true`）。
   实现【决策 D4】：`op_process` 上 `(actor_id, idempotency_key)` 唯一；流程输出在结束时写入 `op_process_result`（同一事务），重放时从中读取。
 - 每个流程声明执行权限码（`pb.permissions(...)`，全部具备才可执行）；未声明 → 非开发环境启动失败。权限由流程 API 检查，执行器本身不检查【D11】。
-  通用实体流程（`ADD_ENTITY` 等）声明 `entity.write`；`SPONSOR_SIGN_IN` 暂时声明 `sponsor.sign-in`（阶段 7 重写）。
+  通用实体流程（`ADD_ENTITY` 等）声明 `entity.write`；`SPONSOR_SIGN_IN` 声明 `auth.sign-in`，只经公开的 `POST /api/auth/login` 执行（10 §3、§4）。
+- 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
 - 同一流程执行器也被定时任务和场景测试调用（传输方式无关）。
 
 ## 9. 启动自检
@@ -153,4 +154,4 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 | `StepHandler<M, C>`（公开，返回 `Mono`） | 移到运行时内部包，仅平台 I/O 步骤实现 |
 | `ProcessExecutor.execute` | 增加：写 `op_process`、事务包裹、自动提交 `ChangeSet`、违规累积、`AFTER_COMMIT` 阶段、子流程（阶段 6 完成；另有 `run(..., ExecutionOptions)` 返回 `ProcessResult`） |
 | `ClockProcessSequence` | 替换为数据库序列实现（保留接口） |
-| `SponsorSignInProcess` 的三个步骤 | 在安全阶段（ROADMAP 阶段 7）真正实现：认证 = 平台 `LoadEntity` + 计算步骤校验密码哈希；登录记录 = 登记变更 |
+| `SponsorSignInProcess` 的三个步骤 | 阶段 7 实现（10 §4）：认证 = 平台 `QueryEntities` 加载用户 + **阻塞步骤**校验密码哈希（BCrypt 不能占用事件循环【D12】）；角色检查 = 平台步骤加载角色 + 计算步骤；登录记录 = 登记变更 |

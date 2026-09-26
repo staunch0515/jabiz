@@ -53,7 +53,10 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `(实体主键, effect_start_time DESC, version_no DESC)` 与 `process_seq_id` 索引、指向 `op_process` / `entity_registry` 的外键，
   并执行 `SELECT jabiz_protect_append_only('<表>')` 安装禁止 UPDATE/DELETE/TRUNCATE 的触发器（启动自检检查）。
   测试中不能 `DELETE` 这类表：用各测试独有的数据（或写墓碑）隔离。
-- **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。
+- **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。实体字段用 `f.sensitive()`
+  （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
+- **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
+  未声明即拒绝。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
@@ -86,7 +89,10 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 静态校验：`./gradlew :app:platformCheck`（启动检查全部跑一遍，输出 `类别 | 定位 | 描述`，有错误退出码非 0；数据库同集成测试；`check` 包含它）
 - 本地启动：仓库根目录 `docker compose up -d`（数据库，端口 5436；pgAdmin 5050）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `npm install && npm run dev`（5173，`/api` 代理到 8080）。
-  开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）
+  开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`（Base64，≥32 字节，
+  如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）
+- 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
+  （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
 - 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**。
 
 ## 7. 每个阶段的交付方式

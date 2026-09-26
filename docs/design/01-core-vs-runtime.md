@@ -90,9 +90,10 @@ public record RequestContext(
 - 构造规则（`RequestContextWebFilter`）：
   - `requestId`：请求头 `X-Request-Id` 合法（`[A-Za-z0-9._-]{1,64}`）时沿用，否则生成；写回响应头 `X-Request-Id`。
   - `locale`：按 `Accept-Language` 在支持的语言（zh、ja、en）中匹配，匹配不到用 `jabiz.i18n.default-locale`（默认 `en`）。
-  - 操作人（阶段 7 之前）：默认 `anonymous`，无角色、无权限。开发环境可用请求头 `X-Jabiz-Actor`、`X-Jabiz-Tenant`、
-    `X-Jabiz-Roles`、`X-Jabiz-Permissions`（逗号分隔）指定，**仅当** `dev` profile 激活且 `jabiz.dev.actor-headers=true`；
-    该属性在非 `dev` profile 下为 true 时启动失败。
+  - 操作人：`RequestContextWebFilter` 先以 `anonymous`（无角色、无权限）建立上下文；Spring Security 认证之后，
+    `AuthenticatedRequestContextWebFilter` 用访问令牌中的操作人、租户、角色、权限替换它（保留 `requestId` 与语言，10 §1）。
+    开发环境可用请求头 `X-Jabiz-Actor`、`X-Jabiz-Tenant`、`X-Jabiz-Roles`、`X-Jabiz-Permissions`（逗号分隔）代替令牌，
+    **仅当** `dev` profile 激活且 `jabiz.dev.actor-headers=true`，且请求没有 `Authorization` 头；该属性在非 `dev` profile 下为 true 时启动失败。
 - `ProcessContext.request()` 随流程引擎（06 §3，阶段 6）加入：平台创建上下文时传入 `ProcessStart(processSeqId, opTime, request, ids)`。
 
 ## 6. 阻塞调用

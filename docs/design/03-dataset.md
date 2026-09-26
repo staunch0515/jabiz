@@ -53,8 +53,9 @@ d.scope(s -> s
 
 - 每个数据视图声明读、写权限码：`d.permissions("order.read", "order.write")`。
 - 未声明权限的视图在非开发环境下启动失败（默认拒绝）。
-- 权限检查在运行时层进行，读取 `RequestContext.permissions`。**阶段 3 只做声明和启动自检**（`dev` profile 下为警告）；
-  请求时的检查随认证在阶段 7 接入（ROADMAP 阶段 7 要求 4）。
+- 权限检查在运行时层进行，读取 `RequestContext.permissions`（启动自检在 `dev` profile 下为警告）。自阶段 7 起：读、查询、历史需要读权限，
+  `commit` 需要写权限，否则 403 `PERMISSION_DENIED`；未声明权限的视图在请求时同样被拒绝（`dev` 除外）（10 §5）。
+  流程中的平台步骤经视图读写时不检查视图权限（权限在流程入口检查，D11）。
 
 ### 2.5 时态相关参数
 

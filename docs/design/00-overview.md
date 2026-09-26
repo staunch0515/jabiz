@@ -85,6 +85,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 07-quality | 启动自检、platformCheck、场景回放、ArchUnit、BlockHound |
 | 08-golden-lessons | 来自 golden 的思想与反面教材 |
 | **09-decisions** | **已确认的设计决策（具有约束力）** |
+| 10-security | 认证、令牌与会话、RBAC 与菜单、登录锁定、权限检查位置、敏感数据遮蔽 |
 
 ## 7. 术语
 
