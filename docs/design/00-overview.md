@@ -70,7 +70,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | `backend/runtime` → `jabiz-runtime` | 响应式运行时 |
 | `backend/ext-geo` | H3 空间编码、物理量等领域扩展语义类型（从核心移出） |
 | `backend/app` | 启动模块和示范业务（物流运单、报关、运费月结；订单与库存 `com.jabiz.app.commerce`，阶段 11） |
-| `frontend/` | 通用后台前端（可挂在子路径，16 §5） |
+| `frontend/` | 通用后台前端（可挂在子路径，16 §6） |
 | `backend/build-logic` | 约定插件 `jabiz.boot-app`（阶段 13a，17 §3） |
 | `docs/` | 设计文档与路线图 |
 
