@@ -95,7 +95,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 13-observability-ops | 指标、链路、结构化日志、本地观测环境、Docker Compose 一条命令启动 |
 | 14-files | 文件存储：上传、按内容判定类型、图片去元数据与变体、`jabiz.file` 类型、清扫与删除 |
 | 15-public-access | 公开只读访问：公开数据视图、公开模板、公开文件、缓存与限流 |
-| 16-content-authoring | 内容编辑：多语言文本类型、引用显示与选择、流程行操作、子实体列表、后台子路径 |
+| 16-content-authoring | 内容编辑：多语言文本类型、引用显示与选择、流程行操作、子实体列表、只经流程写入的字段、后台子路径 |
 | 17-apps-and-branches | 平台与应用：分支模型、应用目录检查、多应用构建、多 SPA、公开前端 |
 
 使用指南（`docs/guide/`）：`quickstart.md`（快速开始）、`new-business-object.md`（新增一个业务对象）；
