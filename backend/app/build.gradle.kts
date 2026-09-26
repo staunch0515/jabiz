@@ -42,7 +42,12 @@ tasks.test {
     val updateSnapshots = providers.systemProperty("scenario.update-snapshots").orElse("false")
     systemProperty("scenario.resources-dir", layout.projectDirectory.dir("src/test/resources").asFile.absolutePath)
     systemProperty("scenario.update-snapshots", updateSnapshots.get())
-    if (updateSnapshots.get() == "true") {
+    // The OpenAPI document the frontend generates its types from (docs/design/12-frontend.md section 3);
+    // -Dopenapi.update-snapshot=true rewrites it when the API changed.
+    val openApi = rootProject.layout.projectDirectory.file("../frontend/openapi/openapi.json").asFile
+    systemProperty("openapi.snapshot", openApi.absolutePath)
+    systemProperty("openapi.update-snapshot", providers.systemProperty("openapi.update-snapshot").orElse("false").get())
+    if (updateSnapshots.get() == "true" || providers.systemProperty("openapi.update-snapshot").orNull == "true") {
         outputs.upToDateWhen { false }
     }
 }

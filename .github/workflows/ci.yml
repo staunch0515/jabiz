@@ -16,10 +16,9 @@ jobs:
           java-version: 21
       # Caches the Gradle wrapper and dependencies.
       - uses: gradle/actions/setup-gradle@v4
-      # Compile, unit tests, integration tests (Testcontainers postgres:16), the core coverage gate and
-      # platformCheck (the startup self-checks against a freshly migrated database, docs/design/07-quality.md).
-      # Packaging (bootJar, which also builds the frontend) is not part of CI yet: the frontend does not
-      # compile today and is rebuilt in ROADMAP phase 10.
+      # Compile, unit tests, integration tests (Testcontainers postgres:16), the core coverage gate,
+      # platformCheck (the startup self-checks against a freshly migrated database, docs/design/07-quality.md),
+      # the validation cases shared with the frontend and the OpenAPI snapshot the frontend is generated from.
       - run: ./gradlew check
         working-directory: backend
       - if: failure()
@@ -30,4 +29,98 @@ jobs:
             backend/*/build/reports/tests/
             backend/*/build/test-results/
             backend/core/build/reports/jacoco/
+          retention-days: 7
+
+  # The metadata-driven frontend (docs/design/12-frontend.md): lint, types, generated API types up to date,
+  # unit tests of the adapter layer (including the validation cases shared with the backend) and the build.
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm check:api
+      - run: pnpm test
+      - run: pnpm build
+
+  # End-to-end: the packaged application (API + frontend in one jar) against PostgreSQL, driven by Playwright.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: jabiz_e2e
+          POSTGRES_USER: jabiz
+          POSTGRES_PASSWORD: jabiz
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U jabiz -d jabiz_e2e" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_ADMIN_USER: admin
+      E2E_ADMIN_PASSWORD: e2e-admin-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      # Builds the frontend with pnpm and packages it into the boot jar.
+      - run: ./gradlew :app:bootJar
+        working-directory: backend
+      - name: Start the application
+        working-directory: backend
+        run: |
+          # A throwaway signing key for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true -jar app/build/libs/app-0.0.1-SNAPSHOT.jar \
+            > ../app.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../app.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/jabiz_e2e
+          SPRING_R2DBC_USERNAME: jabiz
+          SPRING_R2DBC_PASSWORD: jabiz
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/jabiz_e2e
+          SPRING_FLYWAY_USER: jabiz
+          SPRING_FLYWAY_PASSWORD: jabiz
+          JABIZ_BOOTSTRAP_ADMIN_USER: ${{ env.E2E_ADMIN_USER }}
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: frontend
+      - run: pnpm e2e
+        working-directory: frontend
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            app.log
           retention-days: 7

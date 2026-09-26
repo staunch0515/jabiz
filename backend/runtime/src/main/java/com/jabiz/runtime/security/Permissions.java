@@ -47,4 +47,14 @@ public final class Permissions {
             require(context, permission, what);
         }
     }
+
+    /** Whether {@link #requireDeclared} would let the caller through (for catalogs that list what one may use). */
+    public static boolean allowsDeclared(RequestContext context, String permission, boolean development) {
+        return permission == null ? development : context.hasPermission(permission);
+    }
+
+    /** Whether {@link #requireAll} would let the caller through. */
+    public static boolean allowsAll(RequestContext context, Collection<String> permissions, boolean development) {
+        return permissions.isEmpty() ? development : permissions.stream().allMatch(context::hasPermission);
+    }
 }

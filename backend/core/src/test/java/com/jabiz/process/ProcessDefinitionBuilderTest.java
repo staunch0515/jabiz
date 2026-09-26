@@ -177,6 +177,20 @@ class ProcessDefinitionBuilderTest {
     }
 
     @Test
+    void internalProcessesAreMarkedAndKeepTheMarkWithNewPermissions() {
+        ProcessDefinition<In, Out, ProcessContext> plain = define(pb -> complete(pb)
+            .permissions("a.run").step("S", NoopStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<In, Out, ProcessContext> internal = define(pb -> complete(pb)
+            .permissions("a.run").internal().step("S", NoopStep.class, NoMetadata.INSTANCE));
+
+        assertThat(plain.internal()).isFalse();
+        assertThat(internal.internal()).isTrue();
+        assertThat(internal.withPermissions("b.run").internal()).isTrue();
+        assertThat(plain.asInternal().internal()).isTrue();
+        assertThat(plain.asInternal().permissions()).containsExactly("a.run");
+    }
+
+    @Test
     void singleProcessComputesItsOutputFromInputAndContext() {
         ProcessDefinition<In, Out, ProcessContext> def = ProcessDefinition.single("ONE", 2, In.class, Out.class,
             (in, ctx) -> {

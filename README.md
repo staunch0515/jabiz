@@ -17,7 +17,7 @@ my-app/
 
 docker compose up -d                                  # 数据库
 cd backend && ./gradlew bootRun                       # :8080，启动时 Flyway 自动建表
-cd frontend && npm install && npm run dev             # :5173，/api 代理到 8080
+cd frontend && pnpm install && pnpm dev              # :5173，/api 代理到 8080
 
 
 curl -X POST localhost:8080/api/todos -H 'Content-Type: application/json' -d '{"title":"hello"}'

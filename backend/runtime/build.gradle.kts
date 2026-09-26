@@ -24,6 +24,9 @@ dependencies {
     api("net.javacrumbs.shedlock:shedlock-core:7.10.1")
     implementation("net.javacrumbs.shedlock:shedlock-provider-r2dbc:7.10.1")
     implementation("io.micrometer:context-propagation")
+    // OpenAPI description of the web API; the frontend generates its types from it (docs/design/12-frontend.md).
+    // 3.0.1 is the release built against Spring Boot 4.0.1. No UI: the document is served at /api/meta/openapi.
+    implementation("org.springdoc:springdoc-openapi-starter-webflux-api:3.0.1")
     // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
     implementation("com.networknt:json-schema-validator:3.0.0")

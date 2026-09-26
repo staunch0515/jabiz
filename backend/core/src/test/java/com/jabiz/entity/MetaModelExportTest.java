@@ -121,4 +121,36 @@ class MetaModelExportTest {
         })).isInstanceOf(IllegalStateException.class).hasMessageContaining("registered twice");
         assertThat(CustomKinds.find("none.such")).isEmpty();
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void localizedExportAddsLabelsAndTheMessagesTheClientMayReport() {
+        com.jabiz.i18n.MessageCatalog catalog = new com.jabiz.i18n.MessageCatalog(
+            List.of(com.jabiz.i18n.MessageCatalog.PLATFORM_BUNDLE, "i18ntest/messages"),
+            List.of(java.util.Locale.CHINESE, java.util.Locale.JAPANESE, java.util.Locale.ENGLISH),
+            java.util.Locale.ENGLISH, getClass().getClassLoader());
+
+        Map<String, Object> ja = MetaModelExporter.export(ORDER, catalog, java.util.Locale.JAPANESE);
+
+        assertThat(ja).containsEntry("label", "注文");
+        assertThat(field(ja, "amount")).containsEntry("label", "金額");
+        assertThat(field(ja, "note")).containsEntry("label", "note");
+        Map<String, Object> messages = (Map<String, Object>) ja.get("messages");
+        assertThat(messages.keySet()).containsExactly("INVALID_VALUE", "REQUIRED", "TOO_LONG", "NUMERIC_PRECISION",
+            "NOT_IN_DICTIONARY", "NON_NEGATIVE");
+        assertThat(messages).containsEntry("NON_NEGATIVE", "項目「{field}」は{min}以上でなければなりません。")
+            .containsEntry("REQUIRED", "項目「{field}」は必須です。");
+
+        EntityDefinition unlabeled = EntityDefinition.define("Bare", eb -> {
+            eb.physicalTable("t_bare");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id").asSemanticIdentity("urn:bare")
+                .rule("NO_TEXT_ANYWHERE", "REQUIRED", Map.of(), v -> true));
+        });
+        Map<String, Object> en = MetaModelExporter.export(unlabeled, catalog, java.util.Locale.ENGLISH);
+        assertThat(en).containsEntry("label", "Bare");
+        assertThat((Map<String, Object>) en.get("messages")).containsEntry("NO_TEXT_ANYWHERE", "NO_TEXT_ANYWHERE");
+        assertThat(MetaModelExporter.labelKey("Order", null)).isEqualTo("entity.Order");
+        assertThat(MetaModelExporter.labelKey("Order", "amount")).isEqualTo("entity.Order.amount");
+    }
 }

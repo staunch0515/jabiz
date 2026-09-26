@@ -73,7 +73,7 @@ class GeoKindsTest {
         var rule = parcel.field("weight").rules().getFirst();
         assertThat(rule.isSatisfiedBy(new BigDecimal("5"), CTX)).isTrue();
         assertThat(rule.isSatisfiedBy(new BigDecimal("11"), CTX)).isFalse();
-        assertThat(parcel.field("weight").ruleSpecs().getFirst().params()).containsEntry("max", 10.0);
+        assertThat(parcel.field("weight").ruleSpecs().getFirst().params()).containsEntry("max", BigDecimal.valueOf(10.0));
     }
 
     @Test

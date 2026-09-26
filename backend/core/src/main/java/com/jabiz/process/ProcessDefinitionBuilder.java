@@ -24,6 +24,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private final Set<String> stepNames = new HashSet<>();
     private final Set<String> permissions = new LinkedHashSet<>();
     private boolean deprecated;
+    private boolean internal;
 
     ProcessDefinitionBuilder(String name, int version, Class<I> inputType, Class<O> outputType, Class<C> contextType) {
         this.name = Objects.requireNonNull(name, "name must not be null");
@@ -51,6 +52,15 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     /** Permission codes the caller needs, all of them. A process without any fails startup outside development. */
     public ProcessDefinitionBuilder<I, O, C> permissions(String... codes) {
         Collections.addAll(permissions, codes);
+        return this;
+    }
+
+    /**
+     * Marks the process as run by the platform or a dedicated entry point only: it is left out of the process
+     * catalog clients build forms from (decision D15). Its permissions are checked as usual.
+     */
+    public ProcessDefinitionBuilder<I, O, C> internal() {
+        this.internal = true;
         return this;
     }
 
@@ -112,6 +122,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated);
+            contextFactory, outputMapper, steps, permissions, deprecated, internal);
     }
 }

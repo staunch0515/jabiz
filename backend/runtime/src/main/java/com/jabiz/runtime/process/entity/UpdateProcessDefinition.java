@@ -14,6 +14,7 @@ public final class UpdateProcessDefinition {
                 .description("Applies the given field changes to an instance of the requested entity type "
                     + "under optimistic locking and returns the resulting state.")
                 .permissions(EntityProcessPermissions.ENTITY_WRITE)
+                .internal()
                 .contextFactory((start, input) -> new EntityChangeContext(
                     start, input.entityType(), input.id(), input.version(), input.attributes()))
                 .outputMapper(EntityChangeContext::result)

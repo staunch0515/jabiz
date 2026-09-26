@@ -1,0 +1,189 @@
+import { DrawerForm, ProFormDateTimePicker, ProFormText } from '@ant-design/pro-components'
+import { Alert, App, Form } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
+import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { api, unwrap } from '../api/client'
+import { ApiError } from '../api/problem'
+import { useAuth } from '../auth/AuthContext'
+import { changedAttributes, formFieldsOf, wireAttributes, type FormField } from '../meta/entityForm'
+import { enabledCodes, fieldLabel, findField, toFormValue } from '../meta/kinds'
+import { describe, validateField } from '../meta/validation'
+import type { DatasetEntry, DictItem, EntityInstance, EntityMeta, Violation } from '../meta/types'
+import EntityField from './EntityField'
+
+interface Props {
+  dataset: DatasetEntry
+  entity: EntityMeta
+  dictionaries: Record<string, DictItem[]>
+  /** The entry to edit; absent to create one. */
+  instance?: EntityInstance
+  open: boolean
+  onOpenChange(open: boolean): void
+  onSaved(): void
+}
+
+type Errors = Record<string, Violation[]>
+
+/**
+ * The generated create / edit form of any entity (docs/design/12-frontend.md section 5). Inputs come from the
+ * semantic kinds; the client check reports the server's rule codes before anything is sent, and whatever the server
+ * still refuses (400/422 violations) is shown at the same place.
+ */
+export default function EntityFormDrawer({ dataset, entity, dictionaries, instance, open, onOpenChange, onSaved }: Props) {
+  const { t } = useTranslation()
+  const { message } = App.useApp()
+  const { can } = useAuth()
+  const [form] = Form.useForm()
+  const [errors, setErrors] = useState<Errors>({})
+  const [general, setGeneral] = useState<string[]>([])
+  const mode = instance ? 'edit' : 'create'
+  const fields = useMemo(() => formFieldsOf(entity, mode), [entity, mode])
+  const original = useMemo(() => (instance?.attributes ?? {}) as Record<string, unknown>, [instance])
+  const codes = useMemo(() => enabledCodes(dictionaries), [dictionaries])
+  const temporal = entity.temporal
+  const showEffectiveTime = temporal && (dataset.allowScheduled || can('temporal.backdate'))
+
+  const initialValues = useMemo(() => {
+    const values: Record<string, unknown> = {}
+    for (const { field } of fields) {
+      // A new entry starts with "no" for yes/no fields: an untouched switch means false, not "not given".
+      values[field.name] = instance || field.type !== 'bool' ? toFormValue(field, original[field.name]) : false
+    }
+    return values
+  }, [fields, original, instance])
+
+  const messageOf = (v: { field: string; ruleCode: string; params: Record<string, unknown> }): Violation => {
+    const field = findField(entity, v.field)
+    return describe(entity, v, field ? fieldLabel(field, t) : v.field)
+  }
+
+  const checkField = (formField: FormField, allValues: Record<string, unknown>) => {
+    const attributes = wireAttributes([formField], allValues)
+    const raw = formField.field.name in attributes ? attributes[formField.field.name] : undefined
+    return validateField(formField.field, raw, { insert: mode === 'create', dictionaries: codes }).map(messageOf)
+  }
+
+  const showServerViolations = (error: ApiError) => {
+    const byField: Errors = {}
+    const rest: string[] = []
+    for (const v of error.violations) {
+      if (v.field && fields.some((f) => f.field.name === v.field)) (byField[v.field] ??= []).push(v)
+      else rest.push(v.message)
+    }
+    if (error.status === 409) rest.unshift(t('form.conflict'))
+    if (rest.length === 0 && Object.keys(byField).length === 0) rest.push(error.display)
+    setErrors(byField)
+    setGeneral(rest)
+  }
+
+  const submit = async (values: Record<string, unknown>) => {
+    setGeneral([])
+    const attributes = mode === 'create' ? wireAttributes(fields, values) : changedAttributes(fields, original, values)
+    // The same check the server runs on what is sent: everything on insert, the changed fields on update.
+    const found: Errors = {}
+    for (const formField of fields) {
+      const { field } = formField
+      if (mode === 'edit' && !(field.name in attributes)) continue
+      const violations = validateField(field, attributes[field.name], {
+        insert: mode === 'create',
+        dictionaries: codes,
+      }).map(messageOf)
+      if (violations.length > 0) found[field.name] = violations
+    }
+    setErrors(found)
+    if (Object.keys(found).length > 0) return false
+    if (mode === 'edit' && Object.keys(attributes).length === 0 && !values.__effectiveTime) {
+      setGeneral([t('form.nothingChanged')])
+      return false
+    }
+
+    const effectiveTime = values.__effectiveTime ? (values.__effectiveTime as Dayjs).toISOString() : undefined
+    const reason = typeof values.__reason === 'string' && values.__reason.trim() ? values.__reason.trim() : undefined
+    try {
+      await unwrap(
+        api.POST('/api/datasets/{resourceId}/commit', {
+          params: { path: { resourceId: dataset.id } },
+          body: {
+            reason,
+            changes: [
+              {
+                action: mode === 'create' ? 'INSERT' : 'UPDATE',
+                id: instance?.id,
+                version: instance?.version,
+                attributes,
+                effectiveTime,
+              },
+            ],
+          },
+        }),
+      )
+    } catch (e) {
+      if (e instanceof ApiError) {
+        showServerViolations(e)
+        return false
+      }
+      throw e
+    }
+    message.success(t('list.saved'))
+    onSaved()
+    return true
+  }
+
+  return (
+    <DrawerForm
+      form={form}
+      name="entity"
+      title={t(mode === 'create' ? 'form.createTitle' : 'form.editTitle', { entity: entity.label })}
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setErrors({})
+          setGeneral([])
+        }
+        onOpenChange(next)
+      }}
+      initialValues={initialValues}
+      drawerProps={{ destroyOnHidden: true, width: 560 }}
+      submitter={{ searchConfig: { submitText: t('form.submit'), resetText: t('form.cancel') } }}
+      onValuesChange={(changed: Record<string, unknown>, all: Record<string, unknown>) => {
+        // Checked while typing, with the same rules as on submit; a server message of that field is replaced.
+        setErrors((previous) => {
+          const next = { ...previous }
+          for (const name of Object.keys(changed)) {
+            const formField = fields.find((f) => f.field.name === name)
+            if (!formField) continue
+            const violations = checkField(formField, all)
+            if (violations.length > 0) next[name] = violations
+            else delete next[name]
+          }
+          return next
+        })
+      }}
+      onFinish={submit}
+    >
+      {general.length > 0 && (
+        <Alert type="error" showIcon message={general.join(' ')} style={{ marginBottom: 16 }} data-testid="form-error" />
+      )}
+      {fields.map((formField) => (
+        <EntityField
+          key={formField.field.name}
+          field={formField.field}
+          disabled={formField.disabled}
+          dictionaries={dictionaries}
+          violations={errors[formField.field.name]}
+          t={t}
+        />
+      ))}
+      {showEffectiveTime && (
+        <ProFormDateTimePicker
+          name="__effectiveTime"
+          label={t('form.effectiveTime')}
+          tooltip={t('form.effectiveTimeHint')}
+          fieldProps={{ style: { width: '100%' }, disabledDate: dataset.allowScheduled ? undefined : (d) => d.isAfter(dayjs()) }}
+        />
+      )}
+      {temporal && <ProFormText name="__reason" label={t('form.reason')} />}
+    </DrawerForm>
+  )
+}

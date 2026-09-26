@@ -12,6 +12,7 @@ public final class DeleteProcessDefinition {
             DeleteEntityInput.class, DeleteEntityOutput.class, EntityChangeContext.class, pb -> pb
                 .description("Deletes an instance of the requested entity type under optimistic locking.")
                 .permissions(EntityProcessPermissions.ENTITY_WRITE)
+                .internal()
                 .contextFactory((start, input) -> new EntityChangeContext(
                     start, input.entityType(), input.id(), input.version(), null))
                 .outputMapper(ctx -> new DeleteEntityOutput(ctx.entityType(), ctx.id()))

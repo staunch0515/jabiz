@@ -119,7 +119,9 @@ snapshot:
 |---|---|
 | jqwik 属性测试 | 账本借贷平衡、时态版本不变式（当前版本唯一、版本号连续）、类型转换的往返一致性 |
 | 真实 PostgreSQL 集成测试 | 运行时层全部功能；**不使用 H2** |
-| 前端单元测试（Vitest）与端到端测试（Playwright） | 元数据渲染、关键后台流程（阶段 10 起） |
+| 前端单元测试（Vitest）与端到端测试（Playwright） | 元数据渲染、关键后台流程（阶段 10 起，12 §8） |
+| 前后端共享校验用例（`spec/validation-cases.json`） | 同一输入两端报出相同的错误码（core `ValidationCasesTest` 与前端 `validation.cases.test.ts`，D15） |
+| OpenAPI 快照（`frontend/openapi/openapi.json`） | 前端生成的类型与接口一致（`OpenApiSnapshotIT`、`pnpm check:api`） |
 
 ## 7. 数据库测试环境
 
@@ -133,4 +135,4 @@ snapshot:
 ## 8. 覆盖率与门禁
 
 - `jabiz-core` 行覆盖率 ≥ 80%；运行时层关键路径（写入流程、时态、查询编译、流程执行）必须有集成测试。
-- CI 门禁：编译、全部测试、`platformCheck`、ArchUnit、覆盖率阈值。
+- CI 门禁：编译、全部测试、`platformCheck`、ArchUnit、覆盖率阈值；前端的 lint、类型检查、生成类型是否最新、Vitest、构建；端到端测试（Playwright，对打包后的应用）。

@@ -1,8 +1,6 @@
 package com.jabiz.entity;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -48,18 +46,14 @@ public abstract class BaseEntityDefinitions {
     protected static Consumer<FieldBuilder> temporalCausality(String physicalColumn, String ruleCode, int toleranceSeconds) {
         return f -> f.physicalColumn(physicalColumn)
             .asTemporal(TemporalRole.EVENT_TIME)
-            .rule(ruleCode, "NOT_FUTURE", Map.of("toleranceSeconds", toleranceSeconds),
-                (v, ctx) -> v instanceof Instant t
-                            && !t.isAfter(ctx.clock().instant().plusSeconds(toleranceSeconds)));
+            .apply(Rules.notFuture(ruleCode, toleranceSeconds));
     }
 
     /** Non-negative monetary amount that respects the currency scale. */
     protected static Consumer<FieldBuilder> nonNegativeMonetary(String physicalColumn, String ruleCode, String currency, int scale) {
         return f -> f.physicalColumn(physicalColumn)
             .asMonetary(currency, scale)
-            .rule(ruleCode, "RANGE", Map.of("min", 0.0),
-                (v, ctx) -> v instanceof BigDecimal d && d.signum() >= 0)
-            .rule(ruleCode + "_SCALE", "SCALE", Map.of("scale", scale),
-                (v, ctx) -> v instanceof BigDecimal d && d.stripTrailingZeros().scale() <= scale);
+            .apply(Rules.range(ruleCode, BigDecimal.ZERO, null))
+            .apply(Rules.scale(ruleCode + "_SCALE", scale));
     }
 }

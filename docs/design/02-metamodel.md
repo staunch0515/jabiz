@@ -78,8 +78,12 @@ public interface CustomKindSupport {
 - `FieldRule(code, predicate)`：服务端实现。
 
 约定：
-- 可导出的规则种类（`kind`）必须是前端认识的有限集合：`RANGE`、`SCALE`、`LENGTH`、`PATTERN`、`NOT_FUTURE`、`REQUIRED`。
-  新增种类必须同时实现前端校验器。
+- 可导出的规则种类（`kind`）必须是前端认识的有限集合：`RANGE`、`SCALE`、`LENGTH`、`PATTERN`、`NOT_FUTURE`、`REQUIRED`（core `RuleKinds`），
+  导出其他种类在构建实体时失败【D15】。新增种类必须同时实现前端校验器，并在共享用例 `spec/validation-cases.json` 中加用例（12 §5.1）。
+- 推荐用 core `Rules` 工厂声明（`f.apply(Rules.range("CODE", min, max))` 等）：同一组参数同时产生导出的 `RuleSpec` 与服务端判断。
+  各种类的语义：`RANGE {min?, max?}` 小数闭区间；`SCALE {scale}` 去掉末尾零后的小数位；`LENGTH {min?, max?}` 按码点计的文本长度；
+  `PATTERN {regex}` 整串匹配（只允许 Java 与 JavaScript 读法相同的正则）；`NOT_FUTURE {toleranceSeconds}` 不晚于当前时间加容差；
+  `REQUIRED {}` 文本不为空白（缺失值由字段的 `required` 判断）。
 - 依赖运行时服务（时钟、数据库、外部查询）的规则使用"仅服务端"重载，不导出。
 - 规则代码（`code`）同时是错误码，必须能在多语言资源中找到文案（启动自检检查缺失）。
 
@@ -216,7 +220,7 @@ eb.listView("default", lv -> lv
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回：实体名、主键、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
+`GET /api/meta/entities/{name}` 返回（另按请求语言附 `label` 与错误文案模板 `messages`【D15】，12 §2）：实体名、主键、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
 语义类型及参数、必填、不可变、系统维护、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
 列表视图、字典引用（`dictionaries`）。
 

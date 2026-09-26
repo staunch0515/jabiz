@@ -1,0 +1,128 @@
+# 12 前端
+
+由元数据驱动的后台前端（ROADMAP 阶段 10）。原则：**业务对象不写前端代码**——新增实体定义与数据视图后，列表页、表单页、历史页
+都由元数据生成；前端只是元数据的解释器，不是权限的守门人（隐藏 ≠ 授权，接口照常检查）。约束性细则见【决策 D15】。
+
+## 1. 技术与结构
+
+| 项 | 选择 |
+|---|---|
+| 工具链 | pnpm、Vite、TypeScript |
+| 界面 | React 19、Ant Design 5 + ProComponents（ProLayout / ProTable / ProForm），`@ant-design/v5-patch-for-react-19` |
+| 数据 | TanStack Query（缓存键含界面语言）；请求经 `openapi-fetch`，类型由 OpenAPI 生成 |
+| 路由、多语言 | React Router；i18next（zh / ja / en），antd 与 dayjs 的语言随之切换 |
+| 测试 | Vitest + Testing Library（适配层、组件）；Playwright（端到端） |
+
+```
+frontend/
+  openapi/openapi.json      后端 OpenAPI 快照（由后端测试写出并比对，见第 3 节）
+  src/api/                  schema.d.ts（生成）、client.ts（令牌、语言、401 时刷新一次）、session.ts、problem.ts
+  src/meta/                 适配层（纯函数）：kinds、listQuery、columns、entityForm、validation、decimal、processForm、history
+  src/components/ pages/    通用页面：目录、列表、表单抽屉、历史、流程
+  e2e/                      Playwright
+../spec/validation-cases.json  前后端共享的校验用例（第 5 节）
+```
+
+## 2. 元数据接口（前端的全部输入）
+
+| 接口 | 内容 | 权限 |
+|---|---|---|
+| `GET /api/meta/entities/{name}` | 实体导出（02 §8）+ 按请求语言的 `label`（实体与字段）与 `messages`（本实体前端可能报出的错误码 → 文案模板） | 已认证 |
+| `GET /api/meta/datasets` | 调用方**可读**的数据视图：`id`、`entity`、`label`、`isDefault`、`temporal`、`allowScheduled`、`readOnly`、`processOnlyWrites`、`allowTimeTravel`、`softDelete`、`listView`、`maxQueryBatchSize`、`canWrite` | 已认证，按视图读权限过滤 |
+| `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema） | 已认证，按流程权限过滤 |
+| `GET /api/auth/menus`、`/api/auth/me` | 动态菜单、当前操作人（10 §3） | 已认证 |
+| `GET /api/dictionaries/{urn}` | 字典项（按语言） | 已认证 |
+
+- 标签：消息资源键 `entity.<实体>`、`entity.<实体>.<字段>`、`dataset.<视图 id>`、`process.<流程名>`，缺失时回退为名字；
+  系统字段（`effectStartTime` 等）由前端自己的文案命名。
+- `canWrite` = 具备写权限 ∧ 非只读 ∧ 非 `processOnlyWrites` ∧ 实体可写（有版本字段）。未声明的权限只在 `dev` 下算数（默认拒绝，10 §5）。
+- `ProcessDefinition.internal()`：只经专用入口或由平台执行的流程（`SPONSOR_SIGN_IN`、`SEC_BOOTSTRAP_ADMIN`、`ADD/UPDATE/DELETE_ENTITY`）
+  不进目录；它们的权限检查不变。
+- 流程输入 Schema（runtime `ProcessInputSchemas`，反射 record）：`String`/`UUID`/`Instant`/`LocalDate`/`BigDecimal`（`format: decimal`，以文本发送）/
+  整数/布尔/枚举/列表/嵌套 record/`Map`/`Object`；Bean Validation 的 `@NotNull`/`@NotBlank`/`@NotEmpty` → `required`，`@Size`/`@Min`/`@Max`/
+  `@Positive(OrZero)`/`@Email`/`@Pattern`（只收可移植的正则）→ 对应关键字；`@Sensitive` → `writeOnly` + `format: password`。
+  描述不了的类型退化为任意 JSON，并由 `ProcessChecks` 给出 `PROCESS` 警告。
+
+## 3. OpenAPI 与生成的类型
+
+- runtime 引入 `springdoc-openapi-starter-webflux-api`（不带 UI）。平台默认属性（`JabizDefaultProperties`，最低优先级）：
+  文档路径 `/api/meta/openapi`（位于 `/api/**` 下，**需要认证**；springdoc 默认的 `/v3/api-docs` 不开放）、启动时生成
+  （生成过程扫描类路径，不能发生在事件循环上）、响应类型 `application/json`、按键排序。
+- `OpenApiSnapshotIT`（app）取出文档、去掉 `servers`，与仓库中的 `frontend/openapi/openapi.json` 比较；不一致即失败。
+  更新：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`，再在 `frontend/` 下 `pnpm gen:api`，两者一起提交。
+  `CI` 环境下快照缺失即失败。前端 CI 的 `pnpm check:api` 确认 `schema.d.ts` 与快照一致。
+- 以 `Map` 返回的接口（实体导出、历史、操作详情）在 OpenAPI 中是自由对象，前端在 `src/meta/types.ts` 中声明其形状。
+
+## 4. 登录与令牌
+
+- 登录 `POST /api/auth/login`；登出调用 `/api/auth/logout` 并清除本地会话。
+- **访问令牌只在内存中**；**刷新令牌在 `sessionStorage`**（刷新页面保持登录，关闭标签页即结束）。收到 401 时用刷新令牌刷新一次
+  （并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
+- 当前操作人与权限来自 `GET /api/auth/me`，不在前端解码令牌。
+- 所有请求带 `Accept-Language`（界面语言），服务端据此返回错误文案、标签与字典。
+
+## 5. 适配层
+
+| 语义类型 | 输入控件 | 展示 | 列表筛选 |
+|---|---|---|---|
+| `text` | 文本框（`multiline` → 多行） | 原样 | 允许 `LIKE` → 包含；否则等于 |
+| `monetary` / `numeric` | 数字框（文本模式，不取整，金额带币种后缀） | 按币种与小数位 / 精确小数 | 区间（`between` / `gte` / `lte`） |
+| `temporal` | 日期时间 | 本地时间 | 时间区间 |
+| `code` | 下拉（字典的启用项按顺序，否则固定值） | 字典标签 | 等于 |
+| `bool` | 开关（新建时默认"否"） | 是 / 否 | 等于 |
+| `version` | 整数 | 原样 | 区间 |
+| `semanticIdentity` / `reference` | 文本框 | 原样 | 等于 |
+| `custom` / `none` | JSON 文本 | JSON | 等于 |
+
+- 列：列表视图的 `columns`（没有列表视图时取前 8 个非系统字段）；筛选、排序只对白名单字段开放，默认排序取 `defaultSort`。
+  敏感字段从不出现在列、表单与回看中。
+- 表单：不提供系统维护、生成与敏感字段；不可变字段编辑时只读。新建发送全部填写的值，修改**只发送改变的字段**；清空的输入发送 `null`。
+  日期时间控件只到毫秒，因此判断"是否改变"时时间按毫秒比较（未改动的微秒时间不会被截断后发送）。
+  时态实体另有"生效时间"（允许预定或具备 `temporal.backdate` 时）与"原因"。
+- 提交：`POST /api/datasets/{id}/commit`。后端返回的 400/422 违规回填到对应字段，与前端校验的错误显示在同一处（带 `data-rule-code`）；409 提示重新加载。
+
+### 5.1 前后端校验一致【D15】
+
+- 可导出的规则只有六种（`RANGE` `SCALE` `LENGTH` `PATTERN` `NOT_FUTURE` `REQUIRED`，core `RuleKinds`），导出其他种类即构建失败。
+  推荐用 core `Rules` 工厂声明：同一组参数同时生成导出的 `RuleSpec` 与服务端判断，两者不会漂移。`PATTERN` 只允许 Java 与 JavaScript
+  读法相同的写法（白名单：转义限于 `\d \w \b` 及其反义、`\n` 等控制字符、四位 `\u` 转义、转义的语法字符、字符类内的 `\-`、
+  `\p{..}` 的 Unicode 一般类别；分组限于 `(?:` `(?=` `(?!`；拒绝占有量词、字符类交集与嵌套字符类。`\s` 不可移植：JavaScript 把所有 Unicode 空白都算在内）。
+  前端遇到仍无法编译的正则时不报错，交由服务端判断。
+- 前端 `validation.ts` 逐步复刻服务端的唯一校验路径（`FieldValueCoercer` → `EntityValidator`）：转换失败 `INVALID_VALUE` → 必填 `REQUIRED`
+  （新建，或显式清空）→ 语义类型约束（`TOO_LONG` / `NUMERIC_PRECISION` / `NOT_IN_DICTIONARY`，只报第一个）→ 各导出规则（声明顺序）。
+  小数用 BigInt 精确计算（与 `BigDecimal` 的比较、`stripTrailingZeros`、精度同口径），时间按 ISO-8601（须带偏移）解析到纳秒。
+- 文案：导出中的 `messages` 模板与服务端同源，前端填入同名占位参数（`{field}` 为字段标签）。
+- **共享用例** `spec/validation-cases.json`：字段元数据 + 输入值 + 期望的错误码。core `ValidationCasesTest` 断言①文件中的字段元数据
+  与 `MetaModelExporter` 的导出**完全一致**（`-Dvalidation-cases.update=true` 重写）②服务端得到期望的错误码；
+  前端 `validation.cases.test.ts` 读同一文件断言得到**相同**的错误码。新增规则种类或语义约束时先加用例。
+- 仅服务端的规则、`Custom` 类型（其规范类型由服务端 SPI 决定，前端只检查必填）、实体级校验、状态机、唯一性等需要服务端状态的检查不在前端重复，服务端的回答照常显示。
+  `NOT_FUTURE` 在前端按浏览器时钟判断，仅作提示。
+
+## 6. 页面
+
+| 路径 | 页面 |
+|---|---|
+| `/login` | 登录（可切换语言） |
+| `/data` | 数据视图目录（`/api/meta/datasets`）：不配菜单也能进入任何可读视图 |
+| `/data/:datasetId` | 通用列表：远程分页、筛选、排序；时态实体可选"时间点"（`asOf`）与"按当时所知"（`knownAt`），此时只读 |
+| `/data/:datasetId/:id/history` | 历史：版本时间线（动作、生效 / 记录时间、操作人、操作、原因、改动字段的前后值、预定标记）；任意时间点回看并与当前对比；操作详情（`operation.read`）；撤销（`temporal.revert`，填原因） |
+| `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
+
+- 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是两个目录；语言切换记在 `localStorage`（仅本机偏好）。
+- 按权限显示操作：新建 / 编辑 / 删除看 `canWrite`，历史看 `temporal && allowTimeTravel`，操作详情与撤销看当前操作人的权限。
+
+## 7. 构建与运行
+
+- 开发：`frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
+- 打包：`./gradlew :app:bootJar` 经 node-gradle（pnpm）构建前端并打入 jar，后端同一端口提供页面与接口（`SpaFallbackFilter`）。
+- 检查：`pnpm lint`、`pnpm typecheck`、`pnpm check:api`、`pnpm test`、`pnpm build`；端到端 `pnpm e2e`（见第 8 节）。
+
+## 8. 测试
+
+- Vitest：适配层每个模块（`decimal`、`validation`、`kinds`、`listQuery`、`entityForm`、`processForm`、`history`、`problem`）、
+  共享校验用例、历史时间线组件。
+- Playwright（`e2e/`，对运行中的 jar，`E2E_BASE_URL` 默认 `http://localhost:8080`，管理员 `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`，
+  可用 `E2E_CHROMIUM` 指定已安装的 Chromium）：登录与失败、动态菜单与三种语言、只读用户看不到写操作；`Carrier` 列表（筛选、排序、区间）；
+  表单新建 / 编辑 / 删除；六种非法输入的前端错误码与直接调用接口的错误码相同；历史时间线、回看、预定、操作详情、撤销；
+  列表按时间点读取；另一个时态实体 `Price` 的历史；流程表单。每个测试使用自己的数据（表只增不删）。
+- 示范实体 `Carrier`（app，时态，`V7__carrier.sql`）只有声明，前端没有它的专门代码；`CarrierIT` 断言经数据视图接口的写入只有 INSERT。

@@ -139,6 +139,8 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
   通用实体流程（`ADD_ENTITY` 等）声明 `entity.write`；`SPONSOR_SIGN_IN` 声明 `auth.sign-in`，只经公开的 `POST /api/auth/login` 执行（10 §3、§4）。
 - 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
 - 同一流程执行器也被定时任务、事件消费者和场景测试调用（传输方式无关，11 §2.3、§4）。
+- 流程目录 `GET /api/meta/processes` 列出调用方可执行的流程及其输入的 JSON Schema（`ProcessInputSchemas`），前端据此生成表单（12 §2）。
+  只经专用入口或由平台执行的流程声明 `pb.internal()`（`SPONSOR_SIGN_IN`、`SEC_BOOTSTRAP_ADMIN`、通用实体流程），不进目录，权限检查不变【D15】。
 - `ExecutionOptions`（平台内部）：`idempotencyKey`，以及 `beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
   （事件投递用它写消费标记，与消费效果同一事务）【D14】。
 
@@ -148,6 +150,7 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`，事件类型名合法（11 §2.2）。
 - 调用已废弃（`pb.deprecated()`）的版本给出警告。
 - 权限已声明（`dev` 下为警告）。
+- 非内部流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接

@@ -16,4 +16,14 @@ class DictionariesConfig {
             .item("CUSTOMS_CLEARED", "zh", "已清关", "ja", "通関済み", "en", "Customs cleared")
             .item("DELIVERED", "zh", "已送达", "ja", "配達済み", "en", "Delivered"));
     }
+
+    @Bean
+    StaticDictionary countryDictionary() {
+        return StaticDictionary.define(CarrierEntityDefinitions.COUNTRY_DICTIONARY, d -> d
+            .item("JP", "zh", "日本", "ja", "日本", "en", "Japan")
+            .item("CN", "zh", "中国", "ja", "中国", "en", "China")
+            .item("KR", "zh", "韩国", "ja", "韓国", "en", "South Korea")
+            .item("US", "zh", "美国", "ja", "アメリカ", "en", "United States")
+            .item("DE", "zh", "德国", "ja", "ドイツ", "en", "Germany"));
+    }
 }

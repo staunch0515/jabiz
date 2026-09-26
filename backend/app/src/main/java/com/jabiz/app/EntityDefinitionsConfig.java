@@ -22,4 +22,9 @@ class EntityDefinitionsConfig {
     EntityDefinition priceEntityDefinition() {
         return PriceEntityDefinitions.PRICE;
     }
+
+    @Bean
+    EntityDefinition carrierEntityDefinition() {
+        return CarrierEntityDefinitions.CARRIER;
+    }
 }

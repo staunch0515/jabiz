@@ -1,9 +1,9 @@
 package com.jabiz.ext.geo;
 
 import com.jabiz.entity.FieldBuilder;
+import com.jabiz.entity.Rules;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /** Field patterns built on the geo kinds, for use with {@code eb.field(name, ...)}. */
@@ -18,10 +18,7 @@ public final class GeoFields {
         BigDecimal upper = BigDecimal.valueOf(max);
         return f -> f.physicalColumn(physicalColumn)
             .kind(GeoKinds.quantity(dimension, unitUrn))
-            .rule(ruleCode, "RANGE", Map.of("min", min, "max", max),
-                (v, ctx) -> v instanceof BigDecimal d
-                            && d.compareTo(lower) >= 0
-                            && d.compareTo(upper) <= 0);
+            .apply(Rules.range(ruleCode, lower, upper));
     }
 
     /** H3 cell index at the given resolution. */

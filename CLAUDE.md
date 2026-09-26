@@ -20,8 +20,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 | 数据访问 | **R2DBC**（请求路径）；Flyway 迁移和 `platformCheck` 静态校验允许使用 JDBC（不在请求路径上） |
 | 数据库 | PostgreSQL 16 |
 | 阻塞调用兜底 | Reactor `boundedElastic`，开启 `reactor.schedulers.defaultBoundedElasticOnVirtualThreads=true` |
-| 前端 | React 19、TypeScript、Vite、Ant Design 5 + ProComponents、TanStack Query |
-| 测试 | JUnit 5、Reactor Test、ArchUnit、BlockHound、jqwik、PostgreSQL（Testcontainers 或本地实例） |
+| 前端 | pnpm、React 19、TypeScript、Vite、Ant Design 5 + ProComponents、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12） |
+| 测试 | JUnit 5、Reactor Test、ArchUnit、BlockHound、jqwik、PostgreSQL（Testcontainers 或本地实例）；前端 Vitest、Playwright |
 
 选择 WebFlux 的前提是：**业务开发者不写响应式代码**。所有业务扩展点必须是同步接口（见第 3 节）。
 
@@ -62,6 +62,10 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **账本、事件、定时任务**（见 11 与决策 D14）：账本交易只经 `LEDGER_POST` / `LEDGER_REVERSE` 写入，更正即冲正；
   需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
+- **规则**（见 02 §3 与决策 D15）：导出给前端的字段规则只用 `Rules` 工厂（`RANGE` `SCALE` `LENGTH` `PATTERN` `NOT_FUTURE` `REQUIRED`）；
+  依赖服务端状态的判断写成仅服务端规则。新增规则种类或语义约束时，先在 `spec/validation-cases.json` 加用例，前后端都要通过。
+- **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
+  实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
@@ -80,7 +84,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 
 Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`ext-geo`（地理/物理量扩展语义类型，只依赖 core）、`runtime` = jabiz-runtime、`app`）。以下命令都在 `backend/` 下执行。
 
-- 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建和 `bootJar`；前端目前编译失败，阶段 10 重建前端）。
+- 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建（pnpm，经 node-gradle）和 `bootJar`，jar 同时提供页面与接口）。
   只编译和测试：`./gradlew check`（CI 执行的就是这个）
 - 全部测试：`./gradlew test`；单个模块：`./gradlew :core:test`、`:ext-geo:test`、`:runtime:test`、`:app:test`；
   单个类：`./gradlew :app:test --tests '*DatasetEntityManagerIT'`
@@ -91,7 +95,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   每个测试类使用独立 schema，结束后删除。测试中 BlockHound 始终开启
 - 静态校验：`./gradlew :app:platformCheck`（启动检查全部跑一遍，输出 `类别 | 定位 | 描述`，有错误退出码非 0；数据库同集成测试；`check` 包含它）
 - 本地启动：仓库根目录 `docker compose up -d`（数据库，端口 5436；pgAdmin 5050）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
-  启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `npm install && npm run dev`（5173，`/api` 代理到 8080）。
+  启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`（Base64，≥32 字节，
   如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
@@ -101,6 +105,14 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
+- 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
+  接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
+- 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
+  字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD` 与数据库环境变量
+  `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
+  `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
+  测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此
 - 数据库：PostgreSQL 16，连接信息通过环境变量提供，**不得写入仓库**。
 
 ## 7. 每个阶段的交付方式

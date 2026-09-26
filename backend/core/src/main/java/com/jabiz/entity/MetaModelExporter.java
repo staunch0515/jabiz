@@ -1,11 +1,16 @@
 package com.jabiz.entity;
 
+import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.query.QueryOperator;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Exports an entity definition as plain data for clients (docs/design/02-metamodel.md section 8).
@@ -13,7 +18,47 @@ import java.util.Map;
  */
 public final class MetaModelExporter {
 
+    /**
+     * Codes of the input checks the client repeats before submitting (decision D15): the kind constraints of
+     * {@link EntityValidator} and the conversion failure. Exported rules add their own codes.
+     */
+    public static final List<String> CLIENT_CHECK_CODES = List.of(PlatformErrorCodes.INVALID_VALUE,
+        PlatformErrorCodes.REQUIRED, PlatformErrorCodes.TOO_LONG, PlatformErrorCodes.NUMERIC_PRECISION,
+        PlatformErrorCodes.NOT_IN_DICTIONARY);
+
     private MetaModelExporter() {}
+
+    /**
+     * The export plus what a client needs to render and validate in one language (docs/design/12-frontend.md):
+     * {@code label} of the entity and of each field (message keys {@code entity.<Entity>} and
+     * {@code entity.<Entity>.<field>}, falling back to the logical name) and {@code messages}, the message
+     * templates of every code the client may report for this entity, with the same named placeholders the server
+     * fills.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> export(EntityDefinition def, MessageCatalog catalog, Locale locale) {
+        Map<String, Object> root = export(def);
+        root.put("label", catalog.find(labelKey(def.name, null), locale).orElse(def.name));
+        for (Map<String, Object> field : (List<Map<String, Object>>) root.get("fields")) {
+            String name = (String) field.get("name");
+            field.put("label", catalog.find(labelKey(def.name, name), locale).orElse(name));
+        }
+        Set<String> codes = new LinkedHashSet<>(CLIENT_CHECK_CODES);
+        for (FieldDefinition f : def.fields.values()) {
+            f.ruleSpecs().forEach(spec -> codes.add(spec.code()));
+        }
+        Map<String, Object> messages = new LinkedHashMap<>();
+        for (String code : codes) {
+            messages.put(code, catalog.find(code, locale).orElse(code));
+        }
+        root.put("messages", messages);
+        return root;
+    }
+
+    /** Message key of an entity's label ({@code field} null) or of one of its fields' labels. */
+    public static String labelKey(String entity, String field) {
+        return field == null ? "entity." + entity : "entity." + entity + "." + field;
+    }
 
     public static Map<String, Object> export(EntityDefinition def) {
         List<Map<String, Object>> fields = new ArrayList<>();

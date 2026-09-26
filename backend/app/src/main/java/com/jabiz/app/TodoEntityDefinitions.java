@@ -2,6 +2,7 @@ package com.jabiz.app;
 
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.Rules;
 
 public final class TodoEntityDefinitions extends BaseEntityDefinitions {
 
@@ -14,7 +15,7 @@ public final class TodoEntityDefinitions extends BaseEntityDefinitions {
 
         eb.field("title", f -> f.physicalColumn("title")
             .required(true)
-            .rule("TITLE_NOT_BLANK", v -> v instanceof String s && !s.isBlank()));
+            .apply(Rules.notBlank("TITLE_NOT_BLANK")));
 
         eb.field("done", f -> f.physicalColumn("done")
             .rule("DONE_IS_BOOLEAN", v -> v instanceof Boolean));

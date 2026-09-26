@@ -35,6 +35,7 @@ public final class SponsorSignInProcess {
             SponsorSignInInput.class, SponsorSignInOutput.class, LoginContext.class, pb -> pb
                 .description("Sign-in: verifies credentials, checks that a role is in effect and records the attempt.")
                 .permissions(SecurityPermissions.SIGN_IN)
+                .internal()
                 .contextFactory(LoginContext::new)
                 .outputMapper(LoginContext::output)
 

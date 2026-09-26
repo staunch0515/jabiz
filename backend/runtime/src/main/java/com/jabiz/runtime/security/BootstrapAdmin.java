@@ -52,6 +52,7 @@ public class BootstrapAdmin {
         ProcessDefinition.define("SEC_BOOTSTRAP_ADMIN", 1, Input.class, Output.class, ProcessContext.class, pb -> pb
             .description("Creates the first administrator; run by the platform at startup only.")
             .permissions(SecurityPermissions.BOOTSTRAP)
+            .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(USER_NAME, input.userName());

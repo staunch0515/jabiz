@@ -14,6 +14,7 @@ public final class AddProcessDefinition {
                 .description("Creates an instance of the requested entity type: resolves the definition and "
                     + "dataset, assigns a generated identity, commits the insert and returns the stored state.")
                 .permissions(EntityProcessPermissions.ENTITY_WRITE)
+                .internal()
                 .contextFactory((start, input) ->
                     new EntityChangeContext(start, input.entityType(), null, 0L, input.attributes()))
                 .outputMapper(EntityChangeContext::result)

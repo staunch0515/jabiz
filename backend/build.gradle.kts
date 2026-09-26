@@ -1,4 +1,4 @@
-import com.github.gradle.node.npm.task.NpmTask
+import com.github.gradle.node.pnpm.task.PnpmTask
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
@@ -68,26 +68,34 @@ project(":app") {
     apply(plugin = "org.springframework.boot")
     apply(plugin = "com.github.node-gradle.node")
 
+    // The frontend (docs/design/12-frontend.md) is built with pnpm and packaged into the boot jar.
     configure<com.github.gradle.node.NodeExtension> {
         download.set(true)
         version.set("22.12.0")
+        pnpmVersion.set("10.18.0")
         nodeProjectDir.set(file("${rootProject.projectDir}/../frontend"))
     }
 
-    val npmBuild = tasks.register<NpmTask>("npmBuild") {
-        dependsOn(tasks.named("npmInstall"))
-        npmCommand.set(listOf("run", "build"))
+    tasks.named<com.github.gradle.node.pnpm.task.PnpmInstallTask>("pnpmInstall") {
+        args.set(listOf("--frozen-lockfile"))
+    }
+
+    val frontendBuild = tasks.register<PnpmTask>("frontendBuild") {
+        dependsOn(tasks.named("pnpmInstall"))
+        pnpmCommand.set(listOf("run", "build"))
         inputs.files(
             fileTree("${rootProject.projectDir}/../frontend/src"),
+            fileTree("${rootProject.projectDir}/../frontend/openapi"),
             "${rootProject.projectDir}/../frontend/index.html",
             "${rootProject.projectDir}/../frontend/package.json",
+            "${rootProject.projectDir}/../frontend/pnpm-lock.yaml",
             "${rootProject.projectDir}/../frontend/vite.config.ts"
         )
         outputs.dir("${rootProject.projectDir}/../frontend/dist")
     }
 
     tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
-        dependsOn(npmBuild)
+        dependsOn(frontendBuild)
         from("${rootProject.projectDir}/../frontend/dist") {
             into("BOOT-INF/classes/static")
         }

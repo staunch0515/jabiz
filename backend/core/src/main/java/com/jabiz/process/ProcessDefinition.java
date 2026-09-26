@@ -30,6 +30,8 @@ import java.util.function.Function;
  * @param <C> context type shared by all steps
  * @param permissions permission codes the caller needs, all of them (docs/design/06-process.md section 8)
  * @param deprecated  whether a newer version should be used instead; references to it are reported at startup
+ * @param internal    run by the platform or through a dedicated entry point only (for example signing in): left out
+ *                    of the process catalog clients build forms from; its permissions still apply wherever it runs
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -42,7 +44,8 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     Function<C, O> outputMapper,
     List<StepDefinition<?, C>> steps,
     Set<String> permissions,
-    boolean deprecated
+    boolean deprecated,
+    boolean internal
 ) {
 
     /** Context key under which {@link #single} processes keep their input and output. */
@@ -122,6 +125,12 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** This definition requiring the given permissions instead of the declared ones. */
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated);
+            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal);
+    }
+
+    /** This definition marked as internal: not listed in the process catalog (decision D15). */
+    public ProcessDefinition<I, O, C> asInternal() {
+        return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
+            contextFactory, outputMapper, steps, permissions, deprecated, true);
     }
 }

@@ -66,15 +66,25 @@ val coverageGatedClasses = listOf(
     "com.jabiz.event.DomainEvent",
     "com.jabiz.job.JobDefinition",
     "com.jabiz.dataset.DatasetPolicy",
+    // Phase 10
+    "com.jabiz.entity.Rules",
+    "com.jabiz.entity.RuleKinds",
 )
 
 dependencies {
     // Property tests of the temporal invariants (docs/design/07-quality.md section 6).
     testImplementation("net.jqwik:jqwik:1.9.3")
+    // Reads the validation cases shared with the frontend (spec/validation-cases.json, decision D15).
+    testImplementation("tools.jackson.core:jackson-databind")
 }
 
 tasks.test {
     finalizedBy(tasks.jacocoTestReport)
+    // The validation cases shared with the frontend; -Dvalidation-cases.update=true rewrites their field metadata.
+    val cases = rootProject.layout.projectDirectory.file("../spec/validation-cases.json").asFile
+    inputs.file(cases)
+    systemProperty("validation-cases.file", cases.absolutePath)
+    systemProperty("validation-cases.update", providers.systemProperty("validation-cases.update").orElse("false").get())
 }
 
 tasks.jacocoTestReport {

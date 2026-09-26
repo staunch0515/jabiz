@@ -30,7 +30,8 @@ import java.util.Set;
  *       is not declared in place has exactly one bean;</li>
  *   <li>references of platform steps resolve (datasets, templates, called processes, the event publisher);</li>
  *   <li>the call graph is acyclic; calls of deprecated versions are warned about;</li>
- *   <li>every process declares permissions (a warning in the {@code dev} profile).</li>
+ *   <li>every process declares permissions (a warning in the {@code dev} profile);</li>
+ *   <li>the input form schema of every listed process describes all its input (a warning otherwise).</li>
  * </ul>
  */
 @Component
@@ -63,6 +64,13 @@ public class ProcessChecks implements PlatformCheck {
             }
             for (StepDefinition<?, ?> step : definition.steps()) {
                 checkStep(definition, step, problems, calls.get(process));
+            }
+            if (!definition.internal()) {
+                // Clients build the process form from this schema; what it cannot describe is entered as raw JSON.
+                for (String unsupported : ProcessInputSchemas.of(definition.inputType()).problems()) {
+                    problems.add(CheckProblem.warning(CATEGORY, process,
+                        "input form cannot describe " + unsupported + " (entered as raw JSON)"));
+                }
             }
         }
         findCycle(calls).ifPresent(cycle -> problems.add(CheckProblem.error(CATEGORY, cycle.getFirst(),

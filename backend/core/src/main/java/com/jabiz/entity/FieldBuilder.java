@@ -47,16 +47,35 @@ public final class FieldBuilder {
      * and the server-side implementation are declared together so they cannot drift apart.
      */
     public FieldBuilder rule(String code, String ruleKind, Map<String, Object> params, RulePredicate predicate) {
-        ruleSpecs.add(new RuleSpec(code, ruleKind, Map.copyOf(params)));
+        ruleSpecs.add(exported(code, ruleKind, params));
         rules.add(new FieldRule(code, predicate));
         return this;
     }
 
     /** Exportable rule whose implementation does not need runtime services. */
     public FieldBuilder rule(String code, String ruleKind, Map<String, Object> params, Predicate<Object> predicate) {
-        ruleSpecs.add(new RuleSpec(code, ruleKind, Map.copyOf(params)));
+        ruleSpecs.add(exported(code, ruleKind, params));
         rules.add(FieldRule.of(code, predicate));
         return this;
+    }
+
+    /** Applies a reusable piece of field configuration, typically a rule from {@link Rules}. */
+    public FieldBuilder apply(java.util.function.Consumer<FieldBuilder> configuration) {
+        configuration.accept(this);
+        return this;
+    }
+
+    /**
+     * An exported rule must be of a kind clients implement (decision D15); prefer the factories in {@link Rules},
+     * which also derive the predicate from the parameters.
+     */
+    private static RuleSpec exported(String code, String ruleKind, Map<String, Object> params) {
+        RuleKinds.requireKnown(code, ruleKind);
+        if (RuleKinds.PATTERN.equals(ruleKind)) {
+            RuleKinds.checkPortablePattern(code, String.valueOf(params.get("regex")));
+        }
+        // Insertion order is kept so the export (and the JSON clients see) is stable.
+        return new RuleSpec(code, ruleKind, java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(params)));
     }
 
     /** Server-only rule (for example one that depends on the clock or external lookups); not exported. */
