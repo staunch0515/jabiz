@@ -90,6 +90,9 @@ CREATE TABLE op_process_result (                         -- 流程结束时插�
   `SELECT jabiz_protect_append_only('<表>')` 安装两个触发器（启动自检检查）。
 - 阶段 6 之前，操作由数据视图 `commit`（名为 `jabiz.dataset.commit`）和通用增删改流程产生，仅当变更包含时态实体时写入；
   已在 Reactor Context 中的操作（`Operation`）被加入而不新建【D9】。
+- 阶段 6 起，每次流程执行都在开始时写 `op_process`（不论是否涉及时态实体），流程内的所有写入加入该操作；
+  失败的执行随事务回滚，不留记录【D11】。数据视图 `commit` 的行为不变。
+- `op_process_after_commit`（`db/jabiz/V5__process_after_commit.sql`）记录提交后步骤的每次尝试，同样只追加并受触发器保护【D11】。
 
 ### 2.3 实体登记表
 

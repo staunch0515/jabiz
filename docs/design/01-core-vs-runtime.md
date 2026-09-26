@@ -63,7 +63,8 @@ runtime 通过 Spring Boot 自动配置（`JabizRuntimeAutoConfiguration`）进�
 平台内部的 `StepHandler<M, C>`（返回 `Mono<Void>`）只用于平台提供的 I/O 步骤，**不作为业务扩展点公开**。
 
 `StepDefinition` 通过 core 中的标记接口 `StepImplementation<M, C>`（无方法）引用步骤实现类，因此流程定义留在 core 而不依赖 Reactor。
-`StepHandler`、`ComputeStep`、`BlockingStep` 都扩展它，各自声明执行方法；`ProcessExecutor` 在启动时检查每个步骤类都有对应的执行方式。
+`StepHandler`、`ComputeStep`、`BlockingStep` 都扩展它，各自声明执行方法；启动检查（`ProcessChecks`）确认每个步骤类都有对应的执行方式。
+`ComputeStep`、`BlockingStep` 在 core 的 `com.jabiz.process`；业务模块实现 `StepHandler` 视为违规（ArchUnit）。
 
 ## 5. 请求上下文
 
@@ -92,7 +93,7 @@ public record RequestContext(
   - 操作人（阶段 7 之前）：默认 `anonymous`，无角色、无权限。开发环境可用请求头 `X-Jabiz-Actor`、`X-Jabiz-Tenant`、
     `X-Jabiz-Roles`、`X-Jabiz-Permissions`（逗号分隔）指定，**仅当** `dev` profile 激活且 `jabiz.dev.actor-headers=true`；
     该属性在非 `dev` profile 下为 true 时启动失败。
-- `ProcessContext.request()` 随流程引擎（06 §3，阶段 6）加入。
+- `ProcessContext.request()` 随流程引擎（06 §3，阶段 6）加入：平台创建上下文时传入 `ProcessStart(processSeqId, opTime, request, ids)`。
 
 ## 6. 阻塞调用
 

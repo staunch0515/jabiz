@@ -27,6 +27,20 @@
 | `CallProcess` | 调用另一个流程（同一事务，见第 5 节） |
 | `PublishEvent` | 写入 Outbox（事务提交后由投递器发送） |
 
+实现（`com.jabiz.runtime.process.steps`）：每个平台步骤提供返回 `StepSpec` 的静态工厂，业务代码直接写
+`.step("加载订单", LoadEntity.by(数据视图, 上下文中主键的键, 结果键))`，不必写类型参数：
+
+| 工厂 | 放入上下文的结果 |
+|---|---|
+| `LoadEntity.by(datasetId, idKey, targetKey)` / `LoadEntity.optional(...)` | `EntityInstance`（`by` 找不到时 404） |
+| `QueryEntities.of(datasetId, ctx -> EntityQuery, targetKey)` | `List<EntityInstance>` |
+| `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】） |
+| `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
+| `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` | 子流程输出 |
+| `PublishEvent.of(eventType, ctx -> 载荷)` | —；委托给 `EventPublisher`，阶段 9 之前没有实现，使用它的流程启动检查报错 |
+
+引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
+
 ### 2.2 典型流程
 
 ```
@@ -50,6 +64,12 @@ public class ProcessContext {
 }
 ```
 
+- 上下文由 `ContextFactory.create(ProcessStart start, I input)` 创建，`ProcessStart(processSeqId, opTime, request, ids)` 由平台提供，
+  子类调用 `super(start)`。`ctx.reject(violation)` 等同于 `violations().add(...)`。
+- `ChangeSet`（core）：`insert(实体, 属性)` 返回主键（属性中给出的，或主键为生成字段时平台生成的 UUIDv7）；`update(实体, id, version, 属性)`、
+  `delete(实体, id, version)`；`in(数据视图)` 改用指定视图（缺省为实体的默认视图），`effectiveAt(时间)` 指定时态实体的生效时间，
+  `cancelScheduled` 取消预定。提交后的状态在 `saved()`。
+
 ### 3.1 统一保存（工作单元）
 
 - 计算步骤通过 `ctx.changes().insert/update/delete(...)` 登记变更，不直接写库。
@@ -63,6 +83,11 @@ public class ProcessContext {
 - 步骤可以声明阶段：
   - `IN_TX`（默认）：在事务内执行；
   - `AFTER_COMMIT`：事务成功提交后执行（用于调用外部系统、发送通知）；失败不影响已提交的数据，由平台记录并按策略重试。
+- `AFTER_COMMIT` 的实现【D11】：声明为 `.afterCommit(名称, 步骤类, 元数据[, RetryPolicy])`；在根流程提交后按顺序执行（子流程的推迟到根流程提交后），
+  按 `RetryPolicy`（默认 3 次、200 ms 起指数退避）在进程内重试，每次尝试追加到只追加表 `op_process_after_commit`，用尽后记 error 日志；
+  不做持久化重试（可靠投递用 `PublishEvent`）。
+- 步骤的执行方式：`ComputeStep` 在当前（非阻塞）线程同步执行，BlockHound 会拦下其中的阻塞调用；`BlockingStep` 在 `boundedElastic`（虚拟线程）上执行，
+  之后切回非阻塞线程继续。
 - **有外部副作用的 `BlockingStep` 必须使用 `AFTER_COMMIT`，或者该外部调用本身是幂等的**（避免事务回滚后外部状态已改变）。
   优先使用 `PublishEvent`（Outbox）代替在流程内直接调用外部系统。
 
@@ -73,6 +98,7 @@ public class ProcessContext {
 - 子流程失败 → 整个父流程失败并回滚。
 - 撤销父操作时，按相反顺序一并撤销子操作（见 04 第 6 节）。
 - 禁止递归调用同一流程（启动时检查调用图有无环）。
+- 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出写入它自己的 `op_process_result`。
 
 ## 6. 版本化
 
@@ -89,7 +115,8 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
     (in, ctx) -> { ... ctx.changes().update(...); return new Out(...); });
 ```
 
-它就是只有一个 `ComputeStep` 的流程，享有同样的事务、审计和撤销能力。
+它就是只有一个 `ComputeStep` 的流程，享有同样的事务、审计和撤销能力。上下文类型为 `ProcessContext`；权限用
+`.withPermissions(...)` 声明。构建器中也可以用 `.compute(名称, (元数据, ctx) -> ...)` 在流程里就地写计算步骤（不需要 Bean）。
 
 ## 8. 对外接口
 
@@ -102,22 +129,28 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 操作详情（权限 `operation.read`）与撤销（权限 `temporal.revert`，请求体 `{reason}`）已在阶段 4 实现（`OperationController`、
 `RevertService`）；执行接口与 `Idempotency-Key` 在阶段 6 接入，存储与查找（`OperationRecorder.recordResult / findResult`）已就绪。
 
-- 支持 `Idempotency-Key` 请求头：同一操作人、同一键的重复请求返回第一次的结果，不重复执行。
+- 执行接口：请求体经 JSON 转换为输入 record（不符合时 400 `INVALID_VALUE`），再做 Bean Validation（`NotNull` / `NotBlank` / `NotEmpty` → `REQUIRED`，
+  其他约束 → `INVALID_VALUE`，全部一起返回）；响应 `{processSeqId, output}`。未知的流程或版本 404。
+- 支持 `Idempotency-Key` 请求头：同一操作人、同一键的重复请求返回第一次的结果，不重复执行（并发请求、键的格式、键被其他流程使用时的 409 见【D11】；
+  重放的响应带 `Idempotency-Replayed: true`）。
   实现【决策 D4】：`op_process` 上 `(actor_id, idempotency_key)` 唯一；流程输出在结束时写入 `op_process_result`（同一事务），重放时从中读取。
-- 每个流程声明执行权限码；未声明 → 非开发环境启动失败。
+- 每个流程声明执行权限码（`pb.permissions(...)`，全部具备才可执行）；未声明 → 非开发环境启动失败。权限由流程 API 检查，执行器本身不检查【D11】。
+  通用实体流程（`ADD_ENTITY` 等）声明 `entity.write`；`SPONSOR_SIGN_IN` 暂时声明 `sponsor.sign-in`（阶段 7 重写）。
 - 同一流程执行器也被定时任务和场景测试调用（传输方式无关）。
 
 ## 9. 启动自检
 
-- 每个步骤的处理器恰好有一个 Bean（现有检查保留）；计算步骤和阻塞步骤同样检查。
-- 流程调用图无环；被调用的流程和版本存在。
-- 权限已声明。
+- 每个步骤的处理器恰好有一个 Bean（现有检查保留）；计算步骤和阻塞步骤同样检查（就地写的计算步骤除外）；步骤类必须是三种之一。
+- 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`。
+- 调用已废弃（`pb.deprecated()`）的版本给出警告。
+- 权限已声明（`dev` 下为警告）。
+- 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接
 
 | 现有 | 改动 |
 |---|---|
 | `StepHandler<M, C>`（公开，返回 `Mono`） | 移到运行时内部包，仅平台 I/O 步骤实现 |
-| `ProcessExecutor.execute` | 增加：写 `op_process`、事务包裹、自动提交 `ChangeSet`、违规累积、`AFTER_COMMIT` 阶段、子流程 |
+| `ProcessExecutor.execute` | 增加：写 `op_process`、事务包裹、自动提交 `ChangeSet`、违规累积、`AFTER_COMMIT` 阶段、子流程（阶段 6 完成；另有 `run(..., ExecutionOptions)` 返回 `ProcessResult`） |
 | `ClockProcessSequence` | 替换为数据库序列实现（保留接口） |
 | `SponsorSignInProcess` 的三个步骤 | 在安全阶段（ROADMAP 阶段 7）真正实现：认证 = 平台 `LoadEntity` + 计算步骤校验密码哈希；登录记录 = 登记变更 |

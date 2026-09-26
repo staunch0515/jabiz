@@ -34,6 +34,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 2. **运行时层（`jabiz-runtime`）很薄**：只负责执行（存储、事务、流程执行、Web 接入）。
 3. **业务扩展点全部同步**：字段规则（`RulePredicate`）、迁移守卫、流程计算步骤（`ComputeStep`）、阻塞步骤（`BlockingStep`）。
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
+   业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`）
+   做 I/O，用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
 4. 业务模块（`app` 及以后的业务模块）**禁止引用 `reactor.*`**。以上规则由 ArchUnit 测试强制执行。
 5. 请求路径上禁止阻塞调用；测试环境启用 BlockHound 检测。
 
