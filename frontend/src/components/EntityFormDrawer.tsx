@@ -27,6 +27,11 @@ interface Props {
   preset?: Record<string, unknown>
   /** Shows the entry without offering to change it (the caller may not write through the dataset). */
   readOnly?: boolean
+  /**
+   * The entry as it was at another point in time: shown read-only, without the actions and children of the current
+   * state, which would not match it.
+   */
+  historical?: boolean
   open: boolean
   onOpenChange(open: boolean): void
   onSaved(): void
@@ -46,6 +51,7 @@ export default function EntityFormDrawer({
   instance,
   preset,
   readOnly = false,
+  historical = false,
   open,
   onOpenChange,
   onSaved,
@@ -68,13 +74,16 @@ export default function EntityFormDrawer({
   // Reference targets (picked by name) and, for an existing entry, every entity that may list children under it.
   const metas = useEntityMetas([
     ...entity.fields.flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])),
-    ...(instance ? datasets.filter((d) => d.isDefault).map((d) => d.entity) : []),
+    ...(instance && !historical ? datasets.filter((d) => d.isDefault).map((d) => d.entity) : []),
   ])
   const children = useMemo(
-    () => (instance ? childListsOf(entity.entity, datasets, metas) : []),
-    [instance, entity.entity, datasets, metas],
+    () => (instance && !historical ? childListsOf(entity.entity, datasets, metas) : []),
+    [instance, historical, entity.entity, datasets, metas],
   )
-  const actions = useMemo(() => actionsFor(entity.entity, processes), [entity.entity, processes])
+  const actions = useMemo(
+    () => (historical ? [] : actionsFor(entity.entity, processes)),
+    [historical, entity.entity, processes],
+  )
   const original = useMemo(() => (instance?.attributes ?? {}) as Record<string, unknown>, [instance])
   const codes = useMemo(() => enabledCodes(dictionaries), [dictionaries])
   const temporal = entity.temporal

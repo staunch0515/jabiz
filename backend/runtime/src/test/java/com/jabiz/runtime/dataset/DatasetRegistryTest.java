@@ -201,6 +201,22 @@ class DatasetRegistryTest {
     }
 
     @Test
+    void aProcessOnlyLifecycleNeedsOneInitialState() {
+        EntityDefinition flow = EntityDefinition.define("Flow", eb -> {
+            eb.physicalTable("t_flow");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id").asSemanticIdentity("urn:flow"));
+            eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:flow", "A", "B", "C").processOnly());
+            eb.stateTransitions("status", st -> st.from("A").to("C").from("B").to("C"));
+        });
+        assertThatThrownBy(() -> registry(null, new EntityDefinition[] {flow}, DatasetDefinition.define("urn:ds:flow",
+            d -> d.targetEntityType("Flow").asDefault().permissions("r", "w").storage(s -> s.connectionPoolRef("default")))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Dataset urn:ds:flow | process-only lifecycle field status of Flow has several initial"
+                + " states [A, B]");
+    }
+
+    @Test
     void datasetsThatCannotInsertDoNotNeedThem() {
         assertThatCode(() -> registry(null, new EntityDefinition[] {STORY},
             story("urn:ds:story:ro", d -> d.asDefault().policy(p -> p.readOnly(true))),

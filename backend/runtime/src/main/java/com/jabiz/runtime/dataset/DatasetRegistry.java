@@ -158,7 +158,12 @@ public final class DatasetRegistry implements PlatformCheck {
                 FieldDefinition field = entity.field(name);
                 boolean filled = (name.equals(entity.stateField) && entity.soleInitialState() != null)
                     || dataset.scope().entries().stream().anyMatch(e -> e.field().equals(name));
-                if (field.required() && !filled) {
+                if (name.equals(entity.stateField) && entity.initialStates.size() > 1) {
+                    // Without a state the insert is refused (STATE_REQUIRED), and callers cannot give one.
+                    problems.add(label + ": process-only lifecycle field " + name + " of " + entity.name
+                        + " has several initial states " + entity.initialStates
+                        + ", so no insert through this dataset can choose one");
+                } else if (field.required() && !filled) {
                     problems.add(label + ": required process-only field " + name + " of " + entity.name
                         + " is neither the lifecycle field with one initial state nor a scope field of this dataset,"
                         + " so no insert through it can succeed");
