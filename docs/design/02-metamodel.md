@@ -115,6 +115,9 @@ public interface CustomKindSupport {
 - `eb.stateTransitions(statusField, st -> st.from(A).to(B, C) ...)`；
 - 状态字段必须是 `Code`，状态值必须属于字典（构建时校验）；
 - 初始状态自动推导（有出边无入边）；插入时校验初始状态；更新时校验迁移合法；状态不能被清空。
+- 初始状态可以显式声明：`st.initial("DRAFT").from("DRAFT").to(...)`。声明后以声明为准，否则按上一条推导。
+  状态机会回到起点时必须声明（例如审核退回 `IN_REVIEW → DRAFT`、`DRAFT ⇄ PUBLISHED`），否则推导不出初始状态，插入时既不能自动填入、
+  也不校验（阶段 13e）。构建期校验：声明的初始状态属于状态字典，且至少有一条从它出发的迁移；同一状态不能重复声明。
 
 改动：`SpatialGuardRule` 泛化为 **迁移守卫**：
 

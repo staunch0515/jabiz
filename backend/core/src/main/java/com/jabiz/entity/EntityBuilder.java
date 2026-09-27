@@ -19,6 +19,7 @@ public final class EntityBuilder {
     private String stateField;
     private final Map<String, FieldDefinition> fields = new LinkedHashMap<>();
     private final List<StateTransitionRule> transitions = new ArrayList<>();
+    private final Set<String> declaredInitialStates = new java.util.LinkedHashSet<>();
     private final List<GuardDefinition> guards = new ArrayList<>();
     private final List<CheckDefinition> checks = new ArrayList<>();
     private final List<ReferenceDefinition> references = new ArrayList<>();
@@ -52,6 +53,7 @@ public final class EntityBuilder {
         StateTransitionBuilder stb = new StateTransitionBuilder();
         block.accept(stb);
         transitions.addAll(stb.build());
+        declaredInitialStates.addAll(stb.initialStates());
     }
 
     /**
@@ -167,7 +169,8 @@ public final class EntityBuilder {
             Collections.unmodifiableMap(new LinkedHashMap<>(listViews)),
             temporalSpec,
             publishChanges,
-            displayField
+            displayField,
+            new java.util.LinkedHashSet<>(declaredInitialStates)
         );
     }
 
@@ -254,6 +257,12 @@ public final class EntityBuilder {
         for (StateTransitionRule rule : transitions) {
             requireAllowedState(code, rule.from());
             rule.to().forEach(target -> requireAllowedState(code, target));
+        }
+        for (String initial : declaredInitialStates) {
+            requireAllowedState(code, initial);
+            if (transitions.stream().noneMatch(rule -> rule.from().equals(initial))) {
+                throw invalid("initial state '" + initial + "' has no transition out of it");
+            }
         }
         Set<String> codes = new HashSet<>();
         for (GuardDefinition guard : guards) {
