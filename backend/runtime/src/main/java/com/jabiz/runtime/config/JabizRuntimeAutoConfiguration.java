@@ -3,6 +3,7 @@ package com.jabiz.runtime.config;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.runtime.JabizApplication;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.file.FileProperties;
 import com.jabiz.runtime.web.JabizWebProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,7 @@ import reactor.core.scheduler.Schedulers;
  */
 @AutoConfiguration
 @ComponentScan("com.jabiz.runtime")
-@EnableConfigurationProperties(JabizWebProperties.class)
+@EnableConfigurationProperties({JabizWebProperties.class, FileProperties.class})
 public class JabizRuntimeAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(JabizRuntimeAutoConfiguration.class);

@@ -70,6 +70,19 @@ public final class PlatformErrorCodes {
     public static final String SCOPE_UNAVAILABLE = "SCOPE_UNAVAILABLE";
     public static final String PERMISSION_DENIED = "PERMISSION_DENIED";
 
+    // Files (docs/design/14-files.md): 400 unless noted
+    public static final String FILE_TYPE_NOT_ALLOWED = "FILE_TYPE_NOT_ALLOWED";
+    /** 413. */
+    public static final String FILE_TOO_LARGE = "FILE_TOO_LARGE";
+    public static final String FILE_INVALID = "FILE_INVALID";
+    public static final String FILE_NOT_FOUND = "FILE_NOT_FOUND";
+    public static final String FILE_POLICY_MISMATCH = "FILE_POLICY_MISMATCH";
+    /** 422. */
+    public static final String FILE_IN_USE = "FILE_IN_USE";
+
+    // Too many requests (429)
+    public static final String RATE_LIMITED = "RATE_LIMITED";
+
     public static final List<String> ALL = List.of(
         UNKNOWN_FIELD, INVALID_VALUE, REQUIRED, RULE_EVALUATION_FAILED, REFERENCE_NOT_FOUND, ID_MISMATCH,
         TOO_LONG, NUMERIC_PRECISION, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
@@ -85,7 +98,9 @@ public final class PlatformErrorCodes {
         LEDGER_REVERSAL_NOT_REVERSIBLE,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED);
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED,
+        FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
+        RATE_LIMITED);
 
     private PlatformErrorCodes() {}
 }

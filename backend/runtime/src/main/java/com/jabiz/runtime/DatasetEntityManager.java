@@ -26,6 +26,7 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.entity.FieldWriteCheck;
 import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
@@ -41,6 +42,7 @@ import com.jabiz.runtime.observability.PlatformObservations;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -90,6 +92,7 @@ public class DatasetEntityManager {
     private final JsonMapper json;
     private final Outbox outbox;
     private final PlatformObservations observations;
+    private final ObjectProvider<FieldWriteCheck> writeChecks;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -103,8 +106,10 @@ public class DatasetEntityManager {
         VersionAppender versions,
         JsonMapper json,
         Outbox outbox,
-        PlatformObservations observations
+        PlatformObservations observations,
+        ObjectProvider<FieldWriteCheck> writeChecks
     ) {
+        this.writeChecks = Objects.requireNonNull(writeChecks, "FieldWriteCheck provider cannot be null");
         this.observations = Objects.requireNonNull(observations, "PlatformObservations cannot be null");
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
         this.entityRegistry = Objects.requireNonNull(entityRegistry, "EntityDefinitionRegistry cannot be null");
@@ -700,7 +705,8 @@ public class DatasetEntityManager {
     /**
      * Verifies that every reference field among {@code changedFields} points at an existing instance
      * of its target entity. Fields that are not written, or are set to null, are not checked.
-     * All missing targets are reported together.
+     * All missing targets are reported together. Then runs the platform's other {@link FieldWriteCheck}s
+     * (for example: files exist and belong to the field's policy).
      */
     Mono<Void> verifyReferences(
         EntityDefinition def, Map<String, Object> values, Collection<String> changedFields
@@ -719,7 +725,10 @@ public class DatasetEntityManager {
             .collectList()
             .flatMap(violations -> violations.isEmpty()
                 ? Mono.<Void>empty()
-                : Mono.<Void>error(new ValidationException(violations)));
+                : Mono.<Void>error(new ValidationException(violations)))
+            .then(Flux.fromStream(writeChecks::orderedStream)
+                .concatMap(check -> check.verify(def, values, changedFields))
+                .then());
     }
 
     /** Looks the target up in its default dataset, so its scope and soft delete apply: hidden targets do not count. */

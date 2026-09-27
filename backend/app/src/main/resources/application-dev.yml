@@ -2,3 +2,7 @@
 jabiz:
   dev:
     actor-headers: true
+  # Uploaded files of local development go under the build directory unless JABIZ_FILES_LOCAL_ROOT says otherwise.
+  files:
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:build/jabiz-files}

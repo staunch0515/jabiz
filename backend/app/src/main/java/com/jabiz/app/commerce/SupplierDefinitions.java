@@ -5,6 +5,7 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
+import com.jabiz.file.FileKind;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,6 +36,9 @@ public class SupplierDefinitions extends BaseEntityDefinitions {
         eb.field("leadTimeDays", f -> f.physicalColumn("lead_time_days").required(true).asNumeric(3, 0)
             .apply(Rules.range("SUPPLIER_LEAD_TIME_RANGE", BigDecimal.ONE, new BigDecimal("365"))));
         eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
+        // The signed contract as a PDF, served as a download only (docs/design/14-files.md).
+        eb.field("contractFileId", f -> f.physicalColumn("contract_file_id")
+            .kind(FileKind.of(CommerceFiles.DOCUMENT)));
         eb.unique("uk_supplier_code", "supplierCode");
         eb.listView("default", lv -> lv
             .columns("supplierCode", "supplierName", "countryCode", "leadTimeDays", "active")

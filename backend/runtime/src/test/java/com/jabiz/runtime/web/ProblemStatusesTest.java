@@ -10,7 +10,9 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
+import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ProblemDetail;
@@ -54,6 +56,18 @@ class ProblemStatusesTest {
         AuthenticationFailedException unauthenticated = new AuthenticationFailedException("LOGIN_FAILED", "no");
         assertThat(ProblemStatuses.status(unauthenticated))
             .isEqualTo(handler.handleAuthenticationFailed(unauthenticated, exchange).getStatusCode().value());
+        PayloadTooLargeException tooLarge = new PayloadTooLargeException(new Violation("file", "FILE_TOO_LARGE", "big",
+            Map.of("max", "1 MB")));
+        assertThat(ProblemStatuses.status(tooLarge))
+            .isEqualTo(handler.handlePayloadTooLarge(tooLarge, exchange).getStatus()).isEqualTo(413);
+        RateLimitedException limited = new RateLimitedException("slow down", 7);
+        var limitedResponse = handler.handleRateLimited(limited, exchange);
+        assertThat(ProblemStatuses.status(limited)).isEqualTo(limitedResponse.getStatusCode().value()).isEqualTo(429);
+        assertThat(limitedResponse.getHeaders().getFirst("Retry-After")).isEqualTo("7");
+        assertThat(ProblemStatuses.violations(limited)).singleElement()
+            .satisfies(v -> assertThat(v.params()).isEqualTo(Map.of("retryAfter", 7L)));
+        assertThat(ProblemStatuses.violations(tooLarge)).extracting(Violation::ruleCode)
+            .containsExactly("FILE_TOO_LARGE");
         assertThat(ProblemStatuses.status(new IllegalStateException())).isEqualTo(500);
     }
 
