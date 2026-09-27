@@ -12,6 +12,7 @@ public final class FieldBuilder {
     private boolean required = false;
     private boolean generated = false;
     private boolean sensitive = false;
+    private boolean processOnly = false;
     private SemanticKind kind = new SemanticKind.None();
     private final List<FieldRule> rules = new ArrayList<>();
     private final List<RuleSpec> ruleSpecs = new ArrayList<>();
@@ -27,6 +28,12 @@ public final class FieldBuilder {
      * logs and operation records mask it. Only processes can set it.
      */
     public FieldBuilder sensitive() { this.sensitive = true; return this; }
+    /**
+     * Marks a field only processes change (a status, a review comment): it stays readable, but the dataset API and
+     * the generic entity processes refuse to write it and a revert does not restore it
+     * (docs/design/16-content-authoring.md section 5).
+     */
+    public FieldBuilder processOnly() { this.processOnly = true; return this; }
     public FieldBuilder asSemanticIdentity(String urn) { kind = new SemanticKind.SemanticIdentity(urn); return this; }
     public FieldBuilder asMonetary(String currency, int scale) { kind = new SemanticKind.Monetary(currency, scale); return this; }
     public FieldBuilder asTemporal(TemporalRole role) { kind = new SemanticKind.Temporal(role); return this; }
@@ -94,6 +101,11 @@ public final class FieldBuilder {
         if (physicalColumn == null || physicalColumn.isBlank()) {
             throw new IllegalStateException("Field '" + name + "' has no physical column");
         }
+        if (processOnly && (sensitive || generated)) {
+            // Sensitive fields are already written by processes only; generated ones by the platform.
+            throw new IllegalStateException("Field '" + name + "' cannot be process-only and "
+                + (sensitive ? "sensitive" : "generated"));
+        }
         return new FieldDefinition(
             name,
             physicalColumn,
@@ -103,7 +115,8 @@ public final class FieldBuilder {
             kind,
             List.copyOf(rules),
             List.copyOf(ruleSpecs),
-            sensitive
+            sensitive,
+            processOnly
         );
     }
 }

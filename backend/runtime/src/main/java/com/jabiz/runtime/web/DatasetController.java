@@ -6,7 +6,9 @@ import com.jabiz.entity.ListViewDefinition;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityAction;
@@ -15,6 +17,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.entity.ProcessOnlyFields;
 import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
@@ -67,22 +70,32 @@ class DatasetController {
     /** {@code reason} is recorded with the operation; corrections of the past require it. */
     record CommitRequest(List<Change> changes, String reason) {}
 
+    /** One match of a lookup: the primary key and the display text (all languages of a multilingual text). */
+    record LookupItem(Object id, Object label) {}
+
+    record LabelsRequest(List<Object> ids) {}
+
     private static final int DEFAULT_LIMIT = 50;
+    /** Most keys one labels request may ask for (docs/design/16-content-authoring.md section 2). */
+    static final int MAX_LABELS = 200;
+    private static final int MAX_LOOKUP_TEXT = 200;
 
     private final DatasetRegistry datasets;
     private final EntityDefinitionRegistry entities;
     private final DatasetEntityManager entityManager;
     private final EntityIdGenerator ids;
     private final SensitiveDataMasker masker;
+    private final MessageCatalog messages;
     private final boolean development;
 
     DatasetController(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager,
-        EntityIdGenerator ids, SensitiveDataMasker masker, Environment environment) {
+        EntityIdGenerator ids, SensitiveDataMasker masker, MessageCatalog messages, Environment environment) {
         this.datasets = datasets;
         this.entities = entities;
         this.entityManager = entityManager;
         this.ids = ids;
         this.masker = masker;
+        this.messages = messages;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
@@ -148,6 +161,7 @@ class DatasetController {
                 long version = change.version() == null ? 0L : change.version();
                 Map<String, Object> attributes = change.attributes() == null ? Map.of() : change.attributes();
                 SensitiveDataMasker.rejectWrites(def, attributes);
+                ProcessOnlyFields.rejectWrites(def, attributes);
                 Object id = change.id();
                 if (change.action() == EntityAction.INSERT && generatedKey) {
                     // As in the generic add process: a generated key is issued here, never taken from the caller.
@@ -162,6 +176,63 @@ class DatasetController {
             return entityManager.commitBatch(dataset, changes, request.reason())
                 .map(saved -> saved.stream().map(masker::hide).toList());
         });
+    }
+
+    /**
+     * Instances whose display field contains {@code q}, ignoring case, for reference pickers
+     * (docs/design/16-content-authoring.md section 2); at most 20, within the scope, with the read permission.
+     */
+    @GetMapping("/lookup")
+    Mono<List<LookupItem>> lookup(@PathVariable String resourceId, @RequestParam(required = false) String q,
+        @RequestParam(required = false) Integer limit) {
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
+            EntityDefinition def = displayed(dataset);
+            int size = limit == null ? QueryCompiler.MAX_LOOKUP : limit;
+            if (size <= 0) {
+                throw invalid("limit", "limit must be positive");
+            }
+            if (q != null && q.length() > MAX_LOOKUP_TEXT) {
+                throw invalid("q", "q must not exceed " + MAX_LOOKUP_TEXT + " characters");
+            }
+            return entityManager.lookup(dataset, def, q, size, context.locale().getLanguage(),
+                    messages.defaultLocale().getLanguage())
+                .map(instance -> new LookupItem(instance.id(), instance.attributes().get(def.displayField)))
+                .collectList();
+        });
+    }
+
+    /**
+     * Display texts of the given instances, for reference columns (docs/design/16-content-authoring.md section 2):
+     * at most 200 keys; keys outside the scope or unknown are left out.
+     */
+    @PostMapping("/labels")
+    Mono<Map<String, Object>> labels(@PathVariable String resourceId, @RequestBody LabelsRequest request) {
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
+            EntityDefinition def = displayed(dataset);
+            List<Object> keys = request == null || request.ids() == null ? List.of() : request.ids();
+            if (keys.size() > MAX_LABELS) {
+                throw invalid("ids", "at most " + MAX_LABELS + " ids are allowed");
+            }
+            if (keys.isEmpty()) {
+                return Mono.just(Map.<String, Object>of());
+            }
+            return entityManager.byIds(dataset, def, keys)
+                .collect(java.util.LinkedHashMap<String, Object>::new, (labels, instance) -> labels.put(
+                    String.valueOf(instance.id()), instance.attributes().get(def.displayField)))
+                .map(labels -> (Map<String, Object>) labels);
+        });
+    }
+
+    /** The dataset's entity, which must declare a display field (400 {@code DISPLAY_NOT_DECLARED}). */
+    private EntityDefinition displayed(DatasetDefinition dataset) {
+        EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
+        if (def.displayField == null) {
+            throw new ValidationException(List.of(new Violation(null, PlatformErrorCodes.DISPLAY_NOT_DECLARED,
+                def.name + " declares no display field", Map.of("entity", def.name))));
+        }
+        return def;
     }
 
     /**

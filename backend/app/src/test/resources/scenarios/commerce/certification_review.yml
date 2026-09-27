@@ -1,0 +1,65 @@
+# A supplier certification through its review (docs/design/16-content-authoring.md section 9): it is created like the
+# generated pages create it, with its status left to the platform; only its processes move it on, and the lifecycle
+# decides whatever a client offered.
+name: Supplier certification review
+clock: 2026-05-11T01:00:00Z
+actor: { id: buyer, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Supplier
+      attributes: { supplierCode: KTEA, supplierName: Kanto Tea, countryCode: JP, leadTimeDays: 7, active: true }
+    save: { supplier: $.id }
+  - note: The status is filled with the initial state; titles are kept by language.
+    process: ADD_ENTITY@latest
+    input:
+      entityType: SupplierCertification
+      attributes:
+        supplierId: "${supplier}"
+        title: { ja: 有機 JAS 認証, en: Organic JAS certification }
+        body: { en: "Issued by the **Kanto** certification body." }
+    save: { certification: $.id }
+  - expectError:
+      process: ADD_ENTITY@latest
+      input:
+        entityType: SupplierCertification
+        attributes: { supplierId: "${supplier}", title: { en: Fair trade }, status: APPROVED }
+      status: 400
+      ruleCode: PROCESS_ONLY_FIELD
+      field: status
+  - expectError:
+      process: ADD_ENTITY@latest
+      input:
+        entityType: SupplierCertification
+        attributes: { supplierId: "${supplier}", title: { ja: フェアトレード } }
+      status: 400
+      ruleCode: TRANSLATION_REQUIRED
+      field: title
+
+  - process: CERTIFICATION_SUBMIT@latest
+    input: { certificationId: "${certification}" }
+    expectOutput: { status: SUBMITTED }
+  - advanceClock: P1D
+  - process: CERTIFICATION_REJECT@latest
+    input: { certificationId: "${certification}", comment: The certificate copy is missing. }
+    expectOutput: { status: REJECTED }
+  - process: CERTIFICATION_SUBMIT@latest
+    input: { certificationId: "${certification}" }
+  - advanceClock: P1D
+  - process: CERTIFICATION_APPROVE@latest
+    input: { certificationId: "${certification}" }
+    expectOutput: { status: APPROVED }
+  - note: Approved is final.
+    expectError:
+      process: CERTIFICATION_REJECT@latest
+      input: { certificationId: "${certification}", comment: Too late. }
+      status: 422
+      ruleCode: ILLEGAL_TRANSITION
+      field: status
+  - expect:
+      entity: SupplierCertification
+      id: "${certification}"
+      fields: { status: APPROVED, reviewComment: null }
+snapshot:
+  entities: [Supplier, SupplierCertification]
+  asOf: end

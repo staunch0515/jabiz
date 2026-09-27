@@ -69,6 +69,10 @@ val coverageGatedClasses = listOf(
     // Phase 10
     "com.jabiz.entity.Rules",
     "com.jabiz.entity.RuleKinds",
+    // Phase 13d
+    "com.jabiz.entity.i18n.I18nText",
+    "com.jabiz.entity.i18n.I18nTextSupport",
+    "com.jabiz.process.ActsOn",
 )
 
 dependencies {

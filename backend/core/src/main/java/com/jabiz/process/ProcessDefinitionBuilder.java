@@ -25,6 +25,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private final Set<String> permissions = new LinkedHashSet<>();
     private boolean deprecated;
     private boolean internal;
+    private ActsOn actsOn;
 
     ProcessDefinitionBuilder(String name, int version, Class<I> inputType, Class<O> outputType, Class<C> contextType) {
         this.name = Objects.requireNonNull(name, "name must not be null");
@@ -47,6 +48,18 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     public ProcessDefinitionBuilder<I, O, C> outputMapper(Function<C, O> outputMapper) {
         this.outputMapper = outputMapper;
         return this;
+    }
+
+    /** The entity the process acts on; see {@link ProcessDefinition#actsOn(String, String, java.util.function.Consumer)}. */
+    public ProcessDefinitionBuilder<I, O, C> actsOn(String entity, String input,
+        java.util.function.Consumer<ActsOn.Builder> condition) {
+        this.actsOn = ActsOn.of(entity, input, condition);
+        return this;
+    }
+
+    /** The entity the process acts on, whose primary key is the input component {@code input}. */
+    public ProcessDefinitionBuilder<I, O, C> actsOn(String entity, String input) {
+        return actsOn(entity, input, null);
     }
 
     /** Permission codes the caller needs, all of them. A process without any fails startup outside development. */
@@ -122,6 +135,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal);
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn);
     }
 }

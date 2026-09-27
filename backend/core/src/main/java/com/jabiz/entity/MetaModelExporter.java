@@ -33,7 +33,7 @@ public final class MetaModelExporter {
      * {@code label} of the entity and of each field (message keys {@code entity.<Entity>} and
      * {@code entity.<Entity>.<field>}, falling back to the logical name) and {@code messages}, the message
      * templates of every code the client may report for this entity, with the same named placeholders the server
-     * fills.
+     * fills; and {@code defaultLocale}, the platform's default language.
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> export(EntityDefinition def, MessageCatalog catalog, Locale locale) {
@@ -45,6 +45,9 @@ public final class MetaModelExporter {
         }
         Set<String> codes = new LinkedHashSet<>(CLIENT_CHECK_CODES);
         for (FieldDefinition f : def.fields.values()) {
+            if (f.kind() instanceof SemanticKind.Custom c) {
+                codes.addAll(CustomKinds.require(c.kindId()).violationCodes(c.params()));
+            }
             f.ruleSpecs().forEach(spec -> codes.add(spec.code()));
         }
         Map<String, Object> messages = new LinkedHashMap<>();
@@ -52,6 +55,8 @@ public final class MetaModelExporter {
             messages.put(code, catalog.find(code, locale).orElse(code));
         }
         root.put("messages", messages);
+        // Multilingual texts fall back to it when the interface language has no text (16 section 1.3).
+        root.put("defaultLocale", catalog.defaultLocale().getLanguage());
         return root;
     }
 
@@ -70,6 +75,7 @@ public final class MetaModelExporter {
             json.put("generated", f.generated());
             json.put("systemManaged", def.isSystemManaged(f));
             json.put("sensitive", f.sensitive());
+            json.put("processOnly", f.processOnly());
             json.putAll(kindToJson(f.kind()));
             json.put("operators", SemanticKinds.allowedOperators(f.kind()).stream()
                 .map(QueryOperator::name).sorted().toList());
@@ -80,6 +86,9 @@ public final class MetaModelExporter {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("entity", def.name);
         root.put("primaryKey", def.primaryKey);
+        if (def.displayField != null) {
+            root.put("display", def.displayField);
+        }
         root.put("temporal", def.temporal);
         root.put("publishesChanges", def.publishesChanges);
         if (def.temporal) {

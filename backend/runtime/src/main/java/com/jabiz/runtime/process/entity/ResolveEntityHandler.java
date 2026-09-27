@@ -9,6 +9,7 @@ import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.security.Permissions;
+import com.jabiz.runtime.entity.ProcessOnlyFields;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -48,6 +49,8 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
             DatasetEntityManager.rejectDirectWrites(dataset);
             // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());
+            // So are the fields that only processes change (docs/design/16-content-authoring.md section 5).
+            ProcessOnlyFields.rejectWrites(definition, ctx.attributes());
             ctx.setDefinition(definition);
             ctx.setDataset(dataset);
         });
