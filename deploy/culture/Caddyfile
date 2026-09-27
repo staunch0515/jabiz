@@ -1,0 +1,6 @@
+# The edge profile (docker-compose.yml): automatic HTTPS for CULTURE_DOMAIN in front of the application. Set
+# SERVER_FORWARD_HEADERS_STRATEGY=native for the application when using it, so it sees the client's scheme.
+{$CULTURE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy culture:8080
+}

@@ -1,0 +1,80 @@
+# Culture, Unfiltered (docs/culture/00-design.md section 10). From the repository root:
+#
+#   docker compose -f deploy/culture/docker-compose.yml up -d --build
+#
+# then open http://localhost:8080 (the public site) and http://localhost:8080/admin/ (the admin); the first
+# administrator's password is printed by `docker compose -f deploy/culture/docker-compose.yml logs culture`. Sign in and
+# run the action CULTURE_SETUP once (docs/culture/editor-guide.md, "Before you start").
+#
+# Profiles: `edge` puts Caddy in front with automatic HTTPS for CULTURE_DOMAIN (ports 80 and 443); `observability` runs
+# Grafana with metrics, traces and logs on port 3000.
+#
+# Settings come from deploy/culture/.env (never committed). For a server set at least DB_PASSWORD, JABIZ_JWT_SECRET
+# (openssl rand -base64 48), JABIZ_BOOTSTRAP_ADMIN_PASSWORD and, with `edge`, CULTURE_DOMAIN. Back up the database and
+# the files volume together (section 10).
+name: culture
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: culture
+      POSTGRES_USER: culture
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-culture}
+    ports: ["127.0.0.1:5437:5432"]
+    volumes: [culture-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U culture -d culture"]
+      interval: 5s
+      retries: 10
+
+  culture:
+    build:
+      context: ../..
+      dockerfile: deploy/culture/Dockerfile
+    image: culture:local
+    depends_on:
+      db: { condition: service_healthy }
+    # Only this machine reaches the application directly; the edge proxy (or a proxy of the host) serves the public.
+    ports: ["127.0.0.1:${CULTURE_PORT:-8080}:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/culture
+      SPRING_R2DBC_USERNAME: culture
+      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD:-culture}
+      SPRING_FLYWAY_URL: jdbc:postgresql://db:5432/culture
+      SPRING_FLYWAY_USER: culture
+      SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-culture}
+      # Behind the edge proxy the client's address and scheme come from its headers.
+      SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-none}
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # Telemetry is sent only with the observability profile (docs/design/13-observability-ops.md).
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: ${OTLP_TRACES:-}
+      MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT: ${OTLP_LOGS:-}
+      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${OTLP_METRICS_ENABLED:-false}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: ${OTLP_METRICS:-http://lgtm:4318/v1/metrics}
+    volumes: [culture-secrets:/var/lib/jabiz/secrets, culture-files:/var/lib/jabiz/files]
+
+  edge:
+    image: caddy:2
+    profiles: [edge]
+    depends_on: [culture]
+    ports: ["80:80", "443:443"]
+    environment:
+      CULTURE_DOMAIN: ${CULTURE_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - culture-caddy:/data
+
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    profiles: [observability]
+    ports: ["127.0.0.1:3000:3000"]
+
+volumes:
+  culture-db:
+  culture-secrets:
+  culture-files:
+  culture-caddy:

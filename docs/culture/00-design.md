@@ -1,6 +1,6 @@
 # Culture, Unfiltered — 应用设计
 
-需求原文见 `brief.md`（下文"简报 §n"指其中的章节）。本文件是应用 culture 的设计，状态：**待确认**。
+需求原文见 `brief.md`（下文"简报 §n"指其中的章节）。本文件是应用 culture 的设计，状态：**已确认**（C1 计划确认时一并确认，含 C1 中的调整，见 §14）。
 平台部分（文件、公开访问、内容编辑、平台与应用分开）在 `platform` 分支的 `docs/design/14–17` 与决策 D17–D19 中，本文件只引用，不重复。
 
 ## 0. 设计的出发点
@@ -44,7 +44,7 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 
 全部是**普通实体**（非时态）：内容里有未成年人的个人信息，删除权要求能真正删除（04 §10、D18 的同一理由）。
 修改的"谁、何时、做了什么"由流程操作记录（`op_process`）保留；为此 culture 的流程**只接收主键与枚举**，自由文本输入标 `@Sensitive`（见 §6.4）。
-主键均为 UUIDv7；每个实体有 `version`（乐观锁）。下表中"公开"列是公开数据视图的白名单（§7.1）。
+主键均为 UUIDv7（以文本 `varchar(36)` 存储：平台对普通实体主键的规范类型是文本）；每个实体有 `version`（乐观锁）。下表中"公开"列是公开数据视图的白名单（§7.1）。
 
 `i18n(n)` 表示 `jabiz.i18n-text`（16 §1，每种语言至多 n 字符，英语必填除非注明）；`md` 表示 Markdown；`file(p)` 表示 `jabiz.file`（14 §4），`p` 为策略；
 `PO` 表示 `processOnly()`（16 §5）。
@@ -98,14 +98,14 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | 字段 | 类型 | 公开 | 说明 |
 |---|---|---|---|
 | `slug` | Text(80)，唯一 | ✓ | |
-| `title` | i18n(120) | ✓ | |
-| `summary` | i18n(300) | ✓ | 卡片上的短描述 |
+| `title` | i18n(120)，必填（任一语言；英语由发布检查要求） | ✓ | |
+| `summary` | i18n(300)，可空（英语由发布检查要求） | ✓ | 卡片上的短描述 |
 | `about` | i18n(3000) md，英语可空 | ✓ | "About this story"：研究问题 |
 | `body` | i18n(40000) md，英语可空 | ✓ | 文章正文（`ARTICLE`、`INTERVIEW` 用） |
 | `mediaType` | Code，字典 `culture.media-type`：`VIDEO` `ARTICLE` `PHOTO` `INTERVIEW` `AUDIO` | ✓ | 数据库字典，可增加（简报 §14） |
 | `storyDate` | Temporal(EVENT_TIME) | ✓ | 记录发生的日期（简报 §9 的 date） |
-| `thumbnailFileId` | file(`culture.image`) | ✓ | |
-| `thumbnailAlt` | i18n(200) | ✓ | |
+| `thumbnailFileId` | file(`culture.image`)，可空（发布检查要求） | ✓ | |
+| `thumbnailAlt` | i18n(200)，可空（英语由发布检查要求） | ✓ | |
 | `videoProvider` | Code `YOUTUBE` `VIMEO`，可空 | ✓ | 故事自己的主视频（可无，视频也可在各视角中） |
 | `videoId` | Text(32)，`PATTERN [A-Za-z0-9_-]{6,32}`，可空 | ✓ | **只存平台 + 视频 ID，不存任意 URL**（嵌入地址由前端按白名单拼出） |
 | `captionsConfirmed` | Bool | ✗ | 编辑确认该视频有准确的字幕（发布检查，§6.3） |
@@ -121,6 +121,9 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 
 `storyId`、`themeId`（唯一 `(storyId, themeId)`）、`visibility`（Code `PRIVATE` `PUBLIC`，PO，由发布 / 下线流程维护，公开范围）。一个故事可以属于多个主题。
 
+`visibility`（本节与 §3.6、§3.7）声明为状态机 `PRIVATE ⇄ PUBLIC`，显式初始状态 `PRIVATE`（平台 13e 的 `st.initial`）：
+因此它可以必填且 `processOnly`，经任何数据视图插入时由平台填为 `PRIVATE`。
+
 ### 3.6 视角 `Contribution`（`cu_contribution`）——模型的中心
 
 一个参与者在一个故事中的那一部分（简报 §8 "HOME: Japan → video …"、§10 "Perspectives"）。
@@ -135,7 +138,7 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | `audioFileId` | file(`culture.audio`)，可空 | ✓ | 音频片段；发布要求有 `transcript` |
 | `sortOrder` | Numeric(5,0) | ✓ | |
 | `ownerActorId` | Text(64) | ✗ | 通讯员范围字段 |
-| `editable` | Bool，PO | ✗ | 故事为 `DRAFT` 时为 true；通讯员可写视图的范围（§5） |
+| `editable` | Bool，可空，PO | ✗ | 故事为 `DRAFT` 时为 true；通讯员可写视图的范围（§5）。经编辑的默认视图插入时为空（等同 false：通讯员本来也看不到别人的行） |
 | `visibility` | Code `PRIVATE` `PUBLIC`，PO | 范围 | |
 
 ### 3.7 媒体 `MediaItem`（`cu_media_item`）
@@ -147,7 +150,7 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | `storyId` | Reference(Story) | ✓ | |
 | `contributionId` | Reference(Contribution)，可空 | ✓ | 属于某个视角时填写 |
 | `kind` | Code `PHOTO` `AUDIO` | ✓ | |
-| `fileId` | file(`culture.image` 或 `culture.audio`，按 `kind` 由实体级校验约束) | ✓ | |
+| `imageFileId` / `audioFileId` | file(`culture.image`) / file(`culture.audio`)，可空 | ✓ | 一个文件字段只能有一个策略，因此分两列；实体级校验 `MEDIA_FILE_KIND`：`PHOTO` 恰有图片、`AUDIO` 恰有音频 |
 | `alt` | i18n(300)，`PHOTO` 时英语必填 | ✓ | 替代文本（简报 §18） |
 | `caption` | i18n(500)，可空 | ✓ | |
 | `credit` | Text(80)，可空 | ✓ | |
@@ -192,12 +195,13 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | `participantId` | Reference(Participant) | |
 | `party` | Code `PARTICIPANT` `GUARDIAN` | 本人或监护人 |
 | `coversPhoto` / `coversVideo` / `coversVoice` | Bool | 同意公开的媒体种类（文字与名字由本人同意本身覆盖） |
-| `signedOn` | Temporal(EVENT_TIME) | |
+| `signedOn` | Temporal(EVENT_TIME)，不晚于当前 | |
 | `documentFileId` | file(`culture.consent-doc`)，可空 | 签字的同意书扫描件；策略只有 `culture.consent.read` 可读，且没有任何公开视图引用它，因此**永远不能匿名获取**（15 §4） |
 | `withdrawnTime` | Temporal(EVENT_TIME)，PO | 撤回时间 |
-| `recordedBy` | Text(64) | 自动填为操作人 |
 
 除 `withdrawnTime` 外全部 `immutable`：同意记录不修改，更正 = 撤回 + 新记录。
+谁在何时登记了同意记录，由数据视图 `commit` 的操作记录保留（操作人、时间、实体与主键，10 §6），因此不另设 `recordedBy` 字段
+（平台只能以范围字段自动填入操作人，而范围会让编辑只看到自己登记的记录）。
 
 ### 3.11 文件策略（14 §3）
 
@@ -229,12 +233,11 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | 视图 | 实体 | 范围 | 权限（读 / 写） | 用途 |
 |---|---|---|---|---|
 | `urn:jabiz:dataset:culture:<实体>`（默认） | 全部 | 无 | `culture.content.read` / `culture.content.write`（Consent：`culture.consent.*`） | 编辑后台 |
-| `urn:jabiz:dataset:own:Participant` | Participant | `accountActorId` ← 操作人；`status = DRAFT` | `culture.own.read` / `culture.own.write` | 通讯员编辑自己尚未上线的资料 |
-| `urn:jabiz:dataset:own-view:Participant` | Participant | `accountActorId` ← 操作人 | `culture.own.read` / 只读 | 通讯员查看自己的资料（含已上线的） |
+| `urn:jabiz:dataset:own-view:Participant` | Participant | `accountActorId` ← 操作人 | `culture.own.read` / 只读 | 通讯员查看自己的资料；资料只由编辑修改（C1 评审：可写视图会让通讯员改 `adult`，绕过监护人同意） |
 | `urn:jabiz:dataset:own:Story` | Story | `ownerActorId` ← 操作人；`status = DRAFT` | `culture.own.read` / `culture.own.write` | 通讯员起草自己的故事 |
 | `urn:jabiz:dataset:own:Contribution` / `own:MediaItem` | 同名 | `ownerActorId` ← 操作人；`editable = true` | 同上 | 通讯员为故事（包括编辑发起的多人故事）添加自己的视角与照片 |
 | `urn:jabiz:dataset:own-view:<Story/Contribution/MediaItem>` | 同名 | `ownerActorId` ← 操作人 | `culture.own.read` / 只读 | 查看已提交、已发布的自己的内容 |
-| `urn:jabiz:dataset:public:<实体>` | 除 Consent 外 | 见 §7.1 | `culture.public.read` / 只读 | 公开模板的来源（15 §2） |
+| `urn:jabiz:dataset:public:<实体>` | 除 Consent 外 | 见 §7.1 | `culture.public.read` / 只读 | 公开模板的来源（15 §2）；依赖平台 13c，在 C2 中实现 |
 
 - 通讯员提交后，故事变为 `IN_REVIEW`、子项 `editable = false`，于是落在可写视图的范围之外：**提交后不能再改**，直到编辑退回。
   这完全由数据视图范围实现（03 §2.2 "更新时不允许把数据移出范围"），不需要额外代码。
@@ -252,12 +255,12 @@ Story:        DRAFT ──submit──► IN_REVIEW ──publish──► PUBLI
               UNPUBLISHED ──reopen──► DRAFT
 
 Participant:  DRAFT ──activate──► ACTIVE ◄──► HIDDEN          （activate 检查同意）
-              ACTIVE / HIDDEN ──（撤回同意）──► WITHDRAWN ──reopen──► DRAFT
+              DRAFT / ACTIVE / HIDDEN ──（撤回同意）──► WITHDRAWN ──reopen──► DRAFT
 
 Resource:     DRAFT ⇄ PUBLISHED
 ```
 
-状态字段都是 `processOnly`：只能经下列流程改变。
+状态字段都是 `processOnly`：只能经下列流程改变。这些状态机都会回到起点，初始状态（`DRAFT`、`PRIVATE`）以 `st.initial(...)` 显式声明（平台 13e）。
 
 ### 6.2 同意规则
 
@@ -278,26 +281,32 @@ Resource:     DRAFT ⇄ PUBLISHED
 | `CULTURE_STORY_PUBLISH` | `culture.story.publish` | 发布检查（下），通过后 → `PUBLISHED`，首次时写 `publishedTime`；故事的全部视角、媒体、主题关联 `visibility = PUBLIC`、`editable = false`。对已发布的故事再次执行 = 重新检查并公开新加入的子项 |
 | `CULTURE_STORY_UNPUBLISH` | `culture.story.unpublish` | → `UNPUBLISHED`，子项 `visibility = PRIVATE`；使相关文件的公开判定失效（15 §4） |
 | `CULTURE_STORY_REOPEN` | `culture.story.review` | `UNPUBLISHED` → `DRAFT`，子项 `editable = true` |
-| `CULTURE_PARTICIPANT_ACTIVATE` / `_HIDE` / `_REOPEN` | `culture.participant.manage` | 参与者状态；`ACTIVATE` 检查 §6.2（有头像时含照片） |
+| `CULTURE_PARTICIPANT_ACTIVATE` / `_HIDE` / `_REOPEN` | `culture.participant.manage` | 参与者状态；`ACTIVATE` 检查 §6.2（有头像时含照片），不满足时 `CONSENT_MISSING` |
 | `CULTURE_CONSENT_WITHDRAW` | `culture.consent.withdraw` | 写 `withdrawnTime`；重新评估 §6.2：P 的内容不再满足时，P → `WITHDRAWN`，**下线所有包含 P 的视角或媒体的故事**，并使文件判定失效 |
 | `CULTURE_PARTICIPANT_ERASE` | `culture.erase` | 见 §6.4 |
 | `CULTURE_RESOURCE_PUBLISH` / `_UNPUBLISH` | `culture.resource.publish` | 资源状态 |
-| `CULTURE_SETUP` | `security.role.write` + `platform.param.write` | §6.6 |
+| `CULTURE_SETUP` | `security.role.write` + `security.menu.write` + `platform.param.write` | §6.6 |
 
 **发布检查**（`CULTURE_STORY_PUBLISH` 的计算步骤；全部违规一次返回 422，前端逐条显示）：
 1. 故事：`title`、`summary`、`thumbnailAlt` 有英语；有缩略图；至少一个主题；`ARTICLE` / `INTERVIEW` 有 `body` 或视角文字；`VIDEO` 有视频（故事或视角）。
 2. 每个视频（故事的、视角的）`captionsConfirmed = true` → 否则 `CAPTIONS_NOT_CONFIRMED`。
 3. 每个音频有 `transcript` → `TRANSCRIPT_REQUIRED`；每张照片有英语替代文本 → `ALT_TEXT_REQUIRED`。
 4. 有可辨认人物的照片 `peopleConsentConfirmed = true` → `PEOPLE_CONSENT_NOT_CONFIRMED`。
-5. 每个视角、每个属于视角的媒体：其参与者为 `ACTIVE` 且满足 §6.2 → `CONSENT_MISSING`（参数：参与者、缺少的同意种类）；
-   由通讯员添加的视角，其 `ownerActorId` 必须等于该参与者的 `accountActorId` → `CONTRIBUTION_OWNER_MISMATCH`。
-6. 故事至少有一个视角或正文（不存在"空故事"）。
+5. 每个视角、每个属于视角的媒体：其参与者为 `ACTIVE`（否则 `PARTICIPANT_NOT_ACTIVE`）且满足 §6.2 → `CONSENT_MISSING`（参数：参与者主键、缺少的同意种类）；
+   由通讯员添加的视角（及其媒体），其 `ownerActorId` 必须等于该参与者的 `accountActorId`；通讯员添加的故事级媒体只能在自己的故事上 → `CONTRIBUTION_OWNER_MISMATCH`。
+6. 故事至少有一个视角或正文（不存在"空故事"）→ `STORY_EMPTY`。
+
+第 1 条的错误码：英语缺失 `ENGLISH_REQUIRED`（参数 `field`）、`THUMBNAIL_REQUIRED`、`THEME_REQUIRED`、`BODY_REQUIRED`、`VIDEO_REQUIRED`。
+违规的 `field` 为 `<实体>.<字段>`，参数带 `entity` 与 `id`；参数与文案中只有主键与枚举，不含名字或正文（失败的操作记录会保存错误信息）。
 
 ### 6.4 撤回、抹除与操作记录中的个人信息
 
 - **撤回**立即下线（§6.3）。公开文件最迟在"判定缓存 60 s + 浏览器缓存 300 s"后不可得（15 §4），编辑指南中如实说明。
-- **抹除** `CULTURE_PARTICIPANT_ERASE`（前提：P 为 `WITHDRAWN`）：在一个事务中删除 P 的视角、媒体、头像与这些行引用的文件（`FILE_DELETE` 子流程）、参与者行；
-  同意记录的处理由输入 `keepConsentRecords` 决定（见 §12 待确认问题 4）。P 的登录账号由管理员禁用（平台用户是时态实体，只禁用不删除；账号名本来就是化名）。
+- **抹除** `CULTURE_PARTICIPANT_ERASE`（前提：P 为 `WITHDRAWN`）：在一个事务中删除 P 的视角、这些视角的媒体、P 的同意记录与参与者行，
+  保存后以 `CallProcess.forEach` 对这些行引用的每个文件（头像、音频、照片、同意书）调用 `FILE_DELETE`（平台 13e）。
+  同意记录一并删除（§12 问题 4 的决定：C1 不提供保留选项；将来需要保留时另行设计）。
+  P 的登录账号所拥有的内容也一并删除：P 自己添加的媒体；P 起草、且没有其他人视角的故事（连同其主题、资源关联、媒体与缩略图）；
+  有其他人视角的故事保留，只清空其 `ownerActorId`。P 的登录账号由管理员禁用（平台用户是时态实体，只禁用不删除；账号名本来就是化名）。
 - 操作记录（只追加、不可清除）中不能出现个人信息：culture 的流程输入只含主键、枚举与布尔；唯一的自由文本输入（退回意见 `note`）标 `@Sensitive`，
   在 `input_summary` 中为 `***`（它本身保存在可删除的 `Story.reviewNote` 中）。数据视图 `commit` 本来就只记字段名（D12）。
 
@@ -312,8 +321,10 @@ Resource:     DRAFT ⇄ PUBLISHED
 
 ### 6.6 初始化 `CULTURE_SETUP`
 
-幂等：不存在时创建角色 `CURATOR`、`CORRESPONDENT` 及其权限、后台菜单（§8）、两个开关（`PARAM_CREATE` 子流程）、字典项。
-首次部署后由管理员在后台执行一次；再次执行不改变已有数据。
+幂等：不存在时创建角色 `CURATOR`、`CORRESPONDENT` 及其权限、后台菜单（§8）、两个开关（以 `CallProcess.forEach` 调用 `PARAM_CREATE`）。
+已存在的角色不再补权限（管理员之后的调整得以保留）。首次部署后由管理员在后台执行一次；再次执行不改变已有数据。
+数据库字典（媒体类型、活动类型、年龄段）的初始值不在这里创建：启动检查要求字典在启动时已存在，因此它们是迁移
+`V3__culture_dictionaries.sql` 中的基础数据（平台函数 `jabiz_dict_put`），编辑之后可在后台增加。
 
 ## 7. 公开接口
 
@@ -478,7 +489,7 @@ Resource:     DRAFT ⇄ PUBLISHED
 1. **参与者的名字**：只用名（或化名）是否可以？（设计按"不公开姓氏"做。）
 2. **视觉识别**：是否已有标志、配色或字体？没有的话按 §9.2 设计，C3 开始时给出原型确认。
 3. **域名与托管**：部署在哪里（学校的服务器、云主机）？谁负责运维与备份？
-4. **抹除时同意书是否保留**：学校或法规可能要求保留同意书一段时间。设计提供 `keepConsentRecords` 选项，默认值请确认。
+4. ~~**抹除时同意书是否保留**~~：已决定（C1）：抹除时一并删除，不提供保留选项。
 5. **本人同意是否始终必需**：设计中本人同意不受开关控制（只有监护人同意与审核有开关）。
 6. **翻译**：内容的中文、日文由谁提供？（缺失时回退英语，不影响上线。）
 
@@ -493,3 +504,15 @@ Resource:     DRAFT ⇄ PUBLISHED
   同意书文件永远 404；草稿参与者的头像 404；搜索的通配符被转义。
 - 公开网站：Vitest（组件、语言回退、Markdown 安全、筛选与 URL 同步）；Playwright（全部页面在三种语言、桌面与 375 px 宽度下；axe；只用键盘完成主要路径；
   减少动效；视频在点击前没有第三方请求）。
+
+## 14. C1 中的调整（计划确认时一并确认）
+
+1. 平台 13e：状态机的显式初始状态 `st.initial(...)` 与 `CallProcess.forEach(...)`，由本应用发现，先在 `platform` 上实现。
+2. `Consent` 不设 `recordedBy`（§3.10）。
+3. `visibility` 是显式初始状态为 `PRIVATE` 的状态机；`editable` 可空（§3.5–3.7）。
+4. `MediaItem` 的文件分为 `imageFileId` 与 `audioFileId` 两列（§3.7）。
+5. 公开数据视图与公开模板在 C2 实现（依赖平台 13c）。
+6. 发布检查的错误码补全（§6.3）；参与者可以从 `DRAFT` 直接因撤回同意变为 `WITHDRAWN`（§6.1）。
+7. 通讯员不再有可写的"自己的资料"视图（§5）；抹除包括通讯员自己起草的独立故事与自己添加的媒体（§6.4）。
+8. 主键以文本存储（§3）；数据库字典的初始值在迁移中，不在 `CULTURE_SETUP` 中（§6.6）；`CULTURE_SETUP` 另需 `security.menu.write`。
+9. 平台 13e 另修正了"累积的违规在 `SaveChanges.now` 前后被报告两次"。

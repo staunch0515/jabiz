@@ -1,0 +1,7 @@
+# Development only: lets requests name their actor through X-Jabiz-* headers (docs/design/01 section 5).
+jabiz:
+  dev:
+    actor-headers: true
+  files:
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:build/jabiz-files}
