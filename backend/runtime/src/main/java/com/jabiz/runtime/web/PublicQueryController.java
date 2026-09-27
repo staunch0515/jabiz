@@ -1,6 +1,7 @@
 package com.jabiz.runtime.web;
 
 import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.query.SortOrder;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
@@ -76,7 +77,9 @@ class PublicQueryController {
             // The filter answers first; this only guards against a path it did not recognise.
             throw new ResourceNotFoundException("Not found");
         }
+        // Default deny: besides the startup check, every dataset it reads must be public right here.
         AdvancedQueryDefinition query = templates.find(queryId).filter(AdvancedQueryDefinition::publicAccess)
+            .filter(q -> templates.datasetsOf(q).values().stream().allMatch(DatasetDefinition::isPublic))
             .orElseThrow(() -> new ResourceNotFoundException("No public query " + queryId));
         RequestContext started = RequestContextWebFilter.of(exchange);
         RequestContext anonymous = RequestContext.anonymous(started == null ? Locale.ROOT : started.locale(),
