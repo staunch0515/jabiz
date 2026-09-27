@@ -69,6 +69,8 @@ public class CultureParticipants {
     private static final String STORY_CONTRIBUTIONS = "storyContributions";
     private static final String STORY_MEDIA = "storyMedia";
     private static final String STORY_THEMES = "storyThemes";
+    private static final String STORY_RESOURCES = "storyResources";
+    private static final String OWN_MEDIA = "ownMedia";
     private static final String FILES = "files";
     private static final String OUTPUT = "output";
     private static final String STATUS = "status";
@@ -268,13 +270,15 @@ public class CultureParticipants {
     }
 
     /**
-     * Erases a withdrawn participant: their perspectives, the media of those, their consent records and the
-     * participant row are deleted, then every file these rows referred to. Stories themselves stay (they may hold
-     * other participants' perspectives); a story left without perspectives fails its next publish check.
+     * Erases a withdrawn participant. Deleted: their perspectives with the media of those; the media they added
+     * themselves anywhere; the stories they drafted in which nobody else has a perspective, with everything of those
+     * stories; their consent records and the participant row; then every file these rows referred to. Stories with
+     * other participants' perspectives stay (without an owner): a story left without perspectives fails its next
+     * publish check.
      */
     public static final ProcessDefinition<ParticipantInput, EraseOutput, ProcessContext> ERASE_PROCESS =
         ProcessDefinition.define(ERASE, 1, ParticipantInput.class, EraseOutput.class, ProcessContext.class, pb -> pb
-            .description("Deletes a withdrawn participant with their perspectives, media, consents and files.")
+            .description("Deletes a withdrawn participant with their perspectives, media, stories, consents and files.")
             .permissions(Culture.ERASE)
             .actsOn(PARTICIPANT, PARTICIPANT_ID, a -> a.whenField(STATUS, WITHDRAWN))
             .contextFactory((start, in) -> start(start, in.participantId()))
@@ -286,11 +290,29 @@ public class CultureParticipants {
                 ctx -> where(PARTICIPANT_ID, ctx.get(PARTICIPANT_ID)), CONTRIBUTIONS))
             .step("Load their media", QueryEntities.of(dataset(MEDIA_ITEM),
                 ctx -> where("contributionId", values(rows(ctx, CONTRIBUTIONS), EntityInstance::id)), MEDIA))
+            .step("Load the media they added", QueryEntities.of(dataset(MEDIA_ITEM),
+                ctx -> where("ownerActorId", account(ctx)), OWN_MEDIA))
+            .step("Load the stories they drafted", QueryEntities.of(dataset(STORY),
+                ctx -> where("ownerActorId", account(ctx)), STORIES))
+            .step("Load the perspectives of those stories", QueryEntities.of(dataset(CONTRIBUTION),
+                ctx -> where("storyId", values(rows(ctx, STORIES), EntityInstance::id)), STORY_CONTRIBUTIONS))
+            .step("Load the media of those stories", QueryEntities.of(dataset(MEDIA_ITEM),
+                ctx -> where("storyId", values(rows(ctx, STORIES), EntityInstance::id)), STORY_MEDIA))
+            .step("Load the themes of those stories", QueryEntities.of(dataset(STORY_THEME),
+                ctx -> where("storyId", values(rows(ctx, STORIES), EntityInstance::id)), STORY_THEMES))
+            .step("Load the resource links of those stories", QueryEntities.of(dataset(RESOURCE_STORY),
+                ctx -> where("storyId", values(rows(ctx, STORIES), EntityInstance::id)), STORY_RESOURCES))
             .compute("Delete the rows", (metadata, ctx) -> erase(ctx))
             // FILE_DELETE refuses files that current data still refers to: the deletions are saved first.
             .step("Save", SaveChanges.now())
             .step("Delete the files", CallProcess.forEach(FileProcesses.DELETE, 1,
                 ctx -> files(ctx).stream().map(FileProcesses.DeleteInput::new).toList(), null)));
+
+    /** The participant's login account, as a set of at most one value (none: nothing of theirs by account). */
+    private static Set<Object> account(ProcessContext ctx) {
+        Object account = participant(ctx).get("accountActorId");
+        return account == null ? Set.of() : Set.of(account);
+    }
 
     @SuppressWarnings("unchecked")
     private static List<UUID> files(ProcessContext ctx) {
@@ -304,28 +326,64 @@ public class CultureParticipants {
         }
         Set<UUID> files = new LinkedHashSet<>();
         addFile(files, participant.get("portraitFileId"));
-        int rows = 0;
+        Set<Object> contributions = values(rows(ctx, CONTRIBUTIONS), EntityInstance::id);
+        // Their stories that nobody else contributed to go as a whole; the others lose their owner only.
+        Set<Object> ownStories = new LinkedHashSet<>();
+        for (EntityInstance story : rows(ctx, STORIES)) {
+            boolean shared = rows(ctx, STORY_CONTRIBUTIONS).stream()
+                .anyMatch(c -> Objects.equals(c.get("storyId"), story.id()) && !contributions.contains(c.id()));
+            if (shared) {
+                ctx.changes().update(STORY, story.id(), story.version(), Workflow.mapOf("ownerActorId", null));
+            } else {
+                ownStories.add(story.id());
+            }
+        }
+        Deletions deletions = new Deletions(ctx, files);
         // Children first: the database keeps its foreign keys.
-        for (EntityInstance m : rows(ctx, MEDIA)) {
-            addFile(files, m.get("imageFileId"));
-            addFile(files, m.get("audioFileId"));
-            ctx.changes().delete(MEDIA_ITEM, m.id(), m.version());
-            rows++;
+        for (String key : List.of(MEDIA, OWN_MEDIA, STORY_MEDIA)) {
+            for (EntityInstance m : rows(ctx, key)) {
+                if (!STORY_MEDIA.equals(key) || ownStories.contains(m.get("storyId"))) {
+                    deletions.delete(m, "imageFileId", "audioFileId");
+                }
+            }
         }
-        for (EntityInstance c : rows(ctx, CONTRIBUTIONS)) {
-            addFile(files, c.get("audioFileId"));
-            ctx.changes().delete(CONTRIBUTION, c.id(), c.version());
-            rows++;
+        rows(ctx, CONTRIBUTIONS).forEach(c -> deletions.delete(c, "audioFileId"));
+        for (String key : List.of(STORY_CONTRIBUTIONS, STORY_THEMES, STORY_RESOURCES)) {
+            rows(ctx, key).stream().filter(row -> ownStories.contains(row.get("storyId")))
+                .forEach(row -> deletions.delete(row, "audioFileId"));
         }
-        for (EntityInstance consent : rows(ctx, CONSENTS)) {
-            addFile(files, consent.get("documentFileId"));
-            ctx.changes().delete(CONSENT, consent.id(), consent.version());
-            rows++;
-        }
-        ctx.changes().delete(PARTICIPANT, participant.id(), participant.version());
-        rows++;
+        rows(ctx, STORIES).stream().filter(story -> ownStories.contains(story.id()))
+            .forEach(story -> deletions.delete(story, "thumbnailFileId"));
+        rows(ctx, CONSENTS).forEach(consent -> deletions.delete(consent, "documentFileId"));
+        deletions.delete(participant);
         ctx.put(FILES, List.copyOf(files));
-        ctx.put(OUTPUT, new EraseOutput(String.valueOf(participant.id()), rows, files.size()));
+        ctx.put(OUTPUT, new EraseOutput(String.valueOf(participant.id()), deletions.count(), files.size()));
+    }
+
+    /** Deletes each row once (the same row can be loaded by two steps) and collects the files it refers to. */
+    private static final class Deletions {
+        private final ProcessContext ctx;
+        private final Set<UUID> files;
+        private final Set<String> done = new LinkedHashSet<>();
+
+        Deletions(ProcessContext ctx, Set<UUID> files) {
+            this.ctx = ctx;
+            this.files = files;
+        }
+
+        void delete(EntityInstance row, String... fileFields) {
+            if (!done.add(row.entityType() + " " + row.id())) {
+                return;
+            }
+            for (String field : fileFields) {
+                addFile(files, row.attributes().get(field));
+            }
+            ctx.changes().delete(row.entityType(), row.id(), row.version());
+        }
+
+        int count() {
+            return done.size();
+        }
     }
 
     private static void addFile(Set<UUID> files, Object id) {

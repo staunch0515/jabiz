@@ -35,7 +35,8 @@ services:
     image: culture:local
     depends_on:
       db: { condition: service_healthy }
-    ports: ["${CULTURE_PORT:-8080}:8080"]
+    # Only this machine reaches the application directly; the edge proxy (or a proxy of the host) serves the public.
+    ports: ["127.0.0.1:${CULTURE_PORT:-8080}:8080"]
     env_file:
       - path: .env
         required: false

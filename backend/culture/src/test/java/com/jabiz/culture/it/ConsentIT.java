@@ -167,6 +167,58 @@ class ConsentIT extends CultureItSupport {
             .allSatisfy(row -> assertThat(String.valueOf(row.get("summary"))).doesNotContain("Aiko"));
     }
 
+    @Test
+    void erasingAParticipantWithoutPerspectivesLeavesOtherContentAlone() {
+        String place = location("Sweden");
+        String story = create(dataset(STORY), curator(), storyAttributes(curator()));
+        String storyPhoto = create(dataset(MEDIA_ITEM), curator(), new HashMap<>(Map.of("storyId", story,
+            "kind", PHOTO, "imageFileId", photo(curator()), "alt", en("A lake"))));
+        String participant = activeParticipant(place, null);
+        ok(WITHDRAW, curator(), Map.of("consentId", consentOf(participant)));
+
+        assertThat(ok(ERASE, admin(), Map.of("participantId", participant))).containsEntry("deletedRows", 2)
+            .containsEntry("deletedFiles", 0);
+        assertThat(query("SELECT 1 FROM cu_media_item WHERE media_item_id = ?", storyPhoto)).hasSize(1);
+        assertThat(query("SELECT 1 FROM cu_story WHERE story_id = ?", story)).hasSize(1);
+    }
+
+    @Test
+    void erasureTakesTheStoriesACorrespondentDraftedAloneAndWhatTheyAdded() {
+        String place = location("United Kingdom");
+        String account = unique("cu-uk");
+        String participant = activeParticipant(place, account);
+        String other = activeParticipant(place, null);
+        String theme = theme("digital life");
+
+        // Drafted alone: goes as a whole, with its theme link and thumbnail.
+        Map<String, Object> soloAttributes = storyAttributes(correspondent(account));
+        String solo = create(own(STORY), correspondent(account), soloAttributes);
+        String soloTheme = link(solo, theme);
+        create(own(CONTRIBUTION), correspondent(account), contribution(solo, participant));
+        String soloPhoto = photo(correspondent(account));
+        String soloMedia = create(own(MEDIA_ITEM), correspondent(account), new HashMap<>(Map.of("storyId", solo,
+            "kind", PHOTO, "imageFileId", soloPhoto, "alt", en("My desk"))));
+
+        // Drafted by them, with someone else's perspective too: stays, without an owner and without their photo.
+        String shared = create(own(STORY), correspondent(account), storyAttributes(correspondent(account)));
+        String theirs = create(dataset(CONTRIBUTION), curator(), contribution(shared, other));
+        String sharedPhoto = photo(correspondent(account));
+        String sharedMedia = create(own(MEDIA_ITEM), correspondent(account), new HashMap<>(Map.of("storyId", shared,
+            "kind", PHOTO, "imageFileId", sharedPhoto, "alt", en("Our screens"))));
+
+        ok(WITHDRAW, curator(), Map.of("consentId", consentOf(participant)));
+        ok(ERASE, admin(), Map.of("participantId", participant));
+
+        assertThat(query("SELECT 1 FROM cu_story WHERE story_id = ?", solo)).isEmpty();
+        assertThat(query("SELECT 1 FROM cu_story_theme WHERE story_theme_id = ?", soloTheme)).isEmpty();
+        assertThat(query("SELECT 1 FROM cu_media_item WHERE media_item_id IN (?, ?)", soloMedia, sharedMedia)).isEmpty();
+        for (String file : List.of((String) soloAttributes.get("thumbnailFileId"), soloPhoto, sharedPhoto)) {
+            assertThat(query("SELECT 1 FROM sys_file WHERE file_id = ?", UUID.fromString(file))).as(file).isEmpty();
+        }
+        assertThat(attributes(dataset(STORY), shared)).containsEntry("ownerActorId", null);
+        assertThat(query("SELECT 1 FROM cu_contribution WHERE contribution_id = ?", theirs)).hasSize(1);
+    }
+
     /** The stored objects are removed after the commit, on their own. */
     private static void awaitNoStoredObjects(String fileId) {
         for (int attempt = 0; attempt < 100; attempt++) {

@@ -220,6 +220,13 @@ class PublishCheckTest {
     }
 
     @Test
+    void anEmptyArticleIsOneProblem() {
+        withContribution = false;
+        story.put("mediaType", "ARTICLE");
+        assertThat(codes()).containsExactly("Story.body:BODY_REQUIRED");
+    }
+
+    @Test
     void violationsNameOnlyKeysAndCodes() {
         participant.put("status", "DRAFT");
         story.remove("thumbnailFileId");

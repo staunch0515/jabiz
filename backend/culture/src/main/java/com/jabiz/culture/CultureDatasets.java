@@ -67,12 +67,14 @@ public class CultureDatasets {
     @Bean DatasetDefinition cultureSiteBlockDataset() { return editors(SITE_BLOCK); }
     @Bean DatasetDefinition cultureConsentDataset() { return editors(CONSENT); }
 
-    /** A correspondent edits their own profile while it is a draft; editors activate it. */
-    @Bean DatasetDefinition ownParticipantDataset() { return own(PARTICIPANT, "accountActorId", "status", DRAFT); }
     @Bean DatasetDefinition ownStoryDataset() { return own(STORY, "ownerActorId", "status", DRAFT); }
     @Bean DatasetDefinition ownContributionDataset() { return own(CONTRIBUTION, "ownerActorId", "editable", true); }
     @Bean DatasetDefinition ownMediaItemDataset() { return own(MEDIA_ITEM, "ownerActorId", "editable", true); }
 
+    /**
+     * A correspondent sees their profile but does not edit it: it holds what decides their consent ({@code adult})
+     * and editors' fields, which a dataset cannot keep them from writing. Editors keep the profile up to date.
+     */
     @Bean DatasetDefinition ownViewParticipantDataset() { return ownView(PARTICIPANT, "accountActorId"); }
     @Bean DatasetDefinition ownViewStoryDataset() { return ownView(STORY, "ownerActorId"); }
     @Bean DatasetDefinition ownViewContributionDataset() { return ownView(CONTRIBUTION, "ownerActorId"); }

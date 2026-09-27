@@ -233,8 +233,7 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | 视图 | 实体 | 范围 | 权限（读 / 写） | 用途 |
 |---|---|---|---|---|
 | `urn:jabiz:dataset:culture:<实体>`（默认） | 全部 | 无 | `culture.content.read` / `culture.content.write`（Consent：`culture.consent.*`） | 编辑后台 |
-| `urn:jabiz:dataset:own:Participant` | Participant | `accountActorId` ← 操作人；`status = DRAFT` | `culture.own.read` / `culture.own.write` | 通讯员编辑自己尚未上线的资料 |
-| `urn:jabiz:dataset:own-view:Participant` | Participant | `accountActorId` ← 操作人 | `culture.own.read` / 只读 | 通讯员查看自己的资料（含已上线的） |
+| `urn:jabiz:dataset:own-view:Participant` | Participant | `accountActorId` ← 操作人 | `culture.own.read` / 只读 | 通讯员查看自己的资料；资料只由编辑修改（C1 评审：可写视图会让通讯员改 `adult`，绕过监护人同意） |
 | `urn:jabiz:dataset:own:Story` | Story | `ownerActorId` ← 操作人；`status = DRAFT` | `culture.own.read` / `culture.own.write` | 通讯员起草自己的故事 |
 | `urn:jabiz:dataset:own:Contribution` / `own:MediaItem` | 同名 | `ownerActorId` ← 操作人；`editable = true` | 同上 | 通讯员为故事（包括编辑发起的多人故事）添加自己的视角与照片 |
 | `urn:jabiz:dataset:own-view:<Story/Contribution/MediaItem>` | 同名 | `ownerActorId` ← 操作人 | `culture.own.read` / 只读 | 查看已提交、已发布的自己的内容 |
@@ -305,7 +304,9 @@ Resource:     DRAFT ⇄ PUBLISHED
 - **撤回**立即下线（§6.3）。公开文件最迟在"判定缓存 60 s + 浏览器缓存 300 s"后不可得（15 §4），编辑指南中如实说明。
 - **抹除** `CULTURE_PARTICIPANT_ERASE`（前提：P 为 `WITHDRAWN`）：在一个事务中删除 P 的视角、这些视角的媒体、P 的同意记录与参与者行，
   保存后以 `CallProcess.forEach` 对这些行引用的每个文件（头像、音频、照片、同意书）调用 `FILE_DELETE`（平台 13e）。
-  同意记录一并删除（§12 问题 4 的决定：C1 不提供保留选项；将来需要保留时另行设计）。P 的登录账号由管理员禁用（平台用户是时态实体，只禁用不删除；账号名本来就是化名）。
+  同意记录一并删除（§12 问题 4 的决定：C1 不提供保留选项；将来需要保留时另行设计）。
+  P 的登录账号所拥有的内容也一并删除：P 自己添加的媒体；P 起草、且没有其他人视角的故事（连同其主题、资源关联、媒体与缩略图）；
+  有其他人视角的故事保留，只清空其 `ownerActorId`。P 的登录账号由管理员禁用（平台用户是时态实体，只禁用不删除；账号名本来就是化名）。
 - 操作记录（只追加、不可清除）中不能出现个人信息：culture 的流程输入只含主键、枚举与布尔；唯一的自由文本输入（退回意见 `note`）标 `@Sensitive`，
   在 `input_summary` 中为 `***`（它本身保存在可删除的 `Story.reviewNote` 中）。数据视图 `commit` 本来就只记字段名（D12）。
 
@@ -512,5 +513,6 @@ Resource:     DRAFT ⇄ PUBLISHED
 4. `MediaItem` 的文件分为 `imageFileId` 与 `audioFileId` 两列（§3.7）。
 5. 公开数据视图与公开模板在 C2 实现（依赖平台 13c）。
 6. 发布检查的错误码补全（§6.3）；参与者可以从 `DRAFT` 直接因撤回同意变为 `WITHDRAWN`（§6.1）。
-7. 主键以文本存储（§3）；数据库字典的初始值在迁移中，不在 `CULTURE_SETUP` 中（§6.6）；`CULTURE_SETUP` 另需 `security.menu.write`。
-8. 平台 13e 另修正了"累积的违规在 `SaveChanges.now` 前后被报告两次"。
+7. 通讯员不再有可写的"自己的资料"视图（§5）；抹除包括通讯员自己起草的独立故事与自己添加的媒体（§6.4）。
+8. 主键以文本存储（§3）；数据库字典的初始值在迁移中，不在 `CULTURE_SETUP` 中（§6.6）；`CULTURE_SETUP` 另需 `security.menu.write`。
+9. 平台 13e 另修正了"累积的违规在 `SaveChanges.now` 前后被报告两次"。

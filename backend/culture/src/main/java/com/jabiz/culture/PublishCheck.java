@@ -63,7 +63,9 @@ public final class PublishCheck {
         boolean storyText = hasText(s.get("body"));
         boolean contributionText = in.contributions().stream().anyMatch(c -> hasText(c.get("text")));
         String mediaType = String.valueOf((Object) s.get("mediaType"));
-        if (("ARTICLE".equals(mediaType) || "INTERVIEW".equals(mediaType)) && !storyText && !contributionText) {
+        boolean bodyMissing = ("ARTICLE".equals(mediaType) || "INTERVIEW".equals(mediaType)) && !storyText
+            && !contributionText;
+        if (bodyMissing) {
             violations.add(violation(story, "body", "BODY_REQUIRED", "An article or interview needs its text"));
         }
         boolean storyVideo = s.get("videoId") != null;
@@ -72,7 +74,7 @@ public final class PublishCheck {
             violations.add(violation(story, "videoId", "VIDEO_REQUIRED", "A video story needs a video"));
         }
         // 6. No empty story.
-        if (in.contributions().isEmpty() && !storyText) {
+        if (in.contributions().isEmpty() && !storyText && !bodyMissing) {
             violations.add(violation(story, "body", "STORY_EMPTY", "The story has neither perspectives nor text"));
         }
 

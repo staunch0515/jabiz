@@ -22,9 +22,10 @@ final class Workflow {
 
     /** Rows whose {@code field} is one of {@code values}; none when there are no values. */
     static EntityQuery where(String field, Collection<?> values) {
-        // Callers query required fields, which are never null: no values gives an empty result.
+        // No values match nothing: a field cannot be both null and not null (IS NULL alone would match every row
+        // where a nullable field is empty).
         QueryPredicate predicate = values.isEmpty()
-            ? new QueryPredicate.IsNull(field)
+            ? new QueryPredicate.And(List.of(new QueryPredicate.IsNull(field), new QueryPredicate.IsNotNull(field)))
             : new QueryPredicate.In(field, List.copyOf(values));
         return EntityQuery.builder().where(predicate).limit(CultureDatasets.MAX_QUERY).build();
     }

@@ -54,6 +54,9 @@ site falls back to, so fill it in first; Markdown fields show a preview.
 
    A portrait is optional (an illustration or avatar works too); if you add one, write an English text alternative.
    Leave **Languages** empty unless they want them shown. The participant starts as a **Draft**.
+
+   Only curators change profiles. Correspondents can see theirs under **My content → My profile**, including the
+   curator's note, so write that note as if they will read it.
 2. **People → Consent records → New**, one record per signed form:
    - **Given by**: the participant themselves, or their guardian.
    - What the consent covers: photos, video, voice recordings. Text and the name are covered by any consent.
@@ -117,6 +120,12 @@ their photos.
   - Running **Publish** again on a published story checks it again and publishes what was added since.
 - **Unpublish** takes a story and all its parts offline. **Reopen** makes an unpublished story a draft again, editable
   by its correspondents.
+- **Editing published content takes effect at once**, and nothing checks the edit on its own. After changing a
+  published story, perspective or photo (especially after adding a video, audio or a photo), run **Publish** again: it
+  checks everything again and refuses what is not in order. If in doubt, **Unpublish**, edit, then **Publish**.
+- Photos and audio added to the story itself, rather than to a perspective, belong to nobody's consent. Use them only
+  for material that shows no participant: a place, an object, a landscape. Put a participant's own photos and voice in
+  their perspective.
 
 ## 6. What the publish check messages mean
 
@@ -160,8 +169,20 @@ permanently deletes:
 - their consent records and the scanned forms,
 - the participant record.
 
-This cannot be undone. Stories stay; a story left without perspectives fails its next publish check. Then disable
-their login account (accounts are only disabled, never deleted; the name was a pseudonym anyway).
+It also deletes, if they had an account:
+
+- the photos and audio they added themselves anywhere;
+- the stories they drafted that nobody else has a perspective in, with everything in them.
+
+This cannot be undone. Stories with other people's perspectives stay, without an owner. A story left without
+perspectives fails its next publish check. Then disable their login account (accounts are only disabled, never
+deleted; the name was a pseudonym anyway).
+
+If a file of theirs is also used elsewhere (say their portrait was reused as a story thumbnail), erasure stops with
+`FILE_IN_USE` and nothing is deleted. Replace the other use, then run **Erase** again.
+
+Consent records are ended with **Withdraw**, never by deleting them. Deleting a record in the list does not take
+anything offline.
 
 To bring a withdrawn participant back instead, record a new consent, run **Reopen** (the profile becomes a draft) and
 **Activate**.
