@@ -151,6 +151,25 @@ public final class DatasetRegistry implements PlatformCheck {
                 kind -> kind instanceof SemanticKind.Temporal t && t.role() == TemporalRole.SYSTEM_RECORDED,
                 "soft-delete time field", "Temporal(SYSTEM_RECORDED)", label, problems);
         }
+        if (!policy.readOnly() && !policy.processOnlyWrites()) {
+            // Callers of this dataset cannot set process-only fields, so a required one must be filled by the
+            // platform on insert (docs/design/16-content-authoring.md section 5).
+            for (String name : entity.processOnlyFields()) {
+                FieldDefinition field = entity.field(name);
+                boolean filled = (name.equals(entity.stateField) && entity.soleInitialState() != null)
+                    || dataset.scope().entries().stream().anyMatch(e -> e.field().equals(name));
+                if (name.equals(entity.stateField) && entity.initialStates.size() > 1) {
+                    // Without a state the insert is refused (STATE_REQUIRED), and callers cannot give one.
+                    problems.add(label + ": process-only lifecycle field " + name + " of " + entity.name
+                        + " has several initial states " + entity.initialStates
+                        + ", so no insert through this dataset can choose one");
+                } else if (field.required() && !filled) {
+                    problems.add(label + ": required process-only field " + name + " of " + entity.name
+                        + " is neither the lifecycle field with one initial state nor a scope field of this dataset,"
+                        + " so no insert through it can succeed");
+                }
+            }
+        }
         boolean explicitListView = !ListViewDefinition.DEFAULT.equals(dataset.listView());
         if (explicitListView && entity.listView(dataset.listView()).isEmpty()) {
             problems.add(label + ": list view " + dataset.listView() + " does not exist on " + entity.name);

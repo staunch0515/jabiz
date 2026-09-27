@@ -1,7 +1,8 @@
 import type { ProColumns } from '@ant-design/pro-components'
 import type { TFunction } from 'i18next'
-import { createElement } from 'react'
+import { createElement, type ReactNode } from 'react'
 import FilePreview from '../components/FilePreview'
+import { isI18nText, pickText } from './i18nText'
 import { fieldLabel, formatValue, optionsOf } from './kinds'
 import { columnFields, searchKindOf } from './listQuery'
 import { isFileField, type DictItem, type EntityInstance, type EntityMeta, type FieldMeta, type ListViewMeta } from './types'
@@ -11,6 +12,44 @@ export type Row = Record<string, unknown> & { __key: string; __instance: EntityI
 
 export function toRow(instance: EntityInstance): Row {
   return { ...(instance.attributes ?? {}), __key: String(instance.id), __instance: instance }
+}
+
+/** What a cell needs beyond the field: labels of referenced instances, the default language of texts. */
+export interface CellContext {
+  /** Display texts of referenced instances, by reference field, then key. */
+  labels?: Record<string, Record<string, unknown>>
+  defaultLocale?: string
+}
+
+/**
+ * A cell: references by their label (the key when there is none), multilingual texts in the best language, marked
+ * with lang when it is not the interface language (docs/design/16-content-authoring.md sections 1.3 and 2).
+ */
+export function renderCell(
+  field: FieldMeta,
+  value: unknown,
+  dictionaries: Record<string, DictItem[]>,
+  t: TFunction,
+  locale: string,
+  context: CellContext = {},
+): ReactNode {
+  if (field.type === 'reference' && value !== null && value !== undefined) {
+    const label = context.labels?.[field.name]?.[String(value)]
+    if (typeof label === 'string' && label !== '') return label
+    if (label && typeof label === 'object') return renderCell({ ...field, type: 'custom', kindId: 'jabiz.i18n-text' } as FieldMeta,
+      label, dictionaries, t, locale, context)
+    return String(value)
+  }
+  // A file is shown, not its id: images as a small thumbnail, anything else as a download.
+  if (isFileField(field) && typeof value === 'string' && value) {
+    return createElement(FilePreview, { fileId: value, field, width: 48 })
+  }
+  if (isI18nText(field)) {
+    const picked = pickText(value, locale, context.defaultLocale)
+    if (!picked) return '—'
+    return picked.fallback ? createElement('span', { lang: picked.lang }, picked.text) : picked.text
+  }
+  return formatValue(field, value, dictionaries, t, locale)
 }
 
 /**
@@ -23,6 +62,7 @@ export function buildColumns(
   dictionaries: Record<string, DictItem[]>,
   t: TFunction,
   locale: string,
+  context: CellContext = {},
 ): ProColumns<Row>[] {
   const filters = new Set(view?.filters ?? [])
   const sorts = new Set(view?.sorts ?? [])
@@ -33,14 +73,7 @@ export function buildColumns(
       key: field.name,
       hideInSearch: true,
       sorter: sorts.has(field.name),
-      render: (_, row) => {
-        const value = row[field.name]
-        // A file is shown, not its id: images as a small thumbnail, anything else as a download.
-        if (isFileField(field) && typeof value === 'string' && value) {
-          return createElement(FilePreview, { fileId: value, field, width: 48 })
-        }
-        return formatValue(field, value, dictionaries, t, locale)
-      },
+      render: (_, row) => renderCell(field, row[field.name], dictionaries, t, locale, context),
     }
     if (view?.defaultSort?.field === field.name) {
       column.defaultSortOrder = view.defaultSort.asc ? 'ascend' : 'descend'

@@ -1,6 +1,6 @@
 import type { EntityMeta, FieldMeta, HistoryVersion } from '../meta/types'
 
-const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, rules: [] }
+const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, rules: [] }
 const ops = (...o: string[]) => ({ operators: o })
 
 /** A Carrier-like export: every kind the adapters map. */

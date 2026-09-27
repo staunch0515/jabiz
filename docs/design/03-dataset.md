@@ -69,6 +69,7 @@ d.scope(s -> s
 `policy(p -> p.processOnlyWrites())`：该视图只接受流程（`ChangeSet`）的写入；数据视图 API 的 `commit` 与通用实体流程一律拒绝
 （422 `PROCESS_ONLY_DATASET`，在检查写权限之后）。用于跨多个实例的规则（例如账本交易的借贷平衡，11 §1）不能被绕过的数据。
 以这类视图为默认视图的实体，其操作不能撤销（422 `REVERT_NOT_ALLOWED`）。不能与 `readOnly` 同时使用。
+只需保护个别字段（状态、审核意见）时用字段级的 `f.processOnly()`（02 §6.2、16 §5【D20】），其余字段仍可经视图直接编辑。
 
 ## 3. 数据视图 API（运行时）
 
@@ -78,6 +79,8 @@ d.scope(s -> s
 | POST | `/api/datasets/{resourceId}/query` | 查询：筛选（白名单）、排序（白名单）、分页 |
 | POST | `/api/datasets/{resourceId}/commit` | 批量变更（INSERT / UPDATE / DELETE），一个事务，返回快照 |
 | GET | `/api/datasets/{resourceId}/entities/{id}/history` | 时态实体的版本历史（含 `process_seq_id`） |
+| GET | `/api/datasets/{resourceId}/lookup?q=&limit=` | 按显示字段搜索（至多 20 条）→ `[{id, label}]`（16 §2【D20】） |
+| POST | `/api/datasets/{resourceId}/labels` | 按主键批量取显示文本（至多 200 个）→ `{id: label}`（16 §2） |
 
 请求与响应（阶段 3 实现前三个接口，阶段 4 加入时态参数与历史接口）：
 - `query` 请求体：`{filters: [{field, op, value | values | from, to}], sorts: [{field, asc}], offset, limit}`；
@@ -92,6 +95,9 @@ d.scope(s -> s
 - `history` 响应：版本数组，每项含 `versionNo`、`effectStartTime`、`createdTime`、`deleted`、`action`、`baseVersionNo`、
   `changedFields`、`processSeqId`、`actorId`、`processName`、`opTime`、`reason`、`attributes`。
 
+`lookup` / `labels` 需要读权限，经视图范围；目标实体没有声明 `display` 时 400 `DISPLAY_NOT_DECLARED`。
+`commit` 中出现 `processOnly` 字段时 400 `PROCESS_ONLY_FIELD`（与敏感字段的 `SENSITIVE_FIELD` 并列）。
+
 说明：复杂业务写入应走流程（06），`commit` 接口主要服务于元数据生成的通用增删改页面。
 
 ## 4. 启动自检
@@ -99,4 +105,5 @@ d.scope(s -> s
 - 每个视图的目标实体已注册；存储引擎已注册；默认视图唯一且每个实体都有；权限已声明（`dev` 下为警告）。
 - 范围字段在目标实体中存在，且语义类型允许 `=` 比较；逻辑删除字段类型正确；显式指定的列表视图存在。
 - 全部问题一次性报告（`DatasetRegistry`）。
+- 可直接写入的视图（非只读、非 `processOnlyWrites`）中，必填的 `processOnly` 字段必须是状态字段或该视图的范围字段（16 §5）。
 - `physicalTableOverride` 指向的表存在，并包含目标实体的全部物理列。

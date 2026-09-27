@@ -2,6 +2,7 @@ package com.jabiz.entity;
 
 import com.jabiz.query.QueryOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,4 +33,19 @@ public interface CustomKindSupport {
 
     /** Description for clients; merged into the exported field. */
     Map<String, Object> export(Map<String, Object> params);
+
+    /**
+     * Constraints of the kind that a successfully converted input value breaks, most important first; the validator
+     * reports the first one, like the constraints of the built-in kinds (docs/design/09-decisions.md D20).
+     *
+     * @param value the non-null result of {@link #coerce} for input
+     */
+    default List<KindViolation> validate(Map<String, Object> params, Object value) {
+        return List.of();
+    }
+
+    /** Codes {@link #validate} may report, so clients get their messages with the entity export. */
+    default List<String> violationCodes(Map<String, Object> params) {
+        return List.of();
+    }
 }

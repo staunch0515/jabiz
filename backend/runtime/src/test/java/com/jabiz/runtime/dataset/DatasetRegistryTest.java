@@ -165,4 +165,62 @@ class DatasetRegistryTest {
             .hasMessageContaining("urn:ds:soft:Price | soft delete is not available for temporal entity Price")
             .hasMessageContaining("urn:ds:archive:Price | temporal entity Price cannot be stored in an override table");
     }
+
+    /** Process-only fields cannot be sent through a dataset, so a required one must be filled on insert. */
+    private static final EntityDefinition STORY = EntityDefinition.define("Story", eb -> {
+        eb.physicalTable("t_story");
+        eb.primaryKey("id");
+        eb.field("id", f -> f.physicalColumn("f_id").asSemanticIdentity("urn:story"));
+        eb.field("region", f -> f.physicalColumn("f_region").asText(8).required(true).processOnly());
+        eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:status", "DRAFT", "DONE").required(true)
+            .processOnly());
+        eb.field("reviewer", f -> f.physicalColumn("f_reviewer").asText(8).required(true).processOnly());
+        eb.field("comment", f -> f.physicalColumn("f_comment").asText(8).processOnly());
+        eb.stateTransitions("status", st -> st.from("DRAFT").to("DONE"));
+    });
+
+    private static DatasetDefinition story(String id, Consumer<DatasetDefinition.Builder> extra) {
+        return DatasetDefinition.define(id, d -> {
+            d.targetEntityType("Story").permissions("story.read", "story.write")
+                .storage(s -> s.connectionPoolRef("default"));
+            extra.accept(d);
+        });
+    }
+
+    @Test
+    void requiredProcessOnlyFieldsMustBeFilledOnInsert() {
+        assertThatThrownBy(() -> registry(null, new EntityDefinition[] {STORY},
+            story("urn:ds:story", d -> d.asDefault().scope(s -> s.fixed("region", "JP"))),
+            story("urn:ds:story:all", d -> { })))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Dataset urn:ds:story | required process-only field reviewer of Story")
+            .hasMessageContaining("Dataset urn:ds:story:all | required process-only field region of Story")
+            .hasMessageContaining("Dataset urn:ds:story:all | required process-only field reviewer of Story")
+            .satisfies(e -> assertThat(e.getMessage()).doesNotContain("field status").doesNotContain("field comment")
+                .doesNotContain("urn:ds:story | required process-only field region"));
+    }
+
+    @Test
+    void aProcessOnlyLifecycleNeedsOneInitialState() {
+        EntityDefinition flow = EntityDefinition.define("Flow", eb -> {
+            eb.physicalTable("t_flow");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id").asSemanticIdentity("urn:flow"));
+            eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:flow", "A", "B", "C").processOnly());
+            eb.stateTransitions("status", st -> st.from("A").to("C").from("B").to("C"));
+        });
+        assertThatThrownBy(() -> registry(null, new EntityDefinition[] {flow}, DatasetDefinition.define("urn:ds:flow",
+            d -> d.targetEntityType("Flow").asDefault().permissions("r", "w").storage(s -> s.connectionPoolRef("default")))))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Dataset urn:ds:flow | process-only lifecycle field status of Flow has several initial"
+                + " states [A, B]");
+    }
+
+    @Test
+    void datasetsThatCannotInsertDoNotNeedThem() {
+        assertThatCode(() -> registry(null, new EntityDefinition[] {STORY},
+            story("urn:ds:story:ro", d -> d.asDefault().policy(p -> p.readOnly(true))),
+            story("urn:ds:story:process", d -> d.policy(p -> p.processOnlyWrites()))))
+            .doesNotThrowAnyException();
+    }
 }

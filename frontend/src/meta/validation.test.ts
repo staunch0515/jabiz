@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { EntityMeta, FieldMeta } from './types'
 import { describe as describeViolation, formatMessage, parseInstant, validateAttributes, validateField } from './validation'
 
-const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, operators: [], rules: [] }
+const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, operators: [], rules: [] }
 
 describe('validation details', () => {
   it('parses ISO-8601 instants with offsets only', () => {

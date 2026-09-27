@@ -1,6 +1,7 @@
 #!/bin/sh
 # Fills a running jabiz with demonstration data of the orders-and-inventory sample, through the same API the
-# generated pages use (no SQL): ledger accounts, a warehouse, products, stock, a few orders, one shipped.
+# generated pages use (no SQL): ledger accounts, a warehouse, products, stock, a few orders, one shipped, and a
+# supplier with multilingual certifications (one sent to review).
 # Idempotent enough to run twice: existing codes are reported and skipped by the platform's unique checks.
 #
 #   JABIZ_URL=http://localhost:8080 JABIZ_USER=admin JABIZ_PASSWORD=... tools/demo/seed.sh
@@ -52,6 +53,19 @@ ORDER=$(post /api/processes/ORDER_PLACE/latest '{"orderNo":"DEMO-1","customerCod
 post /api/processes/ORDER_PLACE/latest '{"orderNo":"DEMO-2","customerCode":"CUST-2","warehouseCode":"TKY","lines":[{"sku":"MELON-1","quantity":1}]}' > /dev/null
 if [ -n "$ORDER" ]; then
     post /api/processes/ORDER_SHIP/latest "{\"orderId\":\"$ORDER\"}" > /dev/null
+fi
+
+echo "Supplier and certifications"
+SUPPLIER=$(post "/api/datasets/urn:jabiz:dataset:default:Supplier/commit" '{"changes":[{"action":"INSERT","attributes":{"supplierCode":"KTEA","supplierName":"Kanto Tea","countryCode":"JP","leadTimeDays":7,"active":true}}]}' | jq -r 'if type == "array" then .[0].id else empty end')
+if [ -n "$SUPPLIER" ]; then
+    CERTIFICATION=$(post "/api/datasets/urn:jabiz:dataset:default:SupplierCertification/commit" \
+        "{\"changes\":[{\"action\":\"INSERT\",\"attributes\":{\"supplierId\":\"$SUPPLIER\",\"title\":{\"zh\":\"有机 JAS 认证\",\"ja\":\"有機 JAS 認証\",\"en\":\"Organic JAS certification\"},\"body\":{\"en\":\"Issued by the **Kanto** certification body.\"}}}]}" \
+        | jq -r 'if type == "array" then .[0].id else empty end')
+    insert urn:jabiz:dataset:default:SupplierCertification \
+        "{\"supplierId\":\"$SUPPLIER\",\"title\":{\"en\":\"Fair trade\",\"ja\":\"フェアトレード\"}}"
+    if [ -n "$CERTIFICATION" ]; then
+        post /api/processes/CERTIFICATION_SUBMIT/latest "{\"certificationId\":\"$CERTIFICATION\"}" > /dev/null
+    fi
 fi
 
 echo "Stock now:"
