@@ -1,0 +1,250 @@
+# Six correspondents, one question (docs/culture/00-design.md sections 6 and 13): a story about home with a
+# perspective from each place is drafted, submitted, returned with a note, submitted again and published; then one
+# participant withdraws their consent and the story goes offline at once. Editors work through the generated admin,
+# which runs the same generic entity processes as here.
+name: HOME from six places
+clock: 2026-05-11T01:00:00Z
+actor: { id: cu-editor, permissions: ["*"] }
+steps:
+  - note: Roles, menu and switches; running it twice adds nothing.
+    process: CULTURE_SETUP@latest
+    input: {}
+    expectOutput: { roles: 2, params: 2 }
+  - process: CULTURE_SETUP@latest
+    input: {}
+    expectOutput: { roles: 0, permissions: 0, menus: 0, params: 0 }
+  - note: The thumbnail, as the upload endpoint records it.
+    process: FILE_REGISTER@latest
+    input: { fileId: 01960f5a-7000-7000-8000-000000000001, policy: culture.image, contentType: image/jpeg, sizeBytes: 2048,
+             sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08, width: 640, height: 480,
+             variants: [w320, w640], originalName: kitchen.jpg }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Theme
+      attributes: { slug: home, icon: "🏠", title: { en: Home, ja: 家 }, question: { en: What makes somewhere feel like home? }, sortOrder: 1, visible: true }
+    save: { home: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: uk, name: { en: United Kingdom }, countryCode: GB, visible: true }
+    save: { place_uk: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: chloe, displayName: Chloe, locationId: "${place_uk}", adult: false, accountActorId: cu-uk-01 }
+    save: { person_uk: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_uk}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_uk_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_uk}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_uk_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_uk}" }
+    expectOutput: { status: ACTIVE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: pl, name: { en: Poland }, countryCode: PL, visible: true }
+    save: { place_pl: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: zofia, displayName: Zofia, locationId: "${place_pl}", adult: false, accountActorId: cu-pl-01 }
+    save: { person_pl: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_pl}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_pl_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_pl}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_pl_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_pl}" }
+    expectOutput: { status: ACTIVE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: se, name: { en: Sweden }, countryCode: SE, visible: true }
+    save: { place_se: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: elsa, displayName: Elsa, locationId: "${place_se}", adult: false, accountActorId: cu-se-01 }
+    save: { person_se: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_se}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_se_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_se}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_se_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_se}" }
+    expectOutput: { status: ACTIVE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: sg, name: { en: Singapore }, countryCode: SG, visible: true }
+    save: { place_sg: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: wei, displayName: Wei, locationId: "${place_sg}", adult: false, accountActorId: cu-sg-01 }
+    save: { person_sg: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_sg}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_sg_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_sg}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_sg_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_sg}" }
+    expectOutput: { status: ACTIVE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: jp, name: { en: Japan }, countryCode: JP, visible: true }
+    save: { place_jp: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: aiko, displayName: Aiko, locationId: "${place_jp}", adult: false, accountActorId: cu-jp-01 }
+    save: { person_jp: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_jp}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_jp_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_jp}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_jp_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_jp}" }
+    expectOutput: { status: ACTIVE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Location
+      attributes: { slug: sz, name: { en: Eswatini }, countryCode: SZ, visible: true }
+    save: { place_sz: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Participant
+      attributes: { slug: lindiwe, displayName: Lindiwe, locationId: "${place_sz}", adult: false, accountActorId: cu-sz-01 }
+    save: { person_sz: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_sz}", party: PARTICIPANT, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_sz_participant: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Consent
+      attributes: { participantId: "${person_sz}", party: GUARDIAN, coversPhoto: true, coversVideo: true, coversVoice: true, signedOn: 2026-04-20T00:00:00Z }
+    save: { consent_sz_guardian: $.id }
+  - process: CULTURE_PARTICIPANT_ACTIVATE@latest
+    input: { participantId: "${person_sz}" }
+    expectOutput: { status: ACTIVE }
+  - note: The story is a draft of the editor's; the status is left to the platform.
+    process: ADD_ENTITY@latest
+    input:
+      entityType: Story
+      attributes:
+        slug: what-does-home-mean-to-us
+        title: { en: What Does Home Mean to Us? }
+        summary: { en: A six-country exploration of what makes a place feel like home. }
+        mediaType: ARTICLE
+        thumbnailFileId: 01960f5a-7000-7000-8000-000000000001
+        thumbnailAlt: { en: A kitchen table set for dinner }
+        ownerActorId: cu-editor
+    save: { story: $.id }
+  - process: ADD_ENTITY@latest
+    input: { entityType: StoryTheme, attributes: { storyId: "${story}", themeId: "${home}" } }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_uk}", text: { en: "Home, as Chloe sees it in United Kingdom." }, sortOrder: 1 }
+    save: { contribution_uk: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_pl}", text: { en: "Home, as Zofia sees it in Poland." }, sortOrder: 2 }
+    save: { contribution_pl: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_se}", text: { en: "Home, as Elsa sees it in Sweden." }, sortOrder: 3 }
+    save: { contribution_se: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_sg}", text: { en: "Home, as Wei sees it in Singapore." }, sortOrder: 4 }
+    save: { contribution_sg: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_jp}", text: { en: "Home, as Aiko sees it in Japan." }, sortOrder: 5 }
+    save: { contribution_jp: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Contribution
+      attributes: { storyId: "${story}", participantId: "${person_sz}", text: { en: "Home, as Lindiwe sees it in Eswatini." }, sortOrder: 6 }
+    save: { contribution_sz: $.id }
+  - process: CULTURE_STORY_SUBMIT@latest
+    input: { storyId: "${story}" }
+    expectOutput: { status: IN_REVIEW }
+  - advanceClock: P1D
+  - note: Returned with a note, which the operation record masks.
+    process: CULTURE_STORY_RETURN@latest
+    input: { storyId: "${story}", note: Please add what surprised you. }
+    expectOutput: { status: DRAFT }
+  - process: UPDATE_ENTITY@latest
+    input:
+      entityType: Story
+      id: "${story}"
+      version: 3
+      attributes: { reflectionSurprised: { en: How similar our kitchens are. } }
+  - process: CULTURE_STORY_SUBMIT@latest
+    input: { storyId: "${story}" }
+  - advanceClock: P1D
+  - process: CULTURE_STORY_PUBLISH@latest
+    input: { storyId: "${story}" }
+    expectOutput: { status: PUBLISHED }
+  - expect:
+      entity: Contribution
+      id: "${contribution_jp}"
+      fields: { visibility: PUBLIC, editable: false }
+  - advanceClock: P7D
+  - note: A guardian withdraws consent; the participant is a minor, so the story goes offline.
+    process: CULTURE_CONSENT_WITHDRAW@latest
+    input: { consentId: "${consent_jp_guardian}" }
+    expectOutput: { participantStatus: WITHDRAWN, unpublishedStories: ["${story}"] }
+  - expect:
+      entity: Story
+      id: "${story}"
+      fields: { status: UNPUBLISHED, publishedTime: 2026-05-13T01:00:00Z }
+  - expectError:
+      process: CULTURE_STORY_PUBLISH@latest
+      input: { storyId: "${story}" }
+      status: 422
+      ruleCode: PARTICIPANT_NOT_ACTIVE
+      field: Contribution.participantId
+snapshot:
+  entities: [Location, Theme, Participant, Consent, Story, StoryTheme, Contribution]
+  asOf: end

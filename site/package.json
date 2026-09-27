@@ -1,0 +1,14 @@
+{
+  "name": "culture-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Public website of Culture, Unfiltered. A placeholder until stage C3 (docs/culture/ROADMAP.md).",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^7.1.12"
+  },
+  "packageManager": "pnpm@10.18.0"
+}

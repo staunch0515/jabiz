@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: culture
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5437/culture}
+    username: ${SPRING_R2DBC_USERNAME:culture}
+    password: ${DB_PASSWORD:culture}
+  flyway:
+    url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5437/culture}
+    user: ${SPRING_FLYWAY_USER:culture}
+    password: ${DB_PASSWORD:culture}
+
+jabiz:
+  security:
+    # The key signing access tokens comes from the environment only (docs/design/10-security.md).
+    jwt:
+      secret: ${JABIZ_JWT_SECRET:}
+    bootstrap-admin:
+      user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
+      password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  files:
+    # Photos, audio, PDFs and consent scans (docs/design/14-files.md section 6). No default outside dev.
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:}
+  i18n:
+    default-locale: en
+    bundles: messages
+  web:
+    # The public site at / and the admin at /admin/ (docs/design/17-apps-and-branches.md section 3.2). The site
+    # embeds videos from two players only (docs/culture/00-design.md section 9.4); the admin keeps the platform's
+    # default policy.
+    spa:
+      - path: /
+        content-security-policy: "default-src 'self'; img-src 'self' data:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+      - path: /admin
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:--}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

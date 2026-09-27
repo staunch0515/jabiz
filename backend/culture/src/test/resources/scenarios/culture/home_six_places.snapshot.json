@@ -1,0 +1,498 @@
+{
+  "scenario" : "HOME from six places",
+  "asOf" : "2026-05-20T01:00:00Z",
+  "entities" : {
+    "Location" : [ {
+      "locationId" : "#uuid:1",
+      "slug" : "uk",
+      "name" : {
+        "en" : "United Kingdom"
+      },
+      "countryCode" : "GB",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    }, {
+      "locationId" : "#uuid:2",
+      "slug" : "pl",
+      "name" : {
+        "en" : "Poland"
+      },
+      "countryCode" : "PL",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    }, {
+      "locationId" : "#uuid:3",
+      "slug" : "se",
+      "name" : {
+        "en" : "Sweden"
+      },
+      "countryCode" : "SE",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    }, {
+      "locationId" : "#uuid:4",
+      "slug" : "sg",
+      "name" : {
+        "en" : "Singapore"
+      },
+      "countryCode" : "SG",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    }, {
+      "locationId" : "#uuid:5",
+      "slug" : "jp",
+      "name" : {
+        "en" : "Japan"
+      },
+      "countryCode" : "JP",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    }, {
+      "locationId" : "#uuid:6",
+      "slug" : "sz",
+      "name" : {
+        "en" : "Eswatini"
+      },
+      "countryCode" : "SZ",
+      "placeLabel" : null,
+      "latitude" : null,
+      "longitude" : null,
+      "sortOrder" : null,
+      "visible" : true,
+      "rowVersion" : 1
+    } ],
+    "Theme" : [ {
+      "themeId" : "#uuid:7",
+      "slug" : "home",
+      "icon" : "🏠",
+      "title" : {
+        "en" : "Home",
+        "ja" : "家"
+      },
+      "question" : {
+        "en" : "What makes somewhere feel like home?"
+      },
+      "intro" : null,
+      "sortOrder" : "1",
+      "visible" : true,
+      "rowVersion" : 1
+    } ],
+    "Participant" : [ {
+      "participantId" : "#uuid:8",
+      "slug" : "chloe",
+      "displayName" : "Chloe",
+      "locationId" : "#uuid:1",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-uk-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "ACTIVE",
+      "rowVersion" : 2
+    }, {
+      "participantId" : "#uuid:9",
+      "slug" : "zofia",
+      "displayName" : "Zofia",
+      "locationId" : "#uuid:2",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-pl-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "ACTIVE",
+      "rowVersion" : 2
+    }, {
+      "participantId" : "#uuid:10",
+      "slug" : "elsa",
+      "displayName" : "Elsa",
+      "locationId" : "#uuid:3",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-se-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "ACTIVE",
+      "rowVersion" : 2
+    }, {
+      "participantId" : "#uuid:11",
+      "slug" : "wei",
+      "displayName" : "Wei",
+      "locationId" : "#uuid:4",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-sg-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "ACTIVE",
+      "rowVersion" : 2
+    }, {
+      "participantId" : "#uuid:12",
+      "slug" : "aiko",
+      "displayName" : "Aiko",
+      "locationId" : "#uuid:5",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-jp-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "WITHDRAWN",
+      "rowVersion" : 3
+    }, {
+      "participantId" : "#uuid:13",
+      "slug" : "lindiwe",
+      "displayName" : "Lindiwe",
+      "locationId" : "#uuid:6",
+      "portraitFileId" : null,
+      "portraitAlt" : null,
+      "shortBio" : null,
+      "bio" : null,
+      "perspective" : null,
+      "reflection" : null,
+      "interests" : null,
+      "languages" : null,
+      "sortOrder" : null,
+      "accountActorId" : "cu-sz-01",
+      "adult" : false,
+      "curatorNote" : null,
+      "status" : "ACTIVE",
+      "rowVersion" : 2
+    } ],
+    "Consent" : [ {
+      "consentId" : "#uuid:14",
+      "participantId" : "#uuid:8",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:15",
+      "participantId" : "#uuid:8",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:16",
+      "participantId" : "#uuid:9",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:17",
+      "participantId" : "#uuid:9",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:18",
+      "participantId" : "#uuid:10",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:19",
+      "participantId" : "#uuid:10",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:20",
+      "participantId" : "#uuid:11",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:21",
+      "participantId" : "#uuid:11",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:22",
+      "participantId" : "#uuid:12",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:23",
+      "participantId" : "#uuid:12",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : "2026-05-20T01:00:00Z",
+      "rowVersion" : 2
+    }, {
+      "consentId" : "#uuid:24",
+      "participantId" : "#uuid:13",
+      "party" : "PARTICIPANT",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    }, {
+      "consentId" : "#uuid:25",
+      "participantId" : "#uuid:13",
+      "party" : "GUARDIAN",
+      "coversPhoto" : true,
+      "coversVideo" : true,
+      "coversVoice" : true,
+      "signedOn" : "2026-04-20T00:00:00Z",
+      "documentFileId" : null,
+      "withdrawnTime" : null,
+      "rowVersion" : 1
+    } ],
+    "Story" : [ {
+      "storyId" : "#uuid:26",
+      "slug" : "what-does-home-mean-to-us",
+      "title" : {
+        "en" : "What Does Home Mean to Us?"
+      },
+      "summary" : {
+        "en" : "A six-country exploration of what makes a place feel like home."
+      },
+      "about" : null,
+      "body" : null,
+      "mediaType" : "ARTICLE",
+      "storyDate" : null,
+      "thumbnailFileId" : "#uuid:27",
+      "thumbnailAlt" : {
+        "en" : "A kitchen table set for dinner"
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "reflectionSurprised" : {
+        "en" : "How similar our kitchens are."
+      },
+      "reflectionAssumed" : null,
+      "reflectionLearned" : null,
+      "featured" : null,
+      "ownerActorId" : "cu-editor",
+      "status" : "UNPUBLISHED",
+      "publishedTime" : "2026-05-13T01:00:00Z",
+      "reviewNote" : "Please add what surprised you.",
+      "rowVersion" : 7
+    } ],
+    "StoryTheme" : [ {
+      "storyThemeId" : "#uuid:28",
+      "storyId" : "#uuid:26",
+      "themeId" : "#uuid:7",
+      "visibility" : "PRIVATE",
+      "rowVersion" : 3
+    } ],
+    "Contribution" : [ {
+      "contributionId" : "#uuid:29",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:8",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Chloe sees it in United Kingdom."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "1",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    }, {
+      "contributionId" : "#uuid:30",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:9",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Zofia sees it in Poland."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "2",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    }, {
+      "contributionId" : "#uuid:31",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:10",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Elsa sees it in Sweden."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "3",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    }, {
+      "contributionId" : "#uuid:32",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:11",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Wei sees it in Singapore."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "4",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    }, {
+      "contributionId" : "#uuid:33",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:12",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Aiko sees it in Japan."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "5",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    }, {
+      "contributionId" : "#uuid:34",
+      "storyId" : "#uuid:26",
+      "participantId" : "#uuid:13",
+      "heading" : null,
+      "text" : {
+        "en" : "Home, as Lindiwe sees it in Eswatini."
+      },
+      "videoProvider" : null,
+      "videoId" : null,
+      "captionsConfirmed" : null,
+      "transcript" : null,
+      "audioFileId" : null,
+      "sortOrder" : "6",
+      "ownerActorId" : null,
+      "editable" : false,
+      "visibility" : "PRIVATE",
+      "rowVersion" : 6
+    } ]
+  }
+}
