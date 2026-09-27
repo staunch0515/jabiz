@@ -18,7 +18,7 @@ f.apply(I18nText.markdown(20_000).required("en"))            // 多行 Markdown�
 | `maxLength` | 每种语言按码点计的上限 → `TOO_LONG`（参数 `lang`、`max`） |
 | `multiline` | 多行（`markdown` 隐含多行） |
 | `format` | `plain`（默认）或 `markdown` |
-| `required` | 必须有内容的语言列表 → `TRANSLATION_REQUIRED`（参数 `lang`）；字段本身的 `required` 仍表示"至少有一种语言" |
+| `required(...)` | 必须有内容的语言列表 → `TRANSLATION_REQUIRED`（参数 `lang`）；参数与导出的键为 `requiredLanguages`（不与字段自身的 `required` 冲突）；字段本身的 `required` 仍表示"至少有一种语言" |
 
 ### 1.1 放在哪一层
 
@@ -37,14 +37,15 @@ f.apply(I18nText.markdown(20_000).required("en"))            // 多行 Markdown�
 - 语义约束经 `CustomKindSupport.validate`（02 §1.2）报告，与其他语义类型约束一样**只报第一个**：
   先按语言顺序（`zh`、`ja`、`en`）检查超长（`TOO_LONG`，参数 `lang`、`max`），再检查必填语言（`TRANSLATION_REQUIRED`，参数 `lang`）。
 - 允许的运算符：`IS_NULL` `IS_NOT_NULL`（按语言搜索用 SQL 模板，见 05；jsonb 上的 `ILIKE` 与 `pg_trgm` 索引由业务迁移建立）。
-- 导出：`format`、`multiline`、`maxLength`、`required`、`locales`（平台支持的语言，按上面的顺序）。
+- 导出：`format`、`multiline`、`maxLength`、`requiredLanguages`、`locales`（平台支持的语言，按上面的顺序）。
+- 输入必须是 JSON 对象（文本形式的 JSON 只在从存储读出时接受）。
 - 与 `jabiz.labels` 的区别：`labels` 是字典项等短标签、整体比较；`i18n-text` 是内容，有长度与必填语言规则。两者不合并。
 - **校验一致**：`TOO_LONG`（带 `lang`）、`TRANSLATION_REQUIRED` 是新的语义约束，先在 `spec/validation-cases.json` 加用例，前端校验器同时实现（D15 第 2 条）。
   前端对其他 `Custom` 类型仍只检查必填（12 §5.1）。
 
 ### 1.3 读取与显示
 
-- 数据视图与模板返回完整的 `{语言: 文本}`，由前端按"界面语言 → `jabiz.i18n.default-locale` → 任一有内容的语言（按上面的顺序）"选择；
+- 数据视图与模板返回完整的 `{语言: 文本}`，由前端按"界面语言 → `jabiz.i18n.default-locale`（实体导出中的 `defaultLocale`）→ 任一有内容的语言（按上面的顺序）"选择；
   显示回退语言时，前端给该元素加 `lang` 属性（无障碍：读屏软件按正确语言朗读）。
 - Markdown 只在前端渲染，渲染器**不允许原始 HTML**（`react-markdown`，不启用 `rehype-raw`，并设置 `skipHtml`）；服务端只存文本，不渲染。
 - 后台控件：每种语言一个标签页（必填语言带标记，有错误的语言标签页带错误标记），`markdown` 时附预览（同一渲染器）。
@@ -59,7 +60,7 @@ eb.display("title");            // 该实体被引用时用哪个字段显示（
   没有声明 `display` 的实体保持现状（显示主键）。
 - 新增只读接口（该数据视图的**读权限**，与 `query` 同一判断；用 `PlatformObservations` 包装）：
   - `GET /api/datasets/{id}/lookup?q=&limit=` → `[{id, label}]`：`limit` 缺省与上限均为 20。
-    `q` 为空时不筛选；否则对显示字段做不区分大小写的包含匹配（`i18n-text` 匹配任一语言），`q` 中的 `%`、`_`、`\` 按字面匹配（转义后绑定）。
+    `limit` ≤ 0 时 400；`q` 至多 200 个字符（否则 400）。`q` 为空时不筛选；否则对显示字段做不区分大小写的包含匹配（`i18n-text` 匹配任一语言），`q` 中的 `%`、`_`、`\` 按字面匹配（转义后绑定）。
     结果经该视图的范围（时态实体先取当前版本再过滤，D3）；按显示字段排序（`i18n-text` 按请求语言、再按默认语言的文本），再按主键。
   - `POST /api/datasets/{id}/labels {ids: [...]}` → `{id: label}`：批量取显示文本，`ids` 至多 200 个（超出 400 `INVALID_VALUE`）；
     主键按实体主键的类型转换，失败 400 `INVALID_VALUE`；范围外或不存在的主键不出现在结果中。
@@ -81,7 +82,7 @@ ProcessDefinition.single("CERTIFICATION_SUBMIT", 1, CertificationSubmit.class, O
 
 - `actsOn(entity, inputComponent[, 条件])`：声明流程输入中哪个组件是该实体的主键。`ProcessDefinition` 增加组件 `actsOn`（可为空），
   复制方法（`withPermissions`、`asInternal` 等）保留它。导出到 `GET /api/meta/processes`（`actsOn: {entity, input, when: {field, values}}`，`when` 可缺省）。
-- 后台在该实体的列表行与详情中显示"操作"按钮（仅列出调用方可执行的流程，即目录中的流程，与目录同一判断）；点击后打开流程表单，主键已填且只读，其余输入照常生成。
+- 后台在该实体的列表行与详情中显示"操作"按钮（没有写权限的用户以只读方式打开详情，同样看到操作与子实体列表）（仅列出调用方可执行的流程，即目录中的流程，与目录同一判断）；点击后打开流程表单，主键已填且只读，其余输入照常生成。
   输入只有主键时，确认后直接执行。执行成功后刷新列表与详情。
 - `when` 只是显示提示（字段等于给定值之一），**不是**权限或规则：服务端的状态机、守卫与流程自身的检查照常裁决。
 - 启动检查（`ProcessChecks`，`PlatformCheck`，一次性报告）：实体存在；输入是 record 且组件存在、其 Java 类型与实体主键的规范类型相符；
@@ -104,7 +105,7 @@ eb.field("status", f -> f.physicalColumn("status").asCode(null, "DRAFT", "SUBMIT
 
 - 写入规则与敏感字段相同（02 §6.1），但**照常可读**：数据视图 `commit` 与通用实体流程（`ADD/UPDATE_ENTITY`）的属性中出现该字段
   （即使值为 `null`）→ 400 `PROCESS_ONLY_FIELD`（每个字段一条违规）；流程的 `ChangeSet` 可以写。
-- **撤销**：被撤销的操作改过该字段时拒绝（422 `PROCESS_ONLY_FIELD`，与敏感字段在撤销中的处理相同）。这类字段由流程维护，更正也应经流程；
+- **撤销**（只有时态实体的操作可以撤销）：被撤销的操作改过该字段时拒绝（422 `PROCESS_ONLY_FIELD`，与敏感字段在撤销中的处理相同）。这类字段由流程维护，更正也应经流程；
   否则撤销可以绕过状态机把状态改回去。
 - **插入时的取值**：插入（任何途径）中没有给出该字段时由平台填值——是状态机的状态字段时取初始状态；是数据视图范围字段时取范围值（范围的自动填充照常）；
   否则为空。流程显式给出的值不受影响（照常经状态机的初始状态检查）。

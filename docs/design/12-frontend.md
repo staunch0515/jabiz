@@ -73,7 +73,7 @@ frontend/
 | `version` | 整数 | 原样 | 区间 |
 | `semanticIdentity` | 文本框 | 原样 | 等于 |
 | `reference` | 可搜索下拉（目标实体声明了 `display` 且默认视图可读时，`lookup`；否则文本框） | 标签（`labels`，按页批量；取不到时主键） | 等于 |
-| `jabiz.i18n-text` | 每种语言一个标签页（必填语言带标记）；`markdown` 附预览 | 按语言回退选择，回退时带 `lang` 属性；Markdown 不渲染原始 HTML | —（只有 `isNull`） |
+| `jabiz.i18n-text` | 每种语言一个标签页（必填语言带标记，`requiredLanguages`）；`markdown` 附预览 | 按语言回退选择，回退时带 `lang` 属性；Markdown 不渲染原始 HTML | —（只有 `isNull`） |
 | 其他 `custom` / `none` | JSON 文本 | JSON | 等于 |
 
 - 列：列表视图的 `columns`（没有列表视图时取前 8 个非系统字段）；筛选、排序只对白名单字段开放，默认排序取 `defaultSort`。
@@ -116,6 +116,7 @@ frontend/
   输入只有主键时确认后直接执行。
 - 详情抽屉中的子实体列表（16 §4）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
 - `processOnly` 字段在表单中只读，新建与修改都不发送（16 §5）。
+- 没有写权限时，行上的"查看"以只读方式打开详情（显示实体上的操作与子实体列表）。
 - 按权限显示操作：新建 / 编辑 / 删除看 `canWrite`，历史看 `temporal && allowTimeTravel`，操作详情与撤销看当前操作人的权限。
 
 ## 7. 构建与运行

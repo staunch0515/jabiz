@@ -210,6 +210,25 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 跨天、跨月的业务写成**场景回放**（07 §3）：`src/test/resources/scenarios/**/*.yml`，可控时钟 + 快照对比。
 例子：`scenarios/commerce/order_lifecycle.yml`（预定调价在月初生效、取消释放库存、发货过账）。
 
+## 9. （可选）内容编辑：多语言文本、显示字段、行操作
+
+以内容为主的对象（说明、文章、资质）还可以声明（16）。例子：`commerce/SupplierCertifications.java`。
+
+```java
+eb.field("title", f -> f.physicalColumn("title").required(true).apply(I18nText.of(200).required("en")));  // jsonb 列
+eb.field("body",  f -> f.physicalColumn("body").apply(I18nText.markdown(20_000)));
+eb.field("status", f -> f.physicalColumn("status").required(true).processOnly().asCode(...));  // 只由流程改变
+eb.display("title");                                     // 被引用时显示标题；供应商用 eb.display("supplierName")
+
+ProcessDefinition.define("CERTIFICATION_SUBMIT", ...)
+    .actsOn("SupplierCertification", "certificationId", a -> a.whenField("status", "DRAFT", "REJECTED"))
+```
+
+- 后台随之得到：每种语言一个标签页（Markdown 带预览）、按显示字段搜索的引用下拉、列表中引用列显示名称、行上的"提交"等操作、
+  父实体详情中的子实体列表（引用字段须在子实体列表视图的 `filters` 中）。不写前端代码。
+- `processOnly` 字段经数据视图与通用实体流程写入 → 400 `PROCESS_ONLY_FIELD`；插入时状态字段自动取初始状态；必填的 `processOnly` 字段
+  必须是状态字段或视图范围字段（启动检查）。`when` 只是显示提示，状态机照常裁决。
+
 ## 检查清单
 
 - [ ] 迁移：时态表固定列、`UNIQUE(主键, version_no)`、两个索引、`jabiz_protect_append_only`
@@ -220,3 +239,4 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 - [ ] 集成测试：写入、读取、规则错误码、历史、权限、只插入
 - [ ] 角色授权；需要时加菜单
 - [ ] （如有流程）权限声明、违规累积、单元测试 + 集成测试；（如有跨时间的规则）场景回放与快照
+- [ ] （如有内容）多语言字段的列为 `jsonb`；被引用的实体声明 `display`；流程维护的字段 `processOnly()`；实体上的流程 `actsOn`
