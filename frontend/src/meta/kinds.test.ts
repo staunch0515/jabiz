@@ -25,6 +25,13 @@ describe('semantic kinds', () => {
     expect(scaleOf(field('carrierCode'))).toBeUndefined()
   })
 
+  it('upload files', () => {
+    const file = { ...field('cell'), kindId: 'jabiz.file', policy: 'commerce.image' } as typeof carrier.fields[number]
+    expect(controlOf(file)).toBe('file')
+    expect(toWireValue(file, '')).toBeNull()
+    expect(toWireValue(file, 'f-1')).toBe('f-1')
+  })
+
   it('label fields by the server, else by the UI for system fields', async () => {
     await i18n.changeLanguage('en')
     expect(fieldLabel(field('creditLimit'), t)).toBe('Credit limit')

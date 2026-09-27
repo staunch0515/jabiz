@@ -2,7 +2,11 @@ package com.jabiz.runtime.test;
 
 import com.jabiz.runtime.check.PlatformCheckMain;
 
+import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -26,11 +30,24 @@ public final class PlatformCheckLauncher {
         List<String> args = new ArrayList<>(databaseArgs(schema));
         // The check serves no requests, but the application refuses to start without a token key: a throwaway one.
         args.add("--jabiz.security.jwt.secret=" + throwawayKey());
+        // Nor without a file storage directory when it declares file policies: an empty throwaway one.
+        Path files;
+        try {
+            files = Files.createTempDirectory("jabiz-check-files-");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        args.add("--jabiz.files.local.root=" + files);
         args.addAll(extraArgs);
         try {
             return PlatformCheckMain.run(application, args, out);
         } finally {
             PostgresTestDatabase.get().dropSchema(schema);
+            try {
+                Files.deleteIfExists(files);
+            } catch (IOException ignored) {
+                // an empty temporary directory left behind
+            }
         }
     }
 

@@ -70,6 +70,25 @@ async function authFetch(request: Request): Promise<Response> {
   return response
 }
 
+/**
+ * fetch with the session for calls outside the typed client (uploads, file contents): the same headers and the same
+ * single refresh on 401. The body is passed as given, so a FormData upload is streamed by the browser.
+ */
+export async function sessionFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const send = () => {
+    const headers = new Headers(init.headers)
+    headers.set('Accept-Language', language)
+    const token = session.accessToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    return globalThis.fetch(path, { ...init, headers })
+  }
+  const response = await send()
+  if (response.status === 401 && session.refreshToken() && (await refreshSession())) {
+    return send()
+  }
+  return response
+}
+
 export const api = createClient<paths>({
   baseUrl: typeof window === 'undefined' ? 'http://localhost' : window.location.origin,
   fetch: authFetch,

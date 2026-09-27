@@ -12,7 +12,9 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
+import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.RebaseConflictException;
 import com.jabiz.runtime.RevertConflictException;
 import com.jabiz.runtime.storage.AppendOnlyViolationException;
@@ -146,6 +148,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PermissionDeniedException.class)
     ProblemDetail handlePermissionDenied(PermissionDeniedException ex, ServerWebExchange exchange) {
         return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /** An upload larger than accepted (docs/design/14-files.md section 5); the rest of the body is not read. */
+    @ExceptionHandler(PayloadTooLargeException.class)
+    ProblemDetail handlePayloadTooLarge(PayloadTooLargeException ex, ServerWebExchange exchange) {
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /** Too many requests of one caller: says when to try again. */
+    @ExceptionHandler(RateLimitedException.class)
+    ResponseEntity<ProblemDetail> handleRateLimited(RateLimitedException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.RETRY_AFTER,
+                String.valueOf(ex.retryAfterSeconds()))
+            .body(withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange));
     }
 
     /**

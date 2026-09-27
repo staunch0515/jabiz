@@ -207,6 +207,11 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 复杂查询写 **SQL 模板**（`queries/**/*.sql`，05）：表和列只写占位符 `{{Supplier}}`、`{{Supplier.supplierCode}}`，平台负责数据视图范围、
 时态"当前版本"、外层分页筛选与预编译校验；列表参数写 `= ANY(:name)`。例子：`queries/commerce/stock_availability.sql`。
 
+需要**图片或文档**时（14）：声明一个策略（`FilePolicy` Bean：允许的类型、大小上限、图片变体、上传与读取权限），字段写
+`f.kind(FileKind.of("commerce.document"))`，迁移中加一列 `uuid`（不加外键，建议建部分索引 `WHERE col IS NOT NULL`）。
+后台表单自动得到上传控件与预览；删除文件的业务流程先清空引用、`SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`
+（例子：`CommerceFiles` 的 `SUPPLIER_CONTRACT_REMOVE`）。
+
 跨天、跨月的业务写成**场景回放**（07 §3）：`src/test/resources/scenarios/**/*.yml`，可控时钟 + 快照对比。
 例子：`scenarios/commerce/order_lifecycle.yml`（预定调价在月初生效、取消释放库存、发货过账）。
 
@@ -220,3 +225,4 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 - [ ] 集成测试：写入、读取、规则错误码、历史、权限、只插入
 - [ ] 角色授权；需要时加菜单
 - [ ] （如有流程）权限声明、违规累积、单元测试 + 集成测试；（如有跨时间的规则）场景回放与快照
+- [ ] （如有文件字段）策略及其权限、`uuid` 列与索引、文案；上传与写入检查的集成测试

@@ -20,7 +20,8 @@ import type { EntityMeta, FieldMeta, RuleSpec, Violation } from './types'
  * 4. every exported rule (RANGE, SCALE, LENGTH, PATTERN, NOT_FUTURE, REQUIRED), in declaration order.
  *
  * The shared cases in spec/validation-cases.json run through both implementations. Server-only rules and custom
- * kinds are not checked here; the server remains the authority and its answer is shown the same way.
+ * kinds (except the form of a jabiz.file id) are not checked here; the server remains the authority and its answer
+ * is shown the same way.
  */
 
 /** A value converted to the canonical type of its kind. */
@@ -48,6 +49,8 @@ export interface FieldViolation {
 }
 
 class InvalidValue extends Error {}
+
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const INSTANT =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:\d{2}(?::\d{2})?)$/i
@@ -132,6 +135,13 @@ function coerce(field: FieldMeta, raw: unknown): Canonical | null {
       return { k: 'text', s: raw }
     case 'bool':
       return { k: 'bool', b: toBooleanValue(raw) }
+    case 'custom':
+      // jabiz.file (FileKindSupport): the canonical text form of a UUID, either case.
+      if (field.kindId === 'jabiz.file') {
+        if (typeof raw !== 'string' || !FILE_ID.test(raw)) throw new InvalidValue()
+        return { k: 'text', s: raw.toLowerCase() }
+      }
+      return { k: 'raw', v: raw }
     default:
       return { k: 'raw', v: raw }
   }

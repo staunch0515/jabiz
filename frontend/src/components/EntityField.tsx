@@ -8,8 +8,9 @@ import {
 } from '@ant-design/pro-components'
 import type { TFunction } from 'i18next'
 import { controlOf, fieldLabel, optionsOf } from '../meta/kinds'
-import type { DictItem, FieldMeta, Violation } from '../meta/types'
+import { isFileField, type DictItem, type FieldMeta, type Violation } from '../meta/types'
 import FieldErrors from './FieldErrors'
+import FileField from './FileField'
 
 interface Props {
   field: FieldMeta
@@ -57,6 +58,10 @@ export default function EntityField({ field, disabled, dictionaries, violations,
       return <ProFormSwitch {...common} />
     case 'select':
       return <ProFormSelect {...common} options={optionsOf(field, dictionaries)} fieldProps={{ allowClear: true }} />
+    case 'file':
+      return isFileField(field) ? (
+        <FileField field={field} label={label} disabled={disabled} formItemProps={formItemProps} t={t} />
+      ) : null
     case 'json':
       return <ProFormTextArea {...common} placeholder="JSON" />
     default:

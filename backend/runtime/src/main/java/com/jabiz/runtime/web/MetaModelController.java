@@ -11,6 +11,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.file.FilePolicyExport;
 import com.jabiz.runtime.process.ProcessInputSchemas;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.security.Permissions;
@@ -54,10 +55,12 @@ class MetaModelController {
     private final DatasetRegistry datasets;
     private final ProcessRegistry processes;
     private final MessageCatalog messages;
+    private final FilePolicyExport fileExport;
     private final boolean development;
 
     MetaModelController(EntityDefinitionRegistry registry, DatasetRegistry datasets, ProcessRegistry processes,
-        MessageCatalog messages, Environment environment) {
+        MessageCatalog messages, FilePolicyExport fileExport, Environment environment) {
+        this.fileExport = fileExport;
         this.registry = registry;
         this.datasets = datasets;
         this.processes = processes;
@@ -69,7 +72,11 @@ class MetaModelController {
     @GetMapping("/entities/{name}")
     Mono<Map<String, Object>> getEntity(@PathVariable("name") String name) {
         EntityDefinition def = find(name);
-        return RequestContexts.current().map(context -> MetaModelExporter.export(def, messages, context.locale()));
+        return RequestContexts.current().map(context -> {
+            Map<String, Object> exported = MetaModelExporter.export(def, messages, context.locale());
+            fileExport.complete(exported);
+            return exported;
+        });
     }
 
     /** JSON Schema (draft 2020-12) of the attributes of one instance. */

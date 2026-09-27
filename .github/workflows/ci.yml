@@ -123,6 +123,8 @@ jobs:
           SPRING_FLYWAY_PASSWORD: jabiz
           JABIZ_BOOTSTRAP_ADMIN_USER: ${{ env.E2E_ADMIN_USER }}
           JABIZ_BOOTSTRAP_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+          # Uploaded files of this run (docs/design/14-files.md section 6).
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/jabiz-files
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json

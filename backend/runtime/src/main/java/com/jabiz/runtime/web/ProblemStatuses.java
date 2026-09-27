@@ -11,7 +11,9 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
+import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.RateLimitedException;
 
 import java.util.List;
 import java.util.Map;
@@ -39,6 +41,8 @@ public final class ProblemStatuses {
             case ConcurrentUpdateException e -> 409; // also rebase and revert conflicts
             case IdempotencyConflictException e -> 409;
             case BusinessRuleViolationException e -> 422;
+            case PayloadTooLargeException e -> 413;
+            case RateLimitedException e -> 429;
             default -> 500;
         };
     }
@@ -55,6 +59,8 @@ public final class ProblemStatuses {
             case IdempotencyConflictException e -> List.of(new Violation(null,
                 PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, e.getMessage()));
             case AuthenticationFailedException e -> List.of(new Violation(null, e.code(), e.getMessage()));
+            case PayloadTooLargeException e -> e.violations();
+            case RateLimitedException e -> e.violations();
             default -> List.of();
         };
     }

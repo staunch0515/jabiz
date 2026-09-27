@@ -24,6 +24,9 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.query.template` | `AdvancedQueryExecutor.page`（模板 API 与 `RunTemplate`） | `template` |
 | `jabiz.outbox.delivery` | `OutboxDeliverer.deliver` | `consumer` `event` `result`（`CONSUMED` / `DUPLICATE` / `FAILED`） |
 | `jabiz.job.run` | `JobRunner.run`（调度线程，阻塞式观测） | `job` `result`（`SUCCEEDED` / `REPLAYED` / `FAILED` / `LOCKED`） |
+| `jabiz.file.upload` | `FileUploadService.upload`（14 §1） | `policy` |
+| `jabiz.file.serve` | 读取文件内容（14 §5） | `channel`（`admin`；公开读取在 13c 加 `public`） |
+| `jabiz.file.sweep` | 清扫的存储部分（`FILE_PURGE_ORPHANS` 提交后，14 §6；删除数量记入日志） | `result` |
 
 另外每个都有 `outcome`（`success`、`rejected`＝映射为 4xx 的领域异常、`error`＝其他、`cancelled`）与 `status`（映射的 HTTP 状态，成功为 `none`）。
 同一观测名的标签键集合固定（指标后端的要求）。映射沿用 `ProblemStatuses`，与 API 响应一致。
