@@ -5,6 +5,8 @@ import type { I18nTextParams, Texts } from '../meta/i18nText'
 import MarkdownView from './MarkdownView'
 
 interface Props {
+  /** The field's name, which scopes the test ids of the inputs. */
+  name: string
   params: I18nTextParams
   value?: Texts
   onChange?(value: Texts): void
@@ -17,7 +19,7 @@ interface Props {
  * One tab per language for a multilingual text (docs/design/16-content-authoring.md section 1.3): required languages
  * are marked, Markdown gets a preview rendered by the same renderer as the display.
  */
-export default function I18nTextInput({ params, value, onChange, disabled, invalidLanguages = [] }: Props) {
+export default function I18nTextInput({ name, params, value, onChange, disabled, invalidLanguages = [] }: Props) {
   const { t, i18n } = useTranslation()
   const ui = i18n.language.split('-')[0]
   const [active, setActive] = useState(params.locales.includes(ui) ? ui : params.locales[0])
@@ -29,7 +31,7 @@ export default function I18nTextInput({ params, value, onChange, disabled, inval
       size="small"
       activeKey={active}
       onChange={setActive}
-      data-testid="i18n-text"
+      data-testid={`i18n-${name}`}
       items={params.locales.map((language) => {
         const required = params.required.includes(language)
         const invalid = invalidLanguages.includes(language)
@@ -42,7 +44,7 @@ export default function I18nTextInput({ params, value, onChange, disabled, inval
             disabled={disabled}
             status={invalid ? 'error' : undefined}
             onChange={(e) => set(language, e.target.value)}
-            data-testid={`i18n-${language}`}
+            data-testid={`i18n-${name}-${language}`}
           />
         ) : (
           <Input
@@ -51,13 +53,13 @@ export default function I18nTextInput({ params, value, onChange, disabled, inval
             disabled={disabled}
             status={invalid ? 'error' : undefined}
             onChange={(e) => set(language, e.target.value)}
-            data-testid={`i18n-${language}`}
+            data-testid={`i18n-${name}-${language}`}
           />
         )
         return {
           key: language,
           label: (
-            <span data-testid={`i18n-tab-${language}`} style={invalid ? { color: 'var(--ant-color-error, #ff4d4f)' } : undefined}>
+            <span data-testid={`i18n-${name}-tab-${language}`} style={invalid ? { color: 'var(--ant-color-error, #ff4d4f)' } : undefined}>
               {t(`languages.${language}`, { defaultValue: language })}
               {required && <span aria-label={t('form.requiredLanguage')}> *</span>}
             </span>

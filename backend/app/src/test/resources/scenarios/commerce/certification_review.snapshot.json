@@ -1,0 +1,35 @@
+{
+  "scenario" : "Supplier certification review",
+  "asOf" : "2026-05-13T01:00:00Z",
+  "entities" : {
+    "Supplier" : [ {
+      "supplierId" : "#uuid:1",
+      "supplierCode" : "KTEA",
+      "supplierName" : "Kanto Tea",
+      "countryCode" : "JP",
+      "leadTimeDays" : "7",
+      "active" : true,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-11T01:00:00Z",
+      "createdTime" : "2026-05-11T01:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "SupplierCertification" : [ {
+      "certificationId" : "#uuid:2",
+      "supplierId" : "#uuid:1",
+      "title" : {
+        "en" : "Organic JAS certification",
+        "ja" : "有機 JAS 認証"
+      },
+      "body" : {
+        "en" : "Issued by the **Kanto** certification body."
+      },
+      "status" : "APPROVED",
+      "reviewComment" : null,
+      "versionNo" : 5,
+      "effectStartTime" : "2026-05-13T01:00:00Z",
+      "createdTime" : "2026-05-13T01:00:00Z",
+      "processSeqId" : "#op:2"
+    } ]
+  }
+}

@@ -61,6 +61,7 @@ export default function EntityField({
       return (
         <ProForm.Item name={field.name} label={label} {...formItemProps}>
           <I18nTextInput
+            name={field.name}
             params={i18nParams(field)}
             disabled={disabled}
             invalidLanguages={(violations ?? []).map((v) => v.params?.lang).filter((l): l is string => typeof l === 'string')}

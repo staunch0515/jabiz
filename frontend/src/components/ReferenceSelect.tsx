@@ -1,5 +1,5 @@
 import { Select } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { pickText } from '../meta/i18nText'
 import { useLabels, useLookup } from '../meta/references'
@@ -16,7 +16,13 @@ interface Props {
 /** A searchable picker of a referenced instance, shown by its display field (16 section 2). */
 export default function ReferenceSelect({ datasetId, defaultLocale, value, onChange, disabled }: Props) {
   const { i18n } = useTranslation()
+  const [typed, setTyped] = useState('')
   const [q, setQ] = useState('')
+  // Looked up once typing pauses, not on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(typed), 250)
+    return () => clearTimeout(timer)
+  }, [typed])
   const lookup = useLookup(datasetId, q)
   const current = useLabels(datasetId, value ? [String(value)] : [])
   const text = (label: unknown) =>
@@ -35,7 +41,7 @@ export default function ReferenceSelect({ datasetId, defaultLocale, value, onCha
       value={value ?? undefined}
       options={options}
       loading={lookup.isFetching}
-      onSearch={setQ}
+      onSearch={setTyped}
       onChange={(next) => onChange?.(next ?? null)}
       data-testid="reference-select"
     />
