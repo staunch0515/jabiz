@@ -212,6 +212,70 @@ export interface paths {
         patch: operations["update"];
         trace?: never;
     };
+    "/api/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{fileId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{fileId}/content/{variant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["content_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -376,6 +440,7 @@ export interface components {
             changes?: components["schemas"]["Change"][];
             reason?: string;
         };
+        DataBuffer: unknown;
         DatasetEntry: {
             allowScheduled?: boolean;
             allowTimeTravel?: boolean;
@@ -414,6 +479,36 @@ export interface components {
             /** Format: int64 */
             processSeqId?: number;
         };
+        FileInfo: {
+            contentType?: string;
+            /** Format: uuid */
+            fileId?: string;
+            /** Format: int32 */
+            height?: number;
+            policy?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            variants?: string[];
+            /** Format: int32 */
+            width?: number;
+        };
+        FileMeta: {
+            contentType?: string;
+            /** Format: uuid */
+            fileId?: string;
+            /** Format: int32 */
+            height?: number;
+            originalName?: string;
+            policy?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            uploadedBy?: string;
+            /** Format: date-time */
+            uploadedTime?: string;
+            variants?: string[];
+            /** Format: int32 */
+            width?: number;
+        };
         Filter: {
             field?: string;
             from?: unknown;
@@ -438,6 +533,9 @@ export interface components {
             icon?: string;
             label?: string;
             path?: string;
+        };
+        PartEvent: {
+            last?: boolean;
         };
         ProcessEntry: {
             deprecated?: boolean;
@@ -899,6 +997,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EntityInstance"];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query: {
+                policy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["PartEvent"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileInfo"];
+                };
+            };
+        };
+    };
+    metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMeta"];
+                };
+            };
+        };
+    };
+    content: {
+        parameters: {
+            query?: never;
+            header?: {
+                Range?: string;
+            };
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataBuffer"][];
+                };
+            };
+        };
+    };
+    content_1: {
+        parameters: {
+            query?: never;
+            header?: {
+                Range?: string;
+            };
+            path: {
+                fileId: string;
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataBuffer"][];
                 };
             };
         };

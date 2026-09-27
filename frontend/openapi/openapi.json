@@ -37,6 +37,7 @@
         },
         "type" : "object"
       },
+      "DataBuffer" : { },
       "DatasetEntry" : {
         "properties" : {
           "allowScheduled" : {
@@ -130,6 +131,82 @@
         },
         "type" : "object"
       },
+      "FileInfo" : {
+        "properties" : {
+          "contentType" : {
+            "type" : "string"
+          },
+          "fileId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "height" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "policy" : {
+            "type" : "string"
+          },
+          "sizeBytes" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "variants" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "width" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "FileMeta" : {
+        "properties" : {
+          "contentType" : {
+            "type" : "string"
+          },
+          "fileId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "height" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "originalName" : {
+            "type" : "string"
+          },
+          "policy" : {
+            "type" : "string"
+          },
+          "sizeBytes" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "uploadedBy" : {
+            "type" : "string"
+          },
+          "uploadedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "variants" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "width" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "Filter" : {
         "properties" : {
           "field" : {
@@ -201,6 +278,14 @@
           },
           "path" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PartEvent" : {
+        "properties" : {
+          "last" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -970,6 +1055,150 @@
           }
         },
         "tags" : [ "entity-controller" ]
+      }
+    },
+    "/api/files" : {
+      "post" : {
+        "operationId" : "upload",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "policy",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "items" : {
+                  "$ref" : "#/components/schemas/PartEvent"
+                },
+                "type" : "array"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FileInfo"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/{fileId}" : {
+      "get" : {
+        "operationId" : "metadata",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "fileId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FileMeta"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/{fileId}/content" : {
+      "get" : {
+        "operationId" : "content",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "fileId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Range",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DataBuffer"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/{fileId}/content/{variant}" : {
+      "get" : {
+        "operationId" : "content_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "fileId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "variant",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Range",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DataBuffer"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
       }
     },
     "/api/jobs" : {
