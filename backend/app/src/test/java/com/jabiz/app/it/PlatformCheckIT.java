@@ -72,6 +72,38 @@ class PlatformCheckIT {
                 .contains("no_such_column"));
     }
 
+    /** ROADMAP phase 13c: every problem of public datasets and public templates, in one run. */
+    @Test
+    void brokenPublicDatasetsAndTemplatesAreAllReported() {
+        Outcome outcome = check("--jabiz.sql-templates.locations=classpath*:broken-public/**/*.sql",
+            "--spring.profiles.active=broken-public");
+
+        assertThat(outcome.exitCode()).isNotZero();
+        assertThat(outcome.lines())
+            .contains("PUBLIC | Dataset urn:jabiz:dataset:it:broken:context | scope field title is taken from the"
+                + " request context, which anonymous visitors do not have; public datasets allow fixed scope values"
+                + " only")
+            .anySatisfy(line -> assertThat(line).startsWith("PUBLIC | Dataset urn:jabiz:dataset:it:broken:unscoped"
+                + " | has no scope"))
+            .contains("PUBLIC | Dataset urn:jabiz:dataset:it:broken:unscoped | public field secretStuff does not"
+                + " exist on ItAttachment")
+            .contains("PUBLIC | Dataset urn:jabiz:dataset:it:broken:large | maxQueryBatchSize 500 exceeds"
+                + " jabiz.public.max-limit 100")
+            .contains("PUBLIC | broken-public/default_dataset.sql | query it.broken.default_dataset: entity"
+                + " ItAttachment must be read through a public dataset named in datasets; default datasets are never"
+                + " public")
+            .contains("PUBLIC | broken-public/outside_whitelist.sql:9 | query it.broken.outside_whitelist: field"
+                + " ItAttachment.title is not in the whitelist of its public dataset")
+            .contains("PUBLIC | broken-public/outside_whitelist.sql | query it.broken.outside_whitelist: result title"
+                + " comes from ItAttachment.title, which is not in the whitelist of its public dataset")
+            .contains("PUBLIC | broken-public/public_and_permissions.sql | query it.broken.public_and_permissions: a"
+                + " public template (access: public) declares no permissions")
+            .contains("PUBLIC | broken-public/public_and_permissions.sql | query it.broken.public_and_permissions:"
+                + " timeoutMs (3000) exceeds jabiz.public.max-timeout (2000 ms)")
+            .contains("PUBLIC | broken-public/private_cache.sql | query it.broken.private_cache: cacheSeconds applies"
+                + " to public templates (access: public) only");
+    }
+
     /** ROADMAP phase 5, requirement 7: application startup runs the same checks and refuses to start. */
     @Test
     void startupRunsTheSameChecks() {

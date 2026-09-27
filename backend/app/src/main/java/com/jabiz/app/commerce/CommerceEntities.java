@@ -31,6 +31,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String ORDER_LINE = "SalesOrderLine";
 
     public static final String PRODUCT_DATASET = "urn:jabiz:dataset:default:Product";
+    public static final String PUBLIC_PRODUCT_DATASET = "urn:jabiz:dataset:public:Product";
     public static final String WAREHOUSE_DATASET = "urn:jabiz:dataset:default:Warehouse";
     public static final String STOCK_LEVEL_DATASET = "urn:jabiz:dataset:default:StockLevel";
     public static final String ORDER_DATASET = "urn:jabiz:dataset:default:SalesOrder";

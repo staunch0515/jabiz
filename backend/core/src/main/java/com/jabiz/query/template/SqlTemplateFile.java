@@ -90,6 +90,15 @@ public final class SqlTemplateFile {
         }
         builder.permissions(list(header.get("permissions")).stream().map(SqlTemplateFile::string)
             .toArray(String[]::new));
+        Object access = header.get("access");
+        if ("public".equals(access)) {
+            builder.publicAccess();
+        } else if (access != null) {
+            problems.add(TemplateProblem.header("access must be public when given, not " + access));
+        }
+        if (header.get("cacheSeconds") instanceof Number seconds) {
+            builder.cacheSeconds(seconds.intValue());
+        }
         if (header.get("timeoutMs") instanceof Number ms) {
             builder.timeout(Duration.ofMillis(ms.longValue()));
         }

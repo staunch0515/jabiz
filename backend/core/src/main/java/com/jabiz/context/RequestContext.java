@@ -31,6 +31,9 @@ public record RequestContext(
     /** Actor id of work the platform performs on its own behalf. */
     public static final String SYSTEM_ACTOR = "system";
 
+    /** Actor id of requests nobody has authenticated. */
+    public static final String ANONYMOUS_ACTOR = "anonymous";
+
     /** Permission code that grants every permission (administrators, scenario replays). */
     public static final String ALL_PERMISSIONS = "*";
 
@@ -45,6 +48,14 @@ public record RequestContext(
     /** Context for platform-initiated work: the system actor, without roles or permissions. */
     public static RequestContext system(Locale locale, String requestId) {
         return new RequestContext(SYSTEM_ACTOR, null, locale, requestId, Set.of(), Set.of());
+    }
+
+    /**
+     * Context of an anonymous visitor reading public data (docs/design/15-public-access.md section 5): no tenant,
+     * roles or permissions, whatever credentials the request carried.
+     */
+    public static RequestContext anonymous(Locale locale, String requestId) {
+        return new RequestContext(ANONYMOUS_ACTOR, null, locale, requestId, Set.of(), Set.of());
     }
 
     /** Whether the actor holds the permission, directly or through {@link #ALL_PERMISSIONS}. */

@@ -5,6 +5,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.publicread.FileAccess;
 import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -124,7 +125,8 @@ public class FileProcesses {
                 EntityInstance file = ctx.get(FILE, EntityInstance.class);
                 ctx.changes().delete(FileEntities.ENTITY, file.id(), file.version());
             })
-            .afterCommit("Delete the stored content", DeleteStoredContent.of(FILE_ID)));
+            .afterCommit("Delete the stored content", DeleteStoredContent.of(FILE_ID))
+            .afterCommit("Forget whether it was public", FileAccess.invalidate(FileAccess.fromContext(FILE_ID))));
     }
 
     static ProcessDefinition<PurgeInput, PurgeOutput, ProcessContext> purgeOrphans() {

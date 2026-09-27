@@ -11,6 +11,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.publicread.FileAccess;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static com.jabiz.app.commerce.CommerceEntities.CANCELLED;
 import static com.jabiz.app.commerce.CommerceEntities.MAX_ORDER_LINES;
@@ -36,6 +38,7 @@ import static com.jabiz.app.commerce.CommerceEntities.ORDER_DATASET;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER_LINE;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER_LINE_DATASET;
 import static com.jabiz.app.commerce.CommerceEntities.PLACED;
+import static com.jabiz.app.commerce.CommerceEntities.PRODUCT;
 import static com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET;
 import static com.jabiz.app.commerce.CommerceEntities.SHIPPED;
 import static com.jabiz.app.commerce.CommerceEntities.STOCK_LEVEL;
@@ -65,6 +68,7 @@ public final class CommerceProcesses {
     public static final String ORDER_CANCEL = "ORDER_CANCEL";
     public static final String ORDER_SHIP = "ORDER_SHIP";
     public static final String PRODUCT_REPRICE = "PRODUCT_REPRICE";
+    public static final String PRODUCT_WITHDRAW = "PRODUCT_WITHDRAW";
 
     public static final String RECEIVABLE_ACCOUNT = "1130";
     public static final String SALES_REVENUE_ACCOUNT = "4120";
@@ -85,6 +89,11 @@ public final class CommerceProcesses {
     public record RepriceInput(@NotBlank String sku, @NotNull @Positive BigDecimal unitPrice, Instant effectiveTime) {}
 
     public record RepriceOutput(String productId, String sku, BigDecimal unitPrice, Instant effectiveTime) {}
+
+    public record WithdrawInput(@NotNull UUID productId) {}
+
+    /** @param withdrawn false when the product was not on sale already, so nothing changed */
+    public record WithdrawOutput(String productId, String sku, boolean withdrawn) {}
 
     public record ReceiveInput(@NotBlank String warehouseCode, @NotBlank String sku,
         @NotNull @Positive @Max(MAX_QUANTITY) Integer quantity) {}
@@ -123,6 +132,9 @@ public final class CommerceProcesses {
     static final String OUTPUT = "output";
     static final String POSTING_INPUT = "postingInput";
     static final String POSTING = "posting";
+    static final String PRODUCT_ID = "productId";
+    static final String PRODUCT_KEY = "product";
+    static final String IMAGE_FILE_ID = "imageFileId";
 
     public static final ProcessDefinition<RepriceInput, RepriceOutput, ProcessContext> REPRICE_PROCESS =
         ProcessDefinition.define(PRODUCT_REPRICE, 1, RepriceInput.class, RepriceOutput.class, ProcessContext.class,
@@ -134,6 +146,27 @@ public final class CommerceProcesses {
                 .step("Load the product", QueryEntities.of(PRODUCT_DATASET,
                     ctx -> byCode("sku", input(ctx, RepriceInput.class).sku()), PRODUCTS))
                 .compute("Schedule the price", (metadata, ctx) -> reprice(ctx)));
+
+    /**
+     * Takes a product off sale: it leaves the public catalog at once (the public dataset's scope), and its photo
+     * stops being served anonymously as soon as the commit is through (docs/design/15-public-access.md section 4).
+     */
+    public static final ProcessDefinition<WithdrawInput, WithdrawOutput, ProcessContext> WITHDRAW_PROCESS =
+        ProcessDefinition.define(PRODUCT_WITHDRAW, 1, WithdrawInput.class, WithdrawOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Takes a product off sale and out of the public catalog.")
+                .permissions("commerce.product.write")
+                .actsOn(PRODUCT, PRODUCT_ID, a -> a.whenField("active", "true"))
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = withInput(start, input);
+                    ctx.put(PRODUCT_ID, input.productId());
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, WithdrawOutput.class))
+                .step("Load the product", LoadEntity.by(PRODUCT_DATASET, PRODUCT_ID, PRODUCT_KEY))
+                .compute("Take it off sale", (metadata, ctx) -> withdraw(ctx))
+                .afterCommit("Stop serving its photo publicly",
+                    FileAccess.invalidate(FileAccess.fromContext(IMAGE_FILE_ID))));
 
     public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContext> RECEIVE_PROCESS =
         ProcessDefinition.define(STOCK_RECEIVE, 1, ReceiveInput.class, ReceiveOutput.class, ProcessContext.class,
@@ -265,6 +298,16 @@ public final class CommerceProcesses {
         ctx.changes().effectiveAt(effective).update(CommerceEntities.PRODUCT, product.id(), product.version(),
             Map.of("unitPrice", input.unitPrice()));
         ctx.put(OUTPUT, new RepriceOutput(String.valueOf(product.id()), input.sku(), input.unitPrice(), effective));
+    }
+
+    static void withdraw(ProcessContext ctx) {
+        EntityInstance product = ctx.get(PRODUCT_KEY, EntityInstance.class);
+        boolean onSale = Boolean.TRUE.equals(product.get("active"));
+        if (onSale) {
+            ctx.changes().update(CommerceEntities.PRODUCT, product.id(), product.version(), Map.of("active", false));
+        }
+        ctx.put(IMAGE_FILE_ID, product.get("imageFileId"));
+        ctx.put(OUTPUT, new WithdrawOutput(String.valueOf(product.id()), product.get("sku"), onSale));
     }
 
     static void receive(ProcessContext ctx) {

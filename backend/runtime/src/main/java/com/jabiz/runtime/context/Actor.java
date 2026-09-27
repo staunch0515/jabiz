@@ -7,7 +7,7 @@ import java.util.Set;
 public record Actor(String actorId, String tenantId, Set<String> roles, Set<String> permissions) {
 
     /** Actor id of requests nobody has authenticated. */
-    public static final String ANONYMOUS_ID = "anonymous";
+    public static final String ANONYMOUS_ID = com.jabiz.context.RequestContext.ANONYMOUS_ACTOR;
 
     /** An unauthenticated caller: no tenant, no roles, no permissions. */
     public static final Actor ANONYMOUS = new Actor(ANONYMOUS_ID, null, Set.of(), Set.of());

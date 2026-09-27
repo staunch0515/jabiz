@@ -166,7 +166,7 @@ public class SqlTemplateRegistry implements PlatformCheck {
                 : CheckProblem.error(CATEGORY, location, problem.message()));
         }
         checkDatasets(resolved.query(), source.path());
-        if (needsPermissions && query.permissions().isEmpty()) {
+        if (needsPermissions && query.permissions().isEmpty() && !query.publicAccess()) {
             String message = "query " + query.queryId() + " declares no permissions";
             problems.add(development
                 ? CheckProblem.warning(CATEGORY, source.path(), message + " (allowed in the dev profile only)")
