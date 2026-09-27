@@ -391,8 +391,10 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 1. `st.initial(...)` 显式声明状态机的初始状态；声明后以声明为准，未声明时照旧推导（02 §4）。
 2. 构建期校验：声明的状态属于状态字典、有出边、不重复。
 3. `CallProcess.forEach(...)`：对运行时才知道数量的输入逐个调用子流程（同一事务、依次执行），06 §2。
+4. 修正：计算步骤累积违规后遇到 `SaveChanges.now`，同一违规被报告两次（现在每条只报告一次）。
 
 **验收标准**
 - [x] 回到起点的状态机（`DRAFT → PUBLISHED → DRAFT`）插入时自动取初始状态、往返迁移合法（`ContentAuthoringIT`）。
 - [x] 构建期校验与推导行为不变（`EntityBuilderTest`）。
+- [x] 累积的违规在 `SaveChanges.now` 前后只报告一次（`ProcessEngineIT`，先写复现的失败测试）。
 - [x] `forEach` 每个输入一个子操作（`parent_seq_id` 指向调用方、顺序与输出一致）；空列表不调用；任一失败全部回滚（`ProcessEngineIT`）。

@@ -174,6 +174,13 @@ class ProcessEngineIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void violationsCollectedBeforeASaveAreReportedOnce() {
+        assertThatThrownBy(() -> asTestRequest(executor.execute(ItProcessFixtures.REJECT_THEN_SAVE,
+            new TicketInput(id(), "t", 1L))).block())
+            .satisfies(error -> assertThat(codes(error)).containsExactly("IT_REFUSED"));
+    }
+
+    @Test
     void forEachCallsTheSubProcessOncePerInputInOrder() {
         String parent = id();
         List<String> children = List.of(id(), id(), id());
