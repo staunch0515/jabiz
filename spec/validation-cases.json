@@ -175,7 +175,7 @@
   }, {
     "name" : "headline",
     "immutable" : false,
-    "required" : [ ],
+    "required" : true,
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
@@ -183,6 +183,7 @@
     "format" : "plain",
     "multiline" : false,
     "maxLength" : 8,
+    "requiredLanguages" : [ ],
     "locales" : [ "zh", "ja", "en" ],
     "type" : "custom",
     "kindId" : "jabiz.i18n-text",
@@ -191,7 +192,7 @@
   }, {
     "name" : "summary",
     "immutable" : false,
-    "required" : [ "en" ],
+    "required" : false,
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
@@ -199,6 +200,7 @@
     "format" : "markdown",
     "multiline" : true,
     "maxLength" : 10,
+    "requiredLanguages" : [ "en" ],
     "locales" : [ "zh", "ja", "en" ],
     "type" : "custom",
     "kindId" : "jabiz.i18n-text",

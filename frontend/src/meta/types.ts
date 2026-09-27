@@ -20,6 +20,8 @@ interface FieldBase {
   generated: boolean
   systemManaged: boolean
   sensitive: boolean
+  /** Changed by processes only: shown read-only, never sent (docs/design/16-content-authoring.md section 5). */
+  processOnly: boolean
   operators: string[]
   rules: RuleSpec[]
 }
@@ -51,6 +53,8 @@ export interface EntityMeta {
   entity: string
   label: string
   primaryKey: string
+  /** The field that stands for an instance where it is referenced (16 section 2). */
+  display?: string
   temporal: boolean
   allowScheduled?: boolean
   publishesChanges: boolean
@@ -62,6 +66,8 @@ export interface EntityMeta {
   unique: { name: string; fields: string[] }[]
   /** Message templates by rule code, in the language of the request. */
   messages: Record<string, string>
+  /** The platform's default language, the first fallback of multilingual texts. */
+  defaultLocale?: string
 }
 
 export type DatasetEntry = Required<components['schemas']['DatasetEntry']>

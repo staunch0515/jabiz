@@ -1,16 +1,21 @@
 import { DrawerForm, ProFormDateTimePicker, ProFormText } from '@ant-design/pro-components'
-import { Alert, App, Form } from 'antd'
+import { Alert, App, Form, Space } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
+import { actionsFor } from '../meta/actions'
 import { changedAttributes, formFieldsOf, wireAttributes, type FormField } from '../meta/entityForm'
+import { useDatasets, useProcesses } from '../meta/hooks'
 import { enabledCodes, fieldLabel, findField, toFormValue } from '../meta/kinds'
+import { childListsOf, referenceSourceOf, useEntityMetas } from '../meta/references'
 import { describe, validateField } from '../meta/validation'
 import type { DatasetEntry, DictItem, EntityInstance, EntityMeta, Violation } from '../meta/types'
+import ChildEntityList from './ChildEntityList'
 import EntityField from './EntityField'
+import RowActions from './RowActions'
 
 interface Props {
   dataset: DatasetEntry
@@ -18,6 +23,10 @@ interface Props {
   dictionaries: Record<string, DictItem[]>
   /** The entry to edit; absent to create one. */
   instance?: EntityInstance
+  /** Values of a new entry that are fixed (the parent of a child created from its parent's details). */
+  preset?: Record<string, unknown>
+  /** Shows the entry without offering to change it (the caller may not write through the dataset). */
+  readOnly?: boolean
   open: boolean
   onOpenChange(open: boolean): void
   onSaved(): void
@@ -30,7 +39,17 @@ type Errors = Record<string, Violation[]>
  * semantic kinds; the client check reports the server's rule codes before anything is sent, and whatever the server
  * still refuses (400/422 violations) is shown at the same place.
  */
-export default function EntityFormDrawer({ dataset, entity, dictionaries, instance, open, onOpenChange, onSaved }: Props) {
+export default function EntityFormDrawer({
+  dataset,
+  entity,
+  dictionaries,
+  instance,
+  preset,
+  readOnly = false,
+  open,
+  onOpenChange,
+  onSaved,
+}: Props) {
   const { t } = useTranslation()
   const { message } = App.useApp()
   const { can } = useAuth()
@@ -38,7 +57,24 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
   const [errors, setErrors] = useState<Errors>({})
   const [general, setGeneral] = useState<string[]>([])
   const mode = instance ? 'edit' : 'create'
-  const fields = useMemo(() => formFieldsOf(entity, mode), [entity, mode])
+  const fields = useMemo(() => {
+    const base = formFieldsOf(entity, mode, preset)
+    return readOnly ? base.map((f) => ({ ...f, disabled: true, fixed: false })) : base
+  }, [entity, mode, preset, readOnly])
+  const datasetList = useDatasets().data
+  const processList = useProcesses().data
+  const datasets = useMemo(() => datasetList ?? [], [datasetList])
+  const processes = useMemo(() => processList ?? [], [processList])
+  // Reference targets (picked by name) and, for an existing entry, every entity that may list children under it.
+  const metas = useEntityMetas([
+    ...entity.fields.flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])),
+    ...(instance ? datasets.filter((d) => d.isDefault).map((d) => d.entity) : []),
+  ])
+  const children = useMemo(
+    () => (instance ? childListsOf(entity.entity, datasets, metas) : []),
+    [instance, entity.entity, datasets, metas],
+  )
+  const actions = useMemo(() => actionsFor(entity.entity, processes), [entity.entity, processes])
   const original = useMemo(() => (instance?.attributes ?? {}) as Record<string, unknown>, [instance])
   const codes = useMemo(() => enabledCodes(dictionaries), [dictionaries])
   const temporal = entity.temporal
@@ -49,9 +85,10 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
     for (const { field } of fields) {
       // A new entry starts with "no" for yes/no fields: an untouched switch means false, not "not given".
       values[field.name] = instance || field.type !== 'bool' ? toFormValue(field, original[field.name]) : false
+      if (preset && field.name in preset) values[field.name] = toFormValue(field, preset[field.name])
     }
     return values
-  }, [fields, original, instance])
+  }, [fields, original, instance, preset])
 
   const messageOf = (v: { field: string; ruleCode: string; params: Record<string, unknown> }): Violation => {
     const field = findField(entity, v.field)
@@ -134,7 +171,9 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
     <DrawerForm
       form={form}
       name="entity"
-      title={t(mode === 'create' ? 'form.createTitle' : 'form.editTitle', { entity: entity.label })}
+      title={t(readOnly ? 'form.viewTitle' : mode === 'create' ? 'form.createTitle' : 'form.editTitle', {
+        entity: entity.label,
+      })}
       open={open}
       onOpenChange={(next) => {
         if (!next) {
@@ -147,8 +186,8 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
       // Dates reach onFinish as Dayjs, converted to ISO-8601 with offset by the adapter (toWireValue, effective time).
       // ProForm's default formats them as local text without a zone, which the server rejects.
       dateFormatter={false}
-      drawerProps={{ destroyOnHidden: true, width: 560 }}
-      submitter={{ searchConfig: { submitText: t('form.submit'), resetText: t('form.cancel') } }}
+      drawerProps={{ destroyOnHidden: true, width: children.length > 0 ? 720 : 560 }}
+      submitter={readOnly ? false : { searchConfig: { submitText: t('form.submit'), resetText: t('form.cancel') } }}
       onValuesChange={(changed: Record<string, unknown>, all: Record<string, unknown>) => {
         // Checked while typing, with the same rules as on submit; a server message of that field is replaced.
         setErrors((previous) => {
@@ -168,6 +207,11 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
       {general.length > 0 && (
         <Alert type="error" showIcon message={general.join(' ')} style={{ marginBottom: 16 }} data-testid="form-error" />
       )}
+      {instance && actions.length > 0 && (
+        <Space size="middle" style={{ marginBottom: 16 }} data-testid="detail-actions">
+          <RowActions actions={actions} id={instance.id} attributes={original} onDone={onSaved} />
+        </Space>
+      )}
       {fields.map((formField) => (
         <EntityField
           key={formField.field.name}
@@ -176,9 +220,11 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
           dictionaries={dictionaries}
           violations={errors[formField.field.name]}
           t={t}
+          referenceDatasetId={referenceSourceOf(formField.field, datasets, metas)?.id}
+          defaultLocale={entity.defaultLocale}
         />
       ))}
-      {showEffectiveTime && (
+      {showEffectiveTime && !readOnly && (
         <ProFormDateTimePicker
           name="__effectiveTime"
           label={t('form.effectiveTime')}
@@ -186,7 +232,11 @@ export default function EntityFormDrawer({ dataset, entity, dictionaries, instan
           fieldProps={{ style: { width: '100%' }, disabledDate: dataset.allowScheduled ? undefined : (d) => d.isAfter(dayjs()) }}
         />
       )}
-      {temporal && <ProFormText name="__reason" label={t('form.reason')} />}
+      {temporal && !readOnly && <ProFormText name="__reason" label={t('form.reason')} />}
+      {instance &&
+        children.map((child) => (
+          <ChildEntityList key={`${child.entity.entity}.${child.field}`} child={child} parentId={String(instance.id)} />
+        ))}
     </DrawerForm>
   )
 }

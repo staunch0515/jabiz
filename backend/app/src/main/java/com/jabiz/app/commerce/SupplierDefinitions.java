@@ -36,6 +36,8 @@ public class SupplierDefinitions extends BaseEntityDefinitions {
             .apply(Rules.range("SUPPLIER_LEAD_TIME_RANGE", BigDecimal.ONE, new BigDecimal("365"))));
         eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
         eb.unique("uk_supplier_code", "supplierCode");
+        // Pickers and reference columns show suppliers by name (docs/design/16-content-authoring.md section 2).
+        eb.display("supplierName");
         eb.listView("default", lv -> lv
             .columns("supplierCode", "supplierName", "countryCode", "leadTimeDays", "active")
             .filters("supplierCode", "supplierName", "countryCode", "leadTimeDays", "active")

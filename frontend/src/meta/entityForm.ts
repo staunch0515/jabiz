@@ -7,18 +7,29 @@ import type { EntityMeta, FieldMeta } from './types'
  * Entity metadata → the fields of the generated form (docs/design/12-frontend.md section 5). System-managed and
  * generated fields are the platform's; sensitive ones are written only by dedicated processes (400 SENSITIVE_FIELD
  * otherwise), so none of them is offered. Immutable fields can be set on creation and are read-only afterwards.
+ * Process-only fields are shown read-only when editing and left out on creation, where the platform fills them
+ * (docs/design/16-content-authoring.md section 5). Preset fields (a child created from its parent) are fixed.
  */
 export type FormMode = 'create' | 'edit'
 
 export interface FormField {
   field: FieldMeta
   disabled: boolean
+  /** Read-only but sent: a preset value (the parent of a child created from its parent's details). */
+  fixed?: boolean
 }
 
-export function formFieldsOf(entity: EntityMeta, mode: FormMode): FormField[] {
+export function formFieldsOf(entity: EntityMeta, mode: FormMode, preset: Record<string, unknown> = {}): FormField[] {
   return entity.fields
-    .filter((f) => !f.systemManaged && !f.generated && !f.sensitive)
-    .map((field) => ({ field, disabled: mode === 'edit' && (field.immutable || field.name === entity.primaryKey) }))
+    .filter((f) => !f.systemManaged && !f.generated && !f.sensitive && !(f.processOnly && mode === 'create'))
+    .map((field) => {
+      const fixed = mode === 'create' && field.name in preset
+      return {
+        field,
+        fixed,
+        disabled: fixed || field.processOnly || (mode === 'edit' && (field.immutable || field.name === entity.primaryKey)),
+      }
+    })
 }
 
 /**
@@ -27,8 +38,8 @@ export function formFieldsOf(entity: EntityMeta, mode: FormMode): FormField[] {
  */
 export function wireAttributes(fields: FormField[], values: Record<string, unknown>): Record<string, unknown> {
   const attributes: Record<string, unknown> = {}
-  for (const { field, disabled } of fields) {
-    if (disabled) continue
+  for (const { field, disabled, fixed } of fields) {
+    if (disabled && !fixed) continue
     const value = toWireValue(field, values[field.name])
     if (value === undefined) continue
     attributes[field.name] = value === '' ? null : value
@@ -54,6 +65,8 @@ export function sameValue(field: FieldMeta, a: unknown, b: unknown): boolean {
     }
     case 'json':
       return JSON.stringify(a) === JSON.stringify(b)
+    case 'i18n':
+      return JSON.stringify(sortedKeys(a)) === JSON.stringify(sortedKeys(b))
     default:
       return String(a) === String(b)
   }
@@ -77,4 +90,9 @@ export function changedAttributes(
     if (!sameValue(field, original[field.name], next)) changed[field.name] = next
   }
   return changed
+}
+
+function sortedKeys(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y)))
 }

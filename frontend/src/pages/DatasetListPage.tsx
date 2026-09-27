@@ -8,16 +8,20 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import EntityFormDrawer from '../components/EntityFormDrawer'
+import RowActions from '../components/RowActions'
+import { actionsFor } from '../meta/actions'
 import { buildColumns, toRow, type Row } from '../meta/columns'
-import { useDataset, useDictionaries, useEntityMeta } from '../meta/hooks'
+import { useDataset, useDatasets, useDictionaries, useEntityMeta, useProcesses } from '../meta/hooks'
 import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
+import { useEntityMetas, useReferenceLabels } from '../meta/references'
 import type { EntityInstance } from '../meta/types'
 import { paths } from './paths'
 
 /**
  * The generated list page of any dataset (docs/design/12-frontend.md section 5): columns, search and sorting from
- * the list view, create / edit / delete through the dataset API when the user may write, and — for temporal
- * entities — the data at another point in time and the history of each entry.
+ * the list view, create / edit / delete through the dataset API when the user may write, the processes acting on the
+ * entity as row actions, references shown by their labels, and — for temporal entities — the data at another point
+ * in time and the history of each entry.
  */
 export default function DatasetListPage() {
   const { t, i18n } = useTranslation()
@@ -29,6 +33,17 @@ export default function DatasetListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const actionRef = useRef<ActionType>(undefined)
   const [editing, setEditing] = useState<EntityInstance | null | undefined>(undefined)
+  const [rows, setRows] = useState<Row[]>([])
+  const datasets = useDatasets()
+  const processes = useProcesses()
+  const targets = useEntityMetas(
+    (entity.data?.fields ?? []).flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])),
+  )
+  const labels = useReferenceLabels(entity.data, rows, datasets.data ?? [], targets)
+  const actions = useMemo(
+    () => (entity.data ? actionsFor(entity.data.entity, processes.data ?? []) : []),
+    [entity.data, processes.data],
+  )
 
   const asOf = searchParams.get('asOf')
   const knownAt = searchParams.get('knownAt')
@@ -40,8 +55,10 @@ export default function DatasetListPage() {
 
   const columns = useMemo<ProColumns<Row>[]>(() => {
     if (!entity.data) return []
-    const generated = buildColumns(entity.data, view, dictionaries, t, i18n.language)
-    if (!canWrite && !showHistory) return generated
+    const generated = buildColumns(entity.data, view, dictionaries, t, i18n.language, {
+      labels,
+      defaultLocale: entity.data.defaultLocale,
+    })
     return [
       ...generated,
       {
@@ -51,10 +68,16 @@ export default function DatasetListPage() {
         fixed: 'right',
         render: (_, row) => (
           <Space size="small">
-            {canWrite && (
-              <a onClick={() => setEditing(row.__instance)} data-testid="row-edit">
-                {t('list.edit')}
-              </a>
+            <a onClick={() => setEditing(row.__instance)} data-testid={canWrite ? 'row-edit' : 'row-view'}>
+              {t(canWrite ? 'list.edit' : 'list.view')}
+            </a>
+            {!timeTravel && (
+              <RowActions
+                actions={actions}
+                id={row.__instance.id}
+                attributes={row}
+                onDone={() => actionRef.current?.reload()}
+              />
             )}
             {canWrite && (
               <Popconfirm
@@ -88,7 +111,7 @@ export default function DatasetListPage() {
         ),
       },
     ]
-  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, datasetId, message])
+  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, datasetId, message, labels, actions, timeTravel])
 
   if (dataset.isLoading || (dataset.data && entity.isLoading)) return <Spin style={{ margin: 48 }} />
   if (!dataset.data) return <Result status="404" title={datasetId} />
@@ -118,6 +141,7 @@ export default function DatasetListPage() {
         actionRef={actionRef}
         columns={columns}
         params={{ asOf, knownAt, datasetId }}
+        onLoad={(loaded) => setRows(loaded)}
         dateFormatter={(value) => value.toISOString()}
         scroll={{ x: 'max-content' }}
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
@@ -179,6 +203,7 @@ export default function DatasetListPage() {
           entity={entity.data}
           dictionaries={dictionaries}
           instance={editing ?? undefined}
+          readOnly={!canWrite}
           open
           onOpenChange={(open) => {
             if (!open) setEditing(undefined)

@@ -36,6 +36,8 @@ const en = {
     history: 'History',
     actions: 'Actions',
     deleteConfirm: 'Delete this entry?',
+    view: 'View',
+    actionConfirm: 'Run “{{action}}” on this entry?',
     deleted: 'Deleted.',
     saved: 'Saved.',
     asOf: 'As of',
@@ -48,6 +50,9 @@ const en = {
   form: {
     createTitle: 'New {{entity}}',
     editTitle: 'Edit {{entity}}',
+    viewTitle: '{{entity}}',
+    preview: 'Preview',
+    requiredLanguage: 'required',
     effectiveTime: 'Takes effect at',
     effectiveTimeHint: 'Empty: now. Later: scheduled. Earlier: a correction of the past (needs a reason).',
     reason: 'Reason',
@@ -103,6 +108,7 @@ const en = {
     succeeded: 'The process completed.',
     addItem: 'Add',
   },
+  languages: { zh: '中文', ja: '日本語', en: 'English' },
   fields: {
     effectStartTime: 'Effective from',
     createdTime: 'Recorded at',
@@ -115,6 +121,7 @@ const en = {
 type Texts = typeof en
 
 const zh: Texts = {
+  languages: { zh: '中文', ja: '日本語', en: 'English' },
   app: { title: 'jabiz', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了' },
   login: {
     title: '登录',
@@ -148,6 +155,8 @@ const zh: Texts = {
     history: '历史',
     actions: '操作',
     deleteConfirm: '确定删除这条数据？',
+    view: '查看',
+    actionConfirm: '对这条数据执行“{{action}}”？',
     deleted: '已删除。',
     saved: '已保存。',
     asOf: '时间点',
@@ -160,6 +169,9 @@ const zh: Texts = {
   form: {
     createTitle: '新建{{entity}}',
     editTitle: '编辑{{entity}}',
+    viewTitle: '{{entity}}',
+    preview: '预览',
+    requiredLanguage: '必填',
     effectiveTime: '生效时间',
     effectiveTimeHint: '留空：立即生效；晚于现在：预定；早于现在：追溯更正（须填写原因）。',
     reason: '原因',
@@ -225,6 +237,7 @@ const zh: Texts = {
 }
 
 const ja: Texts = {
+  languages: { zh: '中文', ja: '日本語', en: 'English' },
   app: { title: 'jabiz', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました' },
   login: {
     title: 'ログイン',
@@ -258,6 +271,8 @@ const ja: Texts = {
     history: '履歴',
     actions: '操作',
     deleteConfirm: 'このデータを削除しますか？',
+    view: '表示',
+    actionConfirm: 'このデータに「{{action}}」を実行しますか？',
     deleted: '削除しました。',
     saved: '保存しました。',
     asOf: '時点',
@@ -270,6 +285,9 @@ const ja: Texts = {
   form: {
     createTitle: '{{entity}}の新規作成',
     editTitle: '{{entity}}の編集',
+    viewTitle: '{{entity}}',
+    preview: 'プレビュー',
+    requiredLanguage: '必須',
     effectiveTime: '有効開始日時',
     effectiveTimeHint: '空欄：即時。未来：予約。過去：遡及訂正（理由が必要）。',
     reason: '理由',

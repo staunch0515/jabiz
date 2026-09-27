@@ -294,6 +294,7 @@ public class DatasetEntityManager {
     ) {
         Map<String, Object> raw = new LinkedHashMap<>(instance.attributes());
         raw.putIfAbsent(def.primaryKey, instance.id());
+        fillProcessOnly(dataset, def, scope, raw, instance.state());
         return dictionaryLookup(def, raw).flatMap(lookup -> Mono.defer(() -> {
             requireWritable(def);
 
@@ -548,6 +549,28 @@ public class DatasetEntityManager {
                     timeSlice(dataset, def, asOf, knownAt));
                 return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
             }));
+    }
+
+    /**
+     * Current instances whose display field contains {@code q} (docs/design/16-content-authoring.md section 2), within
+     * the dataset scope, ordered by the display text in {@code language}, then {@code defaultLanguage}.
+     */
+    public Flux<EntityInstance> lookup(DatasetDefinition dataset, EntityDefinition def, String q, int limit,
+        String language, String defaultLanguage) {
+        return observations.flux(PlatformObservations.DATASET_QUERY, "lookup " + def.name, tags(dataset),
+            RequestContexts.current().flatMapMany(request -> readEngine(dataset).executeRawQuery(
+                queryCompiler.compileLookup(dataset, def, q, language, defaultLanguage, limit,
+                    dataset.scope().resolve(request), currentSlice(def, null, null)))
+                .map(row -> hydrate(def, row))));
+    }
+
+    /** Current instances with the given primary keys within the dataset scope; keys outside it are left out. */
+    public Flux<EntityInstance> byIds(DatasetDefinition dataset, EntityDefinition def, List<?> ids) {
+        return observations.flux(PlatformObservations.DATASET_QUERY, "labels " + def.name, tags(dataset),
+            RequestContexts.current().flatMapMany(request -> readEngine(dataset).executeRawQuery(
+                queryCompiler.compileLabels(dataset, def, ids, dataset.scope().resolve(request),
+                    currentSlice(def, null, null)))
+                .map(row -> hydrate(def, row))));
     }
 
     /** Number of entities the query matches within the dataset scope, ignoring its paging. */
@@ -877,6 +900,28 @@ public class DatasetEntityManager {
                 }
             } else if (fillMissing) {
                 attrs.put(filter.getKey(), expected);
+            }
+        }
+    }
+
+    /**
+     * Fills the process-only fields an insert leaves out (docs/design/16-content-authoring.md section 5): the lifecycle
+     * field with the given or the sole initial state, a scope field with its scope value. Done before validation, so
+     * a required one is satisfied; the usual checks of the initial state and the scope still apply.
+     */
+    void fillProcessOnly(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scope,
+        Map<String, Object> raw, String stateHint) {
+        for (String field : def.processOnlyFields()) {
+            if (raw.containsKey(field)) {
+                continue;
+            }
+            if (field.equals(def.stateField)) {
+                String state = stateHint != null ? stateHint : def.soleInitialState();
+                if (state != null) {
+                    raw.put(field, state);
+                }
+            } else if (dataset.isTarget(def.name) && scope.containsKey(field)) {
+                raw.put(field, scope.get(field));
             }
         }
     }

@@ -257,6 +257,11 @@ public class RevertService {
                     def.sensitiveFields().stream().filter(item.changedFields()::contains)
                         .forEach(field -> sensitive.add(new Violation(field, PlatformErrorCodes.SENSITIVE_FIELD,
                             "A revert cannot restore an earlier value of " + def.name + "." + field)));
+                    // Process-only fields are corrected by processes, or a revert would bypass the lifecycle
+                    // (docs/design/16-content-authoring.md section 5).
+                    def.processOnlyFields().stream().filter(item.changedFields()::contains)
+                        .forEach(field -> sensitive.add(new Violation(field, PlatformErrorCodes.PROCESS_ONLY_FIELD,
+                            "A revert cannot restore an earlier value of " + def.name + "." + field)));
                 }
             }
         }
