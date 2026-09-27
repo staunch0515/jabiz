@@ -204,6 +204,7 @@ export default function DatasetListPage() {
           dictionaries={dictionaries}
           instance={editing ?? undefined}
           readOnly={!canWrite}
+          historical={timeTravel}
           open
           onOpenChange={(open) => {
             if (!open) setEditing(undefined)

@@ -110,7 +110,8 @@ eb.field("status", f -> f.physicalColumn("status").asCode(null, "DRAFT", "SUBMIT
 - **插入时的取值**：插入（任何途径）中没有给出该字段时由平台填值——是状态机的状态字段时取初始状态；是数据视图范围字段时取范围值（范围的自动填充照常）；
   否则为空。流程显式给出的值不受影响（照常经状态机的初始状态检查）。
 - 构建期检查：不能同时是 `sensitive` 或 `generated`。启动检查（`DatasetRegistry`，一次性报告）：对每个可直接写入的数据视图
-  （非只读、非 `processOnlyWrites`），必填的 `processOnly` 字段必须是状态机的状态字段或该视图的范围字段（否则经该视图无法插入）。
+  （非只读、非 `processOnlyWrites`），必填的 `processOnly` 字段必须是状态机的状态字段或该视图的范围字段，且 `processOnly` 的状态字段只能有一个初始状态
+（否则经该视图无法插入）。
 - 导出 `processOnly: true`；JSON Schema 中 `readOnly: true`；后台表单把它显示为只读，新建与修改都不发送它。
 - 与状态机、守卫、实体级校验的关系不变：流程写入时它们照常裁决。
 
