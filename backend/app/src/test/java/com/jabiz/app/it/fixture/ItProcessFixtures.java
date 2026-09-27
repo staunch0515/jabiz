@@ -162,6 +162,16 @@ public final class ItProcessFixtures {
                 return in.childTickets().stream().map(id -> new ChildInput(id, id.equals(in.failing()))).toList();
             }, "children")));
 
+    /** Rejects, then saves: the save refuses because of the violation, which is reported once. */
+    public static final ProcessDefinition<TicketInput, TicketOutput, ProcessContext> REJECT_THEN_SAVE =
+        ProcessDefinition.define("IT_REJECT_THEN_SAVE", 1, TicketInput.class, TicketOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, in) -> new ProcessContext(start))
+                .outputMapper(ctx -> null)
+                .compute("Reject", (metadata, ctx) -> ctx.reject(new Violation("title", "IT_REFUSED", "refused")))
+                .step("Save", SaveChanges.now()));
+
     /** Three steps: two report violations, one registers a change that must never be written. */
     public static final ProcessDefinition<TicketInput, TicketOutput, ProcessContext> MULTI_VIOLATION =
         ProcessDefinition.define("IT_MULTI_VIOLATION", 1, TicketInput.class, TicketOutput.class, ProcessContext.class,
@@ -383,6 +393,11 @@ public final class ItProcessFixtures {
         @Bean
         ProcessDefinition<FamilyInput, FamilyOutput, ProcessContext> itFamily() {
             return FAMILY;
+        }
+
+        @Bean
+        ProcessDefinition<TicketInput, TicketOutput, ProcessContext> itRejectThenSave() {
+            return REJECT_THEN_SAVE;
         }
 
         @Bean
