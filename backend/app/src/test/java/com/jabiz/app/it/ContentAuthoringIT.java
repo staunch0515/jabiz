@@ -155,6 +155,21 @@ class ContentAuthoringIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void aLifecycleCanReturnToItsDeclaredInitialState() {
+        // DRAFT -> PUBLISHED -> DRAFT: DRAFT is entered again, so it is the initial state only because it is declared.
+        String id = newId();
+        created(JP_DATASET, id, Map.of("title", "Round trip"));
+        post("/api/processes/" + ItContentFixtures.PUBLISH + "/1", writer(), Map.of("articleId", id))
+            .expectStatus().isOk();
+        post("/api/processes/" + ItContentFixtures.WITHDRAW + "/1", writer(), Map.of("articleId", id))
+            .expectStatus().isOk();
+        assertThat(attributes(read(id))).containsEntry("status", "DRAFT");
+        post("/api/processes/" + ItContentFixtures.PUBLISH + "/1", writer(), Map.of("articleId", id))
+            .expectStatus().isOk();
+        assertThat(attributes(read(id))).containsEntry("status", "PUBLISHED");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void multilingualTextsAreStoredByLanguageAndValidated() {
         String id = newId();
