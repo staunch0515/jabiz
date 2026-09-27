@@ -21,6 +21,7 @@ const photo: FileFieldMeta = {
   generated: false,
   systemManaged: false,
   sensitive: false,
+  processOnly: false,
   operators: [],
   rules: [],
 }
