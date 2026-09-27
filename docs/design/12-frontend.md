@@ -29,7 +29,7 @@ frontend/
 |---|---|---|
 | `GET /api/meta/entities/{name}` | 实体导出（02 §8）+ 按请求语言的 `label`（实体与字段）与 `messages`（本实体前端可能报出的错误码 → 文案模板） | 已认证 |
 | `GET /api/meta/datasets` | 调用方**可读**的数据视图：`id`、`entity`、`label`、`isDefault`、`temporal`、`allowScheduled`、`readOnly`、`processOnlyWrites`、`allowTimeTravel`、`softDelete`、`listView`、`maxQueryBatchSize`、`canWrite` | 已认证，按视图读权限过滤 |
-| `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema） | 已认证，按流程权限过滤 |
+| `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema）、`actsOn`（`{entity, input, when?}`，16 §3） | 已认证，按流程权限过滤 |
 | `GET /api/auth/menus`、`/api/auth/me` | 动态菜单、当前操作人（10 §3） | 已认证 |
 | `GET /api/dictionaries/{urn}` | 字典项（按语言） | 已认证 |
 
@@ -71,8 +71,10 @@ frontend/
 | `code` | 下拉（字典的启用项按顺序，否则固定值） | 字典标签 | 等于 |
 | `bool` | 开关（新建时默认"否"） | 是 / 否 | 等于 |
 | `version` | 整数 | 原样 | 区间 |
-| `semanticIdentity` / `reference` | 文本框 | 原样 | 等于 |
-| `custom` / `none` | JSON 文本 | JSON | 等于 |
+| `semanticIdentity` | 文本框 | 原样 | 等于 |
+| `reference` | 可搜索下拉（目标实体声明了 `display` 且默认视图可读时，`lookup`；否则文本框） | 标签（`labels`，按页批量；取不到时主键） | 等于 |
+| `jabiz.i18n-text` | 每种语言一个标签页（必填语言带标记）；`markdown` 附预览 | 按语言回退选择，回退时带 `lang` 属性；Markdown 不渲染原始 HTML | —（只有 `isNull`） |
+| 其他 `custom` / `none` | JSON 文本 | JSON | 等于 |
 
 - 列：列表视图的 `columns`（没有列表视图时取前 8 个非系统字段）；筛选、排序只对白名单字段开放，默认排序取 `defaultSort`。
   敏感字段从不出现在列、表单与回看中。
@@ -95,7 +97,8 @@ frontend/
 - **共享用例** `spec/validation-cases.json`：字段元数据 + 输入值 + 期望的错误码。core `ValidationCasesTest` 断言①文件中的字段元数据
   与 `MetaModelExporter` 的导出**完全一致**（`-Dvalidation-cases.update=true` 重写）②服务端得到期望的错误码；
   前端 `validation.cases.test.ts` 读同一文件断言得到**相同**的错误码。新增规则种类或语义约束时先加用例。
-- 仅服务端的规则、`Custom` 类型（其规范类型由服务端 SPI 决定，前端只检查必填）、实体级校验、状态机、唯一性等需要服务端状态的检查不在前端重复，服务端的回答照常显示。
+- `jabiz.i18n-text` 的转换与语义约束（`INVALID_VALUE`、`TOO_LONG`（带 `lang`）、`TRANSLATION_REQUIRED`）在前端复刻，并在共享用例中（16 §1.2）。
+- 仅服务端的规则、其他 `Custom` 类型（其规范类型由服务端 SPI 决定，前端只检查必填）、实体级校验、状态机、唯一性等需要服务端状态的检查不在前端重复，服务端的回答照常显示。
   `NOT_FUTURE` 在前端按浏览器时钟判断，仅作提示。
 
 ## 6. 页面
@@ -109,6 +112,10 @@ frontend/
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是两个目录；语言切换记在 `localStorage`（仅本机偏好）。
+- 实体上的操作（16 §3）：流程目录中 `actsOn` 指向该实体的流程，在列表行与详情中显示为按钮（`when` 只是显示提示）；打开的流程表单中主键已填且只读，
+  输入只有主键时确认后直接执行。
+- 详情抽屉中的子实体列表（16 §4）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
+- `processOnly` 字段在表单中只读，新建与修改都不发送（16 §5）。
 - 按权限显示操作：新建 / 编辑 / 删除看 `canWrite`，历史看 `temporal && allowTimeTravel`，操作详情与撤销看当前操作人的权限。
 
 ## 7. 构建与运行
@@ -119,8 +126,8 @@ frontend/
 
 ## 8. 测试
 
-- Vitest：适配层每个模块（`decimal`、`validation`、`kinds`、`listQuery`、`entityForm`、`processForm`、`history`、`problem`）、
-  共享校验用例、历史时间线组件。
+- Vitest：适配层每个模块（`decimal`、`validation`、`kinds`、`listQuery`、`entityForm`、`processForm`、`history`、`problem`、`i18nText`）、
+  共享校验用例、历史时间线组件；多语言控件、Markdown 预览（不渲染原始 HTML）、引用下拉、行操作按钮的显示条件（16 §8）。
 - Playwright（`e2e/`，对运行中的 jar，`E2E_BASE_URL` 默认 `http://localhost:8080`，管理员 `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`，
   可用 `E2E_CHROMIUM` 指定已安装的 Chromium）：登录与失败、动态菜单与三种语言、只读用户看不到写操作；`Carrier` 列表（筛选、排序、区间）；
   表单新建 / 编辑 / 删除；六种非法输入的前端错误码与直接调用接口的错误码相同；历史时间线、回看、预定、操作详情、撤销；

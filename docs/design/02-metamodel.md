@@ -35,13 +35,19 @@ public interface CustomKindSupport {
     Class<?> javaType(Map<String, Object> params);
     Set<String> allowedOperators(Map<String, Object> params);  // 查询时允许的比较
     Map<String, Object> export(Map<String, Object> params);    // 导出给前端
+    /** 语义约束（在转换成功之后）；默认没有。返回的违规只取第一个，与其他语义类型约束一样【D20】。 */
+    default List<KindViolation> validate(Map<String, Object> params, Object value) { return List.of(); }
 }
 ```
+
+- `KindViolation(code, params)`：错误码与文案参数；`EntityValidator` 补上字段名后作为 `Violation` 报告（400）。
+  错误码与其他语义约束一样必须在三种语言中有文案。
 
 - `FieldValueCoercer`、`QueryCompiler`、`MetaModelExporter` 对 `Custom` 委托给注册的 `CustomKindSupport`；
   启动时若有字段使用了未注册的 `kindId`，启动失败（`SemanticKindChecker`）。
 - 注册方式：`java.util.ServiceLoader`（`META-INF/services/com.jabiz.entity.CustomKindSupport`），由 core 的 `CustomKinds`
   发现；`CustomKinds.register(...)` 供测试等场合手动注册。同一 `kindId` 只能由一个实现注册。
+- runtime 提供 `jabiz.labels`（第 5 节）与 `jabiz.i18n-text`（多语言内容，语义在 core `com.jabiz.entity.i18n`，见 16 §1）。
 - `ext-geo` 提供 `geo.quantity`（`BigDecimal`，参数 `dimension`、`unit`）与 `geo.h3`（`Long`，参数 `resolution`）、
   字段模式 `GeoFields`、迁移守卫 `H3AreaGuard`，错误文案在 `jabiz/ext/geo/messages_*.properties`（应用在 `jabiz.i18n.bundles` 中加入）。
   core 与 runtime 不依赖 ext-geo（ArchUnit 检查）；移除 ext-geo 后二者仍可编译并通过测试。
@@ -61,7 +67,8 @@ public interface CustomKindSupport {
 | `None`（过渡） | 全部 |
 
 语义类型本身带来的输入约束由 `EntityValidator` 检查：`Text.maxLength`（按字符计）→ `TOO_LONG`；
-`Numeric(precision, scale)` → `NUMERIC_PRECISION`；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）。
+`Numeric(precision, scale)` → `NUMERIC_PRECISION`；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）；
+`Custom` → `CustomKindSupport.validate`（例如 `jabiz.i18n-text` 的 `TOO_LONG`、`TRANSLATION_REQUIRED`，16 §1.2）。
 
 ## 2. 逻辑名与物理名分离
 
@@ -197,7 +204,18 @@ eb.unique("uk_user_name", "userName");            // 可多字段
 列表视图不得显示、筛选、排序它，SQL 模板不得读取它；导出为 `sensitive: true`，JSON Schema 中 `writeOnly: true`。
 日志与操作记录中按名字遮蔽（10 §6）。
 
-### 6.2 变更事件【D14】
+### 6.2 只经流程写入的字段【D20】
+
+`f.processOnly()` 标记只由流程改变的字段（状态、审核意见等）：数据视图 API 与通用实体流程不接受写入（400 `PROCESS_ONLY_FIELD`），
+撤销不恢复它（422 `PROCESS_ONLY_FIELD`），但照常可读、可筛选、可排序；插入中缺省时由平台填值（状态字段取初始状态）。
+不能同时是 `sensitive`、`generated`。导出为 `processOnly: true`，JSON Schema 中 `readOnly: true`。详见 16 §5。
+
+### 6.3 显示字段【D20】
+
+`eb.display(field)`：该实体被引用时用哪个字段显示（`Text` 或 `jabiz.i18n-text`，非敏感），供 `lookup` / `labels` 接口（03 §3）
+与后台的引用下拉、引用列使用。导出为 `display`。详见 16 §2。
+
+### 6.4 变更事件【D14】
 
 `eb.publishChanges()`：该实体每次提交的写入都在同一事务中向 Outbox 追加实体变更事件 `jabiz.entity-changed.<实体>`
 （载荷只含字段名，不含值；11 §2.2）。导出为 `publishesChanges`。
@@ -220,10 +238,10 @@ eb.listView("default", lv -> lv
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回（另按请求语言附 `label` 与错误文案模板 `messages`【D15】，12 §2）：实体名、主键、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
-语义类型及参数、必填、不可变、系统维护、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
+`GET /api/meta/entities/{name}` 返回（另按请求语言附 `label` 与错误文案模板 `messages`【D15】，12 §2）：实体名、主键、显示字段（`display`）、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
+语义类型及参数、必填、不可变、系统维护、只经流程写入（`processOnly`）、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
 列表视图、字典引用（`dictionaries`）。
 
 另提供 `GET /api/meta/schema/{name}` 返回实例属性的 JSON Schema（draft 2020-12，`JsonSchemaExporter`）：
-系统维护与生成的字段 `readOnly`；必填（非生成、非系统）字段列入 `required`；非必填字段允许 null；
+系统维护、生成与只经流程写入的字段 `readOnly`；必填（非生成、非系统）字段列入 `required`；非必填字段允许 null；
 `additionalProperties: false`；平台扩展关键字 `x-jabiz-dictionary`、`x-jabiz-reference`、`x-jabiz-kind`。
