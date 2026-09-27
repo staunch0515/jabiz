@@ -67,7 +67,8 @@ owned() {
 status=0
 
 # The application may not claim what the platform has.
-platform_files="$(git -C "$root" ls-tree -r --name-only "$merge_base")"
+# NUL-separated: git would otherwise quote and escape non-ASCII names ("\346\226\207.md").
+platform_files="$(git -C "$root" ls-tree -r -z --name-only "$merge_base" | tr '\0' '\n')"
 for i in ${patterns[@]+"${!patterns[@]}"}; do
   claimed="$(grep -E -m 3 -- "${regexes[i]}" <<<"$platform_files" || true)"
   if [[ -n "$claimed" ]]; then
@@ -78,10 +79,9 @@ for i in ${patterns[@]+"${!patterns[@]}"}; do
 done
 
 violations=()
-while IFS= read -r path; do
-  [[ -z "$path" ]] && continue
+while IFS= read -r -d '' path; do
   owned "$path" || violations+=("$path")
-done < <(git -C "$root" diff --name-only --no-renames "$merge_base" HEAD)
+done < <(git -C "$root" diff -z --name-only --no-renames "$merge_base" HEAD)
 
 if ((${#violations[@]} > 0)); then
   echo "check-app-paths: ${#violations[@]} changed path(s) outside .jabiz-app-paths (make platform changes on the" \

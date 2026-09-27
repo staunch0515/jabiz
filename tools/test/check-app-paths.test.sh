@@ -58,6 +58,17 @@ expect 0 "not an application branch" "the platform branch itself is not checked"
 app_branch only-app
 expect 0 "within .jabiz-app-paths" "an application branch that changes only its own paths passes"
 
+app_branch unicode-names
+write "docs/culture/文化.md"
+write "site/src/pages/作品 一覧.tsx"
+commit "non-ASCII names"
+expect 0 "within .jabiz-app-paths" "non-ASCII and spaced file names in application paths pass"
+
+app_branch unicode-platform
+write "docs/design/設計.md"
+commit "a non-ASCII platform file"
+expect 1 "docs/design/設計.md" "a non-ASCII platform file is named as it is"
+
 app_branch edits-core
 write backend/core/Core.java "changed"
 commit "touch the platform"

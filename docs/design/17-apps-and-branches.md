@@ -96,7 +96,7 @@ jabizApp {
 ## 5. 测试
 
 - `check-app-paths.sh`（`tools/test/check-app-paths.test.sh`）：在临时仓库中构造"只改应用目录"与"改了平台目录"两种分支，断言前者通过、后者失败；
-  另有删除与移动平台文件、`*` 不跨目录、合并平台之后、模式覆盖平台文件、找不到平台分支。
+  另有非 ASCII 与含空格的文件名、删除与移动平台文件、`*` 不跨目录、合并平台之后、模式覆盖平台文件、找不到平台分支。
 - 构建：`app` 改用约定插件后 `./gradlew check`、`:app:bootJar`、端到端与 compose 作业全部照常通过。
 - `SpaFallbackFilter`（`SpaFallbackFilterTest`、`SpaConfigCheckTest`）：多个前缀的回退、最长前缀优先、路径段边界、CSP 头；缺省配置与现在行为相同；
   `MultiSpaIT`（app）经完整的 WebFlux 与安全过滤链验证 `/` 与 `/admin/` 两个 SPA。
