@@ -40,6 +40,8 @@ public class SupplierDefinitions extends BaseEntityDefinitions {
         eb.field("contractFileId", f -> f.physicalColumn("contract_file_id")
             .kind(FileKind.of(CommerceFiles.DOCUMENT)));
         eb.unique("uk_supplier_code", "supplierCode");
+        // Pickers and reference columns show suppliers by name (docs/design/16-content-authoring.md section 2).
+        eb.display("supplierName");
         eb.listView("default", lv -> lv
             .columns("supplierCode", "supplierName", "countryCode", "leadTimeDays", "active")
             .filters("supplierCode", "supplierName", "countryCode", "leadTimeDays", "active")

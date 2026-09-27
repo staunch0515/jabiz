@@ -1,4 +1,5 @@
 import {
+  ProForm,
   ProFormDateTimePicker,
   ProFormDigit,
   ProFormSelect,
@@ -7,10 +8,13 @@ import {
   ProFormTextArea,
 } from '@ant-design/pro-components'
 import type { TFunction } from 'i18next'
+import { i18nParams } from '../meta/i18nText'
 import { controlOf, fieldLabel, optionsOf } from '../meta/kinds'
 import { isFileField, type DictItem, type FieldMeta, type Violation } from '../meta/types'
 import FieldErrors from './FieldErrors'
 import FileField from './FileField'
+import I18nTextInput from './I18nTextInput'
+import ReferenceSelect from './ReferenceSelect'
 
 interface Props {
   field: FieldMeta
@@ -18,13 +22,25 @@ interface Props {
   dictionaries: Record<string, DictItem[]>
   violations: Violation[] | undefined
   t: TFunction
+  /** For a reference field: the dataset to look its targets up in, when they can be picked by name. */
+  referenceDatasetId?: string
+  /** The platform's default language, the fallback of multilingual texts. */
+  defaultLocale?: string
 }
 
 /**
  * One form input chosen by the field's semantic kind. Inputs do not truncate or round (no maxLength, no precision):
  * a value the rules reject is shown with the rule's message rather than silently changed.
  */
-export default function EntityField({ field, disabled, dictionaries, violations, t }: Props) {
+export default function EntityField({
+  field,
+  disabled,
+  dictionaries,
+  violations,
+  t,
+  referenceDatasetId,
+  defaultLocale,
+}: Props) {
   const label = fieldLabel(field, t)
   const formItemProps = {
     required: field.required && !disabled,
@@ -33,7 +49,24 @@ export default function EntityField({ field, disabled, dictionaries, violations,
     extra: violations && violations.length > 0 ? <FieldErrors violations={violations} /> : undefined,
   }
   const common = { name: field.name, label, disabled, formItemProps }
+  if (field.type === 'reference' && referenceDatasetId) {
+    return (
+      <ProForm.Item name={field.name} label={label} {...formItemProps}>
+        <ReferenceSelect datasetId={referenceDatasetId} defaultLocale={defaultLocale} disabled={disabled} />
+      </ProForm.Item>
+    )
+  }
   switch (controlOf(field)) {
+    case 'i18n':
+      return (
+        <ProForm.Item name={field.name} label={label} {...formItemProps}>
+          <I18nTextInput
+            params={i18nParams(field)}
+            disabled={disabled}
+            invalidLanguages={(violations ?? []).map((v) => v.params?.lang).filter((l): l is string => typeof l === 'string')}
+          />
+        </ProForm.Item>
+      )
     case 'textarea':
       return <ProFormTextArea {...common} />
     case 'decimal':

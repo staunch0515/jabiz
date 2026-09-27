@@ -12,7 +12,7 @@ const entity = {
   temporal: true,
   publishesChanges: false,
   fields: [
-    { name: 'name', label: 'Name', type: 'text', multiline: false, immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, operators: [], rules: [] },
+    { name: 'name', label: 'Name', type: 'text', multiline: false, immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, operators: [], rules: [] },
   ],
   references: [],
   listViews: [],

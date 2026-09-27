@@ -8,6 +8,7 @@ import {
   toDecimal,
   type Decimal,
 } from './decimal'
+import { i18nParams, InvalidTexts, isI18nText, normalizeTexts, textsViolation } from './i18nText'
 import type { EntityMeta, FieldMeta, RuleSpec, Violation } from './types'
 
 /**
@@ -16,12 +17,13 @@ import type { EntityMeta, FieldMeta, RuleSpec, Violation } from './types'
  *
  * 1. convert the value to the canonical type of the field's semantic kind, else INVALID_VALUE;
  * 2. a missing value of a required field: REQUIRED (on insert, or when explicitly cleared);
- * 3. the constraint of the kind: TOO_LONG, NUMERIC_PRECISION, NOT_IN_DICTIONARY (the first failing one only);
+ * 3. the constraint of the kind: TOO_LONG, NUMERIC_PRECISION, NOT_IN_DICTIONARY, and for multilingual texts TOO_LONG
+ *    (with lang) or TRANSLATION_REQUIRED (the first failing one only; decision D20);
  * 4. every exported rule (RANGE, SCALE, LENGTH, PATTERN, NOT_FUTURE, REQUIRED), in declaration order.
  *
- * The shared cases in spec/validation-cases.json run through both implementations. Server-only rules and custom
- * kinds (except the form of a jabiz.file id) are not checked here; the server remains the authority and its answer
- * is shown the same way.
+ * The shared cases in spec/validation-cases.json run through both implementations. Server-only rules and the other
+ * custom kinds (except the form of a jabiz.file id) are not checked here; the server remains the authority and its
+ * answer is shown the same way.
  */
 
 /** A value converted to the canonical type of its kind. */
@@ -31,6 +33,7 @@ type Canonical =
   | { k: 'instant'; nanos: bigint }
   | { k: 'bool'; b: boolean }
   | { k: 'long'; n: bigint }
+  | { k: 'texts'; t: Record<string, string> }
   | { k: 'raw'; v: unknown }
 
 export interface ValidateOptions {
@@ -135,13 +138,21 @@ function coerce(field: FieldMeta, raw: unknown): Canonical | null {
       return { k: 'text', s: raw }
     case 'bool':
       return { k: 'bool', b: toBooleanValue(raw) }
-    case 'custom':
+    case 'custom': {
       // jabiz.file (FileKindSupport): the canonical text form of a UUID, either case.
       if (field.kindId === 'jabiz.file') {
         if (typeof raw !== 'string' || !FILE_ID.test(raw)) throw new InvalidValue()
         return { k: 'text', s: raw.toLowerCase() }
       }
-      return { k: 'raw', v: raw }
+      if (!isI18nText(field)) return { k: 'raw', v: raw }
+      try {
+        const texts = normalizeTexts(raw, i18nParams(field).locales)
+        return texts === null ? null : { k: 'texts', t: texts }
+      } catch (e) {
+        if (e instanceof InvalidTexts) throw new InvalidValue()
+        throw e
+      }
+    }
     default:
       return { k: 'raw', v: raw }
   }
@@ -240,6 +251,10 @@ export function validateField(field: FieldMeta, raw: unknown, options: ValidateO
       ? [{ field: field.name, ruleCode: 'REQUIRED', params: {} }]
       : []
   }
+  if (value.k === 'texts') {
+    const violation = textsViolation(i18nParams(field), value.t)
+    return violation ? [{ field: field.name, ruleCode: violation.ruleCode, params: violation.params }] : []
+  }
   // A custom kind's canonical type is decided by its server-side SPI; its rules are left to the server.
   if (field.type === 'custom') return []
   const kind = kindViolation(field, value, options)
@@ -259,7 +274,7 @@ export function validateAttributes(
   options: ValidateOptions,
 ): FieldViolation[] {
   return entity.fields
-    .filter((f) => !f.generated && !f.systemManaged && !f.sensitive)
+    .filter((f) => !f.generated && !f.systemManaged && !f.sensitive && !f.processOnly)
     .flatMap((f) => validateField(f, attributes[f.name], options))
 }
 

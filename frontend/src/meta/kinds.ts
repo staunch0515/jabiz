@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import { formatDecimal, toDecimal } from './decimal'
+import { isI18nText, pickText, textsToWire } from './i18nText'
 import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './types'
 
 /**
@@ -18,7 +19,17 @@ export function findField(entity: EntityMeta, name: string): FieldMeta | undefin
   return entity.fields.find((f) => f.name === name)
 }
 
-export type Control = 'text' | 'textarea' | 'decimal' | 'integer' | 'datetime' | 'switch' | 'select' | 'file' | 'json'
+export type Control =
+  | 'text'
+  | 'textarea'
+  | 'decimal'
+  | 'integer'
+  | 'datetime'
+  | 'switch'
+  | 'select'
+  | 'file'
+  | 'i18n'
+  | 'json'
 
 /** The input control for a field of this kind. */
 export function controlOf(field: FieldMeta): Control {
@@ -37,7 +48,7 @@ export function controlOf(field: FieldMeta): Control {
     case 'code':
       return 'select'
     case 'custom':
-      return isFileField(field) ? 'file' : 'json'
+      return isFileField(field) ? 'file' : isI18nText(field) ? 'i18n' : 'json'
     case 'none':
       return 'json'
     default:
@@ -110,6 +121,9 @@ export function formatValue(
       const item = dictionaries[field.dictUrn]?.find((i) => i.code === String(value))
       return item ? item.label : String(value)
     }
+    case 'custom':
+      if (isI18nText(field)) return pickText(value, locale, undefined)?.text ?? '—'
+      return typeof value === 'object' ? JSON.stringify(value) : String(value)
     default:
       return typeof value === 'object' ? JSON.stringify(value) : String(value)
   }
@@ -133,6 +147,8 @@ export function toWireValue(field: FieldMeta, value: unknown): unknown {
       return typeof value === 'number' ? String(value) : value
     case 'file':
       return value === '' ? null : value
+    case 'i18n':
+      return textsToWire(value)
     case 'json':
       if (typeof value !== 'string') return value
       if (value.trim() === '') return null
@@ -161,6 +177,8 @@ export function toFormValue(field: FieldMeta, value: unknown): unknown {
     }
     case 'json':
       return typeof value === 'string' ? value : JSON.stringify(value)
+    case 'i18n':
+      return typeof value === 'object' ? { ...(value as Record<string, unknown>) } : undefined
     default:
       return value
   }

@@ -6,6 +6,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.JsonSchemaExporter;
 import com.jabiz.entity.MetaModelExporter;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.process.ActsOn;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
@@ -49,7 +50,15 @@ class MetaModelController {
 
     /** One process the caller may run, with the JSON Schema of its input. */
     record ProcessEntry(String name, int version, boolean latest, boolean deprecated, String label,
-        String description, Map<String, Object> input) {}
+        String description, Map<String, Object> input, ActsOnEntry actsOn) {}
+
+    /**
+     * The entity a process acts on and the input that takes its primary key; {@code when}, if present, only tells
+     * clients when to offer the action (docs/design/16-content-authoring.md section 3).
+     */
+    record ActsOnEntry(String entity, String input, WhenEntry when) {}
+
+    record WhenEntry(String field, List<String> values) {}
 
     private final EntityDefinitionRegistry registry;
     private final DatasetRegistry datasets;
@@ -124,7 +133,15 @@ class MetaModelController {
             .map(newest -> newest.version() == definition.version()).orElse(false);
         return new ProcessEntry(definition.name(), definition.version(), latest, definition.deprecated(),
             label("process." + definition.name(), context).orElse(definition.name()), definition.description(),
-            ProcessInputSchemas.of(definition.inputType()).schema());
+            ProcessInputSchemas.of(definition.inputType()).schema(), actsOn(definition.actsOn()));
+    }
+
+    private static ActsOnEntry actsOn(ActsOn actsOn) {
+        if (actsOn == null) {
+            return null;
+        }
+        WhenEntry when = actsOn.whenField() == null ? null : new WhenEntry(actsOn.whenField(), actsOn.whenValues());
+        return new ActsOnEntry(actsOn.entity(), actsOn.input(), when);
     }
 
     private Optional<String> label(String key, RequestContext context) {

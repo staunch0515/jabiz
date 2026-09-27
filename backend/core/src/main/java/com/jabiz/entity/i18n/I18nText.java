@@ -27,7 +27,7 @@ public final class I18nText implements Consumer<FieldBuilder> {
     static final String MAX_LENGTH = "maxLength";
     static final String MULTILINE = "multiline";
     static final String FORMAT = "format";
-    static final String REQUIRED = "required";
+    static final String REQUIRED = "requiredLanguages";
     static final String PLAIN = "plain";
     static final String MARKDOWN = "markdown";
 

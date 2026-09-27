@@ -14,7 +14,7 @@ import {
 import { Alert, App, Card, Descriptions, Result, Spin, Typography } from 'antd'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { useProcesses } from '../meta/hooks'
@@ -31,11 +31,23 @@ function compiled(pattern: string | undefined): RegExp[] {
   }
 }
 
-function renderNode(node: InputNode, t: (key: string) => string, path: (string | number)[] = []): ReactNode {
+function renderNode(
+  node: InputNode,
+  t: (key: string) => string,
+  path: (string | number)[] = [],
+  fixed: ReadonlySet<string> = new Set(),
+): ReactNode {
   const name = [...path, node.name]
   const rules = node.required ? [{ required: true, message: `${node.name}: REQUIRED` }] : []
   const pattern = compiled(node.schema.pattern).map((regex) => ({ pattern: regex, message: `${node.name}: INVALID_VALUE` }))
-  const common = { key: node.name, name: name.length === 1 ? node.name : name, label: node.name, rules: [...rules, ...pattern] }
+  const common = {
+    key: node.name,
+    name: name.length === 1 ? node.name : name,
+    label: node.name,
+    rules: [...rules, ...pattern],
+    // An input filled in by the row the process acts on (16 section 3).
+    disabled: path.length === 0 && fixed.has(node.name),
+  }
   switch (node.kind) {
     case 'password':
       return <ProFormText.Password {...common} fieldProps={{ autoComplete: 'new-password' }} />
@@ -89,9 +101,20 @@ export default function ProcessFormPage() {
   const { t } = useTranslation()
   const { message } = App.useApp()
   const { name = '', version = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const processes = useProcesses()
   const process = processes.data?.find((p) => p.name === name && String(p.version) === version)
   const nodes = useMemo(() => (process ? inputNodes(process.input as JsonSchema) : []), [process])
+  // The key of the instance an action was started on arrives as a query parameter named after its input.
+  const preset = useMemo(() => {
+    const values: Record<string, string> = {}
+    for (const node of nodes) {
+      const value = searchParams.get(node.name)
+      if (value !== null && node.name === process?.actsOn?.input) values[node.name] = value
+    }
+    return values
+  }, [nodes, searchParams, process])
+  const fixed = useMemo(() => new Set(Object.keys(preset)), [preset])
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
   const [violations, setViolations] = useState<Violation[]>([])
   const [result, setResult] = useState<{ processSeqId?: number; output?: unknown } | null>(null)
@@ -122,6 +145,7 @@ export default function ProcessFormPage() {
         )}
         <ProForm
           name="process"
+          initialValues={preset}
           // Dates stay Dayjs until processForm converts them (ISO-8601 with offset, or YYYY-MM-DD for dates).
           dateFormatter={false}
           submitter={{ searchConfig: { submitText: t('process.run') }, resetButtonProps: false }}
@@ -157,7 +181,7 @@ export default function ProcessFormPage() {
             }
           }}
         >
-          {nodes.map((node) => renderNode(node, t))}
+          {nodes.map((node) => renderNode(node, t, [], fixed))}
         </ProForm>
       </Card>
       {result && (

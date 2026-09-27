@@ -62,11 +62,11 @@ class I18nTextTest {
     @Test
     void declarationsBecomeCustomKindParameters() {
         assertThat(I18nText.of(200).kind()).isEqualTo(new SemanticKind.Custom(I18nText.KIND_ID,
-            Map.of("maxLength", 200, "multiline", false, "format", "plain", "required", List.of())));
+            Map.of("maxLength", 200, "multiline", false, "format", "plain", "requiredLanguages", List.of())));
         // Required languages are kept in platform order whatever order the declaration lists them in.
         assertThat(I18nText.of(10).multiline().required("en", "zh").kind().params())
             .containsEntry("multiline", true).containsEntry("format", "plain")
-            .containsEntry("required", List.of("zh", "en"));
+            .containsEntry("requiredLanguages", List.of("zh", "en"));
         assertThat(I18nText.markdown(10).kind().params())
             .containsEntry("multiline", true).containsEntry("format", "markdown");
         assertThat(I18nText.is(I18nText.of(1).kind())).isTrue();
@@ -168,9 +168,12 @@ class I18nTextTest {
         Map<String, Object> exported = MetaModelExporter.export(ARTICLE);
         assertThat(exported).containsEntry("display", "title");
         Map<String, Object> body = ((List<Map<String, Object>>) exported.get("fields")).get(2);
+        // The kind's parameters never shadow the field's own flags.
+        assertThat((Boolean) ((List<Map<String, Object>>) exported.get("fields")).get(1).get("required")).isTrue();
+        assertThat(body).containsEntry("required", false);
         assertThat(body).contains(entry("type", "custom"), entry("kindId", "jabiz.i18n-text"),
             entry("format", "markdown"), entry("multiline", true), entry("maxLength", 100),
-            entry("required", List.of("zh", "en")), entry("locales", PlatformLanguages.CODES),
+            entry("requiredLanguages", List.of("zh", "en")), entry("locales", PlatformLanguages.CODES),
             entry("operators", List.of("IS_NOT_NULL", "IS_NULL")));
 
         Map<String, Object> schema = (Map<String, Object>) ((Map<String, Object>) JsonSchemaExporter.export(ARTICLE)

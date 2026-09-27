@@ -33,7 +33,7 @@ public final class MetaModelExporter {
      * {@code label} of the entity and of each field (message keys {@code entity.<Entity>} and
      * {@code entity.<Entity>.<field>}, falling back to the logical name) and {@code messages}, the message
      * templates of every code the client may report for this entity, with the same named placeholders the server
-     * fills.
+     * fills; and {@code defaultLocale}, the platform's default language.
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> export(EntityDefinition def, MessageCatalog catalog, Locale locale) {
@@ -55,6 +55,8 @@ public final class MetaModelExporter {
             messages.put(code, catalog.find(code, locale).orElse(code));
         }
         root.put("messages", messages);
+        // Multilingual texts fall back to it when the interface language has no text (16 section 1.3).
+        root.put("defaultLocale", catalog.defaultLocale().getLanguage());
         return root;
     }
 

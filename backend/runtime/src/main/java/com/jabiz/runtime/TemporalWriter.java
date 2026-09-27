@@ -114,6 +114,7 @@ final class TemporalWriter {
         EntityDefinition def = w.def();
         Map<String, Object> raw = new LinkedHashMap<>(instance.attributes());
         raw.putIfAbsent(def.primaryKey, instance.id());
+        rules.fillProcessOnly(w.dataset(), def, w.scope(), raw, instance.state());
         return rules.dictionaryLookup(def, raw).flatMap(lookup -> Mono.defer(() -> {
             Map<String, Object> attrs = new LinkedHashMap<>(
                 EntityValidator.requireValid(def, raw, w.validation(), true, lookup));
