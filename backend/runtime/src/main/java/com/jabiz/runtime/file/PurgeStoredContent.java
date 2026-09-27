@@ -81,7 +81,8 @@ public class PurgeStoredContent<C extends ProcessContext> implements StepHandler
             Mono<Integer> orphanObjects = store.list()
                 .flatMapIterable(key -> FileKeys.fileIdOf(key).stream().toList())
                 .filter(id -> FileKeys.timeOf(id).isBefore(cutoff))
-                .distinct()
+                // The walk is depth first: the objects of one file come together.
+                .distinctUntilChanged()
                 .buffer(CHECK_BATCH)
                 .concatMap(ids -> withoutRow(ids).flatMapMany(Flux::fromIterable))
                 .concatMap(id -> store.deleteAll(FileKeys.prefix(id)).thenReturn(1))

@@ -1,5 +1,6 @@
 package com.jabiz.file;
 
+import java.text.Normalizer;
 import java.util.regex.Pattern;
 
 /**
@@ -13,20 +14,21 @@ public final class FileNames {
 
     static final String FALLBACK = "file";
 
-    private static final Pattern DISALLOWED = Pattern.compile("[^\\p{L}\\p{N} ._()-]");
+    private static final Pattern DISALLOWED = Pattern.compile("[^\\p{L}\\p{M}\\p{N} ._()-]");
 
     private FileNames() {}
 
     /**
-     * Keeps the last path segment, replaces every character outside letters, digits, space and {@code . _ ( ) -}
-     * with {@code _}, trims spaces, does not let the name start with a dot, and shortens it to {@link #MAX_LENGTH}
-     * code points. A name that ends up empty becomes {@value #FALLBACK}.
+     * Normalises to NFC (macOS sends decomposed names), keeps the last path segment, replaces every character outside
+     * letters, combining marks, digits, space and {@code . _ ( ) -} with {@code _}, trims spaces, does not let the name
+     * start with a dot, and shortens it to {@link #MAX_LENGTH} code points. A name that ends up empty becomes
+     * {@value #FALLBACK}.
      */
     public static String sanitize(String name) {
         if (name == null) {
             return FALLBACK;
         }
-        String last = name;
+        String last = Normalizer.normalize(name, Normalizer.Form.NFC);
         int slash = Math.max(last.lastIndexOf('/'), last.lastIndexOf('\\'));
         if (slash >= 0) {
             last = last.substring(slash + 1);

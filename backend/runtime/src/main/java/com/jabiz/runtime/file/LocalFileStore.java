@@ -11,12 +11,13 @@ import reactor.core.scheduler.Schedulers;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.channels.AsynchronousFileChannel;
-import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -105,27 +106,20 @@ public class LocalFileStore implements FileStore {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
+    /**
+     * Month and year directories stay even when empty: removing them would race with an upload that has just created
+     * them for its own file.
+     */
     @Override
     public Mono<Void> deleteAll(String prefix) {
-        return Mono.<Void>fromRunnable(() -> {
-            Path directory = resolve(prefix);
-            deleteRecursively(directory);
-            // Month and year directories that became empty go too; others stay.
-            Path parent = directory.getParent();
-            Path root = root();
-            while (parent != null && !parent.equals(root) && parent.startsWith(root)) {
-                try {
-                    Files.deleteIfExists(parent);
-                } catch (DirectoryNotEmptyException e) {
-                    break;
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-                parent = parent.getParent();
-            }
-        }).subscribeOn(Schedulers.boundedElastic());
+        return Mono.<Void>fromRunnable(() -> deleteRecursively(resolve(prefix)))
+            .subscribeOn(Schedulers.boundedElastic());
     }
 
+    /**
+     * Streams the keys while walking the tree depth first, so the keys of one file come one after another and nothing
+     * is collected in memory. The walk (and every later request for more keys) runs on {@code boundedElastic}.
+     */
     @Override
     public Flux<String> list() {
         if (!configured()) {
@@ -136,25 +130,22 @@ public class LocalFileStore implements FileStore {
             if (!Files.isDirectory(root)) {
                 return Flux.<String>empty();
             }
-            List<String> keys;
-            try (Stream<Path> walk = Files.walk(root)) {
-                keys = walk.filter(Files::isRegularFile)
-                    .map(path -> root.relativize(path))
+            return Flux.using(() -> Files.walk(root), walk -> Flux.fromStream(walk
+                    .filter(Files::isRegularFile)
+                    .map(root::relativize)
                     .filter(relative -> !hidden(relative))
-                    .map(relative -> relative.toString().replace('\\', '/'))
-                    .toList();
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            return Flux.fromIterable(keys);
+                    .map(relative -> relative.toString().replace('\\', '/'))),
+                Stream::close);
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
-     * Deletes upload-area files and part files older than {@code maxAge} (left behind by a crash). Ages come from
-     * the file system's clock: these are infrastructure leftovers, not business data.
+     * Deletes what crashed uploads left behind and is older than {@code maxAge}: entries of the upload area (received
+     * files and their work directories) and part files next to objects. Ages come from the file system's clock, like
+     * the cluster lock's: these are infrastructure leftovers, not business data, and their only time is the file
+     * system's (docs/design/14-files.md section 6).
      */
-    public Mono<Integer> deleteStaleParts(java.time.Duration maxAge) {
+    public Mono<Integer> deleteStaleParts(Duration maxAge) {
         if (!configured()) {
             return Mono.just(0);
         }
@@ -164,20 +155,21 @@ public class LocalFileStore implements FileStore {
                 return 0;
             }
             long limit = System.currentTimeMillis() - maxAge.toMillis();
-            int deleted = 0;
-            List<Path> stale;
-            try (Stream<Path> walk = Files.walk(root)) {
-                stale = walk.filter(Files::isRegularFile)
-                    .filter(path -> hidden(root.relativize(path)))
-                    .filter(path -> modifiedBefore(path, limit))
-                    .toList();
-            }
-            for (Path path : stale) {
-                if (Files.deleteIfExists(path)) {
-                    deleted++;
+            List<Path> stale = new ArrayList<>();
+            Path area = root.resolve(UPLOAD_AREA);
+            if (Files.isDirectory(area)) {
+                try (Stream<Path> entries = Files.list(area)) {
+                    entries.filter(path -> modifiedBefore(path, limit)).forEach(stale::add);
                 }
             }
-            return deleted;
+            try (Stream<Path> walk = Files.walk(root)) {
+                walk.filter(Files::isRegularFile)
+                    .filter(path -> !path.startsWith(area) && hidden(root.relativize(path)))
+                    .filter(path -> modifiedBefore(path, limit))
+                    .forEach(stale::add);
+            }
+            stale.forEach(LocalFileStore::deleteRecursively);
+            return stale.size();
         }).subscribeOn(Schedulers.boundedElastic());
     }
 

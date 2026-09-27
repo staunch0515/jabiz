@@ -60,6 +60,8 @@ class FilePolicyTest {
         assertThatThrownBy(() -> valid().image(i -> i.variants(9000)).build()).hasMessageContaining("between");
         assertThatThrownBy(() -> valid().image(i -> i.variants(100, 100)).build()).hasMessageContaining("twice");
         assertThatThrownBy(() -> valid().image(i -> i.maxPixels(0)).build()).hasMessageContaining("maxPixels");
+        assertThatThrownBy(() -> valid().image(i -> i.variants(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)).build())
+            .hasMessageContaining("At most 12");
         assertThatThrownBy(() -> new FilePolicy("a", Set.of(), 1, null, "u", "r"))
             .hasMessageContaining("at least one type");
         assertThatThrownBy(() -> new FilePolicy.ImageOptions(1, null)).isInstanceOf(NullPointerException.class);

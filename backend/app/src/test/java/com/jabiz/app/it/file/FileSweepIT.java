@@ -6,9 +6,11 @@ import com.jabiz.runtime.file.FileKeys;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.FileSamples;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,6 +29,7 @@ import static org.awaitility.Awaitility.await;
  * and content; objects without a row go once they are old enough; referenced files, files a scheduled version will
  * use and recent uploads stay.
  */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "jabiz.files.sweep-batch-size=2")
 class FileSweepIT extends FileItSupport {
 
     @Autowired
@@ -35,6 +38,12 @@ class FileSweepIT extends FileItSupport {
     @Autowired
     @Qualifier("fileSweepJob")
     JobDefinition<FileProcesses.PurgeInput> sweep;
+
+    /** Each test runs the sweep once; the cluster lock of the previous run must not stand in its way. */
+    @BeforeEach
+    void releaseTheLock() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+    }
 
     /** A UUIDv7 created at {@code time}, as the platform's generator would. */
     private static UUID uuidV7At(Instant time) {
@@ -91,6 +100,21 @@ class FileSweepIT extends FileItSupport {
         }
         List<Map<String, Object>> runs = query("SELECT process_name, actor_id FROM op_process "
             + "WHERE process_name = 'FILE_PURGE_ORPHANS'");
-        assertThat(runs).extracting(row -> row.get("actor_id")).containsExactly("system");
+        assertThat(runs).isNotEmpty().extracting(row -> row.get("actor_id")).containsOnly("system");
+    }
+
+    @Test
+    void filesStillInUseDoNotHideNewerOrphans() {
+        // More old files in use than one batch (2 here), all older than the orphan.
+        for (int i = 0; i < 3; i++) {
+            createSupplier(uploadContract());
+        }
+        clock.advance(Duration.ofMinutes(5));
+        String orphan = uploadContract();
+
+        clock.advance(Duration.ofHours(26));
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+
+        assertThat(hasRow(orphan)).isFalse();
     }
 }

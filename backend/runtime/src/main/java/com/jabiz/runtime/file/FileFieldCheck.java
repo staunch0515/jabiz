@@ -26,7 +26,9 @@ import java.util.UUID;
 /**
  * Write check of {@code jabiz.file} fields (docs/design/14-files.md section 4): a changed value must be the id of an
  * existing file ({@code FILE_NOT_FOUND}) uploaded under the field's policy ({@code FILE_POLICY_MISMATCH}); both 400.
- * Values the write does not change are not checked again.
+ * Values the write does not change are not checked again. The rows are read {@code FOR KEY SHARE}: a concurrent
+ * deletion of the file (which locks the row before looking for references) waits for this write, then sees the new
+ * reference; there is no foreign key to do this (history may point at deleted files).
  */
 @Component
 public class FileFieldCheck implements FieldWriteCheck {
@@ -57,7 +59,7 @@ public class FileFieldCheck implements FieldWriteCheck {
         String sql = "SELECT " + SqlIdentifiers.require(files.primaryKeyColumn()) + " AS file_id, "
             + SqlIdentifiers.require(files.physicalColumn(FileEntities.POLICY)) + " AS policy FROM "
             + SqlIdentifiers.require(files.physicalTable) + " WHERE "
-            + SqlIdentifiers.require(files.primaryKeyColumn()) + " = ANY(:ids)";
+            + SqlIdentifiers.require(files.primaryKeyColumn()) + " = ANY(:ids) FOR KEY SHARE";
         return storages.getEngine(poolRef)
             .select(sql, Map.of("ids", BoundValue.of(ids.toArray(UUID[]::new))))
             .collectMap(row -> (UUID) row.get("file_id"), row -> (String) row.get("policy"), HashMap::new)

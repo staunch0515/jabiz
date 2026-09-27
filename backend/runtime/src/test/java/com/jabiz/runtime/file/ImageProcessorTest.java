@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ImageProcessorTest {
 
-    private final ImageProcessor processor = new ImageProcessor();
+    private final ImageProcessor processor = new ImageProcessor(1);
 
     @TempDir
     Path temp;

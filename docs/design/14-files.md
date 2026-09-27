@@ -27,7 +27,7 @@ GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据
 | 字段 | 语义类型 | 说明 |
 |---|---|---|
 | `fileId` | `SemanticIdentity`（UUIDv7，生成） | 主键；也是对外的文件标识 |
-| `policy` | `Code`（取值为已注册的策略名） | 上传时的策略，不可变 |
+| `policy` | `Text(100)`（已注册的策略名；策略是 Bean 而不是字典，由上传与启动检查保证取值） | 上传时的策略，不可变 |
 | `contentType` | `Text(100)` | 由内容判定的媒体类型，不可变 |
 | `sizeBytes` | `Numeric(19,0)` | 原件（处理后）字节数，不可变 |
 | `sha256` | `Text(64)` | 处理后原件的摘要，不可变 |
@@ -67,6 +67,8 @@ GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据
   （可以在同源下执行脚本）。WebP、HEIC 不在第一版（JDK 不能解码；iOS 在 `accept="image/jpeg,image/png"` 时会自动转码为 JPEG）。
 - 客户端声明的 `Content-Type` 与扩展名只作参考：与判定结果不符时以判定结果为准，判定结果不在允许列表中 → 400 `FILE_TYPE_NOT_ALLOWED`。
 - 超过 `maxBytes` → 413 `FILE_TOO_LARGE`（写入过程中即中止，不先读完）；图片像素超过 `maxPixels` 或无法解码 → 400 `FILE_INVALID`。
+- 一个策略最多 12 个变体（变体名合存在 `sys_file.variants` 中）；同时解码的图片数有上限 `jabiz.files.image-concurrency`
+  （默认处理器数的一半，至少 1）：每张图片处理时持有数份全尺寸位图，40 MP 的照片约数百 MB。
 - 图片处理（`ImageProcessor`，runtime，JDK ImageIO，在 `boundedElastic` 上执行）：按 EXIF 方向转正后**重新编码**（这就去掉了全部元数据），
   JPEG 质量 0.85，PNG 仍为 PNG（保留透明）；生成宽度变体（原图更窄时不生成）。原件也保存处理后的版本，**不保留**带元数据的原始字节。
   JDK 不解析 EXIF：平台自带只读方向标签的小解析器（JPEG APP1 → TIFF IFD0 的 `0x0112`），不引入第三方库；PNG 不处理方向。
@@ -105,25 +107,32 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
 
 - 请求体大小由 `jabiz.files.max-request-bytes`（默认 100 MB，且不小于各策略上限）限制：声明的 `Content-Length` 超过它立即 413，
   否则边读边计数；只接受一个名为 `file` 的部分（多余的部分或缺少它 → 400 `FILE_INVALID`）；文件名按
-  `[\p{L}\p{N} ._()-]{1,255}` 清洗，其余字符替换为 `_`。
+  NFC 规范化（macOS 发送分解形式）后按 `[\p{L}\p{M}\p{N} ._()-]{1,255}` 清洗，其余字符替换为 `_`。
 - 响应总是带 `X-Content-Type-Options: nosniff` 与判定出的 `Content-Type`；变体不存在时 404。
 - 上传按操作人限流（`jabiz.files.upload-rate-per-minute`，默认 30，进程内令牌桶）→ 429 `RATE_LIMITED`，带 `Retry-After`。
 - 后台前端的图片预览：访问令牌只在内存中（D15），`<img>` 不能带 `Authorization`，因此预览以 `fetch` 取得 blob 再用 `URL.createObjectURL` 显示。
 
 ## 6. 存储、清扫与删除
 
-- `FileStore` SPI（runtime 内部，返回 `Mono`/`Flux`，**不对业务开放**）：`write(key, Flux<DataBuffer>)`、`read(key, range)`、`delete(key)`、`list(prefix)`。
+- `FileStore` SPI（runtime 内部，返回 `Mono`/`Flux`，**不对业务开放**）：`write(key, Flux<DataBuffer>)`、`size(key)`、
+  `read(key, offset, length)`、`deleteAll(文件的前缀)`、`list()`（流式、深度优先，不在内存中收集全部键）。
   实现：`LocalFileStore`（根目录 `jabiz.files.local.root`，非阻塞 `AsynchronousFileChannel`；目录创建与移动在 `boundedElastic` 上；
   键只能由平台推导，仍校验其字符并拒绝逃出根目录）。根目录没有默认值：注册了策略而未配置时启动失败（默认拒绝）；
   compose 挂载专用卷，测试每个类使用独立的临时目录。本地目录只适合单实例（多实例需共享卷，或以后接入 S3）。
   S3 兼容存储以后按同一接口加入，不在本阶段。
 - **一致性**：先写对象、后插入行；插入失败时删除已写的对象。删除时先删行（事务提交）、后删对象（`AFTER_COMMIT`）。
+  写入与删除的并发由行锁排序（没有外键）：写入检查以 `FOR KEY SHARE` 读 `sys_file`；`FILE_DELETE` 先 `FOR UPDATE` 锁行再查引用，
+  清扫对候选行 `FOR UPDATE SKIP LOCKED` 后再查一次引用。因此正在引用某文件的写入与该文件的删除，总有一方看到另一方的结果。
+  清扫按上传时间分页，直到凑满一批孤儿或没有更旧的文件，仍被引用的旧文件不会挡住较新的孤儿。
+  月、年目录即使变空也保留（删除它们会与正在为新文件建目录的上传竞争）。
   两种顺序在崩溃时都只会留下"有对象无行"的孤儿，由清扫任务处理，不会出现"有行无对象"（除非存储被外部改动）。
 - **清扫任务** `FILE_SWEEP`（`JobDefinition`，默认每天，D14）：
   1. 删除上传超过 `jabiz.files.orphan-after`（默认 24 小时）且**未被任何当前数据引用**的 `SysFile` 行（引用 = 任一实体中 `jabiz.file` 字段的当前值；
      时态实体只看当前与预定版本，历史版本中的引用不阻止删除——历史里显示"文件已删除"）；
   2. 列出存储中没有对应行、且早于清扫开始时间一小时的对象并删除。对象的"年龄"取自键中 `fileId`（UUIDv7）的时间戳——它来自注入的
      `Clock`，与业务时间一致；不用文件系统的修改时间（真实时钟，场景回放中对不上）。
+  3. 删除崩溃的上传留下的临时内容（上传区的文件与工作目录、对象旁的部分文件），超过 6 小时的。这些是基础设施的残留而不是业务数据，
+     只有文件系统的时间，因此按文件系统时间判断（与集群锁的时间同理）。
   任务名 `FILE_SWEEP`，它只调用流程 `FILE_PURGE_ORPHANS`（有操作记录，输出含删除的 `fileId`）；各项删除数量记入日志，
   观测 `jabiz.file.sweep` 只带结果标签（D16 第 3 条）。
   引用的判定只看数据库中的当前值（时态实体：当前与预定版本；普通实体：所有行，含逻辑删除的行），不经数据视图范围。

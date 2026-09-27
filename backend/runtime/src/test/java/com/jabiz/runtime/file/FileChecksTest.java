@@ -67,7 +67,7 @@ class FileChecksTest {
         EntityDefinitionRegistry entities = new EntityDefinitionRegistry(factory.getBeanProvider(EntityDefinition.class));
         DatasetRegistry datasets = new DatasetRegistry(factory.getBeanProvider(DatasetDefinition.class), entities,
             new StorageAdapterRegistry(factory.getBeanProvider(StorageEngineBinding.class)), new MockEnvironment());
-        FileProperties properties = new FileProperties(DataSize.ofMegabytes(1), null, null, null, null, null,
+        FileProperties properties = new FileProperties(DataSize.ofMegabytes(1), null, null, null, null, null, null,
             new FileProperties.Local(root));
         return new FileChecks(new FilePolicyRegistry(factory.getBeanProvider(FilePolicy.class)), entities, datasets,
             properties).check().stream().map(CheckProblem::format).toList();

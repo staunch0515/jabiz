@@ -13,6 +13,13 @@ class FileNamesTest {
     }
 
     @Test
+    void keepsDecomposedAndMarkedScripts() {
+        // macOS sends "ば" as "は" + U+3099: normalised, not mangled.
+        assertThat(FileNames.sanitize("\u306F\u3099.pdf")).isEqualTo("\u3070.pdf");
+        assertThat(FileNames.sanitize("नमस्ते.txt")).isEqualTo("नमस्ते.txt");
+    }
+
+    @Test
     void dropsPathsAndReplacesOtherCharacters() {
         assertThat(FileNames.sanitize("../../etc/passwd")).isEqualTo("passwd");
         assertThat(FileNames.sanitize("C:\\Users\\me\\cv.pdf")).isEqualTo("cv.pdf");

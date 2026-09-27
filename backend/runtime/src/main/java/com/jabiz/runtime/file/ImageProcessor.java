@@ -6,6 +6,7 @@ import com.jabiz.file.ExifOrientation;
 import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.i18n.PlatformErrorCodes;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -29,6 +30,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 /**
  * Re-encodes uploaded images (docs/design/14-files.md section 3, decision D18): checks the pixel count from the
@@ -62,14 +64,33 @@ public class ImageProcessor {
      */
     public record ProcessedImage(int width, int height, Path original, Map<String, Path> variants) {}
 
+    /** Bounds the images decoded at once: each holds several full-size bitmaps (a 40 MP photo: hundreds of MB). */
+    private final Semaphore permits;
+
+    @Autowired
+    public ImageProcessor(FileProperties properties) {
+        this(properties.imageConcurrency());
+    }
+
+    ImageProcessor(int concurrency) {
+        this.permits = new Semaphore(concurrency, true);
+    }
+
     /**
      * Processes {@code source}, which the caller recognised as {@code type}, writing the results into {@code work}.
      *
      * @throws ValidationException {@code FILE_INVALID} when the image is too large or cannot be decoded
      */
     public Mono<ProcessedImage> process(Path source, MediaTypes type, FilePolicy.ImageOptions options, Path work) {
-        return Mono.fromCallable(() -> processBlocking(source, type, options, work))
-            .subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> {
+            // Waits on a virtual thread of boundedElastic, never on the event loop.
+            permits.acquire();
+            try {
+                return processBlocking(source, type, options, work);
+            } finally {
+                permits.release();
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     ProcessedImage processBlocking(Path source, MediaTypes type, FilePolicy.ImageOptions options, Path work)

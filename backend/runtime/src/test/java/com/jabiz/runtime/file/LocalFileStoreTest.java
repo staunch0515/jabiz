@@ -10,6 +10,7 @@ import reactor.core.publisher.Flux;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,7 +22,7 @@ class LocalFileStoreTest {
     Path root;
 
     private LocalFileStore store(String directory) {
-        return new LocalFileStore(new FileProperties(DataSize.ofMegabytes(1), null, null, null, null, null,
+        return new LocalFileStore(new FileProperties(DataSize.ofMegabytes(1), null, null, null, null, null, null,
             new FileProperties.Local(directory)));
     }
 
@@ -44,9 +45,9 @@ class LocalFileStoreTest {
 
         store.deleteAll("2026/01/abc").block();
         assertThat(store.list().collectList().block()).isEmpty();
-        // Emptied month and year directories go too; the root stays.
-        assertThat(root.resolve("2026")).doesNotExist();
-        assertThat(root).exists();
+        assertThat(root.resolve("2026/01/abc")).doesNotExist();
+        // The month stays: an upload may just have created it.
+        assertThat(root.resolve("2026/01")).isDirectory();
     }
 
     @Test
@@ -62,10 +63,20 @@ class LocalFileStoreTest {
         LocalFileStore store = store(root.toString());
         Path fresh = store.newUploadFile().block();
         Path stale = store.newUploadFile().block();
-        Files.setLastModifiedTime(stale, java.nio.file.attribute.FileTime.fromMillis(0));
-        assertThat(store.deleteStaleParts(Duration.ofHours(1)).block()).isEqualTo(1);
+        Path work = Files.createDirectories(stale.resolveSibling(stale.getFileName() + ".work"));
+        Files.writeString(work.resolve("original"), "x");
+        Path part = Files.createDirectories(root.resolve("2026/01/abc")).resolve(".original.123.part");
+        Files.writeString(part, "x");
+        Path object = Files.writeString(root.resolve("2026/01/abc/original"), "x");
+        for (Path old : new Path[] {stale, work, part, object}) {
+            Files.setLastModifiedTime(old, FileTime.fromMillis(0));
+        }
+        assertThat(store.deleteStaleParts(Duration.ofHours(1)).block()).isEqualTo(3);
         assertThat(fresh).exists();
         assertThat(stale).doesNotExist();
+        assertThat(work).doesNotExist();
+        assertThat(part).doesNotExist();
+        assertThat(object).exists();
     }
 
     @Test

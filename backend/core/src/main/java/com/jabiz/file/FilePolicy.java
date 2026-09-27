@@ -94,12 +94,17 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
 
         /** Widest variant; wider ones would only waste storage. */
         public static final int MAX_VARIANT_WIDTH = 8192;
+        /** Most variants of one policy: their names are stored together in {@code sys_file.variants}. */
+        public static final int MAX_VARIANTS = 12;
 
         public ImageOptions {
             if (maxPixels <= 0) {
                 throw new IllegalArgumentException("maxPixels must be positive");
             }
             Objects.requireNonNull(variants, "variants must not be null");
+            if (variants.size() > MAX_VARIANTS) {
+                throw new IllegalArgumentException("At most " + MAX_VARIANTS + " variants");
+            }
             TreeSet<Integer> sorted = new TreeSet<>();
             for (Integer width : variants) {
                 if (width == null || width <= 0 || width > MAX_VARIANT_WIDTH) {

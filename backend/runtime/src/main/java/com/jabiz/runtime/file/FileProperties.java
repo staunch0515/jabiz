@@ -15,11 +15,13 @@ import java.time.Duration;
  * @param orphanObjectGrace       how old an object without a row must be before the sweep deletes it
  * @param sweepBatchSize          files one sweep run deletes at most
  * @param sweepCron               when the sweep job runs (six-field Spring cron, UTC)
+ * @param imageConcurrency        images processed at once (each holds several full-size bitmaps); default half the
+ *                                processors, at least one
  * @param local                   the local directory store
  */
 @ConfigurationProperties("jabiz.files")
 public record FileProperties(DataSize maxRequestBytes, Integer uploadRatePerMinute, Duration orphanAfter,
-    Duration orphanObjectGrace, Integer sweepBatchSize, String sweepCron, Local local) {
+    Duration orphanObjectGrace, Integer sweepBatchSize, String sweepCron, Integer imageConcurrency, Local local) {
 
     public FileProperties {
         maxRequestBytes = maxRequestBytes == null ? DataSize.ofMegabytes(100) : maxRequestBytes;
@@ -28,6 +30,8 @@ public record FileProperties(DataSize maxRequestBytes, Integer uploadRatePerMinu
         orphanObjectGrace = orphanObjectGrace == null ? Duration.ofHours(1) : orphanObjectGrace;
         sweepBatchSize = sweepBatchSize == null ? 500 : sweepBatchSize;
         sweepCron = sweepCron == null || sweepCron.isBlank() ? "0 17 3 * * *" : sweepCron;
+        imageConcurrency = imageConcurrency == null || imageConcurrency < 1
+            ? Math.max(1, Runtime.getRuntime().availableProcessors() / 2) : imageConcurrency;
         local = local == null ? new Local(null) : local;
     }
 
