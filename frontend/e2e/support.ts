@@ -1,4 +1,25 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
+
+/**
+ * Playwright's test, failing any test during which the page reported a Content-Security-Policy violation: the server
+ * sends the admin frontend's policy (docs/design/17-apps-and-branches.md section 3.2) and the frontend must work
+ * within it.
+ */
+export const test = base.extend<{ contentSecurityPolicy: void }>({
+  contentSecurityPolicy: [
+    async ({ page }, use) => {
+      const violations: string[] = []
+      page.on('console', (message) => {
+        if (message.type() === 'error' && message.text().includes('Content Security Policy')) {
+          violations.push(message.text())
+        }
+      })
+      await use()
+      expect(violations, 'Content-Security-Policy violations').toEqual([])
+    },
+    { auto: true },
+  ],
+})
 
 /** The administrator created at server start (JABIZ_BOOTSTRAP_ADMIN_*). */
 export const ADMIN = {

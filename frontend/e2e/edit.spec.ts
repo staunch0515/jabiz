@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { adminToken, CARRIERS, commit, datasetPath, insert, signIn, unique } from './support'
+import { expect } from '@playwright/test'
+import { adminToken, CARRIERS, commit, datasetPath, insert, signIn, test, unique } from './support'
 
 /**
  * Acceptance criteria 1 and 2 of ROADMAP phase 10: the generated form creates and edits a Carrier, and for the same

@@ -20,7 +20,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 | 数据访问 | **R2DBC**（请求路径）；Flyway 迁移和 `platformCheck` 静态校验允许使用 JDBC（不在请求路径上） |
 | 数据库 | PostgreSQL 16 |
 | 阻塞调用兜底 | Reactor `boundedElastic`，开启 `reactor.schedulers.defaultBoundedElasticOnVirtualThreads=true` |
-| 前端 | pnpm、React 19、TypeScript、Vite、Ant Design 5 + ProComponents、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12） |
+| 前端 | 通用后台：pnpm、React 19、TypeScript、Vite、Ant Design 5 + ProComponents、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12）。应用的公开前端工具链相同但不用 Ant Design（见 17 §4 与决策 D19） |
 | 测试 | JUnit 5、Reactor Test、ArchUnit、BlockHound、jqwik、PostgreSQL（Testcontainers 或本地实例）；前端 Vitest、Playwright |
 
 选择 WebFlux 的前提是：**业务开发者不写响应式代码**。所有业务扩展点必须是同步接口（见第 3 节）。
@@ -85,9 +85,11 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 ## 6. 构建与运行
 
 Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core` = jabiz-core、`ext-geo`（地理/物理量扩展语义类型，只依赖 core）、`runtime` = jabiz-runtime、`app`（示范业务：物流、运费月结、订单与库存 `com.jabiz.app.commerce`））。
+`backend/` 下其他带 `build.gradle.kts` 的直接子目录自动成为模块（应用分支的模块）；可部署应用用约定插件 `jabiz.boot-app`（`backend/build-logic`，
+`jabizApp { mainClass = …; spa("/", "../../frontend") }`），它负责 Spring Boot、`platformCheck`、测试的快照属性和前端打包（见 17 §3）。
 新增业务对象的步骤见 `docs/guide/new-business-object.md`。以下命令都在 `backend/` 下执行。
 
-- 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建（pnpm，经 node-gradle）和 `bootJar`，jar 同时提供页面与接口）。
+- 构建：`./gradlew build`（含测试、覆盖率门禁、前端构建（pnpm，经 node-gradle，每个 SPA 以 `VITE_BASE` 构建到 `app/build/spa/<名>`）和 `bootJar`，jar 同时提供页面与接口）。
   只编译和测试：`./gradlew check`（CI 执行的就是这个）
 - 全部测试：`./gradlew test`；单个模块：`./gradlew :core:test`、`:ext-geo:test`、`:runtime:test`、`:app:test`；
   单个类：`./gradlew :app:test --tests '*DatasetEntityManagerIT'`
@@ -111,6 +113,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
 - 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
+  挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
@@ -134,10 +137,11 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 6. 如果实现中改变了约定，同步更新本文件和 `docs/design/`。
 7. 在 `docs/ROADMAP.md` 中更新该阶段的状态。
 
-## 8. 平台与应用的分支（见 17 与决策 D19，待确认）
+## 8. 平台与应用的分支（见 17 与决策 D19）
 
 - `platform`：公共分支，只含平台（`core`、`runtime`、`ext-geo`）、示范应用 `app`、通用后台 `frontend/`、`spec/`、`docs/design/`、`docs/guide/`。
   平台工作分支 `phase-<N><x>-<名>` 从 `platform` 拉出并合回。
 - 应用分支（如 `culture`）= `platform` + 应用专有目录（列在应用分支根目录的 `.jabiz-app-paths` 中）；应用工作分支 `<应用>-<N>-<名>`。
-  **合并方向只有 `platform` → 应用分支**；应用分支不修改平台目录（CI 检查），平台需要的改动先在平台分支上完成（带平台自己的测试与示范）。
+  **合并方向只有 `platform` → 应用分支**；应用分支不修改平台目录（CI 的 `app-paths` 作业运行 `tools/check-app-paths.sh`，其测试为
+  `tools/test/check-app-paths.test.sh`），平台需要的改动先在平台分支上完成（带平台自己的测试与示范）。
 - 应用自己的规则写在应用目录内的 `CLAUDE.md` 与 `docs/<应用>/`，不改本文件。

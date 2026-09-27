@@ -35,9 +35,13 @@ tools/culture/**
 .github/workflows/culture.yml
 ```
 
-- 平台提供 `tools/check-app-paths.sh`：在应用分支上计算 `git diff --name-only origin/platform...HEAD`（自共同祖先以来应用分支的改动），
-  任何不匹配 `.jabiz-app-paths` 的路径都报错。平台 CI（`ci.yml`）在存在 `.jabiz-app-paths` 时运行它。
-  合并 `platform` 带来的改动不计入（它们在共同祖先之后同时出现在两边）。
+- 平台提供 `tools/check-app-paths.sh`：在应用分支上计算 `git diff --name-only --no-renames origin/platform...HEAD`（自共同祖先以来应用分支的改动，
+  改名按删除 + 新增计），任何不匹配 `.jabiz-app-paths` 的路径都报错。合并 `platform` 带来的改动不计入（它们在共同祖先之后同时出现在两边）。
+  - 模式：`#` 起注释；`**` 可跨目录，`*`、`?` 只在一段路径内；`.jabiz-app-paths` 本身总是允许。
+  - 模式不得覆盖平台分支（共同祖先）上已有的文件（例如 `backend/**`），否则同样报错。
+  - 退出码：0 通过（或没有 `.jabiz-app-paths`，不是应用分支）；1 有越界；2 无法检查（找不到平台分支或共同祖先），不放行。
+- 平台 CI（`ci.yml`）对推送到任何分支都运行（应用分支不能改 `ci.yml`）；其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时运行检查，
+  并在每个分支上运行脚本自己的测试 `tools/test/check-app-paths.test.sh`。
 - 应用自己的开发规则写在应用目录内的 `CLAUDE.md`（如 `backend/culture/CLAUDE.md`、`site/CLAUDE.md`）与 `docs/<应用>/` 中；
   根目录的 `CLAUDE.md` 只属于平台，应用分支不改它（避免合并冲突）。
 
@@ -65,9 +69,15 @@ jabizApp {
 
 - `SpaFallbackFilter` 改为按配置工作：`jabiz.web.spa[i].path`（前缀）与 `.index`（该前缀的 `index.html`），最长前缀优先；
   缺省只有 `/` → `/index.html`，与现在相同。`/api`、`/actuator` 与带扩展名的路径不回退（不变）。
-- 每个 SPA 可配置内容安全策略 `jabiz.web.spa[i].content-security-policy`（写入响应头）；后台的缺省值为
+- 前缀按路径段匹配（`/admin` 匹配 `/admin` 与 `/admin/…`，不匹配 `/administrator`）；`index` 缺省为 `<前缀>/index.html`。
+- 每个 SPA 可配置内容安全策略 `jabiz.web.spa[i].content-security-policy`，写入该前缀下全部响应（`/api`、`/actuator` 除外）的响应头；
+  未配置时用后台的缺省值
   `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`
-  （antd 的 CSS-in-JS 需要内联样式）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
+  （antd 的 CSS-in-JS 需要内联样式；未配置即取最严格的现有策略，默认拒绝）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
+- 配置由 `SpaConfigCheck`（启动检查，类别 `WEB`）一次性报告：前缀格式、重复、落在 `/api` `/actuator` 下，`index` 格式，CSP 为空或多行。
+- 同源的多个 SPA 共享 `localStorage` / `sessionStorage`：公开前端不存令牌（第 4 节），也不得读写后台的会话键。
+- 构建：插件为每个 `spa(...)` 注册 `pnpmInstall<名>` 与 `spaBuild<名>`（`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，
+  因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），`bootJar` 把输出放到 `static/<前缀>`。
 
 ### 3.3 部署与 CI
 
@@ -85,6 +95,8 @@ jabizApp {
 
 ## 5. 测试
 
-- `check-app-paths.sh`：在临时仓库中构造"只改应用目录"与"改了平台目录"两种分支，断言前者通过、后者失败。
+- `check-app-paths.sh`（`tools/test/check-app-paths.test.sh`）：在临时仓库中构造"只改应用目录"与"改了平台目录"两种分支，断言前者通过、后者失败；
+  另有删除与移动平台文件、`*` 不跨目录、合并平台之后、模式覆盖平台文件、找不到平台分支。
 - 构建：`app` 改用约定插件后 `./gradlew check`、`:app:bootJar`、端到端与 compose 作业全部照常通过。
-- `SpaFallbackFilter`：多个前缀的回退、最长前缀优先、CSP 头；缺省配置与现在行为相同。
+- `SpaFallbackFilter`（`SpaFallbackFilterTest`、`SpaConfigCheckTest`）：多个前缀的回退、最长前缀优先、路径段边界、CSP 头；缺省配置与现在行为相同；
+  `MultiSpaIT`（app）经完整的 WebFlux 与安全过滤链验证 `/` 与 `/admin/` 两个 SPA。

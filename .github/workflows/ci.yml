@@ -1,7 +1,8 @@
 name: CI
 on:
+  # Every branch: platform and its work branches, and application branches, which cannot change this file
+  # (docs/design/17-apps-and-branches.md section 3.3).
   push:
-    branches: [main, alpha, 'phase-*']
   pull_request:
 
 jobs:
@@ -55,6 +56,27 @@ jobs:
       - run: pnpm check:api
       - run: pnpm test
       - run: pnpm build
+      # The admin frontend under a sub-path (docs/design/16-content-authoring.md section 6): assets resolve below it.
+      - name: Build under /admin/
+        run: |
+          VITE_BASE=/admin/ pnpm exec vite build --outDir "$RUNNER_TEMP/admin" --emptyOutDir
+          grep -q 'src="/admin/assets/' "$RUNNER_TEMP/admin/index.html"
+          ! grep -qE '(src|href)="/(assets|favicon)' "$RUNNER_TEMP/admin/index.html"
+
+  # Platform and applications (docs/design/17-apps-and-branches.md section 2): an application branch (one with
+  # .jabiz-app-paths) changes only its own paths. The script's own tests run on every branch.
+  app-paths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: tools/test/check-app-paths.test.sh
+      - if: hashFiles('.jabiz-app-paths') != ''
+        run: |
+          git fetch --no-tags origin platform
+          tools/check-app-paths.sh origin/platform
 
   # End-to-end: the packaged application (API + frontend in one jar) against PostgreSQL, driven by Playwright.
   e2e:

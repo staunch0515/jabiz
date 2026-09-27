@@ -115,6 +115,9 @@ frontend/
 
 - 开发：`frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
 - 打包：`./gradlew :app:bootJar` 经 node-gradle（pnpm）构建前端并打入 jar，后端同一端口提供页面与接口（`SpaFallbackFilter`）。
+  构建由约定插件 `jabiz.boot-app` 完成（`jabizApp { spa("/", "../../frontend") }`，17 §3.1）；服务端给页面加内容安全策略（17 §3.2），
+  端到端测试在任何 CSP 违规时失败。
+- 子路径：`VITE_BASE=/admin/`（`src/base.ts` 校验并换算 React Router 的 `basename`，16 §6）；CI 检查以 `/admin/` 构建后的资源路径。
 - 检查：`pnpm lint`、`pnpm typecheck`、`pnpm check:api`、`pnpm test`、`pnpm build`；端到端 `pnpm e2e`（见第 8 节）。
 
 ## 8. 测试

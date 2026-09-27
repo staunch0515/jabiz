@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { adminToken, insert, signIn, unique } from './support'
+import { expect } from '@playwright/test'
+import { adminToken, insert, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
