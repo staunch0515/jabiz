@@ -38,6 +38,9 @@ public class PlatformObservations {
     public static final String TEMPLATE = "jabiz.query.template";
     public static final String DELIVERY = "jabiz.outbox.delivery";
     public static final String JOB = "jabiz.job.run";
+    public static final String FILE_UPLOAD = "jabiz.file.upload";
+    public static final String FILE_SERVE = "jabiz.file.serve";
+    public static final String FILE_SWEEP = "jabiz.file.sweep";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";

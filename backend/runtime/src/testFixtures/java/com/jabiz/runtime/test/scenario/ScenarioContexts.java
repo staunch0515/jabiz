@@ -6,6 +6,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,7 +34,19 @@ public final class ScenarioContexts {
         }
     }
 
+    private static final Path EMPTY_FILES_ROOT = emptyDirectory();
+
     private ScenarioContexts() {}
+
+    private static Path emptyDirectory() {
+        try {
+            Path directory = Files.createTempDirectory("jabiz-scenario-files-");
+            directory.toFile().deleteOnExit();
+            return directory;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     public static Started start(Class<?> application) {
         PostgresTestDatabase db = PostgresTestDatabase.get();
@@ -47,6 +63,8 @@ public final class ScenarioContexts {
         properties.put("spring.flyway.create-schemas", "true");
         properties.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testmigration");
         properties.put("spring.main.banner-mode", "off");
+        // Replays upload nothing; the application only needs a storage directory to start with its file policies.
+        properties.put("jabiz.files.local.root", EMPTY_FILES_ROOT.toString());
         try {
             ConfigurableApplicationContext context = new SpringApplicationBuilder(application)
                 .web(WebApplicationType.NONE)

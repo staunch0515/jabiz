@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import { formatDecimal, toDecimal } from './decimal'
-import type { DictItem, EntityMeta, FieldMeta } from './types'
+import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './types'
 
 /**
  * Semantic kind → how a value is shown and entered (docs/design/12-frontend.md section 5). Pure functions: the
@@ -18,7 +18,7 @@ export function findField(entity: EntityMeta, name: string): FieldMeta | undefin
   return entity.fields.find((f) => f.name === name)
 }
 
-export type Control = 'text' | 'textarea' | 'decimal' | 'integer' | 'datetime' | 'switch' | 'select' | 'json'
+export type Control = 'text' | 'textarea' | 'decimal' | 'integer' | 'datetime' | 'switch' | 'select' | 'file' | 'json'
 
 /** The input control for a field of this kind. */
 export function controlOf(field: FieldMeta): Control {
@@ -37,6 +37,7 @@ export function controlOf(field: FieldMeta): Control {
     case 'code':
       return 'select'
     case 'custom':
+      return isFileField(field) ? 'file' : 'json'
     case 'none':
       return 'json'
     default:
@@ -130,6 +131,8 @@ export function toWireValue(field: FieldMeta, value: unknown): unknown {
     case 'integer':
       if (value === '') return null
       return typeof value === 'number' ? String(value) : value
+    case 'file':
+      return value === '' ? null : value
     case 'json':
       if (typeof value !== 'string') return value
       if (value.trim() === '') return null

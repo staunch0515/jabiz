@@ -18,7 +18,7 @@
 | 10 | 前端 | 7–10 天 | ☑ 已完成（PR 待合并） |
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
-| 13 | 平台与应用分开、文件、公开访问、内容编辑 | 15–20 天 | ☐ 设计待确认 |
+| 13 | 平台与应用分开、文件、公开访问、内容编辑 | 15–20 天 | ◐ 13a、13b 已完成（PR 待合并）；13c、13d 设计待确认 |
 
 ---
 
@@ -311,7 +311,7 @@ ShedLock 锁 + 按计划时刻的幂等键——调整了要求 5 中"`@Schedule
 ## 阶段 13：平台与应用分开、文件、公开访问、内容编辑
 
 **目标**：让平台能承载"面向公众、以内容为主"的应用（第一个是 culture，见其分支上的 `docs/culture/`），且这些能力对以后的应用通用。
-设计见 `docs/design/14-files.md`、`15-public-access.md`、`16-content-authoring.md`、`17-apps-and-branches.md` 与决策 D17–D19（待确认）。
+设计见 `docs/design/14-files.md`、`15-public-access.md`、`16-content-authoring.md`、`17-apps-and-branches.md` 与决策 D17–D19（D19、D18 已分别在 13a、13b 计划中确认，D17 待确认）。
 本阶段在 `platform` 分支上进行，**不包含任何 culture 的代码**；每项能力都在 `app` 示范应用中有示范与测试。
 
 拆分与顺序：13a → 13b → 13c；13d 在 13a 之后可与 13b、13c 并行。
@@ -325,22 +325,33 @@ ShedLock 锁 + 按计划时刻的幂等键——调整了要求 5 中"`@Schedule
 4. CLAUDE.md 与 01、12 同步（D19）。
 
 **验收标准**
-- [ ] 现有全部测试、`platformCheck`、前端检查、端到端与 compose 作业照常通过。
-- [ ] 同一 jar 可在 `/` 与 `/admin/` 提供两个 SPA，各自回退、各自带 CSP（集成测试）。
-- [ ] 路径检查脚本对"只改应用目录 / 改了平台目录"两种分支给出通过 / 失败（脚本测试）。
+- [x] 现有全部测试、`platformCheck`、前端检查、端到端与 compose 作业照常通过（端到端另加：任何 CSP 违规即失败）。
+- [x] 同一 jar 可在 `/` 与 `/admin/` 提供两个 SPA，各自回退、各自带 CSP（集成测试 `MultiSpaIT`）。
+- [x] 路径检查脚本对"只改应用目录 / 改了平台目录"两种分支给出通过 / 失败（脚本测试 `tools/test/check-app-paths.test.sh`）。
+
+说明：约定插件在 `backend/build-logic`（包 `com.jabiz.gradle`），每个 SPA 以 `VITE_BASE` 构建到本模块的 `build/spa/<名>`；
+SPA 配置由启动检查 `WEB` 报告；未配置 CSP 的 SPA 取后台的缺省策略，因此现有后台从本阶段起带 CSP；路径检查的模式不得覆盖平台文件；
+CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到端测试仍只对根路径部署运行，子路径部署由构建检查与 `MultiSpaIT` 覆盖。
 
 ### 13b 文件存储（4–5 天）
 
 **要求**
-1. `SysFile`、`FilePolicy`、`FileStore`（本地目录）、`ImageProcessor`、`jabiz.file` 类型、上传与读取接口、`FILE_REGISTER` / `FILE_DELETE` / `FILE_SWEEP`。
+1. `SysFile`、`FilePolicy`、`FileStore`（本地目录）、`ImageProcessor`、`jabiz.file` 类型、上传与读取接口、`FILE_REGISTER` / `FILE_DELETE` / `FILE_SWEEP`
+   （任务 `FILE_SWEEP` 调用流程 `FILE_PURGE_ORPHANS`）。
 2. 后台上传控件与预览。
 3. 示范：`app` 中一个实体带图片字段与 PDF 字段。
 
 **验收标准**
-- [ ] 带 GPS 的图片上传后，原件与全部变体都不含 EXIF / GPS（集成测试）。
-- [ ] 伪装扩展名的 HTML / SVG 被拒绝；超限上传在读完请求体之前被中止。
-- [ ] 被引用的文件不能删除；孤儿行与孤儿对象被清扫，被引用的不受影响。
-- [ ] 上传与删除都有操作记录，`input_summary` 中没有文件名；BlockHound 通过。
+- [x] 带 GPS 的图片上传后，原件与全部变体都不含 EXIF / GPS（`FileUploadIT`，PNG 的文本块同样去掉）。
+- [x] 伪装扩展名的 HTML / SVG 被拒绝；超限上传在读完请求体之前被中止（`FileUploadIT`、`FileLimitsIT`）。
+- [x] 被引用的文件不能删除；孤儿行与孤儿对象被清扫，被引用的不受影响（`FileDeleteIT`、`FileSweepIT`）。
+- [x] 上传与删除都有操作记录，`input_summary` 中没有文件名；BlockHound 通过（`FileDeleteIT`；全部集成测试均在 BlockHound 下运行）。
+
+说明：D18 在计划确认时一并确认，实现细则写入 D18 第 7 条与 14：存储键只由 `fileId`（UUIDv7）推导，孤儿对象的年龄取其时间戳；
+文件列不加外键；存储目录无默认值（有策略而未配置即启动失败，检查类别 `FILE`）；`jabiz.file` 的转换在 core，导出中的策略细节由 runtime 补全；
+写入检查是平台内部的 `FieldWriteCheck`，覆盖全部写入途径；业务流程删除文件前先 `SaveChanges.now`（示范 `SUPPLIER_CONTRACT_REMOVE`）。
+新增错误码 `FILE_*` 与 `RATE_LIMITED`（413 / 429 的问题响应）。示范：`Product.imageFileId`（`commerce.image`）与 `Supplier.contractFileId`
+（`commerce.document`）。计划中的场景回放未做：上传经 HTTP 而不是流程，清扫改由 `FileSweepIT` 以可控时钟与 `JobRunner.run` 覆盖。
 
 ### 13c 公开只读访问（4–5 天）
 

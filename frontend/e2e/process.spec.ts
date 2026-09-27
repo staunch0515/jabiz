@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { signIn, unique } from './support'
+import { expect } from '@playwright/test'
+import { signIn, test, unique } from './support'
 
 /** ROADMAP phase 10 requirement 6: a process form generated from the process input type. */
 test('a process runs from its generated form', async ({ page }) => {

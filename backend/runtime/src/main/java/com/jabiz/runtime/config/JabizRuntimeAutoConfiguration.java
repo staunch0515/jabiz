@@ -3,10 +3,13 @@ package com.jabiz.runtime.config;
 import com.jabiz.query.QueryCompiler;
 import com.jabiz.runtime.JabizApplication;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.file.FileProperties;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import reactor.core.scheduler.Schedulers;
@@ -18,6 +21,7 @@ import reactor.core.scheduler.Schedulers;
  */
 @AutoConfiguration
 @ComponentScan("com.jabiz.runtime")
+@EnableConfigurationProperties({JabizWebProperties.class, FileProperties.class})
 public class JabizRuntimeAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(JabizRuntimeAutoConfiguration.class);

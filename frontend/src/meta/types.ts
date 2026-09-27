@@ -39,6 +39,23 @@ export type FieldMeta = FieldBase &
     | { type: 'none' }
   )
 
+/** A `jabiz.file` field (docs/design/14-files.md section 4): the upload control's settings. */
+export type FileFieldMeta = FieldBase & {
+  type: 'custom'
+  kindId: 'jabiz.file'
+  policy: string
+  /** Content types and extensions, for the file picker only: the server decides by content. */
+  accept?: string[]
+  maxBytes?: number
+  image?: boolean
+  /** Names of the image variants, narrowest first (for example w160). */
+  variants?: string[]
+}
+
+export function isFileField(field: FieldMeta): field is FieldMeta & FileFieldMeta {
+  return field.type === 'custom' && field.kindId === 'jabiz.file'
+}
+
 export interface ListViewMeta {
   name: string
   columns: string[]

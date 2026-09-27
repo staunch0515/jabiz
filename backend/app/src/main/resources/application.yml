@@ -21,6 +21,11 @@ jabiz:
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  files:
+    # Where uploaded files are kept (docs/design/14-files.md section 6). No default: startup fails without it, since the
+    # application declares file policies. A directory of this host (a volume in containers); single instance only.
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:}
   i18n:
     # Language of error messages when Accept-Language names none of zh, ja, en.
     default-locale: en

@@ -1,8 +1,10 @@
 import type { ProColumns } from '@ant-design/pro-components'
 import type { TFunction } from 'i18next'
+import { createElement } from 'react'
+import FilePreview from '../components/FilePreview'
 import { fieldLabel, formatValue, optionsOf } from './kinds'
 import { columnFields, searchKindOf } from './listQuery'
-import type { DictItem, EntityInstance, EntityMeta, FieldMeta, ListViewMeta } from './types'
+import { isFileField, type DictItem, type EntityInstance, type EntityMeta, type FieldMeta, type ListViewMeta } from './types'
 
 /** One table row: the entity's attributes by field name, plus the instance itself. */
 export type Row = Record<string, unknown> & { __key: string; __instance: EntityInstance }
@@ -31,7 +33,14 @@ export function buildColumns(
       key: field.name,
       hideInSearch: true,
       sorter: sorts.has(field.name),
-      render: (_, row) => formatValue(field, row[field.name], dictionaries, t, locale),
+      render: (_, row) => {
+        const value = row[field.name]
+        // A file is shown, not its id: images as a small thumbnail, anything else as a download.
+        if (isFileField(field) && typeof value === 'string' && value) {
+          return createElement(FilePreview, { fileId: value, field, width: 48 })
+        }
+        return formatValue(field, value, dictionaries, t, locale)
+      },
     }
     if (view?.defaultSort?.field === field.name) {
       column.defaultSortOrder = view.defaultSort.asc ? 'ascend' : 'descend'

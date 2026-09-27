@@ -42,7 +42,7 @@
 | `process.entity.*`、`process.sponsor.*`（其步骤实现是 `StepHandler`） | runtime（`runtime.process.entity`、`runtime.process.sponsor`；登录流程在阶段 7 重写） |
 | `resource.ResourceId`、`Resource`、`GenericResource`、`ProcessResource`、资源异常 | core |
 | `resource.*Resolver`、`ResourceRegistry`（返回 `Mono`） | runtime（`runtime.resource`） |
-| `web.*`、`MetaModelController`、`app.SpaFallbackFilter`、`config.ClockConfig` | runtime（`runtime.web`、`runtime.config`） |
+| `web.*`、`MetaModelController`、`app.SpaFallbackFilter`（阶段 13a 起按 `JabizWebProperties` 提供多个 SPA，17 §3.2）、`config.ClockConfig` | runtime（`runtime.web`、`runtime.config`） |
 
 runtime 通过 Spring Boot 自动配置（`JabizRuntimeAutoConfiguration`）进入应用；业务模块只扫描自己的包，
 并用 `JabizApplication.run(...)` 启动（它在 Reactor 加载前设置第 6 节的虚拟线程属性）。

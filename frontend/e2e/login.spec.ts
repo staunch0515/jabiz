@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { ADMIN, adminToken, CARRIERS, datasetPath, insert, signIn, unique } from './support'
+import { expect } from '@playwright/test'
+import { ADMIN, adminToken, CARRIERS, datasetPath, insert, signIn, test, unique } from './support'
 
 /** Sign-in, the dynamic menu, languages and what the UI offers by permission (ROADMAP phase 10 requirement 4). */
 test.describe('sign-in and navigation', () => {

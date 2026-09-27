@@ -44,7 +44,8 @@ cd backend && ./gradlew :app:bootRun --args='--spring.profiles.active=dev'   # 8
 cd frontend && pnpm install && pnpm dev          # 5173，/api 代理到 8080
 ```
 
-- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）与首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`。
+- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
+  与上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（`dev` 下默认 `backend/app/build/jabiz-files`；compose 用专用卷）。
 - 启动时 Flyway 先迁移平台脚本（`db/jabiz`），再迁移业务脚本（`db/migration`）；元数据、视图、模板、流程的不一致会在启动时一次性报告。
 - 接入本地观测：`docker compose up -d lgtm`，再以环境变量启动后端：
   `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://localhost:4318/v1/traces`、

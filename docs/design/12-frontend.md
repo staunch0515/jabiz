@@ -72,12 +72,16 @@ frontend/
 | `bool` | 开关（新建时默认"否"） | 是 / 否 | 等于 |
 | `version` | 整数 | 原样 | 区间 |
 | `semanticIdentity` / `reference` | 文本框 | 原样 | 等于 |
-| `custom` / `none` | JSON 文本 | JSON | 等于 |
+| `custom`：`jabiz.file` | 上传按钮（`accept` 与大小提示来自导出的策略）+ 预览；移除即清空 | 图片缩略图（最窄的合适变体）/ 下载按钮 | 不提供 |
+| 其他 `custom` / `none` | JSON 文本 | JSON | 等于 |
 
 - 列：列表视图的 `columns`（没有列表视图时取前 8 个非系统字段）；筛选、排序只对白名单字段开放，默认排序取 `defaultSort`。
   敏感字段从不出现在列、表单与回看中。
 - 表单：不提供系统维护、生成与敏感字段；不可变字段编辑时只读。新建发送全部填写的值，修改**只发送改变的字段**；清空的输入发送 `null`。
   日期时间控件只到毫秒，因此判断"是否改变"时时间按毫秒比较（未改动的微秒时间不会被截断后发送）。
+- 文件（14 §5）：访问令牌只在内存中，`<img>` 不能带令牌，因此预览与下载都以带会话的 `fetch` 取得内容，经 `URL.createObjectURL`
+  显示并在卸载时释放（后台 CSP 的 `img-src` 已允许 `blob:`）；上传以 `FormData` 发送。选择文件时的类型过滤与大小检查只省一次往返，
+  以服务端按内容的判定为准。
   时态实体另有"生效时间"（允许预定或具备 `temporal.backdate` 时）与"原因"。
 - 提交：`POST /api/datasets/{id}/commit`。后端返回的 400/422 违规回填到对应字段，与前端校验的错误显示在同一处（带 `data-rule-code`）；409 提示重新加载。
 
@@ -115,6 +119,9 @@ frontend/
 
 - 开发：`frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
 - 打包：`./gradlew :app:bootJar` 经 node-gradle（pnpm）构建前端并打入 jar，后端同一端口提供页面与接口（`SpaFallbackFilter`）。
+  构建由约定插件 `jabiz.boot-app` 完成（`jabizApp { spa("/", "../../frontend") }`，17 §3.1）；服务端给页面加内容安全策略（17 §3.2），
+  端到端测试在任何 CSP 违规时失败。
+- 子路径：`VITE_BASE=/admin/`（`src/base.ts` 校验并换算 React Router 的 `basename`，16 §6）；CI 检查以 `/admin/` 构建后的资源路径。
 - 检查：`pnpm lint`、`pnpm typecheck`、`pnpm check:api`、`pnpm test`、`pnpm build`；端到端 `pnpm e2e`（见第 8 节）。
 
 ## 8. 测试

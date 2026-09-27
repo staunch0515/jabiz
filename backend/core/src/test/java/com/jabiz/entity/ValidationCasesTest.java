@@ -2,6 +2,7 @@ package com.jabiz.entity;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dictionary.DictionaryLookup;
+import com.jabiz.file.FileKind;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -60,6 +61,7 @@ class ValidationCasesTest {
         eb.field("active", f -> f.physicalColumn("f_active").asBool());
         eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:sample:status", "OPEN", "DONE"));
         eb.field("port", f -> f.physicalColumn("f_port").asCode("urn:sample:port"));
+        eb.field("attachment", f -> f.physicalColumn("f_attachment").kind(FileKind.of("sample.document")));
     });
 
     private static final ObjectMapper JSON = JsonMapper.builder().enable(SerializationFeature.INDENT_OUTPUT).build();

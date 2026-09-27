@@ -49,7 +49,8 @@ services:
       MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "true"
       MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://lgtm:4318/v1/metrics
       MANAGEMENT_OTLP_METRICS_EXPORT_STEP: 10s
-    volumes: [jabiz-secrets:/var/lib/jabiz/secrets]
+    # Uploaded files live in their own volume (docs/design/14-files.md section 6); the image sets JABIZ_FILES_LOCAL_ROOT.
+    volumes: [jabiz-secrets:/var/lib/jabiz/secrets, jabiz-files:/var/lib/jabiz/files]
 
   # Grafana, Prometheus, Tempo, Loki and an OpenTelemetry collector in one container, for development only.
   lgtm:
@@ -71,3 +72,4 @@ services:
 volumes:
   pgdata:
   jabiz-secrets:
+  jabiz-files:

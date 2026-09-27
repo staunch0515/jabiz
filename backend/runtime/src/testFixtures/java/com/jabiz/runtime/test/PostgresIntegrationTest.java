@@ -12,6 +12,10 @@ import org.springframework.test.context.DynamicPropertySource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,12 +23,14 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * Base class of integration tests against a real PostgreSQL.
@@ -50,6 +56,9 @@ public abstract class PostgresIntegrationTest {
     /** Schema of the test class currently running; test classes run one after another. */
     private static String schema;
 
+    /** File storage directory of the test class currently running (docs/design/14-files.md section 6). */
+    private static Path files;
+
     @Autowired
     protected MutableClock clock;
 
@@ -67,6 +76,18 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.flyway.default-schema", () -> current);
         registry.add("spring.flyway.create-schemas", () -> "true");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testmigration");
+        try {
+            files = Files.createTempDirectory("jabiz-files-");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        Path root = files;
+        registry.add("jabiz.files.local.root", root::toString);
+    }
+
+    /** The file storage directory of the running test class. */
+    protected static Path filesRoot() {
+        return files;
     }
 
     /** Schema of the running test class, for tests that open their own connections. */
@@ -79,6 +100,20 @@ public abstract class PostgresIntegrationTest {
         if (schema != null) {
             DB.dropSchema(schema);
             schema = null;
+        }
+        if (files != null) {
+            deleteRecursively(files);
+            files = null;
+        }
+    }
+
+    private static void deleteRecursively(Path root) {
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

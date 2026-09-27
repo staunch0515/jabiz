@@ -6,6 +6,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
+import com.jabiz.file.FileKind;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -59,9 +60,11 @@ public final class CommerceEntities extends BaseEntityDefinitions {
             .apply(Rules.range("PRODUCT_PRICE_RANGE", BigDecimal.ONE, new BigDecimal("10000000")))
             .apply(Rules.scale("PRODUCT_PRICE_SCALE", 0)));
         eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
+        // A photo, re-encoded without metadata and in several widths (docs/design/14-files.md).
+        eb.field("imageFileId", f -> f.physicalColumn("image_file_id").kind(FileKind.of(CommerceFiles.IMAGE)));
         eb.unique("uk_product_sku", "sku");
         eb.listView("default", lv -> lv
-            .columns("sku", "productName", "unitPrice", "active", "effectStartTime")
+            .columns("imageFileId", "sku", "productName", "unitPrice", "active", "effectStartTime")
             .filters("sku", "productName", "unitPrice", "active")
             .sorts("sku", "productName", "unitPrice")
             .defaultSort("sku", true));
