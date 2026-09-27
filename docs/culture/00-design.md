@@ -293,7 +293,7 @@ Resource:     DRAFT ⇄ PUBLISHED
 3. 每个音频有 `transcript` → `TRANSCRIPT_REQUIRED`；每张照片有英语替代文本 → `ALT_TEXT_REQUIRED`。
 4. 有可辨认人物的照片 `peopleConsentConfirmed = true` → `PEOPLE_CONSENT_NOT_CONFIRMED`。
 5. 每个视角、每个属于视角的媒体：其参与者为 `ACTIVE`（否则 `PARTICIPANT_NOT_ACTIVE`）且满足 §6.2 → `CONSENT_MISSING`（参数：参与者主键、缺少的同意种类）；
-   由通讯员添加的视角（及其媒体），其 `ownerActorId` 必须等于该参与者的 `accountActorId` → `CONTRIBUTION_OWNER_MISMATCH`。
+   由通讯员添加的视角（及其媒体），其 `ownerActorId` 必须等于该参与者的 `accountActorId`；通讯员添加的故事级媒体只能在自己的故事上 → `CONTRIBUTION_OWNER_MISMATCH`。
 6. 故事至少有一个视角或正文（不存在"空故事"）→ `STORY_EMPTY`。
 
 第 1 条的错误码：英语缺失 `ENGLISH_REQUIRED`（参数 `field`）、`THUMBNAIL_REQUIRED`、`THEME_REQUIRED`、`BODY_REQUIRED`、`VIDEO_REQUIRED`。

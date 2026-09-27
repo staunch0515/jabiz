@@ -160,6 +160,15 @@ public final class PublishCheck {
                 }
             }
         }
+        // Story-level media added by a correspondent belong on their own story only (their datasets let them name
+        // any story).
+        for (EntityInstance m : in.media()) {
+            Object owner = m.get("ownerActorId");
+            if (m.get("contributionId") == null && owner != null && !owner.equals(s.get("ownerActorId"))) {
+                violations.add(violation(m, "ownerActorId", "CONTRIBUTION_OWNER_MISMATCH",
+                    "Added by someone other than the story's correspondent", Map.of("participant", "-")));
+            }
+        }
         return List.copyOf(violations);
     }
 

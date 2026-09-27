@@ -211,6 +211,15 @@ class PublishCheckTest {
     }
 
     @Test
+    void storyLevelMediaOfACorrespondentBelongOnTheirOwnStory() {
+        extraMedia.add(row("MediaItem", "m-4", Map.of("storyId", STORY_ID, "kind", "PHOTO", "alt", en("A lake"),
+            "ownerActorId", "cu-se-01")));
+        assertThat(codes()).containsExactly("MediaItem.ownerActorId:CONTRIBUTION_OWNER_MISMATCH");
+        story.put("ownerActorId", "cu-se-01");
+        assertThat(codes()).isEmpty();
+    }
+
+    @Test
     void thereAreNoEmptyStories() {
         withContribution = false;
         story.put("mediaType", "PHOTO");
