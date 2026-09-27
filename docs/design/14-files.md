@@ -84,7 +84,8 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
 ```
 
 - 规范 Java 类型 `UUID`（即 `fileId`）；物理列 `uuid`；允许的运算符 `EQ` `NE` `IN` `IS_NULL` `IS_NOT_NULL`。
-- 写入检查（运行时，在提交前异步加载所需文件后同步判断，与字典校验同一方式）：文件存在 → 否则 400 `FILE_NOT_FOUND`；
+- 写入检查（运行时 `FileFieldCheck`，平台内部的 `FieldWriteCheck`，与引用检查在同一位置运行，覆盖数据视图 API、通用实体流程与 `ChangeSet`、
+  普通与时态实体）：文件存在 → 否则 400 `FILE_NOT_FOUND`；
   文件的 `policy` 等于字段声明的策略 → 否则 400 `FILE_POLICY_MISMATCH`。只检查本次**改变**的值。
 - 导出（02 §8）：`{type: custom, kindId: jabiz.file, policy, accept: [...], maxBytes, image: true|false, variants: [...]}`，
   后台据此渲染上传控件（12 §5 增加一行：`jabiz.file` → 上传 + 预览）。`FileKindSupport` 没有状态、拿不到 Spring 中的策略，
@@ -123,7 +124,8 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
      时态实体只看当前与预定版本，历史版本中的引用不阻止删除——历史里显示"文件已删除"）；
   2. 列出存储中没有对应行、且早于清扫开始时间一小时的对象并删除。对象的"年龄"取自键中 `fileId`（UUIDv7）的时间戳——它来自注入的
      `Clock`，与业务时间一致；不用文件系统的修改时间（真实时钟，场景回放中对不上）。
-  任务名 `FILE_SWEEP`，它只调用流程 `FILE_PURGE_ORPHANS`（有操作记录，输出含删除的 `fileId` 与对象数）；删除的文件数记入观测。
+  任务名 `FILE_SWEEP`，它只调用流程 `FILE_PURGE_ORPHANS`（有操作记录，输出含删除的 `fileId`）；各项删除数量记入日志，
+  观测 `jabiz.file.sweep` 只带结果标签（D16 第 3 条）。
   引用的判定只看数据库中的当前值（时态实体：当前与预定版本；普通实体：所有行，含逻辑删除的行），不经数据视图范围。
 - **手动删除** `FILE_DELETE`（`file.delete`）：文件仍被当前数据引用时 422 `FILE_IN_USE`（参数 `entity`、`field`）。
   业务的"删除个人数据"流程（例如 culture 的抹除）先删除（或清空）引用它的行，**执行 `SaveChanges.now`**，再以
