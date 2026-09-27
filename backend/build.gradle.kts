@@ -1,11 +1,9 @@
-import com.github.gradle.node.pnpm.task.PnpmTask
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
     java
-    id("org.springframework.boot") version "4.0.1" apply false
-    id("io.spring.dependency-management") version "1.1.7" apply false
-    id("com.github.node-gradle.node") version "7.1.0" apply false
+    // Puts the plugins of the build conventions (backend/build-logic, with their versions) on the classpath.
+    id("jabiz.boot-app") apply false
 }
 
 // Settings shared by all modules. Dependencies are declared per module: core is pure Java and must not
@@ -60,48 +58,5 @@ subprojects {
             events("failed", "skipped")
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         }
-    }
-}
-
-// Boot application: runtime + business declarations, packaged together with the frontend.
-project(":app") {
-    apply(plugin = "org.springframework.boot")
-    apply(plugin = "com.github.node-gradle.node")
-
-    // The frontend (docs/design/12-frontend.md) is built with pnpm and packaged into the boot jar.
-    configure<com.github.gradle.node.NodeExtension> {
-        download.set(true)
-        version.set("22.12.0")
-        pnpmVersion.set("10.18.0")
-        nodeProjectDir.set(file("${rootProject.projectDir}/../frontend"))
-    }
-
-    tasks.named<com.github.gradle.node.pnpm.task.PnpmInstallTask>("pnpmInstall") {
-        args.set(listOf("--frozen-lockfile"))
-    }
-
-    val frontendBuild = tasks.register<PnpmTask>("frontendBuild") {
-        dependsOn(tasks.named("pnpmInstall"))
-        pnpmCommand.set(listOf("run", "build"))
-        inputs.files(
-            fileTree("${rootProject.projectDir}/../frontend/src"),
-            fileTree("${rootProject.projectDir}/../frontend/openapi"),
-            "${rootProject.projectDir}/../frontend/index.html",
-            "${rootProject.projectDir}/../frontend/package.json",
-            "${rootProject.projectDir}/../frontend/pnpm-lock.yaml",
-            "${rootProject.projectDir}/../frontend/vite.config.ts"
-        )
-        outputs.dir("${rootProject.projectDir}/../frontend/dist")
-    }
-
-    tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
-        dependsOn(frontendBuild)
-        from("${rootProject.projectDir}/../frontend/dist") {
-            into("BOOT-INF/classes/static")
-        }
-    }
-
-    tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-        systemProperty("reactor.schedulers.defaultBoundedElasticOnVirtualThreads", "true")
     }
 }

@@ -25,6 +25,7 @@
 | 事件与定时任务 | 消费者名、任务名唯一；cron 合法；引用的流程已注册（11 §2.3、§4） |
 | 权限 | 数据视图、SQL 模板、流程都声明了权限（开发环境可降级为警告）；SQL 模板不读取敏感字段 |
 | 安全配置 | 访问令牌的签名密钥已配置且足够长（缺失时 Bean 创建失败即拒绝启动，`dev` 除外；见 10 §2） |
+| 单页应用 | `jabiz.web.spa[i]` 的前缀合法、不重复、不在 `/api` `/actuator` 下；`index` 是 `.html` 的绝对路径；CSP 非空且为单行（17 §3.2） |
 
 ## 2. `platformCheck`（CI 静态校验）
 
@@ -34,7 +35,7 @@
   调用 `PlatformCheckRunner.runAll()`，结束后删除 schema。`check` 依赖它。
 - 输出格式：每行一个问题，`类别 | 定位（文件:行号、实体.字段、数据视图）| 描述`，警告行以 `WARNING` 开头；最后一行为汇总；
   存在错误时退出码非 0。上下文本身无法启动时输出一行 `CONTEXT | - | 原因`。
-  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS` `EVENT` `JOB`（`CHECK` 为检查本身失败）。
+  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS` `EVENT` `JOB` `WEB`（`CHECK` 为检查本身失败）。
 - CI 中必须运行（`./gradlew check` 包含它）；PR 不允许在 `platformCheck` 失败时合并。
 - 元模型导出 JSON Schema（`/api/meta/schema/*` 与构建产物），SQL 模板头部按 JSON Schema 校验。
 

@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { adminToken, CARRIERS, datasetPath, insert, signIn, unique } from './support'
+import { expect } from '@playwright/test'
+import { adminToken, CARRIERS, datasetPath, insert, signIn, test, unique } from './support'
 
 /**
  * Acceptance criterion 1 of ROADMAP phase 10: Carrier was added as an entity definition and a dataset only; its list

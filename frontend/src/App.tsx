@@ -6,6 +6,7 @@ import zhCN from 'antd/locale/zh_CN'
 import { useTranslation } from 'react-i18next'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router'
 import { ApiError } from './api/problem'
+import { routerBasename } from './base'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import AppLayout from './layout/AppLayout'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
@@ -53,7 +54,7 @@ const router = createBrowserRouter([
       },
     ],
   },
-])
+], { basename: routerBasename(import.meta.env.BASE_URL) })
 
 const antdLocales = { zh: zhCN, ja: jaJP, en: enUS } as const
 
