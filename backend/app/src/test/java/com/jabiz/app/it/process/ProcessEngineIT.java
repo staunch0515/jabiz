@@ -174,6 +174,39 @@ class ProcessEngineIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void forEachCallsTheSubProcessOncePerInputInOrder() {
+        String parent = id();
+        List<String> children = List.of(id(), id(), id());
+        ItProcessFixtures.FamilyOutput out = asTestRequest(executor.execute(ItProcessFixtures.FAMILY,
+            new ItProcessFixtures.FamilyInput(parent, children, null))).block();
+
+        assertThat(out.children()).hasSize(3);
+        assertThat(children).allSatisfy(child -> assertThat(ticketExists(child)).isTrue());
+        List<Map<String, Object>> calls = query(
+            "SELECT process_seq_id FROM op_process WHERE parent_seq_id = ? ORDER BY process_seq_id",
+            out.processSeqId());
+        assertThat(calls).extracting(row -> ((Number) row.get("process_seq_id")).longValue())
+            .containsExactlyElementsOf(out.children().stream().map(TicketOutput::processSeqId).toList());
+
+        // No inputs: no calls, and an empty list of outputs.
+        ItProcessFixtures.FamilyOutput none = asTestRequest(executor.execute(ItProcessFixtures.FAMILY,
+            new ItProcessFixtures.FamilyInput(id(), List.of(), null))).block();
+        assertThat(none.children()).isEmpty();
+        assertThat(query("SELECT 1 FROM op_process WHERE parent_seq_id = ?", none.processSeqId())).isEmpty();
+    }
+
+    @Test
+    void aFailingCallOfForEachRollsBackTheOthersAndTheCaller() {
+        String parent = id();
+        List<String> children = List.of(id(), id(), id());
+        assertThatThrownBy(() -> asTestRequest(executor.execute(ItProcessFixtures.FAMILY,
+            new ItProcessFixtures.FamilyInput(parent, children, children.get(1)))).block())
+            .satisfies(error -> assertThat(codes(error)).containsExactly("IT_CHILD_REFUSED"));
+        assertThat(ticketExists(parent)).isFalse();
+        assertThat(children).allSatisfy(child -> assertThat(ticketExists(child)).isFalse());
+    }
+
+    @Test
     void revertingAnOperationRevertsItsSubOperations() {
         String parentSku = "F-" + UUID.randomUUID().toString().substring(0, 8);
         String childSku = "C-" + UUID.randomUUID().toString().substring(0, 8);

@@ -7,6 +7,7 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.function.Predicate;
  * Calls another process as a sub-process (docs/design/06-process.md section 5): same transaction, its own
  * {@code process_seq_id} with {@code parent_seq_id} pointing at the caller, the caller's operation time. A failing
  * sub-process fails the caller, and everything is rolled back. The call graph must be acyclic (startup check).
+ * {@link #forEach} calls the process once per input of a list the caller computes, one after another.
  */
 @Component
 public class CallProcess<C extends ProcessContext> implements StepHandler<CallProcess.Metadata<C>, C>,
@@ -30,13 +32,20 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
      * @param outputKey context key receiving the sub-process output; null to discard it
      * @param condition whether to call at all, decided on the caller's context when the step is reached (for
      *                  example: only when there is something to post); always, if null
+     * @param each      whether {@code input} gives a list of inputs, one call each; the output is then the list of
+     *                  the outputs, in the same order
      */
     public record Metadata<C>(String processName, Integer version, Function<C, ?> input, String outputKey,
-        Predicate<C> condition) {
+        Predicate<C> condition, boolean each) {
         public Metadata {
             Objects.requireNonNull(processName, "processName must not be null");
             Objects.requireNonNull(input, "input must not be null");
             condition = condition == null ? ctx -> true : condition;
+        }
+
+        public Metadata(String processName, Integer version, Function<C, ?> input, String outputKey,
+            Predicate<C> condition) {
+            this(processName, version, input, outputKey, condition, false);
         }
 
         public Metadata(String processName, Integer version, Function<C, ?> input, String outputKey) {
@@ -58,6 +67,16 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
         int version, Function<C, ?> input, String outputKey) {
         return StepSpec.of(CallProcess.class, new Metadata<>(processName, version, input, outputKey,
             Objects.requireNonNull(condition, "condition must not be null")));
+    }
+
+    /**
+     * Calls the process once for every input {@code inputs} gives (nothing when the list is empty), in order: for
+     * work over a number of items known only at run time, such as deleting the files of the rows a process removed.
+     * The outputs, in the same order, go to {@code outputKey}.
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> forEach(String processName, int version,
+        Function<C, ? extends List<?>> inputs, String outputKey) {
+        return StepSpec.of(CallProcess.class, new Metadata<>(processName, version, inputs, outputKey, null, true));
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> latest(String processName,
@@ -88,6 +107,23 @@ public class CallProcess<C extends ProcessContext> implements StepHandler<CallPr
             }
             ProcessDefinition<?, ?, ?> target = resolve(registry, metadata).orElseThrow(
                 () -> new IllegalStateException("Unknown process " + metadata.target()));
+            if (metadata.each()) {
+                Object inputs = metadata.input().apply(ctx);
+                if (!(inputs instanceof List<?> list)) {
+                    return Mono.error(new IllegalStateException("The inputs of the calls of " + metadata.target()
+                        + " must be a list"));
+                }
+                // One at a time: the calls share the caller's transaction.
+                return Flux.fromIterable(list)
+                    .concatMap(input -> call(target, input))
+                    .collectList()
+                    .doOnNext(outputs -> {
+                        if (metadata.outputKey() != null) {
+                            ctx.put(metadata.outputKey(), List.copyOf(outputs));
+                        }
+                    })
+                    .then();
+            }
             return call(target, metadata.input().apply(ctx))
                 .doOnNext(output -> {
                     if (metadata.outputKey() != null) {
