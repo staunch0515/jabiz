@@ -32,6 +32,7 @@ import java.util.function.Function;
  * @param deprecated  whether a newer version should be used instead; references to it are reported at startup
  * @param internal    run by the platform or through a dedicated entry point only (for example signing in): left out
  *                    of the process catalog clients build forms from; its permissions still apply wherever it runs
+ * @param actsOn      the entity the process acts on, offered as an action on its rows; null if none
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -45,7 +46,8 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     List<StepDefinition<?, C>> steps,
     Set<String> permissions,
     boolean deprecated,
-    boolean internal
+    boolean internal,
+    ActsOn actsOn
 ) {
 
     /** Context key under which {@link #single} processes keep their input and output. */
@@ -125,12 +127,28 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** This definition requiring the given permissions instead of the declared ones. */
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal);
+            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal,
+            actsOn);
+    }
+
+    /** This definition acting on {@code entity}, whose primary key is the input component {@code input}. */
+    public ProcessDefinition<I, O, C> actsOn(String entity, String input) {
+        return actsOn(entity, input, null);
+    }
+
+    /**
+     * This definition acting on {@code entity}, shown as an action only under the given condition (a display hint,
+     * docs/design/16-content-authoring.md section 3).
+     */
+    public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
+        return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
+            contextFactory, outputMapper, steps, permissions, deprecated, internal,
+            ActsOn.of(entity, input, condition));
     }
 
     /** This definition marked as internal: not listed in the process catalog (decision D15). */
     public ProcessDefinition<I, O, C> asInternal() {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, true);
+            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn);
     }
 }

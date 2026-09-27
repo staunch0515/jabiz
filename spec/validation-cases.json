@@ -1,470 +1,877 @@
 {
-  "description" : "Validation cases shared by the backend (core ValidationCasesTest) and the frontend (src/meta/validation.cases.test.ts); decision D15. 'fields' is the exported metadata of the entity ValidationSample and is rewritten by ./gradlew :core:test -Dvalidation-cases.update=true; the cases are written by hand. Each case validates one field: 'value' is the JSON value sent (absent: the field is left out), 'insert' says whether the entity is new, 'expect' lists the rule codes both sides must report, in order.",
-  "entity" : "ValidationSample",
-  "now" : "2026-01-31T09:00:00Z",
-  "dictionaries" : {
-    "urn:sample:port" : [ "JPTYO", "JPYOK" ]
+  "description": "Validation cases shared by the backend (core ValidationCasesTest) and the frontend (src/meta/validation.cases.test.ts); decision D15. 'fields' is the exported metadata of the entity ValidationSample and is rewritten by ./gradlew :core:test -Dvalidation-cases.update=true; the cases are written by hand. Each case validates one field: 'value' is the JSON value sent (absent: the field is left out), 'insert' says whether the entity is new, 'expect' lists the rule codes both sides must report, in order.",
+  "entity": "ValidationSample",
+  "now": "2026-01-31T09:00:00Z",
+  "dictionaries": {
+    "urn:sample:port": [
+      "JPTYO",
+      "JPYOK"
+    ]
   },
-  "fields" : [ {
-    "name" : "id",
-    "immutable" : false,
-    "required" : true,
-    "generated" : true,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "semanticIdentity",
-    "urn" : "urn:sample",
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
-    "rules" : [ ]
-  }, {
-    "name" : "title",
-    "immutable" : false,
-    "required" : true,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "text",
-    "maxLength" : 10,
-    "multiline" : false,
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "LIKE", "NE" ],
-    "rules" : [ {
-      "code" : "TITLE_BLANK",
-      "kind" : "REQUIRED",
-      "params" : { }
-    } ]
-  }, {
-    "name" : "code",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "text",
-    "maxLength" : 20,
-    "multiline" : false,
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "LIKE", "NE" ],
-    "rules" : [ {
-      "code" : "CODE_FORMAT",
-      "kind" : "PATTERN",
-      "params" : {
-        "regex" : "[A-Z]{2}-[0-9]{3}"
-      }
-    } ]
-  }, {
-    "name" : "nickname",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "text",
-    "multiline" : false,
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "LIKE", "NE" ],
-    "rules" : [ {
-      "code" : "NICK_LENGTH",
-      "kind" : "LENGTH",
-      "params" : {
-        "min" : 2,
-        "max" : 5
-      }
-    } ]
-  }, {
-    "name" : "amount",
-    "immutable" : false,
-    "required" : true,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "monetary",
-    "currency" : "JPY",
-    "scale" : 2,
-    "operators" : [ "BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE" ],
-    "rules" : [ {
-      "code" : "AMOUNT_RANGE",
-      "kind" : "RANGE",
-      "params" : {
-        "min" : 0,
-        "max" : 1000000
-      }
-    }, {
-      "code" : "AMOUNT_SCALE",
-      "kind" : "SCALE",
-      "params" : {
-        "scale" : 2
-      }
-    } ]
-  }, {
-    "name" : "ratio",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "numeric",
-    "precision" : 5,
-    "scale" : 2,
-    "operators" : [ "BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE" ],
-    "rules" : [ {
-      "code" : "RATIO_MAX",
-      "kind" : "RANGE",
-      "params" : {
-        "max" : 100
-      }
-    } ]
-  }, {
-    "name" : "happenedAt",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "temporal",
-    "role" : "EVENT_TIME",
-    "operators" : [ "BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE" ],
-    "rules" : [ {
-      "code" : "NOT_IN_FUTURE",
-      "kind" : "NOT_FUTURE",
-      "params" : {
-        "toleranceSeconds" : 60
-      }
-    } ]
-  }, {
-    "name" : "active",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "bool",
-    "operators" : [ "EQ", "IS_NOT_NULL", "IS_NULL", "NE" ],
-    "rules" : [ ]
-  }, {
-    "name" : "status",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "code",
-    "dictUrn" : "urn:sample:status",
-    "allowedValues" : [ "OPEN", "DONE" ],
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
-    "rules" : [ ]
-  }, {
-    "name" : "port",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "type" : "code",
-    "dictUrn" : "urn:sample:port",
-    "allowedValues" : [ ],
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
-    "rules" : [ ]
-  }, {
-    "name" : "attachment",
-    "immutable" : false,
-    "required" : false,
-    "generated" : false,
-    "systemManaged" : false,
-    "sensitive" : false,
-    "policy" : "sample.document",
-    "type" : "custom",
-    "kindId" : "jabiz.file",
-    "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
-    "rules" : [ ]
-  } ],
-  "cases" : [ {
-    "field" : "title",
-    "value" : "Hello",
-    "expect" : [ ]
-  }, {
-    "field" : "title",
-    "value" : "   ",
-    "expect" : [ "TITLE_BLANK" ]
-  }, {
-    "field" : "title",
-    "value" : "",
-    "expect" : [ "TITLE_BLANK" ]
-  }, {
-    "field" : "title",
-    "value" : "abcdefghijk",
-    "expect" : [ "TOO_LONG" ]
-  }, {
-    "field" : "title",
-    "value" : "😀😀😀😀😀😀😀😀😀😀",
-    "expect" : [ ]
-  }, {
-    "field" : "title",
-    "value" : null,
-    "expect" : [ "REQUIRED" ]
-  }, {
-    "field" : "title",
-    "insert" : true,
-    "expect" : [ "REQUIRED" ]
-  }, {
-    "field" : "title",
-    "expect" : [ ]
-  }, {
-    "field" : "title",
-    "value" : 42,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "title",
-    "value" : true,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "code",
-    "value" : "AB-123",
-    "expect" : [ ]
-  }, {
-    "field" : "code",
-    "value" : "ab-123",
-    "expect" : [ "CODE_FORMAT" ]
-  }, {
-    "field" : "code",
-    "value" : "AB-1234",
-    "expect" : [ "CODE_FORMAT" ]
-  }, {
-    "field" : "code",
-    "value" : "xAB-123",
-    "expect" : [ "CODE_FORMAT" ]
-  }, {
-    "field" : "code",
-    "value" : null,
-    "expect" : [ ]
-  }, {
-    "field" : "nickname",
-    "value" : "a",
-    "expect" : [ "NICK_LENGTH" ]
-  }, {
-    "field" : "nickname",
-    "value" : "abcde",
-    "expect" : [ ]
-  }, {
-    "field" : "nickname",
-    "value" : "abcdef",
-    "expect" : [ "NICK_LENGTH" ]
-  }, {
-    "field" : "nickname",
-    "value" : "😀😀",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "100.50",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : 100.5,
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : 0,
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "-1",
-    "expect" : [ "AMOUNT_RANGE" ]
-  }, {
-    "field" : "amount",
-    "value" : "-0.01",
-    "expect" : [ "AMOUNT_RANGE" ]
-  }, {
-    "field" : "amount",
-    "value" : "1000000",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "1000000.001",
-    "expect" : [ "AMOUNT_RANGE", "AMOUNT_SCALE" ]
-  }, {
-    "field" : "amount",
-    "value" : "12.345",
-    "expect" : [ "AMOUNT_SCALE" ]
-  }, {
-    "field" : "amount",
-    "value" : "12.3400",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "1e3",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "1.5E-3",
-    "expect" : [ "AMOUNT_SCALE" ]
-  }, {
-    "field" : "amount",
-    "value" : " 7 ",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : ".5",
-    "expect" : [ ]
-  }, {
-    "field" : "amount",
-    "value" : "abc",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "amount",
-    "value" : "",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "amount",
-    "value" : "1,000",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "amount",
-    "value" : true,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "amount",
-    "value" : null,
-    "expect" : [ "REQUIRED" ]
-  }, {
-    "field" : "amount",
-    "insert" : true,
-    "expect" : [ "REQUIRED" ]
-  }, {
-    "field" : "ratio",
-    "value" : "99.5",
-    "expect" : [ ]
-  }, {
-    "field" : "ratio",
-    "value" : "999.99",
-    "expect" : [ "RATIO_MAX" ]
-  }, {
-    "field" : "ratio",
-    "value" : "1000",
-    "expect" : [ "NUMERIC_PRECISION" ]
-  }, {
-    "field" : "ratio",
-    "value" : "1.234",
-    "expect" : [ "NUMERIC_PRECISION" ]
-  }, {
-    "field" : "ratio",
-    "value" : "1.2300",
-    "expect" : [ ]
-  }, {
-    "field" : "ratio",
-    "value" : "0.00",
-    "expect" : [ ]
-  }, {
-    "field" : "ratio",
-    "value" : "-999.99",
-    "expect" : [ ]
-  }, {
-    "field" : "ratio",
-    "value" : "0.001",
-    "expect" : [ "NUMERIC_PRECISION" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T09:01:00Z",
-    "expect" : [ ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T09:01:01Z",
-    "expect" : [ "NOT_IN_FUTURE" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T18:00:00+09:00",
-    "expect" : [ ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T18:01:01+09:00",
-    "expect" : [ "NOT_IN_FUTURE" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T09:00:00.123456Z",
-    "expect" : [ ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2025-12-01T00:00:00Z",
-    "expect" : [ ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "2026-01-31T09:00:00",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : "not a time",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "happenedAt",
-    "value" : 1700000000,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "active",
-    "value" : true,
-    "expect" : [ ]
-  }, {
-    "field" : "active",
-    "value" : "TRUE",
-    "expect" : [ ]
-  }, {
-    "field" : "active",
-    "value" : " false ",
-    "expect" : [ ]
-  }, {
-    "field" : "active",
-    "value" : "yes",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "active",
-    "value" : 1,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "status",
-    "value" : "OPEN",
-    "expect" : [ ]
-  }, {
-    "field" : "status",
-    "value" : "open",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "status",
-    "value" : 5,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "port",
-    "value" : "JPTYO",
-    "expect" : [ ]
-  }, {
-    "field" : "port",
-    "value" : "CNSHA",
-    "expect" : [ "NOT_IN_DICTIONARY" ]
-  }, {
-    "field" : "port",
-    "value" : "",
-    "expect" : [ "NOT_IN_DICTIONARY" ]
-  }, {
-    "field" : "attachment",
-    "value" : "0190f2a6-5b7c-7d8e-9f00-112233445566",
-    "expect" : [ ]
-  }, {
-    "field" : "attachment",
-    "value" : "0190F2A6-5B7C-7D8E-9F00-112233445566",
-    "expect" : [ ]
-  }, {
-    "field" : "attachment",
-    "value" : "not-a-file-id",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "attachment",
-    "value" : "0190f2a6-5b7c-7d8e-9f00",
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "attachment",
-    "value" : 42,
-    "expect" : [ "INVALID_VALUE" ]
-  }, {
-    "field" : "attachment",
-    "value" : null,
-    "expect" : [ ]
-  } ]
+  "fields": [
+    {
+      "name": "id",
+      "immutable": false,
+      "required": true,
+      "generated": true,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "semanticIdentity",
+      "urn": "urn:sample",
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "NE"
+      ],
+      "rules": []
+    },
+    {
+      "name": "title",
+      "immutable": false,
+      "required": true,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "text",
+      "maxLength": 10,
+      "multiline": false,
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LIKE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "TITLE_BLANK",
+          "kind": "REQUIRED",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "name": "code",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "text",
+      "maxLength": 20,
+      "multiline": false,
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LIKE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "CODE_FORMAT",
+          "kind": "PATTERN",
+          "params": {
+            "regex": "[A-Z]{2}-[0-9]{3}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "nickname",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "text",
+      "multiline": false,
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LIKE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "NICK_LENGTH",
+          "kind": "LENGTH",
+          "params": {
+            "min": 2,
+            "max": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "amount",
+      "immutable": false,
+      "required": true,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "monetary",
+      "currency": "JPY",
+      "scale": 2,
+      "operators": [
+        "BETWEEN",
+        "EQ",
+        "GT",
+        "GTE",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LT",
+        "LTE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "AMOUNT_RANGE",
+          "kind": "RANGE",
+          "params": {
+            "min": 0,
+            "max": 1000000
+          }
+        },
+        {
+          "code": "AMOUNT_SCALE",
+          "kind": "SCALE",
+          "params": {
+            "scale": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "ratio",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "numeric",
+      "precision": 5,
+      "scale": 2,
+      "operators": [
+        "BETWEEN",
+        "EQ",
+        "GT",
+        "GTE",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LT",
+        "LTE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "RATIO_MAX",
+          "kind": "RANGE",
+          "params": {
+            "max": 100
+          }
+        }
+      ]
+    },
+    {
+      "name": "happenedAt",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "temporal",
+      "role": "EVENT_TIME",
+      "operators": [
+        "BETWEEN",
+        "EQ",
+        "GT",
+        "GTE",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "LT",
+        "LTE",
+        "NE"
+      ],
+      "rules": [
+        {
+          "code": "NOT_IN_FUTURE",
+          "kind": "NOT_FUTURE",
+          "params": {
+            "toleranceSeconds": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "active",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "bool",
+      "operators": [
+        "EQ",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "NE"
+      ],
+      "rules": []
+    },
+    {
+      "name": "status",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "code",
+      "dictUrn": "urn:sample:status",
+      "allowedValues": [
+        "OPEN",
+        "DONE"
+      ],
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "NE"
+      ],
+      "rules": []
+    },
+    {
+      "name": "port",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "type": "code",
+      "dictUrn": "urn:sample:port",
+      "allowedValues": [],
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "NE"
+      ],
+      "rules": []
+    },
+    {
+      "name": "attachment",
+      "immutable": false,
+      "required": false,
+      "generated": false,
+      "systemManaged": false,
+      "sensitive": false,
+      "policy": "sample.document",
+      "type": "custom",
+      "kindId": "jabiz.file",
+      "operators": [
+        "EQ",
+        "IN",
+        "IS_NOT_NULL",
+        "IS_NULL",
+        "NE"
+      ],
+      "rules": []
+    }
+  ],
+  "cases": [
+    {
+      "field": "title",
+      "value": "Hello",
+      "expect": []
+    },
+    {
+      "field": "title",
+      "value": "   ",
+      "expect": [
+        "TITLE_BLANK"
+      ]
+    },
+    {
+      "field": "title",
+      "value": "",
+      "expect": [
+        "TITLE_BLANK"
+      ]
+    },
+    {
+      "field": "title",
+      "value": "abcdefghijk",
+      "expect": [
+        "TOO_LONG"
+      ]
+    },
+    {
+      "field": "title",
+      "value": "😀😀😀😀😀😀😀😀😀😀",
+      "expect": []
+    },
+    {
+      "field": "title",
+      "value": null,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "title",
+      "insert": true,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "title",
+      "expect": []
+    },
+    {
+      "field": "title",
+      "value": 42,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "title",
+      "value": true,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "code",
+      "value": "AB-123",
+      "expect": []
+    },
+    {
+      "field": "code",
+      "value": "ab-123",
+      "expect": [
+        "CODE_FORMAT"
+      ]
+    },
+    {
+      "field": "code",
+      "value": "AB-1234",
+      "expect": [
+        "CODE_FORMAT"
+      ]
+    },
+    {
+      "field": "code",
+      "value": "xAB-123",
+      "expect": [
+        "CODE_FORMAT"
+      ]
+    },
+    {
+      "field": "code",
+      "value": null,
+      "expect": []
+    },
+    {
+      "field": "nickname",
+      "value": "a",
+      "expect": [
+        "NICK_LENGTH"
+      ]
+    },
+    {
+      "field": "nickname",
+      "value": "abcde",
+      "expect": []
+    },
+    {
+      "field": "nickname",
+      "value": "abcdef",
+      "expect": [
+        "NICK_LENGTH"
+      ]
+    },
+    {
+      "field": "nickname",
+      "value": "😀😀",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "100.50",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": 100.5,
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": 0,
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "-1",
+      "expect": [
+        "AMOUNT_RANGE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "-0.01",
+      "expect": [
+        "AMOUNT_RANGE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "1000000",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "1000000.001",
+      "expect": [
+        "AMOUNT_RANGE",
+        "AMOUNT_SCALE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "12.345",
+      "expect": [
+        "AMOUNT_SCALE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "12.3400",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "1e3",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "1.5E-3",
+      "expect": [
+        "AMOUNT_SCALE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": " 7 ",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": ".5",
+      "expect": []
+    },
+    {
+      "field": "amount",
+      "value": "abc",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": "1,000",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": true,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "amount",
+      "value": null,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "amount",
+      "insert": true,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "ratio",
+      "value": "99.5",
+      "expect": []
+    },
+    {
+      "field": "ratio",
+      "value": "999.99",
+      "expect": [
+        "RATIO_MAX"
+      ]
+    },
+    {
+      "field": "ratio",
+      "value": "1000",
+      "expect": [
+        "NUMERIC_PRECISION"
+      ]
+    },
+    {
+      "field": "ratio",
+      "value": "1.234",
+      "expect": [
+        "NUMERIC_PRECISION"
+      ]
+    },
+    {
+      "field": "ratio",
+      "value": "1.2300",
+      "expect": []
+    },
+    {
+      "field": "ratio",
+      "value": "0.00",
+      "expect": []
+    },
+    {
+      "field": "ratio",
+      "value": "-999.99",
+      "expect": []
+    },
+    {
+      "field": "ratio",
+      "value": "0.001",
+      "expect": [
+        "NUMERIC_PRECISION"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T09:01:00Z",
+      "expect": []
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T09:01:01Z",
+      "expect": [
+        "NOT_IN_FUTURE"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T18:00:00+09:00",
+      "expect": []
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T18:01:01+09:00",
+      "expect": [
+        "NOT_IN_FUTURE"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T09:00:00.123456Z",
+      "expect": []
+    },
+    {
+      "field": "happenedAt",
+      "value": "2025-12-01T00:00:00Z",
+      "expect": []
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": "2026-01-31T09:00:00",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": "not a time",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "happenedAt",
+      "value": 1700000000,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "active",
+      "value": true,
+      "expect": []
+    },
+    {
+      "field": "active",
+      "value": "TRUE",
+      "expect": []
+    },
+    {
+      "field": "active",
+      "value": " false ",
+      "expect": []
+    },
+    {
+      "field": "active",
+      "value": "yes",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "active",
+      "value": 1,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "status",
+      "value": "OPEN",
+      "expect": []
+    },
+    {
+      "field": "status",
+      "value": "open",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "status",
+      "value": 5,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "port",
+      "value": "JPTYO",
+      "expect": []
+    },
+    {
+      "field": "port",
+      "value": "CNSHA",
+      "expect": [
+        "NOT_IN_DICTIONARY"
+      ]
+    },
+    {
+      "field": "port",
+      "value": "",
+      "expect": [
+        "NOT_IN_DICTIONARY"
+      ]
+    },
+    {
+      "field": "attachment",
+      "value": "0190f2a6-5b7c-7d8e-9f00-112233445566",
+      "expect": []
+    },
+    {
+      "field": "attachment",
+      "value": "0190F2A6-5B7C-7D8E-9F00-112233445566",
+      "expect": []
+    },
+    {
+      "field": "attachment",
+      "value": "not-a-file-id",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "attachment",
+      "value": "0190f2a6-5b7c-7d8e-9f00",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "attachment",
+      "value": 42,
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "attachment",
+      "value": null,
+      "expect": []
+    },
+    {
+      "field": "headline",
+      "value": {
+        "zh": "标题",
+        "en": "Title"
+      },
+      "expect": []
+    },
+    {
+      "field": "headline",
+      "value": {
+        "en": "   ",
+        "ja": ""
+      },
+      "insert": true,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": {},
+      "insert": true,
+      "expect": [
+        "REQUIRED"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": {
+        "en": "123456789"
+      },
+      "expect": [
+        "TOO_LONG"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": {
+        "en": "😀😀😀😀😀😀😀😀"
+      },
+      "expect": []
+    },
+    {
+      "field": "headline",
+      "value": {
+        "fr": "Titre"
+      },
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": {
+        "en": 5
+      },
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": "Title",
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "headline",
+      "value": [
+        "Title"
+      ],
+      "expect": [
+        "INVALID_VALUE"
+      ]
+    },
+    {
+      "field": "summary",
+      "value": {
+        "zh": "简介",
+        "en": "Intro"
+      },
+      "expect": []
+    },
+    {
+      "field": "summary",
+      "value": {
+        "zh": "简介"
+      },
+      "expect": [
+        "TRANSLATION_REQUIRED"
+      ]
+    },
+    {
+      "field": "summary",
+      "value": {
+        "en": "  ",
+        "ja": "概要"
+      },
+      "expect": [
+        "TRANSLATION_REQUIRED"
+      ]
+    },
+    {
+      "field": "summary",
+      "value": {
+        "en": "12345678901"
+      },
+      "expect": [
+        "TOO_LONG"
+      ]
+    },
+    {
+      "field": "summary",
+      "value": {
+        "ja": "12345678901"
+      },
+      "expect": [
+        "TOO_LONG"
+      ]
+    },
+    {
+      "field": "summary",
+      "value": null,
+      "expect": []
+    },
+    {
+      "field": "summary",
+      "value": {
+        "en": " "
+      },
+      "expect": []
+    }
+  ]
 }

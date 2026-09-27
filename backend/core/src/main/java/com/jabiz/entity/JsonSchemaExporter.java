@@ -23,7 +23,7 @@ public final class JsonSchemaExporter {
         for (FieldDefinition field : def.fields.values()) {
             Map<String, Object> property = new LinkedHashMap<>(kindSchema(field.kind()));
             boolean systemManaged = def.isSystemManaged(field);
-            if (systemManaged || field.generated()) {
+            if (systemManaged || field.generated() || field.processOnly()) {
                 property.put("readOnly", true);
             }
             if (field.sensitive()) {

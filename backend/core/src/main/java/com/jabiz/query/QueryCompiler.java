@@ -10,7 +10,9 @@ import com.jabiz.entity.SemanticKinds;
 import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
+import com.jabiz.entity.i18n.I18nText;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.i18n.PlatformLanguages;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -144,6 +146,134 @@ public class QueryCompiler {
             safeLimit,
             dataset.policy().queryTimeout()
         );
+    }
+
+    /** Most rows a lookup returns (docs/design/16-content-authoring.md section 2). */
+    public static final int MAX_LOOKUP = 20;
+
+    /**
+     * Instances of the dataset's target entity whose display field contains {@code q}, ignoring case (any language
+     * of a multilingual text), within the scope (for a temporal entity: versions in effect at {@code slice}, then the
+     * scope, decision D3), ordered by the display text in {@code language}, then {@code defaultLanguage}, then any
+     * language, then by primary key. The wildcards of {@code q} match literally.
+     *
+     * @param q     text to look for; null or blank matches every instance
+     * @param limit capped at {@value #MAX_LOOKUP} and the dataset's batch size
+     * @throws IllegalStateException if the entity declares no display field
+     */
+    public RawQueryPlan compileLookup(DatasetDefinition dataset, EntityDefinition def, String q, String language,
+        String defaultLanguage, int limit, Map<String, Object> scopeValues, TimeSlice slice) {
+        FieldDefinition display = requireDisplay(def);
+        Binder binder = new Binder("p");
+        String alias = def.temporal ? VERSIONS_ALIAS : "t";
+        String column = alias + "." + SqlIdentifiers.require(display.physicalColumn());
+        List<String> conditions = readConditions(dataset, def, scopeValues, binder);
+        if (q != null && !q.isBlank()) {
+            String pattern = ":" + binder.bind(BoundValue.of("%" + escapeLike(q.strip()) + "%"));
+            conditions.add(I18nText.is(display.kind())
+                ? "EXISTS (SELECT 1 FROM jsonb_each_text(" + column + ") AS l(lang, text) WHERE l.text ILIKE "
+                    + pattern + " ESCAPE '\\')"
+                : column + " ILIKE " + pattern + " ESCAPE '\\'");
+        }
+        String order = column;
+        if (I18nText.is(display.kind())) {
+            List<String> languages = new ArrayList<>();
+            for (String candidate : concat(language, defaultLanguage)) {
+                if (PlatformLanguages.isSupported(candidate) && !languages.contains(candidate)) {
+                    languages.add(candidate);
+                }
+            }
+            List<String> texts = new ArrayList<>();
+            for (String candidate : languages) {
+                texts.add(column + " ->> :" + binder.bind(BoundValue.of(candidate)));
+            }
+            order = "COALESCE(" + String.join(", ", texts) + ")";
+        }
+        int safeLimit = Math.max(1, Math.min(Math.min(limit, MAX_LOOKUP), dataset.policy().maxQueryBatchSize()));
+        String sql = select(dataset, def, alias, conditions, binder, slice)
+            + " ORDER BY " + order + " ASC, " + alias + "." + SqlIdentifiers.require(def.primaryKeyColumn())
+            + " ASC LIMIT " + safeLimit;
+        return new RawQueryPlan(sql, binder.params(), dataset.policy().queryTimeout());
+    }
+
+    /**
+     * Instances of the dataset's target entity with the given primary keys, within the scope as for
+     * {@link #compileLookup}; used to show the display texts of references. Keys that do not convert to the
+     * entity's key type are reported as {@code INVALID_VALUE}.
+     *
+     * @throws IllegalStateException if the entity declares no display field
+     */
+    public RawQueryPlan compileLabels(DatasetDefinition dataset, EntityDefinition def, List<?> ids,
+        Map<String, Object> scopeValues, TimeSlice slice) {
+        requireDisplay(def);
+        FieldDefinition key = def.field(def.primaryKey);
+        List<Object> keys = new ArrayList<>(ids.size());
+        for (Object id : ids) {
+            if (id == null) {
+                throw invalidValue(key, "ids must not contain null");
+            }
+            keys.add(coerce(def, key, id));
+        }
+        Binder binder = new Binder("p");
+        String alias = def.temporal ? VERSIONS_ALIAS : "t";
+        List<String> conditions = readConditions(dataset, def, scopeValues, binder);
+        conditions.add(keys.isEmpty() ? "1 = 0" : alias + "." + SqlIdentifiers.require(def.primaryKeyColumn())
+            + " IN (:" + binder.bind(BoundValue.of(keys)) + ")");
+        String sql = select(dataset, def, alias, conditions, binder, slice) + " LIMIT " + Math.max(1, keys.size());
+        return new RawQueryPlan(sql, binder.params(), dataset.policy().queryTimeout());
+    }
+
+    private static FieldDefinition requireDisplay(EntityDefinition def) {
+        if (def.displayField == null) {
+            throw new IllegalStateException(def.name + " declares no display field");
+        }
+        return def.field(def.displayField);
+    }
+
+    /** Tombstones excluded and the scope applied, as for every read of the dataset's target entity. */
+    private List<String> readConditions(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scopeValues,
+        Binder binder) {
+        List<String> conditions = new ArrayList<>();
+        if (def.temporal) {
+            conditions.add(notDeleted(def));
+        }
+        String scope = scopeCondition(dataset, def, scopeValues, binder);
+        if (!scope.isBlank()) {
+            conditions.add(scope);
+        }
+        return conditions;
+    }
+
+    /** SELECT over the entity's source, aliased {@code alias}, restricted by {@code conditions}. */
+    private String select(DatasetDefinition dataset, EntityDefinition def, String alias, List<String> conditions,
+        Binder binder, TimeSlice slice) {
+        String source = source(dataset, def, slice, binder);
+        StringBuilder sql = new StringBuilder("SELECT * FROM ").append(source);
+        if (!def.temporal) {
+            // The temporal source is already aliased VERSIONS_ALIAS.
+            sql.append(" ").append(alias);
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+        return sql.toString();
+    }
+
+    /** Makes {@code %}, {@code _} and the escape character itself match literally in a LIKE pattern. */
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static List<String> concat(String language, String defaultLanguage) {
+        List<String> candidates = new ArrayList<>();
+        if (language != null) {
+            candidates.add(language);
+        }
+        if (defaultLanguage != null) {
+            candidates.add(defaultLanguage);
+        }
+        candidates.addAll(PlatformLanguages.CODES);
+        return candidates;
     }
 
     /** Table for the entity within the dataset: the override applies to the target entity only. */

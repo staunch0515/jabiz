@@ -43,6 +43,8 @@ public final class EntityDefinition {
     public final TemporalSpec temporalSpec;
     /** Whether committed writes publish entity change events ({@link EntityBuilder#publishChanges()}). */
     public final boolean publishesChanges;
+    /** Field that stands for an instance where it is referenced ({@link EntityBuilder#display}), or null. */
+    public final String displayField;
 
     EntityDefinition(String name, String physicalTable, String primaryKey,
         Map<String, FieldDefinition> fields,
@@ -54,7 +56,8 @@ public final class EntityDefinition {
         List<UniqueConstraint> uniqueConstraints,
         Map<String, ListViewDefinition> listViews,
         TemporalSpec temporalSpec,
-        boolean publishesChanges) {
+        boolean publishesChanges,
+        String displayField) {
         this.name = name;
         this.physicalTable = physicalTable;
         this.primaryKey = primaryKey;
@@ -69,6 +72,7 @@ public final class EntityDefinition {
         this.temporalSpec = temporalSpec;
         this.temporal = temporalSpec != null;
         this.publishesChanges = publishesChanges;
+        this.displayField = displayField;
         this.versionField = fields.values().stream()
             .filter(f -> f.kind() instanceof SemanticKind.Version)
             .map(FieldDefinition::name)
@@ -121,6 +125,16 @@ public final class EntityDefinition {
     /** Names of the fields marked {@linkplain FieldBuilder#sensitive() sensitive}, in declaration order. */
     public List<String> sensitiveFields() {
         return fields.values().stream().filter(FieldDefinition::sensitive).map(FieldDefinition::name).toList();
+    }
+
+    /** Names of the fields marked {@linkplain FieldBuilder#processOnly() process-only}, in declaration order. */
+    public List<String> processOnlyFields() {
+        return fields.values().stream().filter(FieldDefinition::processOnly).map(FieldDefinition::name).toList();
+    }
+
+    /** The only initial state of the lifecycle, or null when there is no lifecycle or several initial states. */
+    public String soleInitialState() {
+        return initialStates.size() == 1 ? initialStates.iterator().next() : null;
     }
 
     /**
