@@ -37,6 +37,7 @@
 | `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】） |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
+| `CallProcess.forEach(name, version, ctx -> 输入列表, outputKey)` | 对列表中每个输入依次调用一次（列表为空时不调用），输出为同序的列表（阶段 13e） |
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 

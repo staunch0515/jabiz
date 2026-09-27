@@ -235,13 +235,16 @@ public class ProcessExecutor {
         });
     }
 
-    /** Violations a failing step reports come together with those collected before it. */
+    /**
+     * Violations a failing step reports come together with those collected before it, each once: a step that
+     * refuses to go on because of the collected violations (such as {@code SaveChanges}) reports those very ones.
+     */
     private static BusinessRuleViolationException withCollected(ProcessContext ctx, BusinessRuleViolationException e) {
         if (!ctx.hasViolations()) {
             return e;
         }
         List<Violation> all = new ArrayList<>(ctx.violations());
-        all.addAll(e.violations());
+        e.violations().stream().filter(violation -> !all.contains(violation)).forEach(all::add);
         return new BusinessRuleViolationException(all);
     }
 

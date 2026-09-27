@@ -137,6 +137,41 @@ public final class ItProcessFixtures {
                 return new ChildInput(in.childTicket(), in.childFails());
             }, "child")));
 
+    public record FamilyInput(@NotBlank String parentTicket, java.util.List<String> childTickets, String failing) {}
+
+    public record FamilyOutput(long processSeqId, java.util.List<TicketOutput> children) {}
+
+    /** Inserts a ticket, then calls {@link #CHILD} once for each child ticket, in the same transaction. */
+    @SuppressWarnings("unchecked")
+    public static final ProcessDefinition<FamilyInput, FamilyOutput, ProcessContext> FAMILY =
+        ProcessDefinition.define("IT_FAMILY", 1, FamilyInput.class, FamilyOutput.class, ProcessContext.class, pb -> pb
+            .permissions(PERMISSION)
+            .contextFactory((start, in) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put("in", in);
+                return ctx;
+            })
+            .outputMapper(ctx -> new FamilyOutput(ctx.processSeqId(),
+                ctx.contains("children") ? (java.util.List<TicketOutput>) ctx.get("children") : null))
+            .compute("Register", (metadata, ctx) -> {
+                FamilyInput in = ctx.get("in", FamilyInput.class);
+                ctx.changes().insert("ItTicket", ticket(in.parentTicket(), "parent", 1L));
+            })
+            .step("Call the children", CallProcess.forEach("IT_CHILD", 1, ctx -> {
+                FamilyInput in = ctx.get("in", FamilyInput.class);
+                return in.childTickets().stream().map(id -> new ChildInput(id, id.equals(in.failing()))).toList();
+            }, "children")));
+
+    /** Rejects, then saves: the save refuses because of the violation, which is reported once. */
+    public static final ProcessDefinition<TicketInput, TicketOutput, ProcessContext> REJECT_THEN_SAVE =
+        ProcessDefinition.define("IT_REJECT_THEN_SAVE", 1, TicketInput.class, TicketOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, in) -> new ProcessContext(start))
+                .outputMapper(ctx -> null)
+                .compute("Reject", (metadata, ctx) -> ctx.reject(new Violation("title", "IT_REFUSED", "refused")))
+                .step("Save", SaveChanges.now()));
+
     /** Three steps: two report violations, one registers a change that must never be written. */
     public static final ProcessDefinition<TicketInput, TicketOutput, ProcessContext> MULTI_VIOLATION =
         ProcessDefinition.define("IT_MULTI_VIOLATION", 1, TicketInput.class, TicketOutput.class, ProcessContext.class,
@@ -353,6 +388,16 @@ public final class ItProcessFixtures {
         @Bean
         ProcessDefinition<ParentInput, ParentOutput, ProcessContext> itParent() {
             return PARENT;
+        }
+
+        @Bean
+        ProcessDefinition<FamilyInput, FamilyOutput, ProcessContext> itFamily() {
+            return FAMILY;
+        }
+
+        @Bean
+        ProcessDefinition<TicketInput, TicketOutput, ProcessContext> itRejectThenSave() {
+            return REJECT_THEN_SAVE;
         }
 
         @Bean
