@@ -45,6 +45,9 @@ public final class MetaModelExporter {
         }
         Set<String> codes = new LinkedHashSet<>(CLIENT_CHECK_CODES);
         for (FieldDefinition f : def.fields.values()) {
+            if (f.kind() instanceof SemanticKind.Custom c) {
+                codes.addAll(CustomKinds.require(c.kindId()).violationCodes(c.params()));
+            }
             f.ruleSpecs().forEach(spec -> codes.add(spec.code()));
         }
         Map<String, Object> messages = new LinkedHashMap<>();
@@ -70,6 +73,7 @@ public final class MetaModelExporter {
             json.put("generated", f.generated());
             json.put("systemManaged", def.isSystemManaged(f));
             json.put("sensitive", f.sensitive());
+            json.put("processOnly", f.processOnly());
             json.putAll(kindToJson(f.kind()));
             json.put("operators", SemanticKinds.allowedOperators(f.kind()).stream()
                 .map(QueryOperator::name).sorted().toList());
@@ -80,6 +84,9 @@ public final class MetaModelExporter {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("entity", def.name);
         root.put("primaryKey", def.primaryKey);
+        if (def.displayField != null) {
+            root.put("display", def.displayField);
+        }
         root.put("temporal", def.temporal);
         root.put("publishesChanges", def.publishesChanges);
         if (def.temporal) {

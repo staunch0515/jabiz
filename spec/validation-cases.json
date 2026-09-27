@@ -12,6 +12,7 @@
     "generated" : true,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "semanticIdentity",
     "urn" : "urn:sample",
     "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
@@ -23,6 +24,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "text",
     "maxLength" : 10,
     "multiline" : false,
@@ -39,6 +41,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "text",
     "maxLength" : 20,
     "multiline" : false,
@@ -57,6 +60,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "text",
     "multiline" : false,
     "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "LIKE", "NE" ],
@@ -75,6 +79,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "monetary",
     "currency" : "JPY",
     "scale" : 2,
@@ -100,6 +105,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "numeric",
     "precision" : 5,
     "scale" : 2,
@@ -118,6 +124,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "temporal",
     "role" : "EVENT_TIME",
     "operators" : [ "BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE" ],
@@ -135,6 +142,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "bool",
     "operators" : [ "EQ", "IS_NOT_NULL", "IS_NULL", "NE" ],
     "rules" : [ ]
@@ -145,6 +153,7 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "code",
     "dictUrn" : "urn:sample:status",
     "allowedValues" : [ "OPEN", "DONE" ],
@@ -157,10 +166,43 @@
     "generated" : false,
     "systemManaged" : false,
     "sensitive" : false,
+    "processOnly" : false,
     "type" : "code",
     "dictUrn" : "urn:sample:port",
     "allowedValues" : [ ],
     "operators" : [ "EQ", "IN", "IS_NOT_NULL", "IS_NULL", "NE" ],
+    "rules" : [ ]
+  }, {
+    "name" : "headline",
+    "immutable" : false,
+    "required" : [ ],
+    "generated" : false,
+    "systemManaged" : false,
+    "sensitive" : false,
+    "processOnly" : false,
+    "format" : "plain",
+    "multiline" : false,
+    "maxLength" : 8,
+    "locales" : [ "zh", "ja", "en" ],
+    "type" : "custom",
+    "kindId" : "jabiz.i18n-text",
+    "operators" : [ "IS_NOT_NULL", "IS_NULL" ],
+    "rules" : [ ]
+  }, {
+    "name" : "summary",
+    "immutable" : false,
+    "required" : [ "en" ],
+    "generated" : false,
+    "systemManaged" : false,
+    "sensitive" : false,
+    "processOnly" : false,
+    "format" : "markdown",
+    "multiline" : true,
+    "maxLength" : 10,
+    "locales" : [ "zh", "ja", "en" ],
+    "type" : "custom",
+    "kindId" : "jabiz.i18n-text",
+    "operators" : [ "IS_NOT_NULL", "IS_NULL" ],
     "rules" : [ ]
   } ],
   "cases" : [ {
@@ -430,5 +472,99 @@
     "field" : "port",
     "value" : "",
     "expect" : [ "NOT_IN_DICTIONARY" ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "zh" : "标题",
+      "en" : "Title"
+    },
+    "expect" : [ ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "en" : "   ",
+      "ja" : ""
+    },
+    "insert" : true,
+    "expect" : [ "REQUIRED" ]
+  }, {
+    "field" : "headline",
+    "value" : { },
+    "insert" : true,
+    "expect" : [ "REQUIRED" ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "en" : "123456789"
+    },
+    "expect" : [ "TOO_LONG" ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "en" : "😀😀😀😀😀😀😀😀"
+    },
+    "expect" : [ ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "fr" : "Titre"
+    },
+    "expect" : [ "INVALID_VALUE" ]
+  }, {
+    "field" : "headline",
+    "value" : {
+      "en" : 5
+    },
+    "expect" : [ "INVALID_VALUE" ]
+  }, {
+    "field" : "headline",
+    "value" : "Title",
+    "expect" : [ "INVALID_VALUE" ]
+  }, {
+    "field" : "headline",
+    "value" : [ "Title" ],
+    "expect" : [ "INVALID_VALUE" ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "zh" : "简介",
+      "en" : "Intro"
+    },
+    "expect" : [ ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "zh" : "简介"
+    },
+    "expect" : [ "TRANSLATION_REQUIRED" ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "en" : "  ",
+      "ja" : "概要"
+    },
+    "expect" : [ "TRANSLATION_REQUIRED" ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "en" : "12345678901"
+    },
+    "expect" : [ "TOO_LONG" ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "ja" : "12345678901"
+    },
+    "expect" : [ "TOO_LONG" ]
+  }, {
+    "field" : "summary",
+    "value" : null,
+    "expect" : [ ]
+  }, {
+    "field" : "summary",
+    "value" : {
+      "en" : " "
+    },
+    "expect" : [ ]
   } ]
 }

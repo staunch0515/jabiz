@@ -1,5 +1,6 @@
 package com.jabiz.entity;
 
+import com.jabiz.entity.i18n.I18nText;
 import com.jabiz.query.SqlIdentifiers;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public final class EntityBuilder {
     private final Map<String, ListViewDefinition> listViews = new LinkedHashMap<>();
     private TemporalBuilder temporal;
     private boolean publishChanges;
+    private String displayField;
 
     EntityBuilder(String name) { this.name = name; }
 
@@ -113,6 +115,18 @@ public final class EntityBuilder {
         publishChanges = true;
     }
 
+    /**
+     * The field that stands for an instance where it is referenced (a text or multilingual text, not sensitive):
+     * used by lookups, labels of reference columns and reference pickers (docs/design/16-content-authoring.md
+     * section 2).
+     */
+    public void display(String field) {
+        if (displayField != null) {
+            throw invalid("display is declared twice");
+        }
+        displayField = field;
+    }
+
     /** Declares a list view (docs/design/02-metamodel.md section 7). */
     public void listView(String viewName, Consumer<ListViewDefinition.Builder> block) {
         if (listViews.containsKey(viewName)) {
@@ -137,6 +151,7 @@ public final class EntityBuilder {
         validateReferences();
         validateUniqueConstraints();
         validateListViews();
+        validateDisplay();
 
         return new EntityDefinition(
             name,
@@ -151,7 +166,8 @@ public final class EntityBuilder {
             List.copyOf(uniqueConstraints),
             Collections.unmodifiableMap(new LinkedHashMap<>(listViews)),
             temporalSpec,
-            publishChanges
+            publishChanges,
+            displayField
         );
     }
 
@@ -308,6 +324,20 @@ public final class EntityBuilder {
             if (view.defaultSort() != null && !view.sorts().contains(view.defaultSort().field())) {
                 throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is not among its sorts");
             }
+        }
+    }
+
+    private void validateDisplay() {
+        if (displayField == null) {
+            return;
+        }
+        requireField(displayField, "display");
+        FieldDefinition field = fields.get(displayField);
+        if (!(field.kind() instanceof SemanticKind.Text) && !I18nText.is(field.kind())) {
+            throw invalid("display field '" + displayField + "' must be a Text or " + I18nText.KIND_ID + " field");
+        }
+        if (field.sensitive()) {
+            throw invalid("display field '" + displayField + "' is sensitive");
         }
     }
 

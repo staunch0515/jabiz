@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Single validation path for incoming entity attributes: normalizes values to their
  * canonical types, rejects unknown fields, enforces required fields, the constraints of the semantic kind
- * (text length, numeric precision, dictionary membership) and runs field rules.
+ * (text length, numeric precision, dictionary membership, the constraints of custom kinds) and runs field rules.
  *
  * System-managed fields (version, system-recorded timestamps) are ignored if supplied.
  */
@@ -108,6 +108,12 @@ public final class EntityValidator {
                 return new Violation(field.name(), PlatformErrorCodes.NUMERIC_PRECISION,
                     "Field '" + field.name() + "' does not fit numeric(" + n.precision() + "," + n.scale() + ")",
                     Map.of("precision", n.precision(), "scale", n.scale()));
+            }
+            case SemanticKind.Custom c -> {
+                return CustomKinds.require(c.kindId()).validate(c.params(), value).stream().findFirst()
+                    .map(kv -> new Violation(field.name(), kv.code(),
+                        "Field '" + field.name() + "' breaks " + kv.code() + " " + kv.params(), kv.params()))
+                    .orElse(null);
             }
             case SemanticKind.Code c when c.allowedValues().isEmpty() -> {
                 return dictionaries.enabledCodes(c.dictUrn())

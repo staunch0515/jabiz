@@ -2,6 +2,8 @@ package com.jabiz.entity;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dictionary.DictionaryLookup;
+import com.jabiz.entity.i18n.I18nText;
+import com.jabiz.testkinds.TestI18nText;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -39,7 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ValidationCasesTest {
 
-    /** Exercises every exportable rule kind and every kind constraint the client repeats. */
+    /** Exercises every exportable rule kind and every kind constraint the client repeats (multilingual text: D20). */
+    static {
+        TestI18nText.register();
+    }
+
     static final EntityDefinition SAMPLE = EntityDefinition.define("ValidationSample", eb -> {
         eb.physicalTable("t_validation_sample");
         eb.primaryKey("id");
@@ -60,6 +66,8 @@ class ValidationCasesTest {
         eb.field("active", f -> f.physicalColumn("f_active").asBool());
         eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:sample:status", "OPEN", "DONE"));
         eb.field("port", f -> f.physicalColumn("f_port").asCode("urn:sample:port"));
+        eb.field("headline", f -> f.physicalColumn("f_headline").required(true).apply(I18nText.of(8)));
+        eb.field("summary", f -> f.physicalColumn("f_summary").apply(I18nText.markdown(10).required("en")));
     });
 
     private static final ObjectMapper JSON = JsonMapper.builder().enable(SerializationFeature.INDENT_OUTPUT).build();
