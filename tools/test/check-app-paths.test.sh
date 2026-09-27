@@ -105,6 +105,12 @@ printf 'backend/**\n' >>"$work/repo/.jabiz-app-paths"
 commit "claim the backend"
 expect 1 "claims files of the platform branch" "a pattern that claims platform files fails"
 
+app_branch claims-new-platform-file
+printf 'backend/runtime/src/Extra.java\n' >>"$work/repo/.jabiz-app-paths"
+write backend/runtime/src/Extra.java
+commit "a new file in a platform module"
+expect 1 "backend/runtime/src/Extra.java" "a new file in a platform directory fails even when listed"
+
 git_ checkout -q only-app
 out_code=0
 (cd "$work/repo" && "$script" no-such-branch >/dev/null 2>&1) || out_code=$?

@@ -39,6 +39,9 @@ tools/culture/**
   改名按删除 + 新增计），任何不匹配 `.jabiz-app-paths` 的路径都报错。合并 `platform` 带来的改动不计入（它们在共同祖先之后同时出现在两边）。
   - 模式：`#` 起注释；`**` 可跨目录，`*`、`?` 只在一段路径内；`.jabiz-app-paths` 本身总是允许。
   - 模式不得覆盖平台分支（共同祖先）上已有的文件（例如 `backend/**`），否则同样报错。
+  - 平台自己的目录（`backend/core` `backend/runtime` `backend/ext-geo` `backend/app` `backend/build-logic` `frontend` `spec`
+    `docs/design` `docs/guide`）下的任何改动（包括新文件）都算越界，不论 `.jabiz-app-paths` 如何写。
+  - 检查用的脚本与工作流来自被检查的分支本身，因此只有在分支保护把 `app-paths` 设为必需检查、且对这两个文件的修改经过评审时才有约束力。
   - 退出码：0 通过（或没有 `.jabiz-app-paths`，不是应用分支）；1 有越界；2 无法检查（找不到平台分支或共同祖先），不放行。
 - 平台 CI（`ci.yml`）对推送到任何分支都运行（应用分支不能改 `ci.yml`）；其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时运行检查，
   并在每个分支上运行脚本自己的测试 `tools/test/check-app-paths.test.sh`。
@@ -96,7 +99,7 @@ jabizApp {
 ## 5. 测试
 
 - `check-app-paths.sh`（`tools/test/check-app-paths.test.sh`）：在临时仓库中构造"只改应用目录"与"改了平台目录"两种分支，断言前者通过、后者失败；
-  另有非 ASCII 与含空格的文件名、删除与移动平台文件、`*` 不跨目录、合并平台之后、模式覆盖平台文件、找不到平台分支。
+  另有非 ASCII 与含空格的文件名、平台目录下的新文件、删除与移动平台文件、`*` 不跨目录、合并平台之后、模式覆盖平台文件、找不到平台分支。
 - 构建：`app` 改用约定插件后 `./gradlew check`、`:app:bootJar`、端到端与 compose 作业全部照常通过。
 - `SpaFallbackFilter`（`SpaFallbackFilterTest`、`SpaConfigCheckTest`）：多个前缀的回退、最长前缀优先、路径段边界、CSP 头；缺省配置与现在行为相同；
   `MultiSpaIT`（app）经完整的 WebFlux 与安全过滤链验证 `/` 与 `/admin/` 两个 SPA。

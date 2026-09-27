@@ -4,7 +4,8 @@
 # ('#' starts a comment; '**' matches across directories, '*' and '?' within one path segment).
 #
 # Every file changed since the common ancestor with the platform branch must match one of them; changes that came
-# in by merging the platform branch are not counted. A pattern may not claim a file of the platform branch.
+# in by merging the platform branch are not counted. A pattern may not claim a file of the platform branch, and
+# nothing under the platform's own directories (see 'reserved') counts as the application's.
 #
 # Usage: tools/check-app-paths.sh [base]    base: the platform branch, default $APP_PATHS_BASE or origin/platform
 # Exit:  0 passes (or not an application branch), 1 violations, 2 cannot check.
@@ -66,6 +67,18 @@ owned() {
 
 status=0
 
+# Directories that belong to the platform as a whole (17 section 1): nothing in them, new files included, can be an
+# application's, whatever .jabiz-app-paths says.
+reserved=(backend/core/ backend/runtime/ backend/ext-geo/ backend/app/ backend/build-logic/ frontend/ spec/
+  docs/design/ docs/guide/)
+reserved_dir() {
+  local path="$1" dir
+  for dir in "${reserved[@]}"; do
+    [[ "$path" == "$dir"* ]] && return 0
+  done
+  return 1
+}
+
 # The application may not claim what the platform has.
 # NUL-separated: git would otherwise quote and escape non-ASCII names ("\346\226\207.md").
 platform_files="$(git -C "$root" ls-tree -r -z --name-only "$merge_base" | tr '\0' '\n')"
@@ -80,7 +93,7 @@ done
 
 violations=()
 while IFS= read -r -d '' path; do
-  owned "$path" || violations+=("$path")
+  if reserved_dir "$path" || ! owned "$path"; then violations+=("$path"); fi
 done < <(git -C "$root" diff -z --name-only --no-renames "$merge_base" HEAD)
 
 if ((${#violations[@]} > 0)); then
