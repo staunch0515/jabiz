@@ -95,6 +95,7 @@ EntityDefinition supplierEntityDefinition() {
 - **字典**：`asCode(urn)` 的取值来自字典注册表；静态字典用 `StaticDictionary.define(...)` 声明为 Bean（见 `DictionariesConfig`），
   需要运行时维护的用平台的数据库字典（`SysDictItem`，02 §5）。
 - **状态机**（本例没有）：`eb.stateTransitions("status", st -> st.from("PLACED").to("SHIPPED", "CANCELLED"))`，参见 `CommerceEntities.ORDER_ENTITY`。
+  状态机会回到起点（如退回草稿）时用 `st.initial("DRAFT")` 声明初始状态（02 §4）。
 - **列表视图**：只有列在 `filters` / `sorts` 中的字段可以筛选、排序（白名单）。
 - `eb.temporal(t -> t.allowScheduled(true))` 允许预定生效（例如"下月起交货周期改为 10 天"）。
 - 需要其他系统感知变化时加 `eb.publishChanges()`（实体变更事件，11 §2）。

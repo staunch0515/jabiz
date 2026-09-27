@@ -27,6 +27,7 @@ public final class ItContentFixtures extends BaseEntityDefinitions {
     public static final String JP_DATASET = "urn:jabiz:dataset:it:ItArticle";
     public static final String KR_DATASET = "urn:jabiz:dataset:it:ItArticleKr";
     public static final String PUBLISH = "IT_ARTICLE_PUBLISH";
+    public static final String WITHDRAW = "IT_ARTICLE_WITHDRAW";
     public static final String READ = "it.article.read";
     public static final String WRITE = "it.article.write";
 
@@ -41,7 +42,8 @@ public final class ItContentFixtures extends BaseEntityDefinitions {
             .asCode("urn:jabiz:dict:it_article_status", "DRAFT", "PUBLISHED"));
         eb.field("note", f -> f.physicalColumn("f_note").processOnly().asText(200));
         eb.field("rowVersion", rowVersion("f_version"));
-        eb.stateTransitions("status", st -> st.from("DRAFT").to("PUBLISHED"));
+        // Withdrawing returns an article to its first state, so the initial state is declared rather than inferred.
+        eb.stateTransitions("status", st -> st.initial("DRAFT").from("DRAFT").to("PUBLISHED").from("PUBLISHED").to("DRAFT"));
         eb.display("title");
         eb.listView("default", lv -> lv.columns("title", "status").filters("status").sorts("title"));
     });
@@ -68,6 +70,23 @@ public final class ItContentFixtures extends BaseEntityDefinitions {
                 changes.put("status", "PUBLISHED");
                 changes.put("note", ctx.get("note", String.class));
                 ctx.changes().update(ARTICLE, article.id(), article.version(), changes);
+            }));
+
+    public record WithdrawInput(@NotBlank String articleId) {}
+
+    public static final ProcessDefinition<WithdrawInput, PublishOutput, ProcessContext> WITHDRAW_PROCESS =
+        ProcessDefinition.define(WITHDRAW, 1, WithdrawInput.class, PublishOutput.class, ProcessContext.class, pb -> pb
+            .permissions(WRITE)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put("id", input.articleId());
+                return ctx;
+            })
+            .outputMapper(ctx -> new PublishOutput("DRAFT"))
+            .step("Load", LoadEntity.by(JP_DATASET, "id", "article"))
+            .compute("Withdraw", (metadata, ctx) -> {
+                EntityInstance article = ctx.get("article", EntityInstance.class);
+                ctx.changes().update(ARTICLE, article.id(), article.version(), Map.of("status", "DRAFT"));
             }));
 
     private ItContentFixtures() {}
@@ -102,6 +121,11 @@ public final class ItContentFixtures extends BaseEntityDefinitions {
         @Bean
         ProcessDefinition<PublishInput, PublishOutput, ProcessContext> itArticlePublishProcess() {
             return PUBLISH_PROCESS;
+        }
+
+        @Bean
+        ProcessDefinition<WithdrawInput, PublishOutput, ProcessContext> itArticleWithdrawProcess() {
+            return WITHDRAW_PROCESS;
         }
     }
 }

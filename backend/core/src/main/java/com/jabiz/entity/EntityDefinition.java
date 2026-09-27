@@ -57,7 +57,8 @@ public final class EntityDefinition {
         Map<String, ListViewDefinition> listViews,
         TemporalSpec temporalSpec,
         boolean publishesChanges,
-        String displayField) {
+        String displayField,
+        Set<String> declaredInitialStates) {
         this.name = name;
         this.physicalTable = physicalTable;
         this.primaryKey = primaryKey;
@@ -78,7 +79,9 @@ public final class EntityDefinition {
             .map(FieldDefinition::name)
             .findFirst()
             .orElse(null);
-        this.initialStates = computeInitialStates(transitions);
+        this.initialStates = declaredInitialStates.isEmpty()
+            ? computeInitialStates(transitions)
+            : Collections.unmodifiableSet(new LinkedHashSet<>(declaredInitialStates));
     }
 
     public static EntityDefinition define(String name, Consumer<EntityBuilder> block) {

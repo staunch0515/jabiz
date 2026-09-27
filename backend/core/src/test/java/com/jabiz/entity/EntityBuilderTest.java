@@ -120,6 +120,58 @@ class EntityBuilderTest {
     }
 
     @Test
+    void initialStatesAreInferredWhenNotDeclared() {
+        EntityDefinition def = define(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED").from("SHIPPED").to("DELIVERED"));
+        });
+        assertThat(def.initialStates).containsExactly("NEW");
+        assertThat(def.soleInitialState()).isEqualTo("NEW");
+    }
+
+    @Test
+    void aLifecycleThatReturnsToItsFirstStateDeclaresIt() {
+        // Without the declaration no state is left but never entered, so there would be no initial state.
+        EntityDefinition inferred = define(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.from("NEW").to("SHIPPED").from("SHIPPED").to("NEW"));
+        });
+        assertThat(inferred.initialStates).isEmpty();
+
+        EntityDefinition declared = define(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.initial("NEW").from("NEW").to("SHIPPED").from("SHIPPED").to("NEW"));
+        });
+        assertThat(declared.initialStates).containsExactly("NEW");
+        assertThat(declared.soleInitialState()).isEqualTo("NEW");
+        assertThat(declared.allowsTransition("SHIPPED", "NEW")).isTrue();
+
+        EntityDefinition several = define(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.initial("SHIPPED", "NEW")
+                .from("NEW").to("SHIPPED").from("SHIPPED").to("NEW"));
+        });
+        assertThat(several.initialStates).containsExactly("SHIPPED", "NEW");
+        assertThat(several.soleInitialState()).isNull();
+    }
+
+    @Test
+    void declaredInitialStatesMustBelongToTheDictionaryAndLeadSomewhere() {
+        assertInvalid(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.initial("DRAFT").from("NEW").to("SHIPPED"));
+        }, "state 'DRAFT' is not among the allowed values");
+        assertInvalid(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.initial("DELIVERED").from("NEW").to("SHIPPED"));
+        }, "initial state 'DELIVERED' has no transition out of it");
+        assertThatThrownBy(() -> define(eb -> {
+            statusField(eb);
+            eb.stateTransitions("status", st -> st.initial("NEW", "NEW").from("NEW").to("SHIPPED"));
+        })).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("declared twice");
+    }
+
+    @Test
     void guardsRequireALifecycle() {
         assertInvalid(eb -> eb.guard("G", "*", "SHIPPED", (f, t, c, i, ctx) -> List.of()),
             "transition guards require a lifecycle");
