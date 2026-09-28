@@ -28,15 +28,28 @@
 - 数据库字典（媒体类型、活动类型、年龄段）的初始值是迁移中的基础数据（`jabiz_dict_put`），启动检查要求它们存在；编辑可在后台增加。
 - 开关（`culture.review.required`、`culture.consent.guardian.required`）是平台业务参数，由 `CULTURE_SETUP` 创建，流程以 `LoadParams` 按操作时间读取。
 
-## 4. 测试
+## 4. 公开接口（设计 §7）
+
+- 公开视图 `urn:jabiz:dataset:public:<实体>`（`Culture.publicDataset`）只含设计 §3 中标 ✓ 的字段；新增公开字段时同时改设计、视图白名单与模板。
+  `Consent` 永远没有公开视图；任何公开视图都不得含 `culture.consent-doc` 文件字段。
+- 公开模板在 `queries/culture/public/*.sql`（`access: public`、`cacheSeconds: 60`），只经公开视图读取。视角与媒体必须与公开的
+  `Participant` 联接（隐藏的参与者不出现），故事的子项必须与公开的 `Story` 联接（设计 §7.1 的连带）。
+- `CAST(:p AS varchar)` 而不是 `AS text`：`text` 是 `Contribution` 的列名，平台检查会报"裸物理名"。
+- 搜索用 `cu_i18n_text(...)` 与 `cu_like_pattern(:q) ESCAPE '\'`，表达式与 `V4__culture_search.sql` 的索引逐字相同。
+- 把内容下线的流程以 `.afterCommit(…, FileAccess.invalidate(…))` 立即结束文件的公开判定（`Workflow.files` 收集文件 id）。
+- 模板变化后：`./gradlew :culture:test --tests '*PublicQueriesSnapshotIT' -Dpublic-queries.update-snapshot=true`（写 `site/src/api/public-queries.json`）
+  → `site/` 下 `pnpm gen:api`，一起提交。新模板要在属性测试 `PublicVisibilityPropertyIT` 的 `checkTemplates` 中调用（它断言全部公开模板都被调用过）。
+
+## 5. 测试
 
 - 集成测试继承 `CultureItSupport`（真实 PostgreSQL、真实令牌、BlockHound）；每个测试前执行 `CULTURE_SETUP`（幂等）。
+  公开接口的测试继承 `PublicItSupport`（匿名 `publicItems` / `publicFile`）；测试配置打开公开访问并放宽限流。
 - 场景回放：`src/test/resources/scenarios/culture/*.yml`，快照随变更提交；更新快照：
   `./gradlew :culture:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true`。
 - 常用命令（在 `backend/` 下）：`./gradlew :culture:check`（测试 + `platformCheck`）、`./gradlew :culture:bootJar`（含 `/` 与 `/admin/` 两个 SPA）。
 - 路径检查：仓库根目录 `tools/check-app-paths.sh`。
 
-## 5. 运行
+## 6. 运行
 
 - 本地：`docker compose -f deploy/culture/docker-compose.yml up -d --build`（数据库端口 5437、应用 8080）；
   或只起数据库后在 `backend/` 下 `./gradlew :culture:bootRun --args='--spring.profiles.active=dev'`。

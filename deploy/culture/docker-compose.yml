@@ -49,6 +49,8 @@ services:
       SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-culture}
       # Behind the edge proxy the client's address and scheme come from its headers.
       SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-none}
+      # The public site reads published content anonymously (docs/culture/00-design.md section 7).
+      JABIZ_PUBLIC_ENABLED: "true"
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
       # Telemetry is sent only with the observability profile (docs/design/13-observability-ops.md).
       MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: ${OTLP_TRACES:-}

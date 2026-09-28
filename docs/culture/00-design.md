@@ -1,6 +1,6 @@
 # Culture, Unfiltered — 应用设计
 
-需求原文见 `brief.md`（下文"简报 §n"指其中的章节）。本文件是应用 culture 的设计，状态：**已确认**（C1 计划确认时一并确认，含 C1 中的调整，见 §14）。
+需求原文见 `brief.md`（下文"简报 §n"指其中的章节）。本文件是应用 culture 的设计，状态：**已确认**（C1 计划确认时一并确认，含 C1、C2 中的调整，见 §14、§15）。
 平台部分（文件、公开访问、内容编辑、平台与应用分开）在 `platform` 分支的 `docs/design/14–17` 与决策 D17–D19 中，本文件只引用，不重复。
 
 ## 0. 设计的出发点
@@ -237,7 +237,7 @@ culture 不修改平台目录（`.jabiz-app-paths`）；做 culture 时发现的
 | `urn:jabiz:dataset:own:Story` | Story | `ownerActorId` ← 操作人；`status = DRAFT` | `culture.own.read` / `culture.own.write` | 通讯员起草自己的故事 |
 | `urn:jabiz:dataset:own:Contribution` / `own:MediaItem` | 同名 | `ownerActorId` ← 操作人；`editable = true` | 同上 | 通讯员为故事（包括编辑发起的多人故事）添加自己的视角与照片 |
 | `urn:jabiz:dataset:own-view:<Story/Contribution/MediaItem>` | 同名 | `ownerActorId` ← 操作人 | `culture.own.read` / 只读 | 查看已提交、已发布的自己的内容 |
-| `urn:jabiz:dataset:public:<实体>` | 除 Consent 外 | 见 §7.1 | `culture.public.read` / 只读 | 公开模板的来源（15 §2）；依赖平台 13c，在 C2 中实现 |
+| `urn:jabiz:dataset:public:<实体>` | 除 Consent 外 | 见 §7.1 | `culture.public.read` / 只读 | 公开模板的来源（15 §2）；编辑也可经数据视图 API 预览（C2） |
 
 - 通讯员提交后，故事变为 `IN_REVIEW`、子项 `editable = false`，于是落在可写视图的范围之外：**提交后不能再改**，直到编辑退回。
   这完全由数据视图范围实现（03 §2.2 "更新时不允许把数据移出范围"），不需要额外代码。
@@ -281,10 +281,10 @@ Resource:     DRAFT ⇄ PUBLISHED
 | `CULTURE_STORY_PUBLISH` | `culture.story.publish` | 发布检查（下），通过后 → `PUBLISHED`，首次时写 `publishedTime`；故事的全部视角、媒体、主题关联 `visibility = PUBLIC`、`editable = false`。对已发布的故事再次执行 = 重新检查并公开新加入的子项 |
 | `CULTURE_STORY_UNPUBLISH` | `culture.story.unpublish` | → `UNPUBLISHED`，子项 `visibility = PRIVATE`；使相关文件的公开判定失效（15 §4） |
 | `CULTURE_STORY_REOPEN` | `culture.story.review` | `UNPUBLISHED` → `DRAFT`，子项 `editable = true` |
-| `CULTURE_PARTICIPANT_ACTIVATE` / `_HIDE` / `_REOPEN` | `culture.participant.manage` | 参与者状态；`ACTIVATE` 检查 §6.2（有头像时含照片），不满足时 `CONSENT_MISSING` |
+| `CULTURE_PARTICIPANT_ACTIVATE` / `_HIDE` / `_REOPEN` | `culture.participant.manage` | 参与者状态；`ACTIVATE` 检查 §6.2（有头像时含照片），不满足时 `CONSENT_MISSING`；`HIDE` 使头像的公开判定失效 |
 | `CULTURE_CONSENT_WITHDRAW` | `culture.consent.withdraw` | 写 `withdrawnTime`；重新评估 §6.2：P 的内容不再满足时，P → `WITHDRAWN`，**下线所有包含 P 的视角或媒体的故事**，并使文件判定失效 |
 | `CULTURE_PARTICIPANT_ERASE` | `culture.erase` | 见 §6.4 |
-| `CULTURE_RESOURCE_PUBLISH` / `_UNPUBLISH` | `culture.resource.publish` | 资源状态 |
+| `CULTURE_RESOURCE_PUBLISH` / `_UNPUBLISH` | `culture.resource.publish` | 资源状态；`_UNPUBLISH` 使 PDF 的公开判定失效 |
 | `CULTURE_SETUP` | `security.role.write` + `security.menu.write` + `platform.param.write` | §6.6 |
 
 **发布检查**（`CULTURE_STORY_PUBLISH` 的计算步骤；全部违规一次返回 422，前端逐条显示）：
@@ -340,7 +340,13 @@ Resource:     DRAFT ⇄ PUBLISHED
 | `public:Resource` | `status = PUBLISHED` | §3.8 ✓ |
 | `public:ResourceStory` / `public:SiteBlock` | `allRows()` | 主键与 ✓ 字段 |
 
-`Consent` 没有公开视图。
+`Consent` 没有公开视图。读权限 `culture.public.read`（编辑经数据视图 API 预览），行数上限为平台默认（≤ `jabiz.public.max-limit`）。
+
+**可见性的连带**（模板遵守，属性测试以此为准）：
+- 视角与媒体在页面上出现，当且仅当自身 `PUBLIC`、所属故事 `PUBLISHED`、（视角或所属视角的）参与者 `ACTIVE`。
+  因此隐藏的参与者（`HIDDEN`）没有个人页，其视角从所有页面消失，故事本身保持发布。
+- 隐藏的主题不出现在故事的主题列表中，也不能用于筛选；隐藏的地点不出现在地点列表、地图与筛选中，其参与者照常显示、地点字段为空（`LEFT JOIN`）。
+- 公开文件由公开视图推导（15 §4），不看这些连带：隐藏参与者的视角音频与照片在知道文件 id 时仍可取得（页面上不再出现，见 §15 已知限制）。
 
 ### 7.2 公开模板（`queries/culture/public/*.sql`，`access: public`）
 
@@ -352,18 +358,28 @@ Resource:     DRAFT ⇄ PUBLISHED
 | `culture.public.person` | `slug` | 个人页头部与正文 |
 | `culture.public.person_stories` / `person_themes` | `slug` | 个人页的故事与主题 |
 | `culture.public.themes` | — | 主题及其故事数、参与地点数 |
-| `culture.public.theme` / `theme_perspectives` | `slug` | 主题页：该主题下已发布故事中的**全部视角，按地点分组**（简报 §8 的横向比较） |
-| `culture.public.stories` | `location`、`theme`、`mediaType`（列表）、`q`、`featured` | STORIES 列表与筛选；结果含各故事涉及的地点 |
+| `culture.public.theme` / `theme_perspectives` | `slug` | 主题页：该主题下已发布故事中的**全部视角**，平铺的行，每行带地点字段、按地点排序；分组由网站完成（简报 §8 的横向比较） |
+| `culture.public.stories` | `location`、`theme`、`mediaType`（列表）、`q`、`featured` | STORIES 列表与筛选；结果列 `locationSlugs` 为各故事涉及的地点（逗号分隔、按地点顺序；模板结果列没有数组类型，名称取自 `locations`） |
 | `culture.public.story` / `story_themes` / `story_perspectives` / `story_media` | `slug` | 故事页 |
 | `culture.public.resources` | `activityType`、`ageGroup`（列表） | RESOURCES |
 | `culture.public.resource` / `resource_stories` | `slug` | 资源页 |
-| `culture.public.search` | `q` | 搜索：故事、参与者、主题、资源的统一结果（类型、slug、标题） |
+| `culture.public.search` | `q` | 搜索：故事、参与者、主题、资源的统一结果（`kind` = `STORY` `PERSON` `THEME` `RESOURCE`、`slug`、`title` 或人名 `name`、`summary`、`imageFileId`） |
 
 - 筛选"国家"= 故事中有来自该地点参与者的视角（`EXISTS`），不是故事的属性——这正是"故事属于人，不属于国家"。
-- 搜索：`q` 为 2–100 字符，转义 `%` `_` 后做 `ILIKE`；范围为标题、摘要、正文、文字稿、参与者名与简介、主题标题与问题的**全部语言**。
-  迁移建立 `pg_trgm` 扩展、不可变函数 `cu_i18n_text(jsonb)`（拼接各语言文本）与其上的 trigram GIN 索引。trigram 对英文与中日文都可用；
-  归档规模（数百到数千条）下足够，以后需要词干与排序时再引入全文检索。
-- 全部模板 `cacheSeconds: 60`。公开模板目录快照在 `site/src/api/public-queries.json`，由此生成类型（15 §7）。
+- 搜索：`q` 为 2–100 字符，以 `ILIKE cu_like_pattern(:q) ESCAPE '\'` 匹配（函数转义 `\` `%` `_` 并加首尾 `%`，通配符按字面匹配）；
+  范围为故事的标题、摘要、正文、文字稿，参与者名与简介，主题标题与问题，资源标题与描述的**全部语言**。平台不检查文本参数的长度，
+  因此长度在 SQL 中判断：`q` 为空时不筛选（`stories`），不在 2–100 字符之间时不返回任何行；网站同时限制输入。
+  迁移 `V4__culture_search.sql` 在 `public` 中建立 `pg_trgm` 扩展（扩展全库唯一，测试每个类一个 schema；索引写全名 `public.gin_trgm_ops`），
+  建立不可变函数 `cu_i18n_text(jsonb)`（拼接各语言文本，空为 `''`）与 `cu_like_pattern(text)`，以及每个实体一条与模板表达式完全相同的
+  trigram GIN 表达式索引。trigram 对英文与中日文都可用（少于 3 个字符或某些 locale 下的中日文用不上索引，结果仍由 `ILIKE` 保证）；
+  归档规模（数百到数千条）下足够，以后需要词干与排序时再引入全文检索。生产的数据库账号需要对数据库有 `CREATE` 权限以创建扩展（受信任扩展）。
+- 字典（`mediaType` 等数据库字典）中不存在的值不被拒绝，只是匹配不到任何行（编辑可随时增加字典值）。
+- 全部模板 `cacheSeconds: 60`。公开模板目录快照在 `site/src/api/public-queries.json`（`jabizApp.publicQueriesSnapshot`），
+  `site/` 下 `pnpm gen:api` 由此生成 `src/api/public-queries.ts`（每个模板的参数、行、外层筛选与排序的类型；无依赖的脚本
+  `scripts/gen-public-api.mjs`），`pnpm check:api` 确认二者一致（CI：`.github/workflows/culture.yml` 的 `site` 作业）（15 §7）。
+- 公开访问的总开关 `jabiz.public.enabled` 在应用中为 `${JABIZ_PUBLIC_ENABLED:false}`（与平台默认一致），`deploy/culture` 的 compose 打开它。
+- 下线类流程（`UNPUBLISH`、`CONSENT_WITHDRAW`、`PARTICIPANT_HIDE`、`RESOURCE_UNPUBLISH`）以提交后步骤 `FileAccess.invalidate(...)`
+  立即结束相关文件的公开判定（15 §4）；已缓存文件的浏览器最多再显示 5 分钟，多实例时其他实例在判定有效期（60 s）内停止。
 
 ## 8. 后台（编辑与通讯员）
 
@@ -500,8 +516,10 @@ Resource:     DRAFT ⇄ PUBLISHED
 - 后台与工作流（集成测试 + 场景回放，真实 PostgreSQL）：通讯员只能看到、改动自己的内容，提交后不能再改；`processOnly` 状态经数据视图写不进去；
   发布检查的每条违规；两个开关各取两种值；撤回同意即下线全部相关故事；抹除后行与文件都不存在；`input_summary` 中没有自由文本。
   场景"六个地点的 HOME 故事"：从起草、提交、退回、再提交、发布到撤回同意的全过程，固定时钟与快照。
-- 公开接口：**任意状态组合下，公开模板只返回已发布的数据**（jqwik 随机生成各实体的状态与可见性，断言公开结果是已发布集合的子集）；
-  同意书文件永远 404；草稿参与者的头像 404；搜索的通配符被转义。
+- 公开接口：**任意状态组合下，公开模板只返回已发布的数据**（`PublicVisibilityPropertyIT`：jqwik 以固定种子随机生成各实体的状态与可见性，
+  经后台与流程造出；以编辑视角读出的数据库为准，断言每个模板对每个 slug 与筛选值的每一行都属于 §7.1 的公开集合，故事、参与者、地点列表与之相等，
+  每个文件恰在被公开行引用时可匿名获取）；同意书文件永远 404；草稿与下线内容的文件 404，下线、撤回、隐藏后立即 404（`PublicFilesIT`）；
+  各页面的模板、筛选、中日英搜索与通配符转义（`PublicTemplatesIT`）；目录快照（`PublicQueriesSnapshotIT`）。
 - 公开网站：Vitest（组件、语言回退、Markdown 安全、筛选与 URL 同步）；Playwright（全部页面在三种语言、桌面与 375 px 宽度下；axe；只用键盘完成主要路径；
   减少动效；视频在点击前没有第三方请求）。
 
@@ -516,3 +534,13 @@ Resource:     DRAFT ⇄ PUBLISHED
 7. 通讯员不再有可写的"自己的资料"视图（§5）；抹除包括通讯员自己起草的独立故事与自己添加的媒体（§6.4）。
 8. 主键以文本存储（§3）；数据库字典的初始值在迁移中，不在 `CULTURE_SETUP` 中（§6.6）；`CULTURE_SETUP` 另需 `security.menu.write`。
 9. 平台 13e 另修正了"累积的违规在 `SaveChanges.now` 前后被报告两次"。
+
+## 15. C2 中的调整（计划确认时一并确认）
+
+1. 可见性的连带（§7.1）：视角与媒体要求参与者 `ACTIVE`；隐藏的主题、地点离开页面，隐藏地点的参与者照常显示、地点为空。
+2. 主题页的视角为平铺的行，分组由网站完成；故事涉及的地点为文本列 `locationSlugs`（§7.2）。
+3. `q` 的长度在 SQL 中判断（平台不检查文本参数的长度）；通配符由 `cu_like_pattern` 转义（§7.2）。
+4. C1 的下线类流程补上文件判定的失效（C1 时平台 13c 尚未合入）；`HIDE` 与 `RESOURCE_UNPUBLISH` 也失效（§6.3、§7.2）。
+5. 已知限制：隐藏参与者的视角文件在知道 id 时仍可取得（公开文件只由公开视图推导，范围不能跨实体）；
+   平台的约定插件在配置测试任务时就读取 `jabizApp.publicQueriesSnapshot`，应用的设置因此不生效，`backend/culture/build.gradle.kts`
+   另行设置测试的系统属性（平台修正后删除）。

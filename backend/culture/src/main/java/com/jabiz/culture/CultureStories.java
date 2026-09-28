@@ -10,6 +10,7 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
+import com.jabiz.runtime.publicread.FileAccess;
 import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -19,6 +20,8 @@ import org.springframework.context.annotation.Configuration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static com.jabiz.culture.Culture.*;
@@ -63,6 +66,7 @@ public class CultureStories {
     private static final String STATUS = "status";
     private static final String NOTE = "note";
     private static final String PUBLISHED_BY_CHILD = "publishedByChild";
+    private static final String OFFLINE_FILES = "offlineFiles";
 
     private static ProcessContext start(ProcessStart start, String storyId) {
         ProcessContext ctx = new ProcessContext(start);
@@ -235,9 +239,21 @@ public class CultureStories {
                     move(ctx, UNPUBLISHED, Map.of());
                     setParts(ctx, "visibility", PRIVATE);
                     setAll(ctx, rows(ctx, THEMES), "visibility", PRIVATE);
+                    ctx.put(OFFLINE_FILES, offlineFiles(ctx));
                 }
-            });
+            })
+                // Not after the decision lifetime: the files stop at once (browsers may still hold them).
+                .afterCommit("Stop serving its files publicly",
+                    FileAccess.invalidate(ctx -> Workflow.collected(ctx, OFFLINE_FILES)));
         });
+
+    /** The files of the story and its parts, public until now. */
+    private static Set<UUID> offlineFiles(ProcessContext ctx) {
+        Set<UUID> files = Workflow.files(List.of(story(ctx)), "thumbnailFileId");
+        files.addAll(Workflow.files(rows(ctx, CONTRIBUTIONS), "audioFileId"));
+        files.addAll(Workflow.files(rows(ctx, MEDIA), "imageFileId", "audioFileId"));
+        return files;
+    }
 
     /** Makes an unpublished story a draft again, editable by its correspondents. */
     public static final ProcessDefinition<StoryInput, StoryOutput, ProcessContext> REOPEN_PROCESS =

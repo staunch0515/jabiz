@@ -39,6 +39,14 @@ public final class Culture {
         return "urn:jabiz:dataset:own-view:" + entity;
     }
 
+    /**
+     * The public dataset of an entity (section 7.1): the rows anonymous visitors may read, projected to a whitelist.
+     * Public templates read only these.
+     */
+    public static String publicDataset(String entity) {
+        return "urn:jabiz:dataset:public:" + entity;
+    }
+
     // Permissions (section 4).
     public static final String CONTENT_READ = "culture.content.read";
     public static final String CONTENT_WRITE = "culture.content.write";
