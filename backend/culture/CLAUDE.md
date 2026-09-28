@@ -2,6 +2,7 @@
 
 应用 Culture, Unfiltered 的后端（模块 `backend/culture`）。根目录 `CLAUDE.md` 的全部规则照常适用；本文件只写本应用额外的约定。
 设计：`docs/culture/00-design.md`；需求：`docs/culture/brief.md`；阶段：`docs/culture/ROADMAP.md`；编辑指南：`docs/culture/editor-guide.md`。
+公开网站（`site/`）的规则在 `site/CLAUDE.md`。
 
 ## 1. 边界
 

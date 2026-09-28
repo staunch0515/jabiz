@@ -1,0 +1,174 @@
+{
+  "site": {
+    "name": "Culture, Unfiltered",
+    "skip": "Skip to content",
+    "menu": "Menu",
+    "language": "Language",
+    "mainNav": "Main",
+    "footerNav": "More",
+    "privacyNote": "No cookies and no tracking. Videos load from YouTube or Vimeo only when you press play."
+  },
+  "nav": {
+    "home": "Home",
+    "people": "People",
+    "themes": "Themes",
+    "stories": "Stories",
+    "method": "Our method",
+    "resources": "Resources",
+    "about": "About"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "We could not load this part of the page. Please try again in a moment.",
+    "retry": "Try again",
+    "externalLink": "(external link)",
+    "notFoundTitle": "We could not find this page",
+    "notFoundBody": "It may have moved, or it is not published any more.",
+    "backHome": "Back to the home page",
+    "all": "All"
+  },
+  "count": {
+    "stories_one": "{{count}} story",
+    "stories_other": "{{count}} stories",
+    "places_one": "{{count}} place",
+    "places_other": "{{count}} places",
+    "people_one": "{{count}} person",
+    "people_other": "{{count}} people",
+    "perspectives_one": "{{count}} perspective",
+    "perspectives_other": "{{count}} perspectives"
+  },
+  "home": {
+    "eyebrow": "A youth-led digital ethnography",
+    "places": "Places",
+    "questionEyebrow": "The question we started with",
+    "featured": "Featured stories",
+    "allStories": "All stories",
+    "themes": "Questions we are asking",
+    "allThemes": "All themes",
+    "people": "The correspondents",
+    "allPeople": "Meet everyone"
+  },
+  "people": {
+    "title": "People",
+    "intro": "Each correspondent documents their own experience. None of us speaks for a whole country.",
+    "viewProfile": "View profile",
+    "portraitOf": "Portrait of {{name}}"
+  },
+  "person": {
+    "about": "About",
+    "perspective": "My perspective",
+    "stories": "Stories",
+    "themes": "Themes",
+    "reflection": "Personal reflection",
+    "languages": "Languages",
+    "interests": "Interests",
+    "noStories": "No stories published yet."
+  },
+  "themes": {
+    "title": "Themes",
+    "intro": "We ask the same questions in every place. Open one to compare the answers side by side."
+  },
+  "theme": {
+    "howToRead": "How to read",
+    "sideBySide": "Side by side",
+    "oneAtATime": "One at a time",
+    "orderNote": "Ordered by place, not by importance",
+    "previous": "Previous",
+    "next": "Next",
+    "position": "{{n}} of {{total}}",
+    "stories": "Stories on this theme",
+    "readInStory": "Read in the story",
+    "empty": "No one has answered this question yet."
+  },
+  "stories": {
+    "title": "Stories",
+    "intro": "Films, photographs, interviews and essays. Filter by the places of the people in them, by theme or by media.",
+    "filters": "Filter stories",
+    "place": "Place",
+    "theme": "Theme",
+    "media": "Media",
+    "clear": "Clear all filters",
+    "results_one": "{{count}} story",
+    "results_other": "{{count}} stories",
+    "none": "No stories match these filters yet."
+  },
+  "story": {
+    "themes": "Themes",
+    "correspondents": "Correspondents",
+    "about": "About this story",
+    "article": "The story",
+    "perspectives": "Perspectives",
+    "photos": "Photos",
+    "audio": "Audio",
+    "transcript": "Read the transcript",
+    "afterWatching": "After watching",
+    "reflection": "What we took away",
+    "surprised": "What surprised us?",
+    "assumed": "What did we initially assume?",
+    "learned": "What did we learn?",
+    "fieldNote": "Field note from {{place}}"
+  },
+  "video": {
+    "play": "Play video: {{title}}",
+    "notice": "Plays from {{provider}} with subtitles. Nothing is loaded from {{provider}} until you press play.",
+    "frameTitle": "Video: {{title}}"
+  },
+  "method": {
+    "title": "Our method",
+    "intro": "How we work, and why we never speak for a whole country.",
+    "ethnography": "What is digital ethnography?",
+    "approach": "Our approach",
+    "reflexivity": "Reflexivity",
+    "emicEtic": "Emic and etic perspectives",
+    "representation": "Cultural representation",
+    "principles": "Our principles",
+    "principle": {
+      "consent": "Consent",
+      "context": "Context",
+      "respect": "Respect",
+      "reflexivity": "Reflexivity",
+      "responsible-representation": "Responsible representation"
+    }
+  },
+  "resources": {
+    "title": "Resources",
+    "intro": "Free activities for classrooms and discussion groups, built on the stories. Read them here or download the PDF.",
+    "type": "Activity",
+    "age": "Age",
+    "duration": "Duration",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "download": "Download the PDF",
+    "steps": "The activity",
+    "related": "Related stories",
+    "none": "No resources match these filters yet.",
+    "results_one": "{{count}} resource",
+    "results_other": "{{count}} resources"
+  },
+  "about": {
+    "title": "About",
+    "project": "The project",
+    "privacy": "Privacy"
+  },
+  "dict": {
+    "mediaType": {
+      "VIDEO": "Video",
+      "ARTICLE": "Article",
+      "PHOTO": "Photo",
+      "INTERVIEW": "Interview",
+      "AUDIO": "Audio"
+    },
+    "activityType": {
+      "CLASSROOM": "Classroom activity",
+      "DISCUSSION": "Discussion activity",
+      "REFLECTION": "Reflection activity",
+      "LANGUAGE": "Language activity"
+    },
+    "ageGroup": {
+      "11-13": "Ages 11–13",
+      "14-16": "Ages 14–16",
+      "16-18": "Ages 16–18",
+      "ADULT": "Adults"
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "site": {
+    "name": "Culture, Unfiltered",
+    "skip": "跳到正文",
+    "menu": "菜单",
+    "language": "语言",
+    "mainNav": "主导航",
+    "footerNav": "更多",
+    "privacyNote": "不使用 Cookie，不做任何跟踪。视频只在你按下播放后才从 YouTube 或 Vimeo 加载。"
+  },
+  "nav": {
+    "home": "首页",
+    "people": "人物",
+    "themes": "主题",
+    "stories": "故事",
+    "method": "我们的方法",
+    "resources": "教学资源",
+    "about": "关于"
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "这部分内容没能加载出来，请稍后再试。",
+    "retry": "重试",
+    "externalLink": "（外部链接）",
+    "notFoundTitle": "没有找到这个页面",
+    "notFoundBody": "它可能已经移动，或者已不再公开。",
+    "backHome": "回到首页",
+    "all": "全部"
+  },
+  "count": {
+    "stories_other": "{{count}} 个故事",
+    "places_other": "{{count}} 个地点",
+    "people_other": "{{count}} 人",
+    "perspectives_other": "{{count}} 个视角"
+  },
+  "home": {
+    "eyebrow": "由青年主导的数字民族志",
+    "places": "地点",
+    "questionEyebrow": "我们从这个问题出发",
+    "featured": "精选故事",
+    "allStories": "全部故事",
+    "themes": "我们在问的问题",
+    "allThemes": "全部主题",
+    "people": "通讯员",
+    "allPeople": "认识每一位"
+  },
+  "people": {
+    "title": "人物",
+    "intro": "每位通讯员记录的是自己的经验。我们谁也不代表一整个国家。",
+    "viewProfile": "查看个人页",
+    "portraitOf": "{{name}} 的头像"
+  },
+  "person": {
+    "about": "关于我",
+    "perspective": "我的视角",
+    "stories": "故事",
+    "themes": "主题",
+    "reflection": "个人反思",
+    "languages": "语言",
+    "interests": "兴趣",
+    "noStories": "还没有发布的故事。"
+  },
+  "themes": {
+    "title": "主题",
+    "intro": "我们在每个地方问同样的问题。打开一个主题，把不同的回答放在一起比较。"
+  },
+  "theme": {
+    "howToRead": "阅读方式",
+    "sideBySide": "并排比较",
+    "oneAtATime": "逐个阅读",
+    "orderNote": "按地点排列，不分主次",
+    "previous": "上一个",
+    "next": "下一个",
+    "position": "第 {{n}} 个，共 {{total}} 个",
+    "stories": "这个主题下的故事",
+    "readInStory": "在故事中阅读",
+    "empty": "还没有人回答这个问题。"
+  },
+  "stories": {
+    "title": "故事",
+    "intro": "短片、照片、访谈与文章。可以按其中人物所在的地点、主题或媒体类型筛选。",
+    "filters": "筛选故事",
+    "place": "地点",
+    "theme": "主题",
+    "media": "媒体",
+    "clear": "清除全部筛选",
+    "results_other": "{{count}} 个故事",
+    "none": "目前没有符合这些条件的故事。"
+  },
+  "story": {
+    "themes": "主题",
+    "correspondents": "通讯员",
+    "about": "关于这个故事",
+    "article": "正文",
+    "perspectives": "视角",
+    "photos": "照片",
+    "audio": "音频",
+    "transcript": "阅读文字稿",
+    "afterWatching": "看完之后",
+    "reflection": "我们的收获",
+    "surprised": "什么让我们意外？",
+    "assumed": "我们起初是怎么想的？",
+    "learned": "我们学到了什么？",
+    "fieldNote": "来自{{place}}的现场笔记"
+  },
+  "video": {
+    "play": "播放视频：{{title}}",
+    "notice": "视频由 {{provider}} 播放，默认打开字幕。按下播放之前，页面不会向 {{provider}} 发出任何请求。",
+    "frameTitle": "视频：{{title}}"
+  },
+  "method": {
+    "title": "我们的方法",
+    "intro": "我们如何工作，以及为什么我们从不代表一整个国家发言。",
+    "ethnography": "什么是数字民族志？",
+    "approach": "我们的做法",
+    "reflexivity": "反身性",
+    "emicEtic": "主位与客位视角",
+    "representation": "文化表征",
+    "principles": "我们的原则",
+    "principle": {
+      "consent": "同意",
+      "context": "语境",
+      "respect": "尊重",
+      "reflexivity": "反身性",
+      "responsible-representation": "负责任的表征"
+    }
+  },
+  "resources": {
+    "title": "教学资源",
+    "intro": "基于这些故事的免费课堂与讨论活动。可以直接在这里阅读，也可以下载 PDF。",
+    "type": "活动类型",
+    "age": "年龄",
+    "duration": "时长",
+    "minutes_other": "{{count}} 分钟",
+    "download": "下载 PDF",
+    "steps": "活动步骤",
+    "related": "相关故事",
+    "none": "目前没有符合这些条件的资源。",
+    "results_other": "{{count}} 个资源"
+  },
+  "about": {
+    "title": "关于",
+    "project": "关于项目",
+    "privacy": "隐私"
+  },
+  "dict": {
+    "mediaType": {
+      "VIDEO": "视频",
+      "ARTICLE": "文章",
+      "PHOTO": "照片",
+      "INTERVIEW": "访谈",
+      "AUDIO": "音频"
+    },
+    "activityType": {
+      "CLASSROOM": "课堂活动",
+      "DISCUSSION": "讨论活动",
+      "REFLECTION": "反思活动",
+      "LANGUAGE": "语言活动"
+    },
+    "ageGroup": {
+      "11-13": "11–13 岁",
+      "14-16": "14–16 岁",
+      "16-18": "16–18 岁",
+      "ADULT": "成人"
+    }
+  }
+}
