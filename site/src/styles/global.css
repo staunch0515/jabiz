@@ -1,0 +1,261 @@
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+@import '@fontsource/atkinson-hyperlegible/400.css';
+@import '@fontsource/atkinson-hyperlegible/400-italic.css';
+@import '@fontsource/atkinson-hyperlegible/700.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 18px/1.6 var(--body);
+  /* A long word (a name, an address) wraps rather than widening the page on a phone. */
+  overflow-wrap: break-word;
+}
+
+:lang(zh) {
+  --body: var(--body-zh);
+}
+
+:lang(ja) {
+  --body: var(--body-ja);
+}
+
+/* CJK text has no italic or display serif of its own: headings fall back to the body face. */
+:lang(zh) :is(h1, h2, h3),
+:lang(ja) :is(h1, h2, h3),
+h1:lang(zh),
+h1:lang(ja),
+h2:lang(zh),
+h2:lang(ja),
+h3:lang(zh),
+h3:lang(ja) {
+  font-family: var(--body);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  line-height: 1.05;
+  text-wrap: balance;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+}
+
+.wrap {
+  max-width: var(--max);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.label {
+  font: 500 12px/1.4 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.label:lang(zh),
+.label:lang(ja),
+:lang(zh) .label,
+:lang(ja) .label {
+  font-family: var(--body);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.mark {
+  background: linear-gradient(transparent 12%, var(--mark) 12%, var(--mark) 88%, transparent 88%);
+  color: var(--on-mark);
+  padding-inline: 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  font: 500 14px/1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.btn:lang(zh),
+.btn:lang(ja),
+:lang(zh) .btn,
+:lang(ja) .btn {
+  font-family: var(--body);
+  letter-spacing: 0.02em;
+}
+
+.btn:hover {
+  text-decoration: underline;
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.section {
+  padding-block: clamp(48px, 8vw, 104px);
+}
+
+.section + .section {
+  border-top: 1px solid var(--rule);
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+
+.section-head h2 {
+  font-size: clamp(34px, 5vw, 56px);
+}
+
+.page-head {
+  padding-block: clamp(40px, 6vw, 80px) 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.page-head h1 {
+  font-size: clamp(46px, 7.6vw, 108px);
+  max-width: 16ch;
+}
+
+.page-head .intro {
+  max-width: 62ch;
+  font-size: 20px;
+}
+
+.crumbs {
+  font: 500 13px/1.4 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.crumbs a {
+  color: var(--muted);
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+}
+
+.prose {
+  display: grid;
+  gap: 1em;
+  max-width: var(--measure);
+}
+
+.prose h2 {
+  font-size: clamp(30px, 4vw, 44px);
+  margin-top: 0.4em;
+}
+
+.prose :is(p, ul, ol, blockquote) {
+  margin: 0;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--mark);
+  padding-left: 1em;
+  font-style: italic;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .enter {
+    animation: rise var(--motion) ease-out both;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0.001;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

@@ -1,0 +1,135 @@
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px 20px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 980px) {
+  .grid4 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .grid3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .grid4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-content: start;
+  position: relative;
+}
+
+.card :is(h2, h3) {
+  font-size: 30px;
+}
+
+.card :is(h2, h3) a {
+  text-decoration: none;
+}
+
+/* The whole card is one link: the heading's link covers it. */
+.card :is(h2, h3) a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.card:hover :is(h2, h3) a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.card:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 6px;
+}
+
+.card :is(h2, h3) a:focus-visible {
+  outline: none;
+}
+
+.card p {
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.person :is(h2, h3) {
+  font-size: 28px;
+}
+
+.card .more {
+  color: var(--ink);
+}
+
+.themes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1.5px solid var(--ink);
+}
+
+.themes li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.themes a {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  gap: 16px;
+  align-items: baseline;
+  padding: 22px 0;
+  text-decoration: none;
+}
+
+.themes .icon {
+  font-size: 26px;
+}
+
+.themes .title {
+  font: 36px/1 var(--display);
+}
+
+.themes .question {
+  color: var(--muted);
+}
+
+.themes a:hover .title {
+  font-style: italic;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+@media (max-width: 760px) {
+  .themes a {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .themes .question,
+  .themes .count {
+    grid-column: 2;
+  }
+}

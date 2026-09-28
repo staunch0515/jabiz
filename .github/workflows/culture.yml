@@ -4,10 +4,10 @@ on:
   pull_request:
 
 # The application's own checks (docs/culture/00-design.md section 2); the backend (./gradlew check, which includes
-# :culture:check) runs in ci.yml. Stage C3 adds the site's lint, tests, build and end-to-end tests here.
+# :culture:check) runs in ci.yml.
 jobs:
-  # The public site's API types are generated from the public templates' catalog, which the backend's
-  # PublicQueriesSnapshotIT keeps up to date (section 7.2): the generated file must match it and type-check.
+  # The public site: its API types match the public templates' catalog that the backend's PublicQueriesSnapshotIT
+  # keeps up to date (section 7.2), then lint, types, unit tests (Vitest) and the production build.
   site:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -26,5 +26,78 @@ jobs:
           cache-dependency-path: site/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:api
+      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm build
+
+  # The site against the packaged application (section 13): content is added through the admin API, then every page
+  # is checked in three languages on a desktop and a phone (axe), by keyboard, and for third-party requests.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: culture_e2e
+          POSTGRES_USER: culture
+          POSTGRES_PASSWORD: culture
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U culture -d culture_e2e" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_ADMIN_USER: admin
+      E2E_ADMIN_PASSWORD: e2e-admin-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      # Builds the site (/) and the admin (/admin/) with pnpm and packages both into the boot jar.
+      - run: ./gradlew :culture:bootJar
+        working-directory: backend
+      - name: Start the application
+        working-directory: backend
+        run: |
+          # A throwaway signing key for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
+            -jar culture/build/libs/culture-0.0.1-SNAPSHOT.jar > ../culture.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../culture.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/culture_e2e
+          SPRING_R2DBC_USERNAME: culture
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/culture_e2e
+          SPRING_FLYWAY_USER: culture
+          DB_PASSWORD: culture
+          JABIZ_PUBLIC_ENABLED: 'true'
+          JABIZ_BOOTSTRAP_ADMIN_USER: ${{ env.E2E_ADMIN_USER }}
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/culture-files
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: site/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: site
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: site
+      - run: pnpm e2e
+        working-directory: site
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: culture-e2e-report
+          path: |
+            site/playwright-report/
+            site/test-results/
+            culture.log
+          retention-days: 7

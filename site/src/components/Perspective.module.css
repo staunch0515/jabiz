@@ -1,0 +1,170 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 48px 28px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 980px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.perspective {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-content: start;
+  border-top: 1.5px solid var(--ink);
+  padding-top: 16px;
+}
+
+.who {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.avatar {
+  width: 52px;
+  flex: none;
+}
+
+.name {
+  display: block;
+  font: 26px/1.1 var(--display);
+}
+
+.name a {
+  text-decoration: none;
+}
+
+.name a:hover {
+  text-decoration: underline;
+}
+
+.heading {
+  font-size: 28px;
+}
+
+.excerpt {
+  font-size: 17px;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.more {
+  font: 500 13px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.full {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  border-top: 1.5px solid var(--ink);
+  padding-top: 20px;
+}
+
+.full .heading {
+  font-size: clamp(30px, 4vw, 40px);
+}
+
+.photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 20px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.photos figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.photos figcaption {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.audio {
+  width: 100%;
+}
+
+.one {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 40px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .one {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.one .perspective {
+  border: 0;
+  padding: 0;
+}
+
+.one .heading {
+  font-size: clamp(34px, 4vw, 48px);
+}
+
+.one .excerpt {
+  font-size: 20px;
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.group + .group {
+  margin-top: 56px;
+}
+
+.groupHead {
+  margin-bottom: 20px;
+  font: 500 13px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.media {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.figure {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}

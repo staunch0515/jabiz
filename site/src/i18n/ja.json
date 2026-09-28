@@ -1,0 +1,167 @@
+{
+  "site": {
+    "name": "Culture, Unfiltered",
+    "skip": "本文へ移動",
+    "menu": "メニュー",
+    "language": "言語",
+    "mainNav": "メインメニュー",
+    "footerNav": "その他",
+    "privacyNote": "Cookie もトラッキングも使いません。動画は再生ボタンを押したときにだけ YouTube または Vimeo から読み込まれます。"
+  },
+  "nav": {
+    "home": "ホーム",
+    "people": "人びと",
+    "themes": "テーマ",
+    "stories": "ストーリー",
+    "method": "わたしたちの方法",
+    "resources": "教材",
+    "about": "概要"
+  },
+  "common": {
+    "loading": "読み込み中…",
+    "error": "この部分を読み込めませんでした。しばらくしてからもう一度お試しください。",
+    "retry": "もう一度",
+    "externalLink": "（外部リンク）",
+    "notFoundTitle": "ページが見つかりません",
+    "notFoundBody": "移動したか、公開が終了した可能性があります。",
+    "backHome": "ホームに戻る",
+    "all": "すべて"
+  },
+  "count": {
+    "stories_other": "{{count}} 件のストーリー",
+    "places_other": "{{count}} か所",
+    "people_other": "{{count}} 人",
+    "perspectives_other": "{{count}} 件の視点"
+  },
+  "home": {
+    "eyebrow": "若者が主導するデジタル・エスノグラフィー",
+    "places": "場所",
+    "questionEyebrow": "わたしたちの出発点",
+    "featured": "注目のストーリー",
+    "allStories": "すべてのストーリー",
+    "themes": "わたしたちの問い",
+    "allThemes": "すべてのテーマ",
+    "people": "特派員たち",
+    "allPeople": "全員に会う"
+  },
+  "people": {
+    "title": "人びと",
+    "intro": "特派員はそれぞれ自分自身の経験を記録しています。国全体を代表している人はいません。",
+    "viewProfile": "プロフィールを見る",
+    "portraitOf": "{{name}} の写真"
+  },
+  "person": {
+    "about": "自己紹介",
+    "perspective": "わたしの視点",
+    "stories": "ストーリー",
+    "themes": "テーマ",
+    "reflection": "ふりかえり",
+    "languages": "話す言語",
+    "interests": "関心",
+    "noStories": "公開中のストーリーはまだありません。"
+  },
+  "themes": {
+    "title": "テーマ",
+    "intro": "どの場所でも同じ問いを立てています。テーマを開くと、答えを並べて比べられます。"
+  },
+  "theme": {
+    "howToRead": "読み方",
+    "sideBySide": "並べて比べる",
+    "oneAtATime": "ひとつずつ読む",
+    "orderNote": "場所の順に並べています（優劣はありません）",
+    "previous": "前へ",
+    "next": "次へ",
+    "position": "{{total}} 件中 {{n}} 件目",
+    "stories": "このテーマのストーリー",
+    "readInStory": "ストーリーで読む",
+    "empty": "この問いに答えた人はまだいません。"
+  },
+  "stories": {
+    "title": "ストーリー",
+    "intro": "短編映像、写真、インタビュー、エッセイ。登場する人の場所、テーマ、メディアで絞り込めます。",
+    "filters": "ストーリーを絞り込む",
+    "place": "場所",
+    "theme": "テーマ",
+    "media": "メディア",
+    "clear": "絞り込みをすべて解除",
+    "results_other": "{{count}} 件のストーリー",
+    "none": "この条件に合うストーリーはまだありません。"
+  },
+  "story": {
+    "themes": "テーマ",
+    "correspondents": "特派員",
+    "about": "このストーリーについて",
+    "article": "本文",
+    "perspectives": "それぞれの視点",
+    "photos": "写真",
+    "audio": "音声",
+    "transcript": "文字起こしを読む",
+    "afterWatching": "見終わって",
+    "reflection": "わたしたちが持ち帰ったこと",
+    "surprised": "何に驚いた？",
+    "assumed": "はじめはどう思っていた？",
+    "learned": "何を学んだ？",
+    "fieldNote": "{{place}}からのフィールドノート"
+  },
+  "video": {
+    "play": "動画を再生：{{title}}",
+    "notice": "{{provider}} で字幕付きで再生します。再生ボタンを押すまで {{provider}} には何も送信されません。",
+    "frameTitle": "動画：{{title}}"
+  },
+  "method": {
+    "title": "わたしたちの方法",
+    "intro": "わたしたちの進め方と、国全体を代弁しない理由。",
+    "ethnography": "デジタル・エスノグラフィーとは？",
+    "approach": "わたしたちのやり方",
+    "reflexivity": "再帰性",
+    "emicEtic": "エミックとエティック",
+    "representation": "文化の表象",
+    "principles": "わたしたちの原則",
+    "principle": {
+      "consent": "同意",
+      "context": "文脈",
+      "respect": "尊重",
+      "reflexivity": "再帰性",
+      "responsible-representation": "責任ある表象"
+    }
+  },
+  "resources": {
+    "title": "教材",
+    "intro": "ストーリーをもとにした、授業や話し合いのための無料の活動です。ここで読むことも、PDF をダウンロードすることもできます。",
+    "type": "活動の種類",
+    "age": "対象年齢",
+    "duration": "所要時間",
+    "minutes_other": "{{count}} 分",
+    "download": "PDF をダウンロード",
+    "steps": "活動の進め方",
+    "related": "関連するストーリー",
+    "none": "この条件に合う教材はまだありません。",
+    "results_other": "{{count}} 件の教材"
+  },
+  "about": {
+    "title": "概要",
+    "project": "プロジェクトについて",
+    "privacy": "プライバシー"
+  },
+  "dict": {
+    "mediaType": {
+      "VIDEO": "動画",
+      "ARTICLE": "記事",
+      "PHOTO": "写真",
+      "INTERVIEW": "インタビュー",
+      "AUDIO": "音声"
+    },
+    "activityType": {
+      "CLASSROOM": "授業の活動",
+      "DISCUSSION": "話し合いの活動",
+      "REFLECTION": "ふりかえりの活動",
+      "LANGUAGE": "ことばの活動"
+    },
+    "ageGroup": {
+      "11-13": "11〜13 歳",
+      "14-16": "14〜16 歳",
+      "16-18": "16〜18 歳",
+      "ADULT": "大人"
+    }
+  }
+}

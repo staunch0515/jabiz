@@ -1,0 +1,49 @@
+/*
+ * Design tokens (docs/culture/00-design.md section 9.2). Every text/background pair used on the site is listed in
+ * tokens.test.ts, which computes its contrast: text >= 4.5:1, focus ring and large text >= 3:1.
+ * The highlighter (--mark) only ever sits behind ink text (--on-mark); it is never a text colour.
+ */
+:root {
+  --paper: #f2f1ec;
+  --paper-2: #e8e7e0;
+  --ink: #17181a;
+  --muted: #53554e;
+  --rule: #d5d4cb;
+  --mark: #d9f24a;
+  --on-mark: #17181a;
+  --focus: #1b4dd8;
+  --inv-bg: #17181a;
+  --inv-ink: #f2f1ec;
+  --inv-muted: #b9bab2;
+  --poster: #17181a;
+  --on-poster: #f2f1ec;
+
+  --display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --body: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --body-zh: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --body-ja: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', 'Yu Gothic', Meiryo, system-ui, sans-serif;
+
+  --gutter: clamp(16px, 4vw, 48px);
+  --max: 1240px;
+  --measure: 66ch;
+  --tap: 44px;
+  --motion: 200ms;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #131412;
+    --paper-2: #1d1e1b;
+    --ink: #ecece5;
+    --muted: #a9aaa2;
+    --rule: #34352f;
+    --focus: #8fb0ff;
+    --inv-bg: #ecece5;
+    --inv-ink: #131412;
+    --inv-muted: #4a4b45;
+    color-scheme: dark;
+  }
+}

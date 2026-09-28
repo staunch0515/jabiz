@@ -1,0 +1,123 @@
+.video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  background: var(--poster);
+  color: var(--on-poster);
+  overflow: hidden;
+}
+
+.play {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.poster {
+  position: absolute;
+  inset: 0;
+}
+
+.poster > span {
+  height: 100%;
+}
+
+.disc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 88px;
+  height: 88px;
+  margin: -44px 0 0 -44px;
+  border-radius: 50%;
+  background: var(--mark);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 6px rgb(23 24 26 / 0.35);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .disc {
+    transition: transform var(--motion);
+  }
+
+  .play:hover .disc {
+    transform: scale(1.06);
+  }
+}
+
+.play:focus-visible {
+  outline-offset: -6px;
+}
+
+.disc svg {
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  fill: var(--on-mark);
+}
+
+.notice {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 14px;
+  font: 12px/1.4 var(--mono);
+  text-align: left;
+  background: rgb(0 0 0 / 0.72);
+  color: #f2f1ec;
+}
+
+.notice:lang(zh),
+.notice:lang(ja),
+:lang(zh) .notice,
+:lang(ja) .notice {
+  font-family: var(--body);
+}
+
+.frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.transcript {
+  border-bottom: 1px solid var(--rule);
+  padding-block: 4px;
+}
+
+.transcript summary {
+  cursor: pointer;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  font: 500 13px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.transcript > div {
+  padding-bottom: 16px;
+  color: var(--ink);
+}
+
+@media (max-width: 520px) {
+  .notice {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+
+  .disc {
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+  }
+}
