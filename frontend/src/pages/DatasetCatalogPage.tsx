@@ -3,6 +3,7 @@ import { Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useDatasets } from '../meta/hooks'
+import { datasetTestId } from '../meta/references'
 import type { DatasetEntry } from '../meta/types'
 import { paths } from './paths'
 
@@ -19,7 +20,7 @@ export default function DatasetCatalogPage() {
       title: t('catalog.entity'),
       dataIndex: 'label',
       render: (_, d) => (
-        <Link to={paths.dataset(d.id)} data-testid={`dataset-${d.entity}`}>
+        <Link to={paths.dataset(d.id)} data-testid={datasetTestId(d)}>
           {d.label}
         </Link>
       ),
