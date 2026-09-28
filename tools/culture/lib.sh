@@ -41,9 +41,17 @@ sql() {
     fi
 }
 
-# The ids of the files whose rows are in the database, and those whose objects are in an archive of the files
-# directory: an object lives in <year>/<month>/<file id>/original (docs/design/14-files.md section 6).
-file_rows() { sql "SELECT file_id FROM sys_file ORDER BY 1"; }
+# The ids of the files whose rows are in the database, those whose rows are in a dump, and those whose objects are in
+# an archive of the files directory: an object lives in <year>/<month>/<file id>/original (docs/design/14-files.md
+# section 6).
+file_rows() { sql "SELECT file_id FROM sys_file" | sort -u; }
+dump_file_rows() { # dump file; the data of sys_file as the dump holds it, its first column
+    if [ "$MODE" = compose ]; then
+        $COMPOSE exec -T db pg_restore -a -t sys_file -f - < "$1"
+    else
+        pg_restore -a -t sys_file -f - "$1"
+    fi | awk '/^COPY / { rows = 1; next } /^\\\.$/ { rows = 0 } rows { print $1 }' | sort -u
+}
 archived_objects() { tar -tzf "$1" | sed -n 's#^\(\./\)\{0,1\}[0-9]\{4\}/[0-9]\{2\}/\([0-9a-f-]\{36\}\)/original$#\2#p' | sort -u; }
 
 # Rows without an object: files deleted after the database was dumped (the object goes after the row,
@@ -54,4 +62,15 @@ report_missing() { # rows file, objects file
     say "$(printf '%s\n' "$missing" | wc -l | tr -d ' ') file row(s) without an object in the archive:"
     printf '%s\n' "$missing" >&2
     return 1
+}
+
+# Archives a files directory without what is in flux while the application runs: the upload area and partial objects
+# (LocalFileStore; the sweep removes their leftovers). Objects are written once, so a warning of GNU tar about a file
+# that changed or went away while read (exit 1) is not a failure; what the archive must hold is checked after.
+archive_files() { # files directory, archive
+    set +e
+    tar -C "$1" --exclude=./.uploads --exclude='*.part' --warning=no-file-changed --warning=no-file-removed -czf "$2" .
+    status=$?
+    set -e
+    [ "$status" -le 1 ] || fail "tar failed ($status)"
 }

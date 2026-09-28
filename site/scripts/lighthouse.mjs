@@ -26,7 +26,8 @@ export const PAGES = [
 export function problems(page, result) {
   const found = []
   if (page.lcp && !(result.lcp < LCP_BUDGET_MS)) found.push(`LCP ${Math.round(result.lcp)} ms ≥ ${LCP_BUDGET_MS} ms`)
-  if (result.accessibility < ACCESSIBILITY) found.push(`accessibility ${result.accessibility} < ${ACCESSIBILITY}`)
+  // The raw score (0 to 1): a rounded 99.5 would read as 100.
+  if (!(result.accessibilityScore >= 1)) found.push(`accessibility ${result.accessibilityScore * 100} < ${ACCESSIBILITY}`)
   return found
 }
 
@@ -38,6 +39,7 @@ function summary(lhr) {
   return {
     performance: Math.round((lhr.categories.performance?.score ?? 0) * 100),
     accessibility: Math.round((lhr.categories.accessibility?.score ?? 0) * 100),
+    accessibilityScore: lhr.categories.accessibility?.score ?? 0,
     lcp: audit('largest-contentful-paint'),
     fcp: audit('first-contentful-paint'),
     tbt: audit('total-blocking-time'),

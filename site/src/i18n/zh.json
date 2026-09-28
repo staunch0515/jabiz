@@ -27,7 +27,10 @@
     "notFoundTitle": "没有找到这个页面",
     "notFoundBody": "它可能已经移动，或者已不再公开。",
     "backHome": "回到首页",
-    "all": "全部"
+    "all": "全部",
+    "pageErrorTitle": "这个页面没能显示出来",
+    "pageErrorBody": "网站的一部分没有加载成功，可能是网络中断了，或者网站刚刚更新。重新加载一般就能解决。",
+    "reload": "重新加载"
   },
   "count": {
     "stories_other": "{{count}} 个故事",
@@ -177,7 +180,9 @@
       "PERSON": "人",
       "THEME": "主题",
       "RESOURCE": "资源"
-    }
+    },
+    "tooLong": "最多 {{count}} 个字符。",
+    "many_other": "“{{q}}”有超过 {{count}} 条结果，再加一个词缩小范围。"
   },
   "dict": {
     "mediaType": {

@@ -85,6 +85,14 @@ describe('map page (design section 9.5)', () => {
   })
 })
 
+/** Answers the search template as the server does: the outer filter on `kind`. */
+function byKind(rows: { kind: string }[]) {
+  return (search: URLSearchParams) => {
+    const kind = /^kind:eq:(.*)$/.exec(search.get('filter') ?? '')?.[1]
+    return rows.filter((row) => !kind || row.kind === kind).slice(0, Number(search.get('limit') ?? 100))
+  }
+}
+
 describe('search page (brief section 14)', () => {
   const hits = [
     { kind: 'STORY', slug: 'trains', title: { en: 'Trains at night' }, summary: { en: 'Going home late.' } },
@@ -94,9 +102,13 @@ describe('search page (brief section 14)', () => {
   ]
 
   it('finds with the words in the address and groups what it finds', async () => {
-    const api = mockPublicApi({ 'culture.public.search': () => hits })
+    const api = mockPublicApi({ 'culture.public.search': byKind(hits) })
     renderRoutes(routes, { path: '/en/search?q=home' })
     await waitFor(() => expect(screen.getAllByRole('status').at(-1)).toHaveTextContent('4 results for “home”'))
+    // One request per kind.
+    expect(api.of('culture.public.search').map((u) => u.searchParams.get('filter')).sort()).toEqual(
+      ['kind:eq:PERSON', 'kind:eq:RESOURCE', 'kind:eq:STORY', 'kind:eq:THEME'],
+    )
     expect(api.of('culture.public.search')[0].searchParams.get('p.q')).toBe('home')
     expect(screen.getByRole('searchbox', { name: 'Words to search for' })).toHaveValue('home')
     for (const [group, name, href] of [
@@ -108,6 +120,24 @@ describe('search page (brief section 14)', () => {
       const section = screen.getByRole('heading', { level: 2, name: new RegExp(`^${group}`) }).parentElement!
       expect(within(section).getByRole('link', { name })).toHaveAttribute('href', href)
     }
+  })
+
+  it('says when a kind has more results than it shows, and never hides the other kinds', async () => {
+    const stories = Array.from({ length: 50 }, (_, i) => ({ kind: 'STORY', slug: `s${i}`, title: { en: `Story ${i}` } }))
+    mockPublicApi({ 'culture.public.search': byKind([...stories, ...hits.slice(1)]) })
+    renderRoutes(routes, { path: '/en/search?q=home' })
+    await waitFor(() =>
+      expect(screen.getAllByRole('status').at(-1)).toHaveTextContent('More than 53 results for “home”: add a word'),
+    )
+    expect(screen.getByRole('heading', { level: 2, name: /^Stories 50\+/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Mapping home' })).toBeInTheDocument()
+  })
+
+  it('asks nothing for words over 100 characters (an address can hold them) and says why', async () => {
+    const api = mockPublicApi({ 'culture.public.search': () => hits })
+    renderRoutes(routes, { path: `/en/search?q=${'a'.repeat(101)}` })
+    await waitFor(() => expect(screen.getAllByRole('status').at(-1)).toHaveTextContent('Use at most 100 characters.'))
+    expect(api.of('culture.public.search')).toHaveLength(0)
   })
 
   it('puts new words in the address; too few characters ask nothing', async () => {

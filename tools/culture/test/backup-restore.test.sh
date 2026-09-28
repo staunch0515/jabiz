@@ -68,28 +68,45 @@ else
 fi
 trap 'status=$?; [ $status -ne 0 ] && logs; cleanup; exit $status' EXIT
 
-# The admin interface, as editors use it.
+# The admin interface, as editors use it. POSIX sh has no pipefail: every response is kept in a variable first, so
+# that a failed request stops the drill instead of passing an empty value on.
 TOKEN=
 login() {
-    TOKEN=$(curl -sf "$BASE/api/auth/login" -H 'Content-Type: application/json' \
-        -d "{\"userName\":\"admin\",\"password\":\"$ADMIN_PASSWORD\"}" | jq -r .accessToken) || return 1
+    body=$(curl -sf "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+        -d "{\"userName\":\"admin\",\"password\":\"$ADMIN_PASSWORD\"}") || return 1
+    TOKEN=$(printf '%s' "$body" | jq -r .accessToken)
     [ -n "$TOKEN" ] && [ "$TOKEN" != null ]
 }
 api() { # method, path, [json]
     curl -sf -X "$1" "$BASE$2" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"} \
         || fail "$1 $2"
 }
+# Prints a field of a JSON text; fails when it is missing.
+field() { # json, jq filter
+    value=$(printf '%s' "$1" | jq -er "$2") || fail "no $2 in: $1"
+    printf '%s\n' "$value"
+}
 create() { # entity, attributes (json)
-    api POST "/api/datasets/urn:jabiz:dataset:culture:$1/commit" "{\"changes\":[{\"action\":\"INSERT\",\"attributes\":$2}]}" \
-        | jq -r '.[0].id'
+    body=$(api POST "/api/datasets/urn:jabiz:dataset:culture:$1/commit" \
+        "{\"changes\":[{\"action\":\"INSERT\",\"attributes\":$2}]}") || exit 1
+    field "$body" '.[0].id'
 }
-run() { api POST "/api/processes/$1/latest" "$2" > /dev/null; }
+run() { api POST "/api/processes/$1/latest" "$2" > /dev/null || exit 1; }
 upload() {
-    curl -sf "$BASE/api/files?policy=culture.image" -H "Authorization: Bearer $TOKEN" \
-        -F "file=@$HERE/photo.jpg;type=image/jpeg" | jq -r .fileId || fail "upload"
+    body=$(curl -sf "$BASE/api/files?policy=culture.image" -H "Authorization: Bearer $TOKEN" \
+        -F "file=@$HERE/photo.jpg;type=image/jpeg") || fail "upload"
+    field "$body" .fileId
 }
-public() { curl -sf "$BASE/api/public/queries/$1?$2" | jq -S .items; }
-file_sum() { curl -sf "$BASE/api/public/files/$1" | sha256sum | cut -d' ' -f1; }
+public() { # template, query string: its rows, keys sorted
+    body=$(curl -sf "$BASE/api/public/queries/$1?$2") || fail "public $1"
+    items=$(field "$body" .items) || exit 1
+    printf '%s' "$items" | jq -S .
+}
+file_sum() { # the bytes of a public file; an empty or missing file fails
+    curl -sf -o "$WORK/file" "$BASE/api/public/files/$1" || fail "public file $1"
+    [ -s "$WORK/file" ] || fail "public file $1 is empty"
+    sha256sum < "$WORK/file" | cut -d' ' -f1
+}
 en() { printf '{"en":"%s"}' "$1"; }
 
 say "starting a system ($MODE)"
@@ -123,6 +140,8 @@ snapshot() { # the public view of the content and its files
 }
 snapshot > "$WORK/before"
 grep -q "Saturday mornings" "$WORK/before" || fail "the story is not public before the backup"
+grep -q "I help at the market" "$WORK/before" || fail "the perspective is not public before the backup"
+grep -q "$TAG-story" "$WORK/before" || fail "the story is not listed under its place before the backup"
 
 say "backing up"
 BACKUP=$("$REPO/tools/culture/backup.sh" "$WORK/backups")

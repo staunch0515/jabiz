@@ -27,7 +27,10 @@
     "notFoundTitle": "We could not find this page",
     "notFoundBody": "It may have moved, or it is not published any more.",
     "backHome": "Back to the home page",
-    "all": "All"
+    "all": "All",
+    "pageErrorTitle": "We could not show this page",
+    "pageErrorBody": "Part of the site did not load, perhaps because the connection dropped or the site was just updated. Reloading usually fixes it.",
+    "reload": "Reload the page"
   },
   "count": {
     "stories_one": "{{count}} story",
@@ -185,7 +188,10 @@
       "PERSON": "People",
       "THEME": "Themes",
       "RESOURCE": "Resources"
-    }
+    },
+    "tooLong": "Use at most {{count}} characters.",
+    "many_one": "More than {{count}} result for “{{q}}”: add a word to narrow them down.",
+    "many_other": "More than {{count}} results for “{{q}}”: add a word to narrow them down."
   },
   "dict": {
     "mediaType": {

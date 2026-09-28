@@ -27,7 +27,10 @@
     "notFoundTitle": "ページが見つかりません",
     "notFoundBody": "移動したか、公開が終了した可能性があります。",
     "backHome": "ホームに戻る",
-    "all": "すべて"
+    "all": "すべて",
+    "pageErrorTitle": "このページを表示できませんでした",
+    "pageErrorBody": "サイトの一部を読み込めませんでした。接続が切れたか、サイトが更新されたところかもしれません。再読み込みすると、たいてい直ります。",
+    "reload": "再読み込み"
   },
   "count": {
     "stories_other": "{{count}} 件のストーリー",
@@ -177,7 +180,9 @@
       "PERSON": "人",
       "THEME": "テーマ",
       "RESOURCE": "教材"
-    }
+    },
+    "tooLong": "{{count}} 文字以内で入力してください。",
+    "many_other": "「{{q}}」の結果は {{count}} 件以上あります。言葉を足して絞り込んでください。"
   },
   "dict": {
     "mediaType": {

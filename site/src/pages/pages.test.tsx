@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { lazy } from 'react'
 import { routes } from '../routes'
+import { RouteError } from './RouteError'
 import { mockPublicApi } from '../test/api'
 import { renderRoutes } from '../test/render'
 
@@ -158,5 +160,20 @@ describe('layout (design section 9.1)', () => {
     expect(within(languages).getByRole('link', { name: '日本語' })).toHaveAttribute('href', '/ja/stories?theme=home')
     expect(within(languages).getByRole('link', { name: 'English' })).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('link', { name: 'Stories' })).toHaveAttribute('aria-current', 'page')
+  })
+})
+
+describe('a page that cannot be shown', () => {
+  it('says so in the page language and offers a reload, inside the site (its code failed to download)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const Broken = lazy(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')))
+    renderRoutes([{ path: '*', element: <Broken />, errorElement: <RouteError /> }], { locale: 'zh' })
+    expect(await screen.findByRole('heading', { level: 1, name: '这个页面没能显示出来' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重新加载' })).toBeInTheDocument()
+  })
+
+  it('every page of the site has it', () => {
+    const children = routes.find((r) => r.path === '/:lang')!.children!
+    expect(children.every((r) => r.errorElement)).toBe(true)
   })
 })

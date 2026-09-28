@@ -65,7 +65,9 @@ function WorldMap({ places, selected, onSelect }: { places: Location[]; selected
   const summary = useSummary()
   const frame = useRef<HTMLDivElement>(null)
   const width = useWidth(frame)
-  const { land, markers } = useMemo(() => {
+  // The projection and the land depend on the places only; the markers' spread also on the width, which changes
+  // with every step of a resize.
+  const { land, located, at } = useMemo(() => {
     const located = places.filter(
       (p): p is Location & { slug: string; latitude: number; longitude: number } =>
         p.slug !== null && p.latitude !== null && p.longitude !== null,
@@ -75,12 +77,12 @@ function WorldMap({ places, selected, onSelect }: { places: Location[]; selected
       const [x, y] = projection([p.longitude, p.latitude]) ?? [0, 0]
       return { x, y }
     })
+    return { land: landPath(projection), located, at }
+  }, [places])
+  const markers = useMemo(() => {
     const buttons = spread(at, (MARKER_SPACING * WIDTH) / width)
-    return {
-      land: landPath(projection),
-      markers: located.map((place, i): Marker => ({ place, at: at[i], button: buttons[i] })),
-    }
-  }, [places, width])
+    return located.map((place, i): Marker => ({ place, at: at[i], button: buttons[i] }))
+  }, [located, at, width])
 
   return (
     <div className={styles.map} ref={frame}>

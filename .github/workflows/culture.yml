@@ -120,4 +120,5 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - run: tools/culture/test/lib.test.sh
       - run: tools/culture/test/backup-restore.test.sh

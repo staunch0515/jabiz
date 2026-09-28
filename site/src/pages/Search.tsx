@@ -1,17 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { QueryRow } from '../api/public-queries'
-import { usePublicQuery } from '../api/hooks'
+import { useQueries } from '@tanstack/react-query'
+import { fetchPublic } from '../api/client'
 import { LocalizedText } from '../components/LocalizedText'
 import { PageMeta } from '../components/PageMeta'
 import { QueryState } from '../components/QueryState'
 import { ResponsiveImage } from '../components/ResponsiveImage'
 import { useLocale, useT } from '../i18n/locale'
 import { path, type Section } from '../lib/paths'
-import { MAX_WORDS, searchable } from '../lib/search'
+import { MAX_WORDS, MIN_WORDS, searchable } from '../lib/search'
 import styles from './Search.module.css'
 
 type Hit = QueryRow<'culture.public.search'>
+
+/** At most this many results of each kind; a kind that has more says so. */
+const PER_KIND = 50
 
 /** The kinds of results, in the order the page shows them, and where each one's page is. */
 const KINDS: { kind: string; section: Section }[] = [
@@ -65,8 +69,18 @@ export function Search() {
     setDraft(q)
   }
   const ready = searchable(q)
-  const hits = usePublicQuery('culture.public.search', { q }, { limit: 100 }, ready)
-  const shown = ready ? hits : null
+  // One request per kind: a common word cannot fill the page with stories and leave the other kinds out.
+  const groups = useQueries({
+    queries: KINDS.map(({ kind }) => ({
+      queryKey: ['public', 'culture.public.search', { q }, kind, locale],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchPublic('culture.public.search', { q }, { limit: PER_KIND, filters: [{ field: 'kind', op: 'eq', value: kind }] }, locale, signal),
+      select: (page: { items: Hit[] }) => page.items,
+      enabled: ready,
+    })),
+  })
+  const loading = ready && groups.some((g) => g.isLoading)
+  const error = groups.find((g) => g.error)?.error ?? null
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -74,10 +88,15 @@ export function Search() {
     setSearch(words ? { q: words } : {}, { preventScrollReset: true })
   }
 
-  const count = shown?.data?.length
+  const count = ready && !loading && !error ? groups.reduce((sum, g) => sum + (g.data?.length ?? 0), 0) : undefined
+  const more = groups.some((g) => (g.data?.length ?? 0) >= PER_KIND)
   let status = ''
-  if (q && !ready) status = t('search.tooShort')
-  else if (count !== undefined) status = count === 0 ? t('search.none', { q }) : t('search.results', { count, q })
+  if (q && [...q].length < MIN_WORDS) status = t('search.tooShort')
+  else if (q && !ready) status = t('search.tooLong', { count: MAX_WORDS })
+  else if (count !== undefined) {
+    if (count === 0) status = t('search.none', { q })
+    else status = more ? t('search.many', { count, q }) : t('search.results', { count, q })
+  }
 
   return (
     <div className="wrap">
@@ -110,20 +129,21 @@ export function Search() {
       <p className={`label ${styles.status}`} role="status">
         {status}
       </p>
-      {shown ? <QueryState loading={shown.isLoading} error={shown.error} onRetry={() => void shown.refetch()} /> : null}
+      <QueryState loading={loading} error={error} onRetry={() => groups.forEach((g) => void g.refetch())} />
       {count === 0 ? (
         <p>
           <Link to={path(locale, 'stories')}>{t('home.allStories')} →</Link>
         </p>
       ) : null}
       <div className={styles.groups}>
-        {KINDS.map(({ kind, section }) => {
-          const rows = (shown?.data ?? []).filter((hit) => hit.kind === kind)
+        {KINDS.map(({ kind, section }, i) => {
+          const rows = ready ? (groups[i].data ?? []) : []
           if (rows.length === 0) return null
           return (
             <section key={kind} aria-labelledby={`search-${kind}`}>
               <h2 id={`search-${kind}`}>
-                {t(`search.kind.${kind}`)} <span className="label">{rows.length}</span>
+                {t(`search.kind.${kind}`)}{' '}
+                <span className="label">{rows.length >= PER_KIND ? `${PER_KIND}+` : rows.length}</span>
               </h2>
               <ul className={styles.hits}>
                 {rows.map((hit) => (

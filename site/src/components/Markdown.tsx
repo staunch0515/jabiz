@@ -1,12 +1,16 @@
-import { lazy, Suspense } from 'react'
+import { Suspense, use } from 'react'
 import type { LocalizedText } from '../api/public-queries'
 import { loadMarkdown } from './markdownLoader'
-
-const Content = lazy(() => loadMarkdown().then((module) => ({ default: module.MarkdownContent })))
 
 interface Props {
   value: LocalizedText | null | undefined
   className?: string
+}
+
+function Rendered(props: Props) {
+  // Already loaded (the pages that need it load it with themselves): rendered at once, without a pause.
+  const { MarkdownContent } = use(loadMarkdown())
+  return <MarkdownContent {...props} />
 }
 
 /**
@@ -16,7 +20,7 @@ interface Props {
 export function Markdown(props: Props) {
   return (
     <Suspense fallback={null}>
-      <Content {...props} />
+      <Rendered {...props} />
     </Suspense>
   )
 }
