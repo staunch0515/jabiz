@@ -39,6 +39,15 @@ jabiz:
         content-security-policy: "default-src 'self'; img-src 'self' data:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
       - path: /admin
 
+server:
+  # The site's scripts, styles and pages are sent compressed (docs/culture/operations.md, Lighthouse): a phone on a slow
+  # connection downloads about a quarter. API responses (JSON) are not: some carry tokens next to what the client sent,
+  # which compression could leak (BREACH).
+  compression:
+    enabled: true
+    mime-types: text/html,text/css,text/javascript,application/javascript,image/svg+xml
+    min-response-size: 1KB
+
 logging:
   pattern:
     level: "%5p [requestId=%X{requestId:--}]"

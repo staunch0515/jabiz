@@ -15,7 +15,8 @@
     "check:api": "node scripts/gen-public-api.mjs --check",
     "e2e": "playwright test",
     "preview": "vite preview",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "lighthouse": "node scripts/lighthouse.mjs"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.2.8",
@@ -47,11 +48,13 @@
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-react": "^6.1.1",
+    "chrome-launcher": "1.2.1",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.12.0",
     "jsdom": "^30.1.1",
+    "lighthouse": "^13.5.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vite": "^8.3.1",

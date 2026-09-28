@@ -211,6 +211,11 @@
   }
 }
 
+/* The footer starts below the first screen, so that it does not move down as a page's content arrives (layout shift). */
+.main {
+  min-height: 100vh;
+}
+
 .main:focus {
   outline: none;
 }

@@ -289,39 +289,42 @@ export function Map() {
         <p className="intro">{t('map.intro')}</p>
       </div>
       <QueryState loading={places.isLoading} error={places.error} onRetry={() => void places.refetch()} />
-      <div className={styles.layout}>
-        <div className={styles.main}>
-          <WorldMap places={all} selected={chosen?.slug ?? null} onSelect={(slug) => select(slug, false)} />
-          <h2 className={styles.listHeading}>{t('map.list')}</h2>
-          <ul className={styles.list}>
-            {all.map((place) => (
-              <li key={place.slug}>
-                <button
-                  type="button"
-                  aria-pressed={place.slug === chosen?.slug}
-                  onClick={() => select(place.slug ?? '', true)}
-                >
-                  <span className={styles.placeName}>
-                    {flag(place.countryCode) ? <span aria-hidden="true">{flag(place.countryCode)} </span> : null}
-                    <LocalizedText value={place.name} />
-                  </span>
-                  <span className="label">
-                    {t('count.people', { count: place.participantCount ?? 0 })} ·{' '}
-                    {t('count.stories', { count: place.storyCount ?? 0 })}
-                    {place.latitude === null || place.longitude === null ? ` · ${t('map.notOnMap')}` : ''}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* The map, the list and the panel show together once the places are in: nothing moves as they arrive. */}
+      {places.isLoading ? null : (
+        <div className={styles.layout}>
+          <div className={styles.main}>
+            <WorldMap places={all} selected={chosen?.slug ?? null} onSelect={(slug) => select(slug, false)} />
+            <h2 className={styles.listHeading}>{t('map.list')}</h2>
+            <ul className={styles.list}>
+              {all.map((place) => (
+                <li key={place.slug}>
+                  <button
+                    type="button"
+                    aria-pressed={place.slug === chosen?.slug}
+                    onClick={() => select(place.slug ?? '', true)}
+                  >
+                    <span className={styles.placeName}>
+                      {flag(place.countryCode) ? <span aria-hidden="true">{flag(place.countryCode)} </span> : null}
+                      <LocalizedText value={place.name} />
+                    </span>
+                    <span className="label">
+                      {t('count.people', { count: place.participantCount ?? 0 })} ·{' '}
+                      {t('count.stories', { count: place.storyCount ?? 0 })}
+                      {place.latitude === null || place.longitude === null ? ` · ${t('map.notOnMap')}` : ''}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <aside className={styles.panel} aria-label={chosen ? summary(chosen) : t('map.list')}>
+            <p className="visually-hidden" role="status">
+              {chosen ? summary(chosen) : ''}
+            </p>
+            {chosen ? <PlacePanel key={chosen.slug} place={chosen} headingRef={heading} /> : <p>{t('map.choose')}</p>}
+          </aside>
         </div>
-        <aside className={styles.panel} aria-label={chosen ? summary(chosen) : t('map.list')}>
-          <p className="visually-hidden" role="status">
-            {chosen ? summary(chosen) : ''}
-          </p>
-          {chosen ? <PlacePanel key={chosen.slug} place={chosen} headingRef={heading} /> : <p>{t('map.choose')}</p>}
-        </aside>
-      </div>
+      )}
     </div>
   )
 }

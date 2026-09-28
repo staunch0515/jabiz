@@ -22,6 +22,6 @@ createRoot(document.getElementById('site')!).render(
   </StrictMode>,
 )
 
-// Once the first screen is up: the renderer of the editors' texts, which most pages need.
-if ('requestIdleCallback' in window) requestIdleCallback(preloadMarkdown)
-else setTimeout(preloadMarkdown, 200)
+// The renderer of the editors' texts, which most pages need: fetched a little after the page has loaded, so that it
+// does not take bandwidth from what the first screen is waiting for (its data, its fonts and images).
+window.addEventListener('load', () => setTimeout(preloadMarkdown, 1500), { once: true })

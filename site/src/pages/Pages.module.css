@@ -3,7 +3,8 @@
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 24px;
-  align-items: center;
+  /* Top, not centred: the title paints before the collage beside it arrives, and must not move when it does. */
+  align-items: start;
   padding-block: clamp(40px, 6vw, 88px);
 }
 
