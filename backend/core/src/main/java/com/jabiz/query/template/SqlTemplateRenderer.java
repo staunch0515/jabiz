@@ -16,7 +16,7 @@ import java.util.Objects;
  * Renders a SQL template (docs/design/05-sql-template.md section 3). Every {@code {{Entity}}} becomes the entity as
  * its dataset shows it, via {@link QueryCompiler#templateExpression}: the scope and soft-delete exclusion of the
  * dataset, and for a temporal entity its versions in effect with tombstones and the scope applied outside the
- * version sub-select (decisions D3, D10). {@code {{Entity.field}}} becomes the physical column. Everything else is
+ * version sub-select (decisions D3, D10); a public dataset only shows its whitelisted columns (decision D17). {@code {{Entity.field}}} becomes the physical column. Everything else is
  * copied verbatim, so the rendered SQL keeps the template's {@code :name} parameters.
  */
 public final class SqlTemplateRenderer {
@@ -115,6 +115,11 @@ public final class SqlTemplateRenderer {
         if (def.findField(placeholder.field()).isEmpty()) {
             problems.add(TemplateProblem.error(placeholder.start(),
                 "unknown field " + entityName + "." + placeholder.field()));
+            return "";
+        }
+        if (binding.dataset().isPublic() && !binding.dataset().publicRead().allows(placeholder.field())) {
+            problems.add(TemplateProblem.error(placeholder.start(), "field " + entityName + "." + placeholder.field()
+                + " is not in the whitelist of public dataset " + binding.dataset().resourceId()));
             return "";
         }
         return SqlIdentifiers.require(def.physicalColumn(placeholder.field()));

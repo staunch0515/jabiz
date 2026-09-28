@@ -1,0 +1,40 @@
+{
+  "scenario" : "Public product catalog",
+  "asOf" : "2026-06-02T00:00:00Z",
+  "entities" : {
+    "Product" : [ {
+      "productId" : "#uuid:1",
+      "sku" : "TEA-1",
+      "productName" : "Green tea",
+      "unitPrice" : "900",
+      "active" : false,
+      "imageFileId" : null,
+      "versionNo" : 4,
+      "effectStartTime" : "2026-06-02T00:00:00Z",
+      "createdTime" : "2026-06-01T00:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "productId" : "#uuid:2",
+      "sku" : "CUP-1",
+      "productName" : "Tea cup",
+      "unitPrice" : "1500",
+      "active" : true,
+      "imageFileId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:00:00Z",
+      "createdTime" : "2026-06-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "productId" : "#uuid:3",
+      "sku" : "POT-1",
+      "productName" : "Tea pot",
+      "unitPrice" : "4200",
+      "active" : false,
+      "imageFileId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:00:00Z",
+      "createdTime" : "2026-06-01T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ]
+  }
+}

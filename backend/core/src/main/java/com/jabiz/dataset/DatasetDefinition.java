@@ -15,6 +15,8 @@ import java.util.function.Consumer;
  *
  * @param defaultView whether this is the default dataset of its target entity
  * @param listView    name of the target entity's list view that whitelists filters and sorts of queries
+ * @param publicRead  what anonymous visitors may read through public templates, or null when the dataset is not
+ *                    public (docs/design/15-public-access.md section 2)
  */
 public record DatasetDefinition(
     String resourceId,
@@ -24,7 +26,8 @@ public record DatasetDefinition(
     DatasetScope scope,
     boolean defaultView,
     DatasetPermissions permissions,
-    String listView
+    String listView,
+    PublicRead publicRead
 ) {
     public DatasetDefinition {
         requireNotBlank(resourceId, "resourceId");
@@ -51,6 +54,11 @@ public record DatasetDefinition(
         return defaultView;
     }
 
+    /** True if anonymous visitors may read this dataset through public templates. */
+    public boolean isPublic() {
+        return publicRead != null;
+    }
+
     private static void requireNotBlank(String value, String what) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(what + " must not be blank");
@@ -66,6 +74,7 @@ public record DatasetDefinition(
         private boolean defaultView;
         private DatasetPermissions permissions = DatasetPermissions.UNDECLARED;
         private String listView;
+        private PublicRead publicRead;
 
         public Builder(String resourceId) { this.resourceId = resourceId; }
 
@@ -105,9 +114,27 @@ public record DatasetDefinition(
         /** List view of the target entity whose whitelists apply to queries; defaults to {@code "default"}. */
         public Builder listView(String name) { this.listView = name; return this; }
 
+        /**
+         * Makes the dataset public (docs/design/15-public-access.md section 2): anonymous visitors read the whitelisted
+         * fields of the rows in its fixed scope through public templates. The dataset becomes read-only and loses
+         * time travel, whatever its policy says.
+         */
+        public Builder publicRead(Consumer<PublicRead.Builder> c) {
+            PublicRead.Builder pb = new PublicRead.Builder();
+            c.accept(pb);
+            this.publicRead = pb.build();
+            return this;
+        }
+
         public DatasetDefinition build() {
-            return new DatasetDefinition(resourceId, targetEntityType, storage, policy, scope, defaultView,
-                permissions, listView);
+            DatasetPolicy effective = policy;
+            if (publicRead != null) {
+                effective = new DatasetPolicy(true, policy.softDelete(), policy.softDeleteField(),
+                    policy.softDeleteTimeField(), policy.maxQueryBatchSize(), policy.maxWriteBatchSize(),
+                    policy.queryTimeout(), false, false);
+            }
+            return new DatasetDefinition(resourceId, targetEntityType, storage, effective, scope, defaultView,
+                permissions, listView, publicRead);
         }
     }
 

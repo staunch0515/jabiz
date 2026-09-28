@@ -1,0 +1,85 @@
+{
+  "queries" : [ {
+    "cacheSeconds" : 60,
+    "description" : "Products on sale, as the public shop window shows them (docs/design/15-public-access.md)",
+    "id" : "commerce.public.catalog",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sku"
+      },
+      "filters" : [ "sku", "unitPrice" ],
+      "sorts" : [ "sku", "productName", "unitPrice" ]
+    },
+    "params" : {
+      "maxPrice" : {
+        "kind" : {
+          "currency" : "JPY",
+          "scale" : 0,
+          "type" : "monetary"
+        },
+        "list" : false,
+        "required" : false
+      },
+      "q" : {
+        "kind" : {
+          "maxLength" : 200,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : false
+      }
+    },
+    "results" : {
+      "imageFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "commerce.image",
+        "type" : "custom"
+      },
+      "productId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:commerce:product"
+      },
+      "productName" : {
+        "maxLength" : 200,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sku" : {
+        "maxLength" : 30,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "unitPrice" : {
+        "currency" : "JPY",
+        "scale" : 0,
+        "type" : "monetary"
+      }
+    }
+  }, {
+    "cacheSeconds" : 0,
+    "description" : "Public attachments of the integration tests (an ordinary table read through a public dataset)",
+    "id" : "it.public.attachments",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "attachmentId"
+      },
+      "filters" : [ "attachmentId" ],
+      "sorts" : [ "attachmentId" ]
+    },
+    "params" : { },
+    "results" : {
+      "attachmentId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:it:attachment"
+      },
+      "cover" : {
+        "kindId" : "jabiz.file",
+        "policy" : "commerce.image",
+        "type" : "custom"
+      }
+    }
+  } ]
+}

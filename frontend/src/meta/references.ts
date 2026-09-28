@@ -15,6 +15,14 @@ export function defaultDatasetOf(entity: string, datasets: DatasetEntry[]): Data
 }
 
 /**
+ * Test id of a dataset's link: the entity's name for its default dataset, the dataset id for the others (an entity
+ * may have several, such as a public one next to the back office's; docs/design/03-dataset.md section 2.1).
+ */
+export function datasetTestId(d: Pick<DatasetEntry, 'id' | 'entity' | 'isDefault'>): string {
+  return d.isDefault ? `dataset-${d.entity}` : `dataset-${d.id}`
+}
+
+/**
  * Where to look up and label the targets of a reference field: the target's default dataset, when the caller may
  * read it and the target declares a display field; otherwise the field stays a plain key.
  */

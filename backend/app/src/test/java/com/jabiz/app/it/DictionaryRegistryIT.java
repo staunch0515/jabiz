@@ -179,15 +179,16 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilogram");
         Map<String, Object> item = query("SELECT dict_item_id, version_no FROM sys_dict_item_version WHERE dict_urn = ?",
             units).getFirst();
-        int cached = dictionaries.cachedDictionaries();
+        assertThat(dictionaries.isCached(units)).isTrue();
 
         Instant tomorrow = clock.instant().plus(Duration.ofDays(1));
         asTestRequest(entityManager.commitBatch(datasets.findById("urn:jabiz:dataset:platform:SysDictItem").orElseThrow(),
             List.of(new EntityChange(EntityAction.UPDATE, new EntityInstance(item.get("dict_item_id"), "SysDictItem",
                 ((Number) item.get("version_no")).longValue(), null, Map.of("labels", Map.of("en", "Kilo"))), tomorrow))))
             .block();
-        // The write is announced; once the entry is evicted it is read again, now knowing when it expires.
-        awaitTrue(() -> dictionaries.cachedDictionaries() == cached - 1);
+        // The write is announced; once the entry is evicted it is read again, now knowing when it expires. The
+        // entry itself is watched, not the cache size: the notification of the insert above may arrive at any time.
+        awaitTrue(() -> !dictionaries.isCached(units));
         assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilogram");
 
         clock.advance(Duration.ofDays(1));

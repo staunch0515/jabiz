@@ -26,6 +26,12 @@ open class JabizAppExtension internal constructor(
     /** The OpenAPI snapshot the admin frontend's types are generated from (docs/design/12-frontend.md section 3). */
     val openApiSnapshot: RegularFileProperty = objects.fileProperty()
 
+    /**
+     * The snapshot of the public templates' catalog that public frontends generate their types from
+     * (docs/design/15-public-access.md section 7). An application branch points it into its own directory.
+     */
+    val publicQueriesSnapshot: RegularFileProperty = objects.fileProperty()
+
     private val paths = mutableSetOf<String>()
 
     /**

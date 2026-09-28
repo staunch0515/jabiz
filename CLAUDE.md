@@ -56,11 +56,15 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。实体字段用 `f.sensitive()`
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
-  未声明即拒绝。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+  未声明即拒绝。唯一的例外是公开只读接口 `/api/public/**`（见下条）。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`，类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
   `SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`。文件名不进 `input_summary`；`FileStore` 返回 `Mono`/`Flux`，不对业务开放。
+- **公开访问**（见 15 与决策 D17）：匿名只能 `GET/HEAD /api/public/queries/{id}` 与 `/api/public/files/{id}[/{变体}]`，总开关
+  `jabiz.public.enabled` 默认关闭。公开的行与列只在数据视图上声明：`publicRead(p -> p.fields(...))`（固定值范围、非默认视图、不含敏感字段），
+  模板渲染时投影到白名单；公开模板头部写 `access: public`（代替 `permissions`），`datasets` 必须指向公开视图。文件是否公开由公开行的白名单文件字段推导，
+  不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **账本、事件、定时任务**（见 11 与决策 D14）：账本交易只经 `LEDGER_POST` / `LEDGER_REVERSE` 写入，更正即冲正；
@@ -123,6 +127,8 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
   挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
+- 公开模板目录快照（15 §7）：`./gradlew :app:test --tests '*PublicQueriesSnapshotIT' -Dpublic-queries.update-snapshot=true`
+  （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
 - 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量

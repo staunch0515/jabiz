@@ -18,7 +18,7 @@
 | 10 | 前端 | 7–10 天 | ☑ 已完成（PR 待合并） |
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
-| 13 | 平台与应用分开、文件、公开访问、内容编辑 | 15–20 天 | ◐ 13a、13b、13d 已完成（13d PR 待合并）；13c 设计待确认 |
+| 13 | 平台与应用分开、文件、公开访问、内容编辑 | 15–20 天 | ☑ 13a–13e 已完成（13c PR 待合并） |
 
 ---
 
@@ -311,7 +311,7 @@ ShedLock 锁 + 按计划时刻的幂等键——调整了要求 5 中"`@Schedule
 ## 阶段 13：平台与应用分开、文件、公开访问、内容编辑
 
 **目标**：让平台能承载"面向公众、以内容为主"的应用（第一个是 culture，见其分支上的 `docs/culture/`），且这些能力对以后的应用通用。
-设计见 `docs/design/14-files.md`、`15-public-access.md`、`16-content-authoring.md`、`17-apps-and-branches.md` 与决策 D17–D19（D19、D18 已分别在 13a、13b 计划中确认，D17 待确认）。
+设计见 `docs/design/14-files.md`、`15-public-access.md`、`16-content-authoring.md`、`17-apps-and-branches.md` 与决策 D17–D19（D19、D18、D17 已分别在 13a、13b、13c 计划中确认）。
 本阶段在 `platform` 分支上进行，**不包含任何 culture 的代码**；每项能力都在 `app` 示范应用中有示范与测试。
 
 拆分与顺序：13a → 13b → 13c；13d 在 13a 之后可与 13b、13c 并行。
@@ -355,16 +355,25 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 ### 13c 公开只读访问（4–5 天）
 
+状态：☑ 已完成（PR 待合并，分支 `phase-13c-public`）。设计见 15、03 §2.7、05 §2 与决策 D17。
+
 **要求**
 1. `publicRead(...)` 公开数据视图（投影渲染）、`access: public` 公开模板与启动检查、`/api/public/queries/{id}`、`/api/public/files/{id}`。
 2. 匿名上下文、缓存头与 ETag、限流、总开关；公开模板目录快照。
 3. 示范：`app` 中一个公开模板（例如已上架的商品目录）。
 
 **验收标准**
-- [ ] 范围外的行在模板、外层筛选、计数三种途径下都不出现；白名单外的列即使写物理列名也读不到（集成测试）。
-- [ ] 文件只在被公开行的白名单字段引用时可匿名获取；下线并失效缓存后 404。
-- [ ] 非公开模板 404、写方法 405、过期令牌不影响公开读取、限流 429、开关关闭 404。
-- [ ] 启动检查报告公开视图与模板的全部违规（一次性）。
+- [x] 范围外的行在模板、外层筛选、计数三种途径下都不出现；白名单外的列即使写物理列名也读不到（`PublicAccessIT`）。
+- [x] 文件只在被公开行的白名单字段引用时可匿名获取；下线并失效缓存后 404（`PublicAccessIT`，下线流程 `PRODUCT_WITHDRAW`）。
+- [x] 非公开模板 404、写方法 405、过期令牌不影响公开读取、限流 429、开关关闭 404（`PublicAccessIT`、`PublicRateLimitIT`、`PublicSwitchedOffIT`）。
+- [x] 启动检查报告公开视图与模板的全部违规（一次性）（`PlatformCheckIT`，类别 `PUBLIC`）。
+
+说明：D17 在计划确认时一并确认，实现细则写入 D17 第 8–10 条与 15：已认证用户经 `/api/queries` 执行公开模板不需要权限；
+公开视图的行数上限以 `maxQueryBatchSize ≤ jabiz.public.max-limit` 检查，接口同时截断；公开文件的下载名不用原始文件名；
+判定缓存的失效是提交后步骤 `FileAccess.invalidate(...)`，只清本实例（多实例时在判定有效期内失效，已知限制），`FILE_DELETE` 也会失效；
+`/api/public/**` 不进入 OpenAPI 文档。示范：公开视图 `urn:jabiz:dataset:public:Product`（`active = true`）、模板 `commerce.public.catalog`、
+流程 `PRODUCT_WITHDRAW`（行操作）与场景 `public_catalog`；`app` 以 `JABIZ_PUBLIC_ENABLED=true` 打开公开访问（默认关闭）。
+公开前端（culture）不在本阶段。
 
 ### 13d 内容编辑能力（4–5 天）
 

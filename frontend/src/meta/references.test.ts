@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { childListsOf, defaultDatasetOf, referenceSourceOf } from './references'
+import { childListsOf, datasetTestId, defaultDatasetOf, referenceSourceOf } from './references'
 import type { DatasetEntry, EntityMeta, FieldMeta } from './types'
 
 const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, operators: [], rules: [] }
@@ -48,5 +48,12 @@ describe('references', () => {
     expect(lists.map((l) => `${l.dataset.id}.${l.field}`)).toEqual(['d:cert.supplierId', 'd:contract.supplierId'])
     expect(childListsOf('Supplier', datasets, { Supplier: supplier })).toEqual([])
     expect(childListsOf('Certification', datasets, metas)).toEqual([])
+  })
+})
+
+describe('datasetTestId', () => {
+  it('names the default dataset by its entity and any other by its id', () => {
+    const ids = [dataset('urn:d:Product', 'Product'), dataset('urn:p:Product', 'Product', false)].map(datasetTestId)
+    expect(ids).toEqual(['dataset-Product', 'dataset-urn:p:Product'])
   })
 })

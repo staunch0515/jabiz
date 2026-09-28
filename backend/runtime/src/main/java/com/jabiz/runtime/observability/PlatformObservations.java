@@ -41,6 +41,8 @@ public class PlatformObservations {
     public static final String FILE_UPLOAD = "jabiz.file.upload";
     public static final String FILE_SERVE = "jabiz.file.serve";
     public static final String FILE_SWEEP = "jabiz.file.sweep";
+    public static final String PUBLIC_QUERY = "jabiz.public.query";
+    public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";
@@ -116,6 +118,11 @@ public class PlatformObservations {
         } finally {
             observation.stop();
         }
+    }
+
+    /** Records that something happened (a counter without tags), such as a request refused by a rate limit. */
+    public void event(String name) {
+        Observation.createNotStarted(name, registry).start().stop();
     }
 
     /** Adds a tag to the observation of the current unit, once its value is known (e.g. a job's result). */

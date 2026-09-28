@@ -20,21 +20,24 @@ GET /api/public/queries/{id}     匿名执行公开模板；缓存头、ETag、�
 
 ```java
 @Bean DatasetDefinition publicStory() {
-    return DatasetDefinition.define("urn:jabiz:dataset:public:Story", "Story")
+    return DatasetDefinition.define("urn:jabiz:dataset:public:Story", d -> d
+        .targetEntityType("Story")
         .scope(s -> s.fixed("status", "PUBLISHED"))                 // 只允许固定值范围
         .publicRead(p -> p.fields("storyId", "slug", "title", "summary", "thumbnailFileId", "publishedTime"))
-        .permissions("culture.public.read", "culture.public.read")  // 已认证用户经数据视图 API 预览时使用
-        .build();
+        .permissions("culture.story.read", "culture.story.write")   // 已认证用户经数据视图 API 预览时使用
+        .storage(s -> s.connectionPoolRef(pool)));
 }
 ```
 
-`publicRead(...)` 的约束（构建期或启动时检查，全部问题一次报告，类别 `PUBLIC`）：
-- 视图必须 `readOnly()`（`publicRead` 自动设置）、`allowTimeTravel(false)`（自动设置），且**不能是默认视图**（默认视图服务后台）。
+`publicRead(...)` 的约束（启动时检查 `PublicReadChecks`，全部问题一次报告，类别 `PUBLIC`）：
+- 视图必须 `readOnly()`（`publicRead` 自动设置，并去掉 `processOnlyWrites`）、`allowTimeTravel(false)`（自动设置），且**不能是默认视图**（默认视图服务后台）。
+- `maxQueryBatchSize` 不超过 `jabiz.public.max-limit`（默认都是 100）。
 - 范围**只能是固定值**（`fixed`）且至少一个：匿名上下文没有操作人和租户，`fromContext` 不能成立；没有范围的公开视图等于整表公开，必须显式写
   `publicRead(p -> p.allRows().fields(...))` 表明意图（例如主题、地点这类本身就公开的数据）。
 - 白名单字段必须存在；不得包含敏感字段（02 §6.1）；范围字段不必在白名单中。
-- **渲染时投影**：模板中 `{{Story}}` 对公开视图渲染为 `(SELECT <白名单字段的物理列> FROM 表 WHERE 范围条件)`。
-  因此即使模板直接写物理列名，也读不到白名单以外的列。
+- **渲染时投影**：模板中 `{{Story}}` 对公开视图渲染为 `(SELECT <白名单字段的物理列> FROM 表 WHERE 范围条件)`
+  （时态实体先取生效版本、去掉墓碑，再投影；没有范围也照样投影）。因此即使模板直接写物理列名，也读不到白名单以外的列（数据库报"列不存在"）；
+  白名单外的 `{{Story.field}}` 在渲染与启动检查时都报错。
 - 子实体没有自己的发布状态时，应由业务在子实体上维护一个可作范围的字段（例如 `visibility = PUBLIC`，由发布流程设置），
   而不是依赖模板里的 JOIN：公开视图的范围必须单独成立。
 
@@ -63,20 +66,27 @@ WHERE s.{{Story.slug}} = :slug
 启动检查（在 05 §5 已有检查之外）：
 1. `entities` 中每个实体都经 `datasets` 指向**公开数据视图**（默认视图从不公开，因此必须写 `datasets`）。
 2. 每个占位符 `{{Entity.field}}` 都在该视图的白名单中；`results` 的 `from` 同样。
-3. `timeoutMs` ≤ `jabiz.public.max-timeout`（默认 2 s）；行数上限 ≤ `jabiz.public.max-limit`（默认 100）。
-4. `cacheSeconds` 可选，0–3600，默认 `jabiz.public.default-cache-seconds`（60）。
+3. `timeoutMs` ≤ `jabiz.public.max-timeout`（默认 2 s）；行数上限 ≤ `jabiz.public.max-limit`（默认 100，见 §2）。
+   执行时超时取 `min(timeoutMs, 视图超时, max-timeout)`，每页行数取 `min(limit, 视图 maxQueryBatchSize, max-limit)`。
+4. `cacheSeconds` 可选，0–3600，默认 `jabiz.public.default-cache-seconds`（60）；只用于公开模板（非公开模板写了即启动失败）。
+
+公开模板也可由已认证用户经 `/api/queries/{id}` 执行，不需要权限（后台预览；D17 第 8 条）。
 
 ## 4. 公开文件
 
 `GET /api/public/files/{fileId}[/{variant}]`：文件**当且仅当**被某个公开数据视图中可见的行、以白名单中的 `jabiz.file` 字段引用时才提供，
 否则 404（不区分"不存在"与"不公开"）。
 
-- 启动时由元数据得出全部（公开视图，`jabiz.file` 白名单字段）对，渲染为一条 `SELECT EXISTS(... UNION ALL ...)` 查询，参数只有 `fileId`。
-- 判定结果在进程内缓存 `jabiz.public.file-decision-ttl`（默认 60 s，有界 LRU）；响应 `Cache-Control: public, max-age=300`。
-  因此内容下线后，文件最迟在"判定缓存 + 浏览器缓存"时间后不再可得——这是有意的取舍，写入用户文档。
-- 需要立即撤下时（例如撤回同意），业务流程在删除或下线后调用平台步骤使判定缓存失效（`FileAccess.invalidate(fileId…)`，平台 I/O 步骤），
-  并在文档中提示浏览器缓存的上限。
-- 与 14 §5 相同的响应头；PDF 为附件；支持单段 `Range`。
+- 由元数据得出全部（公开视图，`jabiz.file` 白名单字段）对（`PublicFileAccess`），渲染为一条 `SELECT EXISTS(... UNION ALL ...)` 查询，
+  每个分支按与公开模板相同的方式读取视图（生效版本、范围、投影），参数只有 `fileId`，超时 `jabiz.public.max-timeout`。
+- 判定结果（可取与不可取都）在进程内缓存 `jabiz.public.file-decision-ttl`（默认 60 s，有界 LRU，`jabiz.public.file-decision-entries`
+  默认 10 000）；响应 `Cache-Control: public, max-age=<jabiz.public.file-cache-seconds>`（默认 300）。
+  因此内容下线后，文件最迟在"判定缓存 + 浏览器缓存"时间后不再可得——这是有意的取舍。
+- 需要立即撤下时（例如撤回同意），业务流程在下线后以提交后步骤使判定缓存失效：
+  `.afterCommit("…", FileAccess.invalidate(ctx -> 文件 id 列表))`（`FileAccess.fromContext(key)` 取上下文中的单个 id）。
+  放在提交之后，下一次请求才会看到已提交的数据。只清本实例的缓存；多实例时其他实例在判定有效期内失效（已知限制），浏览器缓存另计。
+  `FILE_DELETE` 同样在提交后使判定失效。示范：`app` 的 `PRODUCT_WITHDRAW`。
+- 与 14 §5 相同的响应头；PDF 为附件；支持单段 `Range`。下载名由文件 id 与扩展名组成（`<id>[-变体].jpg`），**从不使用上传时的原始文件名**（可能含个人信息）。
 
 ## 5. 接口
 
@@ -92,11 +102,15 @@ WHERE s.{{Story.slug}} = :slug
 - 响应与已认证的模板接口相同：`{items, total, offset, limit}`。
 - 未知或非公开的模板 → 404（不暴露私有模板是否存在）；参数错误 → 400 `ProblemDetail`（文案按 `Accept-Language`）。
 - 匿名上下文：`RequestContext.anonymous(locale, requestId)`，不看 `Authorization` 头（过期的令牌不会让公开页面 401）。
-- 缓存：`Cache-Control: public, max-age=<cacheSeconds>`、`Vary: Accept-Language`、强 `ETag`（响应体 SHA-256）；`If-None-Match` 命中 → 304。
+- 缓存：`Cache-Control: public, max-age=<cacheSeconds>`、`Vary: Accept-Language`、强 `ETag`（响应体 SHA-256）；`If-None-Match` 命中 → 304
+  （比较时忽略 `W/`，RFC 9110 的弱比较）。错误响应不带公开缓存头。
+- 分页：`limit` 默认 20，上限见 §3；`count` 默认 `true`。未知的查询参数（不是 `p.*`、`filter`、`sort`、`offset`、`limit`、`count`）→ 400。
 - 限流：按客户端地址的进程内令牌桶，`jabiz.public.rate-limit.per-minute`（默认 300）→ 429 `RATE_LIMITED` + `Retry-After`。
   客户端地址只在配置了 `server.forward-headers-strategy` 时取自转发头；桶的数量有上限（LRU，默认 100 000），防止内存被耗尽。多实例时各自限流（近似值，已知限制）。
 - 公开读取不是操作：不写 `op_process`（与已认证的读取一致）。
-- 总开关 `jabiz.public.enabled`（默认 **false**）：关闭时 `/api/public/**` 一律 404，但公开视图与模板的启动检查照常执行。
+- 总开关 `jabiz.public.enabled`（默认 **false**；`app` 以环境变量 `JABIZ_PUBLIC_ENABLED` 打开）：关闭时 `/api/public/**` 一律 404（任何方法），
+  但公开视图与模板的启动检查照常执行。
+- 开关、方法（405，带 `Allow: GET, HEAD`）与限流（429）由 `PublicAccessWebFilter` 在安全过滤链之前处理，从不进入控制器或写入路径。
 
 ## 6. 安全配置
 
@@ -106,20 +120,24 @@ WHERE s.{{Story.slug}} = :slug
 
 ## 7. 前端类型契约
 
-公开模板的目录不经 OpenAPI 暴露（D15 第 5 条不变）。平台提供 `PublicQueryCatalog`：由公开模板生成
+公开模板的目录与 `/api/public/**` 接口都不进入 OpenAPI 文档（`springdoc.paths-to-exclude`；D15 第 5 条不变）。平台提供 `PublicQueryCatalog`：由公开模板生成
 `{id, params: {name: {kind, list, required}}, results: {name: kind}, list: {filters, sorts, defaultSort}, cacheSeconds}` 的 JSON。
-应用的测试 `PublicQueriesSnapshotIT` 把它与仓库中的快照比较（`-Dpublic-queries.update-snapshot=true` 重写），公开前端据此生成 TS 类型
+应用的测试 `PublicQueriesSnapshotIT`（平台测试夹具 `PublicQueriesSnapshot.verify`）把它与仓库中的快照比较
+（`-Dpublic-queries.update-snapshot=true` 重写；路径 `jabizApp.publicQueriesSnapshot`，`app` 为 `frontend/openapi/public-queries.json`），公开前端据此生成 TS 类型
 （与 OpenAPI 快照同一套做法，12 §3）。
 
 ## 8. 观测
 
-`jabiz.public.query`（标签：模板 id、结果：ok / not_modified / rejected / error）、`jabiz.public.rate_limited`（无标签）。
-不记录客户端地址（日志中也不记录）。
+`jabiz.public.query`（标签：模板 id、`result`＝`ok` / `not_modified`，以及所有平台观测都有的 `outcome` / `status`，被拒绝或出错时由它们表示）、
+`jabiz.public.rate_limited`（无标签）；公开文件沿用 `jabiz.file.serve`（`channel=public`）。不记录客户端地址（日志中也不记录），未知模板 id 不产生观测。
 
 ## 9. 测试
 
-- core：`publicRead` 构建期校验（敏感字段、`fromContext`、默认视图、白名单字段不存在）；投影渲染；公开模板检查（引用非公开视图、
-  使用白名单外字段、写物理列名读到的只有白名单列）。
-- runtime 集成测试：匿名可读公开模板；**范围外的行永远不出现**（草稿、下线的数据，经模板、外层筛选、计数三种途径）；
-  非公开模板 404；非 GET 405；带过期令牌仍然 200；ETag / 304；限流 429；开关关闭时 404；
-  公开文件：被公开行引用 → 200，只被草稿引用 → 404，被非白名单字段引用 → 404，下线后缓存失效即 404；目录快照。
+- core（`PublicReadTest`）：`publicRead` 的策略与校验（敏感字段、`fromContext`、默认视图、白名单字段不存在、`allRows`、行数上限）；
+  投影渲染（普通、时态、无范围）；公开模板检查（引用非公开视图或默认视图、白名单外的占位符与结果列、权限、超时、缓存时间）；头部解析；目录导出。
+- app 集成测试（真实 PostgreSQL，`PublicAccessIT` 等）：匿名可读公开模板；**范围外的行永远不出现**（下线的数据，经模板参数、外层筛选、计数三种途径）；
+  写物理列名读不到白名单外的列；非公开模板 404；写方法 405；带过期令牌仍然 200；ETag / 304；参数错误 400；不写 `op_process`；
+  限流 429（`PublicRateLimitIT`）；开关关闭时 404（`PublicSwitchedOffIT`）；
+  公开文件：被公开行引用 → 200，只被下线行引用 → 404，被非白名单字段引用 → 404（普通表 `ItAttachment`），经 `PRODUCT_WITHDRAW` 下线即 404，
+  未失效时在判定有效期内仍可取；目录快照（`PublicQueriesSnapshotIT`）；启动检查一次报告全部违规（`PlatformCheckIT`）；观测（`ObservabilityIT`）；
+  场景回放 `scenarios/commerce/public_catalog.yml`。

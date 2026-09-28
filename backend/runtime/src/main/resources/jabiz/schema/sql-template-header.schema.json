@@ -44,7 +44,9 @@
       }
     },
     "permissions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-    "timeoutMs": { "type": "integer", "minimum": 1 }
+    "timeoutMs": { "type": "integer", "minimum": 1 },
+    "access": { "enum": ["public"] },
+    "cacheSeconds": { "type": "integer", "minimum": 0, "maximum": 3600 }
   },
   "$defs": {
     "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
