@@ -46,6 +46,20 @@ class CommerceConfig {
             "commerce.product.write", false, poolRef);
     }
 
+    /**
+     * The public product catalog (docs/design/15-public-access.md): the products on sale, and of them only what a
+     * shop window shows. Back-office users preview it with the product read permission.
+     */
+    @Bean
+    DatasetDefinition publicProductDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return DatasetDefinition.define(CommerceEntities.PUBLIC_PRODUCT_DATASET, d -> d
+            .targetEntityType(CommerceEntities.PRODUCT)
+            .scope(s -> s.fixed("active", true))
+            .publicRead(p -> p.fields("productId", "sku", "productName", "unitPrice", "imageFileId"))
+            .permissions("commerce.product.read", "commerce.product.write")
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     @Bean
     DatasetDefinition warehouseDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(CommerceEntities.WAREHOUSE_DATASET, CommerceEntities.WAREHOUSE, "commerce.warehouse.read",
@@ -82,6 +96,12 @@ class CommerceConfig {
     ProcessDefinition<CommerceProcesses.RepriceInput, CommerceProcesses.RepriceOutput, ProcessContext>
         productRepriceProcess() {
         return CommerceProcesses.REPRICE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<CommerceProcesses.WithdrawInput, CommerceProcesses.WithdrawOutput, ProcessContext>
+        productWithdrawProcess() {
+        return CommerceProcesses.WITHDRAW_PROCESS;
     }
 
     @Bean

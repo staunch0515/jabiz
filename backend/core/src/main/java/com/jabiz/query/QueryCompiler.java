@@ -322,7 +322,8 @@ public class QueryCompiler {
     /**
      * Expression that stands for the entity in a SQL template ({@code {{Entity}}}, docs/design/05-sql-template.md
      * section 3): the table, the table restricted to the scope, or for a temporal entity the versions in effect
-     * without tombstones, restricted to the scope in that order (decision D3).
+     * without tombstones, restricted to the scope in that order (decision D3). A public dataset is projected to its
+     * whitelisted fields.
      */
     public String templateExpression(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scopeValues,
         TimeSlice slice, Binder binder) {
@@ -335,10 +336,17 @@ public class QueryCompiler {
         if (!scope.isBlank()) {
             conditions.add(scope);
         }
-        if (conditions.isEmpty()) {
+        String columns = "*";
+        if (dataset.isPublic() && dataset.isTarget(def.name)) {
+            // Only the whitelist leaves a public dataset, so SQL naming any other column fails instead of reading it
+            // (docs/design/15-public-access.md section 2).
+            columns = String.join(", ", dataset.publicRead().fields().stream()
+                .map(field -> SqlIdentifiers.require(def.physicalColumn(field))).toList());
+        } else if (conditions.isEmpty()) {
             return source;
         }
-        return "(SELECT * FROM " + source + " WHERE " + String.join(" AND ", conditions) + ")";
+        return "(SELECT " + columns + " FROM " + source
+            + (conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions)) + ")";
     }
 
     /**

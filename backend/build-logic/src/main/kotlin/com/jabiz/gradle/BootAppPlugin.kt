@@ -44,6 +44,8 @@ class BootAppPlugin : Plugin<Project> {
         val app = JabizAppExtension(project.objects) { spa -> registerSpa(project, spa, pnpm) }
         app.openApiSnapshot.convention(
             project.rootProject.layout.projectDirectory.file("../frontend/openapi/openapi.json"))
+        app.publicQueriesSnapshot.convention(
+            project.rootProject.layout.projectDirectory.file("../frontend/openapi/public-queries.json"))
         project.extensions.add(JabizAppExtension::class.java, "jabizApp", app)
 
         project.extensions.configure(SpringBootExtension::class.java) { mainClass.set(app.mainClass) }
@@ -94,7 +96,11 @@ class BootAppPlugin : Plugin<Project> {
             val updateOpenApi = providers.systemProperty("openapi.update-snapshot").orElse("false").get()
             systemProperty("openapi.snapshot", app.openApiSnapshot.get().asFile.absolutePath)
             systemProperty("openapi.update-snapshot", updateOpenApi)
-            if (updateScenarios == "true" || updateOpenApi == "true") {
+            // The catalog of the public templates (docs/design/15-public-access.md section 7), the same way.
+            val updatePublicQueries = providers.systemProperty("public-queries.update-snapshot").orElse("false").get()
+            systemProperty("public-queries.snapshot", app.publicQueriesSnapshot.get().asFile.absolutePath)
+            systemProperty("public-queries.update-snapshot", updatePublicQueries)
+            if (updateScenarios == "true" || updateOpenApi == "true" || updatePublicQueries == "true") {
                 outputs.upToDateWhen { false }
             }
         }

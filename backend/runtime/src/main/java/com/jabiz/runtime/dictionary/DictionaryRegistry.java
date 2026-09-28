@@ -155,6 +155,11 @@ public class DictionaryRegistry {
         }
     }
 
+    /** Whether the entries of the dictionary are cached now (for monitoring and tests). */
+    public boolean isCached(String dictUrn) {
+        return cache.containsKey(dictUrn);
+    }
+
     /** Number of dictionaries currently cached (for monitoring). */
     public int cachedDictionaries() {
         return cache.size();

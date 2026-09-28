@@ -68,6 +68,8 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
 | `list` | 外层筛选 `filters`、排序 `sorts` 白名单，默认排序 `defaultSort: {field, asc}`，稳定排序键 `key`（只能引用 `results` 中的名字） |
 | `permissions` | 执行所需权限（全部具备才可执行）；未声明 → 非开发环境启动失败（`dev` 下为警告） |
 | `timeoutMs` | 可选，只能比数据视图的超时更短 |
+| `access` | 可选，只能是 `public`：公开模板，代替 `permissions`（两者都写 → 启动失败），只能读公开数据视图（15 §3【D17】） |
+| `cacheSeconds` | 可选，0–3600，只用于公开模板：公开响应的 `max-age`（默认 `jabiz.public.default-cache-seconds`） |
 
 - 头部按 JSON Schema（runtime 资源 `jabiz/schema/sql-template-header.schema.json`，draft 2020-12）校验，未知键即报错。
 - `kind:` 的写法与元模型导出（02 §8）相同：`{type: monetary, currency: JPY, scale: 0}`、`{type: temporal, role: EVENT_TIME}` 等，

@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * commits, and SQL templates each become a timer and a span nested in the enclosing unit, tagged with names and the
  * outcome only, never with keys, actors or values.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "jabiz.public.enabled=true")
 class ObservabilityIT extends PostgresIntegrationTest {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP = new ParameterizedTypeReference<>() {};
@@ -143,6 +143,24 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .tags("process", "ORDER_PLACE", "outcome", "rejected", "status", "422").timer();
         assertThat(rejected).isNotNull();
         assertThat(rejected.count()).isPositive();
+    }
+
+    /** Public reads (docs/design/15-public-access.md section 8): the template's name and the result, nothing else. */
+    @Test
+    void publicReadsAreObservedWithTheTemplateAndResultOnly() {
+        SEEN.clear();
+        String etag = client.get().uri("/api/public/queries/commerce.public.catalog?p.q=observed").exchange()
+            .expectStatus().isOk().returnResult(String.class).getResponseHeaders().getETag();
+        client.get().uri("/api/public/queries/commerce.public.catalog?p.q=observed")
+            .header(HttpHeaders.IF_NONE_MATCH, etag).exchange().expectStatus().isNotModified();
+
+        assertThat(seen(PlatformObservations.PUBLIC_QUERY)).extracting(Seen::tags).containsExactly(
+            Map.of("template", "commerce.public.catalog", "result", "ok", "outcome", "success", "status", "none"),
+            Map.of("template", "commerce.public.catalog", "result", "not_modified", "outcome", "success",
+                "status", "none"));
+        assertThat(seen(PlatformObservations.TEMPLATE))
+            .allSatisfy(s -> assertThat(s.parent()).isEqualTo(PlatformObservations.PUBLIC_QUERY));
+        assertThat(SEEN).flatExtracting(s -> List.copyOf(s.tags().values())).doesNotContain("observed", "anonymous");
     }
 
     @Test

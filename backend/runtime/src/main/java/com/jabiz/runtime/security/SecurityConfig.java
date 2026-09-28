@@ -32,6 +32,7 @@ import org.springframework.security.web.server.authentication.ServerAuthenticati
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
 import org.springframework.security.web.server.util.matcher.NegatedServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.OrServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import reactor.core.publisher.Mono;
@@ -48,7 +49,8 @@ import java.util.List;
  *
  * <p>Requests authenticate with a bearer access token ({@link JwtService}); in the {@code dev} profile with
  * {@code jabiz.dev.actor-headers=true}, a request without a token may name its actor in headers instead. Every
- * {@code /api/**} path except signing in, refreshing and signing out requires an authenticated actor (401 otherwise);
+ * {@code /api/**} path except signing in, refreshing, signing out and the public read API ({@code /api/public/**})
+ * requires an authenticated actor (401 otherwise);
  * which actor may do what is checked by each entry point against the permissions the metadata declares (403).
  * Stateless: no session, no CSRF token (no cookies are used), no saved requests.
  */
@@ -63,6 +65,14 @@ public class SecurityConfig {
     /** The session endpoints, open to everyone. */
     static final ServerWebExchangeMatcher PUBLIC = ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST,
         AuthController.LOGIN, AuthController.REFRESH, AuthController.LOGOUT);
+
+    /**
+     * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never
+     * authenticated: credentials sent along are ignored, so an expired token cannot break a public page. Which methods
+     * and whether the switch is on is decided by {@code PublicAccessWebFilter} before this chain runs.
+     */
+    static final ServerWebExchangeMatcher PUBLIC_READ = ServerWebExchangeMatchers.pathMatchers("/api/public",
+        "/api/public/**");
 
     @Bean
     JwtService jwtService(Environment environment, Clock clock,
@@ -152,7 +162,8 @@ public class SecurityConfig {
         authentication.setAuthenticationFailureHandler(new ServerAuthenticationEntryPointFailureHandler(problems));
         authentication.setSecurityContextRepository(NoOpServerSecurityContextRepository.getInstance());
         // Signing in, refreshing and signing out need no access token, and a stale one sent along must not stop them.
-        authentication.setRequiresAuthenticationMatcher(new NegatedServerWebExchangeMatcher(PUBLIC));
+        authentication.setRequiresAuthenticationMatcher(new NegatedServerWebExchangeMatcher(
+            new OrServerWebExchangeMatcher(PUBLIC, PUBLIC_READ)));
 
         return http
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
@@ -165,6 +176,7 @@ public class SecurityConfig {
             .addFilterAt(authentication, SecurityWebFiltersOrder.AUTHENTICATION)
             .authorizeExchange(exchanges -> exchanges
                 .matchers(PUBLIC).permitAll()
+                .matchers(PUBLIC_READ).permitAll()
                 .pathMatchers("/api", "/api/**").authenticated()
                 // The single-page application and health: public.
                 .anyExchange().permitAll())

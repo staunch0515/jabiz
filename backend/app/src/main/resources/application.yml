@@ -26,6 +26,10 @@ jabiz:
     # application declares file policies. A directory of this host (a volume in containers); single instance only.
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:}
+  public:
+    # Anonymous read access to public templates and files (docs/design/15-public-access.md). Off unless switched on;
+    # the checks of public datasets and templates run either way. Limits, caching and rate limit have defaults.
+    enabled: ${JABIZ_PUBLIC_ENABLED:false}
   i18n:
     # Language of error messages when Accept-Language names none of zh, ja, en.
     default-locale: en

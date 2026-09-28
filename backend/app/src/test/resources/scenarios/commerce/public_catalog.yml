@@ -1,0 +1,43 @@
+# The public catalog (docs/design/15-public-access.md): what anonymous visitors see follows the products' data. A
+# product off sale is never in it, and taking one off sale (PRODUCT_WITHDRAW) removes it at once; a scheduled price
+# shows from its effective time on.
+name: Public product catalog
+clock: 2026-06-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: TEA-1, productName: Green tea, unitPrice: 800, active: true } }
+    save: { tea: $.id }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: CUP-1, productName: Tea cup, unitPrice: 1500, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: POT-1, productName: Tea pot, unitPrice: 4200, active: false } }
+  - note: The pot is not on sale, so the public catalog does not have it.
+    expect:
+      query: commerce.public.catalog
+      rows: 2
+      values: [{ sku: CUP-1, unitPrice: 1500 }, { sku: TEA-1, unitPrice: 800 }]
+  - process: PRODUCT_REPRICE@latest
+    input: { sku: TEA-1, unitPrice: 900, effectiveTime: 2026-06-02T00:00:00Z }
+  - process: PRODUCT_WITHDRAW@latest
+    input: { productId: "${tea}" }
+    expectOutput: { sku: TEA-1, withdrawn: true }
+  - expect:
+      query: commerce.public.catalog
+      rows: 1
+      values: [{ sku: CUP-1 }]
+  - note: Withdrawing again changes nothing.
+    process: PRODUCT_WITHDRAW@latest
+    input: { productId: "${tea}" }
+    expectOutput: { withdrawn: false }
+  - advanceClock: P1D
+  - note: The scheduled price is in effect, but the product stays off sale.
+    expect: { entity: Product, id: "${tea}", fields: { unitPrice: 900, active: false } }
+  - expect:
+      query: commerce.public.catalog
+      params: { q: tea }
+      rows: 1
+      values: [{ sku: CUP-1 }]
+snapshot:
+  entities: [Product]
+  asOf: end

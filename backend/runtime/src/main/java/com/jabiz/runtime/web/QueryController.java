@@ -27,7 +27,8 @@ import java.util.Map;
 /**
  * SQL template API (docs/design/05-sql-template.md): {@code POST /api/queries/{id}} runs a registered template with
  * the given parameters, filtered, sorted and paged within the template's whitelist. The caller needs every
- * permission the template declares (default deny: 403 {@code PERMISSION_DENIED}).
+ * permission the template declares (default deny: 403 {@code PERMISSION_DENIED}); a public template
+ * ({@code access: public}) needs none.
  */
 @RestController
 @RequestMapping("/api/queries")
@@ -81,6 +82,10 @@ class QueryController {
      * in the dev profile (registration reports it as an error elsewhere, but the startup check can be turned off).
      */
     static void requirePermissions(AdvancedQueryDefinition query, RequestContext context, boolean development) {
+        if (query.publicAccess()) {
+            // Anyone may read it anonymously; signed-in users (the back office previewing it) may as well.
+            return;
+        }
         Permissions.requireAll(context, query.permissions(), development, "Running query " + query.queryId());
     }
 

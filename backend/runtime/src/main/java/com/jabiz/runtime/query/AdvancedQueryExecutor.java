@@ -100,12 +100,24 @@ public class AdvancedQueryExecutor {
      */
     public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, QueryPredicate filter,
         List<SortOrder> sorts, int offset, int limit, boolean count) {
+        return page(queryDef, inputParams, filter, sorts, offset, limit, count, null);
+    }
+
+    /**
+     * As {@link #page(AdvancedQueryDefinition, Map, QueryPredicate, List, int, int, boolean)}, running at most
+     * {@code maxTimeout} (public reads, docs/design/15-public-access.md section 3).
+     *
+     * @param maxTimeout upper bound of the query timeout, or null for the datasets' and the template's own
+     */
+    public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, QueryPredicate filter,
+        List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
         return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
-            KeyValues.of("template", queryDef.queryId()), pageOf(queryDef, inputParams, filter, sorts, offset, limit, count));
+            KeyValues.of("template", queryDef.queryId()),
+            pageOf(queryDef, inputParams, filter, sorts, offset, limit, count, maxTimeout));
     }
 
     private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams,
-        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count) {
+        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
         return RequestContexts.current().flatMap(request -> {
             AdvancedQueryDefinition query = templates.prepare(queryDef);
             Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);
@@ -124,7 +136,8 @@ public class AdvancedQueryExecutor {
                 effectiveLimit, entityRegistry::find);
 
             StorageEngine engine = storageRegistry.getEngine(pool(datasets.values().iterator().next()));
-            Duration timeout = effectiveTimeout(datasets.values(), query);
+            Duration own = effectiveTimeout(datasets.values(), query);
+            Duration timeout = maxTimeout != null && maxTimeout.compareTo(own) < 0 ? maxTimeout : own;
             Map<String, BoundValue> listParams = new LinkedHashMap<>(params);
             listParams.putAll(outer.listParams());
             Mono<List<SemanticRow>> rows = engine.executeRawQuery(new RawQueryPlan(outer.listSql(), listParams, timeout))

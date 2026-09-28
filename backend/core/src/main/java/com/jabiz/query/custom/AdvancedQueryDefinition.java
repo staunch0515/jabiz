@@ -28,6 +28,9 @@ import java.util.function.Consumer;
  * @param permissions     permissions required to run the query through the API; empty means undeclared
  * @param source          where the query was declared, for problem reports
  * @param timeoutOverride optional per-query timeout; the effective timeout never exceeds the datasets'
+ * @param publicAccess    whether anonymous visitors may run the query ({@code access: public}); it then declares no
+ *                        permissions and reads public datasets only (docs/design/15-public-access.md section 3)
+ * @param cacheSeconds    {@code max-age} of public responses, or null for the platform default; public queries only
  */
 public record AdvancedQueryDefinition(
         String queryId,
@@ -40,7 +43,9 @@ public record AdvancedQueryDefinition(
         Map<String, String> datasets,
         ResultListSpec list,
         List<String> permissions,
-        TemplateSource source
+        TemplateSource source,
+        boolean publicAccess,
+        Integer cacheSeconds
 ) {
     public AdvancedQueryDefinition {
         participatingEntities = List.copyOf(participatingEntities);
@@ -60,7 +65,7 @@ public record AdvancedQueryDefinition(
     /** The same query with the parameters and result columns replaced (used to fill in inherited kinds). */
     public AdvancedQueryDefinition withFields(List<QueryParameter> newParameters, List<ProjectedField> newResults) {
         return new AdvancedQueryDefinition(queryId, description, participatingEntities, newParameters, newResults,
-            sqlTemplate, timeoutOverride, datasets, list, permissions, source);
+            sqlTemplate, timeoutOverride, datasets, list, permissions, source, publicAccess, cacheSeconds);
     }
 
     /** The same query reading {@code entity} through another dataset. */
@@ -68,7 +73,7 @@ public record AdvancedQueryDefinition(
         Map<String, String> merged = new LinkedHashMap<>(datasets);
         merged.put(entity, datasetId);
         return new AdvancedQueryDefinition(queryId, description, participatingEntities, parameters, resultFields,
-            sqlTemplate, timeoutOverride, merged, list, permissions, source);
+            sqlTemplate, timeoutOverride, merged, list, permissions, source, publicAccess, cacheSeconds);
     }
 
     /** The result column of that name, compared case-insensitively. */
@@ -88,6 +93,8 @@ public record AdvancedQueryDefinition(
         private String sqlTemplate;
         private Duration timeout;
         private TemplateSource source;
+        private boolean publicAccess;
+        private Integer cacheSeconds;
 
         public Builder(String queryId) { this.queryId = queryId; }
 
@@ -164,6 +171,18 @@ public record AdvancedQueryDefinition(
             return this;
         }
 
+        /** Anonymous visitors may run the query ({@code access: public}); it declares no permissions then. */
+        public Builder publicAccess() {
+            this.publicAccess = true;
+            return this;
+        }
+
+        /** {@code max-age} of the public responses of this query. */
+        public Builder cacheSeconds(int seconds) {
+            this.cacheSeconds = seconds;
+            return this;
+        }
+
         public Builder sqlTemplate(String sql) {
             this.sqlTemplate = sql;
             return this;
@@ -192,7 +211,7 @@ public record AdvancedQueryDefinition(
             TemplateSource where = source != null ? source : new TemplateSource("query " + queryId, 1);
             return new AdvancedQueryDefinition(
                 queryId, description, entities, parameters, resultFields, sqlTemplate, timeout, datasets, list,
-                permissions, where
+                permissions, where, publicAccess, cacheSeconds
             );
         }
     }

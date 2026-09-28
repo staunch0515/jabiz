@@ -25,6 +25,9 @@ public class JabizDefaultProperties implements EnvironmentPostProcessor {
             "springdoc.swagger-ui.enabled", "false",
             "springdoc.writer-with-order-by-keys", "true",
             "springdoc.default-produces-media-type", "application/json",
+            // The public API's contract is the public templates' catalog, not the admin frontend's document
+            // (docs/design/15-public-access.md section 7).
+            "springdoc.paths-to-exclude", "/api/public/**",
             // Built once at startup: building it scans the classpath, which must not happen on the event loop.
             "springdoc.pre-loading-enabled", "true",
             "management.otlp.metrics.export.enabled", "false",
