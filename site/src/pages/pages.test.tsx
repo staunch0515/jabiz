@@ -67,6 +67,17 @@ describe('home page', () => {
   })
 })
 
+describe('home page, first screen (docs/culture/operations.md, Lighthouse)', () => {
+  it('paints the title before any data, and nothing under it until the data is in', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    renderRoutes(routes, { path: '/en/' })
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('CULTURE, UNFILTERED')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    expect(screen.queryByRole('list', { name: 'Places' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull()
+  })
+})
+
 describe('story archive (design section 9.3, FilterBar)', () => {
   it('keeps the filters in the address and sends them to the template', async () => {
     const api = mockPublicApi({

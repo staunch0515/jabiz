@@ -92,6 +92,16 @@ jobs:
         working-directory: site
       - run: pnpm e2e
         working-directory: site
+      # Lighthouse's mobile preset on the pages the end-to-end tests just filled with content (docs/culture/ROADMAP.md,
+      # C4): LCP of the home pages under 2.5 s and accessibility 100 on every page measured.
+      - run: pnpm lighthouse
+        working-directory: site
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: culture-lighthouse
+          path: site/lighthouse/
+          retention-days: 14
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
