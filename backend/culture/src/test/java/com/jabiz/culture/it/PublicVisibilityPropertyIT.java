@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.jabiz.culture.Culture.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -282,6 +283,14 @@ class PublicVisibilityPropertyIT extends PublicItSupport {
         for (String place : oracle.allPlaceSlugs) {
             check.rows("culture.public.stories", STORY, publicItems("culture.public.stories", "p.location", place));
             check.rows("culture.public.people", PARTICIPANT, publicItems("culture.public.people", "p.location", place));
+            // The map's panel of a place: nothing of a hidden place.
+            for (String query : List.of("culture.public.location_themes", "culture.public.location_media")) {
+                List<Map<String, Object>> rows = publicItems(query, "p.location", place);
+                if (!oracle.places.contains(place)) {
+                    assertThat(rows).as("%s of hidden place %s (seed %d)", query, place, seed).isEmpty();
+                }
+                check.rows(query, query.endsWith("themes") ? THEME : null, rows);
+            }
         }
         for (String theme : oracle.allThemeSlugs) {
             check.rows("culture.public.stories", STORY, publicItems("culture.public.stories", "p.theme", theme));
@@ -340,6 +349,9 @@ class PublicVisibilityPropertyIT extends PublicItSupport {
                 case "themeId" -> assertThat(oracle.themeIds).as(what).contains((String) value);
                 case "resourceId" -> assertThat(oracle.resourceIds).as(what).contains((String) value);
                 case "locationId" -> assertThat(oracle.placeIds).as(what).contains((String) value);
+                // location_media: a shown photograph, perspective (its video) or story (its own video).
+                case "itemId" -> assertThat(Stream.of(oracle.media, oracle.contributions, oracle.storyIds)
+                    .anyMatch(ids -> ids.contains((String) value))).as(what).isTrue();
                 case "locationSlugs" -> assertThat(oracle.places).as(what)
                     .containsAll(List.of(((String) value).split(",")));
                 case "slug" -> {

@@ -15,7 +15,9 @@
     "stories": "ストーリー",
     "method": "わたしたちの方法",
     "resources": "教材",
-    "about": "概要"
+    "about": "概要",
+    "map": "地図",
+    "search": "検索"
   },
   "common": {
     "loading": "読み込み中…",
@@ -142,6 +144,40 @@
     "title": "概要",
     "project": "プロジェクトについて",
     "privacy": "プライバシー"
+  },
+  "map": {
+    "title": "地図",
+    "intro": "特派員たちがいる場所。地図は入り口のひとつです。ストーリーは国ではなく、人のものだから。",
+    "markers": "地図上の場所",
+    "list": "場所",
+    "choose": "地図か一覧から場所を選ぶと、そこにいる人と、その人たちが共有したものが見られます。",
+    "summary": "{{place}}：{{people}}、{{stories}}",
+    "people": "人",
+    "themes": "テーマ",
+    "stories": "ストーリー",
+    "videos": "動画",
+    "photos": "写真",
+    "allStories": "{{place}}の人が参加しているストーリーをすべて見る",
+    "nothing": "ここからはまだ何も公開されていません。",
+    "by": "{{name}}",
+    "seeMap": "みんながどこにいるか地図で見る",
+    "notOnMap": "地図にない場所",
+    "show": "{{place}}を表示"
+  },
+  "search": {
+    "title": "検索",
+    "intro": "ストーリー、人、テーマ、教材を、どの言語でも検索できます。",
+    "label": "検索する言葉",
+    "submit": "検索",
+    "results_other": "「{{q}}」の結果 {{count}} 件",
+    "none": "「{{q}}」に合うものはまだありません。別の言葉を試すか、ストーリーの一覧を見てください。",
+    "tooShort": "2 文字以上入力してください。",
+    "kind": {
+      "STORY": "ストーリー",
+      "PERSON": "人",
+      "THEME": "テーマ",
+      "RESOURCE": "教材"
+    }
   },
   "dict": {
     "mediaType": {

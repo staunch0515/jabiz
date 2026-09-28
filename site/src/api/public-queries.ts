@@ -10,6 +10,43 @@ export type FileId = string
 
 /** The public templates: parameters (p.<name>), rows, outer filters and sorts. */
 export interface PublicQueries {
+  /** The photographs and videos of the people from a place, each with its published story (map) */
+  "culture.public.location_media": {
+    params: {
+      location: string
+    }
+    row: {
+      alt: LocalizedText | null
+      displayName: string | null
+      imageFileId: FileId | null
+      itemId: string | null
+      kind: string | null
+      participantSlug: string | null
+      storyDate: string | null
+      storySlug: string | null
+      storyTitle: LocalizedText | null
+      videoId: string | null
+      videoProvider: "YOUTUBE" | "VIMEO" | null
+    }
+    filters: "kind"
+    sorts: "storyDate" | "itemId"
+  }
+  /** The themes of the published stories in which someone from a place has a perspective (map) */
+  "culture.public.location_themes": {
+    params: {
+      location: string
+    }
+    row: {
+      icon: string | null
+      slug: string | null
+      sortOrder: number | null
+      storyCount: number | null
+      themeId: string | null
+      title: LocalizedText | null
+    }
+    filters: never
+    sorts: "sortOrder" | "storyCount"
+  }
   /** Places with how many participants and published stories each has (map, filters) */
   "culture.public.locations": {
     params: Record<string, never>
@@ -389,6 +426,8 @@ export interface QueryPage<Q extends PublicQueryId> {
 
 /** How long responses may be cached (seconds), per template. */
 export const cacheSeconds: Record<PublicQueryId, number> = {
+  "culture.public.location_media": 60,
+  "culture.public.location_themes": 60,
   "culture.public.locations": 60,
   "culture.public.people": 60,
   "culture.public.person": 60,

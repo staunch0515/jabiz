@@ -15,7 +15,9 @@
     "stories": "故事",
     "method": "我们的方法",
     "resources": "教学资源",
-    "about": "关于"
+    "about": "关于",
+    "map": "地图",
+    "search": "搜索"
   },
   "common": {
     "loading": "加载中…",
@@ -142,6 +144,40 @@
     "title": "关于",
     "project": "关于项目",
     "privacy": "隐私"
+  },
+  "map": {
+    "title": "地图",
+    "intro": "通讯员们在哪里。地图只是一个入口：故事属于人，而不属于国家。",
+    "markers": "地图上的地点",
+    "list": "地点",
+    "choose": "在地图或列表中选一个地点，看看那里有谁、他们分享了什么。",
+    "summary": "{{place}}：{{people}}，{{stories}}",
+    "people": "人",
+    "themes": "主题",
+    "stories": "故事",
+    "videos": "视频",
+    "photos": "照片",
+    "allStories": "有{{place}}的人参与的全部故事",
+    "nothing": "这里还没有发布的内容。",
+    "by": "{{name}}",
+    "seeMap": "在地图上看看大家在哪里",
+    "notOnMap": "不在地图上",
+    "show": "查看{{place}}"
+  },
+  "search": {
+    "title": "搜索",
+    "intro": "用任何一种语言搜索故事、人、主题和资源。",
+    "label": "要搜索的词",
+    "submit": "搜索",
+    "results_other": "“{{q}}”有 {{count}} 条结果",
+    "none": "还没有与“{{q}}”相关的内容。换个词试试，或者浏览全部故事。",
+    "tooShort": "请至少输入 2 个字符。",
+    "kind": {
+      "STORY": "故事",
+      "PERSON": "人",
+      "THEME": "主题",
+      "RESOURCE": "资源"
+    }
   },
   "dict": {
     "mediaType": {

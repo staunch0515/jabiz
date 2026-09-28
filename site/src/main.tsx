@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
+import { preloadMarkdown } from './components/markdownLoader'
 import { routes } from './routes'
 import './i18n'
 import './styles/global.css'
@@ -20,3 +21,7 @@ createRoot(document.getElementById('site')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// Once the first screen is up: the renderer of the editors' texts, which most pages need.
+if ('requestIdleCallback' in window) requestIdleCallback(preloadMarkdown)
+else setTimeout(preloadMarkdown, 200)
