@@ -21,8 +21,15 @@ Two rules come before everything else, because most participants are under 18:
    - the two switches (section 8).
 
    Running it again changes nothing.
-3. Create an account for every curator and correspondent (**Processes → USER_CREATE**), then give them their role in
-   **SecUserRole**.
+3. Create an account for every curator and correspondent, in two steps (administrator):
+   1. **Processes → SEC_USER_CREATE** (`/admin/processes/SEC_USER_CREATE/1`): **userName** is the pseudonym
+      (e.g. `cu-jp-01`), **password** an initial password you pass on privately (they cannot change it themselves yet:
+      the administrator resets it with **SEC_USER_SET_PASSWORD**). Leave **tenantId** empty.
+   2. **Datasets → SecUserRole** (`urn:jabiz:dataset:platform:SecUserRole`, under `/admin/data`): add a row with the
+      new user and the role **CURATOR** or **CORRESPONDENT**. Without a role the account cannot sign in.
+
+   A user locked after too many wrong passwords is unlocked with **SEC_USER_UNLOCK**; a user who leaves is disabled
+   (`enabled` off in **SecUser**), never deleted.
 
 **Account names are pseudonyms**, for example `cu-jp-01` for the first correspondent in Japan. The name of an account
 stays forever in the records of who did what, which cannot be deleted, so it must never be a real name. The same
