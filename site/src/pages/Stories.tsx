@@ -59,18 +59,26 @@ export function Stories() {
         <h1>{t('stories.title')}</h1>
         <p className="intro">{t('stories.intro')}</p>
       </div>
-      <FilterBar
-        label={t('stories.filters')}
-        groups={groups}
-        selected={selected}
-        onChange={(name, values) => setSearch(writeFilter(search, name, values), { replace: true, preventScrollReset: true })}
-        onClear={() => setSearch(clearFilters(search, NAMES), { replace: true, preventScrollReset: true })}
-        status={count === undefined ? '' : t('stories.results', { count })}
+      {/* The filters show with all their choices at once, so that the list below does not move as they arrive. */}
+      {places.isLoading || themes.isLoading ? <QueryState loading error={null} /> : null}
+      {places.isLoading || themes.isLoading ? null : (
+        <FilterBar
+          label={t('stories.filters')}
+          groups={groups}
+          selected={selected}
+          onChange={(name, values) => setSearch(writeFilter(search, name, values), { replace: true, preventScrollReset: true })}
+          onClear={() => setSearch(clearFilters(search, NAMES), { replace: true, preventScrollReset: true })}
+          status={count === undefined ? '' : t('stories.results', { count })}
+        />
+      )}
+      <QueryState
+        loading={stories.isLoading && !places.isLoading && !themes.isLoading}
+        error={stories.error}
+        onRetry={() => void stories.refetch()}
       />
-      <QueryState loading={stories.isLoading} error={stories.error} onRetry={() => void stories.refetch()} />
-      {count === 0 ? <p>{t('stories.none')}</p> : null}
+      {count === 0 && !places.isLoading && !themes.isLoading ? <p>{t('stories.none')}</p> : null}
       <ul className={cards.grid3}>
-        {(stories.data ?? []).map((story) => (
+        {(places.isLoading || themes.isLoading ? [] : (stories.data ?? [])).map((story) => (
           <li key={story.slug}>
             <StoryCard story={story} headingLevel={2} />
           </li>

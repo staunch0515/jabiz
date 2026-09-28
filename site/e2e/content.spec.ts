@@ -77,6 +77,48 @@ test('the resource lists the new story', async ({ page }) => {
   await expect(page.getByRole('link', { name: w.storyTitle })).toBeVisible()
 })
 
+test('the new place is on the map; its panel has the person, theme, story, video and photograph', async ({ page }) => {
+  await page.goto('/en/people')
+  await page.getByRole('link', { name: 'See where everyone is on the map' }).click()
+  await expect(page).toHaveURL('/en/map')
+  await settled(page)
+  const marker = page.getByRole('list', { name: 'Places on the map' }).getByRole('button', { name: `${w.placeName}: 1 person, 1 story` })
+  await marker.click()
+  await expect(page).toHaveURL(`/en/map?place=${w.place}`)
+  await expect(marker).toHaveAttribute('aria-pressed', 'true')
+  const panel = page.getByRole('complementary', { name: `${w.placeName}: 1 person, 1 story` })
+  await expect(panel.getByRole('heading', { level: 2 })).toContainText(w.placeName)
+  await expect(panel.getByRole('link', { name: w.personName, exact: true })).toHaveAttribute('href', `/en/people/${w.person}`)
+  await expect(panel.getByRole('link', { name: w.themeTitle })).toHaveAttribute('href', `/en/themes/${w.theme}`)
+  await expect(panel.getByRole('region', { name: 'Stories' }).getByRole('link', { name: w.storyTitle, exact: true })).toHaveAttribute(
+    'href',
+    `/en/stories/${w.story}`,
+  )
+  // The story's own video and the video of the perspective.
+  await expect(panel.getByRole('region', { name: 'Videos' }).getByRole('link')).toHaveCount(2)
+  await expect(panel.getByRole('region', { name: 'Photographs' }).getByRole('img', { name: w.photoAlt })).toBeVisible()
+  // The list offers the same place, with the same numbers.
+  const listed = page.getByRole('button', { name: new RegExp(`${w.placeName}.*1 person · 1 story`) })
+  await expect(listed).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('search finds the new story, person, theme and resource, in any language of the site', async ({ page }) => {
+  await page.goto('/en/')
+  await page.getByRole('link', { name: 'Search' }).first().click()
+  await expect(page).toHaveURL('/en/search')
+  const tag = w.story.replace(/-story$/, '')
+  await page.getByRole('searchbox', { name: 'Words to search for' }).fill(tag)
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(`/en/search?q=${tag}`)
+  await expect(page.getByRole('status').filter({ hasText: 'results for' })).toBeVisible()
+  await expect(page.getByRole('link', { name: w.storyTitle })).toHaveAttribute('href', `/en/stories/${w.story}`)
+  await expect(page.getByRole('link', { name: w.themeTitle })).toHaveAttribute('href', `/en/themes/${w.theme}`)
+  await expect(page.getByRole('link', { name: w.resourceTitle })).toHaveAttribute('href', `/en/resources/${w.resource}`)
+  // A participant's name, and the place's Japanese name through the Japanese interface.
+  await page.goto(`/ja/search?q=${encodeURIComponent(w.personName)}`)
+  await expect(page.getByRole('link', { name: w.personName })).toHaveAttribute('href', `/ja/people/${w.person}`)
+})
+
 test('content without a translation falls back to English, marked as English', async ({ page }) => {
   for (const locale of LOCALES) {
     await page.goto(`/${locale}/stories/${w.story}`)

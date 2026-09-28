@@ -139,6 +139,70 @@ class PublicTemplatesIT extends PublicItSupport {
     }
 
     @Test
+    void theMapShowsTheThemesPhotographsAndVideosOfThePeopleOfAPlace() {
+        String place = location(unique("sweden"), en("Sweden"), 4);
+        String elsewhere = location(unique("poland"), en("Poland"), 5);
+        String food = theme(unique("food"), en("Food"), en("What do we eat together?"));
+        String hidden = theme(unique("hidden-theme"), en("Hidden"), en("Is it there?"));
+        String school = theme(unique("school"), en("School"), en("What do we learn?"));
+        String elsa = person(place, "Elsa", en("Interested in bread."));
+        String ola = person(elsewhere, "Ola", en("Interested in soup."));
+
+        String story = story(Map.of("mediaType", "VIDEO", "videoProvider", "VIMEO", "videoId", "76979871",
+            "captionsConfirmed", true), List.of(food, hidden), List.of());
+        Map<String, Object> mine = contribution(story, elsa);
+        mine.putAll(Map.of("videoProvider", "YOUTUBE", "videoId", "dQw4w9WgXcQ", "captionsConfirmed", true));
+        String elsasPerspective = create(dataset(CONTRIBUTION), curator(), mine);
+        String olasPerspective = create(dataset(CONTRIBUTION), curator(), contribution(story, ola));
+        String elsasPhoto = create(dataset(MEDIA_ITEM), curator(), Map.of("storyId", story, "kind", PHOTO,
+            "contributionId", elsasPerspective, "imageFileId", photo(curator()), "alt", en("Bread on a board")));
+        create(dataset(MEDIA_ITEM), curator(), Map.of("storyId", story, "kind", PHOTO,
+            "contributionId", olasPerspective, "imageFileId", photo(curator()), "alt", en("Soup")));
+        create(dataset(MEDIA_ITEM), curator(), Map.of("storyId", story, "kind", PHOTO,
+            "imageFileId", photo(curator()), "alt", en("The table")));
+        ok(PUBLISH, curator(), Map.of("storyId", story));
+        story(Map.of(), List.of(school), List.of(elsa)); // a draft: none of it is on the map
+        commit(dataset(THEME), curator(), update(hidden, version(dataset(THEME), hidden),
+            Map.of("visible", false))).expectStatus().isOk();
+
+        String placeSlug = slug(LOCATION, place);
+        String storySlug = slug(STORY, story);
+        assertThat(column("slug", "culture.public.location_themes", "p.location", placeSlug))
+            .containsExactly(slug(THEME, food));
+        assertThat(only("culture.public.location_themes", "p.location", placeSlug)).containsEntry("storyCount", 1);
+
+        // Her photograph and video, and the story's own video (someone from the place is in it); not the story's
+        // own photograph nor the photograph of someone from elsewhere.
+        List<Map<String, Object>> media = publicItems("culture.public.location_media", "p.location", placeSlug);
+        assertThat(media).extracting(row -> row.get("itemId"))
+            .containsExactlyInAnyOrder(elsasPhoto, elsasPerspective, story);
+        Map<String, Object> photo = media.stream().filter(row -> elsasPhoto.equals(row.get("itemId"))).findFirst()
+            .orElseThrow();
+        assertThat(photo).containsEntry("kind", "PHOTO").containsEntry("alt", en("Bread on a board"))
+            .containsEntry("storySlug", storySlug).containsEntry("participantSlug", slug(PARTICIPANT, elsa))
+            .containsEntry("videoId", null);
+        Map<String, Object> video = media.stream().filter(row -> elsasPerspective.equals(row.get("itemId")))
+            .findFirst().orElseThrow();
+        assertThat(video).containsEntry("kind", "VIDEO").containsEntry("videoProvider", "YOUTUBE")
+            .containsEntry("videoId", "dQw4w9WgXcQ").containsEntry("alt", en("A kitchen table set for dinner"))
+            .containsEntry("displayName", "Elsa");
+        assertThat(column("itemId", "culture.public.location_media", "p.location", placeSlug, "filter",
+            "kind:eq:VIDEO")).containsExactlyInAnyOrder(elsasPerspective, story);
+
+        // Once she is hidden, what she made leaves the map; the story's own video goes with her perspective.
+        ok("CULTURE_PARTICIPANT_HIDE", curator(), Map.of("participantId", elsa));
+        assertThat(publicItems("culture.public.location_media", "p.location", placeSlug)).isEmpty();
+        assertThat(publicItems("culture.public.location_themes", "p.location", placeSlug)).isEmpty();
+        // A hidden place has no panel.
+        String olaSlug = slug(LOCATION, elsewhere);
+        assertThat(publicItems("culture.public.location_media", "p.location", olaSlug)).hasSize(2);
+        commit(dataset(LOCATION), curator(), update(elsewhere, version(dataset(LOCATION), elsewhere),
+            Map.of("visible", false))).expectStatus().isOk();
+        assertThat(publicItems("culture.public.location_media", "p.location", olaSlug)).isEmpty();
+        assertThat(publicItems("culture.public.location_themes", "p.location", olaSlug)).isEmpty();
+    }
+
+    @Test
     void searchFindsWordsOfAnyLanguageAndTakesWildcardsLiterally() {
         String token = unique("w").replace("-", "");
         String theme = theme(unique("kitchen"), en("Kitchens " + token), en("Who cooks at home?"));

@@ -52,11 +52,11 @@ services:
       # The public site reads published content anonymously (docs/culture/00-design.md section 7).
       JABIZ_PUBLIC_ENABLED: "true"
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-      # Telemetry is sent only with the observability profile (docs/design/13-observability-ops.md).
-      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: ${OTLP_TRACES:-}
-      MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT: ${OTLP_LOGS:-}
-      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${OTLP_METRICS_ENABLED:-false}
-      MANAGEMENT_OTLP_METRICS_EXPORT_URL: ${OTLP_METRICS:-http://lgtm:4318/v1/metrics}
+      # Telemetry is sent only when .env says where (docs/design/13-observability-ops.md), with the observability
+      # profile: MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://lgtm:4318/v1/traces,
+      # MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT=http://lgtm:4318/v1/logs,
+      # MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=true and MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://lgtm:4318/v1/metrics
+      # (docs/culture/operations.md). Not set here: an empty endpoint stops the application at start.
     volumes: [culture-secrets:/var/lib/jabiz/secrets, culture-files:/var/lib/jabiz/files]
 
   edge:

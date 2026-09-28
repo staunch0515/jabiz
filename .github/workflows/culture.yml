@@ -92,6 +92,16 @@ jobs:
         working-directory: site
       - run: pnpm e2e
         working-directory: site
+      # Lighthouse's mobile preset on the pages the end-to-end tests just filled with content (docs/culture/ROADMAP.md,
+      # C4): LCP of the home pages under 2.5 s and accessibility 100 on every page measured.
+      - run: pnpm lighthouse
+        working-directory: site
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: culture-lighthouse
+          path: site/lighthouse/
+          retention-days: 14
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -101,3 +111,14 @@ jobs:
             site/test-results/
             culture.log
           retention-days: 7
+
+  # The restore drill (docs/culture/ROADMAP.md, C4): the compose deployment of deploy/culture, built from source, gets
+  # published content and files, is backed up with tools/culture/backup.sh, loses all its volumes, is restored with
+  # tools/culture/restore.sh and must serve the same pages and file bytes, sign the administrator in and take uploads.
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/culture/test/lib.test.sh
+      - run: tools/culture/test/backup-restore.test.sh

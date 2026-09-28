@@ -49,6 +49,35 @@ test('keyboard only, home to a playing video, with no third-party request before
   expect(thirdParty.every((u) => u.startsWith('https://www.youtube-nocookie.com/'))).toBe(true)
 })
 
+/** The map works with the keyboard alone (docs/culture/ROADMAP.md, C4): choose a place, then go to one of its people. */
+test('keyboard only on the map: a place, its panel, one of its people', async ({ page }) => {
+  await page.goto('/en/map')
+  await settled(page)
+  const marker = page.getByRole('list', { name: 'Places on the map' }).getByRole('button', { name: `${w.placeName}: 1 person, 1 story` })
+  await tabTo(page, marker, 400)
+  await expect(marker).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(marker).toHaveAttribute('aria-pressed', 'true')
+  await expect(page).toHaveURL(`/en/map?place=${w.place}`)
+  await expect(page.getByRole('status').filter({ hasText: `${w.placeName}: 1 person, 1 story` })).toHaveCount(1)
+  const person = page.getByRole('complementary').getByRole('link', { name: w.personName, exact: true })
+  await tabTo(page, person, 400)
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(`/en/people/${w.person}`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(w.personName)
+})
+
+test('on a phone the list is the way in: choosing a place takes the focus to it', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 740 })
+  await page.goto('/en/map')
+  await settled(page)
+  await expect(page.getByRole('list', { name: 'Places on the map' })).toBeHidden()
+  const listed = page.getByRole('button', { name: new RegExp(w.placeName) })
+  await tabTo(page, listed, 400)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('complementary').getByRole('heading', { level: 2 })).toBeFocused()
+})
+
 test('the site sets no cookies and stores nothing', async ({ page, context }) => {
   await page.goto(`/en/stories/${w.story}`)
   await settled(page)

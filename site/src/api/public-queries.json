@@ -1,6 +1,150 @@
 {
   "queries" : [ {
     "cacheSeconds" : 60,
+    "description" : "The photographs and videos of the people from a place, each with its published story (map)",
+    "id" : "culture.public.location_media",
+    "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "storyDate"
+      },
+      "filters" : [ "kind" ],
+      "sorts" : [ "storyDate", "itemId" ]
+    },
+    "params" : {
+      "location" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "alt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "displayName" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "imageFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "itemId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:media-item"
+      },
+      "kind" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "participantSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyDate" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "storySlug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyTitle" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "videoId" : {
+        "maxLength" : 32,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "videoProvider" : {
+        "allowedValues" : [ "YOUTUBE", "VIMEO" ],
+        "dictUrn" : "urn:jabiz:dict:culture:video-provider",
+        "type" : "code"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The themes of the published stories in which someone from a place has a perspective (map)",
+    "id" : "culture.public.location_themes",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ ],
+      "sorts" : [ "sortOrder", "storyCount" ]
+    },
+    "params" : {
+      "location" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "icon" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "storyCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "themeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:theme"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 60,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
     "description" : "Places with how many participants and published stories each has (map, filters)",
     "id" : "culture.public.locations",
     "list" : {

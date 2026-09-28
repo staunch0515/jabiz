@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import { Navigate, Outlet, useParams } from 'react-router'
 import { Layout } from '../components/Layout'
+import { QueryState } from '../components/QueryState'
 import { LocaleContext } from '../i18n/locale'
 import { isLocale, preferredLocale } from '../lib/localized'
 import { NotFound } from './NotFound'
@@ -15,7 +17,22 @@ export function Localized() {
   const known = isLocale(lang)
   return (
     <LocaleContext.Provider value={known ? lang : 'en'}>
-      <Layout>{known ? <Outlet /> : <NotFound />}</Layout>
+      <Layout>
+        {known ? (
+          // A page opened for the first time is loaded first (routes.tsx).
+          <Suspense
+            fallback={
+              <div className="wrap page-head">
+                <QueryState loading error={null} />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
+        ) : (
+          <NotFound />
+        )}
+      </Layout>
     </LocaleContext.Provider>
   )
 }

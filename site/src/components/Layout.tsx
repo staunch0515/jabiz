@@ -113,6 +113,13 @@ export function Layout({ children }: { children?: ReactNode }) {
                 ))}
               </ul>
             </nav>
+            <NavLink className={styles.search} to={path(locale, 'search')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M15.5 15.5L21 21" />
+              </svg>
+              <span className={styles.searchText}>{t('nav.search')}</span>
+            </NavLink>
             <ul className={styles.languages} aria-label={t('site.language')}>
               {LOCALES.map((l) => (
                 <li key={l}>
@@ -143,7 +150,7 @@ export function Layout({ children }: { children?: ReactNode }) {
           </div>
           <nav aria-label={t('site.footerNav')}>
             <ul>
-              {(['method', 'resources', 'about'] as const).map((section) => (
+              {(['map', 'search', 'method', 'resources', 'about'] as const).map((section) => (
                 <li key={section}>
                   <Link to={path(locale, section)}>{t(`nav.${section}`)}</Link>
                 </li>

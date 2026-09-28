@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
+import { preloadMarkdown } from './components/markdownLoader'
 import { routes } from './routes'
 import './i18n'
 import './styles/global.css'
@@ -20,3 +21,7 @@ createRoot(document.getElementById('site')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// The renderer of the editors' texts, which most pages need: fetched a little after the page has loaded, so that it
+// does not take bandwidth from what the first screen is waiting for (its data, its fonts and images).
+window.addEventListener('load', () => setTimeout(preloadMarkdown, 1500), { once: true })

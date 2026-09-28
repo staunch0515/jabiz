@@ -183,6 +183,11 @@ deleted; the name was a pseudonym anyway).
 If a file of theirs is also used elsewhere (say their portrait was reused as a story thumbnail), erasure stops with
 `FILE_IN_USE` and nothing is deleted. Replace the other use, then run **Erase** again.
 
+**Keep a register of withdrawals and erasures**, outside the system (a spreadsheet the project lead keeps): the date,
+the participant's pseudonymous account or record id, and what was done. Backups are kept for 30 days; if the system is
+ever restored from one, everything withdrawn or erased after that backup comes back, and the register is how the
+administrator does it again (`docs/culture/operations.md`, section 5). Do not write real names in it.
+
 Consent records are ended with **Withdraw**, never by deleting them. Deleting a record in the list does not take
 anything offline.
 

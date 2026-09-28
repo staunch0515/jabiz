@@ -1,10 +1,11 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { renderIn } from '../test/render'
 import { FilterBar } from './FilterBar'
 import { LocalizedText } from './LocalizedText'
 import { Markdown } from './Markdown'
+import { loadMarkdown } from './markdownLoader'
 import { ReflectionBlock } from './ReflectionBlock'
 import { ResponsiveImage } from './ResponsiveImage'
 import { VideoEmbed } from './VideoEmbed'
@@ -29,6 +30,11 @@ describe('LocalizedText', () => {
 })
 
 describe('Markdown (design section 9.3)', () => {
+  // The renderer is a chunk of its own; the first import of it (and of react-markdown) is slow in the test runner.
+  beforeAll(async () => {
+    await loadMarkdown()
+  })
+
   it('never renders raw HTML', async () => {
     const { container } = renderIn(
       <Markdown value={{ en: 'Hello <script>alert(1)</script><img src=x onerror=alert(1)> <b>bold</b> world' }} />,

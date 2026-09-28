@@ -15,7 +15,9 @@
     "stories": "Stories",
     "method": "Our method",
     "resources": "Resources",
-    "about": "About"
+    "about": "About",
+    "map": "Map",
+    "search": "Search"
   },
   "common": {
     "loading": "Loading…",
@@ -25,7 +27,10 @@
     "notFoundTitle": "We could not find this page",
     "notFoundBody": "It may have moved, or it is not published any more.",
     "backHome": "Back to the home page",
-    "all": "All"
+    "all": "All",
+    "pageErrorTitle": "We could not show this page",
+    "pageErrorBody": "Part of the site did not load, perhaps because the connection dropped or the site was just updated. Reloading usually fixes it.",
+    "reload": "Reload the page"
   },
   "count": {
     "stories_one": "{{count}} story",
@@ -149,6 +154,44 @@
     "title": "About",
     "project": "The project",
     "privacy": "Privacy"
+  },
+  "map": {
+    "title": "Map",
+    "intro": "Where the correspondents are. The map is one way in: the stories belong to people, not to countries.",
+    "markers": "Places on the map",
+    "list": "Places",
+    "choose": "Choose a place on the map or in the list to see who is there and what they have shared.",
+    "summary": "{{place}}: {{people}}, {{stories}}",
+    "people": "People",
+    "themes": "Themes",
+    "stories": "Stories",
+    "videos": "Videos",
+    "photos": "Photographs",
+    "allStories": "All stories with someone from {{place}}",
+    "nothing": "Nothing from here is published yet.",
+    "by": "by {{name}}",
+    "seeMap": "See where everyone is on the map",
+    "notOnMap": "Not on the map",
+    "show": "Show {{place}}"
+  },
+  "search": {
+    "title": "Search",
+    "intro": "Search the stories, people, themes and resources, in any of our languages.",
+    "label": "Words to search for",
+    "submit": "Search",
+    "results_one": "{{count}} result for “{{q}}”",
+    "results_other": "{{count}} results for “{{q}}”",
+    "none": "Nothing matches “{{q}}” yet. Try other words, or browse the stories.",
+    "tooShort": "Type at least 2 characters.",
+    "kind": {
+      "STORY": "Stories",
+      "PERSON": "People",
+      "THEME": "Themes",
+      "RESOURCE": "Resources"
+    },
+    "tooLong": "Use at most {{count}} characters.",
+    "many_one": "More than {{count}} result for “{{q}}”: add a word to narrow them down.",
+    "many_other": "More than {{count}} results for “{{q}}”: add a word to narrow them down."
   },
   "dict": {
     "mediaType": {
