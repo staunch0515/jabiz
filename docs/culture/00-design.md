@@ -363,6 +363,7 @@ Resource:     DRAFT ⇄ PUBLISHED
 | `culture.public.story` / `story_themes` / `story_perspectives` / `story_media` | `slug` | 故事页 |
 | `culture.public.resources` | `activityType`、`ageGroup`（列表） | RESOURCES |
 | `culture.public.resource` / `resource_stories` | `slug` | 资源页 |
+| `culture.public.location_themes` / `location_media` | `location` | 地图上一个地点的侧栏：该地点的人参与的已发布故事的主题（附故事数）；该地点的人的照片与视频（`kind` = `PHOTO` `VIDEO`，各带所属故事；视频含视角的视频与"有该地点的人参与"的故事自己的视频，封面为故事缩略图）（C4） |
 | `culture.public.search` | `q` | 搜索：故事、参与者、主题、资源的统一结果（`kind` = `STORY` `PERSON` `THEME` `RESOURCE`、`slug`、`title` 或人名 `name`、`summary`、`imageFileId`） |
 
 - 筛选"国家"= 故事中有来自该地点参与者的视角（`EXISTS`），不是故事的属性——这正是"故事属于人，不属于国家"。
@@ -445,13 +446,17 @@ Resource:     DRAFT ⇄ PUBLISHED
 - 数据只来自 `/api/public/**`，类型由公开模板目录快照生成；不登录、不存令牌、不设 Cookie、不接第三方统计（以后需要统计时选不设 Cookie、不采集个人数据的方案，另行决定）。
 - 页面标题与描述用 React 19 的文档元数据（`<title>`、`<meta>`）按页设置。
 - 内容安全策略（17 §3.2）：`default-src 'self'; img-src 'self' data:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'`。
-- 性能目标（C4 以 Lighthouse 测量）：移动端首页 LCP < 2.5 s，首屏 JS < 200 KB（gzip）。
+- 性能目标（C4 以 Lighthouse 测量）：移动端首页 LCP < 2.5 s，首屏 JS < 200 KB（gzip）。除首页外的页面与 Markdown 渲染器按需加载；
+  每次构建检查首屏 JS；CI 以 Lighthouse 检查 LCP 与无障碍（记录与方法见 `operations.md` §7）。
 
 ### 9.5 地图（简报 §13）
 
 - 世界轮廓来自打包的 `world-atlas`（110m），用 `d3-geo` 在 SVG 中绘制；**不加载第三方地图瓦片**（没有外部请求，也不需要地图服务密钥）。
 - 每个可见地点一个标记（按钮），键盘可达，名称为"地点名：N 位参与者，M 个故事"；点击后在侧栏显示该地点的参与者、故事、主题、视频与照片。
 - 地图旁始终有同样内容的**地点列表**（无障碍替代与移动端的主要形式）。
+- 实现（C4）：只画陆地轮廓（`land-110m`），不画国界；视野取各地点的范围加边距（至少一个区域大小）；相距太近的标记被推开到屏幕上
+  相距 ≥ 46 px（按钮 44 px），以细线连回原位；手机宽度（≤ 640 px）下标记不可按，地点列表是入口。选中的地点在地址中（`?place=`），
+  以 `role="status"` 播报；从列表选中时焦点移到侧栏，从地图选中时焦点留在地图上。
 
 ### 9.6 无障碍（简报 §18，目标 WCAG 2.2 AA）
 
@@ -477,7 +482,8 @@ Resource:     DRAFT ⇄ PUBLISHED
 - `deploy/culture/docker-compose.yml`：`db`（PostgreSQL 16，数据卷）、`culture`（jar；文件卷 `/var/lib/jabiz/files`；
   `JABIZ_PUBLIC_ENABLED=true`；首次启动的密钥生成与 D16 第 4 条相同）；可选 profile `edge`（反向代理与自动 TLS）与 `observability`（LGTM）。
 - 生产所需环境变量：`JABIZ_JWT_SECRET`、首个管理员、数据库连接、`SERVER_FORWARD_HEADERS_STRATEGY`（在反向代理后）。
-- 备份：每日 `pg_dump` + 文件卷同步，并在 C4 中实际演练一次恢复。**两者必须同时备份**（文件行与对象要一致）。
+- 备份：每日 `pg_dump` + 文件卷归档（`tools/culture/backup.sh`，先数据库后文件），保留 30 天；恢复 `tools/culture/restore.sh`；
+  演练脚本在 CI 中每次运行。**两者必须同时备份**（文件行与对象要一致）。见 `operations.md`。
 - 规模：一台 2 vCPU / 4 GB 的虚拟机足够（内容量为数百个故事，访问以缓存的公开读取为主）。
 
 ## 11. 需求对照
@@ -557,3 +563,15 @@ Resource:     DRAFT ⇄ PUBLISHED
 4. 视角的视频没有自己的缩略图：播放前的封面用所属故事的缩略图，没有时用参与者头像，再没有时只显示播放按钮。
 5. 地图（`/:lang/map`）与搜索页（`/:lang/search`）在 C4 实现；C3 中页头没有搜索按钮，页脚没有地图链接，首页的地点列表链接到按地点筛选的故事库。
 6. 首页的精选故事：没有标为精选的故事时显示最新的三个。关于页只有项目与隐私两块文案（没有联系方式的文案块，需要时由编辑新增文案块并改页面）。
+
+## 17. C4 中的调整（计划确认时一并确认）
+
+1. 地图侧栏的两个公开模板 `location_themes`、`location_media`（§7.2）：简报 §13 要求点击地点后显示主题、视频与照片，已有模板没有按地点的这些数据。
+   两者遵守 §7.1 的连带（隐藏的地点、参与者、主题都不出现），属性测试覆盖。
+2. 地图只画陆地、不画国界（§9.5），不对有争议的边界表态，也与"国家不是主角"一致。
+3. 首屏（§9.4）：页面与 Markdown 渲染器按需加载，构建检查首屏 JS ≤ 200 KB；应用对静态资源压缩传输（不压缩 JSON）；
+   首页标题立即绘制（未取到文案块时用迁移预置的标题），其余部分到齐后一起出现，故事库筛选与地图页同样整体出现（避免布局偏移）。
+   为此桌面版首页的标题与拼贴改为顶端对齐（原型中垂直居中）。
+4. 搜索入口在页头（放大镜）与页脚，地图入口在 PEOPLE 页与页脚（不在主导航，§9.1）。
+5. 备份保留 30 天；恢复会带回备份之后被撤回、抹除的个人数据，因此编辑在系统之外登记撤回与抹除，恢复后重做（`operations.md` §5、编辑指南 §7）。
+6. 恢复演练发现 `deploy/culture` 的 compose 以空值设置 OTLP 端点，应用无法启动；改为只在 `.env` 中设置（`operations.md` §8）。

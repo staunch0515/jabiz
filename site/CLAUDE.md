@@ -24,6 +24,16 @@ Culture, Unfiltered 的公开网站（`site/`，挂在 `/`）。根目录 `CLAUD
 - `VideoEmbed`：点击前只显示我们自己的封面，不向视频站发任何请求；地址只由 `src/lib/video.ts` 按白名单拼出。
 - `ResponsiveImage`：固定比例的框 + 变体 `w320/w640/w1280`，加载失败回退原件；`alt` 必填，装饰图写 `alt=""`。
 - 筛选状态写在地址的查询串里（`src/lib/filters.ts`），结果数以 `role="status"` 播报。
+- 地图（`src/pages/Map.tsx`、`src/lib/map.ts`）：只画打包的陆地轮廓，不请求任何地图服务；每个地点是一个按钮，标记在屏幕上相距 ≥ 46 px；
+  地点列表提供同样的内容（侧栏），手机宽度下是唯一的入口。选中的地点与搜索的词都在地址中（`?place=`、`?q=`）。
+
+## 2a. 首屏（设计 §9.4，`docs/culture/operations.md` §7）
+
+- 首屏 JS ≤ 200 KB（gzip）：每次 `vite build` 由 `scripts/check-bundle.mjs` 检查，超出即构建失败。首页以外的页面在 `src/routes.tsx` 中按需加载；
+  Markdown 渲染器（`MarkdownContent`）也是，加载完成后预取。新的大依赖只在需要它的页面里引用。
+- 不让内容一块块出现、把下面的内容往下推（布局偏移）：第一屏的各部分在数据到齐后一起出现（首页、故事库的筛选、地图页），
+  首页标题立即绘制（它是 LCP 元素，不要让它等数据，也不要在数据到达时换掉这个元素）。
+- `pnpm lighthouse`（对运行中的应用，`E2E_BASE_URL`）：首页 LCP ≥ 2.5 s 或任一页无障碍 < 100 即失败；CI 的 `e2e` 作业在端到端测试后运行。
 
 ## 3. 无障碍（设计 §9.6，验收项）
 
@@ -42,7 +52,8 @@ Culture, Unfiltered 的公开网站（`site/`，挂在 `/`）。根目录 `CLAUD
 
 ## 5. 命令（在 `site/` 下）
 
-- `pnpm dev`（5173，`/api` 代理到 8080）；`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest + 生成脚本的测试）、`pnpm build`；`pnpm check:api`。
+- `pnpm dev`（5173，`/api` 代理到 8080）；`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest + 脚本的测试）、`pnpm build`（含首屏 JS 检查）；
+  `pnpm check:api`；`pnpm lighthouse`（见 §2a）。
 - 端到端：先运行打包的应用（`./gradlew :culture:bootJar`，以 `JABIZ_PUBLIC_ENABLED=true`、`JABIZ_JWT_SECRET`、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、
   `JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量启动），再 `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认
   `http://localhost:8080`）。测试经后台接口新增各自独有的内容，只增不删，可对同一数据库重复运行；CI 的 `e2e` 作业（`.github/workflows/culture.yml`）即如此。

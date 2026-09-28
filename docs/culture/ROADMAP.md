@@ -10,7 +10,7 @@ PR 逐条对照本文件的验收标准。平台能力来自 `platform` 分支�
 | C1 | 内容模型、工作流与后台 | 13a、13b、13d、13e | 4–5 天 | ☑ 已完成 |
 | C2 | 公开接口 | 13c | 3–4 天 | ☑ 已完成 |
 | C3 | 公开网站 | — | 8–10 天 | ☑ 已完成（PR 待合并，分支 `culture-3-site`；与原型一致待人工确认） |
-| C4 | 地图、搜索与上线准备 | — | 3–4 天 | ☐ 未开始 |
+| C4 | 地图、搜索与上线准备 | — | 3–4 天 | ☑ 已完成（PR 待合并，分支 `culture-4-launch`） |
 
 平台阶段 13 与 C1–C4 合计约 35–45 天。13c 与 C1 可以并行；C3 的视觉原型可以在 C1 期间先做。
 
@@ -76,6 +76,12 @@ PR 逐条对照本文件的验收标准。平台能力来自 `platform` 分支�
 2. Lighthouse 测量与优化；备份与恢复演练；部署文档（`docs/culture/operations.md`）。
 
 **验收标准**
-- [ ] 地图可键盘操作，地点列表提供相同内容。
-- [ ] 移动端首页 LCP < 2.5 s、首屏 JS < 200 KB（gzip），Lighthouse 无障碍 100（记录在 `docs/culture/operations.md`）。
-- [ ] 从备份恢复出一套可用的系统（数据库 + 文件），步骤写入运维文档。
+- [x] 地图可键盘操作，地点列表提供相同内容（`map-search.test.tsx`；端到端 `interaction.spec.ts`、`content.spec.ts`；axe 覆盖地图与搜索页）。
+- [x] 移动端首页 LCP < 2.5 s、首屏 JS < 200 KB（gzip），Lighthouse 无障碍 100（记录在 `docs/culture/operations.md` §7；
+  构建检查首屏 JS，CI 的 `e2e` 作业运行 Lighthouse）。
+- [x] 从备份恢复出一套可用的系统（数据库 + 文件），步骤写入运维文档（`operations.md` §4–§6；演练脚本 `tools/culture/test/backup-restore.test.sh`，
+  CI 作业 `restore-drill`）。
+
+说明：计划确认的调整见设计 §17：地图侧栏的两个公开模板（`location_themes`、`location_media`）、只画陆地、首屏的按需加载与
+无布局偏移（桌面版首页标题改为顶端对齐）、静态资源压缩、备份保留 30 天与撤回 / 抹除登记。恢复演练发现并修正了 compose 部署
+无法启动的问题（空的 OTLP 端点）。首页 LCP 1.85–2.09 s、首屏 JS 136.6 KB、各页无障碍 100。

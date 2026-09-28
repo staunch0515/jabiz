@@ -55,3 +55,7 @@
 - 本地：`docker compose -f deploy/culture/docker-compose.yml up -d --build`（数据库端口 5437、应用 8080）；
   或只起数据库后在 `backend/` 下 `./gradlew :culture:bootRun --args='--spring.profiles.active=dev'`。
 - 首次部署后由管理员在后台执行一次 `CULTURE_SETUP`。
+- 部署、升级、备份与恢复、监控：`docs/culture/operations.md`。备份 `tools/culture/backup.sh`、恢复 `tools/culture/restore.sh`
+  （数据库与文件一起）；恢复演练 `tools/culture/test/backup-restore.test.sh`（CI 作业 `restore-drill`；无 Docker 时 `DRILL_MODE=direct`，
+  以 `PG*` 变量连本地 PostgreSQL，先 `./gradlew :culture:bootJar`）。新增表或文件字段不需要改脚本：它们备份整库与整个文件目录。
+- 静态资源由应用压缩传输（`server.compression`，只限 HTML、CSS、JS、SVG；接口的 JSON 不压缩，避免 BREACH），不要把 JSON 加进去。
