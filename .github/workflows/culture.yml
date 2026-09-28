@@ -111,3 +111,13 @@ jobs:
             site/test-results/
             culture.log
           retention-days: 7
+
+  # The restore drill (docs/culture/ROADMAP.md, C4): the compose deployment of deploy/culture, built from source, gets
+  # published content and files, is backed up with tools/culture/backup.sh, loses all its volumes, is restored with
+  # tools/culture/restore.sh and must serve the same pages and file bytes, sign the administrator in and take uploads.
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/culture/test/backup-restore.test.sh
