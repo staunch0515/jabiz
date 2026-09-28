@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { QueryRow } from '../api/public-queries'
 import { usePublicQuery } from '../api/hooks'
@@ -16,8 +16,26 @@ import styles from './Map.module.css'
 
 type Location = QueryRow<'culture.public.locations'>
 
-/** Markers closer than this (in the map's units) are moved apart, so that each can be pressed on its own. */
-const MARKER_DISTANCE = 40
+/**
+ * Markers are moved apart until they are this far from each other on the screen (in pixels), so that each can be
+ * pressed on its own: the buttons are 44 px (site CLAUDE.md section 3).
+ */
+const MARKER_SPACING = 46
+
+/** The map's width on the screen, followed as the window changes; the drawing's own width until it is measured. */
+function useWidth(ref: React.RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(WIDTH)
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setWidth(Math.round(entry.contentRect.width))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return width
+}
 
 function useSummary() {
   const t = useT()
@@ -45,6 +63,8 @@ interface Marker {
 function WorldMap({ places, selected, onSelect }: { places: Location[]; selected: string | null; onSelect: (slug: string) => void }) {
   const t = useT()
   const summary = useSummary()
+  const frame = useRef<HTMLDivElement>(null)
+  const width = useWidth(frame)
   const { land, markers } = useMemo(() => {
     const located = places.filter(
       (p): p is Location & { slug: string; latitude: number; longitude: number } =>
@@ -55,15 +75,15 @@ function WorldMap({ places, selected, onSelect }: { places: Location[]; selected
       const [x, y] = projection([p.longitude, p.latitude]) ?? [0, 0]
       return { x, y }
     })
-    const buttons = spread(at, MARKER_DISTANCE)
+    const buttons = spread(at, (MARKER_SPACING * WIDTH) / width)
     return {
       land: landPath(projection),
       markers: located.map((place, i): Marker => ({ place, at: at[i], button: buttons[i] })),
     }
-  }, [places])
+  }, [places, width])
 
   return (
-    <div className={styles.map}>
+    <div className={styles.map} ref={frame}>
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true" focusable="false" className={styles.svg}>
         <path d={land} className={styles.land} />
         {markers.map(({ place, at, button }) => (
@@ -246,10 +266,19 @@ export function Map() {
   const all = places.data ?? []
   const chosen = all.find((p) => p.slug !== null && p.slug === search.get('place')) ?? null
 
+  // From the list, the panel is further down the page: the focus goes there once it shows the place. From the map
+  // the panel is next to it: the focus stays on the map.
+  const focusPanel = useRef<string | null>(null)
+  useEffect(() => {
+    if (chosen?.slug && focusPanel.current === chosen.slug) {
+      focusPanel.current = null
+      heading.current?.focus()
+    }
+  }, [chosen?.slug])
+
   const select = (slug: string, fromList: boolean) => {
+    focusPanel.current = fromList ? slug : null
     setSearch({ place: slug }, { replace: true, preventScrollReset: true })
-    // From the list, the panel is further down the page: go there. From the map it is next to it: stay.
-    if (fromList) requestAnimationFrame(() => heading.current?.focus())
   }
 
   return (

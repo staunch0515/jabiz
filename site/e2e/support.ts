@@ -120,6 +120,7 @@ export interface World {
   story: string
   storyTitle: string
   perspectiveHeading: string
+  photoAlt: string
   resource: string
   resourceTitle: string
 }
@@ -143,6 +144,7 @@ export async function seedWorld(request: APIRequestContext, browser: Browser): P
     story: `${tag}-story`,
     storyTitle: `Saturday mornings ${tag}`,
     perspectiveHeading: `The market opens at six ${tag}`,
+    photoAlt: `Crates of fish at the market ${tag}`,
     resource: `${tag}-resource`,
     resourceTitle: `What is a weekend? ${tag}`,
   }
@@ -211,7 +213,7 @@ export async function seedWorld(request: APIRequestContext, browser: Browser): P
     featured: true,
   })
   await admin.create('StoryTheme', { storyId: story, themeId: theme })
-  await admin.create('Contribution', {
+  const contribution = await admin.create('Contribution', {
     storyId: story,
     participantId: participant,
     heading: en(w.perspectiveHeading),
@@ -220,6 +222,16 @@ export async function seedWorld(request: APIRequestContext, browser: Browser): P
     videoId: '76979871',
     captionsConfirmed: true,
     transcript: en('Six o’clock, the boats come in.'),
+  })
+  // A photograph in the perspective: on the story page and in the map's panel of the place.
+  const photo = await admin.upload('culture.image', 'market.jpg', 'image/jpeg', await jpeg(browser, 1200, 1200, 90))
+  await admin.create('MediaItem', {
+    storyId: story,
+    contributionId: contribution,
+    kind: 'PHOTO',
+    imageFileId: photo,
+    alt: en(w.photoAlt),
+    sortOrder: 1,
   })
   await admin.run('CULTURE_STORY_PUBLISH', { storyId: story })
 
@@ -238,7 +250,7 @@ export async function seedWorld(request: APIRequestContext, browser: Browser): P
   return w
 }
 
-/** Every page of the site for the seeded content (design section 9.1; map and search are stage C4). */
+/** Every page of the site for the seeded content (design section 9.1). */
 export function pages(w: World): { name: string; path: string }[] {
   return [
     { name: 'home', path: '' },
@@ -252,6 +264,9 @@ export function pages(w: World): { name: string; path: string }[] {
     { name: 'resources', path: 'resources' },
     { name: 'resource', path: `resources/${w.resource}` },
     { name: 'about', path: 'about' },
+    { name: 'map', path: 'map' },
+    { name: 'map of a place', path: `map?place=${w.place}` },
+    { name: 'search', path: `search?q=${encodeURIComponent(w.storyTitle)}` },
     { name: 'not found', path: 'stories/no-such-story' },
   ]
 }
