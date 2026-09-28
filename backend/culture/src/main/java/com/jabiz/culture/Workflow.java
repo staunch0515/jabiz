@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 
 /** Helpers shared by the processes of Culture, Unfiltered: queries over loaded rows and bulk field changes. */
@@ -93,6 +94,34 @@ final class Workflow {
         ctx.reject(new Violation(field, "WRONG_STATE", "The " + row.entityType() + " is " + state,
             Map.of("state", String.valueOf(state), "expected", String.join(", ", expected))));
         return false;
+    }
+
+    /**
+     * The files that {@code fields} of the rows refer to: those whose public-file decisions must end when the rows go
+     * offline (docs/design/15-public-access.md section 4).
+     */
+    static Set<UUID> files(Collection<EntityInstance> rows, String... fields) {
+        Set<UUID> files = new LinkedHashSet<>();
+        for (EntityInstance row : rows) {
+            for (String field : fields) {
+                addFile(files, row.attributes().get(field));
+            }
+        }
+        return files;
+    }
+
+    static void addFile(Set<UUID> files, Object id) {
+        if (id instanceof UUID uuid) {
+            files.add(uuid);
+        } else if (id != null) {
+            files.add(UUID.fromString(id.toString()));
+        }
+    }
+
+    /** The file ids a process collected under {@code key}, for {@code FileAccess.invalidate} after the commit. */
+    @SuppressWarnings("unchecked")
+    static List<UUID> collected(ProcessContext ctx, String key) {
+        return ctx.contains(key) ? List.copyOf((Collection<UUID>) ctx.get(key)) : List.of();
     }
 
     private Workflow() {}

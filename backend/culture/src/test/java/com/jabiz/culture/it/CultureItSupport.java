@@ -140,6 +140,41 @@ abstract class CultureItSupport extends PostgresIntegrationTest {
             .map(v -> v.get("field") + ":" + v.get("ruleCode")).toList();
     }
 
+    // Public access (docs/culture/00-design.md section 7): anonymous, no Authorization header.
+
+    /**
+     * Runs a public template anonymously and returns the page. {@code params} alternate names and values of query
+     * parameters ({@code "p.slug", "home", "filter", "kind:eq:STORY"}); values are fully encoded.
+     */
+    Map<String, Object> publicPage(String query, String... params) {
+        return publicQuery(query, params).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+    }
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> publicItems(String query, String... params) {
+        return (List<Map<String, Object>>) publicPage(query, params).get("items");
+    }
+
+    WebTestClient.ResponseSpec publicQuery(String query, String... params) {
+        return client.get().uri(b -> {
+            b.path("/api/public/queries/{id}");
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("id", query);
+            for (int i = 0; i < params.length; i += 2) {
+                String name = "v" + i;
+                b.queryParam(params[i], "{" + name + "}");
+                values.put(name, params[i + 1]);
+            }
+            return b.build(values);
+        }).exchange();
+    }
+
+    /** The status of an anonymous request for a file. */
+    int publicFile(String fileId) {
+        return client.get().uri("/api/public/files/{id}", fileId).exchange().returnResult(byte[].class)
+            .getStatus().value();
+    }
+
     void setSwitch(String key, boolean value) {
         ok("PARAM_SET", admin(), Map.of("key", key, "value", value));
     }

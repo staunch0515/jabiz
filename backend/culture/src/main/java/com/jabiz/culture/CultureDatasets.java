@@ -13,7 +13,9 @@ import static com.jabiz.culture.Culture.*;
  * change only their own rows: the {@code own:} datasets are scoped by the actor and by the state in which their rows
  * may still be edited, so a submitted story (and its perspectives and photos, no longer editable) falls out of them
  * and cannot be changed until an editor returns it (docs/design/03-dataset.md section 2.2: a write cannot move a row
- * out of the scope). The {@code own-view:} datasets show all their rows, read-only.
+ * out of the scope). The {@code own-view:} datasets show all their rows, read-only. The {@code public:} datasets
+ * are what anonymous visitors may read (section 7.1; docs/design/15-public-access.md section 2): published rows only,
+ * projected to the fields marked public in section 3. Consent records have none.
  */
 @Configuration
 public class CultureDatasets {
@@ -53,6 +55,74 @@ public class CultureDatasets {
             .policy(p -> p.readOnly(true))
             .scope(s -> s.fromContext(ownerField, "actorId", RequestContext::actorId))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(pool)));
+    }
+
+    /**
+     * A public dataset: the rows whose {@code scopeField} holds {@code scopeValue} (every row when there is no scope
+     * field), projected to {@code fields}. Editors preview it with {@value Culture#PUBLIC_READ}.
+     */
+    private DatasetDefinition publicRead(String entity, String scopeField, Object scopeValue, String... fields) {
+        return DatasetDefinition.define(publicDataset(entity), d -> {
+            d.targetEntityType(entity)
+                // Read-only: the write permission is never used.
+                .permissions(PUBLIC_READ, CONTENT_WRITE)
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(pool));
+            if (scopeField == null) {
+                d.publicRead(p -> p.allRows().fields(fields));
+            } else {
+                d.scope(s -> s.fixed(scopeField, scopeValue)).publicRead(p -> p.fields(fields));
+            }
+        });
+    }
+
+    @Bean DatasetDefinition publicLocationDataset() {
+        return publicRead(LOCATION, "visible", true, "locationId", "slug", "name", "countryCode", "placeLabel",
+            "latitude", "longitude", "sortOrder");
+    }
+
+    @Bean DatasetDefinition publicThemeDataset() {
+        return publicRead(THEME, "visible", true, "themeId", "slug", "icon", "title", "question", "intro",
+            "sortOrder");
+    }
+
+    @Bean DatasetDefinition publicParticipantDataset() {
+        return publicRead(PARTICIPANT, "status", ACTIVE, "participantId", "slug", "displayName", "locationId",
+            "portraitFileId", "portraitAlt", "shortBio", "bio", "perspective", "reflection", "interests", "languages",
+            "sortOrder");
+    }
+
+    @Bean DatasetDefinition publicStoryDataset() {
+        return publicRead(STORY, "status", PUBLISHED, "storyId", "slug", "title", "summary", "about", "body",
+            "mediaType", "storyDate", "thumbnailFileId", "thumbnailAlt", "videoProvider", "videoId", "transcript",
+            "reflectionSurprised", "reflectionAssumed", "reflectionLearned", "featured", "publishedTime");
+    }
+
+    @Bean DatasetDefinition publicStoryThemeDataset() {
+        return publicRead(STORY_THEME, "visibility", PUBLIC, "storyThemeId", "storyId", "themeId");
+    }
+
+    @Bean DatasetDefinition publicContributionDataset() {
+        return publicRead(CONTRIBUTION, "visibility", PUBLIC, "contributionId", "storyId", "participantId",
+            "heading", "text", "videoProvider", "videoId", "transcript", "audioFileId", "sortOrder");
+    }
+
+    @Bean DatasetDefinition publicMediaItemDataset() {
+        return publicRead(MEDIA_ITEM, "visibility", PUBLIC, "mediaItemId", "storyId", "contributionId", "kind",
+            "imageFileId", "audioFileId", "alt", "caption", "credit", "sortOrder");
+    }
+
+    @Bean DatasetDefinition publicResourceDataset() {
+        return publicRead(RESOURCE, "status", PUBLISHED, "resourceId", "slug", "title", "description",
+            "activityType", "ageGroup", "durationMinutes", "pdfFileId", "body", "sortOrder");
+    }
+
+    /** Only two keys: public templates always join the public stories, so an unpublished story never shows. */
+    @Bean DatasetDefinition publicResourceStoryDataset() {
+        return publicRead(RESOURCE_STORY, null, null, "resourceStoryId", "resourceId", "storyId");
+    }
+
+    @Bean DatasetDefinition publicSiteBlockDataset() {
+        return publicRead(SITE_BLOCK, null, null, "siteBlockId", "blockKey", "body");
     }
 
     @Bean DatasetDefinition cultureLocationDataset() { return editors(LOCATION); }

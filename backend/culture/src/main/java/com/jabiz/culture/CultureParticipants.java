@@ -11,6 +11,7 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
+import com.jabiz.runtime.publicread.FileAccess;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -72,6 +73,7 @@ public class CultureParticipants {
     private static final String STORY_RESOURCES = "storyResources";
     private static final String OWN_MEDIA = "ownMedia";
     private static final String FILES = "files";
+    private static final String OFFLINE_FILES = "offlineFiles";
     private static final String OUTPUT = "output";
     private static final String STATUS = "status";
 
@@ -150,8 +152,11 @@ public class CultureParticipants {
                 .compute("Hide", (metadata, ctx) -> {
                     if (Workflow.inState(ctx, participant(ctx), STATUS, ACTIVE)) {
                         move(ctx, HIDDEN);
+                        ctx.put(OFFLINE_FILES, Workflow.files(List.of(participant(ctx)), "portraitFileId"));
                     }
-                }));
+                })
+                .afterCommit("Stop serving the portrait publicly",
+                    FileAccess.invalidate(ctx -> Workflow.collected(ctx, OFFLINE_FILES))));
 
     /** A participant whose consent was withdrawn becomes a draft again, for example after a new consent. */
     public static final ProcessDefinition<ParticipantInput, ParticipantOutput, ProcessContext> REOPEN_PROCESS =
@@ -204,7 +209,10 @@ public class CultureParticipants {
                 ctx -> where("storyId", publishedIds(ctx)), STORY_MEDIA))
             .step("Load the themes of the stories", QueryEntities.of(dataset(STORY_THEME),
                 ctx -> where("storyId", publishedIds(ctx)), STORY_THEMES))
-            .compute("Withdraw", (metadata, ctx) -> withdraw(ctx)));
+            .compute("Withdraw", (metadata, ctx) -> withdraw(ctx))
+            // Consent is gone: the files stop at once rather than after the decision lifetime.
+            .afterCommit("Stop serving the files publicly",
+                FileAccess.invalidate(ctx -> Workflow.collected(ctx, OFFLINE_FILES))));
 
     private static Set<Object> publishedIds(ProcessContext ctx) {
         return values(rows(ctx, STORIES).stream().filter(s -> PUBLISHED.equals(s.get(STATUS))).toList(),
@@ -265,6 +273,12 @@ public class CultureParticipants {
             setAll(ctx, rows(ctx, STORY_CONTRIBUTIONS), "visibility", PRIVATE);
             setAll(ctx, rows(ctx, STORY_MEDIA), "visibility", PRIVATE);
             setAll(ctx, rows(ctx, STORY_THEMES), "visibility", PRIVATE);
+            Set<UUID> offline = Workflow.files(List.of(participant), "portraitFileId");
+            offline.addAll(Workflow.files(rows(ctx, STORIES).stream().filter(s -> published.contains(s.id())).toList(),
+                "thumbnailFileId"));
+            offline.addAll(Workflow.files(rows(ctx, STORY_CONTRIBUTIONS), "audioFileId"));
+            offline.addAll(Workflow.files(rows(ctx, STORY_MEDIA), "imageFileId", "audioFileId"));
+            ctx.put(OFFLINE_FILES, offline);
         }
         ctx.put(OUTPUT, new WithdrawOutput(String.valueOf(consent.id()), status, List.copyOf(unpublished)));
     }
@@ -325,7 +339,7 @@ public class CultureParticipants {
             return;
         }
         Set<UUID> files = new LinkedHashSet<>();
-        addFile(files, participant.get("portraitFileId"));
+        Workflow.addFile(files, participant.get("portraitFileId"));
         Set<Object> contributions = values(rows(ctx, CONTRIBUTIONS), EntityInstance::id);
         // Their stories that nobody else contributed to go as a whole; the others lose their owner only.
         Set<Object> ownStories = new LinkedHashSet<>();
@@ -376,7 +390,7 @@ public class CultureParticipants {
                 return;
             }
             for (String field : fileFields) {
-                addFile(files, row.attributes().get(field));
+                Workflow.addFile(files, row.attributes().get(field));
             }
             ctx.changes().delete(row.entityType(), row.id(), row.version());
         }
@@ -386,13 +400,6 @@ public class CultureParticipants {
         }
     }
 
-    private static void addFile(Set<UUID> files, Object id) {
-        if (id instanceof UUID uuid) {
-            files.add(uuid);
-        } else if (id != null) {
-            files.add(UUID.fromString(id.toString()));
-        }
-    }
 
     @Bean
     ProcessDefinition<ParticipantInput, ParticipantOutput, ProcessContext> cultureParticipantActivateProcess() {

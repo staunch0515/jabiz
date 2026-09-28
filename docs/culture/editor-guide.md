@@ -39,7 +39,8 @@ pseudonym goes into the participant's **Login account** field, which is how the 
 
   A place does not have to be a country.
 - **Themes** are the shared questions (HOME — *What makes somewhere feel like home?*). The icon is decoration. Untick
-  **Visible** to hide a place or theme from the site.
+  **Visible** to hide a place or theme from the site. A hidden place is no longer listed, on the map or as a filter,
+  and its people show without a place; a hidden theme leaves its stories' theme lists (the stories stay).
 
 Every text field that can be translated has one tab per language (English, Chinese, Japanese). English is the one the
 site falls back to, so fill it in first; Markdown fields show a preview.
@@ -69,7 +70,8 @@ site falls back to, so fill it in first; Markdown fields show a preview.
    - a guardian's consent is also needed for anyone under 18, while that switch is on;
    - if they have a portrait, the consent must cover photos.
 
-   **Hide** takes a profile off the site; **Activate** brings it back.
+   **Hide** takes a profile off the site; **Activate** brings it back. While hidden, their perspectives are left out
+   of the site's pages, but the stories they are in stay published with everyone else's perspectives.
 
 ## 4. Photos and audio
 
@@ -118,7 +120,7 @@ their photos.
   - If anything fails, nothing is published, and every problem is listed at once.
   - If everything passes, the story, all its perspectives and photos, and its theme links go public.
   - Running **Publish** again on a published story checks it again and publishes what was added since.
-- **Unpublish** takes a story and all its parts offline. **Reopen** makes an unpublished story a draft again, editable
+- **Unpublish** takes a story and all its parts offline, its photos and audio included, at once. **Reopen** makes an unpublished story a draft again, editable
   by its correspondents.
 - **Editing published content takes effect at once**, and nothing checks the edit on its own. After changing a
   published story, perspective or photo (especially after adding a video, audio or a photo), run **Publish** again: it
@@ -157,9 +159,9 @@ their photos.
 - If the remaining consents still cover everything, nothing else changes. For example, withdrawing a duplicate record
   changes nothing else.
 
-Once the public site is live (stage C2), their photos and files stop being served at once in the site's pages.
-Someone who had already opened a file's address may still load it for up to about six minutes (one minute of server
-cache plus five minutes of browser cache).
+Their photos, audio and files stop being served to the public at once. A visitor's browser that had already loaded
+a file may keep showing it for up to five minutes (its own cache). With more than one server, the other servers stop
+within a minute.
 
 **Erase.** On a participant whose consent was withdrawn, the administrator can run **Erase**. In one step it
 permanently deletes:

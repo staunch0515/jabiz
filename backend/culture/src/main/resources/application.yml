@@ -22,6 +22,11 @@ jabiz:
     # Photos, audio, PDFs and consent scans (docs/design/14-files.md section 6). No default outside dev.
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:}
+  public:
+    # Anonymous read access to the public templates and files (docs/design/15-public-access.md), which the public
+    # site at / uses. Off unless switched on (the compose file does); the checks of public datasets and templates run
+    # either way.
+    enabled: ${JABIZ_PUBLIC_ENABLED:false}
   i18n:
     default-locale: en
     bundles: messages

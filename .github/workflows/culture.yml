@@ -1,0 +1,30 @@
+name: Culture
+on:
+  push:
+  pull_request:
+
+# The application's own checks (docs/culture/00-design.md section 2); the backend (./gradlew check, which includes
+# :culture:check) runs in ci.yml. Stage C3 adds the site's lint, tests, build and end-to-end tests here.
+jobs:
+  # The public site's API types are generated from the public templates' catalog, which the backend's
+  # PublicQueriesSnapshotIT keeps up to date (section 7.2): the generated file must match it and type-check.
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: site/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:api
+      - run: pnpm typecheck
+      - run: pnpm test

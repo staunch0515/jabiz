@@ -5,10 +5,12 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.publicread.FileAccess;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.Map;
 
 import static com.jabiz.culture.Culture.*;
@@ -27,6 +29,7 @@ public class CultureResources {
     private static final String RESOURCE_ID = "resourceId";
     private static final String ROW = "resource";
     private static final String STATUS = "status";
+    private static final String OFFLINE_FILES = "offlineFiles";
 
     private static ProcessDefinition<ResourceInput, ResourceOutput, ProcessContext> define(String name,
         String description, String from, String to, boolean check) {
@@ -58,7 +61,13 @@ public class CultureResources {
                         }
                     }
                     ctx.changes().update(RESOURCE, resource.id(), resource.version(), Workflow.mapOf(STATUS, to));
-                }));
+                    if (!check) {
+                        ctx.put(OFFLINE_FILES, Workflow.files(List.of(resource), "pdfFileId"));
+                    }
+                })
+                // Taking a resource offline stops its PDF at once; publishing leaves nothing to invalidate.
+                .afterCommit("Stop serving the PDF publicly",
+                    FileAccess.invalidate(ctx -> Workflow.collected(ctx, OFFLINE_FILES))));
     }
 
     private static void checkPublishable(ProcessContext ctx, EntityInstance resource) {

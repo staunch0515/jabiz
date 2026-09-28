@@ -3,11 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Public website of Culture, Unfiltered. A placeholder until stage C3 (docs/culture/ROADMAP.md).",
+  "description": "Public website of Culture, Unfiltered. A placeholder until stage C3 (docs/culture/ROADMAP.md); its API types are generated from the public templates' catalog (C2).",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "gen:api": "node scripts/gen-public-api.mjs",
+    "check:api": "node scripts/gen-public-api.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.mjs"
   },
   "devDependencies": {
+    "typescript": "~6.0.3",
     "vite": "^7.1.12"
   },
   "packageManager": "pnpm@10.18.0"

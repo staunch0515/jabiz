@@ -1,0 +1,1574 @@
+{
+  "queries" : [ {
+    "cacheSeconds" : 60,
+    "description" : "Places with how many participants and published stories each has (map, filters)",
+    "id" : "culture.public.locations",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ "slug", "countryCode" ],
+      "sorts" : [ "sortOrder", "slug" ]
+    },
+    "params" : { },
+    "results" : {
+      "countryCode" : {
+        "maxLength" : 2,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "latitude" : {
+        "precision" : 8,
+        "scale" : 5,
+        "type" : "numeric"
+      },
+      "locationId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:location"
+      },
+      "longitude" : {
+        "precision" : 9,
+        "scale" : 5,
+        "type" : "numeric"
+      },
+      "name" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "participantCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "placeLabel" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "storyCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Participants' cards, optionally of some places",
+    "id" : "culture.public.people",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ "locationSlug" ],
+      "sorts" : [ "sortOrder", "displayName" ]
+    },
+    "params" : {
+      "location" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : true,
+        "required" : false
+      }
+    },
+    "results" : {
+      "countryCode" : {
+        "maxLength" : 2,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "displayName" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "interests" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "locationName" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "locationSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "participantId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:participant"
+      },
+      "portraitAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "portraitFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "shortBio" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A participant's page, header and texts",
+    "id" : "culture.public.person",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "bio" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 3000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "countryCode" : {
+        "maxLength" : 2,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "displayName" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "interests" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "languages" : {
+        "maxLength" : 200,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "locationName" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "locationSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "participantId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:participant"
+      },
+      "perspective" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 600,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "placeLabel" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "portraitAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "portraitFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "reflection" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 5000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "shortBio" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The published stories a participant has a perspective in",
+    "id" : "culture.public.person_stories",
+    "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "storyDate"
+      },
+      "filters" : [ "mediaType" ],
+      "sorts" : [ "storyDate", "publishedTime" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "mediaType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-type",
+        "type" : "code"
+      },
+      "publishedTime" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyDate" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "storyId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:story"
+      },
+      "summary" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The themes of the published stories a participant has a perspective in",
+    "id" : "culture.public.person_themes",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ ],
+      "sorts" : [ "sortOrder", "storyCount" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "icon" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "storyCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "themeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:theme"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 60,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A teaching resource's page, with its steps to read on the page and its PDF",
+    "id" : "culture.public.resource",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "activityType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:activity-type",
+        "type" : "code"
+      },
+      "ageGroup" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:age-group",
+        "type" : "code"
+      },
+      "body" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 20000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "description" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 1000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "durationMinutes" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "pdfFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.pdf",
+        "type" : "custom"
+      },
+      "resourceId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:resource"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The published stories a teaching resource works with",
+    "id" : "culture.public.resource_stories",
+    "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "storyDate"
+      },
+      "filters" : [ ],
+      "sorts" : [ "storyDate", "slug" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "mediaType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-type",
+        "type" : "code"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyDate" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "storyId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:story"
+      },
+      "summary" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Teaching resources, optionally of some activity types and age groups",
+    "id" : "culture.public.resources",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ "activityType", "ageGroup", "durationMinutes" ],
+      "sorts" : [ "sortOrder", "durationMinutes", "slug" ]
+    },
+    "params" : {
+      "activityType" : {
+        "kind" : {
+          "allowedValues" : [ ],
+          "dictUrn" : "urn:jabiz:dict:culture:activity-type",
+          "type" : "code"
+        },
+        "list" : true,
+        "required" : false
+      },
+      "ageGroup" : {
+        "kind" : {
+          "allowedValues" : [ ],
+          "dictUrn" : "urn:jabiz:dict:culture:age-group",
+          "type" : "code"
+        },
+        "list" : true,
+        "required" : false
+      }
+    },
+    "results" : {
+      "activityType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:activity-type",
+        "type" : "code"
+      },
+      "ageGroup" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:age-group",
+        "type" : "code"
+      },
+      "description" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 1000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "durationMinutes" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "pdfFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.pdf",
+        "type" : "custom"
+      },
+      "resourceId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:resource"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Stories, participants, themes and resources whose texts in any language contain the words",
+    "id" : "culture.public.search",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "kind"
+      },
+      "filters" : [ "kind" ],
+      "sorts" : [ "kind", "slug" ]
+    },
+    "params" : {
+      "q" : {
+        "kind" : {
+          "maxLength" : 100,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "imageFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "kind" : {
+        "maxLength" : 16,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "name" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "summary" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Texts of the fixed pages (home, method, about), by key",
+    "id" : "culture.public.site_blocks",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "blockKey"
+      },
+      "filters" : [ "blockKey" ],
+      "sorts" : [ "blockKey" ]
+    },
+    "params" : {
+      "keys" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : true,
+        "required" : false
+      }
+    },
+    "results" : {
+      "blockKey" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "body" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 10000,
+        "multiline" : true,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The story archive, filtered by place (of the people in it), theme and media type, and searched",
+    "id" : "culture.public.stories",
+    "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "storyDate"
+      },
+      "filters" : [ "mediaType", "featured" ],
+      "sorts" : [ "storyDate", "publishedTime", "slug" ]
+    },
+    "params" : {
+      "featured" : {
+        "kind" : {
+          "type" : "bool"
+        },
+        "list" : false,
+        "required" : false
+      },
+      "location" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : true,
+        "required" : false
+      },
+      "mediaType" : {
+        "kind" : {
+          "allowedValues" : [ ],
+          "dictUrn" : "urn:jabiz:dict:culture:media-type",
+          "type" : "code"
+        },
+        "list" : true,
+        "required" : false
+      },
+      "q" : {
+        "kind" : {
+          "maxLength" : 100,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : false
+      },
+      "theme" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : true,
+        "required" : false
+      }
+    },
+    "results" : {
+      "featured" : {
+        "type" : "bool"
+      },
+      "locationSlugs" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "mediaType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-type",
+        "type" : "code"
+      },
+      "publishedTime" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyDate" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "storyId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:story"
+      },
+      "summary" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A story page's header, player, texts and the three reflection questions",
+    "id" : "culture.public.story",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "about" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 3000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "body" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 40000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "mediaType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-type",
+        "type" : "code"
+      },
+      "publishedTime" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "reflectionAssumed" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 3000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "reflectionLearned" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 3000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "reflectionSurprised" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 3000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyDate" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "storyId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:story"
+      },
+      "summary" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "transcript" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 40000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "videoId" : {
+        "maxLength" : 32,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "videoProvider" : {
+        "allowedValues" : [ "YOUTUBE", "VIMEO" ],
+        "dictUrn" : "urn:jabiz:dict:culture:video-provider",
+        "type" : "code"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The photos and audio of a published story, its own and those of its shown perspectives",
+    "id" : "culture.public.story_media",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ "kind", "contributionId" ],
+      "sorts" : [ "sortOrder" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "alt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 300,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "audioFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.audio",
+        "type" : "custom"
+      },
+      "caption" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 500,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "contributionId" : {
+        "targetEntity" : "Contribution",
+        "type" : "reference"
+      },
+      "credit" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "imageFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "kind" : {
+        "allowedValues" : [ "PHOTO", "AUDIO" ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-kind",
+        "type" : "code"
+      },
+      "mediaItemId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:media-item"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The perspectives of a published story, each with its participant and place",
+    "id" : "culture.public.story_perspectives",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ ],
+      "sorts" : [ "sortOrder" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "audioFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.audio",
+        "type" : "custom"
+      },
+      "contributionId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:contribution"
+      },
+      "countryCode" : {
+        "maxLength" : 2,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "displayName" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "heading" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "locationName" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "locationSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "participantId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:participant"
+      },
+      "participantSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "portraitAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "portraitFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "text" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 10000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "transcript" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 40000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "videoId" : {
+        "maxLength" : 32,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "videoProvider" : {
+        "allowedValues" : [ "YOUTUBE", "VIMEO" ],
+        "dictUrn" : "urn:jabiz:dict:culture:video-provider",
+        "type" : "code"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "The themes of a published story",
+    "id" : "culture.public.story_themes",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ ],
+      "sorts" : [ "sortOrder" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 80,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "icon" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "themeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:theme"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 60,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A theme page's header, its anthropological question and introduction",
+    "id" : "culture.public.theme",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "icon" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "intro" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 4000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "question" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "themeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:theme"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 60,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Every perspective in the published stories of a theme, place by place, to compare answers to its question",
+    "id" : "culture.public.theme_perspectives",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "locationSortOrder"
+      },
+      "filters" : [ "locationSlug", "mediaType" ],
+      "sorts" : [ "locationSortOrder", "locationSlug", "sortOrder" ]
+    },
+    "params" : {
+      "slug" : {
+        "kind" : {
+          "maxLength" : 40,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "audioFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.audio",
+        "type" : "custom"
+      },
+      "contributionId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:contribution"
+      },
+      "countryCode" : {
+        "maxLength" : 2,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "displayName" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "heading" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "locationName" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 80,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "locationSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "locationSortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "mediaType" : {
+        "allowedValues" : [ ],
+        "dictUrn" : "urn:jabiz:dict:culture:media-type",
+        "type" : "code"
+      },
+      "participantId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:participant"
+      },
+      "participantSlug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "portraitAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "portraitFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "storyId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:story"
+      },
+      "storySlug" : {
+        "maxLength" : 80,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "storyTitle" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 120,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "text" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 10000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailAlt" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "thumbnailFileId" : {
+        "kindId" : "jabiz.file",
+        "policy" : "culture.image",
+        "type" : "custom"
+      },
+      "transcript" : {
+        "format" : "markdown",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 40000,
+        "multiline" : true,
+        "requiredLanguages" : [ ],
+        "type" : "custom"
+      },
+      "videoId" : {
+        "maxLength" : 32,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "videoProvider" : {
+        "allowedValues" : [ "YOUTUBE", "VIMEO" ],
+        "dictUrn" : "urn:jabiz:dict:culture:video-provider",
+        "type" : "code"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "Themes with how many published stories and places answer each",
+    "id" : "culture.public.themes",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "sortOrder"
+      },
+      "filters" : [ ],
+      "sorts" : [ "sortOrder", "slug" ]
+    },
+    "params" : { },
+    "results" : {
+      "icon" : {
+        "maxLength" : 8,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "locationCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "question" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 200,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      },
+      "slug" : {
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "sortOrder" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "storyCount" : {
+        "precision" : 9,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "themeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:culture:theme"
+      },
+      "title" : {
+        "format" : "plain",
+        "kindId" : "jabiz.i18n-text",
+        "locales" : [ "zh", "ja", "en" ],
+        "maxLength" : 60,
+        "multiline" : false,
+        "requiredLanguages" : [ "en" ],
+        "type" : "custom"
+      }
+    }
+  } ]
+}
