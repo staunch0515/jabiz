@@ -174,3 +174,15 @@ describe('FilterBar (design section 9.3)', () => {
     expect(onClear).toHaveBeenCalled()
   })
 })
+
+describe('ResponsiveImage with another file', () => {
+  it('tries the variants again', async () => {
+    const { container, rerender } = await import('@testing-library/react').then(({ render }) =>
+      render(<ResponsiveImage fileId="a" alt="A" ratio="square" sizes="10vw" />),
+    )
+    fireEvent.error(container.querySelector('img')!)
+    expect(container.querySelector('img')!.getAttribute('src')).toBe('/api/public/files/a')
+    rerender(<ResponsiveImage fileId="b" alt="B" ratio="square" sizes="10vw" />)
+    expect(container.querySelector('img')!.getAttribute('src')).toBe('/api/public/files/b/w640')
+  })
+})

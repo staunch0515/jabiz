@@ -31,15 +31,16 @@ export function Story() {
   const perspectives = usePublicQuery('culture.public.story_perspectives', { slug }, { limit: 100 })
   const media = usePublicQuery('culture.public.story_media', { slug }, { limit: 100 })
 
-  // A link to one perspective (from a theme page) lands on it once the perspectives are there.
+  // A link to one perspective (from a theme page) lands on it once the story and its perspectives are there.
+  const loaded = Boolean(story.row) && perspectives.data !== undefined
   useEffect(() => {
-    if (!location.hash || !perspectives.data) return
+    if (!location.hash || !loaded) return
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)))
     if (target) {
       target.scrollIntoView()
       target.focus({ preventScroll: true })
     }
-  }, [location.hash, perspectives.data])
+  }, [location.hash, loaded])
 
   if (story.row === null) return <NotFound />
   if (!story.row) {

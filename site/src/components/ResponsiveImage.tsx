@@ -27,7 +27,9 @@ interface Props {
  * switches to the original.
  */
 export function ResponsiveImage({ fileId, alt, ratio, sizes, eager, placeholder, className }: Props) {
-  const [original, setOriginal] = useState(false)
+  // The fallback belongs to one file: a frame that shows another file tries its variants again.
+  const [failed, setFailed] = useState<string | null>(null)
+  const original = failed !== null && failed === fileId
   const [width, height] = SIZE[ratio]
   const frame = `${styles.frame} ${styles[ratio]} ${className ?? ''}`
   if (!fileId) {
@@ -49,7 +51,7 @@ export function ResponsiveImage({ fileId, alt, ratio, sizes, eager, placeholder,
         alt={alt}
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
-        onError={() => setOriginal(true)}
+        onError={() => setFailed(fileId)}
       />
     </span>
   )
