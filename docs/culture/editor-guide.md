@@ -37,17 +37,43 @@ pseudonym goes into the participant's **Login account** field, which is how the 
 
 ## 2. Places and themes
 
-- **Places** are where the participants speak from.
-  - The **slug** is used in addresses and filters (`japan`, `polish-community-london`).
-  - The **name** is shown on the site.
-  - The optional **country code** (two capital letters, `JP`) shows a small flag.
-  - **Area** says "Tokyo area", never a school or a street. **Latitude/longitude** are the centre of the city or
-    country, for the map.
+Curators add places and themes before the participants who belong to them: a participant must have a place, and a
+story must have a theme before it can be published.
 
-  A place does not have to be a country.
-- **Themes** are the shared questions (HOME — *What makes somewhere feel like home?*). The icon is decoration. Untick
-  **Visible** to hide a place or theme from the site. A hidden place is no longer listed, on the map or as a filter,
-  and its people show without a place; a hidden theme leaves its stories' theme lists (the stories stay).
+**Adding a place**
+
+1. **Content → Places → New**.
+2. Fill in:
+   - **Slug**: lowercase letters, digits and hyphens, unique, used in addresses and filters (`japan`,
+     `polish-community-london`). Choose it once; changing it later breaks links people have shared.
+   - **Name**: what the site shows, one tab per language (`Japan` / `日本` / `日本`). English first.
+   - **Country code** (optional): two capital letters of ISO 3166 (`JP`, `GB`, `SZ`), shown as a small flag. Leave it
+     empty for a place that is not a country, such as a community or a school club.
+   - **Area** (optional): the city or region, e.g. `Tokyo area`. **Never a school, a street or a neighbourhood.**
+   - **Latitude / Longitude**: the centre of the city (or of the country), not anyone's home, for the map. In any
+     online map, right-click the city centre to copy them; five decimals are enough (`35.68950`, `139.69171`).
+     Latitude is north–south (−90 to 90), longitude east–west (−180 to 180); south and west are negative
+     (Eswatini ≈ `-26.52`, `31.47`; London ≈ `51.50`, `-0.12`).
+   - **Order**: where the place comes in lists, on the map's list and in filters (10, 20, 30 … leaves room to insert).
+   - **Visible**: tick it to show the place on the site.
+3. **Save**. The place appears on the site within a minute (public pages are cached for 60 seconds): in the home page's
+   list of places, on the map and as a filter of the story archive, once a participant from there has a published
+   perspective it counts stories.
+
+**Adding a theme**
+
+1. **Content → Themes → New**.
+2. Fill in **Slug** (`home`, `digital-life`), **Icon** (one emoji, decoration only), **Title** (`Home`), **Question**
+   (the question every participant answers, *What makes somewhere feel like home?*), the optional **Introduction**
+   (Markdown, shown at the top of the theme page), **Order** and **Visible**.
+3. **Save**. Link stories to it from the story (**Content → Stories**, open the story, theme list).
+
+**Hiding and changing**
+
+- Open the row and untick **Visible** to hide a place or theme from the site. A hidden place is no longer listed, on
+  the map or as a filter, and its people show without a place; a hidden theme leaves its stories' theme lists (the
+  stories stay).
+- Places and themes are not deleted while participants or stories use them; hide them instead.
 
 Every text field that can be translated has one tab per language (English, Chinese, Japanese). English is the one the
 site falls back to, so fill it in first; Markdown fields show a preview.
