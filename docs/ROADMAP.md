@@ -25,8 +25,8 @@
 
 | 线 | 平台分支 | 包含的阶段 | 发布标签 | 应用分支 |
 |---|---|---|---|---|
-| 1.0 | `1.0/platform` | 1–13f | `platform-v1.0.0`（13f 合入后） | `1.0/culture`、`1.0/finance` |
-| 1.1 | `1.1/platform`（从 `1.0/platform` 拉出） | 14 | — | `1.1/finance`（14a–14c 合入后升级）；culture 需要时升级 |
+| 1.0 | `1.0/platform` | 1–13f | `platform-v1.0.0` | `1.0/culture`、`1.0/finance` |
+| 1.1 | `1.1/platform`（从 `1.0/platform` 的 `platform-v1.0.0` 拉出，已开） | 14 | — | `1.1/finance`（14a–14c 合入后升级）；culture 需要时升级 |
 
 ---
 
@@ -431,5 +431,5 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
   修复向前合并、新线的平台工作分支未改线号、线号格式不对、新线的平台分支未取得、`APP_PATHS_BRANCH` 与游离的 HEAD、没有线号的旧分支
   （`tools/test/check-app-paths.test.sh`，共 24 个）。
 - [x] CI 步骤的命令在本地对 1.0 线上的应用分支（游离 HEAD）运行通过。
-- [ ] 建立 `1.0/platform`、`1.0/culture`、`1.0/finance`，合入后打标签 `platform-v1.0.0`，开 `1.1/platform`（由仓库所有者推送或授权）。
+- [x] 建立 `1.0/platform`、`1.0/culture`、`1.0/finance`；合入后打标签 `platform-v1.0.0`，开 `1.1/platform`。
 
