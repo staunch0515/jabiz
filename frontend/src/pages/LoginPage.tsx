@@ -7,8 +7,8 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
 import { changeLanguage, languages, type Language } from '../i18n'
+import { LANGUAGE_NAMES } from '../i18n/languages'
 
-const LANGUAGE_NAMES: Record<Language, string> = { zh: '中文', ja: '日本語', en: 'English' }
 
 export default function LoginPage() {
   const { t, i18n } = useTranslation()
@@ -27,13 +27,15 @@ export default function LoginPage() {
         subTitle={t('login.title')}
         submitter={{ searchConfig: { submitText: t('login.submit') } }}
         actions={
-          <Select
-            size="small"
-            value={i18n.language}
-            onChange={(lang) => void changeLanguage(lang as Language)}
-            options={languages.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
-            aria-label={t('app.language')}
-          />
+          languages.length > 1 && (
+            <Select
+              size="small"
+              value={i18n.language}
+              onChange={(lang) => void changeLanguage(lang as Language)}
+              options={languages.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
+              aria-label={t('app.language')}
+            />
+          )
         }
         onFinish={async (values: { userName: string; password: string }) => {
           setError(null)

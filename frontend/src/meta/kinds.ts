@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import { formatDecimal, toDecimal } from './decimal'
+import { displayLocale, formatDateTime } from './format'
 import { isI18nText, pickText, textsToWire } from './i18nText'
 import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './types'
 
@@ -82,7 +83,7 @@ export function enabledCodes(dictionaries: Record<string, DictItem[]>): Record<s
   )
 }
 
-/** A value for display, in the UI language (dictionary labels, amounts with currency, local times). */
+/** A value for display, in the UI language (dictionary labels, amounts with currency, local times) and region. */
 export function formatValue(
   field: FieldMeta,
   value: unknown,
@@ -97,7 +98,7 @@ export function formatValue(
       if (!d) return String(value)
       const text = formatDecimal(d)
       try {
-        return new Intl.NumberFormat(locale, {
+        return new Intl.NumberFormat(displayLocale(locale), {
           style: 'currency',
           currency: field.currency,
           minimumFractionDigits: field.scale,
@@ -111,10 +112,8 @@ export function formatValue(
       const d = toDecimal(value)
       return d ? formatDecimal(d) : String(value)
     }
-    case 'temporal': {
-      const time = dayjs(String(value))
-      return time.isValid() ? time.format('YYYY-MM-DD HH:mm:ss') : String(value)
-    }
+    case 'temporal':
+      return formatDateTime(value)
     case 'bool':
       return value === true || value === 'true' ? t('list.yes') : t('list.no')
     case 'code': {

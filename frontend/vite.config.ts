@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteBase } from './src/base.ts'
+import { appSettingsProblems } from './scripts/app-settings.ts'
 import { extensionDir, extensionEntry } from './scripts/extension.ts'
 
 const root = import.meta.dirname
@@ -13,6 +14,9 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 }
 // An application's admin pages (docs/design/12-frontend.md section 9, decision D22), compiled in when named.
 const extension = extensionDir(process.env.JABIZ_ADMIN_EXTENSION, root)
+// The application's interface languages and region (jabizApp { languages(...); region = ... }, decision D22 item 7).
+const settingsProblems = appSettingsProblems(process.env)
+if (settingsProblems.length > 0) throw new Error(settingsProblems.join('\n'))
 
 export default defineConfig({
   // Served under a sub-path when an application puts its public website at the root (VITE_BASE=/admin/).

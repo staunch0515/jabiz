@@ -24,7 +24,7 @@ public final class MetaModelExporter {
      */
     public static final List<String> CLIENT_CHECK_CODES = List.of(PlatformErrorCodes.INVALID_VALUE,
         PlatformErrorCodes.REQUIRED, PlatformErrorCodes.TOO_LONG, PlatformErrorCodes.NUMERIC_PRECISION,
-        PlatformErrorCodes.NOT_IN_DICTIONARY);
+        PlatformErrorCodes.MONETARY_SCALE, PlatformErrorCodes.NOT_IN_DICTIONARY);
 
     private MetaModelExporter() {}
 

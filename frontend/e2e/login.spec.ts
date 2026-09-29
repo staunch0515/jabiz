@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { ADMIN, adminToken, CARRIERS, datasetPath, insert, signIn, test, unique } from './support'
+import { ADMIN, adminToken, CARRIERS, chooseLanguage, datasetPath, insert, signIn, signOut, test, unique } from './support'
 
 /** Sign-in, the dynamic menu, languages and what the UI offers by permission (ROADMAP phase 10 requirement 4). */
 test.describe('sign-in and navigation', () => {
@@ -31,21 +31,17 @@ test.describe('sign-in and navigation', () => {
     await expect(page).toHaveURL(new RegExp(encodeURIComponent(CARRIERS)))
     await expect(page.getByTestId('page-title')).toHaveText('承运商')
 
-    await page.getByTestId('language-switch').hover()
-    await page.getByText('日本語').click()
+    await chooseLanguage(page, '日本語', 'ja')
     await expect(page.getByRole('menuitem', { name: `運送会社メニュー${code}` })).toBeVisible()
     await expect(page.getByTestId('page-title')).toHaveText('運送会社')
-    await page.getByTestId('language-switch').hover()
-    await page.getByText('English').click()
+    await chooseLanguage(page, 'English', 'en')
     await expect(page.getByRole('menuitem', { name: `Carrier menu ${code}` })).toBeVisible()
 
     // A reload keeps the session (the refresh token lives in sessionStorage).
     await page.reload()
     await expect(page.getByRole('menuitem', { name: `Carrier menu ${code}` })).toBeVisible()
 
-    await page.getByTestId('current-user').hover()
-    await page.getByText('Sign out').click()
-    await expect(page).toHaveURL(/\/login$/)
+    await signOut(page)
     await page.goto(datasetPath(CARRIERS))
     await expect(page).toHaveURL(/\/login$/)
   })

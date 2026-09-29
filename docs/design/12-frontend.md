@@ -10,7 +10,7 @@
 | 工具链 | pnpm、Vite、TypeScript |
 | 界面 | React 19、Ant Design 5 + ProComponents（ProLayout / ProTable / ProForm），`@ant-design/v5-patch-for-react-19` |
 | 数据 | TanStack Query（缓存键含界面语言）；请求经 `openapi-fetch`，类型由 OpenAPI 生成 |
-| 路由、多语言 | React Router；i18next（zh / ja / en），antd 与 dayjs 的语言随之切换 |
+| 路由、多语言 | React Router；i18next（zh / ja / en，应用可只选其中几种），antd 与 dayjs 的语言随之切换；可按区域（如 `en-US`）显示日期、数字与金额（第 10 节） |
 | 测试 | Vitest + Testing Library（适配层、组件）；Playwright（端到端） |
 
 ```
@@ -98,7 +98,7 @@ frontend/
   `\p{..}` 的 Unicode 一般类别；分组限于 `(?:` `(?=` `(?!`；拒绝占有量词、字符类交集与嵌套字符类。`\s` 不可移植：JavaScript 把所有 Unicode 空白都算在内）。
   前端遇到仍无法编译的正则时不报错，交由服务端判断。
 - 前端 `validation.ts` 逐步复刻服务端的唯一校验路径（`FieldValueCoercer` → `EntityValidator`）：转换失败 `INVALID_VALUE` → 必填 `REQUIRED`
-  （新建，或显式清空）→ 语义类型约束（`TOO_LONG` / `NUMERIC_PRECISION` / `NOT_IN_DICTIONARY`，只报第一个）→ 各导出规则（声明顺序）。
+  （新建，或显式清空）→ 语义类型约束（`TOO_LONG` / `NUMERIC_PRECISION` / `MONETARY_SCALE` / `NOT_IN_DICTIONARY`，只报第一个）→ 各导出规则（声明顺序）。
   小数用 BigInt 精确计算（与 `BigDecimal` 的比较、`stripTrailingZeros`、精度同口径），时间按 ISO-8601（须带偏移）解析到纳秒。
 - 文案：导出中的 `messages` 模板与服务端同源，前端填入同名占位参数（`{field}` 为字段标签）。
 - **共享用例** `spec/validation-cases.json`：字段元数据 + 输入值 + 期望的错误码。core `ValidationCasesTest` 断言①文件中的字段元数据
@@ -145,6 +145,7 @@ frontend/
   表单新建 / 编辑 / 删除；六种非法输入的前端错误码与直接调用接口的错误码相同；历史时间线、回看、预定、操作详情、撤销；
   列表按时间点读取；另一个时态实体 `Price` 的历史；流程表单。每个测试使用自己的数据（表只增不删）。
 - 示范实体 `Carrier`（app，时态，`V7__carrier.sql`）只有声明，前端没有它的专门代码；`CarrierIT` 断言经数据视图接口的写入只有 INSERT。
+- 语言与区域（第 10 节）：`src/i18n/languages.test.ts`、`src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
 - 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
   `scripts/extension-lint.test.ts`（深层引用被拒绝）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，经 `pnpm ext:test`）；
   端到端 `e2e/extension.spec.ts`（从菜单进入、读模板、执行流程；无权限用户看不到菜单项，直接打开时服务端返回 403）。
@@ -174,3 +175,24 @@ frontend/
 - 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。
 - 示范：`backend/app/admin-extension/`（"库存概览"：模板 `commerce.stock_availability` 与流程 `STOCK_RECEIVE`，菜单项需 `commerce.stock.read`）。
   操作步骤见 `docs/guide/admin-extension.md`。
+
+## 10. 界面语言与区域【D22 第 7 条】
+
+应用在 `jabizApp` 中声明，前后端取自同一处：
+
+```kotlin
+jabizApp {
+    languages("en")      // 界面语言：平台语言 zh / ja / en 的子集，缺省全部
+    region = "en-US"     // 日期、数字、金额按此区域显示；缺省为平台的中性格式
+}
+```
+
+| 方面 | 做法 |
+|---|---|
+| 服务端 | 插件把语言写入 jar 中的 `META-INF/jabiz-app.properties`（`jabiz.i18n.languages`）；消息目录只含这些语言，文案完整性检查只要求这些语言；请求其他语言时以缺省语言回答。启动检查（类别 `I18N`）报告不是平台语言的代码、空列表、不在其中的 `jabiz.i18n.default-locale` |
+| 前端 | 以 `VITE_JABIZ_LANGUAGES` / `VITE_JABIZ_REGION` 构建（构建时校验，`scripts/app-settings.ts`）；语言切换只列所选语言，只有一种时不显示；记住的或浏览器的语言不在其中时取第一种（有中文时取中文） |
+| 区域 | `src/meta/format.ts`：时间 `formatDateTime`（`en-US`：`01/31/2026, 02:05:09 PM`；无区域：`2026-01-31 14:05:09`）、日期 `formatDate`、金额 `formatAmount(value, {scale, currency?, negative: 'minus' | 'parentheses'})`（精确的十进制文本、千分位、固定小数位；财务报表用括号表示负数）；列表与详情中的金额按区域格式化 |
+| 内容语言 | 不变：多语言文本字段仍按平台的三种语言编辑（D20 第 3 条），字段声明自己的必填语言 |
+
+扩展经 `@jabiz/admin` 使用 `formatAmount`、`formatDate`、`formatDateTime`、`enabledLanguages`。
+

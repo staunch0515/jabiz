@@ -2,13 +2,19 @@ package com.jabiz.gradle
 
 import com.github.gradle.node.NodeExtension
 import com.github.gradle.node.pnpm.task.PnpmTask
+import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Provider
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.kotlin.dsl.project
 import org.gradle.process.CommandLineArgumentProvider
@@ -56,6 +62,20 @@ class BootAppPlugin : Plugin<Project> {
 
         registerPlatformCheck(project, app)
         configureTests(project, app)
+        registerAppProperties(project, app)
+    }
+
+    /**
+     * `META-INF/jabiz-app.properties` in the jar: the settings the server shares with the admin frontend, from the
+     * same `jabizApp` block, so the two cannot disagree (decision D22 item 7).
+     */
+    private fun registerAppProperties(project: Project, app: JabizAppExtension) {
+        val write = project.tasks.register("jabizAppProperties", AppPropertiesTask::class.java) {
+            languages.set(app.languages)
+            outputDir.set(project.layout.buildDirectory.dir("generated/jabiz-app"))
+        }
+        val main = project.extensions.getByType(SourceSetContainer::class.java).getByName("main")
+        main.resources.srcDir(write.flatMap { it.outputDir })
     }
 
     /**
@@ -133,6 +153,12 @@ class BootAppPlugin : Plugin<Project> {
             usesService(pnpm)
             workingDir.set(sourceDir)
             environment.put("VITE_BASE", spa.base)
+            // Interface languages and region (decision D22 item 7); the server gets the same from jabiz-app.properties.
+            val app = project.extensions.getByType(JabizAppExtension::class.java)
+            environment.put("VITE_JABIZ_LANGUAGES", app.languages.map { it.joinToString(",") })
+            environment.put("VITE_JABIZ_REGION", app.region.orElse(""))
+            inputs.property("languages", app.languages)
+            inputs.property("region", app.region.orElse(""))
             // The application's own admin pages (decision D22); the build type-checks them before bundling.
             extensionDir?.let { environment.put("JABIZ_ADMIN_EXTENSION", it.asFile.absolutePath) }
             pnpmCommand.set(outDir.map {
@@ -154,6 +180,24 @@ class BootAppPlugin : Plugin<Project> {
 
         project.tasks.named("bootJar", BootJar::class.java) {
             from(build) { into("BOOT-INF/classes/${spa.staticDir}") }
+        }
+    }
+
+    /** Writes the settings the server shares with the frontend (see [registerAppProperties]). */
+    abstract class AppPropertiesTask : DefaultTask() {
+        @get:Input
+        abstract val languages: ListProperty<String>
+
+        @get:OutputDirectory
+        abstract val outputDir: DirectoryProperty
+
+        @TaskAction
+        fun write() {
+            val file = outputDir.file("META-INF/jabiz-app.properties").get().asFile
+            file.parentFile.mkdirs()
+            val lines = mutableListOf("# Written by the jabiz.boot-app plugin from jabizApp { } (decision D22 item 7).")
+            languages.get().takeIf { it.isNotEmpty() }?.let { lines += "jabiz.i18n.languages=${it.joinToString(",")}" }
+            file.writeText(lines.joinToString("\n", postfix = "\n"))
         }
     }
 
