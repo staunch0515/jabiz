@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests of tools/check-app-paths.sh (docs/design/17-apps-and-branches.md section 5): application branches are built
+# Tests of tools/check-app-paths.sh (docs/design/17-apps-and-branches.md section 5, decision D21): application branches are built
 # in a throwaway repository and the script must pass the ones that only change their own paths and fail the others.
 set -euo pipefail
 
@@ -13,9 +13,15 @@ write() { mkdir -p "$(dirname "$work/repo/$1")"; printf '%s\n' "${2:-$1}" >"$wor
 commit() { git_ add -A; git_ commit -q --allow-empty -m "$1"; }
 
 # expect <exit code> <output fragment or ''> <name>: runs the script on the current branch against 'platform'.
-expect() {
+expect() { check "$1" "$2" "$3" platform; }
+
+# expect_line <exit code> <output fragment or ''> <name>: runs the script with its default base (version lines).
+expect_line() { check "$1" "$2" "$3"; }
+
+check() {
   local want="$1" fragment="$2" name="$3" out code=0
-  out="$(cd "$work/repo" && "$script" platform 2>&1)" || code=$?
+  shift 3
+  out="$(cd "$work/repo" && "$script" "$@" 2>&1)" || code=$?
   if [[ "$code" != "$want" ]] || [[ -n "$fragment" && "$out" != *"$fragment"* ]]; then
     echo "FAIL $name: exit $code (want $want)${fragment:+, want output containing '$fragment'}"
     sed 's/^/    /' <<<"$out"
@@ -116,6 +122,85 @@ out_code=0
 (cd "$work/repo" && "$script" no-such-branch >/dev/null 2>&1) || out_code=$?
 if [[ "$out_code" == 2 ]]; then echo "ok   a missing base cannot be checked (exit 2)"; else
   echo "FAIL a missing base: exit $out_code (want 2)"; failures=$((failures + 1)); fi
+
+# Version lines (D21). The repository is its own 'origin', so that origin/<line>/platform exists after a fetch.
+git_ remote add origin "$work/repo"
+fetch() { git_ fetch -q origin; }
+
+git_ checkout -q -b 1.0/platform platform
+write .jabiz-platform-line 1.0
+commit "platform line 1.0"
+fetch
+
+git_ checkout -q -b 1.0/culture 1.0/platform
+cat >"$work/repo/.jabiz-app-paths" <<'PATHS'
+backend/culture/**
+docs/culture/**
+PATHS
+write backend/culture/build.gradle.kts
+commit "culture on 1.0"
+expect_line 0 "since 'origin/1.0/platform'" "the base is the platform branch of the line in .jabiz-platform-line"
+
+git_ checkout -q -b 1.0/culture-2-work 1.0/culture
+write docs/culture/notes.md
+commit "a work branch of the line"
+expect_line 0 "within .jabiz-app-paths" "a work branch named after its line passes"
+
+# Line 1.1 of the platform, with an incompatible change.
+git_ checkout -q -b 1.1/platform 1.0/platform
+write .jabiz-platform-line 1.1
+write backend/core/Core.java "1.1 changed the core"
+commit "platform line 1.1"
+fetch
+
+git_ checkout -q -b 1.0/culture-edits-line 1.0/culture
+write .jabiz-platform-line 1.1
+commit "an application moves its own line instead of merging"
+APP_PATHS_BRANCH=culture-edits-line expect_line 1 ".jabiz-platform-line" \
+  "an application that changes .jabiz-platform-line itself fails"
+
+# An application branch opened for 1.1 without merging 1.1/platform is still on 1.0.
+git_ checkout -q -b 1.1/culture 1.0/culture
+expect_line 1 "belongs to line 1.1" "a branch named after a line it has not merged fails"
+
+git_ merge -q --no-edit 1.1/platform
+write backend/culture/Upgraded.java
+commit "culture adapted to 1.1"
+expect_line 0 "since 'origin/1.1/platform'" "an application upgraded to a new line is checked against that line"
+
+# A fix on the older line, merged forward into the newer line and from there into the application.
+git_ checkout -q 1.0/platform
+write backend/runtime/Fix.java "fixed on 1.0"
+commit "fix on 1.0"
+git_ checkout -q 1.1/platform
+git_ merge -q --no-edit 1.0/platform
+fetch
+git_ checkout -q 1.1/culture
+git_ merge -q --no-edit 1.1/platform
+expect_line 0 "within .jabiz-app-paths" "a fix merged forward through the lines is not counted"
+
+git_ checkout -q -b 1.1/phase-14a-lagging 1.0/platform
+expect_line 1 "belongs to line 1.1" "a platform work branch of a new line needs the new line in the file"
+
+git_ checkout -q -b 1.1/culture-bad-line 1.1/culture
+write .jabiz-platform-line "one point one"
+commit "a malformed line"
+expect_line 2 "must hold a line" "a malformed .jabiz-platform-line cannot be checked (exit 2)"
+
+git_ checkout -q -b 1.2/platform 1.1/platform
+write .jabiz-platform-line 1.2
+commit "platform line 1.2, not pushed"
+git_ checkout -q -b 1.2/culture 1.1/culture
+git_ merge -q --no-edit 1.2/platform
+expect_line 2 "origin/1.2/platform' not found" "a line whose platform branch was not fetched cannot be checked (exit 2)"
+
+git_ checkout -q 1.1/culture
+APP_PATHS_BRANCH=1.0/culture expect_line 1 "belongs to line 1.0" "APP_PATHS_BRANCH names the branch where HEAD is detached"
+git_ checkout -q --detach 1.1/culture
+expect_line 0 "within .jabiz-app-paths" "a detached HEAD without APP_PATHS_BRANCH is checked by its line alone"
+
+git_ checkout -q only-app
+expect_line 0 "since 'origin/platform'" "a branch from before version lines (no line file) is checked against origin/platform"
 
 if ((failures > 0)); then
   echo "$failures test(s) failed"
