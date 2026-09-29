@@ -83,6 +83,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。
+  docs/finance-requirements/ is an unchanged copy of fin-req-v1.0 from staunch0515/ubos-unit; never edit it.
 
 ## 5. 测试要求
 
