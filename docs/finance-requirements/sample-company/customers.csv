@@ -1,0 +1,5 @@
+id,name,location,currency,tax_code,terms_days,exemption_certificate
+C100,"Acme Robotics, Inc.",TX (Austin),USD,TX-AUSTIN,30,
+C200,Cascade Machining LLC,OR (Portland),USD,OR-NONE,30,
+C300,"Lone Star Distributors, Inc.",TX (Dallas),USD,TX-RESALE,30,"TX 01-339 resale certificate RC-3301, valid to 2027-12-31"
+C400,Bayer Feinmechanik GmbH,Germany,EUR,EXPORT,30,

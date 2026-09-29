@@ -1,0 +1,75 @@
+document,kind,posting_date,recorded_on,party,account,debit,credit,description
+BILL-V300-2601,bill,2026-01-02,2026-01-02,V300,6200,8500.00,,January rent
+BILL-V300-2601,bill,2026-01-02,2026-01-02,V300,2000,,8500.00,January rent
+RCPT-0001,receipt,2026-01-05,2026-01-05,C100,1010,32475.00,,Receipt for INV-1001
+RCPT-0001,receipt,2026-01-05,2026-01-05,C100,1200,,32475.00,Receipt for INV-1001
+INV-1004,invoice,2026-01-06,2026-01-06,C100,1200,53300.00,,"Components 40,000.00 (TX-AUSTIN), engineering services 10,000.00 (NT)"
+INV-1004,invoice,2026-01-06,2026-01-06,C100,4000,,40000.00,"Components 40,000.00 (TX-AUSTIN), engineering services 10,000.00 (NT)"
+INV-1004,invoice,2026-01-06,2026-01-06,C100,4100,,10000.00,"Components 40,000.00 (TX-AUSTIN), engineering services 10,000.00 (NT)"
+INV-1004,invoice,2026-01-06,2026-01-06,C100,2200,,3300.00,"Components 40,000.00 (TX-AUSTIN), engineering services 10,000.00 (NT)"
+PAY-RUN-01,payment,2026-01-08,2026-01-08,"V100, V600",2000,32300.00,,"ACH payment run 01: P-7781 28,300.00; CPL-1225 4,000.00"
+PAY-RUN-01,payment,2026-01-08,2026-01-08,"V100, V600",1010,,32300.00,"ACH payment run 01: P-7781 28,300.00; CPL-1225 4,000.00"
+BILL-P-7902,bill,2026-01-09,2026-01-09,V100,5000,22000.00,,Components purchased
+BILL-P-7902,bill,2026-01-09,2026-01-09,V100,2000,,22000.00,Components purchased
+CM-2001,credit memo,2026-01-10,2026-01-10,C100,4900,2000.00,,Return of components on INV-1004
+CM-2001,credit memo,2026-01-10,2026-01-10,C100,2200,165.00,,Return of components on INV-1004
+CM-2001,credit memo,2026-01-10,2026-01-10,C100,1200,,2165.00,Return of components on INV-1004
+INV-1005,invoice,2026-01-12,2026-01-12,C400,1200,54250.00,,"Components, EUR 50,000.00 at 1.0850"
+INV-1005,invoice,2026-01-12,2026-01-12,C400,4000,,54250.00,"Components, EUR 50,000.00 at 1.0850"
+INV-1006,invoice,2026-01-14,2026-01-14,C200,1200,18000.00,,Engineering services (Oregon)
+INV-1006,invoice,2026-01-14,2026-01-14,C200,4100,,18000.00,Engineering services (Oregon)
+INV-1007,invoice,2026-01-15,2026-01-15,C300,1200,25000.00,,Components for resale (certificate RC-3301)
+INV-1007,invoice,2026-01-15,2026-01-15,C300,4000,,25000.00,Components for resale (certificate RC-3301)
+BILL-TS-5520,bill,2026-01-15,2026-01-15,V700,1520,12000.00,,"Application server, capitalized as FA-003"
+BILL-TS-5520,bill,2026-01-15,2026-01-15,V700,2000,,12000.00,"Application server, capitalized as FA-003"
+JE-0001,journal,2026-01-15,2026-01-15,,2100,15000.00,,"Payout of 2025 bonus accrued at year end (approval required: > 10,000.00)"
+JE-0001,journal,2026-01-15,2026-01-15,,1010,,15000.00,"Payout of 2025 bonus accrued at year end (approval required: > 10,000.00)"
+RCPT-0002,receipt,2026-01-16,2026-01-16,C200,1010,24025.00,,Receipt for INV-1002 (past due)
+RCPT-0002,receipt,2026-01-16,2026-01-16,C200,1200,,24025.00,Receipt for INV-1002 (past due)
+BILL-DC-2601,bill,2026-01-20,2026-01-20,V200,6400,7500.00,,January consulting
+BILL-DC-2601,bill,2026-01-20,2026-01-20,V200,2000,,7500.00,January consulting
+BILL-CS-0126,bill,2026-01-20,2026-01-20,V400,6500,1200.00,,Software subscription January
+BILL-CS-0126,bill,2026-01-20,2026-01-20,V400,2000,,1200.00,Software subscription January
+STX-PAY-2512,tax payment,2026-01-20,2026-01-20,Texas Comptroller,2200,3300.00,,Texas sales tax return December 2025
+STX-PAY-2512,tax payment,2026-01-20,2026-01-20,Texas Comptroller,1010,,3300.00,Texas sales tax return December 2025
+BILL-JR-014,bill,2026-01-21,2026-01-21,V800,6400,1500.00,,Drafting services
+BILL-JR-014,bill,2026-01-21,2026-01-21,V800,2000,,1500.00,Drafting services
+PAY-RUN-02,payment,2026-01-22,2026-01-22,"V200, V300, V800",2000,19000.00,,"ACH payment run 02: DC-2025-12 9,000.00; MP-2026-01 8,500.00; JR-014 1,500.00"
+PAY-RUN-02,payment,2026-01-22,2026-01-22,"V200, V300, V800",1010,,19000.00,"ACH payment run 02: DC-2025-12 9,000.00; MP-2026-01 8,500.00; JR-014 1,500.00"
+RCPT-0003,receipt,2026-01-25,2026-01-25,C300,1010,20000.00,,Partial receipt for INV-1003
+RCPT-0003,receipt,2026-01-25,2026-01-25,C300,1200,,20000.00,Partial receipt for INV-1003
+BILL-CPL-0126,bill,2026-01-28,2026-01-28,V600,6300,3600.00,,Electricity January
+BILL-CPL-0126,bill,2026-01-28,2026-01-28,V600,2000,,3600.00,Electricity January
+PAYROLL-2601,journal,2026-01-30,2026-01-30,payroll provider,6100,60000.00,,"Payroll summary from external provider: gross 60,000.00; employer taxes 4,590.00; net pay 45,000.00; withholdings and employer taxes 19,590.00 (imported; approval required: > 10,000.00)"
+PAYROLL-2601,journal,2026-01-30,2026-01-30,payroll provider,6150,4590.00,,"Payroll summary from external provider: gross 60,000.00; employer taxes 4,590.00; net pay 45,000.00; withholdings and employer taxes 19,590.00 (imported; approval required: > 10,000.00)"
+PAYROLL-2601,journal,2026-01-30,2026-01-30,payroll provider,1010,,45000.00,"Payroll summary from external provider: gross 60,000.00; employer taxes 4,590.00; net pay 45,000.00; withholdings and employer taxes 19,590.00 (imported; approval required: > 10,000.00)"
+PAYROLL-2601,journal,2026-01-30,2026-01-30,payroll provider,2150,,19590.00,"Payroll summary from external provider: gross 60,000.00; employer taxes 4,590.00; net pay 45,000.00; withholdings and employer taxes 19,590.00 (imported; approval required: > 10,000.00)"
+JE-0002,journal,2026-01-31,2026-01-31,,6400,25000.00,,"Accrue annual audit fee (approval required: > 10,000.00)"
+JE-0002,journal,2026-01-31,2026-01-31,,2100,,25000.00,"Accrue annual audit fee (approval required: > 10,000.00)"
+JE-0003,journal,2026-01-31,2026-01-31,,6600,1000.00,,Recurring: amortize prepaid insurance 1/12
+JE-0003,journal,2026-01-31,2026-01-31,,1300,,1000.00,Recurring: amortize prepaid insurance 1/12
+DEP-2601,depreciation,2026-01-31,2026-01-31,,6700,4000.00,,"Depreciation January: FA-001 2,000.00; FA-002 1,666.67; FA-003 333.33"
+DEP-2601,depreciation,2026-01-31,2026-01-31,,1590,,4000.00,"Depreciation January: FA-001 2,000.00; FA-002 1,666.67; FA-003 333.33"
+BANK-INT-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,7100,300.00,,"Line of credit interest 50,000.00 x 7.20% / 12"
+BANK-INT-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,1010,,300.00,"Line of credit interest 50,000.00 x 7.20% / 12"
+BANK-FEE-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,6800,45.00,,Account service fee
+BANK-FEE-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,1010,,45.00,Account service fee
+SAV-INT-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,1050,125.00,,Savings interest
+SAV-INT-2601,bank,2026-01-31,2026-01-31,Lakeside National Bank,7300,,125.00,Savings interest
+FXR-2601,revaluation,2026-01-31,2026-01-31,C400,1200,350.00,,"Revalue INV-1005 EUR 50,000.00 at 1.0920 (auto-reverses 2026-02-01)"
+FXR-2601,revaluation,2026-01-31,2026-01-31,C400,7210,,350.00,"Revalue INV-1005 EUR 50,000.00 at 1.0920 (auto-reverses 2026-02-01)"
+JE-0004,journal,2026-01-31,2026-01-31,,8000,1362.90,,"Estimated federal income tax provision, 21% of January pre-tax income 6,490.00"
+JE-0004,journal,2026-01-31,2026-01-31,,2400,,1362.90,"Estimated federal income tax provision, 21% of January pre-tax income 6,490.00"
+FXR-2601-R,revaluation reversal,2026-02-01,2026-02-01,C400,7210,350.00,,Auto-reversal of FXR-2601
+FXR-2601-R,revaluation reversal,2026-02-01,2026-02-01,C400,1200,,350.00,Auto-reversal of FXR-2601
+BILL-P-8010,bill,2026-02-03,2026-02-03,V100,6400,15000.00,,"Components purchased, coded in error to professional fees"
+BILL-P-8010,bill,2026-02-03,2026-02-03,V100,2000,,15000.00,"Components purchased, coded in error to professional fees"
+RCPT-0004,receipt,2026-02-05,2026-02-05,C100,1010,51135.00,,Receipt for INV-1004 balance
+RCPT-0004,receipt,2026-02-05,2026-02-05,C100,1200,,51135.00,Receipt for INV-1004 balance
+BILL-OS-0120,bill,2026-02-10,2026-02-10,V600,6300,480.00,,"January office-power adjustment, document date 2026-01-20; January is closed, so posted in February as a prior-period item referencing January"
+BILL-OS-0120,bill,2026-02-10,2026-02-10,V600,2000,,480.00,"January office-power adjustment, document date 2026-01-20; January is closed, so posted in February as a prior-period item referencing January"
+JE-0005,journal,2026-02-03,2026-02-20,,5000,15000.00,,"Reclassify P-8010 to cost of goods sold (back-dated correction effective 2026-02-03, recorded 2026-02-20)"
+JE-0005,journal,2026-02-03,2026-02-20,,6400,,15000.00,"Reclassify P-8010 to cost of goods sold (back-dated correction effective 2026-02-03, recorded 2026-02-20)"
+RCPT-0005,receipt,2026-02-20,2026-02-20,C400,1010,54000.00,,"Receipt EUR 50,000.00 at 1.0800 for INV-1005; realized loss against the invoice-date rate"
+RCPT-0005,receipt,2026-02-20,2026-02-20,C400,7200,250.00,,"Receipt EUR 50,000.00 at 1.0800 for INV-1005; realized loss against the invoice-date rate"
+RCPT-0005,receipt,2026-02-20,2026-02-20,C400,1200,,54250.00,"Receipt EUR 50,000.00 at 1.0800 for INV-1005; realized loss against the invoice-date rate"

@@ -1,0 +1,37 @@
+code,name,type,normal_balance,statement_line
+1010,Cash - Operating (Lakeside National Bank),Asset,D,Cash and cash equivalents
+1050,Cash - Savings (Lakeside National Bank),Asset,D,Cash and cash equivalents
+1200,Accounts Receivable,Asset,D,"Accounts receivable, net"
+1210,Allowance for Doubtful Accounts,Asset,C,"Accounts receivable, net"
+1300,Prepaid Expenses,Asset,D,Prepaid expenses
+1500,Machinery and Equipment,Asset,D,"Property and equipment, net"
+1510,Vehicles,Asset,D,"Property and equipment, net"
+1520,Computer Equipment,Asset,D,"Property and equipment, net"
+1590,Accumulated Depreciation,Asset,C,"Property and equipment, net"
+2000,Accounts Payable,Liability,C,Accounts payable
+2100,Accrued Liabilities,Liability,C,Accrued liabilities
+2150,Payroll Liabilities,Liability,C,Accrued liabilities
+2200,Sales Tax Payable,Liability,C,Sales tax payable
+2300,Line of Credit,Liability,C,Line of credit
+2400,Income Tax Payable,Liability,C,Income tax payable
+3000,Common Stock,Equity,C,Common stock
+3100,Additional Paid-in Capital,Equity,C,Additional paid-in capital
+3200,Retained Earnings,Equity,C,Retained earnings
+4000,Product Sales,Revenue,C,Revenue
+4100,Service Revenue,Revenue,C,Revenue
+4900,Sales Returns and Allowances,Revenue,D,Revenue
+5000,Cost of Goods Sold - Purchases,Expense,D,Cost of goods sold
+6100,Salaries and Wages,Expense,D,Operating expenses
+6150,Payroll Taxes,Expense,D,Operating expenses
+6200,Rent,Expense,D,Operating expenses
+6300,Utilities,Expense,D,Operating expenses
+6400,Professional Fees,Expense,D,Operating expenses
+6500,Software Subscriptions,Expense,D,Operating expenses
+6600,Insurance,Expense,D,Operating expenses
+6700,Depreciation Expense,Expense,D,Operating expenses
+6800,Bank Fees,Expense,D,Operating expenses
+7100,Interest Expense,Other,D,"Other income (expense), net"
+7200,Realized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net"
+7210,Unrealized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net"
+7300,Interest Income,Other,C,"Other income (expense), net"
+8000,Income Tax Expense,Tax,D,Income tax expense

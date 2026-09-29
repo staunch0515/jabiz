@@ -1,0 +1,6 @@
+code,description,rate_percent,note
+TX-AUSTIN,"Texas, City of Austin combined rate",8.25,state 6.25% + local 2.00%
+TX-RESALE,Texas sale for resale (exempt with certificate),0.00,exemption certificate required
+OR-NONE,Oregon (no general sales tax),0.00,no sales tax
+EXPORT,Export outside the United States,0.00,not subject to US sales tax
+NT,Non-taxable service line,0.00,line-level override

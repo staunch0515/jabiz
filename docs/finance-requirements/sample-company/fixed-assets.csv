@@ -1,0 +1,4 @@
+id,description,account,cost,in_service,method,life_months,accumulated_at_2025_12_31
+FA-001,CNC machining center,1500,120000.00,2024-01-01,SL,60,48000.00
+FA-002,Delivery truck,1510,70000.00,2025-07-01,DDB,84,10000.00
+FA-003,Application server,1520,12000.00,2026-01-15,SL,36,0.00

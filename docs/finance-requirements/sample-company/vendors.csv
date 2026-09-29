@@ -1,0 +1,9 @@
+id,name,entity_type,form_1099,tin_on_file,terms_days
+V100,Precision Parts Co.,C corporation,,yes,30
+V200,Delta Consulting LLC,single-member LLC,1099-NEC box 1,yes,30
+V300,Metro Properties LLC,partnership,1099-MISC box 1 (rents),yes,30
+V400,"CloudStack, Inc.",C corporation,,yes,30
+V500,Hartwell Insurance Company,C corporation,,yes,30
+V600,City Power & Light,municipal utility,,yes,23
+V700,"TechSource, Inc.",C corporation,,yes,30
+V800,Jordan Rivera (sole proprietor),individual,1099-NEC box 1,yes,30
