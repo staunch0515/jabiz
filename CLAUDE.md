@@ -145,17 +145,22 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 
 1. 读 `docs/ROADMAP.md` 中对应阶段的目标、要求、验收标准。
 2. **先给出实施计划并等待确认**，确认后再写代码。计划需列出：要改的模块和类、新增的表和迁移、测试清单、风险。
-3. 在分支 `phase-<N>-<简短名>` 上实现。一个阶段过大时拆成多个 PR（`phase-<N>a`、`phase-<N>b` …）。
+3. 在分支 `<线>/phase-<N>-<简短名>` 上实现（`<线>` 是该阶段所在的平台版本线，见第 8 节）。一个阶段过大时拆成多个 PR（`phase-<N>a`、`phase-<N>b` …）。
 4. 完成后：运行全部测试和静态校验 → 用 `/code-review` 自查 → 涉及认证、权限、SQL 的阶段额外运行 `/security-review`。
 5. 创建 PR，描述中**逐条对照验收标准**说明如何满足，并列出未完成项和已知问题。
 6. 如果实现中改变了约定，同步更新本文件和 `docs/design/`。
 7. 在 `docs/ROADMAP.md` 中更新该阶段的状态。
 
-## 8. 平台与应用的分支（见 17 与决策 D19）
+## 8. 平台与应用的分支（见 17 与决策 D19、D21）
 
-- `platform`：公共分支，只含平台（`core`、`runtime`、`ext-geo`）、示范应用 `app`、通用后台 `frontend/`、`spec/`、`docs/design/`、`docs/guide/`。
-  平台工作分支 `phase-<N><x>-<名>` 从 `platform` 拉出并合回。
-- 应用分支（如 `culture`）= `platform` + 应用专有目录（列在应用分支根目录的 `.jabiz-app-paths` 中）；应用工作分支 `<应用>-<N>-<名>`。
-  **合并方向只有 `platform` → 应用分支**；应用分支不修改平台目录（CI 的 `app-paths` 作业运行 `tools/check-app-paths.sh`，其测试为
-  `tools/test/check-app-paths.test.sh`），平台需要的改动先在平台分支上完成（带平台自己的测试与示范）。
+- **版本线**：平台的每个不兼容版本是一条线，平台分支 `<主>.<次>/platform`（如 `1.0/platform`），线号写在根目录的 `.jabiz-platform-line`。
+  只有应用必须适配的不兼容改动才开新线（从上一条线的平台分支拉出，第一个提交改线号）；兼容的新增与修复留在当前线。发布打标签 `platform-v<主>.<次>.<修订>`。
+- 平台分支只含平台（`core`、`runtime`、`ext-geo`）、示范应用 `app`、通用后台 `frontend/`、`spec/`、`docs/design/`、`docs/guide/`。
+  平台工作分支 `<线>/phase-<N><x>-<名>` 从 `<线>/platform` 拉出并合回。
+- 应用分支 `<线>/<应用>`（如 `1.0/culture`）= 该线的平台 + 应用专有目录（列在应用分支根目录的 `.jabiz-app-paths` 中）；应用工作分支 `<线>/<应用>-<N>-<名>`。
+  **线内的合并方向只有 `<线>/platform` → `<线>/<应用>`**；应用分支不修改平台目录与 `.jabiz-platform-line`（CI 的 `app-paths` 作业运行 `tools/check-app-paths.sh`，
+  以该线的平台分支为基准，并检查以线命名的分支与线号一致；其测试为 `tools/test/check-app-paths.test.sh`），平台需要的改动先在该线的平台分支上完成（带平台自己的测试与示范）。
+- **修复向前合并**：做在最旧的受影响线上，再合并到更新的线，各线再合并到自己的应用；只合并，不变基、不拣选。
+- **应用升级**：`<新线>/<应用>` 从 `<旧线>/<应用>` 拉出，再合并 `<新线>/platform` 并适配；旧线上的应用分支随之冻结。
+- **迁移**：不是最新的线不增加迁移（平台与应用都不加）。操作步骤见 `docs/guide/version-lines.md`。
 - 应用自己的规则写在应用目录内的 `CLAUDE.md` 与 `docs/<应用>/`，不改本文件。

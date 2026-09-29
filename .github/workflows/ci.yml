@@ -64,7 +64,9 @@ jobs:
           ! grep -qE '(src|href)="/(assets|favicon)' "$RUNNER_TEMP/admin/index.html"
 
   # Platform and applications (docs/design/17-apps-and-branches.md section 2): an application branch (one with
-  # .jabiz-app-paths) changes only its own paths. The script's own tests run on every branch.
+  # .jabiz-app-paths) changes only its own paths, measured against the platform branch of its version line
+  # (.jabiz-platform-line, decision D21); a branch named after a line ('1.1/...') must be on that line. The script's
+  # own tests run on every branch.
   app-paths:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -73,10 +75,16 @@ jobs:
         with:
           fetch-depth: 0
       - run: tools/test/check-app-paths.test.sh
-      - if: hashFiles('.jabiz-app-paths') != ''
+      - name: Application paths and version line
+        env:
+          # HEAD is detached in CI; the script needs the branch's name for the line check.
+          APP_PATHS_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
-          git fetch --no-tags origin platform
-          tools/check-app-paths.sh origin/platform
+          if [ -f .jabiz-app-paths ]; then
+            if [ -f .jabiz-platform-line ]; then base="$(tr -d '[:space:]' < .jabiz-platform-line)/platform"; else base=platform; fi
+            git fetch --no-tags origin "+refs/heads/$base:refs/remotes/origin/$base"
+          fi
+          tools/check-app-paths.sh
 
   # End-to-end: the packaged application (API + frontend in one jar) against PostgreSQL, driven by Playwright.
   e2e:
