@@ -12,8 +12,10 @@
 
 ## 2. 边界
 
-- 本分支只改 `.jabiz-app-paths` 中的路径（`tools/check-app-paths.sh`）。平台缺能力时，先在 `platform` 的工作分支上补
-  （带平台自己的测试与 `app` 中的示范，不提财务），合入 `platform` 后再合并到 `finance`。计划中的平台阶段为 14a–14g（设计 §2）。
+- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/finance`，工作分支 `<线>/finance-<N>-<名>`。现在是线 1.0（`1.0/finance`）；
+  平台阶段 14 在线 1.1 上，14a–14c 合入 `1.1/platform` 后建 `1.1/finance`（从 `1.0/finance` 拉出，再合并 `1.1/platform`），F1 起在线 1.1 上开发，`1.0/finance` 冻结。
+- 本分支只改 `.jabiz-app-paths` 中的路径（`tools/check-app-paths.sh`，基准为本线的平台分支），不改 `.jabiz-platform-line`。平台缺能力时，
+  先在该线平台的工作分支上补（带平台自己的测试与 `app` 中的示范，不提财务），合入 `<线>/platform` 后再合并到 `<线>/finance`。计划中的平台阶段为 14a–14g（设计 §2）。
 - 包 `com.jabiz.finance`；启动类 `FinanceApp`；表前缀 `fi_`；迁移 `db/migration/V<n>__finance_<名>.sql`；SQL 模板 `queries/finance/**`，id 前缀 `finance.`；
   权限码 `fin.<模块>.<动作>`。
 

@@ -2,7 +2,8 @@
 
 应用 finance 的阶段计划。设计见 `00-design.md`，需求原文见 `docs/finance-requirements/`（只读），总体计划与已确认的决定见 `docs/finance-work/00-development-plan.md`。
 执行方式与平台相同（根目录 `CLAUDE.md` 第 7 节）：每个阶段先出实施计划、经确认后实现；PR 逐条对照本文件的验收标准。
-平台能力来自 `platform` 分支的阶段 14a–14g（在平台的 `docs/ROADMAP.md` 中立项），合入 `platform` 后再合并到 `finance`。
+分支按平台版本线（平台决策 D21）：F0 在线 1.0（`1.0/finance`）。平台阶段 14a–14g 在线 1.1（`1.1/platform`）上进行；14a–14c 合入后建 `1.1/finance`
+（从 `1.0/finance` 拉出，再合并 `1.1/platform`），F1 起的工作分支为 `1.1/finance-<N>-<名>`。
 
 | 阶段 | 名称 | 依赖（平台） | 预估 | 状态 |
 |---|---|---|---|---|
@@ -33,7 +34,7 @@
 
 **验收标准**
 - [x] `./gradlew :finance:check`（`ArchitectureTest`、`FinanceAppIT`、`platformCheck` 0 错误）通过。
-- [x] `tools/check-app-paths.sh origin/platform` 通过。
+- [x] `tools/check-app-paths.sh` 通过（线 1.0 起以 `origin/1.0/platform` 为基准）。
 - [x] 打包的 jar 在空数据库上启动、迁移、健康检查 UP，`/` 提供后台页面，匿名调用 `/api` 为 401（本地冒烟；CI 作业 `Finance / package`）。
 - [ ] 设计文档经确认。
 
