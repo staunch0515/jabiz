@@ -1,0 +1,57 @@
+name: Finance
+on:
+  push:
+  pull_request:
+
+# The application's own checks (docs/finance/00-design.md section 18); the backend (./gradlew check, which includes
+# :finance:check) and the application-path check run in ci.yml.
+jobs:
+  # The packaged application starts on an empty database, migrates, passes its startup checks and reports healthy.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: finance_smoke
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: finance
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U finance -d finance_smoke" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :finance:bootJar
+        working-directory: backend
+      - name: Start the application and wait for health
+        working-directory: backend
+        run: |
+          # A throwaway signing key for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
+            -jar finance/build/libs/finance-0.0.1-SNAPSHOT.jar > ../finance.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../finance.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/finance_smoke
+          SPRING_R2DBC_USERNAME: finance
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/finance_smoke
+          SPRING_FLYWAY_USER: finance
+          DB_PASSWORD: finance
+          JABIZ_BOOTSTRAP_ADMIN_USER: admin
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: smoke-admin-password
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/finance-files
+      - name: The admin frontend is served
+        run: curl -sf localhost:8080/ | grep -q 'id="root"'
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-package-log
+          path: finance.log
+          retention-days: 7

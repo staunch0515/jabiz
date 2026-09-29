@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: finance
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5438/finance}
+    username: ${SPRING_R2DBC_USERNAME:finance}
+    password: ${DB_PASSWORD:finance}
+  flyway:
+    url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5438/finance}
+    user: ${SPRING_FLYWAY_USER:finance}
+    password: ${DB_PASSWORD:finance}
+
+jabiz:
+  security:
+    # The key signing access tokens comes from the environment only (docs/design/10-security.md).
+    jwt:
+      secret: ${JABIZ_JWT_SECRET:}
+    bootstrap-admin:
+      user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
+      password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  files:
+    # Supporting documents, invoices sent and generated bank files (docs/design/14-files.md section 6).
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:}
+  i18n:
+    # The books are kept in US English (FIN-UI-010).
+    default-locale: en
+    bundles: messages
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:--}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

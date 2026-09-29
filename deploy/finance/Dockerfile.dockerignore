@@ -1,0 +1,11 @@
+# Only sources go into the build context (BuildKit reads this file for deploy/finance/Dockerfile).
+.git
+.idea
+**/build
+**/.gradle
+**/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+.env
+deploy/finance/.env

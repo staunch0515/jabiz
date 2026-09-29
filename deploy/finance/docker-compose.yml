@@ -1,0 +1,50 @@
+# The finance application (docs/finance/00-design.md). From the repository root:
+#
+#   docker compose -f deploy/finance/docker-compose.yml up -d --build
+#
+# then open http://localhost:8080; the first administrator's password is printed by
+# `docker compose -f deploy/finance/docker-compose.yml logs finance`.
+#
+# Settings come from deploy/finance/.env (never committed). For a server set at least DB_PASSWORD, JABIZ_JWT_SECRET
+# (openssl rand -base64 48) and JABIZ_BOOTSTRAP_ADMIN_PASSWORD. Back up the database and the files volume together.
+name: finance
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: finance
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-finance}
+    ports: ["127.0.0.1:5438:5432"]
+    volumes: [finance-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance"]
+      interval: 5s
+      retries: 10
+
+  finance:
+    build:
+      context: ../..
+      dockerfile: deploy/finance/Dockerfile
+    image: finance:local
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["127.0.0.1:${FINANCE_PORT:-8080}:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/finance
+      SPRING_R2DBC_USERNAME: finance
+      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD:-finance}
+      SPRING_FLYWAY_URL: jdbc:postgresql://db:5432/finance
+      SPRING_FLYWAY_USER: finance
+      SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-finance}
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    volumes: [finance-secrets:/var/lib/jabiz/secrets, finance-files:/var/lib/jabiz/files]
+
+volumes:
+  finance-db:
+  finance-secrets:
+  finance-files:
