@@ -1,19 +1,49 @@
 #!/usr/bin/env bash
 # Checks that an application branch changes only its own paths (docs/design/17-apps-and-branches.md section 2,
-# decision D19). The paths it owns are globs listed in .jabiz-app-paths at the repository root, one per line
+# decisions D19 and D21). The paths it owns are globs listed in .jabiz-app-paths at the repository root, one per line
 # ('#' starts a comment; '**' matches across directories, '*' and '?' within one path segment).
 #
 # Every file changed since the common ancestor with the platform branch must match one of them; changes that came
 # in by merging the platform branch are not counted. A pattern may not claim a file of the platform branch, and
 # nothing under the platform's own directories (see 'reserved') counts as the application's.
 #
-# Usage: tools/check-app-paths.sh [base]    base: the platform branch, default $APP_PATHS_BASE or origin/platform
+# The platform branch is the one of the line in .jabiz-platform-line (D21): line 1.1 -> origin/1.1/platform. The file
+# comes from the platform, so an application is on the line whose platform it last merged. A branch named after a
+# line ('1.1/...') must be on that line, which catches an application branch opened for a line without merging its
+# platform, and a platform line whose file was not moved on. This check runs on every branch.
+#
+# Usage: tools/check-app-paths.sh [base]
+#   base: the platform branch; default $APP_PATHS_BASE, else origin/<line>/platform, else origin/platform (no line
+#   file: a branch from before version lines). $APP_PATHS_BRANCH names the branch being checked where HEAD is
+#   detached (CI); default the checked-out branch.
 # Exit:  0 passes (or not an application branch), 1 violations, 2 cannot check.
 set -euo pipefail
 
-base="${1:-${APP_PATHS_BASE:-origin/platform}}"
 root="$(git rev-parse --show-toplevel)"
 list="$root/.jabiz-app-paths"
+line_file="$root/.jabiz-platform-line"
+
+line=""
+if [[ -f "$line_file" ]]; then
+  line="$(tr -d '[:space:]' <"$line_file")"
+  if [[ ! "$line" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    echo "check-app-paths: .jabiz-platform-line must hold a line such as 1.0, not '$line'" >&2
+    exit 2
+  fi
+fi
+
+branch="${APP_PATHS_BRANCH:-$(git -C "$root" symbolic-ref --quiet --short HEAD || true)}"
+if [[ "$branch" =~ ^([0-9]+\.[0-9]+)/ ]]; then
+  named="${BASH_REMATCH[1]}"
+  if [[ "$named" != "$line" ]]; then
+    echo "check-app-paths: branch '$branch' belongs to line $named but .jabiz-platform-line says '${line:-none}'" \
+      "(merge $named/platform into it, or on a new platform line write $named into the file)" >&2
+    exit 1
+  fi
+fi
+
+if [[ -n "$line" ]]; then default_base="origin/$line/platform"; else default_base="origin/platform"; fi
+base="${1:-${APP_PATHS_BASE:-$default_base}}"
 
 if [[ ! -f "$list" ]]; then
   echo "check-app-paths: no .jabiz-app-paths, not an application branch; nothing to check"
@@ -98,7 +128,7 @@ done < <(git -C "$root" diff -z --name-only --no-renames "$merge_base" HEAD)
 
 if ((${#violations[@]} > 0)); then
   echo "check-app-paths: ${#violations[@]} changed path(s) outside .jabiz-app-paths (make platform changes on the" \
-    "platform branch first, then merge it into this branch):" >&2
+    "platform branch of this line first, then merge it into this branch):" >&2
   printf '  %s\n' "${violations[@]}" >&2
   status=1
 fi
