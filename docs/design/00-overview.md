@@ -98,6 +98,7 @@ jabiz 是一个**元数据驱动的业务应用平台**，面向"规则多、变
 | 15-public-access | 公开只读访问：公开数据视图、公开模板、公开文件、缓存与限流 |
 | 16-content-authoring | 内容编辑：多语言文本类型、引用显示与选择、流程行操作、子实体列表、只经流程写入的字段、后台子路径 |
 | 17-apps-and-branches | 平台与应用：分支模型、应用目录检查、多应用构建、多 SPA、公开前端 |
+| 18-numbering-approvals-tasks | 编号（无缺号）、审批、职责分离、任务与通知（阶段 14b，D23） |
 
 使用指南（`docs/guide/`）：`quickstart.md`（快速开始）、`new-business-object.md`（新增一个业务对象）；
 示范业务的开发用时与压测报告：`docs/demo/dev-time-log.md`、`docs/perf/phase-11-load-test.md`。

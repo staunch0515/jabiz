@@ -3,6 +3,7 @@ package com.jabiz.app.commerce;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +15,12 @@ import static com.jabiz.app.commerce.CommerceEntities.dataset;
 /** Registers the orders-and-inventory sample ({@link CommerceEntities}, {@link CommerceProcesses}). */
 @Configuration
 class CommerceConfig {
+
+    /** Numbers of orders placed without one, per year (docs/design/18-numbering-approvals-tasks.md section 2). */
+    @Bean
+    NumberSequence orderNumbers() {
+        return NumberSequence.define(CommerceProcesses.ORDER_NUMBERS, s -> s.format("SO-{scope}-{n:6}").scoped());
+    }
 
     @Bean
     EntityDefinition productEntityDefinition() {

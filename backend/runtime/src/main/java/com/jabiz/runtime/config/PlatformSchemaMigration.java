@@ -43,7 +43,8 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sec_user_role_version", "sec_menu_version", "sec_login_record_version", "sec_refresh_token",
         "sec_refresh_token_use", "sec_refresh_family_revocation", "sys_param_version", "ledger_account_version",
         "ledger_transaction_version", "ledger_entry_version", "sys_outbox_event", "sys_event_consumption",
-        "sys_outbox_attempt", "jabiz_shedlock", "sys_job_run", "sys_file");
+        "sys_outbox_attempt", "jabiz_shedlock", "sys_job_run", "sys_file", "sys_number_counter",
+        "sys_number_assignment");
 
     @Override
     public void migrate(Flyway application) {
