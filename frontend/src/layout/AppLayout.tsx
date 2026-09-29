@@ -8,10 +8,10 @@ import { extension } from '../extension'
 import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
+import { LANGUAGE_NAMES } from '../i18n/languages'
 import { useMenus } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
 
-const LANGUAGE_NAMES: Record<Language, string> = { zh: '中文', ja: '日本語', en: 'English' }
 
 /** Menu items from the server (SecMenu, already filtered by permission) as ProLayout routes. */
 function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
@@ -51,7 +51,8 @@ export default function AppLayout() {
       location={{ pathname: location.pathname }}
       route={{ path: '/', routes }}
       menuItemRender={(item, dom) => (item.path ? <Link to={item.path}>{dom}</Link> : dom)}
-      actionsRender={() => [
+      // One language: nothing to switch (decision D22, item 7).
+      actionsRender={() => (languages.length < 2 ? [] : [
         <Dropdown
           key="language"
           menu={{
@@ -65,7 +66,7 @@ export default function AppLayout() {
             {LANGUAGE_NAMES[i18n.language as Language] ?? i18n.language}
           </Space>
         </Dropdown>,
-      ]}
+      ])}
       avatarProps={{
         icon: <UserOutlined />,
         title: <span data-testid="current-user">{userId}</span>,

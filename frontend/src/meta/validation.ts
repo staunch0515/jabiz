@@ -17,7 +17,7 @@ import type { EntityMeta, FieldMeta, RuleSpec, Violation } from './types'
  *
  * 1. convert the value to the canonical type of the field's semantic kind, else INVALID_VALUE;
  * 2. a missing value of a required field: REQUIRED (on insert, or when explicitly cleared);
- * 3. the constraint of the kind: TOO_LONG, NUMERIC_PRECISION, NOT_IN_DICTIONARY, and for multilingual texts TOO_LONG
+ * 3. the constraint of the kind: TOO_LONG, NUMERIC_PRECISION, MONETARY_SCALE, NOT_IN_DICTIONARY, and for multilingual texts TOO_LONG
  *    (with lang) or TRANSLATION_REQUIRED (the first failing one only; decision D20);
  * 4. every exported rule (RANGE, SCALE, LENGTH, PATTERN, NOT_FUTURE, REQUIRED), in declaration order.
  *
@@ -180,6 +180,15 @@ function kindViolation(field: FieldMeta, value: Canonical, options: ValidateOpti
       ruleCode: 'NUMERIC_PRECISION',
       params: { precision: field.precision, scale: field.scale },
     }
+  }
+  // The currency's scale, unless the field has its own SCALE rule (which reports under its code), as EntityValidator.
+  if (
+    field.type === 'monetary' &&
+    value.k === 'decimal' &&
+    !field.rules.some((rule) => rule.kind === 'SCALE') &&
+    Math.max(stripTrailingZeros(value.d).scale, 0) > field.scale
+  ) {
+    return { field: field.name, ruleCode: 'MONETARY_SCALE', params: { scale: field.scale, currency: field.currency } }
   }
   if (field.type === 'code' && field.allowedValues.length === 0 && value.k === 'text') {
     const codes = options.dictionaries?.[field.dictUrn]

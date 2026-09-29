@@ -154,6 +154,7 @@ public final class EntityBuilder {
         validateUniqueConstraints();
         validateListViews();
         validateDisplay();
+        validateMonetaryScales();
 
         return new EntityDefinition(
             name,
@@ -332,6 +333,26 @@ public final class EntityBuilder {
             }
             if (view.defaultSort() != null && !view.sorts().contains(view.defaultSort().field())) {
                 throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is not among its sorts");
+            }
+        }
+    }
+
+    /**
+     * A SCALE rule on a monetary field replaces the kind's own check (EntityValidator), so it may not allow more
+     * digits than the currency's scale: the column could not hold them.
+     */
+    private void validateMonetaryScales() {
+        for (FieldDefinition field : fields.values()) {
+            if (!(field.kind() instanceof SemanticKind.Monetary monetary)) {
+                continue;
+            }
+            for (RuleSpec spec : field.ruleSpecs()) {
+                if (RuleKinds.SCALE.equals(spec.kind())
+                    && ((Number) spec.params().get("scale")).intValue() > monetary.scale()) {
+                    throw invalid("rule " + spec.code() + " of monetary field '" + field.name() + "' allows "
+                        + spec.params().get("scale") + " digits after the point, more than the scale "
+                        + monetary.scale() + " of " + monetary.currency());
+                }
             }
         }
     }

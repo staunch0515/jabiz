@@ -4,11 +4,12 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import 'dayjs/locale/ja'
 import { setApiLanguage } from '../api/client'
-import { languages, resources, type Language } from './resources'
+import { enabledLanguages as languages } from './languages'
+import { resources, type Language } from './resources'
 
 const STORAGE_KEY = 'jabiz.language'
 
-/** The remembered language, else the browser's, else Chinese. */
+/** The remembered language, else the browser's, else Chinese, among the application's languages (else its first). */
 function initialLanguage(): Language {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
@@ -17,7 +18,8 @@ function initialLanguage(): Language {
     // no storage: fall through
   }
   const browser = (typeof navigator === 'undefined' ? '' : navigator.language).slice(0, 2)
-  return (languages as readonly string[]).includes(browser) ? (browser as Language) : 'zh'
+  if ((languages as readonly string[]).includes(browser)) return browser as Language
+  return languages.includes('zh') ? 'zh' : languages[0]
 }
 
 function apply(lang: Language) {
@@ -32,7 +34,7 @@ apply(language)
 void i18n.use(initReactI18next).init({
   resources,
   lng: language,
-  fallbackLng: 'en',
+  fallbackLng: languages.includes('en') ? 'en' : languages[0],
   interpolation: { escapeValue: false },
 })
 

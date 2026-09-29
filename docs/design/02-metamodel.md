@@ -67,7 +67,8 @@ public interface CustomKindSupport {
 | `None`（过渡） | 全部 |
 
 语义类型本身带来的输入约束由 `EntityValidator` 检查：`Text.maxLength`（按字符计）→ `TOO_LONG`；
-`Numeric(precision, scale)` → `NUMERIC_PRECISION`；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）；
+`Numeric(precision, scale)` → `NUMERIC_PRECISION`；`Monetary(currency, scale)` 的小数位（去掉末尾的 0 后计）→ `MONETARY_SCALE`
+（字段自己有 `SCALE` 规则时由该规则以自己的错误码报告，构建期要求它不比币种的小数位宽松；D22）；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）；
 `Custom` → `CustomKindSupport.validate`（例如 `jabiz.i18n-text` 的 `TOO_LONG`、`TRANSLATION_REQUIRED`，16 §1.2）。
 
 ## 2. 逻辑名与物理名分离

@@ -2,6 +2,7 @@ package com.jabiz.gradle
 
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 
 /**
@@ -13,6 +14,8 @@ import org.gradle.api.provider.Property
  *     spa("/", "../../frontend")          // built with VITE_BASE=/        → static/
  *     spa("/admin", "../../frontend")     // built with VITE_BASE=/admin/  → static/admin/
  *     spa("/", "../../frontend", extension = "admin-extension")   // with the application's own admin pages
+ *     languages("en")                     // interface languages: a subset of zh, ja, en (default all)
+ *     region = "en-US"                    // dates, numbers and amounts shown as in this region
  * }
  * ```
  */
@@ -33,7 +36,24 @@ open class JabizAppExtension internal constructor(
      */
     val publicQueriesSnapshot: RegularFileProperty = objects.fileProperty()
 
+    /**
+     * The interface languages (decision D22 item 7), in any order: the admin frontend offers only these and the
+     * server requires messages only in these. Empty: all platform languages.
+     */
+    val languages: ListProperty<String> = objects.listProperty(String::class.java).convention(emptyList())
+
+    /** The region dates, numbers and amounts are shown in (`en-US`); absent: the platform's neutral forms. */
+    val region: Property<String> = objects.property(String::class.java)
+
     private val paths = mutableSetOf<String>()
+
+    /** Sets [languages], each one of the platform's. */
+    fun languages(vararg codes: String) {
+        require(codes.isNotEmpty()) { "languages() needs at least one language" }
+        val unknown = codes.filterNot { it in PLATFORM_LANGUAGES }
+        require(unknown.isEmpty()) { "languages $unknown are not platform languages $PLATFORM_LANGUAGES" }
+        languages.set(codes.distinct())
+    }
 
     /**
      * Packages the single-page application built from [sourceDir] (a pnpm project, relative to this module) under
@@ -50,6 +70,7 @@ open class JabizAppExtension internal constructor(
 
     private companion object {
         val PATH = Regex("/|(/[a-z0-9][a-z0-9-]*)+")
+        val PLATFORM_LANGUAGES = listOf("zh", "ja", "en")
     }
 }
 

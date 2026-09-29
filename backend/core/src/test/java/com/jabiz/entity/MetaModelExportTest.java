@@ -137,7 +137,7 @@ class MetaModelExportTest {
         assertThat(field(ja, "note")).containsEntry("label", "note");
         Map<String, Object> messages = (Map<String, Object>) ja.get("messages");
         assertThat(messages.keySet()).containsExactly("INVALID_VALUE", "REQUIRED", "TOO_LONG", "NUMERIC_PRECISION",
-            "NOT_IN_DICTIONARY", "NON_NEGATIVE");
+            "MONETARY_SCALE", "NOT_IN_DICTIONARY", "NON_NEGATIVE");
         assertThat(messages).containsEntry("NON_NEGATIVE", "項目「{field}」は{min}以上でなければなりません。")
             .containsEntry("REQUIRED", "項目「{field}」は必須です。");
 

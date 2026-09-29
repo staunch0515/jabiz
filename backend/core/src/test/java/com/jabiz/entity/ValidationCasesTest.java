@@ -60,6 +60,8 @@ class ValidationCasesTest {
         eb.field("amount", f -> f.physicalColumn("f_amount").required(true).asMonetary("JPY", 2)
             .apply(Rules.range("AMOUNT_RANGE", BigDecimal.ZERO, new BigDecimal("1000000")))
             .apply(Rules.scale("AMOUNT_SCALE", 2)));
+        // A monetary field without its own SCALE rule: the currency's scale is checked (MONETARY_SCALE).
+        eb.field("fee", f -> f.physicalColumn("f_fee").asMonetary("USD", 2));
         eb.field("ratio", f -> f.physicalColumn("f_ratio").asNumeric(5, 2)
             .apply(Rules.range("RATIO_MAX", null, new BigDecimal("100"))));
         eb.field("happenedAt", f -> f.physicalColumn("f_happened").asTemporal(TemporalRole.EVENT_TIME)

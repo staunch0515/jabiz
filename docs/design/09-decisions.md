@@ -575,7 +575,8 @@ D9 第 9 条原本就只描述"阶段 6 之前"的操作产生方式，数据视
    违规在应用启动时一次性报告。扩展的类型检查是构建的一部分（`pnpm build`），类型错误使 jar 构建失败。
 6. **检查**：`pnpm ext:typecheck | ext:lint | ext:test | ext:check`（`JABIZ_ADMIN_EXTENSION=<目录>`）用平台前端的工具与配置检查扩展；
    扩展的 `tsconfig.json` 继承 `frontend/tsconfig.extension.json`。
-7. **界面语言子集**（阶段 14a-2 实施）：应用可只用平台语言中的一部分（`jabizApp { languages(…) }`，前后端取自同一处）；
+7. **界面语言子集与区域**（阶段 14a-2）：应用可只用平台语言中的一部分（`jabizApp { languages(…) }`，前后端取自同一处：jar 中的 `META-INF/jabiz-app.properties` 与前端构建变量），
+   并可声明显示区域（`region = "en-US"`，12 §10）；
    文案完整性检查只要求所选语言，界面只提供所选语言。多语言**内容**的语言不变（仍是平台语言，字段声明自己的必填语言），因此不会出现 D20 担心的两套语言集合。
 
 **理由**：一个工程、一套依赖，不会出现两份 React 或两个 antd 的样式与上下文；应用的页面与生成页面共用同一个外框、会话与组件；
