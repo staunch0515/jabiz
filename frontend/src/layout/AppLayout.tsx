@@ -4,6 +4,9 @@ import { Dropdown, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
+import { extension } from '../extension'
+import { EXTENSION_NAMESPACE } from '../extension/api'
+import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { useMenus } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
@@ -21,18 +24,20 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
 }
 
 /**
- * The frame of every signed-in page: the dynamic menu (docs/design/10-security.md section 3) followed by the two
- * catalogs, which list only what the user may use. Hiding is navigation, not access: every call is checked again.
+ * The frame of every signed-in page: the dynamic menu (docs/design/10-security.md section 3), the application's own
+ * menu entries (decision D22) and the two catalogs, which list only what the user may use. Hiding is navigation,
+ * not access: every call is checked again.
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
-  const { userId, signOut } = useAuth()
+  const { userId, signOut, can } = useAuth()
   const menus = useMenus()
   const location = useLocation()
   const navigate = useNavigate()
 
   const routes: MenuDataItem[] = [
     ...toRoutes(menus.data),
+    ...extensionMenu(extension.menu, can, (key) => t(key, { ns: EXTENSION_NAMESPACE })),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]

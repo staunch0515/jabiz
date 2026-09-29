@@ -56,6 +56,11 @@ jobs:
       - run: pnpm check:api
       - run: pnpm test
       - run: pnpm build
+      # The demo application's admin extension (docs/design/12-frontend.md section 9, decision D22): its types, lint
+      # rules (only @jabiz/admin) and tests, checked with this project's tools.
+      - run: pnpm ext:check
+        env:
+          JABIZ_ADMIN_EXTENSION: ../backend/app/admin-extension
       # The admin frontend under a sub-path (docs/design/16-content-authoring.md section 6): assets resolve below it.
       - name: Build under /admin/
         run: |

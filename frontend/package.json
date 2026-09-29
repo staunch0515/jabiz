@@ -6,12 +6,16 @@
   "packageManager": "pnpm@10.18.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && node scripts/ext.mjs typecheck --if-set && vite build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
     "gen:api": "openapi-typescript openapi/openapi.json -o src/api/schema.d.ts",
     "check:api": "openapi-typescript openapi/openapi.json -o node_modules/.tmp/schema.d.ts && diff -q node_modules/.tmp/schema.d.ts src/api/schema.d.ts",
+    "ext:typecheck": "node scripts/ext.mjs typecheck",
+    "ext:lint": "node scripts/ext.mjs lint",
+    "ext:test": "node scripts/ext.mjs test",
+    "ext:check": "node scripts/ext.mjs check",
     "e2e": "playwright test",
     "preview": "vite preview"
   },

@@ -6,7 +6,8 @@ plugins {
 
 jabizApp {
     mainClass = "com.jabiz.app.App"
-    spa("/", "../../frontend")
+    // The admin frontend with the demo's own page (docs/design/12-frontend.md section 9, decision D22).
+    spa("/", "../../frontend", extension = "admin-extension")
 }
 
 dependencies {
