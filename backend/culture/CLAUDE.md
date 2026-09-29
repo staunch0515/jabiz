@@ -6,8 +6,10 @@
 
 ## 1. 边界
 
-- 本分支只改 `.jabiz-app-paths` 中的目录。平台缺能力或有缺陷时，先在 `platform` 的工作分支上补（带平台自己的测试与示范，不提 culture），
-  合入 `platform` 后再合并到 `culture`。C1 中这样补过：显式初始状态 `st.initial`、`CallProcess.forEach`、违规只报告一次（平台 13e）。
+- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：现在是线 1.0（`1.0/culture`），工作分支 `1.0/culture-<N>-<名>`；
+  需要新线（如 1.1）的平台能力时，从 `1.0/culture` 拉出 `1.1/culture` 再合并 `1.1/platform`，`1.0/culture` 随之冻结。
+- 本分支只改 `.jabiz-app-paths` 中的目录，不改 `.jabiz-platform-line`。平台缺能力或有缺陷时，先在该线平台的工作分支上补（带平台自己的测试与示范，不提 culture），
+  合入 `<线>/platform` 后再合并到 `<线>/culture`。C1 中这样补过：显式初始状态 `st.initial`、`CallProcess.forEach`、违规只报告一次（平台 13e）。
 - 包 `com.jabiz.culture`；启动类 `CultureApp`；表前缀 `cu_`；迁移 `db/migration/V*__culture_*.sql`；文案 `messages_{zh,ja,en}.properties`。
 
 ## 2. 个人数据（参与者多为未成年人）

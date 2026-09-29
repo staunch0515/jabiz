@@ -1,8 +1,8 @@
 # Culture, Unfiltered — 路线图
 
 应用 culture 的阶段计划。设计见 `00-design.md`（待确认），需求原文见 `brief.md`。
-执行方式与平台相同（根目录 `CLAUDE.md` 第 7 节）：每个阶段先出实施计划、经确认后实现；工作分支 `culture-<N>-<名>` 从 `culture` 拉出并合回；
-PR 逐条对照本文件的验收标准。平台能力来自 `platform` 分支的阶段 13（`docs/ROADMAP.md`），合入 `platform` 后再合并到 `culture`。
+执行方式与平台相同（根目录 `CLAUDE.md` 第 7 节）：每个阶段先出实施计划、经确认后实现；工作分支 `1.0/culture-<N>-<名>` 从 `1.0/culture` 拉出并合回；
+PR 逐条对照本文件的验收标准。平台能力来自平台版本线 1.0（`1.0/platform`，阶段 1–13f，`docs/ROADMAP.md`），合入 `1.0/platform` 后再合并到 `1.0/culture`（平台决策 D21）。
 
 | 阶段 | 名称 | 依赖（平台） | 预估 | 状态 |
 |---|---|---|---|---|
