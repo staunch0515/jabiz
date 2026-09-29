@@ -85,6 +85,8 @@ jabizApp {
 ```
 
 - `app` 改用同一插件（`spa("/", "../../frontend")`），行为不变；这是本阶段对现有构建的唯一改动，由现有测试与 CI 证明。
+- 应用自己的后台页面（D22）：`spa("/", "../../frontend", extension = "<目录>")` 把应用目录中的扩展编入通用后台（`JABIZ_ADMIN_EXTENSION`，
+  扩展目录是构建输入）；见 12 §9。`app` 以此编入示范扩展 `admin-extension/`。
 
 ### 3.2 多个单页应用（SPA）
 

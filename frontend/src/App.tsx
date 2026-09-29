@@ -8,6 +8,8 @@ import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } fr
 import { ApiError } from './api/problem'
 import { routerBasename } from './base'
 import { AuthProvider, useAuth } from './auth/AuthContext'
+import { extension } from './extension'
+import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
@@ -43,13 +45,15 @@ const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="/data" replace /> },
+          { index: true, element: <Navigate to={homePath(extension)} replace /> },
           { path: '/data', element: <DatasetCatalogPage /> },
           { path: '/data/:datasetId', element: <DatasetListPage /> },
           { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage /> },
           { path: '/processes', element: <ProcessCatalogPage /> },
           { path: '/processes/:name/:version', element: <ProcessFormPage /> },
-          { path: '*', element: <Navigate to="/data" replace /> },
+          // The application's own pages (decision D22), checked at startup not to take a platform path.
+          ...(extension.routes ?? []),
+          { path: '*', element: <Navigate to={homePath(extension)} replace /> },
         ],
       },
     ],

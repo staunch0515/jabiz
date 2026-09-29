@@ -107,13 +107,15 @@ class BootAppPlugin : Plugin<Project> {
     }
 
     /**
-     * Installs and builds one SPA with `VITE_BASE` set to its prefix, into a directory of this module's own (two
-     * applications can build the same frontend with different bases), and packages it under `static/<prefix>`.
+     * Installs and builds one SPA with `VITE_BASE` set to its prefix (and `JABIZ_ADMIN_EXTENSION` to the application's
+     * admin pages), into a directory of this module's own (two applications can build the same frontend with
+     * different bases), and packages it under `static/<prefix>`.
      */
     private fun registerSpa(project: Project, spa: SpaSpec, pnpm: Provider<PnpmLock>) {
         val sourceDir = project.layout.projectDirectory.dir(spa.sourceDir)
         val suffix = spa.name.split('-').joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
         val outDir = project.layout.buildDirectory.dir("spa/${spa.name}")
+        val extensionDir = spa.extension?.let { project.layout.projectDirectory.dir(it) }
 
         val install = project.tasks.register("pnpmInstall$suffix", PnpmTask::class.java) {
             dependsOn("pnpmSetup")
@@ -131,15 +133,21 @@ class BootAppPlugin : Plugin<Project> {
             usesService(pnpm)
             workingDir.set(sourceDir)
             environment.put("VITE_BASE", spa.base)
+            // The application's own admin pages (decision D22); the build type-checks them before bundling.
+            extensionDir?.let { environment.put("JABIZ_ADMIN_EXTENSION", it.asFile.absolutePath) }
             pnpmCommand.set(outDir.map {
                 listOf("run", "build", "--outDir", it.asFile.absolutePath, "--emptyOutDir")
             })
             inputs.property("base", spa.base)
+            inputs.property("extension", spa.extension ?: "")
+            extensionDir?.let { dir -> inputs.files(project.fileTree(dir) { exclude("node_modules/**") }) }
             inputs.files(
                 project.fileTree(sourceDir.dir("src")),
                 project.fileTree(sourceDir.dir("public")),
                 project.fileTree(sourceDir.dir("openapi")),
-                project.fileTree(sourceDir) { include("index.html", "package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig*.json") },
+                project.fileTree(sourceDir) {
+                    include("index.html", "package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig*.json", "scripts/**")
+                },
             )
             outputs.dir(outDir)
         }

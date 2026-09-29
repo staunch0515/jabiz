@@ -19,6 +19,9 @@ frontend/
   src/api/                  schema.d.ts（生成）、client.ts（令牌、语言、401 时刷新一次）、session.ts、problem.ts
   src/meta/                 适配层（纯函数）：kinds、listQuery、columns、entityForm、validation、decimal、processForm、history
   src/components/ pages/    通用页面：目录、列表、表单抽屉、历史、流程
+  src/extension/            应用扩展的约定与加载（第 9 节）
+  src/lib/index.ts          `@jabiz/admin`：扩展可用的全部内容（第 9 节）
+  scripts/                  扩展的解析与检查（ext.mjs、extension.ts、extension-lint.mjs）
   e2e/                      Playwright
 ../spec/validation-cases.json  前后端共享的校验用例（第 5 节）
 ```
@@ -115,7 +118,7 @@ frontend/
 | `/data/:datasetId/:id/history` | 历史：版本时间线（动作、生效 / 记录时间、操作人、操作、原因、改动字段的前后值、预定标记）；任意时间点回看并与当前对比；操作详情（`operation.read`）；撤销（`temporal.revert`，填原因） |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
-- 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是两个目录；语言切换记在 `localStorage`（仅本机偏好）。
+- 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录；语言切换记在 `localStorage`（仅本机偏好）。
 - 实体上的操作（16 §3）：流程目录中 `actsOn` 指向该实体的流程，在列表行与详情中显示为按钮（`when` 只是显示提示）；打开的流程表单中主键已填且只读，
   输入只有主键时确认后直接执行。
 - 详情抽屉中的子实体列表（16 §4）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
@@ -131,6 +134,7 @@ frontend/
   端到端测试在任何 CSP 违规时失败。
 - 子路径：`VITE_BASE=/admin/`（`src/base.ts` 校验并换算 React Router 的 `basename`，16 §6）；CI 检查以 `/admin/` 构建后的资源路径。
 - 检查：`pnpm lint`、`pnpm typecheck`、`pnpm check:api`、`pnpm test`、`pnpm build`；端到端 `pnpm e2e`（见第 8 节）。
+- 应用扩展（第 9 节）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm build` 把它编入；`pnpm ext:check` 检查它（类型、lint、测试）。
 
 ## 8. 测试
 
@@ -141,3 +145,32 @@ frontend/
   表单新建 / 编辑 / 删除；六种非法输入的前端错误码与直接调用接口的错误码相同；历史时间线、回看、预定、操作详情、撤销；
   列表按时间点读取；另一个时态实体 `Price` 的历史；流程表单。每个测试使用自己的数据（表只增不删）。
 - 示范实体 `Carrier`（app，时态，`V7__carrier.sql`）只有声明，前端没有它的专门代码；`CarrierIT` 断言经数据视图接口的写入只有 INSERT。
+- 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
+  `scripts/extension-lint.test.ts`（深层引用被拒绝）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，经 `pnpm ext:test`）；
+  端到端 `e2e/extension.spec.ts`（从菜单进入、读模板、执行流程；无权限用户看不到菜单项，直接打开时服务端返回 403）。
+
+## 9. 应用扩展：应用自己的后台页面【D22】
+
+应用有元数据表达不了的工作流时（例如多行分录的录入网格、对账），在自己的目录里写一个**扩展**，构建通用后台时编入。
+
+```
+<应用目录>/admin-extension/            （例：backend/app/admin-extension/、finance-web/）
+  tsconfig.json                        {"extends": "<相对路径>/frontend/tsconfig.extension.json", "include": ["src"]}
+  src/index.tsx                        export default defineExtension({ routes, menu, messages, home })
+  src/…Page.tsx、src/…test.tsx          页面与测试；只 import '@jabiz/admin' 与平台前端已有的第三方包
+```
+
+| 项 | 规定 |
+|---|---|
+| 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 antd） |
+| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`；不能是 index 路由（用 `home`） |
+| `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
+| `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
+| `home` | 登录后与未知路径的落点；缺省 `/data` |
+| 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、格式化函数 |
+| 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径与 `virtual:jabiz-extension`） |
+
+- 扩展页面调用的仍是 `/api/**`：权限、数据视图范围与校验都在服务端，页面上的隐藏只是导航。
+- 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。
+- 示范：`backend/app/admin-extension/`（"库存概览"：模板 `commerce.stock_availability` 与流程 `STOCK_RECEIVE`，菜单项需 `commerce.stock.read`）。
+  操作步骤见 `docs/guide/admin-extension.md`。
