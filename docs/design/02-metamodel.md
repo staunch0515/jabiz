@@ -214,6 +214,10 @@ eb.unique("uk_user_name", "userName");            // 可多字段
 撤销不恢复它（422 `PROCESS_ONLY_FIELD`），但照常可读、可筛选、可排序；插入中缺省时由平台填值（状态字段取初始状态）。
 不能同时是 `sensitive`、`generated`。导出为 `processOnly: true`，JSON Schema 中 `readOnly: true`。详见 16 §5。
 
+### 6.2.1 不进审计的字段【D27】
+
+`f.auditMasked()`：值照常可读、可写，审计记录（21 §1）只记为 `***`。敏感字段本来就如此，无需再标。示例：`SysFile.originalName`。
+
 ### 6.3 显示字段【D20】
 
 `eb.display(field)`：该实体被引用时用哪个字段显示（`Text` 或 `jabiz.i18n-text`，非敏感），供 `lookup` / `labels` 接口（03 §3）

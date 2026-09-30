@@ -26,6 +26,7 @@ class AuditDiffTest {
         eb.field("creditLimit", f -> f.physicalColumn("credit_limit").asMonetary("USD", 2));
         eb.field("since", f -> f.physicalColumn("since").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("labels", f -> f.physicalColumn("labels").asText(400));
+        eb.field("contractName", f -> f.physicalColumn("contract_name").asText(255).auditMasked());
     });
 
     private static Map<String, Object> state(Object... pairs) {
@@ -46,6 +47,17 @@ class AuditDiffTest {
         assertThat(changes.get("name")).isEqualTo(new AuditDiff.Change("Acme", "Acme Inc."));
         assertThat(changes.get("bankAccount")).isEqualTo(new AuditDiff.Change(AuditDiff.MASK, AuditDiff.MASK));
         assertThat(changes.keySet()).containsExactly("bankAccount", "name");
+    }
+
+    @Test
+    void auditMaskedValuesAreReadableButKeptOutOfTheTrail() {
+        assertThat(VENDOR.fields.get("contractName").auditMasked()).isTrue();
+        assertThat(VENDOR.fields.get("contractName").sensitive()).isFalse();
+        assertThat(AuditDiff.of(VENDOR, state("contractName", "山田_contract.pdf"),
+            state("contractName", "Tanaka_contract.pdf")))
+            .containsExactly(Map.entry("contractName", new AuditDiff.Change(AuditDiff.MASK, AuditDiff.MASK)));
+        assertThat(AuditDiff.of(VENDOR, state("contractName", "same.pdf"), state("contractName", "same.pdf")))
+            .isEmpty();
     }
 
     @Test

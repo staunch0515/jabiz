@@ -94,7 +94,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   导入与字段的显示名在消息 `import.<id>`、`import.<id>.<字段>`。预览是试运行（`ExecutionOptions.DRY_RUN`），不自己做"先校验后写入"的两套逻辑；
   提交有任何问题即整体拒收（只留下 `sys_import_run` 的记录），同一文件、同一外部引用只导入一次。场景中用步骤 `import` 导入文件（07 §3.1）。
 - **审计**（见 21 §1 与决策 D27）：实体写入的前后值由平台在 `DatasetEntityManager` / `VersionAppender` 中记入只追加的 `sys_audit_record`（敏感字段只存 `***`），
-  业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一。查询只经 `GET /api/audit/records`（`audit.read`）。
+  业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一。可读但不应留在审计中的值（如文件名）用 `f.auditMasked()`。查询只经 `GET /api/audit/records`（`audit.read`）。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。

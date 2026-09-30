@@ -125,6 +125,14 @@ class FileDeleteIT extends FileItSupport {
         assertThat(operations).allSatisfy(row -> assertThat((String) row.get("input_summary"))
             .doesNotContain("山田").doesNotContain("passport"));
         assertThat((String) operations.getFirst().get("input_summary")).contains("commerce.document");
+
+        // The audit trail tells that a file was registered and deleted, and which one, but not its name
+        // (docs/design/21-audit-retention.md section 1.2).
+        List<Map<String, Object>> audit = query("SELECT action, changes FROM sys_audit_record WHERE entity_id = ? "
+            + "ORDER BY record_no", fileId);
+        assertThat(audit).extracting(row -> row.get("action")).containsExactly("INSERT", "DELETE");
+        assertThat(audit).allSatisfy(row -> assertThat(String.valueOf(row.get("changes")))
+            .doesNotContain("山田").doesNotContain("passport").contains("\"originalName\"").contains("***"));
     }
 
     @Test

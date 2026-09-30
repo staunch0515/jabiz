@@ -56,7 +56,7 @@ public final class AuditDiff {
             if (Objects.equals(from, to)) {
                 continue;
             }
-            if (field.sensitive()) {
+            if (field.sensitive() || field.auditMasked()) {
                 changes.put(name, new Change(from == null ? null : MASK, to == null ? null : MASK));
             } else {
                 changes.put(name, new Change(from, to));
