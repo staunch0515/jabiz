@@ -846,6 +846,189 @@
         },
         "type" : "object"
       },
+      "IntegrityCheckDetail" : {
+        "properties" : {
+          "check" : {
+            "$ref" : "#/components/schemas/IntegrityCheckSummary"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IntegrityProblem"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegrityCheckPage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IntegrityCheckSummary"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "offset" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegrityCheckSummary" : {
+        "properties" : {
+          "actorId" : {
+            "type" : "string"
+          },
+          "checkNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "checkedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fromSeal" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "intact" : {
+            "type" : "boolean"
+          },
+          "keyId" : {
+            "type" : "string"
+          },
+          "problemCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "processSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "rowCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sealCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "toSeal" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "unsealedCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegrityHead" : {
+        "properties" : {
+          "currentKeyId" : {
+            "type" : "string"
+          },
+          "keyId" : {
+            "type" : "string"
+          },
+          "rowCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sealHash" : {
+            "type" : "string"
+          },
+          "sealNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sealedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegrityProblem" : {
+        "properties" : {
+          "detail" : {
+            "type" : "string"
+          },
+          "key" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "enum" : [ "MODIFIED", "MISSING", "CHAIN_BROKEN", "SEAL_ALTERED", "OTHER_KEY", "UNPROTECTED" ],
+            "type" : "string"
+          },
+          "sealNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "table" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegritySeal" : {
+        "properties" : {
+          "keyId" : {
+            "type" : "string"
+          },
+          "merkleRoot" : {
+            "type" : "string"
+          },
+          "prevHash" : {
+            "type" : "string"
+          },
+          "processSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "rowCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sealHash" : {
+            "type" : "string"
+          },
+          "sealNo" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sealedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "IntegritySealPage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IntegritySeal"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "offset" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LabelsRequest" : {
         "properties" : {
           "ids" : {
@@ -2781,6 +2964,125 @@
           }
         },
         "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/integrity/checks" : {
+      "get" : {
+        "operationId" : "checks",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "offset",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "default" : 50,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IntegrityCheckPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "integrity-controller" ]
+      }
+    },
+    "/api/integrity/checks/{checkNo}" : {
+      "get" : {
+        "operationId" : "check",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "checkNo",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IntegrityCheckDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "integrity-controller" ]
+      }
+    },
+    "/api/integrity/head" : {
+      "get" : {
+        "operationId" : "head",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IntegrityHead"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "integrity-controller" ]
+      }
+    },
+    "/api/integrity/seals" : {
+      "get" : {
+        "operationId" : "seals",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "offset",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "default" : 50,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IntegritySealPage"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "integrity-controller" ]
       }
     },
     "/api/jobs" : {

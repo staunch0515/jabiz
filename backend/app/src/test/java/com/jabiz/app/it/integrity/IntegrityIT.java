@@ -4,7 +4,10 @@ import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.app.it.security.SecurityItSupport;
 import com.jabiz.integrity.IntegrityKey;
 import com.jabiz.integrity.SealBlock;
+import com.jabiz.job.JobDefinition;
 import com.jabiz.runtime.integrity.IntegrityChecks;
+import com.jabiz.runtime.integrity.IntegrityProcesses;
+import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,12 +15,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The integrity seals (docs/design/21-audit-retention.md section 2; ROADMAP phase 14f-2): rows of the append-only
@@ -33,6 +38,15 @@ class IntegrityIT extends SecurityItSupport {
 
     @Autowired
     IntegrityChecks checks;
+
+    @Autowired
+    JobRunner jobs;
+
+    @Autowired
+    JobDefinition<IntegrityProcesses.SealInput> integritySealJob;
+
+    @Autowired
+    JobDefinition<IntegrityProcesses.VerifyInput> integrityVerifyJob;
 
     @Test
     void anIntactChainIsSignedLinkedAndVerified() {
@@ -81,8 +95,8 @@ class IntegrityIT extends SecurityItSupport {
 
         List<Map<String, Object>> problems = problems(verify(sealNo));
         assertThat(problems).extracting(p -> p.get("kind"), p -> p.get("table"), p -> p.get("key"))
-            .contains(org.assertj.core.groups.Tuple.tuple("MODIFIED", "sys_audit_record", "[" + changedNo + "]"),
-                org.assertj.core.groups.Tuple.tuple("MISSING", "sys_audit_record", "[" + deletedNo + "]"));
+            .contains(tuple("MODIFIED", "sys_audit_record", "[" + changedNo + "]"),
+                tuple("MISSING", "sys_audit_record", "[" + deletedNo + "]"));
         assertThat(problems).extracting(p -> ((Number) p.get("sealNo")).longValue()).containsOnly(sealNo);
     }
 
@@ -105,9 +119,9 @@ class IntegrityIT extends SecurityItSupport {
 
         List<Map<String, Object>> problems = problems(verify(altered));
         assertThat(problems).extracting(p -> p.get("kind"), p -> ((Number) p.get("sealNo")).longValue())
-            .contains(org.assertj.core.groups.Tuple.tuple("SEAL_ALTERED", altered),
-                org.assertj.core.groups.Tuple.tuple("CHAIN_BROKEN", resigned),
-                org.assertj.core.groups.Tuple.tuple("SEAL_ALTERED", resigned));
+            .contains(tuple("SEAL_ALTERED", altered),
+                tuple("CHAIN_BROKEN", resigned),
+                tuple("SEAL_ALTERED", resigned));
     }
 
     @Test
@@ -117,7 +131,7 @@ class IntegrityIT extends SecurityItSupport {
         bypassingTheGuard("ALTER TABLE sys_audit_record DISABLE TRIGGER sys_audit_record_append_only");
         try {
             assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"))
-                .contains(org.assertj.core.groups.Tuple.tuple("UNPROTECTED", "sys_audit_record"));
+                .contains(tuple("UNPROTECTED", "sys_audit_record"));
         } finally {
             bypassingTheGuard("ALTER TABLE sys_audit_record ENABLE TRIGGER sys_audit_record_append_only");
         }
@@ -147,6 +161,18 @@ class IntegrityIT extends SecurityItSupport {
     }
 
     @Test
+    void theJobsSealAndVerifyAsTheSystem() {
+        String ticket = ticket();
+        Instant at = clock.instant();
+        assertThat(jobs.run(integritySealJob, at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(sealedKeys("sys_audit_record")).contains("[" + auditRecordNo(ticket) + "]");
+        assertThat(integritySealJob.cron()).isEqualTo("0 */5 * * * *");
+        assertThat(jobs.run(integrityVerifyJob, at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(query("SELECT actor_id FROM sys_integrity_check ORDER BY check_no DESC LIMIT 1").getFirst())
+            .containsEntry("actor_id", "system");
+    }
+
+    @Test
     void theSealsCannotBeChangedAndNeedTheirPermissions() {
         seal();
         assertThatThrownBy(() -> execute("UPDATE sys_integrity_seal SET row_count = 0"))
@@ -173,7 +199,7 @@ class IntegrityIT extends SecurityItSupport {
         query("SELECT 1 AS done FROM (SELECT jabiz_protect_append_only('it_no_key')) AS p");
         try {
             assertThat(checks.check()).extracting(p -> p.location(), p -> p.message())
-                .contains(org.assertj.core.groups.Tuple.tuple("Table it_no_key",
+                .contains(tuple("Table it_no_key",
                     "is append-only but has no primary key, so its rows cannot be sealed"));
             // Sealing goes on with the other tables.
             seal();

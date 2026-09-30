@@ -38,26 +38,26 @@ class IntegrityController {
      * @param sealNo       the last block, or null before the first seal
      * @param currentKeyId the id of the key the application signs with now
      */
-    record Head(Long sealNo, Instant sealedTime, Integer rowCount, String sealHash, String keyId,
+    record IntegrityHead(Long sealNo, Instant sealedTime, Integer rowCount, String sealHash, String keyId,
         String currentKeyId) {}
 
-    record Seal(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String prevHash, String sealHash,
-        String keyId, Long processSeqId) {}
+    record IntegritySeal(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String prevHash,
+        String sealHash, String keyId, Long processSeqId) {}
 
-    record SealPage(List<Seal> items, long offset, int limit) {}
+    record IntegritySealPage(List<IntegritySeal> items, long offset, int limit) {}
 
     /**
      * @param intact        whether nothing was found
      * @param problemCount  all problems found; {@code problems} of the detail holds the first ones
      * @param unsealedCount rows no block held yet when it ran
      */
-    record CheckSummary(long checkNo, Instant checkedTime, String actorId, Long processSeqId, Long fromSeal,
-        Long toSeal, int sealCount, long rowCount, long unsealedCount, int problemCount, boolean intact,
+    record IntegrityCheckSummary(long checkNo, Instant checkedTime, String actorId, Long processSeqId,
+        Long fromSeal, Long toSeal, int sealCount, long rowCount, long unsealedCount, int problemCount, boolean intact,
         String keyId) {}
 
-    record CheckPage(List<CheckSummary> items, long offset, int limit) {}
+    record IntegrityCheckPage(List<IntegrityCheckSummary> items, long offset, int limit) {}
 
-    record CheckDetail(CheckSummary check, List<IntegrityProblem> problems) {}
+    record IntegrityCheckDetail(IntegrityCheckSummary check, List<IntegrityProblem> problems) {}
 
     private final IntegrityStore store;
     private final IntegrityKey key;
@@ -70,49 +70,50 @@ class IntegrityController {
     }
 
     @GetMapping("/head")
-    Mono<Head> head() {
+    Mono<IntegrityHead> head() {
         return readable().then(store.head(store.engine())
-            .map(stored -> new Head(stored.block().sealNo(), stored.block().sealedTime(), stored.block().rowCount(),
-                stored.storedHash(), stored.block().keyId(), key.id()))
-            .defaultIfEmpty(new Head(null, null, null, null, null, key.id())));
+            .map(stored -> new IntegrityHead(stored.block().sealNo(), stored.block().sealedTime(),
+                stored.block().rowCount(), stored.storedHash(), stored.block().keyId(), key.id()))
+            .defaultIfEmpty(new IntegrityHead(null, null, null, null, null, key.id())));
     }
 
     @GetMapping("/seals")
-    Mono<SealPage> seals(@RequestParam(defaultValue = "0") long offset,
+    Mono<IntegritySealPage> seals(@RequestParam(defaultValue = "0") long offset,
         @RequestParam(defaultValue = "50") int limit) {
         return readable().then(Mono.defer(() -> {
             validate(offset, limit);
             return store.sealPage(offset, limit)
-                .map(row -> new Seal(Rows.longValue(row.get("seal_no")), Rows.instant(row.get("sealed_time")),
+                .map(row -> new IntegritySeal(Rows.longValue(row.get("seal_no")), Rows.instant(row.get("sealed_time")),
                     Rows.intValue(row.get("row_count")), Rows.string(row.get("merkle_root")),
                     Rows.string(row.get("prev_hash")), Rows.string(row.get("seal_hash")),
                     Rows.string(row.get("key_id")), Rows.longValue(row.get("process_seq_id"))))
                 .collectList()
-                .map(items -> new SealPage(items, offset, limit));
+                .map(items -> new IntegritySealPage(items, offset, limit));
         }));
     }
 
     @GetMapping("/checks")
-    Mono<CheckPage> checks(@RequestParam(defaultValue = "0") long offset,
+    Mono<IntegrityCheckPage> checks(@RequestParam(defaultValue = "0") long offset,
         @RequestParam(defaultValue = "50") int limit) {
         return readable().then(Mono.defer(() -> {
             validate(offset, limit);
             return store.checkPage(offset, limit).map(IntegrityController::summary).collectList()
-                .map(items -> new CheckPage(items, offset, limit));
+                .map(items -> new IntegrityCheckPage(items, offset, limit));
         }));
     }
 
     @GetMapping("/checks/{checkNo}")
-    Mono<CheckDetail> check(@PathVariable long checkNo) {
+    Mono<IntegrityCheckDetail> check(@PathVariable long checkNo) {
         return readable().then(store.check(checkNo)
-            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("Integrity check " + checkNo + " not found")))
-            .map(row -> new CheckDetail(summary(row), json.readValue(Rows.string(row.get("problems_json")),
+            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("Integrity check " + checkNo
+                + " not found")))
+            .map(row -> new IntegrityCheckDetail(summary(row), json.readValue(Rows.string(row.get("problems_json")),
                 new TypeReference<List<IntegrityProblem>>() {}))));
     }
 
-    private static CheckSummary summary(Map<String, Object> row) {
+    private static IntegrityCheckSummary summary(Map<String, Object> row) {
         int problems = Rows.intValue(row.get("problem_count"));
-        return new CheckSummary(Rows.longValue(row.get("check_no")), Rows.instant(row.get("checked_time")),
+        return new IntegrityCheckSummary(Rows.longValue(row.get("check_no")), Rows.instant(row.get("checked_time")),
             Rows.string(row.get("actor_id")), Rows.longValue(row.get("process_seq_id")),
             Rows.longValue(row.get("from_seal")), Rows.longValue(row.get("to_seal")),
             Rows.intValue(row.get("seal_count")), Rows.longValue(row.get("row_count")),

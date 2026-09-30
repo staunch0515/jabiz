@@ -63,13 +63,57 @@
 
 ## 2. 防篡改：摘要与封存（14f-2）
 
-- 范围：装了 `jabiz_protect_append_only` 的全部表（平台表与应用的时态表），启动时从数据库发现；装了触发器却无法按行标识的表由启动检查报告。
-- 行摘要：规范序列化后的 SHA-256（列按名称排序，numeric 保留小数位，时间 UTC ISO，jsonb 按键排序）。
-- 封存：定时任务 `jabiz.integrity-seal`（缺省每 5 分钟，宽限期 2 分钟，可配置）运行流程 `INTEGRITY_SEAL`，把尚未封存且早于"现在减宽限期"的行的摘要写入
-  `sys_integrity_item`，生成块 `sys_integrity_seal`：本块哈希 = HMAC-SHA256(密钥, 上一块哈希 ‖ 条目 Merkle 根 ‖ 元数据)。
-  迟提交的行由下一次封存补上。密钥只来自 `JABIZ_INTEGRITY_KEY`，非 dev 环境缺少即启动失败。`GET /api/integrity/head` 给出最新块哈希，供系统外留存。
-- 校验：流程 `INTEGRITY_VERIFY`（定时或手动，`integrity.verify`）检查链、Merkle 根与当前数据，报告被改、缺失、可疑（超过两个周期仍未封存）的行与断链，
-  写入 `sys_integrity_check`；页面 `/integrity`。
+触发器（D5）挡住应用与普通数据库用户，挡不住能关掉触发器的数据库管理员。封存让这类修改**可被发现**：
+每行的摘要进入只追加的块，块由带密钥的哈希链相连，没有密钥就无法改了数据再重算整条链。
+
+### 2.1 范围与行摘要
+
+- 范围：当前 schema 中所有带 `jabiz_reject_mutation()` 行触发器的表（平台表、应用的时态表……），每次运行从目录（`pg_trigger`）发现，不用声明。
+  封存表自己（`sys_integrity_*`）不作为行封存：它们由链与 Merkle 根保护（封存它们会无穷无尽）。
+- 行标识：主键，以 JSON 数组的文本保存（`jsonb_build_array(主键列…)::text`，如 `[42]`）。只追加表必须有主键；
+  没有主键或名字不是普通标识符的表由启动检查 `INTEGRITY` 报告（不能封存，其他表照常封存）。
+- 行摘要：`SHA-256(to_jsonb(行)::text)`，在数据库中计算：包含每一列，键按 jsonb 的顺序，numeric 保留小数位；
+  事务内固定 `TimeZone=UTC`、`IntervalStyle=iso_8601`、`extra_float_digits=1`，因此同样的内容总得到同样的摘要。
+
+### 2.2 封存
+
+- 流程 `INTEGRITY_SEAL`（`integrity.seal`），由定时任务 `jabiz.integrity-seal`（`jabiz.integrity.seal.cron`，缺省每 5 分钟，UTC）以系统身份运行，也可手动运行。
+- 一次封存：取事务锁（一次只有一个封存）→ 找出尚无条目的行（按表、主键，至多 `jabiz.integrity.seal.max-rows`，缺省 100000，其余下次）→
+  写 `sys_integrity_item`（表、行标识、摘要、块号）与块 `sys_integrity_seal`：
+  - Merkle 根：叶按表、行标识排序，叶 = SHA-256(0x00 ‖ 表 ‖ 0 ‖ 行标识 ‖ 0 ‖ 摘要)，节点 = SHA-256(0x01 ‖ 左 ‖ 右)，奇数个时末尾直接上移（core `MerkleRoot`）；
+  - 块哈希 = HMAC-SHA256(密钥, "jabiz-seal-v1" ‖ 块号 ‖ 封存时间 ‖ 行数 ‖ Merkle 根 ‖ 上一块哈希 ‖ 密钥标识)（core `SealBlock`），第一块的"上一块哈希"为 64 个 0。
+- **不需要宽限期**：尚未提交的行对封存事务不可见，它们没有条目，下一次封存就会取到（按"有没有条目"而不是按时间找行），因此不会漏掉晚提交的行。
+- 没有新行时不生成块。
+
+### 2.3 校验
+
+- 流程 `INTEGRITY_VERIFY`（`integrity.verify`；定时任务 `jabiz.integrity-verify`，`jabiz.integrity.verify.cron`，缺省每天 03:30 UTC），输入 `fromSeal`（缺省 1：从头）。
+  从中间开始时，前一块按其保存的哈希信任。
+- 检查并报告（`IntegrityProblem` 的种类）：
+
+| 种类 | 含义 |
+|---|---|
+| `CHAIN_BROKEN` | 块号不连续、没有链到前一块、或块哈希不是密钥的签名（块被改、删、插） |
+| `SEAL_ALTERED` | 块的条目不再合出它的 Merkle 根或行数（条目被改、增、删） |
+| `MODIFIED` | 行的当前摘要不同于封存时 |
+| `MISSING` | 封存过的行（或整张表）不在了 |
+| `UNPROTECTED` | 有封存行的表的只追加触发器被关闭或删除 |
+| `OTHER_KEY` | 块由另一把密钥签名，无法用当前密钥检查 |
+
+- 另报"尚未封存的行数"（下次封存会取到；持续很多说明封存没有运行）。
+- 结果写入只追加的 `sys_integrity_check`：前 `jabiz.integrity.verify.max-problems`（缺省 1000）个问题全文，全部计数。
+- **不能发现的**：两次封存之间、由管理员在应用之外**插入**的行——它会像其他新行一样被封存。封存证明的是"封存之后没有被改、没有被删"；
+  需要约束插入的，看操作记录（每次写入都有 `op_process`）与审计记录（§1）。把最新块哈希留存在系统外，可以限定"链从某一刻起未被整条重写"。
+
+### 2.4 密钥、接口与页面
+
+- 密钥：`jabiz.integrity.key`，只来自环境变量 `JABIZ_INTEGRITY_KEY`（Base64，至少 32 字节，如 `openssl rand -base64 48`）；非 dev 环境缺少即启动失败（默认拒绝）；
+  dev 环境使用公开的开发密钥（其封存不证明任何东西）。块中保存密钥标识（密钥的 HMAC 的前 16 个十六进制字符），不保存密钥。
+  **密钥要备份**：没有它，已有的块无法校验；换密钥后，旧块报告为 `OTHER_KEY`。
+- 接口（`integrity.read`）：`GET /api/integrity/head`（最新块：块号、时间、行数、哈希、密钥标识，以及当前密钥标识——留存在系统外作为锚点）、
+  `GET /api/integrity/seals`、`GET /api/integrity/checks`、`GET /api/integrity/checks/{checkNo}`（含问题）。
+  封存与校验就是上述两个流程，经 `/api/processes/{名}/latest` 运行，不另设接口。
+- 页面 `/integrity`：最新块、运行校验（`integrity.verify`）、最近的校验及其问题。
 
 ## 3. 保留期与法律保全（14f-3）
 

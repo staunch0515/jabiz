@@ -679,11 +679,20 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 后台看到一次修改的前后值（Vitest、Playwright）。
 - [x] 现有全部检查照常通过（场景快照不变）。
 
-**14f-2 要求**：只追加表的行摘要与 HMAC 封存链（`JABIZ_INTEGRITY_KEY`）、`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、迁移 V21、`/api/integrity/**`、页面 `/integrity`（21 §2）。
+**14f-2 要求**
+1. core：`MerkleRoot`、`SealBlock`（HMAC 块哈希）、`SealChain`（链的检查）、`IntegrityKey`、`IntegrityProblem`。
+2. 迁移 V21：`sys_integrity_seal`、`sys_integrity_item`、`sys_integrity_check`（都只追加）。
+3. `INTEGRITY_SEAL` / `INTEGRITY_VERIFY` 与定时任务 `jabiz.integrity-seal` / `jabiz.integrity-verify`；只追加表从目录发现；启动检查 `INTEGRITY`（无主键的只追加表）。
+4. 密钥 `JABIZ_INTEGRITY_KEY`（非 dev 缺少即启动失败）；`/api/integrity/head|seals|checks`；页面 `/integrity`。
+5. 文档：21 §2、D27 第 4 条、CLAUDE.md；部署：CI、docker、快速上手。
 
 **14f-2 验收标准**
-- [ ] 绕过触发器修改或删除一行、在应用之外插入一行、改动封存块，校验分别报告被改、缺失、可疑与断链。
-- [ ] 宽限期内未提交的行由下一次封存补上；非 dev 缺少密钥启动失败。
+- [x] 绕过触发器修改或删除一行、改动封存块或条目、关掉表的只追加保护，校验分别报告被改、缺失、断链与条目被改、未受保护（`IntegrityIT`、`SealChainTest`）。
+- [x] 封存时尚未提交的行由下一次封存补上（`IntegrityIT`）；非 dev 缺少密钥启动失败（`IntegrityKeySettingsTest`）。
+- [x] 块哈希是密钥的 HMAC、链到前一块；封存表不能 UPDATE / DELETE；接口与流程需要各自的权限（`IntegrityIT`）。
+- [x] 后台查看最新块、运行校验、查看问题（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：不需要宽限期（见 21 §2.2）；"在应用之外插入的可疑行"无法由封存判定，改为报告未封存行数并在 21 §2.3 说明。
 
 **14f-3 要求**：`RetentionPolicy`、删除拦截、`SysLegalHold` 与 `LEGAL_HOLD_PLACE` / `RELEASE`（迁移 V22）、到期报告、`POST /api/exports/data`（21 §3、§4）。
 

@@ -1,8 +1,9 @@
 #!/bin/sh
-# Starts the application. For the local demonstration (docker compose), a missing access-token signing key and a
-# missing first-administrator password are generated once and kept in the jabiz-secrets volume, so the system starts
-# with one command and no secret is ever written into the repository. Real deployments pass JABIZ_JWT_SECRET and the
-# bootstrap administrator from their secret store (docs/design/10-security.md sections 2 and 7).
+# Starts the application. For the local demonstration (docker compose), a missing access-token signing key, a missing
+# integrity seal key and a missing first-administrator password are generated once and kept in the jabiz-secrets volume, so the system starts
+# with one command and no secret is ever written into the repository. Real deployments pass JABIZ_JWT_SECRET,
+# JABIZ_INTEGRITY_KEY and the bootstrap administrator from their secret store (docs/design/10-security.md sections 2
+# and 7, 21-audit-retention.md section 2.4).
 set -eu
 
 SECRETS=/var/lib/jabiz/secrets
@@ -22,6 +23,14 @@ if [ -z "${JABIZ_JWT_SECRET:-}" ]; then
     fi
     JABIZ_JWT_SECRET=$(cat "$SECRETS/jwt-secret")
     export JABIZ_JWT_SECRET
+fi
+
+if [ -z "${JABIZ_INTEGRITY_KEY:-}" ]; then
+    if generate "$SECRETS/integrity-key" 48 ""; then
+        echo "jabiz: generated an integrity seal key in the jabiz-secrets volume (keep a copy: seals need it)"
+    fi
+    JABIZ_INTEGRITY_KEY=$(cat "$SECRETS/integrity-key")
+    export JABIZ_INTEGRITY_KEY
 fi
 
 export JABIZ_BOOTSTRAP_ADMIN_USER="${JABIZ_BOOTSTRAP_ADMIN_USER:-admin}"
