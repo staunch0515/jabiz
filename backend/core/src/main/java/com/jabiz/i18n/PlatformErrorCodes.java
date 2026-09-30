@@ -130,6 +130,10 @@ public final class PlatformErrorCodes {
     public static final String FILE_IN_USE = "FILE_IN_USE";
     /** 422: a role assignment's data period ends before it starts (docs/design/10-security.md section 13.2). */
     public static final String DATA_PERIOD_ORDER = "DATA_PERIOD_ORDER";
+    /** 422: an access review of a period that has not ended, or ends before it starts (10 section 13.3). */
+    public static final String ACCESS_REVIEW_PERIOD = "ACCESS_REVIEW_PERIOD";
+    /** 422: the report an access review refers to is not the access report issued at the end of its period. */
+    public static final String ACCESS_REVIEW_REPORT = "ACCESS_REVIEW_REPORT";
 
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
@@ -139,7 +143,7 @@ public final class PlatformErrorCodes {
         TOO_LONG, NUMERIC_PRECISION, MONETARY_SCALE, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
         SORT_NOT_ALLOWED, REASON_REQUIRED, NOT_TEMPORAL, TIME_TRAVEL_NOT_ALLOWED, INVALID_IDEMPOTENCY_KEY,
         SENSITIVE_FIELD, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, TRANSLATION_REQUIRED, PROCESS_ONLY_FIELD,
-        DISPLAY_NOT_DECLARED, MASKED_VALUE, DATA_PERIOD_ORDER,
+        DISPLAY_NOT_DECLARED, MASKED_VALUE, DATA_PERIOD_ORDER, ACCESS_REVIEW_PERIOD, ACCESS_REVIEW_REPORT,
         IMMUTABLE_FIELD, ILLEGAL_TRANSITION, INVALID_INITIAL_STATE, STATE_REQUIRED, STATE_CLEARED, OUT_OF_SCOPE,
         GUARD_EVALUATION_FAILED, DATASET_READ_ONLY, ENTITY_READ_ONLY, BATCH_TOO_LARGE, STILL_REFERENCED,
         SCHEDULING_NOT_ALLOWED, NOT_SCHEDULED, NOTHING_TO_REVERT,

@@ -2,6 +2,7 @@ package com.jabiz.app;
 
 import com.jabiz.entity.BaseEntityDefinitions;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.MaskStyle;
 import com.jabiz.entity.Rules;
 
 import java.math.BigDecimal;
@@ -14,6 +15,8 @@ import java.math.BigDecimal;
 public final class CarrierEntityDefinitions extends BaseEntityDefinitions {
 
     public static final String COUNTRY_DICTIONARY = "urn:jabiz:dict:country";
+    /** Reading carriers' bank accounts in plain text, and writing them. */
+    public static final String BANK_ACCOUNT_PERMISSION = "logistics.carrier.bank-account";
 
     public static final EntityDefinition CARRIER = EntityDefinition.define("Carrier", eb -> {
         eb.physicalTable("carrier_version");
@@ -32,12 +35,18 @@ public final class CarrierEntityDefinitions extends BaseEntityDefinitions {
         eb.field("contactEmail", f -> f.physicalColumn("contact_email").asText(200)
             .apply(Rules.pattern("CONTACT_EMAIL_FORMAT", "[^@ ]+@[^@ ]+\\.[^@ ]+")));
         eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
+        // Shown as ****1234; holders of the permission show one value at a time, each time on the record
+        // (docs/design/10-security.md section 13.1).
+        eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
+            .masked(BANK_ACCOUNT_PERMISSION, MaskStyle.LAST4));
 
         eb.unique("uk_carrier_code", "carrierCode");
         eb.listView("default", lv -> lv
-            .columns("carrierCode", "carrierName", "countryCode", "creditLimit", "active", "effectStartTime")
-            .filters("carrierCode", "carrierName", "countryCode", "creditLimit", "active")
-            .sorts("carrierCode", "carrierName", "creditLimit", "effectStartTime")
+            .columns("carrierCode", "carrierName", "countryCode", "creditLimit", "active", "bankAccount",
+                "effectStartTime")
+            // Only holders of the bank account permission may filter and sort by it.
+            .filters("carrierCode", "carrierName", "countryCode", "creditLimit", "active", "bankAccount")
+            .sorts("carrierCode", "carrierName", "creditLimit", "bankAccount", "effectStartTime")
             .defaultSort("carrierCode", true));
         eb.temporal(t -> t.allowScheduled(true));
     });

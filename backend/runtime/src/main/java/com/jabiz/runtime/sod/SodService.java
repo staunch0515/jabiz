@@ -58,6 +58,54 @@ public class SodService {
     }
 
     /** The enabled SoD rules in effect now. */
+    /**
+     * One user's conflict with one rule (18 section 4.4).
+     *
+     * @param left  the permissions of the rule's left group the user holds ({@code *} for a wildcard holder)
+     * @param roles the roles granting them
+     */
+    public record Conflict(String userId, String userName, String ruleCode, List<String> left, List<String> right,
+        List<String> roles, boolean wildcard) {}
+
+    /**
+     * The conflict report: every user who holds a permission of each group of an SoD rule, with the permissions and
+     * the roles they come from. Holders of {@code *} are always listed ({@code wildcard}), whatever else they hold.
+     * Ordered by user name and rule, so that the same holdings give the same report.
+     */
+    public Mono<List<Conflict>> conflicts() {
+        return rules().zipWith(holdings(null)).map(found -> {
+            List<Conflict> conflicts = new java.util.ArrayList<>();
+            for (Holding holding : found.getT2().values()) {
+                for (SodRule rule : found.getT1()) {
+                    conflict(rule, holding).ifPresent(conflicts::add);
+                }
+            }
+            conflicts.sort(java.util.Comparator.comparing(Conflict::userName,
+                    java.util.Comparator.nullsFirst(java.util.Comparator.<String>naturalOrder()))
+                .thenComparing(Conflict::userId).thenComparing(Conflict::ruleCode));
+            return List.copyOf(conflicts);
+        });
+    }
+
+    private static java.util.Optional<Conflict> conflict(SodRule rule, Holding holding) {
+        Map<String, Set<String>> held = holding.rolesByPermission();
+        boolean wildcard = SodRule.coveredByAll(held.keySet());
+        if (!wildcard && !rule.violatedBy(held.keySet())) {
+            return java.util.Optional.empty();
+        }
+        List<String> left = held.keySet().stream().filter(rule.left()::contains).sorted().toList();
+        List<String> right = held.keySet().stream().filter(rule.right()::contains).sorted().toList();
+        Set<String> roles = new java.util.TreeSet<>();
+        held.forEach((permission, grantedBy) -> {
+            if (rule.involves(permission) || (wildcard && permission.equals("*"))) {
+                roles.addAll(grantedBy);
+            }
+        });
+        return java.util.Optional.of(new Conflict(String.valueOf(holding.userId()), holding.userName(),
+            rule.ruleCode(), wildcard && left.isEmpty() ? List.of("*") : left,
+            wildcard && right.isEmpty() ? List.of("*") : right, List.copyOf(roles), wildcard));
+    }
+
     public Mono<List<SodRule>> rules() {
         DatasetDefinition dataset = datasets.findById(ApprovalEntities.SOD_RULE_DATASET).orElseThrow();
         EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq("enabled", true)).limit(MAX_RULES)
