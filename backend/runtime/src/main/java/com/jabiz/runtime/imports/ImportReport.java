@@ -10,6 +10,8 @@ import java.util.Map;
  * What an import did or would do (docs/design/20-imports.md section 5): each row's outcome, every problem, the
  * control totals. A preview's report describes what a commit of the same file would do at that moment.
  *
+ * @param runId      the record of a commit or of a rejected commit; null for a preview
+ * @param committed  whether the rows were imported
  * @param records    records read from the file (blank ones left out)
  * @param rows       rows that would be (or were) imported: read, and not left out as duplicates
  * @param processed  process calls that succeeded (rows, or groups of rows)
@@ -21,7 +23,8 @@ import java.util.Map;
  * @param results    each record's outcome, in file order
  * @param issues     every problem found; the import can be committed only when there is none
  */
-public record ImportReport(String importId, int importVersion, String fileId, String sha256, boolean committed,
+public record ImportReport(String runId, String importId, int importVersion, String fileId, String sha256,
+    boolean committed,
     int records, int rows, int processed, int units, int duplicates, Map<String, String> columns,
     Map<String, String> constants, Map<String, BigDecimal> totals, List<RowResult> results, List<ImportIssue> issues) {
 
@@ -37,5 +40,11 @@ public record ImportReport(String importId, int importVersion, String fileId, St
 
     public boolean accepted() {
         return issues.isEmpty();
+    }
+
+    /** This report as the record of a commit (or of a rejected one). */
+    ImportReport recorded(String id, boolean isCommitted) {
+        return new ImportReport(id, importId, importVersion, fileId, sha256, isCommitted, records, rows, processed,
+            units, duplicates, columns, constants, totals, results, issues);
     }
 }

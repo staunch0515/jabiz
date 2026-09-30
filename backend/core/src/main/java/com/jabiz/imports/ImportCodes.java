@@ -23,6 +23,8 @@ public final class ImportCodes {
     public static final String WRONG_FILE = "IMPORT_WRONG_FILE";
     /** A row's process refused it for a reason other than broken rules; params {@code detail}. */
     public static final String ROW_FAILED = "IMPORT_ROW_FAILED";
+    /** The same file was committed for this import before; params {@code run}. */
+    public static final String ALREADY_IMPORTED = "IMPORT_ALREADY_IMPORTED";
     /** The import has no rows to process. */
     public static final String EMPTY = "IMPORT_EMPTY";
     /** A committed import rejected: at least one row failed; nothing was written. */

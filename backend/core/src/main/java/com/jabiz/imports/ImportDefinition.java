@@ -39,6 +39,9 @@ public final class ImportDefinition<P> {
     /** Import ids: dot-separated lower-case segments, like file policy names. */
     public static final java.util.regex.Pattern ID = FilePolicy.NAME;
 
+    /** Longest external reference; they are kept to import each once. */
+    public static final int MAX_REF_LENGTH = 500;
+
     /** Parameters of an import that takes none. */
     public record NoParams() {}
 

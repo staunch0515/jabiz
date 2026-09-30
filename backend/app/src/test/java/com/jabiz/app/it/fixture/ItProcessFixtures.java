@@ -245,6 +245,54 @@ public final class ItProcessFixtures {
                 }
             }));
 
+    /** @param failing the ids whose unit fails after its sub-process succeeded */
+    public record UnitsInput(List<String> ids, List<String> failing) {}
+
+    /**
+     * Runs each id as a unit the way an import runs its rows: {@link #NOTIFY} behind a savepoint, then - for the
+     * failing ones - a failure of the unit, which undoes it. Only the kept units' after-commit steps may run.
+     */
+    public static final ProcessDefinition<UnitsInput, TicketOutput, ProcessContext> UNITS =
+        ProcessDefinition.define("IT_UNITS", 1, UnitsInput.class, TicketOutput.class, ProcessContext.class, pb -> pb
+            .permissions(PERMISSION)
+            .contextFactory((start, in) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put("in", in);
+                return ctx;
+            })
+            .outputMapper(ctx -> new TicketOutput("units", 1L, ctx.processSeqId()))
+            .step("Run the units", UnitsStep.class, NoMetadata.INSTANCE));
+
+    /** The step of {@link #UNITS}; platform-style, as {@code RunImport} is. */
+    @Component
+    public static class UnitsStep implements com.jabiz.runtime.process.StepHandler<NoMetadata, ProcessContext> {
+
+        private final com.jabiz.runtime.process.ProcessExecutor executor;
+        private final com.jabiz.runtime.storage.StorageAdapterRegistry storages;
+
+        public UnitsStep(com.jabiz.runtime.process.ProcessExecutor executor,
+            com.jabiz.runtime.storage.StorageAdapterRegistry storages) {
+            this.executor = executor;
+            this.storages = storages;
+        }
+
+        @Override
+        public reactor.core.publisher.Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
+            UnitsInput in = ctx.get("in", UnitsInput.class);
+            var engine = storages.getEngine("default");
+            return reactor.core.publisher.Flux.fromIterable(in.ids())
+                .concatMap(id -> engine.inSavepoint(executor.keepingAfterCommitOnSuccess(
+                        executor.executeChild(NOTIFY, new ChildInput(id, false))
+                            .then(in.failing().contains(id)
+                                ? reactor.core.publisher.Mono.error(new com.jabiz.runtime.BusinessRuleViolationException(
+                                    List.of(new Violation(null, "IT_UNIT_FAILED", "unit " + id + " fails"))))
+                                : reactor.core.publisher.Mono.empty())))
+                    .onErrorResume(com.jabiz.runtime.BusinessRuleViolationException.class,
+                        e -> reactor.core.publisher.Mono.empty()))
+                .then();
+        }
+    }
+
     /** Loads, queries, runs a template and saves midway. */
     public static final ProcessDefinition<ReadsInput, ReadsOutput, ProcessContext> READS =
         ProcessDefinition.define("IT_READS", 1, ReadsInput.class, ReadsOutput.class, ProcessContext.class, pb -> pb
@@ -392,6 +440,11 @@ public final class ItProcessFixtures {
 
     @Configuration
     static class Beans {
+
+        @Bean
+        ProcessDefinition<UnitsInput, TicketOutput, ProcessContext> itUnits() {
+            return UNITS;
+        }
 
         @Bean
         ProcessDefinition<TicketInput, TicketOutput, ProcessContext> itCreateTicket() {

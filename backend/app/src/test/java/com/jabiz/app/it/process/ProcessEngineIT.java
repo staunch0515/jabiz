@@ -362,6 +362,28 @@ class ProcessEngineIT extends PostgresIntegrationTest {
         assertThat(ticketExists(id)).isFalse();
     }
 
+    /**
+     * A unit undone by a rollback to its savepoint takes the after-commit steps of its sub-processes with it, even
+     * those that had succeeded (an import's rows, docs/design/20-imports.md section 5).
+     */
+    @Test
+    void afterCommitStepsOfAnUndoneUnitAreDropped() throws InterruptedException {
+        String kept = id();
+        String undone = id();
+
+        asTestRequest(executor.execute(ItProcessFixtures.UNITS, new ItProcessFixtures.UnitsInput(
+            List.of(kept, undone), List.of(undone)))).block();
+
+        assertThat(ticketExists(kept)).isTrue();
+        assertThat(ticketExists(undone)).isFalse();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (ItProcessFixtures.NOTIFIED.isEmpty() && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        Thread.sleep(200);
+        assertThat(ItProcessFixtures.NOTIFIED).containsExactly(kept + ":committed");
+    }
+
     // ---------------------------------------------------------------- idempotency
 
     @Test

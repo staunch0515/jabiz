@@ -284,7 +284,11 @@ public final class ImportPreparation {
             Map.of());
     }
 
-    private static String ref(ImportDefinition<?> definition, ImportRow row) {
+    /** The row's external reference; null when the import has none, the row gives none or the function fails. */
+    public static String ref(ImportDefinition<?> definition, ImportRow row) {
+        if (definition.externalRef() == null) {
+            return null;
+        }
         try {
             String ref = definition.externalRef().apply(row);
             return ref == null || ref.isBlank() ? null : ref;
@@ -296,6 +300,12 @@ public final class ImportPreparation {
     private static String refOrIssue(ImportDefinition<?> definition, ImportRow row, List<ImportIssue> issues) {
         try {
             String ref = definition.externalRef().apply(row);
+            if (ref != null && ref.length() > ImportDefinition.MAX_REF_LENGTH) {
+                issues.add(new ImportIssue(row.number(), row.location(), null, null, PlatformErrorCodes.TOO_LONG,
+                    "The external reference is longer than " + ImportDefinition.MAX_REF_LENGTH + " characters",
+                    Map.of("max", ImportDefinition.MAX_REF_LENGTH)));
+                return null;
+            }
             return ref == null || ref.isBlank() ? null : ref;
         } catch (RuntimeException e) {
             issues.add(inputIssue(row, e));

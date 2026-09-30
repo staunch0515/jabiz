@@ -187,8 +187,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     @Override
     public <T> Mono<T> inSavepoint(Mono<T> work) {
-        // Savepoints of one transaction are used one after another (never nested by the platform), so one name does;
-        // PostgreSQL resolves a name to the most recent savepoint anyway.
+        // One name does: savepoints nest last in, first out, and PostgreSQL resolves a name to the most recent
+        // savepoint of that name, so each RELEASE or ROLLBACK TO reaches the one this call set.
         return statement("SAVEPOINT " + SAVEPOINT)
             .then(work)
             .flatMap(result -> statement("RELEASE SAVEPOINT " + SAVEPOINT).thenReturn(result))

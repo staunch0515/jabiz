@@ -14,6 +14,7 @@ import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
+import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.sod.SodConflictException;
 
 import java.util.List;
@@ -62,6 +63,7 @@ public final class ProblemStatuses {
             case IdempotencyConflictException e -> List.of(new Violation(null,
                 PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, e.getMessage()));
             case AuthenticationFailedException e -> List.of(new Violation(null, e.code(), e.getMessage()));
+            case ImportConflictException e -> List.of(new Violation(null, e.code(), e.getMessage(), e.params()));
             case PayloadTooLargeException e -> e.violations();
             case RateLimitedException e -> e.violations();
             default -> List.of();
