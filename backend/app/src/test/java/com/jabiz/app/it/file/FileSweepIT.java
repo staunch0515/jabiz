@@ -6,6 +6,7 @@ import com.jabiz.runtime.file.FileKeys;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.FileSamples;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,18 @@ class FileSweepIT extends FileItSupport {
     @BeforeEach
     void releaseTheLock() {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+    }
+
+    /**
+     * The storage half of a sweep runs after its commit, on its own, and removes stray objects older than its own
+     * operation time. A test whose clock ran ahead must not leave one running into the next test, where it would take
+     * that test's fresh strays for old ones: wait until every sweep's after-commit step has been recorded.
+     */
+    @AfterEach
+    void awaitTheStorageSweeps() {
+        await().atMost(Duration.ofSeconds(30)).until(() -> query("SELECT 1 FROM op_process p "
+            + "WHERE p.process_name = 'FILE_PURGE_ORPHANS' AND NOT EXISTS (SELECT 1 FROM op_process_after_commit a "
+            + "WHERE a.process_seq_id = p.process_seq_id)").isEmpty());
     }
 
     /** A UUIDv7 created at {@code time}, as the platform's generator would. */
