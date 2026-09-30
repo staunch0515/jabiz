@@ -72,6 +72,10 @@ public final class JsonSchemaExporter {
                 s.put("type", "string");
                 s.put("format", "date-time");
             }
+            case SemanticKind.Date d -> {
+                s.put("type", "string");
+                s.put("format", "date");
+            }
             case SemanticKind.Code c -> {
                 s.put("type", "string");
                 if (!c.allowedValues().isEmpty()) {

@@ -31,6 +31,7 @@ type Canonical =
   | { k: 'decimal'; d: Decimal }
   | { k: 'text'; s: string }
   | { k: 'instant'; nanos: bigint }
+  | { k: 'date'; s: string }
   | { k: 'bool'; b: boolean }
   | { k: 'long'; n: bigint }
   | { k: 'texts'; t: Record<string, string> }
@@ -103,6 +104,14 @@ function toDecimalValue(raw: unknown): Decimal {
   return d
 }
 
+function isIsoDate(text: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (!m) return false
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
 function toLongValue(raw: unknown): bigint {
   if (typeof raw === 'number' && Number.isInteger(raw)) return BigInt(raw)
   if (typeof raw === 'string') {
@@ -122,6 +131,11 @@ function coerce(field: FieldMeta, raw: unknown): Canonical | null {
       const nanos = parseInstant(raw)
       if (nanos === null) throw new InvalidValue()
       return { k: 'instant', nanos }
+    }
+    case 'date': {
+      // LocalDate.parse: exactly YYYY-MM-DD and a day that exists.
+      if (typeof raw !== 'string' || !isIsoDate(raw.trim())) throw new InvalidValue()
+      return { k: 'date', s: raw.trim() }
     }
     case 'monetary':
     case 'numeric':

@@ -79,4 +79,14 @@ describe('semantic kinds', () => {
     expect(toFormValue(field('cell'), { a: 1 })).toBe('{"a":1}')
     expect(toFormValue(field('carrierCode'), null)).toBeUndefined()
   })
+
+  it('keep dates as days, never shifted through a zone', () => {
+    const due = { ...field('versionNo'), name: 'dueDate', type: 'date', systemManaged: false } as typeof carrier.fields[number]
+    expect(controlOf(due)).toBe('date')
+    expect(formatValue(due, '2026-01-31', {}, t, 'en')).toBe('2026-01-31')
+    // The picker's local day as written, whatever the offset of the browser.
+    expect(toWireValue(due, dayjs('2026-01-31T23:30:00'))).toBe('2026-01-31')
+    expect(toWireValue(due, '')).toBeNull()
+    expect(toFormValue(due, '2026-01-31')).toSatisfy((v: unknown) => dayjs.isDayjs(v) && v.format('YYYY-MM-DD') === '2026-01-31')
+  })
 })

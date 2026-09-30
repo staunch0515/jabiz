@@ -8,6 +8,7 @@ import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -50,13 +51,14 @@ public final class CsvReportWriter {
         }
     }
 
-    /** The text of a value: exact decimals, instants in UTC, maps (multilingual texts) with sorted keys. */
+    /** The text of a value: exact decimals, instants in UTC, dates in ISO form, maps (multilingual texts) with sorted keys. */
     static String text(Object value) {
         return switch (value) {
             case null -> "";
             case BigDecimal d -> d.toPlainString();
             case Instant i -> i.toString();
             case OffsetDateTime t -> t.toInstant().toString();
+            case LocalDate d -> d.toString();
             case Map<?, ?> m -> inert(new TreeMap<>(m).toString());
             case Number n -> n.toString();
             case Boolean b -> b.toString();

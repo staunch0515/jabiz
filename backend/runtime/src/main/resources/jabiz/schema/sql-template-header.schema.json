@@ -74,7 +74,7 @@
       "required": ["type"],
       "properties": {
         "type": {
-          "enum": ["semanticIdentity", "monetary", "temporal", "code", "version", "text", "numeric", "bool",
+          "enum": ["semanticIdentity", "monetary", "temporal", "date", "code", "version", "text", "numeric", "bool",
                    "reference", "custom"]
         }
       }

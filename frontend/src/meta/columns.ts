@@ -129,6 +129,8 @@ function searchProps(field: FieldMeta, dictionaries: Record<string, DictItem[]>,
       return { hideInSearch: false, valueType: 'digitRange' }
     case 'time-range':
       return { hideInSearch: false, valueType: 'dateTimeRange' }
+    case 'date-range':
+      return { hideInSearch: false, valueType: 'dateRange' }
     case 'like':
     case 'eq-text':
       return { hideInSearch: false, valueType: 'text' }

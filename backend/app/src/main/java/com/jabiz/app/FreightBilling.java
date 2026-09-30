@@ -27,6 +27,7 @@ import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
@@ -128,13 +129,15 @@ public final class FreightBilling extends BaseEntityDefinitions {
         eb.field("totalAmount", f -> f.physicalColumn("f_total_amt").required(true).asMonetary("JPY", 0));
         eb.field("closed", f -> f.physicalColumn("f_closed").required(true).asBool());
         eb.field("closedTime", f -> f.physicalColumn("f_closed_at").asTemporal(TemporalRole.EVENT_TIME));
+        // A day, not a moment: the freight is due by the end of the month after the statement's.
+        eb.field("dueDate", f -> f.physicalColumn("f_due_date").asDate());
         eb.field("recordedTime", systemRecordedTime("f_sys_created_at"));
         eb.field("rowVersion", rowVersion("f_version"));
         eb.unique("uk_freight_statement_month", "statementMonth");
         eb.listView("default", lv -> lv
-            .columns("statementMonth", "chargeCount", "totalAmount", "closed", "closedTime")
-            .filters("statementMonth")
-            .sorts("statementMonth")
+            .columns("statementMonth", "chargeCount", "totalAmount", "closed", "closedTime", "dueDate")
+            .filters("statementMonth", "dueDate")
+            .sorts("statementMonth", "dueDate")
             .defaultSort("statementMonth", false));
     });
 
@@ -146,7 +149,9 @@ public final class FreightBilling extends BaseEntityDefinitions {
     /** @param month {@code yyyy-MM}, Japan time */
     public record CloseInput(@NotBlank @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])") String month) {}
 
-    public record CloseOutput(String statementId, String month, int chargeCount, BigDecimal totalAmount) {}
+    /** @param dueDate the last day of the month after the closed one */
+    public record CloseOutput(String statementId, String month, int chargeCount, BigDecimal totalAmount,
+        LocalDate dueDate) {}
 
     /** @param totalAmount the month's total, as published by the close */
     public record RevenueInput(@NotBlank String month, String statementId, @NotNull BigDecimal totalAmount) {}
@@ -350,6 +355,8 @@ public final class FreightBilling extends BaseEntityDefinitions {
         closed.put("totalAmount", total);
         closed.put("closed", true);
         closed.put("closedTime", ctx.opTime());
+        LocalDate dueDate = YearMonth.parse(month).plusMonths(1).atEndOfMonth();
+        closed.put("dueDate", dueDate);
         Object statementId;
         if (statement == null) {
             // A month without charges is closed all the same.
@@ -360,7 +367,7 @@ public final class FreightBilling extends BaseEntityDefinitions {
             statementId = statement.id();
             ctx.changes().update(STATEMENT, statement.id(), statement.version(), closed);
         }
-        ctx.put("output", new CloseOutput(String.valueOf(statementId), month, charges.size(), total));
+        ctx.put("output", new CloseOutput(String.valueOf(statementId), month, charges.size(), total, dueDate));
     }
 
     /** Datasets of the charges and statements; the write batch fits the largest close. */

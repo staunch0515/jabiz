@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -42,7 +43,7 @@ class FieldValueCoercerTest {
 
     @Test
     void nullStaysNullForEveryKind() {
-        Stream.of(TEMPORAL, MONETARY, QUANTITY, H3, VERSION, STATUS, TEXT, BOOL, REFERENCE,
+        Stream.of(TEMPORAL, new SemanticKind.Date(), MONETARY, QUANTITY, H3, VERSION, STATUS, TEXT, BOOL, REFERENCE,
                 new SemanticKind.SemanticIdentity("urn:x"), new SemanticKind.None())
             .forEach(kind -> assertThat(coerce(kind, null)).isNull());
     }
@@ -84,6 +85,28 @@ class FieldValueCoercerTest {
             assertThatThrownBy(() -> coerce(TEMPORAL, 1_700_000_000L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Long");
+        }
+    }
+
+    @Nested
+    class Dates {
+        private static final SemanticKind DATE = new SemanticKind.Date();
+
+        @Test
+        void readsIsoDates() {
+            assertThat(coerce(DATE, LocalDate.of(2026, 1, 31))).isEqualTo(LocalDate.of(2026, 1, 31));
+            assertThat(coerce(DATE, " 2024-02-29 ")).isEqualTo(LocalDate.of(2024, 2, 29));
+            assertThat(FieldValueCoercer.javaType(DATE)).isEqualTo(LocalDate.class);
+        }
+
+        @Test
+        void refusesOtherTextAndMoments() {
+            assertThatThrownBy(() -> coerce(DATE, "2026-02-29")).hasMessageContaining("not an ISO-8601 date");
+            assertThatThrownBy(() -> coerce(DATE, "01/31/2026")).hasMessageContaining("not an ISO-8601 date");
+            // Which day a moment falls on depends on a zone: it is not cut to one silently.
+            assertThatThrownBy(() -> coerce(DATE, "2026-01-31T00:00:00Z")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> coerce(DATE, Instant.parse("2026-01-31T00:00:00Z")))
+                .hasMessageContaining("Instant");
         }
     }
 

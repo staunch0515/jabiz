@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ import java.util.TreeMap;
 public final class XlsxReportWriter {
 
     private static final String DATE_TIME = "yyyy-mm-dd hh:mm:ss";
+    private static final String DATE = "yyyy-mm-dd";
 
     private XlsxReportWriter() {}
 
@@ -54,6 +56,8 @@ public final class XlsxReportWriter {
                         sheet.range(first, c, row, c).style().format(numberFormat(column.scale())).set();
                     } else if (column.temporal()) {
                         sheet.range(first, c, row, c).style().format(DATE_TIME).set();
+                    } else if (column.date()) {
+                        sheet.range(first, c, row, c).style().format(DATE).set();
                     }
                 }
             }
@@ -107,6 +111,7 @@ public final class XlsxReportWriter {
             case Boolean b -> sheet.value(row, column, b);
             case Instant i -> sheet.value(row, column, i.atZone(format.zone()).toLocalDateTime());
             case OffsetDateTime t -> sheet.value(row, column, t.toInstant().atZone(format.zone()).toLocalDateTime());
+            case LocalDate d -> sheet.value(row, column, d);
             case Map<?, ?> m -> sheet.value(row, column, new TreeMap<>(m).toString());
             default -> sheet.value(row, column, String.valueOf(value));
         }

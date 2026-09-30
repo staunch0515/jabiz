@@ -24,6 +24,7 @@ class RetentionIT extends SecurityItSupport {
 
     private static final String RECORDS = "/api/datasets/" + ItRetentionFixtures.RECORD_DATASET + "/commit";
     private static final String DOCUMENTS = "/api/datasets/" + ItRetentionFixtures.DOCUMENT_DATASET + "/commit";
+    private static final String VOUCHERS = "/api/datasets/" + ItRetentionFixtures.VOUCHER_DATASET + "/commit";
 
     @Test
     void entriesWithinTheirRetentionCannotBeDeleted() {
@@ -149,7 +150,35 @@ class RetentionIT extends SecurityItSupport {
             .contains("ItRecord", "ItDocument");
     }
 
+    /** A date field counts as its day (14h): today 2026-01-31, a year from 2025-01-31 has passed, from 02-01 not. */
+    @Test
+    void aDateFieldCountsAsItsDay() {
+        Map<String, Object> before = status("ItVoucher");
+        String yearAgo = voucher("2025-01-31");
+        String dayLater = voucher("2025-02-01");
+        voucher(null);
+
+        Map<String, Object> after = status("ItVoucher");
+        assertThat(after).containsEntry("expiredThrough", "2025-01-31");
+        assertThat(count(after, "entries") - count(before, "entries")).isEqualTo(3);
+        assertThat(count(after, "expired") - count(before, "expired")).isEqualTo(1);
+        delete(VOUCHERS, yearAgo, 1).expectStatus().isOk();
+        Map<String, Object> refused = delete(VOUCHERS, dayLater, 1).expectStatus().isEqualTo(422).expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(ruleCode(refused)).isEqualTo("RETENTION_ACTIVE");
+        assertThat(violations(refused).getFirst().get("message").toString()).contains("2026-02-01");
+    }
+
     // ================= helpers =================
+
+    private String voucher(String voucherDate) {
+        String id = unique("VO");
+        Map<String, Object> attributes = new HashMap<>(Map.of("voucherId", id, "title", "t"));
+        attributes.put("voucherDate", voucherDate);
+        post(VOUCHERS, admin(), Map.of("changes", List.of(Map.of("action", "INSERT", "attributes", attributes))))
+            .expectStatus().isOk();
+        return id;
+    }
 
     private String record(String vendor, String bookedTime) {
         String id = unique("R");

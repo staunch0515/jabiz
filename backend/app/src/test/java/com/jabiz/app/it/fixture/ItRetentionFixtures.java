@@ -13,12 +13,13 @@ import java.time.Period;
 
 /**
  * Entities with retention (docs/design/21-audit-retention.md section 3). Tables are created by
- * {@code db/testmigration/V1006__it_retention.sql}.
+ * {@code db/testmigration/V1006__it_retention.sql} and {@code V1007__it_retention_dated.sql}.
  */
 public final class ItRetentionFixtures extends BaseEntityDefinitions {
 
     public static final String RECORD_DATASET = "urn:jabiz:dataset:it:ItRecord";
     public static final String DOCUMENT_DATASET = "urn:jabiz:dataset:it:ItDocument";
+    public static final String VOUCHER_DATASET = "urn:jabiz:dataset:it:ItVoucher";
 
     /** Plain; kept seven years from the end of the fiscal year it was booked in. */
     public static final EntityDefinition RECORD = EntityDefinition.define("ItRecord", eb -> {
@@ -41,6 +42,16 @@ public final class ItRetentionFixtures extends BaseEntityDefinitions {
         eb.field("vendor", f -> f.physicalColumn("vendor").asText(20));
         eb.field("issuedTime", f -> f.physicalColumn("issued_time").asTemporal(TemporalRole.EVENT_TIME));
         eb.temporal();
+    });
+
+    /** Plain; kept a year from its voucher date, a date field. */
+    public static final EntityDefinition VOUCHER = EntityDefinition.define("ItVoucher", eb -> {
+        eb.physicalTable("it_voucher");
+        eb.primaryKey("voucherId");
+        eb.field("voucherId", semanticIdentity("f_id", "urn:jabiz:entity:it:voucher"));
+        eb.field("title", f -> f.physicalColumn("f_title").required(true).asText(200));
+        eb.field("voucherDate", f -> f.physicalColumn("f_voucher_date").asDate());
+        eb.field("rowVersion", rowVersion("f_version"));
     });
 
     private ItRetentionFixtures() {}
@@ -74,6 +85,25 @@ public final class ItRetentionFixtures extends BaseEntityDefinitions {
                 .asDefault()
                 .permissions("it.read", "it.write")
                 .storage(s -> s.connectionPoolRef(pool)));
+        }
+
+        @Bean
+        EntityDefinition itVoucherEntity() {
+            return VOUCHER;
+        }
+
+        @Bean
+        DatasetDefinition itVoucherDataset(@Value("${jabiz.storage.default-pool-ref:default}") String pool) {
+            return DatasetDefinition.define(VOUCHER_DATASET, d -> d
+                .targetEntityType("ItVoucher")
+                .asDefault()
+                .permissions("it.read", "it.write")
+                .storage(s -> s.connectionPoolRef(pool)));
+        }
+
+        @Bean
+        RetentionPolicy itVoucherRetention() {
+            return RetentionPolicy.of("ItVoucher").keep(Period.ofYears(1)).from("voucherDate");
         }
 
         @Bean

@@ -26,7 +26,7 @@ export function columnFields(entity: EntityMeta, view: ListViewMeta | undefined)
 }
 
 /** How a whitelisted field is searched: the operator follows what its kind allows. */
-export type SearchKind = 'like' | 'eq-text' | 'select' | 'bool' | 'decimal-range' | 'time-range'
+export type SearchKind = 'like' | 'eq-text' | 'select' | 'bool' | 'decimal-range' | 'time-range' | 'date-range'
 
 export function searchKindOf(field: FieldMeta): SearchKind | null {
   const ops = new Set(field.operators)
@@ -43,6 +43,8 @@ export function searchKindOf(field: FieldMeta): SearchKind | null {
       return ops.has('BETWEEN') || ops.has('GTE') ? 'decimal-range' : null
     case 'temporal':
       return ops.has('BETWEEN') || ops.has('GTE') ? 'time-range' : null
+    case 'date':
+      return ops.has('BETWEEN') || ops.has('GTE') ? 'date-range' : null
     default:
       return ops.has('EQ') ? 'eq-text' : null
   }
@@ -50,6 +52,13 @@ export function searchKindOf(field: FieldMeta): SearchKind | null {
 
 function blank(value: unknown): boolean {
   return value === undefined || value === null || value === ''
+}
+
+/** A day of a date filter: both ends included, as `YYYY-MM-DD`. */
+function day(value: unknown): string | undefined {
+  if (blank(value)) return undefined
+  const date = dayjs.isDayjs(value) ? value : dayjs(String(value))
+  return date.isValid() ? date.format('YYYY-MM-DD') : undefined
 }
 
 function instant(value: unknown): string | undefined {
@@ -84,9 +93,11 @@ export function buildFilters(
         filters.push({ field: name, op: 'eq', value: value === true || value === 'true' })
         break
       case 'decimal-range':
-      case 'time-range': {
+      case 'time-range':
+      case 'date-range': {
         const [from, to] = Array.isArray(value) ? value : [value, undefined]
-        const convert = searchKindOf(field) === 'time-range' ? instant : (v: unknown) => (blank(v) ? undefined : String(v))
+        const kind = searchKindOf(field)
+        const convert = kind === 'time-range' ? instant : kind === 'date-range' ? day : (v: unknown) => (blank(v) ? undefined : String(v))
         const lower = convert(from)
         const upper = convert(to)
         if (lower !== undefined && upper !== undefined) filters.push({ field: name, op: 'between', from: lower, to: upper })
