@@ -325,6 +325,15 @@ class OidcIT extends SecurityItSupport {
             second.get("challenge"), "code", Totp.code(Base32.decode(secret), Totp.step(clock.instant()))))
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat(verified).containsEntry("status", "SIGNED_IN").containsEntry("userId", userId);
+
+        // That session too ends when the account is unlinked.
+        Map<String, Object> link = query("SELECT user_identity_id, version_no FROM sec_user_identity_version "
+            + "WHERE user_id = ?::uuid", userId).getFirst();
+        post("/api/datasets/" + SecurityEntities.USER_IDENTITY_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", String.valueOf(link.get("user_identity_id")),
+                "version", link.get("version_no"))))).expectStatus().isOk();
+        post("/api/auth/refresh", null, Map.of("refreshToken", verified.get("refreshToken")))
+            .expectStatus().isUnauthorized();
     }
 
     @Test

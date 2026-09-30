@@ -147,7 +147,7 @@ class OidcController {
                     UUID.fromString(result.userId()), UUID.fromString(result.identityId()));
                 case MFA_REQUIRED -> Mono.just(AuthController.TokenResponse.challenge(
                     AuthController.SignInStatus.MFA_REQUIRED, tokens.issueChallenge(result.userId(),
-                        JwtService.Purpose.VERIFY, result.attemptNo(), mfa.challengeTtl())));
+                        JwtService.Purpose.VERIFY, result.attemptNo(), result.identityId(), mfa.challengeTtl())));
                 case MFA_ENROLLMENT_REQUIRED -> Mono.just(AuthController.TokenResponse.challenge(
                     AuthController.SignInStatus.MFA_ENROLLMENT_REQUIRED, tokens.issueChallenge(result.userId(),
                         JwtService.Purpose.ENROLL, result.attemptNo(), mfa.challengeTtl())));

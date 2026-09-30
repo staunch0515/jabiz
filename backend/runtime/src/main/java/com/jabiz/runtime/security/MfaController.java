@@ -105,8 +105,10 @@ class MfaController {
                             result.refusal() != null ? result.refusal() : result.outcome());
                         return Mono.error(AuthController.loginFailed("Second factor refused"));
                     }
+                    // A sign-in through an identity provider stays tied to its account link (section 12).
                     return AuthController.session(refreshTokens, tokens,
-                        AuthController.actor(result, clock.instant()), UUID.fromString(result.userId()));
+                        AuthController.actor(result, clock.instant()), UUID.fromString(result.userId()),
+                        challenge.identityId() == null ? null : UUID.fromString(challenge.identityId()));
                 });
         });
     }
