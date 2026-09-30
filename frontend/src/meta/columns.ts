@@ -2,6 +2,7 @@ import type { ProColumns } from '@ant-design/pro-components'
 import type { TFunction } from 'i18next'
 import { createElement, type ReactNode } from 'react'
 import FilePreview from '../components/FilePreview'
+import MaskedValue from '../components/MaskedValue'
 import { isI18nText, pickText } from './i18nText'
 import { fieldLabel, formatValue, optionsOf } from './kinds'
 import { columnFields, searchKindOf } from './listQuery'
@@ -19,6 +20,15 @@ export interface CellContext {
   /** Display texts of referenced instances, by reference field, then key. */
   labels?: Record<string, Record<string, unknown>>
   defaultLocale?: string
+  /** Whether the user holds a permission: masked fields are searched, sorted and shown in plain by holders only. */
+  can?: (permission: string) => boolean
+  /** The dataset the rows come from, through which holders show a masked value (section 13.1). */
+  datasetId?: string
+}
+
+/** Whether the user may filter and sort by the field: a masked one needs its permission. */
+export function mayCompare(field: FieldMeta, can?: (permission: string) => boolean): boolean {
+  return !field.masked || !!can?.(field.masked.permission)
 }
 
 /**
@@ -31,7 +41,7 @@ export function renderCell(
   dictionaries: Record<string, DictItem[]>,
   t: TFunction,
   locale: string,
-  context: CellContext = {},
+  context: CellContext & { row?: Row } = {},
 ): ReactNode {
   if (field.type === 'reference' && value !== null && value !== undefined) {
     const label = context.labels?.[field.name]?.[String(value)]
@@ -43,6 +53,13 @@ export function renderCell(
   // A file is shown, not its id: images as a small thumbnail, anything else as a download.
   if (isFileField(field) && typeof value === 'string' && value) {
     return createElement(FilePreview, { fileId: value, field, width: 48 })
+  }
+  if (field.masked && value !== null && value !== undefined) {
+    const id = context.row?.__instance.id
+    if (context.datasetId && id !== undefined && context.can?.(field.masked.permission)) {
+      return createElement(MaskedValue, { datasetId: context.datasetId, id, field: field.name, masked: String(value) })
+    }
+    return String(value)
   }
   if (isI18nText(field)) {
     const picked = pickText(value, locale, context.defaultLocale)
@@ -72,20 +89,20 @@ export function buildColumns(
       dataIndex: field.name,
       key: field.name,
       hideInSearch: true,
-      sorter: sorts.has(field.name),
-      render: (_, row) => renderCell(field, row[field.name], dictionaries, t, locale, context),
+      sorter: sorts.has(field.name) && mayCompare(field, context.can),
+      render: (_, row) => renderCell(field, row[field.name], dictionaries, t, locale, { ...context, row }),
     }
     if (view?.defaultSort?.field === field.name) {
       column.defaultSortOrder = view.defaultSort.asc ? 'ascend' : 'descend'
     }
-    if (filters.has(field.name)) Object.assign(column, searchProps(field, dictionaries, t))
+    if (filters.has(field.name) && mayCompare(field, context.can)) Object.assign(column, searchProps(field, dictionaries, t))
     return column
   })
   // Filters that are not columns still get a search input.
   for (const name of view?.filters ?? []) {
     if (columns.some((c) => c.dataIndex === name)) continue
     const field = entity.fields.find((f) => f.name === name)
-    if (!field || field.sensitive || !searchKindOf(field)) continue
+    if (!field || field.sensitive || !mayCompare(field, context.can) || !searchKindOf(field)) continue
     columns.push({ title: fieldLabel(field, t), dataIndex: name, hideInTable: true, ...searchProps(field, dictionaries, t) })
   }
   return columns

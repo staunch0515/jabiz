@@ -218,6 +218,11 @@ eb.unique("uk_user_name", "userName");            // 可多字段
 
 `f.auditMasked()`：值照常可读、可写，审计记录（21 §1）只记为 `***`。敏感字段本来就如此，无需再标。示例：`SysFile.originalName`。
 
+### 6.2.2 遮蔽字段【D28】
+
+`f.masked(权限, MaskStyle.LAST4 | ALL)`（只用于文本字段）：读接口、历史、审计、模板与导出中是遮蔽形式（`****4931`），持有权限者逐值显示明文并留记录，
+只有持有权限者可以写入、筛选与排序。不能同时是 `sensitive`、`generated`，不能是主键、显示字段、默认排序，也不能公开。导出为 `masked: {permission, style}`。详见 10 §13.1。
+
 ### 6.3 显示字段【D20】
 
 `eb.display(field)`：该实体被引用时用哪个字段显示（`Text` 或 `jabiz.i18n-text`，非敏感），供 `lookup` / `labels` 接口（03 §3）

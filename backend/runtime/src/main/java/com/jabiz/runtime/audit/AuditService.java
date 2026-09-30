@@ -146,6 +146,20 @@ public class AuditService {
             query.limit()));
     }
 
+    /**
+     * Every audit record of the given entity types recorded in {@code [from, to)}, oldest first: the changes an access
+     * review covers (docs/design/10-security.md section 13.3).
+     */
+    public Mono<List<AuditRecordEntry>> recordsOf(java.util.Collection<String> entityTypes, Instant from, Instant to) {
+        return storages.getEngine(poolRef).select("SELECT r.*, p.process_name FROM sys_audit_record r "
+                + "LEFT JOIN op_process p ON p.process_seq_id = r.process_seq_id WHERE r.entity_type = ANY(:types) "
+                + "AND r.recorded_time >= :from AND r.recorded_time < :to ORDER BY r.record_no",
+                Map.of("types", BoundValue.of(entityTypes.toArray(String[]::new)), "from", BoundValue.of(from),
+                    "to", BoundValue.of(to)))
+            .map(this::entry)
+            .collectList();
+    }
+
     /** One audit record by its number; empty when there is none. */
     public Mono<AuditRecordEntry> record(long recordNo) {
         return storages.getEngine(poolRef).select("SELECT r.*, p.process_name FROM sys_audit_record r "

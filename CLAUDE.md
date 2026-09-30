@@ -68,6 +68,12 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
 - **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
   平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 由管理员关联，不自动开户；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
+- **按权限显示明文**（见 10 §13.1 与决策 D28 第 7 条）：税号、账号等只让部分人看明文的字段用 `f.masked(权限, MaskStyle.LAST4|ALL)`（文本字段）；
+  读接口、历史、审计、签发的报表中一律遮蔽，持有权限者经 `POST /api/datasets/{id}/reveal` 逐值显示（记入 `sys_reveal_record`），不另写"脱敏"或显示记录。
+  模板与导出由平台在 SQL 中遮蔽并为持有权限者留记录；只有持有权限者能写入、筛选、排序。不要把遮蔽字段设为显示字段、默认排序或公开字段。
+- **数据期限**（见 10 §13.2 与决策 D28 第 8 条）：只能看某一期间数据的人以带 `dataFrom` / `dataTo` 的角色分配表达；受期限约束的数据视图明确声明
+  `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
+- **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`，类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并

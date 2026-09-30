@@ -62,6 +62,8 @@ export default function DatasetListPage() {
     const generated = buildColumns(entity.data, view, dictionaries, t, i18n.language, {
       labels,
       defaultLocale: entity.data.defaultLocale,
+      can,
+      datasetId: timeTravel ? undefined : datasetId,
     })
     return [
       ...generated,
@@ -120,7 +122,7 @@ export default function DatasetListPage() {
         ),
       },
     ]
-  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, showAudit, datasetId, message, labels, actions, timeTravel])
+  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, showAudit, datasetId, message, labels, actions, timeTravel, can])
 
   if (dataset.isLoading || (dataset.data && entity.isLoading)) return <Spin style={{ margin: 48 }} />
   if (!dataset.data) return <Result status="404" title={datasetId} />

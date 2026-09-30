@@ -87,4 +87,31 @@ class LocalFileStoreTest {
         assertThat(store.deleteStaleParts(Duration.ofHours(1)).block()).isZero();
         assertThatThrownBy(store::root).hasMessageContaining("jabiz.files.local.root");
     }
+
+    /**
+     * Two sweeps can list the store while one of them deletes: a directory removed after its parent was read must not
+     * end the other's listing with an error (the error would make its storage step run again later, at an older
+     * operation's cut-off, over newer strays).
+     */
+    @Test
+    void listingSurvivesObjectsDeletedMeanwhile() {
+        LocalFileStore store = store(root.toString());
+        for (String id : new String[] {"a", "b", "c", "d"}) {
+            store.write("2026/01/" + id + "/original", Flux.just(DefaultDataBufferFactory.sharedInstance.wrap(
+                "x".getBytes(StandardCharsets.UTF_8)))).block(Duration.ofSeconds(5));
+        }
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        java.util.List<String> keys = store.list().doOnNext(key -> {
+            if (seen.isEmpty()) {
+                // Everything else goes while the walk is under way.
+                for (String id : new String[] {"a", "b", "c", "d"}) {
+                    if (!key.startsWith("2026/01/" + id + "/")) {
+                        store.deleteAll("2026/01/" + id).block();
+                    }
+                }
+            }
+            seen.add(key);
+        }).collectList().block(Duration.ofSeconds(5));
+        assertThat(keys).hasSize(1);
+    }
 }

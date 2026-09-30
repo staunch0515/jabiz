@@ -259,6 +259,9 @@ public class SqlTemplatePrecompileCheck implements PlatformCheck {
             switch (entry) {
                 case DatasetScope.Fixed fixed -> values.put(fixed.field(), fixed.value());
                 case DatasetScope.FromContext dynamic -> values.put(dynamic.field(), sample(def.field(dynamic.field())));
+                case DatasetScope.WithinDataPeriod within -> values.put(within.field(), new DatasetScope.PeriodCondition(
+                    new com.jabiz.context.DataPeriod(Instant.EPOCH, Instant.EPOCH.plusSeconds(1)),
+                    within.referencedField()));
             }
         }
         return values;

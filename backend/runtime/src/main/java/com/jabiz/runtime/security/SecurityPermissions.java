@@ -38,6 +38,13 @@ public final class SecurityPermissions {
      * {@code /api/auth/challenge/**} as the user enrolling; granted to no role (docs/design/10-security.md section 9).
      */
     public static final String MFA_ENROLL = "auth.mfa-enroll";
+    /**
+     * Reading the access review: the access report (its template), the security changes of a period, the signed
+     * reviews (docs/design/10-security.md section 13.3).
+     */
+    public static final String ACCESS_REVIEW_READ = "security.access-review.read";
+    /** Signing an access review (ACCESS_REVIEW_SIGN_OFF), which always needs a recent second factor. */
+    public static final String ACCESS_REVIEW_SIGN = "security.access-review.sign";
     /** Declared by the bootstrap process, which only the platform runs at startup. */
     public static final String BOOTSTRAP = "security.bootstrap";
 

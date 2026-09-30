@@ -1,8 +1,8 @@
 import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { Space, Table, Tag, Typography } from 'antd'
+import { Space, Table, Tabs, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
-import { AUDIT_FILTERS, type AuditRecord, type AuditFieldChange } from '../api/audit'
+import { AUDIT_FILTERS, type AuditRecord, type AuditFieldChange, type RevealRecord } from '../api/audit'
 import { api, unwrap } from '../api/client'
 import { formatDateTime } from '../meta/format'
 
@@ -89,8 +89,7 @@ export default function AuditPage() {
     { title: t('audit.reason'), dataIndex: 'reason', search: false, ellipsis: true },
   ]
 
-  return (
-    <PageContainer title={t('audit.title')}>
+  const records = (
       <ProTable<AuditRecord, Filters>
         rowKey="recordNo"
         columns={columns}
@@ -117,6 +116,69 @@ export default function AuditPage() {
           return { data: page.items ?? [], success: true, total: page.total ?? 0 }
         }}
       />
+  )
+
+  return (
+    <PageContainer title={t('audit.title')}>
+      <Tabs
+        items={[
+          { key: 'records', label: t('audit.records'), children: records },
+          { key: 'reveals', label: t('audit.reveals'), children: <RevealRecords /> },
+        ]}
+      />
     </PageContainer>
+  )
+}
+
+type RevealFilters = { actorId?: string; entityType?: string; entityId?: string; revealedAt?: [string, string] }
+
+/**
+ * Every display of masked values in plain text (docs/design/10-security.md section 13.1): one value on request, or
+ * the plain columns of a template run or an export, with who and when.
+ */
+function RevealRecords() {
+  const { t } = useTranslation()
+  const columns: ProColumns<RevealRecord>[] = [
+    {
+      title: t('audit.revealedAt'),
+      dataIndex: 'revealedAt',
+      valueType: 'dateTimeRange',
+      render: (_, record) => (record.revealedAt ? formatDateTime(record.revealedAt) : ''),
+    },
+    { title: t('audit.actor'), dataIndex: 'actorId' },
+    {
+      title: t('audit.revealKind'),
+      dataIndex: 'kind',
+      search: false,
+      render: (_, record) => <Tag>{t(`audit.revealKinds.${record.kind}`)}</Tag>,
+    },
+    { title: t('audit.revealResource'), dataIndex: 'resource', search: false, ellipsis: true },
+    { title: t('audit.entityType'), dataIndex: 'entityType', render: (_, record) => record.entity ?? '' },
+    { title: t('audit.entityId'), dataIndex: 'entityId', copyable: true },
+    { title: t('audit.revealFields'), key: 'fields', search: false, render: (_, record) => (record.fields ?? []).join(', ') },
+    { title: t('audit.revealRows'), dataIndex: 'rowCount', search: false, align: 'right' },
+  ]
+  return (
+    <ProTable<RevealRecord, RevealFilters>
+      rowKey="revealId"
+      columns={columns}
+      pagination={{ defaultPageSize: 50 }}
+      data-testid="audit-reveals"
+      request={async ({ current = 1, pageSize = 50, revealedAt, actorId, entityType, entityId }) => {
+        const query: Record<string, string | number | undefined> = {
+          offset: (current - 1) * pageSize,
+          limit: pageSize,
+          actorId: actorId || undefined,
+          entityType: entityType || undefined,
+          entityId: entityId || undefined,
+        }
+        if (revealedAt) {
+          query.from = new Date(revealedAt[0]).toISOString()
+          query.to = new Date(revealedAt[1]).toISOString()
+        }
+        const page = await unwrap(api.GET('/api/audit/reveals', { params: { query } }))
+        return { data: page.items ?? [], success: true, total: page.total ?? 0 }
+      }}
+    />
   )
 }

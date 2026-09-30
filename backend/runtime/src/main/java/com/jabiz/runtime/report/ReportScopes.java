@@ -41,6 +41,30 @@ public class ReportScopes {
         return scopes;
     }
 
+    /**
+     * Whether the reader's request gives every archived scope the same values, and limits none of the template's
+     * datasets the run kept no scope for. A run issued before a dataset's scope came to depend on the caller (a data
+     * period, docs/design/10-security.md section 13.2) kept nothing for it: its rows are unlimited, so a reader who is
+     * limited there may not read it.
+     */
+    public boolean matches(String templateId, Map<String, Map<String, String>> archived, RequestContext reader) {
+        Optional<AdvancedQueryDefinition> query = templates.find(templateId);
+        if (query.isPresent()) {
+            for (DatasetDefinition dataset : templates.datasetsOf(query.get()).values()) {
+                if (dataset.scope().isDynamic() && !archived.containsKey(dataset.resourceId())) {
+                    try {
+                        if (!dataset.scope().resolve(reader).isEmpty()) {
+                            return false;
+                        }
+                    } catch (ScopeUnavailableException unavailable) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return matches(archived, reader);
+    }
+
     /** Whether the reader's request gives every archived scope the same values. */
     public boolean matches(Map<String, Map<String, String>> archived, RequestContext reader) {
         for (Map.Entry<String, Map<String, String>> entry : archived.entrySet()) {

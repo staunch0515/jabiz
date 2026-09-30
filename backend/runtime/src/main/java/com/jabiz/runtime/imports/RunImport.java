@@ -19,6 +19,7 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
@@ -61,10 +62,12 @@ public class RunImport implements StepHandler<NoMetadata, ProcessContext> {
     private final ProcessInputs inputs;
     private final StorageAdapterRegistry storages;
     private final String poolRef;
+    private final SensitiveDataMasker masker;
 
     RunImport(ImportAccess access, ImportRuns runs, EntityIdGenerator ids, ImportRegistry imports, ImportFiles files, ImportSettings settings, ProcessRegistry processes,
         ProcessExecutor executor, ProcessInputs inputs, StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, SensitiveDataMasker masker) {
+        this.masker = masker;
         this.access = access;
         this.runs = runs;
         this.ids = ids;
@@ -251,7 +254,7 @@ public class RunImport implements StepHandler<NoMetadata, ProcessContext> {
             0, 0, 0, 0, 0, Map.of(), Map.of(), Map.of(), List.of(), List.of(problem));
     }
 
-    private static ImportReport report(ImportDefinition<?> definition, ImportFiles.Copy copy, Read read,
+    private ImportReport report(ImportDefinition<?> definition, ImportFiles.Copy copy, Read read,
         ImportPreparation.Plan plan, Set<Integer> failedRows, List<ImportIssue> issues, int processed) {
         Set<Integer> errorRows = new HashSet<>(failedRows);
         issues.stream().filter(issue -> issue.row() > 0).forEach(issue -> errorRows.add(issue.row()));
@@ -271,12 +274,14 @@ public class RunImport implements StepHandler<NoMetadata, ProcessContext> {
             }
             String status = errorRows.contains(record.number()) ? ImportReport.ERROR
                 : duplicates.contains(record.number()) ? ImportReport.DUPLICATE : ImportReport.OK;
-            results.add(new ImportReport.RowResult(record.number(), record.location(), status, values));
+            // Reports are kept and shown to others: masked fields as the read APIs show them (10 section 13.1).
+            results.add(new ImportReport.RowResult(record.number(), record.location(), status,
+                masker.maskByName(values)));
         }
         return new ImportReport(null, definition.id(), definition.version(), copy.fileId().toString(), copy.sha256(),
             false,
             plan.recordCount(), plan.rowCount(), processed, plan.units().size(), plan.duplicates().size(),
             plan.sources().columns(),
-            plan.sources().constants(), plan.totals(), results, List.copyOf(issues));
+            masker.maskByName(plan.sources().constants()), plan.totals(), results, List.copyOf(issues));
     }
 }

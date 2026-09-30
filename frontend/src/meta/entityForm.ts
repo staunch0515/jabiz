@@ -8,7 +8,8 @@ import type { EntityMeta, FieldMeta } from './types'
  * generated fields are the platform's; sensitive ones are written only by dedicated processes (400 SENSITIVE_FIELD
  * otherwise), so none of them is offered. Immutable fields can be set on creation and are read-only afterwards.
  * Process-only fields are shown read-only when editing and left out on creation, where the platform fills them
- * (docs/design/16-content-authoring.md section 5). Preset fields (a child created from its parent) are fixed.
+ * (docs/design/16-content-authoring.md section 5). Preset fields (a child created from its parent) are fixed. Masked
+ * fields are read-only without their permission; their masked form is never sent, since only changed fields are.
  */
 export type FormMode = 'create' | 'edit'
 
@@ -19,7 +20,12 @@ export interface FormField {
   fixed?: boolean
 }
 
-export function formFieldsOf(entity: EntityMeta, mode: FormMode, preset: Record<string, unknown> = {}): FormField[] {
+export function formFieldsOf(
+  entity: EntityMeta,
+  mode: FormMode,
+  preset: Record<string, unknown> = {},
+  can: (permission: string) => boolean = () => false,
+): FormField[] {
   return entity.fields
     .filter((f) => !f.systemManaged && !f.generated && !f.sensitive && !(f.processOnly && mode === 'create'))
     .map((field) => {
@@ -27,7 +33,12 @@ export function formFieldsOf(entity: EntityMeta, mode: FormMode, preset: Record<
       return {
         field,
         fixed,
-        disabled: fixed || field.processOnly || (mode === 'edit' && (field.immutable || field.name === entity.primaryKey)),
+        disabled:
+          fixed ||
+          field.processOnly ||
+          // A masked field is written by holders of its permission only (docs/design/10-security.md section 13.1).
+          (!!field.masked && !can(field.masked.permission)) ||
+          (mode === 'edit' && (field.immutable || field.name === entity.primaryKey)),
       }
     })
 }

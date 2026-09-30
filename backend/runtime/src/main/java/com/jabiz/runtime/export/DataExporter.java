@@ -18,6 +18,8 @@ import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.report.ReportExporter;
 import com.jabiz.runtime.report.ReportRun;
 import com.jabiz.runtime.report.ReportRuns;
+import com.jabiz.runtime.security.MaskedFields;
+import com.jabiz.runtime.security.RevealRecorder;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -44,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -83,11 +86,14 @@ public class DataExporter {
     private final String poolRef;
     private final JsonMapper json;
     private final Clock clock;
+    private final RevealRecorder reveals;
 
     public DataExporter(DatasetEntityManager entities, EntityDefinitionRegistry definitions,
         SensitiveDataMasker masker, MessageCatalog messages, ReportRuns runs, ReportExporter reports,
         IntegrityStore integrity, OperationRecorder operations, StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, JsonMapper json, Clock clock) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, JsonMapper json, Clock clock,
+        RevealRecorder reveals) {
+        this.reveals = reveals;
         this.entities = entities;
         this.definitions = definitions;
         this.masker = masker;
@@ -130,7 +136,7 @@ public class DataExporter {
         StorageEngine engine) {
         List<Map<String, Object>> schema = new ArrayList<>();
         return Flux.fromIterable(plan.datasets())
-            .concatMap(dataset -> dataset(plan, dataset, archive, schema))
+            .concatMap(dataset -> dataset(plan, request, dataset, archive, schema))
             .then(plan.reports() ? reports(plan, request, archive) : Mono.empty())
             .then(blocking(() -> archive.json("schema.json", Map.of("format", FORMAT, "entities", schema))))
             .then(integrity.head(engine).map(head -> {
@@ -144,10 +150,16 @@ public class DataExporter {
                 head, archive.files))));
     }
 
-    /** One dataset as CSV, page by page in primary key order, and its description for {@code schema.json}. */
-    private Mono<Void> dataset(Plan plan, DatasetDefinition dataset, Archive archive,
+    /**
+     * One dataset as CSV, page by page in primary key order, and its description for {@code schema.json}. Masked
+     * fields are exported masked, except to holders of their permissions, whose export is recorded
+     * (docs/design/10-security.md section 13.1).
+     */
+    private Mono<Void> dataset(Plan plan, RequestContext request, DatasetDefinition dataset, Archive archive,
         List<Map<String, Object>> schema) {
         EntityDefinition def = definitions.getOrThrow(dataset.targetEntityType());
+        Set<String> plain = MaskedFields.plainFor(request, def);
+        long[] exported = {0};
         List<FieldDefinition> fields = def.fields.values().stream().filter(field -> !field.sensitive()).toList();
         String file = "data/" + dataset.resourceId().replaceAll("[^A-Za-z0-9._-]", "_") + ".csv";
         int batch = dataset.policy().maxQueryBatchSize();
@@ -163,7 +175,9 @@ public class DataExporter {
                 .expand(rows -> rows.size() < batch ? Mono.empty()
                     : page(dataset, def, asOf, knownAt, rows.getLast().id(), batch)))
             .concatMap(rows -> blocking(() -> {
-                for (EntityInstance row : rows) {
+                exported[0] += rows.size();
+                for (EntityInstance stored : rows) {
+                    EntityInstance row = masker.hide(stored, plain);
                     List<String> cells = new ArrayList<>(fields.size());
                     for (FieldDefinition field : fields) {
                         cells.add(OpenCsv.value(row.attributes().get(field.name()), json::writeValueAsString));
@@ -171,7 +185,10 @@ public class DataExporter {
                     archive.row(OpenCsv.line(cells));
                 }
             }))
-            .then(blocking(archive::end));
+            .then(blocking(archive::end))
+            .then(Mono.defer(() -> plain.isEmpty() ? Mono.empty()
+                : reveals.record(request, RevealRecorder.Kind.EXPORT, PROCESS_NAME, def.name, null, plain,
+                    exported[0])));
     }
 
     /** The entries after {@code after} (the start when null), at most {@code batch}, in key order. */
@@ -181,7 +198,7 @@ public class DataExporter {
         if (after != null) {
             query.where(new QueryPredicate.KeyAfter(after));
         }
-        return entities.query(dataset, def, query.build(), asOf, knownAt).map(masker::hide).collectList();
+        return entities.query(dataset, def, query.build(), asOf, knownAt).collectList();
     }
 
     private static Instant firstNonNull(Instant first, Instant second) {

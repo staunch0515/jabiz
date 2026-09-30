@@ -10,6 +10,7 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
@@ -84,8 +85,11 @@ class ProcessController {
                     if (result.replayed()) {
                         response.header(REPLAYED, "true");
                     }
+                    // The generic entity processes return the instance: masked as every read API shows it.
+                    Object output = result.output() instanceof EntityInstance instance
+                        ? masker.hide(instance) : result.output();
                     return response.body(new ExecuteResponse(result.processSeqId(),
-                        masker.toJsonWithoutSecrets(result.output())));
+                        masker.toJsonWithoutSecrets(output)));
                 });
         });
     }

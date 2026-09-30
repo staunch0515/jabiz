@@ -1,5 +1,6 @@
 package com.jabiz.runtime.test;
 
+import com.jabiz.context.DataPeriod;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.security.JwtService;
 
@@ -20,6 +21,12 @@ public final class TestTokens {
     public static String bearer(JwtService tokens, String actorId, String... permissions) {
         return "Bearer " + tokens.issue(new Actor(actorId, null, Set.of(), Set.of(permissions),
             tokens.clock().instant())).token();
+    }
+
+    /** As {@link #bearer}, for an actor limited to the data of a period (docs/design/10-security.md section 13.2). */
+    public static String withinPeriod(JwtService tokens, DataPeriod period, String actorId, String... permissions) {
+        return "Bearer " + tokens.issue(new Actor(actorId, null, Set.of(), Set.of(permissions),
+            tokens.clock().instant(), period)).token();
     }
 
     /** As {@link #bearer}, for a session that has not passed a second factor. */

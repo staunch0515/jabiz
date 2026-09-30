@@ -71,7 +71,7 @@ public final class DatasetRegistry implements PlatformCheck {
             if (target.isEmpty()) {
                 problems.add(label + ": targets unregistered entity type " + dataset.targetEntityType());
             } else {
-                checkAgainstEntity(dataset, target.get(), label, problems);
+                checkAgainstEntity(dataset, target.get(), entities, label, problems);
             }
             if (dataset.isDefault()) {
                 DatasetDefinition other = defaults.putIfAbsent(dataset.targetEntityType(), dataset);
@@ -122,12 +122,14 @@ public final class DatasetRegistry implements PlatformCheck {
         return Collections.unmodifiableCollection(byResourceId.values());
     }
 
-    private static void checkAgainstEntity(DatasetDefinition dataset, EntityDefinition entity, String label,
-        List<String> problems) {
+    private static void checkAgainstEntity(DatasetDefinition dataset, EntityDefinition entity,
+        EntityDefinitionRegistry entities, String label, List<String> problems) {
         for (DatasetScope.Entry entry : dataset.scope().entries()) {
             FieldDefinition field = entity.fields.get(entry.field());
             if (field == null) {
                 problems.add(label + ": scope field " + entry.field() + " does not exist on " + entity.name);
+            } else if (entry instanceof DatasetScope.WithinDataPeriod within) {
+                checkDataPeriod(within, field, entity, entities, label, problems);
             } else if (!allowsEquality(field.kind())) {
                 problems.add(label + ": scope field " + entry.field() + " cannot be compared for equality");
             }
@@ -181,6 +183,31 @@ public final class DatasetRegistry implements PlatformCheck {
             return SemanticKinds.allows(kind, QueryOperator.EQ);
         } catch (IllegalArgumentException unregisteredCustomKind) {
             return true; // reported by SemanticKindChecker
+        }
+    }
+
+    /**
+     * A data period (docs/design/10-security.md section 13.2) needs a temporal field, or a reference to an entity whose
+     * named field is temporal and immutable, so that any of its versions tells the time.
+     */
+    private static void checkDataPeriod(DatasetScope.WithinDataPeriod within, FieldDefinition field,
+        EntityDefinition entity, EntityDefinitionRegistry entities, String label, List<String> problems) {
+        if (within.referencedField() == null) {
+            if (!(field.kind() instanceof SemanticKind.Temporal)) {
+                problems.add(label + ": data period field " + field.name() + " of " + entity.name
+                    + " is not a temporal field");
+            }
+            return;
+        }
+        if (!(field.kind() instanceof SemanticKind.Reference reference)) {
+            problems.add(label + ": data period field " + field.name() + " of " + entity.name + " is not a reference");
+            return;
+        }
+        Optional<FieldDefinition> time = entities.find(reference.targetEntity())
+            .flatMap(target -> target.findField(within.referencedField()));
+        if (time.isEmpty() || !(time.get().kind() instanceof SemanticKind.Temporal) || !time.get().immutable()) {
+            problems.add(label + ": data period field " + reference.targetEntity() + "." + within.referencedField()
+                + " (through " + field.name() + ") must be an immutable temporal field");
         }
     }
 

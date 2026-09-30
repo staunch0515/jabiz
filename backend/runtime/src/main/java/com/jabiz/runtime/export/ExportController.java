@@ -128,7 +128,7 @@ class ExportController {
             DataExporter.Plan plan = new DataExporter.Plan(chosen, body.asOf(), body.knownAt(), clock.instant(),
                 reports,
                 body.reportsFrom(), body.reportsTo(), run -> Permissions.allowsAll(request, run.permissions(),
-                    development) && scopes.matches(run.scope(), request));
+                    development) && scopes.matches(run.templateId(), run.scope(), request));
             String name = "jabiz-export-" + clock.instant().truncatedTo(ChronoUnit.SECONDS).toString()
                 .replace(":", "") + ".zip";
             return observations.mono(PlatformObservations.DATA_EXPORT, "export data", KeyValues.empty(),

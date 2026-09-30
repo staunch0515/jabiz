@@ -77,8 +77,8 @@ public final class SponsorSignInProcess {
                 if (ctx.outcome() != LoginOutcome.SUCCESS) {
                     return;
                 }
-                Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ROLES),
-                    ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
+                Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ASSIGNMENTS),
+                    ctx.list(LoginContext.KEY_ROLES), ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
                 if (access.roles().isEmpty()) {
                     ctx.setOutcome(LoginOutcome.NO_ROLE);
                 } else {

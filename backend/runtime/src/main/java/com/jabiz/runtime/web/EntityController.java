@@ -20,6 +20,7 @@ import com.jabiz.runtime.process.entity.UpdateEntityInput;
 import com.jabiz.runtime.process.entity.UpdateProcessDefinition;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.security.MaskedFields;
 import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
@@ -110,7 +111,7 @@ class EntityController {
                 if (definition.findField(field).isEmpty()) {
                     throw invalid("sort", "Entity '" + entityType + "' has no field '" + field + "'");
                 }
-                if (definition.field(field).sensitive()) {
+                if (definition.field(field).sensitive() || !MaskedFields.mayCompare(context, definition, field)) {
                     // Even the order of secrets tells something about them (docs/design/10-security.md section 6).
                     throw new ValidationException(List.of(new Violation(field, PlatformErrorCodes.SORT_NOT_ALLOWED,
                         "Sorting by [" + field + "] is not allowed")));

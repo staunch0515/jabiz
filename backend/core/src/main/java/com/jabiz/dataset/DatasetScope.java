@@ -1,5 +1,6 @@
 package com.jabiz.dataset;
 
+import com.jabiz.context.DataPeriod;
 import com.jabiz.context.RequestContext;
 
 import java.util.ArrayList;
@@ -16,12 +17,14 @@ import java.util.function.Function;
  * to reads (rows outside are invisible) and to writes (inserts are filled in, changes may not leave it).
  *
  * <p>A value taken from the context that is missing rejects the request ({@link ScopeUnavailableException}):
- * the scope never silently degrades to "no filter".
+ * the scope never silently degrades to "no filter". The one exception is {@link WithinDataPeriod}, where "no period"
+ * means "not limited in time" by design (decision D28 item 8). Its resolved value is a {@link PeriodCondition}, a
+ * range rather than a value.
  */
 public final class DatasetScope {
 
     /** Condition of one field. */
-    public sealed interface Entry permits Fixed, FromContext {
+    public sealed interface Entry permits Fixed, FromContext, WithinDataPeriod {
         String field();
     }
 
@@ -43,6 +46,29 @@ public final class DatasetScope {
         }
     }
 
+    /**
+     * Rows whose time lies within the actor's {@linkplain RequestContext#dataPeriod() data period}
+     * (docs/design/10-security.md section 13.2): the time is in {@code field} itself (a temporal field), or, when
+     * {@code referencedField} is given, {@code field} refers to another entity whose immutable temporal field
+     * {@code referencedField} holds it (a ledger entry and its transaction's booking time). Unlike {@link FromContext},
+     * an actor without a period is not limited, which is why the scope must be declared explicitly.
+     */
+    public record WithinDataPeriod(String field, String referencedField) implements Entry {
+        public WithinDataPeriod {
+            Objects.requireNonNull(field, "field must not be null");
+        }
+    }
+
+    /**
+     * Resolved value of a {@link WithinDataPeriod} entry for an actor with a period: the rows must have their time
+     * within {@code period}, taken from the referenced entity's {@code referencedField} when that is not null.
+     */
+    public record PeriodCondition(DataPeriod period, String referencedField) {
+        public PeriodCondition {
+            Objects.requireNonNull(period, "period must not be null");
+        }
+    }
+
     public static final DatasetScope NONE = new DatasetScope(List.of());
 
     private final List<Entry> entries;
@@ -61,7 +87,7 @@ public final class DatasetScope {
 
     /** True if some value comes from the request context, so the scope differs between callers. */
     public boolean isDynamic() {
-        return entries.stream().anyMatch(FromContext.class::isInstance);
+        return entries.stream().anyMatch(entry -> !(entry instanceof Fixed));
     }
 
     /**
@@ -80,6 +106,12 @@ public final class DatasetScope {
                         throw new ScopeUnavailableException(dynamic.field(), dynamic.source());
                     }
                     values.put(dynamic.field(), value);
+                }
+                case WithinDataPeriod within -> {
+                    DataPeriod period = request == null ? null : request.dataPeriod();
+                    if (period != null) {
+                        values.put(within.field(), new PeriodCondition(period, within.referencedField()));
+                    }
                 }
             }
         }
@@ -102,6 +134,23 @@ public final class DatasetScope {
         /** As {@link #fromContext(String, Function)}, naming the context attribute for error messages. */
         public Builder fromContext(String field, String source, Function<RequestContext, Object> value) {
             return add(new FromContext(field, source, value));
+        }
+
+        /**
+         * Rows whose temporal {@code field} lies within the actor's data period; actors without one see every row
+         * (docs/design/10-security.md section 13.2).
+         */
+        public Builder withinDataPeriod(String field) {
+            return add(new WithinDataPeriod(field, null));
+        }
+
+        /**
+         * Rows whose reference {@code field} points to an instance whose immutable temporal field
+         * {@code referencedField} lies within the actor's data period.
+         */
+        public Builder withinDataPeriod(String field, String referencedField) {
+            return add(new WithinDataPeriod(field, Objects.requireNonNull(referencedField,
+                "referencedField must not be null")));
         }
 
         private Builder add(Entry entry) {

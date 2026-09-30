@@ -21,6 +21,9 @@ import java.util.Set;
  * @param permissions permission codes granted to the actor
  * @param mfaAt       when the actor last passed a second factor in this session, or null
  *                    (docs/design/10-security.md section 9)
+ * @param dataPeriod  the span of business time whose data the actor may see in datasets declaring
+ *                    {@code withinDataPeriod}, or null when the actor is not limited in time
+ *                    (docs/design/10-security.md section 13.2)
  */
 public record RequestContext(
     String actorId,
@@ -29,7 +32,8 @@ public record RequestContext(
     String requestId,
     Set<String> roles,
     Set<String> permissions,
-    Instant mfaAt
+    Instant mfaAt,
+    DataPeriod dataPeriod
 ) {
 
     /** Actor id of work the platform performs on its own behalf. */
@@ -40,6 +44,12 @@ public record RequestContext(
 
     /** Permission code that grants every permission (administrators, scenario replays). */
     public static final String ALL_PERMISSIONS = "*";
+
+    /** A context of an actor not limited in time. */
+    public RequestContext(String actorId, String tenantId, Locale locale, String requestId, Set<String> roles,
+        Set<String> permissions, Instant mfaAt) {
+        this(actorId, tenantId, locale, requestId, roles, permissions, mfaAt, null);
+    }
 
     /** A context of an actor who has not passed a second factor. */
     public RequestContext(String actorId, String tenantId, Locale locale, String requestId, Set<String> roles,

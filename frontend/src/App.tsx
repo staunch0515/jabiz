@@ -12,6 +12,7 @@ import { extension } from './extension'
 import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
 import AccountSecurityPage from './pages/AccountSecurityPage'
+import AccessReviewPage from './pages/AccessReviewPage'
 import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
@@ -73,6 +74,7 @@ const router = createBrowserRouter([
           { path: '/reports/run', element: <ReportPage /> },
           { path: '/reports/archive', element: <ReportArchivePage /> },
           { path: '/audit', element: <AuditPage /> },
+          { path: '/access-review', element: <AccessReviewPage /> },
           { path: '/integrity', element: <IntegrityPage /> },
           { path: '/retention', element: <RetentionPage /> },
           { path: '/account/security', element: <AccountSecurityPage /> },

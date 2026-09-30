@@ -76,7 +76,7 @@ public class RbacService {
                     return access(user.id())
                         .filter(access -> !access.roles().isEmpty() && (mfaAt != null || !access.mfaRequired()))
                         .map(access -> new Actor(String.valueOf(user.id()), user.get("tenantId"), access.roles(),
-                            access.permissions(), mfaAt));
+                            access.permissions(), mfaAt, access.dataPeriod()));
                 }))
             .map(Optional::of)
             .defaultIfEmpty(Optional.empty());
@@ -85,9 +85,10 @@ public class RbacService {
     private Mono<Rbac.Access> access(Object userId) {
         return query(SecurityEntities.USER_ROLE_DATASET, SecurityEntities.SEC_USER_ROLE, Rbac.assignmentsOf(userId))
             .flatMap(assignments -> query(SecurityEntities.ROLE_DATASET, SecurityEntities.SEC_ROLE,
-                Rbac.rolesOf(assignments)))
-            .flatMap(roles -> query(SecurityEntities.ROLE_PERMISSION_DATASET, SecurityEntities.SEC_ROLE_PERMISSION,
-                Rbac.permissionsOf(roles)).map(grants -> Rbac.access(roles, grants)));
+                Rbac.rolesOf(assignments))
+                .flatMap(roles -> query(SecurityEntities.ROLE_PERMISSION_DATASET,
+                    SecurityEntities.SEC_ROLE_PERMISSION, Rbac.permissionsOf(roles))
+                    .map(grants -> Rbac.access(assignments, roles, grants))));
     }
 
     private Mono<List<EntityInstance>> query(String datasetId, EntityDefinition def, EntityQuery query) {

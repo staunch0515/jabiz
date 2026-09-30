@@ -156,6 +156,10 @@
   `MfaAdministrationOffIT`；单点登录（14g-2）：`OidcIT`（对 testFixtures 的 `TestOidcProvider`：正常登录、未关联、state 只能用一次与过期、
   nonce / aud / azp / iss / exp / iat / sub 不符、HS256 与 `none`、别的密钥签名、密钥轮换只重读一次、PKCE、`amr` 视同二次验证与转入 TOTP、角色要求时先绑定、
   锁定与禁用、关联是管理操作且一个主体只对应一个用户、表只插入且操作记录中没有 state 与授权码），runtime `OidcProvidersTest`；core `TotpTest`（RFC 6238 附录 B 的向量）、`RecoveryCodesTest`、`MfaSecretCipherTest`；runtime `MfaSettingsTest`、`JwtServiceTest`。
+- 14g-3：`MaskedFieldIT`（读接口、历史、审计、操作记录、通用实体流程结果为遮蔽形式；显示明文需要权限并留记录；写入、筛选、排序需要权限，遮蔽形式不能写回；
+  模板在 SQL 中遮蔽、持有权限者的运行与导出留记录，签发的报表一律遮蔽；数据导出；记录表只插入）、`DataPeriodIT`（审计师只看到期间内的交易、分录与报表；
+  审计记录按记录时间；期限外写入被拒；期限来自角色分配、刷新保持、外包与不限期）、`AccessReviewIT`（签发、变更、冲突、签核与存储；权限、二次验证、期间与报表的检查；表只插入）；
+  core `MaskedFieldTest`、`DataPeriodTest`、`AccessControlCompilerTest`。
 - 验收测试：`AccessControlIT`（401 / 403 覆盖数据视图、模板、流程、实体 API、操作）、`SignInIT`（登录、锁定、并发、角色生效、刷新、菜单、安全表只插入）、
   `SensitiveDataIT`（日志、`input_summary`、`op_process_result`、读接口中不出现密码与哈希）、`BootstrapAdminIT`。
 
@@ -222,7 +226,7 @@
 ## 12. OIDC 单点登录【D28 第 6 条，阶段 14g-2】
 
 授权码 + PKCE（S256）+ nonce；平台自己校验 ID 令牌，然后照常签发自己的访问令牌与刷新令牌（第 2 节不变）。不用 Spring 的 oauth2-client（它依赖服务端会话），
-只用已有的 Nimbus 与 WebClient。不做 SAML、不自动开户、不做单点登出。
+只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不自动开户、不做单点登出。
 
 **配置**（`jabiz.security.oidc.providers[i]`）
 
@@ -274,6 +278,64 @@
 - 谁都可以发起登录，所以 `sec_oidc_state` / `sec_oidc_state_use` **不是**只追加表：每次发起时删除过期的请求，表中至多是最近 10 分钟的请求；它们也不被封存（21 §2）。
 - 发现文档、JWKS 与令牌响应至多读 256 KB，超出即停止读取。没有 `kid` 的 ID 令牌逐一尝试同类的全部公钥（密钥轮换期间常有两把）。
 
-## 13. 按权限显示明文、数据期限、访问审查（阶段 14g-3，待实施）
+## 13. 按权限显示明文、数据期限、访问审查【D28 第 7–9 条，阶段 14g-3】
 
-见 D28 第 7–9 条；实施时补充本节。
+### 13.1 遮蔽字段
+
+```java
+eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
+    .masked("logistics.carrier.bank-account", MaskStyle.LAST4));
+```
+
+- **声明**：`f.masked(权限, 样式)`，只用于文本字段；不能同时是 `sensitive()` 或 `generated`，不能是主键、显示字段（`eb.display`，引用处显示）或列表视图的默认排序（任何人都按它排序）。
+  元数据导出 `masked: {permission, style}`；遮蔽字段不得出现在 `publicRead` 的白名单中（启动检查，D17）。
+- **样式**（`MaskStyle`，Java 与 SQL 形式相同）：`LAST4` = `****` + 末 4 个字符（值短于 8 个字符时整体为 `****`，否则末 4 位就暴露了大半）；`ALL` = `****`。空值仍为空。
+- **一律遮蔽**：读接口（数据视图、实体 API、通用实体流程的结果）、历史、审计记录（21 §1，`AuditDiff` 存遮蔽形式）、导入报告（行值与常量按字段名遮蔽，报告会保存并给别人看）
+  中都是遮蔽形式——**持有权限者也一样**，这样列表读取不需要留记录（放弃的方案⑥）。操作记录的 `input_summary` 中与遮蔽字段同名的属性记为 `***`。
+- **显示明文**：`POST /api/datasets/{id}/reveal {id, field}` → `{value}`。需要数据视图的读权限与字段的权限；按数据视图范围读取当前状态（范围外 404）；
+  返回之前在只追加表 `sys_reveal_record` 写一条记录（`kind = VALUE`：时间、操作人、请求号、数据视图、实体、主键、字段），写不成则不返回。
+  前端只对持有权限者在列表中显示"显示"按钮，明文只留在该单元格的状态中。
+- **SQL 模板**：`{{Entity}}` 展开时，调用者没有权限的遮蔽列在子查询中就投影为遮蔽形式（`QueryCompiler.templateExpression` 列出全部列，遮蔽列为 `CASE … END AS 列`），
+  所以模板中的条件、排序、连接与外层筛选都只能看到遮蔽形式，不能借此猜值。持有权限者得到明文，模板正文以占位符 `{{Entity.field}}` 引用了明文遮蔽字段时，
+  每次运行（查询、报表导出）按实体写一条记录（`kind = QUERY`，模板 id、字段、行数）。流程中的 `RunTemplate` 按流程的发起人判断（系统身份没有权限，一律遮蔽）。
+- **签发的报表**（`REPORT_ISSUE`，19 §5）**一律遮蔽**，无论签发人是否持有权限：存档会被别人阅读、重现与校验，校验必须得到相同的行。
+- **数据导出**（`POST /api/exports/data`，21 §4）：无权限者导出遮蔽形式；持有权限者导出明文，每个数据视图写一条记录（`kind = EXPORT`，行数）。
+- **写入与筛选**：数据视图 `commit` 与通用实体流程中写遮蔽字段需要其权限（403）；值以 `****` 开头即拒绝（400 `MASKED_VALUE`），遮蔽形式不能原样写回
+  （前端只提交改过的字段，没有权限时该字段只读）。业务流程照常经 `ctx.changes()` 写入（权限只在入口检查，D11 第 2 条）。
+  没有权限者不能按遮蔽字段筛选、排序（数据视图 400 `FILTER_NOT_ALLOWED` / `SORT_NOT_ALLOWED`，实体 API 同样），列表视图可以把它列入白名单供持有权限者使用。
+- **查阅**：`GET /api/audit/reveals`（`audit.read`，按操作人、实体、主键、时间筛选，最新在前）；后台审计页的"明文显示"页签。`sys_reveal_record` 由 21 §2 封存。
+- 业务流程自己的输入输出中出现遮蔽字段的值时，由该流程负责（输出不经遮蔽；需要隐藏的组件用 `@Sensitive`）。
+
+### 13.2 数据期限
+
+- **分配**：`SecUserRole` 增加 `dataFrom` / `dataTo`（时态字段，`[dataFrom, dataTo)`，任一端可空；两端都空 = 不限；`dataTo` 必须晚于 `dataFrom`，422 `DATA_PERIOD_ORDER`）。
+- **计算**（登录、刷新与 `Rbac.access` 相同，`DataPeriod.hull`）：只算启用角色的分配；**有一个分配不限期即不限期**；否则取所有期限的外包（中间的空档也包括在内）。
+  权限不按分配各自的期限分开计算（已知限制）：只应看某一期间的用户（审计师）应只持有带该期限的角色。
+- **传递**：访问令牌的 `data_from` / `data_to`（ISO-8601），`RequestContext.dataPeriod`，`/api/auth/me` 的 `dataFrom` / `dataTo`（后台在页头显示）；
+  开发请求头 `X-Jabiz-Data-From` / `X-Jabiz-Data-To`；场景的 `actor.dataFrom` / `dataTo`；测试 `TestTokens.withinPeriod(…)`。
+- **声明**（数据视图范围，03 §2.2）：`scope(s -> s.withinDataPeriod("bookingTime"))`（目标实体的时态字段），或
+  `withinDataPeriod("transactionId", "bookingTime")`（引用字段 + 被引用实体的**不可变**时态字段，例如账本分录按其交易的过账时间；启动检查）。
+  **没有期限 = 不受限制**，这与 `fromContext` 取不到值即拒绝不同，所以必须明确声明才生效。
+- **读取**：范围条件为 `列 >= :from AND 列 < :to`（经引用时为 `引用列 IN (SELECT 主键 FROM 被引用表 WHERE …)`，不可变字段任何版本都一样），
+  在取得当前版本之后应用（D3）；数据视图读取期限外的实体 = 不存在（404），SQL 模板经 D10 同样生效（例如试算表只含期间内的交易）。
+  经引用声明的数据视图，受期限限制的调用者看不到历史、不能更新（无法仅凭数据判断，默认拒绝）。
+- **写入**：插入与更新所设的时间必须在期限内，插入必须给出时间（否则 422 `OUT_OF_SCOPE`）；经引用的期限在时间所在的实体上检查（分录随其交易）。
+- **流程中的检查**同样只看得到期限内的数据，所以需要看全部数据的规则要由数据库保证：账本"一笔交易只冲正一次"另有唯一索引
+  （V25，`reverses_transaction_id`），期限外已被冲正的交易再冲正时 400 `UNIQUE_VIOLATION`。
+- **平台的使用**：账本交易（`bookingTime`）与分录（经 `transactionId`）数据视图；审计记录与操作记录的查询（`/api/audit/records`、`/operations`、`/reveals`）按记录时间截取在期限内，
+  单条审计记录在期限外为 404。
+- **签发的报表**：数据期限作为范围值记入运行（19 §5.3），只有期限相同的读者能读；声明期限之前签发的运行没有这项记录，受期限限制的读者不能读。
+
+### 13.3 访问审查
+
+- **访问权限报表**：平台模板 `jabiz.security.access_review`（报表，`timeSlice: {asOf: asOf}`，权限 `security.access-review.read`）：
+  每个用户 × 分配的角色（及其数据期限）× 角色的权限，以及到该时点为止最近一次成功登录。按期末时点以 `REPORT_ISSUE` 签发（D25，不另存报表），存档中可重现与校验。
+- **期间内的变更**：审计记录（D27）中安全实体（`SecUser`、`SecRole`、`SecRolePermission`、`SecUserRole`、`SecUserIdentity`、`SecUserMfa`）在 `[from, to)` 记录的条目，
+  按记录号排序；哈希为其 JSON 的 SHA-256。`GET /api/security/access-reviews/changes?from&to`。
+- **职责分离冲突**：18 §4.4 的冲突报告（`SodService.conflicts`，按用户名与规则排序），`GET /api/security/access-reviews/conflicts`。
+- **签核**：流程 `ACCESS_REVIEW_SIGN_OFF`（权限 `security.access-review.sign`，总要求二次验证）输入期间、报表的 run id 与意见（必填，≤ 2000 字）。
+  期间必须已结束（`periodTo` 不晚于操作时间，422 `ACCESS_REVIEW_PERIOD`）；报表必须是访问权限模板、读取时点等于 `periodTo`、记录时点不早于 `periodTo`（期末之后签发：期末之前"按期末"签发的报表缺少其间的变更）、
+  未被取代且内容未被改动（422 `ACCESS_REVIEW_REPORT`）。
+  只追加表 `sys_access_review` 保存：期间、报表 run id 与内容哈希、变更条数与哈希、签核时的冲突（JSON）与哈希、审查人、意见、时间与操作号。
+  列表 `GET /api/security/access-reviews`（`security.access-review.read`）。后台页面 `/access-review`：选择期间、签发报表、查看变更与冲突、签核、已签核列表。
+- 变更与冲突不另存明细：审计记录只追加且被封存，同一期间随时可以重算并比对哈希；冲突是签核时的状态，所以连同 JSON 一起保存。

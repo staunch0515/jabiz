@@ -1,5 +1,6 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.context.DataPeriod;
 import com.jabiz.runtime.context.Actor;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JOSEObjectType;
@@ -53,6 +54,9 @@ public final class JwtService {
     static final String PURPOSE = "purpose";
     static final String ATTEMPT = "attempt";
     static final String IDENTITY = "idn";
+    /** Ends of the actor's data period as ISO-8601 instants, absent when not limited (section 13.2). */
+    static final String DATA_FROM = "data_from";
+    static final String DATA_TO = "data_to";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
 
@@ -120,6 +124,10 @@ public final class JwtService {
             .claim(ROLES, actor.roles().stream().sorted().toList())
             .claim(PERMISSIONS, actor.permissions().stream().sorted().toList())
             .claim(MFA_AT, actor.mfaAt() == null ? null : actor.mfaAt().getEpochSecond())
+            .claim(DATA_FROM, actor.dataPeriod() == null || actor.dataPeriod().from() == null ? null
+                : actor.dataPeriod().from().toString())
+            .claim(DATA_TO, actor.dataPeriod() == null || actor.dataPeriod().to() == null ? null
+                : actor.dataPeriod().to().toString())
             .build();
         return new Issued(sign(claims, JOSEObjectType.JWT), expires);
     }
@@ -193,10 +201,15 @@ public final class JwtService {
             return new Actor(claims.getSubject(), claims.getStringClaim(TENANT),
                 Set.copyOf(strings(claims.getStringListClaim(ROLES))),
                 Set.copyOf(strings(claims.getStringListClaim(PERMISSIONS))),
-                mfaAt == null ? null : Instant.ofEpochSecond(mfaAt));
-        } catch (ParseException e) {
+                mfaAt == null ? null : Instant.ofEpochSecond(mfaAt),
+                DataPeriod.of(instant(claims.getStringClaim(DATA_FROM)), instant(claims.getStringClaim(DATA_TO))));
+        } catch (ParseException | java.time.format.DateTimeParseException | IllegalArgumentException e) {
             throw new InvalidTokenException("Malformed token claims");
         }
+    }
+
+    private static Instant instant(String text) {
+        return text == null ? null : Instant.parse(text);
     }
 
     /** The claims of a token of the given type, signed by this service with HS256, of this issuer, unexpired. */

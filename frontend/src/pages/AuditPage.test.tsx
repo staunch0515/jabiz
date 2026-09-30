@@ -49,4 +49,29 @@ describe('AuditPage', () => {
     await waitFor(() => expect(within(changes).getByText('Acme Ltd')).toBeTruthy())
     expect(within(changes).getAllByText('***')).toHaveLength(2)
   })
+
+  it('lists the plain-text displays of masked values in their own tab', async () => {
+    get.mockImplementation((path: string) =>
+      Promise.resolve(path === '/api/audit/reveals'
+        ? { items: [{ revealId: 'r1', revealedAt: '2026-02-05T15:00:00Z', actorId: 'clerk', kind: 'VALUE',
+          resource: 'urn:jabiz:dataset:default:Vendor', entity: 'Vendor', entityId: 'V-200', fields: ['bankAccount'],
+          rowCount: null }], total: 1, offset: 0, limit: 50 }
+        : { items: [], total: 0, offset: 0, limit: 50 }))
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <App>
+          <MemoryRouter initialEntries={['/audit']}>
+            <AuditPage />
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(await screen.findByText('Plain-text displays'))
+    const table = await screen.findByTestId('audit-reveals')
+    await waitFor(() => expect(within(table).getByText('clerk')).toBeTruthy())
+    expect(within(table).getByText('One value')).toBeTruthy()
+    expect(within(table).getByText('bankAccount')).toBeTruthy()
+    expect(get.mock.calls.some(([path]) => path === '/api/audit/reveals')).toBe(true)
+  })
 })

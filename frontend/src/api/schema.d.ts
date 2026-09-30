@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit/reveals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reveals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/challenge/enroll": {
         parameters: {
             query?: never;
@@ -404,6 +420,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{resourceId}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dictionaries/{urn}": {
         parameters: {
             query?: never;
@@ -731,7 +763,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_2"];
+        get: operations["list_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -923,7 +955,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -988,6 +1020,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["changes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["conflicts_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1092,6 +1172,10 @@ export interface components {
             /** Format: int64 */
             version?: number;
         };
+        Changes: {
+            hash?: string;
+            items?: components["schemas"]["AuditRecordEntry"][];
+        };
         CodeRequest: {
             code?: string;
         };
@@ -1111,6 +1195,10 @@ export interface components {
             userId?: string;
             userName?: string;
             wildcard?: boolean;
+        };
+        Conflicts: {
+            hash?: string;
+            items?: components["schemas"]["Conflict"][];
         };
         DataBuffer: unknown;
         DatasetEntry: {
@@ -1489,6 +1577,10 @@ export interface components {
             name?: string;
         };
         Me: {
+            /** Format: date-time */
+            dataFrom?: string;
+            /** Format: date-time */
+            dataTo?: string;
             /** Format: int64 */
             idleTimeoutSeconds?: number;
             /** Format: date-time */
@@ -1644,8 +1736,60 @@ export interface components {
             /** Format: date */
             today?: string;
         };
+        RevealEntry: {
+            actorId?: string;
+            entity?: string;
+            entityId?: string;
+            fields?: string[];
+            kind?: string;
+            resource?: string;
+            /** Format: uuid */
+            revealId?: string;
+            /** Format: date-time */
+            revealedAt?: string;
+            /** Format: int64 */
+            rowCount?: number;
+        };
+        RevealPage: {
+            items?: components["schemas"]["RevealEntry"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int32 */
+            offset?: number;
+            /** Format: int64 */
+            total?: number;
+        };
+        RevealRequest: {
+            field?: string;
+            id?: unknown;
+        };
+        RevealResponse: {
+            value?: unknown;
+        };
         RevertRequest: {
             reason?: string;
+        };
+        Review: {
+            /** Format: int32 */
+            changesCount?: number;
+            changesHash?: string;
+            comment?: string;
+            conflicts?: components["schemas"]["Conflict"][];
+            conflictsHash?: string;
+            /** Format: date-time */
+            periodFrom?: string;
+            /** Format: date-time */
+            periodTo?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            reportHash?: string;
+            /** Format: uuid */
+            reportRunId?: string;
+            /** Format: uuid */
+            reviewId?: string;
+            reviewer?: string;
+            /** Format: date-time */
+            signedAt?: string;
         };
         RunDetail: {
             columns?: components["schemas"]["ColumnEntry"][];
@@ -1895,6 +2039,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditRecordEntry"];
+                };
+            };
+        };
+    };
+    reveals: {
+        parameters: {
+            query?: {
+                actorId?: string;
+                entityType?: string;
+                entityId?: string;
+                from?: string;
+                to?: string;
+                offset?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealPage"];
                 };
             };
         };
@@ -2387,6 +2559,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryResponse"];
+                };
+            };
+        };
+    };
+    reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealResponse"];
                 };
             };
         };
@@ -2948,7 +3146,7 @@ export interface operations {
             };
         };
     };
-    list_2: {
+    list_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -3241,7 +3439,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query?: {
                 template?: string;
@@ -3351,6 +3549,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetentionReportResult"];
+                };
+            };
+        };
+    };
+    list_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"][];
+                };
+            };
+        };
+    };
+    changes: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Changes"];
+                };
+            };
+        };
+    };
+    conflicts_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conflicts"];
                 };
             };
         };
