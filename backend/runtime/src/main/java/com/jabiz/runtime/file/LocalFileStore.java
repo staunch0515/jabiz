@@ -130,12 +130,11 @@ public class LocalFileStore implements FileStore {
             if (!Files.isDirectory(root)) {
                 return Flux.<String>empty();
             }
-            return Flux.using(() -> Files.walk(root), walk -> Flux.fromStream(walk
-                    .filter(Files::isRegularFile)
+            return Flux.using(() -> new Walk(root), walk -> Flux.fromIterable(() -> walk)
                     .map(root::relativize)
                     .filter(relative -> !hidden(relative))
-                    .map(relative -> relative.toString().replace('\\', '/'))),
-                Stream::close);
+                    .map(relative -> relative.toString().replace('\\', '/')),
+                Walk::close);
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -162,11 +161,12 @@ public class LocalFileStore implements FileStore {
                     entries.filter(path -> modifiedBefore(path, limit)).forEach(stale::add);
                 }
             }
-            try (Stream<Path> walk = Files.walk(root)) {
-                walk.filter(Files::isRegularFile)
-                    .filter(path -> !path.startsWith(area) && hidden(root.relativize(path)))
-                    .filter(path -> modifiedBefore(path, limit))
-                    .forEach(stale::add);
+            try (Walk walk = new Walk(root)) {
+                walk.forEachRemaining(path -> {
+                    if (!path.startsWith(area) && hidden(root.relativize(path)) && modifiedBefore(path, limit)) {
+                        stale.add(path);
+                    }
+                });
             }
             stale.forEach(LocalFileStore::deleteRecursively);
             return stale.size();
@@ -206,6 +206,87 @@ public class LocalFileStore implements FileStore {
             throw new IllegalArgumentException("Storage key outside the root: " + key);
         }
         return path;
+    }
+
+    /**
+     * The regular files under a directory, depth first and one directory at a time, like {@code Files.walk}, except
+     * that a directory or file deleted meanwhile (by another sweep) is skipped rather than ending the walk with
+     * {@code NoSuchFileException}.
+     */
+    private static final class Walk implements java.util.Iterator<Path>, AutoCloseable {
+        private final java.util.Deque<java.nio.file.DirectoryStream<Path>> open = new java.util.ArrayDeque<>();
+        private final java.util.Deque<java.util.Iterator<Path>> entries = new java.util.ArrayDeque<>();
+        private Path next;
+
+        Walk(Path root) throws IOException {
+            descend(root);
+        }
+
+        @Override
+        public boolean hasNext() {
+            while (next == null && !entries.isEmpty()) {
+                java.util.Iterator<Path> current = entries.peek();
+                Path entry;
+                try {
+                    if (!current.hasNext()) {
+                        entries.pop();
+                        open.pop().close();
+                        continue;
+                    }
+                    entry = current.next();
+                } catch (java.nio.file.DirectoryIteratorException e) {
+                    if (e.getCause() instanceof NoSuchFileException) {
+                        continue;  // the directory went while it was being read
+                    }
+                    throw new UncheckedIOException(e.getCause());
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                if (Files.isDirectory(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                    try {
+                        descend(entry);
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                } else if (Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                    next = entry;
+                }
+            }
+            return next != null;
+        }
+
+        @Override
+        public Path next() {
+            if (!hasNext()) {
+                throw new java.util.NoSuchElementException();
+            }
+            Path result = next;
+            next = null;
+            return result;
+        }
+
+        private void descend(Path directory) throws IOException {
+            java.nio.file.DirectoryStream<Path> stream;
+            try {
+                stream = Files.newDirectoryStream(directory);
+            } catch (NoSuchFileException gone) {
+                return;
+            }
+            open.push(stream);
+            entries.push(stream.iterator());
+        }
+
+        @Override
+        public void close() {
+            while (!open.isEmpty()) {
+                try {
+                    open.pop().close();
+                } catch (IOException ignored) {
+                    // nothing left to read
+                }
+            }
+            entries.clear();
+        }
     }
 
     private static void deleteRecursively(Path path) {
