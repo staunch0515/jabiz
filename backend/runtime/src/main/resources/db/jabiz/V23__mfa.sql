@@ -14,6 +14,7 @@ CREATE TABLE sec_user_mfa_version (
     secret            varchar(200)  NOT NULL,
     confirmed         boolean       NOT NULL,
     confirmed_time    timestamptz,
+    confirmed_step    bigint,
     recovery_codes    varchar(1000),
     CONSTRAINT sec_user_mfa_version_uk UNIQUE (user_mfa_id, version_no)
 );

@@ -37,6 +37,11 @@ public class MfaEnrollStep implements ComputeStep<MfaEnrollStep.Phase, ProcessCo
     @Override
     public void compute(Phase phase, ProcessContext ctx) {
         EntityInstance user = ctx.get(MfaProcesses.USER, EntityInstance.class);
+        // A second factor is set up by its own user only, whoever else may run processes (an administrator resets).
+        if (!String.valueOf(user.id()).equals(ctx.request().actorId())) {
+            throw new com.jabiz.runtime.PermissionDeniedException(SecurityPermissions.MFA_ENROLL,
+                "A second factor is set up by its own user only");
+        }
         Optional<EntityInstance> existing = MfaProcesses.first(ctx);
         if (existing.isPresent() && Boolean.TRUE.equals(existing.get().get("confirmed"))) {
             ctx.reject(new Violation(null, PlatformErrorCodes.MFA_ALREADY_ENROLLED,
@@ -73,8 +78,16 @@ public class MfaEnrollStep implements ComputeStep<MfaEnrollStep.Phase, ProcessCo
             ctx.reject(new Violation(null, PlatformErrorCodes.MFA_NOT_ENROLLED, "No second factor is being set up"));
             return;
         }
-        byte[] secret = cipher.decrypt(pending.get().get("secret"), String.valueOf(user.id()));
-        if (Totp.verify(secret, code, ctx.opTime(), -1).isEmpty()) {
+        byte[] secret;
+        try {
+            secret = cipher.decrypt(pending.get().get("secret"), String.valueOf(user.id()));
+        } catch (MfaSecretCipher.UnreadableSecretException e) {
+            // Sealed under an earlier key: the enrolment starts again.
+            ctx.reject(new Violation(null, PlatformErrorCodes.MFA_NOT_ENROLLED, "Start setting up again"));
+            return;
+        }
+        java.util.OptionalLong step = Totp.verify(secret, code, ctx.opTime(), -1);
+        if (step.isEmpty()) {
             ctx.reject(new Violation("code", PlatformErrorCodes.MFA_CODE_INVALID, "The code does not match"));
             return;
         }
@@ -82,6 +95,8 @@ public class MfaEnrollStep implements ComputeStep<MfaEnrollStep.Phase, ProcessCo
         ctx.changes().update(SecurityEntities.USER_MFA, pending.get().id(), pending.get().version(), Map.of(
             "confirmed", true,
             "confirmedTime", ctx.opTime(),
+            // The confirming code must not work again at the next sign-in.
+            "confirmedStep", step.getAsLong(),
             "recoveryCodes", MfaCodes.join(codes.stream().map(RecoveryCodes::hash).toList())));
         ctx.put(MfaProcesses.RESULT, new MfaProcesses.RecoveryCodeList(codes));
     }

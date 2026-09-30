@@ -70,10 +70,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     }
 
     /**
-     * Marks the process as run by the platform or a dedicated entry point only: it is left out of the process
-     * catalog clients build forms from (decision D15). Its permissions are checked as usual.
-     */
-    /**
      * Callers need a recent second factor (docs/design/10-security.md section 10); checked at the entry points like
      * the permissions.
      */
@@ -87,6 +83,10 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return requiresMfa(com.jabiz.security.MfaRequirement.ALWAYS);
     }
 
+    /**
+     * Marks the process as run by the platform or a dedicated entry point only: it is left out of the process
+     * catalog clients build forms from (decision D15). Its permissions are checked as usual.
+     */
     public ProcessDefinitionBuilder<I, O, C> internal() {
         this.internal = true;
         return this;

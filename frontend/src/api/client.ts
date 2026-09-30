@@ -14,7 +14,9 @@ export function setApiLanguage(lang: string) {
   language = lang
 }
 
-const SESSION_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/step-up']
+const SESSION_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout']
+/** The step-up itself never asks for a step-up (but is refreshed on 401 like any other call). */
+const STEP_UP_PATH = '/api/auth/step-up'
 
 /**
  * Asks the user for a second factor when an operation requires a recent one (403 MFA_REQUIRED, docs/design/
@@ -97,7 +99,7 @@ async function authFetch(request: Request): Promise<Response> {
       response = await globalThis.fetch(decorate(retry))
     }
   }
-  if (!SESSION_PATHS.includes(path) && (await stepUpFor(response))) {
+  if (!SESSION_PATHS.includes(path) && path !== STEP_UP_PATH && (await stepUpFor(response))) {
     again.headers.delete('Authorization')
     return globalThis.fetch(decorate(again))
   }

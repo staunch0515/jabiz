@@ -66,7 +66,8 @@ test('a user sets up two-step verification, steps up for a price change and sign
   await page.getByLabel('version').fill(String(price.version))
   await page.getByLabel('percent').fill('10')
   await page.getByRole('button', { name: /执\s*行/ }).click()
-  await page.getByTestId('step-up-code').fill(totp(secret))
+  // The code of the next step (within the allowed drift): the confirming code does not work twice.
+  await page.getByTestId('step-up-code').fill(totp(secret, Date.now() + 30_000))
   await page.locator('#step-up-submit').click()
   await expect(page.getByTestId('process-result')).toContainText('110')
 

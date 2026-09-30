@@ -116,6 +116,7 @@
 | 我的待办 `GET /api/tasks/mine` / 待办与通知的数据视图 / `TASK_NOTIFY` | 只要求已认证（只列本人与本人所持权限的待办）/ `task.read`（写入只经流程）/ `task.notify`（由系统身份的事件消费者运行）（18 §5） |
 | 职责分离（另加） | 授予角色或权限造成冲突即拒绝（422 `SOD_CONFLICT`）；流程 API 入口拒绝同时持有互斥两组权限的操作人使用其中任一组（403 `SOD_CONFLICT`，`*` 除外）（18 §4） |
 | 字典、元模型导出、`/api/auth/me`、`/api/auth/menus`、OpenAPI 文档 `/api/meta/openapi` | 只要求已认证 |
+| 本人的二次验证：`/api/auth/mfa`、`/api/auth/mfa/enroll[/confirm]`、`/api/auth/step-up`（第 9、10 节） | 只要求已认证：只作用于调用者本人（绑定流程声明的 `auth.mfa-enroll` 不授予任何角色，流程内再确认绑定的是调用者本人，因此持有 `*` 也不能经流程 API 替别人绑定） |
 | 元数据目录 `/api/meta/datasets` / `/api/meta/processes` | 已认证；只列出具备读权限的视图 / 具备全部权限的非内部流程（D15） |
 
 - 未声明权限的数据视图、模板、流程：非 `dev` 下启动失败（`DatasetRegistry`、`SqlTemplateRegistry`、`ProcessChecks`，`dev` 下为警告）；
@@ -162,7 +163,7 @@
 |---|---|
 | 算法 | core `com.jabiz.security.Totp`：RFC 6238，HMAC-SHA1、6 位、30 秒一步，容许前后各 1 步；时间来自注入的 `Clock`。密钥 20 字节随机数（Base32 交给认证器应用，`otpauth://totp/<发行者>:<用户名>?secret=…&issuer=…`，发行者 `jabiz.security.mfa.issuer`，默认 `jabiz`） |
 | 恢复码 | core `RecoveryCodes`：10 个 `XXXXX-XXXXX`（Base32 字母），只显示一次；库中只存 SHA-256（去掉连字符、大写后），用过即删 |
-| 绑定信息 | 时态实体 `SecUserMfa`（`sec_user_mfa_version`，`db/jabiz/V23__mfa.sql`）：`userId`（唯一）、`secret`（加密，**敏感**）、`confirmed`、`confirmedTime`、`recoveryCodes`（哈希列表，**敏感**）。数据视图只读（`security.user.read`），写入只经下列流程 |
+| 绑定信息 | 时态实体 `SecUserMfa`（`sec_user_mfa_version`，`db/jabiz/V23__mfa.sql`）：`userId`（唯一）、`secret`（加密，**敏感**）、`confirmed`、`confirmedTime`、`confirmedStep`（确认所用的时间步，登录时不再接受）、`recoveryCodes`（哈希列表，**敏感**）。数据视图只读（`security.user.read`），写入只经下列流程 |
 | 加密 | AES-256-GCM，附加数据为用户主键（密文不能挪给别的用户）；存放格式 `v1:<密钥标识>:<IV>:<密文>`。密钥 `jabiz.security.mfa.key`（环境变量 `JABIZ_MFA_KEY`，Base64，≥ 32 字节，经 HMAC-SHA256 导出 AES 密钥与密钥标识）；非 dev 缺少即启动失败，dev 缺省时随机生成并告警（重启后已绑定的用户无法验证）；`platformCheck` 用一次性随机密钥 |
 | 登录记录 | `SecLoginRecord` 增加 `factor`（`PASSWORD` / `TOTP` / `RECOVERY_CODE`）与 `mfaStep`（已接受的最后一个 TOTP 时间步，每条记录向后传递）；结果增加 `MFA_REQUIRED`、`MFA_ENROLLMENT_REQUIRED`、`MFA_FAILED` |
 | 角色 | `SecRole.requireMfa`（缺省否）：持有这类角色的会话必须经过二次验证 |
@@ -201,7 +202,8 @@
 - 声明：流程 `pb.requiresMfa(MfaRequirement.ALWAYS)`，数据视图 `d.writeRequiresMfa(MfaRequirement.ALWAYS)`；平台的管理操作声明 `ADMINISTRATION`：
   安全实体（`SecUser` … `SecMenu`、`SecUserMfa`）数据视图的写入、`SEC_USER_CREATE` / `SEC_USER_SET_PASSWORD` / `SEC_USER_UNLOCK` / `SEC_MFA_RESET`、
   `CONTROL_CHANGE_PUBLISH`、`LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`。`ADMINISTRATION` 只在 `jabiz.security.mfa.administration=true`（默认）时生效。
-- 检查（`MfaPolicy`，与 `Permissions` 同在入口）：流程 API、数据视图 `commit`、实体 API 的增改删、导入（行流程要求时）、撤销（所涉数据视图要求时）。
+- 检查（`MfaPolicy`，与 `Permissions` 同在入口）：流程 API、数据视图 `commit`、实体 API 的增改删、导入（行流程要求时）、撤销（所涉数据视图要求时）；
+  通用实体流程与权限一样在流程内再查一次所写数据视图的要求（写入的实体由输入决定，D12 第 2 条）。
   访问令牌的 `mfa_at` 早于"现在 − `jabiz.security.mfa.step-up-max-age`（默认 10 分钟）"或没有 → 403 `MFA_REQUIRED`。
   系统身份、子流程、场景回放、事件消费者与定时任务不检查（与权限相同，D11 第 2 条）。
 - 目录：`/api/meta/processes` 与 `/api/meta/datasets` 导出 `requiresMfa` / `writeRequiresMfa`（已按配置折算为布尔值），前端据此提示。
@@ -210,9 +212,10 @@
 ## 11. 闲置锁定【D28 第 5 条】
 
 - 服务端：刷新令牌只在其签发后"访问令牌有效期 + `jabiz.security.session.idle-timeout`（默认 15 分钟）"以内可用（且不超过其本身的有效期），
-  否则 401 `INVALID_REFRESH_TOKEN`（不消费、不吊销）。前端只在访问令牌失效后才刷新，因此闲置超过闲置时长的会话无法续期。
+  否则 401 `INVALID_REFRESH_TOKEN`（不消费、不吊销）。前端平时只在访问令牌失效后才刷新；用户有键盘、指针活动而没有请求时（例如填写长表单），
+  外框每三分之一闲置时长至多刷新一次，使服务端也把会话算作活动。
   访问令牌有效期长于闲置时长 → 启动失败（类别 `SECURITY`）。
-- 前端：按键盘、指针、滚动与触摸活动计时（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出（吊销令牌族）并回到登录页，提示因闲置而锁定，用户名已填好。
+- 前端：按键盘、指针、滚动与触摸活动计时（同时按上条保持服务端会话）（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出（吊销令牌族）并回到登录页，提示因闲置而锁定，用户名已填好。
 
 ## 12. OIDC 单点登录（阶段 14g-2，待实施）
 

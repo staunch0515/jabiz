@@ -169,7 +169,6 @@ public class LegalHolds {
                 .description("Releases a legal hold, with the reason; its entries follow their retention again.")
                 .permissions(RetentionPermissions.HOLD_WRITE)
                 .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
-            .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

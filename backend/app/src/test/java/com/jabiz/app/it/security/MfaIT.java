@@ -270,6 +270,60 @@ class MfaIT extends SecurityItSupport {
     }
 
     @Test
+    void theGenericEntityProcessesAskForASecondFactorToo() {
+        String noMfa = TestTokens.withoutMfa(tokens, "it-admin", "*");
+        assertThat(ruleCode(post("/api/processes/ADD_ENTITY/latest", noMfa, Map.of("entityType", SecurityEntities.ROLE,
+            "attributes", Map.of("roleCode", unique("R"), "labels", Map.of("en", "R"), "enabled", true)))
+            .expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody())).isEqualTo("MFA_REQUIRED");
+    }
+
+    @Test
+    void nobodyEnrolsASecondFactorForSomeoneElse() {
+        String victim = createUser(unique("pat"), PASSWORD);
+        post("/api/processes/SEC_MFA_ENROLL_BEGIN/latest", admin(), Map.of("userId", victim))
+            .expectStatus().isForbidden();
+        assertThat(query("SELECT count(*) AS n FROM sec_user_mfa_version WHERE user_id = ?::uuid", victim)
+            .getFirst().get("n")).isEqualTo(0L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theConfirmingCodeDoesNotWorkAgainAtSignIn() {
+        String name = unique("quinn");
+        userWith(name, PASSWORD, "p");
+        String bearer = bearerOf(signIn(name, PASSWORD));
+        String secret = (String) post("/api/auth/mfa/enroll", bearer, Map.of()).expectBody(MAP).returnResult()
+            .getResponseBody().get("secret");
+        String code = code(secret);
+        post("/api/auth/mfa/enroll/confirm", bearer, Map.of("code", code)).expectStatus().isOk();
+        refused(challenge(name), code);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aRecoveryCodeIsNotSpentOnARefusedSignIn() {
+        String name = unique("rae");
+        String userId = createUser(name, PASSWORD);
+        String roleId = createRole(unique("R"), "p");
+        assign(userId, roleId, null);
+        String bearer = bearerOf(signIn(name, PASSWORD));
+        String secret = (String) post("/api/auth/mfa/enroll", bearer, Map.of()).expectBody(MAP).returnResult()
+            .getResponseBody().get("secret");
+        List<String> recovery = (List<String>) post("/api/auth/mfa/enroll/confirm", bearer,
+            Map.of("code", code(secret))).expectBody(MAP).returnResult().getResponseBody().get("recoveryCodes");
+        String challenge = challenge(name);
+        // The role goes away between the two steps.
+        Map<String, Object> role = get("/api/datasets/" + SecurityEntities.ROLE_DATASET + "/entities/" + roleId,
+            admin()).expectBody(MAP).returnResult().getResponseBody();
+        post("/api/datasets/" + SecurityEntities.ROLE_DATASET + "/commit", admin(), Map.of("changes", List.of(Map.of(
+            "action", "UPDATE", "id", roleId, "version", role.get("version"),
+            "attributes", Map.of("enabled", false))))).expectStatus().isOk();
+        refused(challenge, recovery.getFirst());
+        assertThat(String.valueOf(query("SELECT recovery_codes FROM sec_user_mfa_version WHERE user_id = ?::uuid "
+            + "ORDER BY version_no DESC LIMIT 1", userId).getFirst().get("recovery_codes")).split(",")).hasSize(10);
+    }
+
+    @Test
     void stepUpNeedsAnEnrolledUser() {
         String name = unique("hal");
         userWith(name, PASSWORD, "p");

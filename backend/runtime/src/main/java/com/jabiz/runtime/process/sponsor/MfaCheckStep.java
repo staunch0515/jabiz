@@ -65,7 +65,10 @@ public class MfaCheckStep implements ComputeStep<NoMetadata, MfaContext> {
             ctx.refuse(MfaContext.UNREADABLE);
             return;
         }
-        OptionalLong step = Totp.verify(secret, code, ctx.opTime(), ctx.latestMfaStep());
+        Object confirmedStep = mfa.get().get("confirmedStep");
+        long lastUsed = Math.max(ctx.latestMfaStep(), confirmedStep == null ? -1
+            : ((Number) confirmedStep).longValue());
+        OptionalLong step = Totp.verify(secret, code, ctx.opTime(), lastUsed);
         if (step.isPresent()) {
             ctx.setFactor(SecurityEntities.FACTOR_TOTP);
             ctx.setAcceptedMfaStep(step.getAsLong());

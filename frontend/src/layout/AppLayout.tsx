@@ -17,6 +17,7 @@ import { Badge, Dropdown, Space } from 'antd'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { refreshSession } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { StepUpProvider } from '../auth/StepUp'
 import { useIdleLock } from '../auth/useIdleLock'
@@ -60,7 +61,8 @@ export default function AppLayout() {
   const lockIdle = useCallback(() => {
     void signOut().then(() => navigate('/login', { state: { idle: true } }))
   }, [signOut, navigate])
-  useIdleLock(idleTimeoutSeconds, lockIdle)
+  const keepAlive = useCallback(() => void refreshSession(), [])
+  useIdleLock(idleTimeoutSeconds, lockIdle, keepAlive)
 
   const routes: MenuDataItem[] = [
     ...toRoutes(menus.data),

@@ -2,8 +2,8 @@ import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useIdleLock } from './useIdleLock'
 
-function Probe({ seconds, onIdle }: { seconds: number | null; onIdle: () => void }) {
-  useIdleLock(seconds, onIdle)
+function Probe({ seconds, onIdle, onActivity }: { seconds: number | null; onIdle: () => void; onActivity?: () => void }) {
+  useIdleLock(seconds, onIdle, onActivity)
   return null
 }
 
@@ -20,6 +20,18 @@ describe('useIdleLock', () => {
     expect(onIdle).not.toHaveBeenCalled()
     act(() => vi.advanceTimersByTime(10_000))
     expect(onIdle).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the server session alive while the user is active, at most once per third of the idle time', () => {
+    const onActivity = vi.fn()
+    render(<Probe seconds={60} onIdle={vi.fn()} onActivity={onActivity} />)
+    act(() => vi.advanceTimersByTime(10_000))
+    fireEvent.keyDown(window, { key: 'a' })
+    expect(onActivity).not.toHaveBeenCalled()
+    act(() => vi.advanceTimersByTime(15_000))
+    fireEvent.pointerDown(window)
+    fireEvent.keyDown(window, { key: 'b' })
+    expect(onActivity).toHaveBeenCalledOnce()
   })
 
   it('does nothing until the timeout is known', () => {

@@ -160,6 +160,7 @@ public class MfaProcesses {
         attributes.put("secret", secret);
         attributes.put("confirmed", false);
         attributes.put("confirmedTime", null);
+        attributes.put("confirmedStep", null);
         attributes.put("recoveryCodes", null);
         return attributes;
     }

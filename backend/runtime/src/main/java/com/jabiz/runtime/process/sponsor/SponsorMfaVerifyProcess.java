@@ -9,6 +9,7 @@ import com.jabiz.runtime.security.MfaCodes;
 import com.jabiz.runtime.security.Rbac;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.security.SecurityPermissions;
+import com.jabiz.security.LoginOutcome;
 
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,8 @@ public final class SponsorMfaVerifyProcess {
                 .steps(SponsorSignInProcess::accessSteps)
 
                 .compute("Use up the recovery code", (metadata, ctx) -> {
-                    if (ctx.usedRecoveryCode() == null) {
+                    // Spent only by a sign-in that succeeds.
+                    if (ctx.usedRecoveryCode() == null || ctx.outcome() != LoginOutcome.SUCCESS) {
                         return;
                     }
                     EntityInstance mfa = ctx.confirmedMfa().orElseThrow();

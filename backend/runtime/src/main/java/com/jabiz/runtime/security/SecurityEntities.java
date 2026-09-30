@@ -186,6 +186,7 @@ public class SecurityEntities {
         eb.field("confirmed", f -> f.physicalColumn("confirmed").required(true).asBool().processOnly());
         eb.field("confirmedTime", f -> f.physicalColumn("confirmed_time").asTemporal(TemporalRole.EVENT_TIME)
             .processOnly());
+        eb.field("confirmedStep", f -> f.physicalColumn("confirmed_step").asNumeric(18, 0).processOnly());
         eb.field("recoveryCodes", f -> f.physicalColumn("recovery_codes").asText(1000).sensitive());
         eb.unique("uk_sec_user_mfa_user", "userId");
         eb.temporal(t -> t.allowScheduled(false));
