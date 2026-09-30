@@ -1,5 +1,7 @@
 package com.jabiz.process;
 
+import com.jabiz.security.MfaRequirement;
+
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +35,7 @@ import java.util.function.Function;
  * @param internal    run by the platform or through a dedicated entry point only (for example signing in): left out
  *                    of the process catalog clients build forms from; its permissions still apply wherever it runs
  * @param actsOn      the entity the process acts on, offered as an action on its rows; null if none
+ * @param mfa         whether callers need a recent second factor (docs/design/10-security.md section 10)
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -47,7 +50,8 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     Set<String> permissions,
     boolean deprecated,
     boolean internal,
-    ActsOn actsOn
+    ActsOn actsOn,
+    MfaRequirement mfa
 ) {
 
     /** Context key under which {@link #single} processes keep their input and output. */
@@ -74,6 +78,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
             throw new IllegalArgumentException("Process " + name + " needs at least one step");
         }
         steps = List.copyOf(steps);
+        mfa = mfa == null ? MfaRequirement.NONE : mfa;
         permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
         for (String permission : permissions) {
             if (permission.isBlank()) {
@@ -128,7 +133,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal,
-            actsOn);
+            actsOn, mfa);
     }
 
     /** This definition acting on {@code entity}, whose primary key is the input component {@code input}. */
@@ -143,12 +148,18 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, internal,
-            ActsOn.of(entity, input, condition));
+            ActsOn.of(entity, input, condition), mfa);
     }
 
     /** This definition marked as internal: not listed in the process catalog (decision D15). */
     public ProcessDefinition<I, O, C> asInternal() {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn);
+            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn, mfa);
+    }
+
+    /** This definition requiring a recent second factor of its callers as given. */
+    public ProcessDefinition<I, O, C> withMfa(MfaRequirement requirement) {
+        return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, requirement);
     }
 }

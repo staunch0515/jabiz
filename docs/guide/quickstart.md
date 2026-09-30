@@ -44,7 +44,7 @@ cd backend && ./gradlew :app:bootRun --args='--spring.profiles.active=dev'   # 8
 cd frontend && pnpm install && pnpm dev          # 5173，/api 代理到 8080
 ```
 
-- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、封存密钥 `JABIZ_INTEGRITY_KEY`（同样生成，务必备份，见 design 21 §2.4）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
+- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、封存密钥 `JABIZ_INTEGRITY_KEY`（同样生成，务必备份，见 design 21 §2.4）、二次验证密钥 `JABIZ_MFA_KEY`（同样生成，务必备份，见 design 10 §9）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
   与上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（`dev` 下默认 `backend/app/build/jabiz-files`；compose 用专用卷）。
 - 公开只读访问（15）默认关闭；`JABIZ_PUBLIC_ENABLED=true` 打开后，匿名即可读取示范的公开商品目录：
   `curl 'http://localhost:8080/api/public/queries/commerce.public.catalog?sort=unitPrice:asc'`（商品照片经 `/api/public/files/{id}`）。

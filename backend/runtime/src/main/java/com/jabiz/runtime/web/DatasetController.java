@@ -21,6 +21,7 @@ import com.jabiz.runtime.entity.ProcessOnlyFields;
 import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
+import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
@@ -87,9 +88,12 @@ class DatasetController {
     private final SensitiveDataMasker masker;
     private final MessageCatalog messages;
     private final boolean development;
+    private final MfaPolicy mfa;
 
     DatasetController(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager,
-        EntityIdGenerator ids, SensitiveDataMasker masker, MessageCatalog messages, Environment environment) {
+        EntityIdGenerator ids, SensitiveDataMasker masker, MessageCatalog messages, Environment environment,
+        MfaPolicy mfa) {
+        this.mfa = mfa;
         this.datasets = datasets;
         this.entities = entities;
         this.entityManager = entityManager;
@@ -147,6 +151,7 @@ class DatasetController {
             DatasetDefinition dataset = dataset(resourceId);
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing through dataset " + resourceId);
+            mfa.require(context, dataset.policy().writeMfa(), "Writing through dataset " + resourceId);
             DatasetEntityManager.rejectDirectWrites(dataset);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             boolean generatedKey = def.field(def.primaryKey).generated();

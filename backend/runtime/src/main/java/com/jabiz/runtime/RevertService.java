@@ -70,11 +70,13 @@ public class RevertService {
     private final DatasetEntityManager entityManager;
     private final String poolRef;
     private final boolean development;
+    private final com.jabiz.runtime.security.MfaPolicy mfa;
 
     public RevertService(OperationRecorder operations, TemporalStore store, VersionAppender versions,
         EntityDefinitionRegistry entities, DatasetRegistry datasets, StorageAdapterRegistry storages,
         QueryCompiler queryCompiler, DatasetEntityManager entityManager, Environment environment,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        com.jabiz.runtime.security.MfaPolicy mfa, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        this.mfa = Objects.requireNonNull(mfa);
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
         this.operations = Objects.requireNonNull(operations);
         this.store = Objects.requireNonNull(store);
@@ -244,6 +246,7 @@ public class RevertService {
                         () -> new IllegalStateException("No default dataset for " + def.name));
                     Permissions.requireDeclared(request, dataset.permissions().write(), development,
                         "Reverting changes of " + def.name + " through dataset " + dataset.resourceId());
+                    mfa.require(request, dataset.policy().writeMfa(), "Reverting changes of " + def.name);
                     // Written by processes only (decision D14): such data is corrected by the process that owns
                     // it (a reversing ledger transaction), never by restoring older versions.
                     if (dataset.policy().processOnlyWrites()) {

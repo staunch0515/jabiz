@@ -6,6 +6,7 @@ import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.runtime.dictionary.LabelsKindSupport;
 import com.jabiz.security.LoginOutcome;
+import com.jabiz.security.MfaRequirement;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ public class SecurityEntities {
     public static final String USER_ROLE = "SecUserRole";
     public static final String MENU = "SecMenu";
     public static final String LOGIN_RECORD = "SecLoginRecord";
+    public static final String USER_MFA = "SecUserMfa";
 
     public static final String USER_DATASET = "urn:jabiz:dataset:platform:SecUser";
     public static final String ROLE_DATASET = "urn:jabiz:dataset:platform:SecRole";
@@ -33,6 +35,12 @@ public class SecurityEntities {
     public static final String USER_ROLE_DATASET = "urn:jabiz:dataset:platform:SecUserRole";
     public static final String MENU_DATASET = "urn:jabiz:dataset:platform:SecMenu";
     public static final String LOGIN_RECORD_DATASET = "urn:jabiz:dataset:platform:SecLoginRecord";
+    public static final String USER_MFA_DATASET = "urn:jabiz:dataset:platform:SecUserMfa";
+
+    /** How a login record's attempt proved the user (docs/design/10-security.md section 9). */
+    public static final String FACTOR_PASSWORD = "PASSWORD";
+    public static final String FACTOR_TOTP = "TOTP";
+    public static final String FACTOR_RECOVERY_CODE = "RECOVERY_CODE";
 
     public static final String LOGIN_OUTCOME_DICTIONARY = "urn:jabiz:dict:platform:login-outcome";
 
@@ -67,11 +75,13 @@ public class SecurityEntities {
         eb.field("labels", f -> f.physicalColumn("labels").required(true)
             .asCustom(LabelsKindSupport.KIND_ID, Map.of()));
         eb.field("enabled", f -> f.physicalColumn("enabled").required(true).asBool());
+        // Holders must have passed a second factor in their session (docs/design/10-security.md section 9).
+        eb.field("requireMfa", f -> f.physicalColumn("require_mfa").asBool());
         eb.unique("uk_sec_role_code", "roleCode");
         eb.temporal(t -> t.allowScheduled(true));
         eb.listView("default", lv -> lv
-            .columns("roleCode", "labels", "enabled")
-            .filters("roleCode", "enabled")
+            .columns("roleCode", "labels", "enabled", "requireMfa")
+            .filters("roleCode", "enabled", "requireMfa")
             .sorts("roleCode")
             .defaultSort("roleCode", true));
     });
@@ -148,14 +158,40 @@ public class SecurityEntities {
         eb.field("attemptTime", f -> f.physicalColumn("attempt_time").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("requestId", f -> f.physicalColumn("request_id").immutable(true).asText(64));
+        // What the attempt was checked with, and the last TOTP step accepted so far (carried from record to record,
+        // so that a code cannot be used twice).
+        eb.field("factor", f -> f.physicalColumn("factor").immutable(true).asText(20));
+        eb.field("mfaStep", f -> f.physicalColumn("mfa_step").immutable(true).asNumeric(18, 0));
         // Concurrent attempts cannot both build on the same latest record (decision D6 locks the pair).
         eb.unique("uk_sec_login_record_attempt", "userId", "attemptNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("userName", "attemptNo", "outcome", "failureCount", "lockedUntil", "attemptTime")
+            .columns("userName", "attemptNo", "outcome", "factor", "failureCount", "lockedUntil", "attemptTime")
             .filters("userId", "userName", "outcome", "attemptTime")
             .sorts("attemptTime", "attemptNo")
             .defaultSort("attemptTime", false));
+    });
+
+    /**
+     * A user's second factor (docs/design/10-security.md section 9): the TOTP secret, encrypted, and the hashes of the
+     * unused recovery codes. Written only by the enrolment and reset processes.
+     */
+    public static final EntityDefinition SEC_USER_MFA = EntityDefinition.define(USER_MFA, eb -> {
+        eb.physicalTable("sec_user_mfa_version");
+        eb.primaryKey("userMfaId");
+        eb.field("userMfaId", f -> f.physicalColumn("user_mfa_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:platform:user-mfa"));
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asReference(USER));
+        eb.field("secret", f -> f.physicalColumn("secret").required(true).asText(200).sensitive());
+        eb.field("confirmed", f -> f.physicalColumn("confirmed").required(true).asBool().processOnly());
+        eb.field("confirmedTime", f -> f.physicalColumn("confirmed_time").asTemporal(TemporalRole.EVENT_TIME)
+            .processOnly());
+        eb.field("recoveryCodes", f -> f.physicalColumn("recovery_codes").asText(1000).sensitive());
+        eb.unique("uk_sec_user_mfa_user", "userId");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv
+            .columns("userId", "confirmed", "confirmedTime")
+            .filters("userId", "confirmed"));
     });
 
     @Bean
@@ -186,6 +222,21 @@ public class SecurityEntities {
     @Bean
     EntityDefinition secLoginRecordEntity() {
         return SEC_LOGIN_RECORD;
+    }
+
+    @Bean
+    EntityDefinition secUserMfaEntity() {
+        return SEC_USER_MFA;
+    }
+
+    @Bean
+    DatasetDefinition secUserMfaDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return DatasetDefinition.define(USER_MFA_DATASET, d -> d
+            .targetEntityType(USER_MFA)
+            .asDefault()
+            .permissions(SecurityPermissions.USER_READ, SecurityPermissions.USER_WRITE)
+            .policy(p -> p.processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
@@ -226,8 +277,9 @@ public class SecurityEntities {
             .targetEntityType(entity)
             .asDefault()
             .permissions(read, write)
-            // Access and menus are read whole (Rbac.MAX_ROWS), never a first page of them.
-            .policy(p -> p.maxQueryBatchSize(Rbac.MAX_ROWS))
+            // Access and menus are read whole (Rbac.MAX_ROWS), never a first page of them. Changing who may do what
+            // is administration: it needs a recent second factor (docs/design/10-security.md section 10).
+            .policy(p -> p.maxQueryBatchSize(Rbac.MAX_ROWS).writeRequiresMfa(MfaRequirement.ADMINISTRATION))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 }

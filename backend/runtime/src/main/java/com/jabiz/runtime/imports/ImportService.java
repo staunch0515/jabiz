@@ -90,7 +90,7 @@ public class ImportService {
     private Mono<ImportDefinition<Object>> authorized(String importId) {
         return RequestContexts.current().map(context -> {
             ImportDefinition<Object> definition = imports.require(importId);
-            access.require(definition, context);
+            access.requireAtEntry(definition, context);
             return definition;
         });
     }

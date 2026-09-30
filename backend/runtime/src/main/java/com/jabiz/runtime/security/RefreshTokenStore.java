@@ -45,8 +45,11 @@ public class RefreshTokenStore {
         }
     }
 
-    /** The user a valid token was issued to, and its family. */
-    public record Grant(UUID userId, UUID familyId) {}
+    /**
+     * The user a valid token was issued to, its family, and when the sign-in of the family passed a second factor
+     * (null if it did not).
+     */
+    public record Grant(UUID userId, UUID familyId, Instant mfaAt) {}
 
     /** The token is unknown, expired, consumed or of a revoked family. */
     public static final class InvalidRefreshTokenException extends RuntimeException {
@@ -64,15 +67,24 @@ public class RefreshTokenStore {
 
     private final Supplier<StorageEngine> engine;
     private final Duration ttl;
+    private final Duration idleWindow;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
-    public RefreshTokenStore(Supplier<StorageEngine> engine, Duration ttl, Clock clock) {
+    /**
+     * @param idleWindow how long after its issue a token can be used at most: the access token issued with it plus the
+     *                   idle timeout (docs/design/10-security.md section 11); a session idle for longer ends
+     */
+    public RefreshTokenStore(Supplier<StorageEngine> engine, Duration ttl, Duration idleWindow, Clock clock) {
         this.engine = Objects.requireNonNull(engine, "engine must not be null");
         if (ttl == null || ttl.isNegative() || ttl.isZero()) {
             throw new IllegalArgumentException("The refresh token lifetime must be positive");
         }
+        if (idleWindow == null || idleWindow.isNegative() || idleWindow.isZero()) {
+            throw new IllegalArgumentException("The idle window must be positive");
+        }
         this.ttl = ttl;
+        this.idleWindow = idleWindow;
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
@@ -80,11 +92,15 @@ public class RefreshTokenStore {
         return ttl;
     }
 
-    /** A token of a new family: one per sign-in. */
-    public Mono<Issued> issue(UUID userId) {
+    /**
+     * A token of a new family: one per sign-in.
+     *
+     * @param mfaAt when the sign-in passed a second factor, or null
+     */
+    public Mono<Issued> issue(UUID userId, Instant mfaAt) {
         return randomBytes(16).flatMap(bytes -> {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
-            return issue(userId, new UUID(buffer.getLong(), buffer.getLong()));
+            return issue(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt);
         });
     }
 
@@ -100,7 +116,7 @@ public class RefreshTokenStore {
      */
     public <T> Mono<Rotated<T>> rotate(String token, Function<Grant, Mono<T>> check) {
         return inTransaction(token, hash -> use(hash).flatMap(grant -> check.apply(grant)
-            .flatMap(value -> issue(grant.userId(), grant.familyId())
+            .flatMap(value -> issue(grant.userId(), grant.familyId(), grant.mfaAt())
                 .map(next -> new Rotated<>(grant, value, next)))));
     }
 
@@ -131,6 +147,10 @@ public class RefreshTokenStore {
             if (!now.isBefore(found.expiresAt())) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
             }
+            // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed.
+            if (!now.isBefore(found.issuedAt().plus(idleWindow))) {
+                return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
+            }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash);
             row.put("used_at", now);
@@ -158,7 +178,7 @@ public class RefreshTokenStore {
             .flatMap(found -> revokeFamily(found.grant().familyId(), REASON_LOGOUT)));
     }
 
-    private Mono<Issued> issue(UUID userId, UUID familyId) {
+    private Mono<Issued> issue(UUID userId, UUID familyId, Instant mfaAt) {
         return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Instant now = now();
@@ -169,6 +189,7 @@ public class RefreshTokenStore {
             row.put("user_id", userId);
             row.put("issued_at", now);
             row.put("expires_at", expires);
+            row.put("mfa_at", mfaAt);
             return engine.get().insert("sec_refresh_token", row).thenReturn(new Issued(token, familyId, expires));
         });
     }
@@ -183,16 +204,19 @@ public class RefreshTokenStore {
             .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
     }
 
-    private record Found(Grant grant, Instant expiresAt, boolean revoked) {}
+    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked) {}
 
     private Mono<Found> find(String hash) {
         return engine.get().select("""
-                SELECT t.user_id, t.family_id, t.expires_at, r.family_id IS NOT NULL AS revoked
+                SELECT t.user_id, t.family_id, t.issued_at, t.expires_at, t.mfa_at,
+                    r.family_id IS NOT NULL AS revoked
                 FROM sec_refresh_token t LEFT JOIN sec_refresh_family_revocation r ON r.family_id = t.family_id
                 WHERE t.token_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
             .next()
-            .map(row -> new Found(new Grant(Rows.uuid(row.get("user_id")), Rows.uuid(row.get("family_id"))),
-                Rows.instant(row.get("expires_at")), Boolean.TRUE.equals(row.get("revoked"))));
+            .map(row -> new Found(new Grant(Rows.uuid(row.get("user_id")), Rows.uuid(row.get("family_id")),
+                    row.get("mfa_at") == null ? null : Rows.instant(row.get("mfa_at"))),
+                Rows.instant(row.get("issued_at")), Rows.instant(row.get("expires_at")),
+                Boolean.TRUE.equals(row.get("revoked"))));
     }
 
     /** SecureRandom may read the operating system's entropy source, which blocks: never on an event loop. */

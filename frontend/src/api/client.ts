@@ -14,7 +14,36 @@ export function setApiLanguage(lang: string) {
   language = lang
 }
 
-const SESSION_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout']
+const SESSION_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/step-up']
+
+/**
+ * Asks the user for a second factor when an operation requires a recent one (403 MFA_REQUIRED, docs/design/
+ * 10-security.md section 10); resolves true once a new access token is stored. Set by the StepUpProvider.
+ */
+type StepUpHandler = () => Promise<boolean>
+let stepUpHandler: StepUpHandler | null = null
+
+export function setStepUpHandler(handler: StepUpHandler | null) {
+  stepUpHandler = handler
+}
+
+let steppingUp: Promise<boolean> | null = null
+
+/** Whether a response asks for a step-up: concurrent requests share one prompt. */
+async function stepUpFor(response: Response): Promise<boolean> {
+  if (response.status !== 403 || !stepUpHandler) return false
+  try {
+    const problem = (await response.clone().json()) as { violations?: { ruleCode?: string }[] }
+    if (!problem.violations?.some((v) => v.ruleCode === 'MFA_REQUIRED')) return false
+  } catch {
+    return false
+  }
+  const handler = stepUpHandler
+  steppingUp ??= handler().finally(() => {
+    steppingUp = null
+  })
+  return steppingUp
+}
 
 function decorate(request: Request): Request {
   request.headers.set('Accept-Language', language)
@@ -59,13 +88,18 @@ export function refreshSession(): Promise<boolean> {
 async function authFetch(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname
   const retry = request.clone()
-  const response = await globalThis.fetch(decorate(request))
+  const again = request.clone()
+  let response = await globalThis.fetch(decorate(request))
   if (response.status === 401 && !SESSION_PATHS.includes(path) && session.refreshToken()) {
     // A refused refresh has already ended the session; a failed one (network) keeps it for the next attempt.
     if (await refreshSession()) {
       retry.headers.delete('Authorization')
-      return globalThis.fetch(decorate(retry))
+      response = await globalThis.fetch(decorate(retry))
     }
+  }
+  if (!SESSION_PATHS.includes(path) && (await stepUpFor(response))) {
+    again.headers.delete('Authorization')
+    return globalThis.fetch(decorate(again))
   }
   return response
 }
@@ -82,11 +116,23 @@ export async function sessionFetch(path: string, init: RequestInit = {}): Promis
     if (token) headers.set('Authorization', `Bearer ${token}`)
     return globalThis.fetch(path, { ...init, headers })
   }
-  const response = await send()
+  let response = await send()
   if (response.status === 401 && session.refreshToken() && (await refreshSession())) {
+    response = await send()
+  }
+  if (await stepUpFor(response)) {
     return send()
   }
   return response
+}
+
+/**
+ * Confirms the signed-in user with a second factor: stores the new access token. Throws an {@link ApiError} with the
+ * server's violations (MFA_CODE_INVALID, MFA_NOT_ENROLLED) when refused.
+ */
+export async function stepUp(code: string): Promise<void> {
+  const answer = await unwrap(api.POST('/api/auth/step-up', { body: { code } }))
+  session.storeAccess(answer.accessToken!)
 }
 
 export const api = createClient<paths>({

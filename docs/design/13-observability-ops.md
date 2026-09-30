@@ -70,7 +70,7 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 | `lgtm` | `grafana/otel-lgtm:0.34.0`（Grafana、Prometheus、Tempo、Loki、OTel Collector），预置仪表盘 `jabiz platform` | 3000 |
 | `pgadmin` | profile `tools`，按需 `docker compose --profile tools up -d` | 5050 |
 
-- **密钥不入库**【D16】：`app` 的入口脚本 `docker/app-entrypoint.sh` 在未提供 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 时，
+- **密钥不入库**【D16】：`app` 的入口脚本 `docker/app-entrypoint.sh` 在未提供 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 时，
   首次启动生成随机值并保存在卷 `jabiz-secrets` 中（重启后不变），管理员密码在日志中打印一次；也可在 `.env` 中自行指定（`.env.example`）。
   这只适用于本地演示；部署时由密钥管理注入环境变量（10 §2、§7）。
 - 镜像以非 root 用户运行，健康检查为 `/actuator/health`。

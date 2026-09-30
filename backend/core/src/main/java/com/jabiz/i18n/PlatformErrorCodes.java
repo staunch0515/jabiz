@@ -96,6 +96,12 @@ public final class PlatformErrorCodes {
     public static final String CONTROL_SAME_PERSON = "CONTROL_SAME_PERSON";
     /** 422 where access is given; 403 at the entry of a process. */
     public static final String SOD_CONFLICT = "SOD_CONFLICT";
+    /** The second factor code (or recovery code) is wrong, or the account is locked (10 section 9). */
+    public static final String MFA_CODE_INVALID = "MFA_CODE_INVALID";
+    /** The user has not set up a second factor. */
+    public static final String MFA_NOT_ENROLLED = "MFA_NOT_ENROLLED";
+    /** The user has set up a second factor already; an administrator resets it first. */
+    public static final String MFA_ALREADY_ENROLLED = "MFA_ALREADY_ENROLLED";
 
     // Conflicts (409)
     public static final String IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED";
@@ -108,6 +114,8 @@ public final class PlatformErrorCodes {
     // Access (403)
     public static final String SCOPE_UNAVAILABLE = "SCOPE_UNAVAILABLE";
     public static final String PERMISSION_DENIED = "PERMISSION_DENIED";
+    /** The operation needs a recent second factor (docs/design/10-security.md section 10). */
+    public static final String MFA_REQUIRED = "MFA_REQUIRED";
 
     // Files (docs/design/14-files.md): 400 unless noted
     public static final String FILE_TYPE_NOT_ALLOWED = "FILE_TYPE_NOT_ALLOWED";
@@ -142,9 +150,10 @@ public final class PlatformErrorCodes {
         REPORT_ALREADY_SUPERSEDED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, SOD_CONFLICT,
+        MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED,
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         RATE_LIMITED);
 

@@ -68,6 +68,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/challenge/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enrollUnderChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/challenge/enroll/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmUnderChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/challenge/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -132,6 +180,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enroll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -142,6 +238,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/step-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stepUp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -911,6 +1023,10 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        ChallengeRequest: {
+            challenge?: string;
+            code?: string;
+        };
         Change: {
             /** @enum {string} */
             action?: "INSERT" | "UPDATE" | "DELETE" | "CANCEL_SCHEDULED";
@@ -922,6 +1038,9 @@ export interface components {
             id?: unknown;
             /** Format: int64 */
             version?: number;
+        };
+        CodeRequest: {
+            code?: string;
         };
         ColumnEntry: {
             label?: string;
@@ -956,6 +1075,7 @@ export interface components {
             readOnly?: boolean;
             softDelete?: boolean;
             temporal?: boolean;
+            writeRequiresMfa?: boolean;
         };
         DictItem: {
             code?: string;
@@ -971,6 +1091,10 @@ export interface components {
             /** Format: int32 */
             priority?: number;
             ruleCode?: string;
+        };
+        Enrollment: {
+            otpauthUri?: string;
+            secret?: string;
         };
         EntityInstance: {
             attributes?: {
@@ -1312,6 +1436,10 @@ export interface components {
             name?: string;
         };
         Me: {
+            /** Format: int64 */
+            idleTimeoutSeconds?: number;
+            /** Format: date-time */
+            mfaAt?: string;
             permissions?: string[];
             roles?: string[];
             tenantId?: string;
@@ -1323,6 +1451,12 @@ export interface components {
             icon?: string;
             label?: string;
             path?: string;
+        };
+        MfaStatus: {
+            enrolled?: boolean;
+            pending?: boolean;
+            /** Format: int32 */
+            recoveryCodesLeft?: number;
         };
         MyTasks: {
             tasks?: components["schemas"]["Task"][];
@@ -1373,6 +1507,7 @@ export interface components {
             label?: string;
             latest?: boolean;
             name?: string;
+            requiresMfa?: boolean;
             /** Format: int32 */
             version?: number;
         };
@@ -1412,6 +1547,9 @@ export interface components {
             offset?: number;
             /** Format: int64 */
             total?: number;
+        };
+        RecoveryCodeList: {
+            recoveryCodes?: string[];
         };
         RefreshRequest: {
             refreshToken?: string;
@@ -1521,6 +1659,13 @@ export interface components {
             asc?: boolean;
             field?: string;
         };
+        StepUpResponse: {
+            accessToken?: string;
+            /** Format: date-time */
+            accessTokenExpiresAt?: string;
+            /** Format: date-time */
+            mfaAt?: string;
+        };
         Task: {
             /** Format: date-time */
             createdTime?: string;
@@ -1545,11 +1690,16 @@ export interface components {
             accessToken?: string;
             /** Format: date-time */
             accessTokenExpiresAt?: string;
+            challenge?: string;
+            /** Format: date-time */
+            challengeExpiresAt?: string;
             permissions?: string[];
             refreshToken?: string;
             /** Format: date-time */
             refreshTokenExpiresAt?: string;
             roles?: string[];
+            /** @enum {string} */
+            status?: "SIGNED_IN" | "MFA_REQUIRED" | "MFA_ENROLLMENT_REQUIRED";
             tokenType?: string;
             userId?: string;
         };
@@ -1688,6 +1838,78 @@ export interface operations {
             };
         };
     };
+    enrollUnderChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enrollment"];
+                };
+            };
+        };
+    };
+    confirmUnderChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodeList"];
+                };
+            };
+        };
+    };
+    verify_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -1774,6 +1996,70 @@ export interface operations {
             };
         };
     };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaStatus"];
+                };
+            };
+        };
+    };
+    enroll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enrollment"];
+                };
+            };
+        };
+    };
+    confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodeList"];
+                };
+            };
+        };
+    };
     refresh: {
         parameters: {
             query?: never;
@@ -1794,6 +2080,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+        };
+    };
+    stepUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepUpResponse"];
                 };
             };
         };

@@ -112,6 +112,7 @@ public class LegalHolds {
         return ProcessDefinition.define(PLACE, 1, PlaceInput.class, HoldOutput.class, ProcessContext.class, pb -> pb
             .description("Places a legal hold: the entries it names cannot be deleted until it is released.")
             .permissions(RetentionPermissions.HOLD_WRITE)
+            .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
@@ -167,6 +168,8 @@ public class LegalHolds {
             pb -> pb
                 .description("Releases a legal hold, with the reason; its entries follow their retention again.")
                 .permissions(RetentionPermissions.HOLD_WRITE)
+                .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
+            .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

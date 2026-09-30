@@ -10,6 +10,7 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
+import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.sod.SodGuard;
@@ -51,9 +52,11 @@ class ProcessController {
     private final boolean development;
     private final SensitiveDataMasker masker;
     private final SodGuard sod;
+    private final MfaPolicy mfa;
 
     ProcessController(ProcessRegistry registry, ProcessExecutor executor, ProcessInputs inputs,
-        Environment environment, SensitiveDataMasker masker, SodGuard sod) {
+        Environment environment, SensitiveDataMasker masker, SodGuard sod, MfaPolicy mfa) {
+        this.mfa = mfa;
         this.masker = masker;
         this.sod = sod;
         this.registry = registry;
@@ -72,6 +75,7 @@ class ProcessController {
         return RequestContexts.current().flatMap(context -> {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
             requirePermissions(definition, context, development);
+            mfa.require(context, definition.mfa(), "Running process " + definition.name());
             return sod.check(context, definition.permissions())
                 .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
                     new ExecutionOptions(idempotencyKey))))

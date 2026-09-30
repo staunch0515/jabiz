@@ -26,6 +26,13 @@ public final class SecurityPermissions {
      * permission keeps the process itself from being run through the process API.
      */
     public static final String SIGN_IN = "auth.sign-in";
+    /** Resetting another user's second factor (SEC_MFA_RESET). */
+    public static final String MFA_RESET = "security.user.mfa-reset";
+    /**
+     * Declared by the enrolment processes, which run only through {@code /api/auth/mfa/**} and
+     * {@code /api/auth/challenge/**} as the user enrolling; granted to no role (docs/design/10-security.md section 9).
+     */
+    public static final String MFA_ENROLL = "auth.mfa-enroll";
     /** Declared by the bootstrap process, which only the platform runs at startup. */
     public static final String BOOTSTRAP = "security.bootstrap";
 

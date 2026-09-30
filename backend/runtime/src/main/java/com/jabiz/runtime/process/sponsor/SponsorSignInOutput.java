@@ -6,7 +6,13 @@ import java.util.List;
 
 /**
  * Result of a sign-in attempt. Only a {@link LoginOutcome#SUCCESS} carries the user, roles and permissions; the
- * other outcomes are not told apart to the caller (docs/design/10-security.md section 4).
+ * other outcomes are not told apart to the caller (docs/design/10-security.md section 4), except that
+ * {@link LoginOutcome#MFA_REQUIRED} and {@link LoginOutcome#MFA_ENROLLMENT_REQUIRED} carry the user and attempt the
+ * second step continues (section 9).
+ *
+ * @param attemptNo attempt number of the login record registered, for the second step
+ * @param refusal   why a second-factor attempt left no record ({@code STALE}, {@code NOT_ENROLLED},
+ *                  {@code UNREADABLE}), or null
  */
 public record SponsorSignInOutput(
     LoginOutcome outcome,
@@ -14,7 +20,9 @@ public record SponsorSignInOutput(
     String tenantId,
     List<String> roles,
     List<String> permissions,
-    String loginRecordId
+    String loginRecordId,
+    Long attemptNo,
+    String refusal
 ) {
     public SponsorSignInOutput {
         roles = roles == null ? List.of() : List.copyOf(roles);

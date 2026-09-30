@@ -37,6 +37,11 @@ export const session = {
     }
     listeners.forEach((l) => l())
   },
+  /** A new access token for the same session (after a step-up, docs/design/10-security.md section 10). */
+  storeAccess(access: string) {
+    accessToken = access
+    listeners.forEach((l) => l())
+  },
   clear() {
     accessToken = null
     try {

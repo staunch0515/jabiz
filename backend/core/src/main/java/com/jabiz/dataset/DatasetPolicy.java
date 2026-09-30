@@ -1,5 +1,7 @@
 package com.jabiz.dataset;
 
+import com.jabiz.security.MfaRequirement;
+
 import java.time.Duration;
 import java.util.Objects;
 
@@ -18,6 +20,7 @@ import java.util.Objects;
  * @param processOnlyWrites   writes come only from processes ({@code ChangeSet}); the dataset API and the generic
  *                            entity processes refuse them, and operations that wrote through it cannot be reverted
  *                            (docs/design/03-dataset.md section 2.6)
+ * @param writeMfa            whether writers need a recent second factor (docs/design/10-security.md section 10)
  */
 public record DatasetPolicy(
     boolean readOnly,
@@ -28,7 +31,8 @@ public record DatasetPolicy(
     int maxWriteBatchSize,
     Duration queryTimeout,
     boolean allowTimeTravel,
-    boolean processOnlyWrites
+    boolean processOnlyWrites,
+    MfaRequirement writeMfa
 ) {
     public DatasetPolicy {
         if (softDelete && (softDeleteField == null || softDeleteField.isBlank())) {
@@ -44,6 +48,7 @@ public record DatasetPolicy(
             throw new IllegalArgumentException("maxWriteBatchSize must be positive");
         }
         Objects.requireNonNull(queryTimeout, "queryTimeout must not be null");
+        writeMfa = writeMfa == null ? MfaRequirement.NONE : writeMfa;
         if (readOnly && processOnlyWrites) {
             throw new IllegalArgumentException("A read-only dataset takes no writes, not even from processes");
         }

@@ -25,6 +25,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private final Set<String> permissions = new LinkedHashSet<>();
     private boolean deprecated;
     private boolean internal;
+    private com.jabiz.security.MfaRequirement mfa = com.jabiz.security.MfaRequirement.NONE;
     private ActsOn actsOn;
 
     ProcessDefinitionBuilder(String name, int version, Class<I> inputType, Class<O> outputType, Class<C> contextType) {
@@ -72,6 +73,20 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
      * Marks the process as run by the platform or a dedicated entry point only: it is left out of the process
      * catalog clients build forms from (decision D15). Its permissions are checked as usual.
      */
+    /**
+     * Callers need a recent second factor (docs/design/10-security.md section 10); checked at the entry points like
+     * the permissions.
+     */
+    public ProcessDefinitionBuilder<I, O, C> requiresMfa(com.jabiz.security.MfaRequirement requirement) {
+        this.mfa = java.util.Objects.requireNonNull(requirement, "requirement must not be null");
+        return this;
+    }
+
+    /** Callers always need a recent second factor. */
+    public ProcessDefinitionBuilder<I, O, C> requiresMfa() {
+        return requiresMfa(com.jabiz.security.MfaRequirement.ALWAYS);
+    }
+
     public ProcessDefinitionBuilder<I, O, C> internal() {
         this.internal = true;
         return this;
@@ -115,6 +130,12 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return afterCommit(stepName, spec.handlerClass(), spec.metadata(), RetryPolicy.DEFAULT);
     }
 
+    /** Appends the steps a shared block declares (several processes with a common part). */
+    public ProcessDefinitionBuilder<I, O, C> steps(java.util.function.Consumer<ProcessDefinitionBuilder<I, O, C>> block) {
+        block.accept(this);
+        return this;
+    }
+
     /** Appends an in-transaction computation declared in place; it needs no bean. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public ProcessDefinitionBuilder<I, O, C> compute(String stepName, ComputeStep<NoMetadata, C> computation) {
@@ -135,6 +156,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn);
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa);
     }
 }

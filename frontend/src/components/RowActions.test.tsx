@@ -16,6 +16,7 @@ function process(name: string, properties: string[], values: string[]): ProcessE
     description: '',
     input: { type: 'object', properties: Object.fromEntries(properties.map((p) => [p, { type: 'string' }])) },
     actsOn: { entity: 'Story', input: 'storyId', when: { field: 'status', values } },
+    requiresMfa: false,
   } as ProcessEntry
 }
 

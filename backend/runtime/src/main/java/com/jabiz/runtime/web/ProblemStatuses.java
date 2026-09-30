@@ -15,6 +15,7 @@ import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
+import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.sod.SodConflictException;
 
 import java.util.List;
@@ -58,6 +59,8 @@ public final class ProblemStatuses {
                 e.getMessage(), Map.of("source", e.source())));
             case SodConflictException e -> List.of(new Violation(null, PlatformErrorCodes.SOD_CONFLICT,
                 e.getMessage(), Map.of("rule", e.ruleCode())));
+            case MfaRequiredException e -> List.of(new Violation(null, PlatformErrorCodes.MFA_REQUIRED,
+                e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,
                 e.getMessage(), Map.of("permission", e.permission())));
             case IdempotencyConflictException e -> List.of(new Violation(null,

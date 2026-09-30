@@ -26,8 +26,11 @@ class ImportAccess {
     private final ProcessRegistry processes;
     private final FilePolicyRegistry policies;
     private final boolean development;
+    private final com.jabiz.runtime.security.MfaPolicy mfa;
 
-    ImportAccess(ProcessRegistry processes, FilePolicyRegistry policies, Environment environment) {
+    ImportAccess(ProcessRegistry processes, FilePolicyRegistry policies, Environment environment,
+        com.jabiz.runtime.security.MfaPolicy mfa) {
+        this.mfa = mfa;
         this.processes = processes;
         this.policies = policies;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
@@ -48,5 +51,15 @@ class ImportAccess {
 
     void require(ImportDefinition<?> definition, RequestContext context) {
         Permissions.requireAll(context, required(definition), development, "Import " + definition.id());
+    }
+
+    /**
+     * {@link #require}, and at the entry point also the second factor the row process may require
+     * (docs/design/10-security.md section 10); the import step itself, like any nested process, is not checked.
+     */
+    void requireAtEntry(ImportDefinition<?> definition, RequestContext context) {
+        require(definition, context);
+        processes.find(definition.target().process(), definition.target().version()).ifPresent(process ->
+            mfa.require(context, process.mfa(), "Import " + definition.id()));
     }
 }

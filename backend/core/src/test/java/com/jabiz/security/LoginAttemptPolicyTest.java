@@ -68,6 +68,21 @@ class LoginAttemptPolicyTest {
         LoginAttemptPolicy.State two = fail(fail(null, T0), T0);
         assertThat(policy.next(two, LoginOutcome.DISABLED, T0)).isEqualTo(new LoginAttemptPolicy.State(3, 2, null));
         assertThat(policy.next(two, LoginOutcome.NO_ROLE, T0)).isEqualTo(new LoginAttemptPolicy.State(3, 2, null));
+        assertThat(policy.next(two, LoginOutcome.MFA_REQUIRED, T0)).isEqualTo(new LoginAttemptPolicy.State(3, 2, null));
+        assertThat(policy.next(two, LoginOutcome.MFA_ENROLLMENT_REQUIRED, T0))
+            .isEqualTo(new LoginAttemptPolicy.State(3, 2, null));
+    }
+
+    @Test
+    void wrongSecondFactorsCountWithWrongPasswordsTowardsTheLock() {
+        LoginAttemptPolicy.State state = null;
+        for (int i = 0; i < 2; i++) {
+            state = policy.next(policy.next(state, LoginOutcome.MFA_REQUIRED, T0), LoginOutcome.MFA_FAILED, T0);
+        }
+        assertThat(state.failureCount()).isEqualTo(2);
+        assertThat(policy.isLocked(state, T0)).isFalse();
+        LoginAttemptPolicy.State locked = policy.next(state, LoginOutcome.BAD_CREDENTIALS, T0);
+        assertThat(policy.isLocked(locked, T0)).isTrue();
     }
 
     @Test
@@ -92,6 +107,6 @@ class LoginAttemptPolicyTest {
     @Test
     void outcomeCodesAreTheEnumNames() {
         assertThat(LoginOutcome.codes()).containsExactly("SUCCESS", "BAD_CREDENTIALS", "LOCKED", "DISABLED", "NO_ROLE",
-            "UNLOCKED");
+            "UNLOCKED", "MFA_REQUIRED", "MFA_ENROLLMENT_REQUIRED", "MFA_FAILED");
     }
 }

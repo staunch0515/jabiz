@@ -1,9 +1,10 @@
 #!/bin/sh
 # Starts the application. For the local demonstration (docker compose), a missing access-token signing key, a missing
-# integrity seal key and a missing first-administrator password are generated once and kept in the jabiz-secrets volume, so the system starts
-# with one command and no secret is ever written into the repository. Real deployments pass JABIZ_JWT_SECRET,
-# JABIZ_INTEGRITY_KEY and the bootstrap administrator from their secret store (docs/design/10-security.md sections 2
-# and 7, 21-audit-retention.md section 2.4).
+# integrity seal key, a missing second-factor key and a missing first-administrator password are generated once and
+# kept in the jabiz-secrets volume, so the system starts with one command and no secret is ever written into the
+# repository. Real deployments pass JABIZ_JWT_SECRET, JABIZ_INTEGRITY_KEY, JABIZ_MFA_KEY and the bootstrap
+# administrator from their secret store (docs/design/10-security.md sections 2, 7 and 9, 21-audit-retention.md
+# section 2.4).
 set -eu
 
 SECRETS=/var/lib/jabiz/secrets
@@ -31,6 +32,14 @@ if [ -z "${JABIZ_INTEGRITY_KEY:-}" ]; then
     fi
     JABIZ_INTEGRITY_KEY=$(cat "$SECRETS/integrity-key")
     export JABIZ_INTEGRITY_KEY
+fi
+
+if [ -z "${JABIZ_MFA_KEY:-}" ]; then
+    if generate "$SECRETS/mfa-key" 48 ""; then
+        echo "jabiz: generated a second-factor key in the jabiz-secrets volume (keep a copy: enrolled users need it)"
+    fi
+    JABIZ_MFA_KEY=$(cat "$SECRETS/mfa-key")
+    export JABIZ_MFA_KEY
 fi
 
 export JABIZ_BOOTSTRAP_ADMIN_USER="${JABIZ_BOOTSTRAP_ADMIN_USER:-admin}"
