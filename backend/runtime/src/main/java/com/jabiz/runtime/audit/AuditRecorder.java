@@ -55,7 +55,8 @@ public class AuditRecorder {
     public Mono<Void> record(StorageEngine engine, EntityDefinition def, Object id, String action, Long version,
         Instant effective, Map<String, ?> before, Map<String, ?> after) {
         Map<String, AuditDiff.Change> changes = AuditDiff.of(def, before, after);
-        if (changes.isEmpty() && before != null && after != null) {
+        // Nothing changed: an update to the same values, or a rebased tombstone (nothing before, nothing after).
+        if (changes.isEmpty() && (before == null) == (after == null)) {
             return Mono.empty();
         }
         return Mono.deferContextual(view -> Operations.current().flatMap(operation -> (operation.isPresent()

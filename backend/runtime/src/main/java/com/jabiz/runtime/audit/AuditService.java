@@ -1,7 +1,9 @@
 package com.jabiz.runtime.audit;
 
 import com.jabiz.query.BoundValue;
+import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.approval.ApprovalSubjectRegistry;
 import com.jabiz.runtime.operation.OperationItem;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.storage.Rows;
@@ -29,24 +31,32 @@ import java.util.Map;
 @Component
 public class AuditService {
 
-    /** Approval requests about entry {@code :entityId} and the decisions on them (18 section 3). */
+    /**
+     * Approval requests about entry {@code :entityId} of a subject in {@code :subjects} (those declared for its entity
+     * type), and the decisions on them (18 section 3).
+     */
     private static final String APPROVALS = """
         (r.entity_type = '%s' AND r.entity_id IN (
-            SELECT q.request_id::text FROM sys_approval_request_version q WHERE q.entity_id = :entityId)
+            SELECT q.request_id::text FROM sys_approval_request_version q
+            WHERE q.entity_id = :entityId AND q.subject = ANY(:subjects))
         OR r.entity_type = '%s' AND r.entity_id IN (
             SELECT d.decision_id FROM sys_approval_decision d
-            JOIN sys_approval_request_version q ON q.request_id = d.request_id WHERE q.entity_id = :entityId))"""
+            JOIN sys_approval_request_version q ON q.request_id = d.request_id
+            WHERE q.entity_id = :entityId AND q.subject = ANY(:subjects)))"""
         .formatted(ApprovalEntities.REQUEST, ApprovalEntities.DECISION);
 
     private final StorageAdapterRegistry storages;
     private final String poolRef;
     private final JsonMapper json;
+    private final ApprovalSubjectRegistry approvalSubjects;
 
     public AuditService(StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, JsonMapper json) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, JsonMapper json,
+        ApprovalSubjectRegistry approvalSubjects) {
         this.storages = storages;
         this.poolRef = poolRef;
         this.json = json;
+        this.approvalSubjects = approvalSubjects;
     }
 
     /** One field's change as the API shows it. */
@@ -67,7 +77,8 @@ public class AuditService {
      * Filters of the audit records, combined with AND; all optional.
      *
      * @param field         records that changed this field
-     * @param withApprovals with {@code entityId}: also the approval requests and decisions about that entry
+     * @param withApprovals with {@code entityType} and {@code entityId}: also the approval requests about that entry
+     *                      (of the subjects declared for its type) and the decisions on them
      */
     public record RecordQuery(String entityType, String entityId, String actorId, Instant from, Instant to,
         String processName, String field, boolean withApprovals, int offset, int limit) {}
@@ -89,8 +100,16 @@ public class AuditService {
         }
         if (!entity.isEmpty()) {
             String own = "(" + String.join(" AND ", entity) + ")";
-            conditions.add(query.withApprovals() && query.entityId() != null ? "(" + own + " OR " + APPROVALS + ")"
-                : own);
+            String[] subjects = query.withApprovals() && query.entityType() != null && query.entityId() != null
+                ? approvalSubjects.all().stream().filter(s -> query.entityType().equals(s.entity()))
+                    .map(ApprovalSubject::name).toArray(String[]::new)
+                : new String[0];
+            if (subjects.length > 0) {
+                params.put("subjects", BoundValue.of(subjects));
+                conditions.add("(" + own + " OR " + APPROVALS + ")");
+            } else {
+                conditions.add(own);
+            }
         }
         if (query.actorId() != null) {
             conditions.add("r.actor_id = :actor");

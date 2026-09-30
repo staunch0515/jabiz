@@ -19,8 +19,9 @@
 | `changes` | JSON `{字段: [前, 后]}`：插入只有"后"，删除只有"前"，更新只记值变化的字段 |
 | `changed_fields` | 变化的字段名（按字段筛选用） |
 | `actor_id` / `recorded_time` | 操作人与时间：操作的操作人与 `op_time`；没有操作时取请求的操作人与注入的 `Clock` |
-| `reason` | 操作的原因；普通实体批量提交的原因（`CommitRequest.reason`）直接记在这里 |
+| `reason` | 操作的原因（不限长度，与 `op_process.reason` 相同）；普通实体批量提交的原因（`CommitRequest.reason`）直接记在这里 |
 
+- 什么都没变的写入不记录：同值更新，以及因更正而重排的墓碑（前后都为空）。
 - 表只追加（`jabiz_protect_append_only`），管理员经应用也改不了；14f-2 将其纳入封存，绕过触发器的修改可被发现。
 - 写入位置：`DatasetEntityManager` 的插入、更新、删除（普通实体）与 `VersionAppender`（时态实体，所有时态写入都经过它）。
   数据视图 API、通用实体流程、业务流程的 `SaveChanges`、平台流程（账本、审批、导入……）都经过这两处，因此不需要各自记录。
@@ -41,7 +42,7 @@
 | 参数 | 含义 |
 |---|---|
 | `entityType` / `entityId` | 按实体 |
-| `withApprovals` | 与 `entityId` 同用：同时列出关于该记录的审批请求（`SysApprovalRequest`）与审批决定（`ApprovalDecision`）的审计行，即审批人、结论与理由（18 §3） |
+| `withApprovals` | 与 `entityType`、`entityId` 同用（缺一则 400）：同时列出关于该记录的审批请求（`SysApprovalRequest`）与审批决定（`ApprovalDecision`）的审计行，即审批人、结论与理由。只算声明了该实体类型的审批对象（`ApprovalSubject` 的 `entity(…)`，18 §3.1），因此别的实体的同名主键不会混入 |
 | `actorId` | 按人 |
 | `from` / `to` | 按时间：`recorded_time ∈ [from, to)` |
 | `processName` | 按流程 |

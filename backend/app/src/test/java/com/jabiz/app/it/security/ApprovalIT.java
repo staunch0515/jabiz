@@ -1,6 +1,7 @@
 package com.jabiz.app.it.security;
 
 import com.jabiz.app.it.fixture.ItApprovalFixtures;
+import com.jabiz.app.it.fixture.ItFixtures;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalPermissions;
@@ -191,7 +192,7 @@ class ApprovalIT extends ApprovalItSupport {
 
         // The audit trail of the payment shows who decided, what and why (docs/design/21-audit-retention.md 1.3).
         String auditor = as("it-auditor", "audit.read");
-        String trail = "/api/audit/records?entityId=" + paymentId;
+        String trail = "/api/audit/records?entityType=" + ItFixtures.TICKET.name + "&entityId=" + paymentId;
         assertThat(auditItems(trail, auditor)).extracting(r -> r.get("entityType"))
             .doesNotContain(ApprovalEntities.REQUEST, ApprovalEntities.DECISION);
         List<Map<String, Object>> withApprovals = auditItems(trail + "&withApprovals=true", auditor);
@@ -202,6 +203,10 @@ class ApprovalIT extends ApprovalItSupport {
                 assertThat(r).containsEntry("actorId", "it-approver").containsEntry("processName", "APPROVAL_DECIDE");
                 assertThat(String.valueOf(r.get("changes"))).contains("REJECT", "no invoice");
             });
+        // Only subjects declared for the entity type count: the same id of another type has no approvals.
+        assertThat(auditItems("/api/audit/records?entityType=ItSoft&entityId=" + paymentId + "&withApprovals=true",
+            auditor)).isEmpty();
+        get("/api/audit/records?entityId=" + paymentId + "&withApprovals=true", auditor).expectStatus().isBadRequest();
     }
 
     @SuppressWarnings("unchecked")

@@ -76,7 +76,7 @@
 
 ```java
 @Bean ApprovalSubject journalApprovals() {
-    return ApprovalSubject.define("fin.journal", s -> s.number("amount").text("source").bool("manual"));
+    return ApprovalSubject.define("fin.journal", s -> s.entity("FinJournal").number("amount").text("source").bool("manual"));
 }
 ```
 
@@ -84,6 +84,7 @@
 |---|---|
 | 名称 | 同序列名（小写字母开头，1–100 个 `a-z 0-9 . _ -`）；全局唯一（启动检查 `APPROVAL`） |
 | 事实 | `NUMBER`（按 `BigDecimal` 比较，金额即此类）、`TEXT`、`BOOLEAN`；名称为字母开头的字母、数字、`_` |
+| 实体（可选） | `entity(实体类型)`：案例的 id 即该实体的主键。声明后，该实体记录的审计轨迹一并列出其审批（21 §1.3）；实体必须已声明（启动检查 `APPROVAL`） |
 
 ### 3.2 规则与层级
 

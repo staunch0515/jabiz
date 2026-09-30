@@ -1,8 +1,10 @@
 package com.jabiz.runtime.approval;
 
 import com.jabiz.approval.ApprovalSubject;
+import com.jabiz.entity.EntityDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
@@ -25,13 +27,38 @@ class ApprovalChecksTest {
         return new ApprovalSubjectRegistry(beans.getBeanProvider(ApprovalSubject.class));
     }
 
+    private static final EntityDefinitionRegistry ENTITIES = entities(EntityDefinition.define("FinJournal", eb -> {
+        eb.physicalTable("fin_journal");
+        eb.primaryKey("journalId");
+        eb.field("journalId", f -> f.physicalColumn("journal_id").asText(36));
+    }));
+
+    private static EntityDefinitionRegistry entities(EntityDefinition... definitions) {
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        for (EntityDefinition definition : definitions) {
+            beans.addBean(definition.name, definition);
+        }
+        return new EntityDefinitionRegistry(beans.getBeanProvider(EntityDefinition.class));
+    }
+
     @Test
     void aSubjectDeclaredTwiceIsReported() {
         ApprovalSubjectRegistry subjects = registry(JOURNAL, PAYMENT,
             ApprovalSubject.define("fin.payment", s -> s.text("x")));
-        assertThat(new ApprovalChecks(subjects).check()).extracting(CheckProblem::location, CheckProblem::message)
+        assertThat(new ApprovalChecks(subjects, ENTITIES).check())
+            .extracting(CheckProblem::location, CheckProblem::message)
             .containsExactly(tuple("ApprovalSubject fin.payment", "declared more than once"));
-        assertThat(new ApprovalChecks(registry(JOURNAL, PAYMENT)).check()).isEmpty();
+        assertThat(new ApprovalChecks(registry(JOURNAL, PAYMENT), ENTITIES).check()).isEmpty();
+    }
+
+    @Test
+    void theEntityOfASubjectMustBeDeclared() {
+        ApprovalSubjectRegistry subjects = registry(
+            ApprovalSubject.define("fin.journal", s -> s.entity("FinJournal").number("amount")),
+            ApprovalSubject.define("fin.payment", s -> s.entity("FinPayment").number("amount")));
+        assertThat(new ApprovalChecks(subjects, ENTITIES).check())
+            .extracting(CheckProblem::location, CheckProblem::message)
+            .containsExactly(tuple("ApprovalSubject fin.payment", "entity FinPayment is not declared"));
     }
 
     @Test

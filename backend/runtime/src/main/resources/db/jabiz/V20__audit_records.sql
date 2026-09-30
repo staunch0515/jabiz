@@ -15,7 +15,7 @@ CREATE TABLE sys_audit_record (
     changed_fields    text[]        NOT NULL,
     actor_id          varchar(100)  NOT NULL,
     recorded_time     timestamptz   NOT NULL,
-    reason            varchar(2000)
+    reason            text
 );
 CREATE INDEX sys_audit_record_entity_idx ON sys_audit_record (entity_type, entity_id, recorded_time DESC);
 CREATE INDEX sys_audit_record_time_idx ON sys_audit_record (recorded_time DESC, record_no DESC);

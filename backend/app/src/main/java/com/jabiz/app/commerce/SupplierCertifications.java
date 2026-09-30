@@ -313,7 +313,7 @@ public class SupplierCertifications {
 
     @Bean
     ApprovalSubject certificationApprovalSubject() {
-        return ApprovalSubject.define(APPROVAL_SUBJECT, s -> s.text("supplierId").number("languages")
+        return ApprovalSubject.define(APPROVAL_SUBJECT, s -> s.entity(CERTIFICATION).text("supplierId").number("languages")
             .bool("hasBody"));
     }
 

@@ -96,6 +96,10 @@ class AuditController {
                 blankToNull(processName), blankToNull(field), withApprovals,
                 bounded("offset", offset, 0, 0, Integer.MAX_VALUE, violations),
                 bounded("limit", limit, AuditQuery.DEFAULT_LIMIT, 1, AuditQuery.MAX_LIMIT, violations));
+            if (withApprovals && (query.entityType() == null || query.entityId() == null)) {
+                violations.add(new Violation("withApprovals", PlatformErrorCodes.INVALID_VALUE,
+                    "withApprovals needs entityType and entityId"));
+            }
             if (!violations.isEmpty()) {
                 return Mono.error(new ValidationException(violations));
             }

@@ -108,7 +108,7 @@ export default function AuditPage() {
             if (value) query[name] = value
           }
           // The approvals of an entry belong to its trail: who approved, what and why.
-          if (query.entityId) query.withApprovals = 'true'
+          if (query.entityType && query.entityId) query.withApprovals = 'true'
           if (recordedTime) {
             query.from = new Date(recordedTime[0]).toISOString()
             query.to = new Date(recordedTime[1]).toISOString()

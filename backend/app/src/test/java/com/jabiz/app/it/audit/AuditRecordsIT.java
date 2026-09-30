@@ -95,6 +95,25 @@ class AuditRecordsIT extends SecurityItSupport {
     }
 
     @Test
+    void aChangeBeforeAScheduledDeletionRecordsOnlyWhatChanged() {
+        String code = unique("ROLE");
+        Map<String, Object> role = insert(SecurityEntities.ROLE_DATASET, Map.of("roleCode", code,
+            "labels", Map.of("en", code), "enabled", true), null);
+        String id = String.valueOf(role.get("id"));
+        roleChange(Map.of("action", "DELETE", "id", id, "version", 1,
+            "effectiveTime", START.plus(Duration.ofDays(10)).toString()), null);
+        clock.advance(Duration.ofMinutes(1));
+        // The scheduled deletion is rebased onto the new version: a copy that changes nothing itself.
+        roleChange(Map.of("action", "UPDATE", "id", id, "version", 1, "attributes", Map.of("enabled", false)),
+            "disabled early");
+
+        List<Map<String, Object>> records = items(records("entityType=" + SecurityEntities.ROLE + "&entityId=" + id));
+        assertThat(records).allSatisfy(r -> assertThat(changes(r)).isNotEmpty());
+        assertThat(records).filteredOn(r -> "disabled early".equals(r.get("reason")))
+            .extracting(r -> changes(r).get("enabled")).contains(pair(true, false));
+    }
+
+    @Test
     void recordsCannotBeChangedAndNeedTheirPermission() {
         String id = unique("AT");
         commit(Map.of("action", "INSERT", "attributes", Map.of("ticketId", id, "title", "t", "amount", "1",
@@ -119,6 +138,15 @@ class AuditRecordsIT extends SecurityItSupport {
             body.put("reason", reason);
         }
         post(TICKETS, admin(), body).expectStatus().isOk();
+    }
+
+    private void roleChange(Map<String, Object> change, String reason) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("changes", List.of(change));
+        if (reason != null) {
+            body.put("reason", reason);
+        }
+        post("/api/datasets/" + SecurityEntities.ROLE_DATASET + "/commit", admin(), body).expectStatus().isOk();
     }
 
     private Map<String, Object> records(String query) {
