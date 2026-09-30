@@ -4,7 +4,9 @@ import com.jabiz.entity.SemanticKindParser;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.QueryParameter;
+import com.jabiz.query.custom.ReportSpec;
 import com.jabiz.query.custom.ResultListSpec;
+import com.jabiz.query.custom.TemplateVersion;
 import com.jabiz.query.custom.TemplateSource;
 
 import java.time.Duration;
@@ -25,8 +27,15 @@ public final class SqlTemplateFile {
     /**
      * @param headerLine line on which the header text starts
      * @param bodyLine   line on which the SQL starts
+     * @param version    version of the whole file (docs/design/19-reports.md section 2.3), or null to derive it from
+     *                   the compiled definition
      */
-    public record Parts(String header, int headerLine, String body, int bodyLine) {}
+    public record Parts(String header, int headerLine, String body, int bodyLine, String version) {
+
+        public Parts(String header, int headerLine, String body, int bodyLine) {
+            this(header, headerLine, body, bodyLine, null);
+        }
+    }
 
     private SqlTemplateFile() {}
 
@@ -49,7 +58,7 @@ public final class SqlTemplateFile {
         }
         int bodyStart = end + HEADER_END.length();
         return new Parts(text.substring(headerStart, end), lineOf(text, headerStart), text.substring(bodyStart),
-            lineOf(text, bodyStart));
+            lineOf(text, bodyStart), TemplateVersion.ofText(text));
     }
 
     /**
@@ -66,7 +75,8 @@ public final class SqlTemplateFile {
         }
         AdvancedQueryDefinition.Builder builder = new AdvancedQueryDefinition.Builder(id)
             .source(new TemplateSource(path, parts.bodyLine()))
-            .sqlTemplate(parts.body());
+            .sqlTemplate(parts.body())
+            .version(parts.version());
         if (header.get("description") != null) {
             builder.description(string(header.get("description")));
         }
@@ -98,6 +108,16 @@ public final class SqlTemplateFile {
         }
         if (header.get("cacheSeconds") instanceof Number seconds) {
             builder.cacheSeconds(seconds.intValue());
+        }
+        Map<String, Object> slice = map(header.get("timeSlice"));
+        if (!slice.isEmpty()) {
+            builder.timeSlice(string(slice.get("asOf")), string(slice.get("knownAt")));
+        }
+        if (header.get("report") instanceof Map<?, ?>) {
+            Map<String, Object> report = map(header.get("report"));
+            Map<String, Object> period = map(report.get("period"));
+            builder.report(new ReportSpec(string(period.get("from")), string(period.get("to")),
+                Boolean.TRUE.equals(report.get("landscape"))));
         }
         if (header.get("timeoutMs") instanceof Number ms) {
             builder.timeout(Duration.ofMillis(ms.longValue()));

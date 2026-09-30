@@ -8,7 +8,7 @@ params:
   account: { like: LedgerAccount.accountCode, required: true, description: code of the account }
   from:    { like: LedgerTransaction.bookingTime, required: true, description: first booking time of the range }
   asOf:    { like: LedgerTransaction.bookingTime, required: true, description: last booking time of the range }
-  knownAt: { like: LedgerTransaction.bookingTime, description: "if given, only transactions recorded at or before this time count" }
+  knownAt: { like: LedgerTransaction.bookingTime, description: "if given, the ledger (accounts included) as recorded at this time" }
 results:
   seq:            { kind: { type: numeric, precision: 18, scale: 0 } }
   rowKind:        { kind: { type: text, maxLength: 10 } }
@@ -36,6 +36,12 @@ list:
   defaultSort: { field: seq, asc: true }
   key: [seq]
 permissions: [ledger.read]
+# The ledger is read as recorded at knownAt, accounts included; asOf filters by booking time only, since a
+# back-dated transaction is in effect from when it was recorded (docs/design/19-reports.md section 2.2).
+timeSlice: { knownAt: knownAt }
+report:
+  period: { from: from, to: asOf }
+  landscape: true
 ---*/
 WITH acct AS (
     SELECT a.{{LedgerAccount.accountId}} AS acct_key

@@ -388,6 +388,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meta/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["queries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meta/schema/{name}": {
         parameters: {
             query?: never;
@@ -651,6 +667,10 @@ export interface components {
         PartEvent: {
             last?: boolean;
         };
+        PeriodEntry: {
+            from?: string;
+            to?: string;
+        };
         PreviewRequest: {
             draft?: components["schemas"]["DraftRule"];
             /** Format: int32 */
@@ -677,6 +697,22 @@ export interface components {
             /** Format: int32 */
             version?: number;
         };
+        QueryEntry: {
+            defaultSort?: components["schemas"]["SortEntry"];
+            description?: string;
+            filters?: string[];
+            id?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            report?: components["schemas"]["ReportEntry"];
+            results?: components["schemas"]["ResultEntry"][];
+            sorts?: string[];
+            timeSlice?: components["schemas"]["TimeSliceEntry"];
+            timeTravel?: boolean;
+            title?: string;
+            version?: string;
+        };
         QueryRequest: {
             /** Format: date-time */
             asOf?: string;
@@ -701,12 +737,28 @@ export interface components {
         RefreshRequest: {
             refreshToken?: string;
         };
+        ReportEntry: {
+            landscape?: boolean;
+            period?: components["schemas"]["PeriodEntry"];
+        };
+        ResultEntry: {
+            kind?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+            name?: string;
+            operators?: string[];
+        };
         RevertRequest: {
             reason?: string;
         };
         RunRequest: {
+            /** Format: date-time */
+            asOf?: string;
             count?: boolean;
             filters?: components["schemas"]["Filter"][];
+            /** Format: date-time */
+            knownAt?: string;
             /** Format: int32 */
             limit?: number;
             /** Format: int32 */
@@ -731,6 +783,10 @@ export interface components {
             asc?: boolean;
             field?: string;
         };
+        SortEntry: {
+            asc?: boolean;
+            field?: string;
+        };
         Task: {
             /** Format: date-time */
             createdTime?: string;
@@ -746,6 +802,10 @@ export interface components {
                 [key: string]: string;
             };
             type?: string;
+        };
+        TimeSliceEntry: {
+            asOf?: string;
+            knownAt?: string;
         };
         TokenResponse: {
             accessToken?: string;
@@ -1405,6 +1465,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessEntry"][];
+                };
+            };
+        };
+    };
+    queries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryEntry"][];
                 };
             };
         };

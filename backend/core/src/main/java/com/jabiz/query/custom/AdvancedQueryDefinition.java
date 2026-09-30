@@ -31,6 +31,10 @@ import java.util.function.Consumer;
  * @param publicAccess    whether anonymous visitors may run the query ({@code access: public}); it then declares no
  *                        permissions and reads public datasets only (docs/design/15-public-access.md section 3)
  * @param cacheSeconds    {@code max-age} of public responses, or null for the platform default; public queries only
+ * @param timeSlice       parameters giving the point in time temporal entities are read at, or null
+ *                        (docs/design/19-reports.md section 2.2)
+ * @param report          how the query shows as a report, or null when it is not one (19 section 3.1)
+ * @param version         SHA-256 of the template file, or of the definition for Java-declared queries (19 section 2.3)
  */
 public record AdvancedQueryDefinition(
         String queryId,
@@ -45,7 +49,10 @@ public record AdvancedQueryDefinition(
         List<String> permissions,
         TemplateSource source,
         boolean publicAccess,
-        Integer cacheSeconds
+        Integer cacheSeconds,
+        TemplateTimeSlice timeSlice,
+        ReportSpec report,
+        String version
 ) {
     public AdvancedQueryDefinition {
         participatingEntities = List.copyOf(participatingEntities);
@@ -65,7 +72,8 @@ public record AdvancedQueryDefinition(
     /** The same query with the parameters and result columns replaced (used to fill in inherited kinds). */
     public AdvancedQueryDefinition withFields(List<QueryParameter> newParameters, List<ProjectedField> newResults) {
         return new AdvancedQueryDefinition(queryId, description, participatingEntities, newParameters, newResults,
-            sqlTemplate, timeoutOverride, datasets, list, permissions, source, publicAccess, cacheSeconds);
+            sqlTemplate, timeoutOverride, datasets, list, permissions, source, publicAccess, cacheSeconds, timeSlice, report,
+            version);
     }
 
     /** The same query reading {@code entity} through another dataset. */
@@ -73,7 +81,8 @@ public record AdvancedQueryDefinition(
         Map<String, String> merged = new LinkedHashMap<>(datasets);
         merged.put(entity, datasetId);
         return new AdvancedQueryDefinition(queryId, description, participatingEntities, parameters, resultFields,
-            sqlTemplate, timeoutOverride, merged, list, permissions, source, publicAccess, cacheSeconds);
+            sqlTemplate, timeoutOverride, merged, list, permissions, source, publicAccess, cacheSeconds, timeSlice, report,
+            version);
     }
 
     /** The result column of that name, compared case-insensitively. */
@@ -95,6 +104,9 @@ public record AdvancedQueryDefinition(
         private TemplateSource source;
         private boolean publicAccess;
         private Integer cacheSeconds;
+        private TemplateTimeSlice timeSlice;
+        private ReportSpec report;
+        private String version;
 
         public Builder(String queryId) { this.queryId = queryId; }
 
@@ -183,6 +195,24 @@ public record AdvancedQueryDefinition(
             return this;
         }
 
+        /** Temporal entities are read at the time given by these parameters (either may be null). */
+        public Builder timeSlice(String asOfParameter, String knownAtParameter) {
+            this.timeSlice = new TemplateTimeSlice(asOfParameter, knownAtParameter);
+            return this;
+        }
+
+        /** The query is a report. */
+        public Builder report(ReportSpec spec) {
+            this.report = spec;
+            return this;
+        }
+
+        /** The version, when the query comes from a file; otherwise it is computed from the definition. */
+        public Builder version(String version) {
+            this.version = version;
+            return this;
+        }
+
         public Builder sqlTemplate(String sql) {
             this.sqlTemplate = sql;
             return this;
@@ -209,10 +239,14 @@ public record AdvancedQueryDefinition(
                 throw new IllegalStateException("Query " + queryId + " declares no result fields");
             }
             TemplateSource where = source != null ? source : new TemplateSource("query " + queryId, 1);
-            return new AdvancedQueryDefinition(
+            AdvancedQueryDefinition query = new AdvancedQueryDefinition(
                 queryId, description, entities, parameters, resultFields, sqlTemplate, timeout, datasets, list,
-                permissions, where, publicAccess, cacheSeconds
+                permissions, where, publicAccess, cacheSeconds, timeSlice, report, version
             );
+            return version != null ? query : new AdvancedQueryDefinition(queryId, query.description(),
+                query.participatingEntities(), query.parameters(), query.resultFields(), sqlTemplate, timeout,
+                query.datasets(), query.list(), query.permissions(), where, publicAccess, cacheSeconds, timeSlice,
+                report, TemplateVersion.of(query));
         }
     }
 }

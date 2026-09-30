@@ -387,6 +387,17 @@
         },
         "type" : "object"
       },
+      "PeriodEntry" : {
+        "properties" : {
+          "from" : {
+            "type" : "string"
+          },
+          "to" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PreviewRequest" : {
         "properties" : {
           "draft" : {
@@ -450,6 +461,57 @@
           "version" : {
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "QueryEntry" : {
+        "properties" : {
+          "defaultSort" : {
+            "$ref" : "#/components/schemas/SortEntry"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "filters" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "report" : {
+            "$ref" : "#/components/schemas/ReportEntry"
+          },
+          "results" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ResultEntry"
+            },
+            "type" : "array"
+          },
+          "sorts" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "timeSlice" : {
+            "$ref" : "#/components/schemas/TimeSliceEntry"
+          },
+          "timeTravel" : {
+            "type" : "boolean"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -518,6 +580,38 @@
         },
         "type" : "object"
       },
+      "ReportEntry" : {
+        "properties" : {
+          "landscape" : {
+            "type" : "boolean"
+          },
+          "period" : {
+            "$ref" : "#/components/schemas/PeriodEntry"
+          }
+        },
+        "type" : "object"
+      },
+      "ResultEntry" : {
+        "properties" : {
+          "kind" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "operators" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
       "RevertRequest" : {
         "properties" : {
           "reason" : {
@@ -528,6 +622,10 @@
       },
       "RunRequest" : {
         "properties" : {
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "count" : {
             "type" : "boolean"
           },
@@ -536,6 +634,10 @@
               "$ref" : "#/components/schemas/Filter"
             },
             "type" : "array"
+          },
+          "knownAt" : {
+            "format" : "date-time",
+            "type" : "string"
           },
           "limit" : {
             "format" : "int32",
@@ -593,6 +695,17 @@
         },
         "type" : "object"
       },
+      "SortEntry" : {
+        "properties" : {
+          "asc" : {
+            "type" : "boolean"
+          },
+          "field" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Task" : {
         "properties" : {
           "createdTime" : {
@@ -628,6 +741,17 @@
             "type" : "object"
           },
           "type" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "TimeSliceEntry" : {
+        "properties" : {
+          "asOf" : {
+            "type" : "string"
+          },
+          "knownAt" : {
             "type" : "string"
           }
         },
@@ -1589,6 +1713,27 @@
           }
         },
         "tags" : [ "meta-model-controller" ]
+      }
+    },
+    "/api/meta/queries" : {
+      "get" : {
+        "operationId" : "queries",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/QueryEntry"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "query-catalog-controller" ]
       }
     },
     "/api/meta/schema/{name}" : {

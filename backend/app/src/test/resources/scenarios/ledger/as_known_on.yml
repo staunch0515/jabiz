@@ -1,0 +1,92 @@
+# Reporting "as known on" (docs/design/19-reports.md section 2.2): an expense is posted to the wrong account on
+# February 3 and a trial balance as of February 5 is issued; on February 20 a back-dated entry, effective February 3,
+# moves it to cost of sales and the wrong account is renamed. The trial balance as of February 5 then differs by the
+# correction in the two accounts it touches when run as known on February 28, and runs exactly as issued, account
+# name included, when run as known on February 5.
+name: Back-dated correction reported as known on two dates
+clock: 2026-02-03T15:00:00Z
+actor: { id: accountant, permissions: ["*"] }
+steps:
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1000", accountName: Cash, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "2000", accountName: Accounts payable, accountType: LIABILITY }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "5000", accountName: Cost of sales, accountType: EXPENSE }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: LedgerAccount
+      attributes: { accountCode: "6400", accountName: Office expenses, accountType: EXPENSE, enabled: true }
+    save: { office: $.id }
+
+  - note: The bill is posted to office expenses in error.
+    process: LEDGER_POST@latest
+    input:
+      bookingTime: 2026-02-03T15:00:00Z
+      description: BILL-P-8010
+      entries:
+        - { accountCode: "6400", direction: DEBIT, amount: 15000 }
+        - { accountCode: "2000", direction: CREDIT, amount: 15000 }
+  - setClock: 2026-02-05T15:00:00Z
+  - process: LEDGER_POST@latest
+    input:
+      bookingTime: 2026-02-05T15:00:00Z
+      description: Part payment of BILL-P-8010
+      entries:
+        - { accountCode: "2000", direction: DEBIT, amount: 5000 }
+        - { accountCode: "1000", direction: CREDIT, amount: 5000 }
+  - note: The trial balance as of February 5, as issued that day.
+    expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-05T23:59:59Z }
+      rows: 4
+      values:
+        - { accountCode: "1000", balance: -5000 }
+        - { accountCode: "2000", balance: -10000 }
+        - { accountCode: "5000", balance: 0 }
+        - { accountCode: "6400", accountName: Office expenses, balance: 15000 }
+
+  - setClock: 2026-02-20T15:00:00Z
+  - process: UPDATE_ENTITY@latest
+    input: { entityType: LedgerAccount, id: "${office}", version: 1, attributes: { accountName: Office supplies } }
+  - note: JE-0005 reclassifies the bill, effective the day it was posted.
+    process: LEDGER_POST@latest
+    input:
+      bookingTime: 2026-02-03T15:00:00Z
+      description: JE-0005 reclassify BILL-P-8010
+      entries:
+        - { accountCode: "5000", direction: DEBIT, amount: 15000 }
+        - { accountCode: "6400", direction: CREDIT, amount: 15000 }
+
+  - note: As known on February 5 - exactly the issued report, the account's name at the time included.
+    expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-05T23:59:59Z, knownAt: 2026-02-05T23:59:59Z }
+      rows: 4
+      values:
+        - { accountCode: "1000", balance: -5000 }
+        - { accountCode: "2000", balance: -10000 }
+        - { accountCode: "5000", balance: 0 }
+        - { accountCode: "6400", accountName: Office expenses, balance: 15000 }
+  - note: As known on February 28 - the correction moves 15,000 from 6400 to 5000; nothing else changes.
+    expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-02-05T23:59:59Z, knownAt: 2026-02-28T23:59:59Z }
+      rows: 4
+      values:
+        - { accountCode: "1000", balance: -5000 }
+        - { accountCode: "2000", balance: -10000 }
+        - { accountCode: "5000", balance: 15000 }
+        - { accountCode: "6400", accountName: Office supplies, balance: 0 }
+  - note: Account activity of 6400 as known on February 5 has only the bill.
+    expect:
+      query: jabiz.ledger.account_activity
+      params: { account: "6400", from: 2026-02-01T00:00:00Z, asOf: 2026-02-05T23:59:59Z, knownAt: 2026-02-05T23:59:59Z }
+      rows: 3
+      values:
+        - { rowKind: OPENING, runningBalance: 0 }
+        - { rowKind: ENTRY, description: BILL-P-8010, debit: 15000, runningBalance: 15000 }
+        - { rowKind: CLOSING, runningBalance: 15000 }
+snapshot:
+  entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
+  asOf: end

@@ -193,7 +193,8 @@ public final class ScenarioRunner {
                 AdvancedQueryDefinition template = templates.find(q.query())
                     .orElseThrow(() -> failure(scenario, step, "unknown SQL template " + q.query(), null));
                 List<Map<String, Object>> rows = as(scenario, queries.execute(template,
-                    ScenarioValues.resolveMap(q.params(), variables)).map(ScenarioRunner::row).collectList());
+                    ScenarioValues.resolveMap(q.params(), variables),
+                    new AdvancedQueryExecutor.At(q.asOf(), q.knownAt())).map(ScenarioRunner::row).collectList());
                 if (q.rows() != null && rows.size() != q.rows()) {
                     throw failure(scenario, step, q.query() + " returned " + rows.size() + " rows, expected "
                         + q.rows() + ": " + rows, null);

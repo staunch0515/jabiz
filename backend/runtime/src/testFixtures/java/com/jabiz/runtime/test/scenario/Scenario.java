@@ -87,9 +87,12 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     public sealed interface Expectation {}
 
-    /** Rows of a SQL template run with {@code params}: their number, and each row containing {@code values[i]}. */
-    public record QueryExpectation(String query, Map<String, Object> params, Integer rows,
-        List<Map<String, Object>> values) implements Expectation {}
+    /**
+     * Rows of a SQL template run with {@code params} (at {@code asOf} / {@code knownAt} when given): their number, and
+     * each row containing {@code values[i]}.
+     */
+    public record QueryExpectation(String query, Map<String, Object> params, Instant asOf, Instant knownAt,
+        Integer rows, List<Map<String, Object>> values) implements Expectation {}
 
     /** The entity with {@code id} (at {@code asOf}, for temporal entities) contains {@code fields}. */
     public record EntityExpectation(String entity, Object id, Instant asOf, Map<String, Object> fields)
@@ -180,7 +183,7 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     private static Expectation expectation(Map<String, Object> expect, String where) {
         if (expect.containsKey("query")) {
-            onlyKeys(expect, where, Set.of("query", "params", "rows", "values"));
+            onlyKeys(expect, where, Set.of("query", "params", "asOf", "knownAt", "rows", "values"));
             List<Map<String, Object>> values = new ArrayList<>();
             if (expect.get("values") != null) {
                 for (Object row : list(expect.get("values"), where + ".values")) {
@@ -188,7 +191,11 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
                 }
             }
             Object rows = expect.get("rows");
+            Object asOf = expect.get("asOf");
+            Object knownAt = expect.get("knownAt");
             return new QueryExpectation(text(expect, "query", true), input(expect.get("params"), where),
+                asOf == null ? null : instant(asOf, where + ".asOf"),
+                knownAt == null ? null : instant(knownAt, where + ".knownAt"),
                 rows == null ? null : ((Number) rows).intValue(), values);
         }
         if (expect.containsKey("entity")) {

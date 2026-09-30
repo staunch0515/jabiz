@@ -17,6 +17,7 @@ list:
   defaultSort: { field: sku, asc: true }
   key: [warehouseCode, sku]
 permissions: [commerce.stock.read]
+report: {}
 ---*/
 SELECT
     w.{{Warehouse.warehouseCode}}                          AS warehouseCode,

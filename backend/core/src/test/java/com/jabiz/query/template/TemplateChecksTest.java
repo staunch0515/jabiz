@@ -3,6 +3,7 @@ package com.jabiz.query.template;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.QueryParameter;
+import com.jabiz.query.custom.ReportSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -159,5 +160,46 @@ class TemplateChecksTest {
                 "W a top-level ORDER BY has no effect: the platform sorts the result (list.defaultSort, then the"
                     + " stable key)",
                 "result x uses custom kind no.such.kind, which has no registered CustomKindSupport");
+    }
+
+    /** docs/design/19-reports.md sections 2.2 and 3.1. */
+    @Test
+    void pointInTimeParametersMustBeSingleTemporalParameters() {
+        SemanticKind time = new SemanticKind.Temporal(com.jabiz.entity.TemporalRole.EVENT_TIME);
+        String sql = "SELECT o.{{Order.amount}} AS amount FROM {{Order}} o"
+            + " WHERE CAST(:at AS timestamptz) IS NULL OR o.{{Order.note}} = ANY(:times) OR :note IS NULL";
+        Consumer<AdvancedQueryDefinition.Builder> params = q -> q
+            .parameter("at", time, false)
+            .listParameter("times", time, false)
+            .parameter("note", new SemanticKind.Text(10, false), false)
+            .returnsFrom("amount", "Order", "amount")
+            .sqlTemplate(sql);
+
+        assertThat(problems(query(q -> {
+            params.accept(q);
+            q.timeSlice("at", "at").report(new ReportSpec("at", null, true));
+        }))).isEmpty();
+        assertThat(problems(query(q -> {
+            params.accept(q);
+            q.timeSlice("ghost", "note").report(new ReportSpec("times", "at", false));
+        }))).contains(
+            "timeSlice.asOf names ghost, which is not a declared parameter",
+            "timeSlice.knownAt names note, which is not a temporal parameter",
+            "report.period.from names times, which is a list parameter");
+        assertThat(problems(query(q -> {
+            params.accept(q);
+            q.timeSlice(null, null);
+        }))).contains("timeSlice must name asOf, knownAt or both");
+    }
+
+    @Test
+    void aPublicQueryTakesNoPointInTime() {
+        assertThat(problems(AdvancedQueryDefinition.define("q", q -> q
+            .fromEntities("Order").publicAccess()
+            .parameter("at", new SemanticKind.Temporal(com.jabiz.entity.TemporalRole.EVENT_TIME), false)
+            .returnsFrom("amount", "Order", "amount")
+            .timeSlice(null, "at")
+            .sqlTemplate("SELECT o.{{Order.amount}} AS amount FROM {{Order}} o WHERE CAST(:at AS timestamptz) IS NULL"))))
+            .contains("a public query cannot declare timeSlice: anonymous visitors read the current state only");
     }
 }

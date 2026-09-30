@@ -2,6 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import type { components } from '../api/schema'
+import type { QueryEntry } from './reports'
 import type { DatasetEntry, DictItem, EntityMeta, Me, MenuItem, ProcessEntry } from './types'
 
 /**
@@ -100,4 +101,14 @@ export function useDictionaries(entity: EntityMeta | undefined): Record<string, 
     if (items) byUrn[urn] = items
   })
   return byUrn
+}
+
+/** SQL templates the signed-in user may run, reports among them (GET /api/meta/queries, 19 section 3.2). */
+export function useQueryCatalog() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['meta', 'queries', lang],
+    queryFn: () => unwrap(api.GET('/api/meta/queries')) as Promise<QueryEntry[]>,
+    staleTime: 60_000,
+  })
 }
