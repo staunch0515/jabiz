@@ -21,7 +21,8 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 |---|---|---|
 | `jabiz.process` | `ProcessExecutor.run` / `executeChild`（子流程嵌套在父流程内，名为 `sub-process X`） | `process` `version` |
 | `jabiz.dataset.read` / `jabiz.dataset.query` / `jabiz.dataset.commit` | `DatasetEntityManager.findById` / `query` / `commitBatch` | `dataset` `entity` |
-| `jabiz.query.template` | `AdvancedQueryExecutor.page`（模板 API 与 `RunTemplate`） | `template` |
+| `jabiz.query.template` | `AdvancedQueryExecutor.page` / `all`（模板 API、`RunTemplate` 与导出） | `template` |
+| `jabiz.query.export` | `ReportExporter.export`（19 §4；其中的模板执行即 `jabiz.query.template`） | `template` `format` |
 | `jabiz.outbox.delivery` | `OutboxDeliverer.deliver` | `consumer` `event` `result`（`CONSUMED` / `DUPLICATE` / `FAILED`） |
 | `jabiz.job.run` | `JobRunner.run`（调度线程，阻塞式观测） | `job` `result`（`SUCCEEDED` / `REPLAYED` / `FAILED` / `LOCKED`） |
 | `jabiz.file.upload` | `FileUploadService.upload`（14 §1） | `policy` |

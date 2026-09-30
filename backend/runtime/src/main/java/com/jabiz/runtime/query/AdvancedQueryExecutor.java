@@ -50,8 +50,11 @@ import java.util.Objects;
 @Component
 public class AdvancedQueryExecutor {
 
-    /** One page of a template's result. {@code total} is null when counting was not asked for. */
-    public record Page(List<SemanticRow> items, Long total, int offset, int limit) {}
+    /**
+     * One page of a template's result. {@code total} is null when counting was not asked for; {@code slice} is the
+     * point in time the template's temporal entities were read at.
+     */
+    public record Page(List<SemanticRow> items, Long total, int offset, int limit, TimeSlice slice) {}
 
     /**
      * The point in time a caller asks a template to be run at (docs/design/19-reports.md section 2.1); either part may
@@ -149,11 +152,25 @@ public class AdvancedQueryExecutor {
         QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
         return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
             KeyValues.of("template", queryDef.queryId()),
-            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, offset, limit, count, maxTimeout));
+            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, offset, limit, count, maxTimeout,
+                true));
+    }
+
+    /**
+     * All rows of the template up to {@code maxRows}, for an export (docs/design/19-reports.md section 4): unlike a
+     * page, not capped by the datasets' {@code maxQueryBatchSize}, which limits browsing only. The caller asks for one
+     * row more than it accepts to tell a complete result from a cut one.
+     */
+    public Mono<Page> all(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
+        QueryPredicate filter, List<SortOrder> sorts, int maxRows) {
+        return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
+            KeyValues.of("template", queryDef.queryId()),
+            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, 0, maxRows, false, null, false));
     }
 
     private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
-        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
+        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout,
+        boolean capped) {
         return RequestContexts.current().flatMap(request -> {
             AdvancedQueryDefinition query = templates.prepare(queryDef);
             Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);
@@ -168,7 +185,7 @@ public class AdvancedQueryExecutor {
             params.putAll(platform.params());
 
             int maxRows = datasets.values().stream().mapToInt(d -> d.policy().maxQueryBatchSize()).min().orElseThrow();
-            int effectiveLimit = Math.min(limit, maxRows);
+            int effectiveLimit = capped ? Math.min(limit, maxRows) : limit;
             OuterQueryCompiler.OuterQuery outer = OuterQueryCompiler.compile(query, sql, filter, sorts, offset,
                 effectiveLimit, entityRegistry::find);
 
@@ -181,14 +198,14 @@ public class AdvancedQueryExecutor {
                 .map(row -> toSemanticRow(query, row))
                 .collectList();
             if (!count) {
-                return rows.map(items -> new Page(items, null, offset, effectiveLimit));
+                return rows.map(items -> new Page(items, null, offset, effectiveLimit, slice));
             }
             Map<String, BoundValue> countParams = new LinkedHashMap<>(params);
             countParams.putAll(outer.countParams());
             Mono<Long> total = engine.executeRawQuery(new RawQueryPlan(outer.countSql(), countParams, timeout))
                 .next()
                 .map(row -> ((Number) row.get("total")).longValue());
-            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit));
+            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit, slice));
         });
     }
 

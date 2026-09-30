@@ -9,13 +9,19 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
+import com.jabiz.runtime.report.ReportExporter;
 import com.jabiz.runtime.security.Permissions;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -23,6 +29,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -51,11 +58,14 @@ class QueryController {
 
     private final SqlTemplateRegistry templates;
     private final AdvancedQueryExecutor executor;
+    private final ReportExporter exporter;
     private final boolean development;
 
-    QueryController(SqlTemplateRegistry templates, AdvancedQueryExecutor executor, Environment environment) {
+    QueryController(SqlTemplateRegistry templates, AdvancedQueryExecutor executor, ReportExporter exporter,
+        Environment environment) {
         this.templates = templates;
         this.executor = executor;
+        this.exporter = exporter;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
@@ -79,6 +89,36 @@ class QueryController {
                     null)
                 .map(page -> new RunResponse(page.items().stream().map(QueryController::values).toList(),
                     page.total(), page.offset(), page.limit()));
+        });
+    }
+
+    /**
+     * The whole result as a file (docs/design/19-reports.md section 4): {@code format} is {@code csv}, {@code xlsx} or
+     * {@code pdf}; the body is the same as a run's, its paging ignored. Permissions are those of a run. A result larger
+     * than {@code jabiz.reports.export.max-rows} is refused with 422 {@code REPORT_TOO_LARGE}.
+     */
+    @PostMapping(value = "/{queryId}/export", produces = {"text/csv", "application/pdf",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json"})
+    Mono<ResponseEntity<byte[]>> export(@PathVariable String queryId, @RequestParam String format,
+        @RequestBody(required = false) RunRequest request) {
+        return RequestContexts.current().flatMap(context -> {
+            AdvancedQueryDefinition query = templates.find(queryId)
+                .orElseThrow(() -> new EntityNotFoundException("Unknown query: " + queryId));
+            requirePermissions(query, context, development);
+            ReportExporter.Format chosen = switch (format.toLowerCase(Locale.ROOT)) {
+                case "csv" -> ReportExporter.Format.CSV;
+                case "xlsx" -> ReportExporter.Format.XLSX;
+                case "pdf" -> ReportExporter.Format.PDF;
+                default -> throw ListRequests.invalid("format", "format must be csv, xlsx or pdf");
+            };
+            RunRequest body = request == null ? new RunRequest(null, null, null, null, null, null, null, null) : request;
+            return exporter.export(query, body.params(), new AdvancedQueryExecutor.At(body.asOf(), body.knownAt()),
+                    filter(body.filters()), sorts(body.sorts()), chosen)
+                .map(export -> ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(export.format().mediaType()))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(export.fileName()).build().toString())
+                    .body(export.content()));
         });
     }
 
