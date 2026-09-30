@@ -181,7 +181,8 @@ class ReportArchiveController {
 
     /** The template's permissions at issue, and the issuer's data scope: the rows are those the issuer saw. */
     private boolean readable(ReportRun run, RequestContext context) {
-        return Permissions.allowsAll(context, run.permissions(), development) && scopes.matches(run.scope(), context);
+        return Permissions.allowsAll(context, run.permissions(), development)
+            && scopes.matches(run.templateId(), run.scope(), context);
     }
 
     private static UUID uuid(String runId) {

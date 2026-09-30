@@ -136,6 +136,29 @@ class DataPeriodIT extends SecurityItSupport {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void archivedLedgerReportsFromBeforeThePeriodsExistedAreNotShownToLimitedReaders() {
+        String prefix = prefix();
+        openAccounts(prefix);
+        postAt(admin(), prefix, IN_2025, "4");
+        Map<String, Object> issued = post("/api/processes/REPORT_ISSUE/latest", admin(), Map.of(
+            "templateId", "jabiz.ledger.account_balances", "params", Map.of("asOf", FY2027.toString())))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        String current = (String) ((Map<String, Object>) issued.get("output")).get("runId");
+        // A run issued before the ledger datasets took the reader's period into account kept no scope for them.
+        String older = UUID.randomUUID().toString();
+        execute("INSERT INTO sys_report_run SELECT (jsonb_populate_record(NULL::sys_report_run, to_jsonb(r)"
+            + " || jsonb_build_object('run_id', ?, 'scope', '{}'))).* FROM sys_report_run r WHERE r.run_id = ?::uuid",
+            older, current);
+
+        String limited = auditor("report.archive.read", "ledger.read");
+        get("/api/reports/runs/" + current, limited).expectStatus().isNotFound();
+        get("/api/reports/runs/" + older, limited).expectStatus().isNotFound();
+        get("/api/reports/runs/" + older, bearer("report.archive.read", "ledger.read")).expectStatus().isOk();
+        get("/api/reports/runs/" + current, bearer("report.archive.read", "ledger.read")).expectStatus().isOk();
+    }
+
+    @Test
     void aTransactionReversedOutsideThePeriodCannotBeReversedAgainFromWithin() {
         String prefix = prefix();
         openAccounts(prefix);

@@ -324,6 +324,7 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   （V25，`reverses_transaction_id`），期限外已被冲正的交易再冲正时 400 `UNIQUE_VIOLATION`。
 - **平台的使用**：账本交易（`bookingTime`）与分录（经 `transactionId`）数据视图；审计记录与操作记录的查询（`/api/audit/records`、`/operations`、`/reveals`）按记录时间截取在期限内，
   单条审计记录在期限外为 404。
+- **签发的报表**：数据期限作为范围值记入运行（19 §5.3），只有期限相同的读者能读；声明期限之前签发的运行没有这项记录，受期限限制的读者不能读。
 
 ### 13.3 访问审查
 
