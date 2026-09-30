@@ -136,10 +136,11 @@ class ReportArchiveIT extends LedgerItSupport {
         ReportProcesses.IssueOutput issued = trialBalance(null);
         // An archived run whose template has changed since: its row, as a run of that earlier version would have it.
         String older = UUID.randomUUID().toString();
-        execute("INSERT INTO sys_report_run SELECT CAST(? AS uuid), template_id, repeat('0', 64), template_source,"
-            + " permissions, title, company, period, language, params, parameters, as_of, read_at, known_at,"
-            + " landscape, columns, rows, row_count, content_hash, recomputable, issued_by, issued_time,"
-            + " process_seq_id, version FROM sys_report_run WHERE run_id = CAST(? AS uuid)", older, issued.runId());
+        String columns = "template_id, template_source, permissions, scope, title, company, period, language, params,"
+            + " parameters, as_of, read_at, known_at, landscape, columns, rows, row_count, content_hash, recomputable,"
+            + " issued_by, issued_time, process_seq_id, version";
+        execute("INSERT INTO sys_report_run (run_id, template_version, " + columns + ") SELECT CAST(? AS uuid),"
+            + " repeat('0', 64), " + columns + " FROM sys_report_run WHERE run_id = CAST(? AS uuid)", older, issued.runId());
 
         assertThat(verify(older)).containsEntry("verdict", "template_changed")
             .containsEntry("currentVersion", issued.templateVersion());
