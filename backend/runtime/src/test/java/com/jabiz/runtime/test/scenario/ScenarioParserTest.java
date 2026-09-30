@@ -40,6 +40,41 @@ class ScenarioParserTest {
         """;
 
     @Test
+    void readsImportSteps() {
+        Scenario scenario = Scenario.parse("""
+            name: Imports
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - import: ledger.opening
+                file: { name: a.csv, content: "Entry,Account\\nOB-1,1000\\n" }
+                params: { description: Opening }
+                commit: true
+                notes: agreed
+                expect: { committed: true }
+                save: { run: $.runId }
+              - import: commerce.stock
+                file: { name: b.csv, content: x }
+                mapping: { columns: { sku: Item } }
+            """, "scenarios/imports.yml");
+
+        assertThat(scenario.steps().get(0)).isEqualTo(new Scenario.ImportStep(1, "ledger.opening", "a.csv",
+            "Entry,Account\nOB-1,1000\n", null, Map.of("description", "Opening"), true, "agreed",
+            Map.of("committed", true), Map.of("run", "$.runId"), null));
+        Scenario.ImportStep preview = (Scenario.ImportStep) scenario.steps().get(1);
+        assertThat(preview.commit()).isFalse();
+        assertThat(preview.mapping()).isEqualTo(Map.of("columns", Map.of("sku", "Item")));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - import: x
+                file: { name: a.csv }
+            """, "scenarios/bad.yml")).hasMessageContaining("content");
+    }
+
+    @Test
     void readsJobAndEventSteps() {
         Scenario scenario = Scenario.parse("""
             name: Jobs

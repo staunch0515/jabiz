@@ -33,6 +33,7 @@ frontend/
 | `GET /api/meta/entities/{name}` | 实体导出（02 §8）+ 按请求语言的 `label`（实体与字段）与 `messages`（本实体前端可能报出的错误码 → 文案模板） | 已认证 |
 | `GET /api/meta/datasets` | 调用方**可读**的数据视图：`id`、`entity`、`label`、`isDefault`、`temporal`、`allowScheduled`、`readOnly`、`processOnlyWrites`、`allowTimeTravel`、`softDelete`、`listView`、`maxQueryBatchSize`、`canWrite` | 已认证，按视图读权限过滤 |
 | `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema）、`actsOn`（`{entity, input, when?}`，16 §3） | 已认证，按流程权限过滤 |
+| `GET /api/meta/imports` | 调用方可运行的导入（20 §6）：字段、版式、参数 Schema、控制合计、能否保存映射 | 已认证，按导入、行流程、文件策略的权限过滤 |
 | `GET /api/auth/menus`、`/api/auth/me` | 动态菜单、当前操作人（10 §3） | 已认证 |
 | `GET /api/dictionaries/{urn}` | 字典项（按语言） | 已认证 |
 
@@ -119,6 +120,8 @@ frontend/
 | `/tasks` | 我的待办（18 §5.3）：审批待办就地批准或驳回（`ApprovalPanel`），其他待办链接到其页面；页头显示开放待办数 |
 | `/reports`、`/reports/run?id=<模板>` | 报表（19 §3.3）：目录中声明了 `report` 的模板；参数表单、生效 / 记录时点、结果表格（分页、白名单内筛选与排序）、导出 Excel / PDF / CSV（19 §4） |
 | `/reports/archive[?template=]` | 已签发的报表（19 §5.4）：按签发原样保存（PDF / Excel / CSV）、核对 |
+| `/imports`、`/imports/run?id=<导入>` | 导入（20 §6）：上传文件 → 映射（CSV / Excel 版式调整、字段取自哪一列或常量、保存与载入映射、前 20 行）→ 参数（表单由参数 Schema 生成）→ 预览（全部行执行并回滚：数字、控制合计、全部问题、逐行状态）→ 说明与提交（有任何问题即不能提交；被拒的提交显示其报告） |
+| `/imports/runs[?import=]` | 导入记录（20 §5）：结果、行数、重复、问题、说明；问题明细；报告保存为 PDF / Excel / CSV |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。

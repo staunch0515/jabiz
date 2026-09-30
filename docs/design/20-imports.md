@@ -2,7 +2,7 @@
 
 应用需要把外部文件整批导入：主数据、期初余额、日记账、银行对账单、工资、汇率。导入的正确性就是业务流程的正确性：
 平台把文件读成行，把每行（或每组行）交给手工录入所用的同一个业务流程，负责读取、转换、事务、去重与报告；业务规则仍在流程中。
-决策见 D26。阶段 14e-1 实施 §1–§4、§5 的试运行（预览）、§6 的查看与映射接口、§7；14e-2 实施提交、去重记录、导入记录与报告导出、后台页面。
+决策见 D26。阶段 14e-1 实施 §1–§4、§5 的试运行（预览）、§6 的查看与映射接口、§7；14e-2 实施提交、去重记录、导入记录与报告导出、后台页面（12 §6）与场景步骤 `import`（07 §3.1）。
 
 ## 1. 文件
 
@@ -95,8 +95,17 @@
 
 - **预览**（`POST /api/imports/{id}/preview`）：`IMPORT_RUN` 的试运行（`ExecutionOptions.DRY_RUN`）：流程完成后整个事务回滚，操作记录、业务数据、Outbox、
   单据号计数都不留下，也不执行提交后步骤。
-- **提交**（14e-2）：有任何问题即整体回滚（422 `IMPORT_REJECTED`），另起事务记录被拒的导入；没有问题则一起提交数据、导入记录、外部引用与事件 `jabiz.import.committed`。
-  各行的 `op_process.parent_seq_id` 指向导入的操作。
+- **提交**（`POST /api/imports/{id}/commit`，可带 `notes`）：
+  1. 取得本导入本文件的事务级咨询锁（同一文件的并发提交依次进行）；该文件已成功导入过 → 409 `IMPORT_ALREADY_IMPORTED`（带 `run`），什么都不执行。
+  2. 查出已导入过的外部引用（`sys_import_ref`），按定义跳过或报错。
+  3. 全部单元放在**另一个保存点**之后执行（每个单元仍各自一个保存点）：
+     - 没有任何问题 → 写导入记录（`sys_import_run`，`committed`）与各行的外部引用，发布事件 `jabiz.import.committed`，与数据一起提交；
+     - 有问题 → 回滚到外层保存点（全部单元的写入撤销），只写被拒的导入记录（`rejected`，前 1000 个问题），`IMPORT_RUN` 照常提交；接口答 422 `IMPORT_REJECTED`，问题中带 `report`（含 `runId`）。
+  4. 并发导致的唯一冲突（同一文件或同一外部引用）→ 409。
+  各行的 `op_process.parent_seq_id` 指向导入的操作；被撤销的工作所登记的提交后步骤一并丢弃（`ProcessExecutor.keepingAfterCommitOnSuccess`），只有留下的工作的提交后步骤会执行。
+- **导入记录**：`sys_import_run`（只追加）保存导入与版本、结果、文件编号与哈希、映射、参数、记录数、导入行数、单元数、成功数、重复数、问题数与前 1000 个问题、
+  各字段取自的列、控制合计（以文本保存小数位）、说明、导入人、时间、`process_seq_id`；部分唯一索引 `(import_id, file_sha256) WHERE outcome = 'committed'`。
+  `sys_import_ref`（只追加）主键 `(import_id, ref)`，外部引用最长 500 字符（更长的记为该行的问题）。
 - 保存点由存储引擎提供（`StorageEngine.inSavepoint`，只在事务内使用）。
 
 ## 6. 接口
@@ -106,6 +115,9 @@
 | `GET /api/meta/imports` | 当前用户可运行的导入：标题（消息 `import.<id>`）、字段（标签 `import.<id>.<字段>`、语义类型、必填、缺省列）、版式与可调整项、可接受的类型与扩展名、参数 Schema、控制合计、外部引用、能否保存映射 |
 | `POST /api/imports/{id}/inspect` | `{fileId, options}` → 列、文件头、前 20 条记录、记录数、不给映射时各字段取自的列、文件级问题 |
 | `POST /api/imports/{id}/preview` | `{fileId, mapping, params}` → 导入报告（问题信息按请求语言） |
+| `POST /api/imports/{id}/commit` | `{fileId, mapping, params, notes}` → 导入报告（200）；被拒 422 `IMPORT_REJECTED`（问题中带 `report`）；已导入过 409 `IMPORT_ALREADY_IMPORTED` |
+| `GET /api/imports/runs[?import=&limit=]`、`/runs/{id}` | 导入记录（最新在前）与详情（问题按请求语言）；只列调用方可运行的导入的记录，其余为 404 |
+| `GET /api/imports/runs/{id}/export?format=pdf\|xlsx\|csv` | 导入报告文件（19 §4 的导出）：页眉为结果、文件哈希、记录与处理数、控制合计、导入人、说明，各行为问题 |
 | `GET /api/imports/{id}/mappings`、`PUT`/`DELETE …/mappings/{名}` | 保存的映射 |
 
 - 权限（默认拒绝）：导入权限、行流程的全部权限、文件策略的读取权限，缺一即 403；保存映射另需映射权限。未知导入与文件 404；文件不是按导入的策略上传的 400 `IMPORT_WRONG_FILE`；参数不合约束 400。
@@ -123,4 +135,7 @@
 
 - core：类型判定（含伪装的 xlsm/docx、带 NUL 的文本、HTML/SVG）、各解析器、XXE 与实体膨胀、解压上限、单元格读取、映射、重复、分组、整个文件的检查、控制合计。
 - 集成（`ImportIT`）：预览执行全部行并报告全部问题，且不留下任何数据与操作记录；保存点只撤销失败的单元；按组导入与不平衡文件；XLSX 与 XML；
-  查看文件与映射、保存的映射只追加；默认拒绝（缺导入权限、缺行流程权限、直接执行内部流程、别的策略的文件）。
+  查看文件与映射、保存的映射只追加；默认拒绝（缺导入权限、缺行流程权限、直接执行内部流程、别的策略的文件）；提交与导入记录、外部引用、事件、
+  父操作；同一文件 409、重复引用跳过；被拒的提交只留下记录；两个同时提交同一文件只有一个成功；记录的列表、详情、导出与权限；导入表拒绝 UPDATE / DELETE。
+- `ProcessEngineIT`：被撤销的单元所登记的提交后步骤不会执行。
+- 场景 `imports/opening_balances`（固定时钟与快照）；Vitest（向导、记录页）；Playwright（经向导导入并保存报告）。

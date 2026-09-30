@@ -125,7 +125,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["commit"];
+        post: operations["commit_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -318,6 +318,70 @@ export interface paths {
         get: operations["content_1"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["run_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/runs/{runId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["commit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -738,6 +802,14 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
         };
+        DraftRule: {
+            condition?: unknown;
+            enabled?: boolean;
+            levels?: unknown;
+            /** Format: int32 */
+            priority?: number;
+            ruleCode?: string;
+        };
         EntityInstance: {
             attributes?: {
                 [key: string]: unknown;
@@ -752,15 +824,6 @@ export interface components {
             output?: unknown;
             /** Format: int64 */
             processSeqId?: number;
-        };
-        FieldEntry: {
-            columns?: string[];
-            kind?: {
-                [key: string]: unknown;
-            };
-            label?: string;
-            name?: string;
-            required?: boolean;
         };
         FileInfo: {
             contentType?: string;
@@ -800,7 +863,42 @@ export interface components {
             value?: unknown;
             values?: unknown[];
         };
-        FormatEntry: {
+        ImportCommitRequest: {
+            fileId?: string;
+            mapping?: components["schemas"]["ImportMapping"];
+            notes?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        ImportEntry: {
+            accept?: string[];
+            extensions?: string[];
+            externalRef?: boolean;
+            fields?: components["schemas"]["ImportFieldEntry"][];
+            filePolicy?: string;
+            format?: components["schemas"]["ImportFormatEntry"];
+            id?: string;
+            mappings?: boolean;
+            onDuplicate?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            title?: string;
+            totals?: string[];
+            /** Format: int32 */
+            version?: number;
+        };
+        ImportFieldEntry: {
+            columns?: string[];
+            kind?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+            name?: string;
+            required?: boolean;
+        };
+        ImportFormatEntry: {
             adjustable?: boolean;
             charset?: string;
             charsets?: string[];
@@ -813,23 +911,31 @@ export interface components {
             /** Format: int32 */
             skipLines?: number;
         };
-        ImportEntry: {
-            accept?: string[];
-            extensions?: string[];
-            externalRef?: boolean;
-            fields?: components["schemas"]["FieldEntry"][];
-            filePolicy?: string;
-            format?: components["schemas"]["FormatEntry"];
-            id?: string;
-            mappings?: boolean;
-            onDuplicate?: string;
-            params?: {
-                [key: string]: unknown;
+        ImportInspectRequest: {
+            fileId?: string;
+            options?: components["schemas"]["Options"];
+        };
+        ImportInspectResponse: {
+            columns?: string[];
+            header?: {
+                [key: string]: string;
             };
-            title?: string;
-            totals?: string[];
+            issues?: components["schemas"]["ImportIssueEntry"][];
             /** Format: int32 */
-            version?: number;
+            records?: number;
+            sample?: components["schemas"]["ImportSampleEntry"][];
+            suggested?: {
+                [key: string]: string;
+            };
+        };
+        ImportIssueEntry: {
+            code?: string;
+            column?: string;
+            field?: string;
+            location?: string;
+            message?: string;
+            /** Format: int32 */
+            row?: number;
         };
         ImportMapping: {
             columns?: {
@@ -840,31 +946,104 @@ export interface components {
             };
             options?: components["schemas"]["Options"];
         };
-        InspectRequest: {
-            fileId?: string;
-            options?: components["schemas"]["Options"];
+        ImportMappingRequest: {
+            mapping?: components["schemas"]["ImportMapping"];
         };
-        InspectResponse: {
-            columns?: string[];
-            header?: {
+        ImportPreviewRequest: {
+            fileId?: string;
+            mapping?: components["schemas"]["ImportMapping"];
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        ImportReportResponse: {
+            accepted?: boolean;
+            columns?: {
                 [key: string]: string;
             };
-            issues?: components["schemas"]["IssueEntry"][];
+            committed?: boolean;
+            constants?: {
+                [key: string]: string;
+            };
+            /** Format: int32 */
+            duplicates?: number;
+            fileId?: string;
+            importId?: string;
+            /** Format: int32 */
+            importVersion?: number;
+            issues?: components["schemas"]["ImportIssueEntry"][];
+            /** Format: int32 */
+            processed?: number;
             /** Format: int32 */
             records?: number;
-            sample?: components["schemas"]["SampleEntry"][];
-            suggested?: {
-                [key: string]: string;
+            results?: components["schemas"]["ImportRowEntry"][];
+            /** Format: int32 */
+            rows?: number;
+            runId?: string;
+            sha256?: string;
+            totals?: {
+                [key: string]: number;
+            };
+            /** Format: int32 */
+            units?: number;
+        };
+        ImportRowEntry: {
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            status?: string;
+            values?: {
+                [key: string]: unknown;
             };
         };
-        IssueEntry: {
-            code?: string;
-            column?: string;
-            field?: string;
-            location?: string;
-            message?: string;
+        ImportRunDetail: {
+            columns?: {
+                [key: string]: string;
+            };
+            issues?: components["schemas"]["ImportIssueEntry"][];
+            mapping?: components["schemas"]["ImportMapping"];
+            params?: {
+                [key: string]: unknown;
+            };
+            run?: components["schemas"]["ImportRunSummary"];
+        };
+        ImportRunSummary: {
             /** Format: int32 */
-            row?: number;
+            duplicates?: number;
+            fileId?: string;
+            importId?: string;
+            /** Format: int32 */
+            importVersion?: number;
+            importedBy?: string;
+            /** Format: date-time */
+            importedTime?: string;
+            /** Format: int32 */
+            issueCount?: number;
+            notes?: string;
+            outcome?: string;
+            /** Format: int32 */
+            processed?: number;
+            /** Format: int32 */
+            records?: number;
+            /** Format: int32 */
+            rows?: number;
+            runId?: string;
+            sha256?: string;
+            title?: string;
+            totals?: {
+                [key: string]: number;
+            };
+            /** Format: int32 */
+            units?: number;
+        };
+        ImportSampleEntry: {
+            cells?: {
+                [key: string]: string;
+            };
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            problem?: string;
         };
         LabelsRequest: {
             ids?: unknown[];
@@ -881,9 +1060,6 @@ export interface components {
             importId?: string;
             mappingId?: string;
             name?: string;
-        };
-        MappingRequest: {
-            mapping?: components["schemas"]["ImportMapping"];
         };
         Me: {
             permissions?: string[];
@@ -925,11 +1101,11 @@ export interface components {
             to?: string;
         };
         PreviewRequest: {
-            fileId?: string;
-            mapping?: components["schemas"]["ImportMapping"];
-            params?: {
-                [key: string]: unknown;
-            };
+            draft?: components["schemas"]["DraftRule"];
+            /** Format: int32 */
+            limit?: number;
+            ruleId?: string;
+            subject?: string;
         };
         PreviewResponse: {
             changed?: components["schemas"]["Change"][];
@@ -994,36 +1170,6 @@ export interface components {
             landscape?: boolean;
             period?: components["schemas"]["PeriodEntry"];
         };
-        ReportResponse: {
-            accepted?: boolean;
-            columns?: {
-                [key: string]: string;
-            };
-            committed?: boolean;
-            constants?: {
-                [key: string]: string;
-            };
-            /** Format: int32 */
-            duplicates?: number;
-            fileId?: string;
-            importId?: string;
-            /** Format: int32 */
-            importVersion?: number;
-            issues?: components["schemas"]["IssueEntry"][];
-            /** Format: int32 */
-            processed?: number;
-            /** Format: int32 */
-            records?: number;
-            results?: components["schemas"]["RowEntry"][];
-            /** Format: int32 */
-            rows?: number;
-            sha256?: string;
-            totals?: {
-                [key: string]: number;
-            };
-            /** Format: int32 */
-            units?: number;
-        };
         ResultEntry: {
             kind?: {
                 [key: string]: unknown;
@@ -1034,15 +1180,6 @@ export interface components {
         };
         RevertRequest: {
             reason?: string;
-        };
-        RowEntry: {
-            location?: string;
-            /** Format: int32 */
-            number?: number;
-            status?: string;
-            values?: {
-                [key: string]: unknown;
-            };
         };
         RunDetail: {
             columns?: components["schemas"]["ColumnEntry"][];
@@ -1100,15 +1237,6 @@ export interface components {
             templateId?: string;
             templateVersion?: string;
             title?: string;
-        };
-        SampleEntry: {
-            cells?: {
-                [key: string]: string;
-            };
-            location?: string;
-            /** Format: int32 */
-            number?: number;
-            problem?: string;
         };
         SavedMapping: {
             mapping?: components["schemas"]["ImportMapping"];
@@ -1346,7 +1474,7 @@ export interface operations {
             };
         };
     };
-    commit: {
+    commit_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -1725,6 +1853,104 @@ export interface operations {
             };
         };
     };
+    runs: {
+        parameters: {
+            query?: {
+                import?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunSummary"][];
+                };
+            };
+        };
+    };
+    run_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunDetail"];
+                };
+            };
+        };
+    };
+    export_2: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportResponse"];
+                };
+            };
+        };
+    };
     inspect: {
         parameters: {
             query?: never;
@@ -1736,7 +1962,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InspectRequest"];
+                "application/json": components["schemas"]["ImportInspectRequest"];
             };
         };
         responses: {
@@ -1746,7 +1972,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InspectResponse"];
+                    "application/json": components["schemas"]["ImportInspectResponse"];
                 };
             };
         };
@@ -1785,7 +2011,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MappingRequest"];
+                "application/json": components["schemas"]["ImportMappingRequest"];
             };
         };
         responses: {
@@ -1834,7 +2060,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PreviewRequest"];
+                "application/json": components["schemas"]["ImportPreviewRequest"];
             };
         };
         responses: {
@@ -1844,7 +2070,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReportResponse"];
+                    "application/json": components["schemas"]["ImportReportResponse"];
                 };
             };
         };

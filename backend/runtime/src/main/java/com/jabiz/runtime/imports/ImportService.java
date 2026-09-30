@@ -14,6 +14,7 @@ import com.jabiz.imports.RawRecord;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.observability.PlatformObservations;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Entry to imports (docs/design/20-imports.md section 6): who may import what, reading a file's layout for the
@@ -50,6 +52,7 @@ public class ImportService {
         int records, Map<String, String> suggested, List<ImportIssue> issues) {}
 
     private final ImportAccess access;
+    private final ImportRuns runs;
     private final ImportRegistry imports;
     private final ImportFiles files;
     private final ImportSettings settings;
@@ -61,11 +64,12 @@ public class ImportService {
     private final DatasetRegistry datasets;
     private final JsonMapper json;
 
-    ImportService(ImportAccess access, ImportRegistry imports, ImportFiles files, ImportSettings settings, ProcessRegistry processes,
+    ImportService(ImportAccess access, ImportRuns runs, ImportRegistry imports, ImportFiles files, ImportSettings settings, ProcessRegistry processes,
         ProcessExecutor executor, ProcessInputs inputs,
         PlatformObservations observations, DatasetEntityManager entities,
         DatasetRegistry datasets, JsonMapper json) {
         this.access = access;
+        this.runs = runs;
         this.entities = entities;
         this.datasets = datasets;
         this.json = json;
@@ -135,10 +139,56 @@ public class ImportService {
             // Parameters are refused (400) before anything runs.
             inputs.convert(definition.paramsType(), params);
             ImportProcesses.RunInput input = new ImportProcesses.RunInput(definition.id(), fileId, mapping, params);
+            inputs.validate(input);
             return observations.mono(PlatformObservations.IMPORT, "import preview " + definition.id(),
                 KeyValues.of("import", definition.id(), "mode", "preview"),
                 executor.run(importProcess(), input, ExecutionOptions.DRY_RUN).map(ProcessResult::output));
         });
+    }
+
+    /**
+     * Imports the file: every unit is run as in a preview and, when nothing at all is wrong, what they did is kept and
+     * the import recorded; otherwise nothing is kept but the record of the rejected attempt. 409 when the file was
+     * imported before.
+     */
+    public Mono<ImportReport> commit(String importId, String fileId, ImportMapping mapping,
+        Map<String, Object> params, String notes) {
+        return authorized(importId).flatMap(definition -> {
+            inputs.convert(definition.paramsType(), params);
+            ImportProcesses.RunInput input = new ImportProcesses.RunInput(definition.id(), fileId, mapping, params,
+                true, notes);
+            // Built here, not read from a request body: checked the same way before anything runs (notes too long, say).
+            inputs.validate(input);
+            return observations.mono(PlatformObservations.IMPORT, "import commit " + definition.id(),
+                KeyValues.of("import", definition.id(), "mode", "commit"),
+                executor.run(importProcess(), input, ExecutionOptions.NONE).map(ProcessResult::output));
+        });
+    }
+
+    /** The runs of imports the caller may run, newest first. */
+    public Mono<List<ImportRun>> runs(String importId, int limit) {
+        return RequestContexts.current().flatMap(context -> runs.latest(importId)
+            .filter(run -> readable(run, context))
+            .take(limit)
+            .collectList());
+    }
+
+    /** The run, if the caller may run its import; 404 otherwise. */
+    public Mono<ImportRun> run(String runId) {
+        UUID id;
+        try {
+            id = UUID.fromString(runId);
+        } catch (IllegalArgumentException e) {
+            return Mono.error(new EntityNotFoundException("Unknown import run: " + runId));
+        }
+        return RequestContexts.current().flatMap(context -> runs.find(id)
+            .filter(run -> readable(run, context))
+            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("Unknown import run: " + runId))));
+    }
+
+    /** A run of an import that no longer exists is kept but shown to nobody through this API. */
+    private boolean readable(ImportRun run, RequestContext context) {
+        return imports.find(run.importId()).map(definition -> access.allowed(definition, context)).orElse(false);
     }
 
     /** A saved mapping. */

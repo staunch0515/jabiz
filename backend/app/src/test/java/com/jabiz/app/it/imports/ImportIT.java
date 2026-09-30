@@ -420,4 +420,171 @@ class ImportIT extends PostgresIntegrationTest {
             .expectStatus().isOk().expectHeader().contentType("text/plain")
             .expectHeader().valueMatches(HttpHeaders.CONTENT_DISPOSITION, "attachment.*");
     }
+
+    // ---------------------------------------------------------------- commit (14e-2)
+
+    private WebTestClient.ResponseSpec commitImport(String importId, String authorization, Map<String, Object> body) {
+        return post("/api/imports/" + importId + "/commit", authorization, body);
+    }
+
+    private static final String STOCK_OF = "SELECT count(*) AS n FROM stock_level_version s JOIN warehouse_version w"
+        + " ON w.warehouse_id = s.warehouse_id WHERE w.warehouse_code = ?";
+
+    private static List<String> ruleCodes(Map<String, Object> problem) {
+        return list(problem, "violations").stream().map(v -> String.valueOf(v.get("ruleCode"))).toList();
+    }
+
+    @Test
+    void aCommitKeepsTheRowsRecordsTheImportAndAFileIsImportedOnce() {
+        String code = code();
+        warehouseAndProducts(code, code + "-A");
+        String text = "Receipt,Warehouse,SKU,Qty\n" + code + "-1," + code + "," + code + "-A,5\n"
+            + code + "-2," + code + "," + code + "-A,3\n";
+        String fileId = uploadText(text);
+
+        Map<String, Object> report = commitImport("commerce.stock", admin(), Map.of("fileId", fileId,
+            "notes", "Counted twice at the dock")).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody();
+        assertThat(report).containsEntry("committed", true).containsEntry("accepted", true)
+            .containsEntry("processed", 2);
+        String runId = String.valueOf(report.get("runId"));
+
+        Map<String, Object> run = query("SELECT * FROM sys_import_run WHERE run_id = ?::uuid", runId).getFirst();
+        assertThat(run).containsEntry("outcome", "committed").containsEntry("row_count", 2)
+            .containsEntry("notes", "Counted twice at the dock").containsEntry("imported_by", "it-admin");
+        assertThat(query("SELECT ref FROM sys_import_ref WHERE run_id = ?::uuid ORDER BY row_number", runId))
+            .extracting(r -> r.get("ref")).containsExactly(code + "-1", code + "-2");
+        // Every row's operation is a sub-operation of the import's.
+        assertThat(count("SELECT count(*) AS n FROM op_process WHERE parent_seq_id = ? AND process_name = ?",
+            run.get("process_seq_id"), "STOCK_RECEIVE")).isEqualTo(2);
+        assertThat(count("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = 'jabiz.import.committed'"
+            + " AND payload->>'runId' = ?", runId)).isEqualTo(1);
+        assertThat(query("SELECT s.on_hand FROM stock_level_version s JOIN warehouse_version w"
+            + " ON w.warehouse_id = s.warehouse_id WHERE w.warehouse_code = ? ORDER BY s.version_no DESC LIMIT 1", code).getFirst().get("on_hand").toString()).startsWith("8");
+
+        // The same file again: 409, nothing run; a preview says so.
+        assertThat(ruleCodes(commitImport("commerce.stock", admin(), Map.of("fileId", uploadText(text)))
+            .expectStatus().isEqualTo(409).expectBody(MAP).returnResult().getResponseBody()))
+            .containsExactly(ImportCodes.ALREADY_IMPORTED);
+        assertThat(issues(preview("commerce.stock", admin(), Map.of("fileId", fileId))))
+            .contains("0:" + ImportCodes.ALREADY_IMPORTED);
+
+        // A new file repeating a receipt: the repeated line is left out, the new one imported.
+        String next = uploadText("Receipt,Warehouse,SKU,Qty\n" + code + "-2," + code + "," + code + "-A,3\n"
+            + code + "-3," + code + "," + code + "-A,1\n");
+        Map<String, Object> second = commitImport("commerce.stock", admin(), Map.of("fileId", next))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(statuses(second)).containsExactly("1:duplicate", "2:ok");
+        assertThat(second).containsEntry("duplicates", 1).containsEntry("processed", 1);
+
+        assertThatThrownBy(() -> execute("UPDATE sys_import_run SET notes = 'x' WHERE run_id = ?::uuid", runId))
+            .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_import_ref WHERE run_id = ?::uuid", runId))
+            .hasMessageContaining("append-only");
+    }
+
+    @Test
+    void aRejectedCommitKeepsNothingButItsRecord() {
+        String code = code();
+        warehouseAndProducts(code, code + "-A");
+        String fileId = uploadText("Receipt,Warehouse,SKU,Qty\n" + code + "-1," + code + "," + code + "-A,5\n"
+            + code + "-2," + code + "," + code + "-NOPE,3\n");
+        long stock = count(STOCK_OF, code);
+
+        Map<String, Object> problem = commitImport("commerce.stock", admin(), Map.of("fileId", fileId))
+            .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(ruleCodes(problem)).containsExactly(ImportCodes.REJECTED);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> report = (Map<String, Object>) problem.get("report");
+        assertThat(report).containsEntry("committed", false).containsEntry("processed", 1);
+        assertThat(issues(report)).containsExactly("2:COMMERCE_PRODUCT_NOT_FOUND");
+        String runId = String.valueOf(report.get("runId"));
+
+        assertThat(count(STOCK_OF, code))
+            .isEqualTo(stock);
+        assertThat(query("SELECT outcome, issue_count FROM sys_import_run WHERE run_id = ?::uuid", runId).getFirst())
+            .containsEntry("outcome", "rejected").containsEntry("issue_count", 1);
+        assertThat(count("SELECT count(*) AS n FROM sys_import_ref WHERE import_id = 'commerce.stock' AND ref = ?",
+            code + "-1")).isZero();
+        assertThat(count("SELECT count(*) AS n FROM sys_outbox_event WHERE payload->>'runId' = ?", runId)).isZero();
+
+        // Fixed, the same receipts import: a rejected attempt blocks nothing.
+        commitImport("commerce.stock", admin(), Map.of("fileId", uploadText("Receipt,Warehouse,SKU,Qty\n" + code
+            + "-1," + code + "," + code + "-A,5\n"))).expectStatus().isOk();
+    }
+
+    @Test
+    void twoCommitsOfTheSameFileAtOnceImportItOnce() throws Exception {
+        String code = code();
+        warehouseAndProducts(code, code + "-A");
+        StringBuilder text = new StringBuilder("Receipt,Warehouse,SKU,Qty\n");
+        for (int i = 0; i < 20; i++) {
+            text.append(code).append('-').append(i).append(',').append(code).append(',').append(code)
+                .append("-A,1\n");
+        }
+        String first = uploadText(text.toString());
+        String second = uploadText(text.toString());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            List<java.util.concurrent.Future<Integer>> results = pool.invokeAll(List.of(
+                () -> commitImport("commerce.stock", admin(), Map.of("fileId", first)).returnResult(String.class)
+                    .getStatus().value(),
+                () -> commitImport("commerce.stock", admin(), Map.of("fileId", second)).returnResult(String.class)
+                    .getStatus().value()));
+            List<Integer> statuses = new java.util.ArrayList<>();
+            for (java.util.concurrent.Future<Integer> result : results) {
+                statuses.add(result.get());
+            }
+            assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(count("SELECT count(*) AS n FROM sys_import_ref WHERE ref LIKE ?", code + "-%")).isEqualTo(20);
+    }
+
+    @Test
+    void runsAreListedShownAndExportedToThoseWhoMayImport() {
+        String code = code();
+        warehouseAndProducts(code, code + "-A");
+        String fileId = uploadText("Receipt,Warehouse,SKU,Qty\n" + code + "-1," + code + "," + code + "-A,x\n");
+        Map<String, Object> problem = commitImport("commerce.stock", admin(), Map.of("fileId", fileId,
+            "notes", "first try")).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        @SuppressWarnings("unchecked")
+        String runId = String.valueOf(((Map<String, Object>) problem.get("report")).get("runId"));
+
+        String importer = bearer("commerce.stock.import", "commerce.stock.receive", "app.import.read");
+        List<Map<String, Object>> runs = client.get().uri("/api/imports/runs?import=commerce.stock")
+            .header(HttpHeaders.AUTHORIZATION, importer).exchange().expectStatus().isOk().expectBody(LIST)
+            .returnResult().getResponseBody();
+        assertThat(runs).extracting(r -> r.get("runId")).contains(runId);
+        Map<String, Object> detail = client.get().uri("/api/imports/runs/{id}", runId)
+            .header(HttpHeaders.AUTHORIZATION, importer).exchange().expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) detail.get("run");
+        assertThat(summary).containsEntry("outcome", "rejected").containsEntry("notes", "first try")
+            .containsEntry("title", "Stock receipts");
+        assertThat(list(detail, "issues").getFirst().get("message").toString()).contains("Quantity");
+
+        byte[] csv = client.get().uri("/api/imports/runs/{id}/export?format=csv", runId)
+            .header(HttpHeaders.AUTHORIZATION, importer).exchange().expectStatus().isOk().expectBody(byte[].class)
+            .returnResult().getResponseBody();
+        assertThat(new String(csv, StandardCharsets.UTF_8)).contains(ImportCodes.VALUE_INVALID).contains("Quantity");
+        client.get().uri("/api/imports/runs/{id}/export?format=pdf", runId)
+            .header(HttpHeaders.AUTHORIZATION, importer).exchange().expectStatus().isOk()
+            .expectHeader().contentType("application/pdf");
+
+        // Without the import's permissions the run does not exist.
+        String other = bearer("commerce.price.import", "commerce.product.write", "app.import.read");
+        client.get().uri("/api/imports/runs/{id}", runId).header(HttpHeaders.AUTHORIZATION, other).exchange()
+            .expectStatus().isNotFound();
+        assertThat(client.get().uri("/api/imports/runs").header(HttpHeaders.AUTHORIZATION, other).exchange()
+            .expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody())
+            .noneMatch(r -> r.get("runId").equals(runId));
+        commitImport("commerce.stock", bearer("commerce.stock.import", "app.import.read"),
+            Map.of("fileId", fileId)).expectStatus().isForbidden();
+        // Notes beyond their limit are refused before anything runs.
+        commitImport("commerce.stock", admin(), Map.of("fileId", fileId, "notes", "x".repeat(4001)))
+            .expectStatus().isBadRequest();
+    }
 }

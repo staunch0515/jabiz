@@ -4,7 +4,9 @@ import com.jabiz.imports.ImportMapping;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -32,9 +34,24 @@ public class ImportProcesses {
      * @param fileId   the uploaded file (under the import's file policy)
      * @param mapping  how the file's columns feed the import's fields; null for the import's defaults
      * @param params   the import's parameters
+     * @param commit   whether to keep what the rows did (and record the import) when nothing is wrong; a rejected
+     *                 commit keeps only the record of the attempt
+     * @param notes    for a commit: what the person importing says about the data (decisions on data quality)
      */
     public record RunInput(@NotBlank String importId, @NotBlank String fileId, ImportMapping mapping,
-        Map<String, Object> params) {}
+        Map<String, Object> params, Boolean commit, @Size(max = 4000) String notes) {
+
+        /** Whether to commit; a preview when not given. */
+        public boolean committing() {
+            return Boolean.TRUE.equals(commit);
+        }
+
+        public RunInput(String importId, String fileId, ImportMapping mapping, Map<String, Object> params) {
+            this(importId, fileId, mapping, params, false, null);
+        }
+    }
+
+    public static final String COMMITTED_EVENT = "jabiz.import.committed";
 
     @Bean
     ProcessDefinition<RunInput, ImportReport, ProcessContext> importRunProcess() {
@@ -49,6 +66,23 @@ public class ImportProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, ImportReport.class))
-            .step("Read the file and process its rows", RunImport.class, NoMetadata.INSTANCE));
+            .step("Read the file and process its rows", RunImport.class, NoMetadata.INSTANCE)
+            .step("Announce the import", PublishEvent.when(ImportProcesses::committed, COMMITTED_EVENT,
+                ImportProcesses::committedPayload)));
+    }
+
+    private static boolean committed(ProcessContext ctx) {
+        ImportReport report = ctx.get(OUTPUT, ImportReport.class);
+        return report != null && report.committed();
+    }
+
+    private static Map<String, Object> committedPayload(ProcessContext ctx) {
+        ImportReport report = ctx.get(OUTPUT, ImportReport.class);
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("runId", report.runId());
+        payload.put("importId", report.importId());
+        payload.put("rows", report.rows());
+        payload.put("duplicates", report.duplicates());
+        return payload;
     }
 }

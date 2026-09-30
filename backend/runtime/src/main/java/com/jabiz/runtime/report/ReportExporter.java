@@ -118,7 +118,7 @@ public class ReportExporter {
     }
 
     /** The document as a file, written off the event loop: it is CPU work, and the writers block on their streams. */
-    Mono<byte[]> write(ReportDocument document, Format format, Locale locale) {
+    public Mono<byte[]> write(ReportDocument document, Format format, Locale locale) {
         ReportLabels labels = labels(locale);
         return Mono.fromCallable(() -> write(document, format, labels)).subscribeOn(Schedulers.boundedElastic());
     }
@@ -225,7 +225,7 @@ public class ReportExporter {
         return fileName(query.queryId(), runTime, format);
     }
 
-    String fileName(String templateId, Instant runTime, Format format) {
+    public String fileName(String templateId, Instant runTime, Format format) {
         String id = templateId.replaceAll("[^A-Za-z0-9._-]", "_");
         return id + "-" + FILE_TIME.format(runTime.atZone(settings.format().zone())) + "." + format.extension();
     }

@@ -80,7 +80,9 @@ snapshot:
   用于准备人与审批人不同的四眼步骤，18 §3；`expectError` 同样可带 `actor`）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
   `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
   `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
-  `expectError: {process, input, status, ruleCode, field}`。未知键即报错（拼错的期望不会静默通过）。
+  `expectError: {process, input, status, ruleCode, field}`；
+  `import: 导入 id`（20，阶段 14e-2）带 `file: {name, content}`（按导入的文件策略存入，内容为 UTF-8 文本）、`mapping`、`params`、`commit`（缺省预览）、
+  `notes`、`expect`（与导入报告按含义比较，被拒的提交也是报告）、`save`、`actor`；导入入口的权限照常检查。未知键即报错（拼错的期望不会静默通过）。
 - 变量：`save: {名: $.a.b[0]}` 从输出（遮蔽后的 JSON）中取值，`$` 为整个输出；`${名}` 整串引用保留类型，嵌在字符串中时插值；未定义即报错。
 - 比较按含义：数值按大小（`0.1` 与 `0.1000` 相等）、时间按时刻（不论偏移）、映射按包含、列表逐项。
 - 流程经 `ProcessExecutor` 以场景的操作人（显式 `RequestContext`）执行，不经 HTTP，入口权限不检查（D11 第 2 条），流程内部的检查照常；

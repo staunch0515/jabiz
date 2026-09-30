@@ -1,0 +1,88 @@
+# Opening balances imported from a file (docs/design/20-imports.md, ROADMAP 14e-2): a file whose debits and credits
+# differ is refused; a file with an unknown account is rejected as a whole, the good entry
+# included, and the attempt recorded; the corrected file posts one ledger transaction per entry, with control totals
+# in the report and the balances in the trial balance.
+name: Opening balances import
+clock: 2026-01-01T00:00:00Z
+actor: { id: accountant, permissions: ["*"] }
+steps:
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1000", accountName: Cash, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1200", accountName: Receivables, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "3000", accountName: Equity, accountType: EQUITY }
+
+  - note: Debits 1500, credits 1400 - refused as a whole, nothing posted.
+    import: ledger.opening
+    file:
+      name: unbalanced.csv
+      content: |
+        Entry,Account,Debit,Credit,Memo
+        OB-1,1000,1500.00,,cash
+        OB-1,3000,,1400.00,equity
+    params: { bookingTime: 2025-12-31T23:59:59Z, description: Opening balances }
+    expect:
+      committed: false
+      processed: 0
+      # The file check refuses it, and the entry itself - run as a preview runs everything - is refused by the ledger.
+      issues: [{ row: 0, code: LEDGER_UNBALANCED }, { row: 1, code: LEDGER_UNBALANCED }]
+
+  - note: Balanced, but one entry names an account that does not exist - rejected, the good entry too.
+    import: ledger.opening
+    file:
+      name: unknown-account.csv
+      content: |
+        Entry,Account,Debit,Credit,Memo
+        OB-1,1000,"1,500.00",,cash
+        OB-1,3000,,1500.00,equity
+        OB-2,1200,250.00,,receivables
+        OB-2,9999,,250.00,unknown
+    params: { bookingTime: 2025-12-31T23:59:59Z, description: Opening balances }
+    commit: true
+    expect:
+      committed: false
+      processed: 1
+      units: 2
+      issues: [{ row: 3, code: LEDGER_ACCOUNT_NOT_FOUND }]
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-01-01T00:00:00Z }
+      rows: 3
+      values:
+        - { accountCode: "1000", debitTotal: 0, balance: 0 }
+        - { accountCode: "1200", debitTotal: 0, balance: 0 }
+        - { accountCode: "3000", creditTotal: 0, balance: 0 }
+
+  - note: Corrected, the file is imported - one transaction per entry.
+    import: ledger.opening
+    file:
+      name: opening.csv
+      content: |
+        Entry,Account,Debit,Credit,Memo
+        OB-1,1000,"1,500.00",,cash
+        OB-1,3000,,1500.00,equity
+        OB-2,1200,250.00,,receivables
+        OB-2,3000,,250.00,equity
+    params: { bookingTime: 2025-12-31T23:59:59Z, description: Opening balances }
+    commit: true
+    notes: Balances agreed with the closing trial balance of the old system.
+    expect:
+      committed: true
+      records: 4
+      rows: 4
+      units: 2
+      processed: 2
+      totals: { debit: 1750.00, credit: 1750.00 }
+      issues: []
+    save: { run: $.runId }
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-01-01T00:00:00Z }
+      rows: 3
+      values:
+        - { accountCode: "1000", balance: 1500 }
+        - { accountCode: "1200", balance: 250 }
+        - { accountCode: "3000", balance: -1750 }
+snapshot:
+  entities: [LedgerTransaction, LedgerEntry]
