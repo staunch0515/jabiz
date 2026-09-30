@@ -96,7 +96,15 @@ export default function EntityHistoryPage() {
     <PageContainer
       title={t('history.title', { entity: entity.data.label })}
       subTitle={entityId}
-      extra={<Link to={paths.dataset(datasetId)}>{t('history.back')}</Link>}
+      extra={
+        <Space>
+          {/* Values before and after each change (docs/design/21-audit-retention.md section 1). */}
+          {can('audit.read') && dataset.data?.entity && (
+            <Link to={paths.audit(dataset.data.entity, entityId)} data-testid="history-audit">{t('audit.open')}</Link>
+          )}
+          <Link to={paths.dataset(datasetId)}>{t('history.back')}</Link>
+        </Space>
+      }
     >
       <Row gutter={24}>
         <Col xs={24} lg={13}>

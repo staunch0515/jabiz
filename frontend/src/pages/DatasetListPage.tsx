@@ -1,4 +1,4 @@
-import { HistoryOutlined, PlusOutlined } from '@ant-design/icons'
+import { AuditOutlined, HistoryOutlined, PlusOutlined } from '@ant-design/icons'
 import { PageContainer, ProTable, type ActionType, type ProColumns } from '@ant-design/pro-components'
 import { Alert, App, Button, DatePicker, Popconfirm, Result, Space, Spin } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
+import { useAuth } from '../auth/AuthContext'
 import EntityFormDrawer from '../components/EntityFormDrawer'
 import RowActions from '../components/RowActions'
 import { actionsFor } from '../meta/actions'
@@ -26,6 +27,7 @@ import { paths } from './paths'
 export default function DatasetListPage() {
   const { t, i18n } = useTranslation()
   const { message } = App.useApp()
+  const { can } = useAuth()
   const { datasetId = '' } = useParams()
   const dataset = useDataset(datasetId)
   const entity = useEntityMeta(dataset.data?.entity)
@@ -52,6 +54,8 @@ export default function DatasetListPage() {
   const view = entity.data ? listViewOf(entity.data, dataset.data?.listView) : undefined
   const canWrite = !!dataset.data?.canWrite && !timeTravel
   const showHistory = !!dataset.data?.temporal && !!dataset.data?.allowTimeTravel
+  // Every entity, plain or temporal, has an audit trail (docs/design/21-audit-retention.md section 1.4).
+  const showAudit = can('audit.read')
 
   const columns = useMemo<ProColumns<Row>[]>(() => {
     if (!entity.data) return []
@@ -107,11 +111,16 @@ export default function DatasetListPage() {
                 <HistoryOutlined /> {t('list.history')}
               </Link>
             )}
+            {showAudit && entity.data && (
+              <Link to={paths.audit(entity.data.entity, String(row.__instance.id))} data-testid="row-audit">
+                <AuditOutlined /> {t('audit.open')}
+              </Link>
+            )}
           </Space>
         ),
       },
     ]
-  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, datasetId, message, labels, actions, timeTravel])
+  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, showAudit, datasetId, message, labels, actions, timeTravel])
 
   if (dataset.isLoading || (dataset.data && entity.isLoading)) return <Spin style={{ margin: 48 }} />
   if (!dataset.data) return <Result status="404" title={datasetId} />

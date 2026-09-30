@@ -1,6 +1,7 @@
 package com.jabiz.runtime.audit;
 
 import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.operation.OperationItem;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.storage.Rows;
@@ -28,6 +29,15 @@ import java.util.Map;
 @Component
 public class AuditService {
 
+    /** Approval requests about entry {@code :entityId} and the decisions on them (18 section 3). */
+    private static final String APPROVALS = """
+        (r.entity_type = '%s' AND r.entity_id IN (
+            SELECT q.request_id::text FROM sys_approval_request_version q WHERE q.entity_id = :entityId)
+        OR r.entity_type = '%s' AND r.entity_id IN (
+            SELECT d.decision_id FROM sys_approval_decision d
+            JOIN sys_approval_request_version q ON q.request_id = d.request_id WHERE q.entity_id = :entityId))"""
+        .formatted(ApprovalEntities.REQUEST, ApprovalEntities.DECISION);
+
     private final StorageAdapterRegistry storages;
     private final String poolRef;
     private final JsonMapper json;
@@ -40,7 +50,7 @@ public class AuditService {
     }
 
     /** One field's change as the API shows it. */
-    public record FieldChange(Object before, Object after) {}
+    public record AuditFieldChange(Object before, Object after) {}
 
     /**
      * One row of the audit trail (docs/design/21-audit-retention.md section 1).
@@ -48,7 +58,7 @@ public class AuditService {
      * @param changes field to its value before and after (secrets as {@code ***})
      */
     public record AuditRecordEntry(long recordNo, Long processSeqId, String processName, String entityType,
-        String entityId, String action, Long versionNo, Instant effectStartTime, Map<String, FieldChange> changes,
+        String entityId, String action, Long versionNo, Instant effectStartTime, Map<String, AuditFieldChange> changes,
         String actorId, Instant recordedTime, String reason) {}
 
     public record AuditRecordPage(List<AuditRecordEntry> items, long total, int offset, int limit) {}
@@ -56,10 +66,11 @@ public class AuditService {
     /**
      * Filters of the audit records, combined with AND; all optional.
      *
-     * @param field records that changed this field
+     * @param field         records that changed this field
+     * @param withApprovals with {@code entityId}: also the approval requests and decisions about that entry
      */
     public record RecordQuery(String entityType, String entityId, String actorId, Instant from, Instant to,
-        String processName, String field, int offset, int limit) {}
+        String processName, String field, boolean withApprovals, int offset, int limit) {}
 
     /** One page of audit records, newest first. */
     public Mono<AuditRecordPage> records(RecordQuery query) {
@@ -67,13 +78,19 @@ public class AuditService {
         List<String> conditions = new ArrayList<>();
         Map<String, BoundValue> params = new LinkedHashMap<>();
         conditions.add("TRUE");
+        List<String> entity = new ArrayList<>();
         if (query.entityType() != null) {
-            conditions.add("r.entity_type = :entityType");
+            entity.add("r.entity_type = :entityType");
             params.put("entityType", BoundValue.of(query.entityType()));
         }
         if (query.entityId() != null) {
-            conditions.add("r.entity_id = :entityId");
+            entity.add("r.entity_id = :entityId");
             params.put("entityId", BoundValue.of(query.entityId()));
+        }
+        if (!entity.isEmpty()) {
+            String own = "(" + String.join(" AND ", entity) + ")";
+            conditions.add(query.withApprovals() && query.entityId() != null ? "(" + own + " OR " + APPROVALS + ")"
+                : own);
         }
         if (query.actorId() != null) {
             conditions.add("r.actor_id = :actor");
@@ -110,11 +127,20 @@ public class AuditService {
             query.limit()));
     }
 
+    /** One audit record by its number; empty when there is none. */
+    public Mono<AuditRecordEntry> record(long recordNo) {
+        return storages.getEngine(poolRef).select("SELECT r.*, p.process_name FROM sys_audit_record r "
+                + "LEFT JOIN op_process p ON p.process_seq_id = r.process_seq_id WHERE r.record_no = :no",
+                Map.of("no", BoundValue.of(recordNo)))
+            .next()
+            .map(this::entry);
+    }
+
     private AuditRecordEntry entry(Map<String, Object> row) {
         Map<String, List<Object>> raw = json.readValue(Rows.string(row.get("changes")),
             new TypeReference<Map<String, List<Object>>>() {});
-        Map<String, FieldChange> changes = new LinkedHashMap<>();
-        raw.forEach((field, pair) -> changes.put(field, new FieldChange(pair.get(0), pair.get(1))));
+        Map<String, AuditFieldChange> changes = new LinkedHashMap<>();
+        raw.forEach((field, pair) -> changes.put(field, new AuditFieldChange(pair.get(0), pair.get(1))));
         return new AuditRecordEntry(Rows.longValue(row.get("record_no")), Rows.longValue(row.get("process_seq_id")),
             Rows.string(row.get("process_name")), Rows.string(row.get("entity_type")),
             Rows.string(row.get("entity_id")), Rows.string(row.get("action")), Rows.longValue(row.get("version_no")),
@@ -132,7 +158,8 @@ public class AuditService {
         pageParams.put("limit", BoundValue.of((long) query.limit()));
         Mono<Long> total = engine.select("SELECT count(*) AS total FROM op_process p WHERE " + where, params)
             .next().map(row -> Rows.longValue(row.get("total")));
-        Mono<List<Map<String, Object>>> page = engine.select("SELECT p.* FROM op_process p WHERE " + where
+        Mono<List<Map<String, Object>>> page = engine.select("SELECT p.*, (SELECT count(*) FROM sys_audit_record a "
+                + "WHERE a.process_seq_id = p.process_seq_id) AS audit_records FROM op_process p WHERE " + where
                 + " ORDER BY p.op_time DESC, p.process_seq_id DESC OFFSET :offset LIMIT :limit", pageParams)
             .collectList()
             .flatMap(rows -> withItems(engine, rows));
@@ -213,6 +240,7 @@ public class AuditService {
                 json.put("requestId", Rows.string(row.get("request_id")));
                 json.put("reason", Rows.string(row.get("reason")));
                 json.put("opTime", Rows.instant(row.get("op_time")));
+                json.put("auditRecords", Rows.longValue(row.get("audit_records")));
                 json.put("items", OperationRecorder.describe(
                     new ArrayList<>(items.getOrDefault(seq, List.of()))));
                 return json;

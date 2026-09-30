@@ -178,7 +178,8 @@ class ApprovalIT extends ApprovalItSupport {
     void aRejectionNeedsAReasonAndEndsTheRequest() {
         String channel = unique("C");
         rule(channel, 1, List.of(Map.of("permission", "it.approve")));
-        String requestId = (String) pay(preparer(), unique("P"), channel, 10, null).get("requestId");
+        String paymentId = unique("P");
+        String requestId = (String) pay(preparer(), paymentId, channel, 10, null).get("requestId");
         String approver = as("it-approver", ApprovalPermissions.DECIDE, "it.approve");
         assertThat(ruleCode(refused("APPROVAL_DECIDE", approver, Map.of("requestId", requestId, "decision",
             "REJECT"), 422))).isEqualTo("REASON_REQUIRED");
@@ -187,6 +188,26 @@ class ApprovalIT extends ApprovalItSupport {
             .satisfies(event -> assertThat(event).containsEntry("reason", "no invoice"));
         assertThat(ruleCode(refused("APPROVAL_DECIDE", as("other", ApprovalPermissions.DECIDE, "it.approve"),
             Map.of("requestId", requestId, "decision", "APPROVE"), 422))).isEqualTo("APPROVAL_NOT_PENDING");
+
+        // The audit trail of the payment shows who decided, what and why (docs/design/21-audit-retention.md 1.3).
+        String auditor = as("it-auditor", "audit.read");
+        String trail = "/api/audit/records?entityId=" + paymentId;
+        assertThat(auditItems(trail, auditor)).extracting(r -> r.get("entityType"))
+            .doesNotContain(ApprovalEntities.REQUEST, ApprovalEntities.DECISION);
+        List<Map<String, Object>> withApprovals = auditItems(trail + "&withApprovals=true", auditor);
+        assertThat(withApprovals).filteredOn(r -> ApprovalEntities.REQUEST.equals(r.get("entityType")))
+            .extracting(r -> r.get("action")).contains("INSERT", "UPDATE");
+        assertThat(withApprovals).filteredOn(r -> ApprovalEntities.DECISION.equals(r.get("entityType")))
+            .singleElement().satisfies(r -> {
+                assertThat(r).containsEntry("actorId", "it-approver").containsEntry("processName", "APPROVAL_DECIDE");
+                assertThat(String.valueOf(r.get("changes"))).contains("REJECT", "no invoice");
+            });
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> auditItems(String path, String authorization) {
+        return (List<Map<String, Object>>) get(path, authorization).expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody().get("items");
     }
 
     @Test

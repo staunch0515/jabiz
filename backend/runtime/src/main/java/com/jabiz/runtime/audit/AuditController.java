@@ -3,9 +3,11 @@ package com.jabiz.runtime.audit;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -77,6 +79,7 @@ class AuditController {
         @RequestParam(required = false) String to,
         @RequestParam(required = false) String processName,
         @RequestParam(required = false) String field,
+        @RequestParam(required = false) boolean withApprovals,
         @RequestParam(required = false) String offset,
         @RequestParam(required = false) String limit
     ) {
@@ -90,13 +93,26 @@ class AuditController {
                 blankToNull(entityId), blankToNull(actorId),
                 parse("from", from, Instant::parse, violations),
                 parse("to", to, Instant::parse, violations),
-                blankToNull(processName), blankToNull(field),
+                blankToNull(processName), blankToNull(field), withApprovals,
                 bounded("offset", offset, 0, 0, Integer.MAX_VALUE, violations),
                 bounded("limit", limit, AuditQuery.DEFAULT_LIMIT, 1, AuditQuery.MAX_LIMIT, violations));
             if (!violations.isEmpty()) {
                 return Mono.error(new ValidationException(violations));
             }
             return audit.records(query);
+        });
+    }
+
+    /** {@code GET /api/audit/records/{recordNo}}: one record of the audit trail. */
+    @GetMapping("/records/{recordNo}")
+    Mono<AuditService.AuditRecordEntry> record(@PathVariable long recordNo) {
+        return RequestContexts.current().flatMap(request -> {
+            if (!request.hasPermission(READ)) {
+                return Mono.error(new PermissionDeniedException(READ, "Reading the audit trail needs permission "
+                    + READ));
+            }
+            return audit.record(recordNo).switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
+                "Audit record " + recordNo + " not found")));
         });
     }
 

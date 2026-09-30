@@ -52,7 +52,13 @@ class AuditRecordsIT extends SecurityItSupport {
             .containsEntry("owner", pair(null, "alice"));
         assertThat(changes(records.get(0))).containsEntry("title", pair("second", null));
 
-        // By changed field; the record by its number.
+        // The record by its number; an unknown number is 404.
+        Map<String, Object> one = get("/api/audit/records/" + update.get("recordNo"), bearer("audit.read"))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(one).isEqualTo(update);
+        get("/api/audit/records/999999999", bearer("audit.read")).expectStatus().isNotFound();
+
+        // By changed field.
         assertThat(items(records("entityId=" + id + "&field=title"))).hasSize(3);
         assertThat(items(records("entityId=" + id + "&field=owner"))).extracting(r -> r.get("action"))
             .containsExactly("DELETE", "INSERT");
@@ -76,6 +82,12 @@ class AuditRecordsIT extends SecurityItSupport {
         // A new hash is a change; neither hash is shown.
         assertThat(changes(records.get(0))).containsOnlyKeys("passwordHash")
             .containsEntry("passwordHash", pair("***", "***"));
+
+        // Each operation tells how many audit records it left.
+        Map<String, Object> operations = get("/api/audit/operations?processName=SEC_USER_SET_PASSWORD&entityId="
+            + userId, bearer("audit.read")).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(items(operations)).singleElement().satisfies(operation -> assertThat(operation)
+            .containsEntry("processSeqId", records.get(0).get("processSeqId")).containsEntry("auditRecords", 1));
 
         List<Map<String, Object>> stored = query("SELECT changes FROM sys_audit_record WHERE entity_id = ?", userId);
         assertThat(stored).hasSize(2).allSatisfy(row -> assertThat(String.valueOf(row.get("changes")))

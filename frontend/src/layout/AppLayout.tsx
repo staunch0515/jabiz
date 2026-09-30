@@ -1,4 +1,5 @@
 import {
+  AuditOutlined,
   BarChartOutlined,
   CloudUploadOutlined,
   CheckSquareOutlined,
@@ -57,6 +58,8 @@ export default function AppLayout() {
     ...(hasReports ? [{ key: 'reports', name: t('nav.reports'), path: '/reports', icon: <BarChartOutlined /> }] : []),
     // Only when there is an import the user may run (docs/design/20-imports.md section 6).
     ...(hasImports ? [{ key: 'imports', name: t('nav.imports'), path: '/imports', icon: <CloudUploadOutlined /> }] : []),
+    // Only for auditors (docs/design/21-audit-retention.md section 1).
+    ...(can('audit.read') ? [{ key: 'audit', name: t('nav.audit'), path: '/audit', icon: <AuditOutlined /> }] : []),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]

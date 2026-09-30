@@ -36,6 +36,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit/records/{recordNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -749,6 +781,40 @@ export interface components {
             input?: string;
             when?: components["schemas"]["WhenEntry"];
         };
+        AuditFieldChange: {
+            after?: unknown;
+            before?: unknown;
+        };
+        AuditRecordEntry: {
+            action?: string;
+            actorId?: string;
+            changes?: {
+                [key: string]: components["schemas"]["AuditFieldChange"];
+            };
+            /** Format: date-time */
+            effectStartTime?: string;
+            entityId?: string;
+            entityType?: string;
+            processName?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            reason?: string;
+            /** Format: int64 */
+            recordNo?: number;
+            /** Format: date-time */
+            recordedTime?: string;
+            /** Format: int64 */
+            versionNo?: number;
+        };
+        AuditRecordPage: {
+            items?: components["schemas"]["AuditRecordEntry"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int32 */
+            offset?: number;
+            /** Format: int64 */
+            total?: number;
+        };
         Change: {
             /** @enum {string} */
             action?: "INSERT" | "UPDATE" | "DELETE" | "CANCEL_SCHEDULED";
@@ -1360,6 +1426,59 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    records: {
+        parameters: {
+            query?: {
+                entityType?: string;
+                entityId?: string;
+                actorId?: string;
+                from?: string;
+                to?: string;
+                processName?: string;
+                field?: string;
+                withApprovals?: boolean;
+                offset?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecordPage"];
+                };
+            };
+        };
+    };
+    record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecordEntry"];
                 };
             };
         };
