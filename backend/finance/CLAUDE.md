@@ -12,8 +12,7 @@
 
 ## 2. 边界
 
-- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/finance`，工作分支 `<线>/finance-<N>-<名>`。现在是线 1.0（`1.0/finance`）；
-  平台阶段 14 在线 1.1 上，14a–14c 合入 `1.1/platform` 后建 `1.1/finance`（从 `1.0/finance` 拉出，再合并 `1.1/platform`），F1 起在线 1.1 上开发，`1.0/finance` 冻结。
+- 分支按平台版本线（平台决策 D21、`docs/guide/version-lines.md`）：`<线>/finance`，工作分支 `<线>/finance-<N>-<名>`。现在是线 1.1（`1.1/finance`），`1.0/finance` 冻结。
 - 本分支只改 `.jabiz-app-paths` 中的路径（`tools/check-app-paths.sh`，基准为本线的平台分支），不改 `.jabiz-platform-line`。平台缺能力时，
   先在该线平台的工作分支上补（带平台自己的测试与 `app` 中的示范，不提财务），合入 `<线>/platform` 后再合并到 `<线>/finance`。计划中的平台阶段为 14a–14g（设计 §2）。
 - 包 `com.jabiz.finance`；启动类 `FinanceApp`；表前缀 `fi_`；迁移 `db/migration/V<n>__finance_<名>.sql`；SQL 模板 `queries/finance/**`，id 前缀 `finance.`；
@@ -28,7 +27,8 @@
 ## 4. 财务约定（设计 §4、§5）
 
 - 金额 `BigDecimal`；舍入只经 `calc.Money`（远离零，`HALF_UP`），只在需求规定的层级舍入。
-- 过账日期、单据日期是 `LocalDate`；记录时间来自注入的 `Clock`。报表都带 `asOf` 与 `knownAt`。
+- 过账日期、单据日期是 `LocalDate`（字段用 `f.asDate()`），账本时刻只经 `calc.BookingTime` 换算；记录时间来自注入的 `Clock`。报表都带 `asOf` 与 `knownAt`。
+- 只用英语（FD4）：消息只写 `messages_en.properties`。新权限加入 `setup.FinanceRoles`，由 `FIN_SETUP` 授予。
 - 影响总账的单据只经其过账流程写入总账（子流程 `LEDGER_POST` / `LEDGER_REVERSE`）；`ledger.post` 不授予任何角色。
   过账后不可修改，更正只能是贷项、作废（冲正）或调整分录。
 - 纯计算（税、折旧、到期日、账龄、匹配评分、1099 汇总、外币损益）写成没有 I/O 的纯 Java 类，并有单元测试与属性测试。

@@ -5,6 +5,7 @@
 | 文件 | 内容 |
 |---|---|
 | `00-development-plan.md` | 总体开发计划（已确认） |
+| `01-requirement-questions.md` | 需求中的疑问与处理（需求副本只读） |
 | `work-items.csv` | 工时记录：每人每天每个工作项一行，由人记录；行从不删除，更正用负工时的新行 |
 | `defects.csv` | 缺陷记录：发现即记录，修复后填 `date_fixed` 的新行 |
 
