@@ -3,9 +3,11 @@ package com.jabiz.runtime.audit;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,7 +23,8 @@ import java.util.function.Function;
 
 /**
  * {@code GET /api/audit/operations} (docs/design/11-ledger-events-jobs.md section 3): operations by actor, time,
- * process and entity, newest first. Needs permission {@value #READ}. Malformed filters are reported together (400).
+ * process and entity, newest first; {@code GET /api/audit/records} (docs/design/21-audit-retention.md section 1):
+ * the audit trail with values. Needs permission {@value #READ}. Malformed filters are reported together (400).
  */
 @RestController
 @RequestMapping("/api/audit")
@@ -63,6 +66,57 @@ class AuditController {
                 return Mono.error(new ValidationException(violations));
             }
             return audit.operations(query);
+        });
+    }
+
+    /** {@code GET /api/audit/records}: the audit trail with values, newest first (21 section 1). */
+    @GetMapping("/records")
+    Mono<AuditService.AuditRecordPage> records(
+        @RequestParam(required = false) String entityType,
+        @RequestParam(required = false) String entityId,
+        @RequestParam(required = false) String actorId,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to,
+        @RequestParam(required = false) String processName,
+        @RequestParam(required = false) String field,
+        @RequestParam(required = false) boolean withApprovals,
+        @RequestParam(required = false) String offset,
+        @RequestParam(required = false) String limit
+    ) {
+        return RequestContexts.current().flatMap(request -> {
+            if (!request.hasPermission(READ)) {
+                return Mono.error(new PermissionDeniedException(READ, "Reading the audit trail needs permission "
+                    + READ));
+            }
+            List<Violation> violations = new ArrayList<>();
+            AuditService.RecordQuery query = new AuditService.RecordQuery(blankToNull(entityType),
+                blankToNull(entityId), blankToNull(actorId),
+                parse("from", from, Instant::parse, violations),
+                parse("to", to, Instant::parse, violations),
+                blankToNull(processName), blankToNull(field), withApprovals,
+                bounded("offset", offset, 0, 0, Integer.MAX_VALUE, violations),
+                bounded("limit", limit, AuditQuery.DEFAULT_LIMIT, 1, AuditQuery.MAX_LIMIT, violations));
+            if (withApprovals && (query.entityType() == null || query.entityId() == null)) {
+                violations.add(new Violation("withApprovals", PlatformErrorCodes.INVALID_VALUE,
+                    "withApprovals needs entityType and entityId"));
+            }
+            if (!violations.isEmpty()) {
+                return Mono.error(new ValidationException(violations));
+            }
+            return audit.records(query);
+        });
+    }
+
+    /** {@code GET /api/audit/records/{recordNo}}: one record of the audit trail. */
+    @GetMapping("/records/{recordNo}")
+    Mono<AuditService.AuditRecordEntry> record(@PathVariable long recordNo) {
+        return RequestContexts.current().flatMap(request -> {
+            if (!request.hasPermission(READ)) {
+                return Mono.error(new PermissionDeniedException(READ, "Reading the audit trail needs permission "
+                    + READ));
+            }
+            return audit.record(recordNo).switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
+                "Audit record " + recordNo + " not found")));
         });
     }
 

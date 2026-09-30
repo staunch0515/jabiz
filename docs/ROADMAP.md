@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架（已完成）；14f 审计与保留；14g 安全增强。各子阶段开始前出计划。
+14e 导入框架（已完成）；14f 审计与保留（进行中）；14g 安全增强。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -660,3 +660,33 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 后台完成一次导入（Vitest、Playwright）。
 - [x] 现有全部检查照常通过。
 
+### 14f 审计、防篡改与保留（6–8 天）
+
+设计见 21 与决策 D27。分三个 PR：14f-1（审计记录）、14f-2（防篡改）、14f-3（保留、保全与导出）。
+
+**14f-1 要求**
+1. 迁移 V20：`sys_audit_record`（只追加）；`DatasetEntityManager`（普通实体）与 `VersionAppender`（时态实体）在同一事务内记录每次写入的前后值、操作人、时间、原因。
+2. 遮蔽：敏感字段只存 `***`（core `AuditDiff`）；值按规范形式保存与比较。
+3. 接口 `GET /api/audit/records`（按实体、操作人、时间、流程、字段；`withApprovals` 一并列出审批）、`/{recordNo}`；`/api/audit/operations` 每项增加 `auditRecords`。
+4. 后台 `/audit`、历史页与列表行的入口。
+5. 文档：21、D27、11 §3、12 §6、CLAUDE.md。
+
+**14f-1 验收标准**
+- [x] 普通与时态实体的插入、更新、删除都有前后值，更新只记变化的字段，原因带出（`AuditRecordsIT`）。
+- [x] 敏感字段只以 `***` 出现，数据库中也没有原值（`AuditRecordsIT`、`AuditDiffTest`）。
+- [x] 审计表上 UPDATE / DELETE 被拒；接口需要 `audit.read`，非法参数 400（`AuditRecordsIT`）。
+- [x] 单据的审计能列出审批人、结论与理由（`ApprovalIT`）。
+- [x] 后台看到一次修改的前后值（Vitest、Playwright）。
+- [x] 现有全部检查照常通过（场景快照不变）。
+
+**14f-2 要求**：只追加表的行摘要与 HMAC 封存链（`JABIZ_INTEGRITY_KEY`）、`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、迁移 V21、`/api/integrity/**`、页面 `/integrity`（21 §2）。
+
+**14f-2 验收标准**
+- [ ] 绕过触发器修改或删除一行、在应用之外插入一行、改动封存块，校验分别报告被改、缺失、可疑与断链。
+- [ ] 宽限期内未提交的行由下一次封存补上；非 dev 缺少密钥启动失败。
+
+**14f-3 要求**：`RetentionPolicy`、删除拦截、`SysLegalHold` 与 `LEGAL_HOLD_PLACE` / `RELEASE`（迁移 V22）、到期报告、`POST /api/exports/data`（21 §3、§4）。
+
+**14f-3 验收标准**
+- [ ] 保留期内与受保全的记录（含文件）删除被拒，解除保全后可删。
+- [ ] 导出的 ZIP 与清单一致，按权限与数据范围过滤；用导出的 CSV 重算试算表与系统一致。

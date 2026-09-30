@@ -87,7 +87,9 @@ public final class ItApprovalFixtures {
 
         @Bean
         ApprovalSubject itPaymentSubject() {
-            return ApprovalSubject.define(SUBJECT, s -> s.number("amount").text("channel"));
+            // Payments are no entity here; the tickets stand in for them in the audit trail (AuditRecordsIT).
+            return ApprovalSubject.define(SUBJECT, s -> s.entity(ItFixtures.TICKET.name).number("amount")
+                .text("channel"));
         }
 
         @Bean

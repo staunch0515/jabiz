@@ -10,4 +10,6 @@ export const paths = {
   importRun: (id: string) => `/imports/run?id=${encodeURIComponent(id)}`,
   importRuns: (id?: string) => (id ? `/imports/runs?import=${encodeURIComponent(id)}` : '/imports/runs'),
   reportArchive: (id?: string) => (id ? `/reports/archive?template=${encodeURIComponent(id)}` : '/reports/archive'),
+  audit: (entityType: string, entityId: string) =>
+    `/audit?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
 }

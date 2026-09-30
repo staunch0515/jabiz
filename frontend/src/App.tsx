@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { extension } from './extension'
 import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
+import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
 import EntityHistoryPage from './pages/EntityHistoryPage'
@@ -65,6 +66,7 @@ const router = createBrowserRouter([
           { path: '/reports', element: <ReportCatalogPage /> },
           { path: '/reports/run', element: <ReportPage /> },
           { path: '/reports/archive', element: <ReportArchivePage /> },
+          { path: '/audit', element: <AuditPage /> },
           // The application's own pages (decision D22), checked at startup not to take a platform path.
           ...(extension.routes ?? []),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },

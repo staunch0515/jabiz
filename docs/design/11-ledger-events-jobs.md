@@ -151,6 +151,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   （实体类型、主键、版本号、动作、生效时间、`changedFields`）——**只有名称与标识，没有字段值**。
 - 非法参数一次性返回全部违规（400 `INVALID_VALUE`）。所有值参数绑定，SQL 为固定文本。
 - 按实体查询只覆盖记入 `op_process_item` 的写入，即时态实体；普通实体的写入没有条目（04 §2.2）。
+- 每项的 `auditRecords` 是该操作留下的审计记录数；字段的前后值见审计记录 `GET /api/audit/records`（21 §1），它也覆盖普通实体。
 
 ## 4. 定时任务
 
