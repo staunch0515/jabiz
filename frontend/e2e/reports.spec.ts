@@ -18,6 +18,15 @@ test('a report runs from the reports page', async ({ page }) => {
   await page.getByText('Excel（.xlsx）').click()
   expect((await download).suggestedFilename()).toMatch(/^commerce\.stock_availability-\d{8}-\d{6}\.xlsx$/)
 
+  // Issued, the report is archived; the archive verifies it against the data.
+  await page.getByTestId('report-issue').click()
+  await page.getByRole('button', { name: /确\s*定/ }).click()
+  await expect(page).toHaveURL(/\/reports\/archive\?template=commerce\.stock_availability$/)
+  const verify = page.locator('[data-testid^="run-verify-"]').first()
+  await expect(verify).toBeVisible()
+  await verify.click()
+  await expect(page.locator('[data-testid^="verdict-"]').first()).toHaveText('与数据一致')
+
   // The trial balance needs its date first.
   await page.goto('/reports/run?id=jabiz.ledger.account_balances')
   await expect(page.getByTestId('report-not-run')).toBeVisible()

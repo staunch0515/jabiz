@@ -331,7 +331,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -500,6 +500,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sod/conflicts": {
         parameters: {
             query?: never;
@@ -552,6 +616,10 @@ export interface components {
             id?: unknown;
             /** Format: int64 */
             version?: number;
+        };
+        ColumnEntry: {
+            label?: string;
+            name?: string;
         };
         CommitRequest: {
             changes?: components["schemas"]["Change"][];
@@ -680,6 +748,10 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        ParameterEntry: {
+            label?: string;
+            value?: string;
+        };
         PartEvent: {
             last?: boolean;
         };
@@ -768,6 +840,17 @@ export interface components {
         RevertRequest: {
             reason?: string;
         };
+        RunDetail: {
+            columns?: components["schemas"]["ColumnEntry"][];
+            company?: string;
+            landscape?: boolean;
+            language?: string;
+            parameters?: components["schemas"]["ParameterEntry"][];
+            params?: {
+                [key: string]: unknown;
+            };
+            run?: components["schemas"]["RunSummary"];
+        };
         RunRequest: {
             /** Format: date-time */
             asOf?: string;
@@ -794,6 +877,25 @@ export interface components {
             offset?: number;
             /** Format: int64 */
             total?: number;
+        };
+        RunSummary: {
+            /** Format: date-time */
+            asOf?: string;
+            contentHash?: string;
+            issuedBy?: string;
+            /** Format: date-time */
+            issuedTime?: string;
+            /** Format: date-time */
+            knownAt?: string;
+            period?: string;
+            recomputable?: boolean;
+            /** Format: int32 */
+            rowCount?: number;
+            runId?: string;
+            supersededBy?: string;
+            templateId?: string;
+            templateVersion?: string;
+            title?: string;
         };
         Sort: {
             asc?: boolean;
@@ -841,6 +943,13 @@ export interface components {
             };
             /** Format: int64 */
             version?: number;
+        };
+        Verification: {
+            contentHash?: string;
+            currentHash?: string;
+            currentVersion?: string;
+            recomputable?: boolean;
+            verdict?: string;
         };
         WhenEntry: {
             field?: string;
@@ -1399,7 +1508,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -1668,6 +1777,100 @@ export interface operations {
                     "application/pdf": string;
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
                     "text/csv": string;
+                };
+            };
+        };
+    };
+    list_1: {
+        parameters: {
+            query?: {
+                template?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"][];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetail"];
+                };
+            };
+        };
+    };
+    export_1: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Verification"];
                 };
             };
         };

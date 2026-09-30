@@ -1,13 +1,15 @@
 import { PageContainer, ProForm, ProFormDateTimePicker, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { DownloadOutlined } from '@ant-design/icons'
-import { Alert, App, Button, Card, Dropdown, Result, Spin, Typography } from 'antd'
+import { DownloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Card, Dropdown, Popconfirm, Result, Spin, Typography } from 'antd'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { exportQuery, type ExportFormat, type ExportRequest } from '../api/reports'
+import { useAuth } from '../auth/AuthContext'
 import { renderNode } from '../components/SchemaInputs'
+import { runProcess } from '../lib/calls'
 import type { Row } from '../meta/columns'
 import { buildColumns } from '../meta/columns'
 import { formatAmount } from '../meta/format'
@@ -17,6 +19,7 @@ import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
 import { InvalidJson, inputNodes, toProcessInput, type JsonSchema } from '../meta/processForm'
 import { pointInTimeOf, reportEntity } from '../meta/reports'
 import type { Violation } from '../meta/types'
+import { paths } from './paths'
 
 const EXPORT_FORMATS: ExportFormat[] = ['xlsx', 'pdf', 'csv']
 
@@ -41,7 +44,8 @@ function instant(value: unknown): string | undefined {
  * Runs one report (docs/design/19-reports.md section 3.3): a form generated from the template's parameters, the
  * point in time when the template accepts one, and the result as a table paged, filtered and sorted by the server
  * within the template's whitelist. Amounts show negatives in parentheses, as financial reports do. The rows on screen
- * - all of them - can be exported as Excel, PDF or CSV (section 4).
+ * - all of them - can be exported as Excel, PDF or CSV (section 4); with `report.issue` the run can be issued, its
+ * contents archived to be shown again exactly (section 5).
  */
 export default function ReportPage() {
   const { t, i18n } = useTranslation()
@@ -60,6 +64,30 @@ export default function ReportPage() {
   // The filters and sort of the rows on screen: an export gives the same rows, all of them.
   const shown = useRef<Pick<ExportRequest, 'filters' | 'sorts'>>({})
   const [exporting, setExporting] = useState(false)
+
+  const [issuing, setIssuing] = useState(false)
+  const { can } = useAuth()
+  const navigate = useNavigate()
+
+  // Issues the report with the parameters and point in time of the run on screen (all rows, not only the filtered).
+  const issue = async () => {
+    if (!effective) return
+    setIssuing(true)
+    try {
+      await runProcess('REPORT_ISSUE', {
+        templateId: id,
+        params: effective.params,
+        asOf: effective.asOf,
+        knownAt: effective.knownAt,
+      })
+      message.success(t('reports.issued'))
+      navigate(paths.reportArchive(id))
+    } catch (e) {
+      message.error(e instanceof ApiError ? e.display : String(e))
+    } finally {
+      setIssuing(false)
+    }
+  }
 
   const download = async (format: ExportFormat) => {
     if (!effective) return
@@ -164,6 +192,15 @@ export default function ReportPage() {
                 {t('reports.export')}
               </Button>
             </Dropdown>,
+            ...(can('report.issue')
+              ? [
+                  <Popconfirm key="issue" title={t('reports.issueConfirm')} onConfirm={() => void issue()}>
+                    <Button type="primary" icon={<SafetyCertificateOutlined />} loading={issuing} data-testid="report-issue">
+                      {t('reports.issue')}
+                    </Button>
+                  </Popconfirm>,
+                ]
+              : []),
           ]}
           rowKey="__key"
           columns={columns}

@@ -110,14 +110,17 @@ public class ReportExporter {
                 Instant runTime = clock.instant();
                 ReportDocument document = document(templates.prepare(query), params, asOfAsked(query, params, at),
                     page, runTime, context.locale());
-                ReportLabels labels = labels(context.locale());
-                // Writing is CPU work on the whole result, and PDFBox and fastexcel block on their streams.
-                return Mono.fromCallable(() -> write(document, format, labels))
-                    .subscribeOn(Schedulers.boundedElastic())
+                return write(document, format, context.locale())
                     .map(bytes -> new Export(bytes, format, fileName(query, runTime, format), page.items().size()));
             }));
         return observations.mono(PlatformObservations.EXPORT, "export " + query.queryId(),
             KeyValues.of("template", query.queryId(), "format", format.extension()), export);
+    }
+
+    /** The document as a file, written off the event loop: it is CPU work, and the writers block on their streams. */
+    Mono<byte[]> write(ReportDocument document, Format format, Locale locale) {
+        ReportLabels labels = labels(locale);
+        return Mono.fromCallable(() -> write(document, format, labels)).subscribeOn(Schedulers.boundedElastic());
     }
 
     private byte[] write(ReportDocument document, Format format, ReportLabels labels) {
@@ -219,7 +222,11 @@ public class ReportExporter {
 
     /** {@code <template>-<run time>.<ext>}, with anything but letters, digits, dots, dashes and underscores replaced. */
     String fileName(AdvancedQueryDefinition query, Instant runTime, Format format) {
-        String id = query.queryId().replaceAll("[^A-Za-z0-9._-]", "_");
+        return fileName(query.queryId(), runTime, format);
+    }
+
+    String fileName(String templateId, Instant runTime, Format format) {
+        String id = templateId.replaceAll("[^A-Za-z0-9._-]", "_");
         return id + "-" + FILE_TIME.format(runTime.atZone(settings.format().zone())) + "." + format.extension();
     }
 }

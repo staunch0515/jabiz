@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +44,12 @@ public class SqlTemplateLoader {
     public static final String SCHEMA = "jabiz/schema/sql-template-header.schema.json";
 
     /** The templates that compiled, and the problems of those that did not. */
-    public record Loaded(List<AdvancedQueryDefinition> queries, List<CheckProblem> problems) {}
+    /**
+     * @param sources the text of each template file by its version (docs/design/19-reports.md section 2.3), which
+     *                issued reports keep
+     */
+    public record Loaded(List<AdvancedQueryDefinition> queries, List<CheckProblem> problems,
+        Map<String, String> sources) {}
 
     private final List<String> locations;
     private final PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
@@ -66,18 +72,23 @@ public class SqlTemplateLoader {
     public Loaded load() {
         List<AdvancedQueryDefinition> queries = new ArrayList<>();
         List<CheckProblem> problems = new ArrayList<>();
+        Map<String, String> sources = new HashMap<>();
         for (String location : locations) {
             for (Resource resource : resources(location)) {
                 String path = relativePath(location, resource);
                 try {
                     String content = resource.getContentAsString(StandardCharsets.UTF_8);
+                    int before = queries.size();
                     load(path, content, queries, problems);
+                    if (queries.size() > before) {
+                        sources.put(queries.getLast().version(), content);
+                    }
                 } catch (IOException e) {
                     problems.add(CheckProblem.error(CATEGORY, path, "cannot be read: " + e.getMessage()));
                 }
             }
         }
-        return new Loaded(queries, problems);
+        return new Loaded(queries, problems, Map.copyOf(sources));
     }
 
     /** Compiles one file; its problems are added to {@code problems}. */

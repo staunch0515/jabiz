@@ -120,13 +120,45 @@ report:
 
 ## 5. 存档（14d-3）
 
-- 流程 `REPORT_ISSUE`（权限 `REPORT_ISSUE` 加模板的权限）：运行模板（未给记录时点时以签发时刻为记录时点），把结果规范化，
-  用 `ContentHash`（18 §3.3）对列与行计算内容哈希，写入只追加的 `sys_report_run`（参数、时点、模板版本与全文、页眉、列、行、哈希、签发人与时间），
-  发布事件 `jabiz.report.issued`；可给出 `supersedes`，取代关系写入只追加的 `sys_report_run_supersede`。行数上限 `jabiz.reports.archive.max-rows`。
-- 重现：`GET /api/reports/runs/{id}/export?format=…` 由存档的行与页眉生成文件，同一存档每次逐字节相同；响应头 `X-Jabiz-Content-Hash`。
-- 核对：`POST /api/reports/runs/{id}/verify` 以存档的参数与时点重新执行当前模板，返回 `identical` / `differs` / `template_changed`。
-  模板读取非时态实体时只能重现存档、不能按数据重算，签发与核对的结果中注明。
-- 读取存档：权限 `REPORT_ARCHIVE_READ` 加模板的权限；`GET /api/reports/runs` 列表。后台 `/reports/archive`。
+### 5.1 签发
+
+流程 `REPORT_ISSUE`（权限 `report.issue`，步骤中再要求模板自己的全部权限）：输入 `{templateId, params, asOf, knownAt, supersedes}`，
+输出 `{runId, templateVersion, contentHash, rowCount, recomputable}`，并发布事件 `jabiz.report.issued`（`runId`、`templateId`、`contentHash`、`supersedes`）。
+
+- **时点**：未给出记录时点时以签发时刻（操作时间）为记录时点——模板声明了 `timeSlice.knownAt` 时写入该参数，否则作为请求的 `knownAt`；
+  于是以后按同一时点重跑读到的是同样的版本。实际读取的生效时点记为 `read_at`；请求了生效时点时它也记为 `as_of`，并写在页眉。
+- **内容**：整份结果（不带筛选），行数上限同导出（`jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`）。
+  值按列的类型规范化（金额为精确小数、时间为时刻、多语言文本为按键排序的映射），以 core `ContentHash`（18 §3.3）对列名与行计算内容哈希
+  （小数的尾零不影响哈希）。
+- **可重算**：模板只读时态实体时 `recomputable` 为真；读取了会被原地修改的数据时只能按存档重现，不能按数据核对。
+- **取代**：`supersedes` 给出同一模板更早的一次运行；不同模板 → 422 `REPORT_SUPERSEDE_MISMATCH`，已被取代 → 422 `REPORT_ALREADY_SUPERSEDED`，
+  不存在 → 404。一次运行至多被取代一次（主键）。
+
+### 5.2 表（迁移 V17，均只追加，D5 的触发器保护）
+
+| 表 | 内容 |
+|---|---|
+| `sys_report_run` | `run_id`（UUIDv7）、`template_id`、`template_version`、`template_source`（签发时模板文件的全文；Java 声明的模板为其版本所依据的规范描述）、`permissions`（签发时模板的权限，读取时据此检查）、`title`、`company`、`period`、`language`、`params`（运行所用参数，JSON）、`parameters`（页眉显示的参数）、`as_of`、`read_at`、`known_at`、`landscape`、`columns`（名称、标签、类型）、`rows`、`row_count`、`content_hash`、`recomputable`、`issued_by`、`issued_time`、`process_seq_id` |
+| `sys_report_run_supersede` | `run_id` → `superseded_by`、`superseded_time`、`process_seq_id` |
+
+列与行存为 **text 中的规范 JSON** 而不是 `jsonb`：`jsonb` 会重排键、改变数字的写法，而存档要保存计算哈希时的原样（小数、时刻都写成字符串，不经过浮点）。
+
+### 5.3 读取、重现与核对
+
+均需 `report.archive.read` 与该次运行签发时模板的全部权限；不可读的运行一律 404（不暴露存在与否）。
+
+| 接口 | 说明 |
+|---|---|
+| `GET /api/reports/runs?template=&limit=` | 最近的运行（默认 50，至多 200），不含行；`supersededBy` 为取代它的运行 |
+| `GET /api/reports/runs/{id}` | 一次运行：页眉（公司、期间、参数、语言）、所用参数、列 |
+| `GET /api/reports/runs/{id}/export?format=csv\|xlsx\|pdf` | 由存档的行与签发时的页眉、语言生成文件，**不重新查询**；先以存档的哈希核对存档的行；响应头 `X-Jabiz-Content-Hash`；PDF 每次逐字节相同 |
+| `POST /api/reports/runs/{id}/verify` | 当前模板版本与签发时相同时，按存档的参数与时点（`read_at`、`known_at`；`timeSlice` 模板用存档的参数）重新执行并比较哈希：`identical` / `differs`；版本不同 → `template_changed`（不重算） |
+
+### 5.4 后台
+
+- 报表运行页：有 `report.issue` 时显示"签发"（确认后按当前的参数与时点签发全部行），完成后转到该报表的存档。
+- `/reports/archive[?template=]`：已签发的运行（标题、期间、签发时间与人、行数、内容哈希、已被取代、仅存档），可"按签发原样保存"（PDF / Excel / CSV）与"核对"。
+  报表目录页在有 `report.archive.read` 时链接到这里。
 
 ## 6. 测试
 
@@ -136,3 +168,7 @@ report:
 - 前端：报表列表与运行页（Vitest）、运行报表（Playwright）。
 - 导出（14d-2）：core `CsvReportWriterTest`、`ReportFormatTest`；runtime `XlsxReportWriterTest`、`PdfReportWriterTest`（读回、页眉页脚、列宽、确定性、字体）；
   `ReportExportIT`（三种格式读回、Excel 单元格之和、同一次运行的 PDF 字节相同、记录时点、超限 422、权限与格式）；前端 `ReportPage.test.tsx`、Playwright 下载。
+- 存档（14d-3）：runtime `ArchivedValuesTest`（存入读回值与哈希不变）；`ReportArchiveIT`（签发后继续过账，重现的 PDF 与 CSV 逐字节相同、核对 `identical`；
+  模板版本不同 `template_changed`；非时态数据被原地修改 `differs`；取代一次、同模板、不存在；读取与签发的权限；只追加）；前端 `ReportPage.test.tsx`（签发）、
+  `ReportArchivePage.test.tsx`、Playwright（签发 → 存档 → 核对）。
+

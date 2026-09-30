@@ -20,13 +20,27 @@ export async function exportQuery(queryId: string, format: ExportFormat, body: E
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  await save(response, `${queryId}.${format}`)
+}
+
+/**
+ * Saves an issued report as it was issued (GET /api/reports/runs/{id}/export, 19 section 5): made from the archive,
+ * never from the current data.
+ */
+export async function exportRun(runId: string, format: ExportFormat): Promise<void> {
+  const response = await sessionFetch(`/api/reports/runs/${encodeURIComponent(runId)}/export?format=${format}`)
+  await save(response, `${runId}.${format}`)
+}
+
+/** Hands a file answer to the browser under the name the server gives it. */
+async function save(response: Response, fallbackName: string): Promise<void> {
   if (!response.ok) throw await toApiError(response)
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   try {
     const link = document.createElement('a')
     link.href = url
-    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${queryId}.${format}`
+    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? fallbackName
     link.rel = 'noopener'
     link.click()
   } finally {
