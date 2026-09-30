@@ -95,6 +95,7 @@ val coverageGatedClasses = listOf(
     // Phase 14f
     "com.jabiz.audit.*",
     "com.jabiz.integrity.*",
+    "com.jabiz.retention.*",
 )
 
 dependencies {

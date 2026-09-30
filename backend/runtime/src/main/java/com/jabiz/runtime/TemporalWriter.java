@@ -197,6 +197,7 @@ final class TemporalWriter {
                 VersionPlanner.Write write = VersionPlanner.Write.delete(base, w.effective(),
                     Set.copyOf(def.changeableFields()));
                 return rules.ensureNotReferenced(def, current)
+                    .then(rules.ensureDeletable(w.engine(), def, current))
                     .then(Mono.defer(() -> append(w, id, timeline, write, false)))
                     .then();
             });

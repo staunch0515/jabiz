@@ -117,4 +117,39 @@ class FileSweepIT extends FileItSupport {
 
         assertThat(hasRow(orphan)).isFalse();
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void orphansUnderALegalHoldAreKeptAndReported() {
+        String held = uploadContract();
+        String free = uploadContract();
+        String keeper = bearer("it-counsel", "legal.hold.write");
+        Map<String, Object> placed = post("/api/processes/LEGAL_HOLD_PLACE/latest", keeper, Map.of("name", "litigation",
+            "reason", "court order", "entityType", "SysFile", "ids", List.of(held)))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        String holdId = (String) ((Map<String, Object>) placed.get("output")).get("holdId");
+
+        // Minutes past the other tests' runs: a job runs once per scheduled time.
+        clock.advance(Duration.ofHours(25).plusMinutes(7));
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(hasRow(held)).isTrue();
+        assertThat(hasObjects(held)).isTrue();
+        assertThat(hasRow(free)).isFalse();
+        // The sweep says what it kept.
+        assertThat(query("SELECT r.output::text AS output FROM op_process_result r JOIN op_process p"
+            + " ON p.process_seq_id = r.process_seq_id WHERE p.process_name = 'FILE_PURGE_ORPHANS'"
+            + " ORDER BY p.process_seq_id DESC LIMIT 1").getFirst().get("output").toString()).contains(held);
+
+        // A single deletion is refused outright.
+        post("/api/processes/FILE_DELETE/latest", bearer("it-deleter", "file.delete"),
+            Map.of("fileId", held)).expectStatus().isEqualTo(422);
+
+        // Tokens are short-lived: a new one after the day that passed.
+        post("/api/processes/LEGAL_HOLD_RELEASE/latest", bearer("it-counsel", "legal.hold.write"),
+            Map.of("holdId", holdId, "reason", "settled")).expectStatus().isOk();
+        clock.advance(Duration.ofHours(1));
+        releaseTheLock();
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(hasRow(held)).isFalse();
+    }
 }

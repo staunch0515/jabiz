@@ -80,6 +80,12 @@ public final class PlatformErrorCodes {
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */
     public static final String REPORT_ALREADY_SUPERSEDED = "REPORT_ALREADY_SUPERSEDED";
+    /** The entry is within its retention period (docs/design/21-audit-retention.md section 3). */
+    public static final String RETENTION_ACTIVE = "RETENTION_ACTIVE";
+    /** The entry is under a legal hold (21 section 3.3). */
+    public static final String LEGAL_HOLD = "LEGAL_HOLD";
+    /** The hold has been released already (21 section 3.3). */
+    public static final String LEGAL_HOLD_NOT_ACTIVE = "LEGAL_HOLD_NOT_ACTIVE";
     public static final String APPROVAL_NOT_PENDING = "APPROVAL_NOT_PENDING";
     public static final String APPROVAL_OWN_REQUEST = "APPROVAL_OWN_REQUEST";
     public static final String APPROVAL_ALREADY_DECIDED = "APPROVAL_ALREADY_DECIDED";
@@ -133,7 +139,7 @@ public final class PlatformErrorCodes {
         LEDGER_SOURCE_NOT_FOUND, LEDGER_PARENT_NOT_SUMMARY, LEDGER_ACCOUNT_CYCLE, LEDGER_SUMMARY_HAS_ENTRIES,
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, REPORT_SUPERSEDE_MISMATCH,
-        REPORT_ALREADY_SUPERSEDED,
+        REPORT_ALREADY_SUPERSEDED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, SOD_CONFLICT,
         IDEMPOTENCY_KEY_REUSED,
