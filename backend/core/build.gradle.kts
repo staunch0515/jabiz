@@ -63,6 +63,7 @@ val coverageGatedClasses = listOf(
     "com.jabiz.ledger.PostingLine",
     "com.jabiz.ledger.Direction",
     "com.jabiz.ledger.LedgerDimension",
+    "com.jabiz.ledger.ForeignAmount",
     "com.jabiz.event.EventSubscription",
     "com.jabiz.event.DomainEvent",
     "com.jabiz.job.JobDefinition",

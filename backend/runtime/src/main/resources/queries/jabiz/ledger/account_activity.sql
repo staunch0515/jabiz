@@ -20,6 +20,9 @@ results:
   sourceId:       { from: LedgerTransaction.sourceId }
   lineNo:         { from: LedgerEntry.lineNo }
   memo:           { from: LedgerEntry.memo }
+  currency:       { from: LedgerEntry.currency }
+  transactionAmount: { from: LedgerEntry.transactionAmount }
+  exchangeRate:   { from: LedgerEntry.exchangeRate }
   dimension1:     { from: LedgerEntry.dimension1 }
   dimension2:     { from: LedgerEntry.dimension2 }
   dimension3:     { from: LedgerEntry.dimension3 }
@@ -49,6 +52,9 @@ entries AS (
            t.{{LedgerTransaction.sourceId}} AS src_key,
            e.{{LedgerEntry.lineNo}} AS line_number,
            e.{{LedgerEntry.memo}} AS memo,
+           e.{{LedgerEntry.currency}} AS entry_currency,
+           e.{{LedgerEntry.transactionAmount}} AS entry_foreign,
+           e.{{LedgerEntry.exchangeRate}} AS entry_rate,
            e.{{LedgerEntry.dimension1}} AS dim_1,
            e.{{LedgerEntry.dimension2}} AS dim_2,
            e.{{LedgerEntry.dimension3}} AS dim_3,
@@ -73,18 +79,20 @@ lines AS (
 )
 SELECT 0 AS seq, 'OPENING' AS rowKind, CAST(:from AS timestamptz) AS bookingTime, NULL AS transactionId,
        NULL AS description, NULL AS reference, NULL AS sourceEntity, NULL AS sourceId, NULL AS lineNo, NULL AS memo,
+       NULL AS currency, NULL AS transactionAmount, NULL AS exchangeRate,
        NULL AS dimension1, NULL AS dimension2, NULL AS dimension3, NULL AS dimension4, NULL AS debit, NULL AS credit,
        opening.balance AS runningBalance
 FROM opening
 UNION ALL
 SELECT lines.position, 'ENTRY', lines.booked_at, lines.tx_key, lines.description, lines.reference,
-       lines.src_entity, lines.src_key, lines.line_number, lines.memo, lines.dim_1, lines.dim_2,
+       lines.src_entity, lines.src_key, lines.line_number, lines.memo,
+       lines.entry_currency, lines.entry_foreign, lines.entry_rate, lines.dim_1, lines.dim_2,
        lines.dim_3, lines.dim_4, lines.debit, lines.credit,
        opening.balance + SUM(lines.debit - lines.credit) OVER (ORDER BY lines.position)
 FROM lines CROSS JOIN opening
 UNION ALL
 SELECT (SELECT COUNT(*) FROM lines) + 1, 'CLOSING', CAST(:asOf AS timestamptz), NULL, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, NULL, NULL, SUM(lines.debit), SUM(lines.credit),
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, SUM(lines.debit), SUM(lines.credit),
        opening.balance + COALESCE(SUM(lines.debit - lines.credit), 0)
 FROM opening LEFT JOIN lines ON true
 GROUP BY opening.balance

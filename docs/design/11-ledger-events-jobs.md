@@ -11,7 +11,7 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
 |---|---|---|---|
 | `LedgerAccount` | `ledger_account_version` | `accountCode`（唯一、不可变）、`accountName`、`accountType`（`ASSET` `LIABILITY` `EQUITY` `REVENUE` `EXPENSE`，不可变）、`enabled`、`parentId`（上级科目）、`summary`（汇总科目，空 = 可过账）（1.4）；可预定 | `ledger.account.read` / `ledger.account.write` |
 | `LedgerTransaction` | `ledger_transaction_version` | `bookingTime`（业务时间）、`description`、`reference`、`sourceEntity` / `sourceId`（来源单据，1.6）、`reversesTransactionId`（→ `LedgerTransaction`，唯一：一笔交易至多被冲正一次，D6）；全部字段不可变；发布变更事件 | `ledger.read` / `ledger.post`，**`processOnlyWrites`** |
-| `LedgerEntry` | `ledger_entry_version` | `transactionId`、`accountId`、`lineNo`、`direction`（`DEBIT` / `CREDIT`）、`amount`（`Monetary`，正数）、`memo`、`dimension1`–`dimension4`（1.5）；全部字段不可变 | 同上，**`processOnlyWrites`** |
+| `LedgerEntry` | `ledger_entry_version` | `transactionId`、`accountId`、`lineNo`、`direction`（`DEBIT` / `CREDIT`）、`amount`（`Monetary`，正数，记账本位币）、`currency` / `transactionAmount` / `exchangeRate`（外币分录，1.8）、`memo`、`dimension1`–`dimension4`（1.5）；全部字段不可变 | 同上，**`processOnlyWrites`** |
 
 - 记账本位币：`Monetary` 在字段上声明币种与小数位，因此账本的金额按配置 `jabiz.ledger.currency`（默认 `JPY`）、`jabiz.ledger.scale`（默认 0，至多 4）构建；列为 `numeric(19,4)`。多币种不在本阶段。
 - 交易与分录只经账本流程写入：数据视图 API 的 `commit` 与通用实体流程一律拒绝（422 `PROCESS_ONLY_DATASET`），
@@ -22,8 +22,8 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
 | 流程 | 权限 | 作用 |
 |---|---|---|
 | `LEDGER_ACCOUNT_OPEN` | `ledger.account.write` | 开立科目（科目也可经其数据视图维护） |
-| `LEDGER_POST` | `ledger.post` | 过账：`{bookingTime?, description, reference?, sourceEntity?, sourceId?, entries: [{accountCode, direction, amount, memo?, dimensions?}]}` |
-| `LEDGER_REVERSE` | `ledger.reverse` | 冲正：`{transactionId, reason, bookingTime?}`，生成借贷互换的新交易（行备注、维度、来源单据照原样），`reversesTransactionId` 指向原交易 |
+| `LEDGER_POST` | `ledger.post` | 过账：`{bookingTime?, description, reference?, sourceEntity?, sourceId?, entries: [{accountCode, direction, amount?, memo?, dimensions?, currency?, transactionAmount?, exchangeRate?}]}` |
+| `LEDGER_REVERSE` | `ledger.reverse` | 冲正：`{transactionId, reason, bookingTime?}`，生成借贷互换的新交易（行备注、维度、来源单据、外币与汇率照原样），`reversesTransactionId` 指向原交易 |
 
 - 写入前校验（core `com.jabiz.ledger.LedgerPosting`，纯逻辑）：至少 2 条、至多 200 条分录；金额为正（`LEDGER_AMOUNT_NOT_POSITIVE`）且不超过账本小数位
   （`LEDGER_AMOUNT_SCALE`）；借贷相等（`LEDGER_UNBALANCED`）；科目存在（`LEDGER_ACCOUNT_NOT_FOUND`）且启用（`LEDGER_ACCOUNT_DISABLED`）。
@@ -76,7 +76,25 @@ SQL 模板（runtime 资源 `queries/jabiz/ledger/`，权限 `ledger.read`；金
 
 - "按当时所知"（`knownAt`）：交易与分录只追加、从不修改，因此以交易的记录时间（`createdTime`）筛选即可重现当时的余额；更正是冲正交易，有自己的记录时间。
 - 借贷平衡的账本上**全部可过账科目的余额之和为零**（汇总科目重复其下级，不计入）。core 的 `LedgerBalances` 是同一口径的内存模型（属性测试用）。
+| `jabiz.ledger.currency_balances` | `asOf`、`knownAt?` | 按科目与交易币种（本位币分录为空串）的交易币种余额 `transactionBalance` 与本位币余额 `balance`：重估所需的外币未结金额 |
+
+`account_activity` 的分录行另有 `currency`、`transactionAmount`、`exchangeRate`。
+
 - `ledger.post` 可以不授予任何角色：业务流程以子流程过账不检查调用方的权限（06 §5），于是控制科目只能由其子账的流程过账。
+
+### 1.8 多币种（14c-2，决策 D24 第 5 条）
+
+- `amount` 始终是**记账本位币**金额（`jabiz.ledger.currency` / `jabiz.ledger.scale`）。外币分录另记 `currency`（ISO 4217，不能是本位币）、
+  `transactionAmount`（正数，不超过该币种的标准小数位，如 JPY 0、USD 2、KWD 3）与 `exchangeRate`（每单位外币折合的本位币，正数，至多 10 位小数）。
+  三者全空即本位币分录（含旧数据）。
+- 本位币金额 = `transactionAmount × exchangeRate`，按账本小数位**四舍五入（远离零）**：输入省略 `amount` 时由平台算出；给出时必须与之相等
+  （`LEDGER_FX_AMOUNT_MISMATCH`，附应有的金额）。分行换算的尾差、结算的汇兑损益由调用方另加本位币行（如收款：借银行 EUR@收款汇率、
+  贷应收 EUR@原汇率、差额记汇兑损益）。
+- 平衡：**每个外币**的借贷各自相等（`LEDGER_UNBALANCED_IN_CURRENCY`，附币种与差额），本位币合计借贷相等（`LEDGER_UNBALANCED`，附差额）。
+  数据库的提交时触发器同样检查每个外币（SQLSTATE `JZ002`）。
+- 其他拒绝：未知或等于本位币的币种（`LEDGER_CURRENCY_INVALID`；币种写成本位币时按本位币分录处理）、缺交易金额或汇率（`REQUIRED`）、
+  汇率非正或超过 10 位小数（`LEDGER_RATE_INVALID`）。
+- 冲正照原样复制外币与汇率：原交易与冲正在每个币种上合计为零。汇率的来源（汇率表、取价）属于应用（如 finance）。
 
 ## 2. 实体变更事件与 Outbox
 

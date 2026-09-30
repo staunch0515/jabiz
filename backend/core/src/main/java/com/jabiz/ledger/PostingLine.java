@@ -11,9 +11,11 @@ import java.util.Objects;
  * @param amount      positive amount in the ledger currency
  * @param memo        optional note of the line
  * @param dimensions  values of analysis dimensions by name ({@link LedgerDimension}); empty for none
+ * @param foreign     the transaction-currency amount and rate of an entry in a foreign currency; null for an entry in
+ *                    the ledger currency. {@code amount} is then its converted value
  */
 public record PostingLine(String accountCode, Direction direction, BigDecimal amount, String memo,
-    Map<String, String> dimensions) {
+    Map<String, String> dimensions, ForeignAmount foreign) {
 
     /** Longest memo of a line. */
     public static final int MAX_MEMO = 500;
@@ -26,11 +28,16 @@ public record PostingLine(String accountCode, Direction direction, BigDecimal am
     }
 
     public PostingLine(String accountCode, Direction direction, BigDecimal amount) {
-        this(accountCode, direction, amount, null, Map.of());
+        this(accountCode, direction, amount, null, Map.of(), null);
     }
 
-    /** The same amount on the other side of the same account, with the same memo and dimensions. */
+    public PostingLine(String accountCode, Direction direction, BigDecimal amount, String memo,
+        Map<String, String> dimensions) {
+        this(accountCode, direction, amount, memo, dimensions, null);
+    }
+
+    /** The same amounts on the other side of the same account, with the same memo, dimensions and rate. */
     public PostingLine reversed() {
-        return new PostingLine(accountCode, direction.opposite(), amount, memo, dimensions);
+        return new PostingLine(accountCode, direction.opposite(), amount, memo, dimensions, foreign);
     }
 }
