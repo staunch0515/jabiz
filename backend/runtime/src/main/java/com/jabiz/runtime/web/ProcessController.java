@@ -12,6 +12,7 @@ import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
+import com.jabiz.runtime.sod.SodGuard;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,8 @@ import java.util.Map;
  * Process API (docs/design/06-process.md section 8): {@code POST /api/processes/{name}/{version|latest}} runs a
  * registered process with the request body as its input. The body is converted to the input record and checked with
  * Bean Validation (400 with all violations); the caller needs every permission the process declares (403). The
- * response carries the output and the operation's {@code processSeqId}.
+ * response carries the output and the operation's {@code processSeqId}. An actor who holds both groups of a
+ * segregation-of-duties rule cannot run a process that needs either ({@link SodGuard}, 403 {@code SOD_CONFLICT}).
  *
  * <p>With an {@code Idempotency-Key} header, a repeated request of the same actor returns the first result without
  * running again, flagged by the response header {@code Idempotency-Replayed: true} (decision D4).
@@ -48,10 +50,12 @@ class ProcessController {
     private final ProcessInputs inputs;
     private final boolean development;
     private final SensitiveDataMasker masker;
+    private final SodGuard sod;
 
     ProcessController(ProcessRegistry registry, ProcessExecutor executor, ProcessInputs inputs,
-        Environment environment, SensitiveDataMasker masker) {
+        Environment environment, SensitiveDataMasker masker, SodGuard sod) {
         this.masker = masker;
+        this.sod = sod;
         this.registry = registry;
         this.executor = executor;
         this.inputs = inputs;
@@ -68,7 +72,9 @@ class ProcessController {
         return RequestContexts.current().flatMap(context -> {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
             requirePermissions(definition, context, development);
-            return run(definition, body == null ? Map.of() : body, new ExecutionOptions(idempotencyKey))
+            return sod.check(context, definition.permissions())
+                .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
+                    new ExecutionOptions(idempotencyKey))))
                 .map(result -> {
                     ResponseEntity.BodyBuilder response = ResponseEntity.ok();
                     if (result.replayed()) {

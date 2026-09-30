@@ -1,0 +1,76 @@
+{
+  "scenario" : "Supplier certification approval",
+  "asOf" : "2026-06-01T03:00:00Z",
+  "entities" : {
+    "SupplierCertification" : [ {
+      "certificationId" : "#uuid:1",
+      "supplierId" : "#uuid:2",
+      "title" : {
+        "en" : "Organic certification"
+      },
+      "body" : {
+        "en" : "Issued by the **Shizuoka** certification body."
+      },
+      "status" : "APPROVED",
+      "reviewComment" : null,
+      "versionNo" : 3,
+      "effectStartTime" : "2026-06-01T03:00:00Z",
+      "createdTime" : "2026-06-01T03:00:00Z",
+      "processSeqId" : "#op:3"
+    } ],
+    "SysApprovalRule" : [ {
+      "ruleId" : "#uuid:3",
+      "ruleCode" : "CERT-BODY",
+      "subject" : "commerce.certification",
+      "condition" : "{\"fact\":\"hasBody\",\"op\":\"eq\",\"value\":true}",
+      "levels" : "[{\"permission\":\"commerce.certification.review\"}]",
+      "priority" : "10",
+      "enabled" : true,
+      "description" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T01:00:00Z",
+      "createdTime" : "2026-06-01T01:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "SysSodRule" : [ {
+      "ruleId" : "#uuid:4",
+      "ruleCode" : "CERT-SUBMIT-REVIEW",
+      "leftPermissions" : "commerce.certification.submit",
+      "rightPermissions" : "commerce.certification.review",
+      "enabled" : true,
+      "description" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T03:00:00Z",
+      "createdTime" : "2026-06-01T03:00:00Z",
+      "processSeqId" : "#op:4"
+    } ],
+    "SysApprovalRequest" : [ {
+      "requestId" : "#uuid:5",
+      "subject" : "commerce.certification",
+      "entityId" : "#uuid:1",
+      "status" : "APPROVED",
+      "preparerId" : "buyer",
+      "ruleId" : "#uuid:3",
+      "ruleVersionNo" : "1",
+      "contentHash" : "f2023aa727d9557e35624f9aa15e2a28dd8e293df69bcd9ae633cb575519af98",
+      "levels" : "[{\"permission\":\"commerce.certification.review\"}]",
+      "currentLevel" : "1",
+      "facts" : "{\"supplierId\":\"019e80b1-da80-7000-8000-000000000001\",\"languages\":1,\"hasBody\":true}",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-06-01T03:00:00Z",
+      "createdTime" : "2026-06-01T03:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "ApprovalDecision" : [ {
+      "decisionId" : "#uuid:6",
+      "requestId" : "#uuid:5",
+      "levelNo" : "1",
+      "approverId" : "reviewer",
+      "decision" : "APPROVE",
+      "reason" : "Certificate checked.",
+      "decidedTime" : "2026-06-01T03:00:00Z",
+      "processSeqId" : "#op:2",
+      "version" : 1
+    } ]
+  }
+}
