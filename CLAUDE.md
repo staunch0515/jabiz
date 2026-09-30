@@ -50,6 +50,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批规则、限额、职责分离规则只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
+- **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
+  邮件只经待办的通知（`jabiz.mail.enabled`，缺省关闭），不在流程中直接发邮件。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝。错误码可多语言（见设计文档）。

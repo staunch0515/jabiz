@@ -48,7 +48,7 @@ export default defineExtension({
 })
 ```
 
-- 路由是绝对路径，不能用 `/`、`/login`、`/data…`、`/processes…`；写错时应用启动即报告全部问题。
+- 路由是绝对路径，不能用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；写错时应用启动即报告全部问题。
 - `permission` 只决定菜单项是否显示；页面的每个请求都由服务端检查。
 - 文案在命名空间 `app`：页面里 `const { t } = useTranslation(EXTENSION_NAMESPACE)`。
 
@@ -65,7 +65,8 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
 
 - 读数据：SQL 模板用 `runQuery`，数据视图用 `api.POST('/api/datasets/{id}/query', …)`，元数据用 `useEntityMeta` 等 hooks。
 - 写数据：只经流程（`runProcess`）或数据视图接口；失败时 `ApiError` 带服务端的全部违规（`display`、`forField`）。
-- 通用组件：`EntityFormDrawer`、`ReferenceSelect`、`FieldErrors`、`FilePreview`、`MarkdownView`。
+- 通用组件：`EntityFormDrawer`、`ReferenceSelect`、`FieldErrors`、`FilePreview`、`MarkdownView`、`ApprovalPanel`（批准 / 驳回一个审批请求）；
+  我的待办用 `useMyTasks()`（18 §5.3）。
 - 不要 import `frontend/src/...`（lint 会拒绝），不要自己存令牌，不要访问后端以外的地址。
 
 ## 4. 测试

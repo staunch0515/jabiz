@@ -2,6 +2,7 @@ package com.jabiz.runtime.security;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.runtime.dictionary.LabelsKindSupport;
 import com.jabiz.security.LoginOutcome;
@@ -45,10 +46,13 @@ public class SecurityEntities {
         eb.field("tenantId", f -> f.physicalColumn("tenant_id").asText(100));
         eb.field("enabled", f -> f.physicalColumn("enabled").required(true).asBool());
         eb.field("passwordHash", f -> f.physicalColumn("password_hash").asText(100).sensitive());
+        // Where notifications go (docs/design/18-numbering-approvals-tasks.md section 5.4); optional.
+        eb.field("email", f -> f.physicalColumn("email").asText(320)
+            .apply(Rules.pattern("INVALID_VALUE", "[^@ ]+@[^@ ]+[.][^@ ]+")));
         eb.unique("uk_sec_user_name", "userName");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("userName", "displayName", "tenantId", "enabled")
+            .columns("userName", "displayName", "email", "tenantId", "enabled")
             .filters("userName", "tenantId", "enabled")
             .sorts("userName")
             .defaultSort("userName", true));

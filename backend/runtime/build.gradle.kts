@@ -15,6 +15,8 @@ dependencies {
     // Business modules annotate process inputs with Bean Validation constraints (docs/design/06-process.md section 8).
     api("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Notifications of tasks by e-mail (docs/design/18-numbering-approvals-tasks.md section 5.4); off by default.
+    implementation("org.springframework.boot:spring-boot-starter-mail")
     // Authentication (docs/design/10-security.md): Spring Security for WebFlux, JWT access tokens, BCrypt.
     api("org.springframework.boot:spring-boot-starter-security")
     implementation("com.nimbusds:nimbus-jose-jwt:10.10")

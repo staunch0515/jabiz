@@ -21,6 +21,8 @@ dependencies {
     testImplementation("net.javacrumbs.shedlock:shedlock-provider-r2dbc:7.10.1")
     // Random transaction sequences for the ledger's balance invariant against the database (ROADMAP phase 9).
     testImplementation("net.jqwik:jqwik:1.9.3")
+    // An SMTP server in the tests of e-mail notifications (docs/design/18-numbering-approvals-tasks.md section 5.4).
+    testImplementation("com.icegreen:greenmail-junit5:2.1.3")
     // Timers of the platform's observations (docs/design/13-observability-ops.md).
     testImplementation("io.micrometer:micrometer-core")
 }

@@ -116,6 +116,7 @@ frontend/
 | `/data` | 数据视图目录（`/api/meta/datasets`）：不配菜单也能进入任何可读视图 |
 | `/data/:datasetId` | 通用列表：远程分页、筛选、排序；时态实体可选"时间点"（`asOf`）与"按当时所知"（`knownAt`），此时只读 |
 | `/data/:datasetId/:id/history` | 历史：版本时间线（动作、生效 / 记录时间、操作人、操作、原因、改动字段的前后值、预定标记）；任意时间点回看并与当前对比；操作详情（`operation.read`）；撤销（`temporal.revert`，填原因） |
+| `/tasks` | 我的待办（18 §5.3）：审批待办就地批准或驳回（`ApprovalPanel`），其他待办链接到其页面；页头显示开放待办数 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录；语言切换记在 `localStorage`（仅本机偏好）。
@@ -164,7 +165,7 @@ frontend/
 | 项 | 规定 |
 |---|---|
 | 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 antd） |
-| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`；不能是 index 路由（用 `home`） |
+| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后与未知路径的落点；缺省 `/data` |

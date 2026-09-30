@@ -34,7 +34,8 @@ import java.util.UUID;
  * </ul>
  * Approving the last level approves the request and publishes {@value #APPROVED_EVENT}; a rejection rejects it and
  * publishes {@value #REJECTED_EVENT}. The application subscribes to them to continue (or stop) its own process,
- * which calls {@link RequireApproval} again: the approval counts only while the content hashes the same.
+ * which calls {@link RequireApproval} again: the approval counts only while the content hashes the same. The request's
+ * task is closed and, while levels remain, the next level's opened ({@link ApprovalTasks}).
  */
 @Configuration
 public class ApprovalProcesses {
@@ -66,6 +67,7 @@ public class ApprovalProcesses {
     private static final String LIMITS = "limits";
     private static final String OUTPUT = "output";
     private static final String DECIDED = "decided";
+    private static final String PASSED = "passed";
 
     public static ProcessDefinition<DecideInput, DecideOutput, ProcessContext> decide() {
         return ProcessDefinition.define(DECIDE, 1, DecideInput.class, DecideOutput.class, ProcessContext.class,
@@ -90,6 +92,7 @@ public class ApprovalProcesses {
                         new QueryPredicate.Eq("subject", ctx.get(REQUEST, EntityInstance.class).get("subject")))))
                         .limit(1).build(), LIMITS))
                 .compute("Decide", (metadata, ctx) -> decide(ctx))
+                .step("Pass the task on", ApprovalTasks.passOn(PASSED))
                 .step("Announce the approval", PublishEvent.when(ctx -> isDecided(ctx, ApprovalEntities.APPROVED),
                     APPROVED_EVENT, ctx -> ctx.get(DECIDED)))
                 .step("Announce the rejection", PublishEvent.when(ctx -> isDecided(ctx, ApprovalEntities.REJECTED),
@@ -182,6 +185,8 @@ public class ApprovalProcesses {
                 request.get("preparerId"), request.get("contentHash"), status, actor, reason));
         }
         ctx.put(OUTPUT, new DecideOutput(requestId, status, next));
+        ctx.put(PASSED, new ApprovalTasks.Passed(requestId, request.get("subject"), request.get("entityId"), next,
+            status.equals(ApprovalEntities.PENDING) ? String.valueOf(levels.get(next - 1).get("permission")) : null));
     }
 
     @Bean

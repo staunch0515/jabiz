@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
+import type { components } from '../api/schema'
 import type { DatasetEntry, DictItem, EntityMeta, Me, MenuItem, ProcessEntry } from './types'
 
 /**
@@ -26,6 +27,24 @@ export function useMenus() {
     queryKey: ['auth', 'menus', lang],
     queryFn: () => unwrap(api.GET('/api/auth/menus')) as Promise<MenuItem[]>,
     staleTime: 60_000,
+  })
+}
+
+/** An open task of the signed-in user (GET /api/tasks/mine). */
+export type MyTask = components['schemas']['Task']
+
+/**
+ * The open tasks of the signed-in user, their titles in the current language (docs/design/18-numbering-approvals-tasks.md
+ * section 5.3). Asked again every minute, so the count in the header follows new work.
+ */
+export function useMyTasks() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['tasks', 'mine', lang],
+    queryFn: () => unwrap(api.GET('/api/tasks/mine', { params: { query: { limit: 200 } } })) as Promise<
+      components['schemas']['MyTasks']
+    >,
+    refetchInterval: 60_000,
   })
 }
 

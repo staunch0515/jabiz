@@ -1,7 +1,6 @@
 # 18 编号、审批、职责分离、任务与通知
 
-业务应用常用的四项通用能力（ROADMAP 阶段 14b，决策 D23）。本文件随子阶段逐步补全：第 2 节已实施（14b-1），第 3、4 节已实施（14b-2）；
-第 5 节（14b-3）是已确认的计划，实施时细化。
+业务应用常用的四项通用能力（ROADMAP 阶段 14b，决策 D23）：第 2 节（14b-1）、第 3、4 节（14b-2）与第 5 节（14b-3）均已实施。
 
 ## 1. 总览
 
@@ -214,8 +213,55 @@ core `ApprovalConditionTest`、`ApprovalEvaluationTest`、`ContentHashTest`（�
 runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与评估记录、绑定内容、层级/权限/限额/准备人、驳回、按业务时间、并发判断、只追加、影响预览）、
 `SodIT`（两条写入途径、`*`、运行时兜底、冲突报告）、场景 `certification_approval`（场景步骤可用 `actor` 指定另一个操作人，07 §3）。
 
-## 5. 任务与通知（14b-3，计划）
+## 5. 任务与通知（14b-3）
 
-- 待办 `SysTask`（时态实体）：类型、标题（文案键与参数）、指派对象（用户或权限）、关联实体、链接、状态、截止时间；步骤 `CreateTask` / `CloseTasks`；审批请求自动建待办。
-- `GET /api/tasks/mine`；平台页面 `/tasks`，页头显示待办数；`ApprovalPanel` 经 `@jabiz/admin` 导出。
-- 邮件：`SecUser.email`（可选）；任务事件的消费流程记录通知（只追加）并在提交后发送，失败重试；`jabiz.mail.enabled` 缺省关闭；测试用 GreenMail。
+### 5.1 待办
+
+`SysTask`（时态平台实体，数据视图只经流程写入，读权限 `task.read`）：类型、标题（文案键 + 参数，按读者的语言显示）、指派对象（**一个用户或一个权限**，二者择一）、
+关联实体与标识、链接（后台中的路径）、状态（`OPEN` / `DONE` / `CANCELLED`）、截止时间、来源键、关闭人。
+
+```java
+.step("Ask for the invoice", CreateTask.of(ctx -> TaskSpec.forUser("fin.invoice", "task.invoice", Map.of("order", no), owner)
+    .about("Order", id).link("/orders/" + id).due(dueTime).source("invoice:" + id)))
+.step("The invoice is in", CloseTasks.done(ctx -> "invoice:" + id))          // CloseTasks.cancel(...)：不再需要
+```
+
+- `TaskSpec.forPermission(…)`：该权限的每个持有人都能看到，谁先做完即关闭（按来源键）。类型为小写的点分名称。
+- 两个步骤都在流程事务内写入（runtime `TaskWriter`）；新建的待办发布事件 `jabiz.task.created`（邮件通知由此触发，5.4）。
+- 标题的文案键放在平台或应用的消息资源中（平台的审批待办：`task.approval`）。
+
+### 5.2 审批待办
+
+每个待审批的请求有一个待办：类型 `approval`、指派给当前层级的权限、关联 `SysApprovalRequest`、链接 `/tasks`、来源键 `approval:<请求>`。
+`RequireApproval` 建请求时同时建第一层的待办；`APPROVAL_DECIDE` 关闭当前层级的待办（`DONE`），还有下一层时建下一层的待办；请求被作废（内容变化）或撤回时待办取消。
+
+### 5.3 我的待办与页面
+
+- `GET /api/tasks/mine?limit=`（只要求已认证）：指派给本人、或指派给本人持有的权限的开放待办（持有 `*` 的用户看到全部按权限指派的待办），
+  按截止时间（无截止的在后）、建立时间排序；返回总数与至多 200 条，标题按请求的语言。
+- 通用后台页面 `/tasks`（平台路径，扩展不能占用）：列出我的待办；审批待办就地显示 `ApprovalPanel`（批准 / 驳回，驳回需理由；能否判断只由服务端决定），
+  其他待办链接到其页面。页头显示开放待办数（每分钟刷新），点击进入 `/tasks`。
+- `@jabiz/admin` 导出 `ApprovalPanel`（`{requestId, onDecided}`）与 `useMyTasks`，应用扩展可在自己的页面中使用（12 §9）。
+- 已知限制：准备人若也持有审批权限，会看到自己请求的待办（判断时被拒，`APPROVAL_OWN_REQUEST`）。
+
+### 5.4 邮件通知
+
+- `SecUser.email`（可选，`SEC_USER_CREATE` 可带）。
+- `jabiz.mail.enabled=true`（缺省关闭）时，消费者 `jabiz.task-notifications` 对每个 `jabiz.task.created` 以系统身份运行 `TASK_NOTIFY`：
+  收件人为指派的用户，或按启用的角色**明确**持有该权限的每个启用用户（`*` 不算，免得管理员收到所有待办）；只发给有邮箱的人。
+  在流程事务内为每个收件人写一条只追加的 `Notification`（标题按平台缺省语言，正文附链接 `jabiz.mail.base-url` + 待办链接），
+  **提交后**的步骤逐条发送：每次尝试写入只追加的 `sys_notification_attempt`（`SENT` / `FAILED`），已发送的不再发送，有失败即按重试策略
+  （5 次，1 秒起加倍）重试整个步骤。
+- 发送经 `NotificationSender`（缺省 `SmtpNotificationSender`，Spring 的 `JavaMailSender`，`spring.mail.*`，发件人 `jabiz.mail.from`）。
+  开启邮件而缺少邮件服务器或发件人：启动检查 `MAIL` 报错。
+
+### 5.5 表与测试
+
+| 表 | 性质 |
+|---|---|
+| `sys_task_version` | 时态（D5），平台实体 `SysTask` |
+| `sys_notification`、`sys_notification_attempt` | 只追加（D5 触发器）；前者为平台实体 `Notification`（只读视图） |
+
+测试：runtime `TaskSpecAndMailChecksTest`；app `TaskIT`（按用户 / 权限 / `*` 可见、开关待办与事件、审批待办逐层传递与关闭、作废与撤回取消、只追加）、
+`NotificationIT`（GreenMail：指派用户收一封、按权限只发给启用且明确持有的有邮箱用户、失败记录后重试成功）；前端 `ApprovalPanel.test`、`TasksPage.test`、
+e2e `tasks.spec`。

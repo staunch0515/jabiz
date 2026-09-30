@@ -30,6 +30,7 @@ describe('extensionProblems', () => {
         { path: '/' },
         { path: '/processes' },
         { path: '/login' },
+        { path: '/tasks/mine' },
       ],
       menu: [
         { key: 'a', label: 'x', path: 'no-slash' },
@@ -46,6 +47,7 @@ describe('extensionProblems', () => {
       'route "/" is a path of the platform',
       'route "/processes" is a path of the platform',
       'route "/login" is a path of the platform',
+      'route "/tasks/mine" is a path of the platform',
       'a menu entry needs a key and a label',
       'menu key "a" is declared twice',
       '"no-slash" is not an absolute path',

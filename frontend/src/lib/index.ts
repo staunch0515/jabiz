@@ -19,7 +19,17 @@ export { uploadFile, fetchFileContent, fetchFileDownload } from '../api/files'
 export { useAuth } from '../auth/AuthContext'
 
 // Metadata and its presentation.
-export { useLanguage, useMe, useDatasets, useDataset, useEntityMeta, useProcesses, useDictionaries } from '../meta/hooks'
+export {
+  useLanguage,
+  useMe,
+  useDatasets,
+  useDataset,
+  useEntityMeta,
+  useProcesses,
+  useDictionaries,
+  useMyTasks,
+} from '../meta/hooks'
+export type { MyTask } from '../meta/hooks'
 export type { EntityMeta, FieldMeta, DatasetEntry, ProcessEntry, EntityInstance, DictItem, Violation } from '../meta/types'
 export { fieldLabel, formatValue } from '../meta/kinds'
 export { parseDecimal, toDecimal, formatDecimal, compareDecimal } from '../meta/decimal'
@@ -35,3 +45,5 @@ export { default as ReferenceSelect } from '../components/ReferenceSelect'
 export { default as FieldErrors } from '../components/FieldErrors'
 export { default as FilePreview } from '../components/FilePreview'
 export { default as MarkdownView } from '../components/MarkdownView'
+export { default as ApprovalPanel } from '../components/ApprovalPanel'
+export type { ApprovalPanelProps } from '../components/ApprovalPanel'
