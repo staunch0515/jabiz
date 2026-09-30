@@ -108,8 +108,8 @@ public class ReportExporter {
                         + " rows", Map.of("limit", maxRows))));
                 }
                 Instant runTime = clock.instant();
-                ReportDocument document = document(templates.prepare(query), params, page, runTime,
-                    context.locale());
+                ReportDocument document = document(templates.prepare(query), params, asOfAsked(query, params, at),
+                    page, runTime, context.locale());
                 ReportLabels labels = labels(context.locale());
                 // Writing is CPU work on the whole result, and PDFBox and fastexcel block on their streams.
                 return Mono.fromCallable(() -> write(document, format, labels))
@@ -130,7 +130,18 @@ public class ReportExporter {
         return out.toByteArray();
     }
 
-    ReportDocument document(AdvancedQueryDefinition query, Map<String, Object> params,
+    /**
+     * Whether the run was asked for another effective time than now - in the request or through the template's
+     * {@code timeSlice} - so that the page header says so.
+     */
+    static boolean asOfAsked(AdvancedQueryDefinition query, Map<String, Object> params, AdvancedQueryExecutor.At at) {
+        if (query.timeSlice() != null) {
+            return query.timeSlice().asOf() != null && params != null && params.get(query.timeSlice().asOf()) != null;
+        }
+        return at != null && at.asOf() != null;
+    }
+
+    ReportDocument document(AdvancedQueryDefinition query, Map<String, Object> params, boolean asOfAsked,
         AdvancedQueryExecutor.Page page, Instant runTime, Locale locale) {
         ReportFormat format = settings.format();
         List<ReportColumn> columns = query.resultFields().stream()
@@ -155,6 +166,7 @@ public class ReportExporter {
         ReportSpec report = query.report();
         return new ReportDocument(query.queryId(), query.version(), texts.title(query, locale), settings.company(),
             report == null ? null : period(query, report, given, format), shown, runTime,
+            asOfAsked && page.slice() != null ? page.slice().asOf() : null,
             page.slice() == null ? null : page.slice().knownAt(), report != null && report.landscape(), columns,
             rows);
     }
@@ -199,6 +211,7 @@ public class ReportExporter {
         ReportLabels english = ReportLabels.ENGLISH;
         return new ReportLabels(texts.text("report.period", locale, english.period()),
             texts.text("report.runAt", locale, english.runAt()),
+            texts.text("report.asOf", locale, english.asOf()),
             texts.text("report.knownAt", locale, english.knownAt()),
             texts.text("report.version", locale, english.version()),
             texts.text("report.page", locale, "Page {page} of {pages}"));

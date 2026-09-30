@@ -18,13 +18,14 @@ import java.util.Objects;
  * @param period          the period, already formatted, or null
  * @param parameters      the given parameters as label and formatted value, in declaration order
  * @param runTime         when it was run; also the creation time of files that carry one
+ * @param asOf            the effective time it was read at, when one was asked for; null for now
  * @param knownAt         the recorded time it was read as of; the run time when no earlier one was asked for
  * @param landscape       whether PDF pages are landscape
  * @param columns         the columns, in result order
  * @param rows            the rows; each has one value per column (null for none)
  */
 public record ReportDocument(String templateId, String templateVersion, String title, String company, String period,
-    List<Parameter> parameters, Instant runTime, Instant knownAt, boolean landscape, List<ReportColumn> columns,
+    List<Parameter> parameters, Instant runTime, Instant asOf, Instant knownAt, boolean landscape, List<ReportColumn> columns,
     List<List<Object>> rows) {
 
     /** A parameter as shown in the header. */

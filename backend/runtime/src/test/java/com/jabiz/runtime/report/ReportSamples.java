@@ -35,6 +35,6 @@ final class ReportSamples {
             "c2741d77d343f5ede1c4130251ff5848eb9b3dabcfb1e1eb4f402d774be36e9a", "Trial balance", "Acme Inc.",
             "2026-02-01 00:00:00 – 2026-02-05 23:59:59",
             List.of(new ReportDocument.Parameter("asOf", "2026-02-05 23:59:59")), RUN,
-            Instant.parse("2026-02-05T23:59:59Z"), landscape, COLUMNS, rows);
+            Instant.parse("2026-02-05T23:59:59Z"), Instant.parse("2026-02-05T23:59:59Z"), landscape, COLUMNS, rows);
     }
 }

@@ -40,7 +40,7 @@ public class ReportSettings {
         this.company = company;
         this.format = new ReportFormat(region, ZoneId.of(zone));
         this.maxRows = maxRows;
-        this.fontPaths = List.copyOf(fontPaths);
+        this.fontPaths = fontPaths.stream().map(String::trim).filter(path -> !path.isEmpty()).toList();
     }
 
     public String company() {
@@ -55,8 +55,9 @@ public class ReportSettings {
         return maxRows;
     }
 
-    public boolean hasFallbackFonts() {
-        return fontPaths.stream().anyMatch(path -> !path.isBlank());
+    /** The configured fallback font files, blank entries left out. */
+    public List<String> fontPaths() {
+        return fontPaths;
     }
 
     /** The fonts, read on first use (they are only needed for PDF). */

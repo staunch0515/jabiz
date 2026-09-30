@@ -98,21 +98,22 @@ report:
 - 行数上限 `jabiz.reports.export.max-rows`（默认 100000）：平台多取一行判断，超过 → 422 `REPORT_TOO_LARGE`（参数 `limit`），不截断。
   它代替数据视图的 `maxQueryBatchSize`（后者只限分页浏览，`AdvancedQueryExecutor.all`）。结果在内存中整体写出（有上限），写出在 `boundedElastic` 上进行。
 - 中间模型 core `com.jabiz.report.ReportDocument`（模板与版本、标题、公司、期间、参数、运行时间、记录时点、横向、列、行）：
-  标题与列名同目录接口（`QueryTexts`），期间取 `report.period` 映射的参数，记录时点为这次运行实际的时点（未给出时即运行时间）。
-  页眉页脚的固定文字在消息 `report.period`、`report.runAt`、`report.knownAt`、`report.version`、`report.page`，语言为请求的语言。
+  标题与列名同目录接口（`QueryTexts`），期间取 `report.period` 映射的参数，记录时点为这次运行实际的时点（未给出时即运行时间）；
+  请求或 `timeSlice` 给出了生效时点时，页眉写明"生效时点"（否则与当前报表无法区分）。
+  页眉页脚的固定文字在消息 `report.period`、`report.runAt`、`report.asOf`、`report.knownAt`、`report.version`、`report.page`，语言为请求的语言。
 - 观测 `jabiz.query.export`，标签只有模板名、格式与结果（13）。
 
 | 格式 | 写出器 | 内容 |
 |---|---|---|
 | CSV | core `CsvReportWriter` | RFC 4180，UTF-8 带 BOM，CRLF；首行为列名，无页眉；金额按列的小数位写出（`300` → `300.00`，多余的位数保留、不舍入），不分组；时间为 ISO-8601（UTC）。**防公式注入**：以 `=` `+` `-` `@`、制表符、回车开头的文本前加 `'`（数值不受影响） |
 | XLSX | runtime `XlsxReportWriter`（fastexcel） | 前几行为标题、公司、期间、运行时间、记录时点、参数、版本；列名行加粗并冻结；`monetary` / `numeric` 为数值单元格（`#,##0.00;(#,##0.00)`，小数位按类型），时间为报表时区的日期单元格；文本一律为文本单元格，不会成为公式 |
-| PDF | runtime `PdfReportWriter`（Apache PDFBox） | A4（`report.landscape` 时横向）；每页页眉：公司、运行时间、标题、期间、参数；每页重复列名；页脚：记录时点、模板版本前 12 位、"第 n 页，共 m 页"；金额右对齐、括号表示负数；列宽按内容，放不下时窄列（金额、日期、代码）保持原宽，最宽的列平分剩余宽度，过长的文本以"…"截断 |
+| PDF | runtime `PdfReportWriter`（Apache PDFBox） | A4（`report.landscape` 时横向）；每页页眉：公司、运行时间、标题、期间、生效时点（给出时）、参数；每页重复列名；页脚：记录时点、模板版本前 12 位、"第 n 页，共 m 页"；金额右对齐、括号表示负数；列宽按内容，放不下时窄列（金额、日期、代码）保持原宽，最宽的列平分剩余宽度，过长的文本以"…"截断；列多到连最小宽度都放不下时一律按比例缩小，不越出页面 |
 
 - **确定性**：PDF 的创建与修改时间、文档 ID 取自运行时间，嵌入的字体子集只取决于用到的字符，因此同一文档逐字节相同（14d-3 的重现依赖这一点，
   `PdfReportWriterTest`、`ReportExportIT`）。XLSX 的文档属性含生成时间，不保证逐字节相同。
 - **字体**：平台带 Noto Sans Regular / Bold（拉丁、希腊、西里尔字母；SIL Open Font License，`runtime` 资源 `jabiz/fonts/`，许可见同目录 `OFL.txt`）。
   中文、日文等字符由应用以 `jabiz.reports.pdf.fonts`（TrueType 字体文件路径，逗号分隔，按顺序尝试）提供；哪种字体都没有的字符显示为 `?`，不使报表失败。
-  应用的语言含中文或日文而未配置时，启动检查给出警告 `REPORTS | jabiz.reports.pdf.fonts`（CSV 与 Excel 不受影响）。
+  配置的字体文件读不到 → 启动检查报错 `REPORTS | jabiz.reports.pdf.fonts`。提供中文或日文界面的应用部署时应配置这项（否则其 PDF 中这些文字为 `?`；CSV 与 Excel 不受影响）。
 - **格式化**：公司名 `jabiz.reports.company`（缺省 `spring.application.name`）；时区 `jabiz.reports.zone`（缺省 UTC）；
   区域 `jabiz.region` 由 `jabizApp { region }` 写入 jar 的 `META-INF/jabiz-app.properties`，数字与时间的写法与后台一致（12 §10），无区域时为
   `1,234.50`、`2026-01-31 14:05:09`（core `ReportFormat`）。

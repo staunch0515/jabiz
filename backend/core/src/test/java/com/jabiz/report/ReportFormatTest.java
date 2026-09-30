@@ -76,9 +76,9 @@ class ReportFormatTest {
 
         List<List<Object>> short1 = new ArrayList<>();
         short1.add(List.of("only one"));
-        assertThatThrownBy(() -> new ReportDocument("q", "v", "t", null, null, List.of(), ReportTestData.RUN, null,
+        assertThatThrownBy(() -> new ReportDocument("q", "v", "t", null, null, List.of(), ReportTestData.RUN, null, null,
             false, document.columns(), short1)).hasMessageContaining("1 values for 3 columns");
-        assertThat(new ReportDocument("q", "v", "t", null, null, List.of(), ReportTestData.RUN, null, false,
+        assertThat(new ReportDocument("q", "v", "t", null, null, List.of(), ReportTestData.RUN, null, null, false,
             List.of(), List.of()).company()).isEmpty();
     }
 }

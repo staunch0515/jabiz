@@ -2,35 +2,35 @@ package com.jabiz.runtime.report;
 
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Startup self-check (docs/design/19-reports.md section 4): Noto Sans has no Chinese or Japanese characters, so an
- * application offering either language needs {@code jabiz.reports.pdf.fonts} for its PDF reports; without it their
- * texts come out as question marks. A warning: CSV and Excel exports are not affected.
+ * Startup self-check (docs/design/19-reports.md section 4): every font file of {@code jabiz.reports.pdf.fonts} can be
+ * read. A wrong path would otherwise fail every PDF export, and only when one is asked for.
  */
 @Component
 public class ReportFontsCheck implements PlatformCheck {
 
-    private final List<String> languages;
     private final ReportSettings settings;
 
-    public ReportFontsCheck(@Value("${jabiz.i18n.languages:zh,ja,en}") List<String> languages,
-        ReportSettings settings) {
-        this.languages = languages.stream().map(String::trim).toList();
+    public ReportFontsCheck(ReportSettings settings) {
         this.settings = settings;
     }
 
     @Override
     public List<CheckProblem> check() {
-        List<String> needing = languages.stream().filter(l -> l.equals("zh") || l.equals("ja")).toList();
-        if (needing.isEmpty() || settings.hasFallbackFonts()) {
-            return List.of();
+        List<CheckProblem> problems = new ArrayList<>();
+        for (String path : settings.fontPaths()) {
+            if (!Files.isReadable(Path.of(path))) {
+                problems.add(CheckProblem.error("REPORTS", "jabiz.reports.pdf.fonts",
+                    "cannot read the font file " + path));
+            }
         }
-        return List.of(CheckProblem.warning("REPORTS", "jabiz.reports.pdf.fonts", "PDF reports in " + needing
-            + " need a font with their characters; without one they show question marks"));
+        return problems;
     }
 }

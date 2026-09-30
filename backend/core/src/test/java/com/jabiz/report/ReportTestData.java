@@ -19,7 +19,7 @@ final class ReportTestData {
     static ReportDocument trialBalance() {
         return new ReportDocument("jabiz.ledger.account_balances", "c2741d77d343f5ede1c4130251ff5848",
             "Trial balance", "Acme Inc.", "2026-02-01 – 2026-02-05",
-            List.of(new ReportDocument.Parameter("asOf", "2026-02-05 23:59:59")), RUN, null, false,
+            List.of(new ReportDocument.Parameter("asOf", "2026-02-05 23:59:59")), RUN, null, null, false,
             List.of(new ReportColumn("accountCode", "Account", new SemanticKind.Text(20, false)),
                 new ReportColumn("balance", "Balance", new SemanticKind.Monetary("USD", 2)),
                 new ReportColumn("bookedAt", null, new SemanticKind.Temporal(TemporalRole.EVENT_TIME))),

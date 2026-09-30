@@ -28,7 +28,7 @@ class XlsxReportWriterTest {
             List<Row> rows = workbook.getFirstSheet().read();
             assertThat(rows.getFirst().getCellText(0)).isEqualTo("Trial balance");
             assertThat(rows.stream().map(r -> r.getCellText(0)).toList())
-                .contains("Acme Inc.", "Period", "Run at", "As known on", "asOf", "Version");
+                .contains("Acme Inc.", "Period", "Run at", "Effective at", "As known on", "asOf", "Version");
             int header = indexOf(rows, "Account");
             assertThat(rows.get(header).stream().map(c -> c.getText()).collect(Collectors.toList()))
                 .containsExactly("Account", "Account name", "Balance", "Booked");

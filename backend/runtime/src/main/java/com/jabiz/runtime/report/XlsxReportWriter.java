@@ -69,7 +69,7 @@ public final class XlsxReportWriter {
         return positive + ";(" + positive + ")";
     }
 
-    /** Title, company, period, run time, point in time and parameters; returns the row of the column labels. */
+    /** Title, company, period, run time, effective and recorded times, parameters and version; returns the row of the column labels. */
     private static int header(Worksheet sheet, ReportDocument document, ReportFormat format, ReportLabels labels) {
         int row = 0;
         sheet.value(row, 0, document.title());
@@ -84,6 +84,10 @@ public final class XlsxReportWriter {
         }
         sheet.value(row, 0, labels.runAt());
         sheet.value(row++, 1, format.dateTime(document.runTime()));
+        if (document.asOf() != null) {
+            sheet.value(row, 0, labels.asOf());
+            sheet.value(row++, 1, format.dateTime(document.asOf()));
+        }
         sheet.value(row, 0, labels.knownAt());
         sheet.value(row++, 1, format.dateTime(document.knownAt()));
         for (ReportDocument.Parameter parameter : document.parameters()) {

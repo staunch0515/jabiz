@@ -24,7 +24,7 @@ import java.util.TimeZone;
 
 /**
  * Writes a report as PDF (docs/design/19-reports.md section 4). Every page has the header - company, run time,
- * title, period and parameters - the column labels, and a footer with the recorded time, the template version and
+ * title, period, the effective time when one was asked for, and parameters - the column labels, and a footer with the recorded time, the template version and
  * "page n of m". Amounts are right aligned with negatives in parentheses; a cell too wide for its column is cut with
  * an ellipsis. A long report is landscape when the template asks for it.
  *
@@ -126,7 +126,12 @@ public final class PdfReportWriter {
                 HEADER_SIZE, MARGIN, y);
         }
         y -= HEADER_SIZE * 1.5f;
-        List<String> given = document.parameters().stream().map(p -> p.label() + ": " + p.value()).toList();
+        List<String> given = new ArrayList<>();
+        if (document.asOf() != null) {
+            // Read at another effective time than now: say so before anything else.
+            given.add(labels.asOf() + " " + format.dateTime(document.asOf()));
+        }
+        document.parameters().forEach(p -> given.add(p.label() + ": " + p.value()));
         text.draw(content, fit(text, String.join("   ", given), false, HEADER_SIZE, width), false, HEADER_SIZE,
             MARGIN, y);
     }
@@ -194,6 +199,16 @@ public final class PdfReportWriter {
             int column = order[k];
             widths[column] = Math.max(MIN_COLUMN, Math.min(natural[column], share));
             remaining -= widths[column];
+        }
+        // So many columns that even their minimums overflow: all shrink alike, the page edge is never crossed.
+        float used = 0;
+        for (float w : widths) {
+            used += w;
+        }
+        if (used > available) {
+            for (int c = 0; c < widths.length; c++) {
+                widths[c] = widths[c] * available / used;
+            }
         }
         return widths;
     }

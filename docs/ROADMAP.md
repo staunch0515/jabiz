@@ -588,7 +588,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 **14d-2 要求**
 1. core `ReportDocument`、`ReportColumn`、`ReportFormat`（区域格式、括号负数）、`CsvReportWriter`（按列的小数位、防公式注入）。
 2. runtime `XlsxReportWriter`（fastexcel，数值与日期单元格）、`PdfReportWriter`（PDFBox，页眉页脚、页码、列宽、确定性输出）、`PdfFonts`
-   （Noto Sans 随平台提供，OFL；`jabiz.reports.pdf.fonts` 为后备字体）、`ReportSettings`、`ReportExporter`、`QueryTexts`；启动检查 `REPORTS`。
+   （Noto Sans 随平台提供，OFL；`jabiz.reports.pdf.fonts` 为后备字体）、`ReportSettings`、`ReportExporter`、`QueryTexts`；启动检查 `REPORTS`（字体文件可读）。
 3. `POST /api/queries/{id}/export?format=`；行数上限 `jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`；`AdvancedQueryExecutor.all`；观测 `jabiz.query.export`。
 4. 约定插件把 `jabizApp { region }` 写入 `jabiz.region`。
 5. 后台报表页"导出"（Excel、PDF、CSV，按当前参数、时点、筛选、排序）。
@@ -597,7 +597,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 **14d-2 验收标准**
 - [x] Excel 中的金额是数值单元格，其和等于报表的合计（`XlsxReportWriterTest`、`ReportExportIT`）。
 - [x] CSV 的值精确（按列的小数位，不分组、不舍入），以公式开头的文本不会被当作公式（`CsvReportWriterTest`、`ReportExportIT`）。
-- [x] PDF 每页有公司、报表、期间、运行时间、页码；负数带括号；窄列不被长文本挤掉（`PdfReportWriterTest`）。
+- [x] PDF 每页有公司、报表、期间、运行时间、页码（给出生效时点时也写明）；负数带括号；窄列不被长文本挤掉，列再多也不越出页面（`PdfReportWriterTest`）。
 - [x] 同一次运行的 PDF 逐字节相同（`PdfReportWriterTest`、`ReportExportIT`）。
 - [x] 导出按请求的时点读取，页脚显示记录时点（`ReportExportIT`）。
 - [x] 超过上限被拒绝（422 `REPORT_TOO_LARGE`），不截断；权限同运行，未知格式 400（`ReportExportIT`）。

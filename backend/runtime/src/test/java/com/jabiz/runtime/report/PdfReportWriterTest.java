@@ -45,6 +45,7 @@ class PdfReportWriterTest {
                 stripper.setEndPage(page);
                 String text = stripper.getText(document);
                 assertThat(text).contains("Acme Inc.", "Trial balance", "Period 2026-02-01", "asOf: 2026-02-05",
+                    "Effective at Feb 5, 2026",
                     "Account name", "Balance", "Page " + page + " of " + pages, "As known on", "Version c2741d77d343");
             }
             stripper.setStartPage(1);
@@ -60,6 +61,13 @@ class PdfReportWriterTest {
             .containsExactly(30f, 160f, 60f, 50f);
         assertThat(PdfReportWriter.fitted(new float[] {30, 40}, 300)).containsExactly(30f, 40f);
         assertThat(PdfReportWriter.fitted(new float[] {200, 200}, 300)).containsExactly(150f, 150f);
+        // Twenty-five columns on a portrait page: even the minimum widths are shrunk to fit.
+        float[] many = PdfReportWriter.fitted(new float[25], 500);
+        float total = 0;
+        for (float w : many) {
+            total += w;
+        }
+        assertThat(total).isLessThanOrEqualTo(500.01f);
     }
 
     @Test
@@ -85,7 +93,7 @@ class PdfReportWriterTest {
 
         com.jabiz.report.ReportDocument sample = ReportSamples.trialBalance(0, false);
         com.jabiz.report.ReportDocument chinese = new com.jabiz.report.ReportDocument(sample.templateId(),
-            sample.templateVersion(), "试算表 Trial", sample.company(), null, List.of(), sample.runTime(), null, false,
+            sample.templateVersion(), "试算表 Trial", sample.company(), null, List.of(), sample.runTime(), null, null, false,
             sample.columns(), sample.rows());
         try (PDDocument document = Loader.loadPDF(pdf(chinese, withFallback))) {
             assertThat(new PDFTextStripper().getText(document)).contains("??? Trial");
