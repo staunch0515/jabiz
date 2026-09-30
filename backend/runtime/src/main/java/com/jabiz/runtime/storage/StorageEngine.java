@@ -79,4 +79,11 @@ public interface StorageEngine {
      * the work take part in the transaction.
      */
     <T> Mono<T> inTransaction(Mono<T> work);
+
+    /**
+     * Runs the given work, within the current transaction, behind a savepoint: if the work fails, what it wrote is
+     * undone and the transaction goes on (the import runs each row this way, docs/design/20-imports.md section 5).
+     * The work's error is passed on. Only valid inside {@link #inTransaction}.
+     */
+    <T> Mono<T> inSavepoint(Mono<T> work);
 }

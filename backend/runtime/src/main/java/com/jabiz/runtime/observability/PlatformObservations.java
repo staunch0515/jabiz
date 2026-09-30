@@ -43,6 +43,7 @@ public class PlatformObservations {
     public static final String FILE_SERVE = "jabiz.file.serve";
     public static final String FILE_SWEEP = "jabiz.file.sweep";
     public static final String PUBLIC_QUERY = "jabiz.public.query";
+    public static final String IMPORT = "jabiz.import.run";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
 
     public static final String OUTCOME = "outcome";

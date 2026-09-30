@@ -67,4 +67,16 @@ class FilePolicyTest {
         assertThatThrownBy(() -> new FilePolicy.ImageOptions(1, null)).isInstanceOf(NullPointerException.class);
         assertThat(new FilePolicy.ImageOptions(1, List.of()).variants()).isEmpty();
     }
+
+    @Test
+    void importTypesStandAlone() {
+        FilePolicy imports = FilePolicy.define("finance.import").allow(MediaTypes.TEXT, MediaTypes.XLSX, MediaTypes.XML)
+            .maxBytes(10 * FilePolicy.MB).permissions("x.import", "x.import").build();
+        assertThat(imports.forImports()).isTrue();
+        assertThat(imports.acceptsImages()).isFalse();
+        assertThatThrownBy(() -> FilePolicy.define("mixed").allow(MediaTypes.TEXT, MediaTypes.PDF).maxBytes(1)
+            .permissions("a", "b").build()).hasMessageContaining("import types");
+        assertThat(FilePolicy.define("docs").allow(MediaTypes.PDF).maxBytes(1).permissions("a", "b").build()
+            .forImports()).isFalse();
+    }
 }

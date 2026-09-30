@@ -185,6 +185,25 @@ public final class R2dbcStorageEngine implements StorageEngine {
         return tx.transactional(work);
     }
 
+    @Override
+    public <T> Mono<T> inSavepoint(Mono<T> work) {
+        // Savepoints of one transaction are used one after another (never nested by the platform), so one name does;
+        // PostgreSQL resolves a name to the most recent savepoint anyway.
+        return statement("SAVEPOINT " + SAVEPOINT)
+            .then(work)
+            .flatMap(result -> statement("RELEASE SAVEPOINT " + SAVEPOINT).thenReturn(result))
+            .switchIfEmpty(Mono.defer(() -> statement("RELEASE SAVEPOINT " + SAVEPOINT).then(Mono.empty())))
+            .onErrorResume(error -> statement("ROLLBACK TO SAVEPOINT " + SAVEPOINT)
+                .then(statement("RELEASE SAVEPOINT " + SAVEPOINT))
+                .then(Mono.error(error)));
+    }
+
+    private static final String SAVEPOINT = "jabiz_unit";
+
+    private Mono<Void> statement(String sql) {
+        return db.sql(sql).then();
+    }
+
     private Flux<Map<String, Object>> run(String sql, Map<String, BoundValue> params, Duration timeout) {
         DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
         for (Map.Entry<String, BoundValue> e : params.entrySet()) {
