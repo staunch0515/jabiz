@@ -122,10 +122,14 @@ public class AccessReviewProcesses {
             });
         }
 
-        /** The access template, read as of the end of the period, its rows as issued. */
+        /**
+         * The access template read as of the end of the period, with everything recorded up to then (issued after the
+         * period ended: a report issued earlier "as of" a later time misses what happened in between), not superseded,
+         * its rows as issued.
+         */
         private static boolean isAccessReport(ReportRun run, Instant periodTo) {
             return AccessReviews.ACCESS_TEMPLATE.equals(run.templateId()) && periodTo.equals(run.readAt())
-                && run.intact();
+                && !run.knownAt().isBefore(periodTo) && run.supersededBy() == null && run.intact();
         }
 
         private static BusinessRuleViolationException refused(String code, String field, String message) {

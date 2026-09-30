@@ -48,3 +48,9 @@ CREATE TABLE sys_access_review (
 );
 CREATE INDEX sys_access_review_period_idx ON sys_access_review (period_to DESC);
 SELECT jabiz_protect_append_only('sys_access_review');
+
+-- A transaction is reversed at most once. LEDGER_REVERSE checks it first, but reads through the caller's data period
+-- (a reversal booked outside it is invisible there), so the database keeps the rule whoever reverses. Transactions are
+-- never changed; a tombstone would not count.
+CREATE UNIQUE INDEX ledger_transaction_reversed_once_uk ON ledger_transaction_version (reverses_transaction_id)
+    WHERE reverses_transaction_id IS NOT NULL AND NOT is_deleted;

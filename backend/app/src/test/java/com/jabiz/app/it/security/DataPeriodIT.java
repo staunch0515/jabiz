@@ -136,6 +136,23 @@ class DataPeriodIT extends SecurityItSupport {
     }
 
     @Test
+    void aTransactionReversedOutsideThePeriodCannotBeReversedAgainFromWithin() {
+        String prefix = prefix();
+        openAccounts(prefix);
+        String transaction = postAt(admin(), prefix, IN_2026, "8");
+        post("/api/processes/LEDGER_REVERSE/latest", admin(), Map.of("transactionId", transaction,
+            "reason", "wrong", "bookingTime", FY2027.plusSeconds(86400).toString())).expectStatus().isOk();
+
+        // The earlier reversal is outside this reverser's period, so only the database sees it.
+        String reverser = TestTokens.withinPeriod(tokens, FISCAL_2026, "period-reverser", "ledger.reverse");
+        post("/api/processes/LEDGER_REVERSE/latest", reverser, Map.of("transactionId", transaction,
+            "reason", "again", "bookingTime", IN_2026.plusSeconds(3600).toString())).expectStatus().isBadRequest()
+            .expectBody(MAP).value(body -> assertThat(ruleCode(body)).isEqualTo("UNIQUE_VIOLATION"));
+        assertThat(query("SELECT count(*) AS n FROM ledger_transaction_version WHERE reverses_transaction_id = ?::uuid",
+            transaction)).singleElement().satisfies(row -> assertThat(((Number) row.get("n")).longValue()).isEqualTo(1));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void thePeriodComesFromTheRoleAssignmentsAtSignInAndRefresh() {
         String prefix = prefix();

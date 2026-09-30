@@ -320,6 +320,8 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   在取得当前版本之后应用（D3）；数据视图读取期限外的实体 = 不存在（404），SQL 模板经 D10 同样生效（例如试算表只含期间内的交易）。
   经引用声明的数据视图，受期限限制的调用者看不到历史、不能更新（无法仅凭数据判断，默认拒绝）。
 - **写入**：插入与更新所设的时间必须在期限内，插入必须给出时间（否则 422 `OUT_OF_SCOPE`）；经引用的期限在时间所在的实体上检查（分录随其交易）。
+- **流程中的检查**同样只看得到期限内的数据，所以需要看全部数据的规则要由数据库保证：账本"一笔交易只冲正一次"另有唯一索引
+  （V25，`reverses_transaction_id`），期限外已被冲正的交易再冲正时 400 `UNIQUE_VIOLATION`。
 - **平台的使用**：账本交易（`bookingTime`）与分录（经 `transactionId`）数据视图；审计记录与操作记录的查询（`/api/audit/records`、`/operations`、`/reveals`）按记录时间截取在期限内，
   单条审计记录在期限外为 404。
 
@@ -331,7 +333,8 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   按记录号排序；哈希为其 JSON 的 SHA-256。`GET /api/security/access-reviews/changes?from&to`。
 - **职责分离冲突**：18 §4.4 的冲突报告（`SodService.conflicts`，按用户名与规则排序），`GET /api/security/access-reviews/conflicts`。
 - **签核**：流程 `ACCESS_REVIEW_SIGN_OFF`（权限 `security.access-review.sign`，总要求二次验证）输入期间、报表的 run id 与意见（必填，≤ 2000 字）。
-  期间必须已结束（`periodTo` 不晚于操作时间，422 `ACCESS_REVIEW_PERIOD`）；报表必须是访问权限模板、读取时点等于 `periodTo` 且内容未被改动（422 `ACCESS_REVIEW_REPORT`）。
+  期间必须已结束（`periodTo` 不晚于操作时间，422 `ACCESS_REVIEW_PERIOD`）；报表必须是访问权限模板、读取时点等于 `periodTo`、记录时点不早于 `periodTo`（期末之后签发：期末之前"按期末"签发的报表缺少其间的变更）、
+  未被取代且内容未被改动（422 `ACCESS_REVIEW_REPORT`）。
   只追加表 `sys_access_review` 保存：期间、报表 run id 与内容哈希、变更条数与哈希、签核时的冲突（JSON）与哈希、审查人、意见、时间与操作号。
   列表 `GET /api/security/access-reviews`（`security.access-review.read`）。后台页面 `/access-review`：选择期间、签发报表、查看变更与冲突、签核、已签核列表。
 - 变更与冲突不另存明细：审计记录只追加且被封存，同一期间随时可以重算并比对哈希；冲突是签核时的状态，所以连同 JSON 一起保存。

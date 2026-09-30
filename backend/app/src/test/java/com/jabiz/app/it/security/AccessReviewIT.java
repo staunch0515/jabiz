@@ -121,6 +121,14 @@ class AccessReviewIT extends SecurityItSupport {
             signOff(from, to, other, "ok")).expectStatus().isEqualTo(422).expectBody(MAP).returnResult()
             .getResponseBody();
         assertThat(ruleCode(otherReport)).isEqualTo("ACCESS_REVIEW_REPORT");
+        // Issued before the period ended "as of" its end: it misses what happened in between.
+        String ahead = issue(TEMPLATE, Map.of("asOf", clock.instant().plus(Duration.ofMinutes(5)).toString()));
+        Instant earlyEnd = clock.instant().plus(Duration.ofMinutes(5));
+        clock.advance(Duration.ofMinutes(10));
+        Map<String, Object> premature = post("/api/processes/ACCESS_REVIEW_SIGN_OFF/latest",
+            bearer("security.access-review.sign"), signOff(from, earlyEnd, ahead, "ok")).expectStatus().isEqualTo(422)
+            .expectBody(MAP).returnResult().getResponseBody();
+        assertThat(ruleCode(premature)).isEqualTo("ACCESS_REVIEW_REPORT");
         // A comment is required.
         post("/api/processes/ACCESS_REVIEW_SIGN_OFF/latest", signer, signOff(from, to, runId, " "))
             .expectStatus().isBadRequest();
