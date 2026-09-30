@@ -3,6 +3,10 @@ package com.jabiz.runtime.imports;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.entity.Violation;
+import com.jabiz.imports.ImportCodes;
+import com.jabiz.imports.ImportDefinition;
 import com.jabiz.imports.ImportMapping;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -10,9 +14,11 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.security.Permissions;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,11 +27,13 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * Saved mappings (docs/design/20-imports.md section 4): the temporal platform entity {@code SysImportMapping}, one
- * per import and name, and the internal processes that save and remove them. The import endpoints check the
- * import's mapping permission before running them.
+ * per import and name, and the internal processes that save and remove them. Internal processes can still be asked
+ * to run directly, so both check the import's own permissions and its mapping permission themselves, whatever the
+ * platform permission they declare.
  */
 @Configuration
 public class ImportMappings {
@@ -85,7 +93,8 @@ public class ImportMappings {
     }
 
     @Bean
-    ProcessDefinition<SaveInput, MappingOutput, ProcessContext> importMappingSaveProcess(JsonMapper json) {
+    ProcessDefinition<SaveInput, MappingOutput, ProcessContext> importMappingSaveProcess(JsonMapper json,
+        ImportRegistry imports, ObjectProvider<ImportAccess> access) {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, MappingOutput.class, ProcessContext.class, pb -> pb
             .description("Saves a mapping of an import under a name, replacing the one of that name.")
             .permissions(ImportPermissions.MAPPING_WRITE)
@@ -96,6 +105,19 @@ public class ImportMappings {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, MappingOutput.class))
+            .compute("Check the caller and the mapping", (metadata, ctx) -> {
+                SaveInput input = ctx.get(INPUT, SaveInput.class);
+                ImportDefinition<?> definition = authorize(imports, access, input.importId(), ctx);
+                List<Violation> unknown = Stream.concat(input.mapping().columns().keySet().stream(),
+                        input.mapping().constants().keySet().stream())
+                    .distinct().sorted().filter(field -> definition.field(field) == null)
+                    .map(field -> new Violation("mapping", ImportCodes.UNKNOWN_FIELD,
+                        "The import has no field " + field, Map.of("field", field)))
+                    .toList();
+                if (!unknown.isEmpty()) {
+                    throw new ValidationException(unknown);
+                }
+            })
             .step("Load the mapping of that name", QueryEntities.of(DATASET, ctx -> byName(
                 ctx.get(INPUT, SaveInput.class).importId(), ctx.get(INPUT, SaveInput.class).name()), FOUND))
             .compute("Register the mapping", (metadata, ctx) -> {
@@ -119,7 +141,8 @@ public class ImportMappings {
     }
 
     @Bean
-    ProcessDefinition<RemoveInput, MappingOutput, ProcessContext> importMappingRemoveProcess() {
+    ProcessDefinition<RemoveInput, MappingOutput, ProcessContext> importMappingRemoveProcess(ImportRegistry imports,
+        ObjectProvider<ImportAccess> access) {
         return ProcessDefinition.define(REMOVE, 1, RemoveInput.class, MappingOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Removes a saved mapping of an import.")
@@ -131,6 +154,8 @@ public class ImportMappings {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, MappingOutput.class))
+                .compute("Check the caller", (metadata, ctx) ->
+                    authorize(imports, access, ctx.get(INPUT, RemoveInput.class).importId(), ctx))
                 .step("Load the mapping", QueryEntities.of(DATASET, ctx -> byName(
                     ctx.get(INPUT, RemoveInput.class).importId(), ctx.get(INPUT, RemoveInput.class).name()), FOUND))
                 .compute("Remove it", (metadata, ctx) -> {
@@ -144,6 +169,19 @@ public class ImportMappings {
                     ctx.changes().delete(ENTITY, current.id(), current.version());
                     ctx.put(OUTPUT, new MappingOutput(String.valueOf(current.id()), input.importId(), input.name()));
                 }));
+    }
+
+    /**
+     * The import, if the caller may run it and save its mappings: its own permissions, those of its process and file
+     * policy, and its mapping permission. An unknown import is 404. The access check is looked up when the process
+     * runs: it needs the process registry, which needs these very definitions.
+     */
+    private static ImportDefinition<?> authorize(ImportRegistry imports, ObjectProvider<ImportAccess> access,
+        String importId, ProcessContext ctx) {
+        ImportDefinition<?> definition = imports.require(importId);
+        access.getObject().require(definition, ctx.request());
+        Permissions.require(ctx.request(), definition.mappingPermission(), "Mappings of " + definition.id());
+        return definition;
     }
 
     static EntityQuery byName(String importId, String name) {

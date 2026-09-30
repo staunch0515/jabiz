@@ -1,8 +1,6 @@
 package com.jabiz.runtime.imports;
 
 import com.jabiz.context.RequestContext;
-import com.jabiz.entity.ValidationException;
-import com.jabiz.entity.Violation;
 import com.jabiz.imports.ImportCodes;
 import com.jabiz.imports.ImportDefinition;
 import com.jabiz.imports.ImportFileException;
@@ -24,7 +22,6 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
-import com.jabiz.runtime.security.Permissions;
 import io.micrometer.common.KeyValues;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -36,7 +33,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /**
  * Entry to imports (docs/design/20-imports.md section 6): who may import what, reading a file's layout for the
@@ -159,31 +155,17 @@ public class ImportService {
             .collectList());
     }
 
-    /** Saves the mapping under the name, replacing the one of that name; needs the import's mapping permission. */
+    /**
+     * Saves the mapping under the name, replacing the one of that name. The process checks the import's permissions,
+     * its mapping permission and the mapping's fields.
+     */
     public Mono<ImportMappings.MappingOutput> saveMapping(String importId, String name, ImportMapping mapping) {
-        return authorized(importId).flatMap(definition -> RequestContexts.current().flatMap(context -> {
-            Permissions.require(context, definition.mappingPermission(), "Saving mappings of " + definition.id());
-            ImportMapping given = mapping == null ? ImportMapping.DEFAULT : mapping;
-            List<Violation> unknown = new ArrayList<>();
-            Stream.concat(given.columns().keySet().stream(), given.constants().keySet().stream())
-                .distinct().filter(field -> definition.field(field) == null)
-                .forEach(field -> unknown.add(new Violation("mapping",
-                    ImportCodes.UNKNOWN_FIELD, "The import has no field " + field,
-                    Map.of("field", field))));
-            if (!unknown.isEmpty()) {
-                throw new ValidationException(unknown);
-            }
-            return executor.execute(process(ImportMappings.SAVE), new ImportMappings.SaveInput(definition.id(), name,
-                given));
-        }));
+        return executor.execute(process(ImportMappings.SAVE), new ImportMappings.SaveInput(importId, name,
+            mapping == null ? ImportMapping.DEFAULT : mapping));
     }
 
     public Mono<ImportMappings.MappingOutput> removeMapping(String importId, String name) {
-        return authorized(importId).flatMap(definition -> RequestContexts.current().flatMap(context -> {
-            Permissions.require(context, definition.mappingPermission(), "Removing mappings of " + definition.id());
-            return executor.execute(process(ImportMappings.REMOVE), new ImportMappings.RemoveInput(definition.id(),
-                name));
-        }));
+        return executor.execute(process(ImportMappings.REMOVE), new ImportMappings.RemoveInput(importId, name));
     }
 
     @SuppressWarnings("unchecked")
