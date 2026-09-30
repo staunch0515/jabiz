@@ -73,6 +73,9 @@ val coverageGatedClasses = listOf(
     "com.jabiz.entity.i18n.I18nText",
     "com.jabiz.entity.i18n.I18nTextSupport",
     "com.jabiz.process.ActsOn",
+    // Phase 14b
+    "com.jabiz.numbering.NumberFormat",
+    "com.jabiz.numbering.NumberSequence",
 )
 
 dependencies {
