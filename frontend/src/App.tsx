@@ -17,6 +17,7 @@ import EntityHistoryPage from './pages/EntityHistoryPage'
 import LoginPage from './pages/LoginPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
 import ProcessFormPage from './pages/ProcessFormPage'
+import TasksPage from './pages/TasksPage'
 import { Spin } from 'antd'
 
 const queryClient = new QueryClient({
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
           { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage /> },
           { path: '/processes', element: <ProcessCatalogPage /> },
           { path: '/processes/:name/:version', element: <ProcessFormPage /> },
+          { path: '/tasks', element: <TasksPage /> },
           // The application's own pages (decision D22), checked at startup not to take a platform path.
           ...(extension.routes ?? []),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },

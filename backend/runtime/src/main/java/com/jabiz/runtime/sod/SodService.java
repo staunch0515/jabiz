@@ -129,8 +129,11 @@ public class SodService {
             .map(row -> (UUID) row.get("user_id")).collectList();
     }
 
-    /** {@code (SELECT DISTINCT ON (key) key, columns, is_deleted FROM table ORDER BY key, version_no DESC)}. */
-    private static String latest(EntityDefinition def, String columns) {
+    /**
+     * {@code (SELECT DISTINCT ON (key) key, columns, is_deleted FROM table ORDER BY key, version_no DESC)}: the latest
+     * version of every instance of a temporal entity, for reads of the security tables.
+     */
+    public static String latest(EntityDefinition def, String columns) {
         String key = SqlIdentifiers.require(def.primaryKeyColumn());
         for (String column : columns.split(",\\s*")) {
             SqlIdentifiers.require(column);

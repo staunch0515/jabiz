@@ -38,13 +38,13 @@ class ApprovalChecksTest {
     void stepsMustNameADeclaredSubject() {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
         RequireApproval<ProcessContext> require = new RequireApproval<>(registry(JOURNAL), null,
-            beans.getBeanProvider(com.jabiz.runtime.process.steps.EventPublisher.class));
+            beans.getBeanProvider(com.jabiz.runtime.process.steps.EventPublisher.class), null);
         assertThat(require.problems(RequireApproval.<ProcessContext>of("fin.nothing",
             ctx -> ApprovalCase.of("1", Map.of(), Map.of()), "a").metadata()))
             .containsExactly("approval subject fin.nothing is not declared",
                 "requests approvals but no EventPublisher is configured");
 
-        WithdrawApproval<ProcessContext> withdraw = new WithdrawApproval<>(registry(JOURNAL), null);
+        WithdrawApproval<ProcessContext> withdraw = new WithdrawApproval<>(registry(JOURNAL), null, null);
         assertThat(withdraw.problems(WithdrawApproval.<ProcessContext>of("fin.journal", ctx -> "1").metadata()))
             .isEmpty();
         assertThat(withdraw.problems(WithdrawApproval.<ProcessContext>of("fin.x", ctx -> "1").metadata()))

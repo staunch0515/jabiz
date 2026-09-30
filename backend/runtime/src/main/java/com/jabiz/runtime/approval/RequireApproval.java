@@ -10,7 +10,10 @@ import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.steps.CheckedStep;
 import com.jabiz.runtime.process.steps.EventPublisher;
 import org.springframework.beans.factory.ObjectProvider;
+import com.jabiz.runtime.task.TaskEntities;
+import com.jabiz.runtime.task.TaskWriter;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -33,7 +36,8 @@ import java.util.function.Predicate;
  *       applies (or the one that applies has no levels) → {@code NOT_REQUIRED}; else a request is made (preparer,
  *       rule version, content hash, levels) and {@code jabiz.approval.requested} published → {@code PENDING}.</li>
  * </ul>
- * Requests of the case whose content hash differs (the document changed since) are superseded. Every evaluation is
+ * Requests of the case whose content hash differs (the document changed since) are superseded. A new request opens a
+ * task for the holders of its first level's permission; a superseded one cancels its task ({@link ApprovalTasks}). Every evaluation is
  * recorded ({@code ApprovalEvaluation}) with the rule versions considered and the facts. Processes evaluating the same
  * case wait for each other (a transaction-scoped advisory lock), so a case never gets two pending requests.
  */
@@ -71,12 +75,14 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
     private final ApprovalSubjectRegistry subjects;
     private final ApprovalStore store;
     private final ObjectProvider<EventPublisher> publisher;
+    private final TaskWriter tasks;
 
     public RequireApproval(ApprovalSubjectRegistry subjects, ApprovalStore store,
-        ObjectProvider<EventPublisher> publisher) {
+        ObjectProvider<EventPublisher> publisher, TaskWriter tasks) {
         this.subjects = subjects;
         this.store = store;
         this.publisher = publisher;
+        this.tasks = tasks;
     }
 
     @Override
@@ -102,57 +108,71 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
                         same = request;
                     }
                 }
+                List<String> superseded = new ArrayList<>();
                 for (EntityInstance request : open) {
                     if (!hash.equals(request.get("contentHash"))) {
                         ctx.changes().update(ApprovalEntities.REQUEST, request.id(), request.version(),
                             Map.of("status", ApprovalEntities.SUPERSEDED));
+                        superseded.add(String.valueOf(request.id()));
                     }
                 }
-                if (same != null) {
-                    ApprovalOutcome.Status status = ApprovalEntities.APPROVED.equals(same.get("status"))
-                        ? ApprovalOutcome.Status.APPROVED : ApprovalOutcome.Status.PENDING;
-                    String requestId = String.valueOf(same.id());
-                    record(ctx, subject, approvalCase, status, null, List.of(), requestId, hash, facts, businessTime);
-                    ctx.put(metadata.targetKey(), new ApprovalOutcome(status, requestId));
-                    return Mono.<Void>empty();
-                }
-                return store.rules(subject, businessTime).flatMap(rules -> {
-                    ApprovalEvaluation evaluation = ApprovalEvaluation.evaluate(rules, facts);
-                    String matched = evaluation.matched() == null ? null : evaluation.matched().versionKey();
-                    if (!evaluation.required()) {
-                        record(ctx, subject, approvalCase, ApprovalOutcome.Status.NOT_REQUIRED, matched,
-                            evaluation.versionKeys(), null, hash, facts, businessTime);
-                        ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.NOT_REQUIRED, null));
-                        return Mono.<Void>empty();
-                    }
-                    List<Map<String, Object>> levels = new ArrayList<>();
-                    evaluation.levels().forEach(level -> {
-                        Map<String, Object> json = new LinkedHashMap<>();
-                        json.put("permission", level.permission());
-                        if (level.limitFact() != null) {
-                            json.put("limitFact", level.limitFact());
-                        }
-                        levels.add(json);
-                    });
-                    Map<String, Object> request = new LinkedHashMap<>();
-                    request.put("subject", subject.name());
-                    request.put("entityId", approvalCase.entityId());
-                    request.put("status", ApprovalEntities.PENDING);
-                    request.put("preparerId", preparer);
-                    request.put("ruleId", evaluation.matched().ruleId());
-                    request.put("ruleVersionNo", BigDecimal.valueOf(evaluation.matched().versionNo()));
-                    request.put("contentHash", hash);
-                    request.put("levels", ApprovalJson.write(levels));
-                    request.put("currentLevel", BigDecimal.ONE);
-                    request.put("facts", ApprovalJson.write(facts));
-                    String requestId = String.valueOf(ctx.changes().insert(ApprovalEntities.REQUEST, request));
-                    record(ctx, subject, approvalCase, ApprovalOutcome.Status.PENDING, matched,
-                        evaluation.versionKeys(), requestId, hash, facts, businessTime);
-                    ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.PENDING, requestId));
-                    return publisher().publish(REQUESTED, new Requested(requestId, subject.name(),
-                        approvalCase.entityId(), preparer, levels.size()), ctx.processSeqId());
-                });
+                Mono<Void> cancelled = Flux.fromIterable(superseded)
+                    .concatMap(id -> tasks.close(ctx, ApprovalTasks.sourceKey(id), TaskEntities.CANCELLED))
+                    .then();
+                EntityInstance found = same;
+                return cancelled.then(Mono.defer(() -> decide(metadata, ctx, subject, approvalCase, facts, hash,
+                    businessTime, preparer, found)));
             });
+        });
+    }
+
+    private Mono<Void> decide(Metadata<C> metadata, C ctx, ApprovalSubject subject, ApprovalCase approvalCase,
+        Map<String, Object> facts, String hash, Instant businessTime, String preparer, EntityInstance same) {
+        if (same != null) {
+            ApprovalOutcome.Status status = ApprovalEntities.APPROVED.equals(same.get("status"))
+                ? ApprovalOutcome.Status.APPROVED : ApprovalOutcome.Status.PENDING;
+            String requestId = String.valueOf(same.id());
+            record(ctx, subject, approvalCase, status, null, List.of(), requestId, hash, facts, businessTime);
+            ctx.put(metadata.targetKey(), new ApprovalOutcome(status, requestId));
+            return Mono.<Void>empty();
+        }
+        return store.rules(subject, businessTime).flatMap(rules -> {
+            ApprovalEvaluation evaluation = ApprovalEvaluation.evaluate(rules, facts);
+            String matched = evaluation.matched() == null ? null : evaluation.matched().versionKey();
+            if (!evaluation.required()) {
+                record(ctx, subject, approvalCase, ApprovalOutcome.Status.NOT_REQUIRED, matched,
+                    evaluation.versionKeys(), null, hash, facts, businessTime);
+                ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.NOT_REQUIRED, null));
+                return Mono.<Void>empty();
+            }
+            List<Map<String, Object>> levels = new ArrayList<>();
+            evaluation.levels().forEach(level -> {
+                Map<String, Object> json = new LinkedHashMap<>();
+                json.put("permission", level.permission());
+                if (level.limitFact() != null) {
+                    json.put("limitFact", level.limitFact());
+                }
+                levels.add(json);
+            });
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("subject", subject.name());
+            request.put("entityId", approvalCase.entityId());
+            request.put("status", ApprovalEntities.PENDING);
+            request.put("preparerId", preparer);
+            request.put("ruleId", evaluation.matched().ruleId());
+            request.put("ruleVersionNo", BigDecimal.valueOf(evaluation.matched().versionNo()));
+            request.put("contentHash", hash);
+            request.put("levels", ApprovalJson.write(levels));
+            request.put("currentLevel", BigDecimal.ONE);
+            request.put("facts", ApprovalJson.write(facts));
+            String requestId = String.valueOf(ctx.changes().insert(ApprovalEntities.REQUEST, request));
+            record(ctx, subject, approvalCase, ApprovalOutcome.Status.PENDING, matched,
+                evaluation.versionKeys(), requestId, hash, facts, businessTime);
+            ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.PENDING, requestId));
+            return publisher().publish(REQUESTED, new Requested(requestId, subject.name(),
+                    approvalCase.entityId(), preparer, levels.size()), ctx.processSeqId())
+                .then(tasks.create(ctx, ApprovalTasks.task(subject.name(), approvalCase.entityId(),
+                    requestId, 1, evaluation.levels().getFirst().permission())));
         });
     }
 

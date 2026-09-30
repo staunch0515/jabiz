@@ -1,6 +1,13 @@
-import { DatabaseOutlined, LogoutOutlined, NodeIndexOutlined, TranslationOutlined, UserOutlined } from '@ant-design/icons'
+import {
+  CheckSquareOutlined,
+  DatabaseOutlined,
+  LogoutOutlined,
+  NodeIndexOutlined,
+  TranslationOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
 import { ProLayout, type MenuDataItem } from '@ant-design/pro-components'
-import { Dropdown, Space } from 'antd'
+import { Badge, Dropdown, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
@@ -9,7 +16,7 @@ import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
-import { useMenus } from '../meta/hooks'
+import { useMenus, useMyTasks } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
 
 
@@ -25,19 +32,22 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
 
 /**
  * The frame of every signed-in page: the dynamic menu (docs/design/10-security.md section 3), the application's own
- * menu entries (decision D22) and the two catalogs, which list only what the user may use. Hiding is navigation,
- * not access: every call is checked again.
+ * menu entries (decision D22), the user's tasks (with their count in the header) and the two catalogs, which list only
+ * what the user may use. Hiding is navigation, not access: every call is checked again.
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
   const { userId, signOut, can } = useAuth()
   const menus = useMenus()
+  const tasks = useMyTasks()
+  const openTasks = tasks.data?.total ?? 0
   const location = useLocation()
   const navigate = useNavigate()
 
   const routes: MenuDataItem[] = [
     ...toRoutes(menus.data),
     ...extensionMenu(extension.menu, can, (key) => t(key, { ns: EXTENSION_NAMESPACE })),
+    { key: 'tasks', name: t('nav.tasks'), path: '/tasks', icon: <CheckSquareOutlined /> },
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]
@@ -52,7 +62,13 @@ export default function AppLayout() {
       route={{ path: '/', routes }}
       menuItemRender={(item, dom) => (item.path ? <Link to={item.path}>{dom}</Link> : dom)}
       // One language: nothing to switch (decision D22, item 7).
-      actionsRender={() => (languages.length < 2 ? [] : [
+      actionsRender={() => [
+        <Link key="tasks" to="/tasks" aria-label={t('tasks.open', { count: openTasks })} data-testid="task-count">
+          <Badge count={openTasks} size="small" overflowCount={99}>
+            <CheckSquareOutlined />
+          </Badge>
+        </Link>,
+        ...(languages.length < 2 ? [] : [
         <Dropdown
           key="language"
           menu={{
@@ -66,7 +82,8 @@ export default function AppLayout() {
             {LANGUAGE_NAMES[i18n.language as Language] ?? i18n.language}
           </Space>
         </Dropdown>,
-      ])}
+      ]),
+      ]}
       avatarProps={{
         icon: <UserOutlined />,
         title: <span data-testid="current-user">{userId}</span>,

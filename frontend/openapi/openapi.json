@@ -364,6 +364,21 @@
         },
         "type" : "object"
       },
+      "MyTasks" : {
+        "properties" : {
+          "tasks" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Task"
+            },
+            "type" : "array"
+          },
+          "total" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PartEvent" : {
         "properties" : {
           "last" : {
@@ -573,6 +588,46 @@
             "type" : "boolean"
           },
           "field" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Task" : {
+        "properties" : {
+          "createdTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "dueTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "link" : {
+            "type" : "string"
+          },
+          "subjectEntity" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "titleKey" : {
+            "type" : "string"
+          },
+          "titleParams" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "type" : {
             "type" : "string"
           }
         },
@@ -1738,6 +1793,34 @@
           }
         },
         "tags" : [ "sod-controller" ]
+      }
+    },
+    "/api/tasks/mine" : {
+      "get" : {
+        "operationId" : "mine",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "default" : 100,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MyTasks"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "task-controller" ]
       }
     }
   }

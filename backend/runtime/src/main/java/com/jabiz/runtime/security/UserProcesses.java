@@ -25,8 +25,9 @@ import java.util.Map;
 @Configuration
 public class UserProcesses {
 
+    /** @param email where notifications go; optional */
     public record CreateUserInput(@NotBlank String userName, String displayName, String tenantId,
-        @Sensitive @NotBlank String password, Boolean enabled) {
+        @Sensitive @NotBlank String password, Boolean enabled, String email) {
         @Override
         public String toString() {
             return "CreateUserInput[userName=" + userName + ", password=***]";
@@ -67,6 +68,7 @@ public class UserProcesses {
                     user.put("userName", input.userName());
                     user.put("displayName", input.displayName());
                     user.put("tenantId", input.tenantId());
+                    user.put("email", input.email());
                     user.put("enabled", input.enabled() == null || input.enabled());
                     ctx.put(NEW_USER, user);
                     ctx.put(PASSWORD, input.password());
