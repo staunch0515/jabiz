@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a 已合入；14b-1 PR 待合并（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b-1 已合入；14b-2 PR 待合并（线 1.1，各子阶段先出计划） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -490,5 +490,26 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 20 个并发流程（其中 4 个取号后失败）：16 个号码，1…16 无缺无重（`NumberingIT`）。
 - [x] 号码记录只 INSERT，触发器拒绝 UPDATE / DELETE；每个号码记录取号的操作（`NumberingIT`）。
 - [x] 序列名重复、步骤引用未声明的序列或范围用法不对，启动时报告（`NumberingChecksTest`）。
+- [x] 现有全部检查照常通过。
+
+**14b-2 要求**
+1. core：`ApprovalSubject`（事实与类型）、`ApprovalCondition`（`all`/`any`、比较运算）、`ApprovalLevel`（权限、限额事实）、`ApprovalEvaluation`（按优先级取第一条）、
+   `ContentHash`（规范文本的 SHA-256）、`SodRule`。
+2. 时态实体 `SysApprovalRule`、`SysApprovalLimit`、`SysSodRule`、`SysControlChange`、`SysApprovalRequest`；只追加 `ApprovalDecision`、`ApprovalEvaluation`（迁移 V13）。
+3. 步骤 `RequireApproval`（按业务时间评估、记录规则版本与事实、绑定内容哈希、内容变化即作废）、`WithdrawApproval`；流程 `APPROVAL_DECIDE`
+   （层级权限、限额、准备人与重复判断的检查；事件 `jabiz.approval.requested` / `approved` / `rejected`）。
+4. 四眼修改：`CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH` / `CONTROL_CHANGE_WITHDRAW`；影响预览 `POST /api/approvals/preview`。
+5. 职责分离：`SecUserRole` / `SecRolePermission` 全部写入途径上的写入检查（`SOD_CONFLICT`）；流程 API 入口兜底（`*` 不拦）；冲突报告 `GET /api/sod/conflicts`。
+6. 示范：供应商认证提交经 `RequireApproval`，以事件继续；场景步骤可指定操作人。文档：18 §3–§4、06、07、10、D23、CLAUDE.md。
+
+**14b-2 验收标准**
+- [x] 规则由一人提出、另一人发布；同一人发布被拒；错误一次报告；可撤回（`ApprovalIT`、场景 `certification_approval`）。
+- [x] 不需审批的案件记录所评估的规则版本与事实；按业务时间取规则，预定生效的修改只影响其后的案件（`ApprovalIT`）。
+- [x] 批准绑定内容：同内容找到同一请求，内容变化使原请求作废并建新请求；批准后同内容得到 `APPROVED`（`ApprovalIT`、`ContentHashTest`）。
+- [x] 准备人不能审批；缺层级权限 403；限额不足（或无限额）被拒；同一人不能判断两个层级；驳回需理由；同一层级的并发判断只有一个成功（`ApprovalIT`）。
+- [x] 判断与评估只 INSERT，触发器拒绝 UPDATE / DELETE（`ApprovalIT`）。
+- [x] 影响预览列出结论不同的单据与评估总数（`ApprovalIT`）。
+- [x] 授予角色或权限造成冲突被拒（两条途径）；`*` 不拦；规则发布前已存在的冲突在流程入口被拒；冲突报告列出用户、规则、角色与 `*` 持有者（`SodIT`）。
+- [x] 示范：等待审批时手工审核被拒；批准事件使认证通过（场景 `certification_approval`）。
 - [x] 现有全部检查照常通过。
 

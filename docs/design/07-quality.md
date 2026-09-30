@@ -76,7 +76,8 @@ snapshot:
 实现（阶段 8，【D13】）：runtime testFixtures 的 `com.jabiz.runtime.test.scenario`（`Scenario`、`ScenarioRunner`、`ScenarioReplay`、
 `SnapshotStore`）；业务模块用 `ScenarioReplay.resources("scenarios")` + `ScenarioReplay.verify(App.class, 资源)` 生成动态测试（示范：`app` 的 `ScenarioTest`）。
 
-- 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
+- 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配，可选 `actor: {id, permissions}` 以另一个操作人运行，
+  用于准备人与审批人不同的四眼步骤，18 §3；`expectError` 同样可带 `actor`）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
   `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
   `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, rows, values}`（SQL 模板的行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
   `expectError: {process, input, status, ruleCode, field}`。未知键即报错（拼错的期望不会静默通过）。

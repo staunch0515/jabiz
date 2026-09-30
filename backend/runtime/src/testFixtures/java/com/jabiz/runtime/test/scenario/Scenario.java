@@ -55,10 +55,11 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     /**
      * Runs a process. {@code save} maps variable names to paths in the output ({@code $.a.b[0]});
-     * {@code expectOutput} must be contained in the output.
+     * {@code expectOutput} must be contained in the output. {@code actor} runs it as another actor than the
+     * scenario's (for four-eyes steps: a preparer and an approver); null for the scenario's.
      */
     public record ProcessStep(int number, String process, Map<String, Object> input, Map<String, String> save,
-        Object expectOutput) implements Step {}
+        Object expectOutput, Actor actor) implements Step {}
 
     /** Moves the clock forward by an ISO-8601 duration ({@code PT2H}) or period ({@code P1D}, {@code P1M}). */
     public record AdvanceClock(int number, String amount) implements Step {}
@@ -77,9 +78,12 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
-    /** Runs a process that must fail with the given status, and with the rule code (on the field) if given. */
+    /**
+     * Runs a process that must fail with the given status, and with the rule code (on the field) if given; as
+     * {@code actor} when given.
+     */
     public record ExpectError(int number, String process, Map<String, Object> input, int status, String ruleCode,
-        String field) implements Step {}
+        String field, Actor actor) implements Step {}
 
     public sealed interface Expectation {}
 
@@ -144,13 +148,13 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         Map<String, Object> keys = new LinkedHashMap<>(step);
         keys.remove("note");
         if (keys.containsKey("process")) {
-            onlyKeys(keys, where, Set.of("process", "input", "save", "expectOutput"));
+            onlyKeys(keys, where, Set.of("process", "input", "save", "expectOutput", "actor"));
             Map<String, String> save = new LinkedHashMap<>();
             if (keys.get("save") != null) {
                 map(keys.get("save"), where + ".save").forEach((name, path) -> save.put(name, String.valueOf(path)));
             }
             return new ProcessStep(number, text(keys, "process", true), input(keys.get("input"), where), save,
-                keys.get("expectOutput"));
+                keys.get("expectOutput"), stepActor(keys.get("actor"), where));
         }
         if (keys.size() != 1) {
             throw new IllegalArgumentException(where + " must have exactly one of process, advanceClock, setClock, "
@@ -215,10 +219,14 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static ExpectError expectError(int number, Map<String, Object> error, String where) {
-        onlyKeys(error, where, Set.of("process", "input", "status", "ruleCode", "field"));
+        onlyKeys(error, where, Set.of("process", "input", "status", "ruleCode", "field", "actor"));
         return new ExpectError(number, text(error, "process", true), input(error.get("input"), where),
             ((Number) required(error, "status", where)).intValue(), text(error, "ruleCode", false),
-            text(error, "field", false));
+            text(error, "field", false), stepActor(error.get("actor"), where));
+    }
+
+    private static Actor stepActor(Object raw, String where) {
+        return raw == null ? null : actor(map(raw, where + ".actor"));
     }
 
     private static Map<String, Object> input(Object raw, String where) {

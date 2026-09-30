@@ -1,0 +1,95 @@
+# A supplier certification that needs approval (docs/design/18-numbering-approvals-tasks.md sections 3 and 4): the
+# rule is changed with four eyes; submitting makes a request bound to the certification's content; the preparer
+# cannot decide it and the manual review cannot bypass it; the approval event moves the certification on. Then a
+# segregation-of-duties rule stops someone who both submits and reviews.
+name: Supplier certification approval
+clock: 2026-06-01T01:00:00Z
+actor: { id: admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Supplier
+      attributes: { supplierCode: SHIZ, supplierName: Shizuoka Tea, countryCode: JP, leadTimeDays: 5, active: true }
+    save: { supplier: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: SupplierCertification
+      attributes:
+        supplierId: "${supplier}"
+        title: { en: Organic certification }
+        body: { en: "Issued by the **Shizuoka** certification body." }
+    save: { certification: $.id }
+
+  - note: Certifications with a body need a reviewer's approval; one person proposes the rule, another publishes it.
+    actor: { id: compliance, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysApprovalRule
+      reason: Reviewed certifications only
+      values:
+        ruleCode: CERT-BODY
+        subject: commerce.certification
+        priority: 10
+        enabled: true
+        condition: { fact: hasBody, op: eq, value: true }
+        levels: [{ permission: commerce.certification.review }]
+    save: { ruleChange: $.changeId }
+  - expectError:
+      actor: { id: compliance, permissions: [control.publish] }
+      process: CONTROL_CHANGE_PUBLISH@latest
+      input: { changeId: "${ruleChange}" }
+      status: 422
+      ruleCode: CONTROL_SAME_PERSON
+  - actor: { id: auditor, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${ruleChange}" }
+    expectOutput: { status: PUBLISHED }
+
+  - advanceClock: PT1H
+  - actor: { id: buyer, permissions: [commerce.certification.submit, commerce.certification.review, approval.decide] }
+    process: CERTIFICATION_SUBMIT@latest
+    input: { certificationId: "${certification}" }
+    expectOutput: { status: SUBMITTED, approval: PENDING }
+    save: { request: $.approvalRequestId }
+  - note: The manual review cannot pass the certification while it awaits approval.
+    expectError:
+      process: CERTIFICATION_APPROVE@latest
+      input: { certificationId: "${certification}" }
+      status: 422
+      ruleCode: CERTIFICATION_AWAITING_APPROVAL
+  - expectError:
+      actor: { id: buyer, permissions: [commerce.certification.review, approval.decide] }
+      process: APPROVAL_DECIDE@latest
+      input: { requestId: "${request}", decision: APPROVE }
+      status: 422
+      ruleCode: APPROVAL_OWN_REQUEST
+  - advanceClock: PT1H
+  - actor: { id: reviewer, permissions: [commerce.certification.review, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${request}", decision: APPROVE, reason: Certificate checked. }
+    expectOutput: { status: APPROVED }
+  - note: The approval event runs CERTIFICATION_APPROVAL_RESULT, which finds the approval for the same content.
+    deliverEvents: true
+  - expect:
+      entity: SupplierCertification
+      id: "${certification}"
+      fields: { status: APPROVED }
+
+  - note: Nobody may both submit and review certifications.
+    actor: { id: compliance, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysSodRule
+      reason: Four eyes on certifications
+      values:
+        ruleCode: CERT-SUBMIT-REVIEW
+        leftPermissions: commerce.certification.submit
+        rightPermissions: commerce.certification.review
+        enabled: true
+    save: { sodChange: $.changeId }
+  - actor: { id: auditor, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${sodChange}" }
+snapshot:
+  entities: [SupplierCertification, SysApprovalRule, SysSodRule, SysApprovalRequest, ApprovalDecision]
+  asOf: end

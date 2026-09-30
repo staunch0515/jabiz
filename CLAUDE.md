@@ -47,6 +47,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **金额**：只用 `BigDecimal`，由 `SemanticKind.Monetary` 声明币种和小数位（小数位由平台自动校验，`MONETARY_SCALE`）。禁止 `double` / `float` 表示金额。
 - **标识**：新实体主键使用 UUIDv7（默认 `EntityIdGenerator` 即 `UuidV7Generator`）；`process_seq_id` 来自数据库序列。
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。
+- **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
+  以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批规则、限额、职责分离规则只经
+  `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝。错误码可多语言（见设计文档）。

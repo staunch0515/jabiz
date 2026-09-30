@@ -51,6 +51,41 @@
         },
         "type" : "object"
       },
+      "Conflict" : {
+        "properties" : {
+          "left" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "right" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "roles" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "ruleCode" : {
+            "type" : "string"
+          },
+          "userId" : {
+            "type" : "string"
+          },
+          "userName" : {
+            "type" : "string"
+          },
+          "wildcard" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "DataBuffer" : { },
       "DatasetEntry" : {
         "properties" : {
@@ -111,6 +146,23 @@
           "sortOrder" : {
             "format" : "int32",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "DraftRule" : {
+        "properties" : {
+          "condition" : { },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "levels" : { },
+          "priority" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleCode" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -315,6 +367,42 @@
       "PartEvent" : {
         "properties" : {
           "last" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "PreviewRequest" : {
+        "properties" : {
+          "draft" : {
+            "$ref" : "#/components/schemas/DraftRule"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleId" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PreviewResponse" : {
+        "properties" : {
+          "changed" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Change"
+            },
+            "type" : "array"
+          },
+          "evaluated" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "truncated" : {
             "type" : "boolean"
           }
         },
@@ -562,6 +650,34 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/approvals/preview" : {
+      "post" : {
+        "operationId" : "preview",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PreviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "approval-preview-controller" ]
+      }
+    },
     "/api/audit/operations" : {
       "get" : {
         "operationId" : "operations",
@@ -1601,6 +1717,27 @@
           }
         },
         "tags" : [ "query-controller" ]
+      }
+    },
+    "/api/sod/conflicts" : {
+      "get" : {
+        "operationId" : "conflicts",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/Conflict"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sod-controller" ]
       }
     }
   }

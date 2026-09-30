@@ -76,6 +76,14 @@ val coverageGatedClasses = listOf(
     // Phase 14b
     "com.jabiz.numbering.NumberFormat",
     "com.jabiz.numbering.NumberSequence",
+    "com.jabiz.approval.ApprovalSubject",
+    "com.jabiz.approval.ApprovalCondition*",
+    "com.jabiz.approval.ConditionParser",
+    "com.jabiz.approval.ApprovalLevel",
+    "com.jabiz.approval.ApprovalEvaluation",
+    "com.jabiz.approval.ContentHash",
+    "com.jabiz.approval.FactType",
+    "com.jabiz.security.SodRule",
 )
 
 dependencies {

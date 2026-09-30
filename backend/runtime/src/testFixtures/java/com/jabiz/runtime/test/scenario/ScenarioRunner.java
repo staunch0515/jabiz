@@ -122,7 +122,8 @@ public final class ScenarioRunner {
             case Scenario.ProcessStep p -> {
                 Object output;
                 try {
-                    output = runProcess(scenario, step, p.process(), ScenarioValues.resolveMap(p.input(), variables));
+                    output = runProcess(scenario, step, p.process(), ScenarioValues.resolveMap(p.input(), variables),
+                        p.actor());
                 } catch (AssertionError e) {
                     throw e;
                 } catch (Throwable e) {
@@ -164,7 +165,8 @@ public final class ScenarioRunner {
     private void expectError(Scenario scenario, Scenario.ExpectError step, Map<String, Object> variables) {
         Object output;
         try {
-            output = runProcess(scenario, step, step.process(), ScenarioValues.resolveMap(step.input(), variables));
+            output = runProcess(scenario, step, step.process(), ScenarioValues.resolveMap(step.input(), variables),
+                step.actor());
         } catch (AssertionError e) {
             // The scenario itself is wrong (an unknown process, say): not a failure of the process.
             throw e;
@@ -233,10 +235,11 @@ public final class ScenarioRunner {
         }
     }
 
-    private Object runProcess(Scenario scenario, Scenario.Step step, String process, Map<String, Object> input) {
+    private Object runProcess(Scenario scenario, Scenario.Step step, String process, Map<String, Object> input,
+        Scenario.Actor actor) {
         ProcessDefinition<?, ?, ?> definition = find(process)
             .orElseThrow(() -> failure(scenario, step, "unknown process " + process, null));
-        ProcessResult<?> result = as(scenario, Mono.defer(() -> run(definition, input)));
+        ProcessResult<?> result = as(actor == null ? scenario.actor() : actor, Mono.defer(() -> run(definition, input)));
         return masker.toJsonWithoutSecrets(result.output());
     }
 
@@ -299,8 +302,12 @@ public final class ScenarioRunner {
     }
 
     private <T> T as(Scenario scenario, Mono<T> pipeline) {
-        RequestContext request = new RequestContext(scenario.actor().id(), scenario.actor().tenant(), Locale.ENGLISH,
-            "scenario", scenario.actor().roles(), scenario.actor().permissions());
+        return as(scenario.actor(), pipeline);
+    }
+
+    private <T> T as(Scenario.Actor actor, Mono<T> pipeline) {
+        RequestContext request = new RequestContext(actor.id(), actor.tenant(), Locale.ENGLISH, "scenario",
+            actor.roles(), actor.permissions());
         try {
             return pipeline.contextWrite(view -> RequestContexts.put(view, request)).block();
         } catch (RuntimeException e) {

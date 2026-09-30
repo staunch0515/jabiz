@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +33,7 @@ class ScenarioParserTest {
               status: 422
               ruleCode: ORDER_ALREADY_SETTLED
               field: orderId
+              actor: { id: clerk, permissions: [order.cancel] }
         snapshot:
           entities: [Order]
           asOf: end
@@ -81,6 +83,7 @@ class ScenarioParserTest {
             assertThat(p.process()).isEqualTo("ORDER_CREATE@latest");
             assertThat(p.save()).containsEntry("orderId", "$.orderId");
             assertThat(p.number()).isEqualTo(1);
+            assertThat(p.actor()).isNull();
         });
         assertThat(scenario.steps().get(1)).isEqualTo(new Scenario.AdvanceClock(2, "P1D"));
         assertThat(scenario.steps().get(2)).isEqualTo(new Scenario.SetClock(3, Instant.parse("2026-01-31T15:00:00Z")));
@@ -92,7 +95,8 @@ class ScenarioParserTest {
         assertThat(((Scenario.Expect) scenario.steps().get(5)).expectation())
             .isEqualTo(new Scenario.ParamExpectation("tax.rate", null, 0.1));
         assertThat(scenario.steps().get(6)).isEqualTo(new Scenario.ExpectError(7, "ORDER_CANCEL@1",
-            Map.of("orderId", "${orderId}"), 422, "ORDER_ALREADY_SETTLED", "orderId"));
+            Map.of("orderId", "${orderId}"), 422, "ORDER_ALREADY_SETTLED", "orderId",
+            new Scenario.Actor("clerk", null, Set.of(), Set.of("order.cancel"))));
         assertThat(scenario.snapshot()).isEqualTo(new Scenario.SnapshotSpec(List.of("Order"), null));
     }
 
