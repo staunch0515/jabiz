@@ -292,6 +292,22 @@ export interface paths {
         patch: operations["update"];
         trace?: never;
     };
+    "/api/exports/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["export_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files": {
         parameters: {
             query?: never;
@@ -395,7 +411,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["export_2"];
+        get: operations["export_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -779,7 +795,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["export_1"];
+        get: operations["export_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -798,6 +814,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["report"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -954,6 +986,18 @@ export interface components {
             output?: unknown;
             /** Format: int64 */
             processSeqId?: number;
+        };
+        ExportRequest: {
+            /** Format: date-time */
+            asOf?: string;
+            datasets?: string[];
+            /** Format: date-time */
+            knownAt?: string;
+            reports?: boolean;
+            /** Format: date-time */
+            reportsFrom?: string;
+            /** Format: date-time */
+            reportsTo?: string;
         };
         FileInfo: {
             contentType?: string;
@@ -1383,6 +1427,27 @@ export interface components {
             label?: string;
             name?: string;
             operators?: string[];
+        };
+        RetentionPolicyStatus: {
+            entity?: string;
+            /** Format: int64 */
+            entries?: number;
+            /** Format: int64 */
+            expired?: number;
+            /** Format: date */
+            expiredThrough?: string;
+            from?: string;
+            fromFiscalYearEnd?: boolean;
+            /** Format: int64 */
+            held?: number;
+            keep?: string;
+        };
+        RetentionReportResult: {
+            /** Format: int32 */
+            fiscalYearEnd?: number;
+            policies?: components["schemas"]["RetentionPolicyStatus"][];
+            /** Format: date */
+            today?: string;
         };
         RevertRequest: {
             reason?: string;
@@ -2015,6 +2080,30 @@ export interface operations {
             };
         };
     };
+    export_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": components["schemas"]["DataBuffer"][];
+                };
+            };
+        };
+    };
     upload: {
         parameters: {
             query: {
@@ -2157,7 +2246,7 @@ export interface operations {
             };
         };
     };
-    export_2: {
+    export_3: {
         parameters: {
             query: {
                 format: string;
@@ -2760,7 +2849,7 @@ export interface operations {
             };
         };
     };
-    export_1: {
+    export_2: {
         parameters: {
             query: {
                 format: string;
@@ -2805,6 +2894,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Verification"];
+                };
+            };
+        };
+    };
+    report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionReportResult"];
                 };
             };
         };

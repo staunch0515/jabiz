@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架（已完成）；14f 审计与保留（进行中）；14g 安全增强。各子阶段开始前出计划。
+14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -695,8 +695,16 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 现有全部检查照常通过。
 - 与计划的差别：不需要宽限期（见 21 §2.2）；"在应用之外插入的可疑行"无法由封存判定，改为报告未封存行数并在 21 §2.3 说明。
 
-**14f-3 要求**：`RetentionPolicy`、删除拦截、`SysLegalHold` 与 `LEGAL_HOLD_PLACE` / `RELEASE`（迁移 V22）、到期报告、`POST /api/exports/data`（21 §3、§4）。
+**14f-3 要求**
+1. core：`RetentionPolicy`（按日期或会计年度末起算）、`LegalHold`、`OpenCsv`。
+2. 删除拦截（`DeletionGuard`：普通实体的删除、时态实体的墓碑，422 `RETENTION_ACTIVE` / `LEGAL_HOLD`）；文件清理跳过受保留与保全的文件；启动检查 `RETENTION`。
+3. `SysLegalHold`（迁移 V22）与 `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；到期报告 `GET /api/retention`。
+4. `POST /api/exports/data`（CSV、`schema.json`、`manifest.json`、报表 PDF），操作记录 `DATA_EXPORT`。
+5. 后台 `/retention`；示范：运费明细保留 7 年；文档 21 §3–§4、D27、14、12、CLAUDE.md。
 
 **14f-3 验收标准**
-- [ ] 保留期内与受保全的记录（含文件）删除被拒，解除保全后可删。
-- [ ] 导出的 ZIP 与清单一致，按权限与数据范围过滤；用导出的 CSV 重算试算表与系统一致。
+- [x] 保留期内与受保全的记录（普通与时态实体、文件）删除被拒，解除保全后可删；文件清理跳过并报告（`RetentionIT`、`FileSweepIT`、`RetentionPolicyTest`）。
+- [x] 保全只经其流程下达与解除，解除须写原因；到期报告的数量正确（`RetentionIT`）。
+- [x] 导出的 ZIP 与清单一致，按权限过滤，敏感字段不导出；用导出的 CSV 重算试算表与系统一致（`DataExportIT`、`OpenCsvTest`）。
+- [x] 后台查看到期报告、进入保全、导出（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。

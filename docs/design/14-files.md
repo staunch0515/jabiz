@@ -135,7 +135,7 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
      `Clock`，与业务时间一致；不用文件系统的修改时间（真实时钟，场景回放中对不上）。
   3. 删除崩溃的上传留下的临时内容（上传区的文件与工作目录、对象旁的部分文件），超过 6 小时的。这些是基础设施的残留而不是业务数据，
      只有文件系统的时间，因此按文件系统时间判断（与集群锁的时间同理）。
-  任务名 `FILE_SWEEP`，它只调用流程 `FILE_PURGE_ORPHANS`（有操作记录，输出含删除的 `fileId`）；各项删除数量记入日志，
+  任务名 `FILE_SWEEP`，它只调用流程 `FILE_PURGE_ORPHANS`（有操作记录，输出含删除的 `fileId`；在保留期内或受法律保全的文件跳过，列在 `keptFileIds`，21 §3.2）；各项删除数量记入日志，
   观测 `jabiz.file.sweep` 只带结果标签（D16 第 3 条）。
   引用的判定只看数据库中的当前值（时态实体：当前与预定版本；普通实体：所有行，含逻辑删除的行），不经数据视图范围。
 - **手动删除** `FILE_DELETE`（`file.delete`）：文件仍被当前数据引用时 422 `FILE_IN_USE`（参数 `entity`、`field`）。

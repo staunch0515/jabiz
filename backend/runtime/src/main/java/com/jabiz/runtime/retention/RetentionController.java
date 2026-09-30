@@ -19,7 +19,7 @@ class RetentionController {
     }
 
     @GetMapping
-    Mono<RetentionReport.Report> report() {
+    Mono<RetentionReport.RetentionReportResult> report() {
         return RequestContexts.current().flatMap(request -> request.hasPermission(RetentionPermissions.READ)
             ? report.report()
             : Mono.error(new PermissionDeniedException(RetentionPermissions.READ,

@@ -39,10 +39,10 @@ public class RetentionReport {
      * @param expired        entries past their retention
      * @param held           of those, entries under a legal hold
      */
-    public record PolicyStatus(String entity, String keep, String from, boolean fromFiscalYearEnd,
+    public record RetentionPolicyStatus(String entity, String keep, String from, boolean fromFiscalYearEnd,
         LocalDate expiredThrough, long entries, long expired, long held) {}
 
-    public record Report(LocalDate today, int fiscalYearEnd, List<PolicyStatus> policies) {}
+    public record RetentionReportResult(LocalDate today, int fiscalYearEnd, List<RetentionPolicyStatus> policies) {}
 
     private final RetentionPolicies policies;
     private final EntityDefinitionRegistry entities;
@@ -62,7 +62,7 @@ public class RetentionReport {
         this.clock = clock;
     }
 
-    public Mono<Report> report() {
+    public Mono<RetentionReportResult> report() {
         StorageEngine engine = storages.getEngine(poolRef);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
@@ -71,10 +71,10 @@ public class RetentionReport {
             .filter(policy -> entities.find(policy.entity()).isPresent())
             .concatMap(policy -> status(engine, policy, entities.getOrThrow(policy.entity()), now, today))
             .collectList()
-            .map(list -> new Report(today, policies.fiscalYearEnd().getValue(), list));
+            .map(list -> new RetentionReportResult(today, policies.fiscalYearEnd().getValue(), list));
     }
 
-    private Mono<PolicyStatus> status(StorageEngine engine, RetentionPolicy policy, EntityDefinition def,
+    private Mono<RetentionPolicyStatus> status(StorageEngine engine, RetentionPolicy policy, EntityDefinition def,
         Instant now, LocalDate today) {
         LocalDate through = policy.expiredThrough(today, policies.fiscalYearEnd());
         return guard.holds(engine, def.name).collectList().flatMap(holds -> {
@@ -97,7 +97,7 @@ public class RetentionReport {
             String sql = "SELECT count(*) AS entries, count(*) FILTER (WHERE " + date + " < :bound) AS expired,"
                 + " count(*) FILTER (WHERE " + date + " < :bound AND " + held + ") AS held FROM "
                 + relation(def, params, now);
-            return engine.select(sql, params).next().map(row -> new PolicyStatus(policy.entity(),
+            return engine.select(sql, params).next().map(row -> new RetentionPolicyStatus(policy.entity(),
                 policy.keep().toString(), policy.from(), policy.fromFiscalYearEnd(), through,
                 Rows.longValue(row.get("entries")), Rows.longValue(row.get("expired")),
                 Rows.longValue(row.get("held"))));

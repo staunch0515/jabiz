@@ -287,6 +287,36 @@
         },
         "type" : "object"
       },
+      "ExportRequest" : {
+        "properties" : {
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "datasets" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "knownAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reports" : {
+            "type" : "boolean"
+          },
+          "reportsFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reportsTo" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "FileInfo" : {
         "properties" : {
           "contentType" : {
@@ -1403,6 +1433,58 @@
         },
         "type" : "object"
       },
+      "RetentionPolicyStatus" : {
+        "properties" : {
+          "entity" : {
+            "type" : "string"
+          },
+          "entries" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "expired" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "expiredThrough" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "from" : {
+            "type" : "string"
+          },
+          "fromFiscalYearEnd" : {
+            "type" : "boolean"
+          },
+          "held" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "keep" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RetentionReportResult" : {
+        "properties" : {
+          "fiscalYearEnd" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "policies" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RetentionPolicyStatus"
+            },
+            "type" : "array"
+          },
+          "today" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "RevertRequest" : {
         "properties" : {
           "reason" : {
@@ -2499,6 +2581,37 @@
         "tags" : [ "entity-controller" ]
       }
     },
+    "/api/exports/data" : {
+      "post" : {
+        "operationId" : "export_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/zip" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DataBuffer"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "export-controller" ]
+      }
+    },
     "/api/files" : {
       "post" : {
         "operationId" : "upload",
@@ -2708,7 +2821,7 @@
     },
     "/api/imports/runs/{runId}/export" : {
       "get" : {
-        "operationId" : "export_2",
+        "operationId" : "export_3",
         "parameters" : [ {
           "in" : "path",
           "name" : "runId",
@@ -3530,7 +3643,7 @@
     },
     "/api/reports/runs/{runId}/export" : {
       "get" : {
-        "operationId" : "export_1",
+        "operationId" : "export_2",
         "parameters" : [ {
           "in" : "path",
           "name" : "runId",
@@ -3604,6 +3717,24 @@
           }
         },
         "tags" : [ "report-archive-controller" ]
+      }
+    },
+    "/api/retention" : {
+      "get" : {
+        "operationId" : "report",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RetentionReportResult"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "retention-controller" ]
       }
     },
     "/api/sod/conflicts" : {
