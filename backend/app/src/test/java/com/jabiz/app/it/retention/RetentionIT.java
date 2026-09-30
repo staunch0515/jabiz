@@ -86,6 +86,27 @@ class RetentionIT extends SecurityItSupport {
     }
 
     @Test
+    void aRevertThatWouldDeleteAKeptEntryIsRefused() {
+        String kept = document("REV", "2026-01-20T00:00:00Z");
+        Object created = query("SELECT process_seq_id FROM op_process_item WHERE entity_id = ?::uuid", kept)
+            .getFirst().get("process_seq_id");
+        Map<String, Object> refused = post("/api/processes/executions/" + created + "/revert", admin(),
+            Map.of("reason", "undo")).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(ruleCode(refused)).isEqualTo("RETENTION_ACTIVE");
+        assertThat(query("SELECT count(*) AS n FROM it_document WHERE document_id = ?::uuid AND is_deleted", kept)
+            .getFirst().get("n")).isEqualTo(0L);
+    }
+
+    @Test
+    void holdIdsMatchWhateverTheCaseTheyWereGivenIn() {
+        String id = document("CASE", "2020-01-01T00:00:00Z");
+        place(Map.of("name", "upper", "reason", "r", "entityType", "ItDocument",
+            "ids", List.of(" " + id.toUpperCase(java.util.Locale.ROOT) + " ")));
+        assertThat(ruleCode(delete(DOCUMENTS, id, 1).expectStatus().isEqualTo(422).expectBody(MAP)
+            .returnResult().getResponseBody())).isEqualTo("LEGAL_HOLD");
+    }
+
+    @Test
     void holdsAreValidatedAndNeedTheirPermission() {
         String keeper = bearer("legal.hold.write");
         List<Map<String, Object>> problems = violations(post("/api/processes/LEGAL_HOLD_PLACE/latest", keeper,

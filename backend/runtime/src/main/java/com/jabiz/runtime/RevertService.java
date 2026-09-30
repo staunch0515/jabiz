@@ -300,9 +300,12 @@ public class RevertService {
                 if (current.deleted() == write.deleted() && sameState(current.state(), write.state())) {
                     return Mono.<Void>empty();
                 }
+                // A revert that deletes is a deletion: references, retention and legal holds apply.
+                EntityInstance snapshot = TemporalWriter.snapshot(def, current, current.processSeqId(),
+                    current.recordedAt());
                 Mono<Void> referenced = write.deleted() && !current.deleted()
-                    ? entityManager.ensureNotReferenced(def, TemporalWriter.snapshot(def, current,
-                        current.processSeqId(), current.recordedAt()))
+                    ? entityManager.ensureNotReferenced(def, snapshot)
+                        .then(entityManager.ensureDeletable(engine, def, snapshot))
                     : Mono.empty();
                 return referenced.then(versions.append(engine, table, def, id, timeline, write, operation, true))
                     .onErrorMap(UniqueKeyViolationException.class, e -> new ConcurrentUpdateException(

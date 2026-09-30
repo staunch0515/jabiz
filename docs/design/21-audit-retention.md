@@ -150,7 +150,7 @@
 
 - 每次删除——普通实体的物理删除或软删除、时态实体的逻辑删除（写墓碑）——在同一事务中先检查：在保留期内拒绝 422 `RETENTION_ACTIVE`（参数 `until`），
   受法律保全拒绝 422 `LEGAL_HOLD`（参数 `hold`）。检查在 `DatasetEntityManager` 与时态写入的删除路径中（`DeletionGuard`），
-  因此数据视图 API、通用实体流程、业务流程的 `SaveChanges` 与 `FILE_DELETE` 都受约束。
+  因此数据视图 API、通用实体流程、业务流程的 `SaveChanges` 与 `FILE_DELETE` 都受约束；撤销一个创建了记录的操作（写墓碑）同样是删除，照样检查。
 - 文件：`sys_file` 按上面的规则受保留策略（实体 `SysFile`，字段 `uploadedTime`）与法律保全约束。清理孤儿文件的 `FILE_PURGE_ORPHANS` 跳过这些文件，
   并在输出 `keptFileIds` 中列出（不因一个文件而整体失败）。
 - 更新、冲正、取消预定版本不是删除，不受拦截；只追加表本来就不能删除。
@@ -177,13 +177,14 @@
 | 请求字段 | 含义 |
 |---|---|
 | `datasets` | 数据视图（1–100 个） |
-| `asOf` / `knownAt` | 读取的时点（时态实体；缺省为现在） |
+| `asOf` / `knownAt` | 读取时态实体的时点（缺省为导出开始的时刻）；只显示当前状态的时态数据视图不接受（400 `TIME_TRAVEL_NOT_ALLOWED`），普通实体没有其他时点，不受影响 |
 | `reports` | 是否包含已签发报表的 PDF |
 | `reportsFrom` / `reportsTo` | 报表签发时间 `[from, to)`，缺省不限 |
 
 以流返回 ZIP（`application/zip`，附件名 `jabiz-export-<时间>.zip`）：
 
-- `data/<数据视图>.csv`：UTF-8、RFC 4180、CRLF、首行为字段名；按主键排序，经数据视图分页读取，因此权限、数据范围与时点照常生效；**敏感字段不导出**。
+- `data/<数据视图>.csv`：UTF-8、RFC 4180、CRLF、首行为字段名；按主键排序，经数据视图按主键分页读取（`QueryPredicate.KeyAfter`，不用偏移，导出期间的增删不会让行错位），
+  因此权限、数据范围与时点照常生效；时态数据视图的所有页读同一时点（`manifest.json` 的 `readAt`）；**敏感字段不导出**。
   值：小数原样（`toPlainString`，保留小数位），时间为 UTC ISO-8601，结构为 JSON；不为电子表格转义（归档是数据，公式前缀会改变它）。
 - `reports/<运行>-<文件名>.pdf`：期间内调用者可读的已签发报表（与存档相同的读取规则），按签发时的内容生成，内容哈希不符的跳过。
 - `schema.json`：每个数据视图的实体、文件、中英文名称、主键、是否时态、每列的名称、中英文名称、是否必填、语义类型（币种与小数位等）、引用。

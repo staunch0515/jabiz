@@ -107,6 +107,16 @@ class QueryCompilerTest {
         assertThat(compile(new QueryPredicate.Eq("price", null)).bindParams()).isEmpty();
     }
 
+    /** Paging by key: after the last key, whatever operators the key's kind allows filters. */
+    @Test
+    void keyAfterComparesThePrimaryKey() {
+        PhysicalQueryPlan plan = compile(new QueryPredicate.KeyAfter("I-7"));
+        assertThat(plan.whereClause()).matches("\\w+ > :p0");
+        assertThat(param(plan, "p0")).isEqualTo("I-7");
+        assertThatThrownBy(() -> compile(new QueryPredicate.KeyAfter(null)))
+            .isInstanceOf(ValidationException.class);
+    }
+
     @Test
     void rangeComparisonWithNullIsRejected() {
         assertRejected(() -> compile(new QueryPredicate.Gt("price", null)), "price", "INVALID_VALUE");

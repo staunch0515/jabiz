@@ -390,6 +390,14 @@ public class QueryCompiler {
             case QueryPredicate.IsNull isNull -> nullCheck(def, isNull.field(), QueryOperator.IS_NULL);
             case QueryPredicate.IsNotNull isNotNull -> nullCheck(def, isNotNull.field(), QueryOperator.IS_NOT_NULL);
             case QueryPredicate.Between between -> compileBetween(between, def, binder);
+            case QueryPredicate.KeyAfter after -> {
+                FieldDefinition key = resolveField(def, def.primaryKey);
+                if (after.value() == null) {
+                    throw invalidValue(key, "paging by key needs the last key");
+                }
+                yield SqlIdentifiers.require(key.physicalColumn()) + " > :"
+                    + binder.bind(BoundValue.of(coerce(def, key, after.value())));
+            }
             case QueryPredicate.And and -> {
                 List<String> children = compileChildren(and.predicates(), def, binder);
                 yield children.isEmpty() ? "" : "(" + String.join(" AND ", children) + ")";

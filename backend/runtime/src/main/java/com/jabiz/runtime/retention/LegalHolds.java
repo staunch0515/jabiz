@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Legal holds (docs/design/21-audit-retention.md section 3.3): the temporal platform entity {@code SysLegalHold} and
@@ -80,6 +81,16 @@ public class LegalHolds {
 
     public record HoldOutput(String holdId, String status) {}
 
+    /** Ids as stored: UUIDs in their canonical lower-case form, anything else trimmed. */
+    static String normalizedId(String id) {
+        String trimmed = id.strip();
+        try {
+            return UUID.fromString(trimmed).toString();
+        } catch (IllegalArgumentException e) {
+            return trimmed;
+        }
+    }
+
     @Bean
     EntityDefinition sysLegalHoldEntity() {
         return SYS_LEGAL_HOLD;
@@ -110,8 +121,8 @@ public class LegalHolds {
             .compute("Check and register the hold", (metadata, ctx) -> {
                 PlaceInput input = ctx.get(INPUT, PlaceInput.class);
                 List<String> ids = input.ids() == null ? List.of()
-                    : input.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::strip).distinct()
-                        .toList();
+                    : input.ids().stream().filter(id -> id != null && !id.isBlank()).map(LegalHolds::normalizedId)
+                        .distinct().toList();
                 List<Violation> problems = new ArrayList<>();
                 EntityDefinition def = entities.find(input.entityType()).orElse(null);
                 if (def == null) {

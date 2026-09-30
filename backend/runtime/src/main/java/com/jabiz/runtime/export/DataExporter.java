@@ -8,6 +8,7 @@ import com.jabiz.entity.MetaModelExporter;
 import com.jabiz.export.OpenCsv;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
@@ -61,9 +62,14 @@ public class DataExporter {
     public static final String PROCESS_NAME = "DATA_EXPORT";
     static final String FORMAT = "jabiz-open-export/1";
 
-    /** What to export; the caller checked it (see {@code ExportController}). */
-    public record Plan(List<DatasetDefinition> datasets, Instant asOf, Instant knownAt, boolean reports,
-        Instant reportsFrom, Instant reportsTo, Predicate<ReportRun> readableRun) {}
+    /**
+     * What to export; the caller checked it (see {@code ExportController}).
+     *
+     * @param readAt the moment the export reads temporal datasets at, unless {@code asOf} / {@code knownAt} say
+     *               otherwise: one snapshot for all their pages
+     */
+    public record Plan(List<DatasetDefinition> datasets, Instant asOf, Instant knownAt, Instant readAt,
+        boolean reports, Instant reportsFrom, Instant reportsTo, Predicate<ReportRun> readableRun) {}
 
     private final DatasetEntityManager entities;
     private final EntityDefinitionRegistry definitions;
@@ -115,7 +121,9 @@ public class DataExporter {
                 .flatMap(archive -> write(plan, request, archive, started.processSeqId(), engine)
                     .then(blocking(archive::close))
                     .thenReturn(archive.path)
-                    .onErrorResume(error -> blocking(archive::discard).then(Mono.error(error)))));
+                    .onErrorResume(error -> blocking(archive::discard).then(Mono.error(error)))
+                    // A client gone before the ZIP is complete leaves no file behind either.
+                    .doOnCancel(() -> Schedulers.boundedElastic().schedule(archive::discardQuietly))));
     }
 
     private Mono<Void> write(Plan plan, RequestContext request, Archive archive, long processSeqId,
@@ -143,19 +151,18 @@ public class DataExporter {
         List<FieldDefinition> fields = def.fields.values().stream().filter(field -> !field.sensitive()).toList();
         String file = "data/" + dataset.resourceId().replaceAll("[^A-Za-z0-9._-]", "_") + ".csv";
         int batch = dataset.policy().maxQueryBatchSize();
+        // Temporal datasets are read at one moment throughout; others as they are (they have no other time), and so
+        // are the temporal datasets showing the current state only (the caller cannot ask them another time).
+        boolean pinned = def.temporal && dataset.policy().allowTimeTravel();
+        Instant asOf = pinned ? firstNonNull(plan.asOf(), plan.readAt()) : null;
+        Instant knownAt = pinned ? firstNonNull(plan.knownAt(), plan.readAt()) : null;
         schema.add(describe(def, dataset, file, fields));
         return blocking(() -> archive.begin(file, OpenCsv.line(fields.stream().map(FieldDefinition::name).toList())))
-            .then(page(plan, dataset, def, fields, archive, 0, batch))
-            .then(blocking(archive::end));
-    }
-
-    private Mono<Void> page(Plan plan, DatasetDefinition dataset, EntityDefinition def, List<FieldDefinition> fields,
-        Archive archive, int offset, int batch) {
-        EntityQuery query = EntityQuery.builder().orderBy(def.primaryKey, true).offset(offset).limit(batch).build();
-        return entities.query(dataset, def, query, plan.asOf(), plan.knownAt())
-            .map(masker::hide)
-            .collectList()
-            .flatMap(rows -> blocking(() -> {
+            // Pages follow the key, not an offset: rows deleted or added meanwhile shift nothing.
+            .thenMany(page(dataset, def, asOf, knownAt, null, batch)
+                .expand(rows -> rows.size() < batch ? Mono.empty()
+                    : page(dataset, def, asOf, knownAt, rows.getLast().id(), batch)))
+            .concatMap(rows -> blocking(() -> {
                 for (EntityInstance row : rows) {
                     List<String> cells = new ArrayList<>(fields.size());
                     for (FieldDefinition field : fields) {
@@ -163,8 +170,22 @@ public class DataExporter {
                     }
                     archive.row(OpenCsv.line(cells));
                 }
-            }).then(rows.size() < batch ? Mono.empty()
-                : Mono.defer(() -> page(plan, dataset, def, fields, archive, offset + batch, batch))));
+            }))
+            .then(blocking(archive::end));
+    }
+
+    /** The entries after {@code after} (the start when null), at most {@code batch}, in key order. */
+    private Mono<List<EntityInstance>> page(DatasetDefinition dataset, EntityDefinition def, Instant asOf,
+        Instant knownAt, Object after, int batch) {
+        EntityQuery.Builder query = EntityQuery.builder().orderBy(def.primaryKey, true).limit(batch);
+        if (after != null) {
+            query.where(new QueryPredicate.KeyAfter(after));
+        }
+        return entities.query(dataset, def, query.build(), asOf, knownAt).map(masker::hide).collectList();
+    }
+
+    private static Instant firstNonNull(Instant first, Instant second) {
+        return first != null ? first : second;
     }
 
     /** The archived PDFs of the runs issued in the period that the caller may read, as issued. */
@@ -224,6 +245,7 @@ public class DataExporter {
         parameters.put("datasets", plan.datasets().stream().map(DatasetDefinition::resourceId).toList());
         parameters.put("asOf", plan.asOf() == null ? null : plan.asOf().toString());
         parameters.put("knownAt", plan.knownAt() == null ? null : plan.knownAt().toString());
+        parameters.put("readAt", plan.readAt().toString());
         parameters.put("reports", plan.reports());
         parameters.put("reportsFrom", plan.reportsFrom() == null ? null : plan.reportsFrom().toString());
         parameters.put("reportsTo", plan.reportsTo() == null ? null : plan.reportsTo().toString());
@@ -325,6 +347,14 @@ public class DataExporter {
 
         void close() throws IOException {
             zip.close();
+        }
+
+        void discardQuietly() {
+            try {
+                discard();
+            } catch (IOException ignored) {
+                // A temporary file; the system cleans its directory.
+            }
         }
 
         void discard() throws IOException {

@@ -7,6 +7,7 @@ import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.report.ReportPermissions;
 import com.jabiz.runtime.report.ReportScopes;
@@ -55,8 +56,8 @@ class ExportController {
 
     /**
      * @param datasets    the datasets to export
-     * @param asOf        the effective time to read at (temporal entities); default now
-     * @param knownAt     the recorded time to read as of; default now
+     * @param asOf        the effective time to read temporal entities at; default the start of the export
+     * @param knownAt     the recorded time to read them as of; default the start of the export
      * @param reports     whether to add the archived PDFs of the reports issued in {@code [reportsFrom, reportsTo)}
      */
     record ExportRequest(List<String> datasets, Instant asOf, Instant knownAt, Boolean reports, Instant reportsFrom,
@@ -64,15 +65,17 @@ class ExportController {
 
     private final DataExporter exporter;
     private final DatasetRegistry datasets;
+    private final EntityDefinitionRegistry entities;
     private final ReportScopes scopes;
     private final PlatformObservations observations;
     private final Clock clock;
     private final boolean development;
 
-    ExportController(DataExporter exporter, DatasetRegistry datasets, ReportScopes scopes,
-        PlatformObservations observations, Clock clock, Environment environment) {
+    ExportController(DataExporter exporter, DatasetRegistry datasets, EntityDefinitionRegistry entities,
+        ReportScopes scopes, PlatformObservations observations, Clock clock, Environment environment) {
         this.exporter = exporter;
         this.datasets = datasets;
+        this.entities = entities;
         this.scopes = scopes;
         this.observations = observations;
         this.clock = clock;
@@ -105,12 +108,25 @@ class ExportController {
                     "Exporting dataset " + id);
                 return dataset;
             }).toList();
+            // Another point in time needs time travel; plain entities have no other time and ignore it.
+            if (body.asOf() != null || body.knownAt() != null) {
+                List<Violation> refused = chosen.stream()
+                    .filter(dataset -> entities.find(dataset.targetEntityType()).map(def -> def.temporal)
+                        .orElse(false) && !dataset.policy().allowTimeTravel())
+                    .map(dataset -> new Violation("asOf", PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED,
+                        "Dataset " + dataset.resourceId() + " shows the current state only"))
+                    .toList();
+                if (!refused.isEmpty()) {
+                    throw new ValidationException(refused);
+                }
+            }
             boolean reports = Boolean.TRUE.equals(body.reports());
             if (reports) {
                 Permissions.requireAll(request, List.of(ReportPermissions.ARCHIVE_READ), development,
                     "Exporting issued reports");
             }
-            DataExporter.Plan plan = new DataExporter.Plan(chosen, body.asOf(), body.knownAt(), reports,
+            DataExporter.Plan plan = new DataExporter.Plan(chosen, body.asOf(), body.knownAt(), clock.instant(),
+                reports,
                 body.reportsFrom(), body.reportsTo(), run -> Permissions.allowsAll(request, run.permissions(),
                     development) && scopes.matches(run.scope(), request));
             String name = "jabiz-export-" + clock.instant().truncatedTo(ChronoUnit.SECONDS).toString()

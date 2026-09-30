@@ -139,6 +139,34 @@ class DataExportIT extends LedgerItSupport {
             .isNotFound();
     }
 
+    @Test
+    void pagesFollowTheKeyAndAPointInTimeAppliesToTemporalDatasetsOnly() throws IOException {
+        // More tickets than one page of their dataset (5): the pages follow the key.
+        String owner = "export-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        for (int i = 0; i < 12; i++) {
+            client().post().uri("/api/datasets/" + com.jabiz.app.it.fixture.ItFixtures.TICKET_DATASET + "/commit")
+                .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "it-admin", "*"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("changes", List.of(Map.of("action", "INSERT", "attributes", Map.of("ticketId",
+                    owner + "-" + i, "title", "t", "amount", "1", "owner", owner))))).exchange().expectStatus().isOk();
+        }
+        String admin = TestTokens.bearer(tokens, "it-admin", "*");
+        Map<String, byte[]> files = export(admin, Map.of("datasets", List.of(
+            com.jabiz.app.it.fixture.ItFixtures.TICKET_DATASET, LedgerEntities.ENTRY_DATASET),
+            "asOf", clock.instant().toString()));
+        List<List<String>> tickets = csv(files.get("data/urn_jabiz_dataset_it_ItTicket.csv"));
+        long stored = ((Number) query("SELECT count(*) AS n FROM it_ticket").getFirst().get("n")).longValue();
+        assertThat(tickets).hasSize((int) stored + 1);
+        assertThat(tickets.subList(1, tickets.size()).stream().map(row -> row.getFirst()).distinct().count())
+            .isEqualTo(stored);
+
+        // A dataset showing the current state only cannot be read at another time.
+        request(admin, Map.of("datasets", List.of(com.jabiz.app.it.fixture.ItTemporalFixtures.PRICE_CURRENT_DATASET),
+            "asOf", clock.instant().toString())).expectStatus().isBadRequest();
+        request(admin, Map.of("datasets", List.of(com.jabiz.app.it.fixture.ItTemporalFixtures.PRICE_CURRENT_DATASET)))
+            .expectStatus().isOk();
+    }
+
     // ================= helpers =================
 
     private WebTestClient.ResponseSpec request(String authorization, Map<String, Object> body) {
