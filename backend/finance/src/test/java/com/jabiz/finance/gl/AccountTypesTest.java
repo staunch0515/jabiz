@@ -17,7 +17,8 @@ class AccountTypesTest {
         assertThat(AccountTypes.ledgerType("TAX", "DEBIT")).isEqualTo("EXPENSE");
         assertThat(AccountTypes.ledgerType("OTHER", "DEBIT")).isEqualTo("EXPENSE");
         assertThat(AccountTypes.ledgerType("OTHER", "CREDIT")).isEqualTo("REVENUE");
-        assertThatThrownBy(() -> AccountTypes.ledgerType("GADGET", "DEBIT")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> AccountTypes.ledgerType("GADGET", "DEBIT"))
+            .isInstanceOf(IllegalArgumentException.class);
         assertThat(AccountTypes.fromChart(" Other ")).isEqualTo("OTHER");
         assertThat(AccountTypes.fromChart(null)).isNull();
         assertThat(AccountTypes.normalBalanceFromChart("c")).isEqualTo("CREDIT");

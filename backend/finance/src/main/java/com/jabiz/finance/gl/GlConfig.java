@@ -129,7 +129,9 @@ class GlConfig {
 
     @Bean
     StaticDictionary normalBalanceDictionary() {
-        return dictionary(GlEntities.NORMAL_BALANCES, d -> d.item("DEBIT", "en", "Debit").item("CREDIT", "en", "Credit"));
+        return dictionary(GlEntities.NORMAL_BALANCES, d -> d
+            .item("DEBIT", "en", "Debit")
+            .item("CREDIT", "en", "Credit"));
     }
 
     @Bean
@@ -176,7 +178,9 @@ class GlConfig {
 
     @Bean
     StaticDictionary subledgerStatusDictionary() {
-        return dictionary(GlEntities.SUBLEDGER_STATUSES, d -> d.item("OPEN", "en", "Open").item("CLOSED", "en", "Closed"));
+        return dictionary(GlEntities.SUBLEDGER_STATUSES, d -> d
+            .item("OPEN", "en", "Open")
+            .item("CLOSED", "en", "Closed"));
     }
 
     private static StaticDictionary dictionary(String urn, Consumer<StaticDictionary.Builder> items) {

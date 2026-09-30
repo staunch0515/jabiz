@@ -234,7 +234,9 @@ public final class AccountProcesses {
             checkValue(ctx, "normalBalance", normalBalance, GlEntities.NORMAL_BALANCE_VALUES);
             // The ledger type of other income or expense follows the normal balance and cannot change.
             String type = fin.get("financialType");
-            if (!ctx.hasViolations() && !AccountTypes.ledgerType(type, normalBalance).equals(ledger.get("accountType"))) {
+            boolean sameLedgerType = ctx.hasViolations()
+                || AccountTypes.ledgerType(type, normalBalance).equals(ledger.get("accountType"));
+            if (!sameLedgerType) {
                 ctx.reject(new Violation("normalBalance", INVALID_VALUE, "Account " + code
                     + " would change its ledger type; open a new account instead", Map.of("accountCode", code)));
             }
