@@ -1,5 +1,6 @@
 import {
   BarChartOutlined,
+  CloudUploadOutlined,
   CheckSquareOutlined,
   DatabaseOutlined,
   LogoutOutlined,
@@ -17,7 +18,7 @@ import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
-import { useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
+import { useImportCatalog, useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
 
 
@@ -33,7 +34,7 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
 
 /**
  * The frame of every signed-in page: the dynamic menu (docs/design/10-security.md section 3), the application's own
- * menu entries (decision D22), the user's tasks (with their count in the header), the reports and the two catalogs,
+ * menu entries (decision D22), the user's tasks (with their count in the header), the reports, the imports and the two catalogs,
  * which list only what the user may use. Hiding is navigation, not access: every call is checked again.
  */
 export default function AppLayout() {
@@ -43,6 +44,7 @@ export default function AppLayout() {
   const tasks = useMyTasks()
   const catalog = useQueryCatalog()
   const hasReports = (catalog.data ?? []).some((q) => q.report)
+  const hasImports = (useImportCatalog().data ?? []).length > 0
   const openTasks = tasks.data?.total ?? 0
   const location = useLocation()
   const navigate = useNavigate()
@@ -53,6 +55,8 @@ export default function AppLayout() {
     { key: 'tasks', name: t('nav.tasks'), path: '/tasks', icon: <CheckSquareOutlined /> },
     // Only when there is a report the user may run (docs/design/19-reports.md section 3.3).
     ...(hasReports ? [{ key: 'reports', name: t('nav.reports'), path: '/reports', icon: <BarChartOutlined /> }] : []),
+    // Only when there is an import the user may run (docs/design/20-imports.md section 6).
+    ...(hasImports ? [{ key: 'imports', name: t('nav.imports'), path: '/imports', icon: <CloudUploadOutlined /> }] : []),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]

@@ -6,5 +6,8 @@ export const paths = {
   process: (name: string, version: number | string) => `/processes/${encodeURIComponent(name)}/${version}`,
   // Template ids contain dots, which the server takes for file names in a path: the id goes in the query.
   report: (id: string) => `/reports/run?id=${encodeURIComponent(id)}`,
+  // Import ids contain dots, as template ids do.
+  importRun: (id: string) => `/imports/run?id=${encodeURIComponent(id)}`,
+  importRuns: (id?: string) => (id ? `/imports/runs?import=${encodeURIComponent(id)}` : '/imports/runs'),
   reportArchive: (id?: string) => (id ? `/reports/archive?template=${encodeURIComponent(id)}` : '/reports/archive'),
 }

@@ -33,6 +33,10 @@ export async function exportRun(runId: string, format: ExportFormat): Promise<vo
 }
 
 /** Hands a file answer to the browser under the name the server gives it. */
+export async function saveResponse(response: Response, fallbackName: string): Promise<void> {
+  await save(response, fallbackName)
+}
+
 async function save(response: Response, fallbackName: string): Promise<void> {
   if (!response.ok) throw await toApiError(response)
   const blob = await response.blob()

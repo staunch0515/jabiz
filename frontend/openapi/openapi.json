@@ -161,6 +161,23 @@
         },
         "type" : "object"
       },
+      "DraftRule" : {
+        "properties" : {
+          "condition" : { },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "levels" : { },
+          "priority" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleCode" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "EntityInstance" : {
         "properties" : {
           "attributes" : {
@@ -187,30 +204,6 @@
           "processSeqId" : {
             "format" : "int64",
             "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
-      "FieldEntry" : {
-        "properties" : {
-          "columns" : {
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "kind" : {
-            "additionalProperties" : { },
-            "type" : "object"
-          },
-          "label" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "required" : {
-            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -309,7 +302,107 @@
         },
         "type" : "object"
       },
-      "FormatEntry" : {
+      "ImportCommitRequest" : {
+        "properties" : {
+          "fileId" : {
+            "type" : "string"
+          },
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportEntry" : {
+        "properties" : {
+          "accept" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "extensions" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "externalRef" : {
+            "type" : "boolean"
+          },
+          "fields" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ImportFieldEntry"
+            },
+            "type" : "array"
+          },
+          "filePolicy" : {
+            "type" : "string"
+          },
+          "format" : {
+            "$ref" : "#/components/schemas/ImportFormatEntry"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "mappings" : {
+            "type" : "boolean"
+          },
+          "onDuplicate" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "version" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportFieldEntry" : {
+        "properties" : {
+          "columns" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "kind" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "required" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportFormatEntry" : {
         "properties" : {
           "adjustable" : {
             "type" : "boolean"
@@ -346,58 +439,74 @@
         },
         "type" : "object"
       },
-      "ImportEntry" : {
+      "ImportInspectRequest" : {
         "properties" : {
-          "accept" : {
+          "fileId" : {
+            "type" : "string"
+          },
+          "options" : {
+            "$ref" : "#/components/schemas/Options"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportInspectResponse" : {
+        "properties" : {
+          "columns" : {
             "items" : {
               "type" : "string"
             },
             "type" : "array"
           },
-          "extensions" : {
-            "items" : {
+          "header" : {
+            "additionalProperties" : {
               "type" : "string"
             },
-            "type" : "array"
-          },
-          "externalRef" : {
-            "type" : "boolean"
-          },
-          "fields" : {
-            "items" : {
-              "$ref" : "#/components/schemas/FieldEntry"
-            },
-            "type" : "array"
-          },
-          "filePolicy" : {
-            "type" : "string"
-          },
-          "format" : {
-            "$ref" : "#/components/schemas/FormatEntry"
-          },
-          "id" : {
-            "type" : "string"
-          },
-          "mappings" : {
-            "type" : "boolean"
-          },
-          "onDuplicate" : {
-            "type" : "string"
-          },
-          "params" : {
-            "additionalProperties" : { },
             "type" : "object"
           },
-          "title" : {
-            "type" : "string"
-          },
-          "totals" : {
+          "issues" : {
             "items" : {
-              "type" : "string"
+              "$ref" : "#/components/schemas/ImportIssueEntry"
             },
             "type" : "array"
           },
-          "version" : {
+          "records" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sample" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ImportSampleEntry"
+            },
+            "type" : "array"
+          },
+          "suggested" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportIssueEntry" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "column" : {
+            "type" : "string"
+          },
+          "field" : {
+            "type" : "string"
+          },
+          "location" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "row" : {
             "format" : "int32",
             "type" : "integer"
           }
@@ -424,26 +533,128 @@
         },
         "type" : "object"
       },
-      "InspectRequest" : {
+      "ImportMappingRequest" : {
         "properties" : {
-          "fileId" : {
-            "type" : "string"
-          },
-          "options" : {
-            "$ref" : "#/components/schemas/Options"
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
           }
         },
         "type" : "object"
       },
-      "InspectResponse" : {
+      "ImportPreviewRequest" : {
         "properties" : {
+          "fileId" : {
+            "type" : "string"
+          },
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportReportResponse" : {
+        "properties" : {
+          "accepted" : {
+            "type" : "boolean"
+          },
           "columns" : {
-            "items" : {
+            "additionalProperties" : {
               "type" : "string"
+            },
+            "type" : "object"
+          },
+          "committed" : {
+            "type" : "boolean"
+          },
+          "constants" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "duplicates" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "fileId" : {
+            "type" : "string"
+          },
+          "importId" : {
+            "type" : "string"
+          },
+          "importVersion" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "issues" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ImportIssueEntry"
             },
             "type" : "array"
           },
-          "header" : {
+          "processed" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "records" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "results" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ImportRowEntry"
+            },
+            "type" : "array"
+          },
+          "rows" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "runId" : {
+            "type" : "string"
+          },
+          "sha256" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "additionalProperties" : {
+              "type" : "number"
+            },
+            "type" : "object"
+          },
+          "units" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportRowEntry" : {
+        "properties" : {
+          "location" : {
+            "type" : "string"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "values" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportRunDetail" : {
+        "properties" : {
+          "columns" : {
             "additionalProperties" : {
               "type" : "string"
             },
@@ -451,49 +662,107 @@
           },
           "issues" : {
             "items" : {
-              "$ref" : "#/components/schemas/IssueEntry"
+              "$ref" : "#/components/schemas/ImportIssueEntry"
             },
             "type" : "array"
+          },
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "run" : {
+            "$ref" : "#/components/schemas/ImportRunSummary"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportRunSummary" : {
+        "properties" : {
+          "duplicates" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "fileId" : {
+            "type" : "string"
+          },
+          "importId" : {
+            "type" : "string"
+          },
+          "importVersion" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "importedBy" : {
+            "type" : "string"
+          },
+          "importedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "issueCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "processed" : {
+            "format" : "int32",
+            "type" : "integer"
           },
           "records" : {
             "format" : "int32",
             "type" : "integer"
           },
-          "sample" : {
-            "items" : {
-              "$ref" : "#/components/schemas/SampleEntry"
-            },
-            "type" : "array"
+          "rows" : {
+            "format" : "int32",
+            "type" : "integer"
           },
-          "suggested" : {
+          "runId" : {
+            "type" : "string"
+          },
+          "sha256" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "totals" : {
             "additionalProperties" : {
-              "type" : "string"
+              "type" : "number"
             },
             "type" : "object"
+          },
+          "units" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         },
         "type" : "object"
       },
-      "IssueEntry" : {
+      "ImportSampleEntry" : {
         "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "column" : {
-            "type" : "string"
-          },
-          "field" : {
-            "type" : "string"
+          "cells" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
           },
           "location" : {
             "type" : "string"
           },
-          "message" : {
-            "type" : "string"
-          },
-          "row" : {
+          "number" : {
             "format" : "int32",
             "type" : "integer"
+          },
+          "problem" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -535,14 +804,6 @@
           },
           "name" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "MappingRequest" : {
-        "properties" : {
-          "mapping" : {
-            "$ref" : "#/components/schemas/ImportMapping"
           }
         },
         "type" : "object"
@@ -665,15 +926,18 @@
       },
       "PreviewRequest" : {
         "properties" : {
-          "fileId" : {
+          "draft" : {
+            "$ref" : "#/components/schemas/DraftRule"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleId" : {
             "type" : "string"
           },
-          "mapping" : {
-            "$ref" : "#/components/schemas/ImportMapping"
-          },
-          "params" : {
-            "additionalProperties" : { },
-            "type" : "object"
+          "subject" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -853,80 +1117,6 @@
         },
         "type" : "object"
       },
-      "ReportResponse" : {
-        "properties" : {
-          "accepted" : {
-            "type" : "boolean"
-          },
-          "columns" : {
-            "additionalProperties" : {
-              "type" : "string"
-            },
-            "type" : "object"
-          },
-          "committed" : {
-            "type" : "boolean"
-          },
-          "constants" : {
-            "additionalProperties" : {
-              "type" : "string"
-            },
-            "type" : "object"
-          },
-          "duplicates" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "fileId" : {
-            "type" : "string"
-          },
-          "importId" : {
-            "type" : "string"
-          },
-          "importVersion" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "issues" : {
-            "items" : {
-              "$ref" : "#/components/schemas/IssueEntry"
-            },
-            "type" : "array"
-          },
-          "processed" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "records" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "results" : {
-            "items" : {
-              "$ref" : "#/components/schemas/RowEntry"
-            },
-            "type" : "array"
-          },
-          "rows" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "sha256" : {
-            "type" : "string"
-          },
-          "totals" : {
-            "additionalProperties" : {
-              "type" : "number"
-            },
-            "type" : "object"
-          },
-          "units" : {
-            "format" : "int32",
-            "type" : "integer"
-          }
-        },
-        "type" : "object"
-      },
       "ResultEntry" : {
         "properties" : {
           "kind" : {
@@ -952,25 +1142,6 @@
         "properties" : {
           "reason" : {
             "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "RowEntry" : {
-        "properties" : {
-          "location" : {
-            "type" : "string"
-          },
-          "number" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "status" : {
-            "type" : "string"
-          },
-          "values" : {
-            "additionalProperties" : { },
-            "type" : "object"
           }
         },
         "type" : "object"
@@ -1115,27 +1286,6 @@
             "type" : "string"
           },
           "title" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "SampleEntry" : {
-        "properties" : {
-          "cells" : {
-            "additionalProperties" : {
-              "type" : "string"
-            },
-            "type" : "object"
-          },
-          "location" : {
-            "type" : "string"
-          },
-          "number" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "problem" : {
             "type" : "string"
           }
         },
@@ -1536,7 +1686,7 @@
     },
     "/api/datasets/{resourceId}/commit" : {
       "post" : {
-        "operationId" : "commit",
+        "operationId" : "commit_1",
         "parameters" : [ {
           "in" : "path",
           "name" : "resourceId",
@@ -2112,6 +2262,157 @@
         "tags" : [ "file-controller" ]
       }
     },
+    "/api/imports/runs" : {
+      "get" : {
+        "operationId" : "runs",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "import",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ImportRunSummary"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/runs/{runId}" : {
+      "get" : {
+        "operationId" : "run_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ImportRunDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/runs/{runId}/export" : {
+      "get" : {
+        "operationId" : "export_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "format",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/pdf" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "text/csv" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/{importId}/commit" : {
+      "post" : {
+        "operationId" : "commit",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ImportCommitRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ImportReportResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
     "/api/imports/{importId}/inspect" : {
       "post" : {
         "operationId" : "inspect",
@@ -2127,7 +2428,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/InspectRequest"
+                "$ref" : "#/components/schemas/ImportInspectRequest"
               }
             }
           },
@@ -2138,7 +2439,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/InspectResponse"
+                  "$ref" : "#/components/schemas/ImportInspectResponse"
                 }
               }
             },
@@ -2230,7 +2531,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/MappingRequest"
+                "$ref" : "#/components/schemas/ImportMappingRequest"
               }
             }
           },
@@ -2266,7 +2567,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/PreviewRequest"
+                "$ref" : "#/components/schemas/ImportPreviewRequest"
               }
             }
           },
@@ -2277,7 +2578,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ReportResponse"
+                  "$ref" : "#/components/schemas/ImportReportResponse"
                 }
               }
             },

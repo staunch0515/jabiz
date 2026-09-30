@@ -60,36 +60,36 @@ class ImportController {
      * @param mappings    whether the caller may save mappings of this import
      */
     record ImportEntry(String id, int version, String title, String filePolicy, List<String> accept,
-        List<String> extensions, FormatEntry format, List<FieldEntry> fields, Map<String, Object> params,
+        List<String> extensions, ImportFormatEntry format, List<ImportFieldEntry> fields, Map<String, Object> params,
         List<String> totals, boolean externalRef, String onDuplicate, boolean mappings) {}
 
     /**
      * @param kind       {@code csv}, {@code fixedWidth}, {@code xlsx}, {@code xml} or {@code custom}
      * @param adjustable whether a mapping may change the layout settings below
      */
-    record FormatEntry(String kind, boolean adjustable, String delimiter, Boolean header, Integer skipLines,
+    record ImportFormatEntry(String kind, boolean adjustable, String delimiter, Boolean header, Integer skipLines,
         String charset, String sheet, Integer headerRow, List<String> charsets) {}
 
-    record FieldEntry(String name, String label, Map<String, Object> kind, boolean required, List<String> columns) {}
+    record ImportFieldEntry(String name, String label, Map<String, Object> kind, boolean required, List<String> columns) {}
 
-    record IssueEntry(int row, String location, String field, String column, String code, String message) {}
+    record ImportIssueEntry(int row, String location, String field, String column, String code, String message) {}
 
-    record InspectRequest(String fileId, ImportFormat.Options options) {}
+    record ImportInspectRequest(String fileId, ImportFormat.Options options) {}
 
-    record SampleEntry(int number, String location, Map<String, String> cells, String problem) {}
+    record ImportSampleEntry(int number, String location, Map<String, String> cells, String problem) {}
 
-    record InspectResponse(List<String> columns, Map<String, String> header, List<SampleEntry> sample, int records,
-        Map<String, String> suggested, List<IssueEntry> issues) {}
+    record ImportInspectResponse(List<String> columns, Map<String, String> header, List<ImportSampleEntry> sample, int records,
+        Map<String, String> suggested, List<ImportIssueEntry> issues) {}
 
-    record PreviewRequest(String fileId, ImportMapping mapping, Map<String, Object> params) {}
+    record ImportPreviewRequest(String fileId, ImportMapping mapping, Map<String, Object> params) {}
 
-    record RowEntry(int number, String location, String status, Map<String, Object> values) {}
+    record ImportRowEntry(int number, String location, String status, Map<String, Object> values) {}
 
     /** An import's report, with its problems in the caller's language. */
-    record ReportResponse(String runId, String importId, int importVersion, String fileId, String sha256, boolean committed,
+    record ImportReportResponse(String runId, String importId, int importVersion, String fileId, String sha256, boolean committed,
         boolean accepted, int records, int rows, int processed, int units, int duplicates, Map<String, String> columns,
-        Map<String, String> constants, Map<String, BigDecimal> totals, List<RowEntry> results,
-        List<IssueEntry> issues) {}
+        Map<String, String> constants, Map<String, BigDecimal> totals, List<ImportRowEntry> results,
+        List<ImportIssueEntry> issues) {}
 
     private final ImportRegistry imports;
     private final ImportService service;
@@ -119,52 +119,52 @@ class ImportController {
     }
 
     @PostMapping("/api/imports/{importId}/inspect")
-    Mono<InspectResponse> inspect(@PathVariable String importId, @RequestBody InspectRequest request) {
+    Mono<ImportInspectResponse> inspect(@PathVariable String importId, @RequestBody ImportInspectRequest request) {
         return RequestContexts.current().flatMap(context -> service.inspect(importId, request.fileId(),
                 request.options())
-            .map(inspection -> new InspectResponse(inspection.columns(), inspection.header(),
-                inspection.sample().stream().map(r -> new SampleEntry(r.number(), r.location(), r.cells(),
+            .map(inspection -> new ImportInspectResponse(inspection.columns(), inspection.header(),
+                inspection.sample().stream().map(r -> new ImportSampleEntry(r.number(), r.location(), r.cells(),
                     r.problem())).toList(),
                 inspection.records(), inspection.suggested(),
                 issues(importId, inspection.issues(), context.locale()))));
     }
 
     @PostMapping("/api/imports/{importId}/preview")
-    Mono<ReportResponse> preview(@PathVariable String importId, @RequestBody PreviewRequest request) {
+    Mono<ImportReportResponse> preview(@PathVariable String importId, @RequestBody ImportPreviewRequest request) {
         return RequestContexts.current().flatMap(context -> service.preview(importId, request.fileId(),
                 request.mapping(), request.params())
             .map(report -> response(report, context.locale())));
     }
 
-    record MappingRequest(ImportMapping mapping) {}
+    record ImportMappingRequest(ImportMapping mapping) {}
 
     /** @param notes what the person importing says about the data (decisions on data quality); kept with the run */
-    record CommitRequest(String fileId, ImportMapping mapping, Map<String, Object> params, String notes) {}
+    record ImportCommitRequest(String fileId, ImportMapping mapping, Map<String, Object> params, String notes) {}
 
     /** A commit that found problems: nothing was imported; the attempt is recorded as {@code report.runId}. */
     static final class RejectedException extends RuntimeException {
-        private final transient ReportResponse report;
+        private final transient ImportReportResponse report;
 
-        RejectedException(ReportResponse report) {
+        RejectedException(ImportReportResponse report) {
             super("The import was rejected", null, false, false);
             this.report = report;
         }
     }
 
-    record RunSummary(String runId, String importId, int importVersion, String title, String outcome, String fileId,
+    record ImportRunSummary(String runId, String importId, int importVersion, String title, String outcome, String fileId,
         String sha256, int records, int rows, int units, int processed, int duplicates, int issueCount,
         Map<String, BigDecimal> totals, String notes, String importedBy, java.time.Instant importedTime) {}
 
-    record RunDetail(RunSummary run, ImportMapping mapping, Map<String, Object> params, Map<String, String> columns,
-        List<IssueEntry> issues) {}
+    record ImportRunDetail(ImportRunSummary run, ImportMapping mapping, Map<String, Object> params, Map<String, String> columns,
+        List<ImportIssueEntry> issues) {}
 
     /** 200 with the report when imported; 422 {@code IMPORT_REJECTED} with the report when not. */
     @PostMapping("/api/imports/{importId}/commit")
-    Mono<ReportResponse> commit(@PathVariable String importId, @RequestBody CommitRequest request) {
+    Mono<ImportReportResponse> commit(@PathVariable String importId, @RequestBody ImportCommitRequest request) {
         return RequestContexts.current().flatMap(context -> service.commit(importId, request.fileId(),
                 request.mapping(), request.params(), request.notes())
             .map(report -> {
-                ReportResponse response = response(report, context.locale());
+                ImportReportResponse response = response(report, context.locale());
                 if (!report.committed()) {
                     throw new RejectedException(response);
                 }
@@ -186,7 +186,7 @@ class ImportController {
     }
 
     @GetMapping("/api/imports/runs")
-    Mono<List<RunSummary>> runs(@RequestParam(name = "import", required = false) String importId,
+    Mono<List<ImportRunSummary>> runs(@RequestParam(name = "import", required = false) String importId,
         @RequestParam(required = false) Integer limit) {
         int size = Math.min(limit == null || limit <= 0 ? 50 : limit, 200);
         return RequestContexts.current().flatMap(context -> service.runs(blankToNull(importId), size)
@@ -194,8 +194,8 @@ class ImportController {
     }
 
     @GetMapping("/api/imports/runs/{runId}")
-    Mono<RunDetail> run(@PathVariable String runId) {
-        return RequestContexts.current().flatMap(context -> service.run(runId).map(run -> new RunDetail(
+    Mono<ImportRunDetail> run(@PathVariable String runId) {
+        return RequestContexts.current().flatMap(context -> service.run(runId).map(run -> new ImportRunDetail(
             summary(run, context.locale()), run.mapping(), run.params(), run.columns(),
             issues(run.importId(), run.issues(), context.locale()))));
     }
@@ -245,7 +245,7 @@ class ImportController {
             new ReportColumn("code", text("import.report.code", locale), null),
             new ReportColumn("message", text("import.report.message", locale), null));
         List<List<Object>> rows = new ArrayList<>();
-        for (IssueEntry issue : issues(run.importId(), run.issues(), locale)) {
+        for (ImportIssueEntry issue : issues(run.importId(), run.issues(), locale)) {
             List<Object> row = new ArrayList<>();
             row.add(issue.row() == 0 ? null : (long) issue.row());
             row.add(issue.location());
@@ -259,8 +259,8 @@ class ImportController {
             header, run.importedTime(), null, null, true, columns, rows);
     }
 
-    private RunSummary summary(ImportRun run, Locale locale) {
-        return new RunSummary(run.runId().toString(), run.importId(), run.importVersion(), title(run.importId(),
+    private ImportRunSummary summary(ImportRun run, Locale locale) {
+        return new ImportRunSummary(run.runId().toString(), run.importId(), run.importVersion(), title(run.importId(),
             locale), run.outcome(), run.fileId().toString(), run.sha256(), run.recordCount(), run.rowCount(),
             run.unitCount(), run.processedCount(), run.duplicateCount(), run.issueCount(), run.totals(), run.notes(),
             run.importedBy(), run.importedTime());
@@ -289,7 +289,7 @@ class ImportController {
 
     @PutMapping("/api/imports/{importId}/mappings/{name}")
     Mono<ImportMappings.MappingOutput> saveMapping(@PathVariable String importId, @PathVariable String name,
-        @RequestBody MappingRequest request) {
+        @RequestBody ImportMappingRequest request) {
         return service.saveMapping(importId, name, request.mapping());
     }
 
@@ -298,16 +298,16 @@ class ImportController {
         return service.removeMapping(importId, name);
     }
 
-    ReportResponse response(ImportReport report, Locale locale) {
-        return new ReportResponse(report.runId(), report.importId(), report.importVersion(), report.fileId(), report.sha256(),
+    ImportReportResponse response(ImportReport report, Locale locale) {
+        return new ImportReportResponse(report.runId(), report.importId(), report.importVersion(), report.fileId(), report.sha256(),
             report.committed(), report.accepted(), report.records(), report.rows(), report.processed(), report.units(),
             report.duplicates(), report.columns(), report.constants(), report.totals(),
-            report.results().stream().map(r -> new RowEntry(r.number(), r.location(), r.status(), r.values()))
+            report.results().stream().map(r -> new ImportRowEntry(r.number(), r.location(), r.status(), r.values()))
                 .toList(),
             issues(report.importId(), report.issues(), locale));
     }
 
-    private List<IssueEntry> issues(String importId, List<ImportIssue> issues, Locale locale) {
+    private List<ImportIssueEntry> issues(String importId, List<ImportIssue> issues, Locale locale) {
         return issues.stream().map(issue -> {
             // The field placeholder shows the field's label where the import has one.
             String label = issue.field() == null ? null
@@ -318,7 +318,7 @@ class ImportController {
             }
             String message = messages.message(new Violation(issue.field(), issue.code(), issue.message(), params),
                 locale);
-            return new IssueEntry(issue.row(), issue.location(), issue.field(), issue.column(), issue.code(),
+            return new ImportIssueEntry(issue.row(), issue.location(), issue.field(), issue.column(), issue.code(),
                 message);
         }).toList();
     }
@@ -326,8 +326,8 @@ class ImportController {
     private ImportEntry entry(ImportDefinition<?> definition, RequestContext context) {
         Locale locale = context.locale();
         String prefix = "import." + definition.id();
-        List<FieldEntry> fields = definition.fields().stream()
-            .map(field -> new FieldEntry(field.name(), messages.find(prefix + "." + field.name(), locale)
+        List<ImportFieldEntry> fields = definition.fields().stream()
+            .map(field -> new ImportFieldEntry(field.name(), messages.find(prefix + "." + field.name(), locale)
                 .orElse(field.name()), MetaModelExporter.kindToJson(field.kind()), field.required(), field.columns()))
             .toList();
         List<MediaTypes> types = policies.find(definition.filePolicy()).map(policy -> List.copyOf(policy.allowed()))
@@ -343,16 +343,16 @@ class ImportController {
             context.hasPermission(definition.mappingPermission()));
     }
 
-    private static FormatEntry format(ImportFormat format) {
+    private static ImportFormatEntry format(ImportFormat format) {
         return switch (format) {
-            case ImportFormat.Csv csv -> new FormatEntry("csv", true, String.valueOf(csv.delimiter()), csv.header(),
+            case ImportFormat.Csv csv -> new ImportFormatEntry("csv", true, String.valueOf(csv.delimiter()), csv.header(),
                 csv.skipLines(), csv.charset().name(), null, null, ImportFormat.CHARSETS);
-            case ImportFormat.Xlsx xlsx -> new FormatEntry("xlsx", true, null, xlsx.header(), null, null,
+            case ImportFormat.Xlsx xlsx -> new ImportFormatEntry("xlsx", true, null, xlsx.header(), null, null,
                 xlsx.sheet(), xlsx.headerRow(), null);
-            case ImportFormat.FixedWidth fixed -> new FormatEntry("fixedWidth", false, null, null, fixed.skipLines(),
+            case ImportFormat.FixedWidth fixed -> new ImportFormatEntry("fixedWidth", false, null, null, fixed.skipLines(),
                 fixed.charset().name(), null, null, null);
-            case ImportFormat.Xml xml -> new FormatEntry("xml", false, null, null, null, null, null, null, null);
-            case ImportFormat.Custom custom -> new FormatEntry("custom", false, null, null, null, null, null, null,
+            case ImportFormat.Xml xml -> new ImportFormatEntry("xml", false, null, null, null, null, null, null, null);
+            case ImportFormat.Custom custom -> new ImportFormatEntry("custom", false, null, null, null, null, null, null,
                 null);
         };
     }

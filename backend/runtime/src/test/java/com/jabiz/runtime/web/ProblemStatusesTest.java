@@ -13,6 +13,7 @@ import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
+import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ProblemDetail;
@@ -46,7 +47,15 @@ class ProblemStatusesTest {
         EntityNotFoundException missing = new EntityNotFoundException("gone");
         assertThat(ProblemStatuses.status(missing)).isEqualTo(handler.handleNotFound(missing).getStatus());
         ConcurrentUpdateException conflict = new ConcurrentUpdateException("stale");
-        assertThat(ProblemStatuses.status(conflict)).isEqualTo(handler.handleConcurrentUpdate(conflict).getStatus());
+        assertThat(ProblemStatuses.status(conflict))
+            .isEqualTo(handler.handleConcurrentUpdate(conflict, exchange).getStatus());
+        ImportConflictException imported = new ImportConflictException("IMPORT_ALREADY_IMPORTED", "again",
+            Map.of("run", "r-1"));
+        ProblemDetail importedProblem = handler.handleConcurrentUpdate(imported, exchange);
+        assertThat(ProblemStatuses.status(imported)).isEqualTo(importedProblem.getStatus()).isEqualTo(409);
+        assertThat(ProblemStatuses.violations(imported)).singleElement()
+            .satisfies(v -> assertThat(v.params()).isEqualTo(Map.of("run", "r-1")));
+        assertThat(importedProblem.getProperties()).containsKey("violations");
         PermissionDeniedException denied = new PermissionDeniedException("p", "no");
         ProblemDetail deniedProblem = handler.handlePermissionDenied(denied, exchange);
         assertThat(ProblemStatuses.status(denied)).isEqualTo(deniedProblem.getStatus());

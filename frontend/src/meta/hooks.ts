@@ -112,3 +112,13 @@ export function useQueryCatalog() {
     staleTime: 60_000,
   })
 }
+
+/** The imports the user may run (docs/design/20-imports.md section 6). */
+export function useImportCatalog() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['meta', 'imports', lang],
+    queryFn: () => unwrap(api.GET('/api/meta/imports')),
+    staleTime: 60_000,
+  })
+}

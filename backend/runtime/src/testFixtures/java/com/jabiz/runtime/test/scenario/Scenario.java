@@ -62,6 +62,15 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         Object expectOutput, Actor actor) implements Step {}
 
     /** Moves the clock forward by an ISO-8601 duration ({@code PT2H}) or period ({@code P1D}, {@code P1M}). */
+    /**
+     * Imports a file given in the scenario (docs/design/20-imports.md): the file is stored under the import's policy,
+     * then previewed, or committed when {@code commit}; {@code expect} is matched against the report as
+     * {@code expectOutput} is against a process output (a rejected commit is a report too).
+     */
+    public record ImportStep(int number, String importId, String fileName, String content, Map<String, Object> mapping,
+        Map<String, Object> params, boolean commit, String notes, Object expect, Map<String, String> save,
+        Actor actor) implements Step {}
+
     public record AdvanceClock(int number, String amount) implements Step {}
 
     public record SetClock(int number, Instant time) implements Step {}
@@ -159,8 +168,23 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
             return new ProcessStep(number, text(keys, "process", true), input(keys.get("input"), where), save,
                 keys.get("expectOutput"), stepActor(keys.get("actor"), where));
         }
+        if (keys.containsKey("import")) {
+            onlyKeys(keys, where, Set.of("import", "file", "mapping", "params", "commit", "notes", "expect", "save",
+                "actor"));
+            Map<String, Object> file = map(required(keys, "file", where), where + ".file");
+            onlyKeys(file, where + ".file", Set.of("name", "content"));
+            Map<String, String> save = new LinkedHashMap<>();
+            if (keys.get("save") != null) {
+                map(keys.get("save"), where + ".save").forEach((name, path) -> save.put(name, String.valueOf(path)));
+            }
+            return new ImportStep(number, text(keys, "import", true), text(file, "name", true),
+                String.valueOf(required(file, "content", where + ".file")),
+                keys.get("mapping") == null ? null : map(keys.get("mapping"), where + ".mapping"),
+                input(keys.get("params"), where), Boolean.TRUE.equals(keys.get("commit")), text(keys, "notes", false),
+                keys.get("expect"), save, stepActor(keys.get("actor"), where));
+        }
         if (keys.size() != 1) {
-            throw new IllegalArgumentException(where + " must have exactly one of process, advanceClock, setClock, "
+            throw new IllegalArgumentException(where + " must have exactly one of process, import, advanceClock, setClock, "
                 + "runJob, deliverEvents, expect, expectError (besides note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();

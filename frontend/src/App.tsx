@@ -14,6 +14,9 @@ import AppLayout from './layout/AppLayout'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
 import EntityHistoryPage from './pages/EntityHistoryPage'
+import ImportCatalogPage from './pages/ImportCatalogPage'
+import ImportPage from './pages/ImportPage'
+import ImportRunsPage from './pages/ImportRunsPage'
 import LoginPage from './pages/LoginPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
 import ProcessFormPage from './pages/ProcessFormPage'
@@ -56,6 +59,9 @@ const router = createBrowserRouter([
           { path: '/processes', element: <ProcessCatalogPage /> },
           { path: '/processes/:name/:version', element: <ProcessFormPage /> },
           { path: '/tasks', element: <TasksPage /> },
+          { path: '/imports', element: <ImportCatalogPage /> },
+          { path: '/imports/run', element: <ImportPage /> },
+          { path: '/imports/runs', element: <ImportRunsPage /> },
           { path: '/reports', element: <ReportCatalogPage /> },
           { path: '/reports/run', element: <ReportPage /> },
           { path: '/reports/archive', element: <ReportArchivePage /> },
