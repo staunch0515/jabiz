@@ -8,7 +8,6 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInInput;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInProcess;
 import com.jabiz.security.LoginOutcome;
-import com.jabiz.security.Sensitive;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,9 +36,19 @@ class OidcController {
 
     record ProviderEntry(String id, String label) {}
 
-    record StartResponse(String authorizationUrl) {}
+    /**
+     * @param binder a secret of this browser's sign-in, kept by the page and sent back with the callback; it never
+     *               appears in a URL, so a state and code sent to someone else cannot sign them in (login CSRF)
+     */
+    record StartResponse(String authorizationUrl, String binder) {
+        @Override
+        public String toString() {
+            return "StartResponse[***]";
+        }
+    }
 
-    record CallbackRequest(@Sensitive String state, @Sensitive String code) {
+    /** Not a process input: masked by its own toString only (no name-based masking of "state" or "code"). */
+    record CallbackRequest(String state, String code, String binder) {
         @Override
         public String toString() {
             return "CallbackRequest[***]";
@@ -82,8 +91,8 @@ class OidcController {
         return Mono.defer(() -> {
             OidcProvider provider = providers.find(id)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown identity provider " + id));
-            return states.start(provider.id()).flatMap(started -> client.authorizationUrl(provider, started))
-                .map(StartResponse::new)
+            return states.start(provider.id()).flatMap(started -> client.authorizationUrl(provider, started)
+                    .map(url -> new StartResponse(url, started.binder())))
                 .onErrorMap(OidcClient.ProviderException.class, e -> {
                     log.warn("Identity provider {} unavailable: {}", provider.id(), e.getMessage());
                     return AuthController.loginFailed("Identity provider unavailable");
@@ -102,7 +111,7 @@ class OidcController {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
             // The state says which provider the sign-in started with; it is used up whatever follows.
-            return states.consume(request.state()).flatMap(pending -> {
+            return states.consume(request.state(), request.binder()).flatMap(pending -> {
                 OidcProvider provider = providers.find(pending.providerId()).orElseThrow(
                     () -> new IllegalStateException("The provider of the state is no longer configured"));
                 Mono<AuthController.TokenResponse> work = client.idToken(provider, request.code(),
@@ -130,13 +139,12 @@ class OidcController {
     }
 
     private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity) {
-        boolean secondFactor = IdTokenValidator.secondFactor(identity, provider);
+        java.time.Instant mfaAt = IdTokenValidator.secondFactorAt(identity, provider, clock.instant());
         return processes.execute(SponsorOidcSignInProcess.DEFINITION,
-                new SponsorOidcSignInInput(provider.id(), identity.subject(), secondFactor))
+                new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null))
             .flatMap(result -> switch (result.outcome()) {
-                case SUCCESS -> AuthController.session(refreshTokens, tokens,
-                    AuthController.actor(result, secondFactor ? clock.instant() : null),
-                    UUID.fromString(result.userId()));
+                case SUCCESS -> AuthController.session(refreshTokens, tokens, AuthController.actor(result, mfaAt),
+                    UUID.fromString(result.userId()), UUID.fromString(result.identityId()));
                 case MFA_REQUIRED -> Mono.just(AuthController.TokenResponse.challenge(
                     AuthController.SignInStatus.MFA_REQUIRED, tokens.issueChallenge(result.userId(),
                         JwtService.Purpose.VERIFY, result.attemptNo(), mfa.challengeTtl())));

@@ -16,7 +16,6 @@ import com.jabiz.runtime.process.sponsor.SponsorMfaVerifyInput;
 import com.jabiz.runtime.process.sponsor.SponsorMfaVerifyProcess;
 import com.jabiz.runtime.process.sponsor.SponsorSignInOutput;
 import com.jabiz.security.LoginOutcome;
-import com.jabiz.security.Sensitive;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,14 +43,15 @@ class MfaController {
 
     private static final Logger log = LoggerFactory.getLogger(MfaController.class);
 
-    record ChallengeRequest(@Sensitive String challenge, @Sensitive String code) {
+    /** Not process inputs: masked by their own toString only (no name-based masking of "code"). */
+    record ChallengeRequest(String challenge, String code) {
         @Override
         public String toString() {
             return "ChallengeRequest[***]";
         }
     }
 
-    record CodeRequest(@Sensitive String code) {
+    record CodeRequest(String code) {
         @Override
         public String toString() {
             return "CodeRequest[***]";

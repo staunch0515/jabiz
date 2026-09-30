@@ -9,7 +9,7 @@ import OidcCallbackPage from './OidcCallbackPage'
 const signInWithProvider = vi.fn()
 
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ signInWithProvider }) }))
-vi.mock('../auth/oidc', () => ({ takeReturnPath: () => '/tasks' }))
+vi.mock('../auth/oidc', () => ({ takeReturnPath: () => '/tasks', takeBinder: () => 'b1' }))
 
 function LoginProbe() {
   const location = useLocation()
@@ -41,7 +41,7 @@ describe('OidcCallbackPage', () => {
     page('?state=s1&code=c1')
     expect(await screen.findByTestId('tasks')).toBeTruthy()
     expect(signInWithProvider).toHaveBeenCalledOnce()
-    expect(signInWithProvider).toHaveBeenCalledWith('s1', 'c1')
+    expect(signInWithProvider).toHaveBeenCalledWith('s1', 'c1', 'b1')
   })
 
   it('continues on the sign-in page when a second factor comes next', async () => {

@@ -47,8 +47,12 @@ public final class IdTokenValidator {
         }
     }
 
-    /** What the platform takes from an accepted token. */
-    public record Identity(String subject, List<String> amr) {}
+    /**
+     * What the platform takes from an accepted token.
+     *
+     * @param authTime when the user authenticated at the provider ({@code auth_time}), or null if not told
+     */
+    public record Identity(String subject, List<String> amr, Instant authTime) {}
 
     private IdTokenValidator() {}
 
@@ -73,12 +77,17 @@ public final class IdTokenValidator {
         if (!ALGORITHMS.contains(algorithm)) {
             throw new InvalidIdTokenException("Unexpected ID token algorithm " + algorithm);
         }
-        JWSVerifier verifier = verifier(token, keys);
-        try {
-            if (!token.verify(verifier)) {
-                throw new InvalidIdTokenException("Invalid ID token signature");
+        // Without a key id, any of the provider's keys of the algorithm may have signed it (during a rotation there
+        // are two): one of them must verify it.
+        boolean verified = false;
+        for (JWSVerifier verifier : verifiers(token, keys)) {
+            try {
+                verified |= token.verify(verifier);
+            } catch (JOSEException e) {
+                // Not this key.
             }
-        } catch (JOSEException e) {
+        }
+        if (!verified) {
             throw new InvalidIdTokenException("Invalid ID token signature");
         }
         JWTClaimsSet claims;
@@ -114,7 +123,14 @@ public final class IdTokenValidator {
         if (subject == null || subject.isBlank()) {
             throw new InvalidIdTokenException("ID token without subject");
         }
-        return new Identity(subject, amr(claims));
+        Instant authTime = null;
+        try {
+            Date auth = claims.getDateClaim("auth_time");
+            authTime = auth == null ? null : auth.toInstant();
+        } catch (ParseException e) {
+            // Unreadable: as if not told.
+        }
+        return new Identity(subject, amr(claims), authTime);
     }
 
     private static List<String> amr(JWTClaimsSet claims) {
@@ -126,7 +142,7 @@ public final class IdTokenValidator {
         }
     }
 
-    private static JWSVerifier verifier(SignedJWT token, JWKSet keys) {
+    private static List<JWSVerifier> verifiers(SignedJWT token, JWKSet keys) {
         String keyId = token.getHeader().getKeyID();
         JWSAlgorithm algorithm = token.getHeader().getAlgorithm();
         List<JWK> candidates = keys.getKeys().stream()
@@ -134,19 +150,29 @@ public final class IdTokenValidator {
             .filter(key -> key.getKeyUse() == null || KeyUse.SIGNATURE.equals(key.getKeyUse()))
             .filter(key -> algorithm.equals(JWSAlgorithm.RS256) ? key instanceof RSAKey : key instanceof ECKey)
             .toList();
-        if (candidates.isEmpty() || (keyId == null && candidates.size() > 1)) {
+        if (candidates.isEmpty()) {
             throw new UnknownKeyException("No key of the provider matches key id " + keyId);
         }
-        JWK key = candidates.getFirst();
-        try {
-            return key instanceof RSAKey rsa ? new RSASSAVerifier(rsa) : new ECDSAVerifier((ECKey) key);
-        } catch (JOSEException e) {
-            throw new InvalidIdTokenException("Unusable provider key");
+        List<JWSVerifier> verifiers = new java.util.ArrayList<>();
+        for (JWK key : candidates) {
+            try {
+                verifiers.add(key instanceof RSAKey rsa ? new RSASSAVerifier(rsa) : new ECDSAVerifier((ECKey) key));
+            } catch (JOSEException e) {
+                // An unusable key verifies nothing.
+            }
         }
+        return verifiers;
     }
 
-    /** Whether the token's authentication methods include one the provider's settings trust as a second factor. */
-    public static boolean secondFactor(Identity identity, OidcProvider provider) {
-        return identity.amr().stream().anyMatch(provider.mfaAmr()::contains);
+    /**
+     * When the user passed a second factor at the provider, or null: the token's authentication methods must include
+     * one the provider's settings trust, and the token must say when ({@code auth_time}); that time, not now, is what
+     * later step-ups compare with (docs/design/10-security.md section 10). Never later than {@code now}.
+     */
+    public static Instant secondFactorAt(Identity identity, OidcProvider provider, Instant now) {
+        if (identity.authTime() == null || identity.amr().stream().noneMatch(provider.mfaAmr()::contains)) {
+            return null;
+        }
+        return identity.authTime().isAfter(now) ? now : identity.authTime();
     }
 }

@@ -11,8 +11,9 @@ import java.util.List;
  * second step continues (section 9).
  *
  * @param attemptNo attempt number of the login record registered, for the second step
- * @param refusal   why a second-factor attempt left no record ({@code STALE}, {@code NOT_ENROLLED},
- *                  {@code UNREADABLE}), or null
+ * @param refusal    why a second-factor attempt left no record ({@code STALE}, {@code NOT_ENROLLED},
+ *                   {@code UNREADABLE}), or null
+ * @param identityId the provider account a sign-in came through (section 12), or null
  */
 public record SponsorSignInOutput(
     LoginOutcome outcome,
@@ -22,7 +23,8 @@ public record SponsorSignInOutput(
     List<String> permissions,
     String loginRecordId,
     Long attemptNo,
-    String refusal
+    String refusal,
+    String identityId
 ) {
     public SponsorSignInOutput {
         roles = roles == null ? List.of() : List.copyOf(roles);

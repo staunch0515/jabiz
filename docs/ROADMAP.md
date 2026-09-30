@@ -738,16 +738,19 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 1. 配置 `jabiz.security.oidc.providers[i]`（`id`、`issuer`、`client-id`、`client-secret`（环境变量）、`redirect-uri`、`scopes`、`labels`、`mfa-amr`）与启动检查 `SECURITY`。
 2. 发现文档与 JWKS（缓存、未知 `kid` 时重读）、授权码 + PKCE + nonce、ID 令牌校验（RS256 / ES256、iss、aud、azp、exp、iat、nonce、sub）；
    接口 `GET /api/auth/oidc/providers`、`POST /api/auth/oidc/{id}/start`、`POST /api/auth/oidc/callback`（公开）。
-3. 迁移 V24：`sec_user_identity_version`（`SecUserIdentity`，管理员经数据视图关联，管理级二次验证）、`sec_oidc_state` / `sec_oidc_state_use`（只追加）。
+3. 迁移 V24：`sec_user_identity_version`（`SecUserIdentity`，管理员经数据视图关联，权限 `security.user.identity.write`，管理级二次验证）、
+   `sec_oidc_state` / `sec_oidc_state_use`（发起时删除过期请求）、`sec_refresh_token.identity_id`。
 4. 流程 `SPONSOR_OIDC_SIGN_IN`（登录记录 `factor = OIDC`）；`amr` 按配置视同二次验证，否则沿用 14g-1 的第二步；`SEC_USER_CREATE` 的密码可选。
 5. 前端：登录页的提供方按钮、回调页 `/login/oidc`。文档 10 §12、D28、07、12、CLAUDE.md。
 
 **14g-2 验收标准**
-- [x] 关联的用户经提供方登录；未关联的主体被拒且不开户；没有密码的用户不能用密码登录（`OidcIT`）。
+- [x] 关联的用户经提供方登录；未关联的主体被拒且不开户；没有密码的用户不能用密码登录，错误的密码也锁不住他（`OidcIT`）。
+- [x] 回调必须带发起登录的浏览器的 binder（login CSRF）；解除关联后其会话不能再刷新；提供方的二次验证以 `auth_time` 计时（`OidcIT`）。
 - [x] state 只能用一次、10 分钟过期；PKCE verifier 不符时提供方拒绝；nonce、受众、授权方、签发方、时间、主体不符与 HS256、`none`、别的密钥签名都被拒；密钥轮换后只重读一次 JWKS（`OidcIT`）。
 - [x] `amr` 符合配置时会话带二次验证；否则已绑定的用户转入验证码，角色要求而未绑定时先绑定；锁定与禁用的用户被拒（`OidcIT`）。
-- [x] 关联是管理操作（二次验证），一个主体只对应一个用户；新表只插入，操作记录中没有 state 与授权码（`OidcIT`）。
+- [x] 关联需要专门的权限并是管理操作（二次验证），一个主体只对应一个用户；除过期的登录请求外只插入，操作记录中没有 state 与授权码（`OidcIT`）。
 - [x] 配置问题一次报告全部（`OidcProvidersTest`）；后台：提供方按钮、回调页、回调后的第二步（Vitest）。
 - [x] 现有全部检查照常通过。
 - 与计划的差别：对提供方的调用改用 JDK 的异步 HTTP 客户端而不是 WebClient（WebClient 在 R2DBC 线程上恢复链路上下文时触发 Micrometer 的断言）；
-  回调不在路径中带提供方，由 state 记录的提供方决定。端到端测试不接身份提供方（见计划）。
+  回调不在路径中带提供方，由 state 记录的提供方决定；state 表改为可删除过期行（任何人都能发起登录，只追加会无限增长）；
+  代码审查后增加 binder、`auth_time`、关联的专门权限与刷新时检查关联。端到端测试不接身份提供方（见计划）。

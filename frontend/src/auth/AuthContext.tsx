@@ -23,7 +23,7 @@ interface AuthState {
   /** The second step of a sign-in: a TOTP or recovery code under the challenge. */
   verify(challenge: string, code: string): Promise<void>
   /** The return from an identity provider (docs/design/10-security.md section 12): state and code. */
-  signInWithProvider(state: string, code: string): Promise<SignInStep>
+  signInWithProvider(state: string, code: string, binder: string): Promise<SignInStep>
   signOut(): Promise<void>
   /** Whether the user holds the permission ("*" holds all). Only decides what the UI offers; the server checks. */
   can(permission: string): boolean
@@ -105,8 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signInWithProvider = useCallback(
-    async (state: string, code: string): Promise<SignInStep> => {
-      const answer = await unwrap(api.POST('/api/auth/oidc/callback', { body: { state, code } }))
+    async (state: string, code: string, binder: string): Promise<SignInStep> => {
+      const answer = await unwrap(api.POST('/api/auth/oidc/callback', { body: { state, code, binder } }))
       if (answer.status === 'MFA_REQUIRED' || answer.status === 'MFA_ENROLLMENT_REQUIRED') {
         return { status: answer.status, challenge: answer.challenge! }
       }

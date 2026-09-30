@@ -28,6 +28,11 @@ public class OidcContext extends LoginContext {
     }
 
     @Override
+    protected String identityId() {
+        return list(KEY_IDENTITIES).stream().findFirst().map(identity -> String.valueOf(identity.id())).orElse(null);
+    }
+
+    @Override
     public boolean secondFactorPassed() {
         return input.secondFactor();
     }

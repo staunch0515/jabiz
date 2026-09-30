@@ -96,6 +96,9 @@
       },
       "CallbackRequest" : {
         "properties" : {
+          "binder" : {
+            "type" : "string"
+          },
           "code" : {
             "type" : "string"
           },
@@ -1766,6 +1769,9 @@
       "StartResponse" : {
         "properties" : {
           "authorizationUrl" : {
+            "type" : "string"
+          },
+          "binder" : {
             "type" : "string"
           }
         },

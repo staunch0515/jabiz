@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router'
 import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
-import { takeReturnPath } from '../auth/oidc'
+import { takeBinder, takeReturnPath } from '../auth/oidc'
 
 /**
  * Where an identity provider sends the user back (docs/design/10-security.md section 12): hands state and code to the
@@ -29,7 +29,7 @@ export default function OidcCallbackPage() {
     // The code works once: never send it twice (React may run effects twice in development).
     if (started.current || !state || !code) return
     started.current = true
-    signInWithProvider(state, code)
+    signInWithProvider(state, code, takeBinder() ?? '')
       .then((next) => {
         const returnTo = takeReturnPath()
         if (next.status === 'SIGNED_IN') {

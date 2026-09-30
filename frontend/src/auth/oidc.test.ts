@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { takeReturnPath } from './oidc'
+import { takeBinder, takeReturnPath } from './oidc'
+
+describe('takeBinder', () => {
+  it('returns the stored binder once', () => {
+    window.sessionStorage.setItem('jabiz.oidcBinder', 'b')
+    expect(takeBinder()).toBe('b')
+    expect(takeBinder()).toBeNull()
+  })
+})
 
 describe('takeReturnPath', () => {
   afterEach(() => window.sessionStorage.clear())

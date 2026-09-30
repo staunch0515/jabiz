@@ -48,8 +48,8 @@ class OidcIT extends SecurityItSupport {
         IDP.close();
     }
 
-    /** An authorization request as the provider receives it. */
-    private record Request(String state, String nonce, String challenge) {}
+    /** An authorization request as the provider receives it, and the binder the starting browser keeps. */
+    private record Request(String state, String nonce, String challenge, String binder) {}
 
     private Request start() {
         Map<String, Object> started = post("/api/auth/oidc/test/start", null, Map.of()).expectStatus().isOk()
@@ -59,7 +59,9 @@ class OidcIT extends SecurityItSupport {
             .containsEntry("redirect_uri", TestOidcProvider.REDIRECT_URI).containsEntry("response_type", "code")
             .containsEntry("code_challenge_method", "S256").containsKeys("state", "nonce", "code_challenge");
         assertThat(query.get("scope")).contains("openid");
-        return new Request(query.get("state"), query.get("nonce"), query.get("code_challenge"));
+        assertThat((String) started.get("authorizationUrl")).doesNotContain((String) started.get("binder"));
+        return new Request(query.get("state"), query.get("nonce"), query.get("code_challenge"),
+            (String) started.get("binder"));
     }
 
     private JWTClaimsSet claims(String subject, Request request, UnaryOperator<JWTClaimsSet.Builder> change) {
@@ -68,8 +70,8 @@ class OidcIT extends SecurityItSupport {
 
     private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec callback(Request request,
         String idToken) {
-        return post("/api/auth/oidc/callback", null,
-            Map.of("state", request.state(), "code", IDP.code(request.challenge(), idToken)));
+        return post("/api/auth/oidc/callback", null, Map.of("state", request.state(),
+            "code", IDP.code(request.challenge(), idToken), "binder", request.binder()));
     }
 
     private Map<String, Object> signedIn(Request request, String idToken) {
@@ -151,7 +153,7 @@ class OidcIT extends SecurityItSupport {
         signedIn(request, IDP.idToken(claims(subject, request, c -> c)));
         refused(request, IDP.idToken(claims(subject, request, c -> c)));
 
-        refused(new Request("made-up-state", request.nonce(), request.challenge()),
+        refused(new Request("made-up-state", request.nonce(), request.challenge(), request.binder()),
             IDP.idToken(claims(subject, request, c -> c)));
 
         Request late = start();
@@ -215,8 +217,85 @@ class OidcIT extends SecurityItSupport {
         linkedUser(subject);
         Request request = start();
         String code = IDP.code("not-the-challenge", IDP.idToken(claims(subject, request, c -> c)));
-        post("/api/auth/oidc/callback", null, Map.of("state", request.state(), "code", code))
+        post("/api/auth/oidc/callback", null, Map.of("state", request.state(), "code", code,
+            "binder", request.binder())).expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void aStateAndCodeSentToSomeoneElseDoNotSignThemIn() {
+        String subject = unique("sub");
+        linkedUser(subject);
+        // The attacker's own sign-in, stopped before the callback; the victim's page has no (or another) binder.
+        Request attackers = start();
+        Request victims = start();
+        String code = IDP.code(attackers.challenge(), IDP.idToken(claims(subject, attackers, c -> c)));
+        post("/api/auth/oidc/callback", null, Map.of("state", attackers.state(), "code", code,
+            "binder", victims.binder())).expectStatus().isUnauthorized();
+        post("/api/auth/oidc/callback", null, Map.of("state", attackers.state(), "code", code))
             .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void aTokenWithoutKeyIdIsCheckedAgainstEveryKeyOfItsKind() {
+        String subject = unique("sub");
+        linkedUser(subject);
+        IDP.rotate();
+        Request request = start();
+        assertThat(signedIn(request, TestOidcProvider.sign(claims(subject, request, c -> c), JWSAlgorithm.RS256,
+            IDP.rsaKey(), false))).containsEntry("status", "SIGNED_IN");
+    }
+
+    @Test
+    void anOldSecondFactorAtTheProviderIsNotARecentOne() {
+        String subject = unique("sub");
+        String userId = linkedUser(subject, "security.user.create");
+        java.time.Instant longAgo = clock.instant().minus(Duration.ofDays(3));
+        Request old = start();
+        Map<String, Object> session = signedIn(old, IDP.idToken(claims(subject, old,
+            c -> c.claim("amr", List.of("hwk")).claim("auth_time", longAgo.getEpochSecond()))));
+        assertThat(get("/api/auth/me", bearerOf(session)).expectBody(MAP).returnResult().getResponseBody()
+            .get("mfaAt")).isEqualTo(longAgo.toString());
+        assertThat(ruleCode(post("/api/processes/SEC_USER_CREATE/latest", bearerOf(session),
+            Map.of("userName", unique("new"))).expectStatus().isForbidden().expectBody(MAP).returnResult()
+            .getResponseBody())).isEqualTo("MFA_REQUIRED");
+
+        // Without auth_time the provider's methods count for nothing.
+        Request untimed = start();
+        Map<String, Object> plain = signedIn(untimed, IDP.idToken(claims(subject, untimed,
+            c -> c.claim("amr", List.of("hwk")))));
+        assertThat(get("/api/auth/me", bearerOf(plain)).expectBody(MAP).returnResult().getResponseBody()
+            .get("mfaAt")).isNull();
+        assertThat(userId).isNotBlank();
+    }
+
+    @Test
+    void unlinkingAnAccountEndsItsSessions() {
+        String subject = unique("sub");
+        String userId = linkedUser(subject);
+        Request request = start();
+        Map<String, Object> session = signedIn(request, IDP.idToken(claims(subject, request, c -> c)));
+        Map<String, Object> link = query("SELECT user_identity_id, version_no FROM sec_user_identity_version "
+            + "WHERE user_id = ?::uuid", userId).getFirst();
+        post("/api/datasets/" + SecurityEntities.USER_IDENTITY_DATASET + "/commit", admin(), Map.of("changes",
+            List.of(Map.of("action", "DELETE", "id", String.valueOf(link.get("user_identity_id")),
+                "version", link.get("version_no"))))).expectStatus().isOk();
+        post("/api/auth/refresh", null, Map.of("refreshToken", session.get("refreshToken")))
+            .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void wrongPasswordsCannotLockAUserWhoHasNone() {
+        String subject = unique("sub");
+        String userId = linkedUser(subject);
+        String name = String.valueOf(query("SELECT user_name FROM sec_user_version WHERE user_id = ?::uuid", userId)
+            .getFirst().get("user_name"));
+        for (int i = 0; i < 6; i++) {
+            login(name, "wrong password " + i).expectStatus().isUnauthorized();
+        }
+        assertThat(records(userId)).isEmpty();
+        Request request = start();
+        assertThat(signedIn(request, IDP.idToken(claims(subject, request, c -> c))))
+            .containsEntry("status", "SIGNED_IN");
     }
 
     @Test
@@ -227,7 +306,7 @@ class OidcIT extends SecurityItSupport {
         // A hardware key at the provider counts as a second factor.
         Request strong = start();
         Map<String, Object> session = signedIn(strong, IDP.idToken(claims(subject, strong,
-            c -> c.claim("amr", List.of("pwd", "hwk")))));
+            c -> c.claim("amr", List.of("pwd", "hwk")).claim("auth_time", clock.instant().getEpochSecond()))));
         assertThat(get("/api/auth/me", bearerOf(session)).expectBody(MAP).returnResult().getResponseBody()
             .get("mfaAt")).isNotNull();
 
@@ -263,9 +342,9 @@ class OidcIT extends SecurityItSupport {
     @Test
     void disabledAndLockedUsersAreRefused() {
         String subject = unique("sub");
-        String userId = linkedUser(subject);
-        String name = String.valueOf(query("SELECT user_name FROM sec_user_version WHERE user_id = ?::uuid", userId)
-            .getFirst().get("user_name"));
+        String name = unique("pw");
+        String userId = userWith(name, "correct horse battery", "p");
+        link(userId, subject);
         for (int i = 0; i < 5; i++) {
             login(name, "wrong password " + i).expectStatus().isUnauthorized();
         }
@@ -288,6 +367,11 @@ class OidcIT extends SecurityItSupport {
     @Test
     void linkingAccountsIsAdministration() {
         String userId = createUser(unique("lnk"), "correct horse battery");
+        // A link is a credential of its own: the permission to change users is not enough.
+        post("/api/datasets/" + SecurityEntities.USER_IDENTITY_DATASET + "/commit", bearer("security.user.write",
+            "security.user.read"), Map.of("changes", List.of(Map.of("action", "INSERT", "attributes",
+                Map.of("userId", userId, "provider", "test", "subject", unique("sub"))))))
+            .expectStatus().isForbidden();
         String noMfa = TestTokens.withoutMfa(tokens, "it-admin", "*");
         assertThat(ruleCode(post("/api/datasets/" + SecurityEntities.USER_IDENTITY_DATASET + "/commit", noMfa,
             Map.of("changes", List.of(Map.of("action", "INSERT", "attributes", Map.of("userId", userId,
@@ -309,10 +393,13 @@ class OidcIT extends SecurityItSupport {
         SqlStatementLog.STATEMENTS.clear();
         Request request = start();
         String code = IDP.code(request.challenge(), IDP.idToken(claims(subject, request, c -> c)));
-        post("/api/auth/oidc/callback", null, Map.of("state", request.state(), "code", code)).expectStatus().isOk();
+        post("/api/auth/oidc/callback", null, Map.of("state", request.state(), "code", code,
+            "binder", request.binder())).expectStatus().isOk();
+        // Only expired sign-in requests are deleted; everything else is inserted.
         assertThat(SqlStatementLog.STATEMENTS).isNotEmpty()
             .noneSatisfy(sql -> assertThat(sql.trim().toUpperCase()).startsWith("UPDATE"))
-            .noneSatisfy(sql -> assertThat(sql.trim().toUpperCase()).startsWith("DELETE"));
+            .allSatisfy(sql -> assertThat(sql.trim().toUpperCase().startsWith("DELETE")
+                ? sql.contains("sec_oidc_state WHERE expires_at") : true).as(sql).isTrue());
         assertThat(query("SELECT count(*) AS n FROM sec_oidc_state WHERE state_hash = ?", request.state())
             .getFirst().get("n")).isEqualTo(0L);
         assertThat(query("SELECT count(*) AS n FROM op_process WHERE input_summary::text LIKE ? "

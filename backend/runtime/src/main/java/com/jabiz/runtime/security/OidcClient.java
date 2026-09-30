@@ -136,7 +136,7 @@ public class OidcClient {
 
     private Mono<String> send(HttpRequest.Builder request, String what) {
         return Mono.fromFuture(() -> http.sendAsync(request.timeout(TIMEOUT).header("Accept", "application/json")
-                .build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)))
+                .build(), responseInfo -> limited()))
             .timeout(TIMEOUT)
             .onErrorMap(e -> !(e instanceof ProviderException), e -> new ProviderException(what + ": "
                 + e.getClass().getSimpleName()))
@@ -144,11 +144,53 @@ public class OidcClient {
                 if (response.statusCode() != 200) {
                     throw new ProviderException(what + ": HTTP " + response.statusCode());
                 }
-                if (response.body().length() > MAX_BODY) {
-                    throw new ProviderException(what + ": response too large");
-                }
                 return response.body();
             });
+    }
+
+    /** Reads a body of at most {@link #MAX_BODY} bytes as UTF-8; stops reading and fails beyond. */
+    private static HttpResponse.BodySubscriber<String> limited() {
+        return new HttpResponse.BodySubscriber<>() {
+            private final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            private final java.util.concurrent.CompletableFuture<String> result =
+                new java.util.concurrent.CompletableFuture<>();
+            private java.util.concurrent.Flow.Subscription subscription;
+
+            @Override
+            public java.util.concurrent.CompletionStage<String> getBody() {
+                return result;
+            }
+
+            @Override
+            public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
+                this.subscription = subscription;
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(java.util.List<java.nio.ByteBuffer> items) {
+                for (java.nio.ByteBuffer item : items) {
+                    if (bytes.size() + item.remaining() > MAX_BODY) {
+                        subscription.cancel();
+                        result.completeExceptionally(new ProviderException("response too large"));
+                        return;
+                    }
+                    byte[] chunk = new byte[item.remaining()];
+                    item.get(chunk);
+                    bytes.writeBytes(chunk);
+                }
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                result.completeExceptionally(error);
+            }
+
+            @Override
+            public void onComplete() {
+                result.complete(bytes.toString(StandardCharsets.UTF_8));
+            }
+        };
     }
 
     private static Map<String, Object> json(String body, String what) {

@@ -144,16 +144,21 @@ public class LoginContext extends ProcessContext {
         if (outcome == LoginOutcome.MFA_REQUIRED || outcome == LoginOutcome.MFA_ENROLLMENT_REQUIRED) {
             // The second step needs to know whose attempt it continues; roles come only with the second factor.
             return new SponsorSignInOutput(outcome, String.valueOf(user().orElseThrow().id()), null, null, null,
-                recordId, attemptNo, null);
+                recordId, attemptNo, null, null);
         }
         if (outcome != LoginOutcome.SUCCESS) {
             return new SponsorSignInOutput(outcome == null ? LoginOutcome.BAD_CREDENTIALS : outcome, null, null,
-                null, null, recordId, null, refusal());
+                null, null, recordId, null, refusal(), null);
         }
         EntityInstance user = user().orElseThrow();
         return new SponsorSignInOutput(outcome, String.valueOf(user.id()), user.get("tenantId"),
             access.roles().stream().sorted().toList(), access.permissions().stream().sorted().toList(),
-            recordId, attemptNo, null);
+            recordId, attemptNo, null, identityId());
+    }
+
+    /** The provider account the attempt came through; null for passwords. */
+    protected String identityId() {
+        return null;
     }
 
     /** Whether the attempt itself passed a second factor (an identity provider's); false for passwords. */

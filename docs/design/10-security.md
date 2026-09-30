@@ -244,16 +244,18 @@
 | 方法与路径 | 说明 |
 |---|---|
 | `GET /api/auth/oidc/providers` | 已配置的提供方：`id` 与按请求语言的 `label`，只此而已 |
-| `POST /api/auth/oidc/{id}/start` | 生成 state、nonce 与 PKCE verifier（各 32 字节随机数），写一行只追加的 `sec_oidc_state`（state 与 nonce 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl}`；前端整页跳转 |
-| `POST /api/auth/oidc/callback {state, code}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED` |
+| `POST /api/auth/oidc/{id}/start` | 生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
+| `POST /api/auth/oidc/callback {state, code, binder}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED` |
 
 **回调**
 
-1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、提供方不符 → 401。
+1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、binder 不符 → 401。
+   binder 把回调绑定到发起登录的那个浏览器：攻击者停在回调之前、把自己的 state 与授权码发给别人时，别人的页面没有对应的 binder，不会以攻击者身份登录（login CSRF）。
 2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）。
 3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；`iss` 等于配置；`aud` 含 `client-id`，
    多个受众时 `azp` 必须是 `client-id`；`exp` 未过、`iat` 不在将来（按注入的 `Clock`，容许 60 秒偏差）；`nonce` 的 SHA-256 与记录的一致；`sub` 非空。
-4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`。
+4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`；成功时刷新令牌记下所经的关联（`sec_refresh_token.identity_id`），每次刷新都要求该关联仍在，
+   因此解除关联即结束其会话（最迟在下一次刷新）。
 
 发现文档与 JWKS 在首次使用时读取并缓存 1 小时；遇到未知的 `kid` 时重新读取 JWKS（至多每分钟一次）；端点必须是 `https`（同上，`localhost` 除外）。
 对身份提供方的调用用 JDK 的异步 HTTP 客户端（不跟随重定向、不带链路头，也不在请求线程上阻塞）。观测 `jabiz.auth.oidc`，标签只有 `provider` 与结果（`outcome`）。
@@ -261,12 +263,16 @@
 **账号关联与登录流程**
 
 - 时态实体 `SecUserIdentity`（`sec_user_identity_version`，`V24__oidc.sql`）：`userId`、`provider`、`subject`，`(provider, subject)` 唯一；
-  管理员经其数据视图维护（`security.user.read` / `.write`，写入为管理级二次验证）。**不自动开户**：没有关联即拒绝。
+  管理员经其数据视图维护（读 `security.user.read`，写 `security.user.identity.write`：关联让对方以该用户登录，是独立的凭证，不随修改用户的权限一并授予；
+  写入为管理级二次验证）。**不自动开户**：没有关联即拒绝。
 - `SPONSOR_OIDC_SIGN_IN`（`auth.sign-in`，内部）与密码登录一样写登录记录（`factor = OIDC`）：没有关联 → 不写记录；锁定中 → `LOCKED`；禁用 → `DISABLED`；
-  无角色 → `NO_ROLE`；然后二次验证：`amr` 符合 `mfa-amr` → 登录（会话带 `mfa_at`）；否则已绑定 TOTP → `MFA_REQUIRED`（第 9 节的第二步）；
+  无角色 → `NO_ROLE`；然后二次验证：`amr` 符合 `mfa-amr` 且 ID 令牌带 `auth_time` → 登录，会话的 `mfa_at` 取 `auth_time`（不是现在：
+  提供方很久以前的二次验证不算第 10 节的"最近"；没有 `auth_time` 则不视同）；否则已绑定 TOTP → `MFA_REQUIRED`（第 9 节的第二步）；
   否则角色要求 → `MFA_ENROLLMENT_REQUIRED`。外部登录不猜密码，失败不计入锁定次数，但已有的锁定照样生效。
-- 只用单点登录的用户：`SEC_USER_CREATE` 的密码可以不填；没有密码哈希的用户用密码登录总是失败（照样比对假哈希）。
-- `sec_oidc_state` 与 `sec_oidc_state_use` 只追加（D5），过期行由将来的受控清除处理（同第 2 节的令牌表）。
+- 只用单点登录的用户：`SEC_USER_CREATE` 的密码可以不填；没有密码哈希的用户用密码登录总是失败（照样比对假哈希），而且与不存在的用户名一样**不写登录记录**，
+  否则任何人都能以错误的密码锁住这类账号（它们没有能对的密码）。
+- 谁都可以发起登录，所以 `sec_oidc_state` / `sec_oidc_state_use` **不是**只追加表：每次发起时删除过期的请求，表中至多是最近 10 分钟的请求；它们也不被封存（21 §2）。
+- 发现文档、JWKS 与令牌响应至多读 256 KB，超出即停止读取。没有 `kid` 的 ID 令牌逐一尝试同类的全部公钥（密钥轮换期间常有两把）。
 
 ## 13. 按权限显示明文、数据期限、访问审查（阶段 14g-3，待实施）
 

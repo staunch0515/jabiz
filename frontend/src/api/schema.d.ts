@@ -1072,6 +1072,7 @@ export interface components {
             total?: number;
         };
         CallbackRequest: {
+            binder?: string;
             code?: string;
             state?: string;
         };
@@ -1717,6 +1718,7 @@ export interface components {
         };
         StartResponse: {
             authorizationUrl?: string;
+            binder?: string;
         };
         StepUpResponse: {
             accessToken?: string;

@@ -126,6 +126,11 @@ public final class TestOidcProvider implements AutoCloseable {
 
     /** A token signed as asked: RS256 / ES256 with the given key, HS256 with the given secret bytes. */
     public static String sign(JWTClaimsSet claims, JWSAlgorithm algorithm, Object key) {
+        return sign(claims, algorithm, key, true);
+    }
+
+    /** As {@link #sign}, with or without the key's id in the header. */
+    public static String sign(JWTClaimsSet claims, JWSAlgorithm algorithm, Object key, boolean withKeyId) {
         try {
             JWSSigner signer = switch (key) {
                 case RSAKey rsaKey -> new RSASSASigner(rsaKey);
@@ -133,7 +138,7 @@ public final class TestOidcProvider implements AutoCloseable {
                 case byte[] secret -> new MACSigner(secret);
                 default -> throw new IllegalArgumentException("Unsupported key " + key);
             };
-            String keyId = key instanceof JWK jwk ? jwk.getKeyID() : null;
+            String keyId = withKeyId && key instanceof JWK jwk ? jwk.getKeyID() : null;
             SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(algorithm).type(JOSEObjectType.JWT).keyID(keyId)
                 .build(), claims);
             jwt.sign(signer);

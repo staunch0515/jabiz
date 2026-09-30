@@ -227,7 +227,7 @@ public class SecurityEntities {
     @Bean
     DatasetDefinition secUserIdentityDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(USER_IDENTITY_DATASET, USER_IDENTITY, SecurityPermissions.USER_READ,
-            SecurityPermissions.USER_WRITE, poolRef);
+            SecurityPermissions.IDENTITY_WRITE, poolRef);
     }
 
     @Bean
