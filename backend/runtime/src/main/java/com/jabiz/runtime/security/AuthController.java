@@ -85,9 +85,11 @@ class AuthController {
     /**
      * @param mfaAt              when the session last passed a second factor, or null
      * @param idleTimeoutSeconds after how long without activity the client locks the session (section 11)
+     * @param dataFrom           start of the data period the session is limited to, or null (section 13.2)
+     * @param dataTo             its (exclusive) end, or null; both null: not limited in time
      */
     record Me(String userId, String tenantId, List<String> roles, List<String> permissions, Instant mfaAt,
-        long idleTimeoutSeconds) {}
+        long idleTimeoutSeconds, Instant dataFrom, Instant dataTo) {}
 
     private final ProcessExecutor processes;
     private final JwtService tokens;
@@ -155,7 +157,9 @@ class AuthController {
     Mono<Me> me() {
         return RequestContexts.current().map(context -> new Me(context.actorId(), context.tenantId(),
             context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList(),
-            context.mfaAt(), mfa.idleTimeout().toSeconds()));
+            context.mfaAt(), mfa.idleTimeout().toSeconds(),
+            context.dataPeriod() == null ? null : context.dataPeriod().from(),
+            context.dataPeriod() == null ? null : context.dataPeriod().to()));
     }
 
     @GetMapping("/api/auth/menus")
