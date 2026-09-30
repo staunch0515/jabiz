@@ -36,4 +36,9 @@ public record ReportRun(UUID runId, String templateId, String templateVersion, S
         return new ReportDocument(templateId, templateVersion, title, company, period, parameters, issuedTime,
             asOf, knownAt, landscape, columns, rows);
     }
+
+    /** Whether the stored rows still have the content hash they were issued with. */
+    public boolean intact() {
+        return ArchivedValues.hash(columns, rows).equals(contentHash);
+    }
 }

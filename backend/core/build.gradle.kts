@@ -96,6 +96,7 @@ val coverageGatedClasses = listOf(
     "com.jabiz.audit.*",
     "com.jabiz.integrity.*",
     "com.jabiz.retention.*",
+    "com.jabiz.export.*",
 )
 
 dependencies {

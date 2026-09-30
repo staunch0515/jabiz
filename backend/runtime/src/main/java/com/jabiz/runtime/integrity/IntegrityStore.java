@@ -90,7 +90,7 @@ public class IntegrityStore {
         this.poolRef = poolRef;
     }
 
-    StorageEngine engine() {
+    public StorageEngine engine() {
         return storages.getEngine(poolRef);
     }
 
@@ -143,7 +143,7 @@ public class IntegrityStore {
     }
 
     /** The last block, or empty before the first. */
-    Mono<SealChain.Stored> head(StorageEngine engine) {
+    public Mono<SealChain.Stored> head(StorageEngine engine) {
         return engine.select("SELECT * FROM sys_integrity_seal ORDER BY seal_no DESC LIMIT 1", Map.of())
             .next()
             .map(IntegrityStore::stored);
