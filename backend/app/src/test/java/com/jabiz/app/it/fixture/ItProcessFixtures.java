@@ -66,6 +66,10 @@ public final class ItProcessFixtures {
 
     public record PriceFamilyInput(String parentSku, String childSku) {}
 
+    public record PricesAtInput(String sku, Instant knownAt) {}
+
+    public record PricesAtOutput(List<Object> amounts) {}
+
     private static Map<String, Object> ticket(String id, String title, Long amount) {
         return Map.of("ticketId", id, "title", title, "amount", amount == null ? 0L : amount, "status", "OPEN",
             "owner", "it-owner");
@@ -270,6 +274,25 @@ public final class ItProcessFixtures {
             .step("Save", SaveChanges.now())
             .step("Reload", LoadEntity.by(ItFixtures.TICKET_DATASET, "id", "reloaded")));
 
+    /** Runs a template as known at the given time (docs/design/19-reports.md section 2.1). */
+    public static final ProcessDefinition<PricesAtInput, PricesAtOutput, ProcessContext> PRICES_AT =
+        ProcessDefinition.define("IT_PRICES_AT", 1, PricesAtInput.class, PricesAtOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, in) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("in", in);
+                    return ctx;
+                })
+                .outputMapper(ctx -> {
+                    String sku = ctx.get("in", PricesAtInput.class).sku();
+                    List<?> rows = ctx.get("prices", List.class);
+                    return new PricesAtOutput(rows.stream().map(row -> (Map<?, ?>) row)
+                        .filter(row -> sku.equals(row.get("sku"))).<Object>map(row -> row.get("amount")).toList());
+                })
+                .step("Template", RunTemplate.at("it.jp_prices", ctx -> Map.of(), ctx -> null,
+                    ctx -> ctx.get("in", PricesAtInput.class).knownAt(), "prices")));
+
     /** Inserts a temporal price and schedules a change of its amount, in one operation. */
     public static final ProcessDefinition<PriceInput, PriceOutput, ProcessContext> PRICE =
         ProcessDefinition.define("IT_PRICE", 1, PriceInput.class, PriceOutput.class, ProcessContext.class, pb -> pb
@@ -428,6 +451,11 @@ public final class ItProcessFixtures {
         @Bean
         ProcessDefinition<ReadsInput, ReadsOutput, ProcessContext> itReads() {
             return READS;
+        }
+
+        @Bean
+        ProcessDefinition<PricesAtInput, PricesAtOutput, ProcessContext> itPricesAt() {
+            return PRICES_AT;
         }
 
         @Bean

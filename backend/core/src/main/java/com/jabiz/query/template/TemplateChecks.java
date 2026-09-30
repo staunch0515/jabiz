@@ -124,6 +124,7 @@ public final class TemplateChecks {
         }
         checkResults(query, problems);
         checkList(query, problems);
+        checkPointInTime(query, problems);
         warnBarePhysicalNames(query, code, known, problems);
         return problems;
     }
@@ -210,6 +211,44 @@ public final class TemplateChecks {
             if (query.resultFields().stream().noneMatch(f -> f.name().equals(name))) {
                 problems.add(TemplateProblem.header("list refers to " + name + ", which is not a result column"));
             }
+        }
+    }
+
+    /**
+     * The parameters {@code timeSlice} and {@code report.period} name must be declared single temporal parameters;
+     * public queries take no point in time (docs/design/19-reports.md sections 2.2 and 3.1).
+     */
+    private static void checkPointInTime(AdvancedQueryDefinition query, List<TemplateProblem> problems) {
+        if (query.timeSlice() != null) {
+            if (query.publicAccess()) {
+                problems.add(TemplateProblem.header("a public query cannot declare timeSlice: anonymous visitors read"
+                    + " the current state only"));
+            }
+            if (query.timeSlice().asOf() == null && query.timeSlice().knownAt() == null) {
+                problems.add(TemplateProblem.header("timeSlice must name asOf, knownAt or both"));
+            }
+            requireTimeParameter(query, query.timeSlice().asOf(), "timeSlice.asOf", problems);
+            requireTimeParameter(query, query.timeSlice().knownAt(), "timeSlice.knownAt", problems);
+        }
+        if (query.report() != null) {
+            requireTimeParameter(query, query.report().periodFrom(), "report.period.from", problems);
+            requireTimeParameter(query, query.report().periodTo(), "report.period.to", problems);
+        }
+    }
+
+    private static void requireTimeParameter(AdvancedQueryDefinition query, String name, String where,
+        List<TemplateProblem> problems) {
+        if (name == null) {
+            return;
+        }
+        Optional<QueryParameter> parameter = query.parameters().stream().filter(p -> p.name().equals(name))
+            .findFirst();
+        if (parameter.isEmpty()) {
+            problems.add(TemplateProblem.header(where + " names " + name + ", which is not a declared parameter"));
+        } else if (parameter.get().list()) {
+            problems.add(TemplateProblem.header(where + " names " + name + ", which is a list parameter"));
+        } else if (parameter.get().kind() != null && !(parameter.get().kind() instanceof SemanticKind.Temporal)) {
+            problems.add(TemplateProblem.header(where + " names " + name + ", which is not a temporal parameter"));
         }
     }
 

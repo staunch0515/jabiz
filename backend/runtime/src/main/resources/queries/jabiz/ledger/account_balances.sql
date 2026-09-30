@@ -8,7 +8,7 @@ entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   asOf:    { like: LedgerTransaction.bookingTime, required: true, description: transactions booked at or before this time count }
   from:    { like: LedgerTransaction.bookingTime, description: "if given, only transactions booked at or after this time count" }
-  knownAt: { like: LedgerTransaction.bookingTime, description: "if given, only transactions recorded at or before this time count" }
+  knownAt: { like: LedgerTransaction.bookingTime, description: "if given, the ledger (accounts included) as recorded at this time" }
 results:
   accountCode: { from: LedgerAccount.accountCode }
   accountName: { from: LedgerAccount.accountName }
@@ -25,6 +25,11 @@ list:
   defaultSort: { field: accountCode, asc: true }
   key: [accountCode]
 permissions: [ledger.read]
+# The ledger is read as recorded at knownAt, accounts included; asOf filters by booking time only, since a
+# back-dated transaction is in effect from when it was recorded (docs/design/19-reports.md section 2.2).
+timeSlice: { knownAt: knownAt }
+report:
+  period: { from: from, to: asOf }
 ---*/
 WITH RECURSIVE tree (acct_key, ancestor_id) AS (
     SELECT a.{{LedgerAccount.accountId}}, a.{{LedgerAccount.accountId}}

@@ -24,7 +24,7 @@ class ScenarioParserTest {
           - note: a day later
             advanceClock: P1D
           - setClock: 2026-02-01T00:00:00+09:00
-          - expect: { query: order.by_customer, params: { customerId: C001 }, rows: 1, values: [{ total: 10 }] }
+          - expect: { query: order.by_customer, params: { customerId: C001 }, knownAt: 2026-01-31T00:00:00Z, rows: 1, values: [{ total: 10 }] }
           - expect: { entity: Order, id: "${orderId}", asOf: 2026-02-01T00:00:00Z, fields: { status: NEW } }
           - expect: { param: tax.rate, value: 0.1 }
           - expectError:
@@ -88,7 +88,8 @@ class ScenarioParserTest {
         assertThat(scenario.steps().get(1)).isEqualTo(new Scenario.AdvanceClock(2, "P1D"));
         assertThat(scenario.steps().get(2)).isEqualTo(new Scenario.SetClock(3, Instant.parse("2026-01-31T15:00:00Z")));
         assertThat(((Scenario.Expect) scenario.steps().get(3)).expectation())
-            .isEqualTo(new Scenario.QueryExpectation("order.by_customer", Map.of("customerId", "C001"), 1,
+            .isEqualTo(new Scenario.QueryExpectation("order.by_customer", Map.of("customerId", "C001"), null,
+                Instant.parse("2026-01-31T00:00:00Z"), 1,
                 List.of(Map.of("total", 10))));
         assertThat(((Scenario.Expect) scenario.steps().get(4)).expectation())
             .isInstanceOf(Scenario.EntityExpectation.class);

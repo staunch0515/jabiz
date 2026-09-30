@@ -70,6 +70,8 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
 | `timeoutMs` | 可选，只能比数据视图的超时更短 |
 | `access` | 可选，只能是 `public`：公开模板，代替 `permissions`（两者都写 → 启动失败），只能读公开数据视图（15 §3【D17】） |
 | `cacheSeconds` | 可选，0–3600，只用于公开模板：公开响应的 `max-age`（默认 `jabiz.public.default-cache-seconds`） |
+| `timeSlice` | 可选，`{asOf: 参数, knownAt: 参数}`：由这些参数给出模板中时态实体的读取时点（19 §2.2【D25】）；公开模板不能声明 |
+| `report` | 可选，`{period: {from: 参数, to: 参数}, landscape}`：模板是报表，列在后台"报表"页面，期间用于导出的页眉（19 §3.1【D25】） |
 
 - 头部按 JSON Schema（runtime 资源 `jabiz/schema/sql-template-header.schema.json`，draft 2020-12）校验，未知键即报错。
 - `kind:` 的写法与元模型导出（02 §8）相同：`{type: monetary, currency: JPY, scale: 0}`、`{type: temporal, role: EVENT_TIME}` 等，
@@ -87,7 +89,7 @@ WHERE w.{{WaybillTracking.freightCharge}} >= :minFreight
 - 模板中必须给 `{{Entity}}` 起别名。
 - 禁止在模板中直接写物理表名、物理列名（`platformCheck` 会检查模板中出现的裸标识符是否与已知物理名冲突并给出警告）。
 - 字符串、带引号的标识符、`$$` 正文和注释中的内容不视为占位符或参数。
-- 范围值取自调用方的 `RequestContext`，取不到时拒绝（403 `SCOPE_UNAVAILABLE`）。时态实体按 `Clock` 的当前时间读取。
+- 范围值取自调用方的 `RequestContext`，取不到时拒绝（403 `SCOPE_UNAVAILABLE`）。时态实体按运行时点读取：头部 `timeSlice` 映射的参数、请求中的 `asOf` / `knownAt`，或缺省为 `Clock` 的现在、不限记录时间（19 §2【D25】）。
 
 ## 4. 参数
 
@@ -122,10 +124,11 @@ LIMIT :__limit OFFSET :__offset
 
 ### 5.1 执行接口
 
-`POST /api/queries/{id}`，请求体 `{params, filters, sorts, offset, limit, count}`（`filters`/`sorts` 与数据视图查询接口相同，03 §3；
+`POST /api/queries/{id}`，请求体 `{params, asOf, knownAt, filters, sorts, offset, limit, count}`（`asOf` / `knownAt` 见 19 §2.1）（`filters`/`sorts` 与数据视图查询接口相同，03 §3；
 `limit` 缺省 50，`count` 缺省 true），响应 `{items, total, offset, limit}`（`items` 为按 `results` 顺序的列名 → 值）。
 调用方必须具备模板声明的**全部**权限（否则 403 `PERMISSION_DENIED`）；模板不存在 404。只有注册的模板（`.sql` 与 Bean）可以经此接口执行，
 `SqlDictionary` 的查询不能。
+当前用户可以运行的模板及其参数 schema、结果列、版本见目录接口 `GET /api/meta/queries`（19 §3.2）。
 
 ## 6. 预编译校验（`platformCheck` 与启动自检）
 
