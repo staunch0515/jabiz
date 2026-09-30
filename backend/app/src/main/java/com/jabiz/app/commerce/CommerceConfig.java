@@ -2,6 +2,7 @@ package com.jabiz.app.commerce;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
@@ -89,6 +90,26 @@ class CommerceConfig {
     DatasetDefinition salesOrderLineDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(CommerceEntities.ORDER_LINE_DATASET, CommerceEntities.ORDER_LINE, "commerce.order.read",
             "commerce.order.place", true, poolRef);
+    }
+
+    /** Analysis dimensions of ledger entries (docs/design/11-ledger-events-jobs.md section 1.5). */
+    @Bean
+    LedgerDimension warehouseDimension() {
+        return LedgerDimension.define(1, "warehouse", d -> d.entity(CommerceEntities.WAREHOUSE, "warehouseCode"));
+    }
+
+    @Bean
+    LedgerDimension salesChannelDimension() {
+        return LedgerDimension.define(2, "salesChannel", d -> d.dictionary(SALES_CHANNELS));
+    }
+
+    static final String SALES_CHANNELS = "urn:jabiz:dict:commerce:sales-channel";
+
+    @Bean
+    StaticDictionary salesChannelDictionary() {
+        return StaticDictionary.define(SALES_CHANNELS, d -> d
+            .item("WEB", "zh", "网店", "ja", "ウェブ", "en", "Web shop")
+            .item("STORE", "zh", "门店", "ja", "店舗", "en", "Store"));
     }
 
     @Bean

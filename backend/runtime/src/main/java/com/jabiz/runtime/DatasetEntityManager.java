@@ -430,7 +430,7 @@ public class DatasetEntityManager {
         EntityInstance updated = new EntityInstance(
             current.id(), def.name, current.version() + 1, nextState, merged);
 
-        return verifyReferences(def, changes, changes.keySet())
+        return verifyReferences(def, current.id(), changes, changes.keySet())
             .then(Mono.defer(() -> engine
                 .casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(), versionColumn, physicalUpdates)
                 .flatMap(applied -> applied
@@ -734,6 +734,13 @@ public class DatasetEntityManager {
     Mono<Void> verifyReferences(
         EntityDefinition def, Map<String, Object> values, Collection<String> changedFields
     ) {
+        return verifyReferences(def, values.get(def.primaryKey), values, changedFields);
+    }
+
+    /** As {@link #verifyReferences(EntityDefinition, Map, Collection)} for the instance {@code id}. */
+    Mono<Void> verifyReferences(
+        EntityDefinition def, Object id, Map<String, Object> values, Collection<String> changedFields
+    ) {
         return Flux.fromIterable(def.references)
             .filter(ref -> changedFields.contains(ref.sourceField()) && values.get(ref.sourceField()) != null)
             .concatMap(ref -> {
@@ -750,7 +757,7 @@ public class DatasetEntityManager {
                 ? Mono.<Void>empty()
                 : Mono.<Void>error(new ValidationException(violations)))
             .then(Flux.fromStream(writeChecks::orderedStream)
-                .concatMap(check -> check.verify(def, values, changedFields))
+                .concatMap(check -> check.verify(def, id, values, changedFields))
                 .then());
     }
 

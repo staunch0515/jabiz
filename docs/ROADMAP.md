@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b-1、14b-2 已合入；14b-3 PR 待合并（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b 已合入；14c-1 PR 待合并（线 1.1，各子阶段先出计划） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -528,4 +528,23 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 开启邮件而缺少服务器或发件人，启动时报告（`TaskSpecAndMailChecksTest`）。
 - [x] 前端：待办页、审批面板（批准、需理由的驳回、显示服务端的拒绝）、页头待办数（`ApprovalPanel.test`、`TasksPage.test`、e2e `tasks.spec`）。
 - [x] 现有全部检查照常通过。
+
+### 14c 账本增强（5–6 天）
+
+设计见 11 §1 与决策 D24（在 14c 计划中确认）。分两个 PR：14c-1 科目层级、行备注、来源单据、分析维度、余额与明细；14c-2 多币种。
+
+**14c-1 要求**
+1. 科目 `parentId`、`summary`：汇总科目不能过账；层级写入检查（上级须为汇总、不成环、有分录不能变汇总、有下级须保持汇总）；层级修改与过账以 advisory lock 串行。
+2. 分析维度：core `LedgerDimension`（位置 1–4、名称、字典或实体字段来源），分录 `dimension1`–`dimension4`，过账时校验取值；启动检查 `LEDGER`。
+3. 分录 `memo`；交易 `sourceEntity` / `sourceId`（过账时校验存在）；冲正照原样复制。
+4. 模板：`account_balances` 增加 `from`、`knownAt`、层级汇总；新增 `dimension_balances`、`account_activity`。
+5. 示范：`app` 声明仓库与销售渠道两个维度，订单的销售过账带来源；场景 `ledger/dimensions_rollup`。文档：11 §1、D24、CLAUDE.md。
+
+**14c-1 验收标准**
+- [x] 汇总科目不能过账；汇总科目余额为其下级之和，可过账科目余额之和为零；上级非汇总、成环、有分录变汇总、有下级变可过账都被拒绝（`LedgerEnhancementsIT`）。
+- [x] 未声明的维度、字典或实体中没有的取值一次报告；按维度汇总正确；冲正后各维度余额为零（`LedgerEnhancementsIT`、`LedgerDimensionTest`）。
+- [x] 来源单据记在交易上，冲正照复制；不存在的实体或实例被拒绝（`LedgerEnhancementsIT`）。
+- [x] 区间与 `knownAt` 的余额、科目明细的期初 / 滚动 / 期末余额正确（`LedgerEnhancementsIT`、场景 `dimensions_rollup`）。
+- [x] 维度声明问题在启动时报告（`LedgerChecksTest`）；账本表仍只 INSERT（`LedgerIT`）。
+- [x] 现有全部检查照常通过（`order_lifecycle` 的快照多出销售交易的来源与新字段的空值）。
 

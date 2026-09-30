@@ -5,6 +5,9 @@ import com.jabiz.i18n.PlatformErrorCodes;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +25,15 @@ public final class LedgerPosting {
 
     /** All violations of the lines, together; empty when they can be posted. Entries are numbered from 1. */
     public static List<Violation> validate(List<PostingLine> lines, int scale) {
+        return validate(lines, scale, List.of());
+    }
+
+    /**
+     * As {@link #validate(List, int)}, and each line's memo and dimensions: only the declared dimensions, values of
+     * at most {@value LedgerDimension#MAX_VALUE_LENGTH} characters, memos of at most {@value PostingLine#MAX_MEMO}.
+     * Whether a value is in its dimension's list needs the database and is checked where the lines are booked.
+     */
+    public static List<Violation> validate(List<PostingLine> lines, int scale, List<LedgerDimension> dimensions) {
         List<Violation> violations = new ArrayList<>();
         if (lines.size() < MIN_LINES) {
             violations.add(new Violation("entries", PlatformErrorCodes.LEDGER_TOO_FEW_LINES,
@@ -42,6 +54,30 @@ public final class LedgerPosting {
                 violations.add(new Violation("entries", PlatformErrorCodes.LEDGER_AMOUNT_SCALE,
                     "Entry " + line + ": amount " + amount.toPlainString() + " has more than " + scale
                         + " decimal places", Map.of("line", line, "scale", scale)));
+            }
+        }
+        Set<String> declared = new HashSet<>();
+        dimensions.forEach(dimension -> declared.add(dimension.name()));
+        for (int i = 0; i < lines.size(); i++) {
+            PostingLine posting = lines.get(i);
+            int line = i + 1;
+            if (posting.memo() != null && posting.memo().length() > PostingLine.MAX_MEMO) {
+                violations.add(new Violation("entries", PlatformErrorCodes.TOO_LONG,
+                    "Entry " + line + ": the memo is longer than " + PostingLine.MAX_MEMO + " characters",
+                    Map.of("line", line, "field", "memo", "max", PostingLine.MAX_MEMO)));
+            }
+            for (Map.Entry<String, String> value : new TreeMap<>(posting.dimensions()).entrySet()) {
+                if (!declared.contains(value.getKey())) {
+                    violations.add(new Violation("entries", PlatformErrorCodes.LEDGER_DIMENSION_UNKNOWN,
+                        "Entry " + line + ": no ledger dimension " + value.getKey(),
+                        Map.of("line", line, "dimension", value.getKey())));
+                } else if (value.getValue() == null || value.getValue().isBlank()
+                    || value.getValue().length() > LedgerDimension.MAX_VALUE_LENGTH) {
+                    violations.add(new Violation("entries", PlatformErrorCodes.LEDGER_DIMENSION_INVALID,
+                        "Entry " + line + ": " + value.getKey() + " must be 1 to "
+                            + LedgerDimension.MAX_VALUE_LENGTH + " characters",
+                        Map.of("line", line, "dimension", value.getKey(), "value", String.valueOf(value.getValue()))));
+                }
             }
         }
         BigDecimal debit = total(lines, Direction.DEBIT);

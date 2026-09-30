@@ -74,7 +74,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
 - **账本、事件、定时任务**（见 11 与决策 D14）：账本交易只经 `LEDGER_POST` / `LEDGER_REVERSE` 写入，更正即冲正；
-  需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
+  需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。账本的科目层级、分析维度（`LedgerDimension` Bean）、行备注与来源单据见 11 §1.4–§1.7 与决策 D24，
+  子账单据过账时带上来源（`sourceEntity` / `sourceId`）。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
 - **内容编辑**（见 16 与决策 D20）：多语言内容用 `f.apply(I18nText.of(...))`（值为 `{语言: 文本}`，存 `jsonb`，语言即平台支持的语言）；
   被引用的实体用 `eb.display(字段)` 声明显示字段；状态、审核意见等只由流程改变的字段用 `f.processOnly()`（照常可读，数据视图 API 与通用实体流程不能写）；

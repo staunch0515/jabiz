@@ -9,11 +9,11 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
 
 | 实体 | 表 | 要点 | 数据视图（读 / 写权限） |
 |---|---|---|---|
-| `LedgerAccount` | `ledger_account_version` | `accountCode`（唯一、不可变）、`accountName`、`accountType`（`ASSET` `LIABILITY` `EQUITY` `REVENUE` `EXPENSE`，不可变）、`enabled`；可预定 | `ledger.account.read` / `ledger.account.write` |
-| `LedgerTransaction` | `ledger_transaction_version` | `bookingTime`（业务时间）、`description`、`reference`、`reversesTransactionId`（→ `LedgerTransaction`，唯一：一笔交易至多被冲正一次，D6）；全部字段不可变；发布变更事件 | `ledger.read` / `ledger.post`，**`processOnlyWrites`** |
-| `LedgerEntry` | `ledger_entry_version` | `transactionId`、`accountId`、`lineNo`、`direction`（`DEBIT` / `CREDIT`）、`amount`（`Monetary`，正数）；全部字段不可变 | 同上，**`processOnlyWrites`** |
+| `LedgerAccount` | `ledger_account_version` | `accountCode`（唯一、不可变）、`accountName`、`accountType`（`ASSET` `LIABILITY` `EQUITY` `REVENUE` `EXPENSE`，不可变）、`enabled`、`parentId`（上级科目）、`summary`（汇总科目，空 = 可过账）（1.4）；可预定 | `ledger.account.read` / `ledger.account.write` |
+| `LedgerTransaction` | `ledger_transaction_version` | `bookingTime`（业务时间）、`description`、`reference`、`sourceEntity` / `sourceId`（来源单据，1.6）、`reversesTransactionId`（→ `LedgerTransaction`，唯一：一笔交易至多被冲正一次，D6）；全部字段不可变；发布变更事件 | `ledger.read` / `ledger.post`，**`processOnlyWrites`** |
+| `LedgerEntry` | `ledger_entry_version` | `transactionId`、`accountId`、`lineNo`、`direction`（`DEBIT` / `CREDIT`）、`amount`（`Monetary`，正数）、`memo`、`dimension1`–`dimension4`（1.5）；全部字段不可变 | 同上，**`processOnlyWrites`** |
 
-- 单一币种：`Monetary` 在字段上声明币种与小数位，因此账本的金额按配置 `jabiz.ledger.currency`（默认 `JPY`）、`jabiz.ledger.scale`（默认 0，至多 4）构建；列为 `numeric(19,4)`。多币种不在本阶段。
+- 记账本位币：`Monetary` 在字段上声明币种与小数位，因此账本的金额按配置 `jabiz.ledger.currency`（默认 `JPY`）、`jabiz.ledger.scale`（默认 0，至多 4）构建；列为 `numeric(19,4)`。多币种不在本阶段。
 - 交易与分录只经账本流程写入：数据视图 API 的 `commit` 与通用实体流程一律拒绝（422 `PROCESS_ONLY_DATASET`），
   撤销（D2）也拒绝（422 `REVERT_NOT_ALLOWED`）——**更正只能是冲正交易**。
 
@@ -22,8 +22,8 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
 | 流程 | 权限 | 作用 |
 |---|---|---|
 | `LEDGER_ACCOUNT_OPEN` | `ledger.account.write` | 开立科目（科目也可经其数据视图维护） |
-| `LEDGER_POST` | `ledger.post` | 过账：`{bookingTime?, description, reference?, entries: [{accountCode, direction, amount}]}` |
-| `LEDGER_REVERSE` | `ledger.reverse` | 冲正：`{transactionId, reason, bookingTime?}`，生成借贷互换的新交易，`reversesTransactionId` 指向原交易 |
+| `LEDGER_POST` | `ledger.post` | 过账：`{bookingTime?, description, reference?, sourceEntity?, sourceId?, entries: [{accountCode, direction, amount, memo?, dimensions?}]}` |
+| `LEDGER_REVERSE` | `ledger.reverse` | 冲正：`{transactionId, reason, bookingTime?}`，生成借贷互换的新交易（行备注、维度、来源单据照原样），`reversesTransactionId` 指向原交易 |
 
 - 写入前校验（core `com.jabiz.ledger.LedgerPosting`，纯逻辑）：至少 2 条、至多 200 条分录；金额为正（`LEDGER_AMOUNT_NOT_POSITIVE`）且不超过账本小数位
   （`LEDGER_AMOUNT_SCALE`）；借贷相等（`LEDGER_UNBALANCED`）；科目存在（`LEDGER_ACCOUNT_NOT_FOUND`）且启用（`LEDGER_ACCOUNT_DISABLED`）。
@@ -38,11 +38,45 @@ ROADMAP 阶段 9 的四个通用业务基础模块。约束性细则见【决策
 `ledger_entry_version` 上有 `DEFERRABLE INITIALLY DEFERRED` 的约束触发器：数据库事务提交时，本事务写入过分录的每笔交易，
 其当前分录必须借贷相等，否则提交失败（SQLSTATE `JZ002`）。这是写入前校验之外的第二道防线（手写 SQL、将来的代码缺陷）。
 
-### 1.4 余额
+### 1.4 科目层级（14c-1，决策 D24）
 
-SQL 模板 `jabiz.ledger.account_balances`（runtime 资源 `queries/jabiz/ledger/account_balances.sql`，权限 `ledger.read`）：
-参数 `asOf`（按 `bookingTime`），每个科目返回 `debitTotal`、`creditTotal`、`balance`（= 借方 − 贷方）。
-因此借贷平衡的账本上**全部科目余额之和为零**。core 的 `LedgerBalances` 是同一口径的内存模型（属性测试用）。
+- `parentId` 指向上级科目；`summary = true` 的是**汇总科目**：只用于归组，不能过账（422 `LEDGER_ACCOUNT_NOT_POSTABLE`）。字段为空即可过账（旧数据如此）。
+- 写入检查（`LedgerAccountCheck`，全部写入途径）：上级必须是汇总科目（`LEDGER_PARENT_NOT_SUMMARY`）、不能是自己或自己的下级（`LEDGER_ACCOUNT_CYCLE`）；
+  已有分录的科目不能改为汇总（`LEDGER_SUMMARY_HAS_ENTRIES`）；有下级的汇总科目不能改为可过账（`LEDGER_ACCOUNT_HAS_CHILDREN`）。按每个科目最新的版本判断（含预定的）。
+- 层级的修改持有账本科目的事务级 advisory lock（独占），过账持有同一把锁（共享）：科目改为汇总与向它过账不会相互越过。
+
+### 1.5 分析维度（14c-1，决策 D24）
+
+分录有 4 个维度列 `dimension1`–`dimension4`（文本，至多 100 字符）。应用以 Bean 声明用哪几个、在过账输入中的名称与取值来源（core `LedgerDimension`）：
+
+```java
+@Bean LedgerDimension department() { return LedgerDimension.define(1, "department", d -> d.dictionary("urn:jabiz:dict:fin:department")); }
+@Bean LedgerDimension location()   { return LedgerDimension.define(2, "location", d -> d.entity("FinLocation", "locationCode")); }
+```
+
+- 过账输入的每行 `dimensions: {"department": "SALES"}`：未声明的名称 `LEDGER_DIMENSION_UNKNOWN`；取值不在字典的启用代码中、或不是该实体当前实例的字段值（经其默认视图读取）
+  `LEDGER_DIMENSION_INVALID`；全部一次报告。维度可选，没有取值即为空。
+- 启动检查 `LEDGER`：位置或名称重复；实体来源的实体、默认视图、文本或代码字段不存在。字典可能由数据库提供，不在启动时检查。
+
+### 1.6 行备注与来源单据（14c-1，决策 D24）
+
+- 每行可带 `memo`（至多 500 字符）。
+- 交易可带 `sourceEntity` + `sourceId`：过账的单据（发票、日记账……）。实体须已注册且该实例存在（经其默认视图读取），否则 422 `LEDGER_SOURCE_NOT_FOUND`。
+  来源在交易上，每行继承；报表据此钻取到单据。
+
+### 1.7 余额与明细
+
+SQL 模板（runtime 资源 `queries/jabiz/ledger/`，权限 `ledger.read`；金额为记账本位币）：
+
+| 模板 | 参数 | 结果 |
+|---|---|---|
+| `jabiz.ledger.account_balances` | `asOf`（必填，按 `bookingTime`）、`from`（可选，区间起点）、`knownAt`（可选：只计记录时间不晚于它的交易） | 每个科目的 `debitTotal`、`creditTotal`、`balance`（= 借方 − 贷方），以及 `parentCode`、`summary`、`level`；**汇总科目为其全部下级之和** |
+| `jabiz.ledger.dimension_balances` | `dimension`（位置 1–4）、`asOf`、`from?`、`knownAt?` | 按科目与维度取值（无取值为空串）的借贷合计与余额 |
+| `jabiz.ledger.account_activity` | `account`（科目代码）、`from`、`asOf`、`knownAt?` | 期初余额（`OPENING`）、区间内每条分录（交易、摘要、参考、来源单据、行号、备注、维度、借、贷、滚动余额，`ENTRY`）、期末（`CLOSING`）；按 `seq` 排序 |
+
+- "按当时所知"（`knownAt`）：交易与分录只追加、从不修改，因此以交易的记录时间（`createdTime`）筛选即可重现当时的余额；更正是冲正交易，有自己的记录时间。
+- 借贷平衡的账本上**全部可过账科目的余额之和为零**（汇总科目重复其下级，不计入）。core 的 `LedgerBalances` 是同一口径的内存模型（属性测试用）。
+- `ledger.post` 可以不授予任何角色：业务流程以子流程过账不检查调用方的权限（06 §5），于是控制科目只能由其子账的流程过账。
 
 ## 2. 实体变更事件与 Outbox
 
