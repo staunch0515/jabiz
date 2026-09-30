@@ -4,14 +4,13 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.MetaModelExporter;
 import com.jabiz.entity.SemanticKinds;
-import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
-import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.ReportSpec;
 import com.jabiz.query.custom.ResultListSpec;
 import com.jabiz.query.template.TemplateSchemas;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.query.QueryTexts;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
 import com.jabiz.runtime.security.Permissions;
 import org.springframework.core.env.Environment;
@@ -24,7 +23,6 @@ import reactor.core.publisher.Mono;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The catalog of SQL templates the caller may run (docs/design/19-reports.md section 3.2): parameters as JSON
@@ -62,14 +60,14 @@ class QueryCatalogController {
 
     private final SqlTemplateRegistry templates;
     private final EntityDefinitionRegistry entities;
-    private final MessageCatalog messages;
+    private final QueryTexts texts;
     private final boolean development;
 
-    QueryCatalogController(SqlTemplateRegistry templates, EntityDefinitionRegistry entities, MessageCatalog messages,
+    QueryCatalogController(SqlTemplateRegistry templates, EntityDefinitionRegistry entities, QueryTexts texts,
         Environment environment) {
         this.templates = templates;
         this.entities = entities;
-        this.messages = messages;
+        this.texts = texts;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
 
@@ -85,9 +83,9 @@ class QueryCatalogController {
     }
 
     private QueryEntry entry(AdvancedQueryDefinition query, RequestContext context) {
-        String title = label("query." + query.queryId(), context).orElse(query.queryId());
+        String title = texts.title(query, context.locale());
         List<ResultEntry> results = query.resultFields().stream()
-            .map(field -> new ResultEntry(field.name(), columnLabel(query, field, context),
+            .map(field -> new ResultEntry(field.name(), texts.column(query, field, context.locale()),
                 MetaModelExporter.kindToJson(field.kind()),
                 SemanticKinds.allowedOperators(field.kind()).stream().map(Enum::name).sorted().toList()))
             .toList();
@@ -126,17 +124,5 @@ class QueryCatalogController {
         PeriodEntry period = spec.periodFrom() == null && spec.periodTo() == null ? null
             : new PeriodEntry(spec.periodFrom(), spec.periodTo());
         return new ReportEntry(period, spec.landscape());
-    }
-
-    /** The column's own text, else the display name of the field it comes from, else its name. */
-    private String columnLabel(AdvancedQueryDefinition query, ProjectedField field, RequestContext context) {
-        return label("query." + query.queryId() + "." + field.name(), context)
-            .or(() -> field.sourceEntity() == null ? Optional.empty()
-                : label(MetaModelExporter.labelKey(field.sourceEntity(), field.sourceField()), context))
-            .orElse(field.name());
-    }
-
-    private Optional<String> label(String key, RequestContext context) {
-        return messages.find(key, context.locale());
     }
 }

@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b、14c 已合入；14d-1 PR 待合并（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b、14c、14d-1 已合入；14d-2 PR 待合并（线 1.1，各子阶段先出计划） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -583,5 +583,24 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 模板版本随文件任何修改而变，换行风格不影响（core 测试）。
 - [x] 目录只列有权运行的模板，内容与执行一致（`QueryCatalogIT`）。
 - [x] 后台运行报表：参数表单、时点、结果表格；无权限者看不到（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+
+**14d-2 要求**
+1. core `ReportDocument`、`ReportColumn`、`ReportFormat`（区域格式、括号负数）、`CsvReportWriter`（按列的小数位、防公式注入）。
+2. runtime `XlsxReportWriter`（fastexcel，数值与日期单元格）、`PdfReportWriter`（PDFBox，页眉页脚、页码、列宽、确定性输出）、`PdfFonts`
+   （Noto Sans 随平台提供，OFL；`jabiz.reports.pdf.fonts` 为后备字体）、`ReportSettings`、`ReportExporter`、`QueryTexts`；启动检查 `REPORTS`。
+3. `POST /api/queries/{id}/export?format=`；行数上限 `jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`；`AdvancedQueryExecutor.all`；观测 `jabiz.query.export`。
+4. 约定插件把 `jabizApp { region }` 写入 `jabiz.region`。
+5. 后台报表页"导出"（Excel、PDF、CSV，按当前参数、时点、筛选、排序）。
+6. 文档：19 §4、§6、13 §2、D25、CLAUDE.md。
+
+**14d-2 验收标准**
+- [x] Excel 中的金额是数值单元格，其和等于报表的合计（`XlsxReportWriterTest`、`ReportExportIT`）。
+- [x] CSV 的值精确（按列的小数位，不分组、不舍入），以公式开头的文本不会被当作公式（`CsvReportWriterTest`、`ReportExportIT`）。
+- [x] PDF 每页有公司、报表、期间、运行时间、页码；负数带括号；窄列不被长文本挤掉（`PdfReportWriterTest`）。
+- [x] 同一次运行的 PDF 逐字节相同（`PdfReportWriterTest`、`ReportExportIT`）。
+- [x] 导出按请求的时点读取，页脚显示记录时点（`ReportExportIT`）。
+- [x] 超过上限被拒绝（422 `REPORT_TOO_LARGE`），不截断；权限同运行，未知格式 400（`ReportExportIT`）。
+- [x] 后台导出当前的行（Vitest、Playwright 下载）。
 - [x] 现有全部检查照常通过。
 

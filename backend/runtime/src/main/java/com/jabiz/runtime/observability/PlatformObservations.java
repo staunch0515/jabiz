@@ -36,6 +36,7 @@ public class PlatformObservations {
     public static final String DATASET_QUERY = "jabiz.dataset.query";
     public static final String DATASET_READ = "jabiz.dataset.read";
     public static final String TEMPLATE = "jabiz.query.template";
+    public static final String EXPORT = "jabiz.query.export";
     public static final String DELIVERY = "jabiz.outbox.delivery";
     public static final String JOB = "jabiz.job.run";
     public static final String FILE_UPLOAD = "jabiz.file.upload";

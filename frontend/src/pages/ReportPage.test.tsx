@@ -9,6 +9,9 @@ import ReportCatalogPage from './ReportCatalogPage'
 import ReportPage from './ReportPage'
 
 const post = vi.fn()
+const exportQuery = vi.fn()
+
+vi.mock('../api/reports', () => ({ exportQuery: (...args: unknown[]) => exportQuery(...args) }))
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -77,6 +80,7 @@ function show(path: string) {
 describe('reports pages', () => {
   beforeEach(async () => {
     post.mockReset()
+    exportQuery.mockReset()
     await i18n.changeLanguage('en')
   })
 
@@ -100,6 +104,22 @@ describe('reports pages', () => {
     expect(request.body).toMatchObject({ params: {}, offset: 0, limit: 50 })
     // The template accepts a point in time from the request.
     expect(screen.getByText('Effective at')).toBeTruthy()
+  })
+
+  it('exports the rows on screen, all of them, in the chosen format', async () => {
+    post.mockResolvedValue({ items: [{ sku: 'A-1', available: '3' }], total: 1, offset: 0, limit: 50 })
+    exportQuery.mockResolvedValue(undefined)
+    show('/reports/run?id=commerce.stock_availability')
+    await screen.findByText('A-1')
+
+    fireEvent.mouseEnter(screen.getByTestId('report-export'))
+    fireEvent.click(await screen.findByText('Excel (.xlsx)'))
+
+    await waitFor(() => expect(exportQuery).toHaveBeenCalled())
+    const [id, format, body] = exportQuery.mock.calls[0] as [string, string, Record<string, unknown>]
+    expect([id, format]).toEqual(['commerce.stock_availability', 'xlsx'])
+    expect(body).toMatchObject({ params: {}, filters: [], sorts: [] })
+    expect(body).not.toHaveProperty('limit')
   })
 
   it('waits for the required parameters of a report', async () => {

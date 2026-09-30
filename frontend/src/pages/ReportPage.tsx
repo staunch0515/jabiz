@@ -1,10 +1,12 @@
 import { PageContainer, ProForm, ProFormDateTimePicker, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { Alert, App, Card, Result, Spin, Typography } from 'antd'
-import { useMemo, useState } from 'react'
+import { DownloadOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Card, Dropdown, Result, Spin, Typography } from 'antd'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
+import { exportQuery, type ExportFormat, type ExportRequest } from '../api/reports'
 import { renderNode } from '../components/SchemaInputs'
 import type { Row } from '../meta/columns'
 import { buildColumns } from '../meta/columns'
@@ -15,6 +17,8 @@ import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
 import { InvalidJson, inputNodes, toProcessInput, type JsonSchema } from '../meta/processForm'
 import { pointInTimeOf, reportEntity } from '../meta/reports'
 import type { Violation } from '../meta/types'
+
+const EXPORT_FORMATS: ExportFormat[] = ['xlsx', 'pdf', 'csv']
 
 /** What the table runs: the parameters and point in time of the last submitted form. */
 interface Run {
@@ -36,7 +40,8 @@ function instant(value: unknown): string | undefined {
 /**
  * Runs one report (docs/design/19-reports.md section 3.3): a form generated from the template's parameters, the
  * point in time when the template accepts one, and the result as a table paged, filtered and sorted by the server
- * within the template's whitelist. Amounts show negatives in parentheses, as financial reports do.
+ * within the template's whitelist. Amounts show negatives in parentheses, as financial reports do. The rows on screen
+ * - all of them - can be exported as Excel, PDF or CSV (section 4).
  */
 export default function ReportPage() {
   const { t, i18n } = useTranslation()
@@ -52,6 +57,26 @@ export default function ReportPage() {
   const [run, setRun] = useState<Run | null>(null)
   const [violations, setViolations] = useState<Violation[]>([])
   const effective = run ?? (entry && !needsInput ? { params: {}, serial: 0 } : null)
+  // The filters and sort of the rows on screen: an export gives the same rows, all of them.
+  const shown = useRef<Pick<ExportRequest, 'filters' | 'sorts'>>({})
+  const [exporting, setExporting] = useState(false)
+
+  const download = async (format: ExportFormat) => {
+    if (!effective) return
+    setExporting(true)
+    try {
+      await exportQuery(id, format, {
+        params: effective.params,
+        asOf: effective.asOf,
+        knownAt: effective.knownAt,
+        ...shown.current,
+      })
+    } catch (e) {
+      message.error(e instanceof ApiError ? e.display : String(e))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const columns = useMemo<ProColumns<Row>[]>(() => {
     if (!entity) return []
@@ -127,6 +152,19 @@ export default function ReportPage() {
         <ProTable<Row>
           // A new run (or report) starts a new table, so its search values hold nothing but filters.
           key={`${id}#${effective.serial}`}
+          toolBarRender={() => [
+            <Dropdown
+              key="export"
+              menu={{
+                items: EXPORT_FORMATS.map((format) => ({ key: format, label: t(`reports.formats.${format}`) })),
+                onClick: ({ key }) => void download(key as ExportFormat),
+              }}
+            >
+              <Button icon={<DownloadOutlined />} loading={exporting} data-testid="report-export">
+                {t('reports.export')}
+              </Button>
+            </Dropdown>,
+          ]}
           rowKey="__key"
           columns={columns}
           dateFormatter={(value) => value.toISOString()}
@@ -137,6 +175,10 @@ export default function ReportPage() {
           request={async (params, sort) => {
             const { current = 1, pageSize = 50, ...values } = params
             setViolations([])
+            shown.current = {
+              filters: buildFilters(entity, view, values),
+              sorts: buildSorts(view, sort as Record<string, string>),
+            }
             try {
               const result = await unwrap(
                 api.POST('/api/queries/{queryId}', {
@@ -145,8 +187,7 @@ export default function ReportPage() {
                     params: effective.params,
                     asOf: effective.asOf,
                     knownAt: effective.knownAt,
-                    filters: buildFilters(entity, view, values),
-                    sorts: buildSorts(view, sort as Record<string, string>),
+                    ...shown.current,
                     offset: (current - 1) * pageSize,
                     limit: pageSize,
                   },

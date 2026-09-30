@@ -7,6 +7,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
@@ -72,6 +73,7 @@ class BootAppPlugin : Plugin<Project> {
     private fun registerAppProperties(project: Project, app: JabizAppExtension) {
         val write = project.tasks.register("jabizAppProperties", AppPropertiesTask::class.java) {
             languages.set(app.languages)
+            region.set(app.region.orElse(""))
             outputDir.set(project.layout.buildDirectory.dir("generated/jabiz-app"))
         }
         val main = project.extensions.getByType(SourceSetContainer::class.java).getByName("main")
@@ -188,6 +190,9 @@ class BootAppPlugin : Plugin<Project> {
         @get:Input
         abstract val languages: ListProperty<String>
 
+        @get:Input
+        abstract val region: Property<String>
+
         @get:OutputDirectory
         abstract val outputDir: DirectoryProperty
 
@@ -197,6 +202,8 @@ class BootAppPlugin : Plugin<Project> {
             file.parentFile.mkdirs()
             val lines = mutableListOf("# Written by the jabiz.boot-app plugin from jabizApp { } (decision D22 item 7).")
             languages.get().takeIf { it.isNotEmpty() }?.let { lines += "jabiz.i18n.languages=${it.joinToString(",")}" }
+            // Exported reports format numbers and times like the frontend (docs/design/19-reports.md section 4).
+            region.get().takeIf { it.isNotBlank() }?.let { lines += "jabiz.region=$it" }
             file.writeText(lines.joinToString("\n", postfix = "\n"))
         }
     }

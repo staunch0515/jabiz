@@ -37,6 +37,9 @@ dependencies {
     // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
     implementation("com.networknt:json-schema-validator:3.0.0")
+    // Report exports (docs/design/19-reports.md section 4): XLSX with numeric cells, PDF laid out by the platform.
+    implementation("org.dhatim:fastexcel:0.20.2")
+    implementation("org.apache.pdfbox:pdfbox:3.0.5")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     // JDBC: Flyway, and the precompile check of SQL templates (reads server error positions).
     implementation("org.postgresql:postgresql")
@@ -54,6 +57,9 @@ dependencies {
     testFixturesApi("io.projectreactor.tools:blockhound:1.0.17.RELEASE")
     testFixturesRuntimeOnly("io.projectreactor.tools:blockhound-junit-platform:1.0.17.RELEASE")
     testFixturesRuntimeOnly("org.postgresql:r2dbc-postgresql")
+    // Report export tests read the files back.
+    testFixturesApi("org.dhatim:fastexcel-reader:0.20.2")
+    testFixturesApi("org.apache.pdfbox:pdfbox:3.0.5")
     // Scenario replay (docs/design/07-quality.md section 3): scenario files are YAML.
     testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 }

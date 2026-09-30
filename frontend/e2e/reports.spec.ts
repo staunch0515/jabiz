@@ -12,6 +12,12 @@ test('a report runs from the reports page', async ({ page }) => {
   await expect(page.getByTestId('page-title')).toHaveText('库存可用量')
   await expect(page.getByRole('columnheader', { name: '可用' })).toBeVisible()
 
+  // The rows are exported as a file named after the report.
+  const download = page.waitForEvent('download')
+  await page.getByTestId('report-export').hover()
+  await page.getByText('Excel（.xlsx）').click()
+  expect((await download).suggestedFilename()).toMatch(/^commerce\.stock_availability-\d{8}-\d{6}\.xlsx$/)
+
   // The trial balance needs its date first.
   await page.goto('/reports/run?id=jabiz.ledger.account_balances')
   await expect(page.getByTestId('report-not-run')).toBeVisible()

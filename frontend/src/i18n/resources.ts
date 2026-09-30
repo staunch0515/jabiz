@@ -22,6 +22,8 @@ const en = {
     pointInTime: 'Point in time',
     version: 'Version {{version}}',
     notRun: 'Fill in the parameters and run the report.',
+    export: 'Export',
+    formats: { xlsx: 'Excel (.xlsx)', pdf: 'PDF', csv: 'CSV' },
   },
   tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks' },
   approval: {
@@ -169,6 +171,8 @@ const zh: Texts = {
     pointInTime: '时点',
     version: '版本 {{version}}',
     notRun: '填写参数后运行报表。',
+    export: '导出',
+    formats: { xlsx: 'Excel（.xlsx）', pdf: 'PDF', csv: 'CSV' },
   },
   tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办' },
   approval: {
@@ -313,6 +317,8 @@ const ja: Texts = {
     pointInTime: '時点',
     version: 'バージョン {{version}}',
     notRun: 'パラメータを入力してレポートを実行してください。',
+    export: 'エクスポート',
+    formats: { xlsx: 'Excel（.xlsx）', pdf: 'PDF', csv: 'CSV' },
   },
   tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件' },
   approval: {
