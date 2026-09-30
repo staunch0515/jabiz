@@ -6,6 +6,7 @@ import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -26,7 +27,11 @@ public class ReportMessagesCheck implements PlatformCheck {
 
     @Override
     public List<CheckProblem> check() {
-        List<String> titles = templates.all().stream()
+        return problems(messages, templates.all());
+    }
+
+    static List<CheckProblem> problems(MessageCatalog messages, Collection<AdvancedQueryDefinition> queries) {
+        List<String> titles = queries.stream()
             .filter(query -> query.report() != null)
             .map(AdvancedQueryDefinition::queryId)
             .map(id -> "query." + id)

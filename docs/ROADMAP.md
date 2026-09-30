@@ -571,9 +571,9 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 1. 运行时点：`POST /api/queries/{id}` 的 `asOf` / `knownAt`；头部 `timeSlice` 映射参数；两者冲突、视图禁止时间旅行、公开模板声明时点均被拒；
    `RunTemplate.at`；场景 `query` 期望的 `asOf` / `knownAt`。账本四个模板映射 `knownAt`。
 2. 模板版本 `AdvancedQueryDefinition.version()`（文件全文或 DSL 规范描述的 SHA-256）。
-3. 头部 `report`（期间、横向）；消息 `query.<id>`、`query.<id>.<列>`，报表缺标题由 `I18N` 报告。
+3. 头部 `report`（期间、横向）；消息 `query.<id>`、`query.<id>.<列>`，报表缺标题由启动检查 `MESSAGES` 报告。
 4. 目录 `GET /api/meta/queries`（有权运行的模板：参数 schema、结果列、筛选排序、版本、时点、报表）。
-5. 后台 `/reports` 与 `/reports/:id`；菜单"报表"。示范：账本模板与 `commerce.stock_availability` 声明 `report`。
+5. 后台 `/reports` 与 `/reports/run?id=<模板>`；菜单"报表"。示范：账本模板与 `commerce.stock_availability` 声明 `report`。
 6. 文档：19、05 §2.1、§3、§5.1、D25、CLAUDE.md。
 
 **14d-1 验收标准**

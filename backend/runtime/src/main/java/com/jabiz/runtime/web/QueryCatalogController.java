@@ -3,6 +3,7 @@ package com.jabiz.runtime.web;
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.MetaModelExporter;
+import com.jabiz.entity.SemanticKinds;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
@@ -45,8 +46,11 @@ class QueryCatalogController {
         List<ResultEntry> results, List<String> filters, List<String> sorts, SortEntry defaultSort,
         TimeSliceEntry timeSlice, boolean timeTravel, ReportEntry report) {}
 
-    /** @param kind the semantic kind as the metamodel export writes it */
-    record ResultEntry(String name, String label, Map<String, Object> kind) {}
+    /**
+     * @param kind      the semantic kind as the metamodel export writes it
+     * @param operators the filter operators its kind allows (the column must be in {@code filters} as well)
+     */
+    record ResultEntry(String name, String label, Map<String, Object> kind, List<String> operators) {}
 
     record SortEntry(String field, boolean asc) {}
 
@@ -84,7 +88,8 @@ class QueryCatalogController {
         String title = label("query." + query.queryId(), context).orElse(query.queryId());
         List<ResultEntry> results = query.resultFields().stream()
             .map(field -> new ResultEntry(field.name(), columnLabel(query, field, context),
-                MetaModelExporter.kindToJson(field.kind())))
+                MetaModelExporter.kindToJson(field.kind()),
+                SemanticKinds.allowedOperators(field.kind()).stream().map(Enum::name).sorted().toList()))
             .toList();
         ResultListSpec list = query.list();
         SortEntry defaultSort = list.defaultSort() == null ? null

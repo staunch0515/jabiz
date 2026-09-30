@@ -1,4 +1,5 @@
 import {
+  BarChartOutlined,
   CheckSquareOutlined,
   DatabaseOutlined,
   LogoutOutlined,
@@ -16,7 +17,7 @@ import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
-import { useMenus, useMyTasks } from '../meta/hooks'
+import { useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
 
 
@@ -32,14 +33,16 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
 
 /**
  * The frame of every signed-in page: the dynamic menu (docs/design/10-security.md section 3), the application's own
- * menu entries (decision D22), the user's tasks (with their count in the header) and the two catalogs, which list only
- * what the user may use. Hiding is navigation, not access: every call is checked again.
+ * menu entries (decision D22), the user's tasks (with their count in the header), the reports and the two catalogs,
+ * which list only what the user may use. Hiding is navigation, not access: every call is checked again.
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
   const { userId, signOut, can } = useAuth()
   const menus = useMenus()
   const tasks = useMyTasks()
+  const catalog = useQueryCatalog()
+  const hasReports = (catalog.data ?? []).some((q) => q.report)
   const openTasks = tasks.data?.total ?? 0
   const location = useLocation()
   const navigate = useNavigate()
@@ -48,6 +51,8 @@ export default function AppLayout() {
     ...toRoutes(menus.data),
     ...extensionMenu(extension.menu, can, (key) => t(key, { ns: EXTENSION_NAMESPACE })),
     { key: 'tasks', name: t('nav.tasks'), path: '/tasks', icon: <CheckSquareOutlined /> },
+    // Only when there is a report the user may run (docs/design/19-reports.md section 3.3).
+    ...(hasReports ? [{ key: 'reports', name: t('nav.reports'), path: '/reports', icon: <BarChartOutlined /> }] : []),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]

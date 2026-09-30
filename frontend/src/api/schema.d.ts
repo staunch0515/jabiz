@@ -747,6 +747,7 @@ export interface components {
             };
             label?: string;
             name?: string;
+            operators?: string[];
         };
         RevertRequest: {
             reason?: string;
