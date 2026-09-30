@@ -17,24 +17,24 @@ class RequestContextConfigTest {
     void devHeadersAreIgnoredUnlessEnabled() {
         MockEnvironment dev = new MockEnvironment();
         dev.setActiveProfiles("dev");
-        assertThat(config.actorResolver(dev, false).resolve(request)).isNull();
+        assertThat(config.actorResolver(dev, java.time.Clock.systemUTC(), false).resolve(request)).isNull();
     }
 
     @Test
     void devHeadersWorkInTheDevProfile() {
         MockEnvironment dev = new MockEnvironment();
         dev.setActiveProfiles("dev");
-        assertThat(config.actorResolver(dev, true).resolve(request).actorId()).isEqualTo("admin");
+        assertThat(config.actorResolver(dev, java.time.Clock.systemUTC(), true).resolve(request).actorId()).isEqualTo("admin");
     }
 
     @Test
     void enablingDevHeadersOutsideTheDevProfileFailsStartup() {
         MockEnvironment prod = new MockEnvironment();
         prod.setActiveProfiles("prod");
-        assertThatThrownBy(() -> config.actorResolver(prod, true))
+        assertThatThrownBy(() -> config.actorResolver(prod, java.time.Clock.systemUTC(), true))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("only allowed with the 'dev' profile");
-        assertThatThrownBy(() -> config.actorResolver(new MockEnvironment(), true))
+        assertThatThrownBy(() -> config.actorResolver(new MockEnvironment(), java.time.Clock.systemUTC(), true))
             .isInstanceOf(IllegalStateException.class);
     }
 }

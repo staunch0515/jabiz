@@ -16,6 +16,13 @@ import java.util.stream.Collectors;
  */
 public final class DevHeaderActorResolver implements ActorResolver {
 
+    private final java.time.Clock clock;
+
+    /** Development actors count as having just passed a second factor (docs/design/10-security.md section 10). */
+    public DevHeaderActorResolver(java.time.Clock clock) {
+        this.clock = java.util.Objects.requireNonNull(clock, "clock must not be null");
+    }
+
     public static final String ACTOR_HEADER = "X-Jabiz-Actor";
     public static final String TENANT_HEADER = "X-Jabiz-Tenant";
     public static final String ROLES_HEADER = "X-Jabiz-Roles";
@@ -33,7 +40,7 @@ public final class DevHeaderActorResolver implements ActorResolver {
         return new Actor(actorId,
             token(headers.getFirst(TENANT_HEADER), TENANT_HEADER),
             tokens(headers.getFirst(ROLES_HEADER), ROLES_HEADER),
-            tokens(headers.getFirst(PERMISSIONS_HEADER), PERMISSIONS_HEADER));
+            tokens(headers.getFirst(PERMISSIONS_HEADER), PERMISSIONS_HEADER), clock.instant());
     }
 
     private static String token(String value, String header) {

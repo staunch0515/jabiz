@@ -64,22 +64,22 @@ class SecurityConfigTest {
             .header("X-Jabiz-Actor", "alice").header("X-Jabiz-Permissions", "order.read");
 
         assertThat(convert(ActorResolver.NONE, request)).isNull();
-        Authentication dev = convert(new DevHeaderActorResolver(), request);
+        Authentication dev = convert(new DevHeaderActorResolver(java.time.Clock.systemUTC()), request);
         assertThat(dev).isInstanceOf(ActorAuthentication.class);
         assertThat(((ActorAuthentication) dev).actor().permissions()).isEqualTo(Set.of("order.read"));
         assertThat(dev.isAuthenticated()).isTrue();
         assertThat(dev.getCredentials()).isNull();
 
         // A token wins over development headers.
-        assertThat(convert(new DevHeaderActorResolver(), MockServerHttpRequest.get("/")
+        assertThat(convert(new DevHeaderActorResolver(java.time.Clock.systemUTC()), MockServerHttpRequest.get("/")
             .header("X-Jabiz-Actor", "alice").header("Authorization", "Bearer t")))
             .isInstanceOf(SecurityConfig.BearerToken.class);
-        assertThat(convert(new DevHeaderActorResolver(), MockServerHttpRequest.get("/"))).isNull();
+        assertThat(convert(new DevHeaderActorResolver(java.time.Clock.systemUTC()), MockServerHttpRequest.get("/"))).isNull();
     }
 
     @Test
     void malformedDevelopmentHeadersAreRefused() {
-        assertThatThrownBy(() -> convert(new DevHeaderActorResolver(),
+        assertThatThrownBy(() -> convert(new DevHeaderActorResolver(java.time.Clock.systemUTC()),
             MockServerHttpRequest.get("/").header("X-Jabiz-Actor", "evil actor")))
             .isInstanceOf(BadCredentialsException.class);
     }

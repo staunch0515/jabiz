@@ -21,11 +21,18 @@ import java.util.TreeSet;
  */
 public final class Rbac {
 
-    /** Role codes and permission codes of a user. */
-    public record Access(Set<String> roles, Set<String> permissions) {
+    /**
+     * Role codes and permission codes of a user, and whether one of the roles requires a second factor
+     * (docs/design/10-security.md section 9).
+     */
+    public record Access(Set<String> roles, Set<String> permissions, boolean mfaRequired) {
         public Access {
             roles = Set.copyOf(roles);
             permissions = Set.copyOf(permissions);
+        }
+
+        public Access(Set<String> roles, Set<String> permissions) {
+            this(roles, permissions, false);
         }
     }
 
@@ -84,10 +91,12 @@ public final class Rbac {
         complete(rolePermissions);
         Set<Object> enabledIds = new LinkedHashSet<>();
         Set<String> codes = new TreeSet<>();
+        boolean mfaRequired = false;
         for (EntityInstance role : roles) {
             if (enabled(role)) {
                 enabledIds.add(String.valueOf(role.id()));
                 codes.add(role.get("roleCode"));
+                mfaRequired |= Boolean.TRUE.equals(role.get("requireMfa"));
             }
         }
         Set<String> permissions = new TreeSet<>();
@@ -96,7 +105,13 @@ public final class Rbac {
                 permissions.add(grant.get("permission"));
             }
         }
-        return new Access(codes, permissions);
+        return new Access(codes, permissions, mfaRequired);
+    }
+
+    /** The last TOTP step accepted before, as carried by a login record; -1 for none. */
+    public static long mfaStep(EntityInstance record) {
+        Object step = record == null ? null : record.get("mfaStep");
+        return step == null ? -1 : number(step);
     }
 
     /** The counters carried by a login record; {@link LoginAttemptPolicy.State#INITIAL} for none. */

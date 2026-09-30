@@ -131,7 +131,7 @@ public record DatasetDefinition(
             if (publicRead != null) {
                 effective = new DatasetPolicy(true, policy.softDelete(), policy.softDeleteField(),
                     policy.softDeleteTimeField(), policy.maxQueryBatchSize(), policy.maxWriteBatchSize(),
-                    policy.queryTimeout(), false, false);
+                    policy.queryTimeout(), false, false, policy.writeMfa());
             }
             return new DatasetDefinition(resourceId, targetEntityType, storage, effective, scope, defaultView,
                 permissions, listView, publicRead);
@@ -164,6 +164,7 @@ public record DatasetDefinition(
         private Duration timeout = Duration.ofSeconds(5);
         private boolean allowTimeTravel = true;
         private boolean processOnlyWrites;
+        private com.jabiz.security.MfaRequirement writeMfa = com.jabiz.security.MfaRequirement.NONE;
 
         public PolicyBuilder readOnly(boolean ro) { this.readOnly = ro; return this; }
 
@@ -192,9 +193,18 @@ public record DatasetDefinition(
          */
         public PolicyBuilder processOnlyWrites() { this.processOnlyWrites = true; return this; }
 
+        /**
+         * Writers through the dataset API and the entity API need a recent second factor
+         * (docs/design/10-security.md section 10).
+         */
+        public PolicyBuilder writeRequiresMfa(com.jabiz.security.MfaRequirement requirement) {
+            this.writeMfa = Objects.requireNonNull(requirement, "requirement must not be null");
+            return this;
+        }
+
         public DatasetPolicy build() {
             return new DatasetPolicy(readOnly, softDelete, softDeleteField, softDeleteTimeField,
-                queryBatch, writeBatch, timeout, allowTimeTravel, processOnlyWrites);
+                queryBatch, writeBatch, timeout, allowTimeTravel, processOnlyWrites, writeMfa);
         }
     }
 }

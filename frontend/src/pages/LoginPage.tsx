@@ -1,24 +1,105 @@
-import { LockOutlined, UserOutlined } from '@ant-design/icons'
+import { LockOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons'
 import { LoginForm, ProFormText } from '@ant-design/pro-components'
-import { Alert, Select } from 'antd'
+import { Alert, Button, Card, Select, Space } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
+import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
+import { lastUserName, useAuth } from '../auth/AuthContext'
+import MfaEnrollment from '../components/MfaEnrollment'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
 
+type Step =
+  | { kind: 'password'; notice?: 'enrolled' }
+  | { kind: 'code'; challenge: string }
+  | { kind: 'enroll'; challenge: string }
 
+/**
+ * Signing in (docs/design/10-security.md sections 4 and 9): the password, then — for users with two-step
+ * verification — a code, or the enrolment a role requires before the user signs in again.
+ */
 export default function LoginPage() {
   const { t, i18n } = useTranslation()
-  const { signIn, signedIn, ready } = useAuth()
+  const { signIn, verify, signedIn, ready } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [error, setError] = useState<string | null>(null)
-  const from = (location.state as { from?: string } | null)?.from ?? '/data'
+  const [step, setStep] = useState<Step>({ kind: 'password' })
+  const state = location.state as { from?: string; idle?: boolean } | null
+  const from = state?.from ?? '/data'
 
   if (ready && signedIn) return <Navigate to={from} replace />
+
+  const failed = (e: unknown) => setError(e instanceof ApiError ? e.display : t('app.error'))
+
+  const language = languages.length > 1 && (
+    <Select
+      size="small"
+      value={i18n.language}
+      onChange={(lang) => void changeLanguage(lang as Language)}
+      options={languages.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
+      aria-label={t('app.language')}
+    />
+  )
+
+  if (step.kind === 'enroll') {
+    const challenge = step.challenge
+    return (
+      <div style={{ paddingTop: 80, display: 'flex', justifyContent: 'center' }}>
+        <Card title={t('login.enrollTitle')} style={{ width: 420 }} data-testid="mfa-enroll">
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Alert type="info" showIcon message={t('login.enrollHint')} />
+            <MfaEnrollment
+              begin={async () => {
+                const answer = await unwrap(api.POST('/api/auth/challenge/enroll', { body: { challenge } }))
+                return { secret: answer.secret!, otpauthUri: answer.otpauthUri! }
+              }}
+              confirm={async (code) =>
+                (await unwrap(api.POST('/api/auth/challenge/enroll/confirm', { body: { challenge, code } })))
+                  .recoveryCodes ?? []
+              }
+              onDone={() => setStep({ kind: 'password', notice: 'enrolled' })}
+            />
+            <Button type="link" onClick={() => setStep({ kind: 'password' })}>{t('login.back')}</Button>
+          </Space>
+        </Card>
+      </div>
+    )
+  }
+
+  if (step.kind === 'code') {
+    const challenge = step.challenge
+    return (
+      <div style={{ paddingTop: 80 }}>
+        <LoginForm
+          title={t('app.title')}
+          subTitle={t('login.codeTitle')}
+          submitter={{ searchConfig: { submitText: t('login.verify') } }}
+          actions={<Button type="link" onClick={() => { setError(null); setStep({ kind: 'password' }) }}>{t('login.back')}</Button>}
+          onFinish={async (values: { code: string }) => {
+            setError(null)
+            try {
+              await verify(challenge, values.code.trim())
+              navigate(from, { replace: true })
+            } catch (e) {
+              failed(e)
+            }
+          }}
+        >
+          <Alert type="info" showIcon message={t('login.codeHint')} style={{ marginBottom: 24 }} />
+          {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 24 }} data-testid="login-error" />}
+          <ProFormText
+            name="code"
+            fieldProps={{ size: 'large', prefix: <SafetyOutlined />, autoComplete: 'one-time-code', inputMode: 'numeric', autoFocus: true }}
+            placeholder={t('login.code')}
+            rules={[{ required: true, message: t('login.codeRequired') }]}
+          />
+        </LoginForm>
+      </div>
+    )
+  }
 
   return (
     <div style={{ paddingTop: 80 }}>
@@ -26,28 +107,31 @@ export default function LoginPage() {
         title={t('app.title')}
         subTitle={t('login.title')}
         submitter={{ searchConfig: { submitText: t('login.submit') } }}
-        actions={
-          languages.length > 1 && (
-            <Select
-              size="small"
-              value={i18n.language}
-              onChange={(lang) => void changeLanguage(lang as Language)}
-              options={languages.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
-              aria-label={t('app.language')}
-            />
-          )
-        }
+        actions={language}
+        initialValues={{ userName: state?.idle ? lastUserName() : undefined }}
         onFinish={async (values: { userName: string; password: string }) => {
           setError(null)
           try {
-            await signIn(values.userName, values.password)
-            navigate(from, { replace: true })
+            const next = await signIn(values.userName, values.password)
+            if (next.status === 'SIGNED_IN') {
+              navigate(from, { replace: true })
+            } else {
+              setStep(next.status === 'MFA_REQUIRED'
+                ? { kind: 'code', challenge: next.challenge }
+                : { kind: 'enroll', challenge: next.challenge })
+            }
           } catch (e) {
             // The server answers every refusal with the same LOGIN_FAILED, in the language of the request.
-            setError(e instanceof ApiError ? e.display : t('app.error'))
+            failed(e)
           }
         }}
       >
+        {state?.idle && step.notice !== 'enrolled' && (
+          <Alert type="warning" showIcon message={t('login.idleLocked')} style={{ marginBottom: 24 }} data-testid="idle-locked" />
+        )}
+        {step.notice === 'enrolled' && (
+          <Alert type="success" showIcon message={t('login.enrolled')} style={{ marginBottom: 24 }} data-testid="mfa-enrolled" />
+        )}
         {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 24 }} data-testid="login-error" />}
         <ProFormText
           name="userName"

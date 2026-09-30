@@ -8,14 +8,19 @@ import {
   LogoutOutlined,
   NodeIndexOutlined,
   SafetyCertificateOutlined,
+  SafetyOutlined,
   TranslationOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { ProLayout, type MenuDataItem } from '@ant-design/pro-components'
 import { Badge, Dropdown, Space } from 'antd'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { refreshSession } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { StepUpProvider } from '../auth/StepUp'
+import { useIdleLock } from '../auth/useIdleLock'
 import { extension } from '../extension'
 import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
@@ -42,7 +47,7 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
-  const { userId, signOut, can } = useAuth()
+  const { userId, signOut, can, idleTimeoutSeconds } = useAuth()
   const menus = useMenus()
   const tasks = useMyTasks()
   const catalog = useQueryCatalog()
@@ -51,6 +56,13 @@ export default function AppLayout() {
   const openTasks = tasks.data?.total ?? 0
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Locked after inactivity (docs/design/10-security.md section 11): signed out, back to the sign-in page.
+  const lockIdle = useCallback(() => {
+    void signOut().then(() => navigate('/login', { state: { idle: true } }))
+  }, [signOut, navigate])
+  const keepAlive = useCallback(() => void refreshSession(), [])
+  useIdleLock(idleTimeoutSeconds, lockIdle, keepAlive)
 
   const routes: MenuDataItem[] = [
     ...toRoutes(menus.data),
@@ -113,8 +125,15 @@ export default function AppLayout() {
         render: (_, dom) => (
           <Dropdown
             menu={{
-              items: [{ key: 'logout', icon: <LogoutOutlined />, label: t('app.logout') }],
-              onClick: async () => {
+              items: [
+                { key: 'security', icon: <SafetyOutlined />, label: t('app.security') },
+                { key: 'logout', icon: <LogoutOutlined />, label: t('app.logout') },
+              ],
+              onClick: async ({ key }) => {
+                if (key === 'security') {
+                  navigate('/account/security')
+                  return
+                }
                 await signOut()
                 navigate('/login')
               },
@@ -125,7 +144,9 @@ export default function AppLayout() {
         ),
       }}
     >
-      <Outlet />
+      <StepUpProvider>
+        <Outlet />
+      </StepUpProvider>
     </ProLayout>
   )
 }

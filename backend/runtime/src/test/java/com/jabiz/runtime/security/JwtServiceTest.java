@@ -92,8 +92,45 @@ class JwtServiceTest {
         assertThat(service.ttl()).isEqualTo(Duration.ofMinutes(15));
     }
 
-    private static String signed(JWTClaimsSet claims) throws Exception {
+    @Test
+    void accessTokensCarryTheSecondFactorTime() {
+        Actor actor = new Actor("u1", null, Set.of(), Set.of("a"), T0.minusSeconds(30));
+        assertThat(service.verify(service.issue(actor).token()).mfaAt()).isEqualTo(T0.minusSeconds(30));
+        assertThat(service.verify(service.issue(new Actor("u1", null, Set.of(), Set.of())).token()).mfaAt()).isNull();
+    }
+
+    @Test
+    void challengesAndAccessTokensCannotStandInForEachOther() throws Exception {
+        JwtService.Issued challenge = service.issueChallenge("u1", JwtService.Purpose.VERIFY, 7, Duration.ofMinutes(5));
+        assertThat(service.verifyChallenge(challenge.token(), JwtService.Purpose.VERIFY))
+            .isEqualTo(new JwtService.Challenge("u1", JwtService.Purpose.VERIFY, 7));
+        assertThatThrownBy(() -> service.verify(challenge.token()))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("type");
+        assertThatThrownBy(() -> service.verifyChallenge(challenge.token(), JwtService.Purpose.ENROLL))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("purpose");
+        String access = service.issue(new Actor("u1", null, Set.of(), Set.of())).token();
+        assertThatThrownBy(() -> service.verifyChallenge(access, JwtService.Purpose.VERIFY))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("type");
+        // An untyped token is neither.
+        String untyped = untyped(new JWTClaimsSet.Builder().issuer(JwtService.ISSUER).subject("x")
+            .expirationTime(Date.from(T0.plusSeconds(60))).build());
+        assertThatThrownBy(() -> service.verify(untyped)).isInstanceOf(JwtService.InvalidTokenException.class);
+        assertThatThrownBy(() -> service.verifyChallenge(untyped, JwtService.Purpose.VERIFY))
+            .isInstanceOf(JwtService.InvalidTokenException.class);
+        clock.advance(Duration.ofMinutes(5));
+        assertThatThrownBy(() -> service.verifyChallenge(challenge.token(), JwtService.Purpose.VERIFY))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("Expired");
+    }
+
+    private static String untyped(JWTClaimsSet claims) throws Exception {
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        jwt.sign(new MACSigner(KEY));
+        return jwt.serialize();
+    }
+
+    private static String signed(JWTClaimsSet claims) throws Exception {
+        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.HS256)
+            .type(com.nimbusds.jose.JOSEObjectType.JWT).build(), claims);
         jwt.sign(new MACSigner(KEY));
         return jwt.serialize();
     }

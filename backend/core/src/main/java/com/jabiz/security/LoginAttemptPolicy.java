@@ -9,7 +9,7 @@ import java.util.Objects;
  * records, each of which carries the counter and lock that were in force after it, so only the latest record of a
  * user is needed to decide the next one.
  *
- * <p>A wrong password increments the counter; reaching {@code maxFailures} locks the account for
+ * <p>A wrong password or second factor increments the counter; reaching {@code maxFailures} locks the account for
  * {@code lockDuration}. While locked every attempt is refused (and recorded as {@link LoginOutcome#LOCKED} without
  * extending the lock). A successful sign-in or an unlock resets the counter; so does the expiry of a lock, which gives
  * the user a fresh series of attempts.
@@ -75,12 +75,13 @@ public record LoginAttemptPolicy(int maxFailures, Duration lockDuration) {
                 }
                 yield new State(attemptNo, previous.failureCount(), previous.lockedUntil());
             }
-            case BAD_CREDENTIALS -> {
+            case BAD_CREDENTIALS, MFA_FAILED -> {
                 int failures = carried + 1;
                 yield new State(attemptNo, failures, failures >= maxFailures ? now.plus(lockDuration) : null);
             }
-            // The password was right, so nothing is added; the refusal has other causes.
-            case DISABLED, NO_ROLE -> new State(attemptNo, carried, null);
+            // The password was right, so nothing is added; the refusal (or the pending second factor) has other
+            // causes. Only a complete sign-in clears the counter, so wrong codes after a right password still lock.
+            case DISABLED, NO_ROLE, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED -> new State(attemptNo, carried, null);
         };
     }
 }

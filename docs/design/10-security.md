@@ -1,7 +1,7 @@
 # 10 安全
 
 认证、授权、菜单与敏感数据遮蔽（ROADMAP 阶段 7）。原则只有一条：**默认拒绝**——没有认证就是匿名，没有声明的权限就是没有权限，
-没有配置的密钥就不启动。约束性细则见【决策 D12】。
+没有配置的密钥就不启动。约束性细则见【决策 D12】；二次验证、按操作要求二次验证、闲置锁定、单点登录、明文显示、数据期限与访问审查见【决策 D28】（第 9–13 节）。
 
 ## 1. 总体结构
 
@@ -14,7 +14,7 @@
 
 - Spring Security（WebFlux）只负责"是谁"和"`/api/**` 必须已认证"；"能做什么"由各入口按元数据声明检查（D11 第 2 条的位置不变）。
 - 无状态：不建会话、不存安全上下文、不保存请求；不用 Cookie，因此关闭 CSRF。保留 Spring Security 默认的安全响应头。
-- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`，以及 `/api` 以外的静态资源与 `/actuator/health`。
+- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节），以及 `/api` 以外的静态资源与 `/actuator/health`。
   认证过滤器不处理这三个会话接口：客户端随手带上的过期访问令牌不会妨碍刷新与登录。
 - 401、403 与控制器的错误一样是 `ProblemDetail`，带按 `Accept-Language` 本地化的 `violations`（`UNAUTHENTICATED`、`PERMISSION_DENIED`），
   401 带 `WWW-Authenticate: Bearer`。
@@ -116,6 +116,7 @@
 | 我的待办 `GET /api/tasks/mine` / 待办与通知的数据视图 / `TASK_NOTIFY` | 只要求已认证（只列本人与本人所持权限的待办）/ `task.read`（写入只经流程）/ `task.notify`（由系统身份的事件消费者运行）（18 §5） |
 | 职责分离（另加） | 授予角色或权限造成冲突即拒绝（422 `SOD_CONFLICT`）；流程 API 入口拒绝同时持有互斥两组权限的操作人使用其中任一组（403 `SOD_CONFLICT`，`*` 除外）（18 §4） |
 | 字典、元模型导出、`/api/auth/me`、`/api/auth/menus`、OpenAPI 文档 `/api/meta/openapi` | 只要求已认证 |
+| 本人的二次验证：`/api/auth/mfa`、`/api/auth/mfa/enroll[/confirm]`、`/api/auth/step-up`（第 9、10 节） | 只要求已认证：只作用于调用者本人（绑定流程声明的 `auth.mfa-enroll` 不授予任何角色，流程内再确认绑定的是调用者本人，因此持有 `*` 也不能经流程 API 替别人绑定） |
 | 元数据目录 `/api/meta/datasets` / `/api/meta/processes` | 已认证；只列出具备读权限的视图 / 具备全部权限的非内部流程（D15） |
 
 - 未声明权限的数据视图、模板、流程：非 `dev` 下启动失败（`DatasetRegistry`、`SqlTemplateRegistry`、`ProcessChecks`，`dev` 下为警告）；
@@ -150,5 +151,76 @@
 
 - 集成测试不使用 `dev` profile 时，用 runtime testFixtures 的 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实的访问令牌；
   测试配置（`config/application.properties`）给出固定的测试密钥与 BCrypt 强度 4。
+- 二次验证（14g-1）：`MfaIT`（绑定与登录、码错误计入锁定、码不能重用、恢复码只能用一次、新登录使旧挑战失效、角色要求时先绑定、刷新时角色新要求二次验证、
+  管理操作与 `requiresMfa` 在各入口的检查与 step-up、管理员重置、绑定流程只经专用入口、密钥不能挪给别的用户、闲置会话不能刷新、操作记录中没有码、表只插入）、
+  `MfaAdministrationOffIT`；core `TotpTest`（RFC 6238 附录 B 的向量）、`RecoveryCodesTest`、`MfaSecretCipherTest`；runtime `MfaSettingsTest`、`JwtServiceTest`。
 - 验收测试：`AccessControlIT`（401 / 403 覆盖数据视图、模板、流程、实体 API、操作）、`SignInIT`（登录、锁定、并发、角色生效、刷新、菜单、安全表只插入）、
   `SensitiveDataIT`（日志、`input_summary`、`op_process_result`、读接口中不出现密码与哈希）、`BootstrapAdminIT`。
+
+## 9. 二次验证（TOTP）【D28 第 1–3 条，阶段 14g-1】
+
+| 项 | 做法 |
+|---|---|
+| 算法 | core `com.jabiz.security.Totp`：RFC 6238，HMAC-SHA1、6 位、30 秒一步，容许前后各 1 步；时间来自注入的 `Clock`。密钥 20 字节随机数（Base32 交给认证器应用，`otpauth://totp/<发行者>:<用户名>?secret=…&issuer=…`，发行者 `jabiz.security.mfa.issuer`，默认 `jabiz`） |
+| 恢复码 | core `RecoveryCodes`：10 个 `XXXXX-XXXXX`（Base32 字母），只显示一次；库中只存 SHA-256（去掉连字符、大写后），用过即删 |
+| 绑定信息 | 时态实体 `SecUserMfa`（`sec_user_mfa_version`，`db/jabiz/V23__mfa.sql`）：`userId`（唯一）、`secret`（加密，**敏感**）、`confirmed`、`confirmedTime`、`confirmedStep`（确认所用的时间步，登录时不再接受）、`recoveryCodes`（哈希列表，**敏感**）。数据视图只读（`security.user.read`），写入只经下列流程 |
+| 加密 | AES-256-GCM，附加数据为用户主键（密文不能挪给别的用户）；存放格式 `v1:<密钥标识>:<IV>:<密文>`。密钥 `jabiz.security.mfa.key`（环境变量 `JABIZ_MFA_KEY`，Base64，≥ 32 字节，经 HMAC-SHA256 导出 AES 密钥与密钥标识）；非 dev 缺少即启动失败，dev 缺省时随机生成并告警（重启后已绑定的用户无法验证）；`platformCheck` 用一次性随机密钥 |
+| 登录记录 | `SecLoginRecord` 增加 `factor`（`PASSWORD` / `TOTP` / `RECOVERY_CODE`）与 `mfaStep`（已接受的最后一个 TOTP 时间步，每条记录向后传递）；结果增加 `MFA_REQUIRED`、`MFA_ENROLLMENT_REQUIRED`、`MFA_FAILED` |
+| 角色 | `SecRole.requireMfa`（缺省否）：持有这类角色的会话必须经过二次验证 |
+
+**流程**
+
+| 流程 | 权限 | 入口 | 作用 |
+|---|---|---|---|
+| `SPONSOR_SIGN_IN`（改） | `auth.sign-in` | `POST /api/auth/login` | 密码正确且已绑定 → `MFA_REQUIRED`；未绑定而持有要求二次验证的角色 → `MFA_ENROLLMENT_REQUIRED`；两者都不重置也不增加失败计数 |
+| `SPONSOR_MFA_VERIFY` | `auth.sign-in`（内部） | `POST /api/auth/challenge/verify`、`POST /api/auth/step-up` | 核对 TOTP 或恢复码：锁定中 → `LOCKED`；码错误 → `MFA_FAILED`（与密码错误同一计数）；正确 → 重新检查启用与角色后 `SUCCESS`；写登录记录，恢复码用过即删 |
+| `SEC_MFA_ENROLL_BEGIN` | `auth.mfa-enroll`（内部，不授予角色） | `POST /api/auth/mfa/enroll`、`POST /api/auth/challenge/enroll` | 生成待确认的密钥（已确认的绑定不能覆盖：422 `MFA_ALREADY_ENROLLED`），返回密钥与 `otpauth` 地址 |
+| `SEC_MFA_ENROLL_CONFIRM` | `auth.mfa-enroll`（内部） | `POST /api/auth/mfa/enroll/confirm`、`POST /api/auth/challenge/enroll/confirm` | 以一个码确认（错误：422 `MFA_CODE_INVALID`），生成并返回恢复码 |
+| `SEC_MFA_RESET` | `security.user.mfa-reset`，要求二次验证（管理级） | 流程 API | 删除某用户的绑定（须填原因），该用户下次登录重新绑定 |
+
+**接口**
+
+| 方法与路径 | 认证 | 说明 |
+|---|---|---|
+| `POST /api/auth/login` | 公开 | 响应 `status`：`SIGNED_IN`（带令牌，同前）/ `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`（带 `challenge` 与到期时间，无令牌）；其他一律 401 `LOGIN_FAILED` |
+| `POST /api/auth/challenge/verify {challenge, code}` | 公开（挑战令牌） | 成功时签发令牌（`status: SIGNED_IN`）；其他一律 401 `LOGIN_FAILED` |
+| `POST /api/auth/challenge/enroll {challenge}`、`…/enroll/confirm {challenge, code}` | 公开（用于绑定的挑战令牌） | 同下；确认后重新登录 |
+| `GET /api/auth/mfa` | 已认证 | 本人的状态：`enrolled`、`pending`、剩余恢复码数 |
+| `POST /api/auth/mfa/enroll`、`…/enroll/confirm {code}` | 已认证 | 本人绑定 |
+| `POST /api/auth/step-up {code}` | 已认证 | 新的访问令牌（`mfa_at` = 现在）；码错误或锁定 422 `MFA_CODE_INVALID`，未绑定 422 `MFA_NOT_ENROLLED` |
+
+- **挑战令牌**：与访问令牌同一密钥，JWT 类型 `jabiz-mfa+jwt`，`purpose` 为 `verify` 或 `enroll`，5 分钟到期（`jabiz.security.mfa.challenge-ttl`），
+  携带其登录记录的 `attemptNo`。访问令牌的校验只接受类型 `JWT`，所以挑战令牌不能当访问令牌用，反之亦然。
+  同一用户之后若有新的密码登录（或已成功验证），旧挑战即失效；码错误不使挑战失效，但计入锁定。
+- **不能重复用码**：TOTP 的时间步必须大于登录记录中传下来的 `mfaStep`；并发的两次验证基于同一条最新登录记录，后者在 `(userId, attemptNo)` 的唯一性上失败（与密码登录相同）。
+- 访问令牌增加 `mfa_at`（最近一次二次验证的时刻，未验证则没有）；刷新令牌行记下登录时的 `mfa_at`，刷新时带到新访问令牌中。
+  会话未经二次验证、而用户现在持有要求二次验证的角色时，刷新被拒（401 `INVALID_REFRESH_TOKEN`），需要重新登录。
+- `GET /api/auth/me` 增加 `mfaAt` 与 `idleTimeoutSeconds`。
+
+## 10. 按操作要求二次验证（step-up）【D28 第 4 条】
+
+- 声明：流程 `pb.requiresMfa(MfaRequirement.ALWAYS)`，数据视图 `d.writeRequiresMfa(MfaRequirement.ALWAYS)`；平台的管理操作声明 `ADMINISTRATION`：
+  安全实体（`SecUser` … `SecMenu`、`SecUserMfa`）数据视图的写入、`SEC_USER_CREATE` / `SEC_USER_SET_PASSWORD` / `SEC_USER_UNLOCK` / `SEC_MFA_RESET`、
+  `CONTROL_CHANGE_PUBLISH`、`LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`。`ADMINISTRATION` 只在 `jabiz.security.mfa.administration=true`（默认）时生效。
+- 检查（`MfaPolicy`，与 `Permissions` 同在入口）：流程 API、数据视图 `commit`、实体 API 的增改删、导入（行流程要求时）、撤销（所涉数据视图要求时）；
+  通用实体流程与权限一样在流程内再查一次所写数据视图的要求（写入的实体由输入决定，D12 第 2 条）。
+  访问令牌的 `mfa_at` 早于"现在 − `jabiz.security.mfa.step-up-max-age`（默认 10 分钟）"或没有 → 403 `MFA_REQUIRED`。
+  系统身份、子流程、场景回放、事件消费者与定时任务不检查（与权限相同，D11 第 2 条）。
+- 目录：`/api/meta/processes` 与 `/api/meta/datasets` 导出 `requiresMfa` / `writeRequiresMfa`（已按配置折算为布尔值），前端据此提示。
+- 开发用请求头（`dev`）认证的操作人视为刚完成二次验证；`TestTokens.bearer(…)` 同样带 `mfa_at`（`TestTokens.withoutMfa(…)` 不带）。
+
+## 11. 闲置锁定【D28 第 5 条】
+
+- 服务端：刷新令牌只在其签发后"访问令牌有效期 + `jabiz.security.session.idle-timeout`（默认 15 分钟）"以内可用（且不超过其本身的有效期），
+  否则 401 `INVALID_REFRESH_TOKEN`（不消费、不吊销）。前端平时只在访问令牌失效后才刷新；用户有键盘、指针活动而没有请求时（例如填写长表单），
+  外框每三分之一闲置时长至多刷新一次，使服务端也把会话算作活动。
+  访问令牌有效期长于闲置时长 → 启动失败（类别 `SECURITY`）。
+- 前端：按键盘、指针、滚动与触摸活动计时（同时按上条保持服务端会话）（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出（吊销令牌族）并回到登录页，提示因闲置而锁定，用户名已填好。
+
+## 12. OIDC 单点登录（阶段 14g-2，待实施）
+
+见 D28 第 6 条；实施时补充本节。
+
+## 13. 按权限显示明文、数据期限、访问审查（阶段 14g-3，待实施）
+
+见 D28 第 7–9 条；实施时补充本节。

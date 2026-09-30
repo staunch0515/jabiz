@@ -2,6 +2,7 @@ package com.jabiz.runtime.process.sponsor;
 
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -12,6 +13,7 @@ import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -21,6 +23,9 @@ import java.util.Map;
  *   <li>authentication and user load: the user and the latest login record through their datasets, then the
  *       password check in a blocking step;</li>
  *   <li>role and access check: the user's roles in effect and their permissions; at least one enabled role;</li>
+ *   <li>second factor: a user who has set one up continues with {@link SponsorMfaVerifyProcess}
+ *       ({@link LoginOutcome#MFA_REQUIRED}); one whose role requires it but who has none sets it up first
+ *       ({@link LoginOutcome#MFA_ENROLLMENT_REQUIRED}, docs/design/10-security.md section 9);</li>
  *   <li>login record: registered as a change, committed by the platform with the operation.</li>
  * </ol>
  * A refused attempt is not a failed process: its login record must be committed to count towards the lock. The
@@ -48,23 +53,19 @@ public final class SponsorSignInProcess {
                     LoginContext.KEY_LATEST_RECORD))
                 .step("Authentication", AuthenticationStep.class, NoMetadata.INSTANCE)
 
-                .step("Load the role assignments", QueryEntities.<LoginContext>of(SecurityEntities.USER_ROLE_DATASET,
-                    ctx -> Rbac.assignmentsOf(ctx.outcome() == LoginOutcome.SUCCESS ? ctx.userId() : null),
-                    LoginContext.KEY_ASSIGNMENTS))
-                .step("Load the roles", QueryEntities.<LoginContext>of(SecurityEntities.ROLE_DATASET,
-                    ctx -> Rbac.rolesOf(ctx.list(LoginContext.KEY_ASSIGNMENTS)), LoginContext.KEY_ROLES))
-                .step("Load the permissions", QueryEntities.<LoginContext>of(SecurityEntities.ROLE_PERMISSION_DATASET,
-                    ctx -> Rbac.permissionsOf(ctx.list(LoginContext.KEY_ROLES)), LoginContext.KEY_ROLE_PERMISSIONS))
-                .compute("Role and access check", (metadata, ctx) -> {
+                .steps(SponsorSignInProcess::accessSteps)
+
+                .step("Load the second factor", QueryEntities.<LoginContext>of(SecurityEntities.USER_MFA_DATASET,
+                    ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
+                        ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_MFA))
+                .compute("Second factor needed", (metadata, ctx) -> {
                     if (ctx.outcome() != LoginOutcome.SUCCESS) {
                         return;
                     }
-                    Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ROLES),
-                        ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
-                    if (access.roles().isEmpty()) {
-                        ctx.setOutcome(LoginOutcome.NO_ROLE);
-                    } else {
-                        ctx.setAccess(access);
+                    if (ctx.confirmedMfa().isPresent()) {
+                        ctx.setOutcome(LoginOutcome.MFA_REQUIRED);
+                    } else if (ctx.access().mfaRequired()) {
+                        ctx.setOutcome(LoginOutcome.MFA_ENROLLMENT_REQUIRED);
                     }
                 })
 
@@ -72,9 +73,40 @@ public final class SponsorSignInProcess {
 
     private SponsorSignInProcess() {}
 
-    /** The attributes of a login record carrying {@code state}. */
+    /**
+     * The role and access check, shared with the second step of a sign-in: the user's roles in effect and their
+     * permissions; a user without an enabled role in effect is refused ({@link LoginOutcome#NO_ROLE}).
+     */
+    static <I, O, C extends LoginContext> void accessSteps(ProcessDefinitionBuilder<I, O, C> pb) {
+        pb.step("Load the role assignments", QueryEntities.<C>of(SecurityEntities.USER_ROLE_DATASET,
+                ctx -> Rbac.assignmentsOf(ctx.outcome() == LoginOutcome.SUCCESS ? ctx.userId() : null),
+                LoginContext.KEY_ASSIGNMENTS))
+            .step("Load the roles", QueryEntities.<C>of(SecurityEntities.ROLE_DATASET,
+                ctx -> Rbac.rolesOf(ctx.list(LoginContext.KEY_ASSIGNMENTS)), LoginContext.KEY_ROLES))
+            .step("Load the permissions", QueryEntities.<C>of(SecurityEntities.ROLE_PERMISSION_DATASET,
+                ctx -> Rbac.permissionsOf(ctx.list(LoginContext.KEY_ROLES)), LoginContext.KEY_ROLE_PERMISSIONS))
+            .compute("Role and access check", (metadata, ctx) -> {
+                if (ctx.outcome() != LoginOutcome.SUCCESS) {
+                    return;
+                }
+                Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ROLES),
+                    ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
+                if (access.roles().isEmpty()) {
+                    ctx.setOutcome(LoginOutcome.NO_ROLE);
+                } else {
+                    ctx.setAccess(access);
+                }
+            });
+    }
+
+    /**
+     * The attributes of a login record carrying {@code state}.
+     *
+     * @param factor  what the attempt was checked with, or null (an unlock)
+     * @param mfaStep the last TOTP step accepted so far, or a negative number for none
+     */
     public static Map<String, Object> record(Object userId, String userName, LoginOutcome outcome,
-        LoginAttemptPolicy.State state, Instant time, String requestId) {
+        LoginAttemptPolicy.State state, Instant time, String requestId, String factor, long mfaStep) {
         Map<String, Object> attributes = new LinkedHashMap<>();
         attributes.put("userId", userId);
         attributes.put("userName", userName);
@@ -84,6 +116,8 @@ public final class SponsorSignInProcess {
         attributes.put("lockedUntil", state.lockedUntil());
         attributes.put("attemptTime", time);
         attributes.put("requestId", requestId);
+        attributes.put("factor", factor);
+        attributes.put("mfaStep", mfaStep < 0 ? null : mfaStep);
         return attributes;
     }
 }

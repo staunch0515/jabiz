@@ -116,6 +116,7 @@ public class ControlChanges {
             pb -> pb
                 .description("Publishes a change of a control that another person proposed.")
                 .permissions(ApprovalPermissions.CONTROL_PUBLISH)
+                .requiresMfa(com.jabiz.security.MfaRequirement.ADMINISTRATION)
                 .actsOn(ApprovalEntities.CONTROL_CHANGE, CHANGE_ID,
                     a -> a.whenField("status", ApprovalEntities.PROPOSED))
                 .contextFactory(ControlChanges::start)

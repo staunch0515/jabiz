@@ -67,6 +67,9 @@ public final class PriceAdjustment {
         ProcessDefinition.define(NAME, 1, Input.class, Output.class, Context.class, pb -> pb
             .description("Adjusts a price by a percentage; the new amount must stay positive.")
             .permissions(PERMISSION)
+            // Changing prices is sensitive: the caller confirms with a recent second factor (docs/design/10-security.md
+            // section 10).
+            .requiresMfa()
             .contextFactory(Context::new)
             .outputMapper(ctx -> new Output(ctx.input().priceId(), ctx.price().get("amount"),
                 ctx.get(Context.NEW_AMOUNT, BigDecimal.class)))

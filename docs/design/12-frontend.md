@@ -63,6 +63,11 @@ frontend/
 - **访问令牌只在内存中**；**刷新令牌在 `sessionStorage`**（刷新页面保持登录，关闭标签页即结束）。收到 401 时用刷新令牌刷新一次
   （并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
 - 当前操作人与权限来自 `GET /api/auth/me`，不在前端解码令牌。
+- 二次验证（10 §9，D28）：登录响应为 `MFA_REQUIRED` 时，登录页转入输入验证码（或恢复码）的一步（`/api/auth/challenge/verify`）；
+  为 `MFA_ENROLLMENT_REQUIRED` 时先绑定（二维码与密钥、确认码、只显示一次的恢复码），然后重新登录。挑战令牌只在页面状态中，不存储。
+- 按操作要求二次验证（10 §10）：任何请求收到 403 且违规为 `MFA_REQUIRED` 时，API 客户端请外框弹出输入框（`StepUpProvider`，并发请求共用一次），
+  `POST /api/auth/step-up` 成功后以新的访问令牌重发原请求；取消则把原 403 交给调用方。未绑定时提示先到"安全设置"绑定。
+- 闲置锁定（10 §11）：外框按键盘、指针、滚动与触摸活动计时（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出并回到登录页，提示原因、填好用户名（`sessionStorage`，只是便利）。
 - 所有请求带 `Accept-Language`（界面语言），服务端据此返回错误文案、标签与字典。
 
 ## 5. 适配层
@@ -125,6 +130,7 @@ frontend/
 | `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`）；按记录筛选时一并列出其审批。历史页与列表行有入口 |
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
+| `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
@@ -154,6 +160,9 @@ frontend/
   表单新建 / 编辑 / 删除；六种非法输入的前端错误码与直接调用接口的错误码相同；历史时间线、回看、预定、操作详情、撤销；
   列表按时间点读取；另一个时态实体 `Price` 的历史；流程表单。每个测试使用自己的数据（表只增不删）。
 - 示范实体 `Carrier`（app，时态，`V7__carrier.sql`）只有声明，前端没有它的专门代码；`CarrierIT` 断言经数据视图接口的写入只有 INSERT。
+- 二次验证（阶段 14g-1）：`src/api/stepUp.test.ts`（403 `MFA_REQUIRED` 时询问并以新令牌重发、其他 403 与取消原样返回）、`src/auth/StepUp.test.tsx`、
+  `src/auth/useIdleLock.test.tsx`、`src/components/MfaEnrollment.test.tsx`、`src/pages/LoginPage.test.tsx`；端到端 `e2e/mfa.spec.ts`
+  （安全设置中绑定、改价时按要求输入验证码、用恢复码登录；CI 以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 运行，共用的管理员没有二次验证）。
 - 语言与区域（第 10 节）：`src/i18n/languages.test.ts`、`src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
 - 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
   `scripts/extension-lint.test.ts`（深层引用被拒绝）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，经 `pnpm ext:test`）；

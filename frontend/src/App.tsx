@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { extension } from './extension'
 import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
+import AccountSecurityPage from './pages/AccountSecurityPage'
 import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
@@ -71,6 +72,7 @@ const router = createBrowserRouter([
           { path: '/audit', element: <AuditPage /> },
           { path: '/integrity', element: <IntegrityPage /> },
           { path: '/retention', element: <RetentionPage /> },
+          { path: '/account/security', element: <AccountSecurityPage /> },
           // The application's own pages (decision D22), checked at startup not to take a platform path.
           ...(extension.routes ?? []),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },

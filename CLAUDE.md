@@ -63,6 +63,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
   未声明即拒绝。唯一的例外是公开只读接口 `/api/public/**`（见下条）。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+- **二次验证**（见 10 §9–§11 与决策 D28）：只用 TOTP 与恢复码（`SecUserMfa`，密钥以 `JABIZ_MFA_KEY` 加密）；登录与 step-up 都是写登录记录的流程，不另写验证逻辑。
+  需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
+  角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`，类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
@@ -134,7 +137,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   首次启动生成的管理员密码见 `docker compose logs app`；pgAdmin 用 `--profile tools`）；演示数据 `JABIZ_PASSWORD=… tools/demo/seed.sh`。见 `docs/guide/quickstart.md`
 - 本地开发：仓库根目录 `docker compose up -d db`（数据库，端口 5436）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
-  开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET` 与 `JABIZ_INTEGRITY_KEY`（都是 Base64，≥32 字节，
+  开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY`（都是 Base64，≥32 字节，
   如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）；
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
@@ -152,7 +155,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
-- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此

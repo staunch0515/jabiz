@@ -22,13 +22,21 @@ public class LoginRecordStep implements ComputeStep<NoMetadata, LoginContext> {
 
     @Override
     public void compute(NoMetadata metadata, LoginContext ctx) {
+        register(policy, ctx);
+    }
+
+    /** Registers the record of the attempt in {@code ctx}; shared with the second-factor step. */
+    static void register(LoginAttemptPolicy policy, LoginContext ctx) {
         if (ctx.outcome() == null) {
             return;
         }
         EntityInstance user = ctx.user().orElseThrow();
         LoginAttemptPolicy.State next = policy.next(ctx.latestState(), ctx.outcome(), ctx.opTime());
+        // The last accepted TOTP step travels from record to record, so that no code is accepted twice.
+        long mfaStep = ctx.acceptedMfaStep() != null ? ctx.acceptedMfaStep() : ctx.latestMfaStep();
+        ctx.setAttemptNo(next.attemptNo());
         ctx.setLoginRecordId(ctx.changes().insert(SecurityEntities.LOGIN_RECORD,
             SponsorSignInProcess.record(user.id(), ctx.userName(), ctx.outcome(), next, ctx.opTime(),
-                ctx.request().requestId())));
+                ctx.request().requestId(), ctx.factor(), mfaStep)));
     }
 }

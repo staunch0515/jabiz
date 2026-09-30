@@ -30,7 +30,11 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
     private final DatasetRegistry datasets;
     private final boolean development;
 
-    public ResolveEntityHandler(EntityDefinitionRegistry entities, DatasetRegistry datasets, Environment environment) {
+    private final com.jabiz.runtime.security.MfaPolicy mfa;
+
+    public ResolveEntityHandler(EntityDefinitionRegistry entities, DatasetRegistry datasets, Environment environment,
+        com.jabiz.runtime.security.MfaPolicy mfa) {
+        this.mfa = mfa;
         this.entities = entities;
         this.datasets = datasets;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
@@ -46,6 +50,9 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
                 () -> new EntityNotFoundException("No dataset serves entity type: " + type));
             Permissions.requireDeclared(ctx.request(), dataset.permissions().write(), development,
                 "Writing " + type + " through dataset " + dataset.resourceId());
+            // Like the permission: the entity is chosen by the input, so the process cannot declare it
+            // (docs/design/10-security.md section 10).
+            mfa.require(ctx.request(), dataset.policy().writeMfa(), "Writing " + type);
             DatasetEntityManager.rejectDirectWrites(dataset);
             // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());

@@ -8,6 +8,7 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
+import com.jabiz.security.MfaRequirement;
 import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -60,6 +61,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Creates a user with a password.")
                 .permissions(SecurityPermissions.USER_CREATE)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     // The fields one by one: the input record holds the plain password, which only the hashing
@@ -88,6 +90,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Sets the password of a user.")
                 .permissions(SecurityPermissions.USER_PASSWORD)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
@@ -110,6 +113,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Lifts the lock of a user after failed sign-ins.")
                 .permissions(SecurityPermissions.USER_UNLOCK)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
@@ -126,7 +130,8 @@ public class UserProcesses {
                     LoginAttemptPolicy.State state = Rbac.state(latest.isEmpty() ? null : latest.getFirst());
                     LoginAttemptPolicy.State next = new LoginAttemptPolicy.State(state.attemptNo() + 1, 0, null);
                     ctx.changes().insert(SecurityEntities.LOGIN_RECORD, SponsorSignInProcess.record(user.id(),
-                        user.get("userName"), LoginOutcome.UNLOCKED, next, ctx.opTime(), ctx.request().requestId()));
+                        user.get("userName"), LoginOutcome.UNLOCKED, next, ctx.opTime(), ctx.request().requestId(),
+                        null, Rbac.mfaStep(latest.isEmpty() ? null : latest.getFirst())));
                 }));
 
     @Bean

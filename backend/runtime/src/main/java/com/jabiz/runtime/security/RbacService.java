@@ -39,6 +39,15 @@ public class RbacService {
 
     /** The actor, or empty when the user may not act (any more). */
     public Mono<Optional<Actor>> currentActor(UUID userId) {
+        return currentActor(userId, null);
+    }
+
+    /**
+     * The actor of a session whose sign-in passed a second factor at {@code mfaAt} (null if it did not), or empty
+     * when the user may not act (any more): also when a role now requires a second factor the session lacks
+     * (docs/design/10-security.md section 9).
+     */
+    public Mono<Optional<Actor>> currentActor(UUID userId, java.time.Instant mfaAt) {
         return entities.findById(dataset(SecurityEntities.USER_DATASET), SecurityEntities.SEC_USER, userId)
             .filter(Rbac::enabled)
             .flatMap(user -> query(SecurityEntities.LOGIN_RECORD_DATASET, SecurityEntities.SEC_LOGIN_RECORD,
@@ -48,9 +57,10 @@ public class RbacService {
                     if (policy.isLocked(state, clock.instant())) {
                         return Mono.empty();
                     }
-                    return access(user.id()).filter(access -> !access.roles().isEmpty())
+                    return access(user.id())
+                        .filter(access -> !access.roles().isEmpty() && (mfaAt != null || !access.mfaRequired()))
                         .map(access -> new Actor(String.valueOf(user.id()), user.get("tenantId"), access.roles(),
-                            access.permissions()));
+                            access.permissions(), mfaAt));
                 }))
             .map(Optional::of)
             .defaultIfEmpty(Optional.empty());

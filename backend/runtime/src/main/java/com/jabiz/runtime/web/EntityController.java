@@ -20,6 +20,7 @@ import com.jabiz.runtime.process.entity.UpdateEntityInput;
 import com.jabiz.runtime.process.entity.UpdateProcessDefinition;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
@@ -61,6 +62,7 @@ class EntityController {
     private final DatasetEntityManager entityManager;
     private final SensitiveDataMasker masker;
     private final boolean development;
+    private final MfaPolicy mfa;
 
     EntityController(
         ProcessExecutor processes,
@@ -68,8 +70,10 @@ class EntityController {
         DatasetRegistry datasets,
         DatasetEntityManager entityManager,
         SensitiveDataMasker masker,
-        Environment environment
+        Environment environment,
+        MfaPolicy mfa
     ) {
+        this.mfa = mfa;
         this.processes = processes;
         this.entities = entities;
         this.datasets = datasets;
@@ -158,6 +162,7 @@ class EntityController {
             DatasetDefinition dataset = defaultDataset(entityType);
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing " + entityType + " through dataset " + dataset.resourceId());
+            mfa.require(context, dataset.policy().writeMfa(), "Writing " + entityType);
         }).then();
     }
 

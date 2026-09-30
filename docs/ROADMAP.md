@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b、14c、14d-1、14d-2 已合入；14d-3 PR 待合并（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a–14f 已合入；14g-1 PR 待合并，14g-2、14g-3 待实施（线 1.1，各子阶段先出计划） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强。各子阶段开始前出计划。
+14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（进行中）。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -708,3 +708,28 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 导出的 ZIP 与清单一致，按权限过滤，敏感字段不导出；用导出的 CSV 重算试算表与系统一致（`DataExportIT`、`OpenCsvTest`）。
 - [x] 后台查看到期报告、进入保全、导出（Vitest、Playwright）。
 - [x] 现有全部检查照常通过。
+
+### 14g 安全增强（6–7 天）
+
+设计见 10 §9–§13 与决策 D28（在 14g 计划中确认）。分三个 PR：14g-1 二次验证、按操作要求二次验证、闲置锁定；14g-2 OIDC 单点登录；
+14g-3 按权限显示明文、数据期限、访问审查。
+
+**14g-1 要求**
+1. core：`Totp`（RFC 6238）、`Base32`、`RecoveryCodes`、`MfaSecretCipher`（AES-256-GCM，附加数据为用户主键）、`MfaRequirement`；
+   流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`；`RequestContext.mfaAt`；登录结果 `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED` / `MFA_FAILED`。
+2. 迁移 V23：`sec_user_mfa_version`（`SecUserMfa`）、`SecRole.requireMfa`、登录记录的 `factor` / `mfaStep`、刷新令牌的 `mfa_at`。
+3. 流程 `SPONSOR_MFA_VERIFY`、`SEC_MFA_ENROLL_BEGIN` / `CONFIRM`、`SEC_MFA_RESET`；接口 `/api/auth/challenge/**`、`/api/auth/mfa/**`、`/api/auth/step-up`；
+   密钥 `JABIZ_MFA_KEY`（非 dev 缺少即启动失败）。
+4. 入口检查（流程 API、数据视图提交、实体 API、导入、撤销）；平台管理操作为 `ADMINISTRATION` 级（`jabiz.security.mfa.administration`）；示范：`PRICE_ADJUST` 总要求二次验证。
+5. 闲置：刷新窗口 = 访问令牌有效期 + 闲置时长，启动检查 `SECURITY`；前端登录第二步、绑定、安全设置页、step-up 对话框、闲置锁定。
+6. 文档：10 §9–§11、D28、07、12、13、CLAUDE.md；部署：CI、docker、快速上手。
+
+**14g-1 验收标准**
+- [x] 已绑定的用户须以密码与验证码登录；码错误与密码错误计入同一锁定；同一个码不能用两次；恢复码只能用一次；新登录使旧挑战失效（`MfaIT`、`TotpTest`、`LoginAttemptPolicyTest`）。
+- [x] 角色要求二次验证时，未绑定的用户先绑定再登录；已有的会话在刷新时失效（`MfaIT`）。
+- [x] 要求二次验证的操作在各入口拒绝没有或过旧的二次验证（403 `MFA_REQUIRED`），step-up 后通过；管理级可按配置关闭，`ALWAYS` 不受影响（`MfaIT`、`MfaAdministrationOffIT`）。
+- [x] 密钥加密存放，不能挪给别的用户；操作记录中没有验证码与密钥；新表只插入（`MfaIT`、`MfaSecretCipherTest`）。
+- [x] 闲置超过时长的会话不能刷新；访问令牌长于闲置时长时启动失败（`MfaIT`、`MfaSettingsTest`）。
+- [x] 后台：登录第二步、绑定、安全设置、step-up、闲置锁定（Vitest；Playwright `mfa.spec.ts`）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：场景回放不经入口，不检查二次验证（与权限相同），因此场景文件不需要新增 `mfa` 键。

@@ -48,6 +48,23 @@ public final class JwtService {
     static final String TENANT = "tenant";
     static final String ROLES = "roles";
     static final String PERMISSIONS = "perms";
+    /** When the actor last passed a second factor (docs/design/10-security.md section 9). */
+    static final String MFA_AT = "mfa_at";
+    static final String PURPOSE = "purpose";
+    static final String ATTEMPT = "attempt";
+    /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
+    static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
+
+    /** What a challenge token lets its holder do (docs/design/10-security.md section 9). */
+    public enum Purpose {
+        /** Complete the sign-in with a second factor. */
+        VERIFY,
+        /** Set up a second factor, then sign in again. */
+        ENROLL
+    }
+
+    /** A verified challenge: whose, and the login record it followed. */
+    public record Challenge(String userId, Purpose purpose, long attemptNo) {}
 
     private final MACSigner signer;
     private final MACVerifier verifier;
@@ -76,6 +93,11 @@ public final class JwtService {
         return ttl;
     }
 
+    /** The clock tokens are issued and checked by. */
+    public Clock clock() {
+        return clock;
+    }
+
     public Issued issue(Actor actor) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         Instant expires = now.plus(ttl);
@@ -87,14 +109,58 @@ public final class JwtService {
             .claim(TENANT, actor.tenantId())
             .claim(ROLES, actor.roles().stream().sorted().toList())
             .claim(PERMISSIONS, actor.permissions().stream().sorted().toList())
+            .claim(MFA_AT, actor.mfaAt() == null ? null : actor.mfaAt().getEpochSecond())
             .build();
-        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.HS256).type(JOSEObjectType.JWT).build(), claims);
+        return new Issued(sign(claims, JOSEObjectType.JWT), expires);
+    }
+
+    /**
+     * A challenge token for the second step of a sign-in: same key, another type, a short lifetime. It carries the
+     * attempt number of the login record it follows, so that a later sign-in makes it stale.
+     */
+    public Issued issueChallenge(String userId, Purpose purpose, long attemptNo, Duration lifetime) {
+        Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
+        Instant expires = now.plus(lifetime);
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+            .issuer(ISSUER)
+            .subject(userId)
+            .issueTime(Date.from(now))
+            .expirationTime(Date.from(expires))
+            .claim(PURPOSE, purpose.name())
+            .claim(ATTEMPT, attemptNo)
+            .build();
+        return new Issued(sign(claims, CHALLENGE_TYPE), expires);
+    }
+
+    /**
+     * The challenge of a valid challenge token for {@code purpose}.
+     *
+     * @throws InvalidTokenException if the token is not a valid, unexpired challenge of that purpose
+     */
+    public Challenge verifyChallenge(String token, Purpose purpose) {
+        JWTClaimsSet claims = verified(token, CHALLENGE_TYPE, "challenge");
+        try {
+            if (!purpose.name().equals(claims.getStringClaim(PURPOSE))) {
+                throw new InvalidTokenException("Challenge of another purpose");
+            }
+            Long attempt = claims.getLongClaim(ATTEMPT);
+            if (attempt == null) {
+                throw new InvalidTokenException("Challenge without attempt");
+            }
+            return new Challenge(claims.getSubject(), purpose, attempt);
+        } catch (ParseException e) {
+            throw new InvalidTokenException("Malformed challenge claims");
+        }
+    }
+
+    private String sign(JWTClaimsSet claims, JOSEObjectType type) {
+        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.HS256).type(type).build(), claims);
         try {
             jwt.sign(signer);
         } catch (JOSEException e) {
-            throw new IllegalStateException("Could not sign an access token", e);
+            throw new IllegalStateException("Could not sign a token", e);
         }
-        return new Issued(jwt.serialize(), expires);
+        return jwt.serialize();
     }
 
     /**
@@ -104,17 +170,35 @@ public final class JwtService {
      *                               another issuer, or expired
      */
     public Actor verify(String token) {
+        JWTClaimsSet claims = verified(token, JOSEObjectType.JWT, "access");
+        try {
+            Long mfaAt = claims.getLongClaim(MFA_AT);
+            return new Actor(claims.getSubject(), claims.getStringClaim(TENANT),
+                Set.copyOf(strings(claims.getStringListClaim(ROLES))),
+                Set.copyOf(strings(claims.getStringListClaim(PERMISSIONS))),
+                mfaAt == null ? null : Instant.ofEpochSecond(mfaAt));
+        } catch (ParseException e) {
+            throw new InvalidTokenException("Malformed token claims");
+        }
+    }
+
+    /** The claims of a token of the given type, signed by this service with HS256, of this issuer, unexpired. */
+    private JWTClaimsSet verified(String token, JOSEObjectType type, String what) {
         SignedJWT jwt;
         JWTClaimsSet claims;
         try {
             jwt = SignedJWT.parse(token);
             claims = jwt.getJWTClaimsSet();
-        } catch (ParseException e) {
-            throw new InvalidTokenException("Malformed access token");
+        } catch (ParseException | NullPointerException e) {
+            throw new InvalidTokenException("Malformed " + what + " token");
         }
         // Only the algorithm this service signs with: never "none", never a key confusion.
         if (!JWSAlgorithm.HS256.equals(jwt.getHeader().getAlgorithm())) {
             throw new InvalidTokenException("Unexpected token algorithm");
+        }
+        // Access and challenge tokens share the key; the type keeps one from standing in for the other.
+        if (!type.equals(jwt.getHeader().getType())) {
+            throw new InvalidTokenException("Wrong token type for a(n) " + what + " token");
         }
         try {
             if (!jwt.verify(verifier)) {
@@ -128,19 +212,13 @@ public final class JwtService {
         }
         Date expires = claims.getExpirationTime();
         if (expires == null || !clock.instant().isBefore(expires.toInstant())) {
-            throw new InvalidTokenException("Expired access token");
+            throw new InvalidTokenException("Expired " + what + " token");
         }
         String subject = claims.getSubject();
         if (subject == null || subject.isBlank()) {
             throw new InvalidTokenException("Token without subject");
         }
-        try {
-            return new Actor(subject, claims.getStringClaim(TENANT),
-                Set.copyOf(strings(claims.getStringListClaim(ROLES))),
-                Set.copyOf(strings(claims.getStringListClaim(PERMISSIONS))));
-        } catch (ParseException e) {
-            throw new InvalidTokenException("Malformed token claims");
-        }
+        return claims;
     }
 
     private static List<String> strings(List<String> values) {

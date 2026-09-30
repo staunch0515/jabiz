@@ -17,6 +17,11 @@ jabiz:
   integrity:
     key: ${JABIZ_INTEGRITY_KEY:}
   security:
+    # The key encrypting the users' TOTP secrets (docs/design/10-security.md section 9), from the environment only:
+    # Base64, at least 32 bytes. Startup fails without it, except in the dev profile. Without it, enrolled users
+    # cannot pass their second factor.
+    mfa:
+      key: ${JABIZ_MFA_KEY:}
     # Authentication (docs/design/10-security.md). The key signing access tokens comes from the environment only:
     # a Base64 value of at least 32 bytes (for example: openssl rand -base64 48). Startup fails without it, except in
     # the dev profile. Lifetimes, lock rules and password rules have defaults (see SecurityConfig).

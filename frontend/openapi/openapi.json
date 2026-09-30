@@ -94,6 +94,17 @@
         },
         "type" : "object"
       },
+      "ChallengeRequest" : {
+        "properties" : {
+          "challenge" : {
+            "type" : "string"
+          },
+          "code" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Change" : {
         "properties" : {
           "action" : {
@@ -112,6 +123,14 @@
           "version" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "CodeRequest" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -218,6 +237,9 @@
           },
           "temporal" : {
             "type" : "boolean"
+          },
+          "writeRequiresMfa" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -252,6 +274,17 @@
             "type" : "integer"
           },
           "ruleCode" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Enrollment" : {
+        "properties" : {
+          "otpauthUri" : {
+            "type" : "string"
+          },
+          "secret" : {
             "type" : "string"
           }
         },
@@ -1105,6 +1138,14 @@
       },
       "Me" : {
         "properties" : {
+          "idleTimeoutSeconds" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "mfaAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "permissions" : {
             "items" : {
               "type" : "string"
@@ -1145,6 +1186,21 @@
           },
           "path" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MfaStatus" : {
+        "properties" : {
+          "enrolled" : {
+            "type" : "boolean"
+          },
+          "pending" : {
+            "type" : "boolean"
+          },
+          "recoveryCodesLeft" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -1279,6 +1335,9 @@
           "name" : {
             "type" : "string"
           },
+          "requiresMfa" : {
+            "type" : "boolean"
+          },
           "version" : {
             "format" : "int32",
             "type" : "integer"
@@ -1389,6 +1448,17 @@
           "total" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RecoveryCodeList" : {
+        "properties" : {
+          "recoveryCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         },
         "type" : "object"
@@ -1671,6 +1741,22 @@
         },
         "type" : "object"
       },
+      "StepUpResponse" : {
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "accessTokenExpiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "mfaAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Task" : {
         "properties" : {
           "createdTime" : {
@@ -1731,6 +1817,13 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "challenge" : {
+            "type" : "string"
+          },
+          "challengeExpiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "permissions" : {
             "items" : {
               "type" : "string"
@@ -1749,6 +1842,10 @@
               "type" : "string"
             },
             "type" : "array"
+          },
+          "status" : {
+            "enum" : [ "SIGNED_IN", "MFA_REQUIRED", "MFA_ENROLLMENT_REQUIRED" ],
+            "type" : "string"
           },
           "tokenType" : {
             "type" : "string"
@@ -2034,6 +2131,87 @@
         "tags" : [ "audit-controller" ]
       }
     },
+    "/api/auth/challenge/enroll" : {
+      "post" : {
+        "operationId" : "enrollUnderChallenge",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Enrollment"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/challenge/enroll/confirm" : {
+      "post" : {
+        "operationId" : "confirmUnderChallenge",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodeList"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/challenge/verify" : {
+      "post" : {
+        "operationId" : "verify_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
     "/api/auth/login" : {
       "post" : {
         "operationId" : "login",
@@ -2120,6 +2298,69 @@
         "tags" : [ "auth-controller" ]
       }
     },
+    "/api/auth/mfa" : {
+      "get" : {
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MfaStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/mfa/enroll" : {
+      "post" : {
+        "operationId" : "enroll",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Enrollment"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/mfa/enroll/confirm" : {
+      "post" : {
+        "operationId" : "confirm",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CodeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodeList"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
+      }
+    },
     "/api/auth/refresh" : {
       "post" : {
         "operationId" : "refresh",
@@ -2145,6 +2386,33 @@
           }
         },
         "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/step-up" : {
+      "post" : {
+        "operationId" : "stepUp",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CodeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StepUpResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mfa-controller" ]
       }
     },
     "/api/datasets/{resourceId}/commit" : {
