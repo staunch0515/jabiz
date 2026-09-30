@@ -70,6 +70,7 @@ frontend/
 - 单点登录（10 §12）：登录页列出 `/api/auth/oidc/providers` 的提供方按钮；点击后取得授权地址并整页跳转（登录后要回到的页面记在 `sessionStorage`，
   只接受本应用的路径）；身份提供方回到 `/login/oidc`，该页把 state 与授权码交给服务端一次，结果与密码登录相同（需要第二步时回到登录页的验证码或绑定步骤）。
 - 闲置锁定（10 §11）：外框按键盘、指针、滚动与触摸活动计时（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出并回到登录页，提示原因、填好用户名（`sessionStorage`，只是便利）。
+- 数据期限（10 §13.2）：`/api/auth/me` 的 `dataFrom` / `dataTo` 不为空时，页头显示期限标签（列表与报表只含该期间，由服务端过滤）。
 - 所有请求带 `Accept-Language`（界面语言），服务端据此返回错误文案、标签与字典。
 
 ## 5. 适配层
@@ -90,6 +91,9 @@ frontend/
 
 - 列：列表视图的 `columns`（没有列表视图时取前 8 个非系统字段）；筛选、排序只对白名单字段开放，默认排序取 `defaultSort`。
   敏感字段从不出现在列、表单与回看中。
+- 遮蔽字段（`masked`，10 §13.1）：列表、历史、审计中显示服务端给出的遮蔽形式；持有其权限者在列表单元格中有"显示"按钮
+  （`POST /api/datasets/{id}/reveal`，服务端每次留记录），明文只留在该单元格的状态中，按时间点回看时不提供；
+  筛选与排序只对持有权限者开放；表单中没有权限时只读（遮蔽形式因"只发送改变的字段"而不会被写回）。
 - 表单：不提供系统维护、生成与敏感字段；不可变字段编辑时只读。新建发送全部填写的值，修改**只发送改变的字段**；清空的输入发送 `null`。
   日期时间控件只到毫秒，因此判断"是否改变"时时间按毫秒比较（未改动的微秒时间不会被截断后发送）。
 - 文件（14 §5）：访问令牌只在内存中，`<img>` 不能带令牌，因此预览与下载都以带会话的 `fetch` 取得内容，经 `URL.createObjectURL`
@@ -129,7 +133,8 @@ frontend/
 | `/reports/archive[?template=]` | 已签发的报表（19 §5.4）：按签发原样保存（PDF / Excel / CSV）、核对 |
 | `/imports`、`/imports/run?id=<导入>` | 导入（20 §6）：上传文件 → 映射（CSV / Excel 版式调整、字段取自哪一列或常量、保存与载入映射、前 20 行）→ 参数（表单由参数 Schema 生成）→ 预览（全部行执行并回滚：数字、控制合计、全部问题、逐行状态）→ 说明与提交（有任何问题即不能提交；被拒的提交显示其报告） |
 | `/imports/runs[?import=]` | 导入记录（20 §5）：结果、行数、重复、问题、说明；问题明细；报告保存为 PDF / Excel / CSV |
-| `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`）；按记录筛选时一并列出其审批。历史页与列表行有入口 |
+| `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`，遮蔽字段为其遮蔽形式）；按记录筛选时一并列出其审批。历史页与列表行有入口。"明文显示"页签列出 `sys_reveal_record`（10 §13.1） |
+| `/access-review` | 访问审查（10 §13.3，`security.access-review.read`）：选期间（整日，结束为次日 0 时）、签发访问权限报表（`report.issue`，进入报表存档）、期间内的安全变更、职责分离冲突、签核（`security.access-review.sign`，填写意见，需要二次验证）、已签核列表 |
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
 | `/login/oidc` | 身份提供方的回调（10 §12）：不需要已登录；显示身份提供方或服务端的拒绝 |
@@ -167,6 +172,8 @@ frontend/
   `src/auth/useIdleLock.test.tsx`、`src/components/MfaEnrollment.test.tsx`、`src/pages/LoginPage.test.tsx`（含提供方按钮与单点登录后的第二步）、
   `src/pages/OidcCallbackPage.test.tsx`、`src/auth/oidc.test.ts`（阶段 14g-2）；端到端 `e2e/mfa.spec.ts`
   （安全设置中绑定、改价时按要求输入验证码、用恢复码登录；CI 以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 运行，共用的管理员没有二次验证）。
+- 按权限显示明文、数据期限、访问审查（阶段 14g-3）：`src/meta/columns.test.ts`（遮蔽字段的筛选与排序只对持有权限者开放、"显示"按钮）、
+  `src/meta/entityForm.test.ts`（没有权限时只读）、`src/components/MaskedValue.test.tsx`、`src/pages/AccessReviewPage.test.tsx`、`src/pages/AuditPage.test.tsx`（明文显示页签）。
 - 语言与区域（第 10 节）：`src/i18n/languages.test.ts`、`src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
 - 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
   `scripts/extension-lint.test.ts`（深层引用被拒绝）；示范扩展的页面测试（`backend/app/admin-extension/src/*.test.tsx`，经 `pnpm ext:test`）；

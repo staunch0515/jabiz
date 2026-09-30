@@ -8,3 +8,6 @@ export type AuditFieldChange = components['schemas']['AuditFieldChange']
 /** The filters of GET /api/audit/records that the page takes from its URL. */
 export const AUDIT_FILTERS = ['entityType', 'entityId', 'actorId', 'processName', 'field'] as const
 export type AuditFilter = (typeof AUDIT_FILTERS)[number]
+
+/** One plain-text display of masked values (docs/design/10-security.md section 13.1). */
+export type RevealRecord = components['schemas']['RevealEntry']

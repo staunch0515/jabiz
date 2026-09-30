@@ -19,6 +19,8 @@ interface AuthState {
   permissions: ReadonlySet<string>
   /** After how many seconds without activity the session is locked (section 11); null until known. */
   idleTimeoutSeconds: number | null
+  /** The span of business time the session's data is limited to (section 13.2); null when not limited. */
+  dataPeriod: DataPeriod | null
   signIn(userName: string, password: string): Promise<SignInStep>
   /** The second step of a sign-in: a TOTP or recovery code under the challenge. */
   verify(challenge: string, code: string): Promise<void>
@@ -31,10 +33,17 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+/** Either end may be open; the end is exclusive. */
+export interface DataPeriod {
+  from?: string
+  to?: string
+}
+
 interface Identity {
   userId: string
   permissions: string[]
   idleTimeoutSeconds: number
+  dataPeriod: DataPeriod | null
 }
 
 const USER_NAME_KEY = 'jabiz.userName'
@@ -85,6 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userId: answer.userId ?? '',
         permissions: answer.permissions ?? [],
         idleTimeoutSeconds: answer.idleTimeoutSeconds ?? 0,
+        dataPeriod:
+          answer.dataFrom || answer.dataTo ? { from: answer.dataFrom ?? undefined, to: answer.dataTo ?? undefined } : null,
       }
     },
   })
@@ -147,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userId: identity?.userId ?? null,
       permissions,
       idleTimeoutSeconds: identity?.idleTimeoutSeconds || null,
+      dataPeriod: identity?.dataPeriod ?? null,
       signIn,
       verify,
       signInWithProvider,

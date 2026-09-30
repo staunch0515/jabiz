@@ -132,6 +132,8 @@ report:
 - **内容**：整份结果（不带筛选），行数上限同导出（`jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`）。
   值按列的类型规范化（金额为精确小数、时间为时刻、多语言文本为按键排序的映射），以 core `ContentHash`（18 §3.3）对列名与行计算内容哈希
   （小数的尾零不影响哈希）。
+- **遮蔽字段**（10 §13.1【D28】）：签发的报表一律为遮蔽形式，无论签发人是否持有权限——存档会被别人阅读、重现与核对，核对必须得到相同的行。
+- **访问审查**（10 §13.3）：平台模板 `jabiz.security.access_review` 按期末时点签发，签核流程 `ACCESS_REVIEW_SIGN_OFF` 引用该运行与内容哈希。
 - **可重算**：模板只读时态实体时 `recomputable` 为真；读取了会被原地修改的数据时只能按存档重现，不能按数据核对。
 - **取代**：`supersedes` 给出同一模板更早的一次运行；不同模板 → 422 `REPORT_SUPERSEDE_MISMATCH`，已被取代 → 422 `REPORT_ALREADY_SUPERSEDED`，
   不存在 → 404。一次运行至多被取代一次（主键）。

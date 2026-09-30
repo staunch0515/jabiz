@@ -141,6 +141,20 @@
         },
         "type" : "object"
       },
+      "Changes" : {
+        "properties" : {
+          "hash" : {
+            "type" : "string"
+          },
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AuditRecordEntry"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
       "CodeRequest" : {
         "properties" : {
           "code" : {
@@ -205,6 +219,20 @@
           },
           "wildcard" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "Conflicts" : {
+        "properties" : {
+          "hash" : {
+            "type" : "string"
+          },
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Conflict"
+            },
+            "type" : "array"
           }
         },
         "type" : "object"
@@ -1152,6 +1180,14 @@
       },
       "Me" : {
         "properties" : {
+          "dataFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "dataTo" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
           "idleTimeoutSeconds" : {
             "format" : "int64",
             "type" : "integer"
@@ -1580,9 +1616,139 @@
         },
         "type" : "object"
       },
+      "RevealEntry" : {
+        "properties" : {
+          "actorId" : {
+            "type" : "string"
+          },
+          "entity" : {
+            "type" : "string"
+          },
+          "entityId" : {
+            "type" : "string"
+          },
+          "fields" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "resource" : {
+            "type" : "string"
+          },
+          "revealId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "revealedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "rowCount" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RevealPage" : {
+        "properties" : {
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RevealEntry"
+            },
+            "type" : "array"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "offset" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "total" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RevealRequest" : {
+        "properties" : {
+          "field" : {
+            "type" : "string"
+          },
+          "id" : { }
+        },
+        "type" : "object"
+      },
+      "RevealResponse" : {
+        "properties" : {
+          "value" : { }
+        },
+        "type" : "object"
+      },
       "RevertRequest" : {
         "properties" : {
           "reason" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Review" : {
+        "properties" : {
+          "changesCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "changesHash" : {
+            "type" : "string"
+          },
+          "comment" : {
+            "type" : "string"
+          },
+          "conflicts" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Conflict"
+            },
+            "type" : "array"
+          },
+          "conflictsHash" : {
+            "type" : "string"
+          },
+          "periodFrom" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "periodTo" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "processSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reportHash" : {
+            "type" : "string"
+          },
+          "reportRunId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "reviewId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "reviewer" : {
+            "type" : "string"
+          },
+          "signedAt" : {
+            "format" : "date-time",
             "type" : "string"
           }
         },
@@ -2158,6 +2324,74 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AuditRecordEntry"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/audit/reveals" : {
+      "get" : {
+        "operationId" : "reveals",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "actorId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityType",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "offset",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RevealPage"
                 }
               }
             },
@@ -2757,6 +2991,42 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/QueryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "dataset-controller" ]
+      }
+    },
+    "/api/datasets/{resourceId}/reveal" : {
+      "post" : {
+        "operationId" : "reveal",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "resourceId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RevealRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RevealResponse"
                 }
               }
             },
@@ -3581,7 +3851,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_2",
+        "operationId" : "list_3",
         "responses" : {
           "200" : {
             "content" : {
@@ -3958,7 +4228,7 @@
     },
     "/api/reports/runs" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "list_2",
         "parameters" : [ {
           "in" : "query",
           "name" : "template",
@@ -4113,6 +4383,78 @@
           }
         },
         "tags" : [ "retention-controller" ]
+      }
+    },
+    "/api/security/access-reviews" : {
+      "get" : {
+        "operationId" : "list_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/Review"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "access-review-controller" ]
+      }
+    },
+    "/api/security/access-reviews/changes" : {
+      "get" : {
+        "operationId" : "changes",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Changes"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "access-review-controller" ]
+      }
+    },
+    "/api/security/access-reviews/conflicts" : {
+      "get" : {
+        "operationId" : "conflicts_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Conflicts"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "access-review-controller" ]
       }
     },
     "/api/sod/conflicts" : {

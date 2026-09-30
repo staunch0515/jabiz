@@ -9,11 +9,12 @@ import {
   NodeIndexOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
+  TeamOutlined,
   TranslationOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { ProLayout, type MenuDataItem } from '@ant-design/pro-components'
-import { Badge, Dropdown, Space } from 'antd'
+import { Badge, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
@@ -47,7 +48,7 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
-  const { userId, signOut, can, idleTimeoutSeconds } = useAuth()
+  const { userId, signOut, can, idleTimeoutSeconds, dataPeriod } = useAuth()
   const menus = useMenus()
   const tasks = useMyTasks()
   const catalog = useQueryCatalog()
@@ -78,6 +79,10 @@ export default function AppLayout() {
     ...(can('integrity.read')
       ? [{ key: 'integrity', name: t('nav.integrity'), path: '/integrity', icon: <SafetyCertificateOutlined /> }]
       : []),
+    // The periodic access review (docs/design/10-security.md section 13.3).
+    ...(can('security.access-review.read')
+      ? [{ key: 'access-review', name: t('nav.accessReview'), path: '/access-review', icon: <TeamOutlined /> }]
+      : []),
     // Retention, legal holds and the export (docs/design/21-audit-retention.md sections 3 and 4).
     ...(['retention.read', 'legal.hold.read', 'legal.hold.write', 'data.export'].some((p) => can(p))
       ? [{ key: 'retention', name: t('nav.retention'), path: '/retention', icon: <InboxOutlined /> }]
@@ -97,6 +102,19 @@ export default function AppLayout() {
       menuItemRender={(item, dom) => (item.path ? <Link to={item.path}>{dom}</Link> : dom)}
       // One language: nothing to switch (decision D22, item 7).
       actionsRender={() => [
+        // A session limited to a period says so: the lists and reports show that period only (section 13.2).
+        ...(dataPeriod
+          ? [
+              <Tooltip key="period" title={t('app.dataPeriodHint')}>
+                <Tag color="gold" data-testid="data-period">
+                  {t('app.dataPeriod', {
+                    from: dataPeriod.from ? new Date(dataPeriod.from).toLocaleDateString(i18n.language) : '…',
+                    to: dataPeriod.to ? new Date(dataPeriod.to).toLocaleDateString(i18n.language) : '…',
+                  })}
+                </Tag>
+              </Tooltip>,
+            ]
+          : []),
         <Link key="tasks" to="/tasks" aria-label={t('tasks.open', { count: openTasks })} data-testid="task-count">
           <Badge count={openTasks} size="small" overflowCount={99}>
             <CheckSquareOutlined />
