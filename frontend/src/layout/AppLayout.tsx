@@ -6,6 +6,7 @@ import {
   DatabaseOutlined,
   LogoutOutlined,
   NodeIndexOutlined,
+  SafetyCertificateOutlined,
   TranslationOutlined,
   UserOutlined,
 } from '@ant-design/icons'
@@ -60,6 +61,10 @@ export default function AppLayout() {
     ...(hasImports ? [{ key: 'imports', name: t('nav.imports'), path: '/imports', icon: <CloudUploadOutlined /> }] : []),
     // Only for auditors (docs/design/21-audit-retention.md section 1).
     ...(can('audit.read') ? [{ key: 'audit', name: t('nav.audit'), path: '/audit', icon: <AuditOutlined /> }] : []),
+    // The seals (docs/design/21-audit-retention.md section 2.4).
+    ...(can('integrity.read')
+      ? [{ key: 'integrity', name: t('nav.integrity'), path: '/integrity', icon: <SafetyCertificateOutlined /> }]
+      : []),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },
   ]

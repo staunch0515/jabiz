@@ -484,6 +484,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrity/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/checks/{checkNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["head"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/seals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["seals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -1110,6 +1174,82 @@ export interface components {
             /** Format: int32 */
             number?: number;
             problem?: string;
+        };
+        IntegrityCheckDetail: {
+            check?: components["schemas"]["IntegrityCheckSummary"];
+            problems?: components["schemas"]["IntegrityProblem"][];
+        };
+        IntegrityCheckPage: {
+            items?: components["schemas"]["IntegrityCheckSummary"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int64 */
+            offset?: number;
+        };
+        IntegrityCheckSummary: {
+            actorId?: string;
+            /** Format: int64 */
+            checkNo?: number;
+            /** Format: date-time */
+            checkedTime?: string;
+            /** Format: int64 */
+            fromSeal?: number;
+            intact?: boolean;
+            keyId?: string;
+            /** Format: int32 */
+            problemCount?: number;
+            /** Format: int64 */
+            processSeqId?: number;
+            /** Format: int64 */
+            rowCount?: number;
+            /** Format: int32 */
+            sealCount?: number;
+            /** Format: int64 */
+            toSeal?: number;
+            /** Format: int64 */
+            unsealedCount?: number;
+        };
+        IntegrityHead: {
+            currentKeyId?: string;
+            keyId?: string;
+            /** Format: int32 */
+            rowCount?: number;
+            sealHash?: string;
+            /** Format: int64 */
+            sealNo?: number;
+            /** Format: date-time */
+            sealedTime?: string;
+        };
+        IntegrityProblem: {
+            detail?: string;
+            key?: string;
+            /** @enum {string} */
+            kind?: "MODIFIED" | "MISSING" | "CHAIN_BROKEN" | "SEAL_ALTERED" | "OTHER_KEY" | "UNPROTECTED";
+            /** Format: int64 */
+            sealNo?: number;
+            table?: string;
+        };
+        IntegritySeal: {
+            columnsHash?: string;
+            keyId?: string;
+            merkleRoot?: string;
+            prevHash?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            /** Format: int32 */
+            rowCount?: number;
+            sealHash?: string;
+            /** Format: int64 */
+            sealNo?: number;
+            /** Format: date-time */
+            sealedTime?: string;
+        };
+        IntegritySealPage: {
+            items?: components["schemas"]["IntegritySeal"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int64 */
+            offset?: number;
         };
         LabelsRequest: {
             ids?: unknown[];
@@ -2190,6 +2330,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportReportResponse"];
+                };
+            };
+        };
+    };
+    checks: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityCheckPage"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityCheckDetail"];
+                };
+            };
+        };
+    };
+    head: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityHead"];
+                };
+            };
+        };
+    };
+    seals: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegritySealPage"];
                 };
             };
         };
