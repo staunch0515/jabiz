@@ -494,10 +494,12 @@ public final class CommerceProcesses {
         ctx.changes().update(ORDER, order.id(), order.version(), shipped);
         BigDecimal total = order.get("totalAmount");
         if (total.signum() > 0) {
+            // The ledger links the sale to its order, the document it was posted from.
             ctx.put(POSTING_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), "Sale " + order.get("orderNo"),
                 String.valueOf(order.id()), List.of(
                     new LedgerProcesses.Line(RECEIVABLE_ACCOUNT, Direction.DEBIT, total),
-                    new LedgerProcesses.Line(SALES_REVENUE_ACCOUNT, Direction.CREDIT, total))));
+                    new LedgerProcesses.Line(SALES_REVENUE_ACCOUNT, Direction.CREDIT, total)),
+                ORDER, String.valueOf(order.id())));
         }
     }
 

@@ -3,6 +3,8 @@ package com.jabiz.runtime.ledger;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.ledger.Direction;
+import com.jabiz.ledger.LedgerDimension;
+import com.jabiz.ledger.PostingLine;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,11 +58,14 @@ public class LedgerEntities {
             eb.field("accountType", f -> f.physicalColumn("account_type").immutable(true).required(true)
                 .asCode(ACCOUNT_TYPES, "ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"));
             eb.field("enabled", f -> f.physicalColumn("enabled").required(true).asBool());
+            // A summary account groups others and takes no postings; empty means postable (decision D24).
+            eb.field("parentId", f -> f.physicalColumn("parent_id").asReference(ACCOUNT));
+            eb.field("summary", f -> f.physicalColumn("summary").asBool());
             eb.unique("uk_ledger_account_code", "accountCode");
             eb.temporal(t -> t.allowScheduled(true));
             eb.listView("default", lv -> lv
-                .columns("accountCode", "accountName", "accountType", "enabled")
-                .filters("accountCode", "accountType", "enabled")
+                .columns("accountCode", "accountName", "accountType", "parentId", "summary", "enabled")
+                .filters("accountCode", "accountType", "parentId", "summary", "enabled")
                 .sorts("accountCode")
                 .defaultSort("accountCode", true));
         });
@@ -79,13 +84,16 @@ public class LedgerEntities {
             eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
             eb.field("reversesTransactionId", f -> f.physicalColumn("reverses_transaction_id").immutable(true)
                 .asReference(TRANSACTION));
+            // The document the transaction was posted from: an entity and its key (decision D24).
+            eb.field("sourceEntity", f -> f.physicalColumn("source_entity").immutable(true).asText(100));
+            eb.field("sourceId", f -> f.physicalColumn("source_id").immutable(true).asText(100));
             // A transaction is reversed at most once (decision D6: advisory lock and check).
             eb.unique("uk_ledger_transaction_reverses", "reversesTransactionId");
             eb.temporal(t -> t.allowScheduled(false));
             eb.publishChanges();
             eb.listView("default", lv -> lv
-                .columns("bookingTime", "description", "reference", "reversesTransactionId")
-                .filters("bookingTime", "reference", "reversesTransactionId")
+                .columns("bookingTime", "description", "reference", "sourceEntity", "sourceId", "reversesTransactionId")
+                .filters("bookingTime", "reference", "sourceEntity", "sourceId", "reversesTransactionId")
                 .sorts("bookingTime")
                 .defaultSort("bookingTime", false));
         });
@@ -106,10 +114,18 @@ public class LedgerEntities {
                 .asCode(DIRECTIONS, Arrays.stream(Direction.values()).map(Enum::name).toArray(String[]::new)));
             eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true)
                 .asMonetary(settings.currency(), settings.scale()));
+            eb.field("memo", f -> f.physicalColumn("memo").immutable(true).asText(PostingLine.MAX_MEMO));
+            for (int position = 1; position <= LedgerDimension.MAX_POSITION; position++) {
+                int column = position;
+                eb.field(LedgerDimension.field(position), f -> f.physicalColumn("dimension_" + column).immutable(true)
+                    .asText(LedgerDimension.MAX_VALUE_LENGTH));
+            }
             eb.temporal(t -> t.allowScheduled(false));
             eb.listView("default", lv -> lv
-                .columns("transactionId", "lineNo", "accountId", "direction", "amount")
-                .filters("transactionId", "accountId", "direction")
+                .columns("transactionId", "lineNo", "accountId", "direction", "amount", "memo", "dimension1",
+                    "dimension2", "dimension3", "dimension4")
+                .filters("transactionId", "accountId", "direction", "dimension1", "dimension2", "dimension3",
+                    "dimension4")
                 .sorts("transactionId", "lineNo")
                 .defaultSort("lineNo", true));
         });

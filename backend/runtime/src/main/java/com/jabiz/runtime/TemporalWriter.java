@@ -136,7 +136,7 @@ final class TemporalWriter {
             for (String field : def.stateFields()) {
                 newState.put(field, attrs.get(field));
             }
-            return rules.verifyReferences(def, attrs, attrs.keySet())
+            return rules.verifyReferences(def, id, attrs, attrs.keySet())
                 .then(timeline(w, id))
                 .flatMap(timeline -> {
                     if (!timeline.versions().isEmpty()) {
@@ -179,7 +179,7 @@ final class TemporalWriter {
                     }
                     DatasetEntityManager.rejectIfAny(violations);
                     VersionPlanner.Write write = VersionPlanner.Write.update(base, w.effective(), changes);
-                    return rules.verifyReferences(def, changes, changes.keySet())
+                    return rules.verifyReferences(def, id, changes, changes.keySet())
                         .then(Mono.defer(() -> append(w, id, timeline, write, touchesUnique(def, changes.keySet()))));
                 }));
             });
