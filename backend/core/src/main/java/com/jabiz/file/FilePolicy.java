@@ -44,6 +44,11 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
         if (maxBytes <= 0) {
             throw new IllegalArgumentException("File policy " + name + ": maxBytes must be positive");
         }
+        long importTypes = allowed.stream().filter(MediaTypes::isImportOnly).count();
+        if (importTypes > 0 && importTypes < allowed.size()) {
+            throw new IllegalArgumentException("File policy " + name + ": import types (TEXT, XLSX, XML) cannot be "
+                + "allowed together with other types");
+        }
         boolean images = allowed.stream().anyMatch(MediaTypes::isImage);
         if (image == null && images) {
             image = ImageOptions.DEFAULT;
@@ -68,6 +73,11 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
 
     public boolean allows(MediaTypes type) {
         return allowed.contains(type);
+    }
+
+    /** Whether the policy is for import files, which are never served inline or publicly (decision D26). */
+    public boolean forImports() {
+        return allowed.stream().allMatch(MediaTypes::isImportOnly);
     }
 
     /** Whether the policy accepts images, which are decoded and re-encoded. */

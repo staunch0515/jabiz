@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架；14f 审计与保留；14g 安全增强。各子阶段开始前出计划。
+14e 导入框架（14e-1 已完成）；14f 审计与保留；14g 安全增强。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -620,4 +620,42 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 存入读回的值与哈希不变（`ArchivedValuesTest`）。
 - [x] 后台签发、存档列表、保存与核对（Vitest、Playwright）。
 - [x] 现有全部检查照常通过。
+
+### 14e 导入框架（4–5 天）
+
+设计见 20 与决策 D26（在 14e 计划中确认）。分两个 PR：14e-1 文件类型、解析、导入定义、按行保存点的预览、查看与映射；14e-2 提交、去重、导入记录与报告、后台页面。
+
+**14e-1 要求**
+1. `MediaTypes` 增加导入专用类型 `TEXT`、`XLSX`（按整个文件判定）、`XML`；只能单独组成策略；原样保存，下载为附件，公开接口不提供。
+2. core `imports`：`ImportFormat`（CSV、定宽、XLSX、XML、自定义）、`ImportParser` SPI 与平台解析器（XLSX 与 XML 自己读取，禁止 DTD，按实际字节限制解压）、
+   `ParseLimits`、`ImportDefinition`（字段、按行或按组、外部引用、整个文件的检查、控制合计、权限、时区与日期格式）、`ImportValues`、`ImportMapping`、`ImportPreparation`。
+3. runtime：`StorageEngine.inSavepoint`、`ExecutionOptions.DRY_RUN`；内部流程 `IMPORT_RUN`（按单元保存点执行子流程，自身再查权限）；
+   `GET /api/meta/imports`、`POST /api/imports/{id}/inspect`、`/preview`；映射 `SysImportMapping`（迁移 V18）与 `IMPORT_MAPPING_SAVE` / `REMOVE`；
+   启动检查 `IMPORT`；配置 `jabiz.imports.max-rows`；观测 `jabiz.import.run`；错误码与三种语言的消息。
+4. 示范：`commerce.stock`（CSV，按行，外部引用跳过）、`commerce.prices`（XLSX）、`commerce.price-list`（XML）、`ledger.opening`（CSV，按组，借贷相等）。
+5. 文档：20、14 §3、06 §4、D26、CLAUDE.md。
+
+**14e-1 验收标准**
+- [x] 预览执行全部行，报告全部问题（读取、重复、流程拒绝），且不留下业务数据、操作记录（`ImportIT`）。
+- [x] 失败的单元只撤销自己，后面的单元照常执行并看到前面单元的写入（`ImportIT`）。
+- [x] 按组导入每组一次流程；借贷不平的文件报告文件级问题（`ImportIT`）。
+- [x] CSV、定宽、XLSX（日期、公式、15 位精度）、XML 读取正确；XXE、实体膨胀、ZIP 炸弹、超限被拒（core 测试、`ImportIT`）。
+- [x] 伪装的 `.xlsm` / `.docx`、HTML/SVG 不被判定为导入类型；导入类型不能与其他类型混用（core 测试）。
+- [x] 映射调整版式与列，保存的映射只追加（`ImportIT`）。
+- [x] 缺导入权限、缺行流程权限、直接执行内部流程、别的策略的文件均被拒（`ImportIT`）。
+- [x] 现有全部检查照常通过。
+
+**14e-2 要求**
+1. `IMPORT_RUN` 的提交：有问题整体回滚（422 `IMPORT_REJECTED`）并另行记录被拒的导入；成功则提交数据、导入记录、外部引用与事件 `jabiz.import.committed`。
+2. 迁移：`sys_import_run`（只追加；同一导入同一文件只成功一次）、`sys_import_ref`（只追加；外部引用唯一）。
+3. 导入记录列表与详情、报告导出（PDF、XLSX、CSV，复用 19 §4 的导出）、数据质量说明。
+4. 后台导入向导（上传、映射、参数、预览、提交、报告）与导入历史。
+5. 场景、e2e、文档。
+
+**14e-2 验收标准**
+- [ ] 一行出错时整份文件不写入任何数据，被拒的导入有记录（IT）。
+- [ ] 同一文件再次提交 409，外部引用跳过或报错，并发提交同一文件只有一次成功（IT）。
+- [ ] 导入表上没有 UPDATE / DELETE；各行的操作指向导入的操作（IT）。
+- [ ] 后台完成一次导入（Vitest、Playwright）。
+- [ ] 现有全部检查照常通过。
 

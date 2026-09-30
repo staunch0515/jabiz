@@ -89,6 +89,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   绝不放主键、操作人、字段值。遥测默认不外发，只经 OTLP 推送，不开放匿名的指标端点。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **报表**（见 19 与决策 D25）：报表就是头部声明了 `report` 的 SQL 模板（标题、列名在消息 `query.<id>`、`query.<id>.<列>`），不另建报表定义；按时点运行用请求的 `asOf` / `knownAt` 或头部 `timeSlice`（参数即时点），不在模板里自己拼"当前版本"；流程中用 `RunTemplate.at`。导出只经 `POST /api/queries/{id}/export?format=csv|xlsx|pdf`（超过 `jabiz.reports.export.max-rows` 即拒绝，不截断）；PDF 的中文、日文字体由 `jabiz.reports.pdf.fonts` 提供。需要原样重现的报表用流程 `REPORT_ISSUE` 签发（存档只追加、带内容哈希），不自己保存报表文件。
+- **导入**（见 20 与决策 D26）：批量导入只经 `ImportDefinition` Bean（文件策略只允许导入类型 `TEXT` / `XLSX` / `XML`，原样保存、只作附件）；
+  每行或每组交给手工录入所用的同一个业务流程，不在导入中另写业务规则或直接写表。其他格式实现 `ImportParser`（core，同步）。解析 XML 一律禁止 DTD。
+  导入与字段的显示名在消息 `import.<id>`、`import.<id>.<字段>`。预览是试运行（`ExecutionOptions.DRY_RUN`），不自己做"先校验后写入"的两套逻辑。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。

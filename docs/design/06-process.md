@@ -95,6 +95,10 @@ public class ProcessContext {
   之后切回非阻塞线程继续。
 - **有外部副作用的 `BlockingStep` 必须使用 `AFTER_COMMIT`，或者该外部调用本身是幂等的**（避免事务回滚后外部状态已改变）。
   优先使用 `PublishEvent`（Outbox）代替在流程内直接调用外部系统。
+- **试运行**（`ExecutionOptions.DRY_RUN`，决策 D26）：流程照常执行完，然后整个事务（含 `op_process`、变更、Outbox、单据号计数）回滚，返回输出；
+  不执行提交后步骤，不接受 `Idempotency-Key`。导入的预览即如此（20 §5）。
+- **保存点**（`StorageEngine.inSavepoint`，决策 D26）：平台步骤可在事务内把一段工作放在保存点之后，失败时只撤销这一段、事务继续；
+  只供平台自己的步骤使用（导入按单元执行子流程，20 §5），不对业务开放。
 
 ## 5. 流程组合
 

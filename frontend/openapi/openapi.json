@@ -161,23 +161,6 @@
         },
         "type" : "object"
       },
-      "DraftRule" : {
-        "properties" : {
-          "condition" : { },
-          "enabled" : {
-            "type" : "boolean"
-          },
-          "levels" : { },
-          "priority" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "ruleCode" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "EntityInstance" : {
         "properties" : {
           "attributes" : {
@@ -204,6 +187,30 @@
           "processSeqId" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "FieldEntry" : {
+        "properties" : {
+          "columns" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "kind" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "required" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -302,6 +309,195 @@
         },
         "type" : "object"
       },
+      "FormatEntry" : {
+        "properties" : {
+          "adjustable" : {
+            "type" : "boolean"
+          },
+          "charset" : {
+            "type" : "string"
+          },
+          "charsets" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "delimiter" : {
+            "type" : "string"
+          },
+          "header" : {
+            "type" : "boolean"
+          },
+          "headerRow" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "sheet" : {
+            "type" : "string"
+          },
+          "skipLines" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportEntry" : {
+        "properties" : {
+          "accept" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "extensions" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "externalRef" : {
+            "type" : "boolean"
+          },
+          "fields" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FieldEntry"
+            },
+            "type" : "array"
+          },
+          "filePolicy" : {
+            "type" : "string"
+          },
+          "format" : {
+            "$ref" : "#/components/schemas/FormatEntry"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "mappings" : {
+            "type" : "boolean"
+          },
+          "onDuplicate" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "version" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ImportMapping" : {
+        "properties" : {
+          "columns" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "constants" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "options" : {
+            "$ref" : "#/components/schemas/Options"
+          }
+        },
+        "type" : "object"
+      },
+      "InspectRequest" : {
+        "properties" : {
+          "fileId" : {
+            "type" : "string"
+          },
+          "options" : {
+            "$ref" : "#/components/schemas/Options"
+          }
+        },
+        "type" : "object"
+      },
+      "InspectResponse" : {
+        "properties" : {
+          "columns" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "header" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "issues" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IssueEntry"
+            },
+            "type" : "array"
+          },
+          "records" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sample" : {
+            "items" : {
+              "$ref" : "#/components/schemas/SampleEntry"
+            },
+            "type" : "array"
+          },
+          "suggested" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "IssueEntry" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "column" : {
+            "type" : "string"
+          },
+          "field" : {
+            "type" : "string"
+          },
+          "location" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "row" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LabelsRequest" : {
         "properties" : {
           "ids" : {
@@ -326,6 +522,28 @@
         "properties" : {
           "id" : { },
           "label" : { }
+        },
+        "type" : "object"
+      },
+      "MappingOutput" : {
+        "properties" : {
+          "importId" : {
+            "type" : "string"
+          },
+          "mappingId" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MappingRequest" : {
+        "properties" : {
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          }
         },
         "type" : "object"
       },
@@ -390,6 +608,31 @@
         },
         "type" : "object"
       },
+      "Options" : {
+        "properties" : {
+          "charset" : {
+            "type" : "string"
+          },
+          "delimiter" : {
+            "type" : "string"
+          },
+          "header" : {
+            "type" : "boolean"
+          },
+          "headerRow" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sheet" : {
+            "type" : "string"
+          },
+          "skipLines" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "ParameterEntry" : {
         "properties" : {
           "label" : {
@@ -422,18 +665,15 @@
       },
       "PreviewRequest" : {
         "properties" : {
-          "draft" : {
-            "$ref" : "#/components/schemas/DraftRule"
-          },
-          "limit" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "ruleId" : {
+          "fileId" : {
             "type" : "string"
           },
-          "subject" : {
-            "type" : "string"
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
           }
         },
         "type" : "object"
@@ -613,6 +853,80 @@
         },
         "type" : "object"
       },
+      "ReportResponse" : {
+        "properties" : {
+          "accepted" : {
+            "type" : "boolean"
+          },
+          "columns" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "committed" : {
+            "type" : "boolean"
+          },
+          "constants" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "duplicates" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "fileId" : {
+            "type" : "string"
+          },
+          "importId" : {
+            "type" : "string"
+          },
+          "importVersion" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "issues" : {
+            "items" : {
+              "$ref" : "#/components/schemas/IssueEntry"
+            },
+            "type" : "array"
+          },
+          "processed" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "records" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "results" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RowEntry"
+            },
+            "type" : "array"
+          },
+          "rows" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sha256" : {
+            "type" : "string"
+          },
+          "totals" : {
+            "additionalProperties" : {
+              "type" : "number"
+            },
+            "type" : "object"
+          },
+          "units" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "ResultEntry" : {
         "properties" : {
           "kind" : {
@@ -638,6 +952,25 @@
         "properties" : {
           "reason" : {
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RowEntry" : {
+        "properties" : {
+          "location" : {
+            "type" : "string"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "values" : {
+            "additionalProperties" : { },
+            "type" : "object"
           }
         },
         "type" : "object"
@@ -782,6 +1115,38 @@
             "type" : "string"
           },
           "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SampleEntry" : {
+        "properties" : {
+          "cells" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "location" : {
+            "type" : "string"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "problem" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SavedMapping" : {
+        "properties" : {
+          "mapping" : {
+            "$ref" : "#/components/schemas/ImportMapping"
+          },
+          "name" : {
             "type" : "string"
           }
         },
@@ -954,7 +1319,7 @@
   "paths" : {
     "/api/approvals/preview" : {
       "post" : {
-        "operationId" : "preview",
+        "operationId" : "preview_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1747,6 +2112,181 @@
         "tags" : [ "file-controller" ]
       }
     },
+    "/api/imports/{importId}/inspect" : {
+      "post" : {
+        "operationId" : "inspect",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InspectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InspectResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/{importId}/mappings" : {
+      "get" : {
+        "operationId" : "mappings",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SavedMapping"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/{importId}/mappings/{name}" : {
+      "delete" : {
+        "operationId" : "removeMapping",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MappingOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      },
+      "put" : {
+        "operationId" : "saveMapping",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MappingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MappingOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/imports/{importId}/preview" : {
+      "post" : {
+        "operationId" : "preview",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "importId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
+      }
+    },
     "/api/jobs" : {
       "get" : {
         "operationId" : "list_2",
@@ -1815,6 +2355,27 @@
           }
         },
         "tags" : [ "meta-model-controller" ]
+      }
+    },
+    "/api/meta/imports" : {
+      "get" : {
+        "operationId" : "catalog",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ImportEntry"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "import-controller" ]
       }
     },
     "/api/meta/processes" : {

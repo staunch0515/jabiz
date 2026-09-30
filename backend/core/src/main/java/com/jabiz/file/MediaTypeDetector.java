@@ -1,13 +1,25 @@
 package com.jabiz.file;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Recognises a file's type from its first bytes (docs/design/14-files.md section 3). What the client declares, the
  * content type and the file name, plays no part. Recognition is strict: content that merely could be a type (a stray
  * MPEG frame sync, an MP4 that may be video) is not recognised, and whatever is not recognised is refused.
+ *
+ * <p>The import types (decision D26): XLSX is a ZIP archive with a workbook and the content type of a macro-free
+ * workbook, which needs the whole file ({@link #detect(Path)}); XML starts with an XML declaration or an element that
+ * is not HTML or SVG; text has no NUL and no control character other than tab, line feed, form feed and carriage
+ * return in its first bytes.
  */
 public final class MediaTypeDetector {
 
@@ -19,6 +31,13 @@ public final class MediaTypeDetector {
     private static final byte[] OGG_SIGNATURE = ascii("OggS");
     private static final byte[] OPUS_HEAD = ascii("OpusHead");
     private static final byte[] VORBIS_HEAD = {0x01, 'v', 'o', 'r', 'b', 'i', 's'};
+    private static final byte[] ZIP_SIGNATURE = {'P', 'K', 3, 4};
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+    /** The content type part a macro-free workbook declares; a macro-enabled one declares another. */
+    private static final String WORKBOOK_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml."
+        + "sheet.main+xml";
+    /** Most bytes of {@code [Content_Types].xml} read; real ones are a few kilobytes. */
+    private static final int MAX_CONTENT_TYPES_BYTES = 256 * 1024;
 
     /** Bit rates in kbit/s of MPEG-1 Layer III and of MPEG-2/2.5 Layer III, by the header's index. */
     private static final int[] MPEG1_L3_KBPS = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0};
@@ -54,7 +73,80 @@ public final class MediaTypeDetector {
         if (isMp3(b)) {
             return Optional.of(MediaTypes.MP3);
         }
-        return Optional.empty();
+        if (startsWith(b, 0, ZIP_SIGNATURE)) {
+            return Optional.empty();  // an XLSX is recognised from the whole file only
+        }
+        return text(b);
+    }
+
+    /**
+     * The type of the file, looking at the whole file where the first bytes are not enough (an XLSX workbook is a
+     * ZIP archive whose directory is at its end).
+     */
+    public static Optional<MediaTypes> detect(Path file) throws IOException {
+        byte[] head;
+        try (InputStream in = Files.newInputStream(file)) {
+            head = in.readNBytes(HEAD_BYTES);
+        }
+        if (startsWith(head, 0, ZIP_SIGNATURE)) {
+            return isXlsx(file) ? Optional.of(MediaTypes.XLSX) : Optional.empty();
+        }
+        return detect(head);
+    }
+
+    /** A workbook part, and a {@code [Content_Types].xml} declaring it as a macro-free workbook; no VBA project. */
+    private static boolean isXlsx(Path file) {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            ZipEntry types = zip.getEntry("[Content_Types].xml");
+            if (types == null || zip.getEntry("xl/workbook.xml") == null || zip.getEntry("xl/vbaProject.bin") != null) {
+                return false;
+            }
+            byte[] content;
+            try (InputStream in = zip.getInputStream(types)) {
+                content = in.readNBytes(MAX_CONTENT_TYPES_BYTES);
+            }
+            return new String(content, StandardCharsets.UTF_8).contains(WORKBOOK_CONTENT_TYPE);
+        } catch (IOException | RuntimeException e) {
+            return false;  // not a readable ZIP archive
+        }
+    }
+
+    /** XML or plain text: printable characters only, told apart by a leading element. */
+    private static Optional<MediaTypes> text(byte[] b) {
+        if (b.length == 0) {
+            return Optional.empty();
+        }
+        for (byte value : b) {
+            int c = value & 0xFF;
+            if (c < 0x20 && c != '\t' && c != '\n' && c != '\r' && c != '\f' || c == 0x7F) {
+                return Optional.empty();
+            }
+        }
+        int start = startsWith(b, 0, UTF8_BOM) ? UTF8_BOM.length : 0;
+        while (start < b.length && Character.isWhitespace(b[start])) {
+            start++;
+        }
+        if (start < b.length && b[start] == '<') {
+            return isXml(new String(b, start, b.length - start, StandardCharsets.ISO_8859_1)) ? Optional.of(
+                MediaTypes.XML) : Optional.empty();
+        }
+        return Optional.of(MediaTypes.TEXT);
+    }
+
+    /**
+     * An XML declaration or a first element, and no HTML or SVG: those could run scripts where a browser renders
+     * them, so they are refused even though they are only ever served as attachments.
+     */
+    private static boolean isXml(String head) {
+        String lower = head.toLowerCase(Locale.ROOT);
+        if (lower.contains("<html") || lower.contains("<svg") || lower.contains("<!doctype html")
+            || lower.contains("<script")) {
+            return false;
+        }
+        if (lower.startsWith("<?xml")) {
+            return true;
+        }
+        return head.length() > 1 && (Character.isLetter(head.charAt(1)) || head.charAt(1) == '_');
     }
 
     /** An Ogg page whose first packet is an Opus or Vorbis identification header. */

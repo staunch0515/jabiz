@@ -63,8 +63,10 @@ GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据
 
 - 可判定的类型（`MediaTypes`）：`JPEG`、`PNG`、`PDF`、`MP3`、`M4A`（AAC）、`OGG`（Opus/Vorbis）。判定从严：MP3 要求 ID3v2 头，
   或连续两个合法的 MPEG 音频帧头；M4A 只接受 `ftyp` 主品牌 `M4A ` / `M4B `（其他 MP4 品牌可能是视频）；OGG 要求首页含 `OpusHead`
-  或 Vorbis 标识头。**永不允许** SVG、HTML、XML 与任何脚本类型
-  （可以在同源下执行脚本）。WebP、HEIC 不在第一版（JDK 不能解码；iOS 在 `accept="image/jpeg,image/png"` 时会自动转码为 JPEG）。
+  或 Vorbis 标识头。**永不允许** SVG、HTML 与任何脚本类型（可以在同源下执行脚本）；XML 只作为导入文件（下一条）。WebP、HEIC 不在第一版（JDK 不能解码；iOS 在 `accept="image/jpeg,image/png"` 时会自动转码为 JPEG）。
+- **导入专用类型**（决策 D26，见 20 §1）：`TEXT`（无 NUL 与控制字符的文本，CSV、定宽等）、`XLSX`（按整个文件判定：ZIP 中有工作簿、
+  内容类型为无宏工作簿、没有 VBA 工程；只看文件头无法判定）、`XML`（XML 声明或首个元素；HTML、SVG、含 `<script` 的一律拒绝）。
+  它们只能出现在只允许这三种类型的策略中（`FilePolicy` 构建时拒绝混用），原样保存，下载一律 `attachment` 加 `sandbox`，公开接口永远不提供。
 - 客户端声明的 `Content-Type` 与扩展名只作参考：与判定结果不符时以判定结果为准，判定结果不在允许列表中 → 400 `FILE_TYPE_NOT_ALLOWED`。
 - 超过 `maxBytes` → 413 `FILE_TOO_LARGE`（写入过程中即中止，不先读完）；图片像素超过 `maxPixels` 或无法解码 → 400 `FILE_INVALID`。
 - 一个策略最多 12 个变体（变体名合存在 `sys_file.variants` 中）；同时解码的图片数有上限 `jabiz.files.image-concurrency`

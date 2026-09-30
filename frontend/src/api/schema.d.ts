@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview"];
+        post: operations["preview_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -324,6 +324,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/imports/{importId}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["inspect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mappings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/mappings/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["saveMapping"];
+        post?: never;
+        delete: operations["removeMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -364,6 +428,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getEntity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meta/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -658,14 +738,6 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
         };
-        DraftRule: {
-            condition?: unknown;
-            enabled?: boolean;
-            levels?: unknown;
-            /** Format: int32 */
-            priority?: number;
-            ruleCode?: string;
-        };
         EntityInstance: {
             attributes?: {
                 [key: string]: unknown;
@@ -680,6 +752,15 @@ export interface components {
             output?: unknown;
             /** Format: int64 */
             processSeqId?: number;
+        };
+        FieldEntry: {
+            columns?: string[];
+            kind?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+            name?: string;
+            required?: boolean;
         };
         FileInfo: {
             contentType?: string;
@@ -719,6 +800,72 @@ export interface components {
             value?: unknown;
             values?: unknown[];
         };
+        FormatEntry: {
+            adjustable?: boolean;
+            charset?: string;
+            charsets?: string[];
+            delimiter?: string;
+            header?: boolean;
+            /** Format: int32 */
+            headerRow?: number;
+            kind?: string;
+            sheet?: string;
+            /** Format: int32 */
+            skipLines?: number;
+        };
+        ImportEntry: {
+            accept?: string[];
+            extensions?: string[];
+            externalRef?: boolean;
+            fields?: components["schemas"]["FieldEntry"][];
+            filePolicy?: string;
+            format?: components["schemas"]["FormatEntry"];
+            id?: string;
+            mappings?: boolean;
+            onDuplicate?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            title?: string;
+            totals?: string[];
+            /** Format: int32 */
+            version?: number;
+        };
+        ImportMapping: {
+            columns?: {
+                [key: string]: string;
+            };
+            constants?: {
+                [key: string]: string;
+            };
+            options?: components["schemas"]["Options"];
+        };
+        InspectRequest: {
+            fileId?: string;
+            options?: components["schemas"]["Options"];
+        };
+        InspectResponse: {
+            columns?: string[];
+            header?: {
+                [key: string]: string;
+            };
+            issues?: components["schemas"]["IssueEntry"][];
+            /** Format: int32 */
+            records?: number;
+            sample?: components["schemas"]["SampleEntry"][];
+            suggested?: {
+                [key: string]: string;
+            };
+        };
+        IssueEntry: {
+            code?: string;
+            column?: string;
+            field?: string;
+            location?: string;
+            message?: string;
+            /** Format: int32 */
+            row?: number;
+        };
         LabelsRequest: {
             ids?: unknown[];
         };
@@ -729,6 +876,14 @@ export interface components {
         LookupItem: {
             id?: unknown;
             label?: unknown;
+        };
+        MappingOutput: {
+            importId?: string;
+            mappingId?: string;
+            name?: string;
+        };
+        MappingRequest: {
+            mapping?: components["schemas"]["ImportMapping"];
         };
         Me: {
             permissions?: string[];
@@ -748,6 +903,16 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        Options: {
+            charset?: string;
+            delimiter?: string;
+            header?: boolean;
+            /** Format: int32 */
+            headerRow?: number;
+            sheet?: string;
+            /** Format: int32 */
+            skipLines?: number;
+        };
         ParameterEntry: {
             label?: string;
             value?: string;
@@ -760,11 +925,11 @@ export interface components {
             to?: string;
         };
         PreviewRequest: {
-            draft?: components["schemas"]["DraftRule"];
-            /** Format: int32 */
-            limit?: number;
-            ruleId?: string;
-            subject?: string;
+            fileId?: string;
+            mapping?: components["schemas"]["ImportMapping"];
+            params?: {
+                [key: string]: unknown;
+            };
         };
         PreviewResponse: {
             changed?: components["schemas"]["Change"][];
@@ -829,6 +994,36 @@ export interface components {
             landscape?: boolean;
             period?: components["schemas"]["PeriodEntry"];
         };
+        ReportResponse: {
+            accepted?: boolean;
+            columns?: {
+                [key: string]: string;
+            };
+            committed?: boolean;
+            constants?: {
+                [key: string]: string;
+            };
+            /** Format: int32 */
+            duplicates?: number;
+            fileId?: string;
+            importId?: string;
+            /** Format: int32 */
+            importVersion?: number;
+            issues?: components["schemas"]["IssueEntry"][];
+            /** Format: int32 */
+            processed?: number;
+            /** Format: int32 */
+            records?: number;
+            results?: components["schemas"]["RowEntry"][];
+            /** Format: int32 */
+            rows?: number;
+            sha256?: string;
+            totals?: {
+                [key: string]: number;
+            };
+            /** Format: int32 */
+            units?: number;
+        };
         ResultEntry: {
             kind?: {
                 [key: string]: unknown;
@@ -839,6 +1034,15 @@ export interface components {
         };
         RevertRequest: {
             reason?: string;
+        };
+        RowEntry: {
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            status?: string;
+            values?: {
+                [key: string]: unknown;
+            };
         };
         RunDetail: {
             columns?: components["schemas"]["ColumnEntry"][];
@@ -896,6 +1100,19 @@ export interface components {
             templateId?: string;
             templateVersion?: string;
             title?: string;
+        };
+        SampleEntry: {
+            cells?: {
+                [key: string]: string;
+            };
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            problem?: string;
+        };
+        SavedMapping: {
+            mapping?: components["schemas"]["ImportMapping"];
+            name?: string;
         };
         Sort: {
             asc?: boolean;
@@ -964,7 +1181,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    preview: {
+    preview_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -1508,6 +1725,130 @@ export interface operations {
             };
         };
     };
+    inspect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InspectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectResponse"];
+                };
+            };
+        };
+    };
+    mappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedMapping"][];
+                };
+            };
+        };
+    };
+    saveMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MappingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingOutput"];
+                };
+            };
+        };
+    };
+    removeMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingOutput"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportResponse"];
+                };
+            };
+        };
+    };
     list_2: {
         parameters: {
             query?: never;
@@ -1570,6 +1911,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportEntry"][];
                 };
             };
         };

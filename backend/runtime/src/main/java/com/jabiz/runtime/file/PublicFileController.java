@@ -86,6 +86,8 @@ class PublicFileController {
                 .flatMap(allowed -> entities.findById(datasets.findById(FileEntities.DATASET).orElseThrow(),
                     FileEntities.SYS_FILE, id))
                 .filter(file -> FileKeys.ORIGINAL.equals(variant) || variants(file).contains(variant))
+                // Import files are never public, whatever a public row refers to (decision D26).
+                .filter(file -> !importOnly(file.get(FileEntities.CONTENT_TYPE)))
                 .switchIfEmpty(Mono.error(() -> notFound(rawId)))
                 .flatMap(file -> {
                     String contentType = file.get(FileEntities.CONTENT_TYPE);
@@ -97,6 +99,11 @@ class PublicFileController {
                             return Mono.error(notFound(rawId));
                         }));
                 }));
+    }
+
+    private static boolean importOnly(String contentType) {
+        return Arrays.stream(MediaTypes.values())
+            .anyMatch(type -> type.isImportOnly() && type.contentType().equals(contentType));
     }
 
     private static List<String> variants(EntityInstance file) {

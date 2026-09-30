@@ -58,6 +58,21 @@ public class ProcessInputs {
         return input;
     }
 
+    /**
+     * Checks an input built in code (an import's row) against its constraints, as a request body is checked.
+     *
+     * @throws ValidationException when it breaks any
+     */
+    public void validate(Object input) {
+        Set<ConstraintViolation<Object>> broken = validator.validate(input);
+        if (!broken.isEmpty()) {
+            throw new ValidationException(broken.stream()
+                .sorted(Comparator.comparing(v -> v.getPropertyPath().toString()))
+                .map(ProcessInputs::toViolation)
+                .toList());
+        }
+    }
+
     private static Violation toViolation(ConstraintViolation<?> violation) {
         String constraint = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
         String code = switch (constraint) {
