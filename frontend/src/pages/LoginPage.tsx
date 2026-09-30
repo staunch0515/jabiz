@@ -1,12 +1,14 @@
 import { LockOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons'
 import { LoginForm, ProFormText } from '@ant-design/pro-components'
-import { Alert, Button, Card, Select, Space } from 'antd'
+import { useQuery } from '@tanstack/react-query'
+import { Alert, Button, Card, Divider, Select, Space } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
-import { lastUserName, useAuth } from '../auth/AuthContext'
+import { lastUserName, useAuth, type SignInStep } from '../auth/AuthContext'
+import { startProviderSignIn } from '../auth/oidc'
 import MfaEnrollment from '../components/MfaEnrollment'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
@@ -26,9 +28,20 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [error, setError] = useState<string | null>(null)
-  const [step, setStep] = useState<Step>({ kind: 'password' })
-  const state = location.state as { from?: string; idle?: boolean } | null
+  const state = location.state as { from?: string; idle?: boolean; step?: SignInStep } | null
+  // Back from an identity provider with a second step to take (docs/design/10-security.md section 12).
+  const [step, setStep] = useState<Step>(() => {
+    const pending = state?.step
+    if (pending?.status === 'MFA_REQUIRED') return { kind: 'code', challenge: pending.challenge }
+    if (pending?.status === 'MFA_ENROLLMENT_REQUIRED') return { kind: 'enroll', challenge: pending.challenge }
+    return { kind: 'password' }
+  })
   const from = state?.from ?? '/data'
+  const providers = useQuery({
+    queryKey: ['auth', 'oidc', 'providers', i18n.language],
+    queryFn: () => unwrap(api.GET('/api/auth/oidc/providers')),
+    staleTime: Infinity,
+  })
 
   if (ready && signedIn) return <Navigate to={from} replace />
 
@@ -145,6 +158,26 @@ export default function LoginPage() {
           placeholder={t('login.password')}
           rules={[{ required: true, message: t('login.passwordRequired') }]}
         />
+        {(providers.data ?? []).length > 0 && (
+          <>
+            <Divider plain>{t('login.orWith')}</Divider>
+            <Space direction="vertical" style={{ width: '100%', marginBottom: 24 }}>
+              {(providers.data ?? []).map((provider) => (
+                <Button
+                  key={provider.id}
+                  block
+                  data-testid={`oidc-${provider.id}`}
+                  onClick={() => {
+                    setError(null)
+                    startProviderSignIn(provider.id!, from).catch(failed)
+                  }}
+                >
+                  {provider.label}
+                </Button>
+              ))}
+            </Space>
+          </>
+        )}
       </LoginForm>
     </div>
   )

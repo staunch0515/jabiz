@@ -26,9 +26,13 @@ import java.util.Map;
 @Configuration
 public class UserProcesses {
 
-    /** @param email where notifications go; optional */
+    /**
+     * @param password optional: a user without one signs in through an identity provider only
+     *                 (docs/design/10-security.md section 12)
+     * @param email    where notifications go; optional
+     */
     public record CreateUserInput(@NotBlank String userName, String displayName, String tenantId,
-        @Sensitive @NotBlank String password, Boolean enabled, String email) {
+        @Sensitive String password, Boolean enabled, String email) {
         @Override
         public String toString() {
             return "CreateUserInput[userName=" + userName + ", password=***]";
@@ -77,11 +81,12 @@ public class UserProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
-                .step("Hash the password", HashPasswordStep.class, HASH_PASSWORD)
+                .step("Hash the password", HashPasswordStep.class,
+                    new HashPasswordStep.Metadata(PASSWORD, HASH, PASSWORD, true))
                 .compute("Register the user", (metadata, ctx) -> {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> user = new LinkedHashMap<>((Map<String, Object>) ctx.get(NEW_USER));
-                    user.put("passwordHash", ctx.get(HASH, String.class));
+                    user.put("passwordHash", ctx.get(HASH));
                     ctx.put(USER_ID, ctx.changes().insert(SecurityEntities.USER, user));
                 }));
 

@@ -20,8 +20,15 @@ public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata,
      * @param passwordKey context key of the new password; removed by the step
      * @param hashKey     context key receiving the hash
      * @param field       field name reported with violations
+     * @param optional    whether a missing password is allowed (the hash is then null: a user who signs in through
+     *                    an identity provider only, docs/design/10-security.md section 12)
      */
-    public record Metadata(String passwordKey, String hashKey, String field) {
+    public record Metadata(String passwordKey, String hashKey, String field, boolean optional) {
+
+        public Metadata(String passwordKey, String hashKey, String field) {
+            this(passwordKey, hashKey, field, false);
+        }
+
         public Metadata {
             Objects.requireNonNull(passwordKey, "passwordKey must not be null");
             Objects.requireNonNull(hashKey, "hashKey must not be null");
@@ -39,6 +46,10 @@ public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata,
     public void run(Metadata metadata, ProcessContext ctx) {
         String password = ctx.get(metadata.passwordKey(), String.class);
         ctx.put(metadata.passwordKey(), null);
+        if (metadata.optional() && (password == null || password.isEmpty())) {
+            ctx.put(metadata.hashKey(), null);
+            return;
+        }
         List<Violation> problems = hasher.check(metadata.field(), password);
         if (!problems.isEmpty()) {
             throw new ValidationException(problems);

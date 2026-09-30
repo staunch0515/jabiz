@@ -66,6 +66,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **二次验证**（见 10 §9–§11 与决策 D28）：只用 TOTP 与恢复码（`SecUserMfa`，密钥以 `JABIZ_MFA_KEY` 加密）；登录与 step-up 都是写登录记录的流程，不另写验证逻辑。
   需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
+- **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
+  平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 由管理员关联，不自动开户；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`，类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
   字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并

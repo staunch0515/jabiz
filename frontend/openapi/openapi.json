@@ -94,6 +94,17 @@
         },
         "type" : "object"
       },
+      "CallbackRequest" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ChallengeRequest" : {
         "properties" : {
           "challenge" : {
@@ -1345,6 +1356,17 @@
         },
         "type" : "object"
       },
+      "ProviderEntry" : {
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "QueryEntry" : {
         "properties" : {
           "defaultSort" : {
@@ -1736,6 +1758,14 @@
             "type" : "boolean"
           },
           "field" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "StartResponse" : {
+        "properties" : {
+          "authorizationUrl" : {
             "type" : "string"
           }
         },
@@ -2359,6 +2389,80 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/oidc/callback" : {
+      "post" : {
+        "operationId" : "callback",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CallbackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "oidc-controller" ]
+      }
+    },
+    "/api/auth/oidc/providers" : {
+      "get" : {
+        "operationId" : "providers",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ProviderEntry"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "oidc-controller" ]
+      }
+    },
+    "/api/auth/oidc/{id}/start" : {
+      "post" : {
+        "operationId" : "start",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StartResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "oidc-controller" ]
       }
     },
     "/api/auth/refresh" : {

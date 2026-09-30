@@ -20,6 +20,12 @@ class ProcessConfig {
     }
 
     @Bean
+    ProcessDefinition<com.jabiz.runtime.process.sponsor.SponsorOidcSignInInput, SponsorSignInOutput,
+        com.jabiz.runtime.process.sponsor.OidcContext> sponsorOidcSignInProcess() {
+        return com.jabiz.runtime.process.sponsor.SponsorOidcSignInProcess.DEFINITION;
+    }
+
+    @Bean
     @ConditionalOnMissingBean(ProcessSequence.class)
     ProcessSequence processSequence(DatabaseClient databaseClient) {
         return new DatabaseProcessSequence(databaseClient);

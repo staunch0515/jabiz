@@ -228,6 +228,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["callback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -1023,6 +1071,10 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        CallbackRequest: {
+            code?: string;
+            state?: string;
+        };
         ChallengeRequest: {
             challenge?: string;
             code?: string;
@@ -1511,6 +1563,10 @@ export interface components {
             /** Format: int32 */
             version?: number;
         };
+        ProviderEntry: {
+            id?: string;
+            label?: string;
+        };
         QueryEntry: {
             defaultSort?: components["schemas"]["SortEntry"];
             description?: string;
@@ -1658,6 +1714,9 @@ export interface components {
         SortEntry: {
             asc?: boolean;
             field?: string;
+        };
+        StartResponse: {
+            authorizationUrl?: string;
         };
         StepUpResponse: {
             accessToken?: string;
@@ -2056,6 +2115,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecoveryCodeList"];
+                };
+            };
+        };
+    };
+    callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+        };
+    };
+    providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderEntry"][];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartResponse"];
                 };
             };
         };

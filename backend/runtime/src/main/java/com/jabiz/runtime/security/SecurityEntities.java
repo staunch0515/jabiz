@@ -28,6 +28,7 @@ public class SecurityEntities {
     public static final String MENU = "SecMenu";
     public static final String LOGIN_RECORD = "SecLoginRecord";
     public static final String USER_MFA = "SecUserMfa";
+    public static final String USER_IDENTITY = "SecUserIdentity";
 
     public static final String USER_DATASET = "urn:jabiz:dataset:platform:SecUser";
     public static final String ROLE_DATASET = "urn:jabiz:dataset:platform:SecRole";
@@ -36,11 +37,13 @@ public class SecurityEntities {
     public static final String MENU_DATASET = "urn:jabiz:dataset:platform:SecMenu";
     public static final String LOGIN_RECORD_DATASET = "urn:jabiz:dataset:platform:SecLoginRecord";
     public static final String USER_MFA_DATASET = "urn:jabiz:dataset:platform:SecUserMfa";
+    public static final String USER_IDENTITY_DATASET = "urn:jabiz:dataset:platform:SecUserIdentity";
 
     /** How a login record's attempt proved the user (docs/design/10-security.md section 9). */
     public static final String FACTOR_PASSWORD = "PASSWORD";
     public static final String FACTOR_TOTP = "TOTP";
     public static final String FACTOR_RECOVERY_CODE = "RECOVERY_CODE";
+    public static final String FACTOR_OIDC = "OIDC";
 
     public static final String LOGIN_OUTCOME_DICTIONARY = "urn:jabiz:dict:platform:login-outcome";
 
@@ -194,6 +197,38 @@ public class SecurityEntities {
             .columns("userId", "confirmed", "confirmedTime")
             .filters("userId", "confirmed"));
     });
+
+    /**
+     * The account of a user at an OpenID Connect provider (docs/design/10-security.md section 12): whom the provider's
+     * subject signs in as. Linked by administrators; nobody is signed up by a provider.
+     */
+    public static final EntityDefinition SEC_USER_IDENTITY = EntityDefinition.define(USER_IDENTITY, eb -> {
+        eb.physicalTable("sec_user_identity_version");
+        eb.primaryKey("userIdentityId");
+        eb.field("userIdentityId", f -> f.physicalColumn("user_identity_id").immutable(true).required(true)
+            .generated(true).asSemanticIdentity("urn:jabiz:entity:platform:user-identity"));
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asReference(USER));
+        eb.field("provider", f -> f.physicalColumn("provider").immutable(true).required(true).asText(40));
+        eb.field("subject", f -> f.physicalColumn("subject").immutable(true).required(true).asText(255));
+        eb.unique("uk_sec_user_identity", "provider", "subject");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv
+            .columns("userId", "provider", "subject")
+            .filters("userId", "provider", "subject")
+            .sorts("provider", "subject")
+            .defaultSort("provider", true));
+    });
+
+    @Bean
+    EntityDefinition secUserIdentityEntity() {
+        return SEC_USER_IDENTITY;
+    }
+
+    @Bean
+    DatasetDefinition secUserIdentityDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(USER_IDENTITY_DATASET, USER_IDENTITY, SecurityPermissions.USER_READ,
+            SecurityPermissions.USER_WRITE, poolRef);
+    }
 
     @Bean
     EntityDefinition secUserEntity() {

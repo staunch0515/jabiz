@@ -156,6 +156,11 @@ public class LoginContext extends ProcessContext {
             recordId, attemptNo, null);
     }
 
+    /** Whether the attempt itself passed a second factor (an identity provider's); false for passwords. */
+    public boolean secondFactorPassed() {
+        return false;
+    }
+
     /** Why an attempt left no login record, when the caller answers differently for it; null by default. */
     protected String refusal() {
         return null;

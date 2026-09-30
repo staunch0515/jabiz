@@ -64,8 +64,13 @@ public class SecurityConfig {
     static final String BEARER = "Bearer ";
 
     /** The session endpoints, and the second step of a sign-in (which carries a challenge), open to everyone. */
-    static final ServerWebExchangeMatcher PUBLIC = ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST,
-        AuthController.LOGIN, AuthController.REFRESH, AuthController.LOGOUT, MfaController.CHALLENGE + "/**");
+    static final ServerWebExchangeMatcher PUBLIC = new OrServerWebExchangeMatcher(
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, AuthController.LOGIN, AuthController.REFRESH,
+            AuthController.LOGOUT, MfaController.CHALLENGE + "/**"),
+        // Signing in through an identity provider (docs/design/10-security.md section 12).
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
+            OidcController.BASE + "/callback"));
 
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never
@@ -122,6 +127,21 @@ public class SecurityConfig {
         // A session idle for longer than its access token plus the idle timeout cannot be refreshed (section 11).
         return new RefreshTokenStore(() -> storages.getEngine(poolRef), ttl, tokens.ttl().plus(mfa.idleTimeout()),
             clock);
+    }
+
+    @Bean
+    OidcStateStore oidcStateStore(StorageAdapterRegistry storages, Clock clock,
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return new OidcStateStore(() -> storages.getEngine(poolRef), clock);
+    }
+
+    /**
+     * Calls to the identity providers. A plain client: the sign-in around it is observed as {@code jabiz.auth.oidc},
+     * and the calls carry no trace headers to the provider.
+     */
+    @Bean
+    OidcClient oidcClient(Clock clock) {
+        return new OidcClient(clock);
     }
 
     @Bean

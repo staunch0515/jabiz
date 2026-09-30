@@ -14,7 +14,7 @@
 
 - Spring Security（WebFlux）只负责"是谁"和"`/api/**` 必须已认证"；"能做什么"由各入口按元数据声明检查（D11 第 2 条的位置不变）。
 - 无状态：不建会话、不存安全上下文、不保存请求；不用 Cookie，因此关闭 CSRF。保留 Spring Security 默认的安全响应头。
-- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节），以及 `/api` 以外的静态资源与 `/actuator/health`。
+- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节）、`/api/auth/oidc/**`（第 12 节），以及 `/api` 以外的静态资源与 `/actuator/health`。
   认证过滤器不处理这三个会话接口：客户端随手带上的过期访问令牌不会妨碍刷新与登录。
 - 401、403 与控制器的错误一样是 `ProblemDetail`，带按 `Accept-Language` 本地化的 `violations`（`UNAUTHENTICATED`、`PERMISSION_DENIED`），
   401 带 `WWW-Authenticate: Bearer`。
@@ -153,7 +153,9 @@
   测试配置（`config/application.properties`）给出固定的测试密钥与 BCrypt 强度 4。
 - 二次验证（14g-1）：`MfaIT`（绑定与登录、码错误计入锁定、码不能重用、恢复码只能用一次、新登录使旧挑战失效、角色要求时先绑定、刷新时角色新要求二次验证、
   管理操作与 `requiresMfa` 在各入口的检查与 step-up、管理员重置、绑定流程只经专用入口、密钥不能挪给别的用户、闲置会话不能刷新、操作记录中没有码、表只插入）、
-  `MfaAdministrationOffIT`；core `TotpTest`（RFC 6238 附录 B 的向量）、`RecoveryCodesTest`、`MfaSecretCipherTest`；runtime `MfaSettingsTest`、`JwtServiceTest`。
+  `MfaAdministrationOffIT`；单点登录（14g-2）：`OidcIT`（对 testFixtures 的 `TestOidcProvider`：正常登录、未关联、state 只能用一次与过期、
+  nonce / aud / azp / iss / exp / iat / sub 不符、HS256 与 `none`、别的密钥签名、密钥轮换只重读一次、PKCE、`amr` 视同二次验证与转入 TOTP、角色要求时先绑定、
+  锁定与禁用、关联是管理操作且一个主体只对应一个用户、表只插入且操作记录中没有 state 与授权码），runtime `OidcProvidersTest`；core `TotpTest`（RFC 6238 附录 B 的向量）、`RecoveryCodesTest`、`MfaSecretCipherTest`；runtime `MfaSettingsTest`、`JwtServiceTest`。
 - 验收测试：`AccessControlIT`（401 / 403 覆盖数据视图、模板、流程、实体 API、操作）、`SignInIT`（登录、锁定、并发、角色生效、刷新、菜单、安全表只插入）、
   `SensitiveDataIT`（日志、`input_summary`、`op_process_result`、读接口中不出现密码与哈希）、`BootstrapAdminIT`。
 
@@ -217,9 +219,54 @@
   访问令牌有效期长于闲置时长 → 启动失败（类别 `SECURITY`）。
 - 前端：按键盘、指针、滚动与触摸活动计时（同时按上条保持服务端会话）（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出（吊销令牌族）并回到登录页，提示因闲置而锁定，用户名已填好。
 
-## 12. OIDC 单点登录（阶段 14g-2，待实施）
+## 12. OIDC 单点登录【D28 第 6 条，阶段 14g-2】
 
-见 D28 第 6 条；实施时补充本节。
+授权码 + PKCE（S256）+ nonce；平台自己校验 ID 令牌，然后照常签发自己的访问令牌与刷新令牌（第 2 节不变）。不用 Spring 的 oauth2-client（它依赖服务端会话），
+只用已有的 Nimbus 与 WebClient。不做 SAML、不自动开户、不做单点登出。
+
+**配置**（`jabiz.security.oidc.providers[i]`）
+
+| 项 | 说明 |
+|---|---|
+| `id` | 小写字母、数字与连字符，唯一；出现在接口路径与登录记录中 |
+| `issuer` | 发现文档 `{issuer}/.well-known/openid-configuration` 的 `issuer` 必须与之完全相同 |
+| `client-id`、`client-secret` | 密钥只来自环境变量（如 `JABIZ_OIDC_<ID>_CLIENT_SECRET` 经 Spring 的松散绑定），不写入仓库 |
+| `redirect-uri` | 在身份提供方登记的绝对地址，指向前端的 `/login/oidc`（挂在子路径时带上子路径） |
+| `scopes` | 缺省 `openid profile email`，必须含 `openid` |
+| `labels` | 登录按钮的文字（`{语言: 文本}`），缺省为 `id` |
+| `mfa-amr` | ID 令牌的 `amr` 含其中任一值时视同平台的二次验证；缺省为空（不信任，照常走第 9 节） |
+
+启动检查（类别 `SECURITY`）一次报告全部问题：缺项、`id` 格式或重复、`scopes` 无 `openid`、`issuer` / `redirect-uri` 不是绝对的 `https` 地址（只有
+`localhost` / `127.0.0.1` 可用 `http`，供开发与测试）。启动时不访问身份提供方。
+
+**接口**（公开，认证过滤器不处理）
+
+| 方法与路径 | 说明 |
+|---|---|
+| `GET /api/auth/oidc/providers` | 已配置的提供方：`id` 与按请求语言的 `label`，只此而已 |
+| `POST /api/auth/oidc/{id}/start` | 生成 state、nonce 与 PKCE verifier（各 32 字节随机数），写一行只追加的 `sec_oidc_state`（state 与 nonce 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl}`；前端整页跳转 |
+| `POST /api/auth/oidc/callback {state, code}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED` |
+
+**回调**
+
+1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、提供方不符 → 401。
+2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）。
+3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；`iss` 等于配置；`aud` 含 `client-id`，
+   多个受众时 `azp` 必须是 `client-id`；`exp` 未过、`iat` 不在将来（按注入的 `Clock`，容许 60 秒偏差）；`nonce` 的 SHA-256 与记录的一致；`sub` 非空。
+4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`。
+
+发现文档与 JWKS 在首次使用时读取并缓存 1 小时；遇到未知的 `kid` 时重新读取 JWKS（至多每分钟一次）；端点必须是 `https`（同上，`localhost` 除外）。
+对身份提供方的调用用 JDK 的异步 HTTP 客户端（不跟随重定向、不带链路头，也不在请求线程上阻塞）。观测 `jabiz.auth.oidc`，标签只有 `provider` 与结果（`outcome`）。
+
+**账号关联与登录流程**
+
+- 时态实体 `SecUserIdentity`（`sec_user_identity_version`，`V24__oidc.sql`）：`userId`、`provider`、`subject`，`(provider, subject)` 唯一；
+  管理员经其数据视图维护（`security.user.read` / `.write`，写入为管理级二次验证）。**不自动开户**：没有关联即拒绝。
+- `SPONSOR_OIDC_SIGN_IN`（`auth.sign-in`，内部）与密码登录一样写登录记录（`factor = OIDC`）：没有关联 → 不写记录；锁定中 → `LOCKED`；禁用 → `DISABLED`；
+  无角色 → `NO_ROLE`；然后二次验证：`amr` 符合 `mfa-amr` → 登录（会话带 `mfa_at`）；否则已绑定 TOTP → `MFA_REQUIRED`（第 9 节的第二步）；
+  否则角色要求 → `MFA_ENROLLMENT_REQUIRED`。外部登录不猜密码，失败不计入锁定次数，但已有的锁定照样生效。
+- 只用单点登录的用户：`SEC_USER_CREATE` 的密码可以不填；没有密码哈希的用户用密码登录总是失败（照样比对假哈希）。
+- `sec_oidc_state` 与 `sec_oidc_state_use` 只追加（D5），过期行由将来的受控清除处理（同第 2 节的令牌表）。
 
 ## 13. 按权限显示明文、数据期限、访问审查（阶段 14g-3，待实施）
 

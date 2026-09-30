@@ -21,6 +21,8 @@ const en = {
     enrollHint: 'Your role requires two-step verification. Set it up now, then sign in again.',
     enrolled: 'Two-step verification is set up. Sign in again with your password and a code.',
     idleLocked: 'You were signed out after a period of inactivity.',
+    orWith: 'or sign in with',
+    providerFailed: 'Signing in through the identity provider did not work.',
   },
   nav: { datasets: 'Data', processes: 'Processes', home: 'Home', tasks: 'Tasks', reports: 'Reports', imports: 'Imports', audit: 'Audit', integrity: 'Integrity', retention: 'Retention' },
   imports: {
@@ -333,6 +335,8 @@ const zh: Texts = {
     enrollHint: '您的角色要求两步验证。请现在设置，然后重新登录。',
     enrolled: '两步验证已设置。请用密码和验证码重新登录。',
     idleLocked: '因长时间未操作，您已退出登录。',
+    orWith: '或通过以下方式登录',
+    providerFailed: '通过身份提供方登录未成功。',
   },
   nav: { datasets: '数据', processes: '流程', home: '首页', tasks: '待办', reports: '报表', imports: '导入', audit: '审计', integrity: '防篡改', retention: '保留与归档' },
   imports: {
@@ -642,6 +646,8 @@ const ja: Texts = {
     enrollHint: 'ロールにより 2 段階認証が必要です。いま設定してから、もう一度ログインしてください。',
     enrolled: '2 段階認証を設定しました。パスワードとコードでもう一度ログインしてください。',
     idleLocked: '一定時間操作がなかったため、ログアウトしました。',
+    orWith: 'または次の方法でログイン',
+    providerFailed: 'ID プロバイダーでのログインに失敗しました。'
   },
   nav: { datasets: 'データ', processes: 'プロセス', home: 'ホーム', tasks: 'タスク', reports: 'レポート', imports: 'インポート', audit: '監査', integrity: '改ざん検知', retention: '保存とアーカイブ' },
   imports: {
