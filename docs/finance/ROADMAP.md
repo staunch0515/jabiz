@@ -52,7 +52,7 @@
 **验收标准**
 - [x] 合并无冲突；`tools/check-app-paths.sh` 以 `origin/1.1/platform` 为基准通过。
 - [x] `./gradlew :finance:check`（`ArchitectureTest`、`FinanceAppIT`、`platformCheck`）通过。
-- [ ] CI（`build`、`Finance / package` 等）在 `1.1/finance` 上通过。
+- [x] CI（`build`、`Finance / package` 等）在 `1.1/finance` 上通过。
 
 ## F1 — F11
 
