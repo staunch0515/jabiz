@@ -97,6 +97,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一。可读但不应留在审计中的值（如文件名）用 `f.auditMasked()`。查询只经 `GET /api/audit/records`（`audit.read`）。
   只追加表由平台逐行封存（21 §2：`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`，HMAC 链，密钥只来自 `JABIZ_INTEGRITY_KEY`，非 dev 缺少即启动失败）；
   新的只追加表必须有主键（启动检查 `INTEGRITY`），不需要另外声明。
+- **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算），法律保全只经
+  `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
+  归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。

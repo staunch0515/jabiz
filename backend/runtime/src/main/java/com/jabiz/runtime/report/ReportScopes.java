@@ -42,7 +42,7 @@ public class ReportScopes {
     }
 
     /** Whether the reader's request gives every archived scope the same values. */
-    boolean matches(Map<String, Map<String, String>> archived, RequestContext reader) {
+    public boolean matches(Map<String, Map<String, String>> archived, RequestContext reader) {
         for (Map.Entry<String, Map<String, String>> entry : archived.entrySet()) {
             Optional<DatasetDefinition> dataset = datasets.findById(entry.getKey());
             if (dataset.isEmpty()) {

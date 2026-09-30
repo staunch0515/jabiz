@@ -107,6 +107,17 @@ public class ReportRuns {
             .map(row -> run(row, false));
     }
 
+    /** The runs issued in {@code [from, to)} (either open when null), oldest first, without their rows. */
+    public Flux<ReportRun> issuedBetween(Instant from, Instant to) {
+        return engine().select("SELECT " + SUMMARY_COLUMNS + FROM
+                + " WHERE (CAST(:from AS timestamptz) IS NULL OR r.issued_time >= :from)"
+                + " AND (CAST(:to AS timestamptz) IS NULL OR r.issued_time < :to)"
+                + " ORDER BY r.issued_time, r.run_id",
+                Map.of("from", from == null ? BoundValue.nullOf(Instant.class) : BoundValue.of(from),
+                    "to", to == null ? BoundValue.nullOf(Instant.class) : BoundValue.of(to)))
+            .map(row -> run(row, false));
+    }
+
     private static ReportRun run(Map<String, Object> row, boolean full) {
         var columns = ArchivedValues.columns((String) row.get("columns"));
         String permissions = (String) row.get("permissions");

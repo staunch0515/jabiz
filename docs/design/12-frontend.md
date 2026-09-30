@@ -124,6 +124,7 @@ frontend/
 | `/imports/runs[?import=]` | 导入记录（20 §5）：结果、行数、重复、问题、说明；问题明细；报告保存为 PDF / Excel / CSV |
 | `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`）；按记录筛选时一并列出其审批。历史页与列表行有入口 |
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
+| `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。

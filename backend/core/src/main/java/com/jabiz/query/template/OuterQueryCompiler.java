@@ -187,6 +187,8 @@ public final class OuterQueryCompiler {
                     Object array = TemplateValues.toArray(FieldValueCoercer.javaType(column.kind()), values);
                     yield reference(column) + " = ANY(:" + binder.bind(BoundValue.of(array)) + ")";
                 }
+                case QueryPredicate.KeyAfter after ->
+                    throw new IllegalArgumentException("Templates have no primary key to page by");
                 case QueryPredicate.Between between -> {
                     ProjectedField column = filterable(between.field(), QueryOperator.BETWEEN);
                     if (between.low() == null || between.high() == null) {

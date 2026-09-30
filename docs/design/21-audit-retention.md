@@ -1,7 +1,7 @@
 # 21 审计、防篡改与保留
 
-决策见 D27。本文件是约定；按阶段实施：14f-1（§1 审计记录）、14f-2（§2 防篡改）、14f-3（§3 保留与法律保全、§4 开放格式导出）。
-§2–§4 是已确认的设计，实施时细化；与实现冲突时先改本文件。
+决策见 D27。本文件是约定；分阶段实施：14f-1（§1 审计记录）、14f-2（§2 防篡改）、14f-3（§3 保留与法律保全、§4 开放格式导出）。
+与实现冲突时先改本文件。
 
 ## 1. 审计记录（14f-1）
 
@@ -126,13 +126,72 @@
 
 ## 3. 保留期与法律保全（14f-3）
 
-- `RetentionPolicy` Bean（core）：实体、保留期、起算字段，可按会计年度末（`jabiz.fiscal-year-end`，缺省 12 月）起算。
-- 删除拦截：时态实体的逻辑删除（墓碑）、普通实体的物理删除、`FILE_DELETE` / `FILE_PURGE_ORPHANS` 在保留期内或受法律保全时拒绝（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`；
-  文件清理跳过并报告）。
-- 法律保全：时态平台实体 `SysLegalHold`（实体类型、主键列表或"字段 = 值"），只经 `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`（`legal.hold.write`，解除需原因）。
-- 到期报告：报表模板列出已过保留期的记录（标出受保全者）。到期后的物理删除与匿名化不在 14f（需另立决策，与 D5 冲突）。
+### 3.1 保留策略
+
+应用以 Bean 声明（core `com.jabiz.retention.RetentionPolicy`）：
+
+```java
+@Bean RetentionPolicy invoiceRetention() {
+    return RetentionPolicy.of("FinInvoice").keep(Period.ofYears(7)).from("invoiceDate").afterFiscalYearEnd();
+}
+```
+
+| 项 | 规定 |
+|---|---|
+| `keep` | 保留期（正的 `Period`） |
+| `from` | 起算字段：实体的时间字段（`asTemporal`），取其 UTC 日期；没有值的记录一律保留 |
+| `afterFiscalYearEnd()` | 自该日期所在会计年度的年末起算；年末月份为 `jabiz.fiscal-year-end`（1–12，缺省 12） |
+
+- 到期日 = 起算日 + 保留期；到期日当天起可以删除（按注入的 `Clock` 的 UTC 日期）。每个实体至多一个策略。
+- 启动检查 `RETENTION`：策略完整、实体已声明、起算字段是时间字段、每个实体只有一个。
+- 示范：`app` 的运费明细（`FreightCharge`）保留 7 年，自发货所在会计年度末起算。
+
+### 3.2 删除拦截
+
+- 每次删除——普通实体的物理删除或软删除、时态实体的逻辑删除（写墓碑）——在同一事务中先检查：在保留期内拒绝 422 `RETENTION_ACTIVE`（参数 `until`），
+  受法律保全拒绝 422 `LEGAL_HOLD`（参数 `hold`）。检查在 `DatasetEntityManager` 与时态写入的删除路径中（`DeletionGuard`），
+  因此数据视图 API、通用实体流程、业务流程的 `SaveChanges` 与 `FILE_DELETE` 都受约束；撤销一个创建了记录的操作（写墓碑）同样是删除，照样检查。
+- 文件：`sys_file` 按上面的规则受保留策略（实体 `SysFile`，字段 `uploadedTime`）与法律保全约束。清理孤儿文件的 `FILE_PURGE_ORPHANS` 跳过这些文件，
+  并在输出 `keptFileIds` 中列出（不因一个文件而整体失败）。
+- 更新、冲正、取消预定版本不是删除，不受拦截；只追加表本来就不能删除。
+
+### 3.3 法律保全
+
+- 时态平台实体 `SysLegalHold`（表 `sys_legal_hold_version`，迁移 V22）：名称、原因、实体类型、主键列表（至多 500 个）**或**"字段 = 值"、状态（`ACTIVE` / `RELEASED`）、解除原因。
+- 只经流程 `LEGAL_HOLD_PLACE`（校验实体与字段存在、主键与字段二选一）与 `LEGAL_HOLD_RELEASE`（必须写原因；已解除的再解除 422 `LEGAL_HOLD_NOT_ACTIVE`）修改，
+  权限 `legal.hold.write`；读取数据视图 `urn:jabiz:dataset:platform:SysLegalHold` 需要 `legal.hold.read`（`processOnlyWrites`，保全不能删除）。
+- "字段 = 值"按值比较：文本相等，数值按大小（`10` 与 `10.00` 相同）。
+- 版本只追加，谁在何时下达、解除以及原因都留在历史与审计记录中。
+
+### 3.4 到期报告
+
+`GET /api/retention`（`retention.read`）：今天、会计年度末月份，以及每个策略的实体、保留期、起算字段、"截至哪一天的记录已过保留期"（`expiredThrough`）、
+当前记录数（时态实体：当前未删除的版本）、已过保留期的记录数、其中受保全的记录数。字段值保全在报告中按文本比较。
+
+到期后的物理删除与个人数据匿名化不在 14f（与 D5 冲突，需另立决策）；报告列出可以处理的范围。
 
 ## 4. 开放格式导出（14f-3）
 
-`POST /api/exports/data`（`data.export`）：以流返回 ZIP——每个实体一个 CSV（UTF-8、表头、小数位原样、UTC 时间、按主键排序）、`schema.json`（字段、语义类型、币种与小数位、引用）、
-`manifest.json`（各文件 SHA-256 与行数、参数、平台版本、最新封存块哈希）与范围内已签发报表的 PDF；按视图的读权限与数据范围过滤，记操作（`DATA_EXPORT`），不设行数上限。
+`POST /api/exports/data`（`data.export`，另需每个数据视图的读取权限；包含报表时需要 `report.archive.read`）：
+
+| 请求字段 | 含义 |
+|---|---|
+| `datasets` | 数据视图（1–100 个） |
+| `asOf` / `knownAt` | 读取时态实体的时点（缺省为导出开始的时刻）；只显示当前状态的时态数据视图不接受（400 `TIME_TRAVEL_NOT_ALLOWED`），普通实体没有其他时点，不受影响 |
+| `reports` | 是否包含已签发报表的 PDF |
+| `reportsFrom` / `reportsTo` | 报表签发时间 `[from, to)`，缺省不限 |
+
+以流返回 ZIP（`application/zip`，附件名 `jabiz-export-<时间>.zip`）：
+
+- `data/<数据视图>.csv`：UTF-8、RFC 4180、CRLF、首行为字段名；按主键排序，经数据视图按主键分页读取（`QueryPredicate.KeyAfter`，不用偏移，导出期间的增删不会让行错位），
+  因此权限、数据范围与时点照常生效；时态数据视图的所有页读同一时点（`manifest.json` 的 `readAt`）；**敏感字段不导出**。
+  值：小数原样（`toPlainString`，保留小数位），时间为 UTC ISO-8601，结构为 JSON；不为电子表格转义（归档是数据，公式前缀会改变它）。
+- `reports/<运行>-<文件名>.pdf`：期间内调用者可读的已签发报表（与存档相同的读取规则），按签发时的内容生成，内容哈希不符的跳过。
+- `schema.json`：每个数据视图的实体、文件、中英文名称、主键、是否时态、每列的名称、中英文名称、是否必填、语义类型（币种与小数位等）、引用。
+- `manifest.json`：格式（`jabiz-open-export/1`）、导出时间与人、操作号、参数、平台版本、防篡改链的最新块（块号、哈希、密钥标识）、
+  其他每个文件的路径、SHA-256、字节数与（CSV 的）行数。
+
+- 导出写一条操作记录（流程名 `DATA_EXPORT`，输入摘要为数据视图与参数），便于追查"谁导出了什么"。不设行数上限。
+- 在 `boundedElastic` 上边读边写到临时文件，发送后删除；观测名 `jabiz.data.export`。
+- 验证：示范中导出账本科目与分录，仅用 CSV 重算的试算表与系统的 `jabiz.ledger.account_balances` 相同（`DataExportIT`）。
+- 后台页面 `/retention`：保留期报告、法律保全入口（生成的列表与流程表单）、导出表单。

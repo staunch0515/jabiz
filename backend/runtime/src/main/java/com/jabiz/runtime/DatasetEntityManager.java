@@ -29,6 +29,7 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.entity.FieldWriteCheck;
 import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.audit.AuditRecorder;
+import com.jabiz.runtime.retention.DeletionGuard;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
@@ -95,6 +96,7 @@ public class DatasetEntityManager {
     private final PlatformObservations observations;
     private final ObjectProvider<FieldWriteCheck> writeChecks;
     private final AuditRecorder audit;
+    private final DeletionGuard deletions;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -110,9 +112,11 @@ public class DatasetEntityManager {
         Outbox outbox,
         PlatformObservations observations,
         ObjectProvider<FieldWriteCheck> writeChecks,
-        AuditRecorder audit
+        AuditRecorder audit,
+        DeletionGuard deletions
     ) {
         this.audit = Objects.requireNonNull(audit, "AuditRecorder cannot be null");
+        this.deletions = Objects.requireNonNull(deletions, "DeletionGuard cannot be null");
         this.writeChecks = Objects.requireNonNull(writeChecks, "FieldWriteCheck provider cannot be null");
         this.observations = Objects.requireNonNull(observations, "PlatformObservations cannot be null");
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
@@ -514,20 +518,22 @@ public class DatasetEntityManager {
                             "Optimistic lock conflict on deleting %s [ID: %s]: expected version [%d], stored version [%d]",
                             def.name, instance.id(), instance.version(), current.version())));
                     }
-                    return ensureNotReferenced(def, current).then(Mono.defer(() -> {
-                        Mono<Boolean> removed = usesSoftDelete(dataset, def)
-                            ? engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
-                                versionColumn, softDeleteAssignments(def, dataset.policy()))
-                            : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
-                        // A soft delete is an update and raises the version; a hard delete leaves the last one.
-                        long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
-                        return removed.flatMap(done -> done
-                            ? audit.record(engine, def, current.id(), EntityAction.DELETE.name(), versionAfter, null,
-                                    current.attributes(), null)
-                                .then(outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
-                                    versionAfter, null, def.changeableFields()))
-                            : Mono.<Void>error(conflict(def, instance.id())));
-                    }));
+                    return ensureNotReferenced(def, current)
+                        .then(ensureDeletable(engine, def, current))
+                        .then(Mono.defer(() -> {
+                            Mono<Boolean> removed = usesSoftDelete(dataset, def)
+                                ? engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
+                                    versionColumn, softDeleteAssignments(def, dataset.policy()))
+                                : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
+                            // A soft delete is an update and raises the version; a hard delete leaves the last one.
+                            long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
+                            return removed.flatMap(done -> done
+                                ? audit.record(engine, def, current.id(), EntityAction.DELETE.name(), versionAfter, null,
+                                        current.attributes(), null)
+                                    .then(outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
+                                        versionAfter, null, def.changeableFields()))
+                                : Mono.<Void>error(conflict(def, instance.id())));
+                        }));
                 });
         });
     }
@@ -781,6 +787,14 @@ public class DatasetEntityManager {
             return findInScope(engine, targetDataset, targetDataset.scope().resolve(request), target, targetId)
                 .hasElement();
         });
+    }
+
+    /**
+     * Rejects the deletion of an instance that must be kept: within its retention period or under a legal hold
+     * (docs/design/21-audit-retention.md section 3.2).
+     */
+    Mono<Void> ensureDeletable(StorageEngine engine, EntityDefinition def, EntityInstance current) {
+        return deletions.check(engine, def, current.id(), current.attributes());
     }
 
     /** Rejects the deletion of an instance that other entities still refer to. */

@@ -4,6 +4,7 @@ import {
   CloudUploadOutlined,
   CheckSquareOutlined,
   DatabaseOutlined,
+  InboxOutlined,
   LogoutOutlined,
   NodeIndexOutlined,
   SafetyCertificateOutlined,
@@ -64,6 +65,10 @@ export default function AppLayout() {
     // The seals (docs/design/21-audit-retention.md section 2.4).
     ...(can('integrity.read')
       ? [{ key: 'integrity', name: t('nav.integrity'), path: '/integrity', icon: <SafetyCertificateOutlined /> }]
+      : []),
+    // Retention, legal holds and the export (docs/design/21-audit-retention.md sections 3 and 4).
+    ...(['retention.read', 'legal.hold.read', 'legal.hold.write', 'data.export'].some((p) => can(p))
+      ? [{ key: 'retention', name: t('nav.retention'), path: '/retention', icon: <InboxOutlined /> }]
       : []),
     { key: 'data', name: t('nav.datasets'), path: '/data', icon: <DatabaseOutlined /> },
     { key: 'processes', name: t('nav.processes'), path: '/processes', icon: <NodeIndexOutlined /> },

@@ -23,6 +23,7 @@ import LoginPage from './pages/LoginPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
 import ProcessFormPage from './pages/ProcessFormPage'
 import ReportArchivePage from './pages/ReportArchivePage'
+import RetentionPage from './pages/RetentionPage'
 import ReportCatalogPage from './pages/ReportCatalogPage'
 import ReportPage from './pages/ReportPage'
 import TasksPage from './pages/TasksPage'
@@ -69,6 +70,7 @@ const router = createBrowserRouter([
           { path: '/reports/archive', element: <ReportArchivePage /> },
           { path: '/audit', element: <AuditPage /> },
           { path: '/integrity', element: <IntegrityPage /> },
+          { path: '/retention', element: <RetentionPage /> },
           // The application's own pages (decision D22), checked at startup not to take a platform path.
           ...(extension.routes ?? []),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },
