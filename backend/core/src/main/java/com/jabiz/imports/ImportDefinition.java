@@ -141,7 +141,9 @@ public final class ImportDefinition<P> {
         List<DateTimeFormatter> formatters = new ArrayList<>();
         for (String pattern : datePatterns) {
             try {
-                formatters.add(DateTimeFormatter.ofPattern(pattern, java.util.Locale.ROOT));
+                // Strict: 02/30/2024 is an error, not February 29th. Strict resolution needs the proleptic year.
+                formatters.add(DateTimeFormatter.ofPattern(prolepticYears(pattern), java.util.Locale.ROOT)
+                    .withResolverStyle(java.time.format.ResolverStyle.STRICT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Import " + id + ": date pattern '" + pattern + "' is invalid", e);
             }
@@ -151,6 +153,19 @@ public final class ImportDefinition<P> {
             throw new IllegalArgumentException("Import " + id + ": maxRows must be positive");
         }
         this.maxRows = b.maxRows;
+    }
+
+    /** The pattern with year-of-era ({@code y}) outside quoted text as proleptic year ({@code u}). */
+    static String prolepticYears(String pattern) {
+        StringBuilder out = new StringBuilder(pattern.length());
+        boolean quoted = false;
+        for (char c : pattern.toCharArray()) {
+            if (c == '\'') {
+                quoted = !quoted;
+            }
+            out.append(!quoted && c == 'y' ? 'u' : c);
+        }
+        return out.toString();
     }
 
     private String require(String value, String what) {

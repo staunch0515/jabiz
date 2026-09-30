@@ -21,8 +21,11 @@ class ImportValuesTest {
     private static final ZoneId NEW_YORK = ZoneId.of("America/New_York");
 
     private static Object read(SemanticKind kind, String text) throws ImportValues.Invalid {
-        return ImportValues.read(kind, text, NEW_YORK, List.of(DateTimeFormatter.ofPattern("MM/dd/yyyy"),
-            DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")));
+        return ImportValues.read(kind, text, NEW_YORK, List.of(strict("MM/dd/uuuu"), strict("MM/dd/uuuu HH:mm")));
+    }
+
+    private static DateTimeFormatter strict(String pattern) {
+        return DateTimeFormatter.ofPattern(pattern).withResolverStyle(java.time.format.ResolverStyle.STRICT);
     }
 
     private static String code(SemanticKind kind, String text) {
@@ -78,6 +81,8 @@ class ImportValuesTest {
         assertThat(read(time, "01/31/2026")).isEqualTo(Instant.parse("2026-01-31T05:00:00Z"));
         assertThat(read(time, "01/31/2026 12:30")).isEqualTo(Instant.parse("2026-01-31T17:30:00Z"));
         assertThat(code(time, "31.01.2026")).isEqualTo(ImportCodes.VALUE_INVALID);
+        assertThat(code(time, "02/30/2024")).isEqualTo(ImportCodes.VALUE_INVALID);
+        assertThat(code(time, "2024-02-30")).isEqualTo(ImportCodes.VALUE_INVALID);
         assertThat(ImportValues.read(time, "2026-01-31", ZoneOffset.UTC, List.of()))
             .isEqualTo(Instant.parse("2026-01-31T00:00:00Z"));
     }

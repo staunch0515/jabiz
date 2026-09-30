@@ -133,7 +133,7 @@ public final class ImportPreparation {
                     .filter(Objects::nonNull).findFirst().ifPresent(column -> columns.put(field.name(), column));
             }
             if (field.required() && !columns.containsKey(field.name()) && !constants.containsKey(field.name())
-                && !mapping.columns().containsKey(field.name())) {
+                && (chosen == null || chosen.isBlank())) {
                 issues.add(new ImportIssue(0, null, field.name(), null, ImportCodes.COLUMN_MISSING,
                     "No column of the file gives field " + field.name(), Map.of("field", field.name())));
             }

@@ -25,11 +25,16 @@ final class TextFiles {
             .onUnmappableCharacter(CodingErrorAction.REPORT);
         InputStream in = Files.newInputStream(file);
         PushbackReader reader = new PushbackReader(new BufferedReader(new InputStreamReader(in, decoder)), 1);
-        int first = read(reader);
-        if (first != -1 && first != '﻿') {
-            reader.unread(first);
+        try {
+            int first = read(reader);
+            if (first != -1 && first != '\uFEFF') {
+                reader.unread(first);
+            }
+            return reader;
+        } catch (IOException | RuntimeException e) {
+            reader.close();
+            throw e;
         }
-        return reader;
     }
 
     /** One character; a decoding error becomes an {@link ImportFileException}. */

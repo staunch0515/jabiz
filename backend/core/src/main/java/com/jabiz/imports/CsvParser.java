@@ -23,10 +23,9 @@ final class CsvParser implements ImportParser {
     public void parse(Path file, ParseLimits limits, Sink sink) throws IOException {
         try (Reader reader = TextFiles.open(file, format.charset())) {
             Lines lines = new Lines(reader, format, limits);
-            for (int i = 0; i < format.skipLines(); i++) {
-                if (lines.next() == null) {
-                    break;
-                }
+            // Lines, not records: a title line with a stray quote must not swallow the header.
+            for (int i = 0; i < format.skipLines() && lines.skipLine(); i++) {
+                // skipped
             }
             List<String> columns = null;
             int records = 0;
@@ -164,13 +163,11 @@ final class CsvParser implements ImportParser {
                         nextLine++;
                     }
                     cells.add(wasQuoted ? cell.toString() : cell.toString().strip());
+                    checkColumns(cells);
                     return cells;
                 } else if (c == format.delimiter()) {
                     cells.add(wasQuoted ? cell.toString() : cell.toString().strip());
-                    if (cells.size() > limits.maxColumns()) {
-                        throw new ImportFileException("line " + line, "A record has more than "
-                            + limits.maxColumns() + " cells");
-                    }
+                    checkColumns(cells);
                     cell.setLength(0);
                     wasQuoted = false;
                 } else if (c == format.quote() && cell.toString().isBlank() && !wasQuoted) {
@@ -182,6 +179,32 @@ final class CsvParser implements ImportParser {
                 }
                 c = read();
             }
+        }
+
+        private void checkColumns(List<String> cells) {
+            if (cells.size() > limits.maxColumns()) {
+                throw new ImportFileException("line " + line, "A record has more than " + limits.maxColumns()
+                    + " cells");
+            }
+        }
+
+        /** Skips one physical line, whatever it holds; false at the end of the file. */
+        boolean skipLine() throws IOException {
+            int c = read();
+            if (c == -1) {
+                return false;
+            }
+            while (c != -1 && c != '\n' && c != '\r') {
+                c = read();
+            }
+            if (c == '\r') {
+                int after = read();
+                if (after != '\n') {
+                    pending = after;
+                }
+            }
+            nextLine++;
+            return true;
         }
 
         private void append(StringBuilder cell, char c) {

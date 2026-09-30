@@ -127,6 +127,12 @@ class ImportPreparationTest {
         assertThat(missing.issues()).extracting(ImportIssue::field).containsExactly("sku", "price");
         assertThat(missing.issues()).extracting(ImportIssue::code).containsOnly(ImportCodes.COLUMN_MISSING);
 
+        // A required field mapped to nothing is missing once for the file, not once per row.
+        ImportPreparation.Converted blank = ImportPreparation.convert(definition,
+            file(List.of("Other", "Price"), record(1, "Other", "1", "Price", "1")),
+            new ImportMapping(Map.of("sku", " "), Map.of(), null));
+        assertThat(blank.issues()).extracting(ImportIssue::code).containsExactly(ImportCodes.COLUMN_MISSING);
+
         ImportPreparation.Converted empty = ImportPreparation.convert(definition, file(List.of("SKU", "Price")),
             ImportMapping.DEFAULT);
         assertThat(empty.issues()).extracting(ImportIssue::code).containsExactly(ImportCodes.EMPTY);

@@ -30,7 +30,7 @@ class ImportParsersTest {
 
     @Test
     void readsCsvWithQuotesLineBreaksAndBom() throws IOException {
-        ParsedFile file = parse(ImportFormat.csv(), text("﻿SKU, Price ,Note\r\n"
+        ParsedFile file = parse(ImportFormat.csv(), text("\uFEFFSKU, Price ,Note\r\n"
             + "A-1,\"1,200.50\",\"said \"\"hi\"\"\"\r\n"
             + "\r\n"
             + "A-2, 3 ,\"two\nlines\"\n"
@@ -266,5 +266,20 @@ class ImportParsersTest {
         assertThat(parsed.records()).hasSize(1);
         assertThat(ok.adjustable()).isFalse();
         assertThat(ok.adjusted(ImportFormat.Options.NONE)).isSameAs(ok);
+    }
+
+    @Test
+    void codeReviewFindings() throws IOException {
+        // skipLines skips physical lines: a stray quote in a title line does not swallow the header.
+        ParsedFile titled = parse(ImportFormat.csv().skipLines(1), text("\"Report of 2026\na,b\n1,2\n"));
+        assertThat(titled.columns()).containsExactly("a", "b");
+        assertThat(titled.records()).hasSize(1);
+        // The last cell of a record counts against the column limit too.
+        assertThatThrownBy(() -> ImportParsers.parse(ImportFormat.csv(), text("a,b,c,d\n"),
+            new ParseLimits(10, 3, 100, 1000))).hasMessageContaining("more than 3 cells");
+        // An undecodable first character refuses the file (and closes it).
+        Path latin = Files.write(dir.resolve("l.csv"), new byte[] {(byte) 0xE9, 'a', '\n'});
+        assertThatThrownBy(() -> parse(ImportFormat.csv(), latin)).isInstanceOf(ImportFileException.class);
+        Files.delete(latin);
     }
 }

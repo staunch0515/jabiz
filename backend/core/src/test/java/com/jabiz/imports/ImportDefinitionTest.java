@@ -52,6 +52,7 @@ class ImportDefinitionTest {
         assertThat(definition.mappingPermission()).isEqualTo("test.mapping");
         assertThat(definition.zone()).isEqualTo(ZoneId.of("America/Chicago"));
         assertThat(definition.datePatterns()).containsExactly("MM/dd/yyyy");
+        assertThat(ImportDefinition.prolepticYears("dd.MM.yyyy 'year' yy")).isEqualTo("dd.MM.uuuu 'year' uu");
         assertThat(definition.maxRows()).isEqualTo(500);
         assertThat(definition.toString()).contains("test.base v2");
         assertThat(base().build().mappingPermission()).isEqualTo("test.import");
