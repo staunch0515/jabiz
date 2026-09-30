@@ -41,11 +41,13 @@ public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
     private final ReportSettings settings;
     private final EntityDefinitionRegistry entities;
     private final EntityIdGenerator ids;
+    private final ReportScopes scopes;
     private final boolean development;
 
     public IssueReport(SqlTemplateRegistry templates, AdvancedQueryExecutor executor, ReportExporter exporter,
         ReportRuns runs, ReportSettings settings, EntityDefinitionRegistry entities, EntityIdGenerator ids,
-        Environment environment) {
+        ReportScopes scopes, Environment environment) {
+        this.scopes = scopes;
         this.templates = templates;
         this.executor = executor;
         this.exporter = exporter;
@@ -83,7 +85,7 @@ public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
                     // A run is no entity of the metamodel: the generator is asked for a plain UUIDv7.
                     UUID runId = UUID.fromString(String.valueOf(ids.next(null)));
                     ReportRun run = new ReportRun(runId, query.queryId(), query.version(), templates.source(query),
-                        query.permissions(), document.title(), document.company(), document.period(),
+                        query.permissions(), scopes.of(query, ctx.request()), document.title(), document.company(), document.period(),
                         ctx.request().locale().getLanguage(), params, document.parameters(), document.asOf(),
                         page.slice().asOf(), page.slice().knownAt() != null ? page.slice().knownAt() : issued,
                         document.landscape(), document.columns(), document.rows(), document.rows().size(),

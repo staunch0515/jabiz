@@ -133,6 +133,14 @@ final class ArchivedValues {
         return stored.stream().map(p -> new ReportDocument.Parameter(p.get("label"), p.get("value"))).toList();
     }
 
+    static String scopeJson(Map<String, Map<String, String>> scope) {
+        return JSON.writeValueAsString(new TreeMap<>(scope));
+    }
+
+    static Map<String, Map<String, String>> scope(String json) {
+        return JSON.readValue(json, new TypeReference<TreeMap<String, Map<String, String>>>() {});
+    }
+
     /** The given parameters, keys sorted so that the same parameters are stored the same way. */
     static String paramsJson(Map<String, Object> params) {
         return JSON.writeValueAsString(new TreeMap<>(params));

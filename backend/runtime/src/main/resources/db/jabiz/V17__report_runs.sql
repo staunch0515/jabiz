@@ -2,13 +2,16 @@
 -- exactly - its template as it was, the parameters and point in time, the page header, the columns and the rows as
 -- canonical JSON (text, not jsonb: jsonb would reorder keys and drop the exact form the content hash is computed on) -
 -- and the hash itself. as_of is the effective time asked for (shown in the page header), read_at the one the
--- temporal entities were actually read at (the issue time when none was asked for), which verification reuses. Append-only: an issued report is never changed; a correction is a new run that supersedes it.
+-- temporal entities were actually read at (the issue time when none was asked for), which verification reuses.
+-- scope keeps the issuer's values of the datasets whose scope depends on the caller: only readers with the same
+-- values may read the run, which holds rows only such a caller sees. Append-only: an issued report is never changed; a correction is a new run that supersedes it.
 CREATE TABLE sys_report_run (
     run_id           uuid          PRIMARY KEY,
     template_id      varchar(200)  NOT NULL,
     template_version char(64)      NOT NULL,
     template_source  text          NOT NULL,
     permissions      varchar(2000) NOT NULL,
+    scope            text          NOT NULL,
     title            varchar(500)  NOT NULL,
     company          varchar(500)  NOT NULL,
     period           varchar(500),

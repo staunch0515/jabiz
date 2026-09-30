@@ -27,7 +27,7 @@ public class ReportRuns {
     static final String RUNS = "sys_report_run";
     static final String SUPERSEDES = "sys_report_run_supersede";
 
-    private static final String SUMMARY_COLUMNS = "r.run_id, r.template_id, r.template_version, r.permissions,"
+    private static final String SUMMARY_COLUMNS = "r.run_id, r.template_id, r.template_version, r.permissions, r.scope,"
         + " r.title, r.company, r.period, r.language, r.params, r.parameters, r.as_of, r.read_at, r.known_at, r.landscape,"
         + " r.columns, r.row_count, r.content_hash, r.recomputable, r.issued_by, r.issued_time, r.process_seq_id,"
         + " s.superseded_by";
@@ -54,6 +54,7 @@ public class ReportRuns {
         row.put("template_version", run.templateVersion());
         row.put("template_source", run.templateSource());
         row.put("permissions", String.join(",", run.permissions()));
+        row.put("scope", ArchivedValues.scopeJson(run.scope()));
         row.put("title", run.title());
         row.put("company", run.company());
         row.put("period", run.period());
@@ -112,7 +113,7 @@ public class ReportRuns {
         return new ReportRun((UUID) row.get("run_id"), (String) row.get("template_id"),
             ((String) row.get("template_version")).trim(), full ? (String) row.get("template_source") : null,
             permissions == null || permissions.isEmpty() ? List.of() : Arrays.asList(permissions.split(",")),
-            (String) row.get("title"), (String) row.get("company"), (String) row.get("period"),
+            ArchivedValues.scope((String) row.get("scope")), (String) row.get("title"), (String) row.get("company"), (String) row.get("period"),
             (String) row.get("language"), ArchivedValues.params((String) row.get("params")),
             ArchivedValues.parameters((String) row.get("parameters")), instant(row.get("as_of")),
             instant(row.get("read_at")), instant(row.get("known_at")), Boolean.TRUE.equals(row.get("landscape")),

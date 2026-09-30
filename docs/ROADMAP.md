@@ -607,7 +607,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 **14d-3 要求**
 1. 迁移 V17：`sys_report_run`、`sys_report_run_supersede`（只追加）。
 2. 流程 `REPORT_ISSUE`（`report.issue` 加模板权限）：未给出的时点固定在签发时刻（`At.pinned`）、规范化与内容哈希、可重算标记、取代、事件 `jabiz.report.issued`。
-3. `GET /api/reports/runs`、`/{id}`、`/{id}/export`（由存档重现）、`POST /{id}/verify`（`report.archive.read` 加签发时的模板权限）。
+3. `GET /api/reports/runs`、`/{id}`、`/{id}/export`（由存档重现）、`POST /{id}/verify`（`report.archive.read` 加签发时的模板权限与数据范围）。
 4. 后台：报表运行页"签发"；`/reports/archive`（保存、核对、已被取代）。
 5. 文档：19 §5、§6、12 §6、D25、CLAUDE.md。
 
@@ -615,7 +615,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 签发后继续过账，再次重现得到逐字节相同的 PDF 与 CSV，哈希不变，核对为 `identical`；未给出的时点固定在签发时刻，其后生效的排定变更不影响核对（`ReportArchiveIT`）。
 - [x] 模板版本改变时核对报告 `template_changed`；读取原地修改数据的报表被标为仅存档，数据改变后核对为 `differs`（`ReportArchiveIT`）。
 - [x] 一次运行只能被同一模板的另一次运行取代一次（`ReportArchiveIT`）。
-- [x] 读取需要存档权限与模板权限，不可读的运行为 404；签发需要模板权限（`ReportArchiveIT`）。
+- [x] 读取需要存档权限、模板权限与签发人相同的数据范围，不可读的运行为 404；签发需要模板权限（`ReportArchiveIT`）。
 - [x] 存档表上的 UPDATE / DELETE 被数据库拒绝（`ReportArchiveIT`）。
 - [x] 存入读回的值与哈希不变（`ArchivedValuesTest`）。
 - [x] 后台签发、存档列表、保存与核对（Vitest、Playwright）。

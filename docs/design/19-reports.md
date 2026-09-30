@@ -140,14 +140,16 @@ report:
 
 | 表 | 内容 |
 |---|---|
-| `sys_report_run` | `run_id`（UUIDv7）、`template_id`、`template_version`、`template_source`（签发时模板文件的全文；Java 声明的模板为其版本所依据的规范描述）、`permissions`（签发时模板的权限，读取时据此检查）、`title`、`company`、`period`、`language`、`params`（运行所用参数，JSON）、`parameters`（页眉显示的参数）、`as_of`、`read_at`、`known_at`、`landscape`、`columns`（名称、标签、类型）、`rows`、`row_count`、`content_hash`、`recomputable`、`issued_by`、`issued_time`、`process_seq_id` |
+| `sys_report_run` | `run_id`（UUIDv7）、`template_id`、`template_version`、`template_source`（签发时模板文件的全文；Java 声明的模板为其版本所依据的规范描述）、`permissions`（签发时模板的权限，读取时据此检查）、`scope`（取自调用方的数据视图范围的签发人取值，按视图 id）、`title`、`company`、`period`、`language`、`params`（运行所用参数，JSON）、`parameters`（页眉显示的参数）、`as_of`、`read_at`、`known_at`、`landscape`、`columns`（名称、标签、类型）、`rows`、`row_count`、`content_hash`、`recomputable`、`issued_by`、`issued_time`、`process_seq_id` |
 | `sys_report_run_supersede` | `run_id` → `superseded_by`、`superseded_time`、`process_seq_id` |
 
 列与行存为 **text 中的规范 JSON** 而不是 `jsonb`：`jsonb` 会重排键、改变数字的写法，而存档要保存计算哈希时的原样（小数、时刻都写成字符串，不经过浮点）。
 
 ### 5.3 读取、重现与核对
 
-均需 `report.archive.read` 与该次运行签发时模板的全部权限；不可读的运行一律 404（不暴露存在与否）。
+均需 `report.archive.read`、该次运行签发时模板的全部权限，以及——模板的数据视图范围取自调用方时（如按当前用户、租户）——与签发人**相同的范围值**：
+存档的行是签发人的范围内所见，范围不同的读者即使有权限也不能读（签发时范围值记入 `sys_report_run.scope`，读取时按当前的视图定义为读者解析并比较；
+视图已不存在或读者的范围无法解析，一律视为不同）。不可读的运行一律 404（不暴露存在与否），列表中也不出现。
 
 | 接口 | 说明 |
 |---|---|
@@ -171,6 +173,6 @@ report:
 - 导出（14d-2）：core `CsvReportWriterTest`、`ReportFormatTest`；runtime `XlsxReportWriterTest`、`PdfReportWriterTest`（读回、页眉页脚、列宽、确定性、字体）；
   `ReportExportIT`（三种格式读回、Excel 单元格之和、同一次运行的 PDF 字节相同、记录时点、超限 422、权限与格式）；前端 `ReportPage.test.tsx`、Playwright 下载。
 - 存档（14d-3）：runtime `ArchivedValuesTest`（存入读回值与哈希不变）；`ReportArchiveIT`（签发后继续过账，重现的 PDF 与 CSV 逐字节相同、核对 `identical`；
-  模板版本不同 `template_changed`；非时态数据被原地修改 `differs`；签发时点固定（含 `timeSlice` 模板与禁止时间旅行的视图，其后生效的排定变更不计入）；取代一次、同模板、不存在；读取与签发的权限；只追加）；前端 `ReportPage.test.tsx`（签发）、
+  模板版本不同 `template_changed`；非时态数据被原地修改 `differs`；签发时点固定（含 `timeSlice` 模板与禁止时间旅行的视图，其后生效的排定变更不计入）；取代一次、同模板、不存在；读取与签发的权限；范围不同的读者读不到；只追加）；前端 `ReportPage.test.tsx`（签发）、
   `ReportArchivePage.test.tsx`、Playwright（签发 → 存档 → 核对）。
 

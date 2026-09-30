@@ -205,6 +205,30 @@ class ReportArchiveIT extends LedgerItSupport {
             .exchange().expectStatus().isNotFound();
     }
 
+    /** An archived run holds the rows its issuer's scope showed: only readers with the same scope read it. */
+    @Test
+    void aRunIsReadOnlyInTheIssuersScope() {
+        String title = "todo-" + UUID.randomUUID().toString().substring(0, 8);
+        execute("INSERT INTO todo (id, title, done, owner_id) VALUES (?, ?, false, ?)", title, title, "it-accountant");
+        ReportProcesses.IssueOutput issued = issue("it.member_todos", Map.of(), null);
+
+        String sameScope = bearer("report.archive.read", "it.query");
+        String otherScope = com.jabiz.runtime.test.TestTokens.bearer(tokens, "someone-else", "report.archive.read",
+            "it.query");
+        String csv = new String(client().get().uri("/api/reports/runs/{id}/export?format=csv", issued.runId())
+            .header(HttpHeaders.AUTHORIZATION, sameScope)
+            .exchange().expectStatus().isOk().expectBody(byte[].class).returnResult().getResponseBody(),
+            StandardCharsets.UTF_8);
+        assertThat(csv).contains(title);
+        client().get().uri("/api/reports/runs/{id}/export?format=csv", issued.runId())
+            .header(HttpHeaders.AUTHORIZATION, otherScope)
+            .exchange().expectStatus().isNotFound();
+        List<Map<String, Object>> visible = client().get().uri("/api/reports/runs?template=it.member_todos")
+            .header(HttpHeaders.AUTHORIZATION, otherScope)
+            .exchange().expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody();
+        assertThat(visible).extracting(r -> r.get("runId")).doesNotContain(issued.runId());
+    }
+
     @Test
     void issuingNeedsTheTemplatesPermissionsAndTheArchiveIsAppendOnly() {
         Map<String, Object> refused = client().post().uri("/api/processes/{name}/1", ReportProcesses.ISSUE)

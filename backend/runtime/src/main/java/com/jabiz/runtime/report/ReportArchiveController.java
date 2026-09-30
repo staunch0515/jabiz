@@ -1,5 +1,6 @@
 package com.jabiz.runtime.report;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
@@ -37,8 +38,8 @@ import java.util.UUID;
 /**
  * Issued reports (docs/design/19-reports.md section 5): the list, one run, the run reproduced as a file from what was
  * archived (the same bytes every time for PDF), and verification against the data. Everything needs
- * {@code report.archive.read} and the permissions the template had when the run was issued; a run the caller may
- * not read is reported as not found.
+ * {@code report.archive.read}, the permissions the template had when the run was issued and, where a dataset's scope
+ * depends on the caller, the issuer's scope values; a run the caller may not read is reported as not found.
  */
 @RestController
 @RequestMapping("/api/reports/runs")
@@ -75,10 +76,12 @@ class ReportArchiveController {
     private final AdvancedQueryExecutor executor;
     private final ReportExporter exporter;
     private final ReportSettings settings;
+    private final ReportScopes scopes;
     private final boolean development;
 
     ReportArchiveController(ReportRuns runs, SqlTemplateRegistry templates, AdvancedQueryExecutor executor,
-        ReportExporter exporter, ReportSettings settings, Environment environment) {
+        ReportExporter exporter, ReportSettings settings, ReportScopes scopes, Environment environment) {
+        this.scopes = scopes;
         this.runs = runs;
         this.templates = templates;
         this.executor = executor;
@@ -97,7 +100,7 @@ class ReportArchiveController {
                 "Reading issued reports");
             // Filtered before counting: runs the caller may not read never take the place of those they may.
             return runs.latest(blankToNull(template))
-                .filter(run -> Permissions.allowsAll(context, run.permissions(), development))
+                .filter(run -> readable(run, context))
                 .take(size)
                 .map(ReportArchiveController::summary)
                 .collectList();
@@ -171,9 +174,14 @@ class ReportArchiveController {
                 "Reading issued reports");
             UUID id = uuid(runId);
             return runs.find(id)
-                .filter(run -> Permissions.allowsAll(context, run.permissions(), development))
+                .filter(run -> readable(run, context))
                 .switchIfEmpty(Mono.error(new EntityNotFoundException("Unknown report run: " + runId)));
         });
+    }
+
+    /** The template's permissions at issue, and the issuer's data scope: the rows are those the issuer saw. */
+    private boolean readable(ReportRun run, RequestContext context) {
+        return Permissions.allowsAll(context, run.permissions(), development) && scopes.matches(run.scope(), context);
     }
 
     private static UUID uuid(String runId) {
