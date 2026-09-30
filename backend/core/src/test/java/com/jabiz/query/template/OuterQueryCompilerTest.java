@@ -101,6 +101,12 @@ class OuterQueryCompilerTest {
     }
 
     @Test
+    void pagingByKeyIsNotForTemplates() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> compile(new QueryPredicate.KeyAfter("x"), List.of()))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("primary key");
+    }
+
+    @Test
     void malformedValuesAreRejected() {
         expect(() -> compile(new QueryPredicate.Gt("amount", "lots"), List.of()), "amount", "INVALID_VALUE");
         expect(() -> compile(new QueryPredicate.Gt("amount", null), List.of()), "amount", "INVALID_VALUE");

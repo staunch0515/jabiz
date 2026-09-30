@@ -14,6 +14,9 @@ import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
+import com.jabiz.runtime.imports.ImportConflictException;
+import com.jabiz.runtime.security.MfaRequiredException;
+import com.jabiz.runtime.sod.SodConflictException;
 
 import java.util.List;
 import java.util.Map;
@@ -54,11 +57,16 @@ public final class ProblemStatuses {
             case BusinessRuleViolationException e -> e.violations();
             case ScopeUnavailableException e -> List.of(new Violation(e.field(), PlatformErrorCodes.SCOPE_UNAVAILABLE,
                 e.getMessage(), Map.of("source", e.source())));
+            case SodConflictException e -> List.of(new Violation(null, PlatformErrorCodes.SOD_CONFLICT,
+                e.getMessage(), Map.of("rule", e.ruleCode())));
+            case MfaRequiredException e -> List.of(new Violation(null, PlatformErrorCodes.MFA_REQUIRED,
+                e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,
                 e.getMessage(), Map.of("permission", e.permission())));
             case IdempotencyConflictException e -> List.of(new Violation(null,
                 PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, e.getMessage()));
             case AuthenticationFailedException e -> List.of(new Violation(null, e.code(), e.getMessage()));
+            case ImportConflictException e -> List.of(new Violation(null, e.code(), e.getMessage(), e.params()));
             case PayloadTooLargeException e -> e.violations();
             case RateLimitedException e -> e.violations();
             default -> List.of();

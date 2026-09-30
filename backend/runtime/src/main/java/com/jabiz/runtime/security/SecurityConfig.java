@@ -8,6 +8,7 @@ import com.jabiz.runtime.context.ActorResolver;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.security.LoginAttemptPolicy;
+import com.jabiz.security.MfaSecretCipher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -62,9 +63,14 @@ public class SecurityConfig {
 
     static final String BEARER = "Bearer ";
 
-    /** The session endpoints, open to everyone. */
-    static final ServerWebExchangeMatcher PUBLIC = ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST,
-        AuthController.LOGIN, AuthController.REFRESH, AuthController.LOGOUT);
+    /** The session endpoints, and the second step of a sign-in (which carries a challenge), open to everyone. */
+    static final ServerWebExchangeMatcher PUBLIC = new OrServerWebExchangeMatcher(
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, AuthController.LOGIN, AuthController.REFRESH,
+            AuthController.LOGOUT, MfaController.CHALLENGE + "/**"),
+        // Signing in through an identity provider (docs/design/10-security.md section 12).
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
+            OidcController.BASE + "/callback"));
 
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never
@@ -86,13 +92,19 @@ public class SecurityConfig {
      * makes up a random key, which invalidates all tokens on restart.
      */
     static byte[] secret(String configured, boolean development) {
+        return key(configured, "jabiz.security.jwt.secret", "JABIZ_JWT_SECRET", JwtService.MIN_SECRET_BYTES,
+            development);
+    }
+
+    /** A Base64 key of at least {@code minBytes}; missing is fatal except in development, which makes one up. */
+    static byte[] key(String configured, String property, String variable, int minBytes, boolean development) {
         if (configured == null || configured.isBlank()) {
             if (!development) {
-                throw new IllegalStateException("jabiz.security.jwt.secret (environment variable JABIZ_JWT_SECRET) "
-                    + "is required: a Base64 key of at least " + JwtService.MIN_SECRET_BYTES + " bytes");
+                throw new IllegalStateException(property + " (environment variable " + variable + ") "
+                    + "is required: a Base64 key of at least " + minBytes + " bytes");
             }
-            log.warn("No jabiz.security.jwt.secret: using a random key; tokens do not survive a restart (dev only)");
-            byte[] random = new byte[JwtService.MIN_SECRET_BYTES];
+            log.warn("No {}: using a random key that does not survive a restart (dev only)", property);
+            byte[] random = new byte[minBytes];
             new SecureRandom().nextBytes(random);
             return random;
         }
@@ -100,20 +112,56 @@ public class SecurityConfig {
         try {
             key = Base64.getDecoder().decode(configured.trim());
         } catch (IllegalArgumentException e) {
-            throw new IllegalStateException("jabiz.security.jwt.secret is not valid Base64");
+            throw new IllegalStateException(property + " is not valid Base64");
         }
-        if (key.length < JwtService.MIN_SECRET_BYTES) {
-            throw new IllegalStateException("jabiz.security.jwt.secret must decode to at least "
-                + JwtService.MIN_SECRET_BYTES + " bytes");
+        if (key.length < minBytes) {
+            throw new IllegalStateException(property + " must decode to at least " + minBytes + " bytes");
         }
         return key;
     }
 
     @Bean
-    RefreshTokenStore refreshTokenStore(StorageAdapterRegistry storages, Clock clock,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+    RefreshTokenStore refreshTokenStore(StorageAdapterRegistry storages, Clock clock, JwtService tokens,
+        MfaSettings mfa, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         @Value("${jabiz.security.refresh-token-ttl:PT8H}") Duration ttl) {
-        return new RefreshTokenStore(() -> storages.getEngine(poolRef), ttl, clock);
+        // A session idle for longer than its access token plus the idle timeout cannot be refreshed (section 11).
+        return new RefreshTokenStore(() -> storages.getEngine(poolRef), ttl, tokens.ttl().plus(mfa.idleTimeout()),
+            clock);
+    }
+
+    @Bean
+    OidcStateStore oidcStateStore(StorageAdapterRegistry storages, Clock clock,
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return new OidcStateStore(() -> storages.getEngine(poolRef), clock);
+    }
+
+    /**
+     * Calls to the identity providers. A plain client: the sign-in around it is observed as {@code jabiz.auth.oidc},
+     * and the calls carry no trace headers to the provider.
+     */
+    @Bean
+    OidcClient oidcClient(Clock clock) {
+        return new OidcClient(clock);
+    }
+
+    @Bean
+    MfaSettings mfaSettings(@Value("${jabiz.security.mfa.issuer:jabiz}") String issuer,
+        @Value("${jabiz.security.mfa.challenge-ttl:PT5M}") Duration challengeTtl,
+        @Value("${jabiz.security.mfa.step-up-max-age:PT10M}") Duration stepUpMaxAge,
+        @Value("${jabiz.security.mfa.administration:true}") boolean administration,
+        @Value("${jabiz.security.session.idle-timeout:PT15M}") Duration idleTimeout) {
+        return new MfaSettings(issuer, challengeTtl, stepUpMaxAge, administration, idleTimeout);
+    }
+
+    /**
+     * Encrypts TOTP secrets (docs/design/10-security.md section 9). The key comes from {@code JABIZ_MFA_KEY}; without
+     * one the application does not start, except in the dev profile, which makes one up (enrolled users then cannot
+     * verify after a restart).
+     */
+    @Bean
+    MfaSecretCipher mfaSecretCipher(Environment environment, @Value("${jabiz.security.mfa.key:}") String key) {
+        return new MfaSecretCipher(key(key, "jabiz.security.mfa.key", "JABIZ_MFA_KEY",
+            MfaSecretCipher.MIN_KEY_BYTES, environment.acceptsProfiles(Profiles.of("dev"))));
     }
 
     @Bean

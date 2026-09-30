@@ -20,6 +20,8 @@ list:
   defaultSort: { field: orderedTime, asc: false }
   key: [orderNo]
 permissions: [commerce.order.read]
+report:
+  period: { from: orderedFrom }
 ---*/
 SELECT
     o.{{SalesOrder.orderNo}}      AS orderNo,

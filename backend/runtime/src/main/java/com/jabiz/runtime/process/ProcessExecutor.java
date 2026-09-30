@@ -163,6 +163,12 @@ public class ProcessExecutor {
                 .flatMap(started -> options.beforeSteps().apply(started)
                     .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)));
         });
+        if (options.dryRun()) {
+            // Rolled back by failing the transaction on purpose once everything has run; after-commit steps never run.
+            return engine.inTransaction(transaction.flatMap(result -> Mono.<ProcessResult<O>>error(
+                    new DryRunComplete(result))))
+                .onErrorResume(DryRunComplete.class, done -> Mono.just(cast(done.result)));
+        }
         return engine.inTransaction(transaction)
             .flatMap(result -> Mono.deferContextual(view -> {
                 startAfterCommit(engine, List.copyOf(afterCommit), view);
@@ -193,6 +199,40 @@ public class ProcessExecutor {
                         .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
                 })).map(ProcessResult::output);
             }));
+    }
+
+    /**
+     * Runs {@code work} - sub-processes of the running process, usually behind a savepoint - so that the after-commit
+     * steps they register are kept only if {@code work} completes: when it fails, and its writes are undone by a
+     * rollback to the savepoint, the after-commit steps of the sub-processes that had succeeded within it are dropped
+     * as well, instead of running once the transaction commits (an import's rows, docs/design/20-imports.md section 5).
+     */
+    public <T> Mono<T> keepingAfterCommitOnSuccess(Mono<T> work) {
+        return Mono.deferContextual(view -> {
+            Frame frame = view.getOrDefault(Frame.class, null);
+            if (frame == null) {
+                return Mono.error(new IllegalStateException("Only within a step of a running process"));
+            }
+            List<PendingStep<?>> local = Collections.synchronizedList(new ArrayList<>());
+            return work
+                .doOnSuccess(result -> frame.afterCommit().addAll(local))
+                .contextWrite(context -> context.put(Frame.class, new Frame(local)));
+        });
+    }
+
+    /** Carries a dry run's result out of the transaction it rolls back. */
+    private static final class DryRunComplete extends RuntimeException {
+        private final transient ProcessResult<?> result;
+
+        DryRunComplete(ProcessResult<?> result) {
+            super("dry run complete", null, false, false);
+            this.result = result;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <O> ProcessResult<O> cast(ProcessResult<?> result) {
+        return (ProcessResult<O>) result;
     }
 
     /** The storage of the operation tables, where every process transaction runs. */

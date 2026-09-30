@@ -43,7 +43,8 @@ public class FileEntities {
         eb.field(WIDTH, f -> f.physicalColumn("width").immutable(true).asNumeric(9, 0));
         eb.field(HEIGHT, f -> f.physicalColumn("height").immutable(true).asNumeric(9, 0));
         eb.field(VARIANTS, f -> f.physicalColumn("variants").immutable(true).asText(200));
-        eb.field(ORIGINAL_NAME, f -> f.physicalColumn("original_name").immutable(true).required(true).asText(255));
+        eb.field(ORIGINAL_NAME, f -> f.physicalColumn("original_name").immutable(true).required(true).asText(255)
+            .auditMasked());
         eb.field(UPLOADED_BY, f -> f.physicalColumn("uploaded_by").immutable(true).required(true).asText(64));
         eb.field(UPLOADED_TIME, f -> f.physicalColumn("uploaded_time").immutable(true)
             .asTemporal(TemporalRole.SYSTEM_RECORDED));

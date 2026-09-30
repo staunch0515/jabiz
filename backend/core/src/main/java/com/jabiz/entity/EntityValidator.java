@@ -109,6 +109,13 @@ public final class EntityValidator {
                     "Field '" + field.name() + "' does not fit numeric(" + n.precision() + "," + n.scale() + ")",
                     Map.of("precision", n.precision(), "scale", n.scale()));
             }
+            // The kind's scale, unless the field declares its own SCALE rule (at most as many digits, see
+            // EntityBuilder), which then reports the value under its own code.
+            case SemanticKind.Monetary m when !hasScaleRule(field) && scale((BigDecimal) value) > m.scale() -> {
+                return new Violation(field.name(), PlatformErrorCodes.MONETARY_SCALE,
+                    "Field '" + field.name() + "' allows at most " + m.scale() + " digits after the point",
+                    Map.of("scale", m.scale(), "currency", m.currency()));
+            }
             case SemanticKind.Custom c -> {
                 return CustomKinds.require(c.kindId()).validate(c.params(), value).stream().findFirst()
                     .map(kv -> new Violation(field.name(), kv.code(),
@@ -127,6 +134,15 @@ public final class EntityValidator {
                 return null;
             }
         }
+    }
+
+    private static boolean hasScaleRule(FieldDefinition field) {
+        return field.ruleSpecs().stream().anyMatch(spec -> RuleKinds.SCALE.equals(spec.kind()));
+    }
+
+    /** Digits after the point, trailing zeros ignored (12.3400 has two), as the SCALE rule counts them. */
+    private static int scale(BigDecimal value) {
+        return Math.max(value.stripTrailingZeros().scale(), 0);
     }
 
     private static boolean fits(BigDecimal value, SemanticKind.Numeric kind) {

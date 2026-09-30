@@ -67,7 +67,8 @@ public interface CustomKindSupport {
 | `None`（过渡） | 全部 |
 
 语义类型本身带来的输入约束由 `EntityValidator` 检查：`Text.maxLength`（按字符计）→ `TOO_LONG`；
-`Numeric(precision, scale)` → `NUMERIC_PRECISION`；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）；
+`Numeric(precision, scale)` → `NUMERIC_PRECISION`；`Monetary(currency, scale)` 的小数位（去掉末尾的 0 后计）→ `MONETARY_SCALE`
+（字段自己有 `SCALE` 规则时由该规则以自己的错误码报告，构建期要求它不比币种的小数位宽松；D22）；字典编码 → `NOT_IN_DICTIONARY`（见第 5 节）；
 `Custom` → `CustomKindSupport.validate`（例如 `jabiz.i18n-text` 的 `TOO_LONG`、`TRANSLATION_REQUIRED`，16 §1.2）。
 
 ## 2. 逻辑名与物理名分离
@@ -212,6 +213,15 @@ eb.unique("uk_user_name", "userName");            // 可多字段
 `f.processOnly()` 标记只由流程改变的字段（状态、审核意见等）：数据视图 API 与通用实体流程不接受写入（400 `PROCESS_ONLY_FIELD`），
 撤销不恢复它（422 `PROCESS_ONLY_FIELD`），但照常可读、可筛选、可排序；插入中缺省时由平台填值（状态字段取初始状态）。
 不能同时是 `sensitive`、`generated`。导出为 `processOnly: true`，JSON Schema 中 `readOnly: true`。详见 16 §5。
+
+### 6.2.1 不进审计的字段【D27】
+
+`f.auditMasked()`：值照常可读、可写，审计记录（21 §1）只记为 `***`。敏感字段本来就如此，无需再标。示例：`SysFile.originalName`。
+
+### 6.2.2 遮蔽字段【D28】
+
+`f.masked(权限, MaskStyle.LAST4 | ALL)`（只用于文本字段）：读接口、历史、审计、模板与导出中是遮蔽形式（`****4931`），持有权限者逐值显示明文并留记录，
+只有持有权限者可以写入、筛选与排序。不能同时是 `sensitive`、`generated`，不能是主键、显示字段、默认排序，也不能公开。导出为 `masked: {permission, style}`。详见 10 §13.1。
 
 ### 6.3 显示字段【D20】
 

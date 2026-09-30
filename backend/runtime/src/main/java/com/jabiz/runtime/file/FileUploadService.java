@@ -182,13 +182,7 @@ public class FileUploadService {
 
     /** The type recognised from the content; empty when it is none the platform knows. */
     private Mono<Optional<MediaTypes>> detect(Path path) {
-        return Mono.fromCallable(() -> {
-            byte[] head;
-            try (InputStream in = Files.newInputStream(path)) {
-                head = in.readNBytes(MediaTypeDetector.HEAD_BYTES);
-            }
-            return MediaTypeDetector.detect(head);
-        }).subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> MediaTypeDetector.detect(path)).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<Prepared> prepare(FilePolicy policy, MediaTypes type, Path upload) {

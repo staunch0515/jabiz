@@ -8,6 +8,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -17,11 +18,13 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -103,7 +106,9 @@ public final class CommerceProcesses {
 
     public record LineInput(@NotBlank String sku, @NotNull @Positive @Max(MAX_QUANTITY) Integer quantity) {}
 
-    public record PlaceInput(@NotBlank String orderNo, @NotBlank String customerCode, @NotBlank String warehouseCode,
+    /** @param orderNo the order's number; absent: the next number of {@link #ORDER_NUMBERS} (SO-2026-000001) */
+    public record PlaceInput(@Pattern(regexp = "\\S(.*\\S)?") String orderNo, @NotBlank String customerCode,
+        @NotBlank String warehouseCode,
         @NotEmpty @Size(max = MAX_ORDER_LINES) List<@Valid @NotNull LineInput> lines) {}
 
     public record LineOutput(int lineNo, String sku, int quantity, BigDecimal unitPrice, BigDecimal lineAmount) {}
@@ -130,6 +135,14 @@ public final class CommerceProcesses {
     static final String ORDER_KEY = "order";
     static final String LINES = "lines";
     static final String OUTPUT = "output";
+    static final String PRICED = "priced";
+    static final String ORDER_NO = "orderNo";
+
+    /**
+     * Numbers of orders placed without one (docs/design/18-numbering-approvals-tasks.md section 2): counted per year,
+     * SO-2026-000001, SO-2026-000002 …
+     */
+    public static final String ORDER_NUMBERS = "commerce.order";
     static final String POSTING_INPUT = "postingInput";
     static final String POSTING = "posting";
     static final String PRODUCT_ID = "productId";
@@ -196,7 +209,12 @@ public final class CommerceProcesses {
                     .limit(MAX_ORDER_LINES)
                     .build(), PRODUCTS))
                 .step("Load the stock", QueryEntities.of(STOCK_LEVEL_DATASET, CommerceProcesses::stockQuery, STOCK))
-                .compute("Price the order and reserve the stock", (metadata, ctx) -> place(ctx)));
+                .compute("Price the order and check the stock", (metadata, ctx) -> price(ctx))
+                // The number is drawn only for an order that will be placed: every drawn number is kept.
+                .step("Number the order", AssignNumber.when(
+                    ctx -> ctx.contains(PRICED) && input(ctx, PlaceInput.class).orderNo() == null,
+                    ORDER_NUMBERS, ctx -> String.valueOf(ctx.opTime().atZone(ZoneOffset.UTC).getYear()), ORDER_NO))
+                .compute("Record the order and reserve the stock", (metadata, ctx) -> place(ctx)));
 
     public static final ProcessDefinition<CancelInput, CancelOutput, ProcessContext> CANCEL_PROCESS =
         ProcessDefinition.define(ORDER_CANCEL, 1, CancelInput.class, CancelOutput.class, ProcessContext.class,
@@ -345,7 +363,11 @@ public final class CommerceProcesses {
             reserved));
     }
 
-    static void place(ProcessContext ctx) {
+    /** The order as priced and checked, before it is numbered and recorded. */
+    private record PricedOrder(EntityInstance warehouse, Map<String, EntityInstance> productsBySku,
+        Map<String, EntityInstance> stockByProduct, List<LineOutput> lines, BigDecimal total) {}
+
+    static void price(ProcessContext ctx) {
         PlaceInput input = input(ctx, PlaceInput.class);
         EntityInstance warehouse = activeWarehouse(ctx, input.warehouseCode());
         Map<String, EntityInstance> productsBySku = new HashMap<>();
@@ -393,9 +415,24 @@ public final class CommerceProcesses {
         if (ctx.hasViolations()) {
             return;
         }
+        ctx.put(PRICED, new PricedOrder(warehouse, productsBySku, stockByProduct, List.copyOf(lines), total));
+    }
+
+    static void place(ProcessContext ctx) {
+        if (!ctx.contains(PRICED)) {
+            return;
+        }
+        PlaceInput input = input(ctx, PlaceInput.class);
+        PricedOrder priced = ctx.get(PRICED, PricedOrder.class);
+        EntityInstance warehouse = priced.warehouse();
+        Map<String, EntityInstance> productsBySku = priced.productsBySku();
+        Map<String, EntityInstance> stockByProduct = priced.stockByProduct();
+        List<LineOutput> lines = priced.lines();
+        BigDecimal total = priced.total();
+        String orderNo = input.orderNo() != null ? input.orderNo() : ctx.get(ORDER_NO, String.class);
 
         Map<String, Object> order = new LinkedHashMap<>();
-        order.put("orderNo", input.orderNo());
+        order.put("orderNo", orderNo);
         order.put("customerCode", input.customerCode());
         order.put("warehouseId", warehouse.id());
         order.put("orderedTime", ctx.opTime());
@@ -416,7 +453,7 @@ public final class CommerceProcesses {
             BigDecimal reserved = stock.<BigDecimal>get("reserved").add(BigDecimal.valueOf(line.quantity()));
             ctx.changes().update(STOCK_LEVEL, stock.id(), stock.version(), Map.of("reserved", reserved));
         }
-        ctx.put(OUTPUT, new PlaceOutput(String.valueOf(orderId), input.orderNo(), total, List.copyOf(lines)));
+        ctx.put(OUTPUT, new PlaceOutput(String.valueOf(orderId), orderNo, total, List.copyOf(lines)));
     }
 
     static void cancel(ProcessContext ctx) {
@@ -457,10 +494,12 @@ public final class CommerceProcesses {
         ctx.changes().update(ORDER, order.id(), order.version(), shipped);
         BigDecimal total = order.get("totalAmount");
         if (total.signum() > 0) {
+            // The ledger links the sale to its order, the document it was posted from.
             ctx.put(POSTING_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), "Sale " + order.get("orderNo"),
                 String.valueOf(order.id()), List.of(
                     new LedgerProcesses.Line(RECEIVABLE_ACCOUNT, Direction.DEBIT, total),
-                    new LedgerProcesses.Line(SALES_REVENUE_ACCOUNT, Direction.CREDIT, total))));
+                    new LedgerProcesses.Line(SALES_REVENUE_ACCOUNT, Direction.CREDIT, total)),
+                ORDER, String.valueOf(order.id())));
         }
     }
 

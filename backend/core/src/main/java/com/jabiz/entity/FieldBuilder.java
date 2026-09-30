@@ -13,6 +13,8 @@ public final class FieldBuilder {
     private boolean generated = false;
     private boolean sensitive = false;
     private boolean processOnly = false;
+    private boolean auditMasked = false;
+    private MaskSpec masked;
     private SemanticKind kind = new SemanticKind.None();
     private final List<FieldRule> rules = new ArrayList<>();
     private final List<RuleSpec> ruleSpecs = new ArrayList<>();
@@ -34,6 +36,21 @@ public final class FieldBuilder {
      * (docs/design/16-content-authoring.md section 5).
      */
     public FieldBuilder processOnly() { this.processOnly = true; return this; }
+    /**
+     * Keeps the value out of the audit trail while it stays readable (an uploaded file's original name): the audit
+     * records that it changed, as {@code ***} (docs/design/21-audit-retention.md section 1.2).
+     */
+    public FieldBuilder auditMasked() { this.auditMasked = true; return this; }
+    /**
+     * Shows the field masked in {@code style} everywhere (read APIs, history, audit, templates and exports) and lets
+     * holders of {@code permission} ask for one value at a time in plain text, each time on the record
+     * (docs/design/10-security.md section 13.1, decision D28). Only holders may write it, filter or sort by it. The
+     * field must be text.
+     */
+    public FieldBuilder masked(String permission, MaskStyle style) {
+        this.masked = new MaskSpec(permission, style);
+        return this;
+    }
     public FieldBuilder asSemanticIdentity(String urn) { kind = new SemanticKind.SemanticIdentity(urn); return this; }
     public FieldBuilder asMonetary(String currency, int scale) { kind = new SemanticKind.Monetary(currency, scale); return this; }
     public FieldBuilder asTemporal(TemporalRole role) { kind = new SemanticKind.Temporal(role); return this; }
@@ -106,6 +123,16 @@ public final class FieldBuilder {
             throw new IllegalStateException("Field '" + name + "' cannot be process-only and "
                 + (sensitive ? "sensitive" : "generated"));
         }
+        if (masked != null) {
+            if (!(kind instanceof SemanticKind.Text)) {
+                throw new IllegalStateException("Masked field '" + name + "' must be a text field");
+            }
+            if (sensitive || generated) {
+                // A sensitive field is never shown at all; a generated one is a key, which must stay usable.
+                throw new IllegalStateException("Field '" + name + "' cannot be masked and "
+                    + (sensitive ? "sensitive" : "generated"));
+            }
+        }
         return new FieldDefinition(
             name,
             physicalColumn,
@@ -116,7 +143,9 @@ public final class FieldBuilder {
             List.copyOf(rules),
             List.copyOf(ruleSpecs),
             sensitive,
-            processOnly
+            processOnly,
+            auditMasked,
+            masked
         );
     }
 }

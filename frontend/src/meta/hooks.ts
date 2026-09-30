@@ -1,6 +1,8 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
+import type { components } from '../api/schema'
+import type { QueryEntry } from './reports'
 import type { DatasetEntry, DictItem, EntityMeta, Me, MenuItem, ProcessEntry } from './types'
 
 /**
@@ -26,6 +28,24 @@ export function useMenus() {
     queryKey: ['auth', 'menus', lang],
     queryFn: () => unwrap(api.GET('/api/auth/menus')) as Promise<MenuItem[]>,
     staleTime: 60_000,
+  })
+}
+
+/** An open task of the signed-in user (GET /api/tasks/mine). */
+export type MyTask = components['schemas']['Task']
+
+/**
+ * The open tasks of the signed-in user, their titles in the current language (docs/design/18-numbering-approvals-tasks.md
+ * section 5.3). Asked again every minute, so the count in the header follows new work.
+ */
+export function useMyTasks() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['tasks', 'mine', lang],
+    queryFn: () => unwrap(api.GET('/api/tasks/mine', { params: { query: { limit: 200 } } })) as Promise<
+      components['schemas']['MyTasks']
+    >,
+    refetchInterval: 60_000,
   })
 }
 
@@ -81,4 +101,24 @@ export function useDictionaries(entity: EntityMeta | undefined): Record<string, 
     if (items) byUrn[urn] = items
   })
   return byUrn
+}
+
+/** SQL templates the signed-in user may run, reports among them (GET /api/meta/queries, 19 section 3.2). */
+export function useQueryCatalog() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['meta', 'queries', lang],
+    queryFn: () => unwrap(api.GET('/api/meta/queries')) as Promise<QueryEntry[]>,
+    staleTime: 60_000,
+  })
+}
+
+/** The imports the user may run (docs/design/20-imports.md section 6). */
+export function useImportCatalog() {
+  const lang = useLanguage()
+  return useQuery({
+    queryKey: ['meta', 'imports', lang],
+    queryFn: () => unwrap(api.GET('/api/meta/imports')),
+    staleTime: 60_000,
+  })
 }

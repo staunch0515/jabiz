@@ -6,9 +6,12 @@ import com.jabiz.event.EventSubscription;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.retention.RetentionPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Period;
 
 /** Registers the freight billing sample ({@link FreightBilling}). */
 @Configuration
@@ -17,6 +20,13 @@ class FreightBillingConfig {
     @Bean
     EntityDefinition freightChargeEntityDefinition() {
         return FreightBilling.FREIGHT_CHARGE;
+    }
+
+    /** Charges are accounting records: kept seven years from the end of the fiscal year they shipped in. */
+    @Bean
+    RetentionPolicy freightChargeRetention() {
+        return RetentionPolicy.of(FreightBilling.CHARGE).keep(Period.ofYears(7)).from("shippedTime")
+            .afterFiscalYearEnd();
     }
 
     @Bean

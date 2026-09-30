@@ -56,6 +56,11 @@ jobs:
       - run: pnpm check:api
       - run: pnpm test
       - run: pnpm build
+      # The demo application's admin extension (docs/design/12-frontend.md section 9, decision D22): its types, lint
+      # rules (only @jabiz/admin) and tests, checked with this project's tools.
+      - run: pnpm ext:check
+        env:
+          JABIZ_ADMIN_EXTENSION: ../backend/app/admin-extension
       # The admin frontend under a sub-path (docs/design/16-content-authoring.md section 6): assets resolve below it.
       - name: Build under /admin/
         run: |
@@ -118,6 +123,11 @@ jobs:
         run: |
           # A throwaway signing key for this run only.
           export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
+          export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          # The shared administrator of the end-to-end tests has no second factor; step-up is tested with a
+          # process that always requires one (e2e/mfa.spec.ts).
+          export JABIZ_SECURITY_MFA_ADMINISTRATION=false
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true -jar app/build/libs/app-0.0.1-SNAPSHOT.jar \
             > ../app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done

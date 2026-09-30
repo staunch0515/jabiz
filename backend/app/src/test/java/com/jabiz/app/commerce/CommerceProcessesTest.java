@@ -65,6 +65,7 @@ class CommerceProcessesTest {
         ctx.put(CommerceProcesses.PRODUCTS, List.of(product(APPLE, "APPLE", 120, true), product(PEAR, "PEAR", 300, true)));
         ctx.put(CommerceProcesses.STOCK, List.of(stock(APPLE, 10, 1), stock(PEAR, 2, 0)));
 
+        CommerceProcesses.price(ctx);
         CommerceProcesses.place(ctx);
 
         assertThat(ctx.violations()).isEmpty();
@@ -90,6 +91,7 @@ class CommerceProcessesTest {
             product(PEAR, "PEAR", 300, false)));
         ctx.put(CommerceProcesses.STOCK, List.of(stock(APPLE, 10, 1)));
 
+        CommerceProcesses.price(ctx);
         CommerceProcesses.place(ctx);
 
         assertThat(ctx.violations()).extracting(Violation::ruleCode).containsExactly(
@@ -97,6 +99,8 @@ class CommerceProcessesTest {
             CommerceProcesses.PRODUCT_INACTIVE, CommerceProcesses.DUPLICATE_SKU);
         assertThat(ctx.violations().getFirst().params()).containsEntry("available", BigDecimal.valueOf(9));
         assertThat(ctx.changes().isEmpty()).isTrue();
+        // A refused order is not priced, so the numbering step draws no number for it.
+        assertThat(ctx.contains(CommerceProcesses.PRICED)).isFalse();
     }
 
     @Test
@@ -106,6 +110,7 @@ class CommerceProcessesTest {
         ctx.put(CommerceProcesses.PRODUCTS, List.of(product(APPLE, "APPLE", 120, true)));
         ctx.put(CommerceProcesses.STOCK, List.of());
 
+        CommerceProcesses.price(ctx);
         CommerceProcesses.place(ctx);
 
         assertThat(ctx.violations()).extracting(Violation::ruleCode)

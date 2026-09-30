@@ -13,7 +13,13 @@ public enum LoginOutcome {
     /** Correct password, but the user holds no role that is in effect. */
     NO_ROLE,
     /** Not an attempt: an administrator lifted the lock. */
-    UNLOCKED;
+    UNLOCKED,
+    /** Correct password; the second factor comes next (docs/design/10-security.md section 9). */
+    MFA_REQUIRED,
+    /** Correct password, but a role requires a second factor the user has not set up: enrolment comes next. */
+    MFA_ENROLLMENT_REQUIRED,
+    /** Wrong second factor; counts towards the lock like a wrong password. */
+    MFA_FAILED;
 
     /** Codes of the login outcome dictionary. */
     public static String[] codes() {

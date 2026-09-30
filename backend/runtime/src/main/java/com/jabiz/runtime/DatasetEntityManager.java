@@ -1,6 +1,7 @@
 package com.jabiz.runtime;
 
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.DatasetScope;
 import com.jabiz.dataset.DatasetPolicy;
 import com.jabiz.dictionary.DictionaryLookup;
 import com.jabiz.entity.EntityDefinition;
@@ -28,6 +29,8 @@ import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.entity.FieldWriteCheck;
 import com.jabiz.runtime.event.Outbox;
+import com.jabiz.runtime.audit.AuditRecorder;
+import com.jabiz.runtime.retention.DeletionGuard;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
@@ -93,6 +96,8 @@ public class DatasetEntityManager {
     private final Outbox outbox;
     private final PlatformObservations observations;
     private final ObjectProvider<FieldWriteCheck> writeChecks;
+    private final AuditRecorder audit;
+    private final DeletionGuard deletions;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -107,8 +112,12 @@ public class DatasetEntityManager {
         JsonMapper json,
         Outbox outbox,
         PlatformObservations observations,
-        ObjectProvider<FieldWriteCheck> writeChecks
+        ObjectProvider<FieldWriteCheck> writeChecks,
+        AuditRecorder audit,
+        DeletionGuard deletions
     ) {
+        this.audit = Objects.requireNonNull(audit, "AuditRecorder cannot be null");
+        this.deletions = Objects.requireNonNull(deletions, "DeletionGuard cannot be null");
         this.writeChecks = Objects.requireNonNull(writeChecks, "FieldWriteCheck provider cannot be null");
         this.observations = Objects.requireNonNull(observations, "PlatformObservations cannot be null");
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
@@ -194,7 +203,7 @@ public class DatasetEntityManager {
                     return apply;
                 }
                 if (ordered.stream().noneMatch(this::isTemporal)) {
-                    return apply;
+                    return apply.contextWrite(view -> AuditRecorder.withReason(view, reason));
                 }
                 return Operations.requested().flatMap(requested -> {
                     OperationRequest operation = requested
@@ -338,6 +347,8 @@ public class DatasetEntityManager {
                 attrs.get(def.primaryKey), def.name, INITIAL_VERSION, state, snapshot);
             return verifyReferences(def, attrs, attrs.keySet())
                 .then(Mono.defer(() -> engine.insert(table, row)))
+                .then(Mono.defer(() -> audit.record(engine, def, created.id(), EntityAction.INSERT.name(),
+                    (long) INITIAL_VERSION, null, null, snapshot)))
                 .then(Mono.defer(() -> outbox.entityChanged(engine, def, created.id(), EntityAction.INSERT.name(),
                     INITIAL_VERSION, null, attrs.keySet().stream().filter(def.changeableFields()::contains).toList())))
                 .thenReturn(created);
@@ -430,12 +441,15 @@ public class DatasetEntityManager {
         EntityInstance updated = new EntityInstance(
             current.id(), def.name, current.version() + 1, nextState, merged);
 
-        return verifyReferences(def, changes, changes.keySet())
+        return verifyReferences(def, current.id(), changes, changes.keySet())
             .then(Mono.defer(() -> engine
                 .casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(), versionColumn, physicalUpdates)
                 .flatMap(applied -> applied
-                    ? outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(),
-                        null, changes.keySet()).thenReturn(updated)
+                    ? audit.record(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(), null,
+                            current.attributes(), merged)
+                        .then(outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(),
+                            updated.version(), null, changes.keySet()))
+                        .thenReturn(updated)
                     : Mono.<EntityInstance>error(conflict(def, instance.id())))));
     }
 
@@ -505,18 +519,22 @@ public class DatasetEntityManager {
                             "Optimistic lock conflict on deleting %s [ID: %s]: expected version [%d], stored version [%d]",
                             def.name, instance.id(), instance.version(), current.version())));
                     }
-                    return ensureNotReferenced(def, current).then(Mono.defer(() -> {
-                        Mono<Boolean> removed = usesSoftDelete(dataset, def)
-                            ? engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
-                                versionColumn, softDeleteAssignments(def, dataset.policy()))
-                            : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
-                        // A soft delete is an update and raises the version; a hard delete leaves the last one.
-                        long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
-                        return removed.flatMap(done -> done
-                            ? outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
-                                versionAfter, null, def.changeableFields())
-                            : Mono.<Void>error(conflict(def, instance.id())));
-                    }));
+                    return ensureNotReferenced(def, current)
+                        .then(ensureDeletable(engine, def, current))
+                        .then(Mono.defer(() -> {
+                            Mono<Boolean> removed = usesSoftDelete(dataset, def)
+                                ? engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
+                                    versionColumn, softDeleteAssignments(def, dataset.policy()))
+                                : engine.delete(table, def.primaryKeyColumn(), current.id(), versionColumn, current.version());
+                            // A soft delete is an update and raises the version; a hard delete leaves the last one.
+                            long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
+                            return removed.flatMap(done -> done
+                                ? audit.record(engine, def, current.id(), EntityAction.DELETE.name(), versionAfter, null,
+                                        current.attributes(), null)
+                                    .then(outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
+                                        versionAfter, null, def.changeableFields()))
+                                : Mono.<Void>error(conflict(def, instance.id())));
+                        }));
                 });
         });
     }
@@ -635,6 +653,14 @@ public class DatasetEntityManager {
             return true;
         }
         for (Map.Entry<String, Object> filter : scope.entrySet()) {
+            if (filter.getValue() instanceof DatasetScope.PeriodCondition period) {
+                // A period through a reference cannot be judged from the values alone: refused (default deny).
+                if (period.referencedField() != null
+                    || !period.period().contains(instant(values.get(filter.getKey())))) {
+                    return false;
+                }
+                continue;
+            }
             Object expected = FieldValueCoercer.coerce(def.field(filter.getKey()), filter.getValue(), false);
             if (!sameValue(expected, values.get(filter.getKey()))) {
                 return false;
@@ -734,6 +760,13 @@ public class DatasetEntityManager {
     Mono<Void> verifyReferences(
         EntityDefinition def, Map<String, Object> values, Collection<String> changedFields
     ) {
+        return verifyReferences(def, values.get(def.primaryKey), values, changedFields);
+    }
+
+    /** As {@link #verifyReferences(EntityDefinition, Map, Collection)} for the instance {@code id}. */
+    Mono<Void> verifyReferences(
+        EntityDefinition def, Object id, Map<String, Object> values, Collection<String> changedFields
+    ) {
         return Flux.fromIterable(def.references)
             .filter(ref -> changedFields.contains(ref.sourceField()) && values.get(ref.sourceField()) != null)
             .concatMap(ref -> {
@@ -750,7 +783,7 @@ public class DatasetEntityManager {
                 ? Mono.<Void>empty()
                 : Mono.<Void>error(new ValidationException(violations)))
             .then(Flux.fromStream(writeChecks::orderedStream)
-                .concatMap(check -> check.verify(def, values, changedFields))
+                .concatMap(check -> check.verify(def, id, values, changedFields))
                 .then());
     }
 
@@ -763,6 +796,14 @@ public class DatasetEntityManager {
             return findInScope(engine, targetDataset, targetDataset.scope().resolve(request), target, targetId)
                 .hasElement();
         });
+    }
+
+    /**
+     * Rejects the deletion of an instance that must be kept: within its retention period or under a legal hold
+     * (docs/design/21-audit-retention.md section 3.2).
+     */
+    Mono<Void> ensureDeletable(StorageEngine engine, EntityDefinition def, EntityInstance current) {
+        return deletions.check(engine, def, current.id(), current.attributes());
     }
 
     /** Rejects the deletion of an instance that other entities still refer to. */
@@ -899,6 +940,10 @@ public class DatasetEntityManager {
         }
         for (Map.Entry<String, Object> filter : scope.entrySet()) {
             FieldDefinition field = def.field(filter.getKey());
+            if (filter.getValue() instanceof DatasetScope.PeriodCondition period) {
+                checkPeriod(dataset, def, field, period, attrs, fillMissing, violations);
+                continue;
+            }
             Object expected = FieldValueCoercer.coerce(field, filter.getValue(), false);
             if (attrs.containsKey(filter.getKey())) {
                 if (!sameValue(expected, attrs.get(filter.getKey()))) {
@@ -911,6 +956,36 @@ public class DatasetEntityManager {
                 attrs.put(filter.getKey(), expected);
             }
         }
+    }
+
+    /**
+     * A write within a data period (docs/design/10-security.md section 13.2): the time it sets must lie within the
+     * actor's period, and an insert must set one (a row without a time would be hidden from the actor who wrote it).
+     * A period through a reference is checked where the time is, on the referenced entity's own dataset.
+     */
+    private static void checkPeriod(DatasetDefinition dataset, EntityDefinition def, FieldDefinition field,
+        DatasetScope.PeriodCondition period, Map<String, Object> attrs, boolean insert, List<Violation> violations) {
+        if (period.referencedField() != null || (!insert && !attrs.containsKey(field.name()))) {
+            return;
+        }
+        Instant time;
+        try {
+            time = instant(FieldValueCoercer.coerce(field, attrs.get(field.name()), false));
+        } catch (RuntimeException e) {
+            return;  // not a valid time: the field's own validation reports it
+        }
+        if (!period.period().contains(time)) {
+            String expected = "[" + (period.period().from() == null ? "" : period.period().from()) + ", "
+                + (period.period().to() == null ? "" : period.period().to()) + ")";
+            violations.add(new Violation(field.name(), PlatformErrorCodes.OUT_OF_SCOPE, String.format(
+                "Write rejected: field [%s] of %s must lie within the data period [%s, %s) in dataset %s",
+                field.name(), def.name, period.period().from(), period.period().to(), dataset.resourceId()),
+                Map.of("expected", expected)));
+        }
+    }
+
+    private static Instant instant(Object value) {
+        return value instanceof Instant instant ? instant : null;
     }
 
     /**
@@ -929,7 +1004,8 @@ public class DatasetEntityManager {
                 if (state != null) {
                     raw.put(field, state);
                 }
-            } else if (dataset.isTarget(def.name) && scope.containsKey(field)) {
+            } else if (dataset.isTarget(def.name) && scope.containsKey(field)
+                && !(scope.get(field) instanceof DatasetScope.PeriodCondition)) {
                 raw.put(field, scope.get(field));
             }
         }

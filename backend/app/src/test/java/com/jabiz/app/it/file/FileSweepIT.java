@@ -6,6 +6,7 @@ import com.jabiz.runtime.file.FileKeys;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.FileSamples;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,19 @@ class FileSweepIT extends FileItSupport {
     @BeforeEach
     void releaseTheLock() {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+    }
+
+    /**
+     * The storage half of a sweep runs after its commit, on its own, and removes stray objects older than its own
+     * operation time. A test whose clock ran ahead must not leave one running into the next test, where it would take
+     * that test's fresh strays for old ones: wait until every sweep's after-commit step has succeeded (a failed attempt
+     * is recorded too, and is retried later).
+     */
+    @AfterEach
+    void awaitTheStorageSweeps() {
+        await().atMost(Duration.ofSeconds(30)).until(() -> query("SELECT 1 FROM op_process p "
+            + "WHERE p.process_name = 'FILE_PURGE_ORPHANS' AND NOT EXISTS (SELECT 1 FROM op_process_after_commit a "
+            + "WHERE a.process_seq_id = p.process_seq_id AND a.succeeded)").isEmpty());
     }
 
     /** A UUIDv7 created at {@code time}, as the platform's generator would. */
@@ -116,5 +130,40 @@ class FileSweepIT extends FileItSupport {
         assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
 
         assertThat(hasRow(orphan)).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void orphansUnderALegalHoldAreKeptAndReported() {
+        String held = uploadContract();
+        String free = uploadContract();
+        String keeper = bearer("it-counsel", "legal.hold.write");
+        Map<String, Object> placed = post("/api/processes/LEGAL_HOLD_PLACE/latest", keeper, Map.of("name", "litigation",
+            "reason", "court order", "entityType", "SysFile", "ids", List.of(held)))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        String holdId = (String) ((Map<String, Object>) placed.get("output")).get("holdId");
+
+        // Minutes past the other tests' runs: a job runs once per scheduled time.
+        clock.advance(Duration.ofHours(25).plusMinutes(7));
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(hasRow(held)).isTrue();
+        assertThat(hasObjects(held)).isTrue();
+        assertThat(hasRow(free)).isFalse();
+        // The sweep says what it kept.
+        assertThat(query("SELECT r.output::text AS output FROM op_process_result r JOIN op_process p"
+            + " ON p.process_seq_id = r.process_seq_id WHERE p.process_name = 'FILE_PURGE_ORPHANS'"
+            + " ORDER BY p.process_seq_id DESC LIMIT 1").getFirst().get("output").toString()).contains(held);
+
+        // A single deletion is refused outright.
+        post("/api/processes/FILE_DELETE/latest", bearer("it-deleter", "file.delete"),
+            Map.of("fileId", held)).expectStatus().isEqualTo(422);
+
+        // Tokens are short-lived: a new one after the day that passed.
+        post("/api/processes/LEGAL_HOLD_RELEASE/latest", bearer("it-counsel", "legal.hold.write"),
+            Map.of("holdId", holdId, "reason", "settled")).expectStatus().isOk();
+        clock.advance(Duration.ofHours(1));
+        releaseTheLock();
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(hasRow(held)).isFalse();
     }
 }

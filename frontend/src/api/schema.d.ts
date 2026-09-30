@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/approvals/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit/operations": {
         parameters: {
             query?: never;
@@ -14,6 +30,102 @@ export interface paths {
         get: operations["operations"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit/records/{recordNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit/reveals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reveals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/challenge/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enrollUnderChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/challenge/enroll/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmUnderChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/challenge/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -84,6 +196,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enroll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["callback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -100,6 +308,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/step-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stepUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{resourceId}/commit": {
         parameters: {
             query?: never;
@@ -109,7 +333,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["commit"];
+        post: operations["commit_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -196,6 +420,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasets/{resourceId}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dictionaries/{urn}": {
         parameters: {
             query?: never;
@@ -242,6 +482,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update"];
+        trace?: never;
+    };
+    "/api/exports/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["export_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/files": {
@@ -308,6 +564,198 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/imports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["run_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/runs/{runId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["inspect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mappings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/mappings/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["saveMapping"];
+        post?: never;
+        delete: operations["removeMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/imports/{importId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/checks/{checkNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["head"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrity/seals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["seals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -315,7 +763,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["list_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -356,6 +804,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meta/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meta/processes": {
         parameters: {
             query?: never;
@@ -364,6 +828,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["processes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meta/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["queries"];
         put?: never;
         post?: never;
         delete?: never;
@@ -452,6 +932,182 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/queries/{queryId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/runs/{runId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["changes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/access-reviews/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["conflicts_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sod/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["conflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -460,6 +1116,49 @@ export interface components {
             entity?: string;
             input?: string;
             when?: components["schemas"]["WhenEntry"];
+        };
+        AuditFieldChange: {
+            after?: unknown;
+            before?: unknown;
+        };
+        AuditRecordEntry: {
+            action?: string;
+            actorId?: string;
+            changes?: {
+                [key: string]: components["schemas"]["AuditFieldChange"];
+            };
+            /** Format: date-time */
+            effectStartTime?: string;
+            entityId?: string;
+            entityType?: string;
+            processName?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            reason?: string;
+            /** Format: int64 */
+            recordNo?: number;
+            /** Format: date-time */
+            recordedTime?: string;
+            /** Format: int64 */
+            versionNo?: number;
+        };
+        AuditRecordPage: {
+            items?: components["schemas"]["AuditRecordEntry"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int32 */
+            offset?: number;
+            /** Format: int64 */
+            total?: number;
+        };
+        CallbackRequest: {
+            binder?: string;
+            code?: string;
+            state?: string;
+        };
+        ChallengeRequest: {
+            challenge?: string;
+            code?: string;
         };
         Change: {
             /** @enum {string} */
@@ -473,9 +1172,33 @@ export interface components {
             /** Format: int64 */
             version?: number;
         };
+        Changes: {
+            hash?: string;
+            items?: components["schemas"]["AuditRecordEntry"][];
+        };
+        CodeRequest: {
+            code?: string;
+        };
+        ColumnEntry: {
+            label?: string;
+            name?: string;
+        };
         CommitRequest: {
             changes?: components["schemas"]["Change"][];
             reason?: string;
+        };
+        Conflict: {
+            left?: string[];
+            right?: string[];
+            roles?: string[];
+            ruleCode?: string;
+            userId?: string;
+            userName?: string;
+            wildcard?: boolean;
+        };
+        Conflicts: {
+            hash?: string;
+            items?: components["schemas"]["Conflict"][];
         };
         DataBuffer: unknown;
         DatasetEntry: {
@@ -493,6 +1216,7 @@ export interface components {
             readOnly?: boolean;
             softDelete?: boolean;
             temporal?: boolean;
+            writeRequiresMfa?: boolean;
         };
         DictItem: {
             code?: string;
@@ -500,6 +1224,18 @@ export interface components {
             label?: string;
             /** Format: int32 */
             sortOrder?: number;
+        };
+        DraftRule: {
+            condition?: unknown;
+            enabled?: boolean;
+            levels?: unknown;
+            /** Format: int32 */
+            priority?: number;
+            ruleCode?: string;
+        };
+        Enrollment: {
+            otpauthUri?: string;
+            secret?: string;
         };
         EntityInstance: {
             attributes?: {
@@ -515,6 +1251,18 @@ export interface components {
             output?: unknown;
             /** Format: int64 */
             processSeqId?: number;
+        };
+        ExportRequest: {
+            /** Format: date-time */
+            asOf?: string;
+            datasets?: string[];
+            /** Format: date-time */
+            knownAt?: string;
+            reports?: boolean;
+            /** Format: date-time */
+            reportsFrom?: string;
+            /** Format: date-time */
+            reportsTo?: string;
         };
         FileInfo: {
             contentType?: string;
@@ -554,6 +1302,264 @@ export interface components {
             value?: unknown;
             values?: unknown[];
         };
+        ImportCommitRequest: {
+            fileId?: string;
+            mapping?: components["schemas"]["ImportMapping"];
+            notes?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        ImportEntry: {
+            accept?: string[];
+            extensions?: string[];
+            externalRef?: boolean;
+            fields?: components["schemas"]["ImportFieldEntry"][];
+            filePolicy?: string;
+            format?: components["schemas"]["ImportFormatEntry"];
+            id?: string;
+            mappings?: boolean;
+            onDuplicate?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            title?: string;
+            totals?: string[];
+            /** Format: int32 */
+            version?: number;
+        };
+        ImportFieldEntry: {
+            columns?: string[];
+            kind?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+            name?: string;
+            required?: boolean;
+        };
+        ImportFormatEntry: {
+            adjustable?: boolean;
+            charset?: string;
+            charsets?: string[];
+            delimiter?: string;
+            header?: boolean;
+            /** Format: int32 */
+            headerRow?: number;
+            kind?: string;
+            sheet?: string;
+            /** Format: int32 */
+            skipLines?: number;
+        };
+        ImportInspectRequest: {
+            fileId?: string;
+            options?: components["schemas"]["Options"];
+        };
+        ImportInspectResponse: {
+            columns?: string[];
+            header?: {
+                [key: string]: string;
+            };
+            issues?: components["schemas"]["ImportIssueEntry"][];
+            /** Format: int32 */
+            records?: number;
+            sample?: components["schemas"]["ImportSampleEntry"][];
+            suggested?: {
+                [key: string]: string;
+            };
+        };
+        ImportIssueEntry: {
+            code?: string;
+            column?: string;
+            field?: string;
+            location?: string;
+            message?: string;
+            /** Format: int32 */
+            row?: number;
+        };
+        ImportMapping: {
+            columns?: {
+                [key: string]: string;
+            };
+            constants?: {
+                [key: string]: string;
+            };
+            options?: components["schemas"]["Options"];
+        };
+        ImportMappingRequest: {
+            mapping?: components["schemas"]["ImportMapping"];
+        };
+        ImportPreviewRequest: {
+            fileId?: string;
+            mapping?: components["schemas"]["ImportMapping"];
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        ImportReportResponse: {
+            accepted?: boolean;
+            columns?: {
+                [key: string]: string;
+            };
+            committed?: boolean;
+            constants?: {
+                [key: string]: string;
+            };
+            /** Format: int32 */
+            duplicates?: number;
+            fileId?: string;
+            importId?: string;
+            /** Format: int32 */
+            importVersion?: number;
+            issues?: components["schemas"]["ImportIssueEntry"][];
+            /** Format: int32 */
+            processed?: number;
+            /** Format: int32 */
+            records?: number;
+            results?: components["schemas"]["ImportRowEntry"][];
+            /** Format: int32 */
+            rows?: number;
+            runId?: string;
+            sha256?: string;
+            totals?: {
+                [key: string]: number;
+            };
+            /** Format: int32 */
+            units?: number;
+        };
+        ImportRowEntry: {
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            status?: string;
+            values?: {
+                [key: string]: unknown;
+            };
+        };
+        ImportRunDetail: {
+            columns?: {
+                [key: string]: string;
+            };
+            issues?: components["schemas"]["ImportIssueEntry"][];
+            mapping?: components["schemas"]["ImportMapping"];
+            params?: {
+                [key: string]: unknown;
+            };
+            run?: components["schemas"]["ImportRunSummary"];
+        };
+        ImportRunSummary: {
+            /** Format: int32 */
+            duplicates?: number;
+            fileId?: string;
+            importId?: string;
+            /** Format: int32 */
+            importVersion?: number;
+            importedBy?: string;
+            /** Format: date-time */
+            importedTime?: string;
+            /** Format: int32 */
+            issueCount?: number;
+            notes?: string;
+            outcome?: string;
+            /** Format: int32 */
+            processed?: number;
+            /** Format: int32 */
+            records?: number;
+            /** Format: int32 */
+            rows?: number;
+            runId?: string;
+            sha256?: string;
+            title?: string;
+            totals?: {
+                [key: string]: number;
+            };
+            /** Format: int32 */
+            units?: number;
+        };
+        ImportSampleEntry: {
+            cells?: {
+                [key: string]: string;
+            };
+            location?: string;
+            /** Format: int32 */
+            number?: number;
+            problem?: string;
+        };
+        IntegrityCheckDetail: {
+            check?: components["schemas"]["IntegrityCheckSummary"];
+            problems?: components["schemas"]["IntegrityProblem"][];
+        };
+        IntegrityCheckPage: {
+            items?: components["schemas"]["IntegrityCheckSummary"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int64 */
+            offset?: number;
+        };
+        IntegrityCheckSummary: {
+            actorId?: string;
+            /** Format: int64 */
+            checkNo?: number;
+            /** Format: date-time */
+            checkedTime?: string;
+            /** Format: int64 */
+            fromSeal?: number;
+            intact?: boolean;
+            keyId?: string;
+            /** Format: int32 */
+            problemCount?: number;
+            /** Format: int64 */
+            processSeqId?: number;
+            /** Format: int64 */
+            rowCount?: number;
+            /** Format: int32 */
+            sealCount?: number;
+            /** Format: int64 */
+            toSeal?: number;
+            /** Format: int64 */
+            unsealedCount?: number;
+        };
+        IntegrityHead: {
+            currentKeyId?: string;
+            keyId?: string;
+            /** Format: int32 */
+            rowCount?: number;
+            sealHash?: string;
+            /** Format: int64 */
+            sealNo?: number;
+            /** Format: date-time */
+            sealedTime?: string;
+        };
+        IntegrityProblem: {
+            detail?: string;
+            key?: string;
+            /** @enum {string} */
+            kind?: "MODIFIED" | "MISSING" | "CHAIN_BROKEN" | "SEAL_ALTERED" | "OTHER_KEY" | "UNPROTECTED";
+            /** Format: int64 */
+            sealNo?: number;
+            table?: string;
+        };
+        IntegritySeal: {
+            columnsHash?: string;
+            keyId?: string;
+            merkleRoot?: string;
+            prevHash?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            /** Format: int32 */
+            rowCount?: number;
+            sealHash?: string;
+            /** Format: int64 */
+            sealNo?: number;
+            /** Format: date-time */
+            sealedTime?: string;
+        };
+        IntegritySealPage: {
+            items?: components["schemas"]["IntegritySeal"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int64 */
+            offset?: number;
+        };
         LabelsRequest: {
             ids?: unknown[];
         };
@@ -565,7 +1571,20 @@ export interface components {
             id?: unknown;
             label?: unknown;
         };
+        MappingOutput: {
+            importId?: string;
+            mappingId?: string;
+            name?: string;
+        };
         Me: {
+            /** Format: date-time */
+            dataFrom?: string;
+            /** Format: date-time */
+            dataTo?: string;
+            /** Format: int64 */
+            idleTimeoutSeconds?: number;
+            /** Format: date-time */
+            mfaAt?: string;
             permissions?: string[];
             roles?: string[];
             tenantId?: string;
@@ -578,8 +1597,50 @@ export interface components {
             label?: string;
             path?: string;
         };
+        MfaStatus: {
+            enrolled?: boolean;
+            pending?: boolean;
+            /** Format: int32 */
+            recoveryCodesLeft?: number;
+        };
+        MyTasks: {
+            tasks?: components["schemas"]["Task"][];
+            /** Format: int64 */
+            total?: number;
+        };
+        Options: {
+            charset?: string;
+            delimiter?: string;
+            header?: boolean;
+            /** Format: int32 */
+            headerRow?: number;
+            sheet?: string;
+            /** Format: int32 */
+            skipLines?: number;
+        };
+        ParameterEntry: {
+            label?: string;
+            value?: string;
+        };
         PartEvent: {
             last?: boolean;
+        };
+        PeriodEntry: {
+            from?: string;
+            to?: string;
+        };
+        PreviewRequest: {
+            draft?: components["schemas"]["DraftRule"];
+            /** Format: int32 */
+            limit?: number;
+            ruleId?: string;
+            subject?: string;
+        };
+        PreviewResponse: {
+            changed?: components["schemas"]["Change"][];
+            /** Format: int32 */
+            evaluated?: number;
+            truncated?: boolean;
         };
         ProcessEntry: {
             actsOn?: components["schemas"]["ActsOnEntry"];
@@ -591,8 +1652,29 @@ export interface components {
             label?: string;
             latest?: boolean;
             name?: string;
+            requiresMfa?: boolean;
             /** Format: int32 */
             version?: number;
+        };
+        ProviderEntry: {
+            id?: string;
+            label?: string;
+        };
+        QueryEntry: {
+            defaultSort?: components["schemas"]["SortEntry"];
+            description?: string;
+            filters?: string[];
+            id?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            report?: components["schemas"]["ReportEntry"];
+            results?: components["schemas"]["ResultEntry"][];
+            sorts?: string[];
+            timeSlice?: components["schemas"]["TimeSliceEntry"];
+            timeTravel?: boolean;
+            title?: string;
+            version?: string;
         };
         QueryRequest: {
             /** Format: date-time */
@@ -615,15 +1697,118 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        RecoveryCodeList: {
+            recoveryCodes?: string[];
+        };
         RefreshRequest: {
             refreshToken?: string;
+        };
+        ReportEntry: {
+            landscape?: boolean;
+            period?: components["schemas"]["PeriodEntry"];
+        };
+        ResultEntry: {
+            kind?: {
+                [key: string]: unknown;
+            };
+            label?: string;
+            name?: string;
+            operators?: string[];
+        };
+        RetentionPolicyStatus: {
+            entity?: string;
+            /** Format: int64 */
+            entries?: number;
+            /** Format: int64 */
+            expired?: number;
+            /** Format: date */
+            expiredThrough?: string;
+            from?: string;
+            fromFiscalYearEnd?: boolean;
+            /** Format: int64 */
+            held?: number;
+            keep?: string;
+        };
+        RetentionReportResult: {
+            /** Format: int32 */
+            fiscalYearEnd?: number;
+            policies?: components["schemas"]["RetentionPolicyStatus"][];
+            /** Format: date */
+            today?: string;
+        };
+        RevealEntry: {
+            actorId?: string;
+            entity?: string;
+            entityId?: string;
+            fields?: string[];
+            kind?: string;
+            resource?: string;
+            /** Format: uuid */
+            revealId?: string;
+            /** Format: date-time */
+            revealedAt?: string;
+            /** Format: int64 */
+            rowCount?: number;
+        };
+        RevealPage: {
+            items?: components["schemas"]["RevealEntry"][];
+            /** Format: int32 */
+            limit?: number;
+            /** Format: int32 */
+            offset?: number;
+            /** Format: int64 */
+            total?: number;
+        };
+        RevealRequest: {
+            field?: string;
+            id?: unknown;
+        };
+        RevealResponse: {
+            value?: unknown;
         };
         RevertRequest: {
             reason?: string;
         };
+        Review: {
+            /** Format: int32 */
+            changesCount?: number;
+            changesHash?: string;
+            comment?: string;
+            conflicts?: components["schemas"]["Conflict"][];
+            conflictsHash?: string;
+            /** Format: date-time */
+            periodFrom?: string;
+            /** Format: date-time */
+            periodTo?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            reportHash?: string;
+            /** Format: uuid */
+            reportRunId?: string;
+            /** Format: uuid */
+            reviewId?: string;
+            reviewer?: string;
+            /** Format: date-time */
+            signedAt?: string;
+        };
+        RunDetail: {
+            columns?: components["schemas"]["ColumnEntry"][];
+            company?: string;
+            landscape?: boolean;
+            language?: string;
+            parameters?: components["schemas"]["ParameterEntry"][];
+            params?: {
+                [key: string]: unknown;
+            };
+            run?: components["schemas"]["RunSummary"];
+        };
         RunRequest: {
+            /** Format: date-time */
+            asOf?: string;
             count?: boolean;
             filters?: components["schemas"]["Filter"][];
+            /** Format: date-time */
+            knownAt?: string;
             /** Format: int32 */
             limit?: number;
             /** Format: int32 */
@@ -644,19 +1829,82 @@ export interface components {
             /** Format: int64 */
             total?: number;
         };
+        RunSummary: {
+            /** Format: date-time */
+            asOf?: string;
+            contentHash?: string;
+            issuedBy?: string;
+            /** Format: date-time */
+            issuedTime?: string;
+            /** Format: date-time */
+            knownAt?: string;
+            period?: string;
+            recomputable?: boolean;
+            /** Format: int32 */
+            rowCount?: number;
+            runId?: string;
+            supersededBy?: string;
+            templateId?: string;
+            templateVersion?: string;
+            title?: string;
+        };
+        SavedMapping: {
+            mapping?: components["schemas"]["ImportMapping"];
+            name?: string;
+        };
         Sort: {
             asc?: boolean;
             field?: string;
+        };
+        SortEntry: {
+            asc?: boolean;
+            field?: string;
+        };
+        StartResponse: {
+            authorizationUrl?: string;
+            binder?: string;
+        };
+        StepUpResponse: {
+            accessToken?: string;
+            /** Format: date-time */
+            accessTokenExpiresAt?: string;
+            /** Format: date-time */
+            mfaAt?: string;
+        };
+        Task: {
+            /** Format: date-time */
+            createdTime?: string;
+            /** Format: date-time */
+            dueTime?: string;
+            link?: string;
+            subjectEntity?: string;
+            subjectId?: string;
+            taskId?: string;
+            title?: string;
+            titleKey?: string;
+            titleParams?: {
+                [key: string]: string;
+            };
+            type?: string;
+        };
+        TimeSliceEntry: {
+            asOf?: string;
+            knownAt?: string;
         };
         TokenResponse: {
             accessToken?: string;
             /** Format: date-time */
             accessTokenExpiresAt?: string;
+            challenge?: string;
+            /** Format: date-time */
+            challengeExpiresAt?: string;
             permissions?: string[];
             refreshToken?: string;
             /** Format: date-time */
             refreshTokenExpiresAt?: string;
             roles?: string[];
+            /** @enum {string} */
+            status?: "SIGNED_IN" | "MFA_REQUIRED" | "MFA_ENROLLMENT_REQUIRED";
             tokenType?: string;
             userId?: string;
         };
@@ -666,6 +1914,13 @@ export interface components {
             };
             /** Format: int64 */
             version?: number;
+        };
+        Verification: {
+            contentHash?: string;
+            currentHash?: string;
+            currentVersion?: string;
+            recomputable?: boolean;
+            verdict?: string;
         };
         WhenEntry: {
             field?: string;
@@ -680,6 +1935,30 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    preview_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
+                };
+            };
+        };
+    };
     operations: {
         parameters: {
             query?: {
@@ -707,6 +1986,159 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    records: {
+        parameters: {
+            query?: {
+                entityType?: string;
+                entityId?: string;
+                actorId?: string;
+                from?: string;
+                to?: string;
+                processName?: string;
+                field?: string;
+                withApprovals?: boolean;
+                offset?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecordPage"];
+                };
+            };
+        };
+    };
+    record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecordEntry"];
+                };
+            };
+        };
+    };
+    reveals: {
+        parameters: {
+            query?: {
+                actorId?: string;
+                entityType?: string;
+                entityId?: string;
+                from?: string;
+                to?: string;
+                offset?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealPage"];
+                };
+            };
+        };
+    };
+    enrollUnderChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enrollment"];
+                };
+            };
+        };
+    };
+    confirmUnderChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodeList"];
+                };
+            };
+        };
+    };
+    verify_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
                 };
             };
         };
@@ -797,6 +2229,136 @@ export interface operations {
             };
         };
     };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaStatus"];
+                };
+            };
+        };
+    };
+    enroll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enrollment"];
+                };
+            };
+        };
+    };
+    confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodeList"];
+                };
+            };
+        };
+    };
+    callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+        };
+    };
+    providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderEntry"][];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartResponse"];
+                };
+            };
+        };
+    };
     refresh: {
         parameters: {
             query?: never;
@@ -821,7 +2383,31 @@ export interface operations {
             };
         };
     };
-    commit: {
+    stepUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepUpResponse"];
+                };
+            };
+        };
+    };
+    commit_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -977,6 +2563,32 @@ export interface operations {
             };
         };
     };
+    reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealResponse"];
+                };
+            };
+        };
+    };
     items: {
         parameters: {
             query?: never;
@@ -1103,6 +2715,30 @@ export interface operations {
             };
         };
     };
+    export_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": components["schemas"]["DataBuffer"][];
+                };
+            };
+        };
+    };
     upload: {
         parameters: {
             query: {
@@ -1200,7 +2836,317 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    runs: {
+        parameters: {
+            query?: {
+                import?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunSummary"][];
+                };
+            };
+        };
+    };
+    run_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunDetail"];
+                };
+            };
+        };
+    };
+    export_3: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportResponse"];
+                };
+            };
+        };
+    };
+    inspect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspectResponse"];
+                };
+            };
+        };
+    };
+    mappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedMapping"][];
+                };
+            };
+        };
+    };
+    saveMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingOutput"];
+                };
+            };
+        };
+    };
+    removeMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingOutput"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReportResponse"];
+                };
+            };
+        };
+    };
+    checks: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityCheckPage"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityCheckDetail"];
+                };
+            };
+        };
+    };
+    head: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityHead"];
+                };
+            };
+        };
+    };
+    seals: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegritySealPage"];
+                };
+            };
+        };
+    };
+    list_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -1266,6 +3212,26 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportEntry"][];
+                };
+            };
+        };
+    };
     processes: {
         parameters: {
             query?: never;
@@ -1282,6 +3248,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessEntry"][];
+                };
+            };
+        };
+    };
+    queries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryEntry"][];
                 };
             };
         };
@@ -1418,6 +3404,256 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                queryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    list_2: {
+        parameters: {
+            query?: {
+                template?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"][];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetail"];
+                };
+            };
+        };
+    };
+    export_2: {
+        parameters: {
+            query: {
+                format: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Verification"];
+                };
+            };
+        };
+    };
+    report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionReportResult"];
+                };
+            };
+        };
+    };
+    list_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"][];
+                };
+            };
+        };
+    };
+    changes: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Changes"];
+                };
+            };
+        };
+    };
+    conflicts_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conflicts"];
+                };
+            };
+        };
+    };
+    conflicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conflict"][];
+                };
+            };
+        };
+    };
+    mine: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTasks"];
                 };
             };
         };

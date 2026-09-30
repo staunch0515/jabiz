@@ -69,6 +69,8 @@ public final class PublicReadChecks {
                 problems.add("public field " + name + " does not exist on " + entity.name);
             } else if (field.get().sensitive()) {
                 problems.add("public field " + name + " is sensitive and can never be public");
+            } else if (field.get().isMasked()) {
+                problems.add("public field " + name + " is masked and can never be public");
             }
         }
         if (dataset.policy().maxQueryBatchSize() > limits.maxLimit()) {

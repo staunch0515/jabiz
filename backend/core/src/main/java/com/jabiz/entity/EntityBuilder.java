@@ -145,6 +145,9 @@ public final class EntityBuilder {
         if (!fields.containsKey(primaryKey)) {
             throw invalid("primary key '" + primaryKey + "' is not a declared field");
         }
+        if (fields.get(primaryKey).isMasked()) {
+            throw invalid("primary key '" + primaryKey + "' cannot be masked");
+        }
         TemporalSpec temporalSpec = temporal == null ? null : buildTemporal();
         validateUniqueColumns(temporalSpec);
         validateVersionField();
@@ -154,6 +157,7 @@ public final class EntityBuilder {
         validateUniqueConstraints();
         validateListViews();
         validateDisplay();
+        validateMonetaryScales();
 
         return new EntityDefinition(
             name,
@@ -330,8 +334,33 @@ public final class EntityBuilder {
                     throw invalid(where + " shows, filters or sorts sensitive field '" + f + "'");
                 });
             }
+            if (view.defaultSort() != null && fields.containsKey(view.defaultSort().field())
+                && fields.get(view.defaultSort().field()).isMasked()) {
+                // Everyone gets the default order, holders of the field's permission or not.
+                throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is masked");
+            }
             if (view.defaultSort() != null && !view.sorts().contains(view.defaultSort().field())) {
                 throw invalid(where + ": default sort '" + view.defaultSort().field() + "' is not among its sorts");
+            }
+        }
+    }
+
+    /**
+     * A SCALE rule on a monetary field replaces the kind's own check (EntityValidator), so it may not allow more
+     * digits than the currency's scale: the column could not hold them.
+     */
+    private void validateMonetaryScales() {
+        for (FieldDefinition field : fields.values()) {
+            if (!(field.kind() instanceof SemanticKind.Monetary monetary)) {
+                continue;
+            }
+            for (RuleSpec spec : field.ruleSpecs()) {
+                if (RuleKinds.SCALE.equals(spec.kind())
+                    && ((Number) spec.params().get("scale")).intValue() > monetary.scale()) {
+                    throw invalid("rule " + spec.code() + " of monetary field '" + field.name() + "' allows "
+                        + spec.params().get("scale") + " digits after the point, more than the scale "
+                        + monetary.scale() + " of " + monetary.currency());
+                }
             }
         }
     }
@@ -347,6 +376,10 @@ public final class EntityBuilder {
         }
         if (field.sensitive()) {
             throw invalid("display field '" + displayField + "' is sensitive");
+        }
+        if (field.isMasked()) {
+            // Display texts go wherever the instance is referenced (labels, lookups), unmasked.
+            throw invalid("display field '" + displayField + "' is masked");
         }
     }
 

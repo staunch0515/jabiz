@@ -32,12 +32,20 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         steps = List.copyOf(steps);
     }
 
-    /** Who runs the processes; permissions {@code ["*"]} grant everything. */
-    public record Actor(String id, String tenant, Set<String> roles, Set<String> permissions) {
+    /**
+     * Who runs the processes; permissions {@code ["*"]} grant everything. {@code dataFrom} / {@code dataTo} limit the
+     * actor to the data of a period (docs/design/10-security.md section 13.2); null when not limited.
+     */
+    public record Actor(String id, String tenant, Set<String> roles, Set<String> permissions,
+        com.jabiz.context.DataPeriod dataPeriod) {
         public Actor {
             Objects.requireNonNull(id, "actor id");
             roles = Set.copyOf(roles);
             permissions = Set.copyOf(permissions);
+        }
+
+        public Actor(String id, String tenant, Set<String> roles, Set<String> permissions) {
+            this(id, tenant, roles, permissions, null);
         }
     }
 
@@ -55,12 +63,22 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     /**
      * Runs a process. {@code save} maps variable names to paths in the output ({@code $.a.b[0]});
-     * {@code expectOutput} must be contained in the output.
+     * {@code expectOutput} must be contained in the output. {@code actor} runs it as another actor than the
+     * scenario's (for four-eyes steps: a preparer and an approver); null for the scenario's.
      */
     public record ProcessStep(int number, String process, Map<String, Object> input, Map<String, String> save,
-        Object expectOutput) implements Step {}
+        Object expectOutput, Actor actor) implements Step {}
 
     /** Moves the clock forward by an ISO-8601 duration ({@code PT2H}) or period ({@code P1D}, {@code P1M}). */
+    /**
+     * Imports a file given in the scenario (docs/design/20-imports.md): the file is stored under the import's policy,
+     * then previewed, or committed when {@code commit}; {@code expect} is matched against the report as
+     * {@code expectOutput} is against a process output (a rejected commit is a report too).
+     */
+    public record ImportStep(int number, String importId, String fileName, String content, Map<String, Object> mapping,
+        Map<String, Object> params, boolean commit, String notes, Object expect, Map<String, String> save,
+        Actor actor) implements Step {}
+
     public record AdvanceClock(int number, String amount) implements Step {}
 
     public record SetClock(int number, Instant time) implements Step {}
@@ -77,15 +95,21 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
-    /** Runs a process that must fail with the given status, and with the rule code (on the field) if given. */
+    /**
+     * Runs a process that must fail with the given status, and with the rule code (on the field) if given; as
+     * {@code actor} when given.
+     */
     public record ExpectError(int number, String process, Map<String, Object> input, int status, String ruleCode,
-        String field) implements Step {}
+        String field, Actor actor) implements Step {}
 
     public sealed interface Expectation {}
 
-    /** Rows of a SQL template run with {@code params}: their number, and each row containing {@code values[i]}. */
-    public record QueryExpectation(String query, Map<String, Object> params, Integer rows,
-        List<Map<String, Object>> values) implements Expectation {}
+    /**
+     * Rows of a SQL template run with {@code params} (at {@code asOf} / {@code knownAt} when given): their number, and
+     * each row containing {@code values[i]}.
+     */
+    public record QueryExpectation(String query, Map<String, Object> params, Instant asOf, Instant knownAt,
+        Integer rows, List<Map<String, Object>> values) implements Expectation {}
 
     /** The entity with {@code id} (at {@code asOf}, for temporal entities) contains {@code fields}. */
     public record EntityExpectation(String entity, Object id, Instant asOf, Map<String, Object> fields)
@@ -122,9 +146,11 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static Actor actor(Map<String, Object> actor) {
-        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions"));
+        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions", "dataFrom", "dataTo"));
         return new Actor(text(actor, "id", true), text(actor, "tenant", false), strings(actor.get("roles")),
-            strings(actor.get("permissions")));
+            strings(actor.get("permissions")), com.jabiz.context.DataPeriod.of(
+                actor.get("dataFrom") == null ? null : instant(actor.get("dataFrom"), "actor.dataFrom"),
+                actor.get("dataTo") == null ? null : instant(actor.get("dataTo"), "actor.dataTo")));
     }
 
     private static SnapshotSpec snapshot(Object raw) {
@@ -144,16 +170,31 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         Map<String, Object> keys = new LinkedHashMap<>(step);
         keys.remove("note");
         if (keys.containsKey("process")) {
-            onlyKeys(keys, where, Set.of("process", "input", "save", "expectOutput"));
+            onlyKeys(keys, where, Set.of("process", "input", "save", "expectOutput", "actor"));
             Map<String, String> save = new LinkedHashMap<>();
             if (keys.get("save") != null) {
                 map(keys.get("save"), where + ".save").forEach((name, path) -> save.put(name, String.valueOf(path)));
             }
             return new ProcessStep(number, text(keys, "process", true), input(keys.get("input"), where), save,
-                keys.get("expectOutput"));
+                keys.get("expectOutput"), stepActor(keys.get("actor"), where));
+        }
+        if (keys.containsKey("import")) {
+            onlyKeys(keys, where, Set.of("import", "file", "mapping", "params", "commit", "notes", "expect", "save",
+                "actor"));
+            Map<String, Object> file = map(required(keys, "file", where), where + ".file");
+            onlyKeys(file, where + ".file", Set.of("name", "content"));
+            Map<String, String> save = new LinkedHashMap<>();
+            if (keys.get("save") != null) {
+                map(keys.get("save"), where + ".save").forEach((name, path) -> save.put(name, String.valueOf(path)));
+            }
+            return new ImportStep(number, text(keys, "import", true), text(file, "name", true),
+                String.valueOf(required(file, "content", where + ".file")),
+                keys.get("mapping") == null ? null : map(keys.get("mapping"), where + ".mapping"),
+                input(keys.get("params"), where), Boolean.TRUE.equals(keys.get("commit")), text(keys, "notes", false),
+                keys.get("expect"), save, stepActor(keys.get("actor"), where));
         }
         if (keys.size() != 1) {
-            throw new IllegalArgumentException(where + " must have exactly one of process, advanceClock, setClock, "
+            throw new IllegalArgumentException(where + " must have exactly one of process, import, advanceClock, setClock, "
                 + "runJob, deliverEvents, expect, expectError (besides note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();
@@ -176,7 +217,7 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     private static Expectation expectation(Map<String, Object> expect, String where) {
         if (expect.containsKey("query")) {
-            onlyKeys(expect, where, Set.of("query", "params", "rows", "values"));
+            onlyKeys(expect, where, Set.of("query", "params", "asOf", "knownAt", "rows", "values"));
             List<Map<String, Object>> values = new ArrayList<>();
             if (expect.get("values") != null) {
                 for (Object row : list(expect.get("values"), where + ".values")) {
@@ -184,7 +225,11 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
                 }
             }
             Object rows = expect.get("rows");
+            Object asOf = expect.get("asOf");
+            Object knownAt = expect.get("knownAt");
             return new QueryExpectation(text(expect, "query", true), input(expect.get("params"), where),
+                asOf == null ? null : instant(asOf, where + ".asOf"),
+                knownAt == null ? null : instant(knownAt, where + ".knownAt"),
                 rows == null ? null : ((Number) rows).intValue(), values);
         }
         if (expect.containsKey("entity")) {
@@ -215,10 +260,14 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static ExpectError expectError(int number, Map<String, Object> error, String where) {
-        onlyKeys(error, where, Set.of("process", "input", "status", "ruleCode", "field"));
+        onlyKeys(error, where, Set.of("process", "input", "status", "ruleCode", "field", "actor"));
         return new ExpectError(number, text(error, "process", true), input(error.get("input"), where),
             ((Number) required(error, "status", where)).intValue(), text(error, "ruleCode", false),
-            text(error, "field", false));
+            text(error, "field", false), stepActor(error.get("actor"), where));
+    }
+
+    private static Actor stepActor(Object raw, String where) {
+        return raw == null ? null : actor(map(raw, where + ".actor"));
     }
 
     private static Map<String, Object> input(Object raw, String where) {

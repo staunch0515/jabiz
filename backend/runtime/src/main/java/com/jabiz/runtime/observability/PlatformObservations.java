@@ -36,12 +36,16 @@ public class PlatformObservations {
     public static final String DATASET_QUERY = "jabiz.dataset.query";
     public static final String DATASET_READ = "jabiz.dataset.read";
     public static final String TEMPLATE = "jabiz.query.template";
+    public static final String EXPORT = "jabiz.query.export";
     public static final String DELIVERY = "jabiz.outbox.delivery";
     public static final String JOB = "jabiz.job.run";
     public static final String FILE_UPLOAD = "jabiz.file.upload";
     public static final String FILE_SERVE = "jabiz.file.serve";
     public static final String FILE_SWEEP = "jabiz.file.sweep";
     public static final String PUBLIC_QUERY = "jabiz.public.query";
+    public static final String IMPORT = "jabiz.import.run";
+    public static final String DATA_EXPORT = "jabiz.data.export";
+    public static final String AUTH_OIDC = "jabiz.auth.oidc";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
 
     public static final String OUTCOME = "outcome";

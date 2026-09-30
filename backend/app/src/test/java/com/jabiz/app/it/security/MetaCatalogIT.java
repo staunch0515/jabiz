@@ -109,7 +109,7 @@ class MetaCatalogIT extends SecurityItSupport {
         assertThat(entries).containsEntry("type", "array").containsEntry("minItems", 1);
         Map<String, Object> line = (Map<String, Object>) entries.get("items");
         assertThat(line).containsEntry("type", "object")
-            .containsEntry("required", List.of("accountCode", "direction", "amount"));
+            .containsEntry("required", List.of("accountCode", "direction"));
         assertThat((Map<String, Object>) ((Map<String, Object>) line.get("properties")).get("direction"))
             .containsEntry("enum", List.of("DEBIT", "CREDIT"));
     }

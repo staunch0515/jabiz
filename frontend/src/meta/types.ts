@@ -22,6 +22,11 @@ interface FieldBase {
   sensitive: boolean
   /** Changed by processes only: shown read-only, never sent (docs/design/16-content-authoring.md section 5). */
   processOnly: boolean
+  /**
+   * Shown masked to everyone; holders of the permission show one value at a time, each time recorded, and alone may
+   * write, filter and sort by it (docs/design/10-security.md section 13.1).
+   */
+  masked?: { permission: string; style: 'LAST4' | 'ALL' }
   operators: string[]
   rules: RuleSpec[]
 }

@@ -1,8 +1,15 @@
 package com.jabiz.file;
 
+import com.jabiz.imports.TestWorkbooks;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -72,7 +79,7 @@ class MediaTypeDetectorTest {
             .isEmpty();
         assertThat(MediaTypeDetector.detect(concat(bytes(0xEF, 0xBB, 0xBF), ascii("<html>")))).isEmpty();
         assertThat(MediaTypeDetector.detect(ascii("<?xml version=\"1.0\"?><svg/>"))).isEmpty();
-        assertThat(MediaTypeDetector.detect(ascii("GIF89a"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(concat(ascii("GIF89a"), bytes(1, 0, 1, 0)))).isEmpty();
         assertThat(MediaTypeDetector.detect(ascii("RIFF\0\0\0\0WEBPVP8 "))).isEmpty();
     }
 
@@ -96,15 +103,15 @@ class MediaTypeDetectorTest {
         assertThat(MediaTypeDetector.detect(concat(bytes(0, 0, 0, 0x20), ascii("ftypisom")))).isEmpty();
         assertThat(MediaTypeDetector.detect(concat(bytes(0, 0, 0, 0x20), ascii("ftypmp42")))).isEmpty();
         assertThat(MediaTypeDetector.detect(oggPage(ascii("\u0080theora")))).isEmpty();
-        assertThat(MediaTypeDetector.detect(ascii("OggS"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(ascii("OggS"))).contains(MediaTypes.TEXT);
     }
 
     @Test
     void handlesShortAndMissingInput() {
-        assertThat(MediaTypeDetector.detect(null)).isEmpty();
+        assertThat(MediaTypeDetector.detect((byte[]) null)).isEmpty();
         assertThat(MediaTypeDetector.detect(new byte[0])).isEmpty();
-        assertThat(MediaTypeDetector.detect(bytes(0xFF, 0xD8))).isEmpty();
-        assertThat(MediaTypeDetector.detect(ascii("%PD"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(bytes(0xFF, 0xD8))).isNotEqualTo(java.util.Optional.of(MediaTypes.JPEG));
+        assertThat(MediaTypeDetector.detect(ascii("%PD"))).contains(MediaTypes.TEXT);
         byte[] large = new byte[MediaTypeDetector.HEAD_BYTES * 2];
         System.arraycopy(ascii("%PDF-"), 0, large, 0, 5);
         assertThat(MediaTypeDetector.detect(large)).contains(MediaTypes.PDF);
@@ -117,5 +124,50 @@ class MediaTypeDetectorTest {
         assertThat(MediaTypes.OGG.contentType()).isEqualTo("audio/ogg");
         assertThat(MediaTypes.JPEG.extension()).isEqualTo("jpg");
         assertThat(MediaTypes.JPEG.extensions()).contains(".jpeg");
+    }
+
+    @Test
+    void recognisesImportTypes() {
+        assertThat(MediaTypeDetector.detect(ascii("sku,price\r\nA-1,\"1,200.00\"\r\n"))).contains(MediaTypes.TEXT);
+        assertThat(MediaTypeDetector.detect(concat(bytes(0xEF, 0xBB, 0xBF), ascii("a;b\n")))).contains(MediaTypes.TEXT);
+        assertThat(MediaTypeDetector.detect("Café,5\n".getBytes(StandardCharsets.UTF_8))).contains(MediaTypes.TEXT);
+        assertThat(MediaTypeDetector.detect(ascii("<?xml version=\"1.0\"?><Document/>"))).contains(MediaTypes.XML);
+        assertThat(MediaTypeDetector.detect(ascii("  <Document><Stmt/></Document>"))).contains(MediaTypes.XML);
+        assertThat(MediaTypeDetector.detect(ascii("a,b\u0000c"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(ascii("a,b\u0007"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(ascii("<!-- comment --><Document/>"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(ascii("< not markup"))).isEmpty();
+        assertThat(MediaTypeDetector.detect(ascii("<Document><script>x()</script></Document>"))).isEmpty();
+        assertThat(MediaTypes.TEXT.isImportOnly()).isTrue();
+        assertThat(MediaTypes.PDF.isImportOnly()).isFalse();
+    }
+
+    @Test
+    void recognisesWorkbooksFromTheWholeFile(@TempDir Path dir) throws IOException {
+        Path workbook = TestWorkbooks.workbook(dir.resolve("a.xlsx"), TestWorkbooks.sheet(""), null, null);
+        assertThat(MediaTypeDetector.detect(workbook)).contains(MediaTypes.XLSX);
+        assertThat(MediaTypeDetector.detect(Files.readAllBytes(workbook))).isEmpty();
+
+        Map<String, String> macro = new LinkedHashMap<>();
+        macro.put("[Content_Types].xml", TestWorkbooks.CONTENT_TYPES.replace("sheet.main+xml",
+            "sheet.macroEnabled.main+xml"));
+        macro.put("xl/workbook.xml", TestWorkbooks.WORKBOOK);
+        assertThat(MediaTypeDetector.detect(TestWorkbooks.zip(dir.resolve("m.xlsm"), macro))).isEmpty();
+
+        Map<String, String> vba = new LinkedHashMap<>();
+        vba.put("[Content_Types].xml", TestWorkbooks.CONTENT_TYPES);
+        vba.put("xl/workbook.xml", TestWorkbooks.WORKBOOK);
+        vba.put("xl/vbaProject.bin", "x");
+        assertThat(MediaTypeDetector.detect(TestWorkbooks.zip(dir.resolve("v.xlsx"), vba))).isEmpty();
+
+        Map<String, String> document = new LinkedHashMap<>();
+        document.put("[Content_Types].xml", TestWorkbooks.CONTENT_TYPES);
+        document.put("word/document.xml", "<w/>");
+        assertThat(MediaTypeDetector.detect(TestWorkbooks.zip(dir.resolve("d.docx"), document))).isEmpty();
+
+        Path broken = Files.write(dir.resolve("b.xlsx"), concat(ascii("PK"), bytes(3, 4), ascii("garbage")));
+        assertThat(MediaTypeDetector.detect(broken)).isEmpty();
+        Path text = Files.write(dir.resolve("t.csv"), ascii("a,b\n"));
+        assertThat(MediaTypeDetector.detect(text)).contains(MediaTypes.TEXT);
     }
 }

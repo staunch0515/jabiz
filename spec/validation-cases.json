@@ -99,6 +99,19 @@
       }
     } ]
   }, {
+    "name" : "fee",
+    "immutable" : false,
+    "required" : false,
+    "generated" : false,
+    "systemManaged" : false,
+    "sensitive" : false,
+    "processOnly" : false,
+    "type" : "monetary",
+    "currency" : "USD",
+    "scale" : 2,
+    "operators" : [ "BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE" ],
+    "rules" : [ ]
+  }, {
     "name" : "ratio",
     "immutable" : false,
     "required" : false,
@@ -371,6 +384,42 @@
     "field" : "amount",
     "insert" : true,
     "expect" : [ "REQUIRED" ]
+  }, {
+    "field" : "fee",
+    "value" : "12.34",
+    "expect" : [ ]
+  }, {
+    "field" : "fee",
+    "value" : "12.3400",
+    "expect" : [ ]
+  }, {
+    "field" : "fee",
+    "value" : 7,
+    "expect" : [ ]
+  }, {
+    "field" : "fee",
+    "value" : "-0.5",
+    "expect" : [ ]
+  }, {
+    "field" : "fee",
+    "value" : "12.345",
+    "expect" : [ "MONETARY_SCALE" ]
+  }, {
+    "field" : "fee",
+    "value" : "-0.001",
+    "expect" : [ "MONETARY_SCALE" ]
+  }, {
+    "field" : "fee",
+    "value" : "1.5E-3",
+    "expect" : [ "MONETARY_SCALE" ]
+  }, {
+    "field" : "fee",
+    "value" : "1e2",
+    "expect" : [ ]
+  }, {
+    "field" : "fee",
+    "value" : null,
+    "expect" : [ ]
   }, {
     "field" : "ratio",
     "value" : "99.5",

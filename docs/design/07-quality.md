@@ -24,7 +24,7 @@
 | 流程 | 见 06 第 9 节 |
 | 事件与定时任务 | 消费者名、任务名唯一；cron 合法；引用的流程已注册（11 §2.3、§4） |
 | 权限 | 数据视图、SQL 模板、流程都声明了权限（开发环境可降级为警告）；SQL 模板不读取敏感字段 |
-| 安全配置 | 访问令牌的签名密钥已配置且足够长（缺失时 Bean 创建失败即拒绝启动，`dev` 除外；见 10 §2） |
+| 安全配置 | 访问令牌的签名密钥、二次验证的加密密钥已配置且足够长（缺失时 Bean 创建失败即拒绝启动，`dev` 除外；见 10 §2、§9）；访问令牌有效期不长于闲置时长；OIDC 提供方配置完整、`https`（类别 `SECURITY`，10 §11、§12） |
 | 单页应用 | `jabiz.web.spa[i]` 的前缀合法、不重复、不在 `/api` `/actuator` 下；`index` 是 `.html` 的绝对路径；CSP 非空且为单行（17 §3.2） |
 | 文件 | 策略名不重复、上限不超过请求上限；文件字段的策略已声明、实体有数据视图；有策略时存储目录已配置且可写（14 §4） |
 
@@ -76,10 +76,13 @@ snapshot:
 实现（阶段 8，【D13】）：runtime testFixtures 的 `com.jabiz.runtime.test.scenario`（`Scenario`、`ScenarioRunner`、`ScenarioReplay`、
 `SnapshotStore`）；业务模块用 `ScenarioReplay.resources("scenarios")` + `ScenarioReplay.verify(App.class, 资源)` 生成动态测试（示范：`app` 的 `ScenarioTest`）。
 
-- 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
+- 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配，可选 `actor: {id, permissions}` 以另一个操作人运行，
+  用于准备人与审批人不同的四眼步骤，18 §3；`expectError` 同样可带 `actor`）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
   `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
-  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, rows, values}`（SQL 模板的行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
-  `expectError: {process, input, status, ruleCode, field}`。未知键即报错（拼错的期望不会静默通过）。
+  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
+  `expectError: {process, input, status, ruleCode, field}`；
+  `import: 导入 id`（20，阶段 14e-2）带 `file: {name, content}`（按导入的文件策略存入，内容为 UTF-8 文本）、`mapping`、`params`、`commit`（缺省预览）、
+  `notes`、`expect`（与导入报告按含义比较，被拒的提交也是报告）、`save`、`actor`；导入入口的权限照常检查。未知键即报错（拼错的期望不会静默通过）。
 - 变量：`save: {名: $.a.b[0]}` 从输出（遮蔽后的 JSON）中取值，`$` 为整个输出；`${名}` 整串引用保留类型，嵌在字符串中时插值；未定义即报错。
 - 比较按含义：数值按大小（`0.1` 与 `0.1000` 相等）、时间按时刻（不论偏移）、映射按包含、列表逐项。
 - 流程经 `ProcessExecutor` 以场景的操作人（显式 `RequestContext`）执行，不经 HTTP，入口权限不检查（D11 第 2 条），流程内部的检查照常；

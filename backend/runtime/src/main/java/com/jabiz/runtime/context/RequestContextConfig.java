@@ -34,7 +34,7 @@ class RequestContextConfig {
      * any caller claim any identity.
      */
     @Bean
-    ActorResolver actorResolver(Environment environment,
+    ActorResolver actorResolver(Environment environment, java.time.Clock clock,
         @Value("${jabiz.dev.actor-headers:false}") boolean devActorHeaders) {
         if (!devActorHeaders) {
             return ActorResolver.NONE;
@@ -43,6 +43,6 @@ class RequestContextConfig {
             throw new IllegalStateException("jabiz.dev.actor-headers=true is only allowed with the '"
                 + DEV_PROFILE + "' profile active");
         }
-        return new DevHeaderActorResolver();
+        return new DevHeaderActorResolver(clock);
     }
 }

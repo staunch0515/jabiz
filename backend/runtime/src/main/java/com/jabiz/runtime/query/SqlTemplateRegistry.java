@@ -3,6 +3,7 @@ package com.jabiz.runtime.query;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.query.custom.TemplateVersion;
 import com.jabiz.query.custom.TemplateSource;
 import com.jabiz.query.template.SqlTemplateException;
 import com.jabiz.query.template.TemplateChecks;
@@ -21,6 +22,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +52,8 @@ public class SqlTemplateRegistry implements PlatformCheck {
     /** Queries built in code and run without registration, prepared once. */
     private final Map<AdvancedQueryDefinition, AdvancedQueryDefinition> adHoc = new ConcurrentHashMap<>();
 
+    private final Map<String, String> sources = new HashMap<>();
+
     public SqlTemplateRegistry(SqlTemplateLoader loader, ObjectProvider<AdvancedQueryDefinition> beans,
         ObjectProvider<SqlDictionary> dictionaries, EntityDefinitionRegistry entities, DatasetRegistry datasets,
         Environment environment) {
@@ -59,6 +63,7 @@ public class SqlTemplateRegistry implements PlatformCheck {
 
         SqlTemplateLoader.Loaded loaded = loader.load();
         problems.addAll(loaded.problems());
+        sources.putAll(loaded.sources());
         List<AdvancedQueryDefinition> declared = new ArrayList<>(loaded.queries());
         beans.orderedStream().forEach(declared::add);
         for (AdvancedQueryDefinition query : declared) {
@@ -82,6 +87,15 @@ public class SqlTemplateRegistry implements PlatformCheck {
     /** The query of an SQL dictionary, reading the dictionary's dataset for that dataset's entity. */
     public static AdvancedQueryDefinition forDictionary(SqlDictionary dictionary, DatasetDefinition dataset) {
         return dictionary.query().withDataset(dataset.targetEntityType(), dataset.resourceId());
+    }
+
+    /**
+     * The text a template was declared with (docs/design/19-reports.md section 5): the file, or for a template
+     * declared in Java the description its version is the hash of.
+     */
+    public String source(AdvancedQueryDefinition query) {
+        String text = sources.get(query.version());
+        return text != null ? text : TemplateVersion.describe(query);
     }
 
     /** The template of that id, as callable through the API. */

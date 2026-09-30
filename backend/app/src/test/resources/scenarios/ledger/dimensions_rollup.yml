@@ -1,0 +1,93 @@
+# The ledger's account hierarchy, analysis dimensions and source documents (docs/design/11-ledger-events-jobs.md
+# sections 1.4 to 1.7): a summary account groups two cash accounts and takes no postings itself; a sale is booked
+# with its warehouse and sales channel and linked to the warehouse it came from; balances roll up the hierarchy and
+# break down by channel; the reversal returns every figure to zero.
+name: Ledger hierarchy, dimensions and sources
+clock: 2026-04-01T00:00:00Z
+actor: { id: accountant, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: Warehouse
+      attributes: { warehouseCode: OSAKA, warehouseName: Osaka, active: true }
+    save: { warehouse: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: LedgerAccount
+      attributes: { accountCode: "1000", accountName: Cash and bank, accountType: ASSET, enabled: true, summary: true }
+    save: { cash: $.id }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: LedgerAccount
+      attributes: { accountCode: "1010", accountName: Petty cash, accountType: ASSET, enabled: true, parentId: "${cash}" }
+  - process: ADD_ENTITY@latest
+    input:
+      entityType: LedgerAccount
+      attributes: { accountCode: "1020", accountName: Bank, accountType: ASSET, enabled: true, parentId: "${cash}" }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4000", accountName: Sales, accountType: REVENUE }
+
+  - note: A summary account takes no postings.
+    expectError:
+      process: LEDGER_POST@latest
+      input:
+        description: Wrong account
+        entries:
+          - { accountCode: "1000", direction: DEBIT, amount: 100 }
+          - { accountCode: "4000", direction: CREDIT, amount: 100 }
+      status: 422
+      ruleCode: LEDGER_ACCOUNT_NOT_POSTABLE
+  - expectError:
+      process: LEDGER_POST@latest
+      input:
+        description: Unknown channel
+        entries:
+          - { accountCode: "1010", direction: DEBIT, amount: 100, dimensions: { salesChannel: FAX } }
+          - { accountCode: "4000", direction: CREDIT, amount: 100 }
+      status: 422
+      ruleCode: LEDGER_DIMENSION_INVALID
+
+  - advanceClock: P1D
+  - process: LEDGER_POST@latest
+    input:
+      description: Counter sale
+      sourceEntity: Warehouse
+      sourceId: "${warehouse}"
+      entries:
+        - { accountCode: "1010", direction: DEBIT, amount: 300, memo: cash part, dimensions: { salesChannel: STORE } }
+        - { accountCode: "1020", direction: DEBIT, amount: 700, memo: card part, dimensions: { salesChannel: STORE } }
+        - { accountCode: "4000", direction: CREDIT, amount: 1000, dimensions: { warehouse: OSAKA, salesChannel: STORE } }
+    save: { sale: $.transactionId }
+  - expect:
+      query: jabiz.ledger.account_balances
+      params: { asOf: 2026-04-03T00:00:00Z }
+      rows: 4
+      values:
+        - { accountCode: "1000", summary: true, level: 0, balance: 1000 }
+        - { accountCode: "1010", parentCode: "1000", level: 1, balance: 300 }
+        - { accountCode: "1020", parentCode: "1000", level: 1, balance: 700 }
+        - { accountCode: "4000", summary: false, balance: -1000 }
+  - expect:
+      query: jabiz.ledger.dimension_balances
+      params: { dimension: 2, asOf: 2026-04-03T00:00:00Z }
+      rows: 3
+      values:
+        - { accountCode: "1010", dimensionValue: STORE, balance: 300 }
+        - { accountCode: "1020", dimensionValue: STORE, balance: 700 }
+        - { accountCode: "4000", dimensionValue: STORE, balance: -1000 }
+
+  - advanceClock: P1D
+  - process: LEDGER_REVERSE@latest
+    input: { transactionId: "${sale}", reason: Entered twice }
+  - expect:
+      query: jabiz.ledger.account_activity
+      params: { account: "1010", from: 2026-04-02T00:00:00Z, asOf: 2026-04-05T00:00:00Z }
+      rows: 4
+      values:
+        - { rowKind: OPENING, runningBalance: 0 }
+        - { rowKind: ENTRY, memo: cash part, sourceEntity: Warehouse, debit: 300, runningBalance: 300 }
+        - { rowKind: ENTRY, memo: cash part, credit: 300, runningBalance: 0 }
+        - { rowKind: CLOSING, debit: 300, credit: 300, runningBalance: 0 }
+snapshot:
+  entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
+  asOf: end

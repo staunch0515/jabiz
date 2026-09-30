@@ -19,14 +19,14 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ☐ 未开始（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a–14f、14g-1、14g-2 已合入；14g-3 PR #39 待合并（线 1.1） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
 | 线 | 平台分支 | 包含的阶段 | 发布标签 | 应用分支 |
 |---|---|---|---|---|
-| 1.0 | `1.0/platform` | 1–13f | `platform-v1.0.0`（13f 合入后） | `1.0/culture`、`1.0/finance` |
-| 1.1 | `1.1/platform`（从 `1.0/platform` 拉出） | 14 | — | `1.1/finance`（14a–14c 合入后升级）；culture 需要时升级 |
+| 1.0 | `1.0/platform` | 1–13f | `platform-v1.0.0` | `1.0/culture`、`1.0/finance` |
+| 1.1 | `1.1/platform`（从 `1.0/platform` 的 `platform-v1.0.0` 拉出，已开） | 14 | — | `1.1/finance`（14a–14c 合入后升级）；culture 需要时升级 |
 
 ---
 
@@ -431,5 +431,349 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
   修复向前合并、新线的平台工作分支未改线号、线号格式不对、新线的平台分支未取得、`APP_PATHS_BRANCH` 与游离的 HEAD、没有线号的旧分支
   （`tools/test/check-app-paths.test.sh`，共 24 个）。
 - [x] CI 步骤的命令在本地对 1.0 线上的应用分支（游离 HEAD）运行通过。
-- [ ] 建立 `1.0/platform`、`1.0/culture`、`1.0/finance`，合入后打标签 `platform-v1.0.0`，开 `1.1/platform`（由仓库所有者推送或授权）。
+- [x] 建立 `1.0/platform`、`1.0/culture`、`1.0/finance`；合入后打标签 `platform-v1.0.0`，开 `1.1/platform`。
 
+---
+
+## 阶段 14：应用所需的通用业务能力（线 1.1）
+
+由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
+14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
+14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（14g-3 待合并）。各子阶段开始前出计划。
+
+### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
+
+设计见 12 §9 与决策 D22（在 14a 计划中确认）。分两个 PR：14a-1（扩展机制与示范）、14a-2（语言子集、区域格式、金额小数位）。
+
+**14a-1 要求**
+1. 构建时扩展：`defineExtension({routes, menu, messages, home})`、`virtual:jabiz-extension`、`@jabiz/admin`（`frontend/src/lib/index.ts`）、
+   `runQuery` / `runProcess`；扩展的检查（启动时一次报告全部问题）、类型检查纳入 `pnpm build`、`pnpm ext:*` 与扩展的 lint 规则。
+2. 约定插件：`spa(path, sourceDir, extension = …)`（`JABIZ_ADMIN_EXTENSION`、扩展目录为构建输入）。
+3. 示范：`backend/app/admin-extension/`"库存概览"（模板 `commerce.stock_availability`、流程 `STOCK_RECEIVE`）。
+4. 决策 D22；12 §9、17 §3.1、CLAUDE.md、`docs/guide/admin-extension.md`。
+
+**14a-1 验收标准**
+- [x] 不指定扩展时产物不含任何扩展代码；指定时扩展页面编入且只有一份 React / antd（构建对比）。
+- [x] 扩展的路由问题（占用平台路径、相对路径、重复、index 路由）与菜单问题一次报告全部（`registry.test.ts`）；深层引用被 lint 拒绝（`extension-lint.test.ts`）。
+- [x] 扩展的类型错误使 `pnpm build`（因而 jar 构建）失败。
+- [x] 示范页面：从菜单进入、读取模板、执行流程；无权限用户看不到菜单项，直接打开时服务端返回 403（Vitest 3 个、Playwright 2 个）。
+- [x] 现有全部检查照常通过：前端 lint / typecheck / test，端到端 23 个，`./gradlew check`。
+
+**14a-2 要求**
+1. 界面语言子集：`jabizApp { languages(…) }` → jar 中的 `META-INF/jabiz-app.properties` 与前端构建变量；消息目录与文案检查只用所选语言；启动检查 `I18N`；
+   前端只列所选语言。
+2. 区域：`jabizApp { region = … }`；`formatDateTime`、`formatDate`、`formatAmount`（括号负数），经 `@jabiz/admin` 导出；列表与详情按区域显示。
+3. 金额小数位：`Monetary` 的小数位由 `EntityValidator` 与前端同样检查（`MONETARY_SCALE`，共享用例）；字段自己的 `SCALE` 规则优先，且不得比币种宽松。
+4. 文档：D22 第 7 条、02 §2、12 §1、§5.1、§8、§10、17 §3.1、CLAUDE.md。
+
+**14a-2 验收标准**
+- [x] 只选英语的应用：请求日语、中文时都以英语回答，元数据也是英语；缺日、中文案不报错，缺英文案报错（`LanguageSubsetIT`、`LanguageSubsetTest`）。
+- [x] 非平台语言、空列表、缺省语言不在其中：启动检查一次报告全部（`LanguageSubsetTest`）；前端构建对错误的语言或区域失败（`app-settings.test.ts`）。
+- [x] `en-US` 下日期为 `MM/DD/YYYY`、金额有千分位与固定小数位、报表负数为 `(2,000.00)`，大金额不丢位数（`format.test.ts`）。
+- [x] 金额小数位：共享用例（新增字段 `fee` 的 9 个用例）前后端都通过；自己的 `SCALE` 规则优先；比币种宽松的规则在构建期被拒绝（`KindConstraintValidationTest`）。
+- [x] 插件：声明 `languages("en")`、`region = "en-US"` 时生成的属性与前端构建都带上它们，未声明时为全部语言（手工验证，见 PR）。
+- [x] 现有全部检查照常通过。
+
+### 14b 编号、审批、职责分离、任务与通知（7–9 天）
+
+设计见 18 与决策 D23（在 14b 计划中确认）。分三个 PR：14b-1 编号；14b-2 审批与职责分离；14b-3 任务与通知。
+
+**14b-1 要求**
+1. `NumberSequence`（core：格式 `{n}` / `{n:宽度}` / `{scope}`、按范围计数、起始值）；启动检查 `NUMBERING`。
+2. 流程步骤 `AssignNumber.of / when`：在流程事务内取号（`sys_number_counter` 的行锁），回滚归还；`sys_number_assignment` 只追加，平台实体 `NumberAssignment` 只读视图。
+3. 示范：`ORDER_PLACE` 不带订单号时取 `SO-{scope}-{n:6}`。
+4. 文档：18 §2、06 §2.1、D23、CLAUDE.md。
+
+**14b-1 验收标准**
+- [x] 按范围连续编号，格式正确；未按范围的序列从起始值开始（`NumberingIT`、`NumberSequenceTest`）。
+- [x] 取号后失败的流程归还号码，下一个成功的流程取到它；条件不成立不取号（`NumberingIT`、`CommerceIT`）。
+- [x] 20 个并发流程（其中 4 个取号后失败）：16 个号码，1…16 无缺无重（`NumberingIT`）。
+- [x] 号码记录只 INSERT，触发器拒绝 UPDATE / DELETE；每个号码记录取号的操作（`NumberingIT`）。
+- [x] 序列名重复、步骤引用未声明的序列或范围用法不对，启动时报告（`NumberingChecksTest`）。
+- [x] 现有全部检查照常通过。
+
+**14b-2 要求**
+1. core：`ApprovalSubject`（事实与类型）、`ApprovalCondition`（`all`/`any`、比较运算）、`ApprovalLevel`（权限、限额事实）、`ApprovalEvaluation`（按优先级取第一条）、
+   `ContentHash`（规范文本的 SHA-256）、`SodRule`。
+2. 时态实体 `SysApprovalRule`、`SysApprovalLimit`、`SysSodRule`、`SysControlChange`、`SysApprovalRequest`；只追加 `ApprovalDecision`、`ApprovalEvaluation`（迁移 V13）。
+3. 步骤 `RequireApproval`（按业务时间评估、记录规则版本与事实、绑定内容哈希、内容变化即作废）、`WithdrawApproval`；流程 `APPROVAL_DECIDE`
+   （层级权限、限额、准备人与重复判断的检查；事件 `jabiz.approval.requested` / `approved` / `rejected`）。
+4. 四眼修改：`CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH` / `CONTROL_CHANGE_WITHDRAW`；影响预览 `POST /api/approvals/preview`。
+5. 职责分离：`SecUserRole` / `SecRolePermission` 全部写入途径上的写入检查（`SOD_CONFLICT`）；流程 API 入口兜底（`*` 不拦）；冲突报告 `GET /api/sod/conflicts`。
+6. 示范：供应商认证提交经 `RequireApproval`，以事件继续；场景步骤可指定操作人。文档：18 §3–§4、06、07、10、D23、CLAUDE.md。
+
+**14b-2 验收标准**
+- [x] 规则由一人提出、另一人发布；同一人发布被拒；错误一次报告；可撤回（`ApprovalIT`、场景 `certification_approval`）。
+- [x] 不需审批的案件记录所评估的规则版本与事实；按业务时间取规则，预定生效的修改只影响其后的案件（`ApprovalIT`）。
+- [x] 批准绑定内容：同内容找到同一请求，内容变化使原请求作废并建新请求；批准后同内容得到 `APPROVED`（`ApprovalIT`、`ContentHashTest`）。
+- [x] 准备人不能审批；缺层级权限 403；限额不足（或无限额）被拒；同一人不能判断两个层级；驳回需理由；同一层级的并发判断只有一个成功（`ApprovalIT`）。
+- [x] 判断与评估只 INSERT，触发器拒绝 UPDATE / DELETE（`ApprovalIT`）。
+- [x] 影响预览列出结论不同的单据与评估总数（`ApprovalIT`）。
+- [x] 授予角色或权限造成冲突被拒（两条途径）；`*` 不拦；规则发布前已存在的冲突在流程入口被拒；冲突报告列出用户、规则、角色与 `*` 持有者（`SodIT`）。
+- [x] 示范：等待审批时手工审核被拒；批准事件使认证通过（场景 `certification_approval`）。
+- [x] 现有全部检查照常通过。
+
+**14b-3 要求**
+1. 时态实体 `SysTask`（指派给用户或权限、标题为文案键 + 参数、来源键）；步骤 `CreateTask` / `CloseTasks`；新待办发布 `jabiz.task.created`（迁移 V14）。
+2. 审批请求自动建待办，逐层传递，判断完成、作废、撤回时关闭或取消。
+3. `GET /api/tasks/mine`；后台页面 `/tasks`、页头待办数；`@jabiz/admin` 导出 `ApprovalPanel`、`useMyTasks`。
+4. 邮件：`SecUser.email`；`TASK_NOTIFY` 记录只追加的通知并在提交后发送、失败重试（尝试只追加）；`jabiz.mail.enabled` 缺省关闭；启动检查 `MAIL`；GreenMail 测试。
+5. 文档：18 §5、10、12、D23、CLAUDE.md、应用扩展指南。
+
+**14b-3 验收标准**
+- [x] 用户看到指派给本人或本人所持权限的开放待办（`*` 看全部按权限指派的），关闭后不再出现；未认证 401（`TaskIT`）。
+- [x] 审批请求有当前层级的待办，判断后传给下一层，最后一层后关闭；作废与撤回取消待办（`TaskIT`）。
+- [x] 待办与通知只 INSERT（`TaskIT`）。
+- [x] 开启邮件：指派用户收到一封，按权限只发给启用且明确持有的有邮箱用户；失败的尝试被记录并重试成功，已发送的不重发（`NotificationIT`）。
+- [x] 开启邮件而缺少服务器或发件人，启动时报告（`TaskSpecAndMailChecksTest`）。
+- [x] 前端：待办页、审批面板（批准、需理由的驳回、显示服务端的拒绝）、页头待办数（`ApprovalPanel.test`、`TasksPage.test`、e2e `tasks.spec`）。
+- [x] 现有全部检查照常通过。
+
+### 14c 账本增强（5–6 天）
+
+设计见 11 §1 与决策 D24（在 14c 计划中确认）。分两个 PR：14c-1 科目层级、行备注、来源单据、分析维度、余额与明细；14c-2 多币种。
+
+**14c-1 要求**
+1. 科目 `parentId`、`summary`：汇总科目不能过账；层级写入检查（上级须为汇总、不成环、有分录不能变汇总、有下级须保持汇总）；层级修改与过账以 advisory lock 串行。
+2. 分析维度：core `LedgerDimension`（位置 1–4、名称、字典或实体字段来源），分录 `dimension1`–`dimension4`，过账时校验取值；启动检查 `LEDGER`。
+3. 分录 `memo`；交易 `sourceEntity` / `sourceId`（过账时校验存在）；冲正照原样复制。
+4. 模板：`account_balances` 增加 `from`、`knownAt`、层级汇总；新增 `dimension_balances`、`account_activity`。
+5. 示范：`app` 声明仓库与销售渠道两个维度，订单的销售过账带来源；场景 `ledger/dimensions_rollup`。文档：11 §1、D24、CLAUDE.md。
+
+**14c-1 验收标准**
+- [x] 汇总科目不能过账；汇总科目余额为其下级之和，可过账科目余额之和为零；上级非汇总、成环、有分录变汇总、有下级变可过账都被拒绝（`LedgerEnhancementsIT`）。
+- [x] 未声明的维度、字典或实体中没有的取值一次报告；按维度汇总正确；冲正后各维度余额为零（`LedgerEnhancementsIT`、`LedgerDimensionTest`）。
+- [x] 来源单据记在交易上，冲正照复制；不存在的实体或实例被拒绝（`LedgerEnhancementsIT`）。
+- [x] 区间与 `knownAt` 的余额、科目明细的期初 / 滚动 / 期末余额正确（`LedgerEnhancementsIT`、场景 `dimensions_rollup`）。
+- [x] 维度声明问题在启动时报告（`LedgerChecksTest`）；账本表仍只 INSERT（`LedgerIT`）。
+- [x] 现有全部检查照常通过（`order_lifecycle` 的快照多出销售交易的来源与新字段的空值）。
+
+**14c-2 要求**
+1. core `ForeignAmount`（币种、交易金额、汇率；换算为本位币按账本小数位四舍五入）；`LedgerPosting` 的外币规则：币种、金额小数位、汇率、换算一致、每个外币各自平衡。
+2. 分录 `currency`、`transactionAmount`、`exchangeRate`（迁移 V16，空即本位币）；`LEDGER_POST` 可省略外币行的本位币金额；冲正照原样复制；
+   数据库触发器按币种兜底。
+3. 模板 `currency_balances`；`account_activity` 增加外币列。
+4. 示范：场景 `ledger/multi_currency`（外币开票、按另一汇率收款并记汇兑收益、冲正）。文档：11 §1.8、D24。
+
+**14c-2 验收标准**
+- [x] 省略本位币金额时按汇率换算；给出而不一致被拒（附应有金额）；四舍五入远离零（`ForeignCurrencyTest`、`LedgerMultiCurrencyIT`）。
+- [x] 本位币平衡而某外币不平衡被拒；差额 0.01 的不平衡显示差额（`ForeignCurrencyTest`、`LedgerMultiCurrencyIT`）。
+- [x] 属性测试：随机的外币分录及其冲正通过校验，每个币种与本位币合计为零（`ForeignCurrencyTest`）。
+- [x] 绕过流程写入的外币不平衡分录被数据库拒绝（`LedgerMultiCurrencyIT`）。
+- [x] 按币种的余额、结算后应收在两种币种上都为零、冲正后归零（`LedgerMultiCurrencyIT`、场景 `multi_currency`）。
+- [x] 现有全部检查照常通过。
+
+### 14d 时点查询、导出与报表存档（5–7 天）
+
+设计见 19 与决策 D25（在 14d 计划中确认）。分三个 PR：14d-1 时点运行、模板目录与"报表"页面；14d-2 导出；14d-3 签发存档与重现。
+
+**14d-1 要求**
+1. 运行时点：`POST /api/queries/{id}` 的 `asOf` / `knownAt`；头部 `timeSlice` 映射参数；两者冲突、视图禁止时间旅行、公开模板声明时点均被拒；
+   `RunTemplate.at`；场景 `query` 期望的 `asOf` / `knownAt`。账本四个模板映射 `knownAt`。
+2. 模板版本 `AdvancedQueryDefinition.version()`（文件全文或 DSL 规范描述的 SHA-256）。
+3. 头部 `report`（期间、横向）；消息 `query.<id>`、`query.<id>.<列>`，报表缺标题由启动检查 `MESSAGES` 报告。
+4. 目录 `GET /api/meta/queries`（有权运行的模板：参数 schema、结果列、筛选排序、版本、时点、报表）。
+5. 后台 `/reports` 与 `/reports/run?id=<模板>`；菜单"报表"。示范：账本模板与 `commerce.stock_availability` 声明 `report`。
+6. 文档：19、05 §2.1、§3、§5.1、D25、CLAUDE.md。
+
+**14d-1 验收标准**
+- [x] 按请求的 `asOf` / `knownAt` 运行时，时态实体（含主数据）取该时点的版本；缺省行为不变（`TemplateTimeSliceIT`）。
+- [x] 声明 `timeSlice` 的模板以参数为时点，请求再给时点被拒；禁止时间旅行的视图被拒；公开模板的 `timeSlice` 启动即报错（`TemplateTimeSliceIT`、core 测试）。
+- [x] 倒签更正：试算表按两个记录时点运行，只在更正的两个科目上相差，科目名称按当时所知显示（场景 `ledger/as_known_on`）。
+- [x] 模板版本随文件任何修改而变，换行风格不影响（core 测试）。
+- [x] 目录只列有权运行的模板，内容与执行一致（`QueryCatalogIT`）。
+- [x] 后台运行报表：参数表单、时点、结果表格；无权限者看不到（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+
+**14d-2 要求**
+1. core `ReportDocument`、`ReportColumn`、`ReportFormat`（区域格式、括号负数）、`CsvReportWriter`（按列的小数位、防公式注入）。
+2. runtime `XlsxReportWriter`（fastexcel，数值与日期单元格）、`PdfReportWriter`（PDFBox，页眉页脚、页码、列宽、确定性输出）、`PdfFonts`
+   （Noto Sans 随平台提供，OFL；`jabiz.reports.pdf.fonts` 为后备字体）、`ReportSettings`、`ReportExporter`、`QueryTexts`；启动检查 `REPORTS`（字体文件可读）。
+3. `POST /api/queries/{id}/export?format=`；行数上限 `jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`；`AdvancedQueryExecutor.all`；观测 `jabiz.query.export`。
+4. 约定插件把 `jabizApp { region }` 写入 `jabiz.region`。
+5. 后台报表页"导出"（Excel、PDF、CSV，按当前参数、时点、筛选、排序）。
+6. 文档：19 §4、§6、13 §2、D25、CLAUDE.md。
+
+**14d-2 验收标准**
+- [x] Excel 中的金额是数值单元格，其和等于报表的合计（`XlsxReportWriterTest`、`ReportExportIT`）。
+- [x] CSV 的值精确（按列的小数位，不分组、不舍入），以公式开头的文本不会被当作公式（`CsvReportWriterTest`、`ReportExportIT`）。
+- [x] PDF 每页有公司、报表、期间、运行时间、页码（给出生效时点时也写明）；负数带括号；窄列不被长文本挤掉，列再多也不越出页面（`PdfReportWriterTest`）。
+- [x] 同一次运行的 PDF 逐字节相同（`PdfReportWriterTest`、`ReportExportIT`）。
+- [x] 导出按请求的时点读取，页脚显示记录时点（`ReportExportIT`）。
+- [x] 超过上限被拒绝（422 `REPORT_TOO_LARGE`），不截断；权限同运行，未知格式 400（`ReportExportIT`）。
+- [x] 后台导出当前的行（Vitest、Playwright 下载）。
+- [x] 现有全部检查照常通过。
+
+**14d-3 要求**
+1. 迁移 V17：`sys_report_run`、`sys_report_run_supersede`（只追加）。
+2. 流程 `REPORT_ISSUE`（`report.issue` 加模板权限）：未给出的时点固定在签发时刻（`At.pinned`）、规范化与内容哈希、可重算标记、取代、事件 `jabiz.report.issued`。
+3. `GET /api/reports/runs`、`/{id}`、`/{id}/export`（由存档重现）、`POST /{id}/verify`（`report.archive.read` 加签发时的模板权限与数据范围）。
+4. 后台：报表运行页"签发"；`/reports/archive`（保存、核对、已被取代）。
+5. 文档：19 §5、§6、12 §6、D25、CLAUDE.md。
+
+**14d-3 验收标准**
+- [x] 签发后继续过账，再次重现得到逐字节相同的 PDF 与 CSV，哈希不变，核对为 `identical`；未给出的时点固定在签发时刻，其后生效的排定变更不影响核对（`ReportArchiveIT`）。
+- [x] 模板版本改变时核对报告 `template_changed`；读取原地修改数据的报表被标为仅存档，数据改变后核对为 `differs`（`ReportArchiveIT`）。
+- [x] 一次运行只能被同一模板的另一次运行取代一次（`ReportArchiveIT`）。
+- [x] 读取需要存档权限、模板权限与签发人相同的数据范围，不可读的运行为 404；签发需要模板权限（`ReportArchiveIT`）。
+- [x] 存档表上的 UPDATE / DELETE 被数据库拒绝（`ReportArchiveIT`）。
+- [x] 存入读回的值与哈希不变（`ArchivedValuesTest`）。
+- [x] 后台签发、存档列表、保存与核对（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+
+### 14e 导入框架（4–5 天）
+
+设计见 20 与决策 D26（在 14e 计划中确认）。分两个 PR：14e-1 文件类型、解析、导入定义、按行保存点的预览、查看与映射；14e-2 提交、去重、导入记录与报告、后台页面。
+
+**14e-1 要求**
+1. `MediaTypes` 增加导入专用类型 `TEXT`、`XLSX`（按整个文件判定）、`XML`；只能单独组成策略；原样保存，下载为附件，公开接口不提供。
+2. core `imports`：`ImportFormat`（CSV、定宽、XLSX、XML、自定义）、`ImportParser` SPI 与平台解析器（XLSX 与 XML 自己读取，禁止 DTD，按实际字节限制解压）、
+   `ParseLimits`、`ImportDefinition`（字段、按行或按组、外部引用、整个文件的检查、控制合计、权限、时区与日期格式）、`ImportValues`、`ImportMapping`、`ImportPreparation`。
+3. runtime：`StorageEngine.inSavepoint`、`ExecutionOptions.DRY_RUN`；内部流程 `IMPORT_RUN`（按单元保存点执行子流程，自身再查权限）；
+   `GET /api/meta/imports`、`POST /api/imports/{id}/inspect`、`/preview`；映射 `SysImportMapping`（迁移 V18）与 `IMPORT_MAPPING_SAVE` / `REMOVE`；
+   启动检查 `IMPORT`；配置 `jabiz.imports.max-rows`；观测 `jabiz.import.run`；错误码与三种语言的消息。
+4. 示范：`commerce.stock`（CSV，按行，外部引用跳过）、`commerce.prices`（XLSX）、`commerce.price-list`（XML）、`ledger.opening`（CSV，按组，借贷相等）。
+5. 文档：20、14 §3、06 §4、D26、CLAUDE.md。
+
+**14e-1 验收标准**
+- [x] 预览执行全部行，报告全部问题（读取、重复、流程拒绝），且不留下业务数据、操作记录（`ImportIT`）。
+- [x] 失败的单元只撤销自己，后面的单元照常执行并看到前面单元的写入（`ImportIT`）。
+- [x] 按组导入每组一次流程；借贷不平的文件报告文件级问题（`ImportIT`）。
+- [x] CSV、定宽、XLSX（日期、公式、15 位精度）、XML 读取正确；XXE、实体膨胀、ZIP 炸弹、超限被拒（core 测试、`ImportIT`）。
+- [x] 伪装的 `.xlsm` / `.docx`、HTML/SVG 不被判定为导入类型；导入类型不能与其他类型混用（core 测试）。
+- [x] 映射调整版式与列，保存的映射只追加（`ImportIT`）。
+- [x] 缺导入权限、缺行流程权限、直接执行内部流程、别的策略的文件均被拒（`ImportIT`）。
+- [x] 现有全部检查照常通过。
+
+**14e-2 要求**
+1. `IMPORT_RUN` 的提交：有问题整体回滚（422 `IMPORT_REJECTED`）并另行记录被拒的导入；成功则提交数据、导入记录、外部引用与事件 `jabiz.import.committed`。
+2. 迁移：`sys_import_run`（只追加；同一导入同一文件只成功一次）、`sys_import_ref`（只追加；外部引用唯一）。
+3. 导入记录列表与详情、报告导出（PDF、XLSX、CSV，复用 19 §4 的导出）、数据质量说明。
+4. 后台导入向导（上传、映射、参数、预览、提交、报告）与导入历史。
+5. 场景步骤 `import`（07 §3.1）与场景 `imports/opening_balances`、e2e、文档（20、07、12、D26）。
+
+**14e-2 验收标准**
+- [x] 一行出错时整份文件不写入任何数据，被拒的导入有记录（`ImportIT`、场景 `imports/opening_balances`）。
+- [x] 同一文件再次提交 409，外部引用跳过或报错，并发提交同一文件只有一次成功（`ImportIT`）。
+- [x] 导入表上没有 UPDATE / DELETE；各行的操作指向导入的操作；被撤销的工作的提交后步骤不执行（`ImportIT`、`ProcessEngineIT`）。
+- [x] 导入记录的列表、详情、报告导出（PDF、XLSX、CSV），只对能运行该导入的人可见（`ImportIT`）。
+- [x] 后台完成一次导入（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+
+### 14f 审计、防篡改与保留（6–8 天）
+
+设计见 21 与决策 D27。分三个 PR：14f-1（审计记录）、14f-2（防篡改）、14f-3（保留、保全与导出）。
+
+**14f-1 要求**
+1. 迁移 V20：`sys_audit_record`（只追加）；`DatasetEntityManager`（普通实体）与 `VersionAppender`（时态实体）在同一事务内记录每次写入的前后值、操作人、时间、原因。
+2. 遮蔽：敏感字段只存 `***`（core `AuditDiff`）；值按规范形式保存与比较。
+3. 接口 `GET /api/audit/records`（按实体、操作人、时间、流程、字段；`withApprovals` 一并列出审批）、`/{recordNo}`；`/api/audit/operations` 每项增加 `auditRecords`。
+4. 后台 `/audit`、历史页与列表行的入口。
+5. 文档：21、D27、11 §3、12 §6、CLAUDE.md。
+
+**14f-1 验收标准**
+- [x] 普通与时态实体的插入、更新、删除都有前后值，更新只记变化的字段，原因带出（`AuditRecordsIT`）。
+- [x] 敏感字段只以 `***` 出现，数据库中也没有原值（`AuditRecordsIT`、`AuditDiffTest`）。
+- [x] 审计表上 UPDATE / DELETE 被拒；接口需要 `audit.read`，非法参数 400（`AuditRecordsIT`）。
+- [x] 单据的审计能列出审批人、结论与理由（`ApprovalIT`）。
+- [x] 后台看到一次修改的前后值（Vitest、Playwright）。
+- [x] 现有全部检查照常通过（场景快照不变）。
+
+**14f-2 要求**
+1. core：`MerkleRoot`、`SealedColumns`、`SealBlock`（HMAC 块哈希）、`SealChain`（链的检查）、`IntegrityKey`、`IntegrityProblem`。
+2. 迁移 V21：`sys_integrity_seal`、`sys_integrity_item`、`sys_integrity_seal_table`、`sys_integrity_check`（都只追加）。
+3. `INTEGRITY_SEAL` / `INTEGRITY_VERIFY` 与定时任务 `jabiz.integrity-seal` / `jabiz.integrity-verify`；只追加表从目录发现；启动检查 `INTEGRITY`（无主键的只追加表）。
+4. 密钥 `JABIZ_INTEGRITY_KEY`（非 dev 缺少即启动失败）；`/api/integrity/head|seals|checks`；页面 `/integrity`。
+5. 文档：21 §2、D27 第 4 条、CLAUDE.md；部署：CI、docker、快速上手。
+
+**14f-2 验收标准**
+- [x] 绕过触发器修改或删除一行、改动封存块或条目、关掉表的只追加保护，校验分别报告被改、缺失、断链与条目被改、未受保护（`IntegrityIT`、`SealChainTest`）。
+- [x] 封存时尚未提交的行由下一次封存补上（`IntegrityIT`）；非 dev 缺少密钥启动失败（`IntegrityKeySettingsTest`）。
+- [x] 迁移给只追加表加列后已有封存照常通过；改列清单来掩盖修改被发现（`IntegrityIT`）。
+- [x] 块哈希是密钥的 HMAC、链到前一块；封存表不能 UPDATE / DELETE；接口与流程需要各自的权限（`IntegrityIT`）。
+- [x] 后台查看最新块、运行校验、查看问题（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：不需要宽限期（见 21 §2.2）；"在应用之外插入的可疑行"无法由封存判定，改为报告未封存行数并在 21 §2.3 说明。
+
+**14f-3 要求**
+1. core：`RetentionPolicy`（按日期或会计年度末起算）、`LegalHold`、`OpenCsv`。
+2. 删除拦截（`DeletionGuard`：普通实体的删除、时态实体的墓碑，422 `RETENTION_ACTIVE` / `LEGAL_HOLD`）；文件清理跳过受保留与保全的文件；启动检查 `RETENTION`。
+3. `SysLegalHold`（迁移 V22）与 `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；到期报告 `GET /api/retention`。
+4. `POST /api/exports/data`（CSV、`schema.json`、`manifest.json`、报表 PDF），操作记录 `DATA_EXPORT`。
+5. 后台 `/retention`；示范：运费明细保留 7 年；文档 21 §3–§4、D27、14、12、CLAUDE.md。
+
+**14f-3 验收标准**
+- [x] 保留期内与受保全的记录（普通与时态实体、文件）删除被拒，解除保全后可删；文件清理跳过并报告（`RetentionIT`、`FileSweepIT`、`RetentionPolicyTest`）。
+- [x] 保全只经其流程下达与解除，解除须写原因；到期报告的数量正确（`RetentionIT`）。
+- [x] 导出的 ZIP 与清单一致，按权限过滤，敏感字段不导出；用导出的 CSV 重算试算表与系统一致（`DataExportIT`、`OpenCsvTest`）。
+- [x] 后台查看到期报告、进入保全、导出（Vitest、Playwright）。
+- [x] 现有全部检查照常通过。
+
+### 14g 安全增强（6–7 天）
+
+设计见 10 §9–§13 与决策 D28（在 14g 计划中确认）。分三个 PR：14g-1 二次验证、按操作要求二次验证、闲置锁定；14g-2 OIDC 单点登录；
+14g-3 按权限显示明文、数据期限、访问审查。
+
+**14g-1 要求**
+1. core：`Totp`（RFC 6238）、`Base32`、`RecoveryCodes`、`MfaSecretCipher`（AES-256-GCM，附加数据为用户主键）、`MfaRequirement`；
+   流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`；`RequestContext.mfaAt`；登录结果 `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED` / `MFA_FAILED`。
+2. 迁移 V23：`sec_user_mfa_version`（`SecUserMfa`）、`SecRole.requireMfa`、登录记录的 `factor` / `mfaStep`、刷新令牌的 `mfa_at`。
+3. 流程 `SPONSOR_MFA_VERIFY`、`SEC_MFA_ENROLL_BEGIN` / `CONFIRM`、`SEC_MFA_RESET`；接口 `/api/auth/challenge/**`、`/api/auth/mfa/**`、`/api/auth/step-up`；
+   密钥 `JABIZ_MFA_KEY`（非 dev 缺少即启动失败）。
+4. 入口检查（流程 API、数据视图提交、实体 API、导入、撤销）；平台管理操作为 `ADMINISTRATION` 级（`jabiz.security.mfa.administration`）；示范：`PRICE_ADJUST` 总要求二次验证。
+5. 闲置：刷新窗口 = 访问令牌有效期 + 闲置时长，启动检查 `SECURITY`；前端登录第二步、绑定、安全设置页、step-up 对话框、闲置锁定。
+6. 文档：10 §9–§11、D28、07、12、13、CLAUDE.md；部署：CI、docker、快速上手。
+
+**14g-1 验收标准**
+- [x] 已绑定的用户须以密码与验证码登录；码错误与密码错误计入同一锁定；同一个码不能用两次；恢复码只能用一次；新登录使旧挑战失效（`MfaIT`、`TotpTest`、`LoginAttemptPolicyTest`）。
+- [x] 角色要求二次验证时，未绑定的用户先绑定再登录；已有的会话在刷新时失效（`MfaIT`）。
+- [x] 要求二次验证的操作在各入口拒绝没有或过旧的二次验证（403 `MFA_REQUIRED`），step-up 后通过；管理级可按配置关闭，`ALWAYS` 不受影响（`MfaIT`、`MfaAdministrationOffIT`）。
+- [x] 密钥加密存放，不能挪给别的用户；操作记录中没有验证码与密钥；新表只插入（`MfaIT`、`MfaSecretCipherTest`）。
+- [x] 闲置超过时长的会话不能刷新；访问令牌长于闲置时长时启动失败（`MfaIT`、`MfaSettingsTest`）。
+- [x] 后台：登录第二步、绑定、安全设置、step-up、闲置锁定（Vitest；Playwright `mfa.spec.ts`）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：场景回放不经入口，不检查二次验证（与权限相同），因此场景文件不需要新增 `mfa` 键。
+
+**14g-2 要求**
+1. 配置 `jabiz.security.oidc.providers[i]`（`id`、`issuer`、`client-id`、`client-secret`（环境变量）、`redirect-uri`、`scopes`、`labels`、`mfa-amr`）与启动检查 `SECURITY`。
+2. 发现文档与 JWKS（缓存、未知 `kid` 时重读）、授权码 + PKCE + nonce、ID 令牌校验（RS256 / ES256、iss、aud、azp、exp、iat、nonce、sub）；
+   接口 `GET /api/auth/oidc/providers`、`POST /api/auth/oidc/{id}/start`、`POST /api/auth/oidc/callback`（公开）。
+3. 迁移 V24：`sec_user_identity_version`（`SecUserIdentity`，管理员经数据视图关联，权限 `security.user.identity.write`，管理级二次验证）、
+   `sec_oidc_state` / `sec_oidc_state_use`（发起时删除过期请求）、`sec_refresh_token.identity_id`。
+4. 流程 `SPONSOR_OIDC_SIGN_IN`（登录记录 `factor = OIDC`）；`amr` 按配置视同二次验证，否则沿用 14g-1 的第二步；`SEC_USER_CREATE` 的密码可选。
+5. 前端：登录页的提供方按钮、回调页 `/login/oidc`。文档 10 §12、D28、07、12、CLAUDE.md。
+
+**14g-2 验收标准**
+- [x] 关联的用户经提供方登录；未关联的主体被拒且不开户；没有密码的用户不能用密码登录，错误的密码也锁不住他（`OidcIT`）。
+- [x] 回调必须带发起登录的浏览器的 binder（login CSRF）；解除关联后其会话不能再刷新；提供方的二次验证以 `auth_time` 计时（`OidcIT`）。
+- [x] state 只能用一次、10 分钟过期；PKCE verifier 不符时提供方拒绝；nonce、受众、授权方、签发方、时间、主体不符与 HS256、`none`、别的密钥签名都被拒；密钥轮换后只重读一次 JWKS（`OidcIT`）。
+- [x] `amr` 符合配置时会话带二次验证；否则已绑定的用户转入验证码，角色要求而未绑定时先绑定；锁定与禁用的用户被拒（`OidcIT`）。
+- [x] 关联需要专门的权限并是管理操作（二次验证），一个主体只对应一个用户；除过期的登录请求外只插入，操作记录中没有 state 与授权码（`OidcIT`）。
+- [x] 配置问题一次报告全部（`OidcProvidersTest`）；后台：提供方按钮、回调页、回调后的第二步（Vitest）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：对提供方的调用改用 JDK 的异步 HTTP 客户端而不是 WebClient（WebClient 在 R2DBC 线程上恢复链路上下文时触发 Micrometer 的断言）；
+  回调不在路径中带提供方，由 state 记录的提供方决定；state 表改为可删除过期行（任何人都能发起登录，只追加会无限增长）；
+  代码审查后增加 binder、`auth_time`、关联的专门权限与刷新时检查关联。端到端测试不接身份提供方（见计划）。
+
+**14g-3 要求**
+1. 遮蔽字段 `f.masked(权限, MaskStyle.LAST4 | ALL)`：读接口、历史、审计、导入报告、`input_summary` 中为遮蔽形式；`POST /api/datasets/{id}/reveal` 逐值显示明文，
+   每次写只追加的 `sys_reveal_record`（迁移 V25）；SQL 模板在 `{{Entity}}` 中为无权限者投影遮蔽形式，持有权限者的运行、报表导出与数据导出留记录，签发的报表一律遮蔽；
+   写入、筛选、排序需要权限，遮蔽形式不能写回（400 `MASKED_VALUE`）；遮蔽字段不能公开（启动检查）；`GET /api/audit/reveals`。
+2. 数据期限：`SecUserRole.dataFrom` / `dataTo`（V25），`DataPeriod.hull`，令牌 `data_from` / `data_to`，`RequestContext.dataPeriod`，`/api/auth/me`；
+   数据视图范围 `withinDataPeriod(字段)` 与经引用的 `withinDataPeriod(引用字段, 被引用字段)`（启动检查）；账本交易与分录；审计查询按记录时间截取。
+3. 访问审查：报表模板 `jabiz.security.access_review`（`REPORT_ISSUE` 按期末时点签发）、`GET /api/security/access-reviews[/changes|/conflicts]`、
+   流程 `ACCESS_REVIEW_SIGN_OFF`（`security.access-review.sign`，总要求二次验证）与只追加表 `sys_access_review`（V25）。
+4. 前端：列表中的"显示"、遮蔽字段的筛选排序与表单权限、页头的数据期限、审计页"明文显示"页签、`/access-review`。示范：`Carrier.bankAccount`（app V12）。
+5. 文档：10 §13、D28、02、03 §2.2、05、12、19、21、CLAUDE.md。
+
+**14g-3 验收标准**
+- [x] 遮蔽字段在读接口、历史、审计、操作记录与通用实体流程的结果中为遮蔽形式；显示明文需要数据视图与字段的权限，每次留记录，范围外 404（`MaskedFieldIT`）。
+- [x] 无权限者写入被拒、不能按其筛选排序；遮蔽形式不能写回；持有权限者可以（`MaskedFieldIT`）。
+- [x] 模板对无权限者在 SQL 中遮蔽（条件同样只见遮蔽值），持有权限者的运行与导出留记录；签发的报表一律遮蔽；数据导出同理（`MaskedFieldIT`、`AccessControlCompilerTest`）。
+- [x] 遮蔽样式、审计形式、声明约束（文本、非敏感、非主键、非显示字段、非默认排序、不能公开）（`MaskedFieldTest`）。
+- [x] 期限限定的审计师只看到期间内的交易、分录与报表数字；审计记录按记录时间；期限外写入被拒；期限来自角色分配（外包、不限期即不限、刷新保持）（`DataPeriodIT`、`DataPeriodTest`）。
+- [x] 访问审查：按期末签发的报表、期间内的变更与冲突，签核保存引用与哈希；需要权限与二次验证、期间已结束、报表正确；表只插入（`AccessReviewIT`）。
+- [x] 后台：显示明文、遮蔽字段的筛选与表单、数据期限标签、明文显示记录、访问审查页（Vitest）。
+- [x] 现有全部检查照常通过。
+- 与计划的差别：签发的报表一律遮蔽（计划未涉及；存档给别人阅读与核对，核对须得到相同的行）；访问审查不另存报表快照，改为 `REPORT_ISSUE` 签发并在签核中引用（D25、D28 第 9 条）；
+  经引用声明期限的数据视图，受限者不能看历史、不能更新（默认拒绝）；写入时经引用的期限在时间所在的实体上检查。

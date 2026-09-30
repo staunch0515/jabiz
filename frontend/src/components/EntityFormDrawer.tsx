@@ -64,9 +64,9 @@ export default function EntityFormDrawer({
   const [general, setGeneral] = useState<string[]>([])
   const mode = instance ? 'edit' : 'create'
   const fields = useMemo(() => {
-    const base = formFieldsOf(entity, mode, preset)
+    const base = formFieldsOf(entity, mode, preset, can)
     return readOnly ? base.map((f) => ({ ...f, disabled: true, fixed: false })) : base
-  }, [entity, mode, preset, readOnly])
+  }, [entity, mode, preset, readOnly, can])
   const datasetList = useDatasets().data
   const processList = useProcesses().data
   const datasets = useMemo(() => datasetList ?? [], [datasetList])

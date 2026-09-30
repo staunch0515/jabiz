@@ -20,6 +20,8 @@ import com.jabiz.runtime.process.entity.UpdateEntityInput;
 import com.jabiz.runtime.process.entity.UpdateProcessDefinition;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.security.MaskedFields;
+import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
@@ -61,6 +63,7 @@ class EntityController {
     private final DatasetEntityManager entityManager;
     private final SensitiveDataMasker masker;
     private final boolean development;
+    private final MfaPolicy mfa;
 
     EntityController(
         ProcessExecutor processes,
@@ -68,8 +71,10 @@ class EntityController {
         DatasetRegistry datasets,
         DatasetEntityManager entityManager,
         SensitiveDataMasker masker,
-        Environment environment
+        Environment environment,
+        MfaPolicy mfa
     ) {
+        this.mfa = mfa;
         this.processes = processes;
         this.entities = entities;
         this.datasets = datasets;
@@ -106,7 +111,7 @@ class EntityController {
                 if (definition.findField(field).isEmpty()) {
                     throw invalid("sort", "Entity '" + entityType + "' has no field '" + field + "'");
                 }
-                if (definition.field(field).sensitive()) {
+                if (definition.field(field).sensitive() || !MaskedFields.mayCompare(context, definition, field)) {
                     // Even the order of secrets tells something about them (docs/design/10-security.md section 6).
                     throw new ValidationException(List.of(new Violation(field, PlatformErrorCodes.SORT_NOT_ALLOWED,
                         "Sorting by [" + field + "] is not allowed")));
@@ -158,6 +163,7 @@ class EntityController {
             DatasetDefinition dataset = defaultDataset(entityType);
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing " + entityType + " through dataset " + dataset.resourceId());
+            mfa.require(context, dataset.policy().writeMfa(), "Writing " + entityType);
         }).then();
     }
 

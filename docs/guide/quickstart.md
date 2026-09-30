@@ -44,10 +44,14 @@ cd backend && ./gradlew :app:bootRun --args='--spring.profiles.active=dev'   # 8
 cd frontend && pnpm install && pnpm dev          # 5173，/api 代理到 8080
 ```
 
-- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
+- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、封存密钥 `JABIZ_INTEGRITY_KEY`（同样生成，务必备份，见 design 21 §2.4）、二次验证密钥 `JABIZ_MFA_KEY`（同样生成，务必备份，见 design 10 §9）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
   与上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（`dev` 下默认 `backend/app/build/jabiz-files`；compose 用专用卷）。
 - 公开只读访问（15）默认关闭；`JABIZ_PUBLIC_ENABLED=true` 打开后，匿名即可读取示范的公开商品目录：
   `curl 'http://localhost:8080/api/public/queries/commerce.public.catalog?sort=unitPrice:asc'`（商品照片经 `/api/public/files/{id}`）。
+- 单点登录（design 10 §12）：在身份提供方登记回调地址 `https://<后台>/login/oidc`，再以环境变量配置一个提供方，例如
+  `JABIZ_SECURITY_OIDC_PROVIDERS_0_ID=corp`、`…_0_ISSUER=https://idp.example.com/realms/corp`、`…_0_CLIENT_ID=jabiz`、
+  `…_0_CLIENT_SECRET=<密钥>`、`…_0_REDIRECT_URI=https://<后台>/login/oidc`、`…_0_LABELS_EN=Corporate sign-in`；
+  然后在数据视图 `SecUserIdentity` 中把提供方的 `sub` 关联到用户（只用单点登录的用户可以不设密码）。
 - 启动时 Flyway 先迁移平台脚本（`db/jabiz`），再迁移业务脚本（`db/migration`）；元数据、视图、模板、流程的不一致会在启动时一次性报告。
 - 接入本地观测：`docker compose up -d lgtm`，再以环境变量启动后端：
   `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://localhost:4318/v1/traces`、

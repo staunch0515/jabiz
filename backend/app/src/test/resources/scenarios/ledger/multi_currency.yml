@@ -1,0 +1,72 @@
+# Entries in a foreign currency (docs/design/11-ledger-events-jobs.md section 1.8, decision D24 item 5). The demo
+# ledger keeps yen without decimals: a customer is invoiced in euros, pays at a better rate, and the gain is booked in
+# yen; the receivable is cleared in both currencies. A mistyped posting is refused, a wrong one reversed.
+name: Ledger in foreign currencies
+clock: 2026-05-01T00:00:00Z
+actor: { id: accountant, permissions: ["*"] }
+steps:
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1010", accountName: Bank EUR, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1200", accountName: Receivables, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4000", accountName: Sales, accountType: REVENUE }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4900", accountName: Exchange gains, accountType: REVENUE }
+
+  - note: 1,250.00 EUR at 160.25; the yen amounts are converted by the ledger.
+    process: LEDGER_POST@latest
+    input:
+      description: Invoice INV-1001
+      reference: INV-1001
+      entries:
+        - { accountCode: "1200", direction: DEBIT, currency: EUR, transactionAmount: "1250.00", exchangeRate: "160.25" }
+        - { accountCode: "4000", direction: CREDIT, currency: EUR, transactionAmount: "1250.00", exchangeRate: "160.25" }
+    expectOutput: { total: 200313 }
+  - note: The yen amount does not match the rate.
+    expectError:
+      process: LEDGER_POST@latest
+      input:
+        description: Receipt, mistyped
+        entries:
+          - { accountCode: "1010", direction: DEBIT, amount: 204000, currency: EUR, transactionAmount: "1250.00", exchangeRate: "164" }
+          - { accountCode: "1200", direction: CREDIT, amount: 204000, currency: EUR, transactionAmount: "1250.00", exchangeRate: "164" }
+      status: 422
+      ruleCode: LEDGER_FX_AMOUNT_MISMATCH
+
+  - advanceClock: P20D
+  - note: Paid at 164.00; the receivable is cleared at the invoice rate and the difference is a gain.
+    process: LEDGER_POST@latest
+    input:
+      description: Receipt for INV-1001
+      reference: INV-1001
+      entries:
+        - { accountCode: "1010", direction: DEBIT, currency: EUR, transactionAmount: "1250.00", exchangeRate: "164" }
+        - { accountCode: "1200", direction: CREDIT, currency: EUR, transactionAmount: "1250.00", exchangeRate: "160.25" }
+        - { accountCode: "4900", direction: CREDIT, amount: 4687 }
+    save: { receipt: $.transactionId }
+  - expect:
+      query: jabiz.ledger.currency_balances
+      params: { asOf: 2026-05-22T00:00:00Z }
+      rows: 4
+      values:
+        - { accountCode: "1010", currency: EUR, transactionBalance: 1250, balance: 205000 }
+        - { accountCode: "1200", currency: EUR, transactionBalance: 0, balance: 0 }
+        - { accountCode: "4000", currency: EUR, transactionBalance: -1250, balance: -200313 }
+        - { accountCode: "4900", currency: "", balance: -4687 }
+
+  - advanceClock: P1D
+  - process: LEDGER_REVERSE@latest
+    input: { transactionId: "${receipt}", reason: Wrong customer }
+  - expect:
+      query: jabiz.ledger.currency_balances
+      params: { asOf: 2026-05-23T00:00:00Z }
+      rows: 4
+      values:
+        - { accountCode: "1010", currency: EUR, transactionBalance: 0, balance: 0 }
+        - { accountCode: "1200", currency: EUR, transactionBalance: 1250, balance: 200313 }
+        - { accountCode: "4000", currency: EUR, transactionBalance: -1250, balance: -200313 }
+        - { accountCode: "4900", currency: "", balance: 0 }
+snapshot:
+  entities: [LedgerTransaction, LedgerEntry]
+  asOf: end

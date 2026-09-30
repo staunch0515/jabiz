@@ -15,6 +15,20 @@ import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.file.MediaTypeDetector;
+import com.jabiz.file.MediaTypes;
+import com.jabiz.imports.ImportDefinition;
+import com.jabiz.imports.ImportMapping;
+import com.jabiz.runtime.file.FileEntities;
+import com.jabiz.runtime.file.FileKeys;
+import com.jabiz.runtime.file.FileProcesses;
+import com.jabiz.runtime.file.FileStore;
+import com.jabiz.runtime.imports.ImportRegistry;
+import com.jabiz.runtime.imports.ImportReport;
+import com.jabiz.runtime.imports.ImportService;
+import com.jabiz.runtime.process.entity.EntityIdGenerator;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import tools.jackson.databind.json.JsonMapper;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.param.ParamService;
@@ -78,6 +92,11 @@ public final class ScenarioRunner {
     private final JobRegistry jobs;
     private final JobRunner jobRunner;
     private final OutboxDeliverer deliverer;
+    private final ImportRegistry imports;
+    private final ImportService importService;
+    private final FileStore fileStore;
+    private final EntityIdGenerator ids;
+    private final JsonMapper json;
 
     public ScenarioRunner(ApplicationContext context) {
         this.processes = context.getBean(ProcessRegistry.class);
@@ -94,6 +113,11 @@ public final class ScenarioRunner {
         this.jobs = context.getBean(JobRegistry.class);
         this.jobRunner = context.getBean(JobRunner.class);
         this.deliverer = context.getBean(OutboxDeliverer.class);
+        this.imports = context.getBean(ImportRegistry.class);
+        this.importService = context.getBean(ImportService.class);
+        this.fileStore = context.getBean(FileStore.class);
+        this.ids = context.getBean(EntityIdGenerator.class);
+        this.json = context.getBean(JsonMapper.class);
     }
 
     public Result run(Scenario scenario) {
@@ -122,7 +146,8 @@ public final class ScenarioRunner {
             case Scenario.ProcessStep p -> {
                 Object output;
                 try {
-                    output = runProcess(scenario, step, p.process(), ScenarioValues.resolveMap(p.input(), variables));
+                    output = runProcess(scenario, step, p.process(), ScenarioValues.resolveMap(p.input(), variables),
+                        p.actor());
                 } catch (AssertionError e) {
                     throw e;
                 } catch (Throwable e) {
@@ -136,6 +161,26 @@ public final class ScenarioRunner {
                     Object expected = ScenarioValues.resolve(p.expectOutput(), variables);
                     if (!ScenarioValues.matches(expected, output)) {
                         throw failure(scenario, step, "output " + output + " does not match " + expected, null);
+                    }
+                }
+            }
+            case Scenario.ImportStep i -> {
+                Object output;
+                try {
+                    output = runImport(scenario, i, variables);
+                } catch (AssertionError e) {
+                    throw e;
+                } catch (Throwable e) {
+                    throw failure(scenario, step, "import " + i.importId() + " failed with "
+                        + ProblemStatuses.status(e) + " " + describe(ProblemStatuses.violations(e))
+                        + ": " + e.getMessage(), e);
+                }
+                outputs.put(step.number(), output);
+                i.save().forEach((name, path) -> variables.put(name, ScenarioValues.extract(output, path)));
+                if (i.expect() != null) {
+                    Object expected = ScenarioValues.resolve(i.expect(), variables);
+                    if (!ScenarioValues.matches(expected, output)) {
+                        throw failure(scenario, step, "report " + output + " does not match " + expected, null);
                     }
                 }
             }
@@ -164,7 +209,8 @@ public final class ScenarioRunner {
     private void expectError(Scenario scenario, Scenario.ExpectError step, Map<String, Object> variables) {
         Object output;
         try {
-            output = runProcess(scenario, step, step.process(), ScenarioValues.resolveMap(step.input(), variables));
+            output = runProcess(scenario, step, step.process(), ScenarioValues.resolveMap(step.input(), variables),
+                step.actor());
         } catch (AssertionError e) {
             // The scenario itself is wrong (an unknown process, say): not a failure of the process.
             throw e;
@@ -191,7 +237,8 @@ public final class ScenarioRunner {
                 AdvancedQueryDefinition template = templates.find(q.query())
                     .orElseThrow(() -> failure(scenario, step, "unknown SQL template " + q.query(), null));
                 List<Map<String, Object>> rows = as(scenario, queries.execute(template,
-                    ScenarioValues.resolveMap(q.params(), variables)).map(ScenarioRunner::row).collectList());
+                    ScenarioValues.resolveMap(q.params(), variables),
+                    new AdvancedQueryExecutor.At(q.asOf(), q.knownAt())).map(ScenarioRunner::row).collectList());
                 if (q.rows() != null && rows.size() != q.rows()) {
                     throw failure(scenario, step, q.query() + " returned " + rows.size() + " rows, expected "
                         + q.rows() + ": " + rows, null);
@@ -233,16 +280,48 @@ public final class ScenarioRunner {
         }
     }
 
-    private Object runProcess(Scenario scenario, Scenario.Step step, String process, Map<String, Object> input) {
+    private Object runProcess(Scenario scenario, Scenario.Step step, String process, Map<String, Object> input,
+        Scenario.Actor actor) {
         ProcessDefinition<?, ?, ?> definition = find(process)
             .orElseThrow(() -> failure(scenario, step, "unknown process " + process, null));
-        ProcessResult<?> result = as(scenario, Mono.defer(() -> run(definition, input)));
+        ProcessResult<?> result = as(actor == null ? scenario.actor() : actor, Mono.defer(() -> run(definition, input)));
         return masker.toJsonWithoutSecrets(result.output());
     }
 
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> run(ProcessDefinition<I, O, C> definition,
         Map<String, Object> input) {
         return executor.run(definition, inputs.convert(definition.inputType(), input), ExecutionOptions.NONE);
+    }
+
+    /** Stores the scenario's file as an upload would, then previews or commits the import. */
+    private Object runImport(Scenario scenario, Scenario.ImportStep step, Map<String, Object> variables)
+        throws java.io.IOException {
+        ImportDefinition<?> definition = imports.find(step.importId())
+            .orElseThrow(() -> failure(scenario, step, "unknown import " + step.importId(), null));
+        byte[] bytes = step.content().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        MediaTypes type = MediaTypeDetector.detect(bytes)
+            .orElseThrow(() -> failure(scenario, step, "the file is not of an import type", null));
+        java.util.UUID fileId = java.util.UUID.fromString(String.valueOf(ids.next(FileEntities.SYS_FILE)));
+        String sha256;
+        try {
+            sha256 = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        Scenario.Actor actor = step.actor() == null ? scenario.actor() : step.actor();
+        fileStore.write(FileKeys.key(fileId, FileKeys.ORIGINAL),
+            Flux.just(DefaultDataBufferFactory.sharedInstance.wrap(bytes))).block();
+        as(actor, executor.run(FileProcesses.REGISTER_PROCESS, new FileProcesses.RegisterInput(fileId,
+            definition.filePolicy(), type.contentType(), bytes.length, sha256, null, null, List.of(),
+            step.fileName()), ExecutionOptions.NONE));
+        ImportMapping mapping = step.mapping() == null ? null
+            : json.convertValue(ScenarioValues.resolveMap(step.mapping(), variables), ImportMapping.class);
+        Map<String, Object> params = ScenarioValues.resolveMap(step.params(), variables);
+        ImportReport report = as(actor, step.commit()
+            ? importService.commit(step.importId(), fileId.toString(), mapping, params, step.notes())
+            : importService.preview(step.importId(), fileId.toString(), mapping, params));
+        return masker.toJsonWithoutSecrets(report);
     }
 
     private java.util.Optional<ProcessDefinition<?, ?, ?>> find(String process) {
@@ -299,8 +378,12 @@ public final class ScenarioRunner {
     }
 
     private <T> T as(Scenario scenario, Mono<T> pipeline) {
-        RequestContext request = new RequestContext(scenario.actor().id(), scenario.actor().tenant(), Locale.ENGLISH,
-            "scenario", scenario.actor().roles(), scenario.actor().permissions());
+        return as(scenario.actor(), pipeline);
+    }
+
+    private <T> T as(Scenario.Actor actor, Mono<T> pipeline) {
+        RequestContext request = new RequestContext(actor.id(), actor.tenant(), Locale.ENGLISH, "scenario",
+            actor.roles(), actor.permissions(), null, actor.dataPeriod());
         try {
             return pipeline.contextWrite(view -> RequestContexts.put(view, request)).block();
         } catch (RuntimeException e) {

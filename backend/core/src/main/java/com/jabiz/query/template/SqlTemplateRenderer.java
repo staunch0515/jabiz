@@ -24,13 +24,22 @@ public final class SqlTemplateRenderer {
     /**
      * How one entity is read by a template.
      *
-     * @param scope the dataset scope resolved for the caller
+     * @param scope      the dataset scope resolved for the caller
+     * @param plainFields the masked fields the caller may read in plain text (holds their permissions); every other
+     *                    masked field is projected in its masked form (docs/design/10-security.md section 13.1)
      */
-    public record EntityBinding(EntityDefinition entity, DatasetDefinition dataset, Map<String, Object> scope) {
+    public record EntityBinding(EntityDefinition entity, DatasetDefinition dataset, Map<String, Object> scope,
+        java.util.Set<String> plainFields) {
         public EntityBinding {
             Objects.requireNonNull(entity, "entity must not be null");
             Objects.requireNonNull(dataset, "dataset must not be null");
             scope = Map.copyOf(scope);
+            plainFields = plainFields == null ? java.util.Set.of() : java.util.Set.copyOf(plainFields);
+        }
+
+        /** A binding of a caller who sees every masked field masked. */
+        public EntityBinding(EntityDefinition entity, DatasetDefinition dataset, Map<String, Object> scope) {
+            this(entity, dataset, scope, java.util.Set.of());
         }
     }
 
@@ -110,7 +119,8 @@ public final class SqlTemplateRenderer {
         }
         EntityDefinition def = binding.entity();
         if (placeholder.field() == null) {
-            return compiler.templateExpression(binding.dataset(), def, binding.scope(), slice, binder);
+            return compiler.templateExpression(binding.dataset(), def, binding.scope(), slice, binder,
+                binding.plainFields());
         }
         if (def.findField(placeholder.field()).isEmpty()) {
             problems.add(TemplateProblem.error(placeholder.start(),

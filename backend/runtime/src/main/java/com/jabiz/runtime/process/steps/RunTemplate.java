@@ -10,6 +10,7 @@ import com.jabiz.runtime.query.SqlTemplateRegistry;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,17 +28,34 @@ import java.util.function.Function;
 public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTemplate.Metadata<C>, C>,
     CheckedStep<RunTemplate.Metadata<C>> {
 
-    public record Metadata<C>(String templateId, Function<C, Map<String, Object>> params, String targetKey) {
+    /**
+     * @param asOf    effective time the template's temporal entities are read at (null: now)
+     * @param knownAt recorded time they are read as of (null: everything recorded so far)
+     */
+    public record Metadata<C>(String templateId, Function<C, Map<String, Object>> params, Function<C, Instant> asOf,
+        Function<C, Instant> knownAt, String targetKey) {
         public Metadata {
             Objects.requireNonNull(templateId, "templateId must not be null");
             Objects.requireNonNull(params, "params must not be null");
+            Objects.requireNonNull(asOf, "asOf must not be null");
+            Objects.requireNonNull(knownAt, "knownAt must not be null");
             Objects.requireNonNull(targetKey, "targetKey must not be null");
         }
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String templateId,
         Function<C, Map<String, Object>> params, String targetKey) {
-        return StepSpec.of(RunTemplate.class, new Metadata<>(templateId, params, targetKey));
+        return at(templateId, params, ctx -> null, ctx -> null, targetKey);
+    }
+
+    /**
+     * Runs the template at a point in time computed from the context (docs/design/19-reports.md section 2.1); either
+     * function may return null. A template declaring {@code timeSlice} takes its point in time from its parameters.
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> at(String templateId,
+        Function<C, Map<String, Object>> params, Function<C, Instant> asOf, Function<C, Instant> knownAt,
+        String targetKey) {
+        return StepSpec.of(RunTemplate.class, new Metadata<>(templateId, params, asOf, knownAt, targetKey));
     }
 
     private final SqlTemplateRegistry templates;
@@ -53,7 +71,9 @@ public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTem
         return Mono.defer(() -> {
             AdvancedQueryDefinition template = templates.find(metadata.templateId()).orElseThrow();
             Map<String, Object> params = metadata.params().apply(ctx);
-            return executor.execute(template, params == null ? Map.of() : params)
+            AdvancedQueryExecutor.At at = new AdvancedQueryExecutor.At(metadata.asOf().apply(ctx),
+                metadata.knownAt().apply(ctx));
+            return executor.execute(template, params == null ? Map.of() : params, at)
                 .map(RunTemplate::values)
                 .collectList()
                 .doOnNext(rows -> ctx.put(metadata.targetKey(), List.copyOf(rows)))

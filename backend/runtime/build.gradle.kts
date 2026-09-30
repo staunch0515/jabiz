@@ -15,6 +15,8 @@ dependencies {
     // Business modules annotate process inputs with Bean Validation constraints (docs/design/06-process.md section 8).
     api("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Notifications of tasks by e-mail (docs/design/18-numbering-approvals-tasks.md section 5.4); off by default.
+    implementation("org.springframework.boot:spring-boot-starter-mail")
     // Authentication (docs/design/10-security.md): Spring Security for WebFlux, JWT access tokens, BCrypt.
     api("org.springframework.boot:spring-boot-starter-security")
     implementation("com.nimbusds:nimbus-jose-jwt:10.10")
@@ -35,6 +37,9 @@ dependencies {
     // SQL template headers: YAML, validated against a JSON Schema (docs/design/05-sql-template.md section 2).
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
     implementation("com.networknt:json-schema-validator:3.0.0")
+    // Report exports (docs/design/19-reports.md section 4): XLSX with numeric cells, PDF laid out by the platform.
+    implementation("org.dhatim:fastexcel:0.20.2")
+    implementation("org.apache.pdfbox:pdfbox:3.0.5")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     // JDBC: Flyway, and the precompile check of SQL templates (reads server error positions).
     implementation("org.postgresql:postgresql")
@@ -48,10 +53,15 @@ dependencies {
     testFixturesApi("org.testcontainers:testcontainers-postgresql")
     testFixturesApi("org.testcontainers:testcontainers-junit-jupiter")
     testFixturesApi("org.postgresql:postgresql")
+    // Signs the ID tokens of the test identity provider (TestOidcProvider).
+    testFixturesApi("com.nimbusds:nimbus-jose-jwt:10.10")
     // On the test classpath, blockhound-junit-platform installs BlockHound before any test runs.
     testFixturesApi("io.projectreactor.tools:blockhound:1.0.17.RELEASE")
     testFixturesRuntimeOnly("io.projectreactor.tools:blockhound-junit-platform:1.0.17.RELEASE")
     testFixturesRuntimeOnly("org.postgresql:r2dbc-postgresql")
+    // Report export tests read the files back.
+    testFixturesApi("org.dhatim:fastexcel-reader:0.20.2")
+    testFixturesApi("org.apache.pdfbox:pdfbox:3.0.5")
     // Scenario replay (docs/design/07-quality.md section 3): scenario files are YAML.
     testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 }

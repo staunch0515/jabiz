@@ -156,4 +156,31 @@ abstract class LedgerItSupport extends PostgresIntegrationTest {
             GROUP BY e.transaction_id
             HAVING sum(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END) <> 0""", prefix + "%");
     }
+
+    /** Rows of a ledger template, keys in lower case, filtered to the accounts with the prefix when it has them. */
+    List<Map<String, Object>> rows(String template, Map<String, Object> params, String prefix) {
+        Map<String, Object> body = new LinkedHashMap<>(Map.of("params", params, "limit", 500));
+        if (prefix != null) {
+            body.put("filters", List.of(Map.of("field", "accountcode", "op", "like", "value", prefix + "%")));
+        }
+        Map<String, Object> page = client().post().uri("/api/queries/{id}", template)
+            .header(HttpHeaders.AUTHORIZATION, bearer("ledger.read"))
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(body)
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) page.get("items");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> item : items) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            item.forEach((key, value) -> row.put(key.toLowerCase(Locale.ROOT), value));
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    Map<String, Map<String, Object>> byAccount(List<Map<String, Object>> rows) {
+        Map<String, Map<String, Object>> map = new LinkedHashMap<>();
+        rows.forEach(row -> map.put(String.valueOf(row.get("accountcode")), row));
+        return map;
+    }
 }

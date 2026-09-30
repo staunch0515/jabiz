@@ -9,7 +9,6 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.sponsor.SponsorSignInInput;
 import com.jabiz.runtime.process.sponsor.SponsorSignInOutput;
 import com.jabiz.runtime.process.sponsor.SponsorSignInProcess;
-import com.jabiz.security.LoginOutcome;
 import com.jabiz.security.Sensitive;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,29 +54,58 @@ class AuthController {
         }
     }
 
-    record TokenResponse(String tokenType, String accessToken, Instant accessTokenExpiresAt, String refreshToken,
-        Instant refreshTokenExpiresAt, String userId, List<String> roles, List<String> permissions) {
+    /** How far a sign-in got (docs/design/10-security.md section 9). */
+    enum SignInStatus {
+        /** Signed in: the tokens are there. */
+        SIGNED_IN,
+        /** The password was right; the second factor comes next, with the challenge. */
+        MFA_REQUIRED,
+        /** The password was right; a role requires a second factor, to be set up with the challenge first. */
+        MFA_ENROLLMENT_REQUIRED
+    }
+
+    /**
+     * Tokens of a session, or the challenge of its second step. Exactly one of the two is present, as
+     * {@code status} tells.
+     */
+    record TokenResponse(SignInStatus status, String tokenType, String accessToken, Instant accessTokenExpiresAt,
+        String refreshToken, Instant refreshTokenExpiresAt, String userId, List<String> roles,
+        List<String> permissions, String challenge, Instant challengeExpiresAt) {
         @Override
         public String toString() {
-            return "TokenResponse[userId=" + userId + ", tokens=***]";
+            return "TokenResponse[status=" + status + ", userId=" + userId + ", tokens=***]";
+        }
+
+        static TokenResponse challenge(SignInStatus status, JwtService.Issued challenge) {
+            return new TokenResponse(status, null, null, null, null, null, null, List.of(), List.of(),
+                challenge.token(), challenge.expiresAt());
         }
     }
 
-    record Me(String userId, String tenantId, List<String> roles, List<String> permissions) {}
+    /**
+     * @param mfaAt              when the session last passed a second factor, or null
+     * @param idleTimeoutSeconds after how long without activity the client locks the session (section 11)
+     * @param dataFrom           start of the data period the session is limited to, or null (section 13.2)
+     * @param dataTo             its (exclusive) end, or null; both null: not limited in time
+     */
+    record Me(String userId, String tenantId, List<String> roles, List<String> permissions, Instant mfaAt,
+        long idleTimeoutSeconds, Instant dataFrom, Instant dataTo) {}
 
     private final ProcessExecutor processes;
     private final JwtService tokens;
     private final RefreshTokenStore refreshTokens;
     private final RbacService rbac;
     private final MenuService menus;
+    private final MfaSettings mfa;
 
     AuthController(ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens, RbacService rbac,
-        MenuService menus) {
+        MenuService menus, MfaSettings mfa) {
         this.processes = processes;
         this.tokens = tokens;
         this.refreshTokens = refreshTokens;
         this.rbac = rbac;
         this.menus = menus;
+        this.mfa = mfa;
     }
 
     @PostMapping(LOGIN)
@@ -92,12 +120,18 @@ class AuthController {
                 .onErrorMap(e -> e instanceof ValidationException v && v.violations().stream()
                         .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode())),
                     e -> loginFailed("Concurrent sign-in attempt"))
-                .flatMap(result -> {
-                    if (result.outcome() != LoginOutcome.SUCCESS) {
+                .flatMap(result -> switch (result.outcome()) {
+                    case SUCCESS -> session(refreshTokens, tokens, actor(result, null), UUID.fromString(result.userId()));
+                    case MFA_REQUIRED -> Mono.just(TokenResponse.challenge(SignInStatus.MFA_REQUIRED,
+                        tokens.issueChallenge(result.userId(), JwtService.Purpose.VERIFY, result.attemptNo(),
+                            mfa.challengeTtl())));
+                    case MFA_ENROLLMENT_REQUIRED -> Mono.just(TokenResponse.challenge(
+                        SignInStatus.MFA_ENROLLMENT_REQUIRED, tokens.issueChallenge(result.userId(),
+                            JwtService.Purpose.ENROLL, result.attemptNo(), mfa.challengeTtl())));
+                    default -> {
                         log.info("Sign-in of '{}' refused: {}", request.userName().trim(), result.outcome());
-                        return Mono.error(loginFailed("Sign-in refused"));
+                        yield Mono.error(loginFailed("Sign-in refused"));
                     }
-                    return session(actor(result), UUID.fromString(result.userId()));
                 });
         });
     }
@@ -106,7 +140,7 @@ class AuthController {
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> refreshTokens.rotate(request == null ? null : request.refreshToken(),
-                grant -> rbac.currentActor(grant.userId()).flatMap(actor -> actor.map(Mono::just)
+                grant -> rbac.currentActor(grant.userId(), grant.mfaAt(), grant.identityId()).flatMap(actor -> actor.map(Mono::just)
                     .orElseGet(() -> Mono.error(invalidRefresh("The user can no longer sign in"))))))
             .onErrorMap(RefreshTokenStore.InvalidRefreshTokenException.class, e -> invalidRefresh(e.getMessage()))
             .map(rotated -> response(tokens.issue(rotated.value()), rotated.value(), rotated.next()));
@@ -122,7 +156,10 @@ class AuthController {
     @GetMapping("/api/auth/me")
     Mono<Me> me() {
         return RequestContexts.current().map(context -> new Me(context.actorId(), context.tenantId(),
-            context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList()));
+            context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList(),
+            context.mfaAt(), mfa.idleTimeout().toSeconds(),
+            context.dataPeriod() == null ? null : context.dataPeriod().from(),
+            context.dataPeriod() == null ? null : context.dataPeriod().to()));
     }
 
     @GetMapping("/api/auth/menus")
@@ -130,21 +167,31 @@ class AuthController {
         return RequestContexts.current().flatMap(menus::menuOf);
     }
 
-    /** Tokens of a new session. */
-    private Mono<TokenResponse> session(Actor actor, UUID userId) {
-        return refreshTokens.issue(userId).map(next -> response(tokens.issue(actor), actor, next));
+    /** Tokens of a new session; the refresh tokens of the session remember when it passed a second factor. */
+    static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId) {
+        return session(refreshTokens, tokens, actor, userId, null);
+    }
+
+    /** As {@link #session}, for a sign-in through the provider account {@code identityId}. */
+    static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId,
+        UUID identityId) {
+        return refreshTokens.issue(userId, actor.mfaAt(), identityId)
+            .map(next -> response(tokens.issue(actor), actor, next));
     }
 
     private static TokenResponse response(JwtService.Issued access, Actor actor, RefreshTokenStore.Issued refresh) {
-        return new TokenResponse("Bearer", access.token(), access.expiresAt(), refresh.token(), refresh.expiresAt(),
-            actor.actorId(), actor.roles().stream().sorted().toList(), actor.permissions().stream().sorted().toList());
+        return new TokenResponse(SignInStatus.SIGNED_IN, "Bearer", access.token(), access.expiresAt(),
+            refresh.token(), refresh.expiresAt(), actor.actorId(), actor.roles().stream().sorted().toList(),
+            actor.permissions().stream().sorted().toList(), null, null);
     }
 
-    private static Actor actor(SponsorSignInOutput result) {
-        return new Actor(result.userId(), result.tenantId(), Set.copyOf(result.roles()), Set.copyOf(result.permissions()));
+    /** The actor a successful sign-in (or second step, passed at {@code mfaAt}) established. */
+    static Actor actor(SponsorSignInOutput result, Instant mfaAt) {
+        return new Actor(result.userId(), result.tenantId(), Set.copyOf(result.roles()),
+            Set.copyOf(result.permissions()), mfaAt, result.dataPeriod());
     }
 
-    private static AuthenticationFailedException loginFailed(String message) {
+    static AuthenticationFailedException loginFailed(String message) {
         return new AuthenticationFailedException(PlatformErrorCodes.LOGIN_FAILED, message);
     }
 

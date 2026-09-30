@@ -127,6 +127,29 @@ class CommerceIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void anOrderPlacedWithoutANumberGetsTheNextOfTheYearAndARefusedOrderNone() {
+        String code = code();
+        String warehouse = warehouse(code);
+        String apple = product(code + "-A", 100);
+        receive(warehouse, apple, 3);
+        Map<String, Object> unnumbered = Map.of("customerCode", code, "warehouseCode", warehouse,
+            "lines", List.of(line(apple, 1)));
+
+        String first = (String) output(process("ORDER_PLACE", unnumbered).expectStatus().isOk()).get("orderNo");
+        // Refused for lack of stock: it draws no number, so the next placed order gets the following one.
+        process("ORDER_PLACE", Map.of("customerCode", code, "warehouseCode", warehouse,
+            "lines", List.of(line(apple, 50)))).expectStatus().isEqualTo(422);
+        String second = (String) output(process("ORDER_PLACE", unnumbered).expectStatus().isOk()).get("orderNo");
+
+        // The test clock starts in 2026 (PostgresIntegrationTest.START).
+        assertThat(first).matches("SO-2026-\\d{6}");
+        assertThat(Integer.parseInt(second.substring(8))).isEqualTo(Integer.parseInt(first.substring(8)) + 1);
+        // A given number is kept as it is.
+        assertThat(output(process("ORDER_PLACE", order(code + "-X", warehouse, line(apple, 1)))
+            .expectStatus().isOk())).containsEntry("orderNo", code + "-X");
+    }
+
+    @Test
     void everyProblemOfAnOrderIsReportedAtOnceAndNothingIsWritten() {
         String code = code();
         String warehouse = warehouse(code);

@@ -94,8 +94,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(ConcurrentUpdateException.class)
-    ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
-        return ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
+    ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex, ServerWebExchange exchange) {
+        List<Violation> violations = ProblemStatuses.violations(ex);
+        return violations.isEmpty() ? ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage())
+            : withViolations(statusOf(ex), ex.getMessage(), violations, exchange);
     }
 
     /** Later versions changed the same fields (decision D1): lists them so the caller can cancel or change them. */

@@ -15,6 +15,7 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.file.FilePolicyExport;
 import com.jabiz.runtime.process.ProcessInputSchemas;
 import com.jabiz.runtime.process.ProcessRegistry;
+import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.security.Permissions;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -46,11 +47,14 @@ class MetaModelController {
      */
     record DatasetEntry(String id, String entity, String label, boolean isDefault, boolean temporal,
         boolean allowScheduled, boolean readOnly, boolean processOnlyWrites, boolean allowTimeTravel,
-        boolean softDelete, String listView, int maxQueryBatchSize, boolean canWrite) {}
+        boolean softDelete, String listView, int maxQueryBatchSize, boolean canWrite, boolean writeRequiresMfa) {}
 
-    /** One process the caller may run, with the JSON Schema of its input. */
+    /**
+     * One process the caller may run, with the JSON Schema of its input. {@code requiresMfa}: running it needs a
+     * recent second factor (docs/design/10-security.md section 10).
+     */
     record ProcessEntry(String name, int version, boolean latest, boolean deprecated, String label,
-        String description, Map<String, Object> input, ActsOnEntry actsOn) {}
+        String description, Map<String, Object> input, ActsOnEntry actsOn, boolean requiresMfa) {}
 
     /**
      * The entity a process acts on and the input that takes its primary key; {@code when}, if present, only tells
@@ -66,9 +70,11 @@ class MetaModelController {
     private final MessageCatalog messages;
     private final FilePolicyExport fileExport;
     private final boolean development;
+    private final MfaPolicy mfa;
 
     MetaModelController(EntityDefinitionRegistry registry, DatasetRegistry datasets, ProcessRegistry processes,
-        MessageCatalog messages, FilePolicyExport fileExport, Environment environment) {
+        MessageCatalog messages, FilePolicyExport fileExport, Environment environment, MfaPolicy mfa) {
+        this.mfa = mfa;
         this.fileExport = fileExport;
         this.registry = registry;
         this.datasets = datasets;
@@ -125,7 +131,8 @@ class MetaModelController {
             .orElse(def.name);
         return new DatasetEntry(dataset.resourceId(), def.name, label, dataset.isDefault(), def.temporal,
             def.temporal && def.temporalSpec.allowScheduled(), policy.readOnly(), policy.processOnlyWrites(),
-            policy.allowTimeTravel(), policy.softDelete(), dataset.listView(), policy.maxQueryBatchSize(), writable);
+            policy.allowTimeTravel(), policy.softDelete(), dataset.listView(), policy.maxQueryBatchSize(), writable,
+            mfa.applies(policy.writeMfa()));
     }
 
     private ProcessEntry entry(ProcessDefinition<?, ?, ?> definition, RequestContext context) {
@@ -133,7 +140,8 @@ class MetaModelController {
             .map(newest -> newest.version() == definition.version()).orElse(false);
         return new ProcessEntry(definition.name(), definition.version(), latest, definition.deprecated(),
             label("process." + definition.name(), context).orElse(definition.name()), definition.description(),
-            ProcessInputSchemas.of(definition.inputType()).schema(), actsOn(definition.actsOn()));
+            ProcessInputSchemas.of(definition.inputType()).schema(), actsOn(definition.actsOn()),
+            mfa.applies(definition.mfa()));
     }
 
     private static ActsOnEntry actsOn(ActsOn actsOn) {

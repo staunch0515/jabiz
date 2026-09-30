@@ -28,8 +28,11 @@ public final class PlatformCheckLauncher {
     public static int run(Class<?> application, List<String> extraArgs, PrintStream out) {
         String schema = newSchema();
         List<String> args = new ArrayList<>(databaseArgs(schema));
-        // The check serves no requests, but the application refuses to start without a token key: a throwaway one.
+        // The check serves no requests, but the application refuses to start without a token key, an integrity key
+        // and a second-factor key: throwaway ones.
         args.add("--jabiz.security.jwt.secret=" + throwawayKey());
+        args.add("--jabiz.integrity.key=" + throwawayKey());
+        args.add("--jabiz.security.mfa.key=" + throwawayKey());
         // Nor without a file storage directory when it declares file policies: an empty throwaway one.
         Path files;
         try {

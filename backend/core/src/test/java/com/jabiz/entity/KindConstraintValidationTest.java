@@ -16,7 +16,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
-/** Constraints that come from the semantic kind itself: text length, numeric precision, dictionary membership. */
+/**
+ * Constraints that come from the semantic kind itself: text length, numeric precision, monetary scale, dictionary
+ * membership.
+ */
 class KindConstraintValidationTest {
 
     private static final ValidationContext CTX = new ValidationContext(
@@ -31,6 +34,10 @@ class KindConstraintValidationTest {
         eb.field("ratio", f -> f.physicalColumn("f_ratio").asNumeric(5, 2));
         eb.field("port", f -> f.physicalColumn("f_port").asCode("urn:test:dict:port"));
         eb.field("fragile", f -> f.physicalColumn("f_fragile").asBool());
+        eb.field("fee", f -> f.physicalColumn("f_fee").asMonetary("USD", 2));
+        eb.field("yen", f -> f.physicalColumn("f_yen").asMonetary("JPY", 0));
+        eb.field("charge", f -> f.physicalColumn("f_charge").asMonetary("USD", 2)
+            .apply(Rules.scale("CHARGE_SCALE", 1)));
     });
 
     private static final DictionaryLookup PORTS =
@@ -114,5 +121,38 @@ class KindConstraintValidationTest {
         assertThatThrownBy(() -> EntityValidator.requireValid(SHIPMENT, Map.of("port", "X"), CTX, false, PORTS))
             .isInstanceOf(ValidationException.class)
             .hasMessageContaining("NOT_IN_DICTIONARY");
+    }
+
+    @Test
+    void monetaryAmountsHoldNoMoreDigitsThanTheirCurrency() {
+        assertThat(check(Map.of("fee", "12.34", "yen", "1500"), DictionaryLookup.NONE).isValid()).isTrue();
+        // Trailing zeros are not digits of the amount.
+        assertThat(check(Map.of("fee", "12.3400", "yen", "1500.00"), DictionaryLookup.NONE).isValid()).isTrue();
+
+        EntityValidator.Result result = check(Map.of("fee", "12.345", "yen", "0.5"), DictionaryLookup.NONE);
+        assertThat(result.violations()).extracting(Violation::field, Violation::ruleCode)
+            .containsExactlyInAnyOrder(tuple("fee", "MONETARY_SCALE"), tuple("yen", "MONETARY_SCALE"));
+        assertThat(result.violations()).filteredOn(v -> v.field().equals("fee")).first()
+            .extracting(Violation::params).isEqualTo(Map.of("scale", 2, "currency", "USD"));
+    }
+
+    @Test
+    void anOwnScaleRuleReportsUnderItsCodeInsteadOfTheKind() {
+        assertThat(check(Map.of("charge", "1.25"), DictionaryLookup.NONE).violations())
+            .extracting(Violation::ruleCode).containsExactly("CHARGE_SCALE");
+        assertThat(check(Map.of("charge", "1.2"), DictionaryLookup.NONE).isValid()).isTrue();
+    }
+
+    @Test
+    void anOwnScaleRuleMayNotAllowMoreDigitsThanTheCurrency() {
+        assertThatThrownBy(() -> EntityDefinition.define("Loose", eb -> {
+            eb.physicalTable("t_loose");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id").asSemanticIdentity("urn:test:loose"));
+            eb.field("amount", f -> f.physicalColumn("f_amount").asMonetary("USD", 2)
+                .apply(Rules.scale("AMOUNT_SCALE", 3)));
+        })).isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("rule AMOUNT_SCALE of monetary field 'amount' allows 3 digits")
+            .hasMessageContaining("more than the scale 2 of USD");
     }
 }

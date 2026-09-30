@@ -62,6 +62,8 @@ val coverageGatedClasses = listOf(
     "com.jabiz.ledger.LedgerBalances",
     "com.jabiz.ledger.PostingLine",
     "com.jabiz.ledger.Direction",
+    "com.jabiz.ledger.LedgerDimension",
+    "com.jabiz.ledger.ForeignAmount",
     "com.jabiz.event.EventSubscription",
     "com.jabiz.event.DomainEvent",
     "com.jabiz.job.JobDefinition",
@@ -73,6 +75,28 @@ val coverageGatedClasses = listOf(
     "com.jabiz.entity.i18n.I18nText",
     "com.jabiz.entity.i18n.I18nTextSupport",
     "com.jabiz.process.ActsOn",
+    // Phase 14b
+    "com.jabiz.numbering.NumberFormat",
+    "com.jabiz.numbering.NumberSequence",
+    "com.jabiz.approval.ApprovalSubject",
+    "com.jabiz.approval.ApprovalCondition*",
+    "com.jabiz.approval.ConditionParser",
+    "com.jabiz.approval.ApprovalLevel",
+    "com.jabiz.approval.ApprovalEvaluation",
+    "com.jabiz.approval.ContentHash",
+    "com.jabiz.approval.FactType",
+    "com.jabiz.security.SodRule",
+    // Phase 14d
+    "com.jabiz.query.custom.TemplateVersion",
+    "com.jabiz.report.*",
+    // Phase 14e
+    "com.jabiz.imports.*",
+    "com.jabiz.file.MediaTypeDetector",
+    // Phase 14f
+    "com.jabiz.audit.*",
+    "com.jabiz.integrity.*",
+    "com.jabiz.retention.*",
+    "com.jabiz.export.*",
 )
 
 dependencies {

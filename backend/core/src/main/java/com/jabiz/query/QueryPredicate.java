@@ -20,6 +20,11 @@ public sealed interface QueryPredicate {
     record IsNotNull(String field) implements QueryPredicate {}
     /** Inclusive range {@code low <= field <= high}. */
     record Between(String field, Object low, Object high) implements QueryPredicate {}
+    /**
+     * The primary key after {@code value}, in the key's own order, whatever operators its kind allows otherwise: for
+     * paging by key (the open-format export, docs/design/21-audit-retention.md section 4). Not for templates.
+     */
+    record KeyAfter(Object value) implements QueryPredicate {}
     record And(List<QueryPredicate> predicates) implements QueryPredicate {}
     record Or(List<QueryPredicate> predicates) implements QueryPredicate {}
 }

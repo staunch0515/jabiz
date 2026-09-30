@@ -1,5 +1,6 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.context.DataPeriod;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
@@ -9,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,11 +23,26 @@ import java.util.TreeSet;
  */
 public final class Rbac {
 
-    /** Role codes and permission codes of a user. */
-    public record Access(Set<String> roles, Set<String> permissions) {
+    /**
+     * Role codes and permission codes of a user, and whether one of the roles requires a second factor
+     * (docs/design/10-security.md section 9).
+     */
+    /**
+     * @param dataPeriod the span of business time the actor may see in datasets declaring {@code withinDataPeriod},
+     *                   or null when not limited (docs/design/10-security.md section 13.2)
+     */
+    public record Access(Set<String> roles, Set<String> permissions, boolean mfaRequired, DataPeriod dataPeriod) {
         public Access {
             roles = Set.copyOf(roles);
             permissions = Set.copyOf(permissions);
+        }
+
+        public Access(Set<String> roles, Set<String> permissions, boolean mfaRequired) {
+            this(roles, permissions, mfaRequired, null);
+        }
+
+        public Access(Set<String> roles, Set<String> permissions) {
+            this(roles, permissions, false);
         }
     }
 
@@ -79,15 +96,45 @@ public final class Rbac {
     }
 
     /** Codes of the enabled roles and the permissions they grant. */
+    /**
+     * As {@link #access(Collection, Collection)}, with the data period of the assignments of enabled roles: none if
+     * one of them is not limited, else the smallest period covering them all ({@link DataPeriod#hull}).
+     */
+    public static Access access(Collection<EntityInstance> assignments, Collection<EntityInstance> roles,
+        Collection<EntityInstance> rolePermissions) {
+        Access access = access(roles, rolePermissions);
+        complete(assignments);
+        Set<String> enabledIds = new HashSet<>();
+        roles.stream().filter(Rbac::enabled).forEach(role -> enabledIds.add(String.valueOf(role.id())));
+        List<DataPeriod> periods = new ArrayList<>();
+        for (EntityInstance assignment : assignments) {
+            if (enabledIds.contains(String.valueOf(assignment.<Object>get("roleId")))) {
+                periods.add(DataPeriod.of(instant(assignment.get("dataFrom")), instant(assignment.get("dataTo"))));
+            }
+        }
+        return new Access(access.roles(), access.permissions(), access.mfaRequired(), DataPeriod.hull(periods));
+    }
+
+    private static Instant instant(Object value) {
+        return switch (value) {
+            case null -> null;
+            case Instant instant -> instant;
+            case java.time.OffsetDateTime time -> time.toInstant();
+            default -> Instant.parse(String.valueOf(value));
+        };
+    }
+
     public static Access access(Collection<EntityInstance> roles, Collection<EntityInstance> rolePermissions) {
         complete(roles);
         complete(rolePermissions);
         Set<Object> enabledIds = new LinkedHashSet<>();
         Set<String> codes = new TreeSet<>();
+        boolean mfaRequired = false;
         for (EntityInstance role : roles) {
             if (enabled(role)) {
                 enabledIds.add(String.valueOf(role.id()));
                 codes.add(role.get("roleCode"));
+                mfaRequired |= Boolean.TRUE.equals(role.get("requireMfa"));
             }
         }
         Set<String> permissions = new TreeSet<>();
@@ -96,7 +143,13 @@ public final class Rbac {
                 permissions.add(grant.get("permission"));
             }
         }
-        return new Access(codes, permissions);
+        return new Access(codes, permissions, mfaRequired);
+    }
+
+    /** The last TOTP step accepted before, as carried by a login record; -1 for none. */
+    public static long mfaStep(EntityInstance record) {
+        Object step = record == null ? null : record.get("mfaStep");
+        return step == null ? -1 : number(step);
     }
 
     /** The counters carried by a login record; {@link LoginAttemptPolicy.State#INITIAL} for none. */

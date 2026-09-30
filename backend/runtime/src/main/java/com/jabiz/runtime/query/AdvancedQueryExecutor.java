@@ -2,6 +2,7 @@ package com.jabiz.runtime.query;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
@@ -18,6 +19,7 @@ import com.jabiz.query.custom.QueryParameter;
 import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.query.template.OuterQueryCompiler;
 import com.jabiz.query.template.SqlTemplateRenderer;
+import com.jabiz.query.template.SqlText;
 import com.jabiz.query.template.TemplateChecks;
 import com.jabiz.query.template.TemplateValues;
 import com.jabiz.runtime.context.RequestContexts;
@@ -25,6 +27,8 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.security.MaskedFields;
+import com.jabiz.runtime.security.RevealRecorder;
 import io.micrometer.common.KeyValues;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -32,11 +36,16 @@ import reactor.core.publisher.Mono;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Executes SQL templates (docs/design/05-sql-template.md). Every participating entity is rendered as its dataset
@@ -48,8 +57,49 @@ import java.util.Objects;
 @Component
 public class AdvancedQueryExecutor {
 
-    /** One page of a template's result. {@code total} is null when counting was not asked for. */
-    public record Page(List<SemanticRow> items, Long total, int offset, int limit) {}
+    /**
+     * One page of a template's result. {@code total} is null when counting was not asked for; {@code slice} is the
+     * point in time the template's temporal entities were read at.
+     */
+    public record Page(List<SemanticRow> items, Long total, int offset, int limit, TimeSlice slice) {}
+
+    /**
+     * The point in time a caller asks a template to be run at (docs/design/19-reports.md section 2.1); either part may
+     * be null. A template declaring {@code timeSlice} takes its point in time from its parameters instead.
+     *
+     * <p>The platform may also <em>pin</em> a run (issued reports, 19 section 5): a pinned part applies where nothing
+     * else gives that part - neither the request nor the template's parameters - so that a run made "now" can be
+     * made again later at the very same point. Pins are not time travel a caller asked for: they pass the datasets'
+     * time-travel policy and the template's {@code timeSlice}.
+     *
+     * @param asOf          effective time asked for; null means now
+     * @param knownAt       recorded time asked for; null means everything recorded so far
+     * @param pinnedAsOf    effective time to use when none is asked for, or null
+     * @param pinnedKnownAt recorded time to use when none is asked for, or null
+     */
+    public record At(Instant asOf, Instant knownAt, Instant pinnedAsOf, Instant pinnedKnownAt) {
+
+        /** Now, as recorded so far: the default. */
+        public static final At NOW = new At(null, null);
+
+        public At(Instant asOf, Instant knownAt) {
+            this(asOf, knownAt, null, null);
+        }
+
+        /** A pinned point in time, for the platform's own runs. */
+        public static At pinned(Instant asOf, Instant knownAt) {
+            return new At(null, null, asOf, knownAt);
+        }
+
+        /** The asked parts with the given pins. */
+        public At pin(Instant pinAsOf, Instant pinKnownAt) {
+            return new At(asOf, knownAt, pinAsOf, pinKnownAt);
+        }
+
+        boolean given() {
+            return asOf != null || knownAt != null;
+        }
+    }
 
     private final StorageAdapterRegistry storageRegistry;
     private final EntityDefinitionRegistry entityRegistry;
@@ -57,14 +107,17 @@ public class AdvancedQueryExecutor {
     private final SqlTemplateRenderer renderer;
     private final Clock clock;
     private final PlatformObservations observations;
+    private final RevealRecorder reveals;
 
     public AdvancedQueryExecutor(StorageAdapterRegistry storageRegistry,
         EntityDefinitionRegistry entityRegistry,
         SqlTemplateRegistry templates,
         QueryCompiler queryCompiler,
         Clock clock,
-        PlatformObservations observations) {
+        PlatformObservations observations,
+        RevealRecorder reveals) {
         this.observations = Objects.requireNonNull(observations);
+        this.reveals = Objects.requireNonNull(reveals);
         this.storageRegistry = Objects.requireNonNull(storageRegistry);
         this.entityRegistry = Objects.requireNonNull(entityRegistry);
         this.templates = Objects.requireNonNull(templates);
@@ -78,7 +131,12 @@ public class AdvancedQueryExecutor {
      * @param inputParams caller-supplied parameter values by name
      */
     public Flux<SemanticRow> execute(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams) {
-        return page(queryDef, inputParams, null, List.of(), 0, Integer.MAX_VALUE, false)
+        return execute(queryDef, inputParams, At.NOW);
+    }
+
+    /** As {@link #execute(AdvancedQueryDefinition, Map)}, at the given point in time. */
+    public Flux<SemanticRow> execute(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at) {
+        return page(queryDef, inputParams, at, null, List.of(), 0, Integer.MAX_VALUE, false, null)
             .flatMapMany(page -> Flux.fromIterable(page.items()));
     }
 
@@ -111,27 +169,69 @@ public class AdvancedQueryExecutor {
      */
     public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, QueryPredicate filter,
         List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
-        return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
-            KeyValues.of("template", queryDef.queryId()),
-            pageOf(queryDef, inputParams, filter, sorts, offset, limit, count, maxTimeout));
+        return page(queryDef, inputParams, At.NOW, filter, sorts, offset, limit, count, maxTimeout);
     }
 
-    private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams,
+    /**
+     * As {@link #page(AdvancedQueryDefinition, Map, QueryPredicate, List, int, int, boolean, Duration)}, reading the
+     * template's temporal entities at the given point in time (docs/design/19-reports.md section 2.1).
+     *
+     * @throws ValidationException (as the error of the returned Mono) for a point in time the template's datasets do
+     *                             not allow, or given besides the template's own {@code timeSlice}
+     */
+    public Mono<Page> page(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
         QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout) {
+        return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
+            KeyValues.of("template", queryDef.queryId()),
+            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, offset, limit, count, maxTimeout,
+                true, false));
+    }
+
+    /**
+     * All rows of the template up to {@code maxRows}, for an export (docs/design/19-reports.md section 4): unlike a
+     * page, not capped by the datasets' {@code maxQueryBatchSize}, which limits browsing only. The caller asks for one
+     * row more than it accepts to tell a complete result from a cut one.
+     */
+    public Mono<Page> all(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
+        QueryPredicate filter, List<SortOrder> sorts, int maxRows) {
+        return all(queryDef, inputParams, at, filter, sorts, maxRows, false);
+    }
+
+    /**
+     * As {@link #all(AdvancedQueryDefinition, Map, At, QueryPredicate, List, int)}; with {@code masked} every masked
+     * field stays masked whatever the caller's permissions, for archived reports (docs/design/10-security.md section
+     * 13.1): others read them later, and verifying one must give the same rows whoever verifies.
+     */
+    public Mono<Page> all(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
+        QueryPredicate filter, List<SortOrder> sorts, int maxRows, boolean masked) {
+        return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
+            KeyValues.of("template", queryDef.queryId()),
+            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, 0, maxRows, false, null, false,
+                masked));
+    }
+
+    private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
+        QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout,
+        boolean capped, boolean masked) {
         return RequestContexts.current().flatMap(request -> {
             AdvancedQueryDefinition query = templates.prepare(queryDef);
             Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);
             Map<String, SqlTemplateRenderer.EntityBinding> bindings = new LinkedHashMap<>();
-            datasets.forEach((entity, dataset) -> bindings.put(entity, new SqlTemplateRenderer.EntityBinding(
-                entityRegistry.getOrThrow(entity), dataset, dataset.scope().resolve(request))));
+            datasets.forEach((entity, dataset) -> {
+                EntityDefinition def = entityRegistry.getOrThrow(entity);
+                bindings.put(entity, new SqlTemplateRenderer.EntityBinding(def, dataset,
+                    dataset.scope().resolve(request), masked ? Set.of() : MaskedFields.plainFor(request, def)));
+            });
+            Map<String, Set<String>> revealed = revealedFields(query, bindings);
 
             Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(query, inputParams));
+            TimeSlice slice = timeSlice(query, params, at, datasets);
             QueryCompiler.Binder platform = new QueryCompiler.Binder(TemplateChecks.SCOPE_PREFIX);
-            String sql = renderer.render(query, bindings, TimeSlice.asOf(clock.instant()), platform).sql();
+            String sql = renderer.render(query, bindings, slice, platform).sql();
             params.putAll(platform.params());
 
             int maxRows = datasets.values().stream().mapToInt(d -> d.policy().maxQueryBatchSize()).min().orElseThrow();
-            int effectiveLimit = Math.min(limit, maxRows);
+            int effectiveLimit = capped ? Math.min(limit, maxRows) : limit;
             OuterQueryCompiler.OuterQuery outer = OuterQueryCompiler.compile(query, sql, filter, sorts, offset,
                 effectiveLimit, entityRegistry::find);
 
@@ -142,17 +242,100 @@ public class AdvancedQueryExecutor {
             listParams.putAll(outer.listParams());
             Mono<List<SemanticRow>> rows = engine.executeRawQuery(new RawQueryPlan(outer.listSql(), listParams, timeout))
                 .map(row -> toSemanticRow(query, row))
-                .collectList();
+                .collectList()
+                .flatMap(items -> recordReveals(request, query, revealed, items.size()).thenReturn(items));
             if (!count) {
-                return rows.map(items -> new Page(items, null, offset, effectiveLimit));
+                return rows.map(items -> new Page(items, null, offset, effectiveLimit, slice));
             }
             Map<String, BoundValue> countParams = new LinkedHashMap<>(params);
             countParams.putAll(outer.countParams());
             Mono<Long> total = engine.executeRawQuery(new RawQueryPlan(outer.countSql(), countParams, timeout))
                 .next()
                 .map(row -> ((Number) row.get("total")).longValue());
-            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit));
+            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit, slice));
         });
+    }
+
+    /**
+     * The masked fields the template names ({@code {{Entity.field}}}) that this caller reads in plain text, by entity:
+     * each run showing them is recorded (docs/design/10-security.md section 13.1). Fields the caller may not read are
+     * masked inside the SQL and need no record.
+     */
+    private static Map<String, Set<String>> revealedFields(AdvancedQueryDefinition query,
+        Map<String, SqlTemplateRenderer.EntityBinding> bindings) {
+        Map<String, Set<String>> revealed = new TreeMap<>();
+        for (SqlText.Placeholder placeholder : SqlText.placeholders(SqlText.mask(query.sqlTemplate()))) {
+            SqlTemplateRenderer.EntityBinding binding = bindings.get(placeholder.entity());
+            if (placeholder.field() != null && binding != null
+                && binding.plainFields().contains(placeholder.field())) {
+                revealed.computeIfAbsent(placeholder.entity(), entity -> new TreeSet<>()).add(placeholder.field());
+            }
+        }
+        return revealed;
+    }
+
+    private Mono<Void> recordReveals(RequestContext request, AdvancedQueryDefinition query,
+        Map<String, Set<String>> revealed, int rows) {
+        return Flux.fromIterable(revealed.entrySet())
+            .concatMap(entry -> reveals.record(request, RevealRecorder.Kind.QUERY, query.queryId(), entry.getKey(),
+                null, entry.getValue(), (long) rows))
+            .then();
+    }
+
+    /**
+     * The point in time of this run: the template's {@code timeSlice} parameters, or the caller's, or now as recorded
+     * so far. A point in time needs the datasets of the template's temporal entities to allow time travel.
+     */
+    private TimeSlice timeSlice(AdvancedQueryDefinition query, Map<String, BoundValue> params, At at,
+        Map<String, DatasetDefinition> datasets) {
+        At asked = at;
+        if (query.timeSlice() != null) {
+            if (at.given()) {
+                List<Violation> violations = new ArrayList<>();
+                String message = "Query " + query.queryId() + " takes its point in time from its parameters";
+                if (at.asOf() != null) {
+                    violations.add(new Violation("asOf", PlatformErrorCodes.INVALID_VALUE, message));
+                }
+                if (at.knownAt() != null) {
+                    violations.add(new Violation("knownAt", PlatformErrorCodes.INVALID_VALUE, message));
+                }
+                throw new ValidationException(violations);
+            }
+            asked = new At(instant(params, query.timeSlice().asOf()), instant(params, query.timeSlice().knownAt()));
+        }
+        if (asked.given()) {
+            String field = asked.asOf() != null ? "asOf" : "knownAt";
+            if (query.publicAccess()) {
+                throw new ValidationException(List.of(new Violation(field,
+                    PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED, "Public query " + query.queryId()
+                    + " shows the current state only")));
+            }
+            datasets.forEach((entity, dataset) -> {
+                if (entityRegistry.getOrThrow(entity).temporal && !dataset.policy().allowTimeTravel()) {
+                    throw new ValidationException(List.of(new Violation(field,
+                        PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED,
+                        "Dataset " + dataset.resourceId() + " shows the current state only")));
+                }
+            });
+        }
+        Instant asOf = asked.asOf() != null ? asked.asOf() : at.pinnedAsOf();
+        Instant knownAt = asked.knownAt() != null ? asked.knownAt() : at.pinnedKnownAt();
+        return new TimeSlice(asOf != null ? asOf : clock.instant(), knownAt);
+    }
+
+    private static Instant instant(Map<String, BoundValue> params, String name) {
+        if (name == null) {
+            return null;
+        }
+        BoundValue bound = params.get(name);
+        Object value = bound == null ? null : bound.value();
+        return switch (value) {
+            case null -> null;
+            case Instant time -> time;
+            case OffsetDateTime time -> time.toInstant();
+            default -> throw new IllegalStateException("Parameter [" + name + "] of a timeSlice is bound as "
+                + value.getClass().getSimpleName());
+        };
     }
 
     /** Templates read the read replica when their datasets have one (all share the storage, checked at startup). */

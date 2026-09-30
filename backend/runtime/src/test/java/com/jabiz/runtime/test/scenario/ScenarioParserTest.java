@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,7 +24,7 @@ class ScenarioParserTest {
           - note: a day later
             advanceClock: P1D
           - setClock: 2026-02-01T00:00:00+09:00
-          - expect: { query: order.by_customer, params: { customerId: C001 }, rows: 1, values: [{ total: 10 }] }
+          - expect: { query: order.by_customer, params: { customerId: C001 }, knownAt: 2026-01-31T00:00:00Z, rows: 1, values: [{ total: 10 }] }
           - expect: { entity: Order, id: "${orderId}", asOf: 2026-02-01T00:00:00Z, fields: { status: NEW } }
           - expect: { param: tax.rate, value: 0.1 }
           - expectError:
@@ -32,10 +33,46 @@ class ScenarioParserTest {
               status: 422
               ruleCode: ORDER_ALREADY_SETTLED
               field: orderId
+              actor: { id: clerk, permissions: [order.cancel] }
         snapshot:
           entities: [Order]
           asOf: end
         """;
+
+    @Test
+    void readsImportSteps() {
+        Scenario scenario = Scenario.parse("""
+            name: Imports
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - import: ledger.opening
+                file: { name: a.csv, content: "Entry,Account\\nOB-1,1000\\n" }
+                params: { description: Opening }
+                commit: true
+                notes: agreed
+                expect: { committed: true }
+                save: { run: $.runId }
+              - import: commerce.stock
+                file: { name: b.csv, content: x }
+                mapping: { columns: { sku: Item } }
+            """, "scenarios/imports.yml");
+
+        assertThat(scenario.steps().get(0)).isEqualTo(new Scenario.ImportStep(1, "ledger.opening", "a.csv",
+            "Entry,Account\nOB-1,1000\n", null, Map.of("description", "Opening"), true, "agreed",
+            Map.of("committed", true), Map.of("run", "$.runId"), null));
+        Scenario.ImportStep preview = (Scenario.ImportStep) scenario.steps().get(1);
+        assertThat(preview.commit()).isFalse();
+        assertThat(preview.mapping()).isEqualTo(Map.of("columns", Map.of("sku", "Item")));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - import: x
+                file: { name: a.csv }
+            """, "scenarios/bad.yml")).hasMessageContaining("content");
+    }
 
     @Test
     void readsJobAndEventSteps() {
@@ -81,18 +118,21 @@ class ScenarioParserTest {
             assertThat(p.process()).isEqualTo("ORDER_CREATE@latest");
             assertThat(p.save()).containsEntry("orderId", "$.orderId");
             assertThat(p.number()).isEqualTo(1);
+            assertThat(p.actor()).isNull();
         });
         assertThat(scenario.steps().get(1)).isEqualTo(new Scenario.AdvanceClock(2, "P1D"));
         assertThat(scenario.steps().get(2)).isEqualTo(new Scenario.SetClock(3, Instant.parse("2026-01-31T15:00:00Z")));
         assertThat(((Scenario.Expect) scenario.steps().get(3)).expectation())
-            .isEqualTo(new Scenario.QueryExpectation("order.by_customer", Map.of("customerId", "C001"), 1,
+            .isEqualTo(new Scenario.QueryExpectation("order.by_customer", Map.of("customerId", "C001"), null,
+                Instant.parse("2026-01-31T00:00:00Z"), 1,
                 List.of(Map.of("total", 10))));
         assertThat(((Scenario.Expect) scenario.steps().get(4)).expectation())
             .isInstanceOf(Scenario.EntityExpectation.class);
         assertThat(((Scenario.Expect) scenario.steps().get(5)).expectation())
             .isEqualTo(new Scenario.ParamExpectation("tax.rate", null, 0.1));
         assertThat(scenario.steps().get(6)).isEqualTo(new Scenario.ExpectError(7, "ORDER_CANCEL@1",
-            Map.of("orderId", "${orderId}"), 422, "ORDER_ALREADY_SETTLED", "orderId"));
+            Map.of("orderId", "${orderId}"), 422, "ORDER_ALREADY_SETTLED", "orderId",
+            new Scenario.Actor("clerk", null, Set.of(), Set.of("order.cancel"))));
         assertThat(scenario.snapshot()).isEqualTo(new Scenario.SnapshotSpec(List.of("Order"), null));
     }
 

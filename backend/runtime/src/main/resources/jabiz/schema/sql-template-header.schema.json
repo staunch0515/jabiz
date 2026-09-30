@@ -46,7 +46,24 @@
     "permissions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "timeoutMs": { "type": "integer", "minimum": 1 },
     "access": { "enum": ["public"] },
-    "cacheSeconds": { "type": "integer", "minimum": 0, "maximum": 3600 }
+    "cacheSeconds": { "type": "integer", "minimum": 0, "maximum": 3600 },
+    "timeSlice": {
+      "type": "object", "minProperties": 1,
+      "additionalProperties": false,
+      "properties": { "asOf": { "$ref": "#/$defs/name" }, "knownAt": { "$ref": "#/$defs/name" } }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "period": {
+          "type": "object", "minProperties": 1,
+          "additionalProperties": false,
+          "properties": { "from": { "$ref": "#/$defs/name" }, "to": { "$ref": "#/$defs/name" } }
+        },
+        "landscape": { "type": "boolean" }
+      }
+    }
   },
   "$defs": {
     "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },

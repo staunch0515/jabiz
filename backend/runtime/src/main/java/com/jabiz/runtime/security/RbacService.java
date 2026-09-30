@@ -39,6 +39,31 @@ public class RbacService {
 
     /** The actor, or empty when the user may not act (any more). */
     public Mono<Optional<Actor>> currentActor(UUID userId) {
+        return currentActor(userId, null);
+    }
+
+    /**
+     * The actor of a session whose sign-in passed a second factor at {@code mfaAt} (null if it did not), or empty
+     * when the user may not act (any more): also when a role now requires a second factor the session lacks
+     * (docs/design/10-security.md section 9).
+     */
+    public Mono<Optional<Actor>> currentActor(UUID userId, java.time.Instant mfaAt) {
+        return currentActor(userId, mfaAt, null);
+    }
+
+    /**
+     * As above, for a session that came through the provider account {@code identityId} (null for none): its link to
+     * the user must still exist, so that unlinking an account ends its sessions at the next refresh
+     * (docs/design/10-security.md section 12).
+     */
+    public Mono<Optional<Actor>> currentActor(UUID userId, java.time.Instant mfaAt, UUID identityId) {
+        if (identityId != null) {
+            return entities.findById(dataset(SecurityEntities.USER_IDENTITY_DATASET), SecurityEntities.SEC_USER_IDENTITY,
+                    identityId)
+                .filter(identity -> userId.toString().equals(String.valueOf(identity.<Object>get("userId"))))
+                .flatMap(identity -> currentActor(userId, mfaAt, null))
+                .defaultIfEmpty(Optional.empty());
+        }
         return entities.findById(dataset(SecurityEntities.USER_DATASET), SecurityEntities.SEC_USER, userId)
             .filter(Rbac::enabled)
             .flatMap(user -> query(SecurityEntities.LOGIN_RECORD_DATASET, SecurityEntities.SEC_LOGIN_RECORD,
@@ -48,9 +73,10 @@ public class RbacService {
                     if (policy.isLocked(state, clock.instant())) {
                         return Mono.empty();
                     }
-                    return access(user.id()).filter(access -> !access.roles().isEmpty())
+                    return access(user.id())
+                        .filter(access -> !access.roles().isEmpty() && (mfaAt != null || !access.mfaRequired()))
                         .map(access -> new Actor(String.valueOf(user.id()), user.get("tenantId"), access.roles(),
-                            access.permissions()));
+                            access.permissions(), mfaAt, access.dataPeriod()));
                 }))
             .map(Optional::of)
             .defaultIfEmpty(Optional.empty());
@@ -59,9 +85,10 @@ public class RbacService {
     private Mono<Rbac.Access> access(Object userId) {
         return query(SecurityEntities.USER_ROLE_DATASET, SecurityEntities.SEC_USER_ROLE, Rbac.assignmentsOf(userId))
             .flatMap(assignments -> query(SecurityEntities.ROLE_DATASET, SecurityEntities.SEC_ROLE,
-                Rbac.rolesOf(assignments)))
-            .flatMap(roles -> query(SecurityEntities.ROLE_PERMISSION_DATASET, SecurityEntities.SEC_ROLE_PERMISSION,
-                Rbac.permissionsOf(roles)).map(grants -> Rbac.access(roles, grants)));
+                Rbac.rolesOf(assignments))
+                .flatMap(roles -> query(SecurityEntities.ROLE_PERMISSION_DATASET,
+                    SecurityEntities.SEC_ROLE_PERMISSION, Rbac.permissionsOf(roles))
+                    .map(grants -> Rbac.access(assignments, roles, grants))));
     }
 
     private Mono<List<EntityInstance>> query(String datasetId, EntityDefinition def, EntityQuery query) {

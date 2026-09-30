@@ -8,6 +8,7 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
+import com.jabiz.security.MfaRequirement;
 import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,8 +26,13 @@ import java.util.Map;
 @Configuration
 public class UserProcesses {
 
+    /**
+     * @param password optional: a user without one signs in through an identity provider only
+     *                 (docs/design/10-security.md section 12)
+     * @param email    where notifications go; optional
+     */
     public record CreateUserInput(@NotBlank String userName, String displayName, String tenantId,
-        @Sensitive @NotBlank String password, Boolean enabled) {
+        @Sensitive String password, Boolean enabled, String email) {
         @Override
         public String toString() {
             return "CreateUserInput[userName=" + userName + ", password=***]";
@@ -59,6 +65,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Creates a user with a password.")
                 .permissions(SecurityPermissions.USER_CREATE)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     // The fields one by one: the input record holds the plain password, which only the hashing
@@ -67,17 +74,19 @@ public class UserProcesses {
                     user.put("userName", input.userName());
                     user.put("displayName", input.displayName());
                     user.put("tenantId", input.tenantId());
+                    user.put("email", input.email());
                     user.put("enabled", input.enabled() == null || input.enabled());
                     ctx.put(NEW_USER, user);
                     ctx.put(PASSWORD, input.password());
                     return ctx;
                 })
                 .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
-                .step("Hash the password", HashPasswordStep.class, HASH_PASSWORD)
+                .step("Hash the password", HashPasswordStep.class,
+                    new HashPasswordStep.Metadata(PASSWORD, HASH, PASSWORD, true))
                 .compute("Register the user", (metadata, ctx) -> {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> user = new LinkedHashMap<>((Map<String, Object>) ctx.get(NEW_USER));
-                    user.put("passwordHash", ctx.get(HASH, String.class));
+                    user.put("passwordHash", ctx.get(HASH));
                     ctx.put(USER_ID, ctx.changes().insert(SecurityEntities.USER, user));
                 }));
 
@@ -86,6 +95,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Sets the password of a user.")
                 .permissions(SecurityPermissions.USER_PASSWORD)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
@@ -108,6 +118,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Lifts the lock of a user after failed sign-ins.")
                 .permissions(SecurityPermissions.USER_UNLOCK)
+                .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
@@ -124,7 +135,8 @@ public class UserProcesses {
                     LoginAttemptPolicy.State state = Rbac.state(latest.isEmpty() ? null : latest.getFirst());
                     LoginAttemptPolicy.State next = new LoginAttemptPolicy.State(state.attemptNo() + 1, 0, null);
                     ctx.changes().insert(SecurityEntities.LOGIN_RECORD, SponsorSignInProcess.record(user.id(),
-                        user.get("userName"), LoginOutcome.UNLOCKED, next, ctx.opTime(), ctx.request().requestId()));
+                        user.get("userName"), LoginOutcome.UNLOCKED, next, ctx.opTime(), ctx.request().requestId(),
+                        null, Rbac.mfaStep(latest.isEmpty() ? null : latest.getFirst())));
                 }));
 
     @Bean

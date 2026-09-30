@@ -43,6 +43,7 @@ public class FileProcesses {
     static final String FILE_ID = "fileId";
     static final String FILE = "file";
     static final String ORPHANS = "orphans";
+    static final String KEPT = "kept";
     static final String OUTPUT = "output";
 
     /**
@@ -76,8 +77,11 @@ public class FileProcesses {
     /** @param scheduledTime the scheduled time of the sweep run (unused by the purge itself; identifies the run) */
     public record PurgeInput(Instant scheduledTime) {}
 
-    /** @param fileIds the files whose rows were deleted; their content goes after the commit */
-    public record PurgeOutput(int deletedFiles, List<UUID> fileIds) {}
+    /**
+     * @param fileIds    the files whose rows were deleted; their content goes after the commit
+     * @param keptFileIds orphans kept because of their retention or a legal hold (docs/design/21 section 3.2)
+     */
+    public record PurgeOutput(int deletedFiles, List<UUID> fileIds, List<UUID> keptFileIds) {}
 
     static ProcessDefinition<RegisterInput, FileInfo, ProcessContext> register() {
         return ProcessDefinition.define(REGISTER, 1, RegisterInput.class, FileInfo.class, ProcessContext.class, pb -> pb
@@ -137,14 +141,17 @@ public class FileProcesses {
                 .contextFactory((start, input) -> new ProcessContext(start))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PurgeOutput.class))
                 .step("Find orphan files", FindOrphanFiles.into(ORPHANS))
+                .step("Keep those to be retained or held", SkipKeptFiles.of(ORPHANS, KEPT))
                 .compute("Delete them", (metadata, ctx) -> {
                     @SuppressWarnings("unchecked")
                     List<EntityInstance> orphans = (List<EntityInstance>) ctx.get(ORPHANS);
                     for (EntityInstance orphan : orphans) {
                         ctx.changes().delete(FileEntities.ENTITY, orphan.id(), orphan.version());
                     }
+                    @SuppressWarnings("unchecked")
+                    List<UUID> kept = (List<UUID>) ctx.get(KEPT);
                     ctx.put(OUTPUT, new PurgeOutput(orphans.size(),
-                        orphans.stream().map(orphan -> (UUID) orphan.id()).toList()));
+                        orphans.stream().map(orphan -> (UUID) orphan.id()).toList(), kept));
                 })
                 .afterCommit("Delete their content and orphan objects", PurgeStoredContent.of(ORPHANS)));
     }

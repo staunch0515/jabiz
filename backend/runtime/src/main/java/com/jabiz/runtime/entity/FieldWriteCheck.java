@@ -18,4 +18,13 @@ public interface FieldWriteCheck {
      * {@link com.jabiz.entity.ValidationException} listing every problem.
      */
     Mono<Void> verify(EntityDefinition def, Map<String, Object> values, Collection<String> changedFields);
+
+    /**
+     * As {@link #verify(EntityDefinition, Map, Collection)}, knowing which instance is written ({@code id}): an update
+     * gives only the changed fields. Checks that need the instance override this one.
+     */
+    default Mono<Void> verify(EntityDefinition def, Object id, Map<String, Object> values,
+        Collection<String> changedFields) {
+        return verify(def, values, changedFields);
+    }
 }

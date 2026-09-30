@@ -113,4 +113,29 @@ class SqlTemplateFileTest {
         assertThatThrownBy(() -> new TemplateSource(" ", 1)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new TemplateSource("a", 0)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    /** docs/design/19-reports.md sections 2.2, 2.3 and 3.1. */
+    @Test
+    void timeSliceReportAndVersionComeFromTheFile() {
+        Map<String, Object> header = new LinkedHashMap<>();
+        header.put("id", "sales.orders");
+        header.put("entities", List.of("Order"));
+        header.put("results", Map.of("amount", Map.of("from", "Order.amount")));
+        header.put("timeSlice", Map.of("knownAt", "seen"));
+        header.put("report", Map.of("period", Map.of("to", "seen"), "landscape", true));
+
+        AdvancedQueryDefinition query = SqlTemplateFile.compile("a.sql", header,
+            new SqlTemplateFile.Parts("", 1, BODY, 3, "v1"));
+
+        assertThat(query.timeSlice()).isEqualTo(new com.jabiz.query.custom.TemplateTimeSlice(null, "seen"));
+        assertThat(query.report()).isEqualTo(new com.jabiz.query.custom.ReportSpec(null, "seen", true));
+        assertThat(query.version()).isEqualTo("v1");
+
+        header.put("report", Map.of());
+        header.remove("timeSlice");
+        AdvancedQueryDefinition plain = SqlTemplateFile.compile("a.sql", header,
+            new SqlTemplateFile.Parts("", 1, BODY, 3, "v1"));
+        assertThat(plain.report()).isEqualTo(com.jabiz.query.custom.ReportSpec.PLAIN);
+        assertThat(plain.timeSlice()).isNull();
+    }
 }
