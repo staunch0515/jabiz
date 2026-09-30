@@ -139,6 +139,7 @@ public class ImportService {
             // Parameters are refused (400) before anything runs.
             inputs.convert(definition.paramsType(), params);
             ImportProcesses.RunInput input = new ImportProcesses.RunInput(definition.id(), fileId, mapping, params);
+            inputs.validate(input);
             return observations.mono(PlatformObservations.IMPORT, "import preview " + definition.id(),
                 KeyValues.of("import", definition.id(), "mode", "preview"),
                 executor.run(importProcess(), input, ExecutionOptions.DRY_RUN).map(ProcessResult::output));
@@ -156,6 +157,8 @@ public class ImportService {
             inputs.convert(definition.paramsType(), params);
             ImportProcesses.RunInput input = new ImportProcesses.RunInput(definition.id(), fileId, mapping, params,
                 true, notes);
+            // Built here, not read from a request body: checked the same way before anything runs (notes too long, say).
+            inputs.validate(input);
             return observations.mono(PlatformObservations.IMPORT, "import commit " + definition.id(),
                 KeyValues.of("import", definition.id(), "mode", "commit"),
                 executor.run(importProcess(), input, ExecutionOptions.NONE).map(ProcessResult::output));

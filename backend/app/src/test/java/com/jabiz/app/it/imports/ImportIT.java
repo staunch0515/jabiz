@@ -583,5 +583,8 @@ class ImportIT extends PostgresIntegrationTest {
             .noneMatch(r -> r.get("runId").equals(runId));
         commitImport("commerce.stock", bearer("commerce.stock.import", "app.import.read"),
             Map.of("fileId", fileId)).expectStatus().isForbidden();
+        // Notes beyond their limit are refused before anything runs.
+        commitImport("commerce.stock", admin(), Map.of("fileId", fileId, "notes", "x".repeat(4001)))
+            .expectStatus().isBadRequest();
     }
 }

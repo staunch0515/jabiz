@@ -98,9 +98,11 @@ export default function ImportRunsPage() {
         columns={columns}
         pagination={{ defaultPageSize: 50 }}
         data-testid="import-runs"
-        request={async () => {
+        // The import filter comes from the URL: a new one asks again.
+        params={{ importId }}
+        request={async ({ importId: current }) => {
           const data = await unwrap(api.GET('/api/imports/runs', {
-            params: { query: { import: importId, limit: 200 } },
+            params: { query: { import: current as string | undefined, limit: 200 } },
           }))
           return { data, success: true, total: data.length }
         }}
