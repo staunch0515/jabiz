@@ -95,8 +95,10 @@ class ReportArchiveController {
         return RequestContexts.current().flatMap(context -> {
             Permissions.requireAll(context, List.of(ReportPermissions.ARCHIVE_READ), development,
                 "Reading issued reports");
-            return runs.latest(blankToNull(template), size)
+            // Filtered before counting: runs the caller may not read never take the place of those they may.
+            return runs.latest(blankToNull(template))
                 .filter(run -> Permissions.allowsAll(context, run.permissions(), development))
+                .take(size)
                 .map(ReportArchiveController::summary)
                 .collectList();
         });
@@ -142,8 +144,8 @@ class ReportArchiveController {
                     current.map(AdvancedQueryDefinition::version).orElse(null)));
             }
             AdvancedQueryDefinition query = templates.prepare(current.get());
-            AdvancedQueryExecutor.At at = query.timeSlice() != null ? AdvancedQueryExecutor.At.NOW
-                : new AdvancedQueryExecutor.At(run.readAt(), run.knownAt());
+            // Exactly the point the run was read at: its parameters, and the archived times for the rest.
+            AdvancedQueryExecutor.At at = AdvancedQueryExecutor.At.pinned(run.readAt(), run.knownAt());
             return executor.all(query, run.params(), at, null, List.of(), settings.maxRows() + 1)
                 .map(page -> {
                     List<ReportColumn> columns = run.columns();

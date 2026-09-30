@@ -93,15 +93,42 @@ class ReportArchiveIT extends LedgerItSupport {
         assertThat(verification).containsEntry("verdict", "identical").containsEntry("recomputable", true)
             .containsEntry("currentHash", issued.contentHash());
 
-        // Its knownAt was filled in with the issue time and kept with the parameters.
         Map<String, Object> detail = client().get().uri("/api/reports/runs/{id}", issued.runId())
             .header(HttpHeaders.AUTHORIZATION, reader())
             .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         @SuppressWarnings("unchecked")
         Map<String, Object> params = (Map<String, Object>) detail.get("params");
-        assertThat(params).containsKeys("asOf", "knownAt");
+        assertThat(params).containsOnlyKeys("asOf");
         assertThat(query("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = 'jabiz.report.issued'"
             + " AND payload->>'runId' = ?", issued.runId()).getFirst().get("n")).isEqualTo(1L);
+    }
+
+    /**
+     * Nothing asked for: the run is pinned to the issue time, also through a template's {@code timeSlice}, and also
+     * where the dataset shows the current state only - a change scheduled then and in effect now does not count.
+     */
+    @Test
+    void aRunIsPinnedToItsIssueTime() {
+        String sku = "A-" + UUID.randomUUID().toString().substring(0, 8);
+        run("IT_PRICE", new com.jabiz.app.it.fixture.ItProcessFixtures.PriceInput(sku, 100,
+            clock.instant().plus(Duration.ofHours(1)), 200));
+        clock.advance(Duration.ofMinutes(1));
+        ReportProcesses.IssueOutput sliced = issue("it.prices_at", Map.of(), null);
+        ReportProcesses.IssueOutput current = issue("it.current_prices", Map.of(), null);
+        assertThat(current.recomputable()).isTrue();
+
+        clock.advance(Duration.ofHours(2));
+        for (ReportProcesses.IssueOutput issued : List.of(sliced, current)) {
+            Map<String, Object> verification = client().post().uri("/api/reports/runs/{id}/verify", issued.runId())
+                .header(HttpHeaders.AUTHORIZATION, bearer("report.archive.read", "it.query"))
+                .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+            assertThat(verification).containsEntry("verdict", "identical");
+            String csv = new String(client().get().uri("/api/reports/runs/{id}/export?format=csv", issued.runId())
+                .header(HttpHeaders.AUTHORIZATION, bearer("report.archive.read", "it.query"))
+                .exchange().expectStatus().isOk().expectBody(byte[].class).returnResult().getResponseBody(),
+                StandardCharsets.UTF_8);
+            assertThat(csv).contains(sku + ",100").doesNotContain(sku + ",200");
+        }
     }
 
     @Test

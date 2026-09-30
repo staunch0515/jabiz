@@ -27,9 +27,9 @@ import java.util.UUID;
 
 /**
  * The step of {@code REPORT_ISSUE} (docs/design/19-reports.md section 5). The caller needs the template's own
- * permissions besides the process's. Without a recorded time asked for, the report is read as known at the issue
- * time - through the template's {@code timeSlice} parameter when it declares one - so that running it again at the
- * same point in time reads the same versions.
+ * permissions besides the process's. The parts of the point in time nobody asked for - in the input or through the
+ * template's {@code timeSlice} parameters - are pinned to the issue time and archived, so that running the report
+ * again at the same point reads the same versions.
  */
 @Component
 public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
@@ -66,13 +66,9 @@ public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
                 "Issuing report " + query.queryId());
             Instant issued = ctx.opTime();
             Map<String, Object> params = new LinkedHashMap<>(input.params() == null ? Map.of() : input.params());
-            AdvancedQueryExecutor.At at = new AdvancedQueryExecutor.At(input.asOf(), input.knownAt());
-            if (query.timeSlice() == null) {
-                at = new AdvancedQueryExecutor.At(input.asOf(), input.knownAt() != null ? input.knownAt() : issued);
-            } else if (query.timeSlice().knownAt() != null && params.get(query.timeSlice().knownAt()) == null) {
-                params.put(query.timeSlice().knownAt(), issued.toString());
-            }
-            AdvancedQueryExecutor.At readAt = at;
+            AdvancedQueryExecutor.At asked = new AdvancedQueryExecutor.At(input.asOf(), input.knownAt());
+            // Whatever is not asked for is read as at the issue time, and pinned there for verification.
+            AdvancedQueryExecutor.At readAt = asked.pin(issued, issued);
             return supersedable(input, query)
                 .then(executor.all(query, params, readAt, null, List.of(), settings.maxRows() + 1))
                 .flatMap(page -> {
@@ -83,7 +79,7 @@ public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
                     }
                     AdvancedQueryDefinition prepared = templates.prepare(query);
                     ReportDocument document = exporter.document(prepared, params,
-                        ReportExporter.asOfAsked(query, params, readAt), page, issued, ctx.request().locale());
+                        ReportExporter.asOfAsked(query, params, asked), page, issued, ctx.request().locale());
                     // A run is no entity of the metamodel: the generator is asked for a plain UUIDv7.
                     UUID runId = UUID.fromString(String.valueOf(ids.next(null)));
                     ReportRun run = new ReportRun(runId, query.queryId(), query.version(), templates.source(query),

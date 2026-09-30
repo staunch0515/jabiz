@@ -60,13 +60,34 @@ public class AdvancedQueryExecutor {
      * The point in time a caller asks a template to be run at (docs/design/19-reports.md section 2.1); either part may
      * be null. A template declaring {@code timeSlice} takes its point in time from its parameters instead.
      *
-     * @param asOf    effective time; null means now
-     * @param knownAt recorded time; null means everything recorded so far
+     * <p>The platform may also <em>pin</em> a run (issued reports, 19 section 5): a pinned part applies where nothing
+     * else gives that part - neither the request nor the template's parameters - so that a run made "now" can be
+     * made again later at the very same point. Pins are not time travel a caller asked for: they pass the datasets'
+     * time-travel policy and the template's {@code timeSlice}.
+     *
+     * @param asOf          effective time asked for; null means now
+     * @param knownAt       recorded time asked for; null means everything recorded so far
+     * @param pinnedAsOf    effective time to use when none is asked for, or null
+     * @param pinnedKnownAt recorded time to use when none is asked for, or null
      */
-    public record At(Instant asOf, Instant knownAt) {
+    public record At(Instant asOf, Instant knownAt, Instant pinnedAsOf, Instant pinnedKnownAt) {
 
         /** Now, as recorded so far: the default. */
         public static final At NOW = new At(null, null);
+
+        public At(Instant asOf, Instant knownAt) {
+            this(asOf, knownAt, null, null);
+        }
+
+        /** A pinned point in time, for the platform's own runs. */
+        public static At pinned(Instant asOf, Instant knownAt) {
+            return new At(null, null, asOf, knownAt);
+        }
+
+        /** The asked parts with the given pins. */
+        public At pin(Instant pinAsOf, Instant pinKnownAt) {
+            return new At(asOf, knownAt, pinAsOf, pinKnownAt);
+        }
 
         boolean given() {
             return asOf != null || knownAt != null;
@@ -215,7 +236,7 @@ public class AdvancedQueryExecutor {
      */
     private TimeSlice timeSlice(AdvancedQueryDefinition query, Map<String, BoundValue> params, At at,
         Map<String, DatasetDefinition> datasets) {
-        At effective = at;
+        At asked = at;
         if (query.timeSlice() != null) {
             if (at.given()) {
                 List<Violation> violations = new ArrayList<>();
@@ -228,10 +249,10 @@ public class AdvancedQueryExecutor {
                 }
                 throw new ValidationException(violations);
             }
-            effective = new At(instant(params, query.timeSlice().asOf()), instant(params, query.timeSlice().knownAt()));
+            asked = new At(instant(params, query.timeSlice().asOf()), instant(params, query.timeSlice().knownAt()));
         }
-        if (effective.given()) {
-            String field = effective.asOf() != null ? "asOf" : "knownAt";
+        if (asked.given()) {
+            String field = asked.asOf() != null ? "asOf" : "knownAt";
             if (query.publicAccess()) {
                 throw new ValidationException(List.of(new Violation(field,
                     PlatformErrorCodes.TIME_TRAVEL_NOT_ALLOWED, "Public query " + query.queryId()
@@ -245,7 +266,9 @@ public class AdvancedQueryExecutor {
                 }
             });
         }
-        return new TimeSlice(effective.asOf() != null ? effective.asOf() : clock.instant(), effective.knownAt());
+        Instant asOf = asked.asOf() != null ? asked.asOf() : at.pinnedAsOf();
+        Instant knownAt = asked.knownAt() != null ? asked.knownAt() : at.pinnedKnownAt();
+        return new TimeSlice(asOf != null ? asOf : clock.instant(), knownAt);
     }
 
     private static Instant instant(Map<String, BoundValue> params, String name) {

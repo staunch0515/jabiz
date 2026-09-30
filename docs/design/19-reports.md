@@ -125,8 +125,10 @@ report:
 流程 `REPORT_ISSUE`（权限 `report.issue`，步骤中再要求模板自己的全部权限）：输入 `{templateId, params, asOf, knownAt, supersedes}`，
 输出 `{runId, templateVersion, contentHash, rowCount, recomputable}`，并发布事件 `jabiz.report.issued`（`runId`、`templateId`、`contentHash`、`supersedes`）。
 
-- **时点**：未给出记录时点时以签发时刻（操作时间）为记录时点——模板声明了 `timeSlice.knownAt` 时写入该参数，否则作为请求的 `knownAt`；
-  于是以后按同一时点重跑读到的是同样的版本。实际读取的生效时点记为 `read_at`；请求了生效时点时它也记为 `as_of`，并写在页眉。
+- **时点**：没有人给出的部分——输入中没有、模板的 `timeSlice` 参数也没有——固定（pin）在签发时刻（操作时间）并存档：生效时点记为 `read_at`，
+  记录时点记为 `known_at`，于是以后按同一时点重跑读到的是同样的版本（包括签发时已排定、之后才生效的变更）。固定的时点是平台自己的运行，
+  不算调用方要求的时间旅行：不受 `timeSlice` 与数据视图 `allowTimeTravel` 的限制（`AdvancedQueryExecutor.At.pinned`）。
+  输入给出了生效时点时它也记为 `as_of`，并写在页眉。
 - **内容**：整份结果（不带筛选），行数上限同导出（`jabiz.reports.export.max-rows`，超过 422 `REPORT_TOO_LARGE`）。
   值按列的类型规范化（金额为精确小数、时间为时刻、多语言文本为按键排序的映射），以 core `ContentHash`（18 §3.3）对列名与行计算内容哈希
   （小数的尾零不影响哈希）。
@@ -149,10 +151,10 @@ report:
 
 | 接口 | 说明 |
 |---|---|
-| `GET /api/reports/runs?template=&limit=` | 最近的运行（默认 50，至多 200），不含行；`supersededBy` 为取代它的运行 |
+| `GET /api/reports/runs?template=&limit=` | 调用方可读的最近的运行（先按权限过滤再取条数；默认 50，至多 200），不含行；`supersededBy` 为取代它的运行 |
 | `GET /api/reports/runs/{id}` | 一次运行：页眉（公司、期间、参数、语言）、所用参数、列 |
 | `GET /api/reports/runs/{id}/export?format=csv\|xlsx\|pdf` | 由存档的行与签发时的页眉、语言生成文件，**不重新查询**；先以存档的哈希核对存档的行；响应头 `X-Jabiz-Content-Hash`；PDF 每次逐字节相同 |
-| `POST /api/reports/runs/{id}/verify` | 当前模板版本与签发时相同时，按存档的参数与时点（`read_at`、`known_at`；`timeSlice` 模板用存档的参数）重新执行并比较哈希：`identical` / `differs`；版本不同 → `template_changed`（不重算） |
+| `POST /api/reports/runs/{id}/verify` | 当前模板版本与签发时相同时，按存档的参数、固定在 `read_at`、`known_at` 的时点重新执行并比较哈希：`identical` / `differs`；版本不同 → `template_changed`（不重算） |
 
 ### 5.4 后台
 
@@ -169,6 +171,6 @@ report:
 - 导出（14d-2）：core `CsvReportWriterTest`、`ReportFormatTest`；runtime `XlsxReportWriterTest`、`PdfReportWriterTest`（读回、页眉页脚、列宽、确定性、字体）；
   `ReportExportIT`（三种格式读回、Excel 单元格之和、同一次运行的 PDF 字节相同、记录时点、超限 422、权限与格式）；前端 `ReportPage.test.tsx`、Playwright 下载。
 - 存档（14d-3）：runtime `ArchivedValuesTest`（存入读回值与哈希不变）；`ReportArchiveIT`（签发后继续过账，重现的 PDF 与 CSV 逐字节相同、核对 `identical`；
-  模板版本不同 `template_changed`；非时态数据被原地修改 `differs`；取代一次、同模板、不存在；读取与签发的权限；只追加）；前端 `ReportPage.test.tsx`（签发）、
+  模板版本不同 `template_changed`；非时态数据被原地修改 `differs`；签发时点固定（含 `timeSlice` 模板与禁止时间旅行的视图，其后生效的排定变更不计入）；取代一次、同模板、不存在；读取与签发的权限；只追加）；前端 `ReportPage.test.tsx`（签发）、
   `ReportArchivePage.test.tsx`、Playwright（签发 → 存档 → 核对）。
 

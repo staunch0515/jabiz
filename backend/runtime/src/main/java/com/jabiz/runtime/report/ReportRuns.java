@@ -94,16 +94,15 @@ public class ReportRuns {
     }
 
     /**
-     * The latest runs, newest first, without their rows or template text.
+     * The runs, newest first, without their rows or template text; read as far as the subscriber takes them.
      *
      * @param templateId only runs of this template, or null for all
      */
-    public Flux<ReportRun> latest(String templateId, int limit) {
+    public Flux<ReportRun> latest(String templateId) {
         return engine().select("SELECT " + SUMMARY_COLUMNS + FROM
                 + " WHERE (CAST(:template AS varchar) IS NULL OR r.template_id = :template)"
-                + " ORDER BY r.issued_time DESC, r.run_id DESC LIMIT :limit",
-                Map.of("template", templateId == null ? BoundValue.nullOf(String.class) : BoundValue.of(templateId),
-                    "limit", BoundValue.of(limit)))
+                + " ORDER BY r.issued_time DESC, r.run_id DESC",
+                Map.of("template", templateId == null ? BoundValue.nullOf(String.class) : BoundValue.of(templateId)))
             .map(row -> run(row, false));
     }
 
