@@ -227,16 +227,18 @@ public final class TemplateChecks {
             if (query.timeSlice().asOf() == null && query.timeSlice().knownAt() == null) {
                 problems.add(TemplateProblem.header("timeSlice must name asOf, knownAt or both"));
             }
-            requireTimeParameter(query, query.timeSlice().asOf(), "timeSlice.asOf", problems);
-            requireTimeParameter(query, query.timeSlice().knownAt(), "timeSlice.knownAt", problems);
+            requireTimeParameter(query, query.timeSlice().asOf(), "timeSlice.asOf", false, problems);
+            requireTimeParameter(query, query.timeSlice().knownAt(), "timeSlice.knownAt", false, problems);
         }
         if (query.report() != null) {
-            requireTimeParameter(query, query.report().periodFrom(), "report.period.from", problems);
-            requireTimeParameter(query, query.report().periodTo(), "report.period.to", problems);
+            // A report's period may be days as well: the period of a financial statement is dates.
+            requireTimeParameter(query, query.report().periodFrom(), "report.period.from", true, problems);
+            requireTimeParameter(query, query.report().periodTo(), "report.period.to", true, problems);
         }
     }
 
-    private static void requireTimeParameter(AdvancedQueryDefinition query, String name, String where,
+    /** @param dates whether a date parameter will do; a time slice is moments only */
+    private static void requireTimeParameter(AdvancedQueryDefinition query, String name, String where, boolean dates,
         List<TemplateProblem> problems) {
         if (name == null) {
             return;
@@ -247,8 +249,10 @@ public final class TemplateChecks {
             problems.add(TemplateProblem.header(where + " names " + name + ", which is not a declared parameter"));
         } else if (parameter.get().list()) {
             problems.add(TemplateProblem.header(where + " names " + name + ", which is a list parameter"));
-        } else if (parameter.get().kind() != null && !(parameter.get().kind() instanceof SemanticKind.Temporal)) {
-            problems.add(TemplateProblem.header(where + " names " + name + ", which is not a temporal parameter"));
+        } else if (parameter.get().kind() != null && !(parameter.get().kind() instanceof SemanticKind.Temporal)
+            && !(dates && parameter.get().kind() instanceof SemanticKind.Date)) {
+            problems.add(TemplateProblem.header(where + " names " + name + ", which is not a "
+                + (dates ? "temporal or date" : "temporal") + " parameter"));
         }
     }
 

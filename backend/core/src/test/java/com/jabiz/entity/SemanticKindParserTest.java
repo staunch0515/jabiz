@@ -17,6 +17,7 @@ class SemanticKindParserTest {
             new SemanticKind.SemanticIdentity("urn:x"),
             new SemanticKind.Monetary("JPY", 0),
             new SemanticKind.Temporal(TemporalRole.VALID_FROM),
+            new SemanticKind.Date(),
             new SemanticKind.Code("urn:d", List.of("A", "B")),
             new SemanticKind.Version(),
             new SemanticKind.Text(12, true),

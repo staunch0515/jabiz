@@ -46,4 +46,9 @@ class CsvReportWriterTest {
         assertThat(CsvReportWriter.scaled(new java.math.BigDecimal("1E+3"), 0)).isEqualTo("1000");
         assertThat(CsvReportWriter.scaled(new java.math.BigDecimal("1.005"), 2)).isEqualTo("1.005");
     }
+
+    @Test
+    void datesAreWrittenAsIsoDays() {
+        assertThat(CsvReportWriter.text(java.time.LocalDate.of(2026, 1, 31))).isEqualTo("2026-01-31");
+    }
 }

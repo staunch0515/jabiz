@@ -1,5 +1,6 @@
 import {
   ProForm,
+  ProFormDatePicker,
   ProFormDateTimePicker,
   ProFormDigit,
   ProFormSelect,
@@ -88,6 +89,8 @@ export default function EntityField({
       return <ProFormDigit {...common} fieldProps={{ precision: 0, style: { width: '100%' } }} />
     case 'datetime':
       return <ProFormDateTimePicker {...common} fieldProps={{ style: { width: '100%' } }} />
+    case 'date':
+      return <ProFormDatePicker {...common} fieldProps={{ style: { width: '100%' } }} />
     case 'switch':
       return <ProFormSwitch {...common} />
     case 'select':

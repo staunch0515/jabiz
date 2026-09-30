@@ -6,6 +6,7 @@ import com.jabiz.entity.SemanticKindParser;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -33,6 +34,7 @@ public final class ParamKinds {
             case SemanticKind.Monetary m -> { }
             case SemanticKind.Bool b -> { }
             case SemanticKind.Temporal t -> { }
+            case SemanticKind.Date d -> { }
             case SemanticKind.Code c when !c.allowedValues().isEmpty() -> { }
             case SemanticKind.Code c -> throw new IllegalArgumentException(
                 "a code parameter must list its allowed values");
@@ -55,6 +57,7 @@ public final class ParamKinds {
         return switch (value) {
             case BigDecimal decimal -> decimal(kind, decimal).toPlainString();
             case Instant instant -> instant.toString();
+            case LocalDate date -> date.toString();
             case String text -> text(kind, text);
             default -> value.toString();
         };
@@ -62,7 +65,7 @@ public final class ParamKinds {
 
     /**
      * The value stored as {@code text}, as the canonical Java value of {@code kind}: {@code String},
-     * {@code BigDecimal}, {@code Boolean} or {@code Instant}.
+     * {@code BigDecimal}, {@code Boolean}, {@code Instant} or {@code LocalDate}.
      *
      * @throws IllegalArgumentException when the stored text is not a valid value of the kind
      */

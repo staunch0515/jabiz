@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -69,6 +70,15 @@ class ImportValuesTest {
         assertThat(code(rate, "12345")).isEqualTo(PlatformErrorCodes.NUMERIC_PRECISION);
         assertThat(read(new SemanticKind.Version(), "1,024")).isEqualTo(1024L);
         assertThat(code(new SemanticKind.Version(), "1.5")).isEqualTo(ImportCodes.VALUE_INVALID);
+    }
+
+    @Test
+    void readsDatesAsDays() throws Exception {
+        SemanticKind date = new SemanticKind.Date();
+        assertThat(read(date, "2026-01-31")).isEqualTo(LocalDate.of(2026, 1, 31));
+        assertThat(read(date, "01/31/2026")).isEqualTo(LocalDate.of(2026, 1, 31));
+        assertThat(code(date, "02/30/2024")).isEqualTo(ImportCodes.VALUE_INVALID);
+        assertThat(code(date, "2026-01-31T10:00:00Z")).isEqualTo(ImportCodes.VALUE_INVALID);
     }
 
     @Test

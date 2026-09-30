@@ -3,6 +3,7 @@ package com.jabiz.entity;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -16,6 +17,7 @@ import java.util.Date;
  *
  * <ul>
  *   <li>Temporal: {@link Instant} (a timestamp without zone is interpreted as UTC)</li>
+ *   <li>Date: {@link LocalDate}</li>
  *   <li>Monetary, Numeric: {@link BigDecimal}</li>
  *   <li>Version: {@link Long}</li>
  *   <li>Code, Text: {@link String}</li>
@@ -50,6 +52,7 @@ public final class FieldValueCoercer {
         }
         return switch (kind) {
             case SemanticKind.Temporal t -> toInstant(raw);
+            case SemanticKind.Date d -> toDate(raw);
             case SemanticKind.Monetary m -> toDecimal(raw);
             case SemanticKind.Numeric n -> toDecimal(raw);
             case SemanticKind.Version v -> toLong(raw);
@@ -67,6 +70,7 @@ public final class FieldValueCoercer {
     public static Class<?> javaType(SemanticKind kind) {
         return switch (kind) {
             case SemanticKind.Temporal t -> Instant.class;
+            case SemanticKind.Date d -> LocalDate.class;
             case SemanticKind.Monetary m -> BigDecimal.class;
             case SemanticKind.Numeric n -> BigDecimal.class;
             case SemanticKind.Version v -> Long.class;
@@ -100,6 +104,23 @@ public final class FieldValueCoercer {
             }
         }
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to a timestamp");
+    }
+
+    /**
+     * A calendar date from a {@link LocalDate} or ISO text ({@code 2026-01-31}). A moment is refused rather than
+     * cut to a day: which day a moment falls on depends on a zone the value does not carry.
+     */
+    private static LocalDate toDate(Object raw) {
+        if (raw instanceof LocalDate d) return d;
+        if (raw instanceof CharSequence s) {
+            String text = s.toString().trim();
+            try {
+                return LocalDate.parse(text);
+            } catch (DateTimeParseException e) {
+                throw new IllegalArgumentException("not an ISO-8601 date: '" + text + "'", e);
+            }
+        }
+        throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to a date");
     }
 
     /** Canonical decimal conversion, shared with custom kinds. */

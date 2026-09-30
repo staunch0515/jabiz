@@ -2,6 +2,7 @@ package com.jabiz.query.template;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,7 @@ public final class SqlTypeCompatibility {
         Long.class, INTEGERS,
         Integer.class, Set.of("int2", "int4"),
         Instant.class, Set.of("timestamptz", "timestamp"),
+        LocalDate.class, Set.of("date"),
         Boolean.class, Set.of("bool"),
         UUID.class, Set.of("uuid"),
         Map.class, Set.of("jsonb", "json")
@@ -41,6 +43,7 @@ public final class SqlTypeCompatibility {
         Long.class, Set.of("int2", "int4", "int8", "numeric"),
         Integer.class, Set.of("int2", "int4", "int8", "numeric"),
         Instant.class, Set.of("timestamptz", "timestamp"),
+        LocalDate.class, Set.of("date"),
         Boolean.class, Set.of("bool"),
         UUID.class, Set.of("uuid"),
         Map.class, Set.of("jsonb", "json")
