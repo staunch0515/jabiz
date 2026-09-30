@@ -144,7 +144,7 @@ public class LoginContext extends ProcessContext {
         if (outcome == LoginOutcome.MFA_REQUIRED || outcome == LoginOutcome.MFA_ENROLLMENT_REQUIRED) {
             // The second step needs to know whose attempt it continues; roles come only with the second factor.
             return new SponsorSignInOutput(outcome, String.valueOf(user().orElseThrow().id()), null, null, null,
-                recordId, attemptNo, null, null);
+                recordId, attemptNo, null, identityId());
         }
         if (outcome != LoginOutcome.SUCCESS) {
             return new SponsorSignInOutput(outcome == null ? LoginOutcome.BAD_CREDENTIALS : outcome, null, null,
