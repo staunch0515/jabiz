@@ -32,8 +32,10 @@ jobs:
       - name: Start the application and wait for health
         working-directory: backend
         run: |
-          # A throwaway signing key for this run only.
+          # Throwaway keys for this run only.
           export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
+          export JABIZ_MFA_KEY=$(openssl rand -base64 48)
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
             -jar finance/build/libs/finance-0.0.1-SNAPSHOT.jar > ../finance.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done

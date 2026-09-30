@@ -5,8 +5,12 @@
 # then open http://localhost:8080; the first administrator's password is printed by
 # `docker compose -f deploy/finance/docker-compose.yml logs finance`.
 #
-# Settings come from deploy/finance/.env (never committed). For a server set at least DB_PASSWORD, JABIZ_JWT_SECRET
-# (openssl rand -base64 48) and JABIZ_BOOTSTRAP_ADMIN_PASSWORD. Back up the database and the files volume together.
+# Settings come from deploy/finance/.env (never committed). For a server set at least DB_PASSWORD, JABIZ_JWT_SECRET,
+# JABIZ_INTEGRITY_KEY and JABIZ_MFA_KEY (each: openssl rand -base64 48) and JABIZ_BOOTSTRAP_ADMIN_PASSWORD; on a first
+# local start the entrypoint generates the three keys into the secrets volume. Keep copies of the integrity and MFA
+# keys: without them the seals cannot be verified and enrolled users cannot sign in. Single sign-on: see
+# docs/guide/quickstart.md (JABIZ_SECURITY_OIDC_PROVIDERS_0_…). Back up the database, the files volume and the secrets
+# volume together.
 name: finance
 
 services:

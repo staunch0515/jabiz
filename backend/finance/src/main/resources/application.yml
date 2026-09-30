@@ -11,10 +11,19 @@ spring:
     password: ${DB_PASSWORD:finance}
 
 jabiz:
+  # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
+  # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
+  integrity:
+    key: ${JABIZ_INTEGRITY_KEY:}
   security:
     # The key signing access tokens comes from the environment only (docs/design/10-security.md).
     jwt:
       secret: ${JABIZ_JWT_SECRET:}
+    # The key encrypting the users' TOTP secrets (docs/design/10-security.md section 9), from the environment only:
+    # Base64, at least 32 bytes. Startup fails without it; without it, enrolled users cannot pass their second factor.
+    # Single sign-on providers are configured by environment too (JABIZ_SECURITY_OIDC_PROVIDERS_0_…, section 12).
+    mfa:
+      key: ${JABIZ_MFA_KEY:}
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
