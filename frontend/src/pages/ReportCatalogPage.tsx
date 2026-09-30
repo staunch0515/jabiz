@@ -2,6 +2,7 @@ import { PageContainer } from '@ant-design/pro-components'
 import { Card, Empty, List, Spin, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { useAuth } from '../auth/AuthContext'
 import { useQueryCatalog } from '../meta/hooks'
 import { reportGroups } from '../meta/reports'
 import { paths } from './paths'
@@ -13,10 +14,18 @@ import { paths } from './paths'
 export default function ReportCatalogPage() {
   const { t } = useTranslation()
   const catalog = useQueryCatalog()
+  const { can } = useAuth()
   if (catalog.isLoading) return <Spin style={{ margin: 48 }} />
   const groups = reportGroups(catalog.data ?? [])
   return (
-    <PageContainer title={t('reports.title')}>
+    <PageContainer
+      title={t('reports.title')}
+      extra={can('report.archive.read') ? [
+        <Link key="archive" to={paths.reportArchive()} data-testid="report-archive-link">
+          {t('reports.archive.title')}
+        </Link>,
+      ] : []}
+    >
       {groups.length === 0 && <Empty description={t('reports.empty')} />}
       {groups.map(({ group, reports }) => (
         <Card key={group} title={group} style={{ marginBottom: 16 }} data-testid={`report-group-${group}`}>

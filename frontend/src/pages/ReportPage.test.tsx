@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from 'antd'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import i18n from '../i18n'
@@ -11,7 +11,11 @@ import ReportPage from './ReportPage'
 const post = vi.fn()
 const exportQuery = vi.fn()
 
+const runProcess = vi.fn()
+
 vi.mock('../api/reports', () => ({ exportQuery: (...args: unknown[]) => exportQuery(...args) }))
+vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: () => true }) }))
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -62,6 +66,11 @@ vi.mock('../meta/hooks', () => ({
   }),
 }))
 
+function ArchiveProbe() {
+  const [params] = useSearchParams()
+  return <span>archive of {params.get('template')}</span>
+}
+
 function show(path: string) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -70,6 +79,7 @@ function show(path: string) {
           <Routes>
             <Route path="/reports" element={<ReportCatalogPage />} />
             <Route path="/reports/run" element={<ReportPage />} />
+            <Route path="/reports/archive" element={<ArchiveProbe />} />
           </Routes>
         </MemoryRouter>
       </App>
@@ -81,6 +91,7 @@ describe('reports pages', () => {
   beforeEach(async () => {
     post.mockReset()
     exportQuery.mockReset()
+    runProcess.mockReset()
     await i18n.changeLanguage('en')
   })
 
@@ -89,6 +100,7 @@ describe('reports pages', () => {
     expect(screen.getByRole('link', { name: 'Stock availability' }).getAttribute('href'))
       .toBe('/reports/run?id=commerce.stock_availability')
     expect(screen.getByTestId('report-group-jabiz')).toBeTruthy()
+    expect(screen.getByTestId('report-archive-link').getAttribute('href')).toBe('/reports/archive')
     expect(screen.queryByText('Not a report')).toBeNull()
   })
 
@@ -120,6 +132,23 @@ describe('reports pages', () => {
     expect([id, format]).toEqual(['commerce.stock_availability', 'xlsx'])
     expect(body).toMatchObject({ params: {}, filters: [], sorts: [] })
     expect(body).not.toHaveProperty('limit')
+  })
+
+  it('issues the run on screen and opens the archive of the report', async () => {
+    post.mockResolvedValue({ items: [{ sku: 'A-1', available: '3' }], total: 1, offset: 0, limit: 50 })
+    runProcess.mockResolvedValue({ runId: 'r-1' })
+    show('/reports/run?id=commerce.stock_availability')
+    await screen.findByText('A-1')
+
+    fireEvent.click(screen.getByTestId('report-issue'))
+    expect(await screen.findByText(/archived for good/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Issue' && b !== screen
+      .getByTestId('report-issue'))!)
+
+    await waitFor(() => expect(runProcess).toHaveBeenCalled())
+    expect(runProcess.mock.calls[0]).toEqual(['REPORT_ISSUE', { templateId: 'commerce.stock_availability', params: {},
+      asOf: undefined, knownAt: undefined }])
+    expect(await screen.findByText('archive of commerce.stock_availability')).toBeTruthy()
   })
 
   it('waits for the required parameters of a report', async () => {

@@ -37,6 +37,17 @@
         },
         "type" : "object"
       },
+      "ColumnEntry" : {
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "CommitRequest" : {
         "properties" : {
           "changes" : {
@@ -379,6 +390,17 @@
         },
         "type" : "object"
       },
+      "ParameterEntry" : {
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PartEvent" : {
         "properties" : {
           "last" : {
@@ -620,6 +642,39 @@
         },
         "type" : "object"
       },
+      "RunDetail" : {
+        "properties" : {
+          "columns" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ColumnEntry"
+            },
+            "type" : "array"
+          },
+          "company" : {
+            "type" : "string"
+          },
+          "landscape" : {
+            "type" : "boolean"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "parameters" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ParameterEntry"
+            },
+            "type" : "array"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "run" : {
+            "$ref" : "#/components/schemas/RunSummary"
+          }
+        },
+        "type" : "object"
+      },
       "RunRequest" : {
         "properties" : {
           "asOf" : {
@@ -680,6 +735,54 @@
           "total" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RunSummary" : {
+        "properties" : {
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "contentHash" : {
+            "type" : "string"
+          },
+          "issuedBy" : {
+            "type" : "string"
+          },
+          "issuedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "knownAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "period" : {
+            "type" : "string"
+          },
+          "recomputable" : {
+            "type" : "boolean"
+          },
+          "rowCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "runId" : {
+            "type" : "string"
+          },
+          "supersededBy" : {
+            "type" : "string"
+          },
+          "templateId" : {
+            "type" : "string"
+          },
+          "templateVersion" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -803,6 +906,26 @@
           "version" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "Verification" : {
+        "properties" : {
+          "contentHash" : {
+            "type" : "string"
+          },
+          "currentHash" : {
+            "type" : "string"
+          },
+          "currentVersion" : {
+            "type" : "string"
+          },
+          "recomputable" : {
+            "type" : "boolean"
+          },
+          "verdict" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1626,7 +1749,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "list_2",
         "responses" : {
           "200" : {
             "content" : {
@@ -1978,6 +2101,147 @@
           }
         },
         "tags" : [ "query-controller" ]
+      }
+    },
+    "/api/reports/runs" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "template",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/RunSummary"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "report-archive-controller" ]
+      }
+    },
+    "/api/reports/runs/{runId}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "report-archive-controller" ]
+      }
+    },
+    "/api/reports/runs/{runId}/export" : {
+      "get" : {
+        "operationId" : "export_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "format",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/pdf" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "text/csv" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "report-archive-controller" ]
+      }
+    },
+    "/api/reports/runs/{runId}/verify" : {
+      "post" : {
+        "operationId" : "verify",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Verification"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "report-archive-controller" ]
       }
     },
     "/api/sod/conflicts" : {

@@ -23,6 +23,11 @@ public final class TemplateVersion {
 
     /** Version of a template declared with the Java DSL, from everything that defines it. */
     public static String of(AdvancedQueryDefinition query) {
+        return ofText(describe(query));
+    }
+
+    /** The canonical description of a template declared in Java: what its version is the hash of. */
+    public static String describe(AdvancedQueryDefinition query) {
         StringBuilder text = new StringBuilder()
             .append("id=").append(query.queryId()).append('\n')
             .append("description=").append(query.description()).append('\n')
@@ -38,7 +43,7 @@ public final class TemplateVersion {
             .append("timeSlice=").append(query.timeSlice()).append('\n')
             .append("report=").append(query.report()).append('\n')
             .append("sql=").append(query.sqlTemplate());
-        return ofText(text.toString());
+        return text.toString();
     }
 
     private static String sha256(String text) {
