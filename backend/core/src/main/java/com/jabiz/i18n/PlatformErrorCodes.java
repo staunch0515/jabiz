@@ -31,6 +31,8 @@ public final class PlatformErrorCodes {
     /** Written through the dataset API or a generic entity process (400), or restored by a revert (422). */
     public static final String PROCESS_ONLY_FIELD = "PROCESS_ONLY_FIELD";
     public static final String DISPLAY_NOT_DECLARED = "DISPLAY_NOT_DECLARED";
+    /** A masked field given its masked form, which would replace the plain value (docs/design/10-security.md §13.1). */
+    public static final String MASKED_VALUE = "MASKED_VALUE";
 
     // Business rules (422)
     public static final String IMMUTABLE_FIELD = "IMMUTABLE_FIELD";
@@ -126,6 +128,8 @@ public final class PlatformErrorCodes {
     public static final String FILE_POLICY_MISMATCH = "FILE_POLICY_MISMATCH";
     /** 422. */
     public static final String FILE_IN_USE = "FILE_IN_USE";
+    /** 422: a role assignment's data period ends before it starts (docs/design/10-security.md section 13.2). */
+    public static final String DATA_PERIOD_ORDER = "DATA_PERIOD_ORDER";
 
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
@@ -135,7 +139,7 @@ public final class PlatformErrorCodes {
         TOO_LONG, NUMERIC_PRECISION, MONETARY_SCALE, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
         SORT_NOT_ALLOWED, REASON_REQUIRED, NOT_TEMPORAL, TIME_TRAVEL_NOT_ALLOWED, INVALID_IDEMPOTENCY_KEY,
         SENSITIVE_FIELD, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, TRANSLATION_REQUIRED, PROCESS_ONLY_FIELD,
-        DISPLAY_NOT_DECLARED,
+        DISPLAY_NOT_DECLARED, MASKED_VALUE, DATA_PERIOD_ORDER,
         IMMUTABLE_FIELD, ILLEGAL_TRANSITION, INVALID_INITIAL_STATE, STATE_REQUIRED, STATE_CLEARED, OUT_OF_SCOPE,
         GUARD_EVALUATION_FAILED, DATASET_READ_ONLY, ENTITY_READ_ONLY, BATCH_TOO_LARGE, STILL_REFERENCED,
         SCHEDULING_NOT_ALLOWED, NOT_SCHEDULED, NOTHING_TO_REVERT,

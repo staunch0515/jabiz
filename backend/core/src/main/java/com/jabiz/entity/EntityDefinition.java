@@ -130,6 +130,11 @@ public final class EntityDefinition {
         return fields.values().stream().filter(FieldDefinition::sensitive).map(FieldDefinition::name).toList();
     }
 
+    /** The fields marked {@linkplain FieldBuilder#masked masked}, in declaration order. */
+    public List<FieldDefinition> maskedFields() {
+        return fields.values().stream().filter(FieldDefinition::isMasked).toList();
+    }
+
     /** Names of the fields marked {@linkplain FieldBuilder#processOnly() process-only}, in declaration order. */
     public List<String> processOnlyFields() {
         return fields.values().stream().filter(FieldDefinition::processOnly).map(FieldDefinition::name).toList();

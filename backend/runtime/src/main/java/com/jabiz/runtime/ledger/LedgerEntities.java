@@ -174,6 +174,8 @@ public class LedgerEntities {
             .targetEntityType(TRANSACTION)
             .asDefault()
             .permissions(LedgerPermissions.READ, LedgerPermissions.POST)
+            // Actors limited to a period see and post transactions booked within it (10 section 13.2).
+            .scope(s -> s.withinDataPeriod("bookingTime"))
             .policy(p -> p.processOnlyWrites())
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
@@ -184,6 +186,7 @@ public class LedgerEntities {
             .targetEntityType(ENTRY)
             .asDefault()
             .permissions(LedgerPermissions.READ, LedgerPermissions.POST)
+            .scope(s -> s.withinDataPeriod("transactionId", "bookingTime"))
             // A transaction has at most LedgerPosting.MAX_LINES entries; the processes read them all at once.
             .policy(p -> p.processOnlyWrites().maxQueryBatchSize(500).maxWriteBatchSize(500))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

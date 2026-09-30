@@ -153,7 +153,9 @@ public class LoginContext extends ProcessContext {
         EntityInstance user = user().orElseThrow();
         return new SponsorSignInOutput(outcome, String.valueOf(user.id()), user.get("tenantId"),
             access.roles().stream().sorted().toList(), access.permissions().stream().sorted().toList(),
-            recordId, attemptNo, null, identityId());
+            recordId, attemptNo, null, identityId(),
+            access.dataPeriod() == null ? null : access.dataPeriod().from(),
+            access.dataPeriod() == null ? null : access.dataPeriod().to());
     }
 
     /** The provider account the attempt came through; null for passwords. */

@@ -1,6 +1,7 @@
 package com.jabiz.runtime.security;
 
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
@@ -48,6 +49,11 @@ public class SensitiveDataMasker {
     private final JsonMapper json;
     private final EntityDefinitionRegistry entities;
     private final Set<String> names;
+    /**
+     * Styles of masked entity fields by lower-case name: values under these names are kept out of operation records
+     * and import reports, which their readers may not see in plain (the first entity declaring a name decides).
+     */
+    private final Map<String, com.jabiz.entity.MaskStyle> maskedNames;
     private final List<String> fragments;
 
     public SensitiveDataMasker(JsonMapper json, EntityDefinitionRegistry entities,
@@ -63,6 +69,12 @@ public class SensitiveDataMasker {
             collectSensitive(process.outputType(), found, 0);
         }
         this.names = Set.copyOf(found);
+        Map<String, com.jabiz.entity.MaskStyle> masked = new LinkedHashMap<>();
+        for (EntityDefinition def : entities.all()) {
+            def.maskedFields().forEach(field -> masked.putIfAbsent(field.name().toLowerCase(Locale.ROOT),
+                field.masked().style()));
+        }
+        this.maskedNames = Map.copyOf(masked);
         this.fragments = fragments.stream().filter(f -> f != null && !f.isBlank())
             .map(f -> f.trim().toLowerCase(Locale.ROOT)).distinct().toList();
     }
@@ -77,14 +89,16 @@ public class SensitiveDataMasker {
     }
 
     /**
-     * The value as JSON for {@code op_process.input_summary}: secrets replaced by {@value #MASK}; an input longer than
+     * The value as JSON for {@code op_process.input_summary}: secrets and values of properties named like masked
+     * entity fields replaced by {@value #MASK}; an input longer than
      * {@value #MAX_SUMMARY_LENGTH} characters is recorded by its length only. Null for a null value.
      */
     public String summary(Object value) {
         if (value == null) {
             return null;
         }
-        String text = json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().stringNode(MASK)));
+        String text = json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().stringNode(MASK),
+            name -> isSensitive(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT))));
         if (text.length() <= MAX_SUMMARY_LENGTH) {
             return text;
         }
@@ -99,7 +113,8 @@ public class SensitiveDataMasker {
      * still convert back to their type.
      */
     public String withoutSecrets(Object value) {
-        return json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().nullNode()));
+        return json.writeValueAsString(
+            mask(json.valueToTree(value), json.getNodeFactory().nullNode(), this::isSensitive));
     }
 
     /** The value converted to JSON types with secrets removed (null), for responses of generic endpoints. */
@@ -107,33 +122,75 @@ public class SensitiveDataMasker {
         if (value == null) {
             return null;
         }
-        return json.treeToValue(mask(json.valueToTree(value), json.getNodeFactory().nullNode()), Object.class);
+        return json.treeToValue(
+            mask(json.valueToTree(value), json.getNodeFactory().nullNode(), this::isSensitive), Object.class);
     }
 
-    /** The instance without the values of its entity's sensitive fields: what read APIs return. */
+    /**
+     * The instance without the values of its entity's sensitive fields and with its masked fields in their masked
+     * form: what read APIs return (docs/design/10-security.md section 13.1; holders of a masked field's permission ask
+     * for one value at a time).
+     */
     public EntityInstance hide(EntityInstance instance) {
         if (instance == null) {
             return null;
         }
-        List<String> hidden = entities.find(instance.entityType()).map(EntityDefinition::sensitiveFields)
-            .orElse(List.of());
-        if (hidden.isEmpty() || hidden.stream().noneMatch(instance.attributes()::containsKey)) {
-            return instance;
-        }
-        Map<String, Object> attributes = new LinkedHashMap<>(instance.attributes());
-        hidden.forEach(attributes::remove);
-        return new EntityInstance(instance.id(), instance.entityType(), instance.version(), instance.state(),
-            attributes);
+        return entities.find(instance.entityType()).map(def -> {
+            Map<String, Object> visible = hide(def, instance.attributes());
+            return visible == instance.attributes() ? instance
+                : new EntityInstance(instance.id(), instance.entityType(), instance.version(), instance.state(),
+                    visible);
+        }).orElse(instance);
     }
 
-    /** The attributes without the sensitive fields of the entity. */
+    /**
+     * As {@link #hide(EntityInstance)}, with the masked fields in {@code plain} left as they are: for exports to
+     * holders of their permissions, which are recorded (docs/design/10-security.md section 13.1).
+     */
+    public EntityInstance hide(EntityInstance instance, Set<String> plain) {
+        EntityInstance hidden = hide(instance);
+        if (plain.isEmpty() || hidden == instance) {
+            return hidden;
+        }
+        Map<String, Object> attributes = new LinkedHashMap<>(hidden.attributes());
+        plain.stream().filter(instance.attributes()::containsKey)
+            .forEach(field -> attributes.put(field, instance.attributes().get(field)));
+        return new EntityInstance(hidden.id(), hidden.entityType(), hidden.version(), hidden.state(), attributes);
+    }
+
+    /**
+     * Values by name, with those named like a sensitive field left out and those named like a masked entity field in
+     * its masked form: for import reports (row values and constants), which are kept and shown to other readers.
+     */
+    @SuppressWarnings("unchecked")
+    public <V> Map<String, V> maskByName(Map<String, V> values) {
+        Map<String, V> visible = new LinkedHashMap<>();
+        values.forEach((name, value) -> {
+            if (isSensitive(name)) {
+                return;
+            }
+            com.jabiz.entity.MaskStyle style = name == null ? null : maskedNames.get(name.toLowerCase(Locale.ROOT));
+            // A masked form is text, like the values masked fields hold (FieldBuilder#masked).
+            visible.put(name, style == null ? value : (V) style.apply(value));
+        });
+        return visible;
+    }
+
+    /** The attributes without the sensitive fields of the entity, its masked fields in their masked form. */
     public Map<String, Object> hide(EntityDefinition def, Map<String, Object> attributes) {
         List<String> hidden = def.sensitiveFields();
-        if (attributes == null || hidden.isEmpty()) {
+        List<FieldDefinition> masked = def.maskedFields();
+        if (attributes == null || (hidden.stream().noneMatch(attributes::containsKey)
+            && masked.stream().noneMatch(field -> attributes.containsKey(field.name())))) {
             return attributes;
         }
         Map<String, Object> visible = new LinkedHashMap<>(attributes);
         hidden.forEach(visible::remove);
+        for (FieldDefinition field : masked) {
+            if (visible.containsKey(field.name())) {
+                visible.put(field.name(), field.masked().style().apply(visible.get(field.name())));
+            }
+        }
         return visible;
     }
 
@@ -151,17 +208,17 @@ public class SensitiveDataMasker {
         }
     }
 
-    private JsonNode mask(JsonNode node, JsonNode replacement) {
+    private JsonNode mask(JsonNode node, JsonNode replacement, java.util.function.Predicate<String> secret) {
         if (node instanceof ObjectNode object) {
             List<String> keys = new ArrayList<>();
             object.properties().forEach(entry -> keys.add(entry.getKey()));
             for (String key : keys) {
                 JsonNode child = object.get(key);
-                object.set(key, isSensitive(key) && !child.isNull() ? replacement : mask(child, replacement));
+                object.set(key, secret.test(key) && !child.isNull() ? replacement : mask(child, replacement, secret));
             }
         } else if (node instanceof ArrayNode array) {
             for (int i = 0; i < array.size(); i++) {
-                array.set(i, mask(array.get(i), replacement));
+                array.set(i, mask(array.get(i), replacement, secret));
             }
         }
         return node;

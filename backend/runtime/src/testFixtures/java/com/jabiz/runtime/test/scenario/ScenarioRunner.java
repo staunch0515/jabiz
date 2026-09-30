@@ -383,7 +383,7 @@ public final class ScenarioRunner {
 
     private <T> T as(Scenario.Actor actor, Mono<T> pipeline) {
         RequestContext request = new RequestContext(actor.id(), actor.tenant(), Locale.ENGLISH, "scenario",
-            actor.roles(), actor.permissions());
+            actor.roles(), actor.permissions(), null, actor.dataPeriod());
         try {
             return pipeline.contextWrite(view -> RequestContexts.put(view, request)).block();
         } catch (RuntimeException e) {

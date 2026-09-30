@@ -32,12 +32,20 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         steps = List.copyOf(steps);
     }
 
-    /** Who runs the processes; permissions {@code ["*"]} grant everything. */
-    public record Actor(String id, String tenant, Set<String> roles, Set<String> permissions) {
+    /**
+     * Who runs the processes; permissions {@code ["*"]} grant everything. {@code dataFrom} / {@code dataTo} limit the
+     * actor to the data of a period (docs/design/10-security.md section 13.2); null when not limited.
+     */
+    public record Actor(String id, String tenant, Set<String> roles, Set<String> permissions,
+        com.jabiz.context.DataPeriod dataPeriod) {
         public Actor {
             Objects.requireNonNull(id, "actor id");
             roles = Set.copyOf(roles);
             permissions = Set.copyOf(permissions);
+        }
+
+        public Actor(String id, String tenant, Set<String> roles, Set<String> permissions) {
+            this(id, tenant, roles, permissions, null);
         }
     }
 
@@ -138,9 +146,11 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static Actor actor(Map<String, Object> actor) {
-        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions"));
+        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions", "dataFrom", "dataTo"));
         return new Actor(text(actor, "id", true), text(actor, "tenant", false), strings(actor.get("roles")),
-            strings(actor.get("permissions")));
+            strings(actor.get("permissions")), com.jabiz.context.DataPeriod.of(
+                actor.get("dataFrom") == null ? null : instant(actor.get("dataFrom"), "actor.dataFrom"),
+                actor.get("dataTo") == null ? null : instant(actor.get("dataTo"), "actor.dataTo")));
     }
 
     private static SnapshotSpec snapshot(Object raw) {

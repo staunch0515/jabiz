@@ -149,7 +149,7 @@ class ReportArchiveController {
             AdvancedQueryDefinition query = templates.prepare(current.get());
             // Exactly the point the run was read at: its parameters, and the archived times for the rest.
             AdvancedQueryExecutor.At at = AdvancedQueryExecutor.At.pinned(run.readAt(), run.knownAt());
-            return executor.all(query, run.params(), at, null, List.of(), settings.maxRows() + 1)
+            return executor.all(query, run.params(), at, null, List.of(), settings.maxRows() + 1, true)
                 .map(page -> {
                     List<ReportColumn> columns = run.columns();
                     List<List<Object>> rows = new ArrayList<>(page.items().size());

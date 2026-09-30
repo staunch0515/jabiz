@@ -21,7 +21,10 @@ import com.jabiz.runtime.entity.ProcessOnlyFields;
 import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
+import com.jabiz.entity.FieldDefinition;
+import com.jabiz.runtime.security.MaskedFields;
 import com.jabiz.runtime.security.MfaPolicy;
+import com.jabiz.runtime.security.RevealRecorder;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
@@ -76,6 +79,12 @@ class DatasetController {
 
     record LabelsRequest(List<Object> ids) {}
 
+    /** One masked field of one instance to show in plain text (docs/design/10-security.md section 13.1). */
+    record RevealRequest(Object id, String field) {}
+
+    /** The plain value, shown once and recorded. */
+    record RevealResponse(Object value) {}
+
     private static final int DEFAULT_LIMIT = 50;
     /** Most keys one labels request may ask for (docs/design/16-content-authoring.md section 2). */
     static final int MAX_LABELS = 200;
@@ -89,11 +98,13 @@ class DatasetController {
     private final MessageCatalog messages;
     private final boolean development;
     private final MfaPolicy mfa;
+    private final RevealRecorder reveals;
 
     DatasetController(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager,
         EntityIdGenerator ids, SensitiveDataMasker masker, MessageCatalog messages, Environment environment,
-        MfaPolicy mfa) {
+        MfaPolicy mfa, RevealRecorder reveals) {
         this.mfa = mfa;
+        this.reveals = reveals;
         this.datasets = datasets;
         this.entities = entities;
         this.entityManager = entityManager;
@@ -133,8 +144,8 @@ class DatasetController {
                 throw invalid("limit", "limit must be positive");
             }
             EntityQuery.Builder query = EntityQuery.builder().offset(offset).limit(limit);
-            query.where(predicate(def, view, body.filters()));
-            applySorts(view, body.sorts(), query);
+            query.where(predicate(context, def, view, body.filters()));
+            applySorts(context, def, view, body.sorts(), query);
             EntityQuery compiled = query.build();
             int effectiveLimit = Math.min(limit, dataset.policy().maxQueryBatchSize());
 
@@ -167,6 +178,7 @@ class DatasetController {
                 Map<String, Object> attributes = change.attributes() == null ? Map.of() : change.attributes();
                 SensitiveDataMasker.rejectWrites(def, attributes);
                 ProcessOnlyFields.rejectWrites(def, attributes);
+                MaskedFields.checkWrites(context, def, attributes);
                 Object id = change.id();
                 if (change.action() == EntityAction.INSERT && generatedKey) {
                     // As in the generic add process: a generated key is issued here, never taken from the caller.
@@ -180,6 +192,32 @@ class DatasetController {
             }
             return entityManager.commitBatch(dataset, changes, request.reason())
                 .map(saved -> saved.stream().map(masker::hide).toList());
+        });
+    }
+
+    /**
+     * One masked field of one instance in plain text (docs/design/10-security.md section 13.1, decision D28 item 7):
+     * needs the dataset's read permission and the field's own, reads the instance within the scope as of now (404
+     * outside it) and records the display in {@code sys_reveal_record} before returning the value.
+     */
+    @PostMapping("/reveal")
+    Mono<RevealResponse> reveal(@PathVariable String resourceId, @RequestBody RevealRequest request) {
+        return RequestContexts.current().flatMap(context -> {
+            DatasetDefinition dataset = readable(resourceId, context);
+            EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
+            if (request == null || request.id() == null || request.field() == null) {
+                throw invalid("field", "id and field are required");
+            }
+            FieldDefinition field = def.findField(request.field()).filter(FieldDefinition::isMasked)
+                .orElseThrow(() -> invalid("field", def.name + " has no masked field " + request.field()));
+            Permissions.require(context, field.masked().permission(),
+                "Showing " + def.name + "." + field.name() + " in plain text");
+            return entityManager.findById(dataset, def, request.id(), null, null)
+                .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(
+                    def.name + " [ID: " + request.id() + "] not found in dataset " + resourceId)))
+                .flatMap(instance -> reveals.record(context, RevealRecorder.Kind.VALUE, resourceId, def.name,
+                        String.valueOf(instance.id()), List.of(field.name()), null)
+                    .thenReturn(new RevealResponse(instance.attributes().get(field.name()))));
         });
     }
 
@@ -268,7 +306,7 @@ class DatasetController {
     @SuppressWarnings("unchecked")
     private Map<String, Object> hideInVersion(EntityDefinition def, Map<String, Object> version) {
         Object attributes = version.get("attributes");
-        if (!(attributes instanceof Map<?, ?>) || def.sensitiveFields().isEmpty()) {
+        if (!(attributes instanceof Map<?, ?>) || (def.sensitiveFields().isEmpty() && def.maskedFields().isEmpty())) {
             return version;
         }
         Map<String, Object> visible = new java.util.LinkedHashMap<>(version);
@@ -281,8 +319,11 @@ class DatasetController {
             () -> new EntityNotFoundException("Unknown dataset: " + resourceId));
     }
 
-    /** Conjunction of the filters; each field must be whitelisted by the list view. */
-    private static QueryPredicate predicate(EntityDefinition def, ListViewDefinition view,
+    /**
+     * Conjunction of the filters; each field must be whitelisted by the list view, and a masked one needs its
+     * permission.
+     */
+    private static QueryPredicate predicate(RequestContext context, EntityDefinition def, ListViewDefinition view,
         List<ListRequests.Filter> filters) {
         if (filters == null || filters.isEmpty()) {
             return null;
@@ -292,7 +333,8 @@ class DatasetController {
             if (filter == null || filter.field() == null || filter.op() == null) {
                 throw invalid("filters", "every filter needs a field and an op");
             }
-            if (view == null || !view.allowsFilter(filter.field())) {
+            if (view == null || !view.allowsFilter(filter.field())
+                || !MaskedFields.mayCompare(context, def, filter.field())) {
                 throw new ValidationException(List.of(new Violation(filter.field(),
                     PlatformErrorCodes.FILTER_NOT_ALLOWED,
                     "Filtering " + def.name + " by [" + filter.field() + "] is not allowed")));
@@ -302,9 +344,12 @@ class DatasetController {
         return parts.size() == 1 ? parts.getFirst() : new QueryPredicate.And(parts);
     }
 
-    /** Requested sorts, each whitelisted by the list view; otherwise the view's default sort. */
-    private static void applySorts(ListViewDefinition view, List<ListRequests.Sort> sorts,
-        EntityQuery.Builder query) {
+    /**
+     * Requested sorts, each whitelisted by the list view (a masked field only for holders of its permission);
+     * otherwise the view's default sort.
+     */
+    private static void applySorts(RequestContext context, EntityDefinition def, ListViewDefinition view,
+        List<ListRequests.Sort> sorts, EntityQuery.Builder query) {
         if (sorts == null || sorts.isEmpty()) {
             if (view != null && view.defaultSort() != null) {
                 query.orderBy(view.defaultSort().field(), view.defaultSort().ascending());
@@ -315,7 +360,7 @@ class DatasetController {
             if (sort == null || sort.field() == null) {
                 throw invalid("sorts", "every sort needs a field");
             }
-            if (view == null || !view.allowsSort(sort.field())) {
+            if (view == null || !view.allowsSort(sort.field()) || !MaskedFields.mayCompare(context, def, sort.field())) {
                 throw new ValidationException(List.of(new Violation(sort.field(), PlatformErrorCodes.SORT_NOT_ALLOWED,
                     "Sorting by [" + sort.field() + "] is not allowed")));
             }

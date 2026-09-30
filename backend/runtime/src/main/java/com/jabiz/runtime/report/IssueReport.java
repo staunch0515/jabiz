@@ -72,7 +72,8 @@ public class IssueReport implements StepHandler<NoMetadata, ProcessContext> {
             // Whatever is not asked for is read as at the issue time, and pinned there for verification.
             AdvancedQueryExecutor.At readAt = asked.pin(issued, issued);
             return supersedable(input, query)
-                .then(executor.all(query, params, readAt, null, List.of(), settings.maxRows() + 1))
+                // Masked fields stay masked in the archive, whoever issues it (10 section 13.1).
+                .then(executor.all(query, params, readAt, null, List.of(), settings.maxRows() + 1, true))
                 .flatMap(page -> {
                     if (page.items().size() > settings.maxRows()) {
                         return Mono.error(new BusinessRuleViolationException(new Violation(null,

@@ -1,6 +1,8 @@
 package com.jabiz.query;
 
+import com.jabiz.context.DataPeriod;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.DatasetScope;
 import com.jabiz.dataset.DatasetPolicy;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
@@ -323,10 +325,21 @@ public class QueryCompiler {
      * Expression that stands for the entity in a SQL template ({@code {{Entity}}}, docs/design/05-sql-template.md
      * section 3): the table, the table restricted to the scope, or for a temporal entity the versions in effect
      * without tombstones, restricted to the scope in that order (decision D3). A public dataset is projected to its
-     * whitelisted fields.
+     * whitelisted fields. Masked fields are projected in their masked form.
      */
     public String templateExpression(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scopeValues,
         TimeSlice slice, Binder binder) {
+        return templateExpression(dataset, def, scopeValues, slice, binder, java.util.Set.of());
+    }
+
+    /**
+     * As {@link #templateExpression(DatasetDefinition, EntityDefinition, Map, TimeSlice, Binder)}, with the masked
+     * fields in {@code plainFields} in plain text. Every other masked field is replaced by its masked form inside
+     * the expression (docs/design/10-security.md section 13.1), so no condition, sort or join of the template can
+     * see the plain value either.
+     */
+    public String templateExpression(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scopeValues,
+        TimeSlice slice, Binder binder, java.util.Set<String> plainFields) {
         String source = source(dataset, def, slice, binder);
         List<String> conditions = new ArrayList<>();
         if (def.temporal) {
@@ -342,11 +355,60 @@ public class QueryCompiler {
             // (docs/design/15-public-access.md section 2).
             columns = String.join(", ", dataset.publicRead().fields().stream()
                 .map(field -> SqlIdentifiers.require(def.physicalColumn(field))).toList());
+        } else if (def.maskedFields().stream().anyMatch(field -> !plainFields.contains(field.name()))) {
+            columns = maskedColumns(def, plainFields);
         } else if (conditions.isEmpty()) {
             return source;
         }
         return "(SELECT " + columns + " FROM " + source
             + (conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions)) + ")";
+    }
+
+    /**
+     * Condition of a data period (docs/design/10-security.md section 13.2): the field's time within the period, or the
+     * referenced instance's; the referenced time field is immutable, so any of its versions answers.
+     */
+    private String periodCondition(EntityDefinition def, FieldDefinition field, DatasetScope.PeriodCondition period,
+        Binder binder) {
+        String column = SqlIdentifiers.require(field.physicalColumn());
+        if (period.referencedField() == null) {
+            return range(column, period.period(), binder);
+        }
+        if (!(field.kind() instanceof SemanticKind.Reference reference)) {
+            throw new IllegalStateException(def.name + "." + field.name() + " is not a reference");
+        }
+        EntityDefinition target = entities.apply(reference.targetEntity()).orElseThrow(
+            () -> new IllegalStateException("Unknown entity " + reference.targetEntity()));
+        return column + " IN (SELECT " + SqlIdentifiers.require(target.primaryKeyColumn()) + " FROM "
+            + SqlIdentifiers.require(target.physicalTable) + " WHERE "
+            + range(SqlIdentifiers.require(target.physicalColumn(period.referencedField())), period.period(), binder)
+            + ")";
+    }
+
+    private static String range(String column, DataPeriod period, Binder binder) {
+        List<String> bounds = new ArrayList<>(2);
+        if (period.from() != null) {
+            bounds.add(column + " >= :" + binder.bind(BoundValue.of(period.from())));
+        }
+        if (period.to() != null) {
+            bounds.add(column + " < :" + binder.bind(BoundValue.of(period.to())));
+        }
+        return "(" + String.join(" AND ", bounds) + ")";
+    }
+
+    /** Every column of the entity, the masked fields outside {@code plainFields} replaced by their masked form. */
+    private static String maskedColumns(EntityDefinition def, java.util.Set<String> plainFields) {
+        List<String> columns = new ArrayList<>();
+        for (FieldDefinition field : def.fields.values()) {
+            String column = SqlIdentifiers.require(field.physicalColumn());
+            columns.add(field.isMasked() && !plainFields.contains(field.name())
+                ? field.masked().style().sql(column) + " AS " + column
+                : column);
+        }
+        if (def.temporal) {
+            columns.add(SqlIdentifiers.require(def.temporalSpec.rowIdColumn()));
+        }
+        return String.join(", ", columns);
     }
 
     /**
@@ -363,6 +425,10 @@ public class QueryCompiler {
         List<String> parts = new ArrayList<>();
         for (Map.Entry<String, Object> entry : scopeValues.entrySet()) {
             FieldDefinition fd = resolveField(def, entry.getKey());
+            if (entry.getValue() instanceof DatasetScope.PeriodCondition period) {
+                parts.add(periodCondition(def, fd, period, binder));
+                continue;
+            }
             Object value = FieldValueCoercer.coerce(fd, entry.getValue(), false);
             parts.add(SqlIdentifiers.require(fd.physicalColumn()) + " = :" + binder.bind(BoundValue.of(value)));
         }

@@ -22,6 +22,8 @@ import java.util.List;
  * @param auditMasked    true for values that are readable but must not be kept in the audit trail (an uploaded file's
  *                       original name): recorded as changed, stored as {@code ***} (docs/design/21-audit-retention.md
  *                       section 1.2); sensitive fields are always masked there
+ * @param masked         permission and style of a field shown masked unless a holder of the permission asks for one
+ *                       value (docs/design/10-security.md section 13.1), or null
  */
 public record FieldDefinition(
     String name,
@@ -34,8 +36,21 @@ public record FieldDefinition(
     List<RuleSpec> ruleSpecs,
     boolean sensitive,
     boolean processOnly,
-    boolean auditMasked
+    boolean auditMasked,
+    MaskSpec masked
 ) {
+    public FieldDefinition(String name, String physicalColumn, boolean immutable, boolean required, boolean generated,
+        SemanticKind kind, List<FieldRule> rules, List<RuleSpec> ruleSpecs, boolean sensitive, boolean processOnly,
+        boolean auditMasked) {
+        this(name, physicalColumn, immutable, required, generated, kind, rules, ruleSpecs, sensitive, processOnly,
+            auditMasked, null);
+    }
+
+    /** Whether the field is {@linkplain FieldBuilder#masked masked}. */
+    public boolean isMasked() {
+        return masked != null;
+    }
+
     public FieldDefinition(String name, String physicalColumn, boolean immutable, boolean required, boolean generated,
         SemanticKind kind, List<FieldRule> rules, List<RuleSpec> ruleSpecs, boolean sensitive, boolean processOnly) {
         this(name, physicalColumn, immutable, required, generated, kind, rules, ruleSpecs, sensitive, processOnly,

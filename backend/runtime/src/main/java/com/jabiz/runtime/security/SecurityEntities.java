@@ -4,6 +4,8 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.runtime.dictionary.LabelsKindSupport;
 import com.jabiz.security.LoginOutcome;
 import com.jabiz.security.MfaRequirement;
@@ -11,6 +13,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -112,11 +116,19 @@ public class SecurityEntities {
             .asSemanticIdentity("urn:jabiz:entity:platform:user-role"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asReference(USER));
         eb.field("roleId", f -> f.physicalColumn("role_id").immutable(true).required(true).asReference(ROLE));
+        // The assignment limited to the data of [dataFrom, dataTo); both empty: not limited in time
+        // (docs/design/10-security.md section 13.2).
+        eb.field("dataFrom", f -> f.physicalColumn("data_from").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("dataTo", f -> f.physicalColumn("data_to").asTemporal(TemporalRole.EVENT_TIME));
+        eb.check(PlatformErrorCodes.DATA_PERIOD_ORDER, (state, ctx) -> state.get("dataFrom") instanceof Instant from
+            && state.get("dataTo") instanceof Instant to && !from.isBefore(to)
+            ? List.of(new Violation("dataTo", PlatformErrorCodes.DATA_PERIOD_ORDER,
+                "dataTo must be after dataFrom")) : List.of());
         eb.unique("uk_sec_user_role", "userId", "roleId");
         // An assignment can be scheduled: the role is in effect from its effective time on.
         eb.temporal(t -> t.allowScheduled(true));
         eb.listView("default", lv -> lv
-            .columns("userId", "roleId", "effectStartTime")
+            .columns("userId", "roleId", "dataFrom", "dataTo", "effectStartTime")
             .filters("userId", "roleId"));
     });
 

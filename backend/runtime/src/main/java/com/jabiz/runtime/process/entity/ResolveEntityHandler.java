@@ -10,6 +10,7 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.entity.ProcessOnlyFields;
+import com.jabiz.runtime.security.MaskedFields;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -58,6 +59,8 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());
             // So are the fields that only processes change (docs/design/16-content-authoring.md section 5).
             ProcessOnlyFields.rejectWrites(definition, ctx.attributes());
+            // Masked fields need their own permission and never take their masked form (10 section 13.1).
+            MaskedFields.checkWrites(ctx.request(), definition, ctx.attributes());
             ctx.setDefinition(definition);
             ctx.setDataset(dataset);
         });

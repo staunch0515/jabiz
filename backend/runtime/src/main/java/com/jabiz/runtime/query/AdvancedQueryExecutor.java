@@ -2,6 +2,7 @@ package com.jabiz.runtime.query;
 
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
@@ -18,6 +19,7 @@ import com.jabiz.query.custom.QueryParameter;
 import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.query.template.OuterQueryCompiler;
 import com.jabiz.query.template.SqlTemplateRenderer;
+import com.jabiz.query.template.SqlText;
 import com.jabiz.query.template.TemplateChecks;
 import com.jabiz.query.template.TemplateValues;
 import com.jabiz.runtime.context.RequestContexts;
@@ -25,6 +27,8 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.security.MaskedFields;
+import com.jabiz.runtime.security.RevealRecorder;
 import io.micrometer.common.KeyValues;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -39,6 +43,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Executes SQL templates (docs/design/05-sql-template.md). Every participating entity is rendered as its dataset
@@ -100,14 +107,17 @@ public class AdvancedQueryExecutor {
     private final SqlTemplateRenderer renderer;
     private final Clock clock;
     private final PlatformObservations observations;
+    private final RevealRecorder reveals;
 
     public AdvancedQueryExecutor(StorageAdapterRegistry storageRegistry,
         EntityDefinitionRegistry entityRegistry,
         SqlTemplateRegistry templates,
         QueryCompiler queryCompiler,
         Clock clock,
-        PlatformObservations observations) {
+        PlatformObservations observations,
+        RevealRecorder reveals) {
         this.observations = Objects.requireNonNull(observations);
+        this.reveals = Objects.requireNonNull(reveals);
         this.storageRegistry = Objects.requireNonNull(storageRegistry);
         this.entityRegistry = Objects.requireNonNull(entityRegistry);
         this.templates = Objects.requireNonNull(templates);
@@ -174,7 +184,7 @@ public class AdvancedQueryExecutor {
         return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
             KeyValues.of("template", queryDef.queryId()),
             pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, offset, limit, count, maxTimeout,
-                true));
+                true, false));
     }
 
     /**
@@ -184,20 +194,35 @@ public class AdvancedQueryExecutor {
      */
     public Mono<Page> all(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
         QueryPredicate filter, List<SortOrder> sorts, int maxRows) {
+        return all(queryDef, inputParams, at, filter, sorts, maxRows, false);
+    }
+
+    /**
+     * As {@link #all(AdvancedQueryDefinition, Map, At, QueryPredicate, List, int)}; with {@code masked} every masked
+     * field stays masked whatever the caller's permissions, for archived reports (docs/design/10-security.md section
+     * 13.1): others read them later, and verifying one must give the same rows whoever verifies.
+     */
+    public Mono<Page> all(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
+        QueryPredicate filter, List<SortOrder> sorts, int maxRows, boolean masked) {
         return observations.mono(PlatformObservations.TEMPLATE, "template " + queryDef.queryId(),
             KeyValues.of("template", queryDef.queryId()),
-            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, 0, maxRows, false, null, false));
+            pageOf(queryDef, inputParams, at == null ? At.NOW : at, filter, sorts, 0, maxRows, false, null, false,
+                masked));
     }
 
     private Mono<Page> pageOf(AdvancedQueryDefinition queryDef, Map<String, Object> inputParams, At at,
         QueryPredicate filter, List<SortOrder> sorts, int offset, int limit, boolean count, Duration maxTimeout,
-        boolean capped) {
+        boolean capped, boolean masked) {
         return RequestContexts.current().flatMap(request -> {
             AdvancedQueryDefinition query = templates.prepare(queryDef);
             Map<String, DatasetDefinition> datasets = templates.datasetsOf(query);
             Map<String, SqlTemplateRenderer.EntityBinding> bindings = new LinkedHashMap<>();
-            datasets.forEach((entity, dataset) -> bindings.put(entity, new SqlTemplateRenderer.EntityBinding(
-                entityRegistry.getOrThrow(entity), dataset, dataset.scope().resolve(request))));
+            datasets.forEach((entity, dataset) -> {
+                EntityDefinition def = entityRegistry.getOrThrow(entity);
+                bindings.put(entity, new SqlTemplateRenderer.EntityBinding(def, dataset,
+                    dataset.scope().resolve(request), masked ? Set.of() : MaskedFields.plainFor(request, def)));
+            });
+            Map<String, Set<String>> revealed = revealedFields(query, bindings);
 
             Map<String, BoundValue> params = new LinkedHashMap<>(bindInputs(query, inputParams));
             TimeSlice slice = timeSlice(query, params, at, datasets);
@@ -217,7 +242,8 @@ public class AdvancedQueryExecutor {
             listParams.putAll(outer.listParams());
             Mono<List<SemanticRow>> rows = engine.executeRawQuery(new RawQueryPlan(outer.listSql(), listParams, timeout))
                 .map(row -> toSemanticRow(query, row))
-                .collectList();
+                .collectList()
+                .flatMap(items -> recordReveals(request, query, revealed, items.size()).thenReturn(items));
             if (!count) {
                 return rows.map(items -> new Page(items, null, offset, effectiveLimit, slice));
             }
@@ -228,6 +254,32 @@ public class AdvancedQueryExecutor {
                 .map(row -> ((Number) row.get("total")).longValue());
             return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit, slice));
         });
+    }
+
+    /**
+     * The masked fields the template names ({@code {{Entity.field}}}) that this caller reads in plain text, by entity:
+     * each run showing them is recorded (docs/design/10-security.md section 13.1). Fields the caller may not read are
+     * masked inside the SQL and need no record.
+     */
+    private static Map<String, Set<String>> revealedFields(AdvancedQueryDefinition query,
+        Map<String, SqlTemplateRenderer.EntityBinding> bindings) {
+        Map<String, Set<String>> revealed = new TreeMap<>();
+        for (SqlText.Placeholder placeholder : SqlText.placeholders(SqlText.mask(query.sqlTemplate()))) {
+            SqlTemplateRenderer.EntityBinding binding = bindings.get(placeholder.entity());
+            if (placeholder.field() != null && binding != null
+                && binding.plainFields().contains(placeholder.field())) {
+                revealed.computeIfAbsent(placeholder.entity(), entity -> new TreeSet<>()).add(placeholder.field());
+            }
+        }
+        return revealed;
+    }
+
+    private Mono<Void> recordReveals(RequestContext request, AdvancedQueryDefinition query,
+        Map<String, Set<String>> revealed, int rows) {
+        return Flux.fromIterable(revealed.entrySet())
+            .concatMap(entry -> reveals.record(request, RevealRecorder.Kind.QUERY, query.queryId(), entry.getKey(),
+                null, entry.getValue(), (long) rows))
+            .then();
     }
 
     /**

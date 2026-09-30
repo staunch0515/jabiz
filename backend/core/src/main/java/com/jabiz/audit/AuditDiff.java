@@ -58,6 +58,10 @@ public final class AuditDiff {
             }
             if (field.sensitive() || field.auditMasked()) {
                 changes.put(name, new Change(from == null ? null : MASK, to == null ? null : MASK));
+            } else if (field.isMasked()) {
+                // The trail shows what the read APIs show (decision D28 item 7): who can read it may not hold the
+                // field's permission.
+                changes.put(name, new Change(field.masked().style().apply(from), field.masked().style().apply(to)));
             } else {
                 changes.put(name, new Change(from, to));
             }

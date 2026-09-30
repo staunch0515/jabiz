@@ -76,6 +76,9 @@ public final class MetaModelExporter {
             json.put("systemManaged", def.isSystemManaged(f));
             json.put("sensitive", f.sensitive());
             json.put("processOnly", f.processOnly());
+            if (f.isMasked()) {
+                json.put("masked", Map.of("permission", f.masked().permission(), "style", f.masked().style().name()));
+            }
             json.putAll(kindToJson(f.kind()));
             json.put("operators", SemanticKinds.allowedOperators(f.kind()).stream()
                 .map(QueryOperator::name).sorted().toList());
