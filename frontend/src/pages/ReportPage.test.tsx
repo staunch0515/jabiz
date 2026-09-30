@@ -142,8 +142,8 @@ describe('reports pages', () => {
 
     fireEvent.click(screen.getByTestId('report-issue'))
     expect(await screen.findByText(/archived for good/)).toBeTruthy()
-    // Without a ConfigProvider antd confirms in its default language.
-    fireEvent.click(screen.getAllByRole('button').find((b) => /^(OK|确\s*定)$/.test(b.textContent?.trim() ?? ''))!)
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Issue' && b !== screen
+      .getByTestId('report-issue'))!)
 
     await waitFor(() => expect(runProcess).toHaveBeenCalled())
     expect(runProcess.mock.calls[0]).toEqual(['REPORT_ISSUE', { templateId: 'commerce.stock_availability', params: {},

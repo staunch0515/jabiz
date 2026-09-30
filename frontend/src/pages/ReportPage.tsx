@@ -194,7 +194,13 @@ export default function ReportPage() {
             </Dropdown>,
             ...(can('report.issue')
               ? [
-                  <Popconfirm key="issue" title={t('reports.issueConfirm')} onConfirm={() => void issue()}>
+                  <Popconfirm
+                    key="issue"
+                    title={t('reports.issueConfirm')}
+                    okText={t('reports.issue')}
+                    cancelText={t('reports.cancel')}
+                    onConfirm={() => void issue()}
+                  >
                     <Button type="primary" icon={<SafetyCertificateOutlined />} loading={issuing} data-testid="report-issue">
                       {t('reports.issue')}
                     </Button>

@@ -25,6 +25,7 @@ const en = {
     export: 'Export',
     formats: { xlsx: 'Excel (.xlsx)', pdf: 'PDF', csv: 'CSV' },
     issue: 'Issue',
+    cancel: 'Cancel',
     issueConfirm: 'Issue this report? What it shows now is archived for good.',
     issued: 'The report was issued.',
     archive: {
@@ -191,6 +192,7 @@ const zh: Texts = {
     export: '导出',
     formats: { xlsx: 'Excel（.xlsx）', pdf: 'PDF', csv: 'CSV' },
     issue: '签发',
+    cancel: '取消',
     issueConfirm: '签发这张报表？当前显示的内容将永久存档。',
     issued: '报表已签发。',
     archive: {
@@ -354,6 +356,7 @@ const ja: Texts = {
     export: 'エクスポート',
     formats: { xlsx: 'Excel（.xlsx）', pdf: 'PDF', csv: 'CSV' },
     issue: '発行',
+    cancel: 'キャンセル',
     issueConfirm: 'このレポートを発行しますか？現在の内容が永久に保存されます。',
     issued: 'レポートを発行しました。',
     archive: {

@@ -20,7 +20,7 @@ test('a report runs from the reports page', async ({ page }) => {
 
   // Issued, the report is archived; the archive verifies it against the data.
   await page.getByTestId('report-issue').click()
-  await page.getByRole('button', { name: /确\s*定/ }).click()
+  await page.locator('.ant-popconfirm').getByRole('button', { name: /签\s*发/ }).click()
   await expect(page).toHaveURL(/\/reports\/archive\?template=commerce\.stock_availability$/)
   const verify = page.locator('[data-testid^="run-verify-"]').first()
   await expect(verify).toBeVisible()
