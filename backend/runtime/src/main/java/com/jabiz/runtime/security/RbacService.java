@@ -48,6 +48,22 @@ public class RbacService {
      * (docs/design/10-security.md section 9).
      */
     public Mono<Optional<Actor>> currentActor(UUID userId, java.time.Instant mfaAt) {
+        return currentActor(userId, mfaAt, null);
+    }
+
+    /**
+     * As above, for a session that came through the provider account {@code identityId} (null for none): its link to
+     * the user must still exist, so that unlinking an account ends its sessions at the next refresh
+     * (docs/design/10-security.md section 12).
+     */
+    public Mono<Optional<Actor>> currentActor(UUID userId, java.time.Instant mfaAt, UUID identityId) {
+        if (identityId != null) {
+            return entities.findById(dataset(SecurityEntities.USER_IDENTITY_DATASET), SecurityEntities.SEC_USER_IDENTITY,
+                    identityId)
+                .filter(identity -> userId.toString().equals(String.valueOf(identity.<Object>get("userId"))))
+                .flatMap(identity -> currentActor(userId, mfaAt, null))
+                .defaultIfEmpty(Optional.empty());
+        }
         return entities.findById(dataset(SecurityEntities.USER_DATASET), SecurityEntities.SEC_USER, userId)
             .filter(Rbac::enabled)
             .flatMap(user -> query(SecurityEntities.LOGIN_RECORD_DATASET, SecurityEntities.SEC_LOGIN_RECORD,

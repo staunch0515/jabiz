@@ -52,6 +52,7 @@ public final class JwtService {
     static final String MFA_AT = "mfa_at";
     static final String PURPOSE = "purpose";
     static final String ATTEMPT = "attempt";
+    static final String IDENTITY = "idn";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
 
@@ -64,7 +65,16 @@ public final class JwtService {
     }
 
     /** A verified challenge: whose, and the login record it followed. */
-    public record Challenge(String userId, Purpose purpose, long attemptNo) {}
+    /**
+     * @param identityId the provider account the sign-in came through (docs/design/10-security.md section 12), or
+     *                   null: the session the challenge leads to depends on it as one signed in directly would
+     */
+    public record Challenge(String userId, Purpose purpose, long attemptNo, String identityId) {
+
+        public Challenge(String userId, Purpose purpose, long attemptNo) {
+            this(userId, purpose, attemptNo, null);
+        }
+    }
 
     private final MACSigner signer;
     private final MACVerifier verifier;
@@ -119,6 +129,12 @@ public final class JwtService {
      * attempt number of the login record it follows, so that a later sign-in makes it stale.
      */
     public Issued issueChallenge(String userId, Purpose purpose, long attemptNo, Duration lifetime) {
+        return issueChallenge(userId, purpose, attemptNo, null, lifetime);
+    }
+
+    /** As above, for a sign-in through the provider account {@code identityId}. */
+    public Issued issueChallenge(String userId, Purpose purpose, long attemptNo, String identityId,
+        Duration lifetime) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         Instant expires = now.plus(lifetime);
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
@@ -128,6 +144,7 @@ public final class JwtService {
             .expirationTime(Date.from(expires))
             .claim(PURPOSE, purpose.name())
             .claim(ATTEMPT, attemptNo)
+            .claim(IDENTITY, identityId)
             .build();
         return new Issued(sign(claims, CHALLENGE_TYPE), expires);
     }
@@ -147,7 +164,7 @@ public final class JwtService {
             if (attempt == null) {
                 throw new InvalidTokenException("Challenge without attempt");
             }
-            return new Challenge(claims.getSubject(), purpose, attempt);
+            return new Challenge(claims.getSubject(), purpose, attempt, claims.getStringClaim(IDENTITY));
         } catch (ParseException e) {
             throw new InvalidTokenException("Malformed challenge claims");
         }

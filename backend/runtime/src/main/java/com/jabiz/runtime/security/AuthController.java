@@ -138,7 +138,7 @@ class AuthController {
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> refreshTokens.rotate(request == null ? null : request.refreshToken(),
-                grant -> rbac.currentActor(grant.userId(), grant.mfaAt()).flatMap(actor -> actor.map(Mono::just)
+                grant -> rbac.currentActor(grant.userId(), grant.mfaAt(), grant.identityId()).flatMap(actor -> actor.map(Mono::just)
                     .orElseGet(() -> Mono.error(invalidRefresh("The user can no longer sign in"))))))
             .onErrorMap(RefreshTokenStore.InvalidRefreshTokenException.class, e -> invalidRefresh(e.getMessage()))
             .map(rotated -> response(tokens.issue(rotated.value()), rotated.value(), rotated.next()));
@@ -165,7 +165,14 @@ class AuthController {
 
     /** Tokens of a new session; the refresh tokens of the session remember when it passed a second factor. */
     static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId) {
-        return refreshTokens.issue(userId, actor.mfaAt()).map(next -> response(tokens.issue(actor), actor, next));
+        return session(refreshTokens, tokens, actor, userId, null);
+    }
+
+    /** As {@link #session}, for a sign-in through the provider account {@code identityId}. */
+    static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId,
+        UUID identityId) {
+        return refreshTokens.issue(userId, actor.mfaAt(), identityId)
+            .map(next -> response(tokens.issue(actor), actor, next));
     }
 
     private static TokenResponse response(JwtService.Issued access, Actor actor, RefreshTokenStore.Issued refresh) {

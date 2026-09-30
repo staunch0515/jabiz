@@ -55,19 +55,7 @@ public final class SponsorSignInProcess {
 
                 .steps(SponsorSignInProcess::accessSteps)
 
-                .step("Load the second factor", QueryEntities.<LoginContext>of(SecurityEntities.USER_MFA_DATASET,
-                    ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
-                        ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_MFA))
-                .compute("Second factor needed", (metadata, ctx) -> {
-                    if (ctx.outcome() != LoginOutcome.SUCCESS) {
-                        return;
-                    }
-                    if (ctx.confirmedMfa().isPresent()) {
-                        ctx.setOutcome(LoginOutcome.MFA_REQUIRED);
-                    } else if (ctx.access().mfaRequired()) {
-                        ctx.setOutcome(LoginOutcome.MFA_ENROLLMENT_REQUIRED);
-                    }
-                })
+                .steps(SponsorSignInProcess::secondFactorSteps)
 
                 .step("Create the login record", LoginRecordStep.class, NoMetadata.INSTANCE));
 
@@ -95,6 +83,27 @@ public final class SponsorSignInProcess {
                     ctx.setOutcome(LoginOutcome.NO_ROLE);
                 } else {
                     ctx.setAccess(access);
+                }
+            });
+    }
+
+    /**
+     * Whether the sign-in needs a second factor next (docs/design/10-security.md section 9): a user who has set one
+     * up does, unless the attempt passed one already (an identity provider's, section 12); a user without one whose
+     * role requires one sets it up first.
+     */
+    static <I, O, C extends LoginContext> void secondFactorSteps(ProcessDefinitionBuilder<I, O, C> pb) {
+        pb.step("Load the second factor", QueryEntities.<C>of(SecurityEntities.USER_MFA_DATASET,
+                ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
+                    ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_MFA))
+            .compute("Second factor needed", (metadata, ctx) -> {
+                if (ctx.outcome() != LoginOutcome.SUCCESS || ctx.secondFactorPassed()) {
+                    return;
+                }
+                if (ctx.confirmedMfa().isPresent()) {
+                    ctx.setOutcome(LoginOutcome.MFA_REQUIRED);
+                } else if (ctx.access().mfaRequired()) {
+                    ctx.setOutcome(LoginOutcome.MFA_ENROLLMENT_REQUIRED);
                 }
             });
     }

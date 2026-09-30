@@ -34,7 +34,10 @@ public class AuthenticationStep implements BlockingStep<NoMetadata, LoginContext
         String password = ctx.takePassword();
         Optional<EntityInstance> user = ctx.user();
         boolean matches = hasher.matches(password, user.<String>map(u -> u.get("passwordHash")).orElse(null));
-        if (user.isEmpty()) {
+        // Names of no user, and users without a password (they sign in through an identity provider only,
+        // docs/design/10-security.md section 12), leave no record: no password can be right, so wrong ones must not
+        // let anybody lock such an account.
+        if (user.isEmpty() || blank(user.get().get("passwordHash"))) {
             return;
         }
         if (policy.isLocked(ctx.latestState(), ctx.opTime())) {
@@ -47,5 +50,9 @@ public class AuthenticationStep implements BlockingStep<NoMetadata, LoginContext
             // Provisional: the role check comes next.
             ctx.setOutcome(LoginOutcome.SUCCESS);
         }
+    }
+
+    private static boolean blank(Object hash) {
+        return hash == null || String.valueOf(hash).isBlank();
     }
 }
