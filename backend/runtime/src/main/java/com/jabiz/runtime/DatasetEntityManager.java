@@ -28,6 +28,7 @@ import com.jabiz.runtime.dictionary.DictionaryRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.entity.FieldWriteCheck;
 import com.jabiz.runtime.event.Outbox;
+import com.jabiz.runtime.audit.AuditRecorder;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
@@ -93,6 +94,7 @@ public class DatasetEntityManager {
     private final Outbox outbox;
     private final PlatformObservations observations;
     private final ObjectProvider<FieldWriteCheck> writeChecks;
+    private final AuditRecorder audit;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -107,8 +109,10 @@ public class DatasetEntityManager {
         JsonMapper json,
         Outbox outbox,
         PlatformObservations observations,
-        ObjectProvider<FieldWriteCheck> writeChecks
+        ObjectProvider<FieldWriteCheck> writeChecks,
+        AuditRecorder audit
     ) {
+        this.audit = Objects.requireNonNull(audit, "AuditRecorder cannot be null");
         this.writeChecks = Objects.requireNonNull(writeChecks, "FieldWriteCheck provider cannot be null");
         this.observations = Objects.requireNonNull(observations, "PlatformObservations cannot be null");
         this.storageRegistry = Objects.requireNonNull(storageRegistry, "StorageAdapterRegistry cannot be null");
@@ -194,7 +198,7 @@ public class DatasetEntityManager {
                     return apply;
                 }
                 if (ordered.stream().noneMatch(this::isTemporal)) {
-                    return apply;
+                    return apply.contextWrite(view -> AuditRecorder.withReason(view, reason));
                 }
                 return Operations.requested().flatMap(requested -> {
                     OperationRequest operation = requested
@@ -338,6 +342,8 @@ public class DatasetEntityManager {
                 attrs.get(def.primaryKey), def.name, INITIAL_VERSION, state, snapshot);
             return verifyReferences(def, attrs, attrs.keySet())
                 .then(Mono.defer(() -> engine.insert(table, row)))
+                .then(Mono.defer(() -> audit.record(engine, def, created.id(), EntityAction.INSERT.name(),
+                    (long) INITIAL_VERSION, null, null, snapshot)))
                 .then(Mono.defer(() -> outbox.entityChanged(engine, def, created.id(), EntityAction.INSERT.name(),
                     INITIAL_VERSION, null, attrs.keySet().stream().filter(def.changeableFields()::contains).toList())))
                 .thenReturn(created);
@@ -434,8 +440,11 @@ public class DatasetEntityManager {
             .then(Mono.defer(() -> engine
                 .casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(), versionColumn, physicalUpdates)
                 .flatMap(applied -> applied
-                    ? outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(),
-                        null, changes.keySet()).thenReturn(updated)
+                    ? audit.record(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(), null,
+                            current.attributes(), merged)
+                        .then(outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(),
+                            updated.version(), null, changes.keySet()))
+                        .thenReturn(updated)
                     : Mono.<EntityInstance>error(conflict(def, instance.id())))));
     }
 
@@ -513,8 +522,10 @@ public class DatasetEntityManager {
                         // A soft delete is an update and raises the version; a hard delete leaves the last one.
                         long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
                         return removed.flatMap(done -> done
-                            ? outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
-                                versionAfter, null, def.changeableFields())
+                            ? audit.record(engine, def, current.id(), EntityAction.DELETE.name(), versionAfter, null,
+                                    current.attributes(), null)
+                                .then(outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
+                                    versionAfter, null, def.changeableFields()))
                             : Mono.<Void>error(conflict(def, instance.id())));
                     }));
                 });

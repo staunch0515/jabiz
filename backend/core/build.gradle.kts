@@ -92,6 +92,8 @@ val coverageGatedClasses = listOf(
     // Phase 14e
     "com.jabiz.imports.*",
     "com.jabiz.file.MediaTypeDetector",
+    // Phase 14f
+    "com.jabiz.audit.*",
 )
 
 dependencies {

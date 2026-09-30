@@ -8,6 +8,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.runtime.RebaseConflictException;
+import com.jabiz.runtime.audit.AuditRecorder;
 import com.jabiz.runtime.event.Outbox;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -41,7 +42,10 @@ public class VersionAppender {
     private final Clock clock;
     private final Outbox outbox;
 
-    public VersionAppender(TemporalStore store, Clock clock, Outbox outbox) {
+    private final AuditRecorder audit;
+
+    public VersionAppender(TemporalStore store, Clock clock, Outbox outbox, AuditRecorder audit) {
+        this.audit = Objects.requireNonNull(audit, "audit must not be null");
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.outbox = Objects.requireNonNull(outbox, "outbox must not be null");
@@ -82,12 +86,32 @@ public class VersionAppender {
                 : Mono.empty();
             return unique
                 .thenMany(Flux.fromIterable(plan.versions())
-                    .concatMap(version -> store.append(engine, table, def, id, version, operation)))
+                    .concatMap(version -> store.append(engine, table, def, id, version, operation)
+                        .then(Mono.defer(() -> audited(engine, def, id, timeline, plan.versions(), version)))))
                 .then(Mono.defer(() -> plan.versions().isEmpty()
                     ? Mono.<Void>empty()
                     : published(engine, def, id, plan.versions().getFirst())))
                 .then(Mono.just(plan.versions()));
         });
+    }
+
+    /**
+     * The audit record of a version: its state against the state of the version it is based on (none for an
+     * insertion); a tombstone has no "after".
+     */
+    private Mono<Void> audited(StorageEngine engine, EntityDefinition def, UUID id, Timeline timeline,
+        List<PlannedVersion> planned, PlannedVersion version) {
+        Long base = version.baseVersionNo();
+        Map<String, Object> before = null;
+        if (base != null) {
+            // A rebased copy may be based on a version this same write plans.
+            before = planned.stream().filter(p -> p.versionNo() == base).findFirst()
+                .map(p -> p.deleted() ? null : p.state())
+                .orElseGet(() -> timeline.version(base).filter(v -> !v.deleted()).map(EntityVersion::state)
+                    .orElse(null));
+        }
+        return audit.record(engine, def, id, version.action().name(), version.versionNo(), version.effectiveFrom(),
+            before, version.deleted() ? null : version.state());
     }
 
     /**

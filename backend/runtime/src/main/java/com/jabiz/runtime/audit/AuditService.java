@@ -10,7 +10,10 @@ import com.jabiz.temporal.VersionAction;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,11 +30,96 @@ public class AuditService {
 
     private final StorageAdapterRegistry storages;
     private final String poolRef;
+    private final JsonMapper json;
 
     public AuditService(StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, JsonMapper json) {
         this.storages = storages;
         this.poolRef = poolRef;
+        this.json = json;
+    }
+
+    /** One field's change as the API shows it. */
+    public record FieldChange(Object before, Object after) {}
+
+    /**
+     * One row of the audit trail (docs/design/21-audit-retention.md section 1).
+     *
+     * @param changes field to its value before and after (secrets as {@code ***})
+     */
+    public record AuditRecordEntry(long recordNo, Long processSeqId, String processName, String entityType,
+        String entityId, String action, Long versionNo, Instant effectStartTime, Map<String, FieldChange> changes,
+        String actorId, Instant recordedTime, String reason) {}
+
+    public record AuditRecordPage(List<AuditRecordEntry> items, long total, int offset, int limit) {}
+
+    /**
+     * Filters of the audit records, combined with AND; all optional.
+     *
+     * @param field records that changed this field
+     */
+    public record RecordQuery(String entityType, String entityId, String actorId, Instant from, Instant to,
+        String processName, String field, int offset, int limit) {}
+
+    /** One page of audit records, newest first. */
+    public Mono<AuditRecordPage> records(RecordQuery query) {
+        StorageEngine engine = storages.getEngine(poolRef);
+        List<String> conditions = new ArrayList<>();
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        conditions.add("TRUE");
+        if (query.entityType() != null) {
+            conditions.add("r.entity_type = :entityType");
+            params.put("entityType", BoundValue.of(query.entityType()));
+        }
+        if (query.entityId() != null) {
+            conditions.add("r.entity_id = :entityId");
+            params.put("entityId", BoundValue.of(query.entityId()));
+        }
+        if (query.actorId() != null) {
+            conditions.add("r.actor_id = :actor");
+            params.put("actor", BoundValue.of(query.actorId()));
+        }
+        if (query.from() != null) {
+            conditions.add("r.recorded_time >= :from");
+            params.put("from", BoundValue.of(query.from()));
+        }
+        if (query.to() != null) {
+            conditions.add("r.recorded_time < :to");
+            params.put("to", BoundValue.of(query.to()));
+        }
+        if (query.processName() != null) {
+            conditions.add("p.process_name = :process");
+            params.put("process", BoundValue.of(query.processName()));
+        }
+        if (query.field() != null) {
+            conditions.add(":field = ANY(r.changed_fields)");
+            params.put("field", BoundValue.of(query.field()));
+        }
+        String from = " FROM sys_audit_record r LEFT JOIN op_process p ON p.process_seq_id = r.process_seq_id WHERE "
+            + String.join(" AND ", conditions);
+        Map<String, BoundValue> pageParams = new LinkedHashMap<>(params);
+        pageParams.put("offset", BoundValue.of((long) query.offset()));
+        pageParams.put("limit", BoundValue.of((long) query.limit()));
+        Mono<Long> total = engine.select("SELECT count(*) AS total" + from, params)
+            .next().map(row -> Rows.longValue(row.get("total")));
+        Mono<List<AuditRecordEntry>> page = engine.select("SELECT r.*, p.process_name" + from
+                + " ORDER BY r.recorded_time DESC, r.record_no DESC OFFSET :offset LIMIT :limit", pageParams)
+            .map(this::entry)
+            .collectList();
+        return Mono.zip(page, total).map(parts -> new AuditRecordPage(parts.getT1(), parts.getT2(), query.offset(),
+            query.limit()));
+    }
+
+    private AuditRecordEntry entry(Map<String, Object> row) {
+        Map<String, List<Object>> raw = json.readValue(Rows.string(row.get("changes")),
+            new TypeReference<Map<String, List<Object>>>() {});
+        Map<String, FieldChange> changes = new LinkedHashMap<>();
+        raw.forEach((field, pair) -> changes.put(field, new FieldChange(pair.get(0), pair.get(1))));
+        return new AuditRecordEntry(Rows.longValue(row.get("record_no")), Rows.longValue(row.get("process_seq_id")),
+            Rows.string(row.get("process_name")), Rows.string(row.get("entity_type")),
+            Rows.string(row.get("entity_id")), Rows.string(row.get("action")), Rows.longValue(row.get("version_no")),
+            Rows.instant(row.get("effect_start_time")), changes, Rows.string(row.get("actor_id")),
+            Rows.instant(row.get("recorded_time")), Rows.string(row.get("reason")));
     }
 
     /** One page of operations: {@code {items, total, offset, limit}}. */
