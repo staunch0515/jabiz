@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b 已合入；14c-1 PR 待合并（线 1.1，各子阶段先出计划） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14g） | 35–46 天 | ◐ 14a、14b、14c-1 已合入；14c-2 PR 待合并（线 1.1，各子阶段先出计划） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -547,4 +547,19 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 区间与 `knownAt` 的余额、科目明细的期初 / 滚动 / 期末余额正确（`LedgerEnhancementsIT`、场景 `dimensions_rollup`）。
 - [x] 维度声明问题在启动时报告（`LedgerChecksTest`）；账本表仍只 INSERT（`LedgerIT`）。
 - [x] 现有全部检查照常通过（`order_lifecycle` 的快照多出销售交易的来源与新字段的空值）。
+
+**14c-2 要求**
+1. core `ForeignAmount`（币种、交易金额、汇率；换算为本位币按账本小数位四舍五入）；`LedgerPosting` 的外币规则：币种、金额小数位、汇率、换算一致、每个外币各自平衡。
+2. 分录 `currency`、`transactionAmount`、`exchangeRate`（迁移 V16，空即本位币）；`LEDGER_POST` 可省略外币行的本位币金额；冲正照原样复制；
+   数据库触发器按币种兜底。
+3. 模板 `currency_balances`；`account_activity` 增加外币列。
+4. 示范：场景 `ledger/multi_currency`（外币开票、按另一汇率收款并记汇兑收益、冲正）。文档：11 §1.8、D24。
+
+**14c-2 验收标准**
+- [x] 省略本位币金额时按汇率换算；给出而不一致被拒（附应有金额）；四舍五入远离零（`ForeignCurrencyTest`、`LedgerMultiCurrencyIT`）。
+- [x] 本位币平衡而某外币不平衡被拒；差额 0.01 的不平衡显示差额（`ForeignCurrencyTest`、`LedgerMultiCurrencyIT`）。
+- [x] 属性测试：随机的外币分录及其冲正通过校验，每个币种与本位币合计为零（`ForeignCurrencyTest`）。
+- [x] 绕过流程写入的外币不平衡分录被数据库拒绝（`LedgerMultiCurrencyIT`）。
+- [x] 按币种的余额、结算后应收在两种币种上都为零、冲正后归零（`LedgerMultiCurrencyIT`、场景 `multi_currency`）。
+- [x] 现有全部检查照常通过。
 

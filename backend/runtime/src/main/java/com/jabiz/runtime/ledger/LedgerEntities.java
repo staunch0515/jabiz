@@ -114,6 +114,11 @@ public class LedgerEntities {
                 .asCode(DIRECTIONS, Arrays.stream(Direction.values()).map(Enum::name).toArray(String[]::new)));
             eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true)
                 .asMonetary(settings.currency(), settings.scale()));
+            // An entry in a foreign currency keeps that side too; empty for the ledger currency (decision D24).
+            eb.field("currency", f -> f.physicalColumn("currency").immutable(true).asText(3));
+            eb.field("transactionAmount", f -> f.physicalColumn("transaction_amount").immutable(true)
+                .asNumeric(19, 4));
+            eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").immutable(true).asNumeric(20, 10));
             eb.field("memo", f -> f.physicalColumn("memo").immutable(true).asText(PostingLine.MAX_MEMO));
             for (int position = 1; position <= LedgerDimension.MAX_POSITION; position++) {
                 int column = position;
@@ -122,9 +127,10 @@ public class LedgerEntities {
             }
             eb.temporal(t -> t.allowScheduled(false));
             eb.listView("default", lv -> lv
-                .columns("transactionId", "lineNo", "accountId", "direction", "amount", "memo", "dimension1",
+                .columns("transactionId", "lineNo", "accountId", "direction", "amount", "currency",
+                    "transactionAmount", "exchangeRate", "memo", "dimension1",
                     "dimension2", "dimension3", "dimension4")
-                .filters("transactionId", "accountId", "direction", "dimension1", "dimension2", "dimension3",
+                .filters("transactionId", "accountId", "direction", "currency", "dimension1", "dimension2", "dimension3",
                     "dimension4")
                 .sorts("transactionId", "lineNo")
                 .defaultSort("lineNo", true));

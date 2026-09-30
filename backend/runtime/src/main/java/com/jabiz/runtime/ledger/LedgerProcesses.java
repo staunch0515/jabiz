@@ -3,6 +3,7 @@ package com.jabiz.runtime.ledger;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.ledger.Direction;
+import com.jabiz.ledger.ForeignAmount;
 import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.ledger.LedgerPosting;
 import com.jabiz.ledger.PostingLine;
@@ -41,7 +42,7 @@ import java.util.stream.Collectors;
  *       written;</li>
  *   <li>entries may carry a memo and values of the declared analysis dimensions, the transaction the document it was
  *       posted from; a summary account takes no postings (docs/design/11-ledger-events-jobs.md sections 1.4 to 1.6,
- *       decision D24);</li>
+ *       decision D24); an entry may be in a foreign currency, balanced in that currency too (section 1.8);</li>
  *   <li>{@code LEDGER_REVERSE} books the reversing transaction of a posted one: the same accounts and amounts with
  *       the sides swapped. A transaction is reversed at most once and a reversal is not reversed again.</li>
  * </ul>
@@ -62,14 +63,25 @@ public class LedgerProcesses {
     /**
      * One entry to post.
      *
-     * @param memo       optional note of the line
-     * @param dimensions values of the declared analysis dimensions by name ({@code {"department": "SALES"}})
+     * @param amount            the amount in the ledger currency; for an entry in a foreign currency it may be left
+     *                          out and is then converted, else it must equal the converted amount
+     * @param memo              optional note of the line
+     * @param dimensions        values of the declared analysis dimensions by name ({@code {"department": "SALES"}})
+     * @param currency          ISO 4217 code of a foreign currency; empty (or the ledger's) for the ledger currency
+     * @param transactionAmount the amount in {@code currency}
+     * @param exchangeRate      units of the ledger currency per unit of {@code currency}
      */
-    public record Line(@NotBlank String accountCode, @NotNull Direction direction, @NotNull BigDecimal amount,
-        String memo, Map<String, String> dimensions) {
+    public record Line(@NotBlank String accountCode, @NotNull Direction direction, BigDecimal amount,
+        String memo, Map<String, String> dimensions, String currency, BigDecimal transactionAmount,
+        BigDecimal exchangeRate) {
 
         public Line(String accountCode, Direction direction, BigDecimal amount) {
             this(accountCode, direction, amount, null, null);
+        }
+
+        public Line(String accountCode, Direction direction, BigDecimal amount, String memo,
+            Map<String, String> dimensions) {
+            this(accountCode, direction, amount, memo, dimensions, null, null, null);
         }
     }
 
@@ -166,6 +178,37 @@ public class LedgerProcesses {
                 .compute("Book the reversal", (metadata, ctx) -> reverse(ctx)));
     }
 
+    /**
+     * The entry to check and book, the ledger amount of a foreign one converted when left out; null (and the
+     * problem rejected) when a needed part is missing.
+     */
+    private static PostingLine postingLine(Line line, int number, LedgerEntities.Settings settings,
+        ProcessContext ctx) {
+        boolean foreign = line.currency() != null && !line.currency().isBlank()
+            && !line.currency().equals(settings.currency());
+        if (!foreign) {
+            BigDecimal amount = line.amount() != null ? line.amount() : line.transactionAmount();
+            if (amount == null) {
+                ctx.reject(missing(number, "amount"));
+                return null;
+            }
+            return new PostingLine(line.accountCode(), line.direction(), amount, line.memo(), line.dimensions());
+        }
+        if (line.transactionAmount() == null || line.exchangeRate() == null) {
+            ctx.reject(missing(number, line.transactionAmount() == null ? "transactionAmount" : "exchangeRate"));
+            return null;
+        }
+        ForeignAmount amount = new ForeignAmount(line.currency(), line.transactionAmount(), line.exchangeRate());
+        return new PostingLine(line.accountCode(), line.direction(),
+            line.amount() != null ? line.amount() : amount.converted(settings.scale()), line.memo(),
+            line.dimensions(), amount);
+    }
+
+    private static Violation missing(int line, String part) {
+        return new Violation("entries", PlatformErrorCodes.REQUIRED, "Entry " + line + ": " + part + " is required",
+            Map.of("line", line, "field", "entries[" + (line - 1) + "]." + part));
+    }
+
     private static EntityQuery byField(String field, Object value, int limit) {
         return EntityQuery.builder().where(new QueryPredicate.Eq(field, value)).limit(limit).build();
     }
@@ -174,11 +217,17 @@ public class LedgerProcesses {
         PostInput input = ctx.get("input", PostInput.class);
         @SuppressWarnings("unchecked")
         List<LedgerDimension> dimensions = (List<LedgerDimension>) ctx.get(CheckPosting.DIMENSIONS);
-        List<PostingLine> lines = input.entries().stream()
-            .map(line -> new PostingLine(line.accountCode(), line.direction(), line.amount(), line.memo(),
-                line.dimensions()))
-            .toList();
-        LedgerPosting.validate(lines, settings.scale(), dimensions).forEach(ctx::reject);
+        List<PostingLine> lines = new ArrayList<>();
+        for (int i = 0; i < input.entries().size(); i++) {
+            PostingLine line = postingLine(input.entries().get(i), i + 1, settings, ctx);
+            if (line != null) {
+                lines.add(line);
+            }
+        }
+        if (lines.size() < input.entries().size()) {
+            return;
+        }
+        LedgerPosting.validate(lines, settings.scale(), dimensions, settings.currency()).forEach(ctx::reject);
         Map<String, EntityInstance> accounts = entities(ctx, ACCOUNTS).stream()
             .collect(Collectors.toMap(account -> account.<String>get("accountCode"), Function.identity()));
         List<Object> accountIds = new ArrayList<>();
@@ -202,8 +251,17 @@ public class LedgerProcesses {
             return;
         }
         Instant booking = input.bookingTime() == null ? ctx.opTime() : input.bookingTime();
-        List<Map<String, Object>> extras = input.entries().stream()
-            .map(line -> CheckPosting.entryFields(line, dimensions)).toList();
+        List<Map<String, Object>> extras = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            Map<String, Object> extra = CheckPosting.entryFields(input.entries().get(i), dimensions);
+            ForeignAmount foreign = lines.get(i).foreign();
+            if (foreign != null) {
+                extra.put("currency", foreign.currency());
+                extra.put("transactionAmount", foreign.amount());
+                extra.put("exchangeRate", foreign.rate());
+            }
+            extras.add(extra);
+        }
         Object transactionId = book(ctx, booking, input.description(), input.reference(),
             new Source(input.sourceEntity(), input.sourceId()), null, lines, accountIds, extras);
         ctx.put(OUTPUT, new PostOutput(String.valueOf(transactionId), booking,
@@ -233,6 +291,9 @@ public class LedgerProcesses {
             // The reversal keeps each line's memo and dimensions, so it cancels them in every report.
             Map<String, Object> extra = new LinkedHashMap<>();
             extra.put("memo", entry.get("memo"));
+            extra.put("currency", entry.get("currency"));
+            extra.put("transactionAmount", entry.get("transactionAmount"));
+            extra.put("exchangeRate", entry.get("exchangeRate"));
             for (int position = 1; position <= LedgerDimension.MAX_POSITION; position++) {
                 extra.put(LedgerDimension.field(position), entry.get(LedgerDimension.field(position)));
             }
