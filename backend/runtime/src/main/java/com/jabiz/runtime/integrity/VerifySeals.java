@@ -4,6 +4,7 @@ import com.jabiz.integrity.IntegrityKey;
 import com.jabiz.integrity.IntegrityProblem;
 import com.jabiz.integrity.MerkleRoot;
 import com.jabiz.integrity.SealChain;
+import com.jabiz.integrity.SealedColumns;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.query.BoundValue;
@@ -56,7 +57,9 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                 long to = blocks.isEmpty() ? from - 1 : blocks.getLast().block().sealNo();
                 long rows = blocks.stream().mapToLong(stored -> stored.block().rowCount()).sum();
                 Mono<Void> checks = blocks.isEmpty() ? Mono.empty()
-                    : sealedRows(engine, blocks, from, to, problems).then(tables(engine, from, to, problems));
+                    : sealedRows(engine, blocks, from, to, problems)
+                        .then(sealedColumns(engine, blocks, from, to, problems))
+                        .then(tables(engine, from, to, problems));
                 return checks
                     .then(unsealed(engine))
                     .flatMap(unsealed -> record(engine, ctx, from, to, blocks.size(), rows, unsealed, problems));
@@ -85,6 +88,19 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
             })));
     }
 
+    /** Each block's column lists as stored add up to its signed columns hash. */
+    private Mono<Void> sealedColumns(StorageEngine engine, List<SealChain.Stored> blocks, long from, long to,
+        Problems problems) {
+        return store.sealedColumns(engine, from, to).doOnNext(byBlock -> blocks.forEach(stored -> {
+            String hash = SealedColumns.hash(byBlock.getOrDefault(stored.block().sealNo(), Map.of()));
+            if (!hash.equals(stored.block().columnsHash())) {
+                problems.add(new IntegrityProblem(IntegrityProblem.Kind.SEAL_ALTERED, stored.block().sealNo(), null,
+                    null, "The column lists of block " + stored.block().sealNo() + " are not the ones it was sealed"
+                        + " with"));
+            }
+        })).then();
+    }
+
     private static IntegrityProblem altered(long sealNo) {
         return new IntegrityProblem(IntegrityProblem.Kind.SEAL_ALTERED, sealNo, null, null,
             "The rows of block " + sealNo + " no longer add up to its root");
@@ -105,7 +121,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
                     // Without its primary key the sealed keys cannot be matched: every row counts as gone.
                     Flux<IntegrityProblem> rows = table.keyColumns().isEmpty()
                         ? store.rowsOfMissingTable(engine, name, from, to)
-                        : store.changedRows(engine, table, from, to);
+                        : store.columns(engine, table).flatMapMany(columns ->
+                            store.changedRows(engine, table, columns.size(), from, to));
                     return guard.concatWith(rows);
                 }))
             .doOnNext(problems::add)

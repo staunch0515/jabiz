@@ -11,12 +11,14 @@ import java.util.regex.Pattern;
  * @param sealNo     1, 2, 3 ... without gaps
  * @param sealedTime when the block was made
  * @param rowCount   how many rows it seals
- * @param merkleRoot {@link MerkleRoot} of its rows
- * @param prevHash   the hash of the block before; {@link #GENESIS} for the first
- * @param keyId      {@link IntegrityKey#id()} of the key that signed it
+ * @param merkleRoot  {@link MerkleRoot} of its rows
+ * @param columnsHash {@link SealedColumns#hash} of the columns each table's rows were digested over, so that columns
+ *                    added later leave the sealed digests intact and the list cannot be changed unseen
+ * @param prevHash    the hash of the block before; {@link #GENESIS} for the first
+ * @param keyId       {@link IntegrityKey#id()} of the key that signed it
  */
-public record SealBlock(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String prevHash,
-    String keyId) {
+public record SealBlock(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String columnsHash,
+    String prevHash, String keyId) {
 
     /** The "hash before" the first block. */
     public static final String GENESIS = "0".repeat(64);
@@ -32,6 +34,7 @@ public record SealBlock(long sealNo, Instant sealedTime, int rowCount, String me
             throw new IllegalArgumentException("rowCount must not be negative");
         }
         requireHex("merkleRoot", merkleRoot);
+        requireHex("columnsHash", columnsHash);
         requireHex("prevHash", prevHash);
         Objects.requireNonNull(keyId, "keyId must not be null");
     }
@@ -39,7 +42,7 @@ public record SealBlock(long sealNo, Instant sealedTime, int rowCount, String me
     /** The block's hash: HMAC-SHA256 of its fields, in a fixed layout, with the key. */
     public String hash(IntegrityKey key) {
         return key.sign(String.join("\n", "jabiz-seal-v1", Long.toString(sealNo), sealedTime.toString(),
-            Integer.toString(rowCount), merkleRoot, prevHash, keyId));
+            Integer.toString(rowCount), merkleRoot, columnsHash, prevHash, keyId));
     }
 
     private static void requireHex(String name, String value) {

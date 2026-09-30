@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,6 +43,22 @@ class SealChainTest {
     }
 
     @Test
+    void theColumnsHashDependsOnTablesAndColumnsButNotOnMapOrder() {
+        Map<String, List<String>> columns = new java.util.LinkedHashMap<>();
+        columns.put("b", List.of("id", "x"));
+        columns.put("a", List.of("id"));
+        String hash = SealedColumns.hash(columns);
+        assertThat(hash).hasSize(64).isEqualTo(SealedColumns.hash(Map.of("a", List.of("id"), "b", List.of("id", "x"))));
+        assertThat(SealedColumns.hash(Map.of("a", List.of("id"), "b", List.of("id")))).isNotEqualTo(hash);
+        assertThat(SealedColumns.hash(Map.of("a", List.of("id,b"), "b", List.of("x")))).isNotEqualTo(hash);
+        // The columns are part of the signed block: another list gives another block hash.
+        SealBlock block = chain(1, KEY).getFirst().block();
+        SealBlock other = new SealBlock(1, block.sealedTime(), block.rowCount(), block.merkleRoot(), hash,
+            block.prevHash(), block.keyId());
+        assertThat(other.hash(KEY)).isNotEqualTo(block.hash(KEY));
+    }
+
+    @Test
     void theKeyHasAnIdThatRevealsNothingAndMustBeLongEnough() {
         assertThat(KEY.id()).hasSize(16).isNotEqualTo(OTHER.id()).isEqualTo(
             key("the-integrity-key-of-these-tests-0001").id());
@@ -67,12 +84,13 @@ class SealChainTest {
         SealBlock b2 = blocks.get(1).block();
         List<SealChain.Stored> changed = new ArrayList<>(blocks);
         changed.set(1, new SealChain.Stored(new SealBlock(2, b2.sealedTime(), b2.rowCount(), "f".repeat(64),
-            b2.prevHash(), b2.keyId()), blocks.get(1).storedHash()));
+            b2.columnsHash(), b2.prevHash(), b2.keyId()), blocks.get(1).storedHash()));
         assertThat(SealChain.check(changed, null, KEY)).extracting(IntegrityProblem::kind, IntegrityProblem::sealNo)
             .containsExactly(org.assertj.core.groups.Tuple.tuple(IntegrityProblem.Kind.CHAIN_BROKEN, 2L));
 
         // Re-signing the changed block without the key is impossible; with another key the next link breaks.
-        SealBlock forged = new SealBlock(2, b2.sealedTime(), b2.rowCount(), "f".repeat(64), b2.prevHash(), KEY.id());
+        SealBlock forged = new SealBlock(2, b2.sealedTime(), b2.rowCount(), "f".repeat(64), b2.columnsHash(),
+            b2.prevHash(), KEY.id());
         changed.set(1, new SealChain.Stored(forged, forged.hash(OTHER)));
         assertThat(SealChain.check(changed, null, KEY)).extracting(IntegrityProblem::sealNo).containsExactly(2L, 3L);
 
@@ -90,14 +108,12 @@ class SealChainTest {
 
     @Test
     void blocksAreValidated() {
-        assertThatThrownBy(() -> new SealBlock(0, T, 0, SealBlock.GENESIS, SealBlock.GENESIS, "k"))
-            .hasMessageContaining("sealNo");
-        assertThatThrownBy(() -> new SealBlock(1, T, -1, SealBlock.GENESIS, SealBlock.GENESIS, "k"))
-            .hasMessageContaining("rowCount");
-        assertThatThrownBy(() -> new SealBlock(1, T, 0, "ABC", SealBlock.GENESIS, "k"))
-            .hasMessageContaining("merkleRoot");
-        assertThatThrownBy(() -> new SealBlock(1, T, 0, SealBlock.GENESIS, null, "k"))
-            .hasMessageContaining("prevHash");
+        String g = SealBlock.GENESIS;
+        assertThatThrownBy(() -> new SealBlock(0, T, 0, g, g, g, "k")).hasMessageContaining("sealNo");
+        assertThatThrownBy(() -> new SealBlock(1, T, -1, g, g, g, "k")).hasMessageContaining("rowCount");
+        assertThatThrownBy(() -> new SealBlock(1, T, 0, "ABC", g, g, "k")).hasMessageContaining("merkleRoot");
+        assertThatThrownBy(() -> new SealBlock(1, T, 0, g, "x", g, "k")).hasMessageContaining("columnsHash");
+        assertThatThrownBy(() -> new SealBlock(1, T, 0, g, g, null, "k")).hasMessageContaining("prevHash");
         assertThatThrownBy(() -> new SealedRow("t", null, "d")).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new IntegrityProblem(null, 1L, null, null, "x"))
             .isInstanceOf(NullPointerException.class);
@@ -108,7 +124,8 @@ class SealChainTest {
         String prev = SealBlock.GENESIS;
         for (int no = 1; no <= length; no++) {
             SealBlock block = new SealBlock(no, T.plusSeconds(300L * no), no,
-                MerkleRoot.of(List.of(row("t", "[" + no + "]", 'a'))), prev, key.id());
+                MerkleRoot.of(List.of(row("t", "[" + no + "]", 'a'))), SealedColumns.hash(Map.of("t", List.of("a"))),
+                prev, key.id());
             String hash = block.hash(key);
             blocks.add(new SealChain.Stored(block, hash));
             prev = hash;

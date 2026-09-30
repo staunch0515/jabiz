@@ -63,8 +63,8 @@ class IntegrityIT extends SecurityItSupport {
         // Each block is the key's HMAC of its fields and links to the block before.
         Map<String, Object> row = query("SELECT * FROM sys_integrity_seal WHERE seal_no = ?", sealNo + 1).getFirst();
         SealBlock block = new SealBlock(sealNo + 1, ((java.sql.Timestamp) row.get("sealed_time")).toInstant(),
-            (Integer) row.get("row_count"), (String) row.get("merkle_root"), (String) row.get("prev_hash"),
-            (String) row.get("key_id"));
+            (Integer) row.get("row_count"), (String) row.get("merkle_root"), (String) row.get("columns_hash"),
+            (String) row.get("prev_hash"), (String) row.get("key_id"));
         assertThat(block.hash(key)).isEqualTo(row.get("seal_hash")).isEqualTo(second.get("sealHash"));
         assertThat(block.prevHash()).isEqualTo(first.get("sealHash"));
         assertThat(block.keyId()).isEqualTo(key.id());
@@ -128,13 +128,45 @@ class IntegrityIT extends SecurityItSupport {
     void aTableWhoseGuardIsOffIsReported() {
         ticket();
         long sealNo = sealNo(seal());
-        bypassingTheGuard("ALTER TABLE sys_audit_record DISABLE TRIGGER sys_audit_record_append_only");
-        try {
-            assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"))
-                .contains(tuple("UNPROTECTED", "sys_audit_record"));
-        } finally {
-            bypassingTheGuard("ALTER TABLE sys_audit_record ENABLE TRIGGER sys_audit_record_append_only");
+        // Switched off, or switched to fire for replication only: either way ordinary sessions may change rows.
+        for (String off : List.of("DISABLE TRIGGER", "ENABLE REPLICA TRIGGER")) {
+            bypassingTheGuard("ALTER TABLE sys_audit_record " + off + " sys_audit_record_append_only");
+            try {
+                assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"))
+                    .contains(tuple("UNPROTECTED", "sys_audit_record"));
+            } finally {
+                bypassingTheGuard("ALTER TABLE sys_audit_record ENABLE TRIGGER sys_audit_record_append_only");
+            }
         }
+    }
+
+    @Test
+    void aColumnAddedLaterLeavesTheSealsIntactButTheirColumnListsCannotBeChanged() {
+        // A column named like the query's alias for the row must not be mistaken for the row.
+        execute("CREATE TABLE it_sealed_evolving (id bigint PRIMARY KEY, amount numeric(12, 2), t text)");
+        query("SELECT 1 AS done FROM (SELECT jabiz_protect_append_only('it_sealed_evolving')) AS p");
+        execute("INSERT INTO it_sealed_evolving VALUES (1, 10.50, 'a')");
+        long sealNo = sealNo(seal());
+        assertThat(sealedKeys("it_sealed_evolving")).containsExactly("[1]");
+
+        // A migration adds a column, with a value in the sealed row too: the seal still holds.
+        execute("ALTER TABLE it_sealed_evolving ADD COLUMN note text NOT NULL DEFAULT 'none'");
+        execute("INSERT INTO it_sealed_evolving VALUES (2, 3.00, 'b', 'new')");
+        long next = sealNo(seal());
+        assertThat(verify(sealNo)).containsEntry("intact", true);
+        assertThat(query("SELECT columns::text AS columns FROM sys_integrity_seal_table WHERE seal_no = ?"
+            + " AND table_name = 'it_sealed_evolving'", next).getFirst())
+            .containsEntry("columns", "{amount,id,note,t}");
+        bypassingTheGuard("UPDATE it_sealed_evolving SET amount = 3.01 WHERE id = 2");
+        assertThat(problems(verify(next))).extracting(p -> p.get("kind"), p -> p.get("key"))
+            .contains(tuple("MODIFIED", "[2]"));
+
+        // Leaving the changed column out of the list would hide the change: the block's signed hash forbids it.
+        bypassingTheGuard("UPDATE it_sealed_evolving SET amount = 99 WHERE id = 1",
+            "UPDATE sys_integrity_seal_table SET columns = '{id}' WHERE seal_no = " + sealNo
+                + " AND table_name = 'it_sealed_evolving'");
+        assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> ((Number) p.get("sealNo")).longValue())
+            .contains(tuple("SEAL_ALTERED", sealNo));
     }
 
     @Test

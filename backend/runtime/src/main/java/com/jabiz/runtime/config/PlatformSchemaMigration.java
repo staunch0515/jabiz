@@ -48,7 +48,8 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_control_change_version", "sys_approval_request_version", "sys_approval_decision",
         "sys_approval_evaluation", "sys_task_version", "sys_notification", "sys_notification_attempt",
         "sys_report_run", "sys_report_run_supersede", "sys_import_mapping_version", "sys_import_run", "sys_import_ref", "sys_audit_record",
-        "sys_integrity_seal", "sys_integrity_item", "sys_integrity_check");
+        "sys_integrity_seal", "sys_integrity_item", "sys_integrity_seal_table",
+        "sys_integrity_check");
 
     @Override
     public void migrate(Flyway application) {

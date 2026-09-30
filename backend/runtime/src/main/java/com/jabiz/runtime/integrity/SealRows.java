@@ -3,14 +3,21 @@ package com.jabiz.runtime.integrity;
 import com.jabiz.integrity.IntegrityKey;
 import com.jabiz.integrity.MerkleRoot;
 import com.jabiz.integrity.SealBlock;
+import com.jabiz.integrity.SealChain;
+import com.jabiz.integrity.SealedColumns;
+import com.jabiz.integrity.SealedRow;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * The step of {@code INTEGRITY_SEAL} (docs/design/21-audit-retention.md section 2.2). Rows the transaction cannot
@@ -33,12 +40,20 @@ public class SealRows implements StepHandler<NoMetadata, ProcessContext> {
     @Override
     public Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
         StorageEngine engine = store.engine();
+        Map<String, List<String>> columns = new TreeMap<>();
         return store.pin(engine)
             .then(store.lock(engine))
             .then(store.head(engine).map(Optional::of).defaultIfEmpty(Optional.empty()))
             .flatMap(head -> store.appendOnlyTables(engine)
                 .filter(table -> !table.keyColumns().isEmpty())
-                .concatMap(table -> store.unsealed(engine, table, settings.maxRows()))
+                // Each table's rows are digested over all its columns, and the block keeps which those were. The
+                // columns are read after the rows: the rows' query holds the table's lock until the commit, so no
+                // column can be added in between.
+                .concatMap(table -> store.unsealed(engine, table, settings.maxRows()).collectList()
+                    .flatMapMany(rows -> rows.isEmpty() ? Flux.<SealedRow>empty()
+                        : store.columns(engine, table)
+                            .doOnNext(names -> columns.put(table.name(), names))
+                            .thenMany(Flux.fromIterable(rows))))
                 .take(settings.maxRows())
                 .collectList()
                 .flatMap(rows -> {
@@ -47,10 +62,10 @@ public class SealRows implements StepHandler<NoMetadata, ProcessContext> {
                         return Mono.empty();
                     }
                     SealBlock block = new SealBlock(head.map(h -> h.block().sealNo() + 1).orElse(1L), ctx.opTime(),
-                        rows.size(), MerkleRoot.of(rows), head.map(h -> h.storedHash()).orElse(SealBlock.GENESIS),
-                        key.id());
+                        rows.size(), MerkleRoot.of(rows), SealedColumns.hash(columns),
+                        head.map(SealChain.Stored::storedHash).orElse(SealBlock.GENESIS), key.id());
                     String hash = block.hash(key);
-                    return store.insertSeal(engine, block, hash, ctx.processSeqId(), rows)
+                    return store.insertSeal(engine, block, hash, ctx.processSeqId(), columns, rows)
                         .then(Mono.fromRunnable(() -> ctx.put(IntegrityProcesses.OUTPUT,
                             new IntegrityProcesses.SealOutput(block.sealNo(), rows.size(), hash))));
                 }));

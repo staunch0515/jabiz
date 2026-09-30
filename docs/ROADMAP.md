@@ -680,8 +680,8 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 - [x] 现有全部检查照常通过（场景快照不变）。
 
 **14f-2 要求**
-1. core：`MerkleRoot`、`SealBlock`（HMAC 块哈希）、`SealChain`（链的检查）、`IntegrityKey`、`IntegrityProblem`。
-2. 迁移 V21：`sys_integrity_seal`、`sys_integrity_item`、`sys_integrity_check`（都只追加）。
+1. core：`MerkleRoot`、`SealedColumns`、`SealBlock`（HMAC 块哈希）、`SealChain`（链的检查）、`IntegrityKey`、`IntegrityProblem`。
+2. 迁移 V21：`sys_integrity_seal`、`sys_integrity_item`、`sys_integrity_seal_table`、`sys_integrity_check`（都只追加）。
 3. `INTEGRITY_SEAL` / `INTEGRITY_VERIFY` 与定时任务 `jabiz.integrity-seal` / `jabiz.integrity-verify`；只追加表从目录发现；启动检查 `INTEGRITY`（无主键的只追加表）。
 4. 密钥 `JABIZ_INTEGRITY_KEY`（非 dev 缺少即启动失败）；`/api/integrity/head|seals|checks`；页面 `/integrity`。
 5. 文档：21 §2、D27 第 4 条、CLAUDE.md；部署：CI、docker、快速上手。
@@ -689,6 +689,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 **14f-2 验收标准**
 - [x] 绕过触发器修改或删除一行、改动封存块或条目、关掉表的只追加保护，校验分别报告被改、缺失、断链与条目被改、未受保护（`IntegrityIT`、`SealChainTest`）。
 - [x] 封存时尚未提交的行由下一次封存补上（`IntegrityIT`）；非 dev 缺少密钥启动失败（`IntegrityKeySettingsTest`）。
+- [x] 迁移给只追加表加列后已有封存照常通过；改列清单来掩盖修改被发现（`IntegrityIT`）。
 - [x] 块哈希是密钥的 HMAC、链到前一块；封存表不能 UPDATE / DELETE；接口与流程需要各自的权限（`IntegrityIT`）。
 - [x] 后台查看最新块、运行校验、查看问题（Vitest、Playwright）。
 - [x] 现有全部检查照常通过。

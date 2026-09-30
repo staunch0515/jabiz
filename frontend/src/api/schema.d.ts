@@ -1230,6 +1230,7 @@ export interface components {
             table?: string;
         };
         IntegritySeal: {
+            columnsHash?: string;
             keyId?: string;
             merkleRoot?: string;
             prevHash?: string;

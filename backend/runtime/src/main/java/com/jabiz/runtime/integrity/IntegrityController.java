@@ -41,8 +41,8 @@ class IntegrityController {
     record IntegrityHead(Long sealNo, Instant sealedTime, Integer rowCount, String sealHash, String keyId,
         String currentKeyId) {}
 
-    record IntegritySeal(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String prevHash,
-        String sealHash, String keyId, Long processSeqId) {}
+    record IntegritySeal(long sealNo, Instant sealedTime, int rowCount, String merkleRoot, String columnsHash,
+        String prevHash, String sealHash, String keyId, Long processSeqId) {}
 
     record IntegritySealPage(List<IntegritySeal> items, long offset, int limit) {}
 
@@ -85,8 +85,9 @@ class IntegrityController {
             return store.sealPage(offset, limit)
                 .map(row -> new IntegritySeal(Rows.longValue(row.get("seal_no")), Rows.instant(row.get("sealed_time")),
                     Rows.intValue(row.get("row_count")), Rows.string(row.get("merkle_root")),
-                    Rows.string(row.get("prev_hash")), Rows.string(row.get("seal_hash")),
-                    Rows.string(row.get("key_id")), Rows.longValue(row.get("process_seq_id"))))
+                    Rows.string(row.get("columns_hash")), Rows.string(row.get("prev_hash")),
+                    Rows.string(row.get("seal_hash")), Rows.string(row.get("key_id")),
+                    Rows.longValue(row.get("process_seq_id"))))
                 .collectList()
                 .map(items -> new IntegritySealPage(items, offset, limit));
         }));
