@@ -67,7 +67,7 @@ public final class ChartTemplateProcesses {
         }
         ApplyInput input = ctx.get(INPUT, ApplyInput.class);
         Set<String> excluded = new HashSet<>(input == null || input.excludeCodes() == null ? List.of()
-            : input.excludeCodes().stream().map(String::trim).toList());
+            : input.excludeCodes().stream().filter(java.util.Objects::nonNull).map(String::trim).toList());
         Map<String, Object> ledgerIds = new HashMap<>();
         List<ChartTemplate.Line> copied = new java.util.ArrayList<>();
         for (ChartTemplate.Line line : ChartTemplate.lines()) {

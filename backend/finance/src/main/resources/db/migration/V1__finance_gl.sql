@@ -74,6 +74,7 @@ SELECT finance_create_temporal_table('fi_period_version', 'period_id', '
     fiscal_year    numeric(4,0) NOT NULL,
     period_no      numeric(2,0) NOT NULL,
     period_key     varchar(7)   NOT NULL,
+    adjustment     boolean      NOT NULL,
     start_date     date         NOT NULL,
     end_date       date         NOT NULL,
     status         varchar(12)  NOT NULL,

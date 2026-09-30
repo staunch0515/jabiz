@@ -30,7 +30,7 @@ class ChartTemplateIT extends FinanceItSupport {
         assertThat(find(LedgerEntities.ACCOUNT_DATASET, "accountCode", "1000")).isEmpty();
 
         Map<String, Object> applied = ok(ChartTemplateProcesses.APPLY, controller(),
-            Map.of("excludeCodes", List.of("1300", "1500")));
+            Map.of("excludeCodes", java.util.Arrays.asList("1300", null, " 1500 ")));
         List<Map<String, Object>> copied = (List<Map<String, Object>>) applied.get("accounts");
         // Inventory and fixed assets with the four accounts under them are left out.
         assertThat(copied).hasSize(ChartTemplate.lines().size() - 6);

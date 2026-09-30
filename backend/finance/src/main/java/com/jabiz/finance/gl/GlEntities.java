@@ -223,6 +223,8 @@ public final class GlEntities {
             .asNumeric(4, 0));
         eb.field("periodNo", f -> f.physicalColumn("period_no").immutable(true).required(true).asNumeric(2, 0));
         eb.field("periodKey", f -> f.physicalColumn("period_key").immutable(true).required(true).asText(7));
+        // Period 13 spans December's days; only it is an adjustment period.
+        eb.field("adjustment", f -> f.physicalColumn("adjustment").immutable(true).required(true).asBool());
         eb.field("startDate", f -> f.physicalColumn("start_date").immutable(true).required(true).asDate());
         eb.field("endDate", f -> f.physicalColumn("end_date").immutable(true).required(true).asDate());
         // States change only through FIN_PERIOD_SET_STATE / FIN_PERIOD_SET_SUBLEDGER_STATE (FIN-PC-003).
@@ -237,6 +239,10 @@ public final class GlEntities {
         eb.field("faStatus", f -> f.physicalColumn("fa_status").required(true).processOnly()
             .asCode(SUBLEDGER_STATUSES, values(SUBLEDGER_STATUS_VALUES)));
         eb.unique("uk_fi_period_key", "periodKey");
+        // Years never overlap: two years starting a regular period on the same day cannot both be created, even at
+        // once (the platform's unique check serializes them, decision D6). Periods start on the first of a month, so
+        // any two overlapping years share one.
+        eb.unique("uk_fi_period_start", "startDate", "adjustment");
         eb.display("periodKey");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

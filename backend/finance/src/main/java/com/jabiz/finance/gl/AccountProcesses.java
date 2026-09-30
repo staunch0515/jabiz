@@ -178,10 +178,16 @@ public final class AccountProcesses {
                 Map.of("accountCode", code)));
             return;
         }
-        String financialType = input.financialType().trim().toUpperCase(java.util.Locale.ROOT);
-        String normalBalance = input.normalBalance().trim().toUpperCase(java.util.Locale.ROOT);
+        String financialType = upper(input.financialType());
+        String normalBalance = upper(input.normalBalance());
         checkValue(ctx, "financialType", financialType, GlEntities.FINANCIAL_TYPE_VALUES);
         checkValue(ctx, "normalBalance", normalBalance, GlEntities.NORMAL_BALANCE_VALUES);
+        String cashFlowClass = optionalCode(ctx, "cashFlowClass", upper(input.cashFlowClass()),
+            GlEntities.CASH_FLOW_VALUES);
+        String controlClass = optionalCode(ctx, "controlClass", upper(input.controlClass()),
+            GlEntities.CONTROL_CLASS_VALUES);
+        String requiredDimension = optionalCode(ctx, "requiredDimension", lower(input.requiredDimension()),
+            GlEntities.DIMENSION_VALUES);
         Object parentId = parent(ctx, input.parentCode());
         if (ctx.hasViolations()) {
             return;
@@ -201,10 +207,10 @@ public final class AccountProcesses {
         fin.put("financialType", financialType);
         fin.put("normalBalance", normalBalance);
         fin.put("statementLine", input.statementLine().trim());
-        fin.put("cashFlowClass", blankToNull(input.cashFlowClass()));
-        fin.put("controlClass", blankToNull(input.controlClass()));
+        fin.put("cashFlowClass", cashFlowClass);
+        fin.put("controlClass", controlClass);
         fin.put("clearing", Boolean.TRUE.equals(input.clearing()));
-        fin.put("requiredDimension", blankToNull(input.requiredDimension()));
+        fin.put("requiredDimension", requiredDimension);
         Object finId = ctx.changes().insert(GlEntities.ACCOUNT, fin);
         ctx.put(OUTPUT, new AccountOutput(String.valueOf(finId), String.valueOf(ledgerId), code, true, true));
     }
@@ -220,6 +226,10 @@ public final class AccountProcesses {
         }
         Map<String, Object> ledgerChanges = new LinkedHashMap<>();
         if (input.accountName() != null) {
+            if (input.accountName().isBlank()) {
+                ctx.reject(new Violation("accountName", INVALID_VALUE, "An account needs a name",
+                    Map.of("value", input.accountName())));
+            }
             ledgerChanges.put("accountName", input.accountName().trim());
         }
         if (input.parentCode() != null) {
@@ -230,7 +240,7 @@ public final class AccountProcesses {
         }
         Map<String, Object> finChanges = new LinkedHashMap<>();
         if (input.normalBalance() != null) {
-            String normalBalance = input.normalBalance().trim().toUpperCase(java.util.Locale.ROOT);
+            String normalBalance = upper(input.normalBalance());
             checkValue(ctx, "normalBalance", normalBalance, GlEntities.NORMAL_BALANCE_VALUES);
             // The ledger type of other income or expense follows the normal balance and cannot change.
             String type = fin.get("financialType");
@@ -245,9 +255,18 @@ public final class AccountProcesses {
         if (input.statementLine() != null) {
             finChanges.put("statementLine", input.statementLine().trim());
         }
-        optional(finChanges, "cashFlowClass", input.cashFlowClass());
-        optional(finChanges, "controlClass", input.controlClass());
-        optional(finChanges, "requiredDimension", input.requiredDimension());
+        if (input.cashFlowClass() != null) {
+            finChanges.put("cashFlowClass", optionalCode(ctx, "cashFlowClass", upper(input.cashFlowClass()),
+                GlEntities.CASH_FLOW_VALUES));
+        }
+        if (input.controlClass() != null) {
+            finChanges.put("controlClass", optionalCode(ctx, "controlClass", upper(input.controlClass()),
+                GlEntities.CONTROL_CLASS_VALUES));
+        }
+        if (input.requiredDimension() != null) {
+            finChanges.put("requiredDimension", optionalCode(ctx, "requiredDimension",
+                lower(input.requiredDimension()), GlEntities.DIMENSION_VALUES));
+        }
         if (input.clearing() != null) {
             finChanges.put("clearing", input.clearing());
         }
@@ -319,10 +338,21 @@ public final class AccountProcesses {
         return parent.id();
     }
 
-    private static void optional(Map<String, Object> changes, String field, String value) {
-        if (value != null) {
-            changes.put(field, blankToNull(value));
+    /** A code that may be left out (blank: none), else one of {@code allowed}. */
+    private static String optionalCode(ProcessContext ctx, String field, String value, List<String> allowed) {
+        if (value == null || value.isEmpty()) {
+            return null;
         }
+        checkValue(ctx, field, value, allowed);
+        return value;
+    }
+
+    private static String upper(String value) {
+        return value == null ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static String lower(String value) {
+        return value == null ? null : value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private static void checkValue(ProcessContext ctx, String field, String value, List<String> allowed) {
@@ -339,10 +369,6 @@ public final class AccountProcesses {
     private static AccountOutput output(EntityInstance fin, EntityInstance ledger, boolean active, boolean changed) {
         return new AccountOutput(String.valueOf(fin.id()), String.valueOf(ledger.id()), fin.get("accountCode"),
             active, changed);
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     static EntityInstance ledger(ProcessContext ctx, String code) {

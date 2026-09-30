@@ -85,6 +85,15 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
             : (String) violations.getFirst().get("ruleCode");
     }
 
+    /** A write through a dataset's generic API that must be refused; returns the first violation's rule code. */
+    @SuppressWarnings("unchecked")
+    protected String commitRefused(String dataset, String authorization, Map<String, Object> change) {
+        Map<String, Object> problem = post("/api/datasets/" + dataset + "/commit", authorization,
+            Map.of("changes", List.of(change))).expectStatus().is4xxClientError().expectBody(MAP).returnResult()
+            .getResponseBody();
+        return (String) ((List<Map<String, Object>>) problem.get("violations")).getFirst().get("ruleCode");
+    }
+
     protected WebTestClient.ResponseSpec post(String path, String authorization, Object body) {
         return client.post().uri(path).contentType(MediaType.APPLICATION_JSON)
             .header(HttpHeaders.AUTHORIZATION, authorization).bodyValue(body).exchange();

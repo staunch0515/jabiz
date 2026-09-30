@@ -162,11 +162,14 @@
   `FIN_COA_TEMPLATE_PREVIEW` 只显示，`FIN_COA_TEMPLATE_APPLY` 在尚无科目的账簿中复制（可排除某些代码及其下级），之后逐个调整。
 - 流程（F1a）：`FIN_ACCOUNT_CREATE` / `_UPDATE` / `_DEACTIVATE` / `_REACTIVATE` / `_DELETE`，同时写两个实体（`fin.account.maintain`）；
   `FinAccount` 的数据视图只经流程写入。财务类型不可改；其他收支的正常余额方向决定账本类型，因此也不可改（改则另开科目）。
+  删除前先查发生额给出明确的原因；即使操作人受数据期限限制看不到发生额，平台删除时的引用检查（不受范围限制）仍会拒绝（`STILL_REFERENCED`）。
+  已知限制：删除科目与同时对该科目过账之间没有互斥锁（平台的引用检查是通用的"先查后写"）；删除只用于尚未使用的科目，影响有限，记入平台待改进项。
 
 ### 6.2 维度（FIN-GL-006）
 
 两个分析维度：`department`、`location`，值分别来自 `FinDepartment`、`FinLocation`（时态，代码、名称、启用；平台 `LedgerDimension` 以实体为值来源）。
-科目可声明必填维度（`FinAccount.requiredDimension`，由日记账校验，F1b）。维度在账本行上（14c），日记账、发票、账单行可填；报表可按维度列示。CR-C 只需加维度值与报表列，不改代码。
+科目可声明必填维度（`FinAccount.requiredDimension`，由日记账校验，F1b）。
+平台以实体为维度值来源时接受当前所有值，不看 `active`；停用的值由日记账等单据的校验拒绝（F1b 起），账本本身仍接受（例如冲回旧分录）。维度在账本行上（14c），日记账、发票、账单行可填；报表可按维度列示。CR-C 只需加维度值与报表列，不改代码。
 
 ### 6.3 日记账
 

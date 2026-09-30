@@ -27,7 +27,8 @@ import static com.jabiz.finance.gl.AccountProcesses.list;
  * The fiscal calendar and period states (FIN-PC-001, FIN-PC-003; docs/finance/00-design.md section 7).
  * <ul>
  *   <li>{@code FIN_FISCAL_YEAR_CREATE}: a fiscal year and its twelve periods, and the adjustment period 13 when
- *       asked; every period starts open. Years do not overlap.</li>
+ *       asked; every period starts open. Years do not overlap: the overlap is refused up front, and two requests
+ *       racing each other are kept apart by the unique start day of the regular periods.</li>
  *   <li>{@code FIN_PERIOD_SET_STATE}: the general ledger's state of a period, open, soft-closed or closed.</li>
  *   <li>{@code FIN_PERIOD_SET_SUBLEDGER_STATE}: a subledger's state of a period, open or closed; a subledger may close
  *       before the general ledger.</li>
@@ -173,6 +174,7 @@ public final class PeriodProcesses {
             row.put("fiscalYear", BigDecimal.valueOf(year));
             row.put("periodNo", BigDecimal.valueOf(period.number()));
             row.put("periodKey", period.key());
+            row.put("adjustment", period.adjustment());
             row.put("startDate", period.start());
             row.put("endDate", period.end());
             row.put("status", "OPEN");

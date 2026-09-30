@@ -91,9 +91,9 @@ class SetupAndMasterDataIT extends FinanceItSupport {
             .isEqualTo("LEDGER_DIMENSION_INVALID");
         assertThat(find(GlEntities.ACCOUNT_DATASET, "accountCode", "6900").getFirst())
             .containsEntry("requiredDimension", "department");
-        run(AccountProcesses.CREATE, controller(), Map.of("accountCode", "6910", "accountName", "x",
+        assertThat(refused(AccountProcesses.CREATE, controller(), Map.of("accountCode", "6910", "accountName", "x",
             "financialType", "EXPENSE", "normalBalance", "DEBIT", "statementLine", "x",
-            "requiredDimension", "project")).expectStatus().isBadRequest();
+            "requiredDimension", "project"), 422)).isEqualTo(AccountProcesses.INVALID_VALUE);
     }
 
     private static Map<String, Object> posting(Map<String, String> dimensions) {
@@ -135,9 +135,9 @@ class SetupAndMasterDataIT extends FinanceItSupport {
         post("/api/datasets/" + GlEntities.EXCHANGE_RATE_DATASET + "/commit", treasurer, Map.of("changes", List.of(
             Map.of("action", "INSERT", "attributes", Map.of("fromCurrency", "EUR", "toCurrency", "USD",
                 "rateDate", "2026-01-31", "rateType", "SPOT", "rate", "1.1"))))).expectStatus().isBadRequest();
-        post("/api/datasets/" + GlEntities.EXCHANGE_RATE_DATASET + "/commit", treasurer, Map.of("changes", List.of(
-            Map.of("action", "INSERT", "attributes", Map.of("fromCurrency", "USD", "toCurrency", "USD",
-                "rateDate", "2026-01-31", "rateType", "CLOSING", "rate", "1"))))).expectStatus().is4xxClientError();
+        assertThat(commitRefused(GlEntities.EXCHANGE_RATE_DATASET, treasurer, Map.of("action", "INSERT",
+            "attributes", Map.of("fromCurrency", "USD", "toCurrency", "USD", "rateDate", "2026-01-31",
+                "rateType", "CLOSING", "rate", "1")))).isEqualTo(GlEntities.EXCHANGE_RATE_SAME_CURRENCY);
         assertOnlyInserted("fi_currency_version", "fi_exchange_rate_version", "fi_department_version",
             "fi_location_version");
     }

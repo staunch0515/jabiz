@@ -3,7 +3,9 @@ package com.jabiz.finance.it;
 import com.jabiz.finance.gl.AccountProcesses;
 import com.jabiz.finance.gl.AccountTypes;
 import com.jabiz.finance.gl.GlEntities;
+import com.jabiz.context.DataPeriod;
 import com.jabiz.runtime.ledger.LedgerEntities;
+import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -120,10 +122,26 @@ class ChartOfAccountsIT extends FinanceItSupport {
         run(AccountProcesses.CREATE, as("accountant", "fin.account.read", "fin.journal.prepare"), Map.of(
             "accountCode", code, "accountName", "x", "financialType", "ASSET", "normalBalance", "DEBIT",
             "statementLine", "x")).expectStatus().isForbidden();
+        // Codes are read whatever their case; unknown ones are refused.
+        String other = "1" + unique();
+        account(other, "asset", "debit", Map.of("controlClass", " bank ", "cashFlowClass", "cash",
+            "requiredDimension", "Department"));
+        assertThat(find(GlEntities.ACCOUNT_DATASET, "accountCode", other).getFirst())
+            .containsEntry("financialType", "ASSET").containsEntry("controlClass", "BANK")
+            .containsEntry("cashFlowClass", "CASH").containsEntry("requiredDimension", "department");
+        assertThat(refused(AccountProcesses.CREATE, controller(), Map.of("accountCode", code, "accountName", "x",
+            "financialType", "ASSET", "normalBalance", "DEBIT", "statementLine", "x", "controlClass", "PAYROLL"),
+            422)).isEqualTo(AccountProcesses.INVALID_VALUE);
+        assertThat(refused(AccountProcesses.UPDATE, controller(), Map.of("accountCode", other,
+            "accountName", "  "), 422)).isEqualTo(AccountProcesses.INVALID_VALUE);
+        assertThat(refused(AccountProcesses.UPDATE, controller(), Map.of("accountCode", other,
+            "requiredDimension", "project"), 422)).isEqualTo(AccountProcesses.INVALID_VALUE);
         // Accounts change only through their processes, never through the generic dataset API.
-        post("/api/datasets/" + GlEntities.ACCOUNT_DATASET + "/commit", as("admin", "*"), Map.of("changes",
-            List.of(Map.of("action", "INSERT", "attributes", Map.of("accountCode", code)))))
-            .expectStatus().is4xxClientError();
+        assertThat(commitRefused(GlEntities.ACCOUNT_DATASET, as("admin", "*"), Map.of("action", "INSERT",
+            "attributes", Map.of("accountCode", code, "ledgerAccountId", find(LedgerEntities.ACCOUNT_DATASET,
+                "accountCode", other).getFirst().get("accountId"), "financialType", "ASSET", "normalBalance", "DEBIT",
+                "statementLine", "x", "clearing", false))))
+            .isEqualTo("PROCESS_ONLY_DATASET");
     }
 
     /** FIN-GL-003 acceptance 2: a summary account groups others and takes no postings. */
@@ -160,6 +178,12 @@ class ChartOfAccountsIT extends FinanceItSupport {
 
         assertThat(refused(AccountProcesses.DELETE, controller(), Map.of("accountCode", used), 422))
             .isEqualTo(AccountProcesses.HAS_POSTINGS);
+        // A controller limited to a later period does not see the posting, but the ledger still keeps the account.
+        String limited = TestTokens.withinPeriod(tokens, new DataPeriod(clock.instant().plus(Duration.ofDays(200)),
+            null), "limited-controller", "fin.account.maintain");
+        assertThat(refused(AccountProcesses.DELETE, limited, Map.of("accountCode", used), 422))
+            .isEqualTo("STILL_REFERENCED");
+        assertThat(find(LedgerEntities.ACCOUNT_DATASET, "accountCode", used)).hasSize(1);
         assertThat(ok(AccountProcesses.DEACTIVATE, controller(), Map.of("accountCode", used)))
             .containsEntry("active", false).containsEntry("changed", true);
         assertThat(postRefused(used, cash)).isEqualTo("LEDGER_ACCOUNT_DISABLED");

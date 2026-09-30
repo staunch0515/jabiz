@@ -46,6 +46,28 @@ class PeriodStateIT extends FinanceItSupport {
         assertOnlyInserted("fi_fiscal_year_version", "fi_period_version");
     }
 
+    /** Two overlapping years asked for at the same moment: one is created, never both. */
+    @Test
+    void overlappingYearsCannotBothBeCreatedEvenAtOnce() throws Exception {
+        String controller = controller();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Future<Integer> first = pool.submit(() -> status(controller,
+                Map.of("fiscalYear", 2051)));
+            java.util.concurrent.Future<Integer> second = pool.submit(() -> status(controller,
+                Map.of("fiscalYear", 2052, "startDate", "2051-07-01")));
+            assertThat(List.of(first.get(), second.get())).filteredOn(s -> s == 200).hasSize(1);
+        } finally {
+            pool.shutdown();
+        }
+        assertThat(find(GlEntities.PERIOD_DATASET, "startDate", "2051-07-01")).hasSize(1);
+    }
+
+    private int status(String authorization, Map<String, Object> input) {
+        return run(PeriodProcesses.FISCAL_YEAR_CREATE, authorization, input).returnResult(String.class)
+            .getStatus().value();
+    }
+
     @Test
     void aFiscalYearIsNamedAfterTheYearItEndsIn() {
         Map<String, Object> year = ok(PeriodProcesses.FISCAL_YEAR_CREATE, controller(),
@@ -85,10 +107,11 @@ class PeriodStateIT extends FinanceItSupport {
             "OPEN"), 422)).isEqualTo(PeriodProcesses.PERIOD_NOT_FOUND);
         run(PeriodProcesses.SET_STATE, as("accountant", "fin.period.read", "fin.journal.prepare"),
             Map.of("periodKey", "2040-01", "status", "OPEN")).expectStatus().isForbidden();
-        // The generic dataset API cannot change a state or create a period.
-        post("/api/datasets/" + GlEntities.PERIOD_DATASET + "/commit", as("admin", "*"), Map.of("changes",
-            List.of(Map.of("action", "INSERT", "attributes", Map.of("periodKey", "2041-01")))))
-            .expectStatus().is4xxClientError();
+        // The generic dataset API cannot change a state.
+        Map<String, Object> january = find(GlEntities.PERIOD_DATASET, "periodKey", "2040-01").getFirst();
+        assertThat(commitRefused(GlEntities.PERIOD_DATASET, as("admin", "*"), Map.of("action", "UPDATE",
+            "id", january.get("periodId"), "version", 3, "attributes", Map.of("status", "OPEN"))))
+            .isEqualTo("PROCESS_ONLY_DATASET");
 
         assertThat(find(GlEntities.PERIOD_DATASET, "periodKey", "2040-01").getFirst())
             .containsEntry("status", "CLOSED");
