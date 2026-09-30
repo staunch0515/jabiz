@@ -146,6 +146,7 @@ public final class MetaModelExporter {
                 json.put("type", "temporal");
                 json.put("role", t.role().name());
             }
+            case SemanticKind.Date d -> json.put("type", "date");
             case SemanticKind.Code c -> {
                 json.put("type", "code");
                 json.put("dictUrn", c.dictUrn());

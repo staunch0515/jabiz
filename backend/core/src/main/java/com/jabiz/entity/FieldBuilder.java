@@ -54,6 +54,7 @@ public final class FieldBuilder {
     public FieldBuilder asSemanticIdentity(String urn) { kind = new SemanticKind.SemanticIdentity(urn); return this; }
     public FieldBuilder asMonetary(String currency, int scale) { kind = new SemanticKind.Monetary(currency, scale); return this; }
     public FieldBuilder asTemporal(TemporalRole role) { kind = new SemanticKind.Temporal(role); return this; }
+    public FieldBuilder asDate() { kind = new SemanticKind.Date(); return this; }
     public FieldBuilder asCode(String dictUrn, String... values) { kind = new SemanticKind.Code(dictUrn, List.of(values)); return this; }
     public FieldBuilder asVersion() { kind = new SemanticKind.Version(); return this; }
     public FieldBuilder asText(int maxLength) { kind = new SemanticKind.Text(maxLength, false); return this; }

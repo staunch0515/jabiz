@@ -2,6 +2,7 @@ package com.jabiz.runtime.retention;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
+import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.TemporalSpec;
 import com.jabiz.query.BoundValue;
 import com.jabiz.query.SqlIdentifiers;
@@ -79,7 +80,10 @@ public class RetentionReport {
         LocalDate through = policy.expiredThrough(today, policies.fiscalYearEnd());
         return guard.holds(engine, def.name).collectList().flatMap(holds -> {
             Map<String, BoundValue> params = new LinkedHashMap<>();
-            params.put("bound", BoundValue.of(through.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)));
+            // A date field is compared as a day; a time field by its UTC day, like the deletion guard.
+            boolean dateField = def.fields.get(policy.from()).kind() instanceof SemanticKind.Date;
+            params.put("bound", dateField ? BoundValue.of(through.plusDays(1))
+                : BoundValue.of(through.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)));
             String pk = "r." + column(def.primaryKeyColumn());
             List<String> covered = new ArrayList<>();
             for (int i = 0; i < holds.size(); i++) {

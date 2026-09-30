@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import { formatDecimal, toDecimal } from './decimal'
-import { displayLocale, formatDateTime } from './format'
+import { displayLocale, formatDate, formatDateTime } from './format'
 import { isI18nText, pickText, textsToWire } from './i18nText'
 import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './types'
 
@@ -26,6 +26,7 @@ export type Control =
   | 'decimal'
   | 'integer'
   | 'datetime'
+  | 'date'
   | 'switch'
   | 'select'
   | 'file'
@@ -44,6 +45,8 @@ export function controlOf(field: FieldMeta): Control {
       return 'integer'
     case 'temporal':
       return 'datetime'
+    case 'date':
+      return 'date'
     case 'bool':
       return 'switch'
     case 'code':
@@ -114,6 +117,8 @@ export function formatValue(
     }
     case 'temporal':
       return formatDateTime(value)
+    case 'date':
+      return formatDate(String(value))
     case 'bool':
       return value === true || value === 'true' ? t('list.yes') : t('list.no')
     case 'code': {
@@ -129,8 +134,8 @@ export function formatValue(
 }
 
 /**
- * A form value in the form the server expects: decimals as exact text, times as ISO-8601 instants, empty text as
- * absent. The same conversion feeds the client validation, so both judge the value that is actually sent.
+ * A form value in the form the server expects: decimals as exact text, times as ISO-8601 instants, dates as
+ * `YYYY-MM-DD`, empty text as absent. The same conversion feeds the client validation, so both judge the value that is actually sent.
  */
 export function toWireValue(field: FieldMeta, value: unknown): unknown {
   if (value === undefined) return undefined
@@ -140,6 +145,10 @@ export function toWireValue(field: FieldMeta, value: unknown): unknown {
       if (dayjs.isDayjs(value)) return value.toISOString()
       return value
     }
+    case 'date':
+      // A day, not a moment: the picker's local day as written, never shifted through UTC.
+      if (dayjs.isDayjs(value)) return value.format('YYYY-MM-DD')
+      return value === '' ? null : value
     case 'decimal':
     case 'integer':
       if (value === '') return null
@@ -169,6 +178,7 @@ export function toFormValue(field: FieldMeta, value: unknown): unknown {
   if (value === null || value === undefined) return undefined
   switch (controlOf(field)) {
     case 'datetime':
+    case 'date':
       return dayjs(String(value))
     case 'decimal': {
       const d = toDecimal(value)

@@ -28,6 +28,12 @@ public sealed interface SemanticKind {
     record Temporal(TemporalRole role) implements SemanticKind {}
 
     /**
+     * Calendar date without a time or a zone ({@link java.time.LocalDate}, column {@code date}): a posting date, a
+     * due date, a birthday. Unlike {@link Temporal} it names a day, not a moment, so it reads the same in every zone.
+     */
+    record Date() implements SemanticKind {}
+
+    /**
      * Dictionary code.
      *
      * @param dictUrn       dictionary the code belongs to

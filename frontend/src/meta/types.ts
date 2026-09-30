@@ -36,6 +36,7 @@ export type FieldMeta = FieldBase &
     | { type: 'semanticIdentity'; urn: string }
     | { type: 'monetary'; currency: string; scale: number }
     | { type: 'temporal'; role: 'EVENT_TIME' | 'SYSTEM_RECORDED' | 'VALID_FROM' | 'VALID_TO' }
+    | { type: 'date' }
     | { type: 'code'; dictUrn: string; allowedValues: string[] }
     | { type: 'version' }
     | { type: 'text'; maxLength?: number; multiline: boolean }

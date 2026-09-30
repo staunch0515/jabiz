@@ -52,8 +52,10 @@ public class RetentionChecks implements PlatformCheck {
             FieldDefinition field = def.fields.get(policy.from());
             if (field == null) {
                 problems.add(CheckProblem.error(CATEGORY, location, "field " + policy.from() + " is not declared"));
-            } else if (!(field.kind() instanceof SemanticKind.Temporal)) {
-                problems.add(CheckProblem.error(CATEGORY, location, "field " + policy.from() + " is not a time"));
+            } else if (!(field.kind() instanceof SemanticKind.Temporal)
+                && !(field.kind() instanceof SemanticKind.Date)) {
+                problems.add(CheckProblem.error(CATEGORY, location, "field " + policy.from()
+                    + " is not a time or a date"));
             }
         }
         return List.copyOf(problems);

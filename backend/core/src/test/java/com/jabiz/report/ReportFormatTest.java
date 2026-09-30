@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -40,6 +41,18 @@ class ReportFormatTest {
         assertThat(new ReportFormat(" ", ZoneId.of("Asia/Tokyo")).dateTime(time)).isEqualTo("2026-01-31 23:05:09");
         assertThat(new ReportFormat("en-US", ZoneOffset.UTC).dateTime(time)).contains("2026").contains("2:05:09");
         assertThat(new ReportFormat("en-US", ZoneOffset.UTC).zone()).isEqualTo(ZoneOffset.UTC);
+    }
+
+    @Test
+    void datesFollowTheRegionWithoutAZone() {
+        LocalDate date = LocalDate.of(2026, 1, 31);
+
+        assertThat(new ReportFormat(null, ZoneId.of("Asia/Tokyo")).date(date)).isEqualTo("2026-01-31");
+        assertThat(new ReportFormat("en-US", ZoneId.of("Pacific/Kiritimati")).date(date)).isEqualTo("Jan 31, 2026");
+        ReportColumn due = new ReportColumn("due", "Due", new SemanticKind.Date());
+        assertThat(due.date()).isTrue();
+        assertThat(due.temporal()).isFalse();
+        assertThat(new ReportFormat(null, ZoneOffset.UTC).value(due, date)).isEqualTo("2026-01-31");
     }
 
     @Test
