@@ -774,9 +774,18 @@ public final class JournalProcesses {
         return id;
     }
 
-    /** The journal entries imported from this document, if any (at most one). */
-    public static EntityQuery byExternalRef(String externalRef) {
-        return EntityQuery.builder().where(new QueryPredicate.Eq("externalRef", externalRef)).limit(1).build();
+    /**
+     * The external reference of a document of a source, the source in front: each source numbers its documents
+     * itself, so a journal import cannot take a payroll run's reference, nor the other way round.
+     */
+    public static String externalRef(String source, String document) {
+        return source + ":" + document;
+    }
+
+    /** The journal entries imported from this document of the source, if any (at most one). */
+    public static EntityQuery byExternalRef(String source, String document) {
+        return EntityQuery.builder().where(new QueryPredicate.Eq("externalRef", externalRef(source, document)))
+            .limit(1).build();
     }
 
     static void insertLines(ProcessContext ctx, Object journalId, List<JournalValidator.Line> lines) {

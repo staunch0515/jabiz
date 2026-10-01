@@ -15,7 +15,8 @@ import java.util.TreeSet;
 /**
  * A payroll provider's results as journal lines (FIN-DI-004): every provider code is read through its mapping to an
  * account, a side and, if the mapping names one, a department (otherwise the provider line's department); amounts of
- * the same account, side and department add up into one line, a negative amount counting on the other side. Codes
+ * the same account and department net into one line on the side of their sum, a negative amount counting on the
+ * other side. Codes
  * without a mapping are reported, not guessed. Pure computation, for the import process and its tests.
  */
 public final class PayrollLines {

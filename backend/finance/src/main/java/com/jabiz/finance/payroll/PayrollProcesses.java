@@ -15,6 +15,7 @@ import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -44,18 +45,27 @@ public final class PayrollProcesses {
     public static final String UNMAPPED = "FIN_PAYROLL_UNMAPPED";
     public static final String CONTROL_ACCOUNT = "FIN_PAYROLL_CONTROL_ACCOUNT";
     public static final String IMPORTED_ALREADY = "FIN_PAYROLL_IMPORTED_ALREADY";
+    public static final String NEGATIVE_BANK = "FIN_PAYROLL_NEGATIVE_BANK";
+    public static final String TOO_MANY_CODES = "FIN_PAYROLL_TOO_MANY_CODES";
+
+    /** Most provider codes in one run: the mappings are read in one query. */
+    static final int MAX_CODES = 500;
 
     /** Who stands for the exception of a payroll entry to a bank account: the mappings the controller keeps. */
     static final String MAPPING_EXCEPTION = "payroll mapping";
 
+    /** A run number: its own prefix, apart from every numbering sequence of journal entries. */
+    public static final String RUN = "PAYROLL-[A-Z0-9][A-Z0-9-]{0,21}";
+
     public record ProviderLineInput(@NotBlank @Size(max = 40) String code, @Size(max = 20) String department,
-        @NotNull BigDecimal amount) {}
+        @NotNull @Digits(integer = 13, fraction = 2) BigDecimal amount) {}
 
     /**
-     * @param run    the provider's run, the entry's number: capitals, digits and hyphens
+     * @param run    the provider's run, the entry's number: "PAYROLL-" and capitals, digits and hyphens, so it never
+     *               takes a number the journal sequences give out ("JE-0123")
      * @param submit whether to submit it at once; yes when absent
      */
-    public record PayrollInput(@NotBlank @Pattern(regexp = "[A-Z0-9][A-Z0-9-]{0,29}") String run,
+    public record PayrollInput(@NotBlank @Pattern(regexp = RUN) String run,
         @NotNull LocalDate payDate, @NotBlank @Size(max = 500) String description,
         @NotNull @Size(min = 1, max = 2000) List<@Valid @NotNull ProviderLineInput> lines, Boolean submit) {}
 
@@ -81,11 +91,11 @@ public final class PayrollProcesses {
                     ? ctx.get(SUBMITTED, JournalProcesses.JournalOutput.class)
                     : ctx.get(OUTPUT, JournalProcesses.JournalOutput.class))
                 .step("Look for the run", QueryEntities.of(JournalEntities.JOURNAL_DATASET,
-                    ctx -> JournalProcesses.byExternalRef(input(ctx).run()), FOUND))
+                    ctx -> JournalProcesses.byExternalRef(JournalEntities.PAYROLL, input(ctx).run()), FOUND))
                 .step("Load the mappings", QueryEntities.of(PayrollEntities.MAPPING_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.In("providerCode", new ArrayList<>(codes(ctx))),
-                        new QueryPredicate.Eq("active", true)))).limit(Math.max(1, codes(ctx).size())).build(),
+                        new QueryPredicate.In("providerCode", codes(ctx).stream().limit(MAX_CODES).<Object>map(c -> c).toList()),
+                        new QueryPredicate.Eq("active", true)))).limit(Math.clamp(codes(ctx).size(), 1, MAX_CODES)).build(),
                     MAPPINGS))
                 .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("accountCode",
@@ -101,6 +111,11 @@ public final class PayrollProcesses {
         if (!list(ctx, FOUND).isEmpty()) {
             ctx.reject(new Violation("run", IMPORTED_ALREADY, "Payroll run " + input.run() + " was imported already",
                 Map.of("run", input.run())));
+            return;
+        }
+        if (codes(ctx).size() > MAX_CODES) {
+            ctx.reject(new Violation("lines", TOO_MANY_CODES, "A payroll run has at most " + MAX_CODES
+                + " provider codes", Map.of("max", MAX_CODES)));
             return;
         }
         PayrollLines.Result result = PayrollLines.lines(input.lines().stream()
@@ -126,13 +141,41 @@ public final class PayrollProcesses {
                     Map.of("accountCode", line.accountCode(), "controlClass", controlClass)));
             }
         }
+        // The exception covers paying out what the provider reports, on the mapping's side: a negative amount would
+        // turn the bank line round, which only a controller looking at the entry may allow.
+        Map<String, PayrollLines.Mapping> mappings = mappings(ctx);
+        for (ProviderLineInput line : input.lines()) {
+            PayrollLines.Mapping mapping = mappings.get(line.code().trim());
+            if (mapping != null && "BANK".equals(controlClasses.get(mapping.accountCode()))
+                && line.amount().signum() < 0) {
+                ctx.reject(new Violation("lines", NEGATIVE_BANK, "Provider code " + mapping.code() + " pays out of bank"
+                    + " account " + mapping.accountCode() + " and cannot be negative",
+                    Map.of("code", mapping.code(), "accountCode", mapping.accountCode())));
+            }
+        }
+        // Saved as a numbered draft it could not be deleted again, so it must be a postable entry from the start.
+        for (Violation problem : JournalValidator.checkLines(result.lines())) {
+            ctx.reject(problem);
+        }
+        if (result.lines().size() < 2) {
+            ctx.reject(new Violation("lines", JournalValidator.TOO_FEW_LINES, "An entry has at least two lines",
+                Map.of()));
+        }
+        JournalValidator.Totals sums = JournalValidator.totals(result.lines());
+        if (!sums.balanced()) {
+            ctx.reject(new Violation("lines", JournalValidator.UNBALANCED, "Debits " + sums.debit().toPlainString()
+                + " and credits " + sums.credit().toPlainString() + " differ by "
+                + sums.difference().abs().toPlainString(), Map.of("debit", sums.debit(), "credit", sums.credit(),
+                "difference", sums.difference().abs())));
+        }
         if (ctx.hasViolations()) {
             return;
         }
         String reason = banks.isEmpty() ? null : "Payroll run " + input.run() + " pays out of " + String.join(", ",
             banks) + " as the payroll mapping says";
         Object id = JournalProcesses.insertDraft(ctx, input.payDate(), input.payDate(), input.description(),
-            JournalEntities.PAYROLL, input.run(), input.run(), result.lines(),
+            JournalEntities.PAYROLL, JournalProcesses.externalRef(JournalEntities.PAYROLL, input.run()), input.run(),
+            result.lines(),
             reason == null ? null : MAPPING_EXCEPTION, reason);
         JournalValidator.Totals totals = JournalValidator.totals(result.lines());
         ctx.put(OUTPUT, new JournalProcesses.JournalOutput(String.valueOf(id), input.run(), JournalEntities.DRAFT,

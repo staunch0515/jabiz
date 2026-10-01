@@ -75,7 +75,7 @@ class FinanceImports {
      * @param description of the entry
      * @param submit      whether it is submitted at once; yes when absent
      */
-    record PayrollParams(@NotBlank @Pattern(regexp = "[A-Z0-9][A-Z0-9-]{0,29}") String run, @NotNull LocalDate payDate,
+    record PayrollParams(@NotBlank @Pattern(regexp = PayrollProcesses.RUN) String run, @NotNull LocalDate payDate,
         @NotBlank @Size(max = 500) String description, Boolean submit) {}
 
     @Bean
@@ -161,7 +161,7 @@ class FinanceImports {
             .field("memo", NAME, false, "memo")
             .field("department", CODE, false, "department")
             .field("location", CODE, false, "location")
-            .perGroup(row -> row.text("document"), JournalImportProcesses.IMPORT_ENTRY, 1, FinanceImports::journal)
+            .perGroup(row -> row.text("document").strip(), JournalImportProcesses.IMPORT_ENTRY, 1, FinanceImports::journal)
             .totals("debit", "credit")
             .permissions(FinancePermissions.JOURNAL_PREPARE)
             .build();

@@ -34,7 +34,7 @@ public final class JournalImportProcesses {
      * @param externalRef the document number in the source, e.g. the legacy entry number
      * @param submit      whether to submit it at once; yes when absent
      */
-    public record ImportedEntry(@NotBlank @Size(max = 100) String externalRef, @NotNull LocalDate postingDate,
+    public record ImportedEntry(@NotBlank @Size(max = 90) String externalRef, @NotNull LocalDate postingDate,
         LocalDate documentDate, @NotBlank @Size(max = 500) String description,
         @NotNull @Size(max = JournalValidator.MAX_LINES) List<JournalProcesses.@Valid @NotNull LineInput> lines,
         Boolean submit) {}
@@ -55,7 +55,8 @@ public final class JournalImportProcesses {
                     ? ctx.get(SUBMITTED, JournalProcesses.JournalOutput.class)
                     : ctx.get(OUTPUT, JournalProcesses.JournalOutput.class))
                 .step("Look for the document", QueryEntities.of(JournalEntities.JOURNAL_DATASET,
-                    ctx -> JournalProcesses.byExternalRef(input(ctx).externalRef().trim()), FOUND))
+                    ctx -> JournalProcesses.byExternalRef(JournalEntities.IMPORT,
+                        input(ctx).externalRef().trim()), FOUND))
                 .compute("Save the draft", (metadata, ctx) -> draft(ctx))
                 .step("Save", SaveChanges.now())
                 .step("Submit it", CallProcess.when(ctx -> ctx.contains(SUBMIT_INPUT), JournalProcesses.SUBMIT, 1,
@@ -78,7 +79,7 @@ public final class JournalImportProcesses {
             return;
         }
         Object id = JournalProcesses.insertDraft(ctx, input.postingDate(), input.documentDate(), input.description(),
-            JournalEntities.IMPORT, ref, null, lines, null, null);
+            JournalEntities.IMPORT, JournalProcesses.externalRef(JournalEntities.IMPORT, ref), null, lines, null, null);
         JournalValidator.Totals totals = JournalValidator.totals(lines);
         ctx.put(OUTPUT, new JournalProcesses.JournalOutput(String.valueOf(id), null, JournalEntities.DRAFT,
             totals.debit(), totals.credit(), null, null, null, null));

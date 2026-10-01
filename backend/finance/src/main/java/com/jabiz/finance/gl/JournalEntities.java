@@ -109,7 +109,7 @@ public final class JournalEntities {
         eb.field("reversedById", f -> f.physicalColumn("reversed_by_id").processOnly().asReference(JOURNAL));
         // A recurring template's entry of one period, "PREPAID-INS/2026-01": made once (FIN-GL-017).
         eb.field("recurringKey", f -> f.physicalColumn("recurring_key").immutable(true).asText(150));
-        // The document an imported entry came from ("PAYROLL-2601"): each is imported once (FIN-GL-019, DI-006).
+        // The document an imported entry came from, behind its source ("PAYROLL:PAYROLL-2601"): each is imported once (FIN-GL-019, DI-006).
         eb.field("externalRef", f -> f.physicalColumn("external_ref").immutable(true).asText(100));
         eb.field("totalDebit", f -> f.physicalColumn("total_debit").required(true).processOnly()
             .asMonetary(USD, CENTS));

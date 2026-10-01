@@ -35,8 +35,8 @@ class JournalImportIT extends FinanceItSupport {
             LEG-2,2026-01-21,Legacy fees,2100,,100.00
             """, "commit", null, null, 422);
         assertThat(issues(refused)).contains("1:" + JournalValidator.UNBALANCED, "3:" + JournalValidator.ACCOUNT_UNKNOWN);
-        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "LEG-1")).isEmpty();
-        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "LEG-2")).isEmpty();
+        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "IMPORT:LEG-1")).isEmpty();
+        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "IMPORT:LEG-2")).isEmpty();
 
         // A good file: one entry per document; the small one posts at once, the large one waits for approval.
         Map<String, Object> committed = importCsv(IMPORT, accountant, """
@@ -47,12 +47,12 @@ class JournalImportIT extends FinanceItSupport {
             LEG-4,2026-01-21,,2100,,12000.00,,
             """, "commit", null, null, 200);
         assertThat(committed).containsEntry("committed", true).containsEntry("units", 2);
-        Map<String, Object> small = find(JournalEntities.JOURNAL_DATASET, "externalRef", "LEG-3").getFirst();
+        Map<String, Object> small = find(JournalEntities.JOURNAL_DATASET, "externalRef", "IMPORT:LEG-3").getFirst();
         assertThat(small).containsEntry("source", "IMPORT").containsEntry("status", "POSTED")
             .containsEntry("description", "Legacy accrual");
         assertThat((String) small.get("glNo")).startsWith("GJ-IMP-2026-");
         assertThat((String) small.get("journalNo")).startsWith("JE-");
-        Map<String, Object> large = find(JournalEntities.JOURNAL_DATASET, "externalRef", "LEG-4").getFirst();
+        Map<String, Object> large = find(JournalEntities.JOURNAL_DATASET, "externalRef", "IMPORT:LEG-4").getFirst();
         assertThat(large).containsEntry("status", "SUBMITTED");
         assertThat(large.get("approvalRequestId")).isNotNull();
 
@@ -69,7 +69,7 @@ class JournalImportIT extends FinanceItSupport {
             LEG-5,2026-01-23,Legacy rent,6200,800.00,
             LEG-5,2026-01-23,Legacy rent,2100,,800.00
             """, "commit", null, Map.of("submit", false), 200);
-        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "LEG-5").getFirst())
+        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "IMPORT:LEG-5").getFirst())
             .containsEntry("status", "DRAFT").containsEntry("preparer", "accountant");
 
         // A control account is refused as for a typed entry.

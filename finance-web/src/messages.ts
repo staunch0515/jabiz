@@ -127,6 +127,8 @@ export const messages = {
         REVERSING: 'Reversal',
         AUTO_REVERSING: 'Automatic reversal',
         IMPORT: 'Import',
+        OPENING: 'Opening balances',
+        PAYROLL: 'Payroll',
       },
     },
   },

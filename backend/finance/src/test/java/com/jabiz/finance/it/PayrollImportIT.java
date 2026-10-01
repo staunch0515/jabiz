@@ -1,6 +1,7 @@
 package com.jabiz.finance.it;
 
 import com.jabiz.finance.gl.JournalEntities;
+import com.jabiz.finance.gl.JournalValidator;
 import com.jabiz.finance.payroll.PayrollEntities;
 import com.jabiz.finance.payroll.PayrollProcesses;
 import com.jabiz.finance.setup.FinanceRoles;
@@ -68,7 +69,7 @@ class PayrollImportIT extends FinanceItSupport {
         Map<String, Object> refused = importCsv("finance.payroll", accountant,
             providerFile() + "BONUS,,100.00\n", "commit", null, params("PAYROLL-2600"), 422);
         assertThat(issues(refused)).contains("1:" + PayrollProcesses.UNMAPPED);
-        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "PAYROLL-2600")).isEmpty();
+        assertThat(find(JournalEntities.JOURNAL_DATASET, "externalRef", "PAYROLL:PAYROLL-2600")).isEmpty();
 
         Map<String, Object> committed = importCsv("finance.payroll", accountant, providerFile(), "commit", null,
             params("PAYROLL-2601"), 200);
@@ -76,7 +77,7 @@ class PayrollImportIT extends FinanceItSupport {
         Map<String, Object> journal = find(JournalEntities.JOURNAL_DATASET, "journalNo", "PAYROLL-2601").getFirst();
         // Above 10,000.00: it waits for approval like any entry; the bank line stands on the mapping's exception.
         assertThat(journal).containsEntry("source", "PAYROLL").containsEntry("status", "SUBMITTED")
-            .containsEntry("externalRef", "PAYROLL-2601").containsEntry("postingDate", "2026-01-30")
+            .containsEntry("externalRef", "PAYROLL:PAYROLL-2601").containsEntry("postingDate", "2026-01-30")
             .containsEntry("exceptionBy", "payroll mapping");
         Map<String, BigDecimal> lines = new java.util.TreeMap<>();
         for (Map<String, Object> line : find(JournalEntities.LINE_DATASET, "journalId", journal.get("journalId"))) {
@@ -106,6 +107,30 @@ class PayrollImportIT extends FinanceItSupport {
             RECEIVABLE_DEBIT,10.00
             RECEIVABLE_OFFSET,10.00
             """, "commit", null, params("PAYROLL-2699"), 422))).contains("1:" + PayrollProcesses.CONTROL_ACCOUNT);
+
+        // The run is the entry's number, so it keeps its own prefix: never a number the journal sequence gives out.
+        Map<String, Object> direct = new java.util.LinkedHashMap<>(params("JE-0123"));
+        direct.put("lines", List.of(Map.of("code", "GROSS_WAGES", "amount", 10), Map.of("code", "NET_PAY",
+            "amount", 10)));
+        post("/api/processes/" + PayrollProcesses.IMPORT_RUN + "/latest", accountant, direct)
+            .expectStatus().isBadRequest();
+
+        // The bank's exception covers paying out on the mapping's side, not a negative amount turning it round.
+        assertThat(issues(importCsv("finance.payroll", accountant, """
+            code,amount
+            GROSS_WAGES,-10.00
+            NET_PAY,-10.00
+            """, "commit", null, params("PAYROLL-2698"), 422))).contains("1:" + PayrollProcesses.NEGATIVE_BANK);
+
+        // Kept as a draft, a run must still be a postable entry: a numbered draft cannot be deleted.
+        Map<String, Object> draft = new java.util.HashMap<>(params("PAYROLL-2697"));
+        draft.put("submit", false);
+        assertThat(issues(importCsv("finance.payroll", accountant, """
+            code,amount
+            GROSS_WAGES,10.00
+            EMPLOYER_TAX,10.00
+            """, "commit", null, draft, 422))).contains("1:" + JournalValidator.UNBALANCED);
+        assertThat(find(JournalEntities.JOURNAL_DATASET, "journalNo", "PAYROLL-2697")).isEmpty();
         assertOnlyInserted("fi_payroll_mapping_version", "fi_journal_version", "fi_journal_line_version");
     }
 }
