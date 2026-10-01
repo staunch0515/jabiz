@@ -32,6 +32,13 @@ test('the application page lists stock and receives goods', async ({ page, reque
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`Product ${code}`)
   await expect(rows.first()).toContainText('5')
+
+  // The receipt is written once (04 section 5.4): its generated list offers viewing, never editing or deleting.
+  await page.getByTestId('receipts-link').click()
+  await expect(page).toHaveURL(/\/data\/urn%3Ajabiz%3Adataset%3Adefault%3AStockReceipt$/)
+  await expect(page.getByTestId('row-view').first()).toBeVisible()
+  await expect(page.getByTestId('row-edit')).toHaveCount(0)
+  await expect(page.getByTestId('row-delete')).toHaveCount(0)
 })
 
 test('a user without the permission has no menu entry and the server refuses the page its data', async ({

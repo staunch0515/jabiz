@@ -248,6 +248,9 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
             : t('journal.waiting', { journalNo: output.journalNo }),
         )
         shownVersion.current = null
+        // A read started before the submission (on opening the just-saved entry) would answer with the draft, and an
+        // invalidation joins a read in flight while the entry has no data yet: cancel it, then read again.
+        await queryClient.cancelQueries({ queryKey: ['fin', 'journal', id] })
         await queryClient.invalidateQueries({ queryKey: ['fin', 'journal', id] })
       } catch (error) {
         showRefusal(error, rows)

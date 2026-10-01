@@ -154,6 +154,7 @@ final class TemporalWriter {
         EntityDefinition def = w.def();
         return Mono.defer(() -> {
             rules.requireWritable(def);
+            rules.requireChangeable(def, instance.id());
             UUID id = id(def, instance.id());
             Map<String, Object> incoming = new LinkedHashMap<>(
                 EntityValidator.requireValid(def, instance.attributes(), w.validation(), false));
@@ -190,6 +191,7 @@ final class TemporalWriter {
         EntityDefinition def = w.def();
         return Mono.defer(() -> {
             rules.requireWritable(def);
+            rules.requireChangeable(def, instance.id());
             UUID id = id(def, instance.id());
             return timeline(w, id).flatMap(timeline -> {
                 EntityVersion base = requireBase(w, timeline, id, instance.version());
@@ -209,6 +211,7 @@ final class TemporalWriter {
         EntityDefinition def = w.def();
         return Mono.defer(() -> {
             rules.requireWritable(def);
+            rules.requireChangeable(def, instance.id());
             UUID id = id(def, instance.id());
             return timeline(w, id).flatMap(timeline -> {
                 // Something must still take effect then: a cancelled schedule cannot be cancelled again.

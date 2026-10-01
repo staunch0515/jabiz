@@ -1,11 +1,13 @@
 {
   // Base of an application's admin extension (decision D22): `{"extends": "<path>/frontend/tsconfig.extension.json",
   // "include": ["src"]}`. The extension has no node_modules of its own; its imports resolve to this project's.
+  // react-router declares its types only under "exports", which a mapping to the package directory does not read.
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.extension.tsbuildinfo",
     "paths": {
       "@jabiz/admin": ["./src/lib/index.ts"],
+      "react-router": ["./node_modules/react-router/dist/production/index.d.ts"],
       "*": ["./node_modules/@types/*", "./node_modules/*"]
     },
     "typeRoots": ["./node_modules/@types", "./node_modules"]

@@ -43,6 +43,15 @@ describe('JournalListPage', () => {
     expect(screen.queryByTestId('new-journal')).not.toBeInTheDocument()
   })
 
+  it('shows the latest numbered entries first', async () => {
+    const later = { ...ROWS[0], journalId: 'c', journalNo: 'JE-0002', description: 'Rent accrual' }
+    calls.loadRegister.mockResolvedValue({ items: [ROWS[0], ROWS[1], later], offset: 0, limit: 500, total: 3 })
+    renderAt('/gl/journals', [{ path: '/gl/journals', element: <JournalListPage /> }])
+    await screen.findByText('Rent accrual')
+    const order = screen.getAllByRole('link').map((link) => link.textContent)
+    expect(order).toEqual(['JE-0002', 'JE-0001', '(draft)'])
+  })
+
   it('says when the register shows only the first entries', async () => {
     calls.loadRegister.mockResolvedValue({ items: ROWS, offset: 0, limit: 500, total: 812 })
     renderAt('/gl/journals', [{ path: '/gl/journals', element: <JournalListPage /> }])

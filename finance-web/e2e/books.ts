@@ -123,15 +123,12 @@ export async function prepareBooks(request: APIRequestContext) {
   prepared = true
 }
 
-/** Signs in on the sign-in page, then opens the journal register from the menu. */
+/** Signs in on the sign-in page, which lands on the extension's home: the journal register. */
 export async function signIn(page: Page, user: User) {
   await page.goto('/login')
   await page.getByPlaceholder('User name').fill(user.userName)
   await page.getByPlaceholder('Password').fill(user.password)
   await page.getByRole('button', { name: /Sign\s*in/ }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'))
-  await page.getByRole('menuitem', { name: 'General ledger' }).click()
-  await page.getByRole('link', { name: 'Journal entries' }).click()
   await page.waitForURL('**/gl/journals')
 }
 

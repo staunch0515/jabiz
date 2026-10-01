@@ -133,6 +133,27 @@ describe('JournalEntryPage', () => {
     expect(cell('Account', 2)).toHaveAttribute('title', 'Account 2100 is a control account')
   }, 20_000)
 
+  it('shows the submitted entry even when the read of the just-saved entry was still on its way', async () => {
+    const draft: LoadedJournal = { ...STORED, version: 1, journal: { ...STORED.journal, journalId: 'j-9', status: 'DRAFT', journalNo: null } }
+    let answerFirstRead: (value: LoadedJournal) => void = () => undefined
+    calls.saveJournal.mockResolvedValue({ journalId: 'j-9', status: 'DRAFT' })
+    // The read the page starts on opening the saved entry answers only after the submission: with the draft.
+    calls.loadJournal
+      .mockImplementationOnce(() => new Promise<LoadedJournal>((resolve) => (answerFirstRead = resolve)))
+      .mockResolvedValue({ ...STORED, journal: { ...STORED.journal, journalId: 'j-9' } })
+    calls.submitJournal.mockImplementation(async () => {
+      await waitFor(() => expect(calls.loadJournal).toHaveBeenCalledTimes(1))
+      return { journalId: 'j-9', journalNo: 'JE-0002', status: 'SUBMITTED' }
+    })
+    await fillNewEntry()
+    fireEvent.keyDown(cell('Memo', 1), { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(calls.submitJournal).toHaveBeenCalledTimes(1))
+    answerFirstRead(draft)
+
+    await waitFor(() => expect(screen.getByTestId('journal-status')).toHaveTextContent('Waiting for approval'))
+    expect(screen.getByTestId('page-title')).toHaveTextContent('Journal entry JE-0002')
+  }, 20_000)
+
   it('submits a rejected entry again as a new request', async () => {
     calls.loadJournal.mockResolvedValue({ ...STORED, journal: { ...STORED.journal, status: 'REJECTED' } })
     calls.submitJournal.mockResolvedValue({ journalId: 'j-1', journalNo: 'JE-0002', status: 'SUBMITTED' })

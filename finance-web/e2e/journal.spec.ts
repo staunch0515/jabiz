@@ -15,6 +15,7 @@ test('a 50-line journal pasted from a spreadsheet is corrected, submitted, appro
   await signIn(accountant, ACCOUNTANT)
   await accountant.getByTestId('new-journal').click()
   await expect(accountant).toHaveURL(/\/gl\/journals\/new$/)
+  await expect(accountant.getByTestId('journal-entry-page')).toBeVisible()
 
   const description = unique('Quarterly professional fees')
   await accountant.getByLabel('Posting date', { exact: true }).fill('2026-01-31')
