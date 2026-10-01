@@ -102,6 +102,11 @@ public final class FinancePermissions {
     public static final String INVOICE_APPROVE = "fin.invoice.approve";
     /** Keep the recurring invoice templates (FIN-AR-014). */
     public static final String RECURRING_INVOICE_MAINTAIN = "fin.invoice.recurring";
+    /** Issue and send the documents of posted invoices and credit memos to customers (FIN-AR-005). */
+    public static final String INVOICE_ISSUE = "fin.invoice.issue";
+
+    /** Keep the company's profile: the name, address and remittance instructions its documents show (FIN-AR-005). */
+    public static final String COMPANY_MAINTAIN = "fin.company.maintain";
 
     private FinancePermissions() {}
 }

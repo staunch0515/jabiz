@@ -1,0 +1,233 @@
+# Invoice to cash with sales tax, FIN-SCN-03 (ROADMAP F3d), for the documents entered here: the receivables clerk
+# posts INV-1004 (components taxed in Austin, the service line not) and issues its document; the clerk may not post
+# the credit memo CM-2001 they prepared, the controller does, and it is applied to INV-1004 and issued; Cascade's and
+# Lone Star's January invoices follow (numbered INV-1005 and INV-1006 here: the euro invoice is FinScn03IT's); Lone
+# Star's check is recorded for Acme and applied to INV-1004, taken back, moved to Lone Star and applied to its
+# invoice, the history kept. The aging and sales tax report on 31 January follow; the snapshot keeps the documents,
+# their tax, the applications, the receipt and the company's profile. The legacy open items and their receipts are
+# FinScn03IT's: a replay cannot name an imported item. The sample's files as they are, except that the chart marks
+# its control accounts and has the unapplied cash and sales discount accounts the receivables settings need.
+name: Invoice to cash with sales tax
+clock: 2026-01-31T15:00:00Z
+actor: { id: clerk, permissions: ["*"] }
+steps:
+  - import: finance.chart
+    file:
+      name: chart-of-accounts.csv
+      content: |
+        code,name,type,normal_balance,statement_line,control_class,clearing
+        1010,Cash - Operating (Lakeside National Bank),Asset,D,Cash and cash equivalents,BANK,false
+        1050,Cash - Savings (Lakeside National Bank),Asset,D,Cash and cash equivalents,BANK,false
+        1200,Accounts Receivable,Asset,D,"Accounts receivable, net",AR,false
+        1210,Allowance for Doubtful Accounts,Asset,C,"Accounts receivable, net",,false
+        1250,Unapplied Cash,Liability,C,Accrued liabilities,,true
+        1300,Prepaid Expenses,Asset,D,Prepaid expenses,,false
+        1500,Machinery and Equipment,Asset,D,"Property and equipment, net",FA_COST,false
+        1510,Vehicles,Asset,D,"Property and equipment, net",FA_COST,false
+        1520,Computer Equipment,Asset,D,"Property and equipment, net",FA_COST,false
+        1590,Accumulated Depreciation,Asset,C,"Property and equipment, net",FA_ACCUM,false
+        2000,Accounts Payable,Liability,C,Accounts payable,AP,false
+        2100,Accrued Liabilities,Liability,C,Accrued liabilities,,false
+        2150,Payroll Liabilities,Liability,C,Accrued liabilities,,false
+        2200,Sales Tax Payable,Liability,C,Sales tax payable,,false
+        2300,Line of Credit,Liability,C,Line of credit,,false
+        2400,Income Tax Payable,Liability,C,Income tax payable,,false
+        3000,Common Stock,Equity,C,Common stock,,false
+        3100,Additional Paid-in Capital,Equity,C,Additional paid-in capital,,false
+        3200,Retained Earnings,Equity,C,Retained earnings,,false
+        4000,Product Sales,Revenue,C,Revenue,,false
+        4100,Service Revenue,Revenue,C,Revenue,,false
+        4900,Sales Returns and Allowances,Revenue,D,Revenue,,false
+        4950,Sales Discounts,Revenue,D,Revenue,,false
+        5000,Cost of Goods Sold - Purchases,Expense,D,Cost of goods sold,,false
+        6100,Salaries and Wages,Expense,D,Operating expenses,,false
+        6150,Payroll Taxes,Expense,D,Operating expenses,,false
+        6200,Rent,Expense,D,Operating expenses,,false
+        6300,Utilities,Expense,D,Operating expenses,,false
+        6400,Professional Fees,Expense,D,Operating expenses,,false
+        6500,Software Subscriptions,Expense,D,Operating expenses,,false
+        6600,Insurance,Expense,D,Operating expenses,,false
+        6700,Depreciation Expense,Expense,D,Operating expenses,,false
+        6800,Bank Fees,Expense,D,Operating expenses,,false
+        7100,Interest Expense,Other,D,"Other income (expense), net",,false
+        7200,Realized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net",,false
+        7210,Unrealized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net",,false
+        7300,Interest Income,Other,C,"Other income (expense), net",,false
+        8000,Income Tax Expense,Tax,D,Income tax expense,,false
+    commit: true
+    expect: { committed: true, processed: 38 }
+  - process: FIN_FISCAL_YEAR_CREATE@latest
+    input: { fiscalYear: 2026, adjustmentPeriod: true }
+  - process: FIN_SETUP@latest
+    input: {}
+  - import: finance.opening_balances
+    file:
+      name: opening-balances.csv
+      content: |
+        date,account,debit,credit
+        2025-12-31,1010,250000.00,
+        2025-12-31,1050,100000.00,
+        2025-12-31,1200,86500.00,
+        2025-12-31,1210,,4000.00
+        2025-12-31,1300,12000.00,
+        2025-12-31,1500,120000.00,
+        2025-12-31,1510,70000.00,
+        2025-12-31,1590,,58000.00
+        2025-12-31,2000,,41300.00
+        2025-12-31,2100,,15000.00
+        2025-12-31,2200,,3300.00
+        2025-12-31,2300,,50000.00
+        2025-12-31,2400,,8000.00
+        2025-12-31,3000,,100000.00
+        2025-12-31,3100,,200000.00
+        2025-12-31,3200,,158900.00
+    commit: true
+    expect: { committed: true }
+  - import: finance.tax_codes
+    file:
+      name: tax-codes.csv
+      content: |
+        code,description,rate_percent,note
+        TX-AUSTIN,"Texas, City of Austin combined rate",8.25,state 6.25% + local 2.00%
+        TX-RESALE,Texas sale for resale (exempt with certificate),0.00,exemption certificate required
+        OR-NONE,Oregon (no general sales tax),0.00,no sales tax
+        EXPORT,Export outside the United States,0.00,not subject to US sales tax
+        NT,Non-taxable service line,0.00,line-level override
+    params: { ratesFrom: "2025-01-01" }
+    commit: true
+    expect: { committed: true }
+  - note: The customers in US dollars; Bayer's account is in euros, a currency kept on the data pages.
+    import: finance.customers
+    file:
+      name: customers.csv
+      content: |
+        id,name,location,currency,tax_code,terms_days,exemption_certificate
+        C100,"Acme Robotics, Inc.",TX (Austin),USD,TX-AUSTIN,30,
+        C200,Cascade Machining LLC,OR (Portland),USD,OR-NONE,30,
+        C300,"Lone Star Distributors, Inc.",TX (Dallas),USD,TX-RESALE,30,"TX 01-339 resale certificate RC-3301, valid to 2027-12-31"
+    commit: true
+    expect: { committed: true, processed: 3 }
+  - process: FIN_AR_SETTINGS_SET@latest
+    input: { receivableAccount: "1200", allowanceAccount: "1210", returnsAccount: "4900", salesTaxAccount: "2200",
+             unappliedCashAccount: "1250", discountAccount: "4950" }
+  - process: FIN_COMPANY_PROFILE_SET@latest
+    input: { legalName: "Northwind Components, Inc.", street: 500 Congress Avenue, city: Austin, state: TX,
+             postalCode: "78701", country: United States, remittance: ACH or wire to Lakeside National Bank }
+  - note: Acme's payables contact, master data the sample's file does not have.
+    process: FIN_CUSTOMER_SAVE@latest
+    input: { customerCode: C100, contactName: Dana Fox, contactEmail: ap@acme-robotics.example }
+
+  - note: INV-1004 is posted with 3,300.00 tax (FIN-EXP-02) and its document issued.
+    process: FIN_INVOICE_SAVE@latest
+    input:
+      customerCode: C100
+      invoiceDate: "2026-01-06"
+      lines:
+        - { description: Components, quantity: 100, unitPrice: 400.00, revenueAccount: "4000" }
+        - { description: Engineering services, quantity: 1, unitPrice: 10000.00, revenueAccount: "4100", taxCode: NT }
+    save: { inv1004: $.invoiceId }
+  - process: FIN_INVOICE_POST@latest
+    input: { invoiceId: "${inv1004}" }
+    expectOutput: { invoiceNo: INV-1004, status: POSTED, dueDate: "2026-02-05", subtotal: 50000.00, taxTotal: 3300.00,
+                    total: 53300.00 }
+  - process: FIN_INVOICE_ISSUE@latest
+    input: { invoiceId: "${inv1004}" }
+    expectOutput: { documentNo: INV-1004 }
+
+  - note: CM-2001 for the returned components, at INV-1004's rate, posted by someone other than its preparer.
+    process: FIN_INVOICE_SAVE@latest
+    input:
+      kind: CREDIT_MEMO
+      customerCode: C100
+      invoiceDate: "2026-01-10"
+      originalInvoiceId: "${inv1004}"
+      lines:
+        - { description: Returned components, quantity: 5, unitPrice: 400.00 }
+    save: { cm2001: $.invoiceId }
+  - expectError:
+      process: FIN_INVOICE_POST@latest
+      input: { invoiceId: "${cm2001}" }
+      status: 422
+      ruleCode: FIN_INVOICE_OWN_DOCUMENT
+  - process: FIN_INVOICE_POST@latest
+    actor: { id: controller, permissions: ["*"] }
+    input: { invoiceId: "${cm2001}" }
+    expectOutput: { invoiceNo: CM-2001, taxTotal: 165.00, total: 2165.00 }
+  - process: FIN_CREDIT_APPLY@latest
+    input: { creditMemoId: "${cm2001}", invoiceId: "${inv1004}", amount: 2165.00, applicationDate: "2026-01-10" }
+    expectOutput: { invoiceOpen: 51135.00, creditOpen: 0.00 }
+  - process: FIN_INVOICE_ISSUE@latest
+    input: { invoiceId: "${cm2001}" }
+    expectOutput: { documentNo: CM-2001 }
+
+  - note: Cascade's services (Oregon, no sales tax) and Lone Star's components for resale (certificate RC-3301).
+    process: FIN_INVOICE_SAVE@latest
+    input:
+      customerCode: C200
+      invoiceDate: "2026-01-14"
+      lines:
+        - { description: Engineering services, quantity: 1, unitPrice: 18000.00, revenueAccount: "4100" }
+    save: { cascade: $.invoiceId }
+  - process: FIN_INVOICE_POST@latest
+    input: { invoiceId: "${cascade}" }
+    expectOutput: { invoiceNo: INV-1005, taxTotal: 0.00, total: 18000.00 }
+  - process: FIN_INVOICE_SAVE@latest
+    input:
+      customerCode: C300
+      invoiceDate: "2026-01-15"
+      lines:
+        - { description: Components, quantity: 50, unitPrice: 500.00, revenueAccount: "4000" }
+    save: { lonestar: $.invoiceId }
+  - process: FIN_INVOICE_POST@latest
+    input: { invoiceId: "${lonestar}" }
+    expectOutput: { invoiceNo: INV-1006, taxTotal: 0.00, total: 25000.00 }
+
+  - note: Lone Star's check, recorded for Acme and applied to INV-1004 by mistake (FIN-AR-008).
+    process: FIN_RECEIPT_RECORD@latest
+    input:
+      customerCode: C100
+      receiptDate: "2026-01-25"
+      amount: 25000.00
+      method: CHECK
+      reference: Check 4471
+      bankAccount: "1010"
+      applications: [{ invoiceId: "${inv1004}", amount: 25000.00 }]
+    save: { receipt: $.receiptId, wrong: "$.applications[0].applicationId" }
+    expectOutput: { receiptNo: RCPT-0001, unappliedAmount: 0.00 }
+  - note: Taking it back moves money between customers, the controller's (FIN-CT-001).
+    process: FIN_APPLICATION_REVERSE@latest
+    actor: { id: controller, permissions: ["*"] }
+    input: { applicationId: "${wrong}", reverseDate: "2026-01-25", reason: Lone Star's check, not Acme's }
+    expectOutput: { invoiceOpen: 51135.00, sourceOpen: 25000.00 }
+  - process: FIN_RECEIPT_REASSIGN@latest
+    actor: { id: controller, permissions: ["*"] }
+    input: { receiptId: "${receipt}", customerCode: C300, reason: Lone Star's check }
+  - process: FIN_RECEIPT_APPLY@latest
+    input: { receiptId: "${receipt}", applicationDate: "2026-01-25",
+             applications: [{ invoiceId: "${lonestar}", amount: 25000.00 }] }
+    expectOutput: { unappliedAmount: 0.00 }
+
+  - note: The aging on 31 January by due date, and January's sales tax (FIN-EXP-08 and FIN-EXP-13 for these).
+    expect:
+      query: finance.ar.aging
+      params: { agingDate: "2026-01-31" }
+      rows: 2
+      values:
+        - { documentNo: INV-1004, customerCode: C100, bucket: Current, openAmountUsd: 51135.00 }
+        - { documentNo: INV-1005, customerCode: C200, bucket: Current, openAmountUsd: 18000.00 }
+  - expect:
+      query: finance.tax.sales_tax
+      params: { from: "2026-01-01", to: "2026-01-31" }
+      rows: 4
+  - expect:
+      query: finance.ar.invoice_register
+      params: { from: "2026-01-01", to: "2026-01-31" }
+      rows: 4
+      values:
+        - { invoiceNo: INV-1004, totalUsd: 53300.00, openAmountUsd: 51135.00 }
+        - { invoiceNo: CM-2001, totalUsd: -2165.00, openAmountUsd: 0.00 }
+        - { invoiceNo: INV-1005, totalUsd: 18000.00 }
+        - { invoiceNo: INV-1006, totalUsd: 25000.00, openAmountUsd: 0.00 }
+snapshot:
+  entities: [FinCompanyProfile, FinInvoice, FinInvoiceLine, FinInvoiceTax, FinApplication, FinReceipt]
+  asOf: end

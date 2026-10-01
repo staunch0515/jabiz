@@ -2,6 +2,7 @@ package com.jabiz.finance.ar;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
+import com.jabiz.entity.TemporalRole;
 import com.jabiz.runtime.ledger.LedgerEntities;
 
 import java.math.BigDecimal;
@@ -99,6 +100,9 @@ public final class InvoiceEntities {
         eb.field("openAmount", f -> f.physicalColumn("open_amount").processOnly().asNumeric(15, 2));
         eb.field("openAmountUsd", f -> f.physicalColumn("open_amount_usd").processOnly().asNumeric(15, 2));
         eb.field("glNo", f -> f.physicalColumn("gl_no").processOnly().asText(40));
+        // When it was posted: its document reads the data as at its date, or at this time when entered later.
+        eb.field("postedTime", f -> f.physicalColumn("posted_time").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("transactionId", f -> f.physicalColumn("transaction_id").processOnly()
             .asReference(LedgerEntities.TRANSACTION));
         eb.field("voidDate", f -> f.physicalColumn("void_date").processOnly().asDate());
