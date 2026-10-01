@@ -59,4 +59,12 @@
 | FIN-TX-003 | Tax calculation and rounding | F3a 计算（发票在 F3b） | `calc/SalesTax`（每张单据 × 辖区舍入、最大余数分摊） | `calc/SalesTaxTest`（含属性测试） |
 | FIN-TX-004 | Exemption certificates | F3a 证书与报告（发票引用在 F3b） | `FinExemptionCertificate`、`FIN_EXEMPTION_CERTIFICATE_SAVE`、`FinArSettings.missingCertificate`、`queries/finance/ar/certificates.sql` | `calc/SalesTaxTest`、`it/ReceivablesMasterIT` |
 | FIN-DI-003 | Data-quality decisions | 科目（F2a）、客户合并（F3a） | `migration/MigrationProcesses`（`CUSTOMER`）、`FIN_CUSTOMER_SAVE` 跳过并入的代码 | `it/ReceivablesMasterIT` |
+| FIN-AR-003 | Customer invoice | 完成 | `ar/InvoiceEntities`、`ar/InvoiceProcesses`（`FIN_INVOICE_SAVE`、`FIN_INVOICE_POST`）、`ar/InvoicePosting` | `it/InvoiceIT`（INV-1004…1007 = FIN-EXP-02）、`ar/InvoicePostingTest`（含属性测试） |
+| FIN-AR-004 | Invoice numbering and immutability | 完成 | `NumberSequence` `fin.ar.invoice` / `fin.ar.credit-memo`、`FIN_INVOICE_VOID`、`gl/SubledgerPosting`（`FIN_SUBLEDGER_REVERSE`） | `it/InvoiceIT` |
+| FIN-AR-006 | Credit memos | 完成（退款在 F3c） | `FinInvoice`（`CREDIT_MEMO`）、`FIN_CREDIT_APPLY`、`FinApplication` | `it/InvoiceIT`（CM-2001） |
+| FIN-AR-013 | Credit limit check | 警告完成（审批随 F3c） | `FIN_INVOICE_POST`、`FinArSettings.creditLimitCheck` | `it/InvoiceIT` |
+| FIN-TX-005 | Credits and returns | 完成 | `FIN_INVOICE_POST`（原发票日期的税率） | `it/InvoiceIT`（165.00） |
+| FIN-GL-021 | Posting from subledgers | 应收完成 | `gl/SubledgerPosting`（`FIN_SUBLEDGER_POST`，账本交易引用单据、`FinPosting`） | `it/InvoiceIT` |
+| FIN-UI-007 | Explanations | 税的说明（数据）完成；页面在 F3d | `FinInvoiceTax` | `it/InvoiceIT` |
+| FIN-DI-002 | Migration of open items | 应收完成 | `FIN_AR_OPENING`、`finance.open_receivables`、`reconciliation.sql`（`OPEN_ITEMS`） | `it/InvoiceIT` |
 

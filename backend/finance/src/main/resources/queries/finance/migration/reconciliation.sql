@@ -4,8 +4,10 @@ description: >-
   The migration's control totals (FIN-DI-002, FIN-PC-002): for every account, the opening entry as loaded from the
   source against the general ledger's balance at the opening date and the difference, which is 0.00 when the
   migration is complete; the debit and credit totals; and every recorded decision on the legacy data, with who
-  decided and when (FIN-DI-003). The subledgers' opening items join it with their phases.
-entities: [FinJournal, FinJournalLine, LedgerAccount, LedgerTransaction, LedgerEntry, FinPosting, FinMigrationDecision]
+  decided and when (FIN-DI-003); and each subledger's open items brought over against its control account in the
+  opening entry (OPEN_ITEMS: the receivables from F3).
+entities: [FinJournal, FinJournalLine, LedgerAccount, LedgerTransaction, LedgerEntry, FinPosting, FinMigrationDecision,
+  FinInvoice, FinArSettings]
 params:
   knownAt: { like: LedgerTransaction.bookingTime, description: "if given, the books as recorded at this time" }
 results:
@@ -85,3 +87,13 @@ SELECT 3, 'DECISION', d.{{FinMigrationDecision.kind}} || ' ' || d.{{FinMigration
        || d.{{FinMigrationDecision.decidedValue}}, d.{{FinMigrationDecision.reason}}, NULL, NULL, NULL,
        d.{{FinMigrationDecision.decidedBy}}, d.{{FinMigrationDecision.decidedAt}}
 FROM {{FinMigrationDecision}} d
+UNION ALL
+SELECT 4, 'OPEN_ITEMS', st.{{FinArSettings.receivableAccount}}, 'Open receivables brought over',
+       (SELECT COALESCE(SUM(i.{{FinInvoice.total}}), 0) FROM {{FinInvoice}} i
+        WHERE i.{{FinInvoice.source}} = 'OPENING'),
+       COALESCE((SELECT s.net FROM source_net s WHERE s.code = st.{{FinArSettings.receivableAccount}}), 0),
+       COALESCE((SELECT s.net FROM source_net s WHERE s.code = st.{{FinArSettings.receivableAccount}}), 0)
+         - (SELECT COALESCE(SUM(i.{{FinInvoice.total}}), 0) FROM {{FinInvoice}} i
+            WHERE i.{{FinInvoice.source}} = 'OPENING'),
+       NULL, NULL
+FROM {{FinArSettings}} st

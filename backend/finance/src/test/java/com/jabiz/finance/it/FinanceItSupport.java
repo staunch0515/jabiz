@@ -313,11 +313,38 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
     }
 
     /**
+     * The ledger's lines of everything posted for a subledger document ({@code FinPosting.documentNo}): account code
+     * to signed amount, debits positive; a void nets the document out.
+     */
+    protected static Map<String, BigDecimal> postingLines(String documentNo) {
+        Map<String, BigDecimal> lines = new TreeMap<>();
+        for (Map<String, Object> row : query("""
+            SELECT DISTINCT a.account_code, e.entry_id::text AS entry, e.direction, e.amount
+            FROM fi_posting_version p
+            JOIN ledger_entry_version e ON e.transaction_id = p.transaction_id
+            JOIN ledger_account_version a ON a.account_id = e.account_id
+            WHERE p.document_no = ?""", documentNo)) {
+            BigDecimal amount = ((BigDecimal) row.get("amount")).setScale(2);
+            lines.merge((String) row.get("account_code"),
+                "DEBIT".equals(row.get("direction")) ? amount : amount.negate(), BigDecimal::add);
+        }
+        lines.values().removeIf(v -> v.signum() == 0);
+        return lines;
+    }
+
+    /**
      * FIN-EXP-02's journal rows whose document matches {@code document} (a regular expression):
      * "2100 15,000.00; 1010 (15,000.00)", amounts in parentheses being credits.
      */
     protected static Map<String, Map<String, BigDecimal>> expectedDocuments(String document) throws IOException {
-        Pattern row = Pattern.compile("^\\| [0-9-]+ \\| (" + document + ") \\| journal \\| [^|]* \\| ([^|]+) \\|");
+        return expectedDocuments(document, "journal");
+    }
+
+    /** As {@link #expectedDocuments(String)}, of documents of the kind given ("invoice", "credit memo"). */
+    protected static Map<String, Map<String, BigDecimal>> expectedDocuments(String document, String kind)
+        throws IOException {
+        Pattern row = Pattern.compile("^\\| [0-9-]+ \\| (" + document + ") \\| " + kind
+            + " \\| [^|]* \\| ([^|]+) \\|");
         Pattern part = Pattern.compile("(\\d{4}) (\\(?)([0-9,]+\\.\\d{2})\\)?");
         Map<String, Map<String, BigDecimal>> journals = new TreeMap<>();
         for (String text : Files.readAllLines(SAMPLE_COMPANY.resolveSibling("21-expected-results.md"))) {

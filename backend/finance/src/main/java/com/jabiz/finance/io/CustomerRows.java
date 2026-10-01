@@ -26,8 +26,8 @@ final class CustomerRows {
         "certificate\\s+(?:(?:no\\.?|number|#)\\s*)?([A-Z0-9-]*[0-9][A-Z0-9-]*)", Pattern.CASE_INSENSITIVE);
     /** The US states, DC and the territories with their own sales tax rules. */
     static final java.util.Set<String> US_STATES = java.util.Set.of("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE",
-        "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
-        "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT",
+        "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
+        "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT",
         "VT", "VA", "WA", "WV", "WI", "WY", "PR", "GU", "VI", "AS", "MP");
     private static final Pattern VALID_TO = Pattern.compile("valid (?:to|until|through)\\s+(\\d{4}-\\d{2}-\\d{2})",
         Pattern.CASE_INSENSITIVE);
@@ -70,8 +70,8 @@ final class CustomerRows {
             : lower.contains("exempt organization") || lower.contains("nonprofit") ? "EXEMPT_ORGANIZATION"
             : "OTHER";
         return new CustomerProcesses.CertificateInput(state.group(1).toUpperCase(Locale.ROOT),
-            number.group(1).toUpperCase(Locale.ROOT), type, value.length() > 200 ? value.substring(0, 200) : value, null, date(ISSUED, value), date(VALID_TO, value),
-            true);
+            number.group(1).toUpperCase(Locale.ROOT), type, value.length() > 200 ? value.substring(0, 200) : value,
+            null, date(ISSUED, value), date(VALID_TO, value), true);
     }
 
     private static LocalDate date(Pattern pattern, String value) {

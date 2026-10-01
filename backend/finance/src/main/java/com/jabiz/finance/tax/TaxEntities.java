@@ -84,7 +84,7 @@ public final class TaxEntities {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("jurisdictionCode", "effectiveFrom", "effectiveTo", "ratePercent")
-            .filters("jurisdictionCode", "effectiveFrom")
+            .filters("jurisdictionCode", "effectiveFrom", "effectiveTo")
             .sorts("jurisdictionCode", "effectiveFrom")
             .defaultSort("effectiveFrom", false));
     });

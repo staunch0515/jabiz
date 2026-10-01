@@ -269,6 +269,18 @@ class GlConfig {
     }
 
     @Bean
+    ProcessDefinition<SubledgerPosting.PostInput, SubledgerPosting.PostOutput, ProcessContext>
+        finSubledgerPostProcess(BookingTime booking) {
+        return SubledgerPosting.postProcess(booking);
+    }
+
+    @Bean
+    ProcessDefinition<SubledgerPosting.ReverseInput, SubledgerPosting.PostOutput, ProcessContext>
+        finSubledgerReverseProcess(BookingTime booking) {
+        return SubledgerPosting.reverseProcess(booking);
+    }
+
+    @Bean
     ProcessDefinition<OpeningProcesses.CloseInput, PeriodProcesses.PeriodOutput, ProcessContext>
         finOpeningCloseProcess() {
         return OpeningProcesses.CLOSE_PROCESS;
