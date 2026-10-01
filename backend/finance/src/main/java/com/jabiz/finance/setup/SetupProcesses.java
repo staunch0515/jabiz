@@ -64,7 +64,11 @@ public final class SetupProcesses {
     /** Segregation of duties (FIN-CT-001 acceptance 2): who prepares payables never releases payments. */
     public static final String SOD_PAYABLES = "FIN-SOD-PAYABLES-RELEASE";
 
-    private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE);
+    /** The rule of FIN-AP-006: bills above 10,000.00 need a controller's approval before they are paid. */
+    public static final String BILL_RULE = "FIN-AP-BILL-10K";
+
+    private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE,
+        BILL_RULE);
     private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES);
 
     static final String ROLES = "roles";
@@ -186,6 +190,11 @@ public final class SetupProcesses {
                 "Finance setup: vendor bank changes need another person's approval (FIN-AP-003)"));
             codes.add(VENDOR_BANK_RULE);
         }
+        if (missing(ctx, BILL_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, billRule(), null,
+                "Finance setup: bills above 10,000.00 need a controller's approval before payment (FIN-AP-006)"));
+            codes.add(BILL_RULE);
+        }
         if (missing(ctx, SOD_VENDOR_BANK)) {
             proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
                 sodRule(SOD_VENDOR_BANK, List.of(FinancePermissions.VENDOR_BANK_MAINTAIN),
@@ -236,6 +245,19 @@ public final class SetupProcesses {
         rule.put("condition", Map.of());
         rule.put("levels", List.of(Map.of("permission", FinancePermissions.VENDOR_BANK_APPROVE)));
         rule.put("description", "Vendor bank changes need an approver of them");
+        return rule;
+    }
+
+    /** Bills above 10,000.00 need an approver of bills (FIN-AP-006). */
+    static Map<String, Object> billRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", BILL_RULE);
+        rule.put("subject", com.jabiz.finance.ap.BillProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of("all", List.of(Map.of("fact", "amount", "op", "gt", "value", 10000))));
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.BILL_APPROVE)));
+        rule.put("description", "Bills above 10,000.00 need an approver of bills");
         return rule;
     }
 

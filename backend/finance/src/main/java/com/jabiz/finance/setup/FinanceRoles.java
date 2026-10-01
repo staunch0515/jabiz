@@ -56,7 +56,7 @@ public final class FinanceRoles {
             FinancePermissions.COMPANY_MAINTAIN, FinancePermissions.INVOICE_ISSUE, "document.archive.read",
             "document.send", "document.send.any", FinancePermissions.AP_READ, FinancePermissions.VENDOR_MAINTAIN,
             FinancePermissions.TAX_DATA_READ, FinancePermissions.VENDOR_BANK_APPROVE, FinancePermissions.AP_SETTINGS,
-            FinancePermissions.FORM_1099_MAINTAIN));
+            FinancePermissions.FORM_1099_MAINTAIN, FinancePermissions.BILL_VOID, FinancePermissions.BILL_APPROVE));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, FinancePermissions.AP_READ,
@@ -72,7 +72,8 @@ public final class FinanceRoles {
             "document.archive.read"));
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
             "approval.decide", FinancePermissions.WRITE_OFF_APPROVE, FinancePermissions.INVOICE_APPROVE,
-            FinancePermissions.AR_READ, FinancePermissions.AP_READ, FinancePermissions.VENDOR_BANK_APPROVE));
+            FinancePermissions.AR_READ, FinancePermissions.AP_READ, FinancePermissions.VENDOR_BANK_APPROVE,
+            FinancePermissions.BILL_APPROVE));
         add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN,
             FinancePermissions.IMPORT, FinancePermissions.AP_READ, FinancePermissions.BANK_MAINTAIN,
             FinancePermissions.BANK_READ, FinancePermissions.VENDOR_BANK_READ, FinancePermissions.PAYMENT_RELEASE));
