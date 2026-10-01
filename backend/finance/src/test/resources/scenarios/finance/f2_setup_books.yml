@@ -1,0 +1,128 @@
+# Setting up the books, the general ledger part of FIN-SCN-01 (ROADMAP F2a): the sample company's chart of accounts
+# is imported, fiscal year 2026 created; an unbalanced opening file is refused first and posts nothing; a legacy
+# account code is read through a recorded decision; the opening file then posts the opening entry into the opening
+# period, the migration report shows no difference, and the opening period is closed.
+name: Setting up the books
+clock: 2026-01-02T15:00:00Z
+actor: { id: controller, permissions: ["*"] }
+steps:
+  - note: The chart of accounts from the sample company's file, as it is.
+    import: finance.chart
+    file:
+      name: chart-of-accounts.csv
+      content: |
+        code,name,type,normal_balance,statement_line
+        1010,Cash - Operating (Lakeside National Bank),Asset,D,Cash and cash equivalents
+        1050,Cash - Savings (Lakeside National Bank),Asset,D,Cash and cash equivalents
+        1200,Accounts Receivable,Asset,D,"Accounts receivable, net"
+        1210,Allowance for Doubtful Accounts,Asset,C,"Accounts receivable, net"
+        1300,Prepaid Expenses,Asset,D,Prepaid expenses
+        1500,Machinery and Equipment,Asset,D,"Property and equipment, net"
+        1510,Vehicles,Asset,D,"Property and equipment, net"
+        1520,Computer Equipment,Asset,D,"Property and equipment, net"
+        1590,Accumulated Depreciation,Asset,C,"Property and equipment, net"
+        2000,Accounts Payable,Liability,C,Accounts payable
+        2100,Accrued Liabilities,Liability,C,Accrued liabilities
+        2150,Payroll Liabilities,Liability,C,Accrued liabilities
+        2200,Sales Tax Payable,Liability,C,Sales tax payable
+        2300,Line of Credit,Liability,C,Line of credit
+        2400,Income Tax Payable,Liability,C,Income tax payable
+        3000,Common Stock,Equity,C,Common stock
+        3100,Additional Paid-in Capital,Equity,C,Additional paid-in capital
+        3200,Retained Earnings,Equity,C,Retained earnings
+        4000,Product Sales,Revenue,C,Revenue
+        4100,Service Revenue,Revenue,C,Revenue
+        4900,Sales Returns and Allowances,Revenue,D,Revenue
+        5000,Cost of Goods Sold - Purchases,Expense,D,Cost of goods sold
+        6100,Salaries and Wages,Expense,D,Operating expenses
+        6150,Payroll Taxes,Expense,D,Operating expenses
+        6200,Rent,Expense,D,Operating expenses
+        6300,Utilities,Expense,D,Operating expenses
+        6400,Professional Fees,Expense,D,Operating expenses
+        6500,Software Subscriptions,Expense,D,Operating expenses
+        6600,Insurance,Expense,D,Operating expenses
+        6700,Depreciation Expense,Expense,D,Operating expenses
+        6800,Bank Fees,Expense,D,Operating expenses
+        7100,Interest Expense,Other,D,"Other income (expense), net"
+        7200,Realized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net"
+        7210,Unrealized Foreign Exchange (Gain) Loss,Other,D,"Other income (expense), net"
+        7300,Interest Income,Other,C,"Other income (expense), net"
+        8000,Income Tax Expense,Tax,D,Income tax expense
+    commit: true
+    expect: { committed: true, processed: 36 }
+  - process: FIN_FISCAL_YEAR_CREATE@latest
+    input: { fiscalYear: 2026, adjustmentPeriod: true }
+
+  - note: Debits and credits differ by 0.50 - refused, nothing posted (FIN-PC-002 acceptance 2).
+    import: finance.opening_balances
+    file:
+      name: opening-unbalanced.csv
+      content: |
+        date,account,debit,credit
+        2025-12-31,1010,250000.00,
+        2025-12-31,1050,100000.00,
+        2025-12-31,1200,86500.00,
+        2025-12-31,1210,,4000.00
+        2025-12-31,1300,12000.00,
+        2025-12-31,1500,120000.00,
+        2025-12-31,1510,70000.00,
+        2025-12-31,1590,,58000.00
+        2025-12-31,2000,,41300.00
+        2025-12-31,2100,,15000.00
+        2025-12-31,2200,,3300.00
+        2025-12-31,2300,,50000.00
+        2025-12-31,2400,,8000.50
+        2025-12-31,3000,,100000.00
+        2025-12-31,3100,,200000.00
+        2025-12-31,3200,,158900.00
+    commit: true
+    expect:
+      committed: false
+      processed: 0
+      issues: [{ row: 0, code: FIN_JOURNAL_UNBALANCED }, { row: 1, code: FIN_JOURNAL_UNBALANCED }]
+
+  - note: The legacy ledger's receivables account 1199 is read as 1200 (FIN-DI-003).
+    process: FIN_MIGRATION_DECIDE@latest
+    input: { kind: ACCOUNT, legacyValue: "1199", decidedValue: "1200", reason: Trade receivables in the legacy ledger }
+
+  - note: The opening file with the legacy code posts the opening entry.
+    import: finance.opening_balances
+    file:
+      name: opening-balances.csv
+      content: |
+        date,account,debit,credit
+        2025-12-31,1010,250000.00,
+        2025-12-31,1050,100000.00,
+        2025-12-31,1199,86500.00,
+        2025-12-31,1210,,4000.00
+        2025-12-31,1300,12000.00,
+        2025-12-31,1500,120000.00,
+        2025-12-31,1510,70000.00,
+        2025-12-31,1590,,58000.00
+        2025-12-31,2000,,41300.00
+        2025-12-31,2100,,15000.00
+        2025-12-31,2200,,3300.00
+        2025-12-31,2300,,50000.00
+        2025-12-31,2400,,8000.00
+        2025-12-31,3000,,100000.00
+        2025-12-31,3100,,200000.00
+        2025-12-31,3200,,158900.00
+    commit: true
+    expect: { committed: true, processed: 1, totals: { debit: 638500.00, credit: 638500.00 } }
+
+  - expect:
+      query: finance.gl.trial_balance
+      params: { through: "2025-12-31" }
+      values:
+        - { accountCode: "1010", debit: 250000.00, credit: 0 }
+        - { accountCode: "1050", debit: 100000.00, credit: 0 }
+        - { accountCode: "1200", debit: 86500.00, credit: 0 }
+  - expect:
+      query: finance.migration.reconciliation
+      rows: 19
+  - process: FIN_OPENING_CLOSE@latest
+    input: {}
+    expectOutput: { periodKey: "2026-00", status: CLOSED, changed: true }
+snapshot:
+  entities: [FinPeriod, FinJournal, FinJournalLine, FinPosting, FinMigrationDecision, LedgerTransaction, LedgerEntry]
+  asOf: end

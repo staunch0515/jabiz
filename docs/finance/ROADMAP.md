@@ -8,8 +8,8 @@
 | 阶段 | 名称 | 依赖（平台） | 预估 | 状态 |
 |---|---|---|---|---|
 | F0 | 设计与骨架 | — | 3–4 天 | ☑ 已完成（设计待确认） |
-| F1 | 总账、期间、日记账与审批 | 14a 14b 14c 14h 14i | 8–10 天 | ◐ F1a–F1c 已合入；F1d 进行中 |
-| F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ☐ |
+| F1 | 总账、期间、日记账与审批 | 14a 14b 14c 14h 14i | 8–10 天 | ☑ 已完成 |
+| F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ◐ F2a 进行中 |
 | F3 | 应收与销售税 | — | 8–10 天 | ☐ |
 | F4 | 应付、付款与 1099 | — | 8–10 天 | ☐ |
 | F5 | 银行与对账 | 14e | 6–8 天 | ☐ |
@@ -161,6 +161,34 @@
 - [x] `platformCheck` 0 错误 0 警告；`./gradlew :finance:check`、`pnpm ext:check`、`tools/check-app-paths.sh` 通过；端到端在同一库上重复 10 次（20 次运行）全部通过。
 - 试算表仍超时：按设计 Q1 的结论由期间余额解决（F8 之前），不是本阶段的目标。
 
-## F2 — F11
+## F2 导入、期初、迁移
+
+需求：FIN-DI-001、DI-002、DI-003（Should）、DI-004，FIN-GL-019，FIN-PC-002。计划已确认（2026-10-01，接受全部推荐）：
+范围按方案 A——F2 建财务的导入框架并完成总账侧；客户、税码、未结应收与客户合并在 F3，供应商、1099 阈值、未结应付在 F4，未达银行项目在 F5，资产在 F6，
+各子账的期初项目不再过账、合计须等于期初分录中的控制科目余额（设计 §13.1），"子账 = 控制科目"随各阶段验收，FIN-SCN-01 在 F6 完整通过。分两个 PR：
+
+### F2a 导入框架、科目表与汇率、期初、迁移决定与对账
+
+**要求**
+1. 导入（平台 14e）：文件策略 `fin.import`；`finance.chart`（样例科目表与模板的列）、`finance.fx_rates`（长表；宽表经映射）、`finance.opening_balances`。
+2. 汇率只经新流程 `FIN_EXCHANGE_RATE_SET` 写入（手工与导入同一流程；同日同类型再次设置即更正，旧值留在历史）。
+3. 期初期间 0（`FinPeriod.opening`，V4）与 `FIN_OPENING_POST`：一笔平衡分录（来源 `OPENING`、过账来源 `OPN`），不受审批与控制科目限制，每套账一次；
+   其他分录找不到期初期间；`FIN_OPENING_CLOSE` 关闭后不再打开；期初后不能建更早的财年。
+4. 迁移决定 `FinMigrationDecision` 与 `FIN_MIGRATION_DECIDE`（科目映射，决定人与时间）；迁移对账报告 `finance.migration.reconciliation`。
+5. 权限：`fin.import`、`fin.migration`（Controller）；Treasurer 有 `fin.import`。
+6. 测试：`FinanceImportIT`、`OpeningIT`、`FinanceImportsTest`、`OpeningLinesTest`；场景回放 `scenarios/finance/f2_setup_books.yml`（finance 的第一个场景，`ScenarioTest`）。
+
+**验收标准**
+- [x] 样例科目表与汇率文件原样导入，0 拒收；一行无效则整个文件拒收、指出行与原因、无任何变化；同一文件不能再导入（DI-001 验收 1 的总账部分、验收 2 的同类情形）。
+- [x] 不平的期初文件拒收、显示差额、不过账；样例期初文件过账后 2025-12-31 试算表等于 FIN-EXP-01（PC-002 验收 2、验收 1 的总账部分）。
+- [x] 迁移对账报告每个科目与合计差额 0.00，列出决定、决定人与时间（DI-002 验收 1 的总账部分、DI-003）。
+- [x] 期初只能一次、期初期间不接受其他分录、关闭后不再打开；表只插入（`OpeningIT`）。
+- [x] `./gradlew :finance:check`（含 `platformCheck` 0 错误 0 警告）、场景回放、`tools/check-app-paths.sh` 通过。
+
+### F2b 日记账导入、工资导入
+
+见下一个 PR；要求与验收在其开始时写入。
+
+## F3 — F11
 
 范围、需求编号与验收口径见 `docs/finance-work/00-development-plan.md` §5.2；每个阶段开始时把详细要求与验收标准写入本节。

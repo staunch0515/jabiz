@@ -39,3 +39,15 @@
 | FIN-UI-003 | Grid entry | 完成 | 粘贴与复制到表格、向下填充、撤销与重做 | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`；验收中的可用性研究（50 行 ≤ 5 分钟）需由人进行 |
 | FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`；其他登记簿与报表钻取在 F3–F9 |
 | FIN-NF-001 / 002 | Volumes / Response times | 摸底 | 生成器 `tools/finance/perf/`（直接写库） | 结果见 `docs/finance/perf.md`；带 50 用户的压测在 F11 |
+
+## F2 导入、期初、迁移
+
+路径简写另有：`io/` = `backend/finance/src/main/java/com/jabiz/finance/io/`，`migration/` = `…/finance/migration/`。
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-DI-001 | Master-data import | 部分 | `io/FinanceImports`（文件策略 `fin.import`；`finance.chart` → `FIN_ACCOUNT_CREATE`，`finance.fx_rates` → `gl/ExchangeRateProcesses`）；整文件校验、整体拒收、预览、导入记录（平台 14e） | `it/FinanceImportIT`（样例科目表与汇率 0 拒收；一行错整体拒收、无变化；重复文件 409）；客户、供应商、税码、资产随 F3/F4/F6 |
+| FIN-DI-002 | Migration of open items and history | 部分 | `gl/OpeningProcesses`、`io/FinanceImports`（`finance.opening_balances`）；对账报告 `queries/../migration/reconciliation.sql` | `it/OpeningIT`（FIN-EXP-01 重现，每个科目差额 0.00）；场景 `f2_setup_books`；未结应收、应付、资产、银行项目随 F3–F6 |
+| FIN-DI-003 | Data-quality decisions | 部分 | `migration/MigrationEntities`、`migration/MigrationProcesses`（科目决定，决定人与时间进入对账报告） | `it/OpeningIT`；重复客户合并（验收 1）随 F3 |
+| FIN-PC-002 | Opening balances | 部分 | 期初期间 0（`FinPeriod.opening`）、`FIN_OPENING_POST` / `FIN_OPENING_CLOSE`，控制科目由期初分录记入 | `it/OpeningIT`（验收 1 的总账部分、验收 2）、`FinanceImportsTest`、`OpeningLinesTest`；子账合计 = 控制科目随 F3–F6 |
+
