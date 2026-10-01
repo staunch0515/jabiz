@@ -22,7 +22,7 @@ import ApplyTable from './ApplyTable'
 import Field from './Field'
 import { sign, stored } from './money'
 import { invoicePath, receiptPath, RECEIPTS_PATH } from './paths'
-import { readAmount, toApplications, unapplied, unreadable, type Entries } from './receipt'
+import { only, readAmount, toApplications, unapplied, unreadable, type Entries } from './receipt'
 import { ReceiptStatusTag } from './StatusTags'
 
 interface Header {
@@ -92,8 +92,11 @@ function NewReceipt() {
   }
 
   const amountOk = Boolean(readAmount(header.amount))
-  const over = amountOk && sign(stored(unapplied(header.amount, entries))) < 0
-  const canRecord = ready && amountOk && Boolean(bankAccount) && !over && !unreadable(entries)
+  const ids = (suggestions.data ?? []).map((s) => s.invoiceId)
+  const shown = only(entries, ids)
+  const over = amountOk && sign(stored(unapplied(header.amount, shown))) < 0
+  // Not while the open invoices reload: what is applied is what is shown.
+  const canRecord = ready && amountOk && Boolean(bankAccount) && !over && !unreadable(shown) && !suggestions.isFetching
 
   const onRecord = async () => {
     if (busy || !canRecord) return
@@ -106,7 +109,7 @@ function NewReceipt() {
       reference: header.reference.trim() || null,
       bankAccount,
       description: header.description.trim() || null,
-      applications: toApplications(entries, (suggestions.data ?? []).map((s) => s.invoiceId)),
+      applications: toApplications(shown, ids),
     }
     const body = JSON.stringify(input)
     if (idempotency.current?.body !== body) idempotency.current = { key: crypto.randomUUID(), body }
@@ -183,8 +186,8 @@ function NewReceipt() {
             description={<ul style={{ margin: 0, paddingLeft: 18 }}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>} />
         )}
         <Card size="small" title={t('receivables.receipt.openInvoices')}>
-          <ApplyTable amount={header.amount} suggestions={suggestions.data ?? []} loading={suggestions.isLoading && ready}
-            entries={entries} onChange={setEntries} ready={ready} />
+          <ApplyTable amount={header.amount} suggestions={suggestions.data ?? []} loading={suggestions.isFetching && ready}
+            entries={shown} onChange={setEntries} ready={ready} />
         </Card>
         <Space>
           <Button type="primary" disabled={!canRecord || busy} loading={busy} onClick={() => void onRecord()}
@@ -337,8 +340,11 @@ function ApplyMore({ loaded }: { loaded: LoadedReceipt }) {
       reference: receipt.reference }),
     enabled: Boolean(date),
   })
-  const applications = toApplications(entries, (suggestions.data ?? []).map((s) => s.invoiceId))
-  const ok = applications.length > 0 && !unreadable(entries) && sign(stored(unapplied(amount, entries))) >= 0
+  const ids = (suggestions.data ?? []).map((s) => s.invoiceId)
+  const shown = only(entries, ids)
+  const applications = toApplications(shown, ids)
+  const ok = applications.length > 0 && !unreadable(shown) && sign(stored(unapplied(amount, shown))) >= 0
+    && !suggestions.isFetching
 
   const onApply = async () => {
     setBusy(true)
@@ -364,8 +370,8 @@ function ApplyMore({ loaded }: { loaded: LoadedReceipt }) {
             aria-label={t('receivables.receipt.applicationDate')} />
         </label>
         {error && <Alert type="error" showIcon message={error} data-testid="apply-error" />}
-        <ApplyTable amount={amount} suggestions={suggestions.data ?? []} loading={suggestions.isLoading}
-          entries={entries} onChange={setEntries} ready={Boolean(date)} />
+        <ApplyTable amount={amount} suggestions={suggestions.data ?? []} loading={suggestions.isFetching}
+          entries={shown} onChange={setEntries} ready={Boolean(date)} />
         <Button type="primary" disabled={!ok || busy} loading={busy} onClick={() => void onApply()}
           data-testid="receipt-apply">
           {t('receivables.receipt.apply')}

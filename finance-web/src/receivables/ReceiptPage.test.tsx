@@ -113,4 +113,25 @@ describe('ReceiptPage', () => {
     await waitFor(() => expect(calls.runProcess).toHaveBeenCalledWith('FIN_APPLICATION_REVERSE', {
       applicationId: 'a-1', reverseDate: '2026-01-25', reason: 'Wrong invoice' }))
   })
+
+  it('does not count or send what was typed for an invoice no longer listed', async () => {
+    renderAt('/receivables/receipts/new', ROUTES)
+    await userEvent.type(await screen.findByTestId('receipt-customer'), 'C300')
+    await userEvent.type(screen.getByTestId('receipt-date'), '2026-01-25')
+    await userEvent.type(screen.getByTestId('receipt-amount'), '100')
+    await userEvent.type(await screen.findByTestId('apply-INV-1007'), '100')
+    expect(screen.getByTestId('applied-total')).toHaveTextContent('100.00')
+    // On an earlier day INV-1007 is not open yet.
+    calls.loadSuggestions.mockResolvedValue([OPEN[0]])
+    const date = screen.getByTestId('receipt-date')
+    await userEvent.clear(date)
+    await userEvent.type(date, '2026-01-10')
+    await waitFor(() => expect(screen.queryByTestId('apply-INV-1007')).not.toBeInTheDocument())
+    expect(screen.getByTestId('applied-total')).toHaveTextContent('0.00')
+    calls.recordReceipt.mockResolvedValue({ receiptId: 'r-4', receiptNo: 'RCPT-0004', status: 'POSTED',
+      amount: '100.00', unappliedAmount: '100.00' })
+    await userEvent.click(screen.getByTestId('receipt-record'))
+    await waitFor(() => expect(calls.recordReceipt).toHaveBeenCalled())
+    expect(calls.recordReceipt.mock.calls[0][0].applications).toEqual([])
+  })
 })

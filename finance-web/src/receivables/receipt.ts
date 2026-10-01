@@ -15,10 +15,24 @@ export interface Entry {
 
 export type Entries = Record<string, Entry>
 
-/** An amount as typed in cents; null when blank, undefined when it cannot be read. */
+/** An amount as typed in cents; null when blank or zero (nothing to apply), undefined when it cannot be read. */
 export function readAmount(text: string): Decimal | null | undefined {
   if (text.trim() === '') return null
-  return parseNumber(text, 2) ?? undefined
+  const value = parseNumber(text, 2)
+  if (!value) return undefined
+  return sign(value) === 0 ? null : value
+}
+
+/**
+ * The entries of the invoices listed: an invoice no longer open on the day (or not yet listed again while the list
+ * reloads) is neither counted nor sent.
+ */
+export function only(entries: Entries, invoiceIds: string[]): Entries {
+  const shown: Entries = {}
+  for (const id of invoiceIds) {
+    if (entries[id]) shown[id] = entries[id]
+  }
+  return shown
 }
 
 /** The cash of the entries that can be read. */
@@ -58,7 +72,7 @@ export function suggest(amount: string, suggestions: Suggestion[]): Entries {
 /** The applications to send: the entries with an amount, in the order of the suggestions. */
 export function toApplications(entries: Entries, order: string[]) {
   return order
-    .filter((id) => readAmount(entries[id]?.amount ?? '') )
+    .filter((id) => readAmount(entries[id]?.amount ?? ''))
     .map((id) => ({
       invoiceId: id,
       amount: cents(readAmount(entries[id].amount) as Decimal),

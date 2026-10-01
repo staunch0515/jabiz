@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Suggestion } from './api'
-import { applied, suggest, toApplications, unapplied, unreadable } from './receipt'
+import { applied, only, readAmount, suggest, toApplications, unapplied, unreadable } from './receipt'
 
 const open = (invoiceId: string, openAmount: string, matched = 'OLDEST', discountOffered?: string): Suggestion => ({
   rank: 1, matched, invoiceId, invoiceNo: invoiceId, invoiceDate: '2026-01-01', openAmount, discountOffered,
@@ -28,5 +28,15 @@ describe('applying a receipt', () => {
     expect(toApplications(entries, ['c', 'b', 'a']).map((a) => a.invoiceId)).toEqual(['b', 'a'])
     expect(unreadable(entries)).toBe(false)
     expect(unreadable({ a: { amount: '1.234', discount: '' } })).toBe(true)
+  })
+
+  it('takes a typed zero for nothing to apply, and counts only the invoices listed', () => {
+    expect(readAmount('0')).toBeNull()
+    expect(readAmount('0.00')).toBeNull()
+    const entries = { a: { amount: '0', discount: '0' }, b: { amount: '5.00', discount: '' }, gone: { amount: '7.00', discount: '' } }
+    expect(toApplications(entries, ['a', 'b'])).toEqual([{ invoiceId: 'b', amount: '5.00', discount: null }])
+    const shown = only(entries, ['a', 'b'])
+    expect(Object.keys(shown)).toEqual(['a', 'b'])
+    expect(applied(shown)).toBe('5.00')
   })
 })

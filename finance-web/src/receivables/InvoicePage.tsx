@@ -99,12 +99,14 @@ export default function InvoicePage({ instanceKey }: { instanceKey?: string }) {
     queryFn: () => loadInvoice(invoiceId as string),
     enabled: Boolean(invoiceId),
   })
-  const original = useQuery({
-    queryKey: ['fin', 'invoice', credits],
-    queryFn: () => loadInvoice(credits as string),
-    enabled: Boolean(credits),
-  })
   const invoice = loaded.data?.invoice
+  // The invoice a credit memo credits: to start a new one from, or to name on a draft.
+  const originalId = credits ?? invoice?.originalInvoiceId ?? null
+  const original = useQuery({
+    queryKey: ['fin', 'invoice', originalId],
+    queryFn: () => loadInvoice(originalId as string),
+    enabled: Boolean(originalId),
+  })
   const [startedNew] = useState(!invoiceId)
 
   const [header, setHeader] = useState<Header>(EMPTY_HEADER)
@@ -129,13 +131,13 @@ export default function InvoicePage({ instanceKey }: { instanceKey?: string }) {
   // A new credit memo starts from the invoice it credits: its customer and its lines, to be cut down.
   const startedFrom = useRef<string | null>(null)
   useEffect(() => {
-    if (!original.data || startedFrom.current === original.data.invoice.invoiceId) return
+    if (!credits || !original.data || startedFrom.current === original.data.invoice.invoiceId) return
     startedFrom.current = original.data.invoice.invoiceId
     const source = original.data.invoice
     setHeader({ ...EMPTY_HEADER, kind: 'CREDIT_MEMO', customerCode: source.customerCode,
       originalInvoiceId: source.invoiceId, reference: source.invoiceNo ?? '' })
     setLines(padLines(fromStored(original.data.lines), 1))
-  }, [original.data])
+  }, [credits, original.data])
 
   const customer = customers.data?.find((c) => c.customerCode === header.customerCode.trim())
   const accountMap = accounts.data
@@ -356,7 +358,7 @@ export default function InvoicePage({ instanceKey }: { instanceKey?: string }) {
             <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
               {t('receivables.credits')}:{' '}
               <Link to={invoicePath(header.originalInvoiceId)}>
-                {original.data?.invoice.invoiceNo ?? header.reference ?? header.originalInvoiceId}
+                {original.data?.invoice.invoiceNo || t('receivables.kinds.INVOICE')}
               </Link>
             </Typography.Paragraph>
           )}

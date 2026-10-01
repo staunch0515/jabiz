@@ -207,4 +207,15 @@ describe('InvoicePage', () => {
     expect(calls.saveInvoice.mock.calls[0][0]).toMatchObject({ kind: 'CREDIT_MEMO', customerCode: 'C100',
       originalInvoiceId: 'i-1', reference: 'INV-1004' })
   })
+
+  it('names the invoice a reopened draft credit memo credits', async () => {
+    calls.loadInvoice.mockImplementation(async (id: string) => (id === 'cm-1'
+      ? { ...POSTED, invoice: { ...POSTED.invoice, invoiceId: 'cm-1', kind: 'CREDIT_MEMO', invoiceNo: null,
+        status: 'DRAFT', reference: null, originalInvoiceId: 'i-1' }, taxes: [], applications: [] }
+      : POSTED))
+    renderAt('/receivables/invoices/cm-1', ROUTES)
+    expect(await screen.findByRole('link', { name: 'INV-1004' })).toHaveAttribute('href', '/receivables/invoices/i-1')
+    // The draft's own lines, not the invoice's taken again.
+    expect(calls.loadInvoice).toHaveBeenCalledWith('i-1')
+  })
 })
