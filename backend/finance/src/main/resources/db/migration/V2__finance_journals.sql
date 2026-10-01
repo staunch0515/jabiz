@@ -34,6 +34,7 @@ SELECT finance_create_temporal_table('fi_journal_version', 'journal_id', '
     adjustment_period   boolean       NOT NULL,
     auto_reverse_date   date,
     reverses_journal_id uuid          REFERENCES entity_registry (entity_id),
+    reversed_by_id      uuid          REFERENCES entity_registry (entity_id),
     recurring_key       varchar(150),
     total_debit         numeric(19,2) NOT NULL,
     total_credit        numeric(19,2) NOT NULL,
@@ -52,7 +53,8 @@ CREATE INDEX fi_journal_version_gl_no_idx ON fi_journal_version (gl_no);
 CREATE INDEX fi_journal_version_date_idx ON fi_journal_version (posting_date);
 CREATE INDEX fi_journal_version_reverses_idx ON fi_journal_version (reverses_journal_id);
 CREATE INDEX fi_journal_version_recurring_idx ON fi_journal_version (recurring_key);
-CREATE INDEX fi_journal_version_reverse_date_idx ON fi_journal_version (auto_reverse_date);
+CREATE INDEX fi_journal_version_reverse_date_idx ON fi_journal_version (auto_reverse_date)
+    WHERE auto_reverse_date IS NOT NULL;
 
 SELECT finance_create_temporal_table('fi_journal_line_version', 'line_id', '
     journal_id   uuid          NOT NULL REFERENCES entity_registry (entity_id),

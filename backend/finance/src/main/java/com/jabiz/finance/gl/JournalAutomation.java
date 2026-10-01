@@ -2,12 +2,14 @@ package com.jabiz.finance.gl;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
+import com.jabiz.finance.calc.BookingTime;
 import com.jabiz.finance.calc.PeriodPolicy;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.ledger.LedgerEntities;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -51,14 +53,22 @@ public final class JournalAutomation {
     public static final String AUTO_REVERSE_JOB = "fin.auto-reverse";
 
     public static final String NO_PERIOD = "FIN_RECURRING_NO_PERIOD";
+    public static final String TOO_MANY_LINES = "FIN_RECURRING_TOO_MANY_LINES";
+    public static final String FUTURE_DATE = "FIN_AUTO_REVERSE_FUTURE_DATE";
 
     /** Most templates or entries one run handles; a run reads at most this many. */
     static final int MAX_PER_RUN = 200;
+    /** Most template lines one run reads; a run that would need more is refused rather than cut short. */
+    static final int MAX_TEMPLATE_LINES = 10_000;
 
     /** @param date any day of the period to make the entries of */
     public record RunInput(@NotNull LocalDate date) {}
 
-    public record RecurringOutput(String periodKey, List<JournalProcesses.JournalOutput> entries) {}
+    /** @param skipped templates whose entry could not be made this time, with the reason */
+    public record RecurringOutput(String periodKey, List<JournalProcesses.JournalOutput> entries,
+        List<Skipped> skipped) {}
+
+    public record Skipped(String templateCode, String reason) {}
 
     public record AutoReverseOutput(LocalDate date, List<ReversalOutput> reversals) {}
 
@@ -73,6 +83,7 @@ public final class JournalAutomation {
     static final String EXISTING = "existing";
     static final String TO_SUBMIT = "toSubmit";
     static final String SUBMITTED = "submitted";
+    static final String SKIPPED = "skipped";
     static final String DUE = "due";
     static final String REVERSALS = "reversals";
     static final String TO_REVERSE = "toReverse";
@@ -105,7 +116,21 @@ public final class JournalAutomation {
                 .step("Load their lines", QueryEntities.of(JournalEntities.RECURRING_LINE_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("templateId",
                         new ArrayList<>(list(ctx, TEMPLATES).stream().map(EntityInstance::id).toList())))
-                        .limit(500).build(), TEMPLATE_LINES))
+                        .limit(MAX_TEMPLATE_LINES + 1).build(), TEMPLATE_LINES))
+                .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> JournalProcesses
+                    .byCodes("accountCode", JournalProcesses.accountCodes(ctx, TEMPLATE_LINES)),
+                    JournalProcesses.FIN_ACCOUNTS))
+                .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET,
+                    ctx -> JournalProcesses.byCodes("accountCode",
+                        JournalProcesses.accountCodes(ctx, TEMPLATE_LINES)), JournalProcesses.LEDGER_ACCOUNTS))
+                .step("Load the departments", QueryEntities.of(GlEntities.DEPARTMENT_DATASET,
+                    ctx -> JournalProcesses.byCodes("departmentCode",
+                        JournalProcesses.dimensionValues(ctx, TEMPLATE_LINES, "department")),
+                    JournalProcesses.DEPARTMENTS))
+                .step("Load the locations", QueryEntities.of(GlEntities.LOCATION_DATASET,
+                    ctx -> JournalProcesses.byCodes("locationCode",
+                        JournalProcesses.dimensionValues(ctx, TEMPLATE_LINES, "location")),
+                    JournalProcesses.LOCATIONS))
                 .step("Load the entries made already", QueryEntities.of(JOURNAL_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("recurringKey",
                         new ArrayList<>(keys(ctx)))).limit(MAX_PER_RUN).build(), EXISTING))
@@ -122,6 +147,11 @@ public final class JournalAutomation {
                 Map.of("date", date.toString())));
             return;
         }
+        if (list(ctx, TEMPLATE_LINES).size() > MAX_TEMPLATE_LINES) {
+            ctx.reject(new Violation("date", TOO_MANY_LINES, "The active templates have more than "
+                + MAX_TEMPLATE_LINES + " lines", Map.of("limit", String.valueOf(MAX_TEMPLATE_LINES))));
+            return;
+        }
         LocalDate start = period.get("startDate");
         LocalDate end = period.get("endDate");
         Set<String> made = new HashSet<>();
@@ -129,6 +159,7 @@ public final class JournalAutomation {
             made.add(existing.get("recurringKey"));
         }
         List<JournalProcesses.JournalId> toSubmit = new ArrayList<>();
+        List<Skipped> skipped = new ArrayList<>();
         List<EntityInstance> templates = new ArrayList<>(list(ctx, TEMPLATES));
         templates.sort(Comparator.comparing(t -> t.<String>get("templateCode")));
         for (EntityInstance template : templates) {
@@ -143,6 +174,17 @@ public final class JournalAutomation {
                 .sorted(Comparator.comparing(line -> line.<BigDecimal>get("lineNo")))
                 .map(JournalProcesses::line)
                 .toList();
+            // A template that cannot post is reported and left out; the others still go (FIN-GL-017).
+            List<Violation> problems = new ArrayList<>(JournalValidator.checkLines(lines));
+            if (problems.isEmpty()) {
+                problems.addAll(JournalValidator.checkForPosting(lines, JournalProcesses.accounts(ctx),
+                    JournalProcesses.dimensions(ctx), false));
+            }
+            if (!problems.isEmpty()) {
+                skipped.add(new Skipped(template.get("templateCode"),
+                    String.join("; ", problems.stream().map(Violation::message).toList())));
+                continue;
+            }
             JournalValidator.Totals totals = JournalValidator.totals(lines);
             Map<String, Object> header = new LinkedHashMap<>();
             header.put("postingDate", end);
@@ -161,6 +203,7 @@ public final class JournalAutomation {
             toSubmit.add(new JournalProcesses.JournalId(UUID.fromString(String.valueOf(id))));
         }
         ctx.put(TO_SUBMIT, List.copyOf(toSubmit));
+        ctx.put(SKIPPED, List.copyOf(skipped));
         ctx.put(OUTPUT, period.get("periodKey"));
     }
 
@@ -184,15 +227,17 @@ public final class JournalAutomation {
     private static RecurringOutput recurringOutput(ProcessContext ctx) {
         List<JournalProcesses.JournalOutput> submitted = ctx.contains(SUBMITTED)
             ? (List<JournalProcesses.JournalOutput>) ctx.get(SUBMITTED) : List.of();
+        List<Skipped> skipped = ctx.contains(SKIPPED) ? (List<Skipped>) ctx.get(SKIPPED) : List.of();
         return new RecurringOutput(ctx.contains(OUTPUT) ? ctx.get(OUTPUT, String.class) : null,
-            List.copyOf(submitted));
+            List.copyOf(submitted), skipped);
     }
 
     // ---- automatic reversals --------------------------------------------------------------------------------------
 
-    public static final ProcessDefinition<RunInput, AutoReverseOutput, ProcessContext> AUTO_REVERSE_RUN_PROCESS =
-        ProcessDefinition.define(AUTO_REVERSE_RUN, 1, RunInput.class, AutoReverseOutput.class, ProcessContext.class,
-            pb -> pb
+    public static ProcessDefinition<RunInput, AutoReverseOutput, ProcessContext> autoReverseRunProcess(
+        BookingTime booking) {
+        return ProcessDefinition.define(AUTO_REVERSE_RUN, 1, RunInput.class, AutoReverseOutput.class,
+            ProcessContext.class, pb -> pb
                 .description("Posts the reversals of the entries whose reversal date has come.")
                 .permissions(FinancePermissions.JOURNAL_PREPARE)
                 .contextFactory((start, input) -> {
@@ -201,9 +246,20 @@ public final class JournalAutomation {
                     return ctx;
                 })
                 .outputMapper(JournalAutomation::autoReverseOutput)
+                .compute("Check the date", (metadata, ctx) -> {
+                    // Reversals post without approval: never ahead of their day.
+                    LocalDate date = ctx.get(INPUT, RunInput.class).date();
+                    LocalDate today = booking.dateOf(ctx.opTime());
+                    if (date.isAfter(today)) {
+                        ctx.reject(new Violation("date", FUTURE_DATE, "Reversals due on " + date
+                            + " are not posted before that day", Map.of("today", today.toString())));
+                    }
+                })
+                // Only entries not reversed yet: those already reversed never crowd the others out.
                 .step("Load the entries due", QueryEntities.of(JOURNAL_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", POSTED),
-                        new QueryPredicate.Lte("autoReverseDate", ctx.get(INPUT, RunInput.class).date()))))
+                        new QueryPredicate.Lte("autoReverseDate", ctx.get(INPUT, RunInput.class).date()),
+                        new QueryPredicate.IsNull("reversedById"))))
                     .limit(MAX_PER_RUN).build(), DUE))
                 .step("Load their reversals", QueryEntities.of(JOURNAL_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("reversesJournalId",
@@ -223,7 +279,9 @@ public final class JournalAutomation {
                     }
                     ctx.put(TO_REVERSE, List.copyOf(toReverse));
                 })
-                .step("Reverse them", CallProcess.forEach(AUTO_REVERSE, 1, ctx -> list(ctx, TO_REVERSE), REVERSED)));
+                .step("Reverse them", CallProcess.forEach(AUTO_REVERSE, 1, ctx -> list(ctx, TO_REVERSE),
+                    REVERSED)));
+    }
 
     @SuppressWarnings("unchecked")
     private static AutoReverseOutput autoReverseOutput(ProcessContext ctx) {
@@ -252,6 +310,17 @@ public final class JournalAutomation {
                 .step("Load the period of the reversal", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ctx -> JournalProcesses.periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class)
                         .get("autoReverseDate")), PERIODS))
+                .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> JournalProcesses
+                    .byCodes("accountCode", JournalProcesses.accountCodes(ctx, LINES)), JournalProcesses.FIN_ACCOUNTS))
+                .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET,
+                    ctx -> JournalProcesses.byCodes("accountCode", JournalProcesses.accountCodes(ctx, LINES)),
+                    JournalProcesses.LEDGER_ACCOUNTS))
+                .step("Load the departments", QueryEntities.of(GlEntities.DEPARTMENT_DATASET,
+                    ctx -> JournalProcesses.byCodes("departmentCode",
+                        JournalProcesses.dimensionValues(ctx, LINES, "department")), JournalProcesses.DEPARTMENTS))
+                .step("Load the locations", QueryEntities.of(GlEntities.LOCATION_DATASET,
+                    ctx -> JournalProcesses.byCodes("locationCode",
+                        JournalProcesses.dimensionValues(ctx, LINES, "location")), JournalProcesses.LOCATIONS))
                 .compute("Make the reversal", (metadata, ctx) -> makeReversal(ctx))
                 .step("Save", SaveChanges.now())
                 .step("Post it", CallProcess.when(ctx -> ctx.contains(POST_INPUT), JournalProcesses.POST, 1,
@@ -271,6 +340,15 @@ public final class JournalAutomation {
             reason = PeriodPolicy.check(JournalProcesses.state(period, PeriodPolicy.Source.GL),
                 PeriodPolicy.Source.GL, false, false).map(PeriodPolicy.Refusal::message).orElse(null);
         }
+        if (reason == null) {
+            // An account closed since: the reversal waits, with the reason, until it is open again.
+            List<Violation> problems = JournalValidator.checkForPosting(list(ctx, LINES).stream()
+                .map(JournalProcesses::line).toList(), JournalProcesses.accounts(ctx),
+                JournalProcesses.dimensions(ctx), true);
+            if (!problems.isEmpty()) {
+                reason = String.join("; ", problems.stream().map(Violation::message).toList());
+            }
+        }
         if (reason != null) {
             ctx.put(OUTPUT, new ReversalOutput(String.valueOf(original.id()), null, null, false, reason));
             return;
@@ -282,6 +360,7 @@ public final class JournalAutomation {
         Object id = JournalProcesses.insertReversal(ctx, original, list(ctx, LINES), JournalEntities.AUTO_REVERSING,
             original.get("autoReverseDate"), "Automatic reversal of " + original.get("journalNo"), journalNo,
             JournalEntities.APPROVED, ctx.request().actorId(), extra);
+        ctx.changes().update(JOURNAL, original.id(), original.version(), Map.of("reversedById", id));
         // The reversal posts on the authority of the original's approval: it only takes it back.
         String hash = JournalProcesses.contentHash(reversalHeader(original, journalNo), JournalEntities.AUTO_REVERSING,
             reversedLines(list(ctx, LINES)));

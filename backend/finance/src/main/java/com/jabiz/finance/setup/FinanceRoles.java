@@ -45,8 +45,7 @@ public final class FinanceRoles {
         add(CONTROLLER, "Controller", READ_BOOKS, READ_LEDGER, List.of(
             FinancePermissions.ACCOUNT_MAINTAIN, FinancePermissions.DIMENSION_MAINTAIN, FinancePermissions.FX_MAINTAIN,
             FinancePermissions.PERIOD_MAINTAIN, FinancePermissions.PERIOD_CLOSE, FinancePermissions.JOURNAL_APPROVE,
-            FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.RECURRING_MAINTAIN,
-            FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
+            FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
             "sod.read", "report.issue", "audit.read", "operation.read"));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN));

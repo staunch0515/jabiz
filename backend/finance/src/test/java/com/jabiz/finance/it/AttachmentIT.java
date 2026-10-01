@@ -80,4 +80,29 @@ class AttachmentIT extends FinanceItSupport {
         assertThat(sha256(served)).isEqualTo(sha256(pdf));
         assertOnlyInserted("fi_journal_attachment_version");
     }
+
+    /** The documents are the preparer's own, and do not change while the entry waits for approval. */
+    @Test
+    void onlyThePreparerAttachesTheirOwnUploadsToADraft() {
+        String other = as("other", "fin.journal.prepare", "fin.journal.read", "fin.journal.attach");
+        String theirs = upload(other, JournalEntities.SUPPORT_FILES, FileSamples.pdf(), "theirs.pdf",
+            "application/pdf");
+        String mine = upload(accountant(), JournalEntities.SUPPORT_FILES, FileSamples.pdf(), "mine.pdf",
+            "application/pdf");
+        String id = (String) ok(JournalProcesses.SAVE, accountant(), entry("2026-01-31", "Large accrual",
+            List.of(line("6400", "20000.00", null, null), line("2100", null, "20000.00", null)))).get("journalId");
+
+        assertThat(refused(JournalAttachments.ATTACH, accountant(), Map.of("journalId", id, "fileId", theirs), 422))
+            .isEqualTo(JournalAttachments.NOT_UPLOADER);
+        assertThat(refused(JournalAttachments.ATTACH, other, Map.of("journalId", id, "fileId", theirs), 422))
+            .isEqualTo(JournalAttachments.NOT_PREPARER);
+        Map<String, Object> attached = ok(JournalAttachments.ATTACH, accountant(),
+            Map.of("journalId", id, "fileId", mine));
+
+        // Submitted, it waits for approval: what the approver sees stays as it is.
+        assertThat(ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", id)))
+            .containsEntry("status", "SUBMITTED");
+        assertThat(refused(JournalAttachments.DETACH, accountant(),
+            Map.of("attachmentId", attached.get("attachmentId")), 422)).isEqualTo(JournalAttachments.LOCKED);
+    }
 }

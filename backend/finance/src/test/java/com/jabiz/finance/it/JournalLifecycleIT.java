@@ -1,5 +1,6 @@
 package com.jabiz.finance.it;
 
+import com.jabiz.finance.gl.AccountProcesses;
 import com.jabiz.finance.gl.JournalEntities;
 import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.JournalValidator;
@@ -379,6 +380,92 @@ class JournalLifecycleIT extends FinanceItSupport {
         assertGapFree("journal_no", "JE-");
         assertGapFree("gl_no", "GJ-MAN-2026-");
         assertOnlyInserted("fi_journal_version", "fi_journal_line_version", "fi_posting_version");
+    }
+
+    /** A late decision of an earlier request does not decide the current one. */
+    @Test
+    void aStaleDecisionDoesNotDecideTheCurrentRequest() {
+        Map<String, Object> entry = entry("2026-01-31", "Legal fees accrual", List.of(
+            line("6400", "11000.00", null, null), line("2100", null, "11000.00", null)));
+        String id = draft(accountant(), entry);
+        Object first = submit(accountant(), id).get("approvalRequestId");
+        decide(controller("controller"), first, "REJECT", "Not yet");
+        // Before the rejection reaches the entry, the preparer saves and submits the same content again.
+        ok(JournalProcesses.SAVE, accountant(), withId(entry, id));
+        Object second = submit(accountant(), id).get("approvalRequestId");
+        assertThat(second).isNotEqualTo(first);
+        deliver();
+        assertThat(journal(id)).containsEntry("status", "SUBMITTED");
+
+        decide(controller("controller"), second, "APPROVE", null);
+        deliver();
+        assertThat(journal(id)).containsEntry("status", "POSTED");
+    }
+
+    /** An account closed between approval and posting: the entry waits approved and is posted once corrected. */
+    @Test
+    void anEntryTheLedgerWouldRefuseIsNotPostedOnApproval() {
+        String code = "6" + unique();
+        ok("FIN_ACCOUNT_CREATE", controller(), Map.of("accountCode", code, "accountName", "Temporary",
+            "financialType", "EXPENSE", "normalBalance", "DEBIT", "statementLine", "Operating expenses"));
+        Map<String, Object> entry = entry("2026-01-31", "Consulting accrual", List.of(
+            line(code, "12000.00", null, null), line("2100", null, "12000.00", null)));
+        String id = draft(accountant(), entry);
+        Object request = submit(accountant(), id).get("approvalRequestId");
+        ok(AccountProcesses.DEACTIVATE, controller(), Map.of("accountCode", code));
+
+        decide(controller("controller"), request, "APPROVE", null);
+        deliver();
+        assertThat(journal(id)).containsEntry("status", "APPROVED").containsEntry("glNo", null);
+
+        // The preparer moves it to an open account and it goes through approval again.
+        Map<String, Object> corrected = withId(entry, id);
+        corrected.put("lines", List.of(line("6400", "12000.00", null, null), line("2100", null, "12000.00", null)));
+        ok(JournalProcesses.SAVE, accountant(), corrected);
+        decide(controller("controller"), submit(accountant(), id).get("approvalRequestId"), "APPROVE", null);
+        deliver();
+        assertThat(journal(id)).containsEntry("status", "POSTED");
+    }
+
+    @Test
+    void datesFlagsAndReversalLinesAreChecked() {
+        Map<String, Object> early = entry("2026-01-31", "Reversed too early", List.of(
+            line("6300", "5.00", null, null), line("2100", null, "5.00", null)));
+        early.put("autoReverseDate", "2026-01-31");
+        assertThat(refused(JournalProcesses.SAVE, accountant(), early, 422))
+            .isEqualTo(JournalProcesses.AUTO_REVERSE_DATE);
+        Map<String, Object> thirteen = entry("2026-12-31", "Not adjusting", List.of(
+            line("6300", "5.00", null, null), line("2100", null, "5.00", null)));
+        thirteen.put("adjustmentPeriod", true);
+        assertThat(refused(JournalProcesses.SAVE, accountant(), thirteen, 422))
+            .isEqualTo(JournalProcesses.ADJUSTMENT_PERIOD);
+
+        // The reversal of a large entry waits for approval; its lines stay those of the original.
+        String id = draft(accountant(), entry("2026-01-20", "Large accrual", List.of(
+            line("6400", "30000.00", null, null), line("2100", null, "30000.00", null))));
+        decide(controller("controller"), submit(accountant(), id).get("approvalRequestId"), "APPROVE", null);
+        deliver();
+        Map<String, Object> reversal = ok(JournalProcesses.REVERSE, accountant(),
+            Map.of("journalId", id, "postingDate", "2026-01-25"));
+        assertThat(reversal).containsEntry("status", "SUBMITTED");
+        assertThat(journal(id)).containsEntry("reversedById", reversal.get("journalId"));
+        Map<String, Object> changed = entry("2026-01-26", "Reversal, later", List.of(
+            line("2100", "30000.00", null, null), line("6400", null, "30000.00", null)));
+        changed.put("journalId", reversal.get("journalId"));
+        assertThat(ok(JournalProcesses.SAVE, accountant(), changed)).containsEntry("status", "DRAFT");
+        changed.put("lines", List.of(line("2100", "1.00", null, null), line("6400", null, "1.00", null)));
+        assertThat(refused(JournalProcesses.SAVE, accountant(), changed, 422))
+            .isEqualTo(JournalProcesses.REVERSAL_LINES);
+    }
+
+    /** The exception is granted to the content before it is submitted. */
+    @Test
+    void noExceptionForASubmittedEntry() {
+        String id = draft(accountant(), entry("2026-01-31", "Big", List.of(
+            line("6400", "40000.00", null, null), line("2100", null, "40000.00", null))));
+        submit(accountant(), id);
+        assertThat(refused(JournalProcesses.GRANT_CONTROL_EXCEPTION, controller("controller"),
+            Map.of("journalId", id, "reason", "late"), 422)).isEqualTo(JournalProcesses.NOT_SUBMITTABLE);
     }
 
     private static void assertGapFree(String column, String prefix) {

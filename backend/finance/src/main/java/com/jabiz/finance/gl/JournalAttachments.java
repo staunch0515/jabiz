@@ -16,6 +16,7 @@ import jakarta.validation.constraints.Size;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import static com.jabiz.finance.gl.JournalEntities.ATTACHMENT;
@@ -36,6 +37,9 @@ public final class JournalAttachments {
     public static final String DETACH = "FIN_JOURNAL_DETACH";
 
     public static final String POSTED_ENTRY = "FIN_ATTACHMENT_POSTED";
+    public static final String LOCKED = "FIN_ATTACHMENT_LOCKED";
+    public static final String NOT_PREPARER = "FIN_ATTACHMENT_NOT_PREPARER";
+    public static final String NOT_UPLOADER = "FIN_ATTACHMENT_NOT_UPLOADER";
 
     /** @param fileId a document or image; @param sheetFileId or a spreadsheet: exactly one of the two */
     public record AttachInput(@NotNull UUID journalId, UUID fileId, UUID sheetFileId,
@@ -77,9 +81,7 @@ public final class JournalAttachments {
                 .compute("Attach it", (metadata, ctx) -> {
                     AttachInput input = ctx.get(INPUT, AttachInput.class);
                     EntityInstance journal = ctx.get(JOURNAL_KEY, EntityInstance.class);
-                    if (POSTED.equals(journal.get("status"))) {
-                        ctx.reject(new Violation("journalId", POSTED_ENTRY,
-                            "The supporting documents of a posted entry do not change", Map.of()));
+                    if (refuseChange(ctx, journal, "journalId")) {
                         return;
                     }
                     List<EntityInstance> files = AccountProcesses.list(ctx, FILE);
@@ -89,6 +91,12 @@ public final class JournalAttachments {
                         return;
                     }
                     EntityInstance file = files.getFirst();
+                    // Only one's own uploads: a file id seen elsewhere does not make another's document evidence.
+                    if (!Objects.equals(file.get(FileEntities.UPLOADED_BY), ctx.request().actorId())) {
+                        ctx.reject(new Violation("fileId", NOT_UPLOADER, "Attach a document you uploaded",
+                            Map.of()));
+                        return;
+                    }
                     Map<String, Object> attachment = new LinkedHashMap<>();
                     attachment.put("journalId", journal.id());
                     attachment.put("fileId", input.fileId());
@@ -118,15 +126,32 @@ public final class JournalAttachments {
                 .compute("Remove it", (metadata, ctx) -> {
                     EntityInstance attachment = ctx.get(ATTACHMENT_KEY, EntityInstance.class);
                     EntityInstance journal = ctx.get(JOURNAL_KEY, EntityInstance.class);
-                    if (POSTED.equals(journal.get("status"))) {
-                        ctx.reject(new Violation("attachmentId", POSTED_ENTRY,
-                            "The supporting documents of a posted entry do not change", Map.of()));
+                    if (refuseChange(ctx, journal, "attachmentId")) {
                         return;
                     }
                     ctx.changes().delete(ATTACHMENT, attachment.id(), attachment.version());
                     ctx.put(OUTPUT, new AttachmentOutput(String.valueOf(attachment.id()),
                         String.valueOf(journal.id()), attachment.get("sha256")));
                 }));
+
+    /**
+     * The documents are what the approver saw: only the preparer changes them, and only while the entry is a draft
+     * or rejected; a posted entry's documents are evidence (FIN-GL-016).
+     */
+    private static boolean refuseChange(ProcessContext ctx, EntityInstance journal, String field) {
+        String status = journal.get("status");
+        if (POSTED.equals(status)) {
+            ctx.reject(new Violation(field, POSTED_ENTRY, "The supporting documents of a posted entry do not change",
+                Map.of()));
+        } else if (!JournalEntities.DRAFT.equals(status) && !JournalEntities.REJECTED.equals(status)) {
+            ctx.reject(new Violation(field, LOCKED, "The entry is " + status + "; its supporting documents change "
+                + "once it is a draft again", Map.of("status", status)));
+        } else if (!Objects.equals(journal.get("preparer"), ctx.request().actorId())) {
+            ctx.reject(new Violation(field, NOT_PREPARER, "Only the preparer changes the supporting documents",
+                Map.of()));
+        }
+        return ctx.hasViolations();
+    }
 
     private JournalAttachments() {}
 }

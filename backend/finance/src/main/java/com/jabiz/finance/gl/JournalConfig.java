@@ -186,7 +186,7 @@ class JournalConfig {
 
     private static JournalProcesses.ApprovalResultInput decision(DomainEvent event) {
         return new JournalProcesses.ApprovalResultInput(text(event, "subject"), text(event, "entityId"),
-            text(event, "status"), text(event, "contentHash"));
+            text(event, "status"), text(event, "contentHash"), text(event, "requestId"));
     }
 
     private static String text(DomainEvent event, String key) {
@@ -244,8 +244,8 @@ class JournalConfig {
 
     @Bean
     ProcessDefinition<JournalAutomation.RunInput, JournalAutomation.AutoReverseOutput, ProcessContext>
-        finAutoReverseRunProcess() {
-        return JournalAutomation.AUTO_REVERSE_RUN_PROCESS;
+        finAutoReverseRunProcess(BookingTime booking) {
+        return JournalAutomation.autoReverseRunProcess(booking);
     }
 
     @Bean
@@ -275,8 +275,10 @@ class JournalConfig {
 
     /** Reversals due, posted each morning at 00:30 in the company's zone (FIN-GL-018). */
     @Bean
-    JobDefinition<JournalAutomation.RunInput> autoReverseJob(BookingTime booking) {
+    JobDefinition<JournalAutomation.RunInput> autoReverseJob(BookingTime booking,
+        ProcessDefinition<JournalAutomation.RunInput, JournalAutomation.AutoReverseOutput, ProcessContext>
+            finAutoReverseRunProcess) {
         return JobDefinition.cron(JournalAutomation.AUTO_REVERSE_JOB, "0 30 0 * * *", booking.zone(),
-            JournalAutomation.AUTO_REVERSE_RUN_PROCESS, time -> new JournalAutomation.RunInput(booking.dateOf(time)));
+            finAutoReverseRunProcess, time -> new JournalAutomation.RunInput(booking.dateOf(time)));
     }
 }

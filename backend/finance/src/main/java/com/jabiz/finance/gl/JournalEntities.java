@@ -92,6 +92,8 @@ public final class JournalEntities {
         eb.field("autoReverseDate", f -> f.physicalColumn("auto_reverse_date").asDate());
         eb.field("reversesJournalId", f -> f.physicalColumn("reverses_journal_id").immutable(true)
             .asReference(JOURNAL));
+        // Set on the original once a reversal of it is made: the automatic reversal looks only at the others.
+        eb.field("reversedById", f -> f.physicalColumn("reversed_by_id").processOnly().asReference(JOURNAL));
         // A recurring template's entry of one period, "PREPAID-INS/2026-01": made once (FIN-GL-017).
         eb.field("recurringKey", f -> f.physicalColumn("recurring_key").immutable(true).asText(150));
         eb.field("totalDebit", f -> f.physicalColumn("total_debit").required(true).processOnly()

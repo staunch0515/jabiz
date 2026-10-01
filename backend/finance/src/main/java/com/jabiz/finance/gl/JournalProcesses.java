@@ -99,6 +99,9 @@ public final class JournalProcesses {
     public static final String NOT_POSTED = "FIN_JOURNAL_NOT_POSTED";
     public static final String ALREADY_REVERSED = "FIN_JOURNAL_ALREADY_REVERSED";
     public static final String NO_PERIOD = "FIN_JOURNAL_NO_PERIOD";
+    public static final String AUTO_REVERSE_DATE = "FIN_JOURNAL_AUTO_REVERSE_DATE";
+    public static final String ADJUSTMENT_PERIOD = "FIN_JOURNAL_ADJUSTMENT_PERIOD";
+    public static final String REVERSAL_LINES = "FIN_JOURNAL_REVERSAL_LINES";
 
     // ---- inputs and outputs ---------------------------------------------------------------------------------------
 
@@ -139,7 +142,8 @@ public final class JournalProcesses {
     public record PostOutput(String journalId, boolean posted, String glNo, String transactionId, String reason) {}
 
     /** The platform's approval decision, as its events carry it. */
-    public record ApprovalResultInput(String subject, String entityId, String status, String contentHash) {}
+    public record ApprovalResultInput(String subject, String entityId, String status, String contentHash,
+        String requestId) {}
 
     // ---- context keys ---------------------------------------------------------------------------------------------
 
@@ -248,6 +252,15 @@ public final class JournalProcesses {
             .step("Load its lines", QueryEntities.of(LINE_DATASET, ctx -> linesOf(ctx.get(JOURNAL_ID)), LINES))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class).get("postingDate")), PERIODS))
+            // The accounts may have changed since submission: what the ledger would refuse is not posted.
+            .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
+                ctx -> byCodes("accountCode", accountCodes(ctx, LINES)), FIN_ACCOUNTS))
+            .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET,
+                ctx -> byCodes("accountCode", accountCodes(ctx, LINES)), LEDGER_ACCOUNTS))
+            .step("Load the departments", QueryEntities.of(GlEntities.DEPARTMENT_DATASET,
+                ctx -> byCodes("departmentCode", dimensionValues(ctx, LINES, "department")), DEPARTMENTS))
+            .step("Load the locations", QueryEntities.of(GlEntities.LOCATION_DATASET,
+                ctx -> byCodes("locationCode", dimensionValues(ctx, LINES, "location")), LOCATIONS))
             .compute("Check it is still the approved entry", (metadata, ctx) -> checkPosting(ctx, booking))
             .step("Number the posting", AssignNumber.when(ctx -> ctx.contains(READY), GL_NUMBERS,
                 ctx -> ctx.get(READY, Ready.class).glScope(), GL_NO))
@@ -284,7 +297,7 @@ public final class JournalProcesses {
             ProcessContext.class, pb -> pb
                 .description("Lets this content of a journal entry post to control accounts, with the reason.")
                 .permissions(FinancePermissions.JOURNAL_CONTROL_EXCEPTION)
-                .actsOn(JOURNAL, "journalId", a -> a.whenField("status", DRAFT, REJECTED, SUBMITTED))
+                .actsOn(JOURNAL, "journalId", a -> a.whenField("status", DRAFT, REJECTED))
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);
@@ -332,6 +345,7 @@ public final class JournalProcesses {
                         ? input.description().trim() : "Reversal of " + original.get("journalNo");
                     Object id = insertReversal(ctx, original, list(ctx, LINES), JournalEntities.REVERSING,
                         input.postingDate(), description, null, DRAFT, ctx.request().actorId());
+                    ctx.changes().update(JOURNAL, original.id(), original.version(), Map.of("reversedById", id));
                     ctx.put(POST_INPUT, new JournalId(UUID.fromString(String.valueOf(id))));
                 })
                 .step("Save", SaveChanges.now())
@@ -346,6 +360,14 @@ public final class JournalProcesses {
         for (Violation problem : JournalValidator.checkLines(lines)) {
             ctx.reject(problem);
         }
+        if (input.autoReverseDate() != null && !input.autoReverseDate().isAfter(input.postingDate())) {
+            ctx.reject(new Violation("autoReverseDate", AUTO_REVERSE_DATE, "An entry is reversed after its posting "
+                + "date " + input.postingDate(), Map.of("postingDate", input.postingDate().toString())));
+        }
+        if (Boolean.TRUE.equals(input.adjustmentPeriod()) && !Boolean.TRUE.equals(input.adjusting())) {
+            ctx.reject(new Violation("adjustmentPeriod", ADJUSTMENT_PERIOD, "Only an adjusting entry goes into "
+                + "the adjustment period", Map.of()));
+        }
         EntityInstance journal = null;
         if (input.journalId() != null) {
             journal = list(ctx, JOURNALS).isEmpty() ? null : list(ctx, JOURNALS).getFirst();
@@ -355,6 +377,12 @@ public final class JournalProcesses {
                 return;
             }
             checkChangeable(ctx, journal);
+            // A reversal mirrors its original: its dates and description may change, its lines may not.
+            if (journal.get("reversesJournalId") != null && !sameLines(lines,
+                list(ctx, LINES).stream().map(JournalProcesses::line).toList())) {
+                ctx.reject(refusal("lines", REVERSAL_LINES, "The lines of a reversal are those of the entry it "
+                    + "reverses, on the opposite sides", journal));
+            }
         }
         if (ctx.hasViolations()) {
             return;
@@ -530,12 +558,20 @@ public final class JournalProcesses {
         String reason = null;
         if (POSTED.equals(status)) {
             reason = "posted already";
-        } else if (!SUBMITTED.equals(status) && !APPROVED.equals(status)) {
+        } else if (!APPROVED.equals(status)) {
             reason = "it is " + status;
         } else if (!input.contentHash().equals(journal.get("contentHash"))
             || !input.contentHash().equals(contentHash(journal, lines))) {
             // Changed since it was approved: the approval was for other content (FIN-CT-003).
             reason = "it changed since it was approved";
+        }
+        if (reason == null) {
+            // The control-account rule belongs to submission; here only what the ledger would refuse.
+            List<Violation> problems = JournalValidator.checkForPosting(
+                lines.stream().map(JournalProcesses::line).toList(), accounts(ctx), dimensions(ctx), true);
+            if (!problems.isEmpty()) {
+                reason = String.join("; ", problems.stream().map(Violation::message).toList());
+            }
         }
         EntityInstance period = period(ctx, Boolean.TRUE.equals(journal.get("adjustmentPeriod")));
         if (reason == null && period == null) {
@@ -605,6 +641,9 @@ public final class JournalProcesses {
             reason = "not a journal entry";
         } else if (!SUBMITTED.equals(journal.get("status"))) {
             reason = "it is " + journal.get("status");
+        } else if (!Objects.equals(input.requestId(), String.valueOf((Object) journal.get("approvalRequestId")))) {
+            // A late decision of an earlier request: the entry waits for its current one.
+            reason = "the decision was for another request";
         } else if (!Objects.equals(input.contentHash(), journal.get("contentHash"))) {
             reason = "the decision was for other content";
         }
@@ -628,9 +667,9 @@ public final class JournalProcesses {
         ExceptionInput input = ctx.get(INPUT, ExceptionInput.class);
         EntityInstance journal = ctx.get(JOURNAL_KEY, EntityInstance.class);
         String status = journal.get("status");
-        if (POSTED.equals(status) || APPROVED.equals(status)) {
-            ctx.reject(refusal("journalId", IS_POSTED, "Entry " + journal.get("journalNo") + " is " + status
-                + "; an exception is granted before it is approved", journal));
+        if (!DRAFT.equals(status) && !REJECTED.equals(status)) {
+            ctx.reject(refusal("journalId", NOT_SUBMITTABLE, "Entry " + journal.get("journalNo") + " is " + status
+                + "; an exception is granted before it is submitted", journal));
             return;
         }
         // The controller who prepared the entry does not grant its exception (FIN-CT-001).
@@ -756,6 +795,23 @@ public final class JournalProcesses {
         return maps;
     }
 
+    /** Whether two sets of lines are the same in any order, amounts compared by value. */
+    static boolean sameLines(List<JournalValidator.Line> a, List<JournalValidator.Line> b) {
+        return comparable(lineMaps(a)).equals(comparable(lineMaps(b)));
+    }
+
+    private static List<String> comparable(List<Map<String, Object>> lines) {
+        List<String> result = new ArrayList<>();
+        for (Map<String, Object> line : lines) {
+            Map<String, Object> copy = new LinkedHashMap<>(line);
+            copy.replaceAll((key, value) -> value instanceof BigDecimal amount
+                ? amount.stripTrailingZeros().toPlainString() : value);
+            result.add(copy.toString());
+        }
+        result.sort(null);
+        return result;
+    }
+
     static JournalValidator.Line line(LineInput input) {
         return new JournalValidator.Line(trim(input.accountCode()), input.debit(), input.credit(), input.memo(),
             trim(input.department()), trim(input.location()));
@@ -766,7 +822,8 @@ public final class JournalProcesses {
             row.get("memo"), row.get("department"), row.get("location"));
     }
 
-    private static Map<String, JournalValidator.Account> accounts(ProcessContext ctx) {
+    /** The accounts loaded under {@code FIN_ACCOUNTS} and {@code LEDGER_ACCOUNTS}, by code. */
+    static Map<String, JournalValidator.Account> accounts(ProcessContext ctx) {
         Map<String, EntityInstance> ledger = new HashMap<>();
         for (EntityInstance account : list(ctx, LEDGER_ACCOUNTS)) {
             ledger.put(account.get("accountCode"), account);
@@ -783,7 +840,8 @@ public final class JournalProcesses {
         return accounts;
     }
 
-    private static JournalValidator.Dimensions dimensions(ProcessContext ctx) {
+    /** The active dimension values loaded under {@code DEPARTMENTS} and {@code LOCATIONS}. */
+    static JournalValidator.Dimensions dimensions(ProcessContext ctx) {
         Set<String> departments = new HashSet<>();
         for (EntityInstance value : list(ctx, DEPARTMENTS)) {
             if (Boolean.TRUE.equals(value.get("active"))) {
@@ -842,16 +900,26 @@ public final class JournalProcesses {
     }
 
     private static Set<String> accountCodes(ProcessContext ctx) {
+        return accountCodes(ctx, LINES);
+    }
+
+    /** The account codes of the line rows under {@code linesKey}. */
+    static Set<String> accountCodes(ProcessContext ctx, String linesKey) {
         Set<String> codes = new HashSet<>();
-        for (EntityInstance line : list(ctx, LINES)) {
+        for (EntityInstance line : list(ctx, linesKey)) {
             codes.add(line.get("accountCode"));
         }
         return codes;
     }
 
     private static Set<String> dimensionValues(ProcessContext ctx, String dimension) {
+        return dimensionValues(ctx, LINES, dimension);
+    }
+
+    /** The values of a dimension on the line rows under {@code linesKey}. */
+    static Set<String> dimensionValues(ProcessContext ctx, String linesKey, String dimension) {
         Set<String> values = new HashSet<>();
-        for (EntityInstance line : list(ctx, LINES)) {
+        for (EntityInstance line : list(ctx, linesKey)) {
             String value = line.get(dimension);
             if (value != null) {
                 values.add(value);

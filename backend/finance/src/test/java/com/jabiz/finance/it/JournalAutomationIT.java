@@ -78,7 +78,7 @@ class JournalAutomationIT extends FinanceItSupport {
         // The job of 31 January 06:00 in Chicago.
         assertThat(jobs.run(recurringJob, Instant.parse("2026-01-31T12:00:00Z")))
             .isEqualTo(JobRunner.Outcome.SUCCEEDED);
-        List<Map<String, Object>> made = find(JournalEntities.JOURNAL_DATASET, "source", "RECURRING");
+        List<Map<String, Object>> made = january();
         assertThat(made).hasSize(2);
         Map<String, Object> insurance = made.stream()
             .filter(j -> "Recurring: PREPAID-INS".equals(j.get("description"))).findFirst().orElseThrow();
@@ -91,9 +91,46 @@ class JournalAutomationIT extends FinanceItSupport {
         Map<String, Object> again = ok(JournalAutomation.RECURRING_RUN, accountant(), Map.of("date", "2026-01-15"));
         assertThat((List<?>) again.get("entries")).isEmpty();
         assertThat(again).containsEntry("periodKey", "2026-01");
-        assertThat(find(JournalEntities.JOURNAL_DATASET, "source", "RECURRING")).hasSize(2);
+        assertThat(january()).hasSize(2);
         assertThat(refused(JournalAutomation.RECURRING_RUN, accountant(), Map.of("date", "2030-01-15"), 422))
             .isEqualTo(JournalAutomation.NO_PERIOD);
+    }
+
+    /** A template that cannot post is left out with its reason; the others are made. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aTemplateThatCannotPostIsReportedAndTheOthersAreMade() {
+        String good = "GOOD-" + unique();
+        template(good, "2026-04-01", "6800", "2100", "10.00");
+        String bad = "BAD-" + unique();
+        template(bad, "2026-04-01", "6800", "1200", "10.00");
+        Map<String, Object> run = ok(JournalAutomation.RECURRING_RUN, accountant(), Map.of("date", "2026-04-15"));
+        List<Map<String, Object>> made = find(JournalEntities.JOURNAL_DATASET, "source", "RECURRING");
+        assertThat(made).filteredOn(j -> (good + "/2026-04").equals(j.get("recurringKey"))).singleElement()
+            .satisfies(j -> assertThat(j).containsEntry("status", "POSTED"));
+        assertThat(made).noneSatisfy(j -> assertThat(j.get("recurringKey")).isEqualTo(bad + "/2026-04"));
+        assertThat((List<Map<String, Object>>) run.get("skipped")).singleElement()
+            .satisfies(s -> assertThat(s).containsEntry("templateCode", bad)
+                .hasEntrySatisfying("reason", r -> assertThat((String) r).contains("1200")));
+    }
+
+    /** Reversals post without approval, so never ahead of their day; reversed entries are not looked at again. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void reversalsAreNotPostedEarlyNorTwice() {
+        assertThat(refused(JournalAutomation.AUTO_REVERSE_RUN, accountant(), Map.of("date", "2026-02-01"), 422))
+            .isEqualTo(JournalAutomation.FUTURE_DATE);
+
+        Map<String, Object> accrual = entry("2026-01-30", "Accrue freight", List.of(
+            line("6300", "20.00", null, null), line("2100", null, "20.00", null)));
+        accrual.put("autoReverseDate", "2026-01-31");
+        String id = (String) ok(JournalProcesses.SAVE, accountant(), accrual).get("journalId");
+        ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", id));
+        // Reversed by hand first: the automatic reversal leaves it alone.
+        ok(JournalProcesses.REVERSE, accountant(), Map.of("journalId", id, "postingDate", "2026-01-30"));
+        Map<String, Object> run = ok(JournalAutomation.AUTO_REVERSE_RUN, accountant(), Map.of("date", "2026-01-31"));
+        assertThat((List<Map<String, Object>>) run.get("reversals"))
+            .noneSatisfy(r -> assertThat(r).containsEntry("journalId", id));
     }
 
     /** FIN-GL-018 acceptance 1: on February 1 the reversal posts with opposite amounts and refers to the original. */
@@ -109,6 +146,7 @@ class JournalAutomationIT extends FinanceItSupport {
         // Not yet on 31 January.
         ok(JournalAutomation.AUTO_REVERSE_RUN, accountant(), Map.of("date", "2026-01-31"));
         assertThat(reversalsOf(id)).isEmpty();
+        clock.set(Instant.parse("2026-02-02T12:00:00Z"));
 
         assertThat(jobs.run(autoReverseJob, Instant.parse("2026-02-01T06:30:00Z")))
             .isEqualTo(JobRunner.Outcome.SUCCEEDED);
@@ -136,6 +174,7 @@ class JournalAutomationIT extends FinanceItSupport {
         String id = (String) ok(JournalProcesses.SAVE, accountant(), accrual).get("journalId");
         ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", id));
         ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2026-03", "status", "CLOSED"));
+        clock.set(Instant.parse("2026-03-02T12:00:00Z"));
 
         Map<String, Object> run = ok(JournalAutomation.AUTO_REVERSE_RUN, accountant(), Map.of("date", "2026-03-01"));
         assertThat((List<Map<String, Object>>) run.get("reversals")).singleElement()
@@ -146,6 +185,12 @@ class JournalAutomationIT extends FinanceItSupport {
             .satisfies(r -> assertThat(r).containsEntry("posted", true));
         assertOnlyInserted("fi_journal_version", "fi_journal_line_version", "fi_recurring_template_version",
             "fi_recurring_line_version");
+    }
+
+    /** The recurring entries of January; other tests make entries of other months. */
+    private List<Map<String, Object>> january() {
+        return find(JournalEntities.JOURNAL_DATASET, "source", "RECURRING").stream()
+            .filter(j -> String.valueOf(j.get("recurringKey")).endsWith("/2026-01")).toList();
     }
 
     private List<Map<String, Object>> reversalsOf(String journalId) {
