@@ -655,8 +655,17 @@ public final class JournalProcesses {
      */
     static Object insertReversal(ProcessContext ctx, EntityInstance original, List<EntityInstance> lines,
         String source, LocalDate postingDate, String description, String journalNo, String status, String preparer) {
+        return insertReversal(ctx, original, lines, source, postingDate, description, journalNo, status, preparer,
+            Map.of());
+    }
+
+    /** As above, with further header fields (the period of an entry that skips submission). */
+    static Object insertReversal(ProcessContext ctx, EntityInstance original, List<EntityInstance> lines,
+        String source, LocalDate postingDate, String description, String journalNo, String status, String preparer,
+        Map<String, Object> extra) {
         List<JournalValidator.Line> reversed = new ArrayList<>();
-        for (EntityInstance line : lines) {
+        for (EntityInstance line : lines.stream()
+            .sorted(java.util.Comparator.comparing(l -> l.<BigDecimal>get("lineNo"))).toList()) {
             reversed.add(new JournalValidator.Line(line.get("accountCode"), line.get("credit"), line.get("debit"),
                 line.get("memo"), line.get("department"), line.get("location")));
         }
@@ -674,6 +683,7 @@ public final class JournalProcesses {
         header.put("totalDebit", totals.debit());
         header.put("totalCredit", totals.credit());
         header.put("journalNo", journalNo);
+        header.putAll(extra);
         if (journalNo != null) {
             header.put("contentHash", contentHash(header, source, lineMaps(reversed)));
         }

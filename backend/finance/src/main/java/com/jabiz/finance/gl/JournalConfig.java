@@ -8,6 +8,7 @@ import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
+import com.jabiz.job.JobDefinition;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.BookingTime;
 import com.jabiz.numbering.NumberSequence;
@@ -233,5 +234,49 @@ class JournalConfig {
     ProcessDefinition<JournalProcesses.ReverseInput, JournalProcesses.JournalOutput, ProcessContext>
         finJournalReverseProcess() {
         return JournalProcesses.REVERSE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<JournalAutomation.RunInput, JournalAutomation.RecurringOutput, ProcessContext>
+        finRecurringRunProcess() {
+        return JournalAutomation.RECURRING_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<JournalAutomation.RunInput, JournalAutomation.AutoReverseOutput, ProcessContext>
+        finAutoReverseRunProcess() {
+        return JournalAutomation.AUTO_REVERSE_RUN_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<JournalProcesses.JournalId, JournalAutomation.ReversalOutput, ProcessContext>
+        finJournalAutoReverseProcess() {
+        return JournalAutomation.AUTO_REVERSE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<JournalAttachments.AttachInput, JournalAttachments.AttachmentOutput, ProcessContext>
+        finJournalAttachProcess() {
+        return JournalAttachments.ATTACH_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<JournalAttachments.AttachmentId, JournalAttachments.AttachmentOutput, ProcessContext>
+        finJournalDetachProcess() {
+        return JournalAttachments.DETACH_PROCESS;
+    }
+
+    /** The recurring entries of a month, made on its last day at 06:00 in the company's zone (FIN-GL-017). */
+    @Bean
+    JobDefinition<JournalAutomation.RunInput> recurringJob(BookingTime booking) {
+        return JobDefinition.cron(JournalAutomation.RECURRING_JOB, "0 0 6 L * *", booking.zone(),
+            JournalAutomation.RECURRING_PROCESS, time -> new JournalAutomation.RunInput(booking.dateOf(time)));
+    }
+
+    /** Reversals due, posted each morning at 00:30 in the company's zone (FIN-GL-018). */
+    @Bean
+    JobDefinition<JournalAutomation.RunInput> autoReverseJob(BookingTime booking) {
+        return JobDefinition.cron(JournalAutomation.AUTO_REVERSE_JOB, "0 30 0 * * *", booking.zone(),
+            JournalAutomation.AUTO_REVERSE_RUN_PROCESS, time -> new JournalAutomation.RunInput(booking.dateOf(time)));
     }
 }
