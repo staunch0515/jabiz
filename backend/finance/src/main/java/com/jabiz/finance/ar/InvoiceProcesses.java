@@ -817,6 +817,7 @@ public final class InvoiceProcesses {
         values.put("openAmount", prepared.total());
         values.put("openAmountUsd", prepared.posting().totalUsd());
         values.put("glNo", booked.glNo());
+        values.put("postedTime", ctx.opTime());
         values.put("transactionId", UUID.fromString(booked.transactionId()));
         if (ctx.contains(APPROVAL)) {
             com.jabiz.runtime.approval.ApprovalOutcome approval = ctx.get(APPROVAL,

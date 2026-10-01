@@ -3,6 +3,7 @@ package com.jabiz.finance.ar;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
@@ -466,5 +467,27 @@ class ArConfig {
     ProcessDefinition<ArSettingsProcesses.SettingsInput, ArSettingsProcesses.SettingsOutput, ProcessContext>
         finArSettingsSetProcess() {
         return ArSettingsProcesses.SET_PROCESS;
+    }
+
+    @Bean
+    DocumentLayout finInvoiceDocument() {
+        return InvoiceDocuments.INVOICE;
+    }
+
+    @Bean
+    DocumentLayout finCreditMemoDocument() {
+        return InvoiceDocuments.CREDIT_MEMO;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceDocuments.InvoiceId, InvoiceDocuments.IssueOutput, ProcessContext>
+        finInvoiceIssueProcess(BookingTime booking) {
+        return InvoiceDocuments.issueProcess(booking);
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceDocuments.InvoiceId, InvoiceDocuments.SendOutput, ProcessContext>
+        finInvoiceSendProcess(BookingTime booking) {
+        return InvoiceDocuments.sendProcess(booking);
     }
 }

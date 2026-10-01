@@ -333,6 +333,76 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
     }
 
     /**
+     * Books open for receivables (as {@link ReceivablesIT} has them): {@link #openBooks()}, the euro and its rates,
+     * the opening balances, the sample tax codes and customers, an unapplied cash and a sales discount account, the
+     * receivables settings and the legacy open items INV-1001 to INV-1003.
+     */
+    protected void openReceivables() {
+        openBooks();
+        String controller = inRoles("controller", com.jabiz.finance.setup.FinanceRoles.CONTROLLER);
+        post("/api/datasets/" + com.jabiz.finance.gl.GlEntities.CURRENCY_DATASET + "/commit", controller(),
+            Map.of("changes", List.of(Map.of("action", "INSERT", "attributes", Map.of("currencyCode", "EUR",
+                "currencyName", "Euro", "minorUnits", 2, "active", true))))).expectStatus().isOk();
+        importCsv("finance.fx_rates", controller, sampleText("fx-rates.csv"), "commit",
+            Map.of("columns", Map.of("rateDate", "date", "rate", "eur_usd"),
+                "constants", Map.of("fromCurrency", "EUR", "toCurrency", "USD")), null, 200);
+        importCsv("finance.opening_balances", controller, sampleText("opening-balances.csv"), "commit", null, null,
+            200);
+        importCsv("finance.tax_codes", controller, sampleText("tax-codes.csv"), "commit", null,
+            Map.of("ratesFrom", "2025-01-01"), 200);
+        importCsv("finance.customers", controller, sampleText("customers.csv"), "commit", null, null, 200);
+        // The sample chart has no unapplied cash or sales discount account (design Q4): the controller adds them.
+        ok("FIN_ACCOUNT_CREATE", controller(), Map.of("accountCode", "1250", "accountName", "Unapplied Cash",
+            "financialType", com.jabiz.finance.gl.AccountTypes.fromChart("Liability"), "normalBalance",
+            com.jabiz.finance.gl.AccountTypes.normalBalanceFromChart("C"), "statementLine", "Accrued liabilities",
+            "clearing", true));
+        ok("FIN_ACCOUNT_CREATE", controller(), Map.of("accountCode", "4950", "accountName", "Sales Discounts",
+            "financialType", com.jabiz.finance.gl.AccountTypes.fromChart("Revenue"), "normalBalance",
+            com.jabiz.finance.gl.AccountTypes.normalBalanceFromChart("D"), "statementLine", "Revenue"));
+        ok("FIN_AR_SETTINGS_SET", controller, Map.of("receivableAccount", "1200", "allowanceAccount", "1210",
+            "returnsAccount", "4900", "salesTaxAccount", "2200", "discountAccount", "4950",
+            "unappliedCashAccount", "1250", "lossRateCurrent", "1", "lossRate1", "5"));
+        importCsv("finance.open_receivables", controller, sampleText("open-receivables.csv"), "commit", null, null,
+            200);
+    }
+
+    /**
+     * The company's profile as the controller keeps it: the sample gives the name and the bank (20-sample-company
+     * section 1), the address and remittance details are made up for the tests.
+     */
+    protected void companyProfile() {
+        ok("FIN_COMPANY_PROFILE_SET", inRoles("controller", com.jabiz.finance.setup.FinanceRoles.CONTROLLER),
+            Map.of("legalName", "Northwind Components, Inc.", "street", "500 Congress Avenue", "city", "Austin",
+                "state", "TX", "postalCode", "78701", "country", "United States", "phone", "+1 512 555 0100",
+                "email", "billing@northwind.example", "remittance", "ACH or wire to Lakeside National Bank, "
+                    + "account 000123456789, routing 111000025.\nPlease quote the invoice number."));
+    }
+
+    /** The PDF of an issued document exactly as kept. */
+    protected byte[] documentPdf(String runId, String authorization) {
+        return get("/api/documents/runs/" + runId + "/pdf", authorization).expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody();
+    }
+
+    /** The text of a PDF, as a reader would copy it. */
+    protected static String pdfText(byte[] pdf) {
+        try (org.apache.pdfbox.pdmodel.PDDocument document = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(document);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    protected static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
      * The finance tables are append-only: no UPDATE or DELETE ever succeeded on them (the statistics count none),
      * and each carries the platform's guard trigger.
      */

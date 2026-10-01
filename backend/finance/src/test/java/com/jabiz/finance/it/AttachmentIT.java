@@ -9,8 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -37,10 +35,6 @@ class AttachmentIT extends FinanceItSupport {
 
     private String accountant() {
         return as("accountant", "fin.journal.prepare", "fin.journal.read", "fin.journal.attach");
-    }
-
-    static String sha256(byte[] content) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
     }
 
     /** FIN-GL-016 acceptance 1. */
