@@ -121,7 +121,7 @@ const PAGE = 500
 const MAX_PAGES = 20
 
 /** Every matching instance of a dataset, page after page. */
-async function queryDataset<T>(datasetId: string, filters: Filter[]): Promise<T[]> {
+export async function queryDataset<T>(datasetId: string, filters: Filter[]): Promise<T[]> {
   const all: T[] = []
   for (let page = 0; page < MAX_PAGES; page++) {
     const answer = await unwrap(

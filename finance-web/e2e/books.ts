@@ -26,6 +26,10 @@ export const CONTROLLER: User = {
   userName: 'e2e-controller',
   password: process.env.E2E_CONTROLLER_PASSWORD ?? 'e2e-controller-password-1',
 }
+export const CLERK: User = {
+  userName: 'e2e-clerk',
+  password: process.env.E2E_CLERK_PASSWORD ?? 'e2e-clerk-password-1',
+}
 
 function requireDisposableServer() {
   const host = new URL(process.env.E2E_BASE_URL ?? 'http://localhost:8080').hostname
@@ -57,7 +61,7 @@ export async function token(request: APIRequestContext, user: User): Promise<str
   return (await response.json()).accessToken
 }
 
-async function run(request: APIRequestContext, bearer: string, process: string, input: unknown) {
+export async function run(request: APIRequestContext, bearer: string, process: string, input: unknown) {
   const response = await request.post(`/api/processes/${process}/latest`, {
     headers: { Authorization: `Bearer ${bearer}`, 'Idempotency-Key': crypto.randomUUID() },
     data: input,
@@ -139,4 +143,78 @@ export async function pasteInto(page: Page, label: string, text: string) {
     transfer.setData('text/plain', data)
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }))
   }, text)
+}
+
+/** What receivables need on top of the books: accounts, the Austin tax code and NT, settings, the company. */
+const AR_ACCOUNTS = [
+  { accountCode: '1200', accountName: 'Accounts Receivable', financialType: 'ASSET', normalBalance: 'DEBIT',
+    statementLine: 'Accounts receivable, net', controlClass: 'AR' },
+  { accountCode: '1210', accountName: 'Allowance for Doubtful Accounts', financialType: 'ASSET',
+    normalBalance: 'CREDIT', statementLine: 'Accounts receivable, net' },
+  { accountCode: '1250', accountName: 'Unapplied Cash', financialType: 'LIABILITY', normalBalance: 'CREDIT',
+    statementLine: 'Accrued liabilities', clearing: true },
+  { accountCode: '2200', accountName: 'Sales Tax Payable', financialType: 'LIABILITY', normalBalance: 'CREDIT',
+    statementLine: 'Sales tax payable' },
+  { accountCode: '4000', accountName: 'Product Sales', financialType: 'REVENUE', normalBalance: 'CREDIT',
+    statementLine: 'Revenue' },
+  { accountCode: '4100', accountName: 'Service Revenue', financialType: 'REVENUE', normalBalance: 'CREDIT',
+    statementLine: 'Revenue' },
+  { accountCode: '4900', accountName: 'Sales Returns and Allowances', financialType: 'REVENUE',
+    normalBalance: 'DEBIT', statementLine: 'Revenue' },
+  { accountCode: '4950', accountName: 'Sales Discounts', financialType: 'REVENUE', normalBalance: 'DEBIT',
+    statementLine: 'Revenue' },
+]
+
+let receivables = false
+
+/**
+ * The books for receivables (ROADMAP F3d-2): the clerk, the accounts, TX-AUSTIN (state 6.25% and local 2%) and NT,
+ * the receivables settings and the company's profile. Made or set again on every run; harmless when present.
+ */
+export async function prepareReceivables(request: APIRequestContext) {
+  await prepareBooks(request)
+  if (receivables) return
+  const admin = await token(request, ADMIN)
+  await ensureUser(request, admin, CLERK, 'ReceivablesClerk')
+  const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
+    headers: { Authorization: `Bearer ${admin}` },
+    data: { limit: 1000 },
+  })
+  const existing = new Set(((await lookup.json()).items as { accountCode: string }[]).map((a) => a.accountCode))
+  for (const account of AR_ACCOUNTS.filter((a) => !existing.has(a.accountCode))) {
+    const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', account)
+    expect(created.status, JSON.stringify(created.body)).toBe(200)
+  }
+  for (const code of [
+    { taxCode: 'TX-AUSTIN', description: 'Texas, City of Austin combined rate', kind: 'TAXABLE', state: 'TX',
+      ratesFrom: '2025-01-01', jurisdictions: [
+        { jurisdictionCode: 'TX', jurisdictionName: 'TX state', level: 'STATE', state: 'TX', ratePercent: '6.25' },
+        { jurisdictionCode: 'TX-AUSTIN-LOCAL', jurisdictionName: 'Austin (local)', level: 'CITY', state: 'TX',
+          ratePercent: '2.00' }] },
+    { taxCode: 'NT', description: 'Non-taxable service line', kind: 'NON_TAXABLE', reason: 'NON_TAXABLE_SERVICE' },
+  ]) {
+    const saved = await run(request, admin, 'FIN_TAX_CODE_SAVE', code)
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+  }
+  const settings = await run(request, admin, 'FIN_AR_SETTINGS_SET', { receivableAccount: '1200',
+    allowanceAccount: '1210', returnsAccount: '4900', salesTaxAccount: '2200', unappliedCashAccount: '1250',
+    discountAccount: '4950' })
+  expect(settings.status, JSON.stringify(settings.body)).toBe(200)
+  const profile = await run(request, admin, 'FIN_COMPANY_PROFILE_SET', { legalName: 'Northwind Components, Inc.',
+    street: '500 Congress Avenue', city: 'Austin', state: 'TX', postalCode: '78701', country: 'United States',
+    remittance: 'ACH or wire to Lakeside National Bank.' })
+  expect(profile.status, JSON.stringify(profile.body)).toBe(200)
+  receivables = true
+}
+
+/** A customer of its own, taxed in Austin on net 30 days: a run's documents are only its own. */
+export async function newCustomer(request: APIRequestContext): Promise<string> {
+  const admin = await token(request, ADMIN)
+  const code = `E${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
+  const address = { street: '1 Test Way', city: 'Austin', state: 'TX', postalCode: '78701', country: 'United States' }
+  const saved = await run(request, admin, 'FIN_CUSTOMER_SAVE', { customerCode: code, legalName: `Customer ${code}`,
+    currency: 'USD', termsDays: 30, taxCode: 'TX-AUSTIN', billing: address, shipping: address,
+    contactEmail: `${code.toLowerCase()}@customers.example.com` })
+  expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+  return code
 }
