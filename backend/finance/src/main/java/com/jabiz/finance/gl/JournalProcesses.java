@@ -573,7 +573,8 @@ public final class JournalProcesses {
                 reason = String.join("; ", problems.stream().map(Violation::message).toList());
             }
         }
-        EntityInstance period = period(ctx, Boolean.TRUE.equals(journal.get("adjustmentPeriod")));
+        EntityInstance period = period(ctx, Boolean.TRUE.equals(journal.get("adjustmentPeriod")),
+            JournalEntities.OPENING.equals(journal.get("source")));
         if (reason == null && period == null) {
             reason = "no fiscal period holds its date";
         }
@@ -602,7 +603,8 @@ public final class JournalProcesses {
             journal.get("description"), journal.get("journalNo"), entries, SOURCE_ENTITY,
             String.valueOf(journal.id()));
         int fiscalYear = period.<BigDecimal>get("fiscalYear").intValueExact();
-        ctx.put(READY, new Ready(ledger, "MAN-" + fiscalYear, period));
+        ctx.put(READY, new Ready(ledger, JournalEntities.postingSource(journal.get("source")) + "-" + fiscalYear,
+            period));
     }
 
     static void recordPosting(ProcessContext ctx) {
@@ -621,7 +623,7 @@ public final class JournalProcesses {
         posting.put("fiscalYear", ready.period().get("fiscalYear"));
         posting.put("periodNo", ready.period().get("periodNo"));
         posting.put("periodKey", ready.period().get("periodKey"));
-        posting.put("source", "MAN");
+        posting.put("source", JournalEntities.postingSource(journal.get("source")));
         posting.put("glNo", glNo);
         posting.put("documentNo", journal.get("journalNo"));
         posting.put("sourceEntity", SOURCE_ENTITY);
@@ -859,7 +861,16 @@ public final class JournalProcesses {
 
     /** The regular period holding the posting date, or the adjustment period when the entry asks for it. */
     static EntityInstance period(ProcessContext ctx, boolean adjustmentPeriod) {
+        return period(ctx, adjustmentPeriod, false);
+    }
+
+    /**
+     * As above; the opening period holds only the opening entry, so no other entry finds it, even on its day
+     * (FIN-PC-002).
+     */
+    static EntityInstance period(ProcessContext ctx, boolean adjustmentPeriod, boolean opening) {
         return list(ctx, PERIODS).stream()
+            .filter(p -> Boolean.TRUE.equals(p.get("opening")) == opening)
             .filter(p -> Boolean.TRUE.equals(p.get("adjustment")) == adjustmentPeriod)
             .findFirst().orElse(null);
     }
@@ -880,7 +891,7 @@ public final class JournalProcesses {
     static EntityQuery periodsOf(LocalDate date) {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                 new QueryPredicate.Lte("startDate", date), new QueryPredicate.Gte("endDate", date))))
-            .limit(3).build();
+            .limit(4).build();
     }
 
     static EntityQuery byIds(Object id) {

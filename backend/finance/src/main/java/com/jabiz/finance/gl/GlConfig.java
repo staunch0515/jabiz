@@ -88,8 +88,9 @@ class GlConfig {
 
     @Bean
     DatasetDefinition finExchangeRateDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        // Entered and imported through FIN_EXCHANGE_RATE_SET alike (FIN-DI-001).
         return dataset(GlEntities.EXCHANGE_RATE_DATASET, GlEntities.EXCHANGE_RATE, FinancePermissions.MASTER_READ,
-            FinancePermissions.FX_MAINTAIN, false, poolRef);
+            FinancePermissions.FX_MAINTAIN, true, poolRef);
     }
 
     @Bean
@@ -247,5 +248,23 @@ class GlConfig {
     ProcessDefinition<PeriodProcesses.SubledgerStateInput, PeriodProcesses.PeriodOutput, ProcessContext>
         finPeriodSetSubledgerStateProcess() {
         return PeriodProcesses.SUBLEDGER_STATE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ExchangeRateProcesses.RateInput, ExchangeRateProcesses.RateOutput, ProcessContext>
+        finExchangeRateSetProcess() {
+        return ExchangeRateProcesses.SET_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<OpeningProcesses.OpeningInput, OpeningProcesses.OpeningOutput, ProcessContext>
+        finOpeningPostProcess() {
+        return OpeningProcesses.POST_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<OpeningProcesses.CloseInput, PeriodProcesses.PeriodOutput, ProcessContext>
+        finOpeningCloseProcess() {
+        return OpeningProcesses.CLOSE_PROCESS;
     }
 }

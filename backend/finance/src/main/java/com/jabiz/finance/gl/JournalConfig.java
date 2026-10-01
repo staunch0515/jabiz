@@ -110,7 +110,8 @@ class JournalConfig {
             .item(JournalEntities.RECURRING_SOURCE, "en", "Recurring")
             .item(JournalEntities.REVERSING, "en", "Reversing")
             .item(JournalEntities.AUTO_REVERSING, "en", "Automatic reversal")
-            .item(JournalEntities.IMPORT, "en", "Import"));
+            .item(JournalEntities.IMPORT, "en", "Import")
+            .item(JournalEntities.OPENING, "en", "Opening balances"));
     }
 
     @Bean
@@ -123,7 +124,8 @@ class JournalConfig {
             .item("FA", "en", "Fixed assets")
             .item("FX", "en", "Revaluation")
             .item("IMP", "en", "Import")
-            .item("CLS", "en", "Closing"));
+            .item("CLS", "en", "Closing")
+            .item("OPN", "en", "Opening balances"));
     }
 
     /** JE-0001 …, counted per fiscal year (design section 4.5). */

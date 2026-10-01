@@ -154,6 +154,47 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         return String.valueOf(uploaded.get("fileId"));
     }
 
+    /**
+     * Uploads a CSV file under the finance import policy and previews or commits it as {@code importId}; returns the
+     * import report. A commit refused for problems answers 422: the report is the one carried by the problem.
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> importCsv(String importId, String authorization, String csv, String mode,
+        Map<String, Object> mapping, Map<String, Object> params, int expectedStatus) {
+        String fileId = upload(authorization, "fin.import", csv.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+            importId + ".csv", "text/csv");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("fileId", fileId);
+        if (mapping != null) {
+            body.put("mapping", mapping);
+        }
+        if (params != null) {
+            body.put("params", params);
+        }
+        var exchange = post("/api/imports/" + importId + "/" + mode, authorization, body).expectBody(MAP)
+            .returnResult();
+        assertThat(exchange.getStatus().value()).as(importId + " " + mode + " answered " + exchange.getResponseBody())
+            .isEqualTo(expectedStatus);
+        Map<String, Object> answer = exchange.getResponseBody();
+        return answer.containsKey("report") ? (Map<String, Object>) answer.get("report") : answer;
+    }
+
+    /** The problems of an import report as "row:code" (row 0 for the whole file). */
+    @SuppressWarnings("unchecked")
+    protected static List<String> issues(Map<String, Object> report) {
+        return ((List<Map<String, Object>>) report.get("issues")).stream()
+            .map(issue -> (issue.get("row") == null ? 0 : issue.get("row")) + ":" + issue.get("code")).toList();
+    }
+
+    /** A sample company file as it is on disk. */
+    protected static String sampleText(String file) {
+        try {
+            return Files.readString(SAMPLE_COMPANY.resolve(file));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /** Runs an SQL template with its parameters; returns all its rows (up to 500). */
     @SuppressWarnings("unchecked")
     protected List<Map<String, Object>> report(String template, String authorization, Map<String, Object> params) {
