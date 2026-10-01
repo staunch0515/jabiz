@@ -70,16 +70,18 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
     /** Runs a process that must succeed; returns its output. */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> ok(String process, String authorization, Object input) {
-        Map<String, Object> result = run(process, authorization, input).expectStatus().isOk().expectBody(MAP)
-            .returnResult().getResponseBody();
-        return (Map<String, Object>) result.get("output");
+        var exchange = run(process, authorization, input).expectBody(MAP).returnResult();
+        assertThat(exchange.getStatus().value()).as(process + " answered " + exchange.getResponseBody())
+            .isEqualTo(200);
+        return (Map<String, Object>) exchange.getResponseBody().get("output");
     }
 
     /** Runs a process that must be refused with {@code status}; returns the first violation's rule code. */
     @SuppressWarnings("unchecked")
     protected String refused(String process, String authorization, Object input, int status) {
-        Map<String, Object> problem = run(process, authorization, input).expectStatus().isEqualTo(status)
-            .expectBody(MAP).returnResult().getResponseBody();
+        var exchange = run(process, authorization, input).expectBody(MAP).returnResult();
+        Map<String, Object> problem = exchange.getResponseBody();
+        assertThat(exchange.getStatus().value()).as(process + " answered " + problem).isEqualTo(status);
         List<Map<String, Object>> violations = (List<Map<String, Object>>) problem.get("violations");
         return violations == null || violations.isEmpty() ? String.valueOf(problem.get("title"))
             : (String) violations.getFirst().get("ruleCode");
@@ -115,6 +117,15 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
             .map(item -> (Map<String, Object>) item.get("attributes")).toList();
     }
 
+    /** One instance read by its key through a dataset, as the API returns its attributes; empty when absent. */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> read(String dataset, Object id) {
+        var exchange = get("/api/datasets/" + dataset + "/entities/" + id, as("reader", "*")).expectBody(MAP)
+            .returnResult();
+        return exchange.getStatus().value() == 404 ? Map.of()
+            : (Map<String, Object>) exchange.getResponseBody().get("attributes");
+    }
+
     protected static String unique() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
     }
@@ -137,6 +148,45 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
             return rows;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /** The control accounts of the sample company: its chart file does not mark them (FIN-GL-005). */
+    protected static final Map<String, String> SAMPLE_CONTROL = Map.of("1010", "BANK", "1050", "BANK", "1200", "AR",
+        "2000", "AP", "1500", "FA_COST", "1510", "FA_COST", "1520", "FA_COST", "1590", "FA_ACCUM");
+
+    /** Enters the sample company's 36 accounts through FIN_ACCOUNT_CREATE, as a controller would. */
+    protected void loadSampleChart() {
+        for (Map<String, String> row : sample("chart-of-accounts.csv")) {
+            Map<String, Object> input = new java.util.HashMap<>();
+            input.put("accountCode", row.get("code"));
+            input.put("accountName", row.get("name"));
+            input.put("financialType", com.jabiz.finance.gl.AccountTypes.fromChart(row.get("type")));
+            input.put("normalBalance", com.jabiz.finance.gl.AccountTypes.normalBalanceFromChart(
+                row.get("normal_balance")));
+            input.put("statementLine", row.get("statement_line"));
+            input.put("controlClass", SAMPLE_CONTROL.get(row.get("code")));
+            ok("FIN_ACCOUNT_CREATE", controller(), input);
+        }
+    }
+
+    /**
+     * Books ready for journal entries: the sample chart, fiscal year 2026 with its adjustment period, the finance
+     * roles, the journal approval rule (proposed by the administrator, published by a controller) and two
+     * departments.
+     */
+    @SuppressWarnings("unchecked")
+    protected void openBooks() {
+        loadSampleChart();
+        ok("FIN_FISCAL_YEAR_CREATE", controller(), Map.of("fiscalYear", 2026, "adjustmentPeriod", true));
+        Map<String, Object> setup = ok("FIN_SETUP", as("sysadmin", "fin.setup"), Map.of());
+        ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"),
+            Map.of("changeId", setup.get("approvalRuleChange")));
+        for (String department : List.of("ADMIN", "SALES")) {
+            post("/api/datasets/" + com.jabiz.finance.gl.GlEntities.DEPARTMENT_DATASET + "/commit",
+                as("controller", "fin.dimension.maintain"), Map.of("changes", List.of(Map.of("action", "INSERT",
+                    "attributes", Map.of("departmentCode", department, "departmentName", department,
+                        "active", true))))).expectStatus().isOk();
         }
     }
 

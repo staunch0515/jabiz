@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,27 +25,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 class ChartOfAccountsIT extends FinanceItSupport {
 
-    /** The control accounts of the sample company: its chart file does not mark them (FIN-GL-005). */
-    static final Map<String, String> SAMPLE_CONTROL = Map.of("1010", "BANK", "1050", "BANK", "1200", "AR",
-        "2000", "AP", "1500", "FA_COST", "1510", "FA_COST", "1520", "FA_COST", "1590", "FA_ACCUM");
-
     private static boolean sampleLoaded;
 
     private void loadSample() {
-        if (sampleLoaded) {
-            return;
+        if (!sampleLoaded) {
+            loadSampleChart();
+            sampleLoaded = true;
         }
-        for (Map<String, String> row : sample("chart-of-accounts.csv")) {
-            Map<String, Object> input = new HashMap<>();
-            input.put("accountCode", row.get("code"));
-            input.put("accountName", row.get("name"));
-            input.put("financialType", AccountTypes.fromChart(row.get("type")));
-            input.put("normalBalance", AccountTypes.normalBalanceFromChart(row.get("normal_balance")));
-            input.put("statementLine", row.get("statement_line"));
-            input.put("controlClass", SAMPLE_CONTROL.get(row.get("code")));
-            ok(AccountProcesses.CREATE, controller(), input);
-        }
-        sampleLoaded = true;
     }
 
     private Map<String, Object> account(String code, String type, String side, Map<String, Object> more) {
