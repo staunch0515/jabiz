@@ -16,6 +16,7 @@ import AccessReviewPage from './pages/AccessReviewPage'
 import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
+import DocumentsPage from './pages/DocumentsPage'
 import EntityHistoryPage from './pages/EntityHistoryPage'
 import ImportCatalogPage from './pages/ImportCatalogPage'
 import ImportPage from './pages/ImportPage'
@@ -73,6 +74,7 @@ const router = createBrowserRouter([
           { path: '/reports', element: <ReportCatalogPage /> },
           { path: '/reports/run', element: <ReportPage /> },
           { path: '/reports/archive', element: <ReportArchivePage /> },
+          { path: '/documents', element: <DocumentsPage /> },
           { path: '/audit', element: <AuditPage /> },
           { path: '/access-review', element: <AccessReviewPage /> },
           { path: '/integrity', element: <IntegrityPage /> },

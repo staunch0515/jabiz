@@ -104,6 +104,25 @@ class PlatformCheckIT {
                 + " to public templates (access: public) only");
     }
 
+    /** ROADMAP phase 14j-1: every problem of document layouts, in one run. */
+    @Test
+    void brokenDocumentLayoutsAreAllReported() {
+        Outcome outcome = check("--spring.profiles.active=broken-documents", "--jabiz.documents.page-size=B5");
+
+        assertThat(outcome.exitCode()).isNotZero();
+        assertThat(outcome.lines())
+            .contains("DOCUMENTS | it.broken_document | declared twice")
+            .contains("DOCUMENTS | jabiz.documents.page-size | must be A4 or LETTER, was B5")
+            .contains("DOCUMENTS | it.broken_document | commerce.order_document_header | is read both for one row and"
+                + " as a table")
+            .contains("DOCUMENTS | it.broken_document | commerce.order_document_header | has no result column colour")
+            .contains("DOCUMENTS | it.broken_document | it.no_such_template | no such template")
+            .contains("DOCUMENTS | it.broken_document | unknown subject entity Nowhere")
+            .contains("MESSAGES | document.it.broken_document [en] | no text for document layout it.broken_document")
+            .contains("MESSAGES | document.it.broken_document.missing [zh] | no text for document layout"
+                + " it.broken_document");
+    }
+
     /** ROADMAP phase 5, requirement 7: application startup runs the same checks and refuses to start. */
     @Test
     void startupRunsTheSameChecks() {

@@ -4,6 +4,7 @@ import {
   CloudUploadOutlined,
   CheckSquareOutlined,
   DatabaseOutlined,
+  FileProtectOutlined,
   InboxOutlined,
   LogoutOutlined,
   NodeIndexOutlined,
@@ -71,6 +72,10 @@ export default function AppLayout() {
     { key: 'tasks', name: t('nav.tasks'), path: '/tasks', icon: <CheckSquareOutlined /> },
     // Only when there is a report the user may run (docs/design/19-reports.md section 3.3).
     ...(hasReports ? [{ key: 'reports', name: t('nav.reports'), path: '/reports', icon: <BarChartOutlined /> }] : []),
+    // Issued documents, for those who may read them (docs/design/22-documents.md section 6).
+    ...(can('document.archive.read')
+      ? [{ key: 'documents', name: t('nav.documents'), path: '/documents', icon: <FileProtectOutlined /> }]
+      : []),
     // Only when there is an import the user may run (docs/design/20-imports.md section 6).
     ...(hasImports ? [{ key: 'imports', name: t('nav.imports'), path: '/imports', icon: <CloudUploadOutlined /> }] : []),
     // Only for auditors (docs/design/21-audit-retention.md section 1).

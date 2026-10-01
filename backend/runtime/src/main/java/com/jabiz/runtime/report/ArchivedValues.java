@@ -26,14 +26,14 @@ import java.util.TreeMap;
  * form of {@link ContentHash}. Reading back and normalizing gives the same values, so a stored run always hashes to
  * the hash it was issued with.
  */
-final class ArchivedValues {
+public final class ArchivedValues {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private ArchivedValues() {}
 
     /** The value as the archive keeps and hashes it. */
-    static Object normalize(ReportColumn column, Object value) {
+    public static Object normalize(ReportColumn column, Object value) {
         if (value == null) {
             return null;
         }
@@ -61,7 +61,7 @@ final class ArchivedValues {
         return value.toString();
     }
 
-    static List<List<Object>> normalize(List<ReportColumn> columns, List<List<Object>> rows) {
+    public static List<List<Object>> normalize(List<ReportColumn> columns, List<List<Object>> rows) {
         List<List<Object>> result = new ArrayList<>(rows.size());
         for (List<Object> row : rows) {
             List<Object> values = new ArrayList<>(columns.size());
@@ -74,14 +74,19 @@ final class ArchivedValues {
     }
 
     /** The content hash of a report: its column names and rows, in order. */
-    static String hash(List<ReportColumn> columns, List<List<Object>> rows) {
+    public static String hash(List<ReportColumn> columns, List<List<Object>> rows) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("columns", columns.stream().map(ReportColumn::name).toList());
         content.put("rows", normalize(columns, rows));
         return ContentHash.of(content);
     }
 
-    static String rowsJson(List<ReportColumn> columns, List<List<Object>> rows) {
+    public static String rowsJson(List<ReportColumn> columns, List<List<Object>> rows) {
+        return JSON.writeValueAsString(rowsData(columns, rows));
+    }
+
+    /** The rows as stored: normalized, decimals and times as strings (to be written into a larger JSON text). */
+    public static List<List<Object>> rowsData(List<ReportColumn> columns, List<List<Object>> rows) {
         List<List<Object>> stored = new ArrayList<>(rows.size());
         for (List<Object> row : normalize(columns, rows)) {
             List<Object> values = new ArrayList<>(row.size());
@@ -96,15 +101,20 @@ final class ArchivedValues {
             }
             stored.add(values);
         }
-        return JSON.writeValueAsString(stored);
+        return stored;
     }
 
-    static List<List<Object>> rows(List<ReportColumn> columns, String json) {
+    public static List<List<Object>> rows(List<ReportColumn> columns, String json) {
         List<List<Object>> stored = JSON.readValue(json, new TypeReference<>() {});
         return normalize(columns, stored);
     }
 
-    static String columnsJson(List<ReportColumn> columns) {
+    public static String columnsJson(List<ReportColumn> columns) {
+        return JSON.writeValueAsString(columnsData(columns));
+    }
+
+    /** The columns as stored: name, label and kind (to be written into a larger JSON text). */
+    public static List<Map<String, Object>> columnsData(List<ReportColumn> columns) {
         List<Map<String, Object>> stored = new ArrayList<>();
         for (ReportColumn column : columns) {
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -113,12 +123,16 @@ final class ArchivedValues {
             entry.put("kind", MetaModelExporter.kindToJson(column.kind()));
             stored.add(entry);
         }
-        return JSON.writeValueAsString(stored);
+        return stored;
     }
 
+    public static List<ReportColumn> columns(String json) {
+        return columnsFrom(JSON.readValue(json, new TypeReference<List<Map<String, Object>>>() {}));
+    }
+
+    /** The columns from what {@link #columnsData} stored. */
     @SuppressWarnings("unchecked")
-    static List<ReportColumn> columns(String json) {
-        List<Map<String, Object>> stored = JSON.readValue(json, new TypeReference<>() {});
+    public static List<ReportColumn> columnsFrom(List<Map<String, Object>> stored) {
         return stored.stream().map(entry -> new ReportColumn((String) entry.get("name"), (String) entry.get("label"),
             kind((Map<String, Object>) entry.get("kind")))).toList();
     }
@@ -128,30 +142,30 @@ final class ArchivedValues {
         return json == null || "none".equals(json.get("type")) ? new SemanticKind.None() : SemanticKindParser.parse(json);
     }
 
-    static String parametersJson(List<ReportDocument.Parameter> parameters) {
+    public static String parametersJson(List<ReportDocument.Parameter> parameters) {
         return JSON.writeValueAsString(parameters.stream()
             .map(p -> Map.of("label", p.label(), "value", p.value())).toList());
     }
 
-    static List<ReportDocument.Parameter> parameters(String json) {
+    public static List<ReportDocument.Parameter> parameters(String json) {
         List<Map<String, String>> stored = JSON.readValue(json, new TypeReference<>() {});
         return stored.stream().map(p -> new ReportDocument.Parameter(p.get("label"), p.get("value"))).toList();
     }
 
-    static String scopeJson(Map<String, Map<String, String>> scope) {
+    public static String scopeJson(Map<String, Map<String, String>> scope) {
         return JSON.writeValueAsString(new TreeMap<>(scope));
     }
 
-    static Map<String, Map<String, String>> scope(String json) {
+    public static Map<String, Map<String, String>> scope(String json) {
         return JSON.readValue(json, new TypeReference<TreeMap<String, Map<String, String>>>() {});
     }
 
     /** The given parameters, keys sorted so that the same parameters are stored the same way. */
-    static String paramsJson(Map<String, Object> params) {
+    public static String paramsJson(Map<String, Object> params) {
         return JSON.writeValueAsString(new TreeMap<>(params));
     }
 
-    static Map<String, Object> params(String json) {
+    public static Map<String, Object> params(String json) {
         return JSON.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
     }
 }

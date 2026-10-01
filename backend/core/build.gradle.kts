@@ -97,6 +97,9 @@ val coverageGatedClasses = listOf(
     "com.jabiz.integrity.*",
     "com.jabiz.retention.*",
     "com.jabiz.export.*",
+    // Phase 14j
+    "com.jabiz.document.*",
+    "com.jabiz.query.template.TemplateSchemas",
 )
 
 dependencies {
