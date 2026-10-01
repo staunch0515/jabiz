@@ -13,8 +13,10 @@ import java.util.Objects;
  *
  * @param allowScheduled whether versions may take effect after the time of the operation that writes them
  * @param rowIdColumn    physical column of the per-version row identity
+ * @param writeOnce      every instance has exactly one version (decision D29): it is inserted and never updated,
+ *                       deleted or reverted, so reads take its version without picking the latest one
  */
-public record TemporalSpec(boolean allowScheduled, String rowIdColumn) {
+public record TemporalSpec(boolean allowScheduled, String rowIdColumn, boolean writeOnce) {
 
     public static final String VERSION_NO = "versionNo";
     public static final String EFFECT_START_TIME = "effectStartTime";
@@ -38,6 +40,11 @@ public record TemporalSpec(boolean allowScheduled, String rowIdColumn) {
 
     public TemporalSpec {
         Objects.requireNonNull(rowIdColumn, "rowIdColumn must not be null");
+    }
+
+    /** Settings of an entity whose instances may have many versions. */
+    public TemporalSpec(boolean allowScheduled, String rowIdColumn) {
+        this(allowScheduled, rowIdColumn, false);
     }
 
     public static boolean isSystemField(String logicalName) {

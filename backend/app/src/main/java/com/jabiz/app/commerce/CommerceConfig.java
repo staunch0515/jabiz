@@ -39,6 +39,11 @@ class CommerceConfig {
     }
 
     @Bean
+    EntityDefinition stockReceiptEntityDefinition() {
+        return CommerceEntities.STOCK_RECEIPT_ENTITY;
+    }
+
+    @Bean
     EntityDefinition salesOrderEntityDefinition() {
         return CommerceEntities.ORDER_ENTITY;
     }
@@ -78,6 +83,13 @@ class CommerceConfig {
     DatasetDefinition stockLevelDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(CommerceEntities.STOCK_LEVEL_DATASET, CommerceEntities.STOCK_LEVEL, "commerce.stock.read",
             "commerce.stock.receive", true, poolRef);
+    }
+
+    /** Receipts are recorded by STOCK_RECEIVE and, by those who receive goods, directly; never changed. */
+    @Bean
+    DatasetDefinition stockReceiptDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CommerceEntities.STOCK_RECEIPT_DATASET, CommerceEntities.STOCK_RECEIPT, "commerce.stock.read",
+            "commerce.stock.receive", false, poolRef);
     }
 
     @Bean

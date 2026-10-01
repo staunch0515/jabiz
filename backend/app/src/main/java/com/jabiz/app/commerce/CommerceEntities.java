@@ -27,6 +27,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String PRODUCT = "Product";
     public static final String WAREHOUSE = "Warehouse";
     public static final String STOCK_LEVEL = "StockLevel";
+    public static final String STOCK_RECEIPT = "StockReceipt";
     public static final String ORDER = "SalesOrder";
     public static final String ORDER_LINE = "SalesOrderLine";
 
@@ -34,6 +35,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String PUBLIC_PRODUCT_DATASET = "urn:jabiz:dataset:public:Product";
     public static final String WAREHOUSE_DATASET = "urn:jabiz:dataset:default:Warehouse";
     public static final String STOCK_LEVEL_DATASET = "urn:jabiz:dataset:default:StockLevel";
+    public static final String STOCK_RECEIPT_DATASET = "urn:jabiz:dataset:default:StockReceipt";
     public static final String ORDER_DATASET = "urn:jabiz:dataset:default:SalesOrder";
     public static final String ORDER_LINE_DATASET = "urn:jabiz:dataset:default:SalesOrderLine";
 
@@ -112,6 +114,29 @@ public final class CommerceEntities extends BaseEntityDefinitions {
             .sorts("onHand", "reserved")
             .defaultSort("onHand", true));
         eb.temporal(t -> t.allowScheduled(false));
+    });
+
+    /**
+     * One receipt of goods into a warehouse: written once and never changed, like the lines of a ledger (decision
+     * D29); a wrong receipt is answered by another movement, not by editing this one. STOCK_RECEIVE records one with
+     * every receipt; one recorded directly through the dataset is a record only and does not change the stock.
+     */
+    public static final EntityDefinition STOCK_RECEIPT_ENTITY = EntityDefinition.define(STOCK_RECEIPT, eb -> {
+        eb.physicalTable("stock_receipt_version");
+        eb.primaryKey("receiptId");
+        eb.field("receiptId", f -> f.physicalColumn("receipt_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:commerce:stock-receipt"));
+        eb.field("stockLevelId", f -> f.physicalColumn("stock_level_id").immutable(true).required(true)
+            .asReference(STOCK_LEVEL));
+        eb.field("quantity", f -> f.physicalColumn("quantity").immutable(true).required(true).asNumeric(12, 0)
+            .apply(Rules.range("STOCK_RECEIPT_QUANTITY", BigDecimal.ONE, new BigDecimal("1000000"))));
+        eb.field("note", f -> f.physicalColumn("note").immutable(true).asText(200));
+        eb.listView("default", lv -> lv
+            .columns("stockLevelId", "quantity", "note")
+            .filters("stockLevelId", "quantity")
+            .sorts("quantity")
+            .defaultSort("quantity", false));
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
     });
 
     public static final EntityDefinition ORDER_ENTITY = EntityDefinition.define(ORDER, eb -> {

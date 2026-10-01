@@ -112,7 +112,7 @@ public class QueryCompiler {
 
         Binder binder = new Binder("p");
         List<String> fragments = new ArrayList<>();
-        String source = source(dataset, def, slice, binder);
+        String source = source(dataset, def, slice, binder, innerCondition(query.predicate(), def, binder));
         if (def.temporal) {
             fragments.add(notDeleted(def));
         }
@@ -192,7 +192,7 @@ public class QueryCompiler {
             order = "COALESCE(" + String.join(", ", texts) + ")";
         }
         int safeLimit = Math.max(1, Math.min(Math.min(limit, MAX_LOOKUP), dataset.policy().maxQueryBatchSize()));
-        String sql = select(dataset, def, alias, conditions, binder, slice)
+        String sql = select(dataset, def, alias, conditions, binder, slice, null)
             + " ORDER BY " + order + " ASC, " + alias + "." + SqlIdentifiers.require(def.primaryKeyColumn())
             + " ASC LIMIT " + safeLimit;
         return new RawQueryPlan(sql, binder.params(), dataset.policy().queryTimeout());
@@ -219,9 +219,12 @@ public class QueryCompiler {
         Binder binder = new Binder("p");
         String alias = def.temporal ? VERSIONS_ALIAS : "t";
         List<String> conditions = readConditions(dataset, def, scopeValues, binder);
-        conditions.add(keys.isEmpty() ? "1 = 0" : alias + "." + SqlIdentifiers.require(def.primaryKeyColumn())
-            + " IN (:" + binder.bind(BoundValue.of(keys)) + ")");
-        String sql = select(dataset, def, alias, conditions, binder, slice) + " LIMIT " + Math.max(1, keys.size());
+        String keyColumn = SqlIdentifiers.require(def.primaryKeyColumn());
+        String keyList = keys.isEmpty() ? null : ":" + binder.bind(BoundValue.of(keys));
+        conditions.add(keyList == null ? "1 = 0" : alias + "." + keyColumn + " IN (" + keyList + ")");
+        // The key never changes: only the versions of these instances are read (decision D29).
+        String sql = select(dataset, def, alias, conditions, binder, slice,
+            keyList == null ? null : keyColumn + " IN (" + keyList + ")") + " LIMIT " + Math.max(1, keys.size());
         return new RawQueryPlan(sql, binder.params(), dataset.policy().queryTimeout());
     }
 
@@ -246,10 +249,13 @@ public class QueryCompiler {
         return conditions;
     }
 
-    /** SELECT over the entity's source, aliased {@code alias}, restricted by {@code conditions}. */
+    /**
+     * SELECT over the entity's source, aliased {@code alias}, restricted by {@code conditions}; {@code inner}, if
+     * given, is a condition on immutable columns that the versions are read with as well (decision D29).
+     */
     private String select(DatasetDefinition dataset, EntityDefinition def, String alias, List<String> conditions,
-        Binder binder, TimeSlice slice) {
-        String source = source(dataset, def, slice, binder);
+        Binder binder, TimeSlice slice, String inner) {
+        String source = source(dataset, def, slice, binder, inner);
         StringBuilder sql = new StringBuilder("SELECT * FROM ").append(source);
         if (!def.temporal) {
             // The temporal source is already aliased VERSIONS_ALIAS.
@@ -294,6 +300,17 @@ public class QueryCompiler {
      * {@code slice}, aliased {@value #VERSIONS_ALIAS}. The sub-select filters by time only.
      */
     public String source(DatasetDefinition dataset, EntityDefinition def, TimeSlice slice, Binder binder) {
+        return source(dataset, def, slice, binder, null);
+    }
+
+    /**
+     * As {@link #source(DatasetDefinition, EntityDefinition, TimeSlice, Binder)}, with {@code inner} (unqualified
+     * columns) also restricting the versions read (decision D29). It must hold for every version of an instance or
+     * for none, as a condition on immutable fields does: then it selects whole instances, and the version in effect is
+     * the same as without it. A write-once entity's versions are read directly: each instance has only one.
+     */
+    public String source(DatasetDefinition dataset, EntityDefinition def, TimeSlice slice, Binder binder,
+        String inner) {
         String table = resolveTable(dataset, def);
         if (!def.temporal) {
             return table;
@@ -304,15 +321,22 @@ public class QueryCompiler {
         String id = SqlIdentifiers.require(def.primaryKeyColumn());
         String effective = SqlIdentifiers.require(def.systemColumn(TemporalSpec.EFFECT_START_TIME));
         String version = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
-        StringBuilder sql = new StringBuilder("(SELECT DISTINCT ON (").append(id).append(") * FROM ").append(table)
-            .append(" WHERE ").append(effective).append(" <= :")
+        boolean writeOnce = def.temporalSpec.writeOnce();
+        StringBuilder sql = new StringBuilder(writeOnce ? "(SELECT * FROM " : "(SELECT DISTINCT ON (" + id + ") * FROM ")
+            .append(table).append(" WHERE ").append(effective).append(" <= :")
             .append(binder.bindNamed(AS_OF_PARAM, BoundValue.of(slice.asOf())));
         if (slice.knownAt() != null) {
             sql.append(" AND ").append(SqlIdentifiers.require(def.systemColumn(TemporalSpec.CREATED_TIME)))
                 .append(" <= :").append(binder.bindNamed(KNOWN_AT_PARAM, BoundValue.of(slice.knownAt())));
         }
-        sql.append(" ORDER BY ").append(id).append(", ").append(effective).append(" DESC, ").append(version)
-            .append(" DESC) ").append(VERSIONS_ALIAS);
+        if (inner != null && !inner.isBlank()) {
+            sql.append(" AND ").append(inner);
+        }
+        if (!writeOnce) {
+            sql.append(" ORDER BY ").append(id).append(", ").append(effective).append(" DESC, ").append(version)
+                .append(" DESC");
+        }
+        sql.append(") ").append(VERSIONS_ALIAS);
         return sql.toString();
     }
 
@@ -437,6 +461,85 @@ public class QueryCompiler {
             parts.add(SqlIdentifiers.require(def.physicalColumn(policy.softDeleteField())) + " IS NOT TRUE");
         }
         return String.join(" AND ", parts);
+    }
+
+    /**
+     * The part of a query's condition that may restrict the versions read as well (decision D29): conditions on
+     * immutable fields (the primary key included), which hold for every version of an instance or for none. Null
+     * when there is none or the entity is not temporal.
+     */
+    String innerCondition(QueryPredicate predicate, EntityDefinition def, Binder binder) {
+        if (!def.temporal || predicate == null) {
+            return null;
+        }
+        QueryPredicate part = immutablePart(predicate, def);
+        if (part == null) {
+            return null;
+        }
+        String compiled = compilePredicate(part, def, binder);
+        return compiled.isBlank() ? null : compiled;
+    }
+
+    /**
+     * The conjuncts of {@code predicate} that read only immutable fields: all of it when it does, a subset of an AND's
+     * conjuncts (each conjunct of a condition that holds also holds), an OR only when all of it does, else null.
+     */
+    static QueryPredicate immutablePart(QueryPredicate predicate, EntityDefinition def) {
+        return switch (predicate) {
+            case QueryPredicate.And and -> {
+                List<QueryPredicate> parts = new ArrayList<>();
+                for (QueryPredicate child : and.predicates()) {
+                    QueryPredicate part = immutablePart(child, def);
+                    if (part != null) {
+                        parts.add(part);
+                    }
+                }
+                yield parts.isEmpty() ? null : parts.size() == 1 ? parts.getFirst() : new QueryPredicate.And(parts);
+            }
+            case QueryPredicate.Or or -> wholly(or, def) ? or : null;
+            case QueryPredicate.KeyAfter after -> after;
+            default -> immutableField(def, fieldOf(predicate)) ? predicate : null;
+        };
+    }
+
+    /** Whether every field {@code predicate} reads is immutable. */
+    private static boolean wholly(QueryPredicate predicate, EntityDefinition def) {
+        return switch (predicate) {
+            case QueryPredicate.And and -> !and.predicates().isEmpty()
+                && and.predicates().stream().allMatch(child -> wholly(child, def));
+            case QueryPredicate.Or or -> !or.predicates().isEmpty()
+                && or.predicates().stream().allMatch(child -> wholly(child, def));
+            case QueryPredicate.KeyAfter after -> true;
+            default -> immutableField(def, fieldOf(predicate));
+        };
+    }
+
+    private static String fieldOf(QueryPredicate predicate) {
+        return switch (predicate) {
+            case QueryPredicate.Eq p -> p.field();
+            case QueryPredicate.Ne p -> p.field();
+            case QueryPredicate.Gt p -> p.field();
+            case QueryPredicate.Gte p -> p.field();
+            case QueryPredicate.Lt p -> p.field();
+            case QueryPredicate.Lte p -> p.field();
+            case QueryPredicate.In p -> p.field();
+            case QueryPredicate.Like p -> p.field();
+            case QueryPredicate.IsNull p -> p.field();
+            case QueryPredicate.IsNotNull p -> p.field();
+            case QueryPredicate.Between p -> p.field();
+            default -> null;
+        };
+    }
+
+    private static boolean immutableField(EntityDefinition def, String name) {
+        if (name == null) {
+            return false;
+        }
+        if (name.equals(def.primaryKey)) {
+            return true;
+        }
+        FieldDefinition field = def.fields.get(name);
+        return field != null && field.immutable() && !TemporalSpec.isSystemField(name);
     }
 
     private String compilePredicate(QueryPredicate pred, EntityDefinition def, Binder binder) {

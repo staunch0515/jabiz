@@ -191,44 +191,63 @@ public class TemporalStore {
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("now", BoundValue.of(now));
         params.put("self", BoundValue.of(self));
-        List<String> matches = new ArrayList<>();
+        List<String> columns = new ArrayList<>();
         for (int i = 0; i < candidate.unique().fields().size(); i++) {
-            String column = SqlIdentifiers.require(def.physicalColumn(candidate.unique().fields().get(i)));
-            matches.add(column + " = :u" + i);
+            columns.add(SqlIdentifiers.require(def.physicalColumn(candidate.unique().fields().get(i))));
             params.put("u" + i, BoundValue.of(candidate.values().get(i)));
         }
-        String condition = "NOT " + deleted + " AND " + id + " <> :self AND " + String.join(" AND ", matches);
-        // Current versions, then the winning version of every later effective time (the scheduled ones).
-        String sql = "SELECT 1 AS hit FROM (SELECT DISTINCT ON (" + id + ") * FROM " + source
-            + " WHERE " + effective + " <= :now ORDER BY " + id + ", " + effective + " DESC, " + version + " DESC) c"
-            + " WHERE " + condition
-            + " UNION ALL SELECT 1 AS hit FROM (SELECT DISTINCT ON (" + id + ", " + effective + ") * FROM " + source
-            + " WHERE " + effective + " > :now ORDER BY " + id + ", " + effective + ", " + version + " DESC) s"
-            + " WHERE " + condition + " LIMIT 1";
+        // Only an instance that has used the values in some version can use them now or later: its candidates come
+        // from the index on the values (decision D29), and only their versions are looked at.
+        String sql = "WITH cand AS (SELECT DISTINCT " + id + " AS cid FROM " + source
+            + " WHERE " + matches(columns, "") + " AND " + id + " <> :self)"
+            // The version in effect now …
+            + " SELECT 1 AS hit FROM cand JOIN LATERAL (SELECT * FROM " + source + " v WHERE v." + id + " = cand.cid"
+            + " AND v." + effective + " <= :now ORDER BY v." + effective + " DESC, v." + version + " DESC LIMIT 1) c"
+            + " ON true WHERE NOT c." + deleted + " AND " + matches(columns, "c.")
+            // … and the winning version of every later effective time (the scheduled ones).
+            + " UNION ALL SELECT 1 AS hit FROM cand JOIN LATERAL (SELECT DISTINCT ON (v." + effective + ") * FROM "
+            + source + " v WHERE v." + id + " = cand.cid AND v." + effective + " > :now ORDER BY v." + effective
+            + ", v." + version + " DESC) s ON true WHERE NOT s." + deleted + " AND " + matches(columns, "s.")
+            + " LIMIT 1";
         return engine.select(sql, params).hasElements();
+    }
+
+    private static String matches(List<String> columns, String alias) {
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < columns.size(); i++) {
+            parts.add(alias + columns.get(i) + " = :u" + i);
+        }
+        return String.join(" AND ", parts);
     }
 
     /**
      * Whether a version scheduled after {@code now} (the winner of its effective time, not a tombstone) refers to
-     * {@code targetId} through {@code field}; {@code excludeId}, if given, is an instance that does not count.
+     * {@code targetId} through {@code field}; {@code excludeId}, if given, is an instance that does not count. The
+     * candidates come from the versions that refer to the target (through the index on the field), so the table is
+     * not read as a whole.
      */
     public Mono<Boolean> referencedLater(StorageEngine engine, String table, EntityDefinition def, String field,
         Object targetId, Object excludeId, Instant now) {
         String id = SqlIdentifiers.require(def.primaryKeyColumn());
         String effective = SqlIdentifiers.require(def.systemColumn(TemporalSpec.EFFECT_START_TIME));
         String version = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
+        String column = SqlIdentifiers.require(def.physicalColumn(field));
+        String source = SqlIdentifiers.require(table);
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("now", BoundValue.of(now));
         params.put("target", BoundValue.of(targetId));
-        String sql = "SELECT 1 AS hit FROM (SELECT DISTINCT ON (" + id + ", " + effective + ") * FROM "
-            + SqlIdentifiers.require(table) + " WHERE " + effective + " > :now ORDER BY " + id + ", " + effective
-            + ", " + version + " DESC) s WHERE NOT " + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED))
-            + " AND " + SqlIdentifiers.require(def.physicalColumn(field)) + " = :target";
+        String exclude = "";
         if (excludeId != null) {
-            sql += " AND " + id + " <> :self";
+            exclude = " AND " + id + " <> :self";
             params.put("self", BoundValue.of(excludeId));
         }
-        return engine.select(sql + " LIMIT 1", params).hasElements();
+        String sql = "WITH cand AS (SELECT DISTINCT " + id + " AS cid FROM " + source + " WHERE " + column
+            + " = :target AND " + effective + " > :now" + exclude + ")"
+            + " SELECT 1 AS hit FROM cand JOIN LATERAL (SELECT DISTINCT ON (v." + effective + ") * FROM " + source
+            + " v WHERE v." + id + " = cand.cid AND v." + effective + " > :now ORDER BY v." + effective + ", v."
+            + version + " DESC) s ON true WHERE NOT s." + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED))
+            + " AND s." + column + " = :target LIMIT 1";
+        return engine.select(sql, params).hasElements();
     }
 
     private static Violation violation(EntityDefinition def, UniqueConstraint unique) {
