@@ -50,4 +50,6 @@
 | FIN-DI-002 | Migration of open items and history | 部分 | `gl/OpeningProcesses`、`io/FinanceImports`（`finance.opening_balances`）；对账报告 `queries/../migration/reconciliation.sql` | `it/OpeningIT`（FIN-EXP-01 重现，每个科目差额 0.00）；场景 `f2_setup_books`；未结应收、应付、资产、银行项目随 F3–F6 |
 | FIN-DI-003 | Data-quality decisions | 部分 | `migration/MigrationEntities`、`migration/MigrationProcesses`（科目决定，决定人与时间进入对账报告） | `it/OpeningIT`；重复客户合并（验收 1）随 F3 |
 | FIN-PC-002 | Opening balances | 部分 | 期初期间 0（`FinPeriod.opening`）、`FIN_OPENING_POST` / `FIN_OPENING_CLOSE`，控制科目由期初分录记入 | `it/OpeningIT`（验收 1 的总账部分、验收 2）、`FinanceImportsTest`、`OpeningLinesTest`；子账合计 = 控制科目随 F3–F6 |
+| FIN-GL-019 | Journal import | 完成 | `io/FinanceImports`（`finance.journals`）、`gl/JournalImportProcesses`（`FIN_JOURNAL_IMPORT`，`FinJournal.externalRef`）；菜单 `finance-web/src/index.tsx` | `it/JournalImportIT`（验收 1；照常审批、控制科目、只导入一次）、`it/PayrollImportIT`（验收 2）、`e2e/imports.spec.ts` |
+| FIN-DI-004 | Payroll journal import | 完成 | `payroll/PayrollEntities`（映射）、`payroll/PayrollLines`、`payroll/PayrollProcesses`（`FIN_PAYROLL_IMPORT`）、`io/FinanceImports`（`finance.payroll`） | `it/PayrollImportIT`（PAYROLL-2601 = FIN-EXP-02）、`PayrollLinesTest`（含属性测试） |
 

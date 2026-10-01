@@ -364,6 +364,13 @@
 - 迁移对账报告 `finance.migration.reconciliation`（报表，可 `REPORT_ISSUE` 签发）：每个科目的期初分录（来源）与总账在期初日的余额及差额、借方与贷方合计、
   全部决定及决定人与时间（FIN-DI-002：每个控制总数差额为 0.00）。子账的期初项目对账随各阶段加入。
 
+### 13.3 日记账与工资导入（F2b）
+
+- `FIN_JOURNAL_IMPORT`：一张导入的分录存为草稿（来源 `IMPORT`，来源单据号记入 `externalRef`，唯一），缺省随即以 `FIN_JOURNAL_SUBMIT` 提交，
+  检查、编号、审批与控制科目规则与手工录入完全相同（GL-019）。
+- `FinPayrollMapping` 与 `FIN_PAYROLL_IMPORT`：提供商文件 `code,department,amount` 按映射合并为摘要分录（单据号即发放号，来源 `PAYROLL`），照常提交与审批（DI-004）。
+  映射只由 Controller 维护；映射到银行科目即 Controller 对工资分录付款科目的长期例外（GL-005），记在每张工资分录上，其他控制科目一律拒收。
+
 外部引用与幂等键：每个导入行与 API 请求都可带外部引用，重复不会产生第二张单据（DI-006，平台幂等键 + 外部引用唯一约束）。
 
 ---

@@ -10,6 +10,13 @@ export const messages = {
       newJournal: 'New journal entry',
       trialBalance: 'Trial balance',
       accountInquiry: 'Account inquiry',
+      imports: 'Imports',
+      journalImport: 'Import journal entries',
+      payrollImport: 'Import payroll',
+      openingImport: 'Import opening balances',
+      chartImport: 'Import chart of accounts',
+      migrationReport: 'Migration reconciliation',
+      importRuns: 'Import history',
     },
     journal: {
       listTitle: 'Journal entries',

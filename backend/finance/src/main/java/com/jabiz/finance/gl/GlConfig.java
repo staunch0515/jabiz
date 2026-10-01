@@ -263,6 +263,12 @@ class GlConfig {
     }
 
     @Bean
+    ProcessDefinition<JournalImportProcesses.ImportedEntry, JournalProcesses.JournalOutput, ProcessContext>
+        finJournalImportProcess() {
+        return JournalImportProcesses.IMPORT_PROCESS;
+    }
+
+    @Bean
     ProcessDefinition<OpeningProcesses.CloseInput, PeriodProcesses.PeriodOutput, ProcessContext>
         finOpeningCloseProcess() {
         return OpeningProcesses.CLOSE_PROCESS;

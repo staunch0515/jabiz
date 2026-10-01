@@ -149,7 +149,7 @@ class FinScn02IT extends FinanceItSupport {
             .isEqualTo(JournalValidator.CONTROL_ACCOUNT);
 
         // Expected: the general ledger lines of the four entries are those of FIN-EXP-02; numbers without gaps.
-        Map<String, Map<String, BigDecimal>> expected = expectedJournals();
+        Map<String, Map<String, BigDecimal>> expected = expectedDocuments("JE-\\d{4}");
         assertThat(expected).containsOnlyKeys("JE-0001", "JE-0002", "JE-0003", "JE-0004");
         for (var journalNo : expected.keySet()) {
             assertThat(ledgerLines(journalNo)).as(journalNo).isEqualTo(expected.get(journalNo));
@@ -166,41 +166,5 @@ class FinScn02IT extends FinanceItSupport {
         return post("/api/datasets/" + dataset + "/commit", accountant(), Map.of("changes", List.of(
             Map.of("action", "INSERT", "attributes", attributes)))).expectStatus().isOk().expectBody(LIST)
             .returnResult().getResponseBody().getFirst();
-    }
-
-    /** The ledger's lines of a posted entry: account code to signed amount, debits positive. */
-    private static Map<String, BigDecimal> ledgerLines(String journalNo) {
-        Map<String, BigDecimal> lines = new TreeMap<>();
-        for (Map<String, Object> row : query("""
-            SELECT DISTINCT a.account_code, e.entry_id::text AS entry, e.direction, e.amount
-            FROM fi_journal_version j
-            JOIN ledger_entry_version e ON e.transaction_id = j.transaction_id
-            JOIN ledger_account_version a ON a.account_id = e.account_id
-            WHERE j.journal_no = ? AND j.transaction_id IS NOT NULL""", journalNo)) {
-            BigDecimal amount = ((BigDecimal) row.get("amount")).setScale(2);
-            lines.merge((String) row.get("account_code"),
-                "DEBIT".equals(row.get("direction")) ? amount : amount.negate(), BigDecimal::add);
-        }
-        return lines;
-    }
-
-    /** FIN-EXP-02's journal rows: "2100 15,000.00; 1010 (15,000.00)", amounts in parentheses being credits. */
-    private static Map<String, Map<String, BigDecimal>> expectedJournals() throws IOException {
-        Pattern row = Pattern.compile("^\\| [0-9-]+ \\| (JE-\\d{4}) \\| journal \\| [^|]* \\| ([^|]+) \\|");
-        Pattern part = Pattern.compile("(\\d{4}) (\\(?)([0-9,]+\\.\\d{2})\\)?");
-        Map<String, Map<String, BigDecimal>> journals = new TreeMap<>();
-        for (String text : Files.readAllLines(SAMPLE_COMPANY.resolveSibling("21-expected-results.md"))) {
-            Matcher m = row.matcher(text);
-            if (m.find()) {
-                Map<String, BigDecimal> lines = new TreeMap<>();
-                Matcher p = part.matcher(m.group(2));
-                while (p.find()) {
-                    BigDecimal amount = new BigDecimal(p.group(3).replace(",", ""));
-                    lines.put(p.group(1), p.group(2).isEmpty() ? amount : amount.negate());
-                }
-                journals.put(m.group(1), lines);
-            }
-        }
-        return journals;
     }
 }
