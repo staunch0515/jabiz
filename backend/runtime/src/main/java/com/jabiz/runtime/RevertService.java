@@ -255,6 +255,13 @@ public class RevertService {
                                 + " wrote " + def.name + ", which only its processes change",
                             Map.of("operation", entry.getKey().processSeqId(), "entity", def.name)));
                     }
+                    // Write-once data (decision D29) has nothing earlier to return to either.
+                    if (def.temporal && def.temporalSpec.writeOnce()) {
+                        throw new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.WRITE_ONCE,
+                            "Operation " + entry.getKey().processSeqId() + " wrote " + def.name
+                                + ", which is written once and never changes",
+                            Map.of("entity", def.name, "id", String.valueOf(item.entityId()))));
+                    }
                 }
                 if (item.action() == VersionAction.UPDATE) {
                     def.sensitiveFields().stream().filter(item.changedFields()::contains)

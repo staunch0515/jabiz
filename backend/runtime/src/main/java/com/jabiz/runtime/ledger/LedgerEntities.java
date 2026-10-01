@@ -89,7 +89,8 @@ public class LedgerEntities {
             eb.field("sourceId", f -> f.physicalColumn("source_id").immutable(true).asText(100));
             // A transaction is reversed at most once (decision D6: advisory lock and check).
             eb.unique("uk_ledger_transaction_reverses", "reversesTransactionId");
-            eb.temporal(t -> t.allowScheduled(false));
+            // Posted once, corrected by a reversal, never changed (decision D29).
+            eb.temporal(t -> t.allowScheduled(false).writeOnce());
             eb.publishChanges();
             eb.listView("default", lv -> lv
                 .columns("bookingTime", "description", "reference", "sourceEntity", "sourceId", "reversesTransactionId")
@@ -125,7 +126,7 @@ public class LedgerEntities {
                 eb.field(LedgerDimension.field(position), f -> f.physicalColumn("dimension_" + column).immutable(true)
                     .asText(LedgerDimension.MAX_VALUE_LENGTH));
             }
-            eb.temporal(t -> t.allowScheduled(false));
+            eb.temporal(t -> t.allowScheduled(false).writeOnce());
             eb.listView("default", lv -> lv
                 .columns("transactionId", "lineNo", "accountId", "direction", "amount", "currency",
                     "transactionAmount", "exchangeRate", "memo", "dimension1",

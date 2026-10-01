@@ -60,6 +60,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `(实体主键, effect_start_time DESC, version_no DESC)` 与 `process_seq_id` 索引、指向 `op_process` / `entity_registry` 的外键，
   并执行 `SELECT jabiz_protect_append_only('<表>')` 安装禁止 UPDATE/DELETE/TRUNCATE 的触发器（启动自检检查）。
   测试中不能 `DELETE` 这类表：用各测试独有的数据（或写墓碑）隔离。
+  规模（04 §5.3–§5.4 与决策 D29）：按不可变字段查询、唯一约束的字段要建索引（唯一约束缺少支撑索引时启动检查告警）；
+  只记一次、以冲正等新实例更正的实体（如账本）声明 `t.writeOnce()`，迁移中另建只含实体主键的唯一索引（缺少即启动失败），更新、删除、撤销一律 422 `WRITE_ONCE`。
 - **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。实体字段用 `f.sensitive()`
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），

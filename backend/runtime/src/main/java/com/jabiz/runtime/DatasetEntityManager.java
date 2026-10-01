@@ -853,6 +853,15 @@ public class DatasetEntityManager {
 
     // ================= Rules =================
 
+    /** Refuses a change of an existing instance of a write-once temporal entity (decision D29). */
+    void requireChangeable(EntityDefinition def, Object id) {
+        if (def.temporal && def.temporalSpec.writeOnce()) {
+            throw new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.WRITE_ONCE,
+                def.name + " [ID: " + id + "] is written once and never changes",
+                Map.of("entity", def.name, "id", String.valueOf(id))));
+        }
+    }
+
     String requireWritable(EntityDefinition def) {
         return def.versionColumn().orElseThrow(() -> new BusinessRuleViolationException(new Violation(
             null, PlatformErrorCodes.ENTITY_READ_ONLY,
