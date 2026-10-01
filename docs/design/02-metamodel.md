@@ -256,7 +256,7 @@ eb.listView("default", lv -> lv
 
 ## 8. 导出
 
-`GET /api/meta/entities/{name}` 返回（另按请求语言附 `label` 与错误文案模板 `messages`【D15】，12 §2）：实体名、主键、显示字段（`display`）、默认语言（`defaultLocale`，多语言文本的回退）、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled`，系统字段标记为系统维护）、字段（逻辑名、
+`GET /api/meta/entities/{name}` 返回（另按请求语言附 `label` 与错误文案模板 `messages`【D15】，12 §2）：实体名、主键、显示字段（`display`）、默认语言（`defaultLocale`，多语言文本的回退）、是否发布变更事件（`publishesChanges`）、是否时态（`temporal`；时态实体另有 `allowScheduled` 与 `writeOnce`（只写一次的实体，页面不提供修改、删除与撤销，04 §5.4），系统字段标记为系统维护）、字段（逻辑名、
 语义类型及参数、必填、不可变、系统维护、只经流程写入（`processOnly`）、允许的运算符、可导出规则）、引用、状态机、守卫（仅 code/from/to）、唯一约束、
 列表视图、字典引用（`dictionaries`）。
 

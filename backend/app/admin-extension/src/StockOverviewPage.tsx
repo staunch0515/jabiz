@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Form, Input, InputNumber, Space, Table, Typography } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError, EXTENSION_NAMESPACE, runProcess, runQuery, useAuth } from '@jabiz/admin'
+import { Link } from 'react-router'
+import { ApiError, EXTENSION_NAMESPACE, paths, runProcess, runQuery, useAuth } from '@jabiz/admin'
 
 export interface StockRow {
   warehouseCode: string
@@ -20,6 +21,8 @@ interface ReceiveOutput {
 }
 
 const QUERY = 'commerce.stock_availability'
+/** Every receipt, written once (docs/design/04-temporal-append-only.md section 5.4), on its generated list page. */
+const RECEIPTS = 'urn:jabiz:dataset:default:StockReceipt'
 
 /**
  * Stock per warehouse and product, and a receipt of goods. Reading needs commerce.stock.read (the template's
@@ -59,6 +62,9 @@ export default function StockOverviewPage() {
       <Typography.Title level={3} data-testid="page-title">
         {t('stock.title')}
       </Typography.Title>
+      <Link to={paths.dataset(RECEIPTS)} data-testid="receipts-link">
+        {t('stock.receipts')}
+      </Link>
       {can('commerce.stock.receive') && (
         <Card size="small" title={t('stock.receive')}>
           <Form form={form} layout="inline" onFinish={receive} data-testid="receive-form">

@@ -96,6 +96,8 @@ public final class MetaModelExporter {
         root.put("publishesChanges", def.publishesChanges);
         if (def.temporal) {
             root.put("allowScheduled", def.temporalSpec.allowScheduled());
+            // Only inserted: pages offer no update, delete or revert (decision D29).
+            root.put("writeOnce", def.temporalSpec.writeOnce());
         }
         if (def.stateField != null) {
             root.put("stateField", def.stateField);
