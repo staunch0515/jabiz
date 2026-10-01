@@ -37,5 +37,15 @@ public final class FinancePermissions {
     /** Grant a journal entry's exception to post to a control account (FIN-GL-005; phase F1b). */
     public static final String JOURNAL_CONTROL_EXCEPTION = "fin.journal.control-exception";
 
+    /**
+     * Run {@code FIN_JOURNAL_POST} directly; granted to no role. The journal processes call it as their subprocess
+     * after their own checks (platform decision D11), so posting happens only through them.
+     */
+    public static final String JOURNAL_POST = "fin.journal.post";
+    /** Maintain recurring entry templates (FIN-GL-017). */
+    public static final String RECURRING_MAINTAIN = "fin.recurring.maintain";
+    /** Upload supporting documents of journal entries (FIN-GL-016). */
+    public static final String JOURNAL_ATTACH = "fin.journal.attach";
+
     private FinancePermissions() {}
 }

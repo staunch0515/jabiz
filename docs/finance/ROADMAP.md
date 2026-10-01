@@ -87,7 +87,36 @@
 - [x] 纯计算的单元测试与属性测试（`MoneyTest`、`FiscalCalendarTest`、`BookingTimeTest`、`PeriodPolicyTest`、`AccountTypesTest`）。
 - [x] 所有 `fi_` 表只插入（各 IT 的 `assertOnlyInserted`）；`./gradlew :finance:check`（含 `platformCheck`）与 `tools/check-app-paths.sh` 通过。
 
-**F1b / F1c 要求与验收标准**：在各自开始时写入本节（计划见上文与 `docs/finance-work/00-development-plan.md` §5.2）。
+**F1b 要求**
+1. 日记账实体（迁移 `V2__finance_journals.sql`，全部只追加）：`FinJournal`、`FinJournalLine`、`FinJournalAttachment`、`FinPosting`（每笔总账交易的过账日、期间、来源、总账号、来源单据）、
+   `FinRecurringTemplate` / `FinRecurringLine`；除周期模板（`fin.recurring.maintain`）外都只经流程写入（`processOnlyWrites`）。
+2. 流程：`FIN_JOURNAL_SAVE`（只由准备人；替换行；任何修改退回草稿并使批准与控制科目例外失效，撤回待审请求）、`FIN_JOURNAL_DELETE`（未编号的草稿）、
+   `FIN_JOURNAL_SUBMIT`（一次报告全部问题：行、借贷平衡及差额、科目可过账、控制科目、维度、期间；编号；审批规则）、内部的 `FIN_JOURNAL_POST`（内容哈希一致、期间未关）、
+   `FIN_JOURNAL_APPROVAL_RESULT`（订阅批准/驳回事件）、`FIN_JOURNAL_GRANT_CONTROL_EXCEPTION`（不是准备人）、`FIN_JOURNAL_REVERSE`、`FIN_JOURNAL_ATTACH` / `_DETACH`。
+3. 编号：单据号 `JE-nnnn` 按财年（`fin.journal`，唯一键（财年，单据号））在提交时取得；总账号 `GJ-MAN-<财年>-nnnnnn`（`fin.gl`）在过账时取得；被拒的提交不占号。
+4. 审批（14b）：`ApprovalSubject` `fin.journal`（事实 amount、source、manual、afterPeriodEnd）；`FIN_SETUP` 提出规则 `FIN-MANUAL-10K`（手工且 > 10,000.00 → `fin.journal.approve`），另一人发布；
+   不需审批时直接过账并记录已评估的规则版本。
+5. 附件：两个文件策略（`fin.journal.support`：PDF 与图片；`fin.journal.sheets`：CSV 与 XLSX），记下内容哈希；过账后不能增删。
+6. 周期分录与自动冲回：`FIN_RECURRING_RUN`（模板 × 期间各一次，日期为期末，照常审批）、`FIN_AUTO_REVERSE_RUN`（`<原号>-R`，期间关闭时跳过并说明），各有定时任务（公司时区）。
+7. 报表模板（按过账日）：`finance.gl.trial_balance`（汇总科目合计下级、第 13 期可排除、`knownAt`）、`finance.gl.account_inquiry`（期初、逐行与滚动余额、期末）、`finance.gl.journal_register`。
+
+**F1b 验收标准**
+- [x] 草稿、提交、编号、过账；小额分录直接过账并记录规则版本（GL-010、GL-013、GL-015 第 2 条，`JournalLifecycleIT`）。
+- [x] 超过 10,000.00 的手工分录等待他人批准；准备人即使有审批权限也被拒；驳回须写理由（GL-015 第 1、3 条，CT-001，`JournalLifecycleIT`、`FinScn02IT`）。
+- [x] 批准后的修改使批准失效、须重新批准；待审请求随修改撤回（GL-014、CT-003，`JournalLifecycleIT`）。
+- [x] 提交一次报告全部问题并显示差额；关闭与软关闭期间、第 13 期（GL-011、PC-003，`JournalLifecycleIT`）。
+- [x] 控制科目只在 Controller 授权例外后接受手工行，修改使例外失效（GL-005、Q1，`JournalLifecycleIT`）。
+- [x] 过账后的分录不能修改或删除，通用接口也不能；冲回金额相反并引用原分录，只能冲回一次（GL-012，`JournalLifecycleIT`）。
+- [x] 20 笔并发提交的单据号与总账号连续无重复（GL-013，`JournalLifecycleIT`）。
+- [x] 周期分录每期一次、再次运行不生成；自动冲回在冲回日生成 `<原号>-R`，期间关闭时等待（GL-017、GL-018，`JournalAutomationIT`）。
+- [x] 附件带内容哈希，过账后不能增删、文件不能删除（GL-016，`AttachmentIT`）。
+- [x] 试算表按过账日汇总、第 13 期可排除、按 `knownAt` 重现；账户查询的期初、滚动与期末余额（GL-003、GL-022，`GlReportsIT`）。
+- [x] FIN-SCN-02 第 1–5 步；JE-0001…JE-0004 的总账行等于 FIN-EXP-02；单据号连续（`FinScn02IT`）。
+- [x] 自查后的加固：迟到的旧审批决定不生效；批准后科目被停用则不过账、可修改重提；冲回日与第 13 期标记校验；冲回分录的行固定；
+  附件只由准备人在草稿时增删且只能附自己的上传；不能过账的周期模板被跳过；自动冲回不提前、只看未冲回的分录（`JournalLifecycleIT`、`JournalAutomationIT`、`AttachmentIT`）。
+- [x] 纯计算的单元与属性测试（`JournalValidatorTest`）；所有 `fi_` 表只插入；`./gradlew :finance:check` 与 `tools/check-app-paths.sh` 通过。
+
+**F1c 要求与验收标准**：在开始时写入本节（计划见上文与 `docs/finance-work/00-development-plan.md` §5.2）。
 
 ## F2 — F11
 
