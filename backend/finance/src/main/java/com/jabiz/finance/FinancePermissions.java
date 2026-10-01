@@ -51,6 +51,10 @@ public final class FinancePermissions {
      * (FIN-PC-002, FIN-DI-002, FIN-DI-003).
      */
     public static final String MIGRATION = "fin.migration";
+    /** Keep the payroll provider's code mapping (FIN-DI-004). */
+    public static final String PAYROLL_MAINTAIN = "fin.payroll.maintain";
+    /** Import the payroll provider's results as summary journal entries (FIN-DI-004). */
+    public static final String PAYROLL_IMPORT = "fin.payroll.import";
     /** Upload supporting documents of journal entries (FIN-GL-016). */
     public static final String JOURNAL_ATTACH = "fin.journal.attach";
 

@@ -7,12 +7,17 @@ import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.gl.AccountProcesses;
 import com.jabiz.finance.gl.AccountTypes;
 import com.jabiz.finance.gl.ExchangeRateProcesses;
+import com.jabiz.finance.gl.JournalImportProcesses;
 import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.JournalValidator;
 import com.jabiz.finance.gl.OpeningProcesses;
+import com.jabiz.finance.payroll.PayrollProcesses;
 import com.jabiz.imports.ImportDefinition;
 import com.jabiz.imports.ImportFormat;
 import com.jabiz.imports.ImportRow;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,6 +45,9 @@ import java.util.Set;
  *       constants.</li>
  *   <li>{@code finance.opening_balances}: the opening trial balance as one {@code FIN_OPENING_POST}; debits and
  *       credits must agree before anything is posted, the difference is reported.</li>
+ *   <li>{@code finance.journals}: journal entries, one {@code FIN_JOURNAL_IMPORT} per document, each submitted
+ *       under the approval rules unless asked not to (FIN-GL-019).</li>
+ *   <li>{@code finance.payroll}: a payroll provider's run as one {@code FIN_PAYROLL_IMPORT} (FIN-DI-004).</li>
  * </ul>
  */
 @Configuration
@@ -57,6 +65,18 @@ class FinanceImports {
 
     /** @param description of the opening entry; "Opening balances" when absent */
     record OpeningParams(@Size(max = 500) String description) {}
+
+    /** @param submit whether each entry is submitted at once; yes when absent */
+    record JournalParams(Boolean submit) {}
+
+    /**
+     * @param run         the provider's run, the entry's number ("PAYROLL-2601")
+     * @param payDate     the posting date of the run
+     * @param description of the entry
+     * @param submit      whether it is submitted at once; yes when absent
+     */
+    record PayrollParams(@NotBlank @Pattern(regexp = PayrollProcesses.RUN) String run, @NotNull LocalDate payDate,
+        @NotBlank @Size(max = 500) String description, Boolean submit) {}
 
     @Bean
     FilePolicy financeImportPolicy() {
@@ -125,6 +145,72 @@ class FinanceImports {
             .totals("debit", "credit")
             .permissions(FinancePermissions.MIGRATION)
             .build();
+    }
+
+    @Bean
+    ImportDefinition<JournalParams> journalImport() {
+        return ImportDefinition.define("finance.journals", 1, JournalParams.class)
+            .file(FILE_POLICY, ImportFormat.csv())
+            .field("document", new SemanticKind.Text(100, false), true, "document", "entry", "journal")
+            .field("postingDate", DATE, true, "posting_date", "date")
+            .field("documentDate", DATE, false, "document_date")
+            .field("description", new SemanticKind.Text(500, false), false, "description")
+            .field("account", CODE, true, "account", "account_code")
+            .field("debit", USD, false, "debit")
+            .field("credit", USD, false, "credit")
+            .field("memo", NAME, false, "memo")
+            .field("department", CODE, false, "department")
+            .field("location", CODE, false, "location")
+            .perGroup(row -> row.text("document").strip(), JournalImportProcesses.IMPORT_ENTRY, 1, FinanceImports::journal)
+            .totals("debit", "credit")
+            .permissions(FinancePermissions.JOURNAL_PREPARE)
+            .build();
+    }
+
+    /** One document's rows as one entry: the date and description of its first row that has them. */
+    static JournalImportProcesses.ImportedEntry journal(List<ImportRow> rows, JournalParams params) {
+        String document = rows.getFirst().text("document").trim();
+        String description = rows.stream().map(r -> r.text("description")).filter(d -> d != null && !d.isBlank())
+            .findFirst().orElse("Imported entry " + document);
+        LocalDate documentDate = rows.stream().map(r -> (LocalDate) r.get("documentDate"))
+            .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        List<JournalProcesses.LineInput> lines = new ArrayList<>();
+        for (ImportRow row : rows) {
+            if (!rows.getFirst().get("postingDate").equals(row.get("postingDate"))) {
+                throw new IllegalArgumentException("Document " + document + " has more than one posting date");
+            }
+            lines.add(new JournalProcesses.LineInput(row.text("account"), row.decimal("debit"), row.decimal("credit"),
+                row.text("memo"), row.text("department"), row.text("location")));
+        }
+        return new JournalImportProcesses.ImportedEntry(document, (LocalDate) rows.getFirst().get("postingDate"),
+            documentDate, description, lines, params == null ? null : params.submit());
+    }
+
+    @Bean
+    ImportDefinition<PayrollParams> payrollImport() {
+        return ImportDefinition.define("finance.payroll", 1, PayrollParams.class)
+            .file(FILE_POLICY, ImportFormat.csv())
+            .field("code", new SemanticKind.Text(40, false), true, "code", "provider_code", "pay_code")
+            .field("department", CODE, false, "department")
+            .field("amount", USD, true, "amount")
+            // The whole file is one run.
+            .perGroup(row -> "run", PayrollProcesses.IMPORT_RUN, 1, FinanceImports::payroll)
+            .totals("amount")
+            .permissions(FinancePermissions.PAYROLL_IMPORT)
+            .build();
+    }
+
+    static PayrollProcesses.PayrollInput payroll(List<ImportRow> rows, PayrollParams params) {
+        if (params == null) {
+            throw new IllegalArgumentException("A payroll import names its run, pay date and description");
+        }
+        List<PayrollProcesses.ProviderLineInput> lines = new ArrayList<>();
+        for (ImportRow row : rows) {
+            lines.add(new PayrollProcesses.ProviderLineInput(row.text("code"), row.text("department"),
+                row.decimal("amount")));
+        }
+        return new PayrollProcesses.PayrollInput(params.run(), params.payDate(), params.description(), lines,
+            params.submit());
     }
 
     static OpeningProcesses.OpeningInput opening(List<ImportRow> rows, OpeningParams params) {

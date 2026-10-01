@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | F0 | 设计与骨架 | — | 3–4 天 | ☑ 已完成（设计待确认） |
 | F1 | 总账、期间、日记账与审批 | 14a 14b 14c 14h 14i | 8–10 天 | ☑ 已完成 |
-| F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ◐ F2a 进行中 |
+| F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ◐ F2a 已合入；F2b 进行中 |
 | F3 | 应收与销售税 | — | 8–10 天 | ☐ |
 | F4 | 应付、付款与 1099 | — | 8–10 天 | ☐ |
 | F5 | 银行与对账 | 14e | 6–8 天 | ☐ |
@@ -186,9 +186,25 @@
 - [x] 账套已在使用（已过账或有期间关闭）时不能再开账；期初分录不能冲回；决定之后建立的同名科目读作其自身（`OpeningInUseIT`、`OpeningGuardsIT`，代码与安全审查的修正）。
 - [x] `./gradlew :finance:check`（含 `platformCheck` 0 错误 0 警告）、场景回放、`tools/check-app-paths.sh` 通过。
 
-### F2b 日记账导入、工资导入
+### F2b 日记账导入、工资导入、菜单
 
-见下一个 PR；要求与验收在其开始时写入。
+**要求**
+1. `finance.journals`：按单据号分组，每组交给新流程 `FIN_JOURNAL_IMPORT`（草稿，来源 `IMPORT`，单据号记入 `FinJournal.externalRef`，V5），
+   缺省随即提交：与手工录入相同的检查、编号与审批；同一单据只导入一次（`externalRef` 唯一）。平台的外部引用是逐行的，一张分录有多行，所以由财务以字段唯一保证。
+2. 工资：时态实体 `FinPayrollMapping`（提供商代码 → 科目、借贷、部门；Controller 经数据视图维护，`fin.payroll.maintain`）；`finance.payroll` 整个文件为一次发放，
+   交给 `FIN_PAYROLL_IMPORT`：按映射换算并合并（`PayrollLines`），生成单据号为发放号（`PAYROLL-2601`，来源 `PAYROLL`）的分录并提交；未映射的代码拒收；
+   映射到银行科目（控制科目 BANK）视为 Controller 维护映射时给出的长期例外，记在分录上（例外人"payroll mapping"）；其他控制科目拒收；同一发放只导入一次。
+3. 工资提供商文件版式（需求只说"外部提供商"）：`code,department,amount`，参数为发放号、发放日、说明；示例在测试资源 `payroll/provider-2026-01.csv`。
+4. 权限：Accountant 有 `fin.import`、`fin.payroll.import`；Controller 有 `fin.payroll.maintain`。
+5. finance-web 菜单"Imports"：日记账、工资、期初、科目表的导入（平台导入向导）、迁移对账报告、导入历史，各按其权限显示。
+6. 测试：`JournalImportIT`、`PayrollImportIT`、`PayrollLinesTest`（含 jqwik）、`index.test.tsx`；端到端 `finance-web/e2e/imports.spec.ts`。
+
+**验收标准**
+- [x] 一张不平的分录与一个无效科目：什么都不过账，两行都报告原因（GL-019 验收 1，`JournalImportIT`）。
+- [x] 工资文件导入生成 PAYROLL-2601，一张平衡的四行分录，与 FIN-EXP-02 相同；超过 10,000.00 待审批，批准后过账（GL-019 验收 2、DI-004 验收 1，`PayrollImportIT`）。
+- [x] 导入的分录照常审批（小额直接过账、大额待审批）、照常拒绝控制科目；同一单据、同一发放只导入一次（`JournalImportIT`、`PayrollImportIT`）。
+- [x] 映射合并的借贷差额等于输入的有符号合计、每科目每部门一行（`PayrollLinesTest` 属性测试）。
+- [x] 后台经菜单导入一张分录并在登记簿中看到它已过账（e2e，重复 3 次通过）；`./gradlew :finance:check`、`pnpm ext:check`、`tools/check-app-paths.sh` 通过。
 
 ## F3 — F11
 

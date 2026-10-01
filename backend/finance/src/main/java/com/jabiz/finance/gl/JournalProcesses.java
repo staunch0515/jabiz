@@ -741,6 +741,53 @@ public final class JournalProcesses {
         return id;
     }
 
+    /**
+     * A new draft made by a process rather than typed (an import): the header as {@code FIN_JOURNAL_SAVE} would
+     * store it, with its source, its external reference and, if given, the number it keeps; {@code exceptionReason}
+     * records a standing control-account exception for exactly this content (FIN-GL-005). Returns its key.
+     */
+    public static Object insertDraft(ProcessContext ctx, LocalDate postingDate, LocalDate documentDate,
+        String description, String source, String externalRef, String journalNo, List<JournalValidator.Line> lines,
+        String exceptionBy, String exceptionReason) {
+        JournalValidator.Totals totals = JournalValidator.totals(lines);
+        Map<String, Object> header = new LinkedHashMap<>();
+        header.put("postingDate", postingDate);
+        header.put("documentDate", documentDate != null ? documentDate : postingDate);
+        header.put("description", description.trim());
+        header.put("adjusting", false);
+        header.put("adjustmentPeriod", false);
+        if (exceptionReason != null) {
+            header.put("exceptionHash", contentHash(header, source, lineMaps(lines)));
+            header.put("exceptionBy", exceptionBy);
+            header.put("exceptionTime", ctx.opTime());
+            header.put("exceptionReason", exceptionReason);
+        }
+        header.put("source", source);
+        header.put("status", DRAFT);
+        header.put("preparer", ctx.request().actorId());
+        header.put("totalDebit", totals.debit());
+        header.put("totalCredit", totals.credit());
+        header.put("externalRef", externalRef);
+        header.put("journalNo", journalNo);
+        Object id = ctx.changes().insert(JOURNAL, header);
+        insertLines(ctx, id, lines);
+        return id;
+    }
+
+    /**
+     * The external reference of a document of a source, the source in front: each source numbers its documents
+     * itself, so a journal import cannot take a payroll run's reference, nor the other way round.
+     */
+    public static String externalRef(String source, String document) {
+        return source + ":" + document;
+    }
+
+    /** The journal entries imported from this document of the source, if any (at most one). */
+    public static EntityQuery byExternalRef(String source, String document) {
+        return EntityQuery.builder().where(new QueryPredicate.Eq("externalRef", externalRef(source, document)))
+            .limit(1).build();
+    }
+
     static void insertLines(ProcessContext ctx, Object journalId, List<JournalValidator.Line> lines) {
         for (int i = 0; i < lines.size(); i++) {
             JournalValidator.Line line = lines.get(i);

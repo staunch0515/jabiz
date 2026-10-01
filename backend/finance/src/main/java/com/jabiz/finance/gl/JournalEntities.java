@@ -49,8 +49,10 @@ public final class JournalEntities {
     public static final String IMPORT = "IMPORT";
     /** The opening entry of the books (FIN-PC-002): posted by the migration, never submitted. */
     public static final String OPENING = "OPENING";
+    /** A payroll summary from the external provider's file (FIN-DI-004). */
+    public static final String PAYROLL = "PAYROLL";
     public static final List<String> SOURCE_VALUES = List.of(MANUAL, RECURRING_SOURCE, REVERSING, AUTO_REVERSING,
-        IMPORT, OPENING);
+        IMPORT, OPENING, PAYROLL);
 
     /**
      * Sources of general ledger numbers (design section 4.5), counted apart per fiscal year: manual journals (MAN)
@@ -62,7 +64,7 @@ public final class JournalEntities {
     /** The general ledger source of a journal entry: imported entries count apart, the opening entry too. */
     public static String postingSource(String journalSource) {
         return switch (journalSource == null ? "" : journalSource) {
-            case IMPORT -> "IMP";
+            case IMPORT, PAYROLL -> "IMP";
             case OPENING -> "OPN";
             default -> "MAN";
         };
@@ -107,6 +109,8 @@ public final class JournalEntities {
         eb.field("reversedById", f -> f.physicalColumn("reversed_by_id").processOnly().asReference(JOURNAL));
         // A recurring template's entry of one period, "PREPAID-INS/2026-01": made once (FIN-GL-017).
         eb.field("recurringKey", f -> f.physicalColumn("recurring_key").immutable(true).asText(150));
+        // The document an imported entry came from, behind its source ("PAYROLL:PAYROLL-2601"): each is imported once (FIN-GL-019, DI-006).
+        eb.field("externalRef", f -> f.physicalColumn("external_ref").immutable(true).asText(100));
         eb.field("totalDebit", f -> f.physicalColumn("total_debit").required(true).processOnly()
             .asMonetary(USD, CENTS));
         eb.field("totalCredit", f -> f.physicalColumn("total_credit").required(true).processOnly()
@@ -129,11 +133,13 @@ public final class JournalEntities {
         eb.unique("uk_fi_journal_gl_no", "glNo");
         eb.unique("uk_fi_journal_reverses", "reversesJournalId");
         eb.unique("uk_fi_journal_recurring", "recurringKey");
+        eb.unique("uk_fi_journal_external_ref", "externalRef");
         eb.display("description");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("journalNo", "postingDate", "description", "source", "status", "totalDebit", "glNo", "preparer")
-            .filters("journalNo", "postingDate", "source", "status", "preparer", "fiscalYear", "periodKey", "glNo")
+            .filters("journalNo", "postingDate", "source", "status", "preparer", "fiscalYear", "periodKey", "glNo",
+                "externalRef")
             .sorts("journalNo", "postingDate", "totalDebit")
             .defaultSort("postingDate", false));
     });
