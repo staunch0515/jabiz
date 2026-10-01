@@ -73,12 +73,12 @@ class IssueDocument implements StepHandler<NoMetadata, ProcessContext> {
         });
     }
 
-    /** The addresses the layout's recipients column holds; none without such a column. */
+    /** The plain addresses the layout's recipients column holds; none without such a column. */
     static List<String> recipients(DocumentLayout layout, Documents.Read read) {
         if (layout.recipients() == null) {
             return List.of();
         }
-        return DocumentRecipients.split(read.content().source(layout.recipients().template())
+        return DocumentRecipients.plain(read.content().source(layout.recipients().template())
             .first(layout.recipients().column()));
     }
 }

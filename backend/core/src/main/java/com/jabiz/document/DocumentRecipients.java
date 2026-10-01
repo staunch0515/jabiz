@@ -41,6 +41,14 @@ public final class DocumentRecipients {
         return List.copyOf(addresses.values());
     }
 
+    /**
+     * The plain addresses in a column's value: as {@link #split}, leaving out whatever is not a plain address (a
+     * display name, a truncated address), so that the data can never put anything else into a mail header.
+     */
+    public static List<String> plain(Object value) {
+        return split(value).stream().filter(DocumentRecipients::valid).toList();
+    }
+
     /** Whether the text is one plain address. */
     public static boolean valid(String address) {
         return address != null && address.length() <= MAX_LENGTH && ADDRESS.matcher(address).matches();

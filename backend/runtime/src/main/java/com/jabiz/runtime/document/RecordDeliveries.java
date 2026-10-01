@@ -81,7 +81,9 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
 
     private Mono<Void> record(DocumentRun run, DocumentProcesses.SendInput input, ProcessContext ctx) {
         List<String> asked = input.to() == null ? List.of() : input.to();
-        List<String> addresses = asked.isEmpty() ? run.recipients() : DocumentRecipients.distinct(
+        // The kept addresses were plain when issued; checked again, so that nothing else ever reaches a header.
+        List<String> addresses = asked.isEmpty()
+            ? run.recipients().stream().filter(DocumentRecipients::valid).toList() : DocumentRecipients.distinct(
             asked.stream().map(a -> a == null ? "" : a.trim()).toList());
         List<Violation> invalid = new ArrayList<>();
         for (int i = 0; i < asked.size(); i++) {

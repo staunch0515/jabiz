@@ -17,6 +17,13 @@ class DocumentRecipientsTest {
     }
 
     @Test
+    void onlyThePlainAddressesOfAColumnAreKept() {
+        assertThat(DocumentRecipients.plain("John <j@example.com>; ap@example.com, foo@bar, " + "x".repeat(320)
+            + "@example.com")).containsExactly("ap@example.com");
+        assertThat(DocumentRecipients.plain(null)).isEmpty();
+    }
+
+    @Test
     void onlyPlainAddressesAreValid() {
         assertThat(DocumentRecipients.valid("ap.team+inv@mail.example.co.jp")).isTrue();
         assertThat(DocumentRecipients.valid("a@example.com\r\nBcc: spy@example.com")).isFalse();
