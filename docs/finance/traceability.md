@@ -52,4 +52,11 @@
 | FIN-PC-002 | Opening balances | 部分 | 期初期间 0（`FinPeriod.opening`）、`FIN_OPENING_POST` / `FIN_OPENING_CLOSE`，控制科目由期初分录记入 | `it/OpeningIT`（验收 1 的总账部分、验收 2）、`FinanceImportsTest`、`OpeningLinesTest`；子账合计 = 控制科目随 F3–F6 |
 | FIN-GL-019 | Journal import | 完成 | `io/FinanceImports`（`finance.journals`）、`gl/JournalImportProcesses`（`FIN_JOURNAL_IMPORT`，`FinJournal.externalRef`）；菜单 `finance-web/src/index.tsx` | `it/JournalImportIT`（验收 1；照常审批、控制科目、只导入一次）、`it/PayrollImportIT`（验收 2）、`e2e/imports.spec.ts` |
 | FIN-DI-004 | Payroll journal import | 完成 | `payroll/PayrollEntities`（映射）、`payroll/PayrollLines`、`payroll/PayrollProcesses`（`FIN_PAYROLL_IMPORT`）、`io/FinanceImports`（`finance.payroll`） | `it/PayrollImportIT`（PAYROLL-2601 = FIN-EXP-02）、`PayrollLinesTest`（含属性测试） |
+| FIN-AR-001 | Customer master | F3a 完成（重印在 F3d） | `ar/ArEntities`（`FinCustomer`，预定生效的地址）、`ar/CustomerProcesses`（`FIN_CUSTOMER_SAVE`）、`io/ReceivablesImports`（`finance.customers`） | `it/ReceivablesMasterIT`、`io/ReceivableRowsTest` |
+| FIN-AR-002 | Payment terms | F3a 计算（折扣过账在 F3c） | `calc/PaymentTerms`、`FinPaymentTerms`、`FIN_PAYMENT_TERMS_SAVE` | `calc/PaymentTermsTest`（含属性测试）、`it/ReceivablesMasterIT` |
+| FIN-TX-001 | Jurisdictions and rates | 完成 | `tax/TaxEntities`、`tax/TaxRates`、`tax/TaxProcesses`（`FIN_TAX_RATE_SET`、`FIN_TAX_CODE_SAVE`）、`io/TaxCodeRows` | `tax/TaxRatesTest`、`it/ReceivablesMasterIT`、`io/ReceivableRowsTest` |
+| FIN-TX-002 | Customer and line taxability | F3a 计算（发票在 F3b） | `calc/SalesTax` | `calc/SalesTaxTest` |
+| FIN-TX-003 | Tax calculation and rounding | F3a 计算（发票在 F3b） | `calc/SalesTax`（每张单据 × 辖区舍入、最大余数分摊） | `calc/SalesTaxTest`（含属性测试） |
+| FIN-TX-004 | Exemption certificates | F3a 证书与报告（发票引用在 F3b） | `FinExemptionCertificate`、`FIN_EXEMPTION_CERTIFICATE_SAVE`、`FinArSettings.missingCertificate`、`queries/finance/ar/certificates.sql` | `calc/SalesTaxTest`、`it/ReceivablesMasterIT` |
+| FIN-DI-003 | Data-quality decisions | 科目（F2a）、客户合并（F3a） | `migration/MigrationProcesses`（`CUSTOMER`）、`FIN_CUSTOMER_SAVE` 跳过并入的代码 | `it/ReceivablesMasterIT` |
 

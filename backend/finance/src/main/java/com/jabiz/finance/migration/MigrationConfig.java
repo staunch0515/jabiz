@@ -32,7 +32,8 @@ class MigrationConfig {
     @Bean
     StaticDictionary migrationDecisionKindDictionary() {
         return StaticDictionary.define(MigrationEntities.DECISION_KINDS, d -> d
-            .item(MigrationEntities.ACCOUNT, "en", "Account"));
+            .item(MigrationEntities.ACCOUNT, "en", "Account")
+            .item(MigrationEntities.CUSTOMER, "en", "Customer merge"));
     }
 
     @Bean
