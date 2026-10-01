@@ -37,7 +37,7 @@ public class DocumentRuns {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String SUMMARY_COLUMNS = "run_id, layout_id, layout_version, template_versions, permissions,"
         + " scope, subject_entity, subject_id, document_no, title, language, page_size, params, as_of, read_at,"
-        + " known_at, content_hash, recomputable, pdf_hash, pdf_size, page_count, issued_by, issued_time,"
+        + " known_at, recipients, content_hash, recomputable, pdf_hash, pdf_size, page_count, issued_by, issued_time,"
         + " process_seq_id";
 
     private final StorageAdapterRegistry storages;
@@ -72,6 +72,7 @@ public class DocumentRuns {
         row.put("as_of", run.asOf());
         row.put("read_at", run.readAt());
         row.put("known_at", run.knownAt());
+        row.put("recipients", JSON.writeValueAsString(run.recipients()));
         row.put("content", contentJson(run.content()));
         row.put("content_hash", run.contentHash());
         row.put("recomputable", run.recomputable());
@@ -124,7 +125,7 @@ public class DocumentRuns {
             (String) row.get("subject_id"), (String) row.get("document_no"), (String) row.get("title"),
             (String) row.get("language"), (String) row.get("page_size"),
             ArchivedValues.params((String) row.get("params")), instant(row.get("as_of")),
-            instant(row.get("read_at")), instant(row.get("known_at")),
+            instant(row.get("read_at")), instant(row.get("known_at")), recipients((String) row.get("recipients")),
             full ? content((String) row.get("content")) : null, ((String) row.get("content_hash")).trim(),
             Boolean.TRUE.equals(row.get("recomputable")), full ? bytes(row.get("pdf")) : null,
             ((String) row.get("pdf_hash")).trim(), ((Number) row.get("pdf_size")).intValue(),
@@ -175,6 +176,11 @@ public class DocumentRuns {
             (String) stored.get("title"), (String) stored.get("number"), (String) stored.get("company"),
             (String) stored.get("language"), Instant.parse((String) stored.get("issuedTime")), false,
             (Map<String, String>) stored.get("labels"), sources);
+    }
+
+    /** Documents issued before recipients were kept have none. */
+    private static List<String> recipients(String json) {
+        return json == null ? List.of() : JSON.readValue(json, new TypeReference<List<String>>() {});
     }
 
     private static byte[] bytes(Object value) {

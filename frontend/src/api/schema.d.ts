@@ -1325,7 +1325,22 @@ export interface components {
             label?: string;
             name?: string;
         };
+        DocumentDeliveryEntry: {
+            address?: string;
+            /** Format: int32 */
+            attempts?: number;
+            /** Format: date-time */
+            createdTime?: string;
+            deliveryId?: string;
+            /** Format: date-time */
+            lastAttempt?: string;
+            lastError?: string;
+            outcome?: string;
+            requestedBy?: string;
+            subject?: string;
+        };
         DocumentDetail: {
+            deliveries?: components["schemas"]["DocumentDeliveryEntry"][];
             params?: {
                 [key: string]: unknown;
             };
@@ -1381,6 +1396,7 @@ export interface components {
             pdfSize?: number;
             /** Format: date-time */
             readAt?: string;
+            recipients?: string[];
             recomputable?: boolean;
             runId?: string;
             subjectEntity?: string;

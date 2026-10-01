@@ -9,7 +9,6 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
-import com.jabiz.runtime.report.ReportScopes;
 import com.jabiz.runtime.security.Permissions;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -55,11 +54,18 @@ class DocumentController {
     record DocumentSummary(String runId, String layoutId, String layoutVersion, String title, String documentNo,
         String subjectEntity, String subjectId, String language, String pageSize, Instant asOf, Instant readAt,
         Instant knownAt, String contentHash, String pdfHash, int pdfSize, int pages, boolean recomputable,
-        String issuedBy, Instant issuedTime) {}
+        String issuedBy, Instant issuedTime, List<String> recipients) {}
 
-    /** An issued document with its parameters and what each template returned. */
+    /** An issued document with its parameters, what each template returned, and every time it was sent. */
     record DocumentDetail(DocumentSummary run, Map<String, Object> params, Map<String, String> templateVersions,
-        List<DocumentSourceEntry> sources) {}
+        List<DocumentSourceEntry> sources, List<DocumentDeliveryEntry> deliveries) {}
+
+    /**
+     * One address a document was sent to: {@code outcome} is {@code PENDING} (not tried yet), {@code SENT} or
+     * {@code FAILED} (the last attempt failed; the platform retries).
+     */
+    record DocumentDeliveryEntry(String deliveryId, String address, String subject, String requestedBy,
+        Instant createdTime, String outcome, int attempts, Instant lastAttempt, String lastError) {}
 
     record DocumentSourceEntry(String templateId, List<DocumentColumnEntry> columns, List<List<Object>> rows) {}
 
@@ -83,17 +89,20 @@ class DocumentController {
     private final DocumentLayoutRegistry layouts;
     private final DocumentRuns runs;
     private final SqlTemplateRegistry templates;
-    private final ReportScopes scopes;
+    private final DocumentAccess access;
+    private final DocumentDeliveries deliveries;
     private final Clock clock;
     private final boolean development;
 
     DocumentController(Documents documents, DocumentLayoutRegistry layouts, DocumentRuns runs,
-        SqlTemplateRegistry templates, ReportScopes scopes, Clock clock, Environment environment) {
+        SqlTemplateRegistry templates, DocumentAccess access, DocumentDeliveries deliveries, Clock clock,
+        Environment environment) {
         this.documents = documents;
         this.layouts = layouts;
         this.runs = runs;
         this.templates = templates;
-        this.scopes = scopes;
+        this.access = access;
+        this.deliveries = deliveries;
         this.clock = clock;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
     }
@@ -151,15 +160,17 @@ class DocumentController {
 
     @GetMapping("/api/documents/runs/{runId}")
     Mono<DocumentDetail> getDocument(@PathVariable String runId) {
-        return readable(runId).map(run -> {
+        return readable(runId).flatMap(run -> deliveries.of(run.runId()).map(d -> new DocumentDeliveryEntry(
+            d.deliveryId().toString(), d.address(), d.subject(), d.requestedBy(), d.createdTime(), d.outcome(),
+            d.attempts(), d.lastAttempt(), d.lastError())).collectList().map(sent -> {
             List<DocumentSourceEntry> sources = new ArrayList<>();
             for (DocumentContent.Source source : run.content().sources().values()) {
                 sources.add(new DocumentSourceEntry(source.templateId(),
                     source.columns().stream().map(c -> new DocumentColumnEntry(c.name(), c.label())).toList(),
                     source.rows()));
             }
-            return new DocumentDetail(summary(run), run.params(), run.templateVersions(), sources);
-        });
+            return new DocumentDetail(summary(run), run.params(), run.templateVersions(), sources, sent);
+        }));
     }
 
     /**
@@ -223,16 +234,7 @@ class DocumentController {
     }
 
     private boolean readable(DocumentRun run, RequestContext context) {
-        if (!Permissions.allowsAll(context, run.permissions(), development)) {
-            return false;
-        }
-        // Every template's datasets as they are now: a scope that has come to depend on the caller limits readers too.
-        for (String template : run.templateVersions().keySet()) {
-            if (!scopes.matches(template, run.scope(), context)) {
-                return false;
-            }
-        }
-        return scopes.matches(run.scope(), context);
+        return access.visible(run, context);
     }
 
     private static ResponseEntity<byte[]> pdf(byte[] bytes, String fileName, String contentHash, String pdfHash) {
@@ -249,8 +251,11 @@ class DocumentController {
 
     /** {@code <number>.pdf}, or {@code <layout>-<run>.pdf} without a number; letters, digits, {@code . - _} only. */
     static String fileName(DocumentRun run) {
-        String base = run.documentNo() != null && !run.documentNo().isBlank() ? run.documentNo()
-            : run.layoutId() + "-" + run.runId();
+        return fileName(run.documentNo(), run.layoutId(), run.runId());
+    }
+
+    static String fileName(String documentNo, String layoutId, UUID runId) {
+        String base = documentNo != null && !documentNo.isBlank() ? documentNo : layoutId + "-" + runId;
         return base.replaceAll("[^A-Za-z0-9._-]", "_") + ".pdf";
     }
 
@@ -266,7 +271,7 @@ class DocumentController {
         return new DocumentSummary(run.runId().toString(), run.layoutId(), run.layoutVersion(), run.title(),
             run.documentNo(), run.subjectEntity(), run.subjectId(), run.language(), run.pageSize(), run.asOf(),
             run.readAt(), run.knownAt(), run.contentHash(), run.pdfHash(), run.pdfSize(), run.pageCount(),
-            run.recomputable(), run.issuedBy(), run.issuedTime());
+            run.recomputable(), run.issuedBy(), run.issuedTime(), run.recipients());
     }
 
     private static String blankToNull(String value) {

@@ -179,4 +179,10 @@ class CommerceConfig {
         orderConfirmationIssueProcess() {
         return OrderConfirmations.ISSUE_PROCESS;
     }
+
+    @Bean
+    ProcessDefinition<OrderConfirmations.IssueInput, OrderConfirmations.SendOutput, ProcessContext>
+        orderConfirmationSendProcess() {
+        return OrderConfirmations.SEND_PROCESS;
+    }
 }

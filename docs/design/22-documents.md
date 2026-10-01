@@ -26,6 +26,7 @@ DocumentLayout orderConfirmation() {
         .permissions("commerce.order.read")
         .subject("SalesOrder", "orderId")                    // 单据的对象：按它列出已签发的单据
         .number("commerce.order_document_header", "orderNo") // 单号：文件名、列表、页脚
+        .recipients("commerce.order_document_header", "contactEmail") // 缺省收件地址（14j-2，第 5 节）
         .party("customer", "commerce.order_document_header", "customerCode")
         .facts("commerce.order_document_header", "orderNo", "orderedTime", "warehouseName")
         .table("commerce.order_document_lines", "lineNo", "sku", "productName", "quantity", "unitPrice", "lineAmount")
@@ -58,7 +59,7 @@ DocumentLayout orderConfirmation() {
 一次报告全部问题（`DocumentLayoutProblems`，核心层纯 Java；运行时 `DocumentLayoutRegistry`）：
 版式 id 重复；未声明权限；模板不存在、是公开模板（单据按签发人的权限读取）、声明了 `timeSlice`（单据的全部模板按同一时点读取）；
 显示的列不在模板结果中；同一模板既单行又表格；同名参数不一致；对象参数不在任何模板中；对象实体不存在；
-应用所选语言缺少标题、`party`/`text`/`note` 的文字（类别 `MESSAGES`）；`jabiz.documents.page-size` 不是 `A4` / `LETTER`。
+收件地址列不是文本（14j-2）；应用所选语言缺少标题、`party`/`text`/`note` 的文字（类别 `MESSAGES`）；`jabiz.documents.page-size` 不是 `A4` / `LETTER`。
 
 ## 3. 读取与排版（14j-1）
 
@@ -118,7 +119,7 @@ DocumentLayout orderConfirmation() {
 | `GET /api/documents/runs/{id}/pdf` | **存档原样字节**，先以存档的哈希核对（不符 → 500，不交出被改的字节）；响应头 `X-Jabiz-Pdf-Hash`、`X-Jabiz-Content-Hash`，文件名 `<单号>.pdf` |
 | `POST /api/documents/runs/{id}/verify` | `copyIntact`：存档字节的哈希仍是签发时的；`verdict`：版式版本不同 → `layout_changed`，某模板版本不同 → `template_changed`（都不重读），否则按存档的参数与时点重读、比较内容哈希：`identical` / `differs` |
 
-## 5. 设置
+### 4.4 设置
 
 | 配置 | 缺省 | 说明 |
 |---|---|---|
@@ -128,19 +129,65 @@ DocumentLayout orderConfirmation() {
 
 观测 `jabiz.document.render`（标签只有版式名与结果，13），签发本身在流程的观测 `jabiz.process` 中。
 
-## 6. 后台（14j-1）
+## 5. 发送（14j-2）
+
+### 5.1 收件人
+
+- 版式以 `recipients(模板, 列)` 声明单据缺省发往的地址：单行模板的文本列，一个或几个地址（以逗号、分号或换行分隔，不区分大小写去重）。
+  签发时读出的地址随单据存档（`sys_document_run.recipients`，JSON 数组），以后发送不重新查询——发出的单据写给谁，在签发时就定了。
+- 只接受**纯地址**（`name@example.com`：点原子形式，至多 320 字符，不带显示名、不含换行），因此地址之外的东西到不了邮件头（core `DocumentRecipients`）。
+- 发往单据数据中没有的地址需要单独授予的 `document.send.any`（缺省不授予任何角色），防止把单据发往任意地址；数据中的地址不区分大小写。
+
+### 5.2 流程 `DOCUMENT_SEND`
+
+权限 `document.send`；输入 `{runId, to}`（`to` 为空即发往单据数据中的地址），输出 `{deliveryIds, addresses}`。检查依次为：
+
+| 检查 | 不满足时 |
+|---|---|
+| 邮件开启（`jabiz.mail.enabled`） | 422 `MAIL_DISABLED`（不静默记录） |
+| 单据存在且调用方看得见（签发时的全部权限与相同的数据范围，同 4.3；不需要 `document.archive.read`） | 404 |
+| 每个地址都是纯地址；至多 10 个 | 400（字段 `to[i]` / `to`） |
+| 至少一个地址 | 422 `DOCUMENT_NO_RECIPIENT` |
+| 数据以外的地址需要 `document.send.any` | 422 `DOCUMENT_RECIPIENT_NOT_ALLOWED`（参数 `address`） |
+
+- 在流程事务内为每个地址写一条投递（`sys_document_delivery`）：地址、主题、正文、请求人、时间。**提交后**的步骤逐条发送，每封只有一个收件人
+  （收件人之间互不可见），附件为存档的 PDF 原样字节（文件名同下载），发送前以存档的哈希核对——被改动的副本不会发出，该次尝试记为失败。
+- 每次尝试写入 `sys_document_delivery_attempt`（`SENT` / `FAILED` 与错误），已发送的不再发送，有失败即按重试策略（5 次，1 秒起加倍）重试整个步骤——
+  与待办通知（18 §5.4）同一发送器 `NotificationSender`（新增带附件的 `send(MailMessage)`，`SmtpNotificationSender` 以 MIME 多部分发送）。
+- 主题与正文：消息 `document.<版式>.mail.subject` / `.body`，没有时用平台的 `document.mail.subject` / `.body`；参数 `{title}`、`{number}`、`{company}`；
+  语言为单据的语言。主题中的换行一律换成空格。
+- 业务流程以子流程调用（`CallProcess.of("DOCUMENT_SEND", 1, …)`），例如签发后立即发送；与 `DOCUMENT_ISSUE` 同一事务，邮件在提交后发出。
+
+> 计划中投递记在 `sys_notification`（D30 第 6 条的原文）；实施时细化为单据自己的两张表：`Notification` 是受审计的平台实体、主键为文本、只指向待办，
+> 无法以外键指向不是实体的单据存档；发送机制（提交后发送、尝试只追加、重试、同一发送器）不变。
+
+### 5.3 表（迁移 V28，只追加，D5 的触发器保护）
+
+| 表 | 内容 |
+|---|---|
+| `sys_document_run.recipients` | 新列：签发时数据中的地址（JSON 数组；V28 之前签发的单据为空） |
+| `sys_document_delivery` | `delivery_id`（UUIDv7）、`run_id` → `sys_document_run`、`address`、`subject`、`body`、`requested_by`、`created_time`、`process_seq_id` |
+| `sys_document_delivery_attempt` | `delivery_id`、`attempt_no`（主键）、`outcome`、`error`、`attempted_time` |
+
+`GET /api/documents/runs/{id}` 附 `deliveries`：每个投递的地址、主题、请求人与时间、状态（`PENDING` 未尝试、`SENT`、`FAILED` 最近一次失败、平台在重试）、
+尝试次数、最近一次尝试的时间与错误；摘要附 `recipients`。
+
+## 6. 后台
 
 - `/documents`（菜单"单据"，有 `document.archive.read` 时显示）：已签发的单据（标题与单号、对象、签发时间与人、页数、PDF 哈希），
   可"下载"原件与"核对"（显示 `copyIntact` 与结论）；`?layout=`、`?subject=` 筛选。
 - `@jabiz/admin` 导出 `DocumentPanel({layoutId, params, subjectId, issue, onIssued})`：该对象已签发的单据（下载原件）、预览、签发
   （缺省经 `DOCUMENT_ISSUE`，`issue` 给出应用自己的流程与输入时经它，例如需要按单据日期读取时）。应用扩展页面（如财务的发票页）直接使用。
 - 业务流程声明 `actsOn(实体, 参数)` 时，通用列表的行操作即可签发（示范：订单的"开具订单确认书"）。
+- 发送（14j-2）：单据页与 `DocumentPanel` 的"发送"（有 `document.send` 时）打开对话框，缺省为单据中的地址，可增删；服务端的拒绝原样显示。
+  单据页每行展开为投递记录（地址、状态、尝试次数、请求人与时间，失败时悬停显示最近的错误）。
 
 ## 7. 示范（`app`）
 
 版式 `commerce.order_confirmation`（`OrderConfirmations`）：模板 `commerce.order_document_header`（订单号、客户、下单时间、仓库、合计）与
 `commerce.order_document_lines`（行、SKU、品名、数量、单价、金额）；流程 `ORDER_CONFIRMATION_ISSUE`（`actsOn(SalesOrder)`，权限 `commerce.order.confirm`）
-按下单时刻经子流程 `DOCUMENT_ISSUE` 签发。
+按下单时刻经子流程 `DOCUMENT_ISSUE` 签发。订单头模板另给出客户的联系地址（示范没有客户主数据，地址由客户代码拼成），
+即版式的 `recipients`；流程 `ORDER_CONFIRMATION_SEND`（同样 `actsOn(SalesOrder)`）签发后以子流程 `DOCUMENT_SEND` 发给该地址。
 
 ## 8. 测试
 
@@ -149,4 +196,8 @@ DocumentLayout orderConfirmation() {
 - app：`DocumentIssueIT`（签发后改名，重印逐字节相同、核对 `identical`；再次签发仍按下单时刻读取；预览按现在且不保存；改动存档字节 → `copyIntact=false` 且下载被拒；
   绕过平台改数据 → `differs`；模板 / 版式版本不同 → `template_changed` / `layout_changed`；单行模板无行 → 422 且不保存；未知参数 400、未知版式 404、未知语言 400；
   权限：签发需版式权限（经业务流程也一样），读取需存档权限，缺版式权限 404 且不列出；只追加；目录）、`PlatformCheckIT`（`DOCUMENTS` 全部问题一次报告）、`OpenApiSnapshotIT`。
-- 前端：`DocumentsPage.test.tsx`、`DocumentPanel.test.tsx`；e2e `documents.spec.ts`（订单行操作签发 → 单据页 → 下载原件 → 核对）。
+- 发送（14j-2）：core `DocumentRecipientsTest`、版式与检查的收件人部分；app `DocumentSendIT`（GreenMail：发往数据中的地址、每个地址一封、附件哈希等于存档、
+  主题含单号；再次发送；数据以外的地址需要 `document.send.any`、大小写不同算同一地址；非纯地址与超过 10 个 400；权限与看不见的单据 404；
+  失败的尝试记录后重试成功、已发送的不再发；被改动的副本不发出；只追加）、`DocumentIssueIT`（邮件关闭时 422 `MAIL_DISABLED` 且不记录；签发时记下地址）、`NotificationIT` 照常。
+- 前端：`DocumentsPage.test.tsx`、`DocumentPanel.test.tsx`（发送对话框、服务端的拒绝、投递记录）；e2e `documents.spec.ts`（订单行操作签发 → 单据页 → 下载原件 → 核对；
+  发送对话框给出单据中的地址并显示服务端的拒绝——e2e 的应用不开邮件）。

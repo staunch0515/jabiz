@@ -73,6 +73,22 @@ class DocumentLayoutProblemsTest {
     }
 
     @Test
+    void theRecipientsColumnMustBeText() {
+        DocumentLayout layout = DocumentLayout.define("shop.order", d -> d.permissions("shop.read")
+            .recipients("shop.header", "customer").facts("shop.header", "orderNo"));
+        AdvancedQueryDefinition header = AdvancedQueryDefinition.define("shop.header", q -> q.fromEntities("Order")
+            .returns("orderNo", new SemanticKind.Text(10, false)).returns("customer", new SemanticKind.Bool())
+            .sqlTemplate("SELECT 1").permissions("p"));
+        assertThat(DocumentLayoutProblems.of(layout, id -> Optional.of(header)))
+            .extracting(p -> p.location() + ": " + p.message())
+            .containsExactly("shop.order | shop.header: recipients column customer is not text");
+        AdvancedQueryDefinition text = AdvancedQueryDefinition.define("shop.header", q -> q.fromEntities("Order")
+            .returns("orderNo", new SemanticKind.Text(10, false)).returns("customer", new SemanticKind.Text(320, false))
+            .sqlTemplate("SELECT 1").permissions("p"));
+        assertThat(DocumentLayoutProblems.of(layout, id -> Optional.of(text))).isEmpty();
+    }
+
+    @Test
     void aParameterTheTemplatesTakeDifferentlyIsReported() {
         Map<String, AdvancedQueryDefinition> templates = Map.of(
             "shop.header", template("shop.header", new SemanticKind.Text(10, false), "orderNo", "customer"),

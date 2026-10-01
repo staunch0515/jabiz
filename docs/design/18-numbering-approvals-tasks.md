@@ -254,6 +254,7 @@ runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与
   **提交后**的步骤逐条发送：每次尝试写入只追加的 `sys_notification_attempt`（`SENT` / `FAILED`），已发送的不再发送，有失败即按重试策略
   （5 次，1 秒起加倍）重试整个步骤。
 - 发送经 `NotificationSender`（缺省 `SmtpNotificationSender`，Spring 的 `JavaMailSender`，`spring.mail.*`，发件人 `jabiz.mail.from`）。
+  单据（22 §5）以同一发送器发出，带附件的消息为 `send(MailMessage)`（不能附件的发送器拒绝，而不是丢掉附件后发出）。
   开启邮件而缺少邮件服务器或发件人：启动检查 `MAIL` 报错。
 
 ### 5.5 表与测试

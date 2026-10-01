@@ -3,14 +3,17 @@ package com.jabiz.runtime.document;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.RetryPolicy;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,10 +26,15 @@ import java.util.Map;
 public class DocumentProcesses {
 
     public static final String ISSUE = "DOCUMENT_ISSUE";
+    public static final String SEND = "DOCUMENT_SEND";
     public static final String ISSUED_EVENT = "jabiz.document.issued";
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";
+    static final String DELIVERIES = "deliveries";
+
+    /** Five attempts, the first retry after a second, then doubling: as task notifications. */
+    static final RetryPolicy RETRY = new RetryPolicy(5, Duration.ofSeconds(1));
 
     /**
      * @param layoutId the document layout
@@ -44,6 +52,35 @@ public class DocumentProcesses {
      */
     public record IssueOutput(String runId, String documentNo, String contentHash, String pdfHash, int pages,
         boolean recomputable) {}
+
+    /**
+     * @param runId the issued document
+     * @param to    the addresses; empty for those the document's data names (the layout's recipients column)
+     */
+    public record SendInput(@NotBlank String runId, @Size(max = 50) List<@Size(max = 400) String> to) {}
+
+    /** @param addresses the addresses a delivery was recorded for, in the order of the deliveries */
+    public record SendOutput(List<String> deliveryIds, List<String> addresses) {}
+
+    /**
+     * {@code DOCUMENT_SEND} (22 section 5): sends an issued document by e-mail, its kept PDF attached, one message per
+     * address. The deliveries are recorded in the transaction and sent after the commit, retried, with every attempt
+     * recorded.
+     */
+    @Bean
+    ProcessDefinition<SendInput, SendOutput, ProcessContext> documentSendProcess() {
+        return ProcessDefinition.define(SEND, 1, SendInput.class, SendOutput.class, ProcessContext.class, pb -> pb
+            .description("Sends an issued document by e-mail with its kept PDF attached.")
+            .permissions(DocumentPermissions.SEND)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(INPUT, input);
+                return ctx;
+            })
+            .outputMapper(ctx -> ctx.get(OUTPUT, SendOutput.class))
+            .step("Record the deliveries", RecordDeliveries.class, NoMetadata.INSTANCE)
+            .afterCommit("Send them", SendDocuments.class, NoMetadata.INSTANCE, RETRY));
+    }
 
     @Bean
     ProcessDefinition<IssueInput, IssueOutput, ProcessContext> documentIssueProcess() {

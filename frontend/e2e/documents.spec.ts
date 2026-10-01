@@ -48,3 +48,31 @@ test('an order confirmation is issued from its row, saved as issued and verified
   await page.locator('[data-testid^="document-verify-"]').first().click()
   await expect(page.locator('[data-testid^="verdict-"]').first()).toHaveText('与数据一致')
 })
+
+/**
+ * ROADMAP phase 14j-2: the send dialog offers the address the confirmation names and shows the server's answer - here,
+ * where the application runs without mail, its refusal.
+ */
+test('sending a document offers the address it names and shows the refusal of the server', async ({ page, request }) => {
+  const token = await adminToken(request)
+  const code = unique('M')
+  await insert(request, token, WAREHOUSES, { warehouseCode: code, warehouseName: `Warehouse ${code}`, active: true })
+  await insert(request, token, PRODUCTS, { sku: code, productName: `Product ${code}`, unitPrice: 250, active: true })
+  const headers = { Authorization: `Bearer ${token}` }
+  expect((await request.post('/api/processes/STOCK_RECEIVE/latest', {
+    headers, data: { warehouseCode: code, sku: code, quantity: 5 },
+  })).status()).toBe(200)
+  const placed = await request.post('/api/processes/ORDER_PLACE/latest', {
+    headers, data: { orderNo: code, customerCode: code, warehouseCode: code, lines: [{ sku: code, quantity: 1 }] },
+  })
+  const orderId = (await placed.json()).output.orderId as string
+  const issued = await request.post('/api/processes/ORDER_CONFIRMATION_ISSUE/latest', { headers, data: { orderId } })
+  expect(issued.status(), await issued.text()).toBe(200)
+
+  await signIn(page)
+  await page.goto(`/documents?subject=${orderId}`)
+  await page.locator('[data-testid^="document-send-"]').first().click()
+  await expect(page.getByTestId('document-send-to')).toContainText(`${code.toLowerCase()}@customers.example.com`)
+  await page.locator('.ant-modal').getByRole('button', { name: /发\s*送/ }).click()
+  await expect(page.getByTestId('document-send-error')).toContainText('邮件未启用')
+})

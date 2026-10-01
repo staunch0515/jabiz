@@ -315,8 +315,49 @@
         },
         "type" : "object"
       },
+      "DocumentDeliveryEntry" : {
+        "properties" : {
+          "address" : {
+            "type" : "string"
+          },
+          "attempts" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "createdTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "deliveryId" : {
+            "type" : "string"
+          },
+          "lastAttempt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "requestedBy" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DocumentDetail" : {
         "properties" : {
+          "deliveries" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentDeliveryEntry"
+            },
+            "type" : "array"
+          },
           "params" : {
             "additionalProperties" : { },
             "type" : "object"
@@ -453,6 +494,12 @@
           "readAt" : {
             "format" : "date-time",
             "type" : "string"
+          },
+          "recipients" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           },
           "recomputable" : {
             "type" : "boolean"

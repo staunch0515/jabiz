@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
  *     .permissions("commerce.order.read")
  *     .subject("SalesOrder", "orderId")
  *     .number("commerce.order_document_header", "orderNo")
+ *     .recipients("commerce.order_document_header", "contactEmail")
  *     .party("customer", "commerce.order_document_header", "customerCode")
  *     .facts("commerce.order_document_header", "orderNo", "orderedTime", "warehouseName")
  *     .table("commerce.order_document_lines", "lineNo", "sku", "productName", "quantity", "unitPrice", "lineAmount")
@@ -39,10 +40,12 @@ import java.util.regex.Pattern;
  * @param subjectEntity the entity a document is about, or null; issued documents are listed by it
  * @param subjectParam  the parameter giving the subject's id (required with {@code subjectEntity})
  * @param number        the column giving the document's number (file name, list), or null
+ * @param recipients    the column giving the addresses the document is sent to by default (one or several,
+ *                      separated by commas, semicolons or line breaks), or null (docs/design/22-documents.md section 5)
  * @param blocks        what the document shows, top to bottom
  */
 public record DocumentLayout(String id, List<String> permissions, String subjectEntity, String subjectParam,
-    Column number, List<Block> blocks) {
+    Column number, Column recipients, List<Block> blocks) {
 
     private static final Pattern ID = Pattern.compile("[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+");
     private static final Pattern KEY = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,63}");
@@ -163,7 +166,7 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         Builder builder = new Builder();
         spec.accept(builder);
         return new DocumentLayout(id, builder.permissions, builder.subjectEntity, builder.subjectParam,
-            builder.number, builder.blocks);
+            builder.number, builder.recipients, builder.blocks);
     }
 
     /** The message of the title. */
@@ -202,12 +205,18 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         if (number != null) {
             templates.add(number.template());
         }
+        if (recipients != null) {
+            templates.add(recipients.template());
+        }
         return List.copyOf(templates);
     }
 
-    /** Whether the template is read for one row only (a party, facts, totals, text or the number). */
+    /** Whether the template is read for one row only (a party, facts, totals, text, the number or the recipients). */
     public boolean singleRow(String template) {
         if (number != null && number.template().equals(template)) {
+            return true;
+        }
+        if (recipients != null && recipients.template().equals(template)) {
             return true;
         }
         return blocks.stream().anyMatch(block -> template.equals(block.template()) && block.singleRow());
@@ -223,6 +232,9 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         }
         if (number != null && number.template().equals(template)) {
             columns.add(number.column());
+        }
+        if (recipients != null && recipients.template().equals(template)) {
+            columns.add(recipients.column());
         }
         return List.copyOf(columns);
     }
@@ -243,6 +255,8 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         description.put("subjectEntity", subjectEntity);
         description.put("subjectParam", subjectParam);
         description.put("number", number == null ? null : List.of(number.template(), number.column()));
+        description.put("recipients", recipients == null ? null
+            : List.of(recipients.template(), recipients.column()));
         List<Map<String, Object>> shown = new ArrayList<>();
         for (Block block : blocks) {
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -268,6 +282,7 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         private String subjectEntity;
         private String subjectParam;
         private Column number;
+        private Column recipients;
 
         private Builder() {}
 
@@ -287,6 +302,12 @@ public record DocumentLayout(String id, List<String> permissions, String subject
         /** The document's number: a column of a single-row template. */
         public Builder number(String template, String column) {
             this.number = new Column(template, column);
+            return this;
+        }
+
+        /** Where the document is sent by default: a column of a single-row template holding the addresses. */
+        public Builder recipients(String template, String column) {
+            this.recipients = new Column(template, column);
             return this;
         }
 

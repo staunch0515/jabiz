@@ -11,6 +11,7 @@ results:
   warehouseCode: { from: Warehouse.warehouseCode }
   warehouseName: { from: Warehouse.warehouseName }
   totalAmount:   { from: SalesOrder.totalAmount }
+  contactEmail:  { kind: { type: text, maxLength: 320 } }
 list:
   sorts: [orderNo]
   defaultSort: { field: orderNo, asc: true }
@@ -23,7 +24,9 @@ SELECT
     o.{{SalesOrder.orderedTime}}   AS orderedTime,
     w.{{Warehouse.warehouseCode}}  AS warehouseCode,
     w.{{Warehouse.warehouseName}}  AS warehouseName,
-    o.{{SalesOrder.totalAmount}}   AS totalAmount
+    o.{{SalesOrder.totalAmount}}   AS totalAmount,
+    -- The sample has no customer master: a made-up address per customer stands in for its contact's.
+    lower(o.{{SalesOrder.customerCode}}) || '@customers.example.com' AS contactEmail
 FROM {{SalesOrder}} o
 JOIN {{Warehouse}} w ON w.{{Warehouse.warehouseId}} = o.{{SalesOrder.warehouseId}}
 WHERE o.{{SalesOrder.orderId}} = :orderId

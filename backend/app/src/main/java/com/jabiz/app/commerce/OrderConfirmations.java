@@ -3,6 +3,7 @@ package com.jabiz.app.commerce;
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.document.DocumentProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 import static com.jabiz.app.commerce.CommerceEntities.ORDER;
@@ -28,11 +30,13 @@ public final class OrderConfirmations {
     public static final String HEADER = "commerce.order_document_header";
     public static final String LINES = "commerce.order_document_lines";
     public static final String ISSUE = "ORDER_CONFIRMATION_ISSUE";
+    public static final String SEND = "ORDER_CONFIRMATION_SEND";
 
     public static final DocumentLayout LAYOUT = DocumentLayout.define(LAYOUT_ID, d -> d
         .permissions("commerce.order.read")
         .subject(ORDER, "orderId")
         .number(HEADER, "orderNo")
+        .recipients(HEADER, "contactEmail")
         .party("customer", HEADER, "customerCode")
         .facts(HEADER, "orderNo", "orderedTime", "warehouseName")
         .table(LINES, "lineNo", "sku", "productName", "quantity", "unitPrice", "lineAmount")
@@ -63,12 +67,46 @@ public final class OrderConfirmations {
                 return new IssueOutput(issued.runId(), issued.documentNo(), issued.pdfHash());
             })
             .step("Load the order", LoadEntity.by(ORDER_DATASET, ORDER_ID, ORDER_KEY))
-            // Read as at the order's time: names changed since then do not change what the customer was sent.
-            .step("Issue the confirmation", CallProcess.<ProcessContext>of(DocumentProcesses.ISSUE, 1,
-                ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID, Map.of(ORDER_ID, ctx.get(ORDER_ID)),
-                    orderedTime(ctx.get(ORDER_KEY, EntityInstance.class)), null, null), ISSUED)));
+            .step("Issue the confirmation", issue()));
+
+    /** What was issued and the addresses it went to. */
+    public record SendOutput(String runId, String documentNo, List<String> addresses) {}
+
+    private static final String SENT = "sent";
+
+    /**
+     * Issues the confirmation (as {@link #ISSUE_PROCESS}) and sends it to the customer's contact, in the same
+     * transaction; the e-mail itself leaves after the commit.
+     */
+    public static final ProcessDefinition<IssueInput, SendOutput, ProcessContext> SEND_PROCESS =
+        ProcessDefinition.define(SEND, 1, IssueInput.class, SendOutput.class, ProcessContext.class, pb -> pb
+            .description("Issues the confirmation of a sales order and sends it to the customer by e-mail.")
+            .permissions("commerce.order.confirm")
+            .actsOn(ORDER, ORDER_ID)
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(ORDER_ID, input.orderId());
+                return ctx;
+            })
+            .outputMapper(ctx -> {
+                DocumentProcesses.IssueOutput issued = ctx.get(ISSUED, DocumentProcesses.IssueOutput.class);
+                DocumentProcesses.SendOutput sent = ctx.get(SENT, DocumentProcesses.SendOutput.class);
+                return new SendOutput(issued.runId(), issued.documentNo(), sent.addresses());
+            })
+            .step("Load the order", LoadEntity.by(ORDER_DATASET, ORDER_ID, ORDER_KEY))
+            .step("Issue the confirmation", issue())
+            .step("Send it to the customer", CallProcess.<ProcessContext>of(DocumentProcesses.SEND, 1,
+                ctx -> new DocumentProcesses.SendInput(ctx.get(ISSUED, DocumentProcesses.IssueOutput.class).runId(),
+                    List.of()), SENT)));
 
     private OrderConfirmations() {}
+
+    // Read as at the order's time: names changed since then do not change what the customer was sent.
+    private static StepSpec<CallProcess.Metadata<ProcessContext>, ProcessContext> issue() {
+        return CallProcess.<ProcessContext>of(DocumentProcesses.ISSUE, 1,
+            ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID, Map.of(ORDER_ID, ctx.get(ORDER_ID)),
+                orderedTime(ctx.get(ORDER_KEY, EntityInstance.class)), null, null), ISSUED);
+    }
 
     private static Instant orderedTime(EntityInstance order) {
         Object time = order.get("orderedTime");

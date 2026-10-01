@@ -8,6 +8,7 @@ import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
 import { runProcess } from '../lib/calls'
 import { formatDateTime } from '../meta/format'
+import SendDocumentModal from './SendDocumentModal'
 
 export interface DocumentPanelProps {
   /** The document layout. */
@@ -27,7 +28,7 @@ export interface DocumentPanelProps {
 
 /**
  * A business document of one subject (docs/design/22-documents.md section 6): the copies issued so far, each saved
- * exactly as issued; a preview of the document as it would be issued now; and issuing it. What the user may do is
+ * exactly as issued or sent by e-mail; a preview of the document as it would be issued now; and issuing it. What the user may do is
  * only the server's to say; the buttons follow the permissions to save the user a refusal.
  */
 export default function DocumentPanel({ layoutId, params, subjectId, issue, onIssued }: DocumentPanelProps) {
@@ -37,6 +38,7 @@ export default function DocumentPanel({ layoutId, params, subjectId, issue, onIs
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState<'issue' | 'preview' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState<{ runId: string; recipients: string[] } | undefined>()
   const canRead = can('document.archive.read')
   const issued = useQuery({
     queryKey: ['documents', layoutId, subjectId],
@@ -104,6 +106,12 @@ export default function DocumentPanel({ layoutId, params, subjectId, issue, onIs
                 <a key="download" onClick={() => void save(run.runId!)} data-testid={`document-download-${run.runId}`}>
                   {t('documents.download')}
                 </a>,
+                ...(can('document.send')
+                  ? [<a key="send" data-testid={`document-send-${run.runId}`}
+                      onClick={() => setSending({ runId: run.runId!, recipients: run.recipients ?? [] })}>
+                      {t('documents.send')}
+                    </a>]
+                  : []),
               ]}
             >
               <Space direction="vertical" size={0}>
@@ -116,6 +124,12 @@ export default function DocumentPanel({ layoutId, params, subjectId, issue, onIs
           )}
         />
       )}
+      <SendDocumentModal
+        key={sending?.runId ?? 'none'}
+        runId={sending?.runId}
+        recipients={sending?.recipients ?? []}
+        onClose={() => setSending(undefined)}
+      />
     </Space>
   )
 }
