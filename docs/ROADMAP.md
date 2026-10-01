@@ -820,3 +820,15 @@ finance F1c 的压测（约 200 万个分录版本，`1.1/finance` 的 `docs/fin
 - [x] 现有全部检查照常通过（唯一性、引用、撤销、账本、示范与场景）。
 - [ ] finance 合并后在压测数据上：50 行过账 p95 ≤ 1 秒，一个月的科目查询 ≤ 2 秒（在 `1.1/finance` 上验收）。
 
+
+**要求（14i-b）**
+1. `frontend/tsconfig.extension.json` 解析 `react-router` 的类型（它只在 `exports` 中声明，按包目录的映射读不到）；应用扩展的 `tsconfig.json` 不再重复 `paths`。示范扩展用 `react-router` 的 `Link`。
+2. 登录后没有要返回的页面时落在扩展的 `home`（与根路径一致），而不是固定的 `/data`。
+3. 实体元数据导出 `writeOnce`；生成的列表对只写一次的实体只提供查看（不提供修改、删除），历史页不提供撤销。
+4. 文档：12 §9、02 §8。
+
+**验收标准（14i-b）**
+- [x] 示范扩展引用 `react-router` 通过 `pnpm ext:check`；去掉映射即报 `TS2307`（手工验证）。扩展的链接指向入库记录的生成页面（Vitest）。
+- [x] 声明了 `home` 的应用登录后落在 `home`，有要返回的页面时返回该页（`LoginPage.test.tsx`）。
+- [x] `writeOnce` 随元数据导出（`TemporalDefinitionTest`）；入库记录的列表只有查看（e2e `extension.spec.ts`）。
+- [x] 前端 lint、typecheck、测试与现有 e2e 照常通过。

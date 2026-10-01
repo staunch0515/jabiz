@@ -22,6 +22,12 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ signIn, verify, signedIn: false, ready: true }),
   lastUserName: () => 'amy',
 }))
+let home: string | undefined
+vi.mock('../extension', () => ({
+  get extension() {
+    return { home }
+  },
+}))
 vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))
 
 function page(state?: object) {
@@ -32,6 +38,7 @@ function page(state?: object) {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/data" element={<div data-testid="home" />} />
+          <Route path="/finance/journals" element={<div data-testid="extension-home" />} />
         </Routes>
       </MemoryRouter>
     </App>
@@ -52,6 +59,7 @@ describe('LoginPage', () => {
     providers.mockReset()
     providers.mockResolvedValue([])
     startProviderSignIn.mockReset()
+    home = undefined
     await i18n.changeLanguage('en')
   })
 
@@ -64,6 +72,22 @@ describe('LoginPage', () => {
     fireEvent.change(await screen.findByPlaceholderText('Code'), { target: { value: ' 123456 ' } })
     fireEvent.click(screen.getByRole('button', { name: /Verify/ }))
     await waitFor(() => expect(verify).toHaveBeenCalledWith('ch', '123456'))
+    expect(await screen.findByTestId('home')).toBeTruthy()
+  })
+
+  it("lands on the application's home when it declares one and there is no page to return to", async () => {
+    home = '/finance/journals'
+    signIn.mockResolvedValue({ status: 'SIGNED_IN' })
+    page()
+    await submitPassword()
+    expect(await screen.findByTestId('extension-home')).toBeTruthy()
+  })
+
+  it('returns to the page it came from rather than the home', async () => {
+    home = '/finance/journals'
+    signIn.mockResolvedValue({ status: 'SIGNED_IN' })
+    page({ from: '/data' })
+    await submitPassword()
     expect(await screen.findByTestId('home')).toBeTruthy()
   })
 

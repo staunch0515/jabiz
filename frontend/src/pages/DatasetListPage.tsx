@@ -53,6 +53,8 @@ export default function DatasetListPage() {
 
   const view = entity.data ? listViewOf(entity.data, dataset.data?.listView) : undefined
   const canWrite = !!dataset.data?.canWrite && !timeTravel
+  // A write-once entity is only inserted (docs/design/04-temporal-append-only.md section 5.4).
+  const canChange = canWrite && !entity.data?.writeOnce
   const showHistory = !!dataset.data?.temporal && !!dataset.data?.allowTimeTravel
   // Every entity, plain or temporal, has an audit trail (docs/design/21-audit-retention.md section 1.4).
   const showAudit = can('audit.read')
@@ -74,8 +76,8 @@ export default function DatasetListPage() {
         fixed: 'right',
         render: (_, row) => (
           <Space size="small">
-            <a onClick={() => setEditing(row.__instance)} data-testid={canWrite ? 'row-edit' : 'row-view'}>
-              {t(canWrite ? 'list.edit' : 'list.view')}
+            <a onClick={() => setEditing(row.__instance)} data-testid={canChange ? 'row-edit' : 'row-view'}>
+              {t(canChange ? 'list.edit' : 'list.view')}
             </a>
             {!timeTravel && (
               <RowActions
@@ -85,7 +87,7 @@ export default function DatasetListPage() {
                 onDone={() => actionRef.current?.reload()}
               />
             )}
-            {canWrite && (
+            {canChange && (
               <Popconfirm
                 title={t('list.deleteConfirm')}
                 onConfirm={async () => {
@@ -122,7 +124,7 @@ export default function DatasetListPage() {
         ),
       },
     ]
-  }, [entity.data, view, dictionaries, t, i18n.language, canWrite, showHistory, showAudit, datasetId, message, labels, actions, timeTravel, can])
+  }, [entity.data, view, dictionaries, t, i18n.language, canChange, showHistory, showAudit, datasetId, message, labels, actions, timeTravel, can])
 
   if (dataset.isLoading || (dataset.data && entity.isLoading)) return <Spin style={{ margin: 48 }} />
   if (!dataset.data) return <Result status="404" title={datasetId} />
@@ -214,7 +216,7 @@ export default function DatasetListPage() {
           entity={entity.data}
           dictionaries={dictionaries}
           instance={editing ?? undefined}
-          readOnly={!canWrite}
+          readOnly={editing ? !canChange : !canWrite}
           historical={timeTravel}
           open
           onOpenChange={(open) => {

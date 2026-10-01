@@ -66,7 +66,15 @@ class TemporalDefinitionTest {
     void theDefaultSettingsAllowNoScheduling() {
         EntityDefinition def = price(EntityBuilder::temporal);
         assertThat(def.temporalSpec.allowScheduled()).isFalse();
-        assertThat(MetaModelExporter.export(def)).containsEntry("temporal", true).containsEntry("allowScheduled", false);
+        assertThat(MetaModelExporter.export(def)).containsEntry("temporal", true).containsEntry("allowScheduled", false)
+            .containsEntry("writeOnce", false);
+    }
+
+    @Test
+    void aWriteOnceEntityTellsThePages() {
+        EntityDefinition def = price(eb -> eb.temporal(t -> t.writeOnce()));
+        assertThat(def.temporalSpec.writeOnce()).isTrue();
+        assertThat(MetaModelExporter.export(def)).containsEntry("writeOnce", true);
     }
 
     @Test

@@ -15,6 +15,7 @@ export const messages = {
       quantity: '数量',
       received: '已入库：{{sku}} 在 {{warehouse}} 现有 {{onHand}}',
       empty: '没有库存。',
+      receipts: '入库记录',
     },
   },
   ja: {
@@ -32,6 +33,7 @@ export const messages = {
       quantity: '数量',
       received: '入庫しました：{{warehouse}} の {{sku}} は {{onHand}}',
       empty: '在庫がありません。',
+      receipts: '入庫記録',
     },
   },
   en: {
@@ -49,6 +51,7 @@ export const messages = {
       quantity: 'Quantity',
       received: 'Received: {{sku}} in {{warehouse}} now {{onHand}} on hand',
       empty: 'No stock.',
+      receipts: 'Receipts',
     },
   },
 }
