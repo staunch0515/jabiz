@@ -1,12 +1,12 @@
-// The finance application (docs/finance/00-design.md): the runtime with the finance declarations. Until the
-// application's own admin pages exist (platform phase 14a, finance-web/), it serves the platform's admin frontend.
+// The finance application (docs/finance/00-design.md): the runtime with the finance declarations, serving the
+// platform's admin frontend with the finance pages compiled in (finance-web/, decision D22).
 plugins {
     id("jabiz.boot-app")
 }
 
 jabizApp {
     mainClass = "com.jabiz.finance.FinanceApp"
-    spa("/", "../../frontend")
+    spa("/", "../../frontend", extension = "../../finance-web")
     // The books are kept in US English, shown as in the US (FD4, FIN-UI-010).
     languages("en")
     region = "en-US"

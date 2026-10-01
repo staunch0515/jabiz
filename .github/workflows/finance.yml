@@ -57,3 +57,96 @@ jobs:
           name: finance-package-log
           path: finance.log
           retention-days: 7
+
+  # The finance pages (finance-web, decision D22): types, lint and unit tests with the platform frontend's tools.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm ext:check
+        working-directory: frontend
+        env:
+          JABIZ_ADMIN_EXTENSION: ../finance-web
+
+  # The finance pages in a browser against the packaged application (finance-web/e2e).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: finance_e2e
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: finance
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U finance -d finance_e2e" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_ADMIN_USER: admin
+      E2E_ADMIN_PASSWORD: e2e-admin-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :finance:bootJar
+        working-directory: backend
+      - name: Start the application
+        working-directory: backend
+        run: |
+          # Throwaway keys for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
+          export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          # The shared administrator sets the books up without a second factor (FIN_SETUP asks for one otherwise).
+          export JABIZ_SECURITY_MFA_ADMINISTRATION=false
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
+            -jar finance/build/libs/finance-0.0.1-SNAPSHOT.jar > ../finance.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../finance.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/finance_e2e
+          SPRING_R2DBC_USERNAME: finance
+          SPRING_R2DBC_PASSWORD: finance
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/finance_e2e
+          SPRING_FLYWAY_USER: finance
+          SPRING_FLYWAY_PASSWORD: finance
+          JABIZ_BOOTSTRAP_ADMIN_USER: ${{ env.E2E_ADMIN_USER }}
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/finance-files
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: frontend
+      - run: tools/finance/e2e.sh
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-e2e-report
+          path: |
+            finance-web/e2e/playwright-report/
+            finance-web/e2e/test-results/
+            finance.log
+          retention-days: 7

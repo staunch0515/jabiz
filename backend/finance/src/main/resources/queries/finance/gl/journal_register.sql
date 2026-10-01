@@ -9,6 +9,7 @@ params:
   to:     { like: FinJournal.postingDate, required: true, description: last posting date }
   status: { like: FinJournal.status, description: "only entries in this state, if given" }
 results:
+  journalId:    { from: FinJournal.journalId }
   journalNo:    { from: FinJournal.journalNo }
   postingDate:  { from: FinJournal.postingDate }
   documentDate: { from: FinJournal.documentDate }
@@ -24,13 +25,14 @@ list:
   filters: [journalNo, source, status, preparer, periodKey, glNo]
   sorts:   [journalNo, postingDate, glNo, totalDebit]
   defaultSort: { field: postingDate, asc: true }
-  key: [journalNo, postingDate, description]
+  key: [journalId]
 permissions: [fin.journal.read]
 report:
   period: { from: from, to: to }
   landscape: true
 ---*/
 SELECT
+    j.{{FinJournal.journalId}}    AS journalId,
     j.{{FinJournal.journalNo}}    AS journalNo,
     j.{{FinJournal.postingDate}}  AS postingDate,
     j.{{FinJournal.documentDate}} AS documentDate,

@@ -172,6 +172,33 @@ class GlReportsIT extends FinanceItSupport {
         assertThat(draftId).isNotBlank();
     }
 
+    /** What the entry grid offers while typing: every account with its flags, for those who may read accounts. */
+    @Test
+    void theAccountLookupShowsWhatAnEntryNeeds() {
+        String group = "L" + unique();
+        String inactive = "N" + unique();
+        account(group, Map.of("summary", true));
+        account(inactive, Map.of("parentCode", group, "requiredDimension", "department"));
+        ok("FIN_ACCOUNT_DEACTIVATE", controller(), Map.of("accountCode", inactive));
+
+        List<Map<String, Object>> accounts = report("finance.gl.account_lookup", as("clerk", "fin.account.read"),
+            Map.of());
+        assertThat(row(accounts, group)).containsEntry("summary", true).containsEntry("active", true);
+        assertThat(row(accounts, inactive)).containsEntry("active", false).containsEntry("summary", false)
+            .containsEntry("requiredDimension", "department").containsEntry("accountName", "Account " + inactive);
+        assertThat(row(accounts, "1010")).containsEntry("controlClass", "BANK");
+        // The roles that enter entries have it.
+        post("/api/queries/finance.gl.account_lookup",
+            inRoles("accountant", com.jabiz.finance.setup.FinanceRoles.ACCOUNTANT), Map.of()).expectStatus().isOk();
+        post("/api/queries/finance.gl.account_lookup", as("nobody", "ledger.read"), Map.of())
+            .expectStatus().isForbidden();
+        // The register names each entry, so that a row opens it.
+        Map<String, Object> posted = post(entry("2026-08-03", "Register id", List.of(
+            line("6800", "1.00", null, null), line("2100", null, "1.00", null))));
+        assertThat(report(REGISTER, reader(), Map.of("from", "2026-08-03", "to", "2026-08-03")))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("journalId", posted.get("journalId")));
+    }
+
     /** Over the accounts that take postings, the debits equal the credits. */
     private static void assertBalanced(List<Map<String, Object>> rows) {
         BigDecimal debit = BigDecimal.ZERO;

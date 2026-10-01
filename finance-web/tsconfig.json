@@ -1,0 +1,14 @@
+{
+  // The platform's base for extensions (frontend/tsconfig.extension.json). Its "paths" are repeated here with one more
+  // entry: react-router declares its types only under "exports", which a path mapping to the package directory does
+  // not read. Remove the repetition once the platform's base maps react-router itself.
+  "extends": "../frontend/tsconfig.extension.json",
+  "compilerOptions": {
+    "paths": {
+      "@jabiz/admin": ["../frontend/src/lib/index.ts"],
+      "react-router": ["../frontend/node_modules/react-router/dist/production/index.d.ts"],
+      "*": ["../frontend/node_modules/@types/*", "../frontend/node_modules/*"]
+    }
+  },
+  "include": ["src"]
+}
