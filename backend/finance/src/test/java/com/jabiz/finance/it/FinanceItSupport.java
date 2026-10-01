@@ -211,6 +211,20 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         return (List<Map<String, Object>>) exchange.getResponseBody().get("items");
     }
 
+    /** Runs an SQL template with its parameters on the books as recorded at {@code knownAt}; all its rows. */
+    @SuppressWarnings("unchecked")
+    protected List<Map<String, Object>> reportKnownAt(String template, String authorization,
+        Map<String, Object> params, String knownAt) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("params", params);
+        body.put("knownAt", knownAt);
+        body.put("limit", 500);
+        var exchange = post("/api/queries/" + template, authorization, body).expectBody(MAP).returnResult();
+        assertThat(exchange.getStatus().value()).as(template + " answered " + exchange.getResponseBody())
+            .isEqualTo(200);
+        return (List<Map<String, Object>>) exchange.getResponseBody().get("items");
+    }
+
     /** An amount as the API returns it (a JSON number, or null), for exact comparison. */
     protected static java.math.BigDecimal amount(Object value) {
         return value == null ? null : new java.math.BigDecimal(String.valueOf(value)).setScale(2);
@@ -239,6 +253,42 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** A draft invoice or credit memo as {@code FIN_INVOICE_SAVE} takes it. */
+    protected static Map<String, Object> invoiceInput(String customer, String date, String kind,
+        List<Map<String, Object>> lines) {
+        return invoiceInput(customer, date, kind, lines, null);
+    }
+
+    protected static Map<String, Object> invoiceInput(String customer, String date, String kind,
+        List<Map<String, Object>> lines, String taxCode) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("customerCode", customer);
+        input.put("invoiceDate", date);
+        if (kind != null) {
+            input.put("kind", kind);
+        }
+        if (taxCode != null) {
+            input.put("taxCode", taxCode);
+        }
+        input.put("lines", lines);
+        return input;
+    }
+
+    protected static Map<String, Object> invoiceLine(String description, String quantity, String price,
+        String account, String taxCode) {
+        Map<String, Object> line = new LinkedHashMap<>();
+        line.put("description", description);
+        line.put("quantity", quantity);
+        line.put("unitPrice", price);
+        if (account != null) {
+            line.put("revenueAccount", account);
+        }
+        if (taxCode != null) {
+            line.put("taxCode", taxCode);
+        }
+        return line;
     }
 
     /** The control accounts of the sample company: its chart file does not mark them (FIN-GL-005). */
@@ -272,6 +322,8 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         Map<String, Object> setup = ok("FIN_SETUP", as("sysadmin", "fin.setup"), Map.of());
         ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"),
             Map.of("changeId", setup.get("approvalRuleChange")));
+        ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"),
+            Map.of("changeId", setup.get("writeOffRuleChange")));
         for (String department : List.of("ADMIN", "SALES")) {
             post("/api/datasets/" + com.jabiz.finance.gl.GlEntities.DEPARTMENT_DATASET + "/commit",
                 as("controller", "fin.dimension.maintain"), Map.of("changes", List.of(Map.of("action", "INSERT",

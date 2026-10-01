@@ -50,15 +50,20 @@ public final class FinanceRoles {
             FinancePermissions.MIGRATION, FinancePermissions.PAYROLL_MAINTAIN, FinancePermissions.AR_READ,
             FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS,
             FinancePermissions.CUSTOMER_TAX, FinancePermissions.CUSTOMER_CREDIT, FinancePermissions.INVOICE_PREPARE,
-            FinancePermissions.INVOICE_CREDIT));
+            FinancePermissions.INVOICE_CREDIT, FinancePermissions.RECEIPT_RECORD, FinancePermissions.RECEIPT_VOID,
+            FinancePermissions.RECEIPT_ADJUST, FinancePermissions.WRITE_OFF_REQUEST, FinancePermissions.WRITE_OFF_APPROVE,
+            FinancePermissions.INVOICE_APPROVE, FinancePermissions.RECURRING_INVOICE_MAINTAIN));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ));
         add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of(FinancePermissions.AR_READ,
-            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT, FinancePermissions.INVOICE_PREPARE));
+            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT, FinancePermissions.INVOICE_PREPARE,
+            FinancePermissions.RECEIPT_RECORD, FinancePermissions.WRITE_OFF_REQUEST,
+            FinancePermissions.RECURRING_INVOICE_MAINTAIN));
         add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of());
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
-            "approval.decide"));
+            "approval.decide", FinancePermissions.WRITE_OFF_APPROVE, FinancePermissions.INVOICE_APPROVE,
+            FinancePermissions.AR_READ));
         add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN,
             FinancePermissions.IMPORT));
         add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.AR_READ));
