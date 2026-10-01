@@ -136,6 +136,11 @@
 - [x] 性能摸底完成并写入 `docs/finance/perf.md`；追踪表覆盖 F1 的全部需求。
 - [x] `pnpm ext:check`（扩展的类型、lint、测试）、`./gradlew :finance:check`、`tools/check-app-paths.sh` 通过；端到端在 CI 中运行。
 
+**F1c 发现的平台缺口**（需在线 1.1 的平台分支上修，财务分支不改平台）
+1. 时态数据的规模（`docs/finance/perf.md` §4）：唯一性检查与模板读时态实体都先对全表 `DISTINCT ON`；大数据量下过账 > 1 s、账户查询与试算表超时。建议平台阶段 14i。
+2. `frontend/tsconfig.extension.json` 的路径映射读不到只在 `exports` 中声明类型的包（`react-router`）：`finance-web/tsconfig.json` 暂时重复平台的映射并补上这一条。
+3. 登录后总是进入 `/data`，不进入扩展声明的 `home`（与 12 §9 的规定不符）：端到端测试登录后经菜单进入日记账。
+
 ## F2 — F11
 
 范围、需求编号与验收口径见 `docs/finance-work/00-development-plan.md` §5.2；每个阶段开始时把详细要求与验收标准写入本节。

@@ -134,8 +134,9 @@ describe('spreadsheets', () => {
   it('a block pasted in the middle fills from that cell; beyond the limit, rows are dropped and counted', () => {
     const start = [line('6400', '1'), line('2100')]
     const result = paste(start, 1, 'credit', '1\tfirst\n2\tsecond')
-    expect(result.lines[1]).toMatchObject({ accountCode: '2100', credit: '1', memo: 'first' })
-    expect(result.lines[2]).toMatchObject({ accountCode: '', credit: '2', memo: 'second' })
+    expect(result.lines[1]).toMatchObject({ accountCode: '2100', credit: '1.00', memo: 'first' })
+    expect(result.lines[2]).toMatchObject({ accountCode: '', credit: '2.00', memo: 'second' })
+    expect(paste([], 0, 'debit', '12,500\tx\n').lines[0].debit).toBe('12500.00')
     const big = Array.from({ length: 10 }, () => '6400\t1').join('\n')
     const full = paste([], MAX_LINES - 3, 'accountCode', big)
     expect(full.pasted).toBe(3)

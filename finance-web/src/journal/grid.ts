@@ -330,9 +330,9 @@ export function paste(lines: GridLine[], row: number, column: Column, text: stri
   return { lines: next, pasted: fitting.length, dropped: rows.length - fitting.length }
 }
 
-/** A negative amount moves to the other side as a positive one. */
+/** Amounts take the form typed ones get; a negative amount moves to the other side as a positive one. */
 function sided(line: GridLine): GridLine {
-  const result = { ...line }
+  const result = { ...line, debit: normalizeAmount(line.debit), credit: normalizeAmount(line.credit) }
   for (const [from, to] of [['debit', 'credit'], ['credit', 'debit']] as const) {
     const amount = parseAmount(result[from])
     if (amount.value && !amount.problem && amount.value.unscaled < 0n && result[to].trim() === '') {
