@@ -359,6 +359,8 @@ public final class CommerceProcesses {
             reserved = stock.get("reserved");
             ctx.changes().update(STOCK_LEVEL, stock.id(), stock.version(), Map.of("onHand", onHand));
         }
+        // The receipt itself, written once (decision D29).
+        ctx.changes().insert(CommerceEntities.STOCK_RECEIPT, Map.of("stockLevelId", stockLevelId, "quantity", quantity));
         ctx.put(OUTPUT, new ReceiveOutput(String.valueOf(stockLevelId), input.warehouseCode(), input.sku(), onHand,
             reserved));
     }
