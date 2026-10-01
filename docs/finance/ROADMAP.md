@@ -360,9 +360,11 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
    与不征税的原因和证书；小计、税、应付合计；汇款说明）与 `finance.ar.credit_memo`（同上，列出所冲发票，不列汇款说明与到期日）。模板：`finance.company.profile`、
    `finance.ar.invoice_document_header`、`…_lines`、`…_taxes`。缺省收件人为客户的 `contactEmail`。金额为单据币种。
 3. 流程（`fin.invoice.issue`，`actsOn` 已过账的单据）：`FIN_INVOICE_ISSUE` 以子流程 `DOCUMENT_ISSUE` 签发；`FIN_INVOICE_SEND` 签发并以 `DOCUMENT_SEND` 发往缺省收件人。
-   只签发已过账的单据（422 `FIN_INVOICE_NOT_POSTED`），未设公司资料时 422 `FIN_COMPANY_PROFILE_MISSING`，迁移的未结项目不签发（422 `FIN_INVOICE_NOT_ISSUABLE`，其单据由旧系统开出）。
+   只签发已过账的单据（422 `FIN_INVOICE_NOT_POSTED`）；单据读取时点上还没有公司资料时 422 `FIN_COMPANY_PROFILE_MISSING`（公司资料应在开票前设好）；
+   迁移的未结项目不签发（422 `FIN_INVOICE_NOT_ISSUABLE`，其单据由旧系统开出）。
 4. 读取时点：发票日当天结束（公司时区）；单据在发票日之后才过账时取过账时刻（新字段 `FinInvoice.postedTime`，过账时写入）——平台按生效时间读取时态数据，
-   补录的发票在发票日还不存在。客户地址的修改只能自今天或以后生效（F3a），所以过账后预定的新地址不会出现在旧发票上（AR-001 验收 2）。
+   补录的发票在发票日还不存在。客户地址的修改只能自今天或以后生效（F3a），所以过账后预定的新地址不会出现在旧发票上（AR-001 验收 2）；
+   公司资料同样按这一时点读取，之后的修改不影响旧发票。V9 之前过账、没有过账时刻的发票按签发时刻读取。
 5. 不开放平台的 `DOCUMENT_ISSUE` / 预览（`document.issue`）给财务角色：那会绕过"只签发已过账单据"的检查。重印、核对用平台的 `/api/documents/runs/{id}/pdf|verify`。
 6. 登记簿模板（报表，可 `knownAt` 运行与导出）：`finance.ar.invoice_register`（发票日区间，客户、状态、种类可选；草稿只在按状态筛选时出现；美元列中贷项为负，可直接相加）、
    `finance.ar.receipt_register`（收款日区间，客户、状态可选）。
@@ -378,8 +380,9 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
 - [x] FIN-SCN-03 步骤 1–6 经 API 通过：总账行等于 FIN-EXP-02，账龄等于 FIN-EXP-08（INV-1005 未重估，同 F3c），销售税报表等于 FIN-EXP-13；错核销的收款由 Controller 反核销后再核销，
       三条核销记录都在（`FinScn03IT`、场景回放）。
 - [x] 1 月的发票登记簿美元合计 148,385.00 = 1 月过账的发票减贷项；收款登记簿列出 RCPT-0001…0003（UI-004 的数据部分）。
-- [x] 草稿、迁移的未结项目、没有公司资料时不签发；会计能重印不能签发；没有邮件时不发送；公司资料只经其流程写入、只插入。
-- [ ] `./gradlew :finance:check`（`platformCheck` 0 错误 0 警告）、`tools/check-app-paths.sh` 通过。
+- [x] 草稿、迁移的未结项目、读取时点上没有公司资料时不签发；公司资料之后的修改不改变旧发票的发出方；会计能重印不能签发；没有邮件时不发送；
+      公司资料只经其流程写入、只插入（`InvoiceDocumentIT`）。
+- [x] `./gradlew :finance:check`（`platformCheck` 0 错误 0 警告）、`tools/check-app-paths.sh` 通过。
 
 #### F3d-2 后台页面与端到端（计划）
 

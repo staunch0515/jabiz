@@ -37,29 +37,50 @@ class InvoiceDocumentIT extends FinanceItSupport {
     private String clerk;
     private String controller;
 
+    /** When the tests run: after the books, whose company profile was set a minute after START. */
+    private static final Instant NOW = START.plusSeconds(300);
+
     @BeforeEach
     void books() {
         clerk = inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK);
         controller = inRoles("controller", FinanceRoles.CONTROLLER);
-        if (loaded) {
-            return;
+        if (!loaded) {
+            loaded = true;
+            setUpBooks();
         }
-        loaded = true;
+        clock.set(NOW);
+        clerk = inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK);
+        controller = inRoles("controller", FinanceRoles.CONTROLLER);
+    }
+
+    /**
+     * Cascade's invoice INV-1004 posted before the company's profile was first set, so that it has no sender to show;
+     * then Acme's INV-1005 with CM-2001 and Lone Star's INV-1006.
+     */
+    private void setUpBooks() {
         openReceivables();
         customer("C100", "1200 Robotics Way", "Austin", "78758", "Dana Fox", "ap@acme-robotics.example", null);
+        customer("C200", "9 Mill Road", "Portland", "97201", null, "ap@cascade.example", null);
         customer("C300", "88 Commerce Street", "Dallas", "75202", null, "payables@lonestar.example", null);
-        String inv1004 = post("C100", "2026-01-06", List.of(invoiceLine("Components", "100", "400.00", "4000", null),
+        IDS.put("cascade", post("C200", "2026-01-14", List.of(invoiceLine("Engineering services", "1", "18000.00",
+            "4100", null))));
+        clock.set(START.plusSeconds(60));
+        clerk = inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK);
+        controller = inRoles("controller", FinanceRoles.CONTROLLER);
+        companyProfile();
+        String acme = post("C100", "2026-01-06", List.of(invoiceLine("Components", "100", "400.00", "4000", null),
             invoiceLine("Engineering services", "1", "10000.00", "4100", "NT")));
         Map<String, Object> credit = invoiceInput("C100", "2026-01-10", "CREDIT_MEMO", List.of(
             invoiceLine("Returned components", "5", "400.00", null, null)));
-        credit.put("originalInvoiceId", inv1004);
+        credit.put("originalInvoiceId", acme);
         String cm2001 = (String) ok(InvoiceProcesses.SAVE, clerk, credit).get("invoiceId");
         ok(InvoiceProcesses.POST, controller, Map.of("invoiceId", cm2001));
-        post("C300", "2026-01-15", List.of(invoiceLine("Components", "50", "500.00", "4000", null)));
-        for (String number : List.of("INV-1001", "INV-1004", "INV-1005", "CM-2001")) {
-            IDS.put(number, (String) find(InvoiceEntities.INVOICE_DATASET, "invoiceNo", number).getFirst()
-                .get("invoiceId"));
-        }
+        IDS.put("acme", acme);
+        IDS.put("credit", cm2001);
+        IDS.put("lonestar", post("C300", "2026-01-15", List.of(invoiceLine("Components", "50", "500.00", "4000",
+            null))));
+        IDS.put("legacy", (String) find(InvoiceEntities.INVOICE_DATASET, "invoiceNo", "INV-1001").getFirst()
+            .get("invoiceId"));
     }
 
     private void customer(String code, String street, String city, String zip, String contact, String email,
@@ -91,21 +112,17 @@ class InvoiceDocumentIT extends FinanceItSupport {
     @Test
     @Order(1)
     void aPostedInvoiceIsIssuedWithWhatItsCustomerNeedsAndReprintedAsIssued() {
-        // Without the company's profile there is nothing to say who sends it.
-        assertThat(refused(InvoiceDocuments.ISSUE, clerk, Map.of("invoiceId", IDS.get("INV-1004")), 422))
-            .isEqualTo(InvoiceDocuments.NO_COMPANY);
         assertThat(refused("FIN_COMPANY_PROFILE_SET", clerk, Map.of("legalName", "Someone else"), 403))
             .isEqualTo("PERMISSION_DENIED");
-        companyProfile();
 
-        Map<String, Object> issued = issue(IDS.get("INV-1004"));
-        assertThat(issued).containsEntry("documentNo", "INV-1004");
+        Map<String, Object> issued = issue(IDS.get("acme"));
+        assertThat(issued).containsEntry("documentNo", "INV-1005");
         String runId = (String) issued.get("runId");
         byte[] pdf = documentPdf(runId, clerk);
         assertThat(sha256(pdf)).isEqualTo(issued.get("pdfHash"));
         String text = pdfText(pdf);
         // Company, customer and both addresses, the invoice's facts, the lines, the tax by jurisdiction, totals.
-        assertThat(text).contains("Invoice", "INV-1004", "Northwind Components, Inc.", "500 Congress Avenue",
+        assertThat(text).contains("Invoice", "INV-1005", "Northwind Components, Inc.", "500 Congress Avenue",
             "Austin, TX 78701", "billing@northwind.example", "Bill to", "Ship to", "Acme Robotics, Inc.", "Dana Fox",
             "1200 Robotics Way", "Austin, TX 78758", "Jan 6, 2026", "Net 30 days", "Feb 5, 2026", "C100",
             "Components", "Engineering services", "1 Components 100 400.00 40,000.00 TX-AUSTIN", "10,000.00", "NT", "TX state",
@@ -121,19 +138,19 @@ class InvoiceDocumentIT extends FinanceItSupport {
             .expectBody(MAP).returnResult().getResponseBody()).containsEntry("verdict", "identical")
             .containsEntry("copyIntact", true);
         // Reading is not issuing.
-        assertThat(refused(InvoiceDocuments.ISSUE, accountant, Map.of("invoiceId", IDS.get("INV-1004")), 403))
+        assertThat(refused(InvoiceDocuments.ISSUE, accountant, Map.of("invoiceId", IDS.get("acme")), 403))
             .isEqualTo("PERMISSION_DENIED");
         // Issued again, the data the same: the same document again, kept as a new copy.
-        Map<String, Object> again = issue(IDS.get("INV-1004"));
+        Map<String, Object> again = issue(IDS.get("acme"));
         assertThat(again.get("runId")).isNotEqualTo(runId);
         assertThat(again.get("pdfHash")).isEqualTo(issued.get("pdfHash"));
-        assertThat(get("/api/documents/runs?subject=" + IDS.get("INV-1004"), clerk).expectStatus().isOk()
+        assertThat(get("/api/documents/runs?subject=" + IDS.get("acme"), clerk).expectStatus().isOk()
             .expectBody(LIST).returnResult().getResponseBody()).hasSize(2);
 
         // The credit memo names the invoice it credits and asks for no payment.
-        Map<String, Object> credit = issue(IDS.get("CM-2001"));
+        Map<String, Object> credit = issue(IDS.get("credit"));
         String creditText = pdfText(documentPdf((String) credit.get("runId"), clerk));
-        assertThat(creditText).contains("Credit Memo", "CM-2001", "Credits invoice", "INV-1004",
+        assertThat(creditText).contains("Credit Memo", "CM-2001", "Credits invoice", "INV-1005",
             "Returned components", "2,000.00", "165.00", "2,165.00", "not to be paid")
             .doesNotContain("Remittance instructions");
     }
@@ -146,10 +163,13 @@ class InvoiceDocumentIT extends FinanceItSupport {
         assertThat(refused(InvoiceDocuments.ISSUE, clerk, Map.of("invoiceId", draft), 422))
             .isEqualTo(InvoiceDocuments.NOT_POSTED);
         // INV-1001 came over from the legacy system, which issued its document.
-        assertThat(refused(InvoiceDocuments.ISSUE, clerk, Map.of("invoiceId", IDS.get("INV-1001")), 422))
+        assertThat(refused(InvoiceDocuments.ISSUE, clerk, Map.of("invoiceId", IDS.get("legacy")), 422))
             .isEqualTo(InvoiceDocuments.NOT_ISSUABLE);
+        // The company's profile as at the document's time: set later, it is not what was in effect then.
+        assertThat(refused(InvoiceDocuments.ISSUE, clerk, Map.of("invoiceId", IDS.get("cascade")), 422))
+            .isEqualTo(InvoiceDocuments.NO_COMPANY);
         // Without mail the document is not sent, and nothing is kept of the attempt.
-        assertThat(refused(InvoiceDocuments.SEND, clerk, Map.of("invoiceId", IDS.get("INV-1004")), 422))
+        assertThat(refused(InvoiceDocuments.SEND, clerk, Map.of("invoiceId", IDS.get("acme")), 422))
             .isEqualTo("MAIL_DISABLED");
     }
 
@@ -158,8 +178,8 @@ class InvoiceDocumentIT extends FinanceItSupport {
     void aReprintAfterTheCustomerMovedShowsTheAddressOfTheInvoiceDate() {
         // On 31 January Lone Star tells us its address from 1 February (FIN-AR-001 acceptance 2).
         customer("C300", "1 Elm Plaza", "Fort Worth", "76102", null, "payables@lonestar.example", "2026-02-01");
-        // INV-1005 here: Lone Star's components of 15 January.
-        String january15 = IDS.get("INV-1005");
+        // INV-1006 here: Lone Star's components of 15 January.
+        String january15 = IDS.get("lonestar");
         Map<String, Object> january = issue(january15);
         assertThat(pdfText(documentPdf((String) january.get("runId"), clerk))).contains("88 Commerce Street",
             "Dallas, TX 75202", "Jan 15, 2026", "Exempt: resale, certificate RC-3301").doesNotContain("Elm Plaza");
@@ -191,8 +211,19 @@ class InvoiceDocumentIT extends FinanceItSupport {
             "email", "billing@northwind.example", "remittance", "ACH or wire to Lakeside National Bank, "
                 + "account 000123456789, routing 111000025.\nPlease quote the invoice number."));
         assertThat(unchanged).containsEntry("changed", false);
-        assertThat(ok("FIN_COMPANY_PROFILE_SET", controller, Map.of("legalName", "Northwind Components, Inc.",
-            "street", "600 Congress Avenue"))).containsEntry("changed", true);
+        // The company moves: documents of what was posted before keep the address of their time; a city alone
+        // is printed without a comma.
+        clock.set(START.plusSeconds(3600));
+        clerk = inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK);
+        assertThat(ok("FIN_COMPANY_PROFILE_SET", inRoles("controller", FinanceRoles.CONTROLLER), Map.of(
+            "legalName", "Northwind Components, Inc.", "street", "600 Congress Avenue", "city", "Austin")))
+            .containsEntry("changed", true);
+        assertThat(pdfText(documentPdf((String) issue(IDS.get("acme")).get("runId"), clerk)))
+            .contains("500 Congress Avenue", "Austin, TX 78701").doesNotContain("600 Congress");
+        String later = post("C100", "2026-01-31", List.of(invoiceLine("Spare parts", "1", "100.00", "4100", "NT")));
+        String nl = System.lineSeparator();
+        assertThat(pdfText(documentPdf((String) issue(later).get("runId"), clerk)))
+            .contains("600 Congress Avenue" + nl + "Austin" + nl).doesNotContain("500 Congress");
         assertOnlyInserted("fi_company_profile_version", "fi_invoice_version");
     }
 }

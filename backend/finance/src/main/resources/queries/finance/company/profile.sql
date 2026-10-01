@@ -21,9 +21,10 @@ permissions: [fin.master.read]
 SELECT
     p.{{FinCompanyProfile.legalName}}  AS legalName,
     p.{{FinCompanyProfile.street}}     AS street,
-    -- "Austin, TX 78701": the parts there are.
-    NULLIF(concat_ws(' ', p.{{FinCompanyProfile.city}} || ',', p.{{FinCompanyProfile.state}},
-        p.{{FinCompanyProfile.postalCode}}), '') AS cityLine,
+    -- "Austin, TX 78701", or only the parts there are: "London".
+    NULLIF(concat_ws(', ', NULLIF(p.{{FinCompanyProfile.city}}, ''),
+        NULLIF(concat_ws(' ', NULLIF(p.{{FinCompanyProfile.state}}, ''),
+            NULLIF(p.{{FinCompanyProfile.postalCode}}, '')), '')), '') AS cityLine,
     p.{{FinCompanyProfile.country}}    AS country,
     p.{{FinCompanyProfile.phone}}      AS phone,
     p.{{FinCompanyProfile.email}}      AS email,

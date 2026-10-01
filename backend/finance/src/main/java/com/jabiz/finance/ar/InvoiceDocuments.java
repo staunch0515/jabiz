@@ -4,15 +4,13 @@ import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.BookingTime;
-import com.jabiz.finance.company.CompanyEntities;
-import com.jabiz.finance.company.CompanyProcesses;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.document.DocumentProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
-import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
@@ -93,6 +91,7 @@ public final class InvoiceDocuments {
     static final String INVOICE_ID = "invoiceId";
     static final String INVOICE_KEY = "invoice";
     static final String PROFILES = "profiles";
+    static final String READ_AT = "readAt";
     static final String ISSUE_INPUT = "issueInput";
     static final String ISSUED = "issued";
     static final String SENT = "sent";
@@ -108,9 +107,10 @@ public final class InvoiceDocuments {
                 return new IssueOutput(issued.runId(), issued.documentNo(), issued.pdfHash());
             })
             .step("Load the document", LoadEntity.by(InvoiceEntities.INVOICE_DATASET, INVOICE_ID, INVOICE_KEY))
-            .step("Load the company", QueryEntities.of(CompanyEntities.PROFILE_DATASET,
-                ctx -> CompanyProcesses.current(), PROFILES))
-            .compute("Check it can be issued", (metadata, ctx) -> prepare(ctx, booking))
+            .compute("Check it can be issued", (metadata, ctx) -> check(ctx, booking))
+            .step("Read the company then", RunTemplate.at(COMPANY, ctx -> Map.of(),
+                ctx -> ctx.contains(READ_AT) ? ctx.get(READ_AT, Instant.class) : null, ctx -> null, PROFILES))
+            .compute("Check the company", (metadata, ctx) -> prepare(ctx))
             .step("Issue it", issue()));
     }
 
@@ -130,9 +130,10 @@ public final class InvoiceDocuments {
                 return new SendOutput(issued.runId(), issued.documentNo(), sent.addresses());
             })
             .step("Load the document", LoadEntity.by(InvoiceEntities.INVOICE_DATASET, INVOICE_ID, INVOICE_KEY))
-            .step("Load the company", QueryEntities.of(CompanyEntities.PROFILE_DATASET,
-                ctx -> CompanyProcesses.current(), PROFILES))
-            .compute("Check it can be issued", (metadata, ctx) -> prepare(ctx, booking))
+            .compute("Check it can be issued", (metadata, ctx) -> check(ctx, booking))
+            .step("Read the company then", RunTemplate.at(COMPANY, ctx -> Map.of(),
+                ctx -> ctx.contains(READ_AT) ? ctx.get(READ_AT, Instant.class) : null, ctx -> null, PROFILES))
+            .compute("Check the company", (metadata, ctx) -> prepare(ctx))
             .step("Issue it", issue())
             .step("Send it to the customer", CallProcess.<ProcessContext>when(ctx -> ctx.contains(ISSUED),
                 DocumentProcesses.SEND, 1, ctx -> new DocumentProcesses.SendInput(
@@ -144,7 +145,7 @@ public final class InvoiceDocuments {
             ctx -> ctx.get(ISSUE_INPUT, DocumentProcesses.IssueInput.class), ISSUED);
     }
 
-    static void prepare(ProcessContext ctx, BookingTime booking) {
+    static void check(ProcessContext ctx, BookingTime booking) {
         EntityInstance invoice = ctx.get(INVOICE_KEY, EntityInstance.class);
         String number = invoice.get("invoiceNo");
         String status = invoice.get("status");
@@ -153,24 +154,35 @@ public final class InvoiceDocuments {
                 + (number == null ? "a draft" : number) + " is " + status, Map.of("status", status)));
             return;
         }
-        Instant posted = instant(invoice.get("postedTime"));
-        if (InvoiceEntities.OPENING.equals(invoice.get("source")) || posted == null) {
+        if (InvoiceEntities.OPENING.equals(invoice.get("source"))) {
             // An open item of the legacy system: its document was issued there.
             ctx.reject(new Violation("invoiceId", NOT_ISSUABLE, number + " was not posted here: its document is the "
                 + "one the earlier system issued", Map.of("invoiceNo", String.valueOf(number))));
             return;
         }
-        @SuppressWarnings("unchecked")
-        List<EntityInstance> profiles = (List<EntityInstance>) ctx.get(PROFILES);
-        if (profiles == null || profiles.isEmpty()) {
-            ctx.reject(new Violation("invoiceId", NO_COMPANY, "The company's profile is not set: documents show "
-                + "its name, address and remittance instructions", Map.of()));
+        // Posted before the posting time was kept (V9): read as at now, the earliest time known to have it.
+        Instant posted = instant(invoice.get("postedTime"));
+        ctx.put(READ_AT, readAt(booking, invoice.get("invoiceDate"), posted == null ? ctx.opTime() : posted));
+    }
+
+    // The company as at the time the document is read: what it shows as the sender and where to pay.
+    static void prepare(ProcessContext ctx) {
+        if (!ctx.contains(READ_AT)) {
             return;
         }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> profiles = (List<Map<String, Object>>) ctx.get(PROFILES);
+        Instant readAt = ctx.get(READ_AT, Instant.class);
+        if (profiles == null || profiles.isEmpty()) {
+            ctx.reject(new Violation("invoiceId", NO_COMPANY, "The company's profile was not set at " + readAt
+                + ", when this document is read: documents show the company's name, address and remittance "
+                + "instructions", Map.of("readAt", readAt.toString())));
+            return;
+        }
+        EntityInstance invoice = ctx.get(INVOICE_KEY, EntityInstance.class);
         boolean creditMemo = InvoiceEntities.CREDIT_MEMO.equals(invoice.get("kind"));
         ctx.put(ISSUE_INPUT, new DocumentProcesses.IssueInput(creditMemo ? CREDIT_MEMO_LAYOUT : INVOICE_LAYOUT,
-            Map.of(INVOICE_ID, invoice.id().toString()), readAt(booking, invoice.get("invoiceDate"), posted), null,
-            null));
+            Map.of(INVOICE_ID, invoice.id().toString()), readAt, null, null));
     }
 
     /**
