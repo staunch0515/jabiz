@@ -10,6 +10,8 @@ import { ApiError } from '../api/problem'
 import { lastUserName, useAuth, type SignInStep } from '../auth/AuthContext'
 import { startProviderSignIn } from '../auth/oidc'
 import MfaEnrollment from '../components/MfaEnrollment'
+import { extension } from '../extension'
+import { homePath } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
 import { LANGUAGE_NAMES } from '../i18n/languages'
 
@@ -36,7 +38,8 @@ export default function LoginPage() {
     if (pending?.status === 'MFA_ENROLLMENT_REQUIRED') return { kind: 'enroll', challenge: pending.challenge }
     return { kind: 'password' }
   })
-  const from = state?.from ?? '/data'
+  // Without a page to return to, the application's home (12 section 9), as the root path leads there too.
+  const from = state?.from ?? homePath(extension)
   const providers = useQuery({
     queryKey: ['auth', 'oidc', 'providers', i18n.language],
     queryFn: () => unwrap(api.GET('/api/auth/oidc/providers')),

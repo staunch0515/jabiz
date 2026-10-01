@@ -115,7 +115,7 @@ export default function EntityHistoryPage() {
               dictionaries={dictionaries}
               now={new Date()}
               canReadOperations={can('operation.read')}
-              canRevert={can('temporal.revert')}
+              canRevert={can('temporal.revert') && !entity.data?.writeOnce}
               onViewAt={(version) => setPoint(version.effectStartTime, version.createdTime)}
               onOperation={setOperation}
               onRevert={(seq) => {

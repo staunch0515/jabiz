@@ -197,13 +197,14 @@ frontend/
 | `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
-| `home` | 登录后与未知路径的落点；缺省 `/data` |
+| `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
 | 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、格式化函数 |
 | 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径与 `virtual:jabiz-extension`） |
 
 - 扩展页面调用的仍是 `/api/**`：权限、数据视图范围与校验都在服务端，页面上的隐藏只是导航。
-- 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。
-- 示范：`backend/app/admin-extension/`（"库存概览"：模板 `commerce.stock_availability` 与流程 `STOCK_RECEIVE`，菜单项需 `commerce.stock.read`）。
+- 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。平台前端的依赖（含只在 `exports` 中声明类型的 `react-router`）
+  由 `tsconfig.extension.json` 的 `paths` 解析，扩展的 `tsconfig.json` 只需 `extends` 与 `include`。
+- 示范：`backend/app/admin-extension/`（"库存概览"：模板 `commerce.stock_availability` 与流程 `STOCK_RECEIVE`，菜单项需 `commerce.stock.read`；以 `react-router` 的 `Link` 链到入库记录的生成页面）。
   操作步骤见 `docs/guide/admin-extension.md`。
 
 ## 10. 界面语言与区域【D22 第 7 条】

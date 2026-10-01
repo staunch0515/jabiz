@@ -80,6 +80,8 @@ export interface EntityMeta {
   display?: string
   temporal: boolean
   allowScheduled?: boolean
+  /** Every instance has one version: it is only inserted, never updated, deleted or reverted (04 section 5.4). */
+  writeOnce?: boolean
   publishesChanges: boolean
   stateField?: string
   fields: FieldMeta[]

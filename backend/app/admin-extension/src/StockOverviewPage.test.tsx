@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { App } from 'antd'
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import { MemoryRouter } from 'react-router'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EXTENSION_NAMESPACE } from '@jabiz/admin'
 import { messages } from './messages'
@@ -39,7 +40,9 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <App>
-        <StockOverviewPage />
+        <MemoryRouter>
+          <StockOverviewPage />
+        </MemoryRouter>
       </App>
     </QueryClientProvider>,
   )
@@ -60,6 +63,14 @@ describe('StockOverviewPage', () => {
         params: { warehouseCode: 'W1' },
         limit: 100,
       }),
+    )
+  })
+
+  it('links to the generated list of receipts', async () => {
+    renderPage()
+    expect(await screen.findByTestId('receipts-link')).toHaveAttribute(
+      'href',
+      '/data/urn%3Ajabiz%3Adataset%3Adefault%3AStockReceipt',
     )
   })
 
