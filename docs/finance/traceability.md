@@ -4,7 +4,7 @@
 "部分"表示本阶段只做了其中一部分，余下的阶段写在备注中。需求副本（`docs/finance-requirements/`）只读，编号与标题取自其中。
 
 路径简写：`gl/` = `backend/finance/src/main/java/com/jabiz/finance/gl/`，`it/` = `backend/finance/src/test/java/com/jabiz/finance/it/`，
-`queries/` = `backend/finance/src/main/resources/queries/finance/gl/`，`web/` = `finance-web/src/journal/`，`e2e/` = `finance-web/e2e/`。
+`queries/` = `backend/finance/src/main/resources/queries/finance/gl/`，`web/` = `finance-web/src/journal/`，`receivables/` = `finance-web/src/receivables/`，`e2e/` = `finance-web/e2e/`。
 
 ## F1 总账、期间、日记账与审批
 
@@ -35,9 +35,9 @@
 | FIN-CT-002 | Approval rules are versioned | 部分 | 规则经四眼的控制变更发布；每次评估记下规则版本（`sys_approval_evaluation`） | `it/FinScn02IT`、`it/JournalLifecycleIT`；按生效日改阈值的验收在 F10 |
 | FIN-CT-003 | Approval integrity | 完成 | 批准绑定内容哈希与当前请求；修改使批准失效 | `it/JournalLifecycleIT` |
 | FIN-CT-005 | Suspense and clearing accounts | 部分 | `FinAccount.clearing` 标记 | `it/ChartOfAccountsIT`；期末清单检查在 F8 |
-| FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票、账单、收款在 F3–F4 |
+| FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票与收款：`receivables/InvoicePage.test.tsx`、`ReceiptPage.test.tsx`、`e2e/receivables.spec.ts`；账单在 F4 |
 | FIN-UI-003 | Grid entry | 完成 | 粘贴与复制到表格、向下填充、撤销与重做 | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`；验收中的可用性研究（50 行 ≤ 5 分钟）需由人进行 |
-| FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿模板（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`，页面在 F3d-2） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）；其他登记簿与报表钻取在 F3d-2–F9 |
+| FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`；`receivables/InvoiceListPage.tsx`、`ReceiptListPage.tsx`） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）、`receivables/InvoiceListPage.test.tsx`、`e2e/receivables.spec.ts`；其他登记簿与报表钻取在 F4–F9 |
 | FIN-NF-001 / 002 | Volumes / Response times | 摸底 | 生成器 `tools/finance/perf/`（直接写库） | 结果见 `docs/finance/perf.md`；带 50 用户的压测在 F11 |
 
 ## F2 导入、期初、迁移
@@ -60,13 +60,13 @@
 | FIN-TX-004 | Exemption certificates | F3a 证书与报告（发票引用在 F3b） | `FinExemptionCertificate`、`FIN_EXEMPTION_CERTIFICATE_SAVE`、`FinArSettings.missingCertificate`、`queries/finance/ar/certificates.sql` | `calc/SalesTaxTest`、`it/ReceivablesMasterIT` |
 | FIN-DI-003 | Data-quality decisions | 科目（F2a）、客户合并（F3a） | `migration/MigrationProcesses`（`CUSTOMER`）、`FIN_CUSTOMER_SAVE` 跳过并入的代码 | `it/ReceivablesMasterIT` |
 | FIN-AR-003 | Customer invoice | 完成 | `ar/InvoiceEntities`、`ar/InvoiceProcesses`（`FIN_INVOICE_SAVE`、`FIN_INVOICE_POST`）、`ar/InvoicePosting` | `it/InvoiceIT`（INV-1004…1007 = FIN-EXP-02）、`ar/InvoicePostingTest`（含属性测试） |
-| FIN-AR-005 | Invoice document | 完成（页面在 F3d-2） | `ar/InvoiceDocuments`（版式 `finance.ar.invoice` / `finance.ar.credit_memo`、`FIN_INVOICE_ISSUE`、`FIN_INVOICE_SEND`）、`company/`（`FinCompanyProfile`、`FIN_COMPANY_PROFILE_SET`）、`queries/finance/ar/invoice_document_*.sql`、`queries/finance/company/profile.sql`；平台 `DOCUMENT_ISSUE` / `DOCUMENT_SEND`（D30） | `it/InvoiceDocumentIT`、`it/FinScn03IT`（验收 1） |
+| FIN-AR-005 | Invoice document | 完成 | `ar/InvoiceDocuments`（版式 `finance.ar.invoice` / `finance.ar.credit_memo`、`FIN_INVOICE_ISSUE`、`FIN_INVOICE_SEND`）、`company/`（`FinCompanyProfile`、`FIN_COMPANY_PROFILE_SET`）、`queries/finance/ar/invoice_document_*.sql`、`queries/finance/company/profile.sql`；平台 `DOCUMENT_ISSUE` / `DOCUMENT_SEND`（D30） | `it/InvoiceDocumentIT`、`it/FinScn03IT`（验收 1） |
 | FIN-AR-004 | Invoice numbering and immutability | 完成 | `NumberSequence` `fin.ar.invoice` / `fin.ar.credit-memo`、`FIN_INVOICE_VOID`、`gl/SubledgerPosting`（`FIN_SUBLEDGER_REVERSE`） | `it/InvoiceIT` |
 | FIN-AR-006 | Credit memos | 完成 | `FinInvoice`（`CREDIT_MEMO`）、`FIN_CREDIT_APPLY`、`FIN_CREDIT_REFUND`、`FinApplication` | `it/InvoiceIT`（CM-2001）、`it/ReceivablesIT`（退款） |
 | FIN-AR-013 | Credit limit check | 完成 | `FIN_INVOICE_POST`（审批对象 `fin.ar.invoice`）、`FinArSettings.creditLimitCheck`、`FIN_INVOICE_APPROVAL_RESULT` | `it/InvoiceIT`（警告）、`it/ReceivablesIT`（审批） |
 | FIN-TX-005 | Credits and returns | 完成 | `FIN_INVOICE_POST`（原发票日期的税率） | `it/InvoiceIT`（165.00） |
 | FIN-GL-021 | Posting from subledgers | 应收完成 | `gl/SubledgerPosting`（`FIN_SUBLEDGER_POST`，账本交易引用单据、`FinPosting`） | `it/InvoiceIT` |
-| FIN-UI-007 | Explanations | 税的说明（数据）完成；页面在 F3d | `FinInvoiceTax` | `it/InvoiceIT` |
+| FIN-UI-007 | Explanations | 部分（税的说明完成；其他计算的说明随各模块） | `FinInvoiceTax`；发票页的计算说明（`receivables/InvoiceView.tsx`） | `it/InvoiceIT`、`receivables/InvoicePage.test.tsx`、`e2e/receivables.spec.ts` |
 | FIN-DI-002 | Migration of open items | 应收完成 | `FIN_AR_OPENING`、`finance.open_receivables`、`reconciliation.sql`（`OPEN_ITEMS`） | `it/InvoiceIT` |
 | FIN-AR-007 | Cash receipts | 完成（外币在 F7） | `ar/ReceiptEntities`（`FinReceipt`）、`ar/ReceiptProcesses`（`FIN_RECEIPT_RECORD`、`FIN_RECEIPT_VOID`） | `it/ReceivablesIT`（RCPT-0001…0003 = FIN-EXP-02） |
 | FIN-AR-008 | Application of receipts and credits | 完成 | `FIN_RECEIPT_APPLY`、`FIN_APPLICATION_REVERSE`、`FIN_RECEIPT_REASSIGN`、`queries/finance/ar/receipt_suggestions.sql` | `it/ReceivablesIT`（验收 1） |
