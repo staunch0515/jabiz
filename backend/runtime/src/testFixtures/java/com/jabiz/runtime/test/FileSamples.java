@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.zip.CRC32;
 
 /**
- * Sample file contents for the file tests (docs/design/14-files.md section 9), generated rather than checked in: images
+ * Sample file contents for the file tests (docs/design/14-files.md section 10), generated rather than checked in: images
  * with EXIF (orientation and GPS) and PNG text chunks, a PNG header claiming more pixels than it has, and the smallest
  * valid heads of the other types.
  */

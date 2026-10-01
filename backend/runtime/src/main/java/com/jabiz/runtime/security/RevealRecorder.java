@@ -35,7 +35,9 @@ public class RevealRecorder {
         /** The plain columns of a SQL template run or a report export. */
         QUERY,
         /** The plain columns of a data export. */
-        EXPORT
+        EXPORT,
+        /** A file the server made, downloaded as it was kept (docs/design/14-files.md section 10). */
+        FILE
     }
 
     /** One record as the API shows it. */

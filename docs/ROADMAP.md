@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14j） | 44–56 天 | ◐ 14a–14i、14j-1 已合入；14j-2 PR 待合并（线 1.1） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14k） | 45–58 天 | ◐ 14a–14j 已合入；14k 进行中（线 1.1） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（已完成）；14h 日期类型（F1 开始时发现，已完成）；14i 时态数据的规模（F1c 压测发现，已完成）；14j 单据（F3 的发票文件，14j-1 已合入，14j-2 进行中）。各子阶段开始前出计划。
+14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（已完成）；14h 日期类型（F1 开始时发现，已完成）；14i 时态数据的规模（F1c 压测发现，已完成）；14j 单据（F3 的发票文件，已完成）；14k 纳税人号码遮蔽与生成文件存档（F4 的供应商与付款文件，进行中）。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -885,4 +885,26 @@ finance F3（发票文件 FIN-AR-005、按发票日重印地址 FIN-AR-001 验�
 - [x] 投递与尝试只 INSERT（`DocumentSendIT`）；待办邮件照旧（`NotificationIT` 不改动仍通过）。
 - [x] 收件地址的拆分与校验、版式的收件人声明与检查（`DocumentRecipientsTest`、`DocumentLayoutTest`、`DocumentLayoutProblemsTest`）。
 - [x] 前端：发送对话框（缺省地址、服务端的拒绝）、投递记录（Vitest）；e2e：单据页发送对话框给出单据中的地址并显示服务端的拒绝（`documents.spec.ts`，e2e 的应用不开邮件）。
+- [x] 现有全部检查照常通过。
+
+### 14k 纳税人号码的遮蔽样式与生成文件存档（1–2 天）
+
+finance F4（应付）需要只让部分人看明文的供应商纳税人号码，以及原样保存交给银行与税务机关的文件（NACHA、正向支付、1099 申报）。
+设计见 10 §13.1、14 §10 与决策 D31（在 F4 计划中确认）。
+
+**要求**
+1. core：`MaskStyle.TAX_ID`（Java 与 SQL 形式）；遮蔽形式的识别。
+2. runtime：迁移 V29 `sys_generated_file`（只追加）、`sys_reveal_record.kind` 增加 `FILE`；子流程 `FILE_ARCHIVE`；`GET /api/generated-files/{id}`；
+   权限 `file.generated.read`、`file.generated.archive`（不授予角色）；`jabiz.files.generated.max-bytes`。
+3. 示范：app 的 `ORDER_PICK_LIST_ARCHIVE`（订单拣货单 CSV）。
+4. 后台：遮蔽样式类型、显示记录种类的文字；OpenAPI 快照。
+5. 文档：10 §13.1、14 §10、D31、CLAUDE.md。
+
+**验收标准**
+- [x] `TAX_ID` 的 Java 形式、SQL 形式与识别（`MaskedFieldTest`）；所有样式的 SQL 与 Java 形式逐值相同（`MaskedFieldIT`）。
+- [x] 保存后原样下载，哈希一致，响应带哈希与 `nosniff`；每次下载记入 `sys_reveal_record`（`kind = FILE`）；`input_summary` 中没有内容（`GeneratedFileIT`）。
+- [x] 没有 `file.generated.read` 403；缺任何一项保存时声明的权限、未知或格式不对的 id 404；读者不能直接运行 `FILE_ARCHIVE`（`GeneratedFileIT`）。
+- [x] 经业务流程调用时，非文本类型、不合规的文件名、空文件、没有权限或权限为 `*` / 空白、对象过长、缺少输入都是 422，不保存；直接调用时输入先经校验（400）（`GeneratedFileIT`）。
+- [x] 存档被改动时不返回、不记录下载；表上的 UPDATE / DELETE 被数据库拒绝（`GeneratedFileIT`）。
+- [x] 业务流程（没有 `file.generated.archive` 的操作人）经子流程保存，CSV 防公式注入（`GeneratedFileIT`）。
 - [x] 现有全部检查照常通过。

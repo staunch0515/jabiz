@@ -247,4 +247,17 @@ class MaskedFieldIT extends SecurityItSupport {
         String row = lines.stream().filter(line -> line.contains(code)).findFirst().orElseThrow();
         return row.split(",")[header.indexOf("bankAccount")];
     }
+
+    /** The SQL form of every mask style gives what the Java form gives (templates and exports mask in SQL). */
+    @Test
+    void theDatabaseMasksAsJavaDoes() {
+        for (com.jabiz.entity.MaskStyle style : com.jabiz.entity.MaskStyle.values()) {
+            for (String value : new String[] {"123-45-1234", "123451234", "12-3456789", "12345", "DE44500105175407324931",
+                "1234567"}) {
+                List<Map<String, Object>> rows = query("SELECT " + style.sql("v") + " AS masked FROM (SELECT CAST(? AS text) AS v) t",
+                    value);
+                assertThat(rows.getFirst().get("masked")).as(style + " " + value).isEqualTo(style.apply(value));
+            }
+        }
+    }
 }

@@ -163,3 +163,21 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
   权限（无上传权限 403、无读取权限 403）；`Range`；删除时被引用 → 422；清扫删除孤儿行与孤儿对象、不删除被引用的；
   插入失败时对象被删除；`input_summary` 中没有文件名；BlockHound（图片处理不在事件循环上）。
 - 前端：上传控件（策略导出 → `accept`、大小提示）、blob 预览、失败提示（Vitest）；Playwright：在示范实体上上传并保存。
+
+## 10. 生成的文件【决策 D31，阶段 14k】
+
+银行付款文件（NACHA）、正向支付文件、税务申报文件这类**服务器为业务流程生成、交给外部的文件**，与上传的文件（§1–§9）不同：
+内容由平台生成而不是由人上传，不能删除（是付款与申报的证据），格式是银行或机关要求的文本。它们存放在只追加表 `sys_generated_file` 中，
+与单据（22，`sys_document_run`）一样原样保存字节，但不是 PDF、没有版式。
+
+- **保存**：子流程 `FILE_ARCHIVE`（内部流程，不在流程目录中；权限 `file.generated.archive`，不授予任何角色——只由业务流程以 `CallProcess.of("FILE_ARCHIVE", 1, …)` 调用，
+  业务流程自己的权限即是生成的权限）。输入：文件名（字母、数字、`. - _` 与空格，≤ 200 个字符）、媒体类型（`text/plain`、`text/csv`、`application/xml`、
+  `application/json`，其他 422 `GENERATED_FILE_NOT_ALLOWED`）、内容（1 字节至 `jabiz.files.generated.max-bytes`，缺省 10 MiB，否则 422 `GENERATED_FILE_TOO_LARGE`）、
+  读取所需的权限（1–20 个权限码，不能是 `*`）与可选的对象（实体、主键，各 ≤ 100 个字符）。子流程的输入不经 Bean 校验（`CallProcess`），所以这些都由步骤自己检查，违者 422 `GENERATED_FILE_NOT_ALLOWED`。保存内容的 SHA-256；输出 `{fileId, sha256, size}`。
+  内容（组件名 `fileContent`——`@Sensitive` 按名字在整个 JSON 中遮蔽，不用 `content` 这类通用名字）是 `@Sensitive`：`op_process.input_summary` 与日志中不出现内容（可能含账号）；文件名照常记录。
+- **读取**：`GET /api/generated-files/{fileId}` 需要 `file.generated.read` **与**文件保存时声明的全部权限；缺任何一项即 404（与单据相同，不透露存在）。
+  没有权限保存下来的文件谁也读不到（dev 中也一样）。返回前以存档的哈希核对内容（不符则 500，不返回），并在 `sys_reveal_record` 写一条 `kind = FILE` 的记录（文件名不进记录，只记对象与 `fileId`）——
+  这类文件含明文账号，下载就是一次"显示明文"（10 §13.1）。响应为附件，带 `X-Jabiz-Sha256` 与 `nosniff`。
+- **只追加**：`jabiz_protect_append_only('sys_generated_file')`；由 21 §2 的封存自动覆盖。保留期照常以 `RetentionPolicy` 声明。
+- **示范**：app 的 `ORDER_PICK_LIST_ARCHIVE` 把订单行生成 CSV 拣货单并保存（文本单元格加引号、以 `= + - @` 开头的加 `'`，防止表格软件当作公式）。
+- **测试**：`GeneratedFileIT`（原样下载与哈希、下载记录、`input_summary` 中没有内容、缺权限 404、类型 / 文件名 / 大小 / 权限 / 对象被拒（经业务流程调用也一样）、存档被改不返回、只追加、业务流程经子流程保存）。
