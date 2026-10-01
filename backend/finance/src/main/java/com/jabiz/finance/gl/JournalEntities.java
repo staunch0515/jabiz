@@ -202,7 +202,8 @@ public final class JournalEntities {
         eb.field("sourceId", f -> f.physicalColumn("source_id").immutable(true).required(true).asText(100));
         eb.unique("uk_fi_posting_transaction", "transactionId");
         eb.unique("uk_fi_posting_gl_no", "glNo");
-        eb.temporal(t -> t.allowScheduled(false));
+        // Posted once and corrected by a reversal, like the ledger transaction it stands for (platform decision D29).
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("glNo", "postingDate", "periodKey", "source", "documentNo", "sourceEntity")
             .filters("glNo", "postingDate", "periodKey", "source", "documentNo")

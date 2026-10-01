@@ -87,6 +87,8 @@ export default function JournalListPage() {
             title: t('journal.number'),
             dataIndex: 'journalNo',
             sorter: (a, b) => (a.journalNo ?? '').localeCompare(b.journalNo ?? ''),
+            // The latest entries first: a page holds 50 of them.
+            defaultSortOrder: 'descend',
             render: (value: string | null, row) => <Link to={journalPath(row.journalId)}>{value ?? t('journal.draftNo')}</Link>,
           },
           {
