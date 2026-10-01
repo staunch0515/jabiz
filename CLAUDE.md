@@ -52,7 +52,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批规则、限额、职责分离规则只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
-  邮件只经待办的通知（`jabiz.mail.enabled`，缺省关闭），不在流程中直接发邮件。
+  邮件只经待办的通知与单据的发送（`DOCUMENT_SEND`，22 §5；`jabiz.mail.enabled`，缺省关闭），不在流程中直接发邮件。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝。错误码可多语言（见设计文档）。
@@ -87,6 +87,10 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   不设标记；需要立即撤下时在流程的提交后步骤 `FileAccess.invalidate(...)`。公开读取不写操作记录。
 - **启动即失败**：元数据、数据视图、流程、SQL 模板、表结构的不一致，必须在启动时一次性全部报告，而不是等到请求触发。
   新的检查实现 `PlatformCheck`（返回问题列表，不抛异常），启动与 `platformCheck` 共用。
+- **单据**（见 22 与决策 D30）：发票、确认书这类单据用 `DocumentLayout` Bean 声明（区块显示普通 SQL 模板的列，模板不写 `timeSlice`），
+  由业务流程以子流程 `DOCUMENT_ISSUE` 签发并给出业务时点（单据日期）；`sys_document_run` 只追加、保存 PDF 原样字节，重印与发送一律取存档字节，从不重新排版。
+  单据上的发出方信息来自数据而不是配置；版式的标题与区块文字写在消息资源 `document.<版式>[.<键>]`。
+  以邮件发出单据只经 `DOCUMENT_SEND`（附件为存档字节）；收件地址由版式的 `recipients(模板, 列)` 从数据给出，发往其他地址需要 `document.send.any`。
 - **账本、事件、定时任务**（见 11 与决策 D14）：账本交易只经 `LEDGER_POST` / `LEDGER_REVERSE` 写入，更正即冲正；
   需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。账本的科目层级、分析维度（`LedgerDimension` Bean）、行备注、来源单据与外币分录见 11 §1.4–§1.8 与决策 D24，
   子账单据过账时带上来源（`sourceEntity` / `sourceId`）。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；

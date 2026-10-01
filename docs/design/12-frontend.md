@@ -132,6 +132,7 @@ frontend/
 | `/tasks` | 我的待办（18 §5.3）：审批待办就地批准或驳回（`ApprovalPanel`），其他待办链接到其页面；页头显示开放待办数 |
 | `/reports`、`/reports/run?id=<模板>` | 报表（19 §3.3）：目录中声明了 `report` 的模板；参数表单、生效 / 记录时点、结果表格（分页、白名单内筛选与排序）、导出 Excel / PDF / CSV（19 §4） |
 | `/reports/archive[?template=]` | 已签发的报表（19 §5.4）：按签发原样保存（PDF / Excel / CSV）、核对 |
+| `/documents[?layout=&subject=]` | 已签发的单据（22 §6）：下载存档的原件、核对（存档字节与数据）；有 `document.archive.read` 时在菜单中 |
 | `/imports`、`/imports/run?id=<导入>` | 导入（20 §6）：上传文件 → 映射（CSV / Excel 版式调整、字段取自哪一列或常量、保存与载入映射、前 20 行）→ 参数（表单由参数 Schema 生成）→ 预览（全部行执行并回滚：数字、控制合计、全部问题、逐行状态）→ 说明与提交（有任何问题即不能提交；被拒的提交显示其报告） |
 | `/imports/runs[?import=]` | 导入记录（20 §5）：结果、行数、重复、问题、说明；问题明细；报告保存为 PDF / Excel / CSV |
 | `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`，遮蔽字段为其遮蔽形式）；按记录筛选时一并列出其审批。历史页与列表行有入口。"明文显示"页签列出 `sys_reveal_record`（10 §13.1） |

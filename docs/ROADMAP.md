@@ -19,7 +19,7 @@
 | 11 | 示范业务与收尾 | 4–5 天 | ☑ 已完成（PR 待合并；验收 3 需真人验证） |
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
-| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14i） | 39–51 天 | ◐ 14a–14h 已合入；14i 进行中（线 1.1） |
+| 14 | 应用所需的通用业务能力（由 finance 提出，14a–14j） | 44–56 天 | ◐ 14a–14i、14j-1 已合入；14j-2 PR 待合并（线 1.1） |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -439,7 +439,7 @@ CI 对推送到任何分支运行（应用分支不能改 `ci.yml`）。端到�
 
 由 finance 提出（见其分支上的 `docs/finance-work/00-development-plan.md` §3.1），每项能力都是通用的，并在 `app` 中有示范与测试，不含任何财务代码。
 14a 应用自有后台页面、语言子集、区域格式、金额小数位；14b 编号、审批、职责分离、任务与通知；14c 账本增强；14d 时点查询、导出、报表存档；
-14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（已完成）；14h 日期类型（F1 开始时发现，已完成）；14i 时态数据的规模（F1c 压测发现，进行中）。各子阶段开始前出计划。
+14e 导入框架（已完成）；14f 审计与保留（已完成）；14g 安全增强（已完成）；14h 日期类型（F1 开始时发现，已完成）；14i 时态数据的规模（F1c 压测发现，已完成）；14j 单据（F3 的发票文件，14j-1 已合入，14j-2 进行中）。各子阶段开始前出计划。
 
 ### 14a 应用自有后台页面、语言子集、区域格式、金额小数位（5–7 天）
 
@@ -832,3 +832,57 @@ finance F1c 的压测（约 200 万个分录版本，`1.1/finance` 的 `docs/fin
 - [x] 声明了 `home` 的应用登录后落在 `home`，有要返回的页面时返回该页（`LoginPage.test.tsx`）。
 - [x] `writeOnce` 随元数据导出（`TemporalDefinitionTest`）；入库记录的列表只有查看（e2e `extension.spec.ts`）。
 - [x] 前端 lint、typecheck、测试与现有 e2e 照常通过。
+
+### 14j 单据：版式、确定性 PDF、签发存档与发送（4.5–6 天）
+
+finance F3（发票文件 FIN-AR-005、按发票日重印地址 FIN-AR-001 验收 2）提出；以后的付款通知、1099 收件人副本、对账单同样需要。
+报表（14d）是一张表、重印时重新排版；邮件（14b-3）只发纯文本给系统用户。设计见 22 与决策 D30（在 14j 计划中确认，全部按推荐方案）。
+分两个 PR：14j-1 版式、PDF、签发存档、重印与核对、预览、后台；14j-2 以附件发给外部收件人并记录投递。
+
+**要求（14j-1）**
+1. core `com.jabiz.document`：`DocumentLayout`（区块 `party` / `facts` / `table` / `totals` / `text` / `note`、单号、对象、权限、版本与规范描述）、
+   `DocumentContent`、`DocumentLayoutProblems`；`TemplateSchemas` 合并多个模板的参数。
+2. runtime `com.jabiz.runtime.document`：`DocumentLayoutRegistry`（启动检查 `DOCUMENTS` 与消息）、`Documents`（同一时点读取全部模板、单行检查、标签、内容哈希、排版）、
+   `PdfDocumentWriter`（Letter / A4、并排区块、跨页重复表头、折行不截断、页脚与预览标记、确定性）、`DocumentSettings`、流程 `DOCUMENT_ISSUE`、`DocumentRuns`、`DocumentController`。
+   错误码 `DOCUMENT_NOT_SINGLE`、`DOCUMENT_TOO_LARGE`；观测 `jabiz.document.render`。
+3. 迁移 V27：`sys_document_run`（只追加，存 PDF 原样字节与内容）。
+4. 接口：`GET /api/meta/documents`、`POST /api/documents/{layout}/preview`、`GET /api/documents/runs`、`/{id}`、`/{id}/pdf`、`POST /{id}/verify`。
+5. 后台 `/documents`（菜单"单据"）；`@jabiz/admin` 导出 `DocumentPanel`。
+6. 示范：版式 `commerce.order_confirmation`、模板 `commerce.order_document_header` / `_lines`、流程 `ORDER_CONFIRMATION_ISSUE`（`actsOn(SalesOrder)`，按下单时刻读取）。
+7. 文档：22、09 D30、CLAUDE.md。
+
+**验收标准（14j-1）**
+- [x] 签发的 PDF 显示各区块（标题与单号、客户、键值、明细、合计、说明）；金额按区域格式、负数带括号；长明细跨页并重复表头，每页有"第 n 页，共 m 页"；长文本折行不截断（`PdfDocumentWriterTest`、`DocumentIssueIT`）。
+- [x] 同一内容排版两次逐字节相同；重印返回存档原样字节，哈希与签发时相同（`PdfDocumentWriterTest`、`DocumentIssueIT`）。
+- [x] 签发后改商品名与仓库名：重印不变，核对 `identical`；再次签发仍按下单时刻读到当时的名称；预览按现在读取、每页标"预览"、不保存（`DocumentIssueIT`）。
+- [x] 版式或模板版本改变时核对报告 `layout_changed` / `template_changed`；存档字节被改动时 `copyIntact=false` 且下载被拒；数据被绕过平台改动时 `differs`（`DocumentIssueIT`）。
+- [x] 单行区块的模板没有行时 422 `DOCUMENT_NOT_SINGLE` 且不保存；未知参数 400、未知版式 404、非应用语言 400（`DocumentIssueIT`）。
+- [x] 签发需要版式与模板的权限（经业务流程也一样）；读取需要存档权限，缺版式权限的单据为 404 且不列出；预览需要签发权限；目录只列可签发的版式（`DocumentIssueIT`）。
+- [x] 存档表上的 UPDATE / DELETE 被数据库拒绝（`DocumentIssueIT`）。
+- [x] 启动检查一次报告：重复版式、缺模板、缺列、单行与表格混用、参数不一致、未知对象实体、缺文字、纸张配置错误（`PlatformCheckIT`、`DocumentLayoutProblemsTest`）。
+- [x] 版式版本随描述变化（`DocumentLayoutTest`）；core 门禁类行覆盖率 ≥ 80%。
+- [x] 前端：单据页（下载、核对、存档被改的提示）、`DocumentPanel`（列出、预览、签发、显示服务端的拒绝）（`DocumentsPage.test.tsx`、`DocumentPanel.test.tsx`）；端到端：订单行操作签发 → 单据页 → 按签发原样下载 → 核对（e2e `documents.spec.ts`，重复 3 次通过）。
+- [x] 现有全部检查照常通过。
+
+**要求（14j-2）**
+1. core：版式的 `recipients(模板, 列)`（签发时读出地址并随单据存档）、`DocumentRecipients`（拆分、纯地址、大小写）、检查收件地址列为文本。
+2. runtime：流程 `DOCUMENT_SEND`（权限 `document.send`；邮件关闭 422 `MAIL_DISABLED`；看不见的单据 404；非纯地址或超过 10 个 400；没有地址 422 `DOCUMENT_NO_RECIPIENT`；
+   数据以外的地址需要 `document.send.any`，否则 422 `DOCUMENT_RECIPIENT_NOT_ALLOWED`）；事务内记录投递，提交后逐条发送（附件为存档字节、发送前核对哈希），
+   尝试只追加、失败重试、已发送的不重发；`NotificationSender.send(MailMessage)`（带附件），`SmtpNotificationSender` 以 MIME 发送。
+3. 迁移 V28：`sys_document_run.recipients`、`sys_document_delivery`、`sys_document_delivery_attempt`（只追加）。投递记在单据自己的表而不是 `sys_notification`（D30 第 6 条的细化，22 §5.2）。
+4. 接口：单据详情附投递记录，摘要附缺省地址。
+5. 后台：`DocumentPanel` 与单据页的"发送"对话框；单据页每行展开为投递记录。
+6. 示范：订单头模板给出联系地址；流程 `ORDER_CONFIRMATION_SEND`（签发并发送）。
+7. 文档：22 §5、D30、18 §5.4、CLAUDE.md。
+
+**验收标准（14j-2）**
+- [x] 发往单据数据中的地址：每个地址一封，附件的 SHA-256 等于存档的 `pdfHash`，主题含单号，发件人为 `jabiz.mail.from`；投递记录为 `SENT`（`DocumentSendIT`，GreenMail）。
+- [x] 再次发送得到新的一封、同样的字节；已发送的不重发（`DocumentSendIT`）。
+- [x] 失败的尝试被记录并重试成功；存档字节被改动时不发出、尝试记为失败（`DocumentSendIT`）。
+- [x] 数据以外的地址没有 `document.send.any` 时 422 `DOCUMENT_RECIPIENT_NOT_ALLOWED` 且不记录；大小写不同算同一地址；有该权限时发出（`DocumentSendIT`）。
+- [x] 含换行、带显示名或格式不对的地址 400；超过 10 个 400；没有 `document.send` 403；看不见的单据 404（`DocumentSendIT`）。
+- [x] 邮件关闭时 422 `MAIL_DISABLED` 且不记录（`DocumentIssueIT`）。
+- [x] 投递与尝试只 INSERT（`DocumentSendIT`）；待办邮件照旧（`NotificationIT` 不改动仍通过）。
+- [x] 收件地址的拆分与校验、版式的收件人声明与检查（`DocumentRecipientsTest`、`DocumentLayoutTest`、`DocumentLayoutProblemsTest`）。
+- [x] 前端：发送对话框（缺省地址、服务端的拒绝）、投递记录（Vitest）；e2e：单据页发送对话框给出单据中的地址并显示服务端的拒绝（`documents.spec.ts`，e2e 的应用不开邮件）。
+- [x] 现有全部检查照常通过。

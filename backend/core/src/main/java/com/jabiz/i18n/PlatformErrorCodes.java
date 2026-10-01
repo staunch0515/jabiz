@@ -84,6 +84,16 @@ public final class PlatformErrorCodes {
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */
     public static final String REPORT_ALREADY_SUPERSEDED = "REPORT_ALREADY_SUPERSEDED";
+    /** A template a document reads for one row returned none or several (docs/design/22-documents.md section 3). */
+    public static final String DOCUMENT_NOT_SINGLE = "DOCUMENT_NOT_SINGLE";
+    /** A document would have more rows or bytes than allowed (22 section 3). */
+    public static final String DOCUMENT_TOO_LARGE = "DOCUMENT_TOO_LARGE";
+    /** Sending a document to an address its data does not name needs {@code document.send.any} (22 section 5). */
+    public static final String DOCUMENT_RECIPIENT_NOT_ALLOWED = "DOCUMENT_RECIPIENT_NOT_ALLOWED";
+    /** A document was to be sent but neither the request nor its data names an address (22 section 5). */
+    public static final String DOCUMENT_NO_RECIPIENT = "DOCUMENT_NO_RECIPIENT";
+    /** Sending e-mail needs {@code jabiz.mail.enabled} (22 section 5). */
+    public static final String MAIL_DISABLED = "MAIL_DISABLED";
     /** The entry is within its retention period (docs/design/21-audit-retention.md section 3). */
     public static final String RETENTION_ACTIVE = "RETENTION_ACTIVE";
     /** The entry is under a legal hold (21 section 3.3). */
@@ -157,7 +167,8 @@ public final class PlatformErrorCodes {
         LEDGER_SOURCE_NOT_FOUND, LEDGER_PARENT_NOT_SUMMARY, LEDGER_ACCOUNT_CYCLE, LEDGER_SUMMARY_HAS_ENTRIES,
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, REPORT_SUPERSEDE_MISMATCH,
-        REPORT_ALREADY_SUPERSEDED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
+        REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, SOD_CONFLICT,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,

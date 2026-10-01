@@ -304,6 +304,247 @@
         },
         "type" : "object"
       },
+      "DocumentColumnEntry" : {
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentDeliveryEntry" : {
+        "properties" : {
+          "address" : {
+            "type" : "string"
+          },
+          "attempts" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "createdTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "deliveryId" : {
+            "type" : "string"
+          },
+          "lastAttempt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "requestedBy" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentDetail" : {
+        "properties" : {
+          "deliveries" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentDeliveryEntry"
+            },
+            "type" : "array"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "run" : {
+            "$ref" : "#/components/schemas/DocumentSummary"
+          },
+          "sources" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentSourceEntry"
+            },
+            "type" : "array"
+          },
+          "templateVersions" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentLayoutEntry" : {
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "subjectEntity" : {
+            "type" : "string"
+          },
+          "subjectParam" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentPreviewRequest" : {
+        "properties" : {
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "knownAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentSourceEntry" : {
+        "properties" : {
+          "columns" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentColumnEntry"
+            },
+            "type" : "array"
+          },
+          "rows" : {
+            "items" : {
+              "items" : { },
+              "type" : "array"
+            },
+            "type" : "array"
+          },
+          "templateId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentSummary" : {
+        "properties" : {
+          "asOf" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "contentHash" : {
+            "type" : "string"
+          },
+          "documentNo" : {
+            "type" : "string"
+          },
+          "issuedBy" : {
+            "type" : "string"
+          },
+          "issuedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "knownAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "layoutId" : {
+            "type" : "string"
+          },
+          "layoutVersion" : {
+            "type" : "string"
+          },
+          "pageSize" : {
+            "type" : "string"
+          },
+          "pages" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "pdfHash" : {
+            "type" : "string"
+          },
+          "pdfSize" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "readAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "recipients" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "recomputable" : {
+            "type" : "boolean"
+          },
+          "runId" : {
+            "type" : "string"
+          },
+          "subjectEntity" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DocumentVerification" : {
+        "properties" : {
+          "contentHash" : {
+            "type" : "string"
+          },
+          "copyIntact" : {
+            "type" : "boolean"
+          },
+          "currentHash" : {
+            "type" : "string"
+          },
+          "currentLayoutVersion" : {
+            "type" : "string"
+          },
+          "layoutVersion" : {
+            "type" : "string"
+          },
+          "recomputable" : {
+            "type" : "boolean"
+          },
+          "verdict" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DraftRule" : {
         "properties" : {
           "condition" : { },
@@ -3065,6 +3306,178 @@
         "tags" : [ "dictionary-controller" ]
       }
     },
+    "/api/documents/runs" : {
+      "get" : {
+        "operationId" : "listDocuments",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "layout",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "subject",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DocumentSummary"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
+      }
+    },
+    "/api/documents/runs/{runId}" : {
+      "get" : {
+        "operationId" : "getDocument",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DocumentDetail"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
+      }
+    },
+    "/api/documents/runs/{runId}/pdf" : {
+      "get" : {
+        "operationId" : "documentPdf",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/pdf" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
+      }
+    },
+    "/api/documents/runs/{runId}/verify" : {
+      "post" : {
+        "operationId" : "verifyDocument",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DocumentVerification"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
+      }
+    },
+    "/api/documents/{layoutId}/preview" : {
+      "post" : {
+        "operationId" : "previewDocument",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "layoutId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DocumentPreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              },
+              "application/pdf" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
+      }
+    },
     "/api/entities/{entityType}" : {
       "get" : {
         "operationId" : "list",
@@ -3890,6 +4303,27 @@
           }
         },
         "tags" : [ "meta-model-controller" ]
+      }
+    },
+    "/api/meta/documents" : {
+      "get" : {
+        "operationId" : "documentLayouts",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DocumentLayoutEntry"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "document-controller" ]
       }
     },
     "/api/meta/entities/{name}" : {
