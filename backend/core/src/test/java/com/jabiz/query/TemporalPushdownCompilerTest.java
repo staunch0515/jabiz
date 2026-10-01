@@ -85,6 +85,16 @@ class TemporalPushdownCompilerTest {
         PhysicalQueryPlan immutableOr = lines(new QueryPredicate.Or(List.of(new QueryPredicate.Eq("orderId", "O-1"),
             new QueryPredicate.Eq("region", "KR"))));
         assertThat(immutableOr.source()).contains("(order_id = :p0 OR region = :p1)");
+
+        // An OR of immutable ANDs is wholly immutable too; one changeable field anywhere keeps it outside.
+        PhysicalQueryPlan nested = lines(new QueryPredicate.Or(List.of(new QueryPredicate.And(List.of(
+            new QueryPredicate.Eq("orderId", "O-1"), new QueryPredicate.Eq("region", "KR"))),
+            new QueryPredicate.Eq("orderId", "O-2"))));
+        assertThat(nested.source()).contains("order_id").contains("region");
+        PhysicalQueryPlan nestedMixed = lines(new QueryPredicate.Or(List.of(new QueryPredicate.And(List.of(
+            new QueryPredicate.Eq("orderId", "O-1"), new QueryPredicate.Eq("memo", "x"))),
+            new QueryPredicate.Eq("orderId", "O-2"))));
+        assertThat(nestedMixed.source()).doesNotContain("order_id").doesNotContain("memo");
     }
 
     @Test

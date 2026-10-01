@@ -135,7 +135,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             for (UniqueConstraint unique : def.uniqueConstraints) {
                 List<String> columns = unique.fields().stream()
                     .map(field -> def.physicalColumn(field).toLowerCase(Locale.ROOT)).toList();
-                if (found.stream().noneMatch(ix -> ix.columns().size() >= columns.size()
+                if (found.stream().noneMatch(ix -> ix.full() && ix.columns().size() >= columns.size()
                     && Set.copyOf(ix.columns().subList(0, columns.size())).equals(Set.copyOf(columns)))) {
                     problems.add(WARNING + label + " -> unique constraint " + unique.name() + " has no index starting "
                         + "with " + columns + ": checking it reads every version of the table");

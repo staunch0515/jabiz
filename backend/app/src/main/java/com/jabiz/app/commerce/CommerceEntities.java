@@ -117,8 +117,9 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     });
 
     /**
-     * One receipt of goods into a warehouse, as STOCK_RECEIVE records it: written once and never changed, like the
-     * lines of a ledger (decision D29); a wrong receipt is answered by another movement, not by editing this one.
+     * One receipt of goods into a warehouse: written once and never changed, like the lines of a ledger (decision
+     * D29); a wrong receipt is answered by another movement, not by editing this one. STOCK_RECEIVE records one with
+     * every receipt; one recorded directly through the dataset is a record only and does not change the stock.
      */
     public static final EntityDefinition STOCK_RECEIPT_ENTITY = EntityDefinition.define(STOCK_RECEIPT, eb -> {
         eb.physicalTable("stock_receipt_version");
