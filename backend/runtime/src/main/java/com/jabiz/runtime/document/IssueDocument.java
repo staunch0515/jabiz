@@ -1,6 +1,7 @@
 package com.jabiz.runtime.document;
 
 import com.jabiz.document.DocumentLayout;
+import com.jabiz.document.DocumentRecipients;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.process.StepHandler;
@@ -11,6 +12,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
@@ -60,7 +62,8 @@ class IssueDocument implements StepHandler<NoMetadata, ProcessContext> {
                         read.scope(), layout.subjectEntity(), subject == null ? null : String.valueOf(subject),
                         read.content().number(), read.content().title(), read.content().language(),
                         settings.pageSize().name(), params, input.asOf(), read.readAt(),
-                        read.knownAt() != null ? read.knownAt() : issued, read.content(), contentHash,
+                        read.knownAt() != null ? read.knownAt() : issued, recipients(layout, read), read.content(),
+                        contentHash,
                         read.recomputable(), rendered.pdf(), rendered.pdfHash(), rendered.pdf().length,
                         rendered.pages(), ctx.request().actorId(), issued, ctx.processSeqId());
                     return runs.insert(run).then(Mono.fromRunnable(() -> ctx.put(DocumentProcesses.OUTPUT,
@@ -68,5 +71,14 @@ class IssueDocument implements StepHandler<NoMetadata, ProcessContext> {
                             rendered.pdfHash(), rendered.pages(), read.recomputable()))));
                 }));
         });
+    }
+
+    /** The plain addresses the layout's recipients column holds; none without such a column. */
+    static List<String> recipients(DocumentLayout layout, Documents.Read read) {
+        if (layout.recipients() == null) {
+            return List.of();
+        }
+        return DocumentRecipients.plain(read.content().source(layout.recipients().template())
+            .first(layout.recipients().column()));
     }
 }

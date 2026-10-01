@@ -225,6 +225,24 @@ class DocumentIssueIT extends PostgresIntegrationTest {
     }
 
     @Test
+    void sendingIsRefusedWhileMailIsOff() {
+        Order order = order();
+        String runId = (String) confirm(order).get("runId");
+        Map<String, Object> refused = process("DOCUMENT_SEND", Map.of("runId", runId),
+            bearer("document.send", "commerce.order.read")).expectStatus().isEqualTo(422).expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(refused.toString()).contains("MAIL_DISABLED");
+        assertThat(query("SELECT delivery_id FROM sys_document_delivery WHERE run_id = CAST(? AS uuid)", runId))
+            .isEmpty();
+        // The address the data names was kept with the document when it was issued.
+        Map<String, Object> run = client.get().uri("/api/documents/runs/{id}", runId)
+            .header(HttpHeaders.AUTHORIZATION, reader()).exchange().expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(run.get("run").toString())
+            .contains("recipients=[" + order.code().toLowerCase(Locale.ROOT) + "@customers.example.com]");
+    }
+
+    @Test
     void theCatalogListsTheLayoutsTheCallerMayIssueWithTheirParameters() {
         List<Map<String, Object>> layouts = client.get().uri("/api/meta/documents")
             .header(HttpHeaders.AUTHORIZATION, bearer("document.issue", "commerce.order.read")).exchange()

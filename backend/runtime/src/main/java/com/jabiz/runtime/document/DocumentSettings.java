@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.Locale;
 
 /**
- * Settings of business documents (docs/design/22-documents.md section 5):
+ * Settings of business documents (docs/design/22-documents.md section 4.4):
  * <ul>
  *   <li>{@code jabiz.documents.page-size}: {@code A4} or {@code LETTER}; by default Letter for the regions that print
  *       on it ({@code jabiz.region} in the United States, Canada, Mexico and the Philippines), A4 elsewhere</li>

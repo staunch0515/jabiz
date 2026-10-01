@@ -1,5 +1,6 @@
 package com.jabiz.document;
 
+import com.jabiz.entity.SemanticKind;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.QueryParameter;
 import com.jabiz.query.template.TemplateSchemas;
@@ -70,6 +71,15 @@ public final class DocumentLayoutProblems {
                         + paramSource.get(parameter.name())));
                 }
             }
+        }
+        if (layout.recipients() != null) {
+            String template = layout.recipients().template();
+            templates.apply(template).flatMap(t -> t.result(layout.recipients().column())).ifPresent(column -> {
+                if (!(column.kind() instanceof SemanticKind.Text)) {
+                    problems.add(new Problem(where + " | " + template, "recipients column "
+                        + layout.recipients().column() + " is not text"));
+                }
+            });
         }
         if (layout.subjectParam() != null && !params.containsKey(layout.subjectParam())) {
             problems.add(new Problem(where, "no template has the subject parameter " + layout.subjectParam()));

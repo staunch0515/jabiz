@@ -27,7 +27,8 @@ vi.mock('../auth/AuthContext', () => ({
 }))
 
 const RUN = { runId: 'd-1', layoutId: 'commerce.order_confirmation', title: 'Order confirmation',
-  documentNo: 'SO-1', issuedBy: 'alice', issuedTime: '2026-02-05T15:00:00Z', pages: 1 }
+  documentNo: 'SO-1', issuedBy: 'alice', issuedTime: '2026-02-05T15:00:00Z', pages: 1,
+  recipients: ['ap@customer.example'] }
 
 function renderPanel(props: Partial<Parameters<typeof DocumentPanel>[0]> = {}) {
   render(
@@ -45,7 +46,7 @@ describe('DocumentPanel', () => {
     runProcess.mockReset()
     downloadDocument.mockReset()
     previewDocument.mockReset()
-    permissions = new Set(['document.issue', 'document.archive.read'])
+    permissions = new Set(['document.issue', 'document.archive.read', 'document.send'])
     await i18n.changeLanguage('en')
   })
 
@@ -86,5 +87,32 @@ describe('DocumentPanel', () => {
     expect(runProcess).toHaveBeenCalledWith('DOCUMENT_ISSUE', { layoutId: 'commerce.order_confirmation',
       params: { orderId: 'o-1' } })
     expect(get).not.toHaveBeenCalled()
+  })
+
+  it('sends a copy to the addresses its data names, and shows a refusal of another', async () => {
+    get.mockResolvedValue([RUN])
+    runProcess.mockResolvedValueOnce({ addresses: ['ap@customer.example'], deliveryIds: ['x-1'] })
+    renderPanel()
+    fireEvent.click(await screen.findByTestId('document-send-d-1'))
+    expect(await screen.findByText('ap@customer.example')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
+      { runId: 'd-1', to: ['ap@customer.example'] }))
+    await waitFor(() => expect(screen.queryByTestId('document-send-to')).toBeNull())
+
+    runProcess.mockRejectedValueOnce(new ApiError(422, { violations: [{ ruleCode: 'DOCUMENT_RECIPIENT_NOT_ALLOWED',
+      message: 'Sending to x@other.example needs the permission to send documents to any address.' }] }))
+    fireEvent.click(screen.getByTestId('document-send-d-1'))
+    await screen.findByTestId('document-send-to')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect((await screen.findByTestId('document-send-error')).textContent).toContain('x@other.example')
+  })
+
+  it('offers no sending without its permission', async () => {
+    permissions = new Set(['document.archive.read'])
+    get.mockResolvedValue([RUN])
+    renderPanel()
+    expect(await screen.findByText('SO-1')).toBeTruthy()
+    expect(screen.queryByTestId('document-send-d-1')).toBeNull()
   })
 })

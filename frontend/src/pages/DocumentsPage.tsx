@@ -1,5 +1,6 @@
 import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components'
 import { App, Space, Tag, Tooltip, Typography } from 'antd'
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
@@ -7,6 +8,9 @@ import { api, unwrap } from '../api/client'
 import { downloadDocument } from '../api/documents'
 import { ApiError } from '../api/problem'
 import type { components } from '../api/schema'
+import { useAuth } from '../auth/AuthContext'
+import DocumentDeliveries from '../components/DocumentDeliveries'
+import SendDocumentModal from '../components/SendDocumentModal'
 import { formatDateTime } from '../meta/format'
 
 type DocumentSummary = components['schemas']['DocumentSummary']
@@ -15,8 +19,8 @@ type DocumentVerification = components['schemas']['DocumentVerification']
 /**
  * Issued documents (docs/design/22-documents.md section 6): newest first, optionally of one layout (`?layout=`) or
  * about one subject (`?subject=`). Each is saved exactly as issued - the kept PDF - and can be verified: the kept
- * bytes against their hash, and the data at the document's point in time against its content hash. The server lists
- * only documents the user may read.
+ * bytes against their hash, and the data at the document's point in time against its content hash - and sent by
+ * e-mail, each row opening onto the addresses it went to. The server lists only documents the user may read.
  */
 export default function DocumentsPage() {
   const { t } = useTranslation()
@@ -25,6 +29,9 @@ export default function DocumentsPage() {
   const layout = searchParams.get('layout') ?? undefined
   const subject = searchParams.get('subject') ?? undefined
   const [verdicts, setVerdicts] = useState<Record<string, DocumentVerification>>({})
+  const [sending, setSending] = useState<DocumentSummary | undefined>()
+  const queryClient = useQueryClient()
+  const { can } = useAuth()
 
   const verify = async (runId: string) => {
     try {
@@ -108,6 +115,11 @@ export default function DocumentsPage() {
         <a key="verify" onClick={() => void verify(run.runId!)} data-testid={`document-verify-${run.runId}`}>
           {t('documents.verify')}
         </a>,
+        ...(can('document.send')
+          ? [<a key="send" onClick={() => setSending(run)} data-testid={`document-send-${run.runId}`}>
+              {t('documents.send')}
+            </a>]
+          : []),
       ],
     },
   ]
@@ -121,6 +133,7 @@ export default function DocumentsPage() {
         params={{ layout, subject }}
         pagination={false}
         data-testid="documents"
+        expandable={{ expandedRowRender: (run) => <DocumentDeliveries runId={run.runId!} /> }}
         request={async () => {
           try {
             const runs = await unwrap(
@@ -132,6 +145,13 @@ export default function DocumentsPage() {
             return { data: [], success: false }
           }
         }}
+      />
+      <SendDocumentModal
+        key={sending?.runId ?? 'none'}
+        runId={sending?.runId}
+        recipients={sending?.recipients ?? []}
+        onClose={() => setSending(undefined)}
+        onSent={() => void queryClient.invalidateQueries({ queryKey: ['document', sending?.runId] })}
       />
     </PageContainer>
   )

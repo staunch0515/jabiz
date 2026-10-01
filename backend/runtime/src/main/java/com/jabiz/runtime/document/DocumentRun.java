@@ -18,12 +18,14 @@ import java.util.UUID;
  * @param asOf             the effective time asked for; null when none was
  * @param readAt           the effective time the templates were read at
  * @param knownAt          the recorded time they were read as of
+ * @param recipients       the addresses it is sent to by default, read from the layout's recipients column at issue
  * @param content          what it shows; null when only the summary was read
  * @param pdf              the PDF as issued; null when only the summary was read
  */
 public record DocumentRun(UUID runId, String layoutId, String layoutVersion, String layoutSource,
     Map<String, String> templateVersions, List<String> permissions, Map<String, Map<String, String>> scope,
     String subjectEntity, String subjectId, String documentNo, String title, String language, String pageSize,
-    Map<String, Object> params, Instant asOf, Instant readAt, Instant knownAt, DocumentContent content,
+    Map<String, Object> params, Instant asOf, Instant readAt, Instant knownAt, List<String> recipients,
+    DocumentContent content,
     String contentHash, boolean recomputable, byte[] pdf, String pdfHash, int pdfSize, int pageCount, String issuedBy,
     Instant issuedTime, long processSeqId) {}

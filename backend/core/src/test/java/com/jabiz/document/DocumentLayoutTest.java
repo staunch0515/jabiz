@@ -17,6 +17,7 @@ class DocumentLayoutTest {
         .permissions("fin.ar.read")
         .subject("FinInvoice", "invoiceId")
         .number("fin.invoice_header", "invoiceNo")
+        .recipients("fin.invoice_contact", "email")
         .party("seller", "fin.invoice_company", "name", "address")
         .party("billTo", "fin.invoice_header", "customerName", "billingAddress")
         .facts("fin.invoice_header", "invoiceNo", "invoiceDate", "dueDate")
@@ -28,7 +29,10 @@ class DocumentLayoutTest {
     @Test
     void aLayoutKnowsItsTemplatesColumnsAndTexts() {
         assertThat(INVOICE.templates()).containsExactly("fin.invoice_company", "fin.invoice_header",
-            "fin.invoice_lines");
+            "fin.invoice_lines", "fin.invoice_contact");
+        assertThat(INVOICE.singleRow("fin.invoice_contact")).isTrue();
+        assertThat(INVOICE.columnsOf("fin.invoice_contact")).containsExactly("email");
+        assertThat(INVOICE.describe()).containsEntry("recipients", List.of("fin.invoice_contact", "email"));
         assertThat(INVOICE.singleRow("fin.invoice_header")).isTrue();
         assertThat(INVOICE.singleRow("fin.invoice_company")).isTrue();
         assertThat(INVOICE.singleRow("fin.invoice_lines")).isFalse();
@@ -72,7 +76,7 @@ class DocumentLayoutTest {
     void malformedLayoutsAreRefused() {
         assertThatThrownBy(() -> DocumentLayout.define("Invoice", d -> d.permissions("p")))
             .hasMessageContaining("dotted lowercase");
-        assertThatThrownBy(() -> new DocumentLayout("a.b", List.of("p"), "E", null, null, List.of()))
+        assertThatThrownBy(() -> new DocumentLayout("a.b", List.of("p"), "E", null, null, null, List.of()))
             .hasMessageContaining("subject");
         assertThatThrownBy(() -> DocumentLayout.define("a.b", d -> d.note("x").note("x")))
             .hasMessageContaining("used twice");
