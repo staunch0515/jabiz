@@ -45,17 +45,20 @@ public final class SubledgerPosting {
     public static final String REVERSE = "FIN_SUBLEDGER_REVERSE";
 
     public static final String REFUSED = "FIN_SUBLEDGER_POSTING_REFUSED";
+    public static final String CONTROL_ACCOUNT = "FIN_SUBLEDGER_CONTROL_ACCOUNT";
 
     /**
      * @param source       {@code AR}, {@code AP}, {@code BANK} or {@code FA}: the subledger, its period state and its
      *                     series of general ledger numbers
      * @param documentNo   the document's number, the ledger transaction's reference ("INV-1004")
      * @param sourceEntity the document's entity ("FinInvoice"), with {@code sourceId} its identity
+     * @param controlClasses the control accounts the document may post to: its subledger's own ({@code AR}), never
+     *                     another's
      */
     public record PostInput(@NotBlank String source, @NotNull LocalDate postingDate,
         @NotBlank @Size(max = 500) String description, @NotBlank @Size(max = 40) String documentNo,
         @NotBlank String sourceEntity, @NotBlank String sourceId,
-        @NotEmpty List<JournalProcesses.@Valid @NotNull LineInput> lines) {}
+        @NotEmpty List<JournalProcesses.@Valid @NotNull LineInput> lines, @NotNull List<String> controlClasses) {}
 
     public record PostOutput(String glNo, String transactionId, String periodKey) {}
 
@@ -112,8 +115,21 @@ public final class SubledgerPosting {
                 .outputMapper(ctx -> ctx.get(OUTPUT, PostOutput.class))
                 .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ctx -> JournalProcesses.periodsOf(reverseInput(ctx).reverseDate()), JournalProcesses.PERIODS))
+                .step("Load the posting", QueryEntities.of(JournalEntities.POSTING_DATASET,
+                    ctx -> com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.Eq(
+                        "documentNo", reverseInput(ctx).documentNo())).limit(50).build(), POSTINGS))
                 .compute("Check the period", (metadata, ctx) -> {
                     ReverseInput input = reverseInput(ctx);
+                    // Only the document's own entry: what it reverses is what it posted.
+                    boolean own = AccountProcesses.list(ctx, POSTINGS).stream().anyMatch(p ->
+                        input.transactionId().equals(String.valueOf((Object) p.get("transactionId")))
+                            && input.sourceEntity().equals(p.get("sourceEntity"))
+                            && input.sourceId().equals(p.get("sourceId")));
+                    if (!own) {
+                        ctx.reject(new Violation("transactionId", REFUSED, "The transaction is not the document's",
+                            Map.of("reason", "the transaction is not the document's")));
+                        return;
+                    }
                     PeriodPolicy.Source source = source(ctx, input.source());
                     EntityInstance period = source == null ? null : open(ctx, source, input.reverseDate());
                     if (period == null) {
@@ -141,6 +157,7 @@ public final class SubledgerPosting {
     }
 
     static final String REVERSE_INPUT = "reverseInput";
+    static final String POSTINGS = "postings";
 
     /** The subledger named, or null with the refusal recorded. */
     private static PeriodPolicy.Source source(ProcessContext ctx, String name) {
@@ -182,9 +199,20 @@ public final class SubledgerPosting {
             return;
         }
         List<JournalValidator.Line> lines = input.lines().stream().map(JournalProcesses::line).toList();
-        for (Violation problem : JournalValidator.checkForPosting(lines, JournalProcesses.accounts(ctx),
-            JournalProcesses.dimensions(ctx), true)) {
+        Map<String, JournalValidator.Account> accounts = JournalProcesses.accounts(ctx);
+        for (Violation problem : JournalValidator.checkForPosting(lines, accounts, JournalProcesses.dimensions(ctx),
+            true)) {
             ctx.reject(problem);
+        }
+        for (int i = 0; i < lines.size(); i++) {
+            JournalValidator.Account account = accounts.get(lines.get(i).accountCode());
+            if (account != null && account.controlClass() != null
+                && !input.controlClasses().contains(account.controlClass())) {
+                ctx.reject(new Violation("lines[" + i + "].accountCode", CONTROL_ACCOUNT, "Account "
+                    + account.code() + " is a " + account.controlClass() + " control account: a " + input.source()
+                    + " document does not post to it", Map.of("accountCode", account.code(),
+                    "controlClass", account.controlClass())));
+            }
         }
         EntityInstance period = open(ctx, source, input.postingDate());
         if (ctx.hasViolations() || period == null) {
@@ -236,6 +264,30 @@ public final class SubledgerPosting {
         posting.put("sourceId", sourceId);
         ctx.changes().insert(JournalEntities.POSTING, posting);
         ctx.put(OUTPUT, new PostOutput(glNo, transactionId, ready.period().get("periodKey")));
+    }
+
+    /** The periods holding {@code date}, for {@link #periodRefusal}. */
+    public static com.jabiz.query.EntityQuery periodsOn(LocalDate date) {
+        return JournalProcesses.periodsOf(date);
+    }
+
+    /**
+     * Why a subledger document may not be dated {@code date}, given the periods holding it: no period, or the general
+     * ledger or the subledger closed for it. Empty when it may (FIN-PC-003).
+     */
+    public static java.util.Optional<Violation> periodRefusal(List<EntityInstance> periods, String source,
+        LocalDate date, String field) {
+        EntityInstance period = periods.stream()
+            .filter(p -> !Boolean.TRUE.equals(p.get("opening")) && !Boolean.TRUE.equals(p.get("adjustment")))
+            .findFirst().orElse(null);
+        if (period == null) {
+            return java.util.Optional.of(new Violation(field, JournalProcesses.NO_PERIOD, "No fiscal period holds "
+                + date, Map.of("date", date.toString())));
+        }
+        PeriodPolicy.Source subledger = PeriodPolicy.Source.valueOf(source);
+        return PeriodPolicy.check(JournalProcesses.state(period, subledger), subledger, false, false)
+            .map(r -> new Violation(field, r.code(), r.message(),
+                Map.of("periodKey", (Object) period.get("periodKey"))));
     }
 
     /** The general ledger series of a subledger (design section 4.5). */

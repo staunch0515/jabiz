@@ -37,6 +37,7 @@ SELECT finance_create_temporal_table('fi_invoice_version', 'invoice_id', '
     original_invoice_id uuid          REFERENCES entity_registry (entity_id),
     source              varchar(10)   NOT NULL,
     status              varchar(10)   NOT NULL,
+    prepared_by         varchar(100),
     subtotal            numeric(15,2),
     tax_total           numeric(15,2),
     total               numeric(15,2),

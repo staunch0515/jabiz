@@ -75,6 +75,8 @@ public final class InvoiceEntities {
             .asCode(SOURCES, values(SOURCE_VALUES)));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUSES, values(STATUS_VALUES)));
+        // Who created the draft: a credit memo or void is never posted by its preparer (FIN-CT-001).
+        eb.field("preparedBy", f -> f.physicalColumn("prepared_by").processOnly().asText(100));
         eb.field("subtotal", f -> f.physicalColumn("subtotal").processOnly().asNumeric(15, 2));
         eb.field("taxTotal", f -> f.physicalColumn("tax_total").processOnly().asNumeric(15, 2));
         eb.field("total", f -> f.physicalColumn("total").processOnly().asNumeric(15, 2));

@@ -49,6 +49,11 @@ public final class FinancePermissions {
     public static final String SUBLEDGER_POST = "fin.subledger.post";
     /** Prepare, post and void invoices and credit memos, and apply credits (FIN-AR-003, 004, 006). */
     public static final String INVOICE_PREPARE = "fin.invoice.prepare";
+    /**
+     * Post credit memos and void invoices (FIN-AR-004, 006): what writes receivables down is apart from preparing
+     * documents, and never the preparer's own (FIN-CT-001).
+     */
+    public static final String INVOICE_CREDIT = "fin.invoice.credit";
     /** Maintain recurring entry templates (FIN-GL-017). */
     public static final String RECURRING_MAINTAIN = "fin.recurring.maintain";
     /** Upload and read the files of the finance imports (FIN-DI-001); each import needs its own permission too. */

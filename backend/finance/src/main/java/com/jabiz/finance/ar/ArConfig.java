@@ -146,8 +146,9 @@ class ArConfig {
 
     @Bean
     ProcessDefinition<InvoiceProcesses.OpeningInput, InvoiceProcesses.OpeningOutput, ProcessContext>
-        finArOpeningProcess() {
-        return InvoiceProcesses.OPENING_PROCESS;
+        finArOpeningProcess(@Value("${finance.ar.invoice-numbers-start:1001}") long invoiceStart,
+        @Value("${finance.ar.credit-memo-numbers-start:2001}") long creditMemoStart) {
+        return InvoiceProcesses.openingProcess(invoiceStart, creditMemoStart);
     }
 
     @Bean

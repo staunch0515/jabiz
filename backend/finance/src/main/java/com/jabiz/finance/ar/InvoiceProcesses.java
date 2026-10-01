@@ -60,7 +60,10 @@ import java.util.UUID;
  *       together they must equal the receivables account in the opening entry (FIN-DI-002).</li>
  * </ul>
  * Tax codes that charge no tax are the customer's: a clerk cannot pick one for an invoice other than the customer's,
- * nor for a line other than a non-taxable service ({@code fin.customer.tax} can).
+ * nor for a line other than a non-taxable service ({@code fin.customer.tax} can). Lines post to revenue accounts only,
+ * the receivable to the {@code AR} control account. What writes receivables down, posting a credit memo and voiding,
+ * needs {@code fin.invoice.credit} and is never the preparer's own; a credit memo against an invoice credits at most
+ * what is left of it, with its tax codes and per jurisdiction no more tax than it bore (FIN-CT-001, FIN-TX-005).
  */
 public final class InvoiceProcesses {
 
@@ -90,6 +93,13 @@ public final class InvoiceProcesses {
     public static final String OPENING_TOTAL = "FIN_AR_OPENING_TOTAL";
     public static final String OPENING_NONE = "FIN_AR_OPENING_NO_ENTRY";
     public static final String CREDIT_LIMIT = "FIN_AR_CREDIT_LIMIT";
+    public static final String ACCOUNT = "FIN_INVOICE_ACCOUNT";
+    public static final String ZERO = "FIN_INVOICE_ZERO";
+    public static final String CREDIT_RESTRICTED = "FIN_INVOICE_CREDIT_RESTRICTED";
+    public static final String OWN_DOCUMENT = "FIN_INVOICE_OWN_DOCUMENT";
+    public static final String EXCEEDS = "FIN_CREDIT_MEMO_EXCEEDS";
+    public static final String OPENING_DONE = "FIN_AR_OPENING_DONE";
+    public static final String OPENING_NUMBER = "FIN_AR_OPENING_NUMBER";
 
     public record LineInput(@NotBlank @Size(max = 500) String description,
         @NotNull @DecimalMin("0.0001") @Digits(integer = 11, fraction = 4) BigDecimal quantity,
@@ -159,6 +169,10 @@ public final class InvoiceProcesses {
     static final String APPLICATIONS = "applications";
     static final String DECISIONS = "decisions";
     static final String JOURNALS = "journals";
+    static final String CREDITS = "credits";
+    static final String USED_CODES = "usedCodes";
+    static final String PERIODS = "periods";
+    static final String ORIGINAL_TAXES = "originalTaxes";
 
     // ---- save and delete -------------------------------------------------------------------------------------------
 
@@ -179,7 +193,23 @@ public final class InvoiceProcesses {
             .step("Load the currencies", QueryEntities.of(GlEntities.CURRENCY_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(200).build(),
                 CURRENCIES))
-            .step("Load the tax codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> allCodes(), CODES))
+            .step("Load the tax codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> {
+                Set<String> used = new LinkedHashSet<>();
+                InvoiceInput input = saveInput(ctx);
+                if (input.taxCode() != null) {
+                    used.add(input.taxCode());
+                }
+                list(ctx, CUSTOMERS).forEach(c -> used.add(c.get("taxCode")));
+                list(ctx, FOUND).forEach(i -> used.add(i.get("taxCode")));
+                input.lines().forEach(l -> {
+                    if (l.taxCode() != null) {
+                        used.add(l.taxCode());
+                    }
+                });
+                return TaxProcesses.codes(used);
+            }, CODES))
+            .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> accountsOf(
+                saveInput(ctx).lines().stream().map(LineInput::revenueAccount).toList()), ACCOUNTS))
             .compute("Save the draft", (metadata, ctx) -> save(ctx)));
 
     public static final ProcessDefinition<InvoiceId, InvoiceOutput, ProcessContext> DELETE_PROCESS =
@@ -255,8 +285,9 @@ public final class InvoiceProcesses {
         }
         int scale = currencyRow.<BigDecimal>get("minorUnits").intValueExact();
         boolean creditMemo = InvoiceEntities.CREDIT_MEMO.equals(kind);
+        EntityInstance original = null;
         if (input.originalInvoiceId() != null) {
-            EntityInstance original = find(ctx, FOUND, input.originalInvoiceId());
+            original = find(ctx, FOUND, input.originalInvoiceId());
             if (!creditMemo || original == null || !InvoiceEntities.INVOICE_KIND.equals(original.get("kind"))
                 || !InvoiceEntities.POSTED.equals(original.get("status"))
                 || !customerCode.equals(original.get("customerCode")) || !currency.equals(original.get("currency"))) {
@@ -265,13 +296,20 @@ public final class InvoiceProcesses {
                 return;
             }
         }
-        String headerCode = upper(input.taxCode(), customer.get("taxCode"));
+        // A credit memo of an invoice is taxed as the invoice was.
+        String headerCode = upper(input.taxCode(),
+            original != null ? original.get("taxCode") : customer.get("taxCode"));
         Map<String, EntityInstance> codes = new LinkedHashMap<>();
         for (EntityInstance code : list(ctx, CODES)) {
-            codes.put(code.get("taxCode"), code);
+            if (Boolean.TRUE.equals(code.get("active"))) {
+                codes.put(code.get("taxCode"), code);
+            }
         }
         boolean taxPermitted = ctx.request().hasPermission(FinancePermissions.CUSTOMER_TAX);
-        if (!headerCode.equals(customer.get("taxCode")) && !taxPermitted && !taxable(codes.get(headerCode))) {
+        boolean ownCode = headerCode.equals(customer.get("taxCode"))
+            || original != null && headerCode.equals(original.get("taxCode"));
+        // A credit memo of no invoice takes back tax only at the customer's code (FIN-TX-005).
+        if (!ownCode && !taxPermitted && (creditMemo || !taxable(codes.get(headerCode)))) {
             ctx.reject(new Violation("taxCode", TAX_RESTRICTED, "Tax code " + headerCode + " charges no tax; the "
                 + "customer's is " + customer.get("taxCode"), Map.of("taxCode", headerCode)));
         }
@@ -289,6 +327,10 @@ public final class InvoiceProcesses {
                 ctx.reject(new Violation("lines[" + i + "].revenueAccount", NO_ACCOUNT, "Line " + (i + 1)
                     + " needs a revenue account", Map.of("line", i + 1)));
                 continue;
+            }
+            if (!revenueAccount(ctx, account)) {
+                ctx.reject(new Violation("lines[" + i + "].revenueAccount", ACCOUNT, "Account " + account
+                    + " is not a revenue account that takes postings", Map.of("accountCode", account)));
             }
             String lineCode = line.taxCode() == null || line.taxCode().isBlank() ? null
                 : line.taxCode().trim().toUpperCase(Locale.ROOT);
@@ -334,6 +376,7 @@ public final class InvoiceProcesses {
             header.put("originalInvoiceId", input.originalInvoiceId());
             header.put("source", InvoiceEntities.MANUAL);
             header.put("status", InvoiceEntities.DRAFT);
+            header.put("preparedBy", ctx.request().actorId());
             id = ctx.changes().insert(InvoiceEntities.INVOICE, header);
         } else {
             id = current.id();
@@ -384,15 +427,53 @@ public final class InvoiceProcesses {
             }, FX))
             .step("Load the original invoice", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
                 ctx -> byIds(uuid(invoice(ctx).get("originalInvoiceId"))), ORIGINALS))
-            .step("Load the tax codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> allCodes(), CODES))
-            .step("Load the tax rates", QueryEntities.of(TaxEntities.RATE_DATASET,
-                ctx -> TaxProcesses.rates(jurisdictions(ctx)), RATES))
+            .step("Load the tax codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> {
+                Set<String> used = new LinkedHashSet<>();
+                used.add(invoice(ctx).get("taxCode"));
+                list(ctx, LINES).forEach(l -> {
+                    if (l.get("taxCode") != null) {
+                        used.add(l.get("taxCode"));
+                    }
+                });
+                return TaxProcesses.codes(used);
+            }, USED_CODES))
+            .step("Load their charge codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> {
+                Set<String> charged = new LinkedHashSet<>();
+                list(ctx, USED_CODES).forEach(c -> {
+                    if (c.get("chargeCode") != null) {
+                        charged.add(c.get("chargeCode"));
+                    }
+                });
+                return TaxProcesses.codes(charged);
+            }, CODES))
+            .step("Load the tax rates in effect", QueryEntities.of(TaxEntities.RATE_DATASET, ctx -> {
+                LocalDate date = taxDate(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.In("jurisdictionCode", new ArrayList<>(jurisdictions(ctx))),
+                    new QueryPredicate.Lte("effectiveFrom", date),
+                    new QueryPredicate.Or(List.of(new QueryPredicate.IsNull("effectiveTo"),
+                        new QueryPredicate.Gte("effectiveTo", date)))))).limit(500).build();
+            }, RATES))
             .step("Load the certificates", QueryEntities.of(ArEntities.CERTIFICATE_DATASET,
                 ctx -> CustomerProcesses.certificatesOf(invoice(ctx).get("customerCode")), CERTIFICATES))
+            .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> accountsOf(
+                list(ctx, LINES).stream().map(l -> (String) l.get("revenueAccount")).toList()), ACCOUNTS))
+            .step("Load the original's other credit memos", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
+                ctx -> creditsOf(uuid(invoice(ctx).get("originalInvoiceId"))), CREDITS))
+            .step("Load the original's and their tax", QueryEntities.of(InvoiceEntities.TAX_DATASET, ctx -> {
+                List<Object> ids = new ArrayList<>();
+                if (invoice(ctx).get("originalInvoiceId") != null) {
+                    ids.add(invoice(ctx).get("originalInvoiceId"));
+                }
+                list(ctx, CREDITS).stream().filter(c -> InvoiceEntities.POSTED.equals(c.get("status")))
+                    .forEach(c -> ids.add(c.id()));
+                return EntityQuery.builder().where(new QueryPredicate.In("invoiceId", ids)).limit(500).build();
+            }, ORIGINAL_TAXES))
             .step("Load the customer's open documents", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                     new QueryPredicate.Eq("customerCode", invoice(ctx).get("customerCode")),
-                    new QueryPredicate.Eq("status", InvoiceEntities.POSTED)))).limit(500).build(), OPEN_ITEMS))
+                    new QueryPredicate.Eq("status", InvoiceEntities.POSTED),
+                    new QueryPredicate.Ne("openAmountUsd", BigDecimal.ZERO)))).limit(500).build(), OPEN_ITEMS))
             .compute("Compute the document", (metadata, ctx) -> prepare(ctx))
             .step("Number the invoice", AssignNumber.when(ctx -> ctx.contains(PREPARED)
                 && !prepared(ctx).creditMemo(), INVOICE_NUMBERS, null, NUMBER))
@@ -409,9 +490,10 @@ public final class InvoiceProcesses {
                     .map(l -> new JournalProcesses.LineInput(l.accountCode(), l.debit(), l.credit(), l.memo(),
                         l.department(), l.location())).toList();
                 String description = invoice.get("description") != null ? invoice.get("description")
-                    : (prepared.creditMemo() ? "Credit memo " : "Invoice ") + number + " " + invoice.get("customerCode");
+                    : (prepared.creditMemo() ? "Credit memo " : "Invoice ") + number + " "
+                        + invoice.get("customerCode");
                 ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", invoice.get("invoiceDate"), description,
-                    number, InvoiceEntities.SOURCE_ENTITY, String.valueOf(invoice.id()), lines));
+                    number, InvoiceEntities.SOURCE_ENTITY, String.valueOf(invoice.id()), lines, List.of("AR")));
             })
             .step("Book it", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
                 ctx -> ctx.get(SUB_INPUT), SUB_OUTPUT))
@@ -424,10 +506,29 @@ public final class InvoiceProcesses {
             return;
         }
         boolean creditMemo = InvoiceEntities.CREDIT_MEMO.equals(invoice.get("kind"));
+        if (creditMemo) {
+            if (!ctx.request().hasPermission(FinancePermissions.INVOICE_CREDIT)) {
+                ctx.reject(new Violation("invoiceId", CREDIT_RESTRICTED, "Posting a credit memo needs permission "
+                    + FinancePermissions.INVOICE_CREDIT, Map.of()));
+                return;
+            }
+            if (Objects.equals(ctx.request().actorId(), invoice.get("preparedBy"))) {
+                ctx.reject(new Violation("invoiceId", OWN_DOCUMENT, "The preparer of a credit memo does not post it",
+                    Map.of("invoiceNo", "the credit memo")));
+                return;
+            }
+        }
         List<EntityInstance> lines = new ArrayList<>(list(ctx, LINES));
         lines.sort(java.util.Comparator.comparing(l -> l.<BigDecimal>get("lineNo")));
         if (lines.isEmpty()) {
             ctx.reject(new Violation("lines", NO_LINES, "A document has at least one line", Map.of()));
+        }
+        for (EntityInstance line : lines) {
+            if (!revenueAccount(ctx, line.get("revenueAccount"))) {
+                ctx.reject(new Violation("lines", ACCOUNT, "Account " + line.get("revenueAccount") + " is not a "
+                    + "revenue account that takes postings",
+                    Map.of("accountCode", (Object) line.get("revenueAccount"))));
+            }
         }
         EntityInstance customer = list(ctx, CUSTOMERS).isEmpty() ? null : list(ctx, CUSTOMERS).getFirst();
         if (customer == null || !"ACTIVE".equals(customer.get("status"))) {
@@ -461,11 +562,19 @@ public final class InvoiceProcesses {
                 taxDate = original.get("invoiceDate");
             }
         }
+        // The customer's code may have changed since the draft: a code that charges no tax stays the controller's.
+        if (customer != null && !ctx.request().hasPermission(FinancePermissions.CUSTOMER_TAX)
+            && !Objects.equals(invoice.get("taxCode"), customer.get("taxCode"))
+            && (creditMemo && invoice.get("originalInvoiceId") == null || codesInUse(ctx).stream().anyMatch(c ->
+                Objects.equals(c.get("taxCode"), invoice.get("taxCode")) && !taxable(c)))) {
+            ctx.reject(new Violation("taxCode", TAX_RESTRICTED, "Tax code " + invoice.get("taxCode")
+                + " is not the customer's", Map.of("taxCode", (Object) invoice.get("taxCode"))));
+        }
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, SalesTax.Code> codes = new LinkedHashMap<>();
-        for (EntityInstance code : list(ctx, CODES)) {
+        for (EntityInstance code : codesInUse(ctx)) {
             String jurisdictions = code.get("jurisdictions");
             codes.put(code.get("taxCode"), new SalesTax.Code(code.get("taxCode"),
                 SalesTax.Kind.valueOf(code.get("kind")), code.get("reason"), code.get("state"),
@@ -491,6 +600,12 @@ public final class InvoiceProcesses {
         }
         BigDecimal subtotal = lines.stream().map(l -> l.<BigDecimal>get("amount")).reduce(BigDecimal.ZERO,
             BigDecimal::add);
+        if (invoice.get("originalInvoiceId") != null) {
+            checkCredit(ctx, invoice, subtotal, taxes);
+            if (ctx.hasViolations()) {
+                return;
+            }
+        }
         BigDecimal total = subtotal.add(taxes.total());
         List<InvoicePosting.Line> postingLines = lines.stream().map(l -> new InvoicePosting.Line(l.get("amount"),
             l.get("revenueAccount"), l.get("department"), l.get("location"))).toList();
@@ -499,6 +614,10 @@ public final class InvoiceProcesses {
         InvoicePosting.Result posting = InvoicePosting.lines(creditMemo, postingLines, taxes.total(), rate,
             settings.get("receivableAccount"), settings.get("salesTaxAccount"), null,
             jurisdictions.isEmpty() ? null : "Sales tax " + String.join(", ", jurisdictions), null);
+        if (posting.lines().isEmpty()) {
+            ctx.reject(new Violation("lines", ZERO, "The document comes to nothing", Map.of()));
+            return;
+        }
         LocalDate invoiceDate = invoice.get("invoiceDate");
         PaymentTerms paymentTerms = new PaymentTerms(terms.<BigDecimal>get("netDays").intValueExact(),
             terms.get("discountPercent"), terms.get("discountDays") == null ? null
@@ -520,6 +639,59 @@ public final class InvoiceProcesses {
         }
         ctx.put(PREPARED, new Prepared(creditMemo, dueDate, rate, subtotal, taxes.total(), total, posting, taxes,
             List.copyOf(lines), List.copyOf(warnings)));
+    }
+
+    /**
+     * A credit memo of an invoice credits at most what is left of it: its amount before tax and, per jurisdiction,
+     * its tax, less what earlier credit memos took back, and only under the tax codes the invoice bore (FIN-TX-005).
+     */
+    static void checkCredit(ProcessContext ctx, EntityInstance credit, BigDecimal subtotal, SalesTax.Result taxes) {
+        EntityInstance original = list(ctx, ORIGINALS).getFirst();
+        Object originalId = original.id();
+        Set<Object> earlier = new LinkedHashSet<>();
+        BigDecimal leftAmount = original.get("subtotal");
+        for (EntityInstance other : list(ctx, CREDITS)) {
+            if (InvoiceEntities.POSTED.equals(other.get("status")) && !Objects.equals(other.id(), credit.id())) {
+                earlier.add(other.id());
+                leftAmount = leftAmount.subtract(other.get("subtotal"));
+            }
+        }
+        if (subtotal.compareTo(leftAmount) > 0) {
+            ctx.reject(new Violation("lines", EXCEEDS, "The credit memo credits " + subtotal.toPlainString()
+                + "; " + leftAmount.toPlainString() + " is left of the invoice", Map.of("what", "amount "
+                + subtotal.toPlainString() + " of " + leftAmount.toPlainString() + " left")));
+        }
+        Map<String, BigDecimal> leftTax = new LinkedHashMap<>();
+        Set<String> invoiceCodes = new LinkedHashSet<>();
+        for (EntityInstance row : list(ctx, ORIGINAL_TAXES)) {
+            boolean ofOriginal = Objects.equals(uuid(row.get("invoiceId")), uuid(originalId));
+            if (row.get("jurisdiction") != null) {
+                BigDecimal tax = row.get("tax");
+                if (ofOriginal) {
+                    leftTax.merge(row.get("jurisdiction"), tax, BigDecimal::add);
+                } else if (earlier.contains(row.get("invoiceId")) || earlier.stream()
+                    .anyMatch(id -> Objects.equals(uuid(id), uuid(row.get("invoiceId"))))) {
+                    leftTax.merge(row.get("jurisdiction"), tax.negate(), BigDecimal::add);
+                }
+            } else if (ofOriginal) {
+                invoiceCodes.add(row.get("taxCode"));
+            }
+        }
+        for (SalesTax.LineResult line : taxes.lines()) {
+            if (!invoiceCodes.contains(line.taxCode())) {
+                ctx.reject(new Violation("lines[" + line.line() + "].taxCode", EXCEEDS, "Tax code " + line.taxCode()
+                    + " was not on the invoice", Map.of("what", "tax code " + line.taxCode())));
+            }
+        }
+        for (SalesTax.JurisdictionTax tax : taxes.taxes()) {
+            BigDecimal left = leftTax.getOrDefault(tax.jurisdiction(), BigDecimal.ZERO);
+            if (tax.tax().compareTo(left) > 0) {
+                ctx.reject(new Violation("lines", EXCEEDS, "The credit memo takes back " + tax.tax().toPlainString()
+                    + " of " + tax.jurisdiction() + " tax; " + left.toPlainString() + " is left",
+                    Map.of("what", tax.jurisdiction() + " tax " + tax.tax().toPlainString() + " of "
+                        + left.toPlainString() + " left")));
+            }
+        }
     }
 
     static void recordPosting(ProcessContext ctx) {
@@ -576,7 +748,7 @@ public final class InvoiceProcesses {
     public static final ProcessDefinition<VoidInput, InvoiceOutput, ProcessContext> VOID_PROCESS =
         ProcessDefinition.define(VOID, 1, VoidInput.class, InvoiceOutput.class, ProcessContext.class, pb -> pb
             .description("Voids a posted invoice or credit memo nothing was applied to, reversing its entry.")
-            .permissions(FinancePermissions.INVOICE_PREPARE)
+            .permissions(FinancePermissions.INVOICE_CREDIT)
             .actsOn(InvoiceEntities.INVOICE, "invoiceId", a -> a.whenField("status", InvoiceEntities.POSTED))
             .contextFactory((start, input) -> {
                 ProcessContext ctx = withInput(start, input);
@@ -594,6 +766,11 @@ public final class InvoiceProcesses {
                     || !InvoiceEntities.MANUAL.equals(invoice.get("source"))) {
                     ctx.reject(new Violation("invoiceId", NOT_POSTED, "Only a posted document entered here is voided",
                         Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")))));
+                    return;
+                }
+                if (Objects.equals(ctx.request().actorId(), invoice.get("preparedBy"))) {
+                    ctx.reject(new Violation("invoiceId", OWN_DOCUMENT, "The preparer of " + invoice.get("invoiceNo")
+                        + " does not void it", Map.of("invoiceNo", (Object) invoice.get("invoiceNo"))));
                     return;
                 }
                 if (!list(ctx, APPLICATIONS).isEmpty()) {
@@ -643,6 +820,8 @@ public final class InvoiceProcesses {
                 ApplyInput input = ctx.get(INPUT, ApplyInput.class);
                 return byIds(input.creditMemoId(), input.invoiceId());
             }, FOUND))
+            .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
+                ctx -> SubledgerPosting.periodsOn(ctx.get(INPUT, ApplyInput.class).applicationDate()), PERIODS))
             .compute("Apply the credit", (metadata, ctx) -> apply(ctx)));
 
     static void apply(ProcessContext ctx) {
@@ -667,10 +846,20 @@ public final class InvoiceProcesses {
             reason = "a credit is applied on or after the dates of both documents";
         } else if (!Money.fits(input.amount(), Money.USD_SCALE)) {
             reason = "the amount has more decimals than the currency";
+        } else if (((BigDecimal) credit.get("exchangeRate")).compareTo(invoice.get("exchangeRate")) != 0) {
+            // The difference is a realized gain or loss, booked from F7 (FIN-FX-003); until then the subledger and
+            // the receivables account would part.
+            reason = "the credit memo and the invoice were converted at different rates";
         }
         if (reason != null) {
             ctx.reject(new Violation("amount", APPLY_REFUSED, "The credit cannot be applied: " + reason,
                 Map.of("reason", reason)));
+            return;
+        }
+        var closed = SubledgerPosting.periodRefusal(list(ctx, PERIODS), "AR", input.applicationDate(),
+            "applicationDate");
+        if (closed.isPresent()) {
+            ctx.reject(closed.get());
             return;
         }
         BigDecimal invoiceOpen = invoice.<BigDecimal>get("openAmount").subtract(input.amount());
@@ -698,38 +887,73 @@ public final class InvoiceProcesses {
 
     // ---- opening open items ----------------------------------------------------------------------------------------
 
-    public static final ProcessDefinition<OpeningInput, OpeningOutput, ProcessContext> OPENING_PROCESS =
-        ProcessDefinition.define(OPENING, 1, OpeningInput.class, OpeningOutput.class, ProcessContext.class, pb -> pb
-            .description("Brings over the legacy system's open invoices; they add up to the opening receivables.")
-            .permissions(FinancePermissions.MIGRATION)
-            .contextFactory(InvoiceProcesses::withInput)
-            .outputMapper(ctx -> ctx.get(OUTPUT, OpeningOutput.class))
-            .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
-                ctx -> ArSettingsProcesses.current(), SETTINGS))
-            .step("Load the merge decisions", QueryEntities.of(com.jabiz.finance.migration.MigrationEntities
-                .DECISION_DATASET, ctx -> CustomerProcesses.customerDecisions(openingCodes(ctx)), DECISIONS))
-            .step("Load the customers", QueryEntities.of(ArEntities.CUSTOMER_DATASET,
-                ctx -> CustomerProcesses.byCodes(customerCodes(ctx)), CUSTOMERS))
-            .step("Load the opening entry", QueryEntities.of(com.jabiz.finance.gl.JournalEntities.JOURNAL_DATASET,
-                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("source",
-                    com.jabiz.finance.gl.JournalEntities.OPENING)).limit(1).build(), JOURNALS))
-            .step("Load its receivables lines", QueryEntities.of(com.jabiz.finance.gl.JournalEntities.LINE_DATASET,
-                ctx -> {
-                    List<EntityInstance> journals = list(ctx, JOURNALS);
-                    List<EntityInstance> settings = list(ctx, SETTINGS);
-                    if (journals.isEmpty() || settings.isEmpty()) {
-                        return EntityQuery.builder().where(new QueryPredicate.In("journalId", List.of())).limit(1)
-                            .build();
-                    }
-                    return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.Eq("journalId", journals.getFirst().id()),
-                        new QueryPredicate.Eq("accountCode", settings.getFirst().get("receivableAccount")))))
-                        .limit(500).build();
-                }, LINES))
-            .compute("Bring the items over", (metadata, ctx) -> opening(ctx)));
+    /**
+     * @param invoiceStart    the first number the invoice sequence gives out: a legacy {@code INV-} number from it on
+     *                        would collide with a new invoice's
+     * @param creditMemoStart the same for credit memos
+     */
+    public static ProcessDefinition<OpeningInput, OpeningOutput, ProcessContext> openingProcess(long invoiceStart,
+        long creditMemoStart) {
+        return ProcessDefinition.define(OPENING, 1, OpeningInput.class, OpeningOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Brings over the legacy system's open invoices; they add up to the opening receivables.")
+                .permissions(FinancePermissions.MIGRATION)
+                .contextFactory(InvoiceProcesses::withInput)
+                .outputMapper(ctx -> ctx.get(OUTPUT, OpeningOutput.class))
+                .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
+                    ctx -> ArSettingsProcesses.current(), SETTINGS))
+                .step("Load the merge decisions", QueryEntities.of(com.jabiz.finance.migration.MigrationEntities
+                    .DECISION_DATASET, ctx -> CustomerProcesses.customerDecisions(openingCodes(ctx)), DECISIONS))
+                .step("Load the customers", QueryEntities.of(ArEntities.CUSTOMER_DATASET,
+                    ctx -> CustomerProcesses.byCodes(customerCodes(ctx)), CUSTOMERS))
+                .step("Load the opening entry", QueryEntities.of(com.jabiz.finance.gl.JournalEntities.JOURNAL_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("source",
+                        com.jabiz.finance.gl.JournalEntities.OPENING)).limit(1).build(), JOURNALS))
+                .step("Load its receivables lines", QueryEntities.of(com.jabiz.finance.gl.JournalEntities.LINE_DATASET,
+                    ctx -> {
+                        List<EntityInstance> journals = list(ctx, JOURNALS);
+                        List<EntityInstance> settings = list(ctx, SETTINGS);
+                        if (journals.isEmpty() || settings.isEmpty()) {
+                            return EntityQuery.builder().where(new QueryPredicate.In("journalId", List.of())).limit(1)
+                                .build();
+                        }
+                        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("journalId", journals.getFirst().id()),
+                            new QueryPredicate.Eq("accountCode", settings.getFirst().get("receivableAccount")))))
+                            .limit(500).build();
+                    }, LINES))
+                .step("Look for items brought over", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("source", InvoiceEntities.OPENING))
+                        .limit(1).build(), FOUND))
+                .compute("Bring the items over", (metadata, ctx) -> opening(ctx, invoiceStart, creditMemoStart)));
+    }
 
-    static void opening(ProcessContext ctx) {
+    private static final java.util.regex.Pattern NUMBERED = java.util.regex.Pattern.compile("(INV|CM)-(\\d{1,18})");
+
+    static void opening(ProcessContext ctx, long invoiceStart, long creditMemoStart) {
         OpeningInput input = ctx.get(INPUT, OpeningInput.class);
+        // Once: further open items would be receivables without an entry.
+        if (!list(ctx, FOUND).isEmpty()) {
+            ctx.reject(new Violation("items", OPENING_DONE, "The open receivables were brought over already",
+                Map.of()));
+            return;
+        }
+        for (int i = 0; i < input.items().size(); i++) {
+            OpeningItem item = input.items().get(i);
+            java.util.regex.Matcher m = NUMBERED.matcher(item.document().trim());
+            if (m.matches() && Long.parseLong(m.group(2)) >= ("INV".equals(m.group(1)) ? invoiceStart
+                : creditMemoStart)) {
+                ctx.reject(new Violation("items[" + i + "].document", OPENING_NUMBER, "Document " + item.document()
+                    + " would collide with the numbering of new documents", Map.of("document", item.document())));
+            }
+            if (item.dueDate().isBefore(item.invoiceDate())) {
+                ctx.reject(new Violation("items[" + i + "].dueDate", INVALID_VALUE, "An item is due on or after its "
+                    + "date", Map.of("value", item.dueDate().toString())));
+            }
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
         if (list(ctx, SETTINGS).isEmpty()) {
             ctx.reject(new Violation("items", NO_SETTINGS, "The receivables settings are not set", Map.of()));
             return;
@@ -801,9 +1025,25 @@ public final class InvoiceProcesses {
         return code != null && "TAXABLE".equals(code.get("kind"));
     }
 
+    /** The codes the document uses and their charge codes, as loaded. */
+    private static List<EntityInstance> codesInUse(ProcessContext ctx) {
+        List<EntityInstance> codes = new ArrayList<>(list(ctx, USED_CODES));
+        codes.addAll(list(ctx, CODES));
+        return codes;
+    }
+
+    /** The day the tax rates and certificates are read on: the original invoice's for its credit memo. */
+    private static LocalDate taxDate(ProcessContext ctx) {
+        EntityInstance invoice = invoice(ctx);
+        if (invoice.get("originalInvoiceId") != null && !list(ctx, ORIGINALS).isEmpty()) {
+            return list(ctx, ORIGINALS).getFirst().get("invoiceDate");
+        }
+        return invoice.get("invoiceDate");
+    }
+
     private static Set<String> jurisdictions(ProcessContext ctx) {
         Set<String> jurisdictions = new LinkedHashSet<>();
-        for (EntityInstance code : list(ctx, CODES)) {
+        for (EntityInstance code : codesInUse(ctx)) {
             String value = code.get("jurisdictions");
             if (value != null) {
                 jurisdictions.addAll(Arrays.asList(value.split(",")));
@@ -825,8 +1065,24 @@ public final class InvoiceProcesses {
         return List.copyOf(codes);
     }
 
-    static EntityQuery allCodes() {
-        return EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(500).build();
+    /** Whether {@code code} is a revenue account that takes postings: no control account, no other type. */
+    private static boolean revenueAccount(ProcessContext ctx, String code) {
+        return list(ctx, ACCOUNTS).stream().anyMatch(a -> Objects.equals(code, a.get("accountCode"))
+            && "REVENUE".equals(a.get("financialType")) && a.get("controlClass") == null);
+    }
+
+    static EntityQuery accountsOf(List<String> codes) {
+        List<Object> present = codes.stream().filter(c -> c != null && !c.isBlank()).map(String::trim).distinct()
+            .map(c -> (Object) c).toList();
+        // The returns account may be used without being named.
+        return EntityQuery.builder().where(new QueryPredicate.Or(List.of(
+                new QueryPredicate.In("accountCode", new ArrayList<>(present)),
+                new QueryPredicate.Eq("financialType", "REVENUE")))).limit(500).build();
+    }
+
+    static EntityQuery creditsOf(UUID originalId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("originalInvoiceId",
+            originalId == null ? List.of() : List.of(originalId))).limit(500).build();
     }
 
     static EntityQuery byIds(UUID... ids) {
