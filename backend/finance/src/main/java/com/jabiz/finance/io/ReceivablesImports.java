@@ -68,7 +68,7 @@ class ReceivablesImports {
         return new CustomerProcesses.CustomerInput(row.text("customerCode"), row.text("legalName"), address, address,
             row.text("contactName"), row.text("contactEmail"), row.text("contactPhone"), row.text("currency"),
             row.text("termsCode"), days == null ? null : days.intValueExact(), row.decimal("creditLimit"),
-            row.text("taxCode"), true, null, CustomerRows.certificate(row.text("certificate")));
+            row.text("taxCode"), null, null, CustomerRows.certificate(row.text("certificate")));
     }
 
     @Bean

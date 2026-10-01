@@ -113,6 +113,17 @@ class SalesTaxTest {
     }
 
     @Test
+    void twoCodesOfOneStateShareTheStatesTaxRoundedOnce() {
+        // 2.00 × 6.25 % = 0.125 → 0.13 for Texas; per code it would be 0.06 + 0.06.
+        SalesTax.Result result = tax(JAN_6, List.of(line("1.00", "TX-AUSTIN"), line("1.00", "TX-DALLAS")), List.of(),
+            SalesTax.OnMissingCertificate.BLOCK);
+        assertThat(result.taxes()).extracting(t -> t.jurisdiction() + " " + t.base() + " " + t.tax())
+            .containsExactly("TX 2.00 0.13", "TX-AUSTIN-LOCAL 1.00 0.02", "TX-DALLAS-LOCAL 1.00 0.02");
+        assertThat(result.total()).isEqualByComparingTo("0.17");
+        assertThat(result.lines()).extracting(SalesTax.LineResult::taxCode).containsExactly("TX-AUSTIN", "TX-DALLAS");
+    }
+
+    @Test
     void unknownCodesMissingRatesAndNegativeLinesAreProblems() {
         SalesTax.Result result = SalesTax.compute(new SalesTax.Request(LocalDate.of(2024, 6, 1),
             List.of(line("1.00", "XX"), line("-1.00", "NT"), line("10.00", "TX-AUSTIN")), CODES, RATES, List.of(),

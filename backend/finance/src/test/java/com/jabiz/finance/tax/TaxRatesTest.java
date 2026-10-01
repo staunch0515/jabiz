@@ -43,6 +43,13 @@ class TaxRatesTest {
     }
 
     @Test
+    void theSamePercentAlreadyInEffectChangesNothing() {
+        TaxRates.Stored current = new TaxRates.Stored("a", 1, JAN, null, new BigDecimal("6.25"));
+        assertThat(TaxRates.plan(List.of(current), APR, new BigDecimal("6.25")))
+            .isEqualTo(new TaxRates.Plan(false, null, List.of()));
+    }
+
+    @Test
     void theSameDateCorrectsTheRateOrChangesNothing() {
         TaxRates.Stored current = new TaxRates.Stored("a", 1, JAN, null, new BigDecimal("6.25"));
         assertThat(TaxRates.plan(List.of(current), JAN, new BigDecimal("6.2500")))

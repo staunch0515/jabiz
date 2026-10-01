@@ -51,6 +51,11 @@ public final class TaxRates {
                 next = rate;
             }
         }
+        if (previous != null && previous.percent().compareTo(percent) == 0
+            && (previous.to() == null || !previous.to().isBefore(from))) {
+            // The rate in effect on that day is this rate already.
+            return new Plan(false, null, List.of());
+        }
         LocalDate newTo = next == null ? null : next.from().minusDays(1);
         if (previous != null && !Objects.equals(previous.to(), from.minusDays(1))) {
             updates.add(new Update(previous.id(), previous.version(), from.minusDays(1), previous.percent()));

@@ -120,6 +120,11 @@ public final class TaxEntities {
                 return List.of(new Violation("reason", CODE_KIND, "An exempt or non-taxable code says why",
                     Map.of()));
             }
+            if (Boolean.TRUE.equals(state.get("certificateRequired"))
+                && (!"EXEMPT".equals(state.get("kind")) || state.get("state") == null)) {
+                return List.of(new Violation("certificateRequired", CODE_KIND, "Only an exempt code of a state "
+                    + "needs a certificate: certificates are per state", Map.of()));
+            }
             return List.of();
         });
         eb.unique("uk_fi_tax_code", "taxCode");

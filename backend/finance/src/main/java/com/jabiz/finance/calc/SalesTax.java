@@ -20,8 +20,9 @@ import java.util.Objects;
  *       configured;</li>
  *   <li>taxable otherwise.</li>
  * </ul>
- * Tax is computed per tax code and jurisdiction on the sum of the taxable lines, rounded half away from zero to the
- * cent, and allocated back to those lines by the largest remainder so the lines add up to it. Every amount keeps how
+ * Tax is computed per jurisdiction on the sum of the document's taxable lines whose codes include it (two codes of
+ * one state share the state's tax), rounded half away from zero to the cent, and allocated back to those lines by
+ * the largest remainder so the lines add up to it. Every amount keeps how
  * it was computed: the base, the rate and the date the rate took effect (FIN-UI-007). Pure computation.
  */
 public final class SalesTax {
@@ -86,12 +87,12 @@ public final class SalesTax {
     public record LineResult(int line, String taxCode, Kind kind, String reason, String certificate, BigDecimal tax) {}
 
     /**
-     * The tax of one code and jurisdiction: the explanation of the amount.
+     * The tax of one jurisdiction on the document: the explanation of the amount.
      *
      * @param shares the tax allocated to each line of the document (zero for lines not in the base)
      */
-    public record JurisdictionTax(String taxCode, String jurisdiction, BigDecimal base, BigDecimal percent,
-        LocalDate rateFrom, BigDecimal tax, List<BigDecimal> shares) {}
+    public record JurisdictionTax(String jurisdiction, BigDecimal base, BigDecimal percent, LocalDate rateFrom,
+        BigDecimal tax, List<BigDecimal> shares) {}
 
     /** Why the document cannot be taxed; {@code line} is 0-based, -1 for the document. */
     public record Problem(int line, String code, String message, Map<String, Object> params) {}
@@ -151,47 +152,47 @@ public final class SalesTax {
                 certificates[i] = code.kind() == Kind.EXEMPT && certificate != null ? certificate.number() : null;
             }
         }
-        // Taxable lines by code, in the order the codes first appear.
+        // Taxable lines by jurisdiction, in the order the jurisdictions first appear.
         Map<String, List<Integer>> taxable = new LinkedHashMap<>();
+        Map<String, String> namedBy = new LinkedHashMap<>();
         for (int i = 0; i < size; i++) {
             if (kinds[i] == Kind.TAXABLE) {
-                taxable.computeIfAbsent(codes[i], c -> new ArrayList<>()).add(i);
+                for (String jurisdiction : request.codes().get(codes[i]).jurisdictions()) {
+                    taxable.computeIfAbsent(jurisdiction, j -> new ArrayList<>()).add(i);
+                    namedBy.putIfAbsent(jurisdiction, codes[i]);
+                }
             }
         }
         List<JurisdictionTax> taxes = new ArrayList<>();
         BigDecimal[] lineTax = new BigDecimal[size];
         java.util.Arrays.fill(lineTax, Money.usd(BigDecimal.ZERO));
-        taxable.forEach((codeName, lines) -> {
-            Code code = request.codes().get(codeName);
-            BigDecimal base = lines.stream().map(i -> request.lines().get(i).amount())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-            for (String jurisdiction : code.jurisdictions()) {
-                Rate rate = request.rates().stream()
-                    .filter(r -> r.jurisdiction().equals(jurisdiction) && r.covers(request.date()))
-                    .findFirst().orElse(null);
-                if (rate == null) {
-                    problems.add(new Problem(-1, NO_RATE, "Jurisdiction " + jurisdiction + " of tax code " + codeName
-                        + " has no rate on " + request.date(),
-                        params("jurisdiction", jurisdiction, "taxCode", codeName, "date", request.date())));
-                    continue;
-                }
-                BigDecimal tax = Money.usd(base.multiply(rate.percent()).movePointLeft(2));
-                List<BigDecimal> weights = lines.stream().map(i -> request.lines().get(i).amount()).toList();
-                List<BigDecimal> allocated = tax.signum() == 0 || base.signum() == 0
-                    ? weights.stream().map(w -> Money.usd(BigDecimal.ZERO)).toList()
-                    : Money.allocate(tax, weights, Money.USD_SCALE);
-                List<BigDecimal> shares = new ArrayList<>();
-                for (int i = 0; i < size; i++) {
-                    shares.add(Money.usd(BigDecimal.ZERO));
-                }
-                for (int k = 0; k < lines.size(); k++) {
-                    int i = lines.get(k);
-                    shares.set(i, allocated.get(k));
-                    lineTax[i] = lineTax[i].add(allocated.get(k));
-                }
-                taxes.add(new JurisdictionTax(codeName, jurisdiction, Money.usd(base), rate.percent(), rate.from(), tax,
-                    List.copyOf(shares)));
+        taxable.forEach((jurisdiction, lines) -> {
+            Rate rate = request.rates().stream()
+                .filter(r -> r.jurisdiction().equals(jurisdiction) && r.covers(request.date()))
+                .findFirst().orElse(null);
+            if (rate == null) {
+                problems.add(new Problem(-1, NO_RATE, "Jurisdiction " + jurisdiction + " of tax code "
+                    + namedBy.get(jurisdiction) + " has no rate on " + request.date(), params("jurisdiction",
+                    jurisdiction, "taxCode", namedBy.get(jurisdiction), "date", request.date())));
+                return;
             }
+            List<BigDecimal> weights = lines.stream().map(i -> request.lines().get(i).amount()).toList();
+            BigDecimal base = weights.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal tax = Money.usd(base.multiply(rate.percent()).movePointLeft(2));
+            List<BigDecimal> allocated = tax.signum() == 0 || base.signum() == 0
+                ? weights.stream().map(w -> Money.usd(BigDecimal.ZERO)).toList()
+                : Money.allocate(tax, weights, Money.USD_SCALE);
+            List<BigDecimal> shares = new ArrayList<>();
+            for (int i = 0; i < size; i++) {
+                shares.add(Money.usd(BigDecimal.ZERO));
+            }
+            for (int k = 0; k < lines.size(); k++) {
+                int i = lines.get(k);
+                shares.set(i, allocated.get(k));
+                lineTax[i] = lineTax[i].add(allocated.get(k));
+            }
+            taxes.add(new JurisdictionTax(jurisdiction, Money.usd(base), rate.percent(), rate.from(), tax,
+                List.copyOf(shares)));
         });
         List<LineResult> results = new ArrayList<>();
         for (int i = 0; i < size; i++) {

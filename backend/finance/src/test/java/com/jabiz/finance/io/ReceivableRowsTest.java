@@ -21,6 +21,10 @@ class ReceivableRowsTest {
         assertThat(CustomerRows.location("Portland, OR")).isEqualTo(new CustomerRows.Location("Portland", "OR", "US"));
         assertThat(CustomerRows.location("Germany")).isEqualTo(new CustomerRows.Location(null, null, "Germany"));
         assertThat(CustomerRows.location(" ")).isEqualTo(new CustomerRows.Location(null, null, null));
+        // Only US states read as states.
+        assertThat(CustomerRows.location("Toronto, ON")).isEqualTo(new CustomerRows.Location(null, null,
+            "Toronto, ON"));
+        assertThat(CustomerRows.location("tx (Dallas)")).isEqualTo(new CustomerRows.Location("Dallas", "TX", "US"));
     }
 
     @Test
@@ -35,6 +39,10 @@ class ReceivableRowsTest {
         assertThat(CustomerRows.certificate("")).isNull();
         assertThat(CustomerRows.certificate("CA exempt organization certificate EO-7, issued 2025-05-01").issueDate())
             .isEqualTo(LocalDate.of(2025, 5, 1));
+        assertThat(CustomerRows.certificate("TX resale certificate no. RC-1, valid to 2027-12-31").certificateNo())
+            .isEqualTo("RC-1");
+        assertThatThrownBy(() -> CustomerRows.certificate("ON resale certificate RC-1"))
+            .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CustomerRows.certificate("resale, valid to 2027-12-31"))
             .isInstanceOf(IllegalArgumentException.class);
     }

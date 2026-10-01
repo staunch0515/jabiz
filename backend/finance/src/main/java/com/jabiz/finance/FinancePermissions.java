@@ -62,6 +62,13 @@ public final class FinancePermissions {
     public static final String AR_READ = "fin.ar.read";
     /** Create and change customers and their exemption certificates (FIN-AR-001, FIN-TX-004). */
     public static final String CUSTOMER_MAINTAIN = "fin.customer.maintain";
+    /**
+     * Give a customer a tax code that charges no tax, and record exemption certificates (FIN-TX-002, 004): what makes
+     * a customer's sales tax-free is not the clerk's alone (FIN-CT-001).
+     */
+    public static final String CUSTOMER_TAX = "fin.customer.tax";
+    /** Set customers' credit limits (FIN-AR-013): apart from keeping customers. */
+    public static final String CUSTOMER_CREDIT = "fin.customer.credit";
     /** Maintain sales tax jurisdictions, rates and codes (FIN-TX-001). */
     public static final String TAX_MAINTAIN = "fin.tax.maintain";
     /** Set the receivables accounts and policies, and payment terms (FIN-AR-002). */

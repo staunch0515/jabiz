@@ -39,7 +39,10 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code FIN_CUSTOMER_SAVE}: a customer, new or changed. A change takes effect now or from a later day (an
  *       address that changes on the first of next month); the past is not rewritten, so a document issued earlier
- *       keeps the address it was issued with. Terms
+ *       keeps the address it was issued with. Only addresses and the contact change from a later day; the rest
+ *       changes now, where it is seen. A tax code that charges no tax and a certificate need {@code fin.customer.tax},
+ *       a credit limit {@code fin.customer.credit}: keeping customers alone does not make sales tax-free or raise
+ *       credit (FIN-CT-001). Terms
  *       may be given as days ("30"): the standard terms {@code NET30} are used, and created when missing. A customer
  *       code that the migration merged into another ({@code CUSTOMER} decision, FIN-DI-003) is not created: the
  *       output names the customer it was merged into.</li>
@@ -60,6 +63,10 @@ public final class CustomerProcesses {
     public static final String UNKNOWN_TAX_CODE = "FIN_CUSTOMER_UNKNOWN_TAX_CODE";
     public static final String INVALID_VALUE = "FIN_CUSTOMER_INVALID_VALUE";
     public static final String PAST_DATE = "FIN_CUSTOMER_PAST_DATE";
+    public static final String TAX_RESTRICTED = "FIN_CUSTOMER_TAX_RESTRICTED";
+    public static final String CREDIT_RESTRICTED = "FIN_CUSTOMER_CREDIT_RESTRICTED";
+    public static final String SCHEDULED_FIELD = "FIN_CUSTOMER_SCHEDULED_FIELD";
+    public static final String MERGED = "FIN_CUSTOMER_MERGED";
 
     public record Address(@Size(max = 200) String street, @Size(max = 100) String city, @Size(max = 20) String state,
         @Size(max = 20) String postalCode, @Size(max = 60) String country) {}
@@ -73,7 +80,8 @@ public final class CustomerProcesses {
         LocalDate expiryDate, Boolean active) {}
 
     /**
-     * Only what is given changes an existing customer; a new one needs its name, currency, terms and tax code.
+     * Only what is given changes an existing customer (an empty text clears an address part or the contact); a new one
+     * needs its name, currency, terms and tax code and takes effect now.
      *
      * @param termsCode     payment terms by code, or
      * @param termsDays     net days: the standard terms {@code NET<days>}
@@ -145,7 +153,7 @@ public final class CustomerProcesses {
         ProcessDefinition.define(CERTIFICATE_SAVE, 1, CertificateSave.class, CertificateOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Records a customer's exemption or resale certificate for a state.")
-                .permissions(FinancePermissions.CUSTOMER_MAINTAIN)
+                .permissions(FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.CUSTOMER_TAX)
                 .contextFactory(CustomerProcesses::withInput)
                 .outputMapper(ctx -> ctx.get(OUTPUT, CertificateOutput.class))
                 .step("Load the customer", QueryEntities.of(ArEntities.CUSTOMER_DATASET,
@@ -205,6 +213,12 @@ public final class CustomerProcesses {
         String customerCode = code(input.customerCode());
         if (!list(ctx, DECISIONS).isEmpty()) {
             String into = list(ctx, DECISIONS).getFirst().get("decidedValue");
+            if (input.certificate() != null) {
+                // The certificate would be lost with the merged code; it is recorded on the customer it went into.
+                ctx.reject(new Violation("certificate", MERGED, customerCode + " was merged into " + into
+                    + ": record its certificate on " + into, Map.of("customerCode", customerCode, "into", into)));
+                return;
+            }
             ctx.put(OUTPUT, new CustomerOutput(null, customerCode, false, false, into));
             return;
         }
@@ -246,6 +260,27 @@ public final class CustomerProcesses {
             ctx.reject(new Violation("effectiveDate", PAST_DATE, "A change takes effect today or later, not on "
                 + input.effectiveDate(), Map.of("date", input.effectiveDate().toString())));
         }
+        if (input.effectiveDate() != null && input.effectiveDate().isAfter(today) && (input.legalName() != null
+            || input.currency() != null || terms != null || input.creditLimit() != null || taxCode != null
+            || input.active() != null || input.certificate() != null)) {
+            ctx.reject(new Violation("effectiveDate", SCHEDULED_FIELD, "Only addresses and the contact change from a "
+                + "later day; the rest changes now", Map.of()));
+        }
+        boolean taxPermitted = ctx.request().hasPermission(FinancePermissions.CUSTOMER_TAX);
+        if (taxCode != null && !taxPermitted && (current == null || !taxCode.equals(current.get("taxCode")))
+            && list(ctx, TAX_CODES).stream().anyMatch(c -> !"TAXABLE".equals(c.get("kind")))) {
+            ctx.reject(new Violation("taxCode", TAX_RESTRICTED, "Tax code " + taxCode + " charges no tax: it needs "
+                + "permission " + FinancePermissions.CUSTOMER_TAX, Map.of("taxCode", taxCode)));
+        }
+        if (input.certificate() != null && !taxPermitted) {
+            ctx.reject(new Violation("certificate", TAX_RESTRICTED, "Recording a certificate needs permission "
+                + FinancePermissions.CUSTOMER_TAX, Map.of("taxCode", "")));
+        }
+        if (input.creditLimit() != null && !ctx.request().hasPermission(FinancePermissions.CUSTOMER_CREDIT)
+            && (current == null || !CustomerProcesses.same(current.get("creditLimit"), input.creditLimit()))) {
+            ctx.reject(new Violation("creditLimit", CREDIT_RESTRICTED, "Setting a credit limit needs permission "
+                + FinancePermissions.CUSTOMER_CREDIT, Map.of()));
+        }
         if (ctx.hasViolations()) {
             return;
         }
@@ -263,9 +298,9 @@ public final class CustomerProcesses {
         put(values, "legalName", trim(input.legalName()));
         address(values, "billing", input.billing());
         address(values, "shipping", input.shipping());
-        put(values, "contactName", trim(input.contactName()));
-        put(values, "contactEmail", trim(input.contactEmail()));
-        put(values, "contactPhone", trim(input.contactPhone()));
+        clearable(values, "contactName", input.contactName());
+        clearable(values, "contactEmail", input.contactEmail());
+        clearable(values, "contactPhone", input.contactPhone());
         put(values, "currency", currency);
         put(values, "termsCode", terms);
         if (input.creditLimit() != null) {
@@ -285,7 +320,8 @@ public final class CustomerProcesses {
                 : target.insert(ArEntities.CUSTOMER, values));
             changed = true;
         } else {
-            Map<String, Object> changes = differences(current, values);
+            // A later day's change is written as given: the version it lands on may differ from today's.
+            Map<String, Object> changes = target == null ? differences(current, values) : values;
             if (!changes.isEmpty()) {
                 if (target == null) {
                     ctx.changes().update(ArEntities.CUSTOMER, current.id(), current.version(), changes);
@@ -343,11 +379,18 @@ public final class CustomerProcesses {
         if (address == null) {
             return;
         }
-        values.put(prefix + "Street", trim(address.street()));
-        values.put(prefix + "City", trim(address.city()));
-        values.put(prefix + "State", trim(address.state()));
-        values.put(prefix + "PostalCode", trim(address.postalCode()));
-        values.put(prefix + "Country", trim(address.country()));
+        clearable(values, prefix + "Street", address.street());
+        clearable(values, prefix + "City", address.city());
+        clearable(values, prefix + "State", address.state());
+        clearable(values, prefix + "PostalCode", address.postalCode());
+        clearable(values, prefix + "Country", address.country());
+    }
+
+    /** A text given changes the field, an empty one clears it; one not given leaves it. */
+    private static void clearable(Map<String, Object> values, String field, String value) {
+        if (value != null) {
+            values.put(field, trim(value));
+        }
     }
 
     /** The fields of {@code values} that differ from the stored entity. */
@@ -362,6 +405,10 @@ public final class CustomerProcesses {
             }
         });
         return changes;
+    }
+
+    static boolean same(Object stored, BigDecimal value) {
+        return stored != null && new BigDecimal(stored.toString()).compareTo(value) == 0;
     }
 
     private static void require(ProcessContext ctx, String value, String field) {

@@ -34,8 +34,10 @@ import java.util.Set;
  *   <li>{@code FIN_TAX_JURISDICTION_SAVE}: a jurisdiction, new or changed.</li>
  *   <li>{@code FIN_TAX_RATE_SET}: a jurisdiction's rate from a date; the rate before it ends the day before, and a
  *       rate set again for the same date corrects it (the earlier value stays in the history).</li>
- *   <li>{@code FIN_TAX_CODE_SAVE}: a tax code, new or changed; with its jurisdictions' names and rates it creates or
- *       updates them too, so a code and its rates can be set up, or imported, in one go.</li>
+ *   <li>{@code FIN_TAX_CODE_SAVE}: a tax code, new or changed; it creates the jurisdictions it names that do not
+ *       exist yet and sets the rates given from {@code ratesFrom}, so a code and its rates can be set up, or imported,
+ *       in one go. Existing jurisdictions are shared by codes and keep their names; a rate given here is the
+ *       jurisdiction's for every code.</li>
  * </ul>
  */
 public final class TaxProcesses {
@@ -47,7 +49,7 @@ public final class TaxProcesses {
     public static final String UNKNOWN_JURISDICTION = "FIN_TAX_UNKNOWN_JURISDICTION";
     public static final String UNKNOWN_CHARGE_CODE = "FIN_TAX_UNKNOWN_CHARGE_CODE";
     public static final String RATES_FROM_REQUIRED = "FIN_TAX_RATES_FROM_REQUIRED";
-    public static final String INVALID_VALUE = "FIN_TAX_INVALID_VALUE";
+    public static final String DUPLICATE_JURISDICTION = "FIN_TAX_DUPLICATE_JURISDICTION";
 
     public record JurisdictionInput(@NotBlank @Size(max = 20) String jurisdictionCode,
         @NotBlank @Size(max = 200) String jurisdictionName, @NotBlank String level, @NotBlank String state,
@@ -165,9 +167,14 @@ public final class TaxProcesses {
             ctx.reject(new Violation("ratesFrom", RATES_FROM_REQUIRED, "Rates take effect from a date",
                 Map.of()));
         }
+        Set<String> seen = new LinkedHashSet<>();
         for (int i = 0; i < parts.size(); i++) {
             JurisdictionPart part = parts.get(i);
             String code = upper(part.jurisdictionCode());
+            if (!seen.add(code)) {
+                ctx.reject(new Violation("jurisdictions[" + i + "].jurisdictionCode", DUPLICATE_JURISDICTION,
+                    "Jurisdiction " + code + " is named twice", Map.of("jurisdictionCode", code)));
+            }
             if (!jurisdictions.containsKey(code) && (blank(part.jurisdictionName()) || blank(part.level())
                 || (blank(part.state()) && state == null))) {
                 ctx.reject(new Violation("jurisdictions[" + i + "].jurisdictionCode", UNKNOWN_JURISDICTION,
@@ -187,10 +194,11 @@ public final class TaxProcesses {
         boolean changed = false;
         for (JurisdictionPart part : parts) {
             String code = upper(part.jurisdictionCode());
-            if (!blank(part.jurisdictionName())) {
+            // An existing jurisdiction is shared by codes: it is changed through FIN_TAX_JURISDICTION_SAVE only.
+            if (!jurisdictions.containsKey(code)) {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("jurisdictionName", part.jurisdictionName().trim());
-                values.put("level", upper(part.level() == null ? jurisdictions.get(code).get("level") : part.level()));
+                values.put("level", upper(part.level()));
                 values.put("state", upper(blank(part.state()) ? state : part.state()));
                 values.put("active", true);
                 changed |= upsert(ctx, TaxEntities.JURISDICTION, list(ctx, JURISDICTIONS), "jurisdictionCode", code,

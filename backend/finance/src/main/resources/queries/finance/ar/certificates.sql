@@ -2,8 +2,10 @@
 id: finance.ar.certificates
 description: >-
   Exemption and resale certificates to look after on a date (FIN-TX-004): customers whose tax code needs a
-  certificate but who hold no valid one for the code's state (MISSING), and certificates that expire within the
-  given number of days (EXPIRING) or have expired while their customer still needs them (EXPIRED).
+  certificate but who hold no valid one for the code's state (MISSING); certificates that expire within the given
+  number of days with no later one for the same customer and state (EXPIRING); and certificates that have expired
+  with no valid one taking their place, where the customer's tax code still needs one or they expired within those
+  days (EXPIRED). Certificates that exempt sales under a taxable code count as much as those an exempt code needs.
 entities: [FinCustomer, FinTaxCode, FinExemptionCertificate]
 params:
   onDate: { like: FinExemptionCertificate.expiryDate, required: true, description: the date the certificates are checked on }
@@ -33,12 +35,14 @@ WITH needed AS (
     WHERE t.{{FinTaxCode.certificateRequired}} AND c.{{FinCustomer.status}} = 'ACTIVE'
 ),
 held AS (
-    SELECT e.{{FinExemptionCertificate.customerCode}} AS cust, e.{{FinExemptionCertificate.state}} AS state,
+    SELECT e.{{FinExemptionCertificate.customerCode}} AS cust, c.{{FinCustomer.legalName}} AS cname,
+           c.{{FinCustomer.taxCode}} AS ctax, e.{{FinExemptionCertificate.state}} AS state,
            e.{{FinExemptionCertificate.certificateNo}} AS cert,
            e.{{FinExemptionCertificate.issueDate}} AS issued,
            e.{{FinExemptionCertificate.expiryDate}} AS expires
     FROM {{FinExemptionCertificate}} e
-    WHERE e.{{FinExemptionCertificate.active}}
+    JOIN {{FinCustomer}} c ON c.{{FinCustomer.customerCode}} = e.{{FinExemptionCertificate.customerCode}}
+    WHERE e.{{FinExemptionCertificate.active}} AND c.{{FinCustomer.status}} = 'ACTIVE'
 )
 SELECT 'MISSING' AS status, n.cust AS customerCode, n.cname AS legalName, n.ctax AS taxCode,
        n.state AS state, CAST(NULL AS varchar) AS certificateNo, CAST(NULL AS date) AS expiryDate
@@ -49,9 +53,22 @@ WHERE NOT EXISTS (
       AND (h.issued IS NULL OR h.issued <= :onDate)
       AND (h.expires IS NULL OR h.expires >= :onDate))
 UNION ALL
-SELECT CASE WHEN h.expires < :onDate THEN 'EXPIRED' ELSE 'EXPIRING' END, n.cust, n.cname,
-       n.ctax, n.state, h.cert, h.expires
-FROM needed n
-JOIN held h ON h.cust = n.cust AND h.state = n.state
-WHERE h.expires IS NOT NULL
+SELECT 'EXPIRING', h.cust, h.cname, h.ctax, h.state, h.cert, h.expires
+FROM held h
+WHERE h.expires >= :onDate
   AND h.expires <= CAST(:onDate AS date) + CAST(COALESCE(:days, 30) AS integer)
+  AND NOT EXISTS (
+      SELECT 1 FROM held o
+      WHERE o.cust = h.cust AND o.state = h.state AND o.cert <> h.cert
+        AND (o.expires IS NULL OR o.expires > h.expires))
+UNION ALL
+SELECT 'EXPIRED', h.cust, h.cname, h.ctax, h.state, h.cert, h.expires
+FROM held h
+WHERE h.expires < :onDate
+  AND NOT EXISTS (
+      SELECT 1 FROM held o
+      WHERE o.cust = h.cust AND o.state = h.state
+        AND (o.issued IS NULL OR o.issued <= :onDate)
+        AND (o.expires IS NULL OR o.expires >= :onDate))
+  AND (EXISTS (SELECT 1 FROM needed n WHERE n.cust = h.cust AND n.state = h.state)
+       OR h.expires >= CAST(:onDate AS date) - CAST(COALESCE(:days, 30) AS integer))

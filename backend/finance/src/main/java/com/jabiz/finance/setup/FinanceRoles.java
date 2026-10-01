@@ -48,7 +48,8 @@ public final class FinanceRoles {
             FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
             "sod.read", "report.issue", "audit.read", "operation.read", FinancePermissions.IMPORT,
             FinancePermissions.MIGRATION, FinancePermissions.PAYROLL_MAINTAIN, FinancePermissions.AR_READ,
-            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS));
+            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS,
+            FinancePermissions.CUSTOMER_TAX, FinancePermissions.CUSTOMER_CREDIT));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ));

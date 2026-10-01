@@ -60,8 +60,9 @@ class ReceivablesMasterIT extends FinanceItSupport {
     }
 
     private void importCustomers() {
-        Map<String, Object> report = importCsv("finance.customers", clerk, sampleText("customers.csv"), "commit",
-            null, null, 200);
+        // The sample has exempt and non-taxable customers and a certificate: the controller's (fin.customer.tax).
+        Map<String, Object> report = importCsv("finance.customers", controller, sampleText("customers.csv"),
+            "commit", null, null, 200);
         assertThat(report).containsEntry("committed", true).containsEntry("units", 4);
     }
 
@@ -80,9 +81,10 @@ class ReceivablesMasterIT extends FinanceItSupport {
             .containsEntry("shippingCountry", "Germany");
         assertThat(attributes(find(ArEntities.PAYMENT_TERMS_DATASET, "termsCode", "NET30").getFirst()))
             .containsEntry("netDays", 30);
-        assertThat(attributes(find(ArEntities.CERTIFICATE_DATASET, "customerCode", "C300").getFirst()))
-            .containsEntry("state", "TX").containsEntry("certificateNo", "RC-3301")
-            .containsEntry("certificateType", "RESALE").containsEntry("expiryDate", "2027-12-31");
+        assertThat(find(ArEntities.CERTIFICATE_DATASET, "customerCode", "C300").stream()
+            .map(ReceivablesMasterIT::attributes).filter(c -> "RC-3301".equals(c.get("certificateNo"))))
+            .singleElement().satisfies(c -> assertThat(c).containsEntry("state", "TX")
+                .containsEntry("certificateType", "RESALE").containsEntry("expiryDate", "2027-12-31"));
 
         // TX-AUSTIN is the state's 6.25 % and the city's 2.00 % (FIN-TX-001 acceptance 1).
         assertThat(attributes(find(TaxEntities.CODE_DATASET, "taxCode", "TX-AUSTIN").getFirst()))
@@ -97,7 +99,7 @@ class ReceivablesMasterIT extends FinanceItSupport {
             .containsEntry("kind", "NON_TAXABLE").containsEntry("reason", "NON_TAXABLE_SERVICE");
 
         // The same files again are refused as imported already; nothing doubles.
-        importCsv("finance.customers", clerk, sampleText("customers.csv"), "commit", null, null, 409);
+        importCsv("finance.customers", controller, sampleText("customers.csv"), "commit", null, null, 409);
         assertThat(find(ArEntities.CUSTOMER_DATASET, "customerCode", "C100")).hasSize(1);
         assertOnlyInserted("fi_customer_version", "fi_payment_terms_version", "fi_exemption_certificate_version",
             "fi_tax_code_version", "fi_tax_jurisdiction_version", "fi_tax_rate_version");
@@ -148,6 +150,23 @@ class ReceivablesMasterIT extends FinanceItSupport {
             today.minusDays(1).toString(), "contactName", "Back Dated"), 422)).isEqualTo(CustomerProcesses.PAST_DATE);
         assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C501"), 422))
             .isEqualTo(CustomerProcesses.MISSING);
+
+        // One change waits at a time: another from a later day is refused until the first is cancelled or in effect,
+        // rather than compared with today's address and dropped.
+        run(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C500", "effectiveDate", "2026-04-01",
+            "billing", Map.of("street", "100 Congress Ave", "postalCode", "78701"))).expectStatus().isEqualTo(409);
+        // Once 1 March has come, going back to the old street from 1 April is written, though it is no change from
+        // the address of the day the change is made.
+        clock.set(Instant.parse("2026-03-02T15:00:00Z"));
+        clerk = inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK);
+        assertThat(ok(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C500", "effectiveDate", "2026-04-01",
+            "billing", Map.of("street", "100 Congress Ave", "postalCode", "78701")))).containsEntry("changed", true);
+        assertThat(asOf("C500", LocalDate.of(2026, 3, 15))).containsEntry("billingStreet", "500 Lamar Blvd");
+        assertThat(asOf("C500", LocalDate.of(2026, 4, 1))).containsEntry("billingStreet", "100 Congress Ave")
+            .containsEntry("billingCity", "Austin");
+        // An empty text clears the contact.
+        ok(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C500", "contactName", ""));
+        assertThat(asOf("C500", LocalDate.of(2026, 3, 3))).containsEntry("contactName", null);
     }
 
     @Test
@@ -232,31 +251,83 @@ class ReceivablesMasterIT extends FinanceItSupport {
 
         Map<String, Object> certificate = new HashMap<>(Map.of("state", "OR", "certificateNo", "OR-77",
             "certificateType", "EXEMPT_ORGANIZATION", "expiryDate", "2026-12-31"));
-        ok(CustomerProcesses.CERTIFICATE_SAVE, clerk, Map.of("customerCode", "C200", "certificate", certificate));
+        assertThat(refused(CustomerProcesses.CERTIFICATE_SAVE, clerk, Map.of("customerCode", "C200",
+            "certificate", certificate), 403)).isEqualTo("PERMISSION_DENIED");
+        ok(CustomerProcesses.CERTIFICATE_SAVE, controller, Map.of("customerCode", "C200", "certificate",
+            certificate));
         assertThat(find(ArEntities.CERTIFICATE_DATASET, "customerCode", "C200")).singleElement()
             .satisfies(c -> assertThat(attributes(c)).containsEntry("certificateNo", "OR-77"));
         certificate.put("certificateType", "SOMETHING");
-        assertThat(refused(CustomerProcesses.CERTIFICATE_SAVE, clerk, Map.of("customerCode", "C200",
+        assertThat(refused(CustomerProcesses.CERTIFICATE_SAVE, controller, Map.of("customerCode", "C200",
             "certificate", certificate), 422)).isEqualTo(CustomerProcesses.INVALID_VALUE);
-        assertThat(refused(CustomerProcesses.CERTIFICATE_SAVE, clerk, Map.of("customerCode", "C999",
+        assertThat(refused(CustomerProcesses.CERTIFICATE_SAVE, controller, Map.of("customerCode", "C999",
             "certificate", Map.of("state", "OR", "certificateNo", "X", "certificateType", "OTHER")), 422))
             .isEqualTo(CustomerProcesses.UNKNOWN_CUSTOMER);
         // A tax code whose charge code is not taxable is refused.
         assertThat(refused("FIN_TAX_CODE_SAVE", controller, Map.of("taxCode", "OR-EXEMPT", "description", "Oregon "
             + "exempt", "kind", "EXEMPT", "reason", "OTHER", "certificateRequired", true, "chargeCode", "NT"), 422))
             .isEqualTo("FIN_TAX_UNKNOWN_CHARGE_CODE");
+        // Certificates are per state, and only for exempt codes.
+        assertThat(refused("FIN_TAX_CODE_SAVE", controller, Map.of("taxCode", "ANY-EXEMPT", "description", "Exempt",
+            "kind", "EXEMPT", "reason", "OTHER", "certificateRequired", true), 422)).isEqualTo("FIN_TAX_CODE_KIND");
+        // A jurisdiction named twice would double its tax.
+        assertThat(refused("FIN_TAX_CODE_SAVE", controller, Map.of("taxCode", "TX-TWICE", "description", "Twice",
+            "kind", "TAXABLE", "state", "TX", "jurisdictions", List.of(Map.of("jurisdictionCode", "TX"),
+                Map.of("jurisdictionCode", "TX"))), 422)).isEqualTo("FIN_TAX_DUPLICATE_JURISDICTION");
+        // Another code of Texas imported with explicit columns shares the state's jurisdiction without renaming it.
+        importCsv("finance.tax_codes", controller, """
+            code,description,kind,state,jurisdictions
+            TX-HOUSTON,Houston,TAXABLE,TX,TX:6.25;TX-HOUSTON-LOCAL:2.00
+            """, "commit", null, Map.of("ratesFrom", "2025-01-01"), 200);
+        assertThat(attributes(find(TaxEntities.JURISDICTION_DATASET, "jurisdictionCode", "TX").getFirst()))
+            .containsEntry("jurisdictionName", "TX state").containsEntry("level", "STATE");
+        // The state's rate stood at 6.25 % already: no second rate from the same day.
+        assertThat(find(TaxEntities.RATE_DATASET, "jurisdictionCode", "TX").stream()
+            .map(r -> attributes(r).get("effectiveFrom")).toList()).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void aClerkCannotMakeSalesTaxFreeRaiseCreditOrScheduleMoreThanAddresses() {
+        Map<String, Object> customer = new HashMap<>(Map.of("customerCode", "C800", "legalName", "Lone Clerk Co",
+            "currency", "USD", "termsDays", 30, "taxCode", "TX-AUSTIN"));
+        ok(CustomerProcesses.SAVE, clerk, customer);
+        // A tax code that charges no tax, a certificate, a credit limit: each needs a permission the clerk lacks.
+        assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C800", "taxCode", "EXPORT"), 422))
+            .isEqualTo(CustomerProcesses.TAX_RESTRICTED);
+        assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C800", "certificate",
+            Map.of("state", "TX", "certificateNo", "X-1", "certificateType", "RESALE")), 422))
+            .isEqualTo(CustomerProcesses.TAX_RESTRICTED);
+        assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C800", "creditLimit", 1000000),
+            422)).isEqualTo(CustomerProcesses.CREDIT_RESTRICTED);
+        assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C801", "legalName", "Exporter",
+            "currency", "USD", "termsDays", 30, "taxCode", "EXPORT"), 422)).isEqualTo(CustomerProcesses.TAX_RESTRICTED);
+        // Only addresses and the contact change from a later day.
+        assertThat(refused(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C800", "effectiveDate",
+            "2026-06-01", "taxCode", "TX-RESALE"), 422)).isEqualTo(CustomerProcesses.SCHEDULED_FIELD);
+        // The controller may; resaving the same values needs nothing.
+        ok(CustomerProcesses.SAVE, controller, Map.of("customerCode", "C800", "creditLimit", 100000,
+            "taxCode", "EXPORT"));
+        assertThat(ok(CustomerProcesses.SAVE, clerk, Map.of("customerCode", "C800", "creditLimit", 100000,
+            "taxCode", "EXPORT", "contactName", "Sam"))).containsEntry("changed", true);
     }
 
     @Test
     void theCertificatesReportShowsMissingExpiringAndExpiredCertificates() {
         Map<String, Object> customer = new HashMap<>(Map.of("customerCode", "C700", "legalName", "Resale Without Paper",
             "currency", "USD", "termsDays", 30, "taxCode", "TX-RESALE"));
-        ok(CustomerProcesses.SAVE, clerk, customer);
+        ok(CustomerProcesses.SAVE, controller, customer);
 
         assertThat(statuses(LocalDate.of(2026, 1, 15))).containsExactly("MISSING C700");
         assertThat(statuses(LocalDate.of(2027, 12, 15))).containsExactly("EXPIRING C300", "MISSING C700");
         assertThat(statuses(LocalDate.of(2028, 1, 15))).containsExactly("EXPIRED C300", "MISSING C300",
             "MISSING C700");
+
+        // Renewed: the old certificate is neither expiring nor expired any more.
+        ok(CustomerProcesses.CERTIFICATE_SAVE, controller, Map.of("customerCode", "C300", "certificate", Map.of(
+            "state", "TX", "certificateNo", "RC-3302", "certificateType", "RESALE", "issueDate", "2027-12-01",
+            "expiryDate", "2029-12-31")));
+        assertThat(statuses(LocalDate.of(2027, 12, 15))).containsExactly("MISSING C700");
+        assertThat(statuses(LocalDate.of(2028, 1, 15))).containsExactly("MISSING C700");
     }
 
     private List<String> statuses(LocalDate onDate) {

@@ -234,7 +234,9 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
    `NET<n>`，没有即建）、`finance.tax_codes`（样例 `tax-codes.csv`，参数为税率生效日；备注"state x% + local y%"读作州与地方两个辖区，`certificate required`
    读作需要证书的免税，零税率读作非应税；显式的列优先）。迁移决定新增 `CUSTOMER`（旧客户代码并入现有客户）：并入的行不建客户，迁移报告列出决定。
 5. 报表 `finance.ar.certificates`：需要证书而在某日没有有效证书的客户、即将到期的证书。
-6. 权限：`fin.ar.read`、`fin.customer.maintain`（ReceivablesClerk、Controller）、`fin.tax.maintain`、`fin.ar.settings`（Controller）、`fin.tax.data.read`。
+6. 权限：`fin.ar.read`、`fin.customer.maintain`（ReceivablesClerk、Controller）、`fin.tax.maintain`、`fin.ar.settings`（Controller）；
+   职责分离（安全审查）：不收税的税码与免税证书需要 `fin.customer.tax`，信用额度需要 `fin.customer.credit`（都只授予 Controller）；
+   预定在以后生效的只能是地址与联系人，其余修改即时生效。样例客户文件含免税客户与证书，由 Controller 导入。
 
 **验收标准**
 - [x] 样例客户与税码文件原样导入，0 拒收：四个客户的币种、条件、税码；C300 有证书 RC-3301（到期 2027-12-31）；一行无效则整个文件拒收；同一文件不再导入
@@ -246,6 +248,10 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
       各行分摊之和 = 各辖区税额）。
 - [x] 合并客户的决定、决定人与时间出现在迁移报告；并入的客户不另建；已存在的客户不能作为被并入的旧代码（DI-003 验收 1）。
 - [x] 证书报表在某日列出缺少、即将到期与已过期的证书（TX-004 的报告部分）。
+- [x] 收款员不能把客户改为免税、登记证书、设置信用额度或预定地址以外的修改（`ReceivablesMasterIT`，安全审查的修正）。
+
+已知限制：客户同一时间只能有一个尚未生效的预定修改（平台的流程不能按将来某日读取版本；第二个预定修改得到 409，先取消或等前一个生效）；
+共用的辖区（如 `TX`）由税码保存流程只新建、不改名，改名经 `FIN_TAX_JURISDICTION_SAVE`；税率对共用它的所有税码生效。
 - [x] 时态表只插入；`./gradlew :finance:check`（`platformCheck` 0 错误 0 警告）、`tools/check-app-paths.sh` 通过。
 
 ### F3b 发票与贷项通知单（计划）
