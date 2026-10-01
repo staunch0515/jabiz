@@ -62,8 +62,18 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             .collectList()
             .block(CHECK_TIMEOUT);
 
-        return problems == null ? List.of()
-            : problems.stream().map(text -> CheckProblem.error(CATEGORY, text)).toList();
+        return problems == null ? List.of() : problems.stream().map(MetaModelConsistencyChecker::problem).toList();
+    }
+
+    /** Marks a finding that slows the application down without breaking it. */
+    private static final String WARNING = "warning: ";
+
+    private static CheckProblem problem(String text) {
+        if (!text.startsWith(WARNING)) {
+            return CheckProblem.error(CATEGORY, text);
+        }
+        CheckProblem located = CheckProblem.error(CATEGORY, text.substring(WARNING.length()));
+        return CheckProblem.warning(CATEGORY, located.location(), located.message());
     }
 
     private Flux<String> checkEntity(EntityDefinition def) {
@@ -115,6 +125,21 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             }
             if (found.stream().noneMatch(ix -> ix.startsWith(process, false))) {
                 problems.add(label + " -> no index on (" + process + ")");
+            }
+            // One version per instance (decision D29): the key alone is unique.
+            if (def.temporalSpec.writeOnce() && found.stream().noneMatch(ix -> ix.unique() && ix.full()
+                && ix.columns().equals(List.of(id)))) {
+                problems.add(label + " -> write-once, but no unique index on (" + id + ") alone");
+            }
+            // Uniqueness checks find their candidates through an index on the constraint's fields (decision D29).
+            for (UniqueConstraint unique : def.uniqueConstraints) {
+                List<String> columns = unique.fields().stream()
+                    .map(field -> def.physicalColumn(field).toLowerCase(Locale.ROOT)).toList();
+                if (found.stream().noneMatch(ix -> ix.columns().size() >= columns.size()
+                    && Set.copyOf(ix.columns().subList(0, columns.size())).equals(Set.copyOf(columns)))) {
+                    problems.add(WARNING + label + " -> unique constraint " + unique.name() + " has no index starting "
+                        + "with " + columns + ": checking it reads every version of the table");
+                }
             }
             return Flux.fromIterable(problems);
         });
