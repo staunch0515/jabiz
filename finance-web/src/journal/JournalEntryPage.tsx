@@ -10,7 +10,7 @@ import {
   useAuth,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Checkbox, Descriptions, Input, Space, Tag, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
@@ -94,6 +94,7 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { journalId } = useParams<{ journalId: string }>()
+  const formId = useId()
 
   const accounts = useQuery({ queryKey: ['fin', 'accounts'], queryFn: loadAccounts, staleTime: 60_000 })
   const dimensions = useQuery({ queryKey: ['fin', 'dimensions'], queryFn: loadDimensions, staleTime: 60_000 })
@@ -289,27 +290,22 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
 
         <Card size="small">
           <Space wrap size="large" align="end">
-            <label>
-              <div>{t('journal.postingDate')}</div>
-              <Input type="date" value={header.postingDate} disabled={!editable} aria-label={t('journal.postingDate')}
+            <Field id={`${formId}-posting`} label={t('journal.postingDate')}>
+              <Input id={`${formId}-posting`} type="date" value={header.postingDate} disabled={!editable}
                 onChange={(e) => changeHeader({ postingDate: e.target.value })} style={{ width: 170 }} />
-            </label>
-            <label>
-              <div>{t('journal.documentDate')}</div>
-              <Input type="date" value={header.documentDate} disabled={!editable} aria-label={t('journal.documentDate')}
+            </Field>
+            <Field id={`${formId}-document`} label={t('journal.documentDate')}>
+              <Input id={`${formId}-document`} type="date" value={header.documentDate} disabled={!editable}
                 onChange={(e) => changeHeader({ documentDate: e.target.value })} style={{ width: 170 }} />
-            </label>
-            <label style={{ flex: 1, minWidth: 320 }}>
-              <div>{t('journal.description')}</div>
-              <Input value={header.description} disabled={!editable} maxLength={500} aria-label={t('journal.description')}
+            </Field>
+            <Field id={`${formId}-description`} label={t('journal.description')} grow>
+              <Input id={`${formId}-description`} value={header.description} disabled={!editable} maxLength={500}
                 onChange={(e) => changeHeader({ description: e.target.value })} />
-            </label>
-            <label>
-              <div>{t('journal.autoReverseDate')}</div>
-              <Input type="date" value={header.autoReverseDate} disabled={!editable}
-                aria-label={t('journal.autoReverseDate')} style={{ width: 170 }}
-                onChange={(e) => changeHeader({ autoReverseDate: e.target.value })} />
-            </label>
+            </Field>
+            <Field id={`${formId}-reverse`} label={t('journal.autoReverseDate')}>
+              <Input id={`${formId}-reverse`} type="date" value={header.autoReverseDate} disabled={!editable}
+                style={{ width: 170 }} onChange={(e) => changeHeader({ autoReverseDate: e.target.value })} />
+            </Field>
             <Checkbox checked={header.adjusting} disabled={!editable}
               onChange={(e) => changeHeader({ adjusting: e.target.checked, adjustmentPeriod: e.target.checked && header.adjustmentPeriod })}>
               {t('journal.adjusting')}
@@ -374,6 +370,18 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
           <AttachmentsCard journal={journal} attachments={loaded.data.attachments} editable={editable} />
         )}
       </Space>
+    </div>
+  )
+}
+
+/** A header field with its label above it. */
+function Field({ id, label, grow, children }: { id: string; label: string; grow?: boolean; children: ReactNode }) {
+  return (
+    <div style={grow ? { flex: 1, minWidth: 320 } : undefined}>
+      <label htmlFor={id} style={{ display: 'block' }}>
+        {label}
+      </label>
+      {children}
     </div>
   )
 }
