@@ -185,4 +185,10 @@ class CommerceConfig {
         orderConfirmationSendProcess() {
         return OrderConfirmations.SEND_PROCESS;
     }
+
+    @Bean
+    ProcessDefinition<OrderPickLists.ArchiveInput, OrderPickLists.ArchiveOutput, ProcessContext>
+        orderPickListArchiveProcess() {
+        return OrderPickLists.ARCHIVE_PROCESS;
+    }
 }
