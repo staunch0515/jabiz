@@ -54,6 +54,8 @@ public final class OpeningProcesses {
     public static final String NOT_FIRST = "FIN_OPENING_NOT_FIRST";
     public static final String EXISTS = "FIN_OPENING_EXISTS";
     public static final String NONE = "FIN_OPENING_NONE";
+    public static final String BOOKS_IN_USE = "FIN_OPENING_BOOKS_IN_USE";
+    public static final String NOT_POSTED = "FIN_OPENING_NOT_POSTED";
 
     /**
      * @param postingDate the day before the first day of the first fiscal year
@@ -75,6 +77,8 @@ public final class OpeningProcesses {
     static final String OPENINGS = "openings";
     static final String DECISIONS = "decisions";
     static final String POST_INPUT = "postInput";
+    static final String POSTINGS = "postings";
+    static final String NOT_OPEN = "notOpen";
 
     public static final ProcessDefinition<OpeningInput, OpeningOutput, ProcessContext> POST_PROCESS =
         ProcessDefinition.define(POST_OPENING, 1, OpeningInput.class, OpeningOutput.class, ProcessContext.class,
@@ -88,6 +92,12 @@ public final class OpeningProcesses {
                         input(ctx).postingDate().plusDays(1))).limit(2).build(), YEARS))
                 .step("Load the opening of the books", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ctx -> PeriodProcesses.openings(), OPENINGS))
+                // Books in use are opened no more: an opening then would change balances already reported on.
+                .step("Load any posting", QueryEntities.of(JournalEntities.POSTING_DATASET,
+                    ctx -> EntityQuery.builder().limit(1).build(), POSTINGS))
+                .step("Load any period no longer open", QueryEntities.of(GlEntities.PERIOD_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Ne("status", "OPEN")).limit(1).build(),
+                    NOT_OPEN))
                 .step("Load the account decisions", QueryEntities.of(MigrationEntities.DECISION_DATASET,
                     ctx -> MigrationProcesses.accountDecisions(rawCodes(ctx)), DECISIONS))
                 .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
@@ -103,7 +113,8 @@ public final class OpeningProcesses {
                 .compute("Make the opening period and entry", (metadata, ctx) -> open(ctx))
                 .step("Save", SaveChanges.now())
                 .step("Post it", CallProcess.when(ctx -> ctx.contains(POST_INPUT), JournalProcesses.POST, 1,
-                    ctx -> ctx.get(POST_INPUT), JournalProcesses.POSTED_OUTPUT)));
+                    ctx -> ctx.get(POST_INPUT), JournalProcesses.POSTED_OUTPUT))
+                .compute("Check it posted", (metadata, ctx) -> checkPosted(ctx)));
 
     public static final ProcessDefinition<CloseInput, PeriodProcesses.PeriodOutput, ProcessContext> CLOSE_PROCESS =
         ProcessDefinition.define(CLOSE_OPENING, 1, CloseInput.class, PeriodProcesses.PeriodOutput.class,
@@ -135,8 +146,11 @@ public final class OpeningProcesses {
             EntityInstance opening = list(ctx, OPENINGS).getFirst();
             ctx.reject(new Violation("postingDate", EXISTS, "The books were opened already (period "
                 + opening.get("periodKey") + ")", Map.of("periodKey", opening.<String>get("periodKey"))));
+        } else if (!list(ctx, POSTINGS).isEmpty() || !list(ctx, NOT_OPEN).isEmpty()) {
+            ctx.reject(new Violation("postingDate", BOOKS_IN_USE, "The books are in use (entries are posted or a "
+                + "period is closed): they are no longer opened", Map.of()));
         }
-        Map<String, String> mapped = MigrationProcesses.accountMap(list(ctx, DECISIONS));
+        Map<String, String> mapped = effectiveMap(ctx);
         List<JournalValidator.Line> lines = lines(input, mapped);
         for (Violation problem : JournalValidator.checkForPosting(lines, JournalProcesses.accounts(ctx),
             JournalProcesses.dimensions(ctx), true)) {
@@ -190,6 +204,30 @@ public final class OpeningProcesses {
         }
         ctx.put(OUTPUT, new OpeningOutput(String.valueOf(id), journalNo, periodKey, totals.debit(), totals.credit(),
             false, null, null, Map.copyOf(used)));
+    }
+
+    /**
+     * The decisions that apply: a legacy code that is (now) an account of the chart is read as itself, whatever was
+     * decided while it was not.
+     */
+    private static Map<String, String> effectiveMap(ProcessContext ctx) {
+        Map<String, String> mapped = new LinkedHashMap<>(MigrationProcesses.accountMap(list(ctx, DECISIONS)));
+        for (EntityInstance account : list(ctx, JournalProcesses.FIN_ACCOUNTS)) {
+            mapped.remove(account.<String>get("accountCode"));
+        }
+        return mapped;
+    }
+
+    /** A posting the ledger refused leaves nothing behind: the whole opening is refused with its reason. */
+    static void checkPosted(ProcessContext ctx) {
+        if (!ctx.contains(JournalProcesses.POSTED_OUTPUT)) {
+            return;
+        }
+        JournalProcesses.PostOutput posted = ctx.get(JournalProcesses.POSTED_OUTPUT, JournalProcesses.PostOutput.class);
+        if (!posted.posted()) {
+            ctx.reject(new Violation("lines", NOT_POSTED, "The opening entry was not posted: " + posted.reason(),
+                Map.of("reason", String.valueOf(posted.reason()))));
+        }
     }
 
     static void close(ProcessContext ctx) {
@@ -253,7 +291,8 @@ public final class OpeningProcesses {
 
     private static Set<String> codes(ProcessContext ctx) {
         Map<String, String> mapped = MigrationProcesses.accountMap(list(ctx, DECISIONS));
-        Set<String> codes = new LinkedHashSet<>();
+        // The raw codes too: one that is an account of the chart is read as itself.
+        Set<String> codes = new LinkedHashSet<>(rawCodes(ctx));
         for (String code : rawCodes(ctx)) {
             codes.add(mapped.getOrDefault(code, code));
         }

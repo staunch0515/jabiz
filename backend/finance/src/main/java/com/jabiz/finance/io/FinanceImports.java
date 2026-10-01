@@ -45,7 +45,7 @@ import java.util.Set;
 @Configuration
 class FinanceImports {
 
-    /** The files of the finance imports: CSV and XLSX, kept as uploaded with the import's record. */
+    /** The files of the finance imports: CSV, kept as uploaded with the import's record. */
     static final String FILE_POLICY = "fin.import";
 
     static final String OPENING_DESCRIPTION = "Opening balances";
@@ -61,7 +61,7 @@ class FinanceImports {
     @Bean
     FilePolicy financeImportPolicy() {
         return FilePolicy.define(FILE_POLICY)
-            .allow(MediaTypes.TEXT, MediaTypes.XLSX)
+            .allow(MediaTypes.TEXT)
             .maxBytes(25 * FilePolicy.MB)
             .permissions(FinancePermissions.IMPORT, FinancePermissions.IMPORT)
             .build();
@@ -112,7 +112,8 @@ class FinanceImports {
         return ImportDefinition.define("finance.opening_balances", 1, OpeningParams.class)
             .file(FILE_POLICY, ImportFormat.csv())
             .field("date", DATE, true, "date", "posting_date")
-            .field("account", CODE, true, "account", "account_code")
+            // Legacy codes may be longer than the chart's; a decision reads them as an account.
+            .field("account", new SemanticKind.Text(100, false), true, "account", "account_code")
             .field("debit", USD, false, "debit")
             .field("credit", USD, false, "credit")
             .field("memo", NAME, false, "memo")
