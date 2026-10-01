@@ -30,6 +30,7 @@ import AttachmentsCard from './AttachmentsCard'
 import {
   checkLine,
   COLUMNS,
+  compact,
   fromStored,
   padLines,
   placeViolations,
@@ -119,7 +120,6 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState<'save' | 'submit' | 'delete' | null>(null)
   const [server, setServer] = useState<ServerProblems | null>(null)
-  const [sentRows, setSentRows] = useState<number[]>([])
   const idempotency = useRef<{ key: string; body: string } | null>(null)
 
   // The stored entry fills the form when it arrives, unless the user is changing it.
@@ -147,17 +147,30 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
     setServer(null)
   }, [])
 
+  /** Undo and redo are changes like any other: unsaved, and the server's refusals no longer apply. */
+  const step = (move: (history: History) => History) => {
+    setHistory(move)
+    setDirty(true)
+    setServer(null)
+  }
+
   const changeHeader = (patch: Partial<Header>) => {
     setHeader((current) => ({ ...current, ...patch }))
     setDirty(true)
     setServer(null)
   }
 
-  /** The same request retried (a timeout, a double click) is run once by the server. */
+  /**
+   * The same request retried after a failure (a timeout) is run once by the server; once a request succeeded, the
+   * next one is new even with the same content (submitting a rejected entry again).
+   */
   const keyFor = (body: unknown) => {
     const text = JSON.stringify(body)
     if (idempotency.current?.body !== text) idempotency.current = { key: crypto.randomUUID(), body: text }
     return idempotency.current.key
+  }
+  const succeeded = () => {
+    idempotency.current = null
   }
 
   const showRefusal = (error: unknown, rows: number[]) => {
@@ -170,9 +183,12 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
     }
   }
 
+  /**
+   * Saves the lines without the blank ones, and shows them so: the server numbers the lines it stores, and its
+   * refusals of a later submission name them by that number.
+   */
   const save = async (): Promise<JournalOutput | null> => {
     const { inputs, rows } = toInputs(lines)
-    setSentRows(rows)
     const input: JournalInput = {
       journalId: journalId ?? undefined,
       postingDate: header.postingDate,
@@ -185,6 +201,8 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
     }
     try {
       const output = await saveJournal(input, keyFor({ save: input }))
+      succeeded()
+      setHistory((current) => record(current, compact(current.present)))
       setDirty(false)
       setServer(null)
       shownVersion.current = null
@@ -212,13 +230,17 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
     setBusy('submit')
     try {
       let id = journalId
-      if (!id || dirty || journal?.status !== 'DRAFT' && journal?.status !== 'REJECTED') {
+      // The rows of the lines as the server numbers them: after a save, the grid shows the saved lines in order.
+      let rows = toInputs(lines).rows
+      if (!id || dirty || (journal?.status !== 'DRAFT' && journal?.status !== 'REJECTED')) {
         const saved = await save()
         if (!saved) return
         id = saved.journalId
+        rows = toInputs(lines).inputs.map((_, i) => i)
       }
       try {
-        const output = await submitJournal(id as string, keyFor({ submit: id, header, lines }))
+        const output = await submitJournal(id as string, keyFor({ submit: id }))
+        succeeded()
         setServer(null)
         message.success(
           output.status === 'POSTED'
@@ -228,7 +250,7 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
         shownVersion.current = null
         await queryClient.invalidateQueries({ queryKey: ['fin', 'journal', id] })
       } catch (error) {
-        showRefusal(error, toInputs(lines).rows)
+        showRefusal(error, rows)
       }
     } finally {
       setBusy(null)
@@ -243,7 +265,7 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
       message.success(t('journal.deleted'))
       navigate(JOURNALS_PATH)
     } catch (error) {
-      showRefusal(error, sentRows)
+      showRefusal(error, [])
     } finally {
       setBusy(null)
     }
@@ -327,8 +349,8 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
           <JournalGrid
             lines={lines}
             onChange={changeLines}
-            onUndo={() => setHistory(undo)}
-            onRedo={() => setHistory(redo)}
+            onUndo={() => step(undo)}
+            onRedo={() => step(redo)}
             problems={problems}
             serverProblems={server?.cells}
             accounts={accountOptions}
@@ -349,10 +371,10 @@ export default function JournalEntryPage({ instanceKey }: { instanceKey?: string
                 title="Ctrl+Enter">
                 {t('journal.submit')}
               </Button>
-              <Button onClick={() => setHistory(undo)} disabled={history.past.length === 0} title="Ctrl+Z">
+              <Button onClick={() => step(undo)} disabled={history.past.length === 0} title="Ctrl+Z">
                 {t('journal.undo')}
               </Button>
-              <Button onClick={() => setHistory(redo)} disabled={history.future.length === 0} title="Ctrl+Y">
+              <Button onClick={() => step(redo)} disabled={history.future.length === 0} title="Ctrl+Y">
                 {t('journal.redo')}
               </Button>
             </>

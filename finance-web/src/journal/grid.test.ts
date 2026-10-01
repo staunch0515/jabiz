@@ -59,6 +59,10 @@ describe('amounts', () => {
     expect(parseAmount('').value).toBeNull()
     expect(parseAmount('abc').problem).toBe('format')
     expect(parseAmount('(12').problem).toBe('format')
+    expect(parseAmount('(-250)').problem).toBe('format')
+    expect(parseAmount('1,2,3').problem).toBe('format')
+    expect(normalizeAmount('1,234,567.89')).toBe('1234567.89')
+    expect(normalizeAmount('-$1,234.50')).toBe('-1234.50')
     expect(parseAmount('1.234').problem).toBe('scale')
     expect(normalizeAmount('1.234')).toBe('1.234')
   })
@@ -88,7 +92,8 @@ describe('checks while typing', () => {
     expect(checkLine(line('9999', '1'))).toEqual({})
   })
 
-  it('want one amount per line, in cents, and no problems on blank lines', () => {
+  it('want one positive amount per line, in cents, and no problems on blank lines', () => {
+    expect(checkLine(line('6400', '-5'), ACCOUNTS).debit?.key).toBe('negative')
     expect(checkLine(line('6400'), ACCOUNTS).debit?.key).toBe('noAmount')
     expect(checkLine(line('6400', '1', '1'), ACCOUNTS).credit?.key).toBe('oneSide')
     expect(checkLine(line('6400', '1.001'), ACCOUNTS).debit?.key).toBe('cents')
@@ -120,6 +125,12 @@ describe('spreadsheets', () => {
     expect(totals(result.lines).balanced).toBe(true)
   })
 
+  it('a header is skipped whichever column it is pasted into', () => {
+    const result = paste([emptyLine()], 0, 'debit', 'Debit\tCredit\tMemo\n15.00\t\tfee')
+    expect(result.pasted).toBe(1)
+    expect(result.lines[0]).toMatchObject({ debit: '15.00', memo: 'fee' })
+  })
+
   it('a block pasted in the middle fills from that cell; beyond the limit, rows are dropped and counted', () => {
     const start = [line('6400', '1'), line('2100')]
     const result = paste(start, 1, 'credit', '1\tfirst\n2\tsecond')
@@ -149,6 +160,15 @@ describe('spreadsheets', () => {
 })
 
 describe('editing', () => {
+  it('formats a left amount in cents and drops blank lines for saving', async () => {
+    const { compact, withAmountFormatted } = await import('./grid')
+    const lines = [line('6400', '15000'), emptyLine(), line('2100', '', '15000.00')]
+    expect(withAmountFormatted(lines, 0, 'debit')[0].debit).toBe('15000.00')
+    expect(withAmountFormatted(lines, 2, 'credit')).toBe(lines)
+    expect(withAmountFormatted(lines, 0, 'memo')).toBe(lines)
+    expect(compact(lines, 1).map((l) => l.accountCode)).toEqual(['6400', '2100', ''])
+  })
+
   it('fills down from the line above, inserts and removes lines', () => {
     const lines = [line('6400', '1', '', 'audit'), line('2100')]
     expect(fillDown(lines, 1, 'memo')[1].memo).toBe('audit')

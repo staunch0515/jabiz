@@ -26,6 +26,21 @@ export function isBlank(line: GridLine): boolean {
   return COLUMNS.every((column) => line[column].trim() === '')
 }
 
+/** The lines without the blank ones, as the server stores them, with room to type after them. */
+export function compact(lines: GridLine[], room = 2): GridLine[] {
+  const kept = lines.filter((line) => !isBlank(line))
+  return [...kept, ...Array.from({ length: room }, emptyLine)]
+}
+
+/** The cell left with its amount in cents ("15000" becomes "15000.00"); the same lines when nothing changes. */
+export function withAmountFormatted(lines: GridLine[], row: number, column: Column): GridLine[] {
+  if (column !== 'debit' && column !== 'credit') return lines
+  const value = lines[row]?.[column]
+  if (value === undefined) return lines
+  const normalized = normalizeAmount(value)
+  return normalized === value ? lines : setCell(lines, row, column, normalized)
+}
+
 /** Lines to show: at least {@code count}, so that there is always room to type. */
 export function padLines(lines: GridLine[], count = 2): GridLine[] {
   const padded = [...lines]
@@ -43,7 +58,8 @@ export interface ParsedAmount {
   problem?: AmountProblem
 }
 
-const AMOUNT = /^\(?-?\$?\s*[\d,]*(\.\d*)?\)?$/
+/** "-$1,234.50", "(1,234.50)", "1234.5": thousands separators only in their places, if at all. */
+const AMOUNT = /^(?:-?\$?\s*|\(\$?\s*)(?:\d{1,3}(?:,\d{3})+|\d*)(?:\.\d*)?\)?$/
 
 /**
  * Reads an amount as accountants type and spreadsheets copy it: "15000", "15,000.00", "$1,234.5", "-250" or
@@ -53,8 +69,8 @@ export function parseAmount(text: string): ParsedAmount {
   const trimmed = text.trim()
   if (trimmed === '') return { value: null }
   if (!AMOUNT.test(trimmed)) return { value: null, problem: 'format' }
-  const parenthesized = trimmed.startsWith('(') && trimmed.endsWith(')')
-  if (trimmed.startsWith('(') !== trimmed.endsWith(')')) return { value: null, problem: 'format' }
+  const parenthesized = trimmed.startsWith('(')
+  if (parenthesized !== trimmed.endsWith(')')) return { value: null, problem: 'format' }
   const digits = trimmed.replace(/[()$,\s]/g, '')
   const negative = parenthesized || digits.startsWith('-')
   const decimal = parseDecimal(digits.replace(/^-/, ''))
@@ -171,6 +187,7 @@ export function checkLine(line: GridLine, accounts?: ReadonlyMap<string, Account
   const credit = parseAmount(line.credit)
   for (const [column, amount] of [['debit', debit], ['credit', credit]] as const) {
     if (amount.problem) problems[column] = { key: amount.problem === 'scale' ? 'cents' : 'amount' }
+    else if (amount.value && amount.value.unscaled < 0n) problems[column] = { key: 'negative' }
   }
   const hasDebit = debit.value !== null && debit.value.unscaled !== 0n
   const hasCredit = credit.value !== null && credit.value.unscaled !== 0n
@@ -276,9 +293,10 @@ export function parseTsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c.trim() !== ''))
 }
 
-/** A first row naming the columns ("Account", "Debit" …) is a header, not a line. */
+/** A first row naming the columns ("Account", "Debit" …) without any amount is a header, not a line. */
 function isHeader(row: string[]): boolean {
-  return /account/i.test(row[0] ?? '') && !/\d/.test(row[0] ?? '')
+  return row.some((cell) => /^(account|debit|credit|memo|department|location|amount)\b/i.test(cell.trim()))
+    && row.every((cell) => !/\d/.test(cell))
 }
 
 export interface PasteResult {
@@ -296,7 +314,7 @@ export interface PasteResult {
  */
 export function paste(lines: GridLine[], row: number, column: Column, text: string): PasteResult {
   let rows = parseTsv(text)
-  if (rows.length > 0 && column === 'accountCode' && isHeader(rows[0])) rows = rows.slice(1)
+  if (rows.length > 0 && isHeader(rows[0])) rows = rows.slice(1)
   const start = COLUMNS.indexOf(column)
   const room = MAX_LINES - row
   const fitting = rows.slice(0, Math.max(0, room))

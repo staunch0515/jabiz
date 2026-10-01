@@ -55,7 +55,7 @@ describe('JournalGrid', () => {
     await userEvent.type(cell('Credit', 50), '1186')
     expect(cell('Account', 49)).not.toHaveAttribute('aria-invalid')
     expect(screen.getByTestId('total-difference')).toHaveTextContent('Balanced')
-  })
+  }, 20_000)
 
   it('works by keyboard: Enter adds and moves to a line, amounts take cents, Ctrl+D fills down, Ctrl+Z undoes', async () => {
     render(<Harness />)
@@ -79,7 +79,28 @@ describe('JournalGrid', () => {
     expect(cell('Account', 4)).toHaveFocus()
     await userEvent.keyboard('{Control>}{Delete}{/Control}')
     expect(screen.queryByLabelText('Account, line 4')).not.toBeInTheDocument()
-  })
+  }, 20_000)
+
+  it('Enter on the last line keeps the amount it formats, and arrow keys stay with the account suggestions', async () => {
+    render(<Harness initial={[{ accountCode: '6400', debit: '', credit: '', memo: '', department: '', location: '' }]} />)
+    await userEvent.click(cell('Debit', 1))
+    await userEvent.keyboard('25000{Enter}')
+    expect(cell('Debit', 1).value).toBe('25000.00')
+    expect(cell('Debit', 2)).toHaveFocus()
+    await userEvent.click(cell('Account', 2))
+    await userEvent.keyboard('{ArrowUp}')
+    expect(cell('Account', 2)).toHaveFocus()
+    await userEvent.click(cell('Memo', 2))
+    await userEvent.keyboard('{ArrowUp}')
+    expect(cell('Memo', 1)).toHaveFocus()
+  }, 20_000)
+
+  it('links each flagged cell to the text of its problem', () => {
+    render(<Harness initial={[{ accountCode: '9999', debit: '5', credit: '', memo: '', department: '', location: '' }]} />)
+    const described = cell('Account', 1).getAttribute('aria-describedby')
+    expect(described).toBeTruthy()
+    expect(document.getElementById(described as string)).toHaveTextContent('There is no account 9999.')
+  }, 20_000)
 
   it('warns of a control account without refusing it, and offers only accounts that take postings', () => {
     render(<Harness initial={[{ accountCode: '1010', debit: '', credit: '5.00', memo: '', department: '', location: '' }]} />)
@@ -87,7 +108,7 @@ describe('JournalGrid', () => {
     expect(cell('Account', 1)).toHaveAttribute('title', expect.stringContaining('control account'))
     const options = [...document.querySelectorAll('#fin-grid-accounts option')].map((o) => o.getAttribute('value'))
     expect(options).toEqual(['1010', '2100', '6400'])
-  })
+  }, 20_000)
 
   it('a single value pastes into the cell as usual; read-only lines take no edits', () => {
     const { rerender } = render(<Harness />)

@@ -59,7 +59,8 @@ export default function AttachmentsCard({ journal, attachments, editable }: {
       link.href = url
       link.download = fileName ?? 'attachment'
       link.click()
-      URL.revokeObjectURL(url)
+      // Released once the browser has taken the download over.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
       setError(e instanceof ApiError ? e.display : String(e))
     }
@@ -99,7 +100,7 @@ export default function AttachmentsCard({ journal, attachments, editable }: {
       />
       {changeable && (
         <Space.Compact style={{ width: '100%', marginTop: 8 }}>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500}
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200}
             placeholder={t('journal.attachmentDescription')} aria-label={t('journal.attachmentDescription')} />
           <Button loading={busy} onClick={() => picker.current?.click()}>
             {t('journal.attach')}

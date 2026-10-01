@@ -25,6 +25,7 @@ export const messages = {
       draftNo: '(draft)',
       none: 'No journal entries in this range.',
       registerTotal: '{{count}} entries',
+      registerCapped: 'Only the first {{shown}} of {{total}} entries are shown, and the totals are theirs: narrow the dates or the status.',
       postingDate: 'Posting date',
       documentDate: 'Document date',
       description: 'Description',
@@ -47,7 +48,7 @@ export const messages = {
       unsaved: 'Unsaved changes',
       changeReturnsToDraft: 'Saving a change returns this entry to draft; any approval must be given again.',
       gridHelp:
-        'Enter or ↑/↓ moves between lines, Tab across. Paste a block from a spreadsheet into any cell. Ctrl+D fills down, Ctrl+Z / Ctrl+Y undo and redo, Alt+N inserts a line, Ctrl+Delete removes one. Ctrl+S saves, Ctrl+Enter submits.',
+        'Enter moves down a line (↑/↓ too, except in the account and dimension cells, where they open the suggestions), Tab across. Paste a block from a spreadsheet into any cell. Ctrl+D fills down, Ctrl+Z / Ctrl+Y undo and redo, Alt+N inserts a line, Ctrl+Delete removes one. Ctrl+S saves, Ctrl+Enter submits.',
       cell: '{{column}}, line {{line}}',
       column: {
         accountCode: 'Account',
@@ -66,6 +67,7 @@ export const messages = {
         cents: 'Amounts are in cents.',
         oneSide: 'Either a debit or a credit.',
         noAmount: 'A debit or a credit is needed.',
+        negative: 'Amounts are positive: put a negative debit in the credit column.',
         accountMissing: 'An account is needed.',
         accountUnknown: 'There is no account {{code}}.',
         accountSummary: '{{code}} is a summary account.',

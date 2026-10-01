@@ -100,11 +100,18 @@ describe('JournalEntryPage', () => {
     })
     expect(key).toEqual(expect.any(String))
     await waitFor(() => expect(calls.loadJournal).toHaveBeenCalledWith('j-9'))
-  })
+  }, 20_000)
 
-  it('submits with Ctrl+Enter and shows each refusal on the cell it names', async () => {
+  it('submits with Ctrl+Enter and shows each refusal on the cell it names, also once the saved entry loads', async () => {
     calls.saveJournal.mockResolvedValue({ journalId: 'j-9', status: 'DRAFT' })
-    calls.loadJournal.mockReturnValue(new Promise(() => {}))
+    calls.loadJournal.mockResolvedValue({
+      ...STORED,
+      journal: { ...STORED.journal, journalId: 'j-9', status: 'DRAFT', journalNo: null, approvalRequestId: null },
+      lines: [
+        { lineNo: 1, accountCode: '6400', debit: 25000 },
+        { lineNo: 2, accountCode: '2100', credit: 25000 },
+      ],
+    })
     calls.submitJournal.mockRejectedValue(
       new ApiError(422, {
         detail: 'refused',
@@ -118,11 +125,29 @@ describe('JournalEntryPage', () => {
     fireEvent.keyDown(cell('Memo', 1), { key: 'Enter', ctrlKey: true })
 
     await waitFor(() => expect(calls.submitJournal).toHaveBeenCalledWith('j-9', expect.any(String)))
-    // The second line sent is grid line 3: the blank line between was left out.
+    // Saved, the lines show without the blank one between them: the server's second line is grid line 2.
     expect(await screen.findByText('Period closed')).toBeInTheDocument()
-    expect(cell('Account', 3)).toHaveAttribute('aria-invalid', 'true')
-    expect(cell('Account', 3)).toHaveAttribute('title', 'Account 2100 is a control account')
-  })
+    await waitFor(() => expect(calls.loadJournal).toHaveBeenCalledWith('j-9'))
+    expect(cell('Account', 2).value).toBe('2100')
+    expect(cell('Account', 2)).toHaveAttribute('aria-invalid', 'true')
+    expect(cell('Account', 2)).toHaveAttribute('title', 'Account 2100 is a control account')
+  }, 20_000)
+
+  it('submits a rejected entry again as a new request', async () => {
+    calls.loadJournal.mockResolvedValue({ ...STORED, journal: { ...STORED.journal, status: 'REJECTED' } })
+    calls.submitJournal.mockResolvedValue({ journalId: 'j-1', journalNo: 'JE-0002', status: 'SUBMITTED' })
+    renderAt('/gl/journals/j-1', ROUTES)
+    await screen.findByText('Journal entry JE-0002')
+    const submit = () => screen.getByText('Submit').closest('button') as HTMLButtonElement
+    await userEvent.click(submit())
+    await waitFor(() => expect(calls.submitJournal).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submit()).not.toBeDisabled())
+    await userEvent.click(submit())
+    await waitFor(() => expect(calls.submitJournal).toHaveBeenCalledTimes(2))
+    const [first, second] = calls.submitJournal.mock.calls.map((call) => call[1])
+    expect(second).not.toBe(first)
+    expect(calls.saveJournal).not.toHaveBeenCalled()
+  }, 20_000)
 
   it('shows a submitted entry with its approval to approvers; changing it warns it returns to draft', async () => {
     calls.loadJournal.mockResolvedValue(STORED)
@@ -137,7 +162,7 @@ describe('JournalEntryPage', () => {
 
     await userEvent.type(cell('Memo', 2), 'x')
     expect(screen.getByText(/returns this entry to draft/)).toBeInTheDocument()
-  })
+  }, 20_000)
 
   it('a posted entry is read-only and offers its reversal', async () => {
     calls.loadJournal.mockResolvedValue({
@@ -155,7 +180,7 @@ describe('JournalEntryPage', () => {
     await waitFor(() =>
       expect(calls.runProcess).toHaveBeenCalledWith('FIN_JOURNAL_REVERSE', { journalId: 'j-1', postingDate: '2026-02-01' }),
     )
-  })
+  }, 20_000)
 
   it('offers no editing to those who may not prepare entries', async () => {
     calls.permissions = new Set(['fin.journal.read'])

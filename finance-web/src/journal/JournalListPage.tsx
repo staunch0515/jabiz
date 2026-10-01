@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth } from '@jabiz/admin'
-import { Button, Input, Select, Space, Table, Typography } from 'antd'
+import { Alert, Button, Input, Select, Space, Table, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
@@ -69,6 +69,10 @@ export default function JournalListPage() {
           ]}
         />
       </Space>
+      {register.data?.total !== undefined && register.data.total > rows.length && (
+        <Alert type="warning" showIcon data-testid="register-capped"
+          message={t('journal.registerCapped', { shown: rows.length, total: register.data.total })} />
+      )}
       <Table<RegisterRow>
         data-testid="journal-table"
         size="small"

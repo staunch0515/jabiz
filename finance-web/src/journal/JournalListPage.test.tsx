@@ -43,6 +43,12 @@ describe('JournalListPage', () => {
     expect(screen.queryByTestId('new-journal')).not.toBeInTheDocument()
   })
 
+  it('says when the register shows only the first entries', async () => {
+    calls.loadRegister.mockResolvedValue({ items: ROWS, offset: 0, limit: 500, total: 812 })
+    renderAt('/gl/journals', [{ path: '/gl/journals', element: <JournalListPage /> }])
+    expect(await screen.findByTestId('register-capped')).toHaveTextContent('Only the first 2 of 812 entries')
+  })
+
   it('narrows the register by date and offers a new entry to preparers', async () => {
     calls.permissions.add('fin.journal.prepare')
     renderAt('/gl/journals', [{ path: '/gl/journals', element: <JournalListPage /> }])

@@ -14,8 +14,26 @@ export const ADMIN: User = {
   userName: process.env.E2E_ADMIN_USER ?? 'admin',
   password: process.env.E2E_ADMIN_PASSWORD ?? 'admin-password-1',
 }
-export const ACCOUNTANT: User = { userName: 'e2e-accountant', password: 'e2e-accountant-password-1' }
-export const CONTROLLER: User = { userName: 'e2e-controller', password: 'e2e-controller-password-1' }
+/**
+ * The test users are made on the server under test with known passwords: only a server on this machine (a CI job or
+ * a developer's), unless E2E_ALLOW_REMOTE is set for a disposable environment; the passwords can be set too.
+ */
+export const ACCOUNTANT: User = {
+  userName: 'e2e-accountant',
+  password: process.env.E2E_ACCOUNTANT_PASSWORD ?? 'e2e-accountant-password-1',
+}
+export const CONTROLLER: User = {
+  userName: 'e2e-controller',
+  password: process.env.E2E_CONTROLLER_PASSWORD ?? 'e2e-controller-password-1',
+}
+
+function requireDisposableServer() {
+  const host = new URL(process.env.E2E_BASE_URL ?? 'http://localhost:8080').hostname
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && !process.env.E2E_ALLOW_REMOTE) {
+    throw new Error(`E2E_BASE_URL points at ${host}: the tests make users with known passwords there. ` +
+      'Set E2E_ALLOW_REMOTE=1 only for a disposable environment.')
+  }
+}
 
 const ACCOUNTS = [
   { accountCode: '1010', accountName: 'Cash - Operating', financialType: 'ASSET', normalBalance: 'DEBIT',
@@ -78,6 +96,7 @@ let prepared = false
 
 export async function prepareBooks(request: APIRequestContext) {
   if (prepared) return
+  requireDisposableServer()
   const admin = await token(request, ADMIN)
   const setup = await run(request, admin, 'FIN_SETUP', {})
   expect(setup.status, JSON.stringify(setup.body)).toBe(200)

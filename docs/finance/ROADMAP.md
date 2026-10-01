@@ -116,7 +116,25 @@
   附件只由准备人在草稿时增删且只能附自己的上传；不能过账的周期模板被跳过；自动冲回不提前、只看未冲回的分录（`JournalLifecycleIT`、`JournalAutomationIT`、`AttachmentIT`）。
 - [x] 纯计算的单元与属性测试（`JournalValidatorTest`）；所有 `fi_` 表只插入；`./gradlew :finance:check` 与 `tools/check-app-paths.sh` 通过。
 
-**F1c 要求与验收标准**：在开始时写入本节（计划见上文与 `docs/finance-work/00-development-plan.md` §5.2）。
+**F1c 要求**
+1. `finance-web/`：财务的后台扩展（D22，经 `@jabiz/admin` 引用平台，菜单"General ledger"），只写元数据表达不了的页面：
+   - 日记账登记簿 `/gl/journals`（模板 `finance.gl.journal_register`：日期范围、状态、排序、合计，每行打开分录）。
+   - 分录页 `/gl/journals/new` 与 `/gl/journals/:id`：表头与录入网格（GL-020、UI-002/003）——从表格粘贴整块、复制回表格、向下填充、撤销与重做、
+     Enter 与方向键换行、Alt+N 插行、Ctrl+Delete 删行、Ctrl+S 保存、Ctrl+Enter 提交；金额不用分隔符；科目与维度输入联想（模板 `finance.gl.account_lookup`）；
+     当场检查（科目、金额、维度）与实时借贷合计和差额；服务端的拒绝显示在它指出的单元格上。审批（平台 `ApprovalPanel`）、控制科目例外、冲回、附件与哈希。
+   - 试算表与账户查询用平台的报表页面运行（菜单项指向它们）。主数据仍用生成的页面。
+2. 测试：Vitest（网格模型、网格组件、分录页、登记簿）；Playwright（`finance-web/e2e`，`tools/finance/e2e.sh`）对打包的应用；CI `finance.yml` 增加 `web` 与 `e2e` 作业。
+3. 性能摸底：生成器 `tools/finance/perf/`（直接写库）与 `probe.sh`，结果与对设计 Q1 的结论写入 `docs/finance/perf.md`。
+4. 需求追踪表 `docs/finance/traceability.md`（F1 的需求 → 实现 → 测试）。
+
+**F1c 验收标准**
+- [x] 从表格粘贴 50 行：全部出现，无效单元格标出，合计显示差额直到平衡（GL-020 验收 1，`e2e/journal.spec.ts`、`JournalGrid.test.tsx`）。
+- [x] 只用键盘录入、保存并提交一笔分录（UI-002，`e2e/journal.spec.ts`）；粘贴、复制、向下填充、撤销（UI-003，`grid.test.ts`、`JournalGrid.test.tsx`）。
+- [x] 提交后等待审批，会计无审批入口，Controller 在分录页批准后过账（FIN-SCN-02 第 2 步，`e2e/journal.spec.ts`）。
+- [x] 服务端拒绝落在对应单元格，跳过的空行不错位（`JournalEntryPage.test.tsx`）；已过账分录只读并可冲回。
+- [x] 登记簿排序、筛选、精确合计并打开分录（UI-004 的日记账部分，`JournalListPage.test.tsx`）。
+- [x] 性能摸底完成并写入 `docs/finance/perf.md`；追踪表覆盖 F1 的全部需求。
+- [x] `pnpm ext:check`（扩展的类型、lint、测试）、`./gradlew :finance:check`、`tools/check-app-paths.sh` 通过；端到端在 CI 中运行。
 
 ## F2 — F11
 

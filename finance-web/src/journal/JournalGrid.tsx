@@ -1,6 +1,6 @@
 import { EXTENSION_NAMESPACE, formatAmount } from '@jabiz/admin'
 import { Typography } from 'antd'
-import { useEffect, useRef, type ClipboardEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   COLUMNS,
@@ -9,11 +9,11 @@ import {
   insertLine,
   isBlock,
   MAX_LINES,
-  normalizeAmount,
   paste,
   removeLine,
   setCell,
   totals,
+  withAmountFormatted,
   type AccountOption,
   type CellProblem,
   type Column,
@@ -88,6 +88,7 @@ export default function JournalGrid({
   onPasteDropped,
 }: JournalGridProps) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const gridId = useId()
   const inputs = useRef(new Map<string, HTMLInputElement>())
   // A cell to focus once it exists: a line added by Enter or Alt+N appears only after the next render.
   const pendingFocus = useRef<{ row: number; column: Column } | null>(null)
@@ -111,13 +112,16 @@ export default function JournalGrid({
 
   const label = (column: Column, row: number) => t('journal.cell', { column: t(`journal.column.${column}`), line: row + 1 })
 
+  /** Leaves a cell for the line above or below: its amount takes its form, and past the last line one is added. */
   const move = (row: number, column: Column, delta: number) => {
     const target = row + delta
     if (target < 0) return
-    if (target >= lines.length) {
-      if (readOnly || lines.length >= MAX_LINES) return
-      onChange([...lines, emptyLine()])
+    let next = readOnly ? lines : withAmountFormatted(lines, row, column)
+    if (target >= next.length) {
+      if (readOnly || next.length >= MAX_LINES) return
+      next = [...next, emptyLine()]
     }
+    if (next !== lines) onChange(next)
     setFocusTarget({ row: target, column })
   }
 
@@ -143,22 +147,20 @@ export default function JournalGrid({
       event.preventDefault()
       onChange(removeLine(lines, row))
       setFocusTarget({ row: Math.max(0, Math.min(row, lines.length - 2)), column })
-    } else if ((key === 'enter' && !ctrl && !event.altKey) || key === 'arrowdown') {
+    } else if (key === 'enter' && !ctrl && !event.altKey) {
       event.preventDefault()
-      commitAmount(row, column, event.currentTarget.value)
       move(row, column, 1)
-    } else if (key === 'arrowup') {
+    } else if ((key === 'arrowdown' || key === 'arrowup') && !LISTS[column]) {
+      // In cells with suggestions the arrow keys stay the browser's: they open and walk the list.
       event.preventDefault()
-      commitAmount(row, column, event.currentTarget.value)
-      move(row, column, -1)
+      move(row, column, key === 'arrowdown' ? 1 : -1)
     }
   }
 
   /** Amounts take their form in cents when the cell is left ("15000" becomes "15000.00"). */
-  const commitAmount = (row: number, column: Column, value: string) => {
-    if (!AMOUNTS.has(column)) return
-    const normalized = normalizeAmount(value)
-    if (normalized !== value) onChange(setCell(lines, row, column, normalized))
+  const commitAmount = (row: number, column: Column) => {
+    const next = withAmountFormatted(lines, row, column)
+    if (next !== lines) onChange(next)
   }
 
   const onPaste = (event: ClipboardEvent<HTMLInputElement>, row: number, column: Column) => {
@@ -237,6 +239,7 @@ export default function JournalGrid({
                         readOnly={readOnly}
                         aria-label={label(column, row)}
                         aria-invalid={problem && !(typeof problem === 'object' && problem.warning) ? true : undefined}
+                        aria-describedby={message ? `${gridId}-check-${row}` : undefined}
                         title={message}
                         list={LISTS[column]}
                         inputMode={AMOUNTS.has(column) ? 'decimal' : undefined}
@@ -244,14 +247,15 @@ export default function JournalGrid({
                         maxLength={column === 'memo' ? 200 : column === 'accountCode' ? 20 : AMOUNTS.has(column) ? 24 : 20}
                         style={cellStyle(problem, AMOUNTS.has(column))}
                         onChange={(event) => onChange(setCell(lines, row, column, event.target.value))}
-                        onBlur={(event) => commitAmount(row, column, event.target.value)}
+                        onBlur={() => !readOnly && commitAmount(row, column)}
                         onKeyDown={(event) => onKeyDown(event, row, column)}
                         onPaste={(event) => onPaste(event, row, column)}
                       />
                     </td>
                   )
                 })}
-                <td style={{ padding: '1px 6px', fontSize: 12, color: '#a8071a' }} data-testid={`grid-check-${row}`}>
+                <td id={`${gridId}-check-${row}`} style={{ padding: '1px 6px', fontSize: 12, color: '#a8071a' }}
+                  data-testid={`grid-check-${row}`}>
                   {messages.join(' ')}
                 </td>
               </tr>

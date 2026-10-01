@@ -115,19 +115,37 @@ export interface JournalInput {
   lines: LineInput[]
 }
 
-async function queryDataset<T>(datasetId: string, filters: Filter[], limit = 500): Promise<T[]> {
-  const page = await unwrap(
-    api.POST('/api/datasets/{resourceId}/query', {
-      params: { path: { resourceId: datasetId } },
-      body: { filters, limit },
-    }),
-  )
-  return (page.items ?? []).map((item) => item.attributes as T)
+/** The most rows one call returns: the datasets' and templates' page limit. */
+const PAGE = 500
+/** Enough pages for any chart of accounts or dimension list (FIN-NF-001: 600 accounts, twice that without limit). */
+const MAX_PAGES = 20
+
+/** Every matching instance of a dataset, page after page. */
+async function queryDataset<T>(datasetId: string, filters: Filter[]): Promise<T[]> {
+  const all: T[] = []
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const answer = await unwrap(
+      api.POST('/api/datasets/{resourceId}/query', {
+        params: { path: { resourceId: datasetId } },
+        body: { filters, offset: page * PAGE, limit: PAGE },
+      }),
+    )
+    const items = answer.items ?? []
+    all.push(...items.map((item) => item.attributes as T))
+    if (items.length < PAGE) break
+  }
+  return all
 }
 
+/** Every account, page after page: an account not loaded would show as unknown. */
 export async function loadAccounts(): Promise<Map<string, AccountOption>> {
-  const page = await runQuery<AccountOption>(QUERIES.accounts, { limit: 5000 })
-  return new Map(page.items.map((account) => [account.accountCode, account]))
+  const accounts = new Map<string, AccountOption>()
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const answer = await runQuery<AccountOption>(QUERIES.accounts, { offset: page * PAGE, limit: PAGE })
+    for (const account of answer.items) accounts.set(account.accountCode, account)
+    if (answer.items.length < PAGE) break
+  }
+  return accounts
 }
 
 export async function loadDimensions(): Promise<Dimensions> {
@@ -177,7 +195,7 @@ export function submitJournal(journalId: string, idempotencyKey?: string): Promi
 export async function loadRegister(params: { from: string; to: string; status?: string | null }) {
   const page = await runQuery<RegisterRow>(QUERIES.register, {
     params: { from: params.from, to: params.to, status: params.status ?? null },
-    limit: 500,
+    limit: PAGE,
     count: true,
   })
   return page
