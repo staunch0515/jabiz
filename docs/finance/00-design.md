@@ -281,14 +281,17 @@
 | 实体 | 要点 |
 |---|---|
 | `FinVendor` | ID、法定名称、DBA、汇款地址、联系人、币种、条件、缺省费用科目、付款方式、实体类型、1099 表与栏、状态 |
-| `FinVendorTaxInfo` | TIN（敏感：按权限显示明文，14g）、TIN 类型、W-9 文件与日期、验证状态、备用预扣标记（AP-002） |
-| `FinVendorBankAccount` | 银行账号（敏感）；变更进入"待批准"，第二人批准后生效；待批准期间该供应商的账单在付款建议中被暂停，原因"bank details pending approval"（AP-003） |
+| `FinVendorTaxInfo` | TIN（`masked(fin.tax.data.read, TAX_ID)`，平台 14k）、TIN 类型、W-9 文件（策略 `fin.w9`，读取需要 `fin.tax.data.read`）与日期、验证状态、备用预扣标记（AP-002）。应付员可以登记 W-9，之后同样只看到遮蔽形式 |
+| `FinVendorBankAccount` | 每个账户一行；银行账号 `masked(fin.vendor.bank.read, LAST4)`。变更（`FIN_VENDOR_BANK_CHANGE`，二次验证）是一行"待批准"，经审批对象 `fin.ap.vendor-bank`（规则 `FIN-VENDOR-BANK`）由第二人批准后启用、原账户 REPLACED；审批事实与内容中没有账号。待批准期间该供应商的账单在付款建议中被暂停，原因"bank details pending approval"（AP-003） |
+| `FinBankAccount` | 公司银行账户（F4 计划 D3，F4a 起）：代码、银行、总账科目（`BANK` 控制科目）、币种、路由号、账号（`masked(fin.bank.read, LAST4)`）、ACH 公司 ID 与名称、下一支票号；Treasurer 以二次验证维护；对账的字段在 F5 |
+| `FinApSettings` | 应付科目（`AP` 控制科目）、现金折扣、使用税应付、供应商预付科目（样例科目表没有，由 Controller 新增，D5）、缺省付款银行 |
 | `FinBill` / `FinBillLine` | 供应商、供应商发票号（供应商 × 号码唯一 → 阻止）、日期、收到日、到期日、币种、条件；行：金额、费用或资产科目、税（使用税 TX-007）、维度、1099 栏（缺省来自供应商，可逐行覆盖） |
 | `FinVendorCredit`、`FinVendorPrepayment` | 应用到账单（AP-008） |
 | `FinPaymentRun` / `FinPayment` / `FinPaymentLine` | 建议（到期日、折扣日、供应商、币种、银行账户）、增删、提交、他人批准、财务主管释放（二次验证）、锁定；每笔付款 × 账单 |
 | `FinPaymentFile` | 生成的文件（NACHA CCD/PPD、pain.001、支票文件、正向支付）：只追加、哈希；同一付款批只能有一个有效文件，重新生成须先以原因作废（BK-011） |
-| `Fin1099Threshold` | 纳税年度 × 表 → 阈值（时态，AP-021） |
+| `Fin1099Threshold` | 纳税年度 × 表（NEC、MISC）→ 阈值（时态，AP-021）；样例的一列阈值同时用于两种表 |
 
+- 职责分离（FIN-CT-001，F4a 起由 `FIN_SETUP` 提出、他人发布）：`fin.vendor.bank.maintain` × `fin.payment.release`；`fin.bill.prepare`、`fin.payment.prepare` × `fin.payment.release`。
 - 重复检查（AP-005）：同供应商同号 → 拒绝；同供应商、金额、日期而号不同 → 警告，需确认并填写原因。
 - 审批（AP-006）：规则（金额、供应商、科目、维度）与审批人限额；未批准的账单不能被选入付款。
 - 资本化（AP-007）：行科目为资产成本科目 → 过账时创建或更新资产登记并链接账单（资产的折旧在 F6）。

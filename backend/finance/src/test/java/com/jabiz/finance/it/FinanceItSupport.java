@@ -315,21 +315,34 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
      * roles, the journal approval rule (proposed by the administrator, published by a controller) and two
      * departments.
      */
-    @SuppressWarnings("unchecked")
     protected void openBooks() {
+        openBooksHolding();
+    }
+
+    /**
+     * {@link #openBooks()}, publishing every rule {@code FIN_SETUP} proposed but those of the codes given; returns
+     * the held changes by rule code, for a test that publishes them later.
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, String> openBooksHolding(String... held) {
         loadSampleChart();
         ok("FIN_FISCAL_YEAR_CREATE", controller(), Map.of("fiscalYear", 2026, "adjustmentPeriod", true));
         Map<String, Object> setup = ok("FIN_SETUP", as("sysadmin", "fin.setup"), Map.of());
-        ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"),
-            Map.of("changeId", setup.get("approvalRuleChange")));
-        ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"),
-            Map.of("changeId", setup.get("writeOffRuleChange")));
+        Map<String, String> holding = new LinkedHashMap<>();
+        ((Map<String, String>) setup.get("proposedChanges")).forEach((code, changeId) -> {
+            if (List.of(held).contains(code)) {
+                holding.put(code, changeId);
+            } else {
+                ok("CONTROL_CHANGE_PUBLISH", as("controller-2", "control.publish"), Map.of("changeId", changeId));
+            }
+        });
         for (String department : List.of("ADMIN", "SALES")) {
             post("/api/datasets/" + com.jabiz.finance.gl.GlEntities.DEPARTMENT_DATASET + "/commit",
                 as("controller", "fin.dimension.maintain"), Map.of("changes", List.of(Map.of("action", "INSERT",
                     "attributes", Map.of("departmentCode", department, "departmentName", department,
                         "active", true))))).expectStatus().isOk();
         }
+        return holding;
     }
 
     /**

@@ -54,24 +54,32 @@ public final class FinanceRoles {
             FinancePermissions.RECEIPT_ADJUST, FinancePermissions.WRITE_OFF_REQUEST, FinancePermissions.WRITE_OFF_APPROVE,
             FinancePermissions.INVOICE_APPROVE, FinancePermissions.RECURRING_INVOICE_MAINTAIN,
             FinancePermissions.COMPANY_MAINTAIN, FinancePermissions.INVOICE_ISSUE, "document.archive.read",
-            "document.send", "document.send.any"));
+            "document.send", "document.send.any", FinancePermissions.AP_READ, FinancePermissions.VENDOR_MAINTAIN,
+            FinancePermissions.TAX_DATA_READ, FinancePermissions.VENDOR_BANK_APPROVE, FinancePermissions.AP_SETTINGS,
+            FinancePermissions.FORM_1099_MAINTAIN));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
-            FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, "document.archive.read"));
+            FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, FinancePermissions.AP_READ,
+            "document.archive.read"));
         add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of(FinancePermissions.AR_READ,
             FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT, FinancePermissions.INVOICE_PREPARE,
             FinancePermissions.RECEIPT_RECORD, FinancePermissions.WRITE_OFF_REQUEST,
             FinancePermissions.RECURRING_INVOICE_MAINTAIN, FinancePermissions.INVOICE_ISSUE, "document.archive.read",
             "document.send"));
-        add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of());
+        add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of(FinancePermissions.AP_READ,
+            FinancePermissions.VENDOR_MAINTAIN, FinancePermissions.VENDOR_BANK_MAINTAIN, FinancePermissions.IMPORT,
+            FinancePermissions.FORM_1099_MAINTAIN, FinancePermissions.BILL_PREPARE, FinancePermissions.PAYMENT_PREPARE,
+            "document.archive.read"));
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
             "approval.decide", FinancePermissions.WRITE_OFF_APPROVE, FinancePermissions.INVOICE_APPROVE,
-            FinancePermissions.AR_READ));
+            FinancePermissions.AR_READ, FinancePermissions.AP_READ, FinancePermissions.VENDOR_BANK_APPROVE));
         add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN,
-            FinancePermissions.IMPORT));
-        add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.AR_READ));
+            FinancePermissions.IMPORT, FinancePermissions.AP_READ, FinancePermissions.BANK_MAINTAIN,
+            FinancePermissions.BANK_READ, FinancePermissions.VENDOR_BANK_READ, FinancePermissions.PAYMENT_RELEASE));
+        add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.AR_READ,
+            FinancePermissions.AP_READ));
         add(EXTERNAL_AUDITOR, "External auditor", READ_BOOKS, READ_LEDGER, List.of("audit.read", "operation.read",
-            FinancePermissions.AR_READ, "document.archive.read"));
+            FinancePermissions.AR_READ, FinancePermissions.AP_READ, "document.archive.read"));
         add(SYSTEM_ADMINISTRATOR, "System administrator", List.of(FinancePermissions.SETUP,
             "security.user.read", "security.user.write", "security.user.create", "security.user.password",
             "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",

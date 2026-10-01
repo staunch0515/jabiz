@@ -77,3 +77,19 @@
 | FIN-AR-014 | Recurring invoices | 完成 | `FinRecurringInvoice`、`ar/RecurringInvoiceProcesses`、定时任务 `fin.recurring-invoices` | `it/ReceivablesIT`（验收 1） |
 | FIN-TX-006 | Tax payable accounts | 完成（缴款在 F4 为付款） | 一个 2200，辖区明细在 `FinInvoiceTax` | `it/ReceivablesIT`（3,135.00） |
 | FIN-TX-008 | Return data | 完成 | `queries/finance/tax/sales_tax.sql`、`sales_tax_return.sql` | `it/ReceivablesIT`（= FIN-EXP-13） |
+
+## F4 应付、付款与 1099
+
+路径简写：`ap/` = `backend/finance/src/main/java/com/jabiz/finance/ap/`，`bank/` = `…/finance/bank/`，`calc/` = `…/finance/calc/`，`io/` = `…/finance/io/`。
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-AP-001 | Vendor master | 完成 | `FinVendor`（迁移 V10）、`FIN_VENDOR_SAVE`（`ap/VendorProcesses`）；导入 `finance.vendors`（`io/PayablesImports`、`io/VendorRows`） | `it/PayablesMasterIT`、`VendorRowsTest` |
+| FIN-AP-002 | Tax identification (Form W-9) | 部分（验收 2 的警告在 F4b） | `FinVendorTaxInfo`（TIN `TAX_ID` 遮蔽，平台 14k）、`FIN_VENDOR_TAX_SAVE`、`calc/TaxIds` | `it/PayablesMasterIT`、`TaxIdsTest` |
+| FIN-AP-003 | Bank-detail change control | 部分（付款中的暂停在 F4c） | `FinVendorBankAccount`、`FIN_VENDOR_BANK_CHANGE` / `_APPROVAL_RESULT`（审批对象 `fin.ap.vendor-bank`、规则 `FIN-VENDOR-BANK`）、`calc/BankNumbers` | `it/PayablesMasterIT`、`BankNumbersTest` |
+| FIN-AP-021 | Reportable amounts and thresholds | 部分（报表在 F4d） | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds` | `it/PayablesMasterIT` |
+| FIN-CT-001 | Segregation of duties | 部分（应付：F4a 的两条规则与冲突报告） | `FIN_SETUP` 提出 `FIN-SOD-VENDOR-BANK-RELEASE`、`FIN-SOD-PAYABLES-RELEASE`（平台 14b） | `it/PayablesMasterIT`（验收 2） |
+| FIN-CT-010 | Complete audit trail | 部分（银行信息变更） | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy` | `it/PayablesMasterIT`（验收 1） |
+| FIN-SC-001 | Authentication | 部分（银行信息变更；付款释放在 F4c） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE` 的 `requiresMfa(ALWAYS)` | `it/PayablesMasterIT` |
+| FIN-SC-004 | Sensitive data protection | 部分（TIN、银行账号） | `masked(…)`、`sys_reveal_record`；W-9 文件策略的读取权限 | `it/PayablesMasterIT` |
+
