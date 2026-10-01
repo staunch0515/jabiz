@@ -39,12 +39,26 @@ public final class InvoiceEntities {
     public static final String DRAFT = "DRAFT";
     public static final String POSTED = "POSTED";
     public static final String VOID = "VOID";
-    public static final List<String> STATUS_VALUES = List.of(DRAFT, POSTED, VOID);
+    /** What was left open was written off against the allowance (FIN-AR-012); a recovery reopens it. */
+    public static final String WRITTEN_OFF = "WRITTEN_OFF";
+    public static final List<String> STATUS_VALUES = List.of(DRAFT, POSTED, VOID, WRITTEN_OFF);
 
     /** Entered here, or an open item of the legacy system brought over by the migration (not posted again). */
     public static final String MANUAL = "MANUAL";
     public static final String OPENING = "OPENING";
-    public static final List<String> SOURCE_VALUES = List.of(MANUAL, OPENING);
+    /** Made from a recurring invoice template (FIN-AR-014). */
+    public static final String RECURRING = "RECURRING";
+    public static final List<String> SOURCE_VALUES = List.of(MANUAL, OPENING, RECURRING);
+
+    /** What an application applies to an invoice (FIN-AR-008, 012). */
+    public static final String RECEIPT_SOURCE = "RECEIPT";
+    public static final String WRITE_OFF_SOURCE = "WRITE_OFF";
+    public static final String RECOVERY_SOURCE = "RECOVERY";
+    /** A credit memo's credit paid out: applied to the credit memo itself (FIN-AR-006). */
+    public static final String REFUND_SOURCE = "REFUND";
+
+    /** An invoice waiting for the approval its posting needs (FIN-AR-013). */
+    public static final String APPROVAL_PENDING = "PENDING";
 
     /** The entity the general ledger's lines of a posted document refer to (FIN-GL-021). */
     public static final String SOURCE_ENTITY = INVOICE;
@@ -90,14 +104,20 @@ public final class InvoiceEntities {
         eb.field("voidDate", f -> f.physicalColumn("void_date").processOnly().asDate());
         eb.field("voidReason", f -> f.physicalColumn("void_reason").processOnly().asText(500));
         eb.field("voidGlNo", f -> f.physicalColumn("void_gl_no").processOnly().asText(40));
+        // "MONTHLY-SUPPORT/2026-02": one invoice per recurring template and period (FIN-AR-014).
+        eb.field("recurringKey", f -> f.physicalColumn("recurring_key").processOnly().asText(80));
+        // The approval a draft's posting waits for, under the approval rules of invoices (FIN-AR-013).
+        eb.field("approval", f -> f.physicalColumn("approval").processOnly().asText(15));
+        eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(40));
         eb.unique("uk_fi_invoice_no", "invoiceNo");
+        eb.unique("uk_fi_invoice_recurring", "recurringKey");
         eb.display("invoiceNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("invoiceNo", "kind", "customerCode", "invoiceDate", "dueDate", "currency", "total", "openAmount",
                 "status")
             .filters("invoiceNo", "kind", "customerCode", "invoiceDate", "dueDate", "status", "source",
-                "originalInvoiceId", "currency")
+                "originalInvoiceId", "currency", "recurringKey", "approval")
             .sorts("invoiceNo", "invoiceDate", "dueDate", "total", "openAmount")
             .defaultSort("invoiceDate", false));
     });
@@ -162,9 +182,10 @@ public final class InvoiceEntities {
     });
 
     /**
-     * A credit memo (or, from F3c, a receipt) applied to an invoice on a day: written once; taking it back is a new
-     * application of the opposite amount, so the history and any earlier day's open items stay as they were
-     * (FIN-AR-008).
+     * A credit memo or receipt applied to an invoice on a day, or a write-off or its recovery: written once; taking it
+     * back is a new application of the opposite amount that names it, so the history and any earlier day's open items
+     * stay as they were (FIN-AR-008). A receipt's application may take an early-payment discount, which clears the
+     * invoice as the cash does (FIN-AR-002).
      */
     public static final EntityDefinition APPLICATION_ENTITY = EntityDefinition.define(APPLICATION, eb -> {
         eb.physicalTable("fi_application_version");
@@ -184,10 +205,15 @@ public final class InvoiceEntities {
             .asNumeric(15, 2));
         eb.field("reversesApplicationId", f -> f.physicalColumn("reverses_application_id").immutable(true)
             .asReference(APPLICATION));
+        eb.field("discount", f -> f.physicalColumn("discount").immutable(true).asNumeric(15, 2));
+        // The number of what was applied (CM-2001, RCPT-0003), for the history.
+        eb.field("sourceNo", f -> f.physicalColumn("source_no").immutable(true).asText(40));
+        eb.field("reason", f -> f.physicalColumn("reason").immutable(true).asText(500));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
-            .columns("applicationDate", "sourceKind", "sourceId", "invoiceId", "customerCode", "amount", "amountUsd")
-            .filters("invoiceId", "sourceId", "customerCode", "applicationDate")
+            .columns("applicationDate", "sourceKind", "sourceNo", "invoiceId", "customerCode", "amount", "discount",
+                "amountUsd", "reversesApplicationId", "reason")
+            .filters("invoiceId", "sourceId", "customerCode", "applicationDate", "sourceKind", "reversesApplicationId")
             .sorts("applicationDate")
             .defaultSort("applicationDate", true));
     });

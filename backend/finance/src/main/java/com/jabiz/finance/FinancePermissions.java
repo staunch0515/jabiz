@@ -85,6 +85,18 @@ public final class FinancePermissions {
     public static final String TAX_MAINTAIN = "fin.tax.maintain";
     /** Set the receivables accounts and policies, and payment terms (FIN-AR-002). */
     public static final String AR_SETTINGS = "fin.ar.settings";
+    /** Record customer receipts, apply and unapply them and credits, and move an unapplied receipt (FIN-AR-007, 008). */
+    public static final String RECEIPT_RECORD = "fin.receipt.record";
+    /** Void a receipt that bounced or was recorded in error: it takes cash back out of the books. */
+    public static final String RECEIPT_VOID = "fin.receipt.void";
+    /** Ask for an invoice to be written off, and record what was recovered of one (FIN-AR-012). */
+    public static final String WRITE_OFF_REQUEST = "fin.writeoff.request";
+    /** Approve write-offs: the level of the write-off approval rule (FIN-AR-012, FIN-CT-001). */
+    public static final String WRITE_OFF_APPROVE = "fin.writeoff.approve";
+    /** Approve invoices an approval rule stops, such as one over the customer's credit limit (FIN-AR-013). */
+    public static final String INVOICE_APPROVE = "fin.invoice.approve";
+    /** Keep the recurring invoice templates (FIN-AR-014). */
+    public static final String RECURRING_INVOICE_MAINTAIN = "fin.invoice.recurring";
 
     private FinancePermissions() {}
 }

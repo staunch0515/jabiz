@@ -40,6 +40,10 @@ public final class ArEntities {
     public static final List<String> MISSING_CERTIFICATE_VALUES = List.of("BLOCK", "CHARGE");
     public static final List<String> CREDIT_LIMIT_CHECK_VALUES = List.of("OFF", "WARN");
 
+    /** The loss rates of the aging buckets: current, the three after it, and the rest (FIN-AR-011). */
+    public static final List<String> LOSS_RATE_FIELDS =
+        List.of("lossRateCurrent", "lossRate1", "lossRate2", "lossRate3", "lossRateOver");
+
     /** The certificate documents: scans or PDFs, kept with the customer (FIN-TX-004). */
     public static final String CERTIFICATE_FILES = "fin.certificate";
 
@@ -181,6 +185,12 @@ public final class ArEntities {
             .asCode(MISSING_CERTIFICATE_POLICIES, values(MISSING_CERTIFICATE_VALUES)));
         eb.field("creditLimitCheck", f -> f.physicalColumn("credit_limit_check").required(true)
             .asCode(CREDIT_LIMIT_CHECKS, values(CREDIT_LIMIT_CHECK_VALUES)));
+        // Expected loss in percent of what is open in each aging bucket, for the allowance suggestion (FIN-AR-011).
+        for (int bucket = 0; bucket < LOSS_RATE_FIELDS.size(); bucket++) {
+            String field = LOSS_RATE_FIELDS.get(bucket);
+            eb.field(field, f -> f.physicalColumn("loss_rate_" + LOSS_RATE_FIELDS.indexOf(field)).asNumeric(7, 4)
+                .apply(Rules.range("FIN_LOSS_RATE_RANGE", BigDecimal.ZERO, new BigDecimal("100"))));
+        }
         eb.unique("uk_fi_ar_settings_key", "settingsKey");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

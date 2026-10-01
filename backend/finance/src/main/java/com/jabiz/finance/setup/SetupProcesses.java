@@ -46,12 +46,15 @@ public final class SetupProcesses {
      * @param currencyCreated    whether the functional currency was created
      * @param approvalRuleChange the proposed change creating the journal approval rule, which another person
      *                           publishes (four eyes, FIN-CT-002); null when the rule exists or is proposed already
+     * @param writeOffRuleChange the same for the rule that write-offs need an approver of write-offs (FIN-AR-012)
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, boolean currencyCreated,
-        String approvalRuleChange) {}
+        String approvalRuleChange, String writeOffRuleChange) {}
 
     /** The rule of FIN-GL-015: manual entries above 10,000.00 need an approver of journal entries. */
     public static final String APPROVAL_RULE = "FIN-MANUAL-10K";
+    /** The rule of FIN-AR-012: every write-off needs an approver of write-offs. */
+    public static final String WRITE_OFF_RULE = "FIN-WRITE-OFF";
 
     static final String ROLES = "roles";
     static final String GRANTS = "grants";
@@ -61,6 +64,7 @@ public final class SetupProcesses {
     static final String PROPOSALS = "proposals";
     static final String PROPOSAL = "proposal";
     static final String PROPOSED = "proposed";
+    static final String PROPOSED_CODES = "proposedCodes";
 
     public static final ProcessDefinition<SetupInput, SetupOutput, ProcessContext> PROCESS =
         ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
@@ -69,12 +73,7 @@ public final class SetupProcesses {
             .permissions(FinancePermissions.SETUP)
             .requiresMfa(MfaRequirement.ADMINISTRATION)
             .contextFactory((start, input) -> new ProcessContext(start))
-            .outputMapper(ctx -> {
-                SetupOutput output = ctx.get(OUTPUT, SetupOutput.class);
-                return ctx.contains(PROPOSED) ? new SetupOutput(output.rolesCreated(), output.permissionsAdded(),
-                    output.currencyCreated(), ctx.get(PROPOSED, ControlChanges.ChangeOutput.class).changeId())
-                    : output;
-            })
+            .outputMapper(SetupProcesses::output)
             .step("Load the roles", QueryEntities.of(SecurityEntities.ROLE_DATASET, ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.In("roleCode", new ArrayList<>(FinanceRoles.all().stream()
                     .map(FinanceRoles.Role::code).toList())))
@@ -89,18 +88,40 @@ public final class SetupProcesses {
             .step("Load the functional currency", QueryEntities.of(GlEntities.CURRENCY_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("currencyCode", FUNCTIONAL_CURRENCY))
                     .limit(1).build(), CURRENCIES))
-            .step("Load the journal approval rule", QueryEntities.of(ApprovalEntities.RULE_DATASET,
-                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("ruleCode", APPROVAL_RULE)).limit(1).build(),
-                RULES))
-            .step("Look for its proposal", QueryEntities.of(ApprovalEntities.CONTROL_CHANGE_DATASET,
+            .step("Load the approval rules", QueryEntities.of(ApprovalEntities.RULE_DATASET,
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("ruleCode",
+                    List.of(APPROVAL_RULE, WRITE_OFF_RULE))).limit(2).build(), RULES))
+            .step("Look for their proposals", QueryEntities.of(ApprovalEntities.CONTROL_CHANGE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ApprovalEntities.PROPOSED),
-                        new QueryPredicate.Like("changeValues", "%\"" + APPROVAL_RULE + "\"%"))))
-                    .limit(1).build(), PROPOSALS))
+                        new QueryPredicate.Or(List.of(
+                            new QueryPredicate.Like("changeValues", "%\"" + APPROVAL_RULE + "\"%"),
+                            new QueryPredicate.Like("changeValues", "%\"" + WRITE_OFF_RULE + "\"%"))))))
+                    .limit(10).build(), PROPOSALS))
             .compute("Add what is missing", (metadata, ctx) -> setup(ctx))
-            // Proposed only: rules change with four eyes, so another person publishes it (FIN-CT-002).
-            .step("Propose the approval rule", CallProcess.when(ctx -> ctx.contains(PROPOSAL), ControlChanges.PROPOSE,
-                1, ctx -> ctx.get(PROPOSAL), PROPOSED)));
+            // Proposed only: rules change with four eyes, so another person publishes them (FIN-CT-002).
+            .step("Propose the approval rules", CallProcess.forEach(ControlChanges.PROPOSE, 1,
+                ctx -> ctx.contains(PROPOSAL) ? (List<?>) ctx.get(PROPOSAL) : List.of(), PROPOSED)));
+
+    /** The setup with the changes it proposed, by rule. */
+    @SuppressWarnings("unchecked")
+    private static SetupOutput output(ProcessContext ctx) {
+        SetupOutput output = ctx.get(OUTPUT, SetupOutput.class);
+        List<String> codes = ctx.contains(PROPOSED_CODES) ? (List<String>) ctx.get(PROPOSED_CODES) : List.of();
+        List<ControlChanges.ChangeOutput> proposed = ctx.contains(PROPOSED)
+            ? (List<ControlChanges.ChangeOutput>) ctx.get(PROPOSED) : List.of();
+        String journal = null;
+        String writeOff = null;
+        for (int i = 0; i < codes.size() && i < proposed.size(); i++) {
+            if (APPROVAL_RULE.equals(codes.get(i))) {
+                journal = proposed.get(i).changeId();
+            } else {
+                writeOff = proposed.get(i).changeId();
+            }
+        }
+        return new SetupOutput(output.rolesCreated(), output.permissionsAdded(), output.currencyCreated(), journal,
+            writeOff);
+    }
 
     static void setup(ProcessContext ctx) {
         Map<String, Object> roleIds = new HashMap<>();
@@ -137,11 +158,41 @@ public final class SetupProcesses {
             usd.put("active", true);
             ctx.changes().insert(GlEntities.CURRENCY, usd);
         }
-        if (list(ctx, RULES).isEmpty() && list(ctx, PROPOSALS).isEmpty()) {
-            ctx.put(PROPOSAL, new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, approvalRule(), null,
+        List<ControlChanges.ProposeInput> proposals = new ArrayList<>();
+        List<String> codes = new ArrayList<>();
+        if (missing(ctx, APPROVAL_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, approvalRule(), null,
                 "Finance setup: manual journal entries above 10,000.00 need approval (FIN-GL-015)"));
+            codes.add(APPROVAL_RULE);
         }
-        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null));
+        if (missing(ctx, WRITE_OFF_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, writeOffRule(), null,
+                "Finance setup: write-offs need an approver of write-offs (FIN-AR-012)"));
+            codes.add(WRITE_OFF_RULE);
+        }
+        ctx.put(PROPOSAL, List.copyOf(proposals));
+        ctx.put(PROPOSED_CODES, List.copyOf(codes));
+        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null, null));
+    }
+
+    /** Neither the rule nor a proposal of it exists. */
+    private static boolean missing(ProcessContext ctx, String code) {
+        return list(ctx, RULES).stream().noneMatch(r -> code.equals(r.get("ruleCode")))
+            && list(ctx, PROPOSALS).stream().noneMatch(p -> String.valueOf((Object) p.get("changeValues"))
+                .contains("\"" + code + "\""));
+    }
+
+    /** Every write-off, whatever its amount, needs an approver of write-offs (FIN-AR-012). */
+    static Map<String, Object> writeOffRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", WRITE_OFF_RULE);
+        rule.put("subject", com.jabiz.finance.ar.WriteOffProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of());
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.WRITE_OFF_APPROVE)));
+        rule.put("description", "Write-offs need an approver of write-offs");
+        return rule;
     }
 
     /** The rule's values as a control change proposes them. */

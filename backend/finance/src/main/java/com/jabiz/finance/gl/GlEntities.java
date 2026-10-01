@@ -256,7 +256,7 @@ public final class GlEntities {
     });
 
     /** The default dataset of a finance entity. */
-    static DatasetDefinition dataset(String id, String entity, String readPermission, String writePermission,
+    public static DatasetDefinition dataset(String id, String entity, String readPermission, String writePermission,
         boolean processOnlyWrites, String poolRef) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)

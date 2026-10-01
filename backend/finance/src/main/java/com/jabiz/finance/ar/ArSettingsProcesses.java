@@ -9,9 +9,13 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,12 +39,20 @@ public final class ArSettingsProcesses {
 
     /**
      * @param missingCertificate {@code BLOCK} (the default) or {@code CHARGE} (FIN-TX-004)
-     * @param creditLimitCheck   {@code WARN} (the default) or {@code OFF} (FIN-AR-013)
+     * @param creditLimitCheck   {@code WARN} (the default) or {@code OFF} (FIN-AR-013); requiring approval is an
+     *                           approval rule of invoices instead
+     * @param lossRateCurrent    the expected loss in percent of what is current, and the next ones of the aging
+     *                           buckets after it (FIN-AR-011); none means no suggestion for the bucket
      */
     public record SettingsInput(@NotBlank @Size(max = 20) String receivableAccount,
         @NotBlank @Size(max = 20) String allowanceAccount, @NotBlank @Size(max = 20) String returnsAccount,
         @NotBlank @Size(max = 20) String salesTaxAccount, @Size(max = 20) String unappliedCashAccount,
-        @Size(max = 20) String discountAccount, String missingCertificate, String creditLimitCheck) {}
+        @Size(max = 20) String discountAccount, String missingCertificate, String creditLimitCheck,
+        @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 4) BigDecimal lossRateCurrent,
+        @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 4) BigDecimal lossRate1,
+        @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 4) BigDecimal lossRate2,
+        @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 4) BigDecimal lossRate3,
+        @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 4) BigDecimal lossRateOver) {}
 
     public record SettingsOutput(String settingsId, boolean changed) {}
 
@@ -117,6 +129,11 @@ public final class ArSettingsProcesses {
         values.put("discountAccount", blankToNull(input.discountAccount()));
         values.put("missingCertificate", missing);
         values.put("creditLimitCheck", creditCheck);
+        values.put("lossRateCurrent", input.lossRateCurrent());
+        values.put("lossRate1", input.lossRate1());
+        values.put("lossRate2", input.lossRate2());
+        values.put("lossRate3", input.lossRate3());
+        values.put("lossRateOver", input.lossRateOver());
         List<EntityInstance> found = CustomerProcesses.list(ctx, SETTINGS);
         if (found.isEmpty()) {
             values.put("settingsKey", ArEntities.SETTINGS_KEY);

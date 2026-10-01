@@ -53,7 +53,7 @@
 | FIN-GL-019 | Journal import | 完成 | `io/FinanceImports`（`finance.journals`）、`gl/JournalImportProcesses`（`FIN_JOURNAL_IMPORT`，`FinJournal.externalRef`）；菜单 `finance-web/src/index.tsx` | `it/JournalImportIT`（验收 1；照常审批、控制科目、只导入一次）、`it/PayrollImportIT`（验收 2）、`e2e/imports.spec.ts` |
 | FIN-DI-004 | Payroll journal import | 完成 | `payroll/PayrollEntities`（映射）、`payroll/PayrollLines`、`payroll/PayrollProcesses`（`FIN_PAYROLL_IMPORT`）、`io/FinanceImports`（`finance.payroll`） | `it/PayrollImportIT`（PAYROLL-2601 = FIN-EXP-02）、`PayrollLinesTest`（含属性测试） |
 | FIN-AR-001 | Customer master | F3a 完成（重印在 F3d） | `ar/ArEntities`（`FinCustomer`，预定生效的地址）、`ar/CustomerProcesses`（`FIN_CUSTOMER_SAVE`）、`io/ReceivablesImports`（`finance.customers`） | `it/ReceivablesMasterIT`、`io/ReceivableRowsTest` |
-| FIN-AR-002 | Payment terms | F3a 计算（折扣过账在 F3c） | `calc/PaymentTerms`、`FinPaymentTerms`、`FIN_PAYMENT_TERMS_SAVE` | `calc/PaymentTermsTest`（含属性测试）、`it/ReceivablesMasterIT` |
+| FIN-AR-002 | Payment terms | 完成 | `calc/PaymentTerms`、`FinPaymentTerms`、`FIN_PAYMENT_TERMS_SAVE`；折扣：`ar/ReceiptProcesses`、`queries/finance/ar/receipt_suggestions.sql` | `calc/PaymentTermsTest`（含属性测试）、`it/ReceivablesMasterIT`、`it/ReceivablesIT`（验收 2） |
 | FIN-TX-001 | Jurisdictions and rates | 完成 | `tax/TaxEntities`、`tax/TaxRates`、`tax/TaxProcesses`（`FIN_TAX_RATE_SET`、`FIN_TAX_CODE_SAVE`）、`io/TaxCodeRows` | `tax/TaxRatesTest`、`it/ReceivablesMasterIT`、`io/ReceivableRowsTest` |
 | FIN-TX-002 | Customer and line taxability | F3a 计算（发票在 F3b） | `calc/SalesTax` | `calc/SalesTaxTest` |
 | FIN-TX-003 | Tax calculation and rounding | F3a 计算（发票在 F3b） | `calc/SalesTax`（每张单据 × 辖区舍入、最大余数分摊） | `calc/SalesTaxTest`（含属性测试） |
@@ -61,10 +61,18 @@
 | FIN-DI-003 | Data-quality decisions | 科目（F2a）、客户合并（F3a） | `migration/MigrationProcesses`（`CUSTOMER`）、`FIN_CUSTOMER_SAVE` 跳过并入的代码 | `it/ReceivablesMasterIT` |
 | FIN-AR-003 | Customer invoice | 完成 | `ar/InvoiceEntities`、`ar/InvoiceProcesses`（`FIN_INVOICE_SAVE`、`FIN_INVOICE_POST`）、`ar/InvoicePosting` | `it/InvoiceIT`（INV-1004…1007 = FIN-EXP-02）、`ar/InvoicePostingTest`（含属性测试） |
 | FIN-AR-004 | Invoice numbering and immutability | 完成 | `NumberSequence` `fin.ar.invoice` / `fin.ar.credit-memo`、`FIN_INVOICE_VOID`、`gl/SubledgerPosting`（`FIN_SUBLEDGER_REVERSE`） | `it/InvoiceIT` |
-| FIN-AR-006 | Credit memos | 完成（退款在 F3c） | `FinInvoice`（`CREDIT_MEMO`）、`FIN_CREDIT_APPLY`、`FinApplication` | `it/InvoiceIT`（CM-2001） |
-| FIN-AR-013 | Credit limit check | 警告完成（审批随 F3c） | `FIN_INVOICE_POST`、`FinArSettings.creditLimitCheck` | `it/InvoiceIT` |
+| FIN-AR-006 | Credit memos | 完成 | `FinInvoice`（`CREDIT_MEMO`）、`FIN_CREDIT_APPLY`、`FIN_CREDIT_REFUND`、`FinApplication` | `it/InvoiceIT`（CM-2001）、`it/ReceivablesIT`（退款） |
+| FIN-AR-013 | Credit limit check | 完成 | `FIN_INVOICE_POST`（审批对象 `fin.ar.invoice`）、`FinArSettings.creditLimitCheck`、`FIN_INVOICE_APPROVAL_RESULT` | `it/InvoiceIT`（警告）、`it/ReceivablesIT`（审批） |
 | FIN-TX-005 | Credits and returns | 完成 | `FIN_INVOICE_POST`（原发票日期的税率） | `it/InvoiceIT`（165.00） |
 | FIN-GL-021 | Posting from subledgers | 应收完成 | `gl/SubledgerPosting`（`FIN_SUBLEDGER_POST`，账本交易引用单据、`FinPosting`） | `it/InvoiceIT` |
 | FIN-UI-007 | Explanations | 税的说明（数据）完成；页面在 F3d | `FinInvoiceTax` | `it/InvoiceIT` |
 | FIN-DI-002 | Migration of open items | 应收完成 | `FIN_AR_OPENING`、`finance.open_receivables`、`reconciliation.sql`（`OPEN_ITEMS`） | `it/InvoiceIT` |
-
+| FIN-AR-007 | Cash receipts | 完成（外币在 F7） | `ar/ReceiptEntities`（`FinReceipt`）、`ar/ReceiptProcesses`（`FIN_RECEIPT_RECORD`、`FIN_RECEIPT_VOID`） | `it/ReceivablesIT`（RCPT-0001…0003 = FIN-EXP-02） |
+| FIN-AR-008 | Application of receipts and credits | 完成 | `FIN_RECEIPT_APPLY`、`FIN_APPLICATION_REVERSE`、`FIN_RECEIPT_REASSIGN`、`queries/finance/ar/receipt_suggestions.sql` | `it/ReceivablesIT`（验收 1） |
+| FIN-AR-009 | Customer statements | 数据完成（文件在 F3d） | `queries/finance/ar/statement.sql`、`aging.sql`（单个客户） | `it/ReceivablesIT`（C300 未结项目、C100 期间） |
+| FIN-AR-010 | Receivables aging | 完成（INV-1005 重估在 F7） | `queries/finance/ar/aging.sql` | `it/ReceivablesIT`（验收 1 未重估部分、验收 2、任意日期 = 1200） |
+| FIN-AR-011 | Allowance for credit losses | 完成 | `queries/finance/ar/allowance_suggestion.sql`、`FinArSettings` 损失率 | `it/ReceivablesIT`（1,983.85，原值随 F7） |
+| FIN-AR-012 | Write-off and recovery | 完成 | `ar/WriteOffProcesses`（审批对象 `fin.ar.write-off`、规则 `FIN-WRITE-OFF`） | `it/ReceivablesIT` |
+| FIN-AR-014 | Recurring invoices | 完成 | `FinRecurringInvoice`、`ar/RecurringInvoiceProcesses`、定时任务 `fin.recurring-invoices` | `it/ReceivablesIT`（验收 1） |
+| FIN-TX-006 | Tax payable accounts | 完成（缴款在 F4 为付款） | 一个 2200，辖区明细在 `FinInvoiceTax` | `it/ReceivablesIT`（3,135.00） |
+| FIN-TX-008 | Return data | 完成 | `queries/finance/tax/sales_tax.sql`、`sales_tax_return.sql` | `it/ReceivablesIT`（= FIN-EXP-13） |

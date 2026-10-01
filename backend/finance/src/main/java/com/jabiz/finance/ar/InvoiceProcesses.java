@@ -18,6 +18,8 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.approval.RequireApproval;
+import com.jabiz.runtime.approval.WithdrawApproval;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -101,6 +103,13 @@ public final class InvoiceProcesses {
     public static final String OPENING_DONE = "FIN_AR_OPENING_DONE";
     public static final String OPENING_NUMBER = "FIN_AR_OPENING_NUMBER";
 
+    /**
+     * The approval subject of invoices (FIN-AR-013): no rule stops an invoice unless the controller sets one, such as
+     * one for invoices that take a customer over the credit limit.
+     */
+    public static final String SUBJECT = "fin.ar.invoice";
+    public static final String APPROVAL_RESULT = "FIN_INVOICE_APPROVAL_RESULT";
+
     public record LineInput(@NotBlank @Size(max = 500) String description,
         @NotNull @DecimalMin("0.0001") @Digits(integer = 11, fraction = 4) BigDecimal quantity,
         @NotNull @DecimalMin("0") @Digits(integer = 13, fraction = 4) BigDecimal unitPrice,
@@ -130,10 +139,16 @@ public final class InvoiceProcesses {
 
     /**
      * @param warnings what the poster should know, such as a credit limit exceeded
+     * @param approval {@code PENDING} when an approval rule stops the posting: the document stays a draft and is
+     *                 posted again once approved; {@code APPROVED} when it was
      */
     public record InvoiceOutput(String invoiceId, String invoiceNo, String kind, String status, LocalDate dueDate,
         BigDecimal subtotal, BigDecimal taxTotal, BigDecimal total, BigDecimal totalUsd, BigDecimal openAmount,
-        String glNo, List<String> warnings) {}
+        String glNo, List<String> warnings, String approval) {}
+
+    /** The platform's approval decision, as its events carry it. */
+    public record ApprovalResultInput(String subject, String entityId, String status, String contentHash,
+        String requestId) {}
 
     public record ApplyOutput(String applicationId, BigDecimal invoiceOpen, BigDecimal creditOpen) {}
 
@@ -173,6 +188,8 @@ public final class InvoiceProcesses {
     static final String USED_CODES = "usedCodes";
     static final String PERIODS = "periods";
     static final String ORIGINAL_TAXES = "originalTaxes";
+    static final String APPROVAL = "approval";
+    static final String HELD = "held";
 
     // ---- save and delete -------------------------------------------------------------------------------------------
 
@@ -210,7 +227,9 @@ public final class InvoiceProcesses {
             }, CODES))
             .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> accountsOf(
                 saveInput(ctx).lines().stream().map(LineInput::revenueAccount).toList()), ACCOUNTS))
-            .compute("Save the draft", (metadata, ctx) -> save(ctx)));
+            .compute("Save the draft", (metadata, ctx) -> save(ctx))
+            // A pending approval of the old content is of no use any more; its tasks go too.
+            .step("Withdraw the approval request", WithdrawApproval.of(SUBJECT, InvoiceProcesses::approvalCaseId)));
 
     public static final ProcessDefinition<InvoiceId, InvoiceOutput, ProcessContext> DELETE_PROCESS =
         ProcessDefinition.define(DELETE, 1, InvoiceId.class, InvoiceOutput.class, ProcessContext.class, pb -> pb
@@ -233,7 +252,8 @@ public final class InvoiceProcesses {
                 }
                 ctx.changes().delete(InvoiceEntities.INVOICE, invoice.id(), invoice.version());
                 ctx.put(OUTPUT, output(invoice, Map.of("status", "DELETED"), List.of()));
-            }));
+            })
+            .step("Withdraw the approval request", WithdrawApproval.of(SUBJECT, InvoiceProcesses::approvalCaseId)));
 
     static void save(ProcessContext ctx) {
         InvoiceInput input = saveInput(ctx);
@@ -380,6 +400,9 @@ public final class InvoiceProcesses {
             id = ctx.changes().insert(InvoiceEntities.INVOICE, header);
         } else {
             id = current.id();
+            // An approval was given for the content as it was.
+            header.put("approval", null);
+            header.put("approvalRequestId", null);
             ctx.changes().update(InvoiceEntities.INVOICE, current.id(), current.version(), header);
             for (EntityInstance line : list(ctx, LINES)) {
                 ctx.changes().delete(InvoiceEntities.LINE, line.id(), line.version());
@@ -390,7 +413,7 @@ public final class InvoiceProcesses {
             ctx.changes().insert(InvoiceEntities.LINE, line);
         }
         ctx.put(OUTPUT, new InvoiceOutput(String.valueOf(id), null, kind, InvoiceEntities.DRAFT, null, subtotal, null,
-            null, null, null, null, List.of()));
+            null, null, null, null, List.of(), null));
     }
 
     // ---- post ------------------------------------------------------------------------------------------------------
@@ -398,7 +421,7 @@ public final class InvoiceProcesses {
     /** What posting a document will write, computed before it is numbered. */
     record Prepared(boolean creditMemo, LocalDate dueDate, BigDecimal rate, BigDecimal subtotal, BigDecimal tax,
         BigDecimal total, InvoicePosting.Result posting, SalesTax.Result taxes, List<EntityInstance> lines,
-        List<String> warnings) {}
+        List<String> warnings, boolean overCreditLimit) {}
 
     public static final ProcessDefinition<InvoiceId, InvoiceOutput, ProcessContext> POST_PROCESS =
         ProcessDefinition.define(POST, 1, InvoiceId.class, InvoiceOutput.class, ProcessContext.class, pb -> pb
@@ -475,12 +498,17 @@ public final class InvoiceProcesses {
                     new QueryPredicate.Eq("status", InvoiceEntities.POSTED),
                     new QueryPredicate.Ne("openAmountUsd", BigDecimal.ZERO)))).limit(500).build(), OPEN_ITEMS))
             .compute("Compute the document", (metadata, ctx) -> prepare(ctx))
-            .step("Number the invoice", AssignNumber.when(ctx -> ctx.contains(PREPARED)
+            // Invoices only: a credit memo lowers what the customer owes.
+            .step("Apply the approval rules", RequireApproval.when(ctx -> ctx.contains(PREPARED)
+                && !prepared(ctx).creditMemo(), SUBJECT, InvoiceProcesses::approvalCase, APPROVAL))
+            .compute("Hold it for approval", (metadata, ctx) -> hold(ctx))
+            // Numbered only when it posts: a refused or held document uses no number (FIN-AR-004).
+            .step("Number the invoice", AssignNumber.when(ctx -> proceeds(ctx)
                 && !prepared(ctx).creditMemo(), INVOICE_NUMBERS, null, NUMBER))
-            .step("Number the credit memo", AssignNumber.when(ctx -> ctx.contains(PREPARED)
+            .step("Number the credit memo", AssignNumber.when(ctx -> proceeds(ctx)
                 && prepared(ctx).creditMemo(), CREDIT_MEMO_NUMBERS, null, NUMBER))
             .compute("Build the entry", (metadata, ctx) -> {
-                if (!ctx.contains(PREPARED)) {
+                if (!proceeds(ctx)) {
                     return;
                 }
                 EntityInstance invoice = invoice(ctx);
@@ -625,20 +653,22 @@ public final class InvoiceProcesses {
         LocalDate dueDate = creditMemo ? invoiceDate : paymentTerms.dueDate(invoiceDate);
         List<String> warnings = new ArrayList<>();
         BigDecimal limit = customer.get("creditLimit");
-        if (!creditMemo && limit != null && "WARN".equals(settings.get("creditLimitCheck"))) {
+        boolean overLimit = false;
+        if (!creditMemo && limit != null && !"OFF".equals(settings.get("creditLimitCheck"))) {
             BigDecimal open = BigDecimal.ZERO;
             for (EntityInstance item : list(ctx, OPEN_ITEMS)) {
                 BigDecimal itemOpen = item.get("openAmountUsd") == null ? BigDecimal.ZERO : item.get("openAmountUsd");
                 open = InvoiceEntities.CREDIT_MEMO.equals(item.get("kind")) ? open.subtract(itemOpen)
                     : open.add(itemOpen);
             }
-            if (open.add(posting.totalUsd()).compareTo(limit) > 0) {
+            overLimit = open.add(posting.totalUsd()).compareTo(limit) > 0;
+            if (overLimit) {
                 warnings.add(CREDIT_LIMIT + ": open items " + Money.usd(open).toPlainString() + " and this invoice "
                     + posting.totalUsd().toPlainString() + " exceed the credit limit " + limit.toPlainString());
             }
         }
         ctx.put(PREPARED, new Prepared(creditMemo, dueDate, rate, subtotal, taxes.total(), total, posting, taxes,
-            List.copyOf(lines), List.copyOf(warnings)));
+            List.copyOf(lines), List.copyOf(warnings), overLimit));
     }
 
     /**
@@ -694,6 +724,67 @@ public final class InvoiceProcesses {
         }
     }
 
+    /**
+     * The approval case of an invoice (FIN-AR-013): what the rules ask about, and the content an approval is given for
+     * — a changed draft needs a new approval.
+     */
+    static com.jabiz.runtime.approval.ApprovalCase approvalCase(ProcessContext ctx) {
+        EntityInstance invoice = invoice(ctx);
+        Prepared prepared = prepared(ctx);
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("amount", prepared.posting().totalUsd());
+        facts.put("customerCode", invoice.get("customerCode"));
+        facts.put("overCreditLimit", prepared.overCreditLimit());
+        Map<String, Object> content = new LinkedHashMap<>();
+        for (String field : List.of("kind", "customerCode", "invoiceDate", "currency", "termsCode", "taxCode",
+            "description", "reference")) {
+            content.put(field, invoice.get(field));
+        }
+        List<Map<String, Object>> lines = new ArrayList<>();
+        for (EntityInstance line : prepared.lines()) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            for (String field : List.of("lineNo", "description", "quantity", "unitPrice", "amount", "revenueAccount",
+                "taxCode", "department", "location")) {
+                values.put(field, line.get(field));
+            }
+            lines.add(values);
+        }
+        content.put("lines", lines);
+        content.put("total", prepared.total());
+        return com.jabiz.runtime.approval.ApprovalCase.of(invoice.id(), facts, content);
+    }
+
+    /** The approval case of the document saved or deleted; a new draft has none, and nothing is filed under "none". */
+    private static Object approvalCaseId(ProcessContext ctx) {
+        Object id = ctx.get(INPUT) instanceof InvoiceInput input ? input.invoiceId() : ctx.get(INVOICE_ID);
+        return id == null || ctx.hasViolations() ? "none" : id;
+    }
+
+    /** Whether the document posts now: computed, and not stopped by an approval rule. */
+    private static boolean proceeds(ProcessContext ctx) {
+        return ctx.contains(PREPARED) && !ctx.contains(HELD);
+    }
+
+    /** A document an approval rule stopped stays a draft and waits; it is posted again once approved. */
+    static void hold(ProcessContext ctx) {
+        if (!ctx.contains(APPROVAL)) {
+            return;
+        }
+        com.jabiz.runtime.approval.ApprovalOutcome approval = ctx.get(APPROVAL,
+            com.jabiz.runtime.approval.ApprovalOutcome.class);
+        if (approval.mayProceed()) {
+            return;
+        }
+        EntityInstance invoice = invoice(ctx);
+        ctx.put(HELD, Boolean.TRUE);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("approval", InvoiceEntities.APPROVAL_PENDING);
+        values.put("approvalRequestId", approval.requestId());
+        ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(), values);
+        InvoiceOutput held = output(invoice, values, prepared(ctx).warnings());
+        ctx.put(OUTPUT, held);
+    }
+
     static void recordPosting(ProcessContext ctx) {
         if (!ctx.contains(PREPARED) || !ctx.contains(SUB_OUTPUT)) {
             return;
@@ -715,6 +806,14 @@ public final class InvoiceProcesses {
         values.put("openAmountUsd", prepared.posting().totalUsd());
         values.put("glNo", booked.glNo());
         values.put("transactionId", UUID.fromString(booked.transactionId()));
+        if (ctx.contains(APPROVAL)) {
+            com.jabiz.runtime.approval.ApprovalOutcome approval = ctx.get(APPROVAL,
+                com.jabiz.runtime.approval.ApprovalOutcome.class);
+            if (approval.status() == com.jabiz.runtime.approval.ApprovalOutcome.Status.APPROVED) {
+                values.put("approval", "APPROVED");
+                values.put("approvalRequestId", approval.requestId());
+            }
+        }
         ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(), values);
         for (SalesTax.JurisdictionTax tax : prepared.taxes().taxes()) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -872,6 +971,7 @@ public final class InvoiceProcesses {
         Map<String, Object> application = new LinkedHashMap<>();
         application.put("sourceKind", InvoiceEntities.CREDIT_MEMO);
         application.put("sourceId", String.valueOf(credit.id()));
+        application.put("sourceNo", credit.get("invoiceNo"));
         application.put("invoiceId", invoice.id());
         application.put("customerCode", invoice.get("customerCode"));
         application.put("applicationDate", input.applicationDate());
@@ -884,6 +984,39 @@ public final class InvoiceProcesses {
             "openAmount", creditOpen, "openAmountUsd", credit.<BigDecimal>get("openAmountUsd").subtract(creditUsd)));
         ctx.put(OUTPUT, new ApplyOutput(String.valueOf(id), invoiceOpen, creditOpen));
     }
+
+    // ---- approval results ------------------------------------------------------------------------------------------
+
+    /**
+     * Marks a held invoice approved or rejected when its approvers decide (FIN-AR-013); an approved one is posted by
+     * posting it again, which finds the approval of the same content.
+     */
+    public static final ProcessDefinition<ApprovalResultInput, InvoiceOutput, ProcessContext>
+        APPROVAL_RESULT_PROCESS = ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class,
+            InvoiceOutput.class, ProcessContext.class, pb -> pb
+                .description("Marks an invoice held for approval approved or rejected.")
+                .permissions(FinancePermissions.SUBLEDGER_POST)
+                .internal()
+                .contextFactory(InvoiceProcesses::withInput)
+                .outputMapper(ctx -> ctx.get(OUTPUT, InvoiceOutput.class))
+                .step("Load the invoice", QueryEntities.of(InvoiceEntities.INVOICE_DATASET, ctx -> {
+                    ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
+                    // Approvals of other subjects are none of this process's business.
+                    return byIds(SUBJECT.equals(input.subject()) && input.entityId() != null
+                        ? uuid(input.entityId()) : null);
+                }, FOUND))
+                .compute("Mark it", (metadata, ctx) -> {
+                    ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
+                    EntityInstance invoice = list(ctx, FOUND).isEmpty() ? null : list(ctx, FOUND).getFirst();
+                    if (invoice == null || !InvoiceEntities.DRAFT.equals(invoice.get("status"))
+                        || !Objects.equals(input.requestId(), invoice.get("approvalRequestId"))) {
+                        return;
+                    }
+                    Map<String, Object> values = Map.of("approval",
+                        "APPROVED".equals(input.status()) ? "APPROVED" : "REJECTED");
+                    ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(), values);
+                    ctx.put(OUTPUT, output(invoice, values, List.of()));
+                }));
 
     // ---- opening open items ----------------------------------------------------------------------------------------
 
@@ -1123,7 +1256,7 @@ public final class InvoiceProcesses {
             (String) state.get("kind"), (String) state.get("status"), (LocalDate) state.get("dueDate"),
             (BigDecimal) state.get("subtotal"), (BigDecimal) state.get("taxTotal"), (BigDecimal) state.get("total"),
             (BigDecimal) state.get("totalUsd"), (BigDecimal) state.get("openAmount"), (String) state.get("glNo"),
-            warnings);
+            warnings, (String) state.get("approval"));
     }
 
     static UUID uuid(Object value) {

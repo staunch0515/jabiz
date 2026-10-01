@@ -107,8 +107,8 @@ class InvoiceIT extends FinanceItSupport {
 
         // INV-1004: components taxed in Austin, engineering services not (FIN-AR-003, FIN-TX-002, FIN-TX-003).
         String inv1004 = draft("C100", "2026-01-06", null, List.of(
-            line("Components", "100", "400.00", "4000", null),
-            line("Engineering services", "1", "10000.00", "4100", "NT")));
+            invoiceLine("Components", "100", "400.00", "4000", null),
+            invoiceLine("Engineering services", "1", "10000.00", "4100", "NT")));
         Map<String, Object> posted = ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", inv1004));
         assertThat(posted).containsEntry("invoiceNo", "INV-1004").containsEntry("status", "POSTED")
             .containsEntry("dueDate", "2026-02-05");
@@ -139,13 +139,13 @@ class InvoiceIT extends FinanceItSupport {
             "line 2 NT NON_TAXABLE 0.00");
         // A posted invoice is not changed: corrections are credit memos (FIN-AR-004).
         Map<String, Object> change = new HashMap<>(invoiceInput("C100", "2026-01-06", null, List.of(
-            line("Components", "100", "500.00", "4000", null))));
+            invoiceLine("Components", "100", "500.00", "4000", null))));
         change.put("invoiceId", inv1004);
         assertThat(refused(InvoiceProcesses.SAVE, clerk, change, 422)).isEqualTo(InvoiceProcesses.NOT_DRAFT);
 
         // CM-2001: 2,000.00 of returned components, tax at INV-1004's rates (FIN-AR-006, FIN-TX-005), applied.
         Map<String, Object> credit = invoiceInput("C100", "2026-01-10", "CREDIT_MEMO", List.of(
-            line("Returned components", "5", "400.00", null, null)));
+            invoiceLine("Returned components", "5", "400.00", null, null)));
         credit.put("originalInvoiceId", inv1004);
         String cm2001 = (String) ok(InvoiceProcesses.SAVE, clerk, credit).get("invoiceId");
         // Writing receivables down is the controller's, and not the preparer's (FIN-CT-001).
@@ -164,7 +164,7 @@ class InvoiceIT extends FinanceItSupport {
         assertThat(amount(document("INV-1004").get("openAmountUsd"))).isEqualByComparingTo("51135.00");
         // No more is credited than is left of the invoice: 38,000.00 of components and 3,135.00 of tax.
         Map<String, Object> tooMuch = invoiceInput("C100", "2026-01-11", "CREDIT_MEMO", List.of(
-            line("Returned components", "96", "400.00", null, null)));
+            invoiceLine("Returned components", "96", "400.00", null, null)));
         tooMuch.put("originalInvoiceId", inv1004);
         String excess = (String) ok(InvoiceProcesses.SAVE, clerk, tooMuch).get("invoiceId");
         assertThat(refused(InvoiceProcesses.POST, controller, Map.of("invoiceId", excess), 422))
@@ -172,7 +172,8 @@ class InvoiceIT extends FinanceItSupport {
         ok(InvoiceProcesses.DELETE, clerk, Map.of("invoiceId", excess));
 
         // INV-1005: EUR 50,000.00 at 1.0850 to a German customer, no US sales tax.
-        String inv1005 = draft("C400", "2026-01-12", null, List.of(line("Components", "1", "50000.00", "4000", null)));
+        String inv1005 = draft("C400", "2026-01-12", null,
+            List.of(invoiceLine("Components", "1", "50000.00", "4000", null)));
         Map<String, Object> euro = ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", inv1005));
         assertThat(euro).containsEntry("invoiceNo", "INV-1005");
         assertThat(amount(euro.get("total"))).isEqualByComparingTo("50000.00");
@@ -182,13 +183,14 @@ class InvoiceIT extends FinanceItSupport {
 
         // INV-1006: services shipped to Oregon, no sales tax (FIN-TX-002 acceptance 2).
         String inv1006 = draft("C200", "2026-01-14", null, List.of(
-            line("Engineering services", "1", "18000.00", "4100", null)));
+            invoiceLine("Engineering services", "1", "18000.00", "4100", null)));
         assertThat(amount(ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", inv1006)).get("taxTotal")))
             .isEqualByComparingTo("0.00");
         assertThat(postingLines("INV-1006")).isEqualTo(invoices.get("INV-1006"));
 
         // INV-1007: components for resale, exempt with certificate RC-3301, which the invoice names (FIN-TX-004).
-        String inv1007 = draft("C300", "2026-01-15", null, List.of(line("Components", "50", "500.00", "4000", null)));
+        String inv1007 = draft("C300", "2026-01-15", null,
+            List.of(invoiceLine("Components", "50", "500.00", "4000", null)));
         assertThat(ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", inv1007))).containsEntry("invoiceNo",
             "INV-1007");
         assertThat(postingLines("INV-1007")).isEqualTo(invoices.get("INV-1007"));
@@ -201,8 +203,8 @@ class InvoiceIT extends FinanceItSupport {
     @Test
     @Order(3)
     void aPostedDocumentIsVoidedByReversingItsEntryUnlessSomethingWasAppliedToIt() {
-        String id = draft("C200", "2026-01-20", null, List.of(line("Engineering services", "1", "1000.00", "4100",
-            null)));
+        String id = draft("C200", "2026-01-20", null, List.of(invoiceLine("Engineering services", "1", "1000.00",
+            "4100", null)));
         String number = (String) ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", id)).get("invoiceNo");
         assertThat(postingLines(number)).containsEntry("1200", new BigDecimal("1000.00"));
         assertThat(refused(InvoiceProcesses.VOID, controller, Map.of("invoiceId", id, "voidDate", "2026-01-19",
@@ -223,7 +225,7 @@ class InvoiceIT extends FinanceItSupport {
             "2026-01-21", "reason", "no"), 422)).isEqualTo(InvoiceProcesses.APPLIED);
         // The controller's own credit memo is posted by someone else.
         Map<String, Object> own = invoiceInput("C200", "2026-01-21", "CREDIT_MEMO", List.of(
-            line("Goodwill", "1", "10.00", null, null)));
+            invoiceLine("Goodwill", "1", "10.00", null, null)));
         String ownId = (String) ok(InvoiceProcesses.SAVE, controller, own).get("invoiceId");
         assertThat(refused(InvoiceProcesses.POST, controller, Map.of("invoiceId", ownId), 422))
             .isEqualTo(InvoiceProcesses.OWN_DOCUMENT);
@@ -234,8 +236,8 @@ class InvoiceIT extends FinanceItSupport {
     void theRulesAroundPostingHold() {
         // A credit limit exceeded warns (FIN-AR-013): C200 owes 24,025.00 + 18,000.00.
         ok(CustomerProcesses.SAVE, controller, Map.of("customerCode", "C200", "creditLimit", 50000));
-        String id = draft("C200", "2026-01-22", null, List.of(line("Engineering services", "1", "10000.00", "4100",
-            null)));
+        String id = draft("C200", "2026-01-22", null, List.of(invoiceLine("Engineering services", "1", "10000.00",
+            "4100", null)));
         @SuppressWarnings("unchecked")
         List<String> warnings = (List<String>) ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", id))
             .get("warnings");
@@ -244,22 +246,23 @@ class InvoiceIT extends FinanceItSupport {
         // A resale customer without a valid certificate: the posting is refused (FIN-TX-004 acceptance 2).
         ok(CustomerProcesses.SAVE, controller, Map.of("customerCode", "C700", "legalName", "Paperless Resale",
             "currency", "USD", "termsDays", 30, "taxCode", "TX-RESALE"));
-        String resale = draft("C700", "2026-01-22", null, List.of(line("Components", "1", "100.00", "4000", null)));
+        String resale = draft("C700", "2026-01-22", null,
+            List.of(invoiceLine("Components", "1", "100.00", "4000", null)));
         assertThat(refused(InvoiceProcesses.POST, clerk, Map.of("invoiceId", resale), 422))
             .isEqualTo(SalesTax.CERTIFICATE_MISSING);
         ok(InvoiceProcesses.DELETE, clerk, Map.of("invoiceId", resale));
 
         // A clerk cannot take tax off an invoice: another ship-to code, or a no-tax code on goods.
         assertThat(refused(InvoiceProcesses.SAVE, clerk, invoiceInput("C100", "2026-01-22", null, List.of(
-            line("Components", "1", "100.00", "4000", null)), "EXPORT"), 422))
+            invoiceLine("Components", "1", "100.00", "4000", null)), "EXPORT"), 422))
             .isEqualTo(InvoiceProcesses.TAX_RESTRICTED);
         assertThat(refused(InvoiceProcesses.SAVE, clerk, invoiceInput("C100", "2026-01-22", null, List.of(
-            line("Components", "1", "100.00", "4000", "TX-RESALE")), null), 422))
+            invoiceLine("Components", "1", "100.00", "4000", "TX-RESALE")), null), 422))
             .isEqualTo(InvoiceProcesses.TAX_RESTRICTED);
         // Lines post to revenue accounts only: not the bank, not an expense.
         for (String account : List.of("1010", "6100", "2000")) {
             assertThat(refused(InvoiceProcesses.SAVE, clerk, invoiceInput("C100", "2026-01-22", "CREDIT_MEMO",
-                List.of(line("Refund", "1", "100.00", account, null))), 422)).as(account)
+                List.of(invoiceLine("Refund", "1", "100.00", account, null))), 422)).as(account)
                 .isEqualTo(InvoiceProcesses.ACCOUNT);
         }
         // The open items were brought over once.
@@ -271,7 +274,8 @@ class InvoiceIT extends FinanceItSupport {
         // Receivables closed for January: nothing posts there, though the general ledger is open.
         ok("FIN_PERIOD_SET_SUBLEDGER_STATE", controller, Map.of("periodKey", "2026-01", "subledger", "AR",
             "status", "CLOSED"));
-        String late = draft("C100", "2026-01-23", null, List.of(line("Components", "1", "100.00", "4000", null)));
+        String late = draft("C100", "2026-01-23", null,
+            List.of(invoiceLine("Components", "1", "100.00", "4000", null)));
         assertThat(refused(InvoiceProcesses.POST, clerk, Map.of("invoiceId", late), 422))
             .isEqualTo("FIN_SUBLEDGER_CLOSED");
         ok("FIN_PERIOD_SET_SUBLEDGER_STATE", controller, Map.of("periodKey", "2026-01", "subledger", "AR",
@@ -280,10 +284,11 @@ class InvoiceIT extends FinanceItSupport {
         assertThat(latePosted).containsEntry("status", "POSTED");
 
         // A draft saved again keeps its lines' numbers; the next invoice gets the next number, without gaps.
-        String twice = draft("C100", "2026-01-23", null, List.of(line("Components", "1", "100.00", "4000", null),
-            line("Components", "2", "100.00", "4000", null)));
+        String twice = draft("C100", "2026-01-23", null, List.of(invoiceLine("Components", "1", "100.00", "4000", null),
+            invoiceLine("Components", "2", "100.00", "4000", null)));
         Map<String, Object> again = new HashMap<>(invoiceInput("C100", "2026-01-23", null, List.of(
-            line("Components", "3", "100.00", "4000", null), line("Components", "4", "100.00", "4000", null))));
+            invoiceLine("Components", "3", "100.00", "4000", null),
+            invoiceLine("Components", "4", "100.00", "4000", null))));
         again.put("invoiceId", twice);
         assertThat(amount(ok(InvoiceProcesses.SAVE, clerk, again).get("subtotal"))).isEqualByComparingTo("700.00");
         String previous = (String) latePosted.get("invoiceNo");
@@ -292,7 +297,7 @@ class InvoiceIT extends FinanceItSupport {
 
         // A credit is applied within one customer, and not into a closed period.
         Map<String, Object> other = invoiceInput("C200", "2026-01-23", "CREDIT_MEMO", List.of(
-            line("Allowance", "1", "50.00", null, null)));
+            invoiceLine("Allowance", "1", "50.00", null, null)));
         String otherCredit = (String) ok(InvoiceProcesses.SAVE, clerk, other).get("invoiceId");
         ok(InvoiceProcesses.POST, controller, Map.of("invoiceId", otherCredit));
         assertThat(refused(InvoiceProcesses.APPLY, clerk, Map.of("creditMemoId", otherCredit, "invoiceId", twice,
@@ -317,41 +322,6 @@ class InvoiceIT extends FinanceItSupport {
 
     private String draft(String customer, String date, String kind, List<Map<String, Object>> lines) {
         return (String) ok(InvoiceProcesses.SAVE, clerk, invoiceInput(customer, date, kind, lines)).get("invoiceId");
-    }
-
-    private static Map<String, Object> invoiceInput(String customer, String date, String kind,
-        List<Map<String, Object>> lines) {
-        return invoiceInput(customer, date, kind, lines, null);
-    }
-
-    private static Map<String, Object> invoiceInput(String customer, String date, String kind,
-        List<Map<String, Object>> lines, String taxCode) {
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("customerCode", customer);
-        input.put("invoiceDate", date);
-        if (kind != null) {
-            input.put("kind", kind);
-        }
-        if (taxCode != null) {
-            input.put("taxCode", taxCode);
-        }
-        input.put("lines", lines);
-        return input;
-    }
-
-    private static Map<String, Object> line(String description, String quantity, String price, String account,
-        String taxCode) {
-        Map<String, Object> line = new LinkedHashMap<>();
-        line.put("description", description);
-        line.put("quantity", quantity);
-        line.put("unitPrice", price);
-        if (account != null) {
-            line.put("revenueAccount", account);
-        }
-        if (taxCode != null) {
-            line.put("taxCode", taxCode);
-        }
-        return line;
     }
 
     private Map<String, Object> document(String number) {
