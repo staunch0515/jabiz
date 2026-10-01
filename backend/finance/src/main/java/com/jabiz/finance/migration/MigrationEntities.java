@@ -17,9 +17,11 @@ public final class MigrationEntities {
     public static final String DECISION_DATASET = "urn:jabiz:dataset:default:FinMigrationDecision";
     public static final String DECISION_KINDS = "urn:jabiz:dict:finance:migration-decision-kind";
 
-    /** A legacy account code read as one of ours. Merging duplicate customers comes with the receivables (F3). */
+    /** A legacy account code read as one of ours. */
     public static final String ACCOUNT = "ACCOUNT";
-    public static final List<String> DECISION_KIND_VALUES = List.of(ACCOUNT);
+    /** A legacy customer code merged into another customer: the same company twice in the legacy data (F3a). */
+    public static final String CUSTOMER = "CUSTOMER";
+    public static final List<String> DECISION_KIND_VALUES = List.of(ACCOUNT, CUSTOMER);
 
     public static final EntityDefinition DECISION_ENTITY = EntityDefinition.define(DECISION, eb -> {
         eb.physicalTable("fi_migration_decision_version");

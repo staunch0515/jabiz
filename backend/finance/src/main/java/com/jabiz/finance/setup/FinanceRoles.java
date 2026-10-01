@@ -47,18 +47,21 @@ public final class FinanceRoles {
             FinancePermissions.PERIOD_MAINTAIN, FinancePermissions.PERIOD_CLOSE, FinancePermissions.JOURNAL_APPROVE,
             FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
             "sod.read", "report.issue", "audit.read", "operation.read", FinancePermissions.IMPORT,
-            FinancePermissions.MIGRATION, FinancePermissions.PAYROLL_MAINTAIN));
+            FinancePermissions.MIGRATION, FinancePermissions.PAYROLL_MAINTAIN, FinancePermissions.AR_READ,
+            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
-            FinancePermissions.PAYROLL_IMPORT));
-        add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of());
+            FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ));
+        add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of(FinancePermissions.AR_READ,
+            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT));
         add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of());
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
             "approval.decide"));
         add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN,
             FinancePermissions.IMPORT));
-        add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER);
-        add(EXTERNAL_AUDITOR, "External auditor", READ_BOOKS, READ_LEDGER, List.of("audit.read", "operation.read"));
+        add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.AR_READ));
+        add(EXTERNAL_AUDITOR, "External auditor", READ_BOOKS, READ_LEDGER, List.of("audit.read", "operation.read",
+            FinancePermissions.AR_READ));
         add(SYSTEM_ADMINISTRATOR, "System administrator", List.of(FinancePermissions.SETUP,
             "security.user.read", "security.user.write", "security.user.create", "security.user.password",
             "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",

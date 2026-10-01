@@ -2,6 +2,8 @@ package com.jabiz.finance.migration;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
+import com.jabiz.finance.ar.ArEntities;
+import com.jabiz.finance.ar.CustomerProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -32,11 +34,14 @@ public final class MigrationProcesses {
     public static final String INVALID_KIND = "FIN_MIGRATION_INVALID_KIND";
     public static final String UNKNOWN_ACCOUNT = "FIN_MIGRATION_UNKNOWN_ACCOUNT";
     public static final String LEGACY_IS_ACCOUNT = "FIN_MIGRATION_LEGACY_IS_ACCOUNT";
+    public static final String UNKNOWN_CUSTOMER = "FIN_MIGRATION_UNKNOWN_CUSTOMER";
+    public static final String LEGACY_IS_CUSTOMER = "FIN_MIGRATION_LEGACY_IS_CUSTOMER";
 
     /**
-     * @param kind          {@code ACCOUNT}
+     * @param kind          {@code ACCOUNT} or {@code CUSTOMER}
      * @param legacyValue   the value as the legacy data has it
-     * @param decidedValue  what it is read as: for {@code ACCOUNT} an account code of the chart
+     * @param decidedValue  what it is read as: for {@code ACCOUNT} an account code of the chart, for {@code CUSTOMER}
+     *                      the customer the legacy customer is merged into
      */
     public record DecisionInput(@NotBlank String kind, @NotBlank @Size(max = 100) String legacyValue,
         @NotBlank @Size(max = 100) String decidedValue, @NotBlank @Size(max = 500) String reason) {}
@@ -49,6 +54,7 @@ public final class MigrationProcesses {
     static final String OUTPUT = "output";
     static final String DECISIONS = "decisions";
     static final String ACCOUNTS = "accounts";
+    static final String CUSTOMERS = "customers";
 
     public static final ProcessDefinition<DecisionInput, DecisionOutput, ProcessContext> DECIDE_PROCESS =
         ProcessDefinition.define(DECIDE, 1, DecisionInput.class, DecisionOutput.class, ProcessContext.class, pb -> pb
@@ -64,12 +70,16 @@ public final class MigrationProcesses {
                 DecisionInput input = ctx.get(INPUT, DecisionInput.class);
                 return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                     new QueryPredicate.Eq("kind", kind(input)),
-                    new QueryPredicate.Eq("legacyValue", input.legacyValue().trim())))).limit(1).build();
+                    new QueryPredicate.Eq("legacyValue", legacy(input))))).limit(1).build();
             }, DECISIONS))
             .step("Load the accounts it names", QueryEntities.of(GlEntities.ACCOUNT_DATASET, ctx -> {
                 DecisionInput input = ctx.get(INPUT, DecisionInput.class);
                 return accountsByCode(List.of(input.legacyValue().trim(), input.decidedValue().trim()));
             }, ACCOUNTS))
+            .step("Load the customers it names", QueryEntities.of(ArEntities.CUSTOMER_DATASET, ctx -> {
+                DecisionInput input = ctx.get(INPUT, DecisionInput.class);
+                return CustomerProcesses.byCodes(List.of(input.legacyValue(), input.decidedValue()));
+            }, CUSTOMERS))
             .compute("Record the decision", (metadata, ctx) -> decide(ctx)));
 
     /** The finance accounts with these codes. */
@@ -105,8 +115,34 @@ public final class MigrationProcesses {
                 + MigrationEntities.DECISION_KIND_VALUES, Map.of("value", input.kind())));
             return;
         }
-        String legacy = input.legacyValue().trim();
-        String decided = input.decidedValue().trim();
+        String legacy = legacy(input);
+        String decided = MigrationEntities.CUSTOMER.equals(kind)
+            ? input.decidedValue().trim().toUpperCase(Locale.ROOT) : input.decidedValue().trim();
+        if (MigrationEntities.CUSTOMER.equals(kind)) {
+            checkCustomer(ctx, legacy, decided);
+        } else {
+            checkAccount(ctx, legacy, decided);
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
+        record(ctx, input, kind, legacy, decided);
+    }
+
+    private static void checkCustomer(ProcessContext ctx, String legacy, String decided) {
+        List<EntityInstance> customers = list(ctx, CUSTOMERS);
+        if (customers.stream().noneMatch(c -> decided.equals(c.get("customerCode")))) {
+            ctx.reject(new Violation("decidedValue", UNKNOWN_CUSTOMER, "There is no customer " + decided,
+                Map.of("customerCode", decided)));
+        }
+        // Merging two customers that both exist would leave documents on the merged one; merge before importing.
+        if (customers.stream().anyMatch(c -> legacy.equals(c.get("customerCode")))) {
+            ctx.reject(new Violation("legacyValue", LEGACY_IS_CUSTOMER, legacy + " is a customer already: merge "
+                + "legacy customers before they are imported", Map.of("customerCode", legacy)));
+        }
+    }
+
+    private static void checkAccount(ProcessContext ctx, String legacy, String decided) {
         List<EntityInstance> accounts = list(ctx, ACCOUNTS);
         if (accounts.stream().noneMatch(a -> decided.equals(a.get("accountCode")))) {
             ctx.reject(new Violation("decidedValue", UNKNOWN_ACCOUNT, "There is no account " + decided,
@@ -117,9 +153,9 @@ public final class MigrationProcesses {
             ctx.reject(new Violation("legacyValue", LEGACY_IS_ACCOUNT, legacy + " is an account of the chart: "
                 + "it is read as itself", Map.of("accountCode", legacy)));
         }
-        if (ctx.hasViolations()) {
-            return;
-        }
+    }
+
+    private static void record(ProcessContext ctx, DecisionInput input, String kind, String legacy, String decided) {
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("decidedValue", decided);
         state.put("reason", input.reason().trim());
@@ -140,6 +176,12 @@ public final class MigrationProcesses {
             ctx.changes().update(MigrationEntities.DECISION, decision.id(), decision.version(), state);
         }
         ctx.put(OUTPUT, new DecisionOutput(String.valueOf(decision.id()), kind, legacy, decided, changed));
+    }
+
+    /** The legacy value as decided on: customer codes in capitals, as customers have them. */
+    private static String legacy(DecisionInput input) {
+        String legacy = input.legacyValue().trim();
+        return MigrationEntities.CUSTOMER.equals(kind(input)) ? legacy.toUpperCase(Locale.ROOT) : legacy;
     }
 
     private static String kind(DecisionInput input) {
