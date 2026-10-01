@@ -24,6 +24,7 @@ public final class SemanticKindParser {
             case "semanticIdentity" -> new SemanticKind.SemanticIdentity(text(spec, "urn", true));
             case "monetary" -> new SemanticKind.Monetary(text(spec, "currency", true), integer(spec, "scale"));
             case "temporal" -> new SemanticKind.Temporal(role(text(spec, "role", true)));
+            case "date" -> new SemanticKind.Date();
             case "code" -> new SemanticKind.Code(text(spec, "dictUrn", true), strings(spec, "allowedValues"));
             case "version" -> new SemanticKind.Version();
             case "text" -> new SemanticKind.Text(integerOrNull(spec, "maxLength"),

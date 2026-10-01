@@ -35,6 +35,7 @@
 | 导入框架（CSV/XLSX/XML/文本，全行校验后写入、预览、报告、去重） | 14e | 已有（线 1.1）|
 | 审计前后值、防篡改哈希链与校验、保留期与法律保全、全量导出 | 14f | 已有（线 1.1）|
 | TOTP 与按操作二次验证、OIDC、会话闲置锁定、按权限显示明文并记录、角色的数据期限、访问审查 | 14g | 已有（线 1.1）|
+| 日期类型（`f.asDate()`，`LocalDate`，列 `date`：过账日、单据日、到期日、汇率日） | 14h（F1 开始时发现） | PR 待合并（线 1.1）|
 
 平台阶段的具体接口以各自的计划为准；本文件用到它们时只写"财务怎样使用"。平台接口与本文件的假设不同时，改本文件。
 
@@ -74,7 +75,7 @@
 
 ### 4.2 日期与时间
 
-- 过账日期（posting date）、单据日期（document date）是无时区的 `LocalDate`。
+- 过账日期（posting date）、单据日期（document date）是无时区的 `LocalDate`，实体字段用平台的日期类型 `f.asDate()`（14h，列 `date`）。
 - 账本的 `bookingTime` = 过账日期在公司时区（`America/Chicago`，配置 `finance.company.zone`）的 00:00 对应的时刻；按日期查余额时用"次日 00:00 之前"。
 - 记录时间（recorded-on）= 平台的操作时间 `op_time` / `created_time`，来自注入的 `Clock`。场景中"2026-02-20 录入"用模拟时钟（`advanceClock`）。
 - 审计时间戳 UTC 毫秒，界面按公司时区显示（FIN 00 §4.3）。
@@ -121,6 +122,9 @@
 | SystemAdministrator | 用户、角色、配置、集成；**无任何过账权限** |
 
 - 平台账本的 `ledger.post` / `ledger.reverse` 不授予任何角色：总账只经财务流程以子流程写入（平台 D11：子流程不再检查权限）。因此**控制科目只能由子账过账**（FIN-GL-005），手工日记账对控制科目的检查在日记账流程中（例外须 Controller 逐笔授权并记录）。
+- `FIN_SETUP`（`fin.setup`，平台管理级二次验证）幂等：建立缺少的角色与权限、本位币 USD；不删除管理员另外授予的权限。
+  各阶段把自己的权限加入 `setup.FinanceRoles`，再运行一次即可。角色也不授予 `ledger.account.write`（科目只经财务流程维护）；
+  读取账本余额与模板需要平台的 `ledger.read`、`ledger.account.read`，授予需要看账的角色。
 - 职责分离（14b）的财务规则（FIN-CT-001）：准备人 ≠ 审批人（分录、账单、付款批、核销、重开）；维护供应商银行信息 × 释放付款；维护用户角色 × 过账。
 
 ---
@@ -154,11 +158,18 @@
 
 - 财务类型映射到账本的五类（other income/expense、income tax → REVENUE/EXPENSE），报表按 `FinAccount` 的类型与报表行分类。
 - 有发生额的科目不能删除，只能停用；停用后拒绝过账但仍出现在报表（FIN-GL-004）。
-- 标准科目模板（GL-002）：资源文件中的美国小型商业公司科目表，`FIN_COA_FROM_TEMPLATE` 先预览、确认后保存。
+- 标准科目模板（GL-002）：资源文件 `finance/coa/us-small-business.csv`（美国小型商业公司，含汇总科目、控制与清算标记）；
+  `FIN_COA_TEMPLATE_PREVIEW` 只显示，`FIN_COA_TEMPLATE_APPLY` 在尚无科目的账簿中复制（可排除某些代码及其下级），之后逐个调整。
+- 流程（F1a）：`FIN_ACCOUNT_CREATE` / `_UPDATE` / `_DEACTIVATE` / `_REACTIVATE` / `_DELETE`，同时写两个实体（`fin.account.maintain`）；
+  `FinAccount` 的数据视图只经流程写入。财务类型不可改；其他收支的正常余额方向决定账本类型，因此也不可改（改则另开科目）。
+  删除前先查发生额给出明确的原因；即使操作人受数据期限限制看不到发生额，平台删除时的引用检查（不受范围限制）仍会拒绝（`STILL_REFERENCED`）。
+  已知限制：删除科目与同时对该科目过账之间没有互斥锁（平台的引用检查是通用的"先查后写"）；删除只用于尚未使用的科目，影响有限，记入平台待改进项。
 
 ### 6.2 维度（FIN-GL-006）
 
-两个分析维度：`department`、`location`，值来自维度值表（时态，校验列表）。维度在账本行上（14c），日记账、发票、账单行可填；报表可按维度列示。CR-C 只需加维度值与报表列，不改代码。
+两个分析维度：`department`、`location`，值分别来自 `FinDepartment`、`FinLocation`（时态，代码、名称、启用；平台 `LedgerDimension` 以实体为值来源）。
+科目可声明必填维度（`FinAccount.requiredDimension`，由日记账校验，F1b）。
+平台以实体为维度值来源时接受当前所有值，不看 `active`；停用的值由日记账等单据的校验拒绝（F1b 起），账本本身仍接受（例如冲回旧分录）。维度在账本行上（14c），日记账、发票、账单行可填；报表可按维度列示。CR-C 只需加维度值与报表列，不改代码。
 
 ### 6.3 日记账
 
@@ -183,13 +194,17 @@
 
 ### 7.1 日历
 
-`FinFiscalYear`（年份、起止日、是否启用第 13 期）与 `FinPeriod`（年、期号 1–12/13、起止日期、状态、各子账状态）。
+`FinFiscalYear`（年份、起止日、是否启用第 13 期）与 `FinPeriod`（年、期号 1–12/13、键 `2026-01`、起止日期、状态、各子账状态）。
+财年以结束所在的日历年命名（7 月起的财年 FY2027 = 2026-07-01 至 2027-06-30），第 1 期是财年的第一个月；财年不重叠。
+`FIN_FISCAL_YEAR_CREATE`（`fin.period.maintain`）一次建立财年与全部期间，初始都为开放。
 过账日期决定期间；第 13 期与 12 月同日期范围，只能由显式选择"调整期"的分录进入，出现在年度报表、不出现在 12 月月报（FIN-PC-001）。
 
 ### 7.2 状态与检查
 
 - 状态：`OPEN`、`SOFT_CLOSED`（只有 `fin.period.close` 且只允许调整分录）、`CLOSED`（拒绝，原因"period closed"）；子账（AR、AP、BANK、FA）可先于总账关闭（FIN-PC-003）。
-- 状态只经流程改变（`processOnly`）。每个过账流程的期间检查是同一个纯函数 `PeriodPolicy.check(期间, 子账, 分录种类, 权限)`。
+- 状态只经流程改变（`processOnly`）：`FIN_PERIOD_SET_STATE`（总账：三种状态）、`FIN_PERIOD_SET_SUBLEDGER_STATE`（子账：开放、关闭），都需要 `fin.period.close`；
+  F8 之前在各状态间自由切换，每次改变都在期间的历史中。总账关闭时子账自动视为关闭（`PeriodPolicy` 先看总账）。
+- 每个过账流程的期间检查是同一个纯函数 `PeriodPolicy.check(期间, 来源, 是否调整分录, 是否持有 fin.period.close)`。
 - 以前期间项目（PC-007）：单据日期在已结期间、过账日期在开放期间；保留两个日期；报表 `finance.gl.prior_period_items`。
 
 ### 7.3 结账（F8）
@@ -281,7 +296,7 @@
 | 实体 | 要点 |
 |---|---|
 | `FinCurrency` | ISO 4217 代码、小数位、状态；本位币 USD（配置） |
-| `FinExchangeRate` | 币种对、日期、类型（spot、closing、average）、汇率；时态，更正保留旧值与操作人（FX-002） |
+| `FinExchangeRate` | 币种对、日期（日期类型）、类型（spot、closing、average）、汇率 `numeric(19,10)`，每对 × 日 × 类型一行；时态，更正即更新，历史保留旧值与操作人（FX-002） |
 | `FinRevaluationRun` / `…Line` | 期末重估：开放的外币货币性项目（应收、应付、银行、借款）按期末汇率重估，过账未实现损益，并标记下期首日自动冲回；可重现、拒绝已结期间；"模拟"用更正后的汇率显示差额而不改变原运行（FX-005，CR-F） |
 
 - 外币单据：每行存交易币种金额与本位币金额（按单据日即期汇率换算，除非手工输入汇率，FX-003）；账本行同样两列（14c）。

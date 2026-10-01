@@ -66,6 +66,7 @@ class ValidationCasesTest {
             .apply(Rules.range("RATIO_MAX", null, new BigDecimal("100"))));
         eb.field("happenedAt", f -> f.physicalColumn("f_happened").asTemporal(TemporalRole.EVENT_TIME)
             .apply(Rules.notFuture("NOT_IN_FUTURE", 60)));
+        eb.field("dueOn", f -> f.physicalColumn("f_due_on").asDate());
         eb.field("active", f -> f.physicalColumn("f_active").asBool());
         eb.field("status", f -> f.physicalColumn("f_status").asCode("urn:sample:status", "OPEN", "DONE"));
         eb.field("port", f -> f.physicalColumn("f_port").asCode("urn:sample:port"));

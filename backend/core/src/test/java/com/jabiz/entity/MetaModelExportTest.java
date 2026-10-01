@@ -28,6 +28,7 @@ class MetaModelExportTest {
         eb.field("channel", f -> f.physicalColumn("f_channel").asCode("urn:dict:channel"));
         eb.field("cell", f -> f.physicalColumn("f_cell").kind(TestCellKind.of(7)));
         eb.field("placedAt", f -> f.physicalColumn("f_placed").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("dueOn", f -> f.physicalColumn("f_due_on").asDate());
         eb.field("recordedAt", f -> f.physicalColumn("f_recorded").asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("legacy", f -> f.physicalColumn("f_legacy"));
         eb.field("rowVersion", f -> f.physicalColumn("f_version").asVersion());
@@ -78,6 +79,8 @@ class MetaModelExportTest {
         assertThat(field(export, "legacy")).containsEntry("type", "none");
         assertThat(field(export, "rowVersion")).containsEntry("type", "version").containsEntry("systemManaged", true);
         assertThat(field(export, "placedAt")).containsEntry("type", "temporal").containsEntry("role", "EVENT_TIME");
+        assertThat(field(export, "dueOn")).containsEntry("type", "date").containsEntry("operators",
+            List.of("BETWEEN", "EQ", "GT", "GTE", "IN", "IS_NOT_NULL", "IS_NULL", "LT", "LTE", "NE"));
         assertThat(field(export, "amount")).containsEntry("type", "monetary").containsEntry("currency", "JPY");
         assertThat(field(export, "orderId")).containsEntry("type", "semanticIdentity");
     }
@@ -94,6 +97,7 @@ class MetaModelExportTest {
         assertThat((List<String>) schema.get("required")).containsExactly("customerId", "amount");
         assertThat(props.get("orderId")).containsEntry("readOnly", true);
         assertThat(props.get("recordedAt")).containsEntry("readOnly", true).containsEntry("format", "date-time");
+        assertThat(props.get("dueOn")).containsEntry("type", List.of("string", "null")).containsEntry("format", "date");
         assertThat(props.get("note")).containsEntry("type", List.of("string", "null")).containsEntry("maxLength", 200);
         assertThat(props.get("amount")).containsEntry("type", "number")
             .containsEntry("multipleOf", BigDecimal.ONE);

@@ -98,6 +98,7 @@ public final class ImportValues {
                 yield number.setScale(n.scale());
             }
             case SemanticKind.Temporal t -> instant(value, zone, datePatterns);
+            case SemanticKind.Date d -> date(value, datePatterns);
             case SemanticKind.Bool b -> bool(value);
             case SemanticKind.Version v -> {
                 try {
@@ -153,6 +154,23 @@ public final class ImportValues {
                 var parsed = pattern.parseBest(value, LocalDateTime::from, LocalDate::from);
                 return parsed instanceof LocalDateTime dateTime ? dateTime.atZone(zone).toInstant()
                     : ((LocalDate) parsed).atStartOfDay(zone).toInstant();
+            } catch (DateTimeParseException ignored) {
+                // next pattern
+            }
+        }
+        throw invalid(value);
+    }
+
+    /** A day: ISO ({@code 2026-01-31}, as spreadsheets' date cells read) or one of the import's date patterns. */
+    private static LocalDate date(String value, List<DateTimeFormatter> patterns) throws Invalid {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ignored) {
+            // try the import's patterns
+        }
+        for (DateTimeFormatter pattern : patterns) {
+            try {
+                return LocalDate.parse(value, pattern);
             } catch (DateTimeParseException ignored) {
                 // next pattern
             }

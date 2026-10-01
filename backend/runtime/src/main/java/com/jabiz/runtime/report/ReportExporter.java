@@ -28,6 +28,7 @@ import reactor.core.scheduler.Schedulers;
 import java.io.ByteArrayOutputStream;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -203,6 +204,13 @@ public class ReportExporter {
         if (kind instanceof SemanticKind.Temporal) {
             try {
                 return format.dateTime(OffsetDateTime.parse(String.valueOf(value)).toInstant());
+            } catch (DateTimeParseException e) {
+                return String.valueOf(value);
+            }
+        }
+        if (kind instanceof SemanticKind.Date) {
+            try {
+                return format.date(LocalDate.parse(String.valueOf(value)));
             } catch (DateTimeParseException e) {
                 return String.valueOf(value);
             }

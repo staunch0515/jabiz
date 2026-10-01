@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
+import type { FieldMeta } from './types'
 import i18n from '../i18n'
 import { carrier, countries } from '../test/fixtures'
 import { buildColumns, toRow } from './columns'
@@ -70,6 +71,19 @@ describe('list view adapter', () => {
       { field: 'creditLimit', op: 'lte', value: '5' },
     ])
     expect(buildFilters(carrier, undefined, { carrierCode: 'x' })).toEqual([])
+  })
+
+  it('filters dates by day, both ends included', () => {
+    const due = { ...carrier.fields[9], name: 'dueDate', type: 'date', systemManaged: false } as FieldMeta
+    const dated = { ...carrier, fields: [...carrier.fields, due] }
+    const dueView = { ...view, filters: ['dueDate'] }
+    expect(searchKindOf(due)).toBe('date-range')
+    expect(buildFilters(dated, dueView, { dueDate: [dayjs('2026-01-01T23:00:00'), '2026-01-31'] })).toEqual([
+      { field: 'dueDate', op: 'between', from: '2026-01-01', to: '2026-01-31' },
+    ])
+    expect(buildFilters(dated, dueView, { dueDate: [undefined, '2026-01-31'] })).toEqual([
+      { field: 'dueDate', op: 'lte', value: '2026-01-31' },
+    ])
   })
 
   it('sorts by whitelisted fields only', () => {

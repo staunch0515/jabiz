@@ -31,6 +31,7 @@ public final class SemanticKinds {
             case SemanticKind.Monetary m -> ORDERED;
             case SemanticKind.Numeric n -> ORDERED;
             case SemanticKind.Temporal t -> ORDERED;
+            case SemanticKind.Date d -> ORDERED;
             case SemanticKind.Version v -> ORDERED;
             case SemanticKind.Bool b -> FLAG;
             case SemanticKind.Custom c -> Set.copyOf(CustomKinds.require(c.kindId()).allowedOperators(c.params()));

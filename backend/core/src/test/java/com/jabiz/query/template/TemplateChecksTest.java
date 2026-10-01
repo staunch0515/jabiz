@@ -192,6 +192,27 @@ class TemplateChecksTest {
         }))).contains("timeSlice must name asOf, knownAt or both");
     }
 
+    /** A report's period may be days; a time slice stays moments (19 section 2.2). */
+    @Test
+    void aReportPeriodMayBeDatesButATimeSliceMayNot() {
+        String sql = "SELECT o.{{Order.amount}} AS amount FROM {{Order}} o"
+            + " WHERE CAST(:from AS date) IS NULL OR CAST(:to AS date) IS NULL";
+        Consumer<AdvancedQueryDefinition.Builder> params = q -> q
+            .parameter("from", new SemanticKind.Date(), false)
+            .parameter("to", new SemanticKind.Date(), false)
+            .returnsFrom("amount", "Order", "amount")
+            .sqlTemplate(sql);
+
+        assertThat(problems(query(q -> {
+            params.accept(q);
+            q.report(new ReportSpec("from", "to", false));
+        }))).isEmpty();
+        assertThat(problems(query(q -> {
+            params.accept(q);
+            q.timeSlice("to", null);
+        }))).contains("timeSlice.asOf names to, which is not a temporal parameter");
+    }
+
     @Test
     void aPublicQueryTakesNoPointInTime() {
         assertThat(problems(AdvancedQueryDefinition.define("q", q -> q

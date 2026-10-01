@@ -44,6 +44,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **SQL**：所有值必须参数绑定；表名、列名只能来自元数据，并经过 `SqlIdentifiers.require` 校验。禁止字符串拼接用户输入。
 - **默认拒绝**：未实现、未配置的安全检查一律报错，绝不放行（参考现有 `AuthenticationHandler` 的写法）。
 - **时间**：只能来自注入的 `java.time.Clock`，禁止 `Instant.now()` / `System.currentTimeMillis()` / 数据库 `now()` 作为业务时间。
+  指一天而不是一个时刻的值（过账日、到期日）用日期类型 `f.asDate()`（`LocalDate`，列 `date`，02 §1.1），不用时刻或文本表示。
 - **金额**：只用 `BigDecimal`，由 `SemanticKind.Monetary` 声明币种和小数位（小数位由平台自动校验，`MONETARY_SCALE`）。禁止 `double` / `float` 表示金额。
 - **标识**：新实体主键使用 UUIDv7（默认 `EntityIdGenerator` 即 `UuidV7Generator`）；`process_seq_id` 来自数据库序列。
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。

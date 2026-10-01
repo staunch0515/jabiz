@@ -7,6 +7,9 @@ plugins {
 jabizApp {
     mainClass = "com.jabiz.finance.FinanceApp"
     spa("/", "../../frontend")
+    // The books are kept in US English, shown as in the US (FD4, FIN-UI-010).
+    languages("en")
+    region = "en-US"
 }
 
 dependencies {

@@ -11,6 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,6 +46,9 @@ final class ArchivedValues {
                 case OffsetDateTime t -> t.toInstant();
                 default -> Instant.parse(value.toString());
             };
+        }
+        if (column.date() || value instanceof LocalDate) {
+            return value instanceof LocalDate d ? d : LocalDate.parse(value.toString());
         }
         if (column.kind() instanceof SemanticKind.Bool || value instanceof Boolean) {
             return value instanceof Boolean b ? b : Boolean.valueOf(value.toString());
@@ -85,6 +89,7 @@ final class ArchivedValues {
                 values.add(switch (value) {
                     case BigDecimal d -> d.toPlainString();
                     case Instant i -> i.toString();
+                    case LocalDate d -> d.toString();
                     case null -> null;
                     default -> value;
                 });

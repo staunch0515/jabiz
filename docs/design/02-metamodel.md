@@ -14,6 +14,7 @@
 | `SemanticIdentity` | `urn` | `String` / `UUID` | 业务标识，默认不可变、必填 |
 | `Monetary` | `currency`、`scale` | `BigDecimal` | 金额，禁止 double |
 | `Temporal` | `role`：`EVENT_TIME` / `SYSTEM_RECORDED` / `VALID_FROM` / `VALID_TO` | `Instant` | 时间及其角色 |
+| `Date` | — | `LocalDate` | 日历日期（14h）：列 `date`，接口中为 `YYYY-MM-DD`；指一天而不是一个时刻，与时区无关（过账日、到期日） |
 | `Code` | `dictUrn`、`allowedValues`（可为空，表示由字典注册表提供） | `String` | 字典编码；禁止范围比较 |
 | `Version` | — | `Long` | 乐观锁版本（普通实体）或 `version_no`（时态实体） |
 | `Text` | `maxLength`、`multiline` | `String` | 普通文本（新增） |
@@ -22,6 +23,10 @@
 | `Reference` | `targetEntity` | 目标主键类型 | 指向另一实体（新增） |
 | `Custom` | `kindId`、`params` | 由 SPI 决定 | 扩展点 |
 | `None` | — | 原样 | 未声明语义（仅用于过渡，新代码不应使用） |
+
+`Date` 的值只接受 ISO 日期（`2026-01-31`）与 `LocalDate`；带时刻的值（`2026-01-31T00:00:00Z`）一律拒绝（`INVALID_VALUE`），因为一个时刻属于哪一天取决于值本身没有的时区。
+`NOT_FUTURE` 只用于 `Temporal`。SQL 模板的日期参数写 `CAST(:p AS date)`；导出中 CSV 为 ISO 日期，XLSX 为日期单元格，PDF 按区域格式；
+导入按 ISO 或导入声明的日期格式读取；保留期可自日期字段起算（21 §3）。
 
 ### 1.2 扩展类型
 
@@ -61,7 +66,7 @@ public interface CustomKindSupport {
 |---|---|
 | `SemanticIdentity`、`Reference`、`Code` | `EQ` `NE` `IN` `IS_NULL` `IS_NOT_NULL` |
 | `Text` | 以上 + `LIKE` |
-| `Monetary`、`Numeric`、`Temporal`、`Version` | 除 `LIKE` 外全部（含 `GT` `GTE` `LT` `LTE` `BETWEEN`） |
+| `Monetary`、`Numeric`、`Temporal`、`Date`、`Version` | 除 `LIKE` 外全部（含 `GT` `GTE` `LT` `LTE` `BETWEEN`） |
 | `Bool` | `EQ` `NE` `IS_NULL` `IS_NOT_NULL` |
 | `Custom` | 由 `CustomKindSupport.allowedOperators` 决定 |
 | `None`（过渡） | 全部 |

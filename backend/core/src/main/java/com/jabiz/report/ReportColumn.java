@@ -30,6 +30,11 @@ public record ReportColumn(String name, String label, SemanticKind kind) {
         return kind instanceof SemanticKind.Temporal;
     }
 
+    /** Calendar dates. */
+    public boolean date() {
+        return kind instanceof SemanticKind.Date;
+    }
+
     /** Digits after the point of a numeric column; 0 for whole numbers and other columns. */
     public int scale() {
         return switch (kind) {

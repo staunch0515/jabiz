@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +48,11 @@ class ParamKindsTest {
         SemanticKind time = ParamKinds.parse(Map.of("type", "temporal", "role", "EVENT_TIME"));
         assertThat(ParamKinds.canonical(time, "2026-02-01T00:00:00+09:00")).isEqualTo("2026-01-31T15:00:00Z");
         assertThat(ParamKinds.value(time, "2026-01-31T15:00:00Z")).isEqualTo(Instant.parse("2026-01-31T15:00:00Z"));
+
+        SemanticKind date = ParamKinds.parse(Map.of("type", "date"));
+        assertThat(ParamKinds.canonical(date, "2026-01-31")).isEqualTo("2026-01-31");
+        assertThat(ParamKinds.value(date, "2026-01-31")).isEqualTo(LocalDate.of(2026, 1, 31));
+        assertThatThrownBy(() -> ParamKinds.canonical(date, "2026-02-30")).isInstanceOf(IllegalArgumentException.class);
 
         SemanticKind mode = ParamKinds.parse(Map.of("type", "code", "dictUrn", "urn:m", "allowedValues",
             List.of("FAST", "SLOW")));

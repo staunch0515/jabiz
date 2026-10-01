@@ -10,7 +10,17 @@ spring:
     user: ${SPRING_FLYWAY_USER:finance}
     password: ${DB_PASSWORD:finance}
 
+finance:
+  company:
+    # Posting dates are booked at the start of the day in the company's zone (docs/finance/00-design.md section 4.2).
+    zone: America/Chicago
+
 jabiz:
+  # The general ledger keeps US dollars and cents (FIN-FX-001); the fiscal year ends in December (FIN-PC-001).
+  ledger:
+    currency: USD
+    scale: 2
+  fiscal-year-end: 12
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:
