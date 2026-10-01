@@ -108,10 +108,10 @@ class SetupAndMasterDataIT extends FinanceItSupport {
         String treasurer = as("treasurer", "fin.master.read", "fin.fx.maintain");
         commit(GlEntities.CURRENCY_DATASET, treasurer, Map.of("action", "INSERT", "attributes",
             Map.of("currencyCode", "EUR", "currencyName", "Euro", "minorUnits", 2, "active", true)));
+        // Rates are entered through FIN_EXCHANGE_RATE_SET, as the import enters them (FIN-DI-001).
         for (Map<String, String> row : sample("fx-rates.csv")) {
-            commit(GlEntities.EXCHANGE_RATE_DATASET, treasurer, Map.of("action", "INSERT", "attributes", Map.of(
-                "fromCurrency", "EUR", "toCurrency", "USD", "rateDate", row.get("date"), "rateType", "SPOT",
-                "rate", row.get("eur_usd"))));
+            ok("FIN_EXCHANGE_RATE_SET", treasurer, Map.of("fromCurrency", "EUR", "toCurrency", "USD",
+                "rateDate", row.get("date"), "rate", row.get("eur_usd")));
         }
         assertThat(find(GlEntities.EXCHANGE_RATE_DATASET, "fromCurrency", "EUR"))
             .extracting(r -> r.get("rateDate")).containsExactlyInAnyOrder("2026-01-12", "2026-01-31", "2026-02-20");
@@ -119,9 +119,9 @@ class SetupAndMasterDataIT extends FinanceItSupport {
 
         Map<String, Object> rate = find(GlEntities.EXCHANGE_RATE_DATASET, "rateDate", "2026-01-31").getFirst();
         clock.advance(Duration.ofDays(1));
-        commit(GlEntities.EXCHANGE_RATE_DATASET, as("treasurer-2", "fin.master.read", "fin.fx.maintain"),
-            Map.of("action", "UPDATE", "id", rate.get("rateId"), "version", 1,
-                "attributes", Map.of("rate", "1.0930")));
+        assertThat(ok("FIN_EXCHANGE_RATE_SET", as("treasurer-2", "fin.master.read", "fin.fx.maintain"),
+            Map.of("fromCurrency", "EUR", "toCurrency", "USD", "rateDate", "2026-01-31", "rateType", "SPOT",
+                "rate", "1.0930"))).containsEntry("changed", true).containsEntry("rateId", rate.get("rateId"));
         assertThat(new BigDecimal(String.valueOf(find(GlEntities.EXCHANGE_RATE_DATASET, "rateDate", "2026-01-31")
             .getFirst().get("rate")))).isEqualByComparingTo("1.0930");
         List<Map<String, Object>> history = get("/api/datasets/" + GlEntities.EXCHANGE_RATE_DATASET + "/entities/"
@@ -130,14 +130,17 @@ class SetupAndMasterDataIT extends FinanceItSupport {
         assertThat(history).hasSize(2);
         assertThat(history.toString()).contains("1.092").contains("1.093").contains("treasurer-2");
 
-        // One rate per pair, day and type; a rate converts between two currencies.
+        // One rate per pair, day and type: setting the same one again changes nothing; a rate converts between two
+        // currencies; the dataset takes no writes but through the process.
         treasurer = as("treasurer", "fin.master.read", "fin.fx.maintain");
-        post("/api/datasets/" + GlEntities.EXCHANGE_RATE_DATASET + "/commit", treasurer, Map.of("changes", List.of(
-            Map.of("action", "INSERT", "attributes", Map.of("fromCurrency", "EUR", "toCurrency", "USD",
-                "rateDate", "2026-01-31", "rateType", "SPOT", "rate", "1.1"))))).expectStatus().isBadRequest();
+        assertThat(ok("FIN_EXCHANGE_RATE_SET", treasurer, Map.of("fromCurrency", "EUR", "toCurrency", "USD",
+            "rateDate", "2026-01-31", "rate", "1.093"))).containsEntry("changed", false);
+        assertThat(refused("FIN_EXCHANGE_RATE_SET", treasurer, Map.of("fromCurrency", "USD", "toCurrency", "USD",
+            "rateDate", "2026-01-31", "rateType", "CLOSING", "rate", "1"), 422))
+            .isEqualTo(GlEntities.EXCHANGE_RATE_SAME_CURRENCY);
         assertThat(commitRefused(GlEntities.EXCHANGE_RATE_DATASET, treasurer, Map.of("action", "INSERT",
-            "attributes", Map.of("fromCurrency", "USD", "toCurrency", "USD", "rateDate", "2026-01-31",
-                "rateType", "CLOSING", "rate", "1")))).isEqualTo(GlEntities.EXCHANGE_RATE_SAME_CURRENCY);
+            "attributes", Map.of("fromCurrency", "EUR", "toCurrency", "USD", "rateDate", "2026-03-01",
+                "rateType", "SPOT", "rate", "1.1")))).isEqualTo("PROCESS_ONLY_DATASET");
         assertOnlyInserted("fi_currency_version", "fi_exchange_rate_version", "fi_department_version",
             "fi_location_version");
     }

@@ -44,6 +44,13 @@ public final class FinancePermissions {
     public static final String JOURNAL_POST = "fin.journal.post";
     /** Maintain recurring entry templates (FIN-GL-017). */
     public static final String RECURRING_MAINTAIN = "fin.recurring.maintain";
+    /** Upload and read the files of the finance imports (FIN-DI-001); each import needs its own permission too. */
+    public static final String IMPORT = "fin.import";
+    /**
+     * Open the books: post the opening entry, record the migration's decisions, close the opening period
+     * (FIN-PC-002, FIN-DI-002, FIN-DI-003).
+     */
+    public static final String MIGRATION = "fin.migration";
     /** Upload supporting documents of journal entries (FIN-GL-016). */
     public static final String JOURNAL_ATTACH = "fin.journal.attach";
 

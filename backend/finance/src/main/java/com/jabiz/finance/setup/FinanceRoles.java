@@ -46,14 +46,16 @@ public final class FinanceRoles {
             FinancePermissions.ACCOUNT_MAINTAIN, FinancePermissions.DIMENSION_MAINTAIN, FinancePermissions.FX_MAINTAIN,
             FinancePermissions.PERIOD_MAINTAIN, FinancePermissions.PERIOD_CLOSE, FinancePermissions.JOURNAL_APPROVE,
             FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
-            "sod.read", "report.issue", "audit.read", "operation.read"));
+            "sod.read", "report.issue", "audit.read", "operation.read", FinancePermissions.IMPORT,
+            FinancePermissions.MIGRATION));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN));
         add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of());
         add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of());
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
             "approval.decide"));
-        add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN));
+        add(TREASURER, "Treasurer", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.FX_MAINTAIN,
+            FinancePermissions.IMPORT));
         add(EXECUTIVE, "Executive", READ_BOOKS, READ_LEDGER);
         add(EXTERNAL_AUDITOR, "External auditor", READ_BOOKS, READ_LEDGER, List.of("audit.read", "operation.read"));
         add(SYSTEM_ADMINISTRATOR, "System administrator", List.of(FinancePermissions.SETUP,

@@ -47,15 +47,26 @@ public final class JournalEntities {
     public static final String REVERSING = "REVERSING";
     public static final String AUTO_REVERSING = "AUTO_REVERSING";
     public static final String IMPORT = "IMPORT";
+    /** The opening entry of the books (FIN-PC-002): posted by the migration, never submitted. */
+    public static final String OPENING = "OPENING";
     public static final List<String> SOURCE_VALUES = List.of(MANUAL, RECURRING_SOURCE, REVERSING, AUTO_REVERSING,
-        IMPORT);
+        IMPORT, OPENING);
 
     /**
      * Sources of general ledger numbers (design section 4.5), counted apart per fiscal year: manual journals (MAN)
      * and, from later phases, the subledgers.
      */
     public static final List<String> POSTING_SOURCE_VALUES =
-        List.of("MAN", "AR", "AP", "BK", "FA", "FX", "IMP", "CLS");
+        List.of("MAN", "AR", "AP", "BK", "FA", "FX", "IMP", "CLS", "OPN");
+
+    /** The general ledger source of a journal entry: imported entries count apart, the opening entry too. */
+    public static String postingSource(String journalSource) {
+        return switch (journalSource == null ? "" : journalSource) {
+            case IMPORT -> "IMP";
+            case OPENING -> "OPN";
+            default -> "MAN";
+        };
+    }
 
     /** The ledger's currency and scale (FIN-FX-001). */
     static final String USD = "USD";

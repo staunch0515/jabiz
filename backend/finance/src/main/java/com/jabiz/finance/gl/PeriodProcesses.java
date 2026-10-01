@@ -46,6 +46,8 @@ public final class PeriodProcesses {
     public static final String FISCAL_YEAR_INVALID = "FIN_FISCAL_YEAR_INVALID";
     public static final String PERIOD_NOT_FOUND = "FIN_PERIOD_NOT_FOUND";
     public static final String INVALID_STATE = "FIN_PERIOD_INVALID_STATE";
+    public static final String OPENING_PERIOD = "FIN_PERIOD_OPENING";
+    public static final String BEFORE_OPENING = "FIN_FISCAL_YEAR_BEFORE_OPENING";
 
     /** Subledgers with a state of their own, and the period field holding it. */
     public static final Map<String, String> SUBLEDGER_FIELDS =
@@ -80,6 +82,7 @@ public final class PeriodProcesses {
     static final String OUTPUT = "output";
     static final String YEARS = "years";
     static final String PERIODS = "periods";
+    static final String OPENINGS = "openings";
 
     public static final ProcessDefinition<FiscalYearInput, FiscalYearOutput, ProcessContext> FISCAL_YEAR_PROCESS =
         ProcessDefinition.define(FISCAL_YEAR_CREATE, 1, FiscalYearInput.class, FiscalYearOutput.class,
@@ -90,6 +93,8 @@ public final class PeriodProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, FiscalYearOutput.class))
                 .step("Load the years it could overlap", QueryEntities.of(GlEntities.FISCAL_YEAR_DATASET,
                     PeriodProcesses::overlapping, YEARS))
+                .step("Load the opening of the books", QueryEntities.of(GlEntities.PERIOD_DATASET,
+                    ctx -> openings(), OPENINGS))
                 .compute("Create the year and its periods", (metadata, ctx) -> createYear(ctx)));
 
     public static final ProcessDefinition<StateInput, PeriodOutput, ProcessContext> STATE_PROCESS =
@@ -137,6 +142,11 @@ public final class PeriodProcesses {
             .build();
     }
 
+    /** The opening period of the books, if they were opened (at most one). */
+    public static EntityQuery openings() {
+        return EntityQuery.builder().where(new QueryPredicate.Eq("opening", true)).limit(2).build();
+    }
+
     static EntityQuery byKey(String periodKey) {
         return EntityQuery.builder().where(new QueryPredicate.Eq("periodKey", periodKey.trim())).limit(1).build();
     }
@@ -162,6 +172,17 @@ public final class PeriodProcesses {
         }
         LocalDate start = periods.getFirst().start();
         LocalDate end = periods.getLast().end();
+        // The books begin where they were opened: a year before that would hold periods the opening entry
+        // already summarizes.
+        for (EntityInstance opening : list(ctx, OPENINGS)) {
+            LocalDate openedOn = opening.get("endDate");
+            if (!start.isAfter(openedOn)) {
+                ctx.reject(new Violation("fiscalYear", BEFORE_OPENING, "The books were opened on " + openedOn
+                    + ": fiscal year " + year + " would start before them", Map.of("fiscalYear", year,
+                    "openedOn", openedOn.toString())));
+                return;
+            }
+        }
         Map<String, Object> fiscalYear = new LinkedHashMap<>();
         fiscalYear.put("fiscalYear", BigDecimal.valueOf(year));
         fiscalYear.put("startDate", start);
@@ -175,6 +196,7 @@ public final class PeriodProcesses {
             row.put("periodNo", BigDecimal.valueOf(period.number()));
             row.put("periodKey", period.key());
             row.put("adjustment", period.adjustment());
+            row.put("opening", false);
             row.put("startDate", period.start());
             row.put("endDate", period.end());
             row.put("status", "OPEN");
@@ -200,6 +222,13 @@ public final class PeriodProcesses {
             return;
         }
         EntityInstance period = found.getFirst();
+        if (Boolean.TRUE.equals(period.get("opening"))) {
+            // Closed once the migration is done (FIN_OPENING_CLOSE) and never opened again.
+            ctx.reject(new Violation("periodKey", OPENING_PERIOD, "Period " + period.get("periodKey")
+                + " holds the opening of the books: it changes only through the migration",
+                Map.of("periodKey", period.<String>get("periodKey"))));
+            return;
+        }
         boolean change = !wanted.equals(period.get(field));
         Map<String, Object> state = new LinkedHashMap<>();
         for (String name : List.of("status", "arStatus", "apStatus", "bankStatus", "faStatus")) {

@@ -225,6 +225,8 @@ public final class GlEntities {
         eb.field("periodKey", f -> f.physicalColumn("period_key").immutable(true).required(true).asText(7));
         // Period 13 spans December's days; only it is an adjustment period.
         eb.field("adjustment", f -> f.physicalColumn("adjustment").immutable(true).required(true).asBool());
+        // Period 0 of the first year: the day before it, holding only the opening entry of the books (FIN-PC-002).
+        eb.field("opening", f -> f.physicalColumn("opening").immutable(true).required(true).asBool());
         eb.field("startDate", f -> f.physicalColumn("start_date").immutable(true).required(true).asDate());
         eb.field("endDate", f -> f.physicalColumn("end_date").immutable(true).required(true).asDate());
         // States change only through FIN_PERIOD_SET_STATE / FIN_PERIOD_SET_SUBLEDGER_STATE (FIN-PC-003).
@@ -248,7 +250,7 @@ public final class GlEntities {
         eb.listView("default", lv -> lv
             .columns("periodKey", "startDate", "endDate", "status", "arStatus", "apStatus", "bankStatus",
                 "faStatus")
-            .filters("fiscalYear", "periodKey", "status", "startDate")
+            .filters("fiscalYear", "periodKey", "status", "startDate", "opening")
             .sorts("periodKey", "startDate")
             .defaultSort("periodKey", true));
     });
