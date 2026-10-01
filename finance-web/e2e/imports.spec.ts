@@ -12,7 +12,8 @@ test.beforeEach(async ({ request }) => {
 
 test('journal entries are imported from a file through the import wizard', async ({ page }) => {
   await signIn(page, ACCOUNTANT)
-  await page.getByRole('menuitem', { name: 'Imports' }).click()
+  // The finance menu's group, not the platform's own Imports page, which shows once its catalog has loaded.
+  await page.locator('.ant-menu-submenu-title').filter({ hasText: 'Imports' }).click()
   await page.getByRole('link', { name: 'Import journal entries' }).click()
   await expect(page.getByTestId('page-title')).toHaveText('Journal entries')
 
