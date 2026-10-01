@@ -7,8 +7,6 @@ import com.jabiz.runtime.test.FileSamples;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -41,27 +39,7 @@ class AttachmentIT extends FinanceItSupport {
         return as("accountant", "fin.journal.prepare", "fin.journal.read", "fin.journal.attach");
     }
 
-    private static final String BOUNDARY = "finance-it-boundary";
-
-    /**
-     * Uploads one file. The multipart body is built by hand: the client's own writer draws its boundary from a
-     * blocking random source, which BlockHound would report.
-     */
-    private String upload(String policy, byte[] content, String name, String type) {
-        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
-        body.writeBytes(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name
-            + "\"\r\nContent-Type: " + type + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-        body.writeBytes(content);
-        body.writeBytes(("\r\n--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        Map<String, Object> uploaded = client.post().uri("/api/files?policy=" + policy)
-            .header(HttpHeaders.AUTHORIZATION, accountant())
-            .contentType(MediaType.parseMediaType("multipart/form-data; boundary=" + BOUNDARY))
-            .bodyValue(body.toByteArray())
-            .exchange().expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody();
-        return String.valueOf(uploaded.get("fileId"));
-    }
-
-    private static String sha256(byte[] content) throws Exception {
+    static String sha256(byte[] content) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
     }
 
@@ -69,9 +47,9 @@ class AttachmentIT extends FinanceItSupport {
     @Test
     void documentsOfAPostedEntryAreEvidence() throws Exception {
         byte[] pdf = FileSamples.pdf();
-        String pdfId = upload(JournalEntities.SUPPORT_FILES, pdf, "bonus-memo.pdf", "application/pdf");
+        String pdfId = upload(accountant(), JournalEntities.SUPPORT_FILES, pdf, "bonus-memo.pdf", "application/pdf");
         byte[] csv = "employee,amount\nA,15000.00\n".getBytes(StandardCharsets.UTF_8);
-        String sheetId = upload(JournalEntities.SHEET_FILES, csv, "bonus.csv", "text/csv");
+        String sheetId = upload(accountant(), JournalEntities.SHEET_FILES, csv, "bonus.csv", "text/csv");
         String id = (String) ok(JournalProcesses.SAVE, accountant(), entry("2026-01-31", "Bonus accrual",
             List.of(line("6100", "500.00", null, null), line("2100", null, "500.00", null)))).get("journalId");
 

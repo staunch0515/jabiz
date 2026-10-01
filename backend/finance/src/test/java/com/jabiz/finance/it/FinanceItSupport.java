@@ -56,6 +56,14 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         return TestTokens.bearer(tokens, actor, permissions);
     }
 
+    /** A token for a user holding the permissions of finance roles, as {@code FIN_SETUP} creates them. */
+    protected String inRoles(String actor, String... roles) {
+        List<String> wanted = List.of(roles);
+        return as(actor, com.jabiz.finance.setup.FinanceRoles.all().stream()
+            .filter(role -> wanted.contains(role.code())).flatMap(role -> role.permissions().stream()).distinct()
+            .toArray(String[]::new));
+    }
+
     /** A controller of the books: may maintain accounts, periods and master data. */
     protected String controller() {
         return as("controller", "fin.account.read", "fin.account.maintain", "fin.master.read",
@@ -124,6 +132,43 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
             .returnResult();
         return exchange.getStatus().value() == 404 ? Map.of()
             : (Map<String, Object>) exchange.getResponseBody().get("attributes");
+    }
+
+    private static final String BOUNDARY = "finance-it-boundary";
+
+    /**
+     * Uploads one file under a policy; returns its id. The multipart body is built by hand: the client's own writer
+     * draws its boundary from a blocking random source, which BlockHound would report.
+     */
+    protected String upload(String authorization, String policy, byte[] content, String name, String type) {
+        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+        body.writeBytes(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + name
+            + "\"\r\nContent-Type: " + type + "\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        body.writeBytes(content);
+        body.writeBytes(("\r\n--" + BOUNDARY + "--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Map<String, Object> uploaded = client.post().uri("/api/files?policy=" + policy)
+            .header(HttpHeaders.AUTHORIZATION, authorization)
+            .contentType(MediaType.parseMediaType("multipart/form-data; boundary=" + BOUNDARY))
+            .bodyValue(body.toByteArray())
+            .exchange().expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody();
+        return String.valueOf(uploaded.get("fileId"));
+    }
+
+    /** Runs an SQL template with its parameters; returns all its rows (up to 500). */
+    @SuppressWarnings("unchecked")
+    protected List<Map<String, Object>> report(String template, String authorization, Map<String, Object> params) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("params", params);
+        body.put("limit", 500);
+        var exchange = post("/api/queries/" + template, authorization, body).expectBody(MAP).returnResult();
+        assertThat(exchange.getStatus().value()).as(template + " answered " + exchange.getResponseBody())
+            .isEqualTo(200);
+        return (List<Map<String, Object>>) exchange.getResponseBody().get("items");
+    }
+
+    /** An amount as the API returns it (a JSON number, or null), for exact comparison. */
+    protected static java.math.BigDecimal amount(Object value) {
+        return value == null ? null : new java.math.BigDecimal(String.valueOf(value)).setScale(2);
     }
 
     protected static String unique() {

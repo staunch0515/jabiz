@@ -217,7 +217,8 @@ public final class JournalAutomation {
                     List<JournalProcesses.JournalId> toReverse = new ArrayList<>();
                     for (EntityInstance journal : list(ctx, DUE)) {
                         if (!reversed.contains(String.valueOf(journal.id()))) {
-                            toReverse.add(new JournalProcesses.JournalId(UUID.fromString(String.valueOf(journal.id()))));
+                            UUID journalId = UUID.fromString(String.valueOf(journal.id()));
+                            toReverse.add(new JournalProcesses.JournalId(journalId));
                         }
                     }
                     ctx.put(TO_REVERSE, List.copyOf(toReverse));

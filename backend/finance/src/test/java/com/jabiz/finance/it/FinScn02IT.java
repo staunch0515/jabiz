@@ -1,0 +1,206 @@
+package com.jabiz.finance.it;
+
+import com.jabiz.finance.gl.JournalAttachments;
+import com.jabiz.finance.gl.JournalAutomation;
+import com.jabiz.finance.gl.JournalEntities;
+import com.jabiz.finance.gl.JournalProcesses;
+import com.jabiz.finance.gl.JournalValidator;
+import com.jabiz.finance.setup.FinanceRoles;
+import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.runtime.test.FileSamples;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static com.jabiz.finance.it.JournalLifecycleIT.entry;
+import static com.jabiz.finance.it.JournalLifecycleIT.line;
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Acceptance scenario FIN-SCN-02 (docs/finance-requirements/30-acceptance-scenarios.md), steps 1 to 5, on books of
+ * their own: journal entries with maker–checker approval. The general ledger lines of JE-0001 … JE-0004 are compared
+ * with FIN-EXP-02, read from the requirements in the test only. Entering JE-0002 in the grid is F1c's; here the
+ * grid's process takes it.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+class FinScn02IT extends FinanceItSupport {
+
+    @Autowired
+    OutboxDeliverer deliverer;
+
+    private String accountant() {
+        return inRoles("accountant", FinanceRoles.ACCOUNTANT);
+    }
+
+    private String controllerUser() {
+        return inRoles("controller", FinanceRoles.CONTROLLER);
+    }
+
+    private void deliver() {
+        deliverer.deliverPending().block();
+    }
+
+    private Map<String, Object> decide(String authorization, Object requestId) {
+        return ok("APPROVAL_DECIDE", authorization, Map.of("requestId", requestId, "decision", "APPROVE"));
+    }
+
+    private Map<String, Object> journal(Object id) {
+        return read(JournalEntities.JOURNAL_DATASET, id);
+    }
+
+    @Test
+    void journalEntriesWithMakerCheckerApproval() throws Exception {
+        openBooks();
+
+        // Step 1: JE-0001 with its support; 1010 is a control account, so the controller allows the manual line.
+        Map<String, Object> bonus = entry("2026-01-15", "Payout of 2025 bonus accrued at year end", List.of(
+            line("2100", "15000.00", null, null), line("1010", null, "15000.00", null)));
+        String je1 = (String) ok(JournalProcesses.SAVE, accountant(), bonus).get("journalId");
+        String memo = upload(accountant(), JournalEntities.SUPPORT_FILES, FileSamples.pdf(), "bonus-memo.pdf",
+            "application/pdf");
+        ok(JournalAttachments.ATTACH, accountant(), Map.of("journalId", je1, "fileId", memo,
+            "description", "Board approval of the 2025 bonus"));
+        ok(JournalProcesses.GRANT_CONTROL_EXCEPTION, controllerUser(),
+            Map.of("journalId", je1, "reason", "Bonus paid from the operating account"));
+        Map<String, Object> submitted1 = ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", je1));
+        assertThat(submitted1).containsEntry("journalNo", "JE-0001").containsEntry("approval", "PENDING");
+        decide(controllerUser(), submitted1.get("approvalRequestId"));
+        deliver();
+        assertThat(journal(je1)).containsEntry("status", "POSTED");
+
+        // Step 2: JE-0002; the preparer may not approve; a change after approval needs approval again.
+        Map<String, Object> audit = entry("2026-01-31", "Accrue annual audit fee", List.of(
+            line("6400", "25000.00", null, null), line("2100", null, "25000.00", null)));
+        String je2 = (String) ok(JournalProcesses.SAVE, accountant(), audit).get("journalId");
+        Map<String, Object> submitted2 = ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", je2));
+        assertThat(submitted2).containsEntry("journalNo", "JE-0002").containsEntry("approval", "PENDING");
+        Map<String, Object> approve = Map.of("requestId", submitted2.get("approvalRequestId"), "decision", "APPROVE");
+        assertThat(refused("APPROVAL_DECIDE", accountant(), approve, 403)).isEqualTo("PERMISSION_DENIED");
+        // Also when the accountant holds the approver role besides: nobody approves their own entry.
+        assertThat(refused("APPROVAL_DECIDE", inRoles("accountant", FinanceRoles.ACCOUNTANT, FinanceRoles.APPROVER),
+            approve, 422)).isEqualTo("APPROVAL_OWN_REQUEST");
+        decide(controllerUser(), submitted2.get("approvalRequestId"));
+        Map<String, Object> changed = new LinkedHashMap<>(audit);
+        changed.put("journalId", je2);
+        changed.put("lines", List.of(line("6400", "25000.00", null, "Audit of FY2025"),
+            line("2100", null, "25000.00", null)));
+        ok(JournalProcesses.SAVE, accountant(), changed);
+        deliver();
+        assertThat(journal(je2)).containsEntry("status", "DRAFT").containsEntry("approvalRequestId", null);
+        Map<String, Object> again = ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", je2));
+        assertThat(again).containsEntry("journalNo", "JE-0002");
+        decide(controllerUser(), again.get("approvalRequestId"));
+        deliver();
+        assertThat(journal(je2)).containsEntry("status", "POSTED");
+
+        // Step 3: JE-0003 from the recurring template; running it again makes nothing.
+        Object template = commit(JournalEntities.RECURRING_DATASET, Map.of("templateCode", "PREPAID-INS",
+            "description", "Recurring: amortize prepaid insurance 1/12", "startDate", "2026-01-01",
+            "endDate", "2026-12-31", "active", true)).get("id");
+        commit(JournalEntities.RECURRING_LINE_DATASET, Map.of("templateId", template, "lineNo", 1,
+            "accountCode", "6600", "debit", "1000.00"));
+        commit(JournalEntities.RECURRING_LINE_DATASET, Map.of("templateId", template, "lineNo", 2,
+            "accountCode", "1300", "credit", "1000.00"));
+        ok(JournalAutomation.RECURRING_RUN, accountant(), Map.of("date", "2026-01-31"));
+        Map<String, Object> rerun = ok(JournalAutomation.RECURRING_RUN, accountant(), Map.of("date", "2026-01-31"));
+        assertThat((List<?>) rerun.get("entries")).isEmpty();
+        List<Map<String, Object>> recurring = find(JournalEntities.JOURNAL_DATASET, "source", "RECURRING");
+        assertThat(recurring).singleElement().satisfies(j -> assertThat(j).containsEntry("journalNo", "JE-0003")
+            .containsEntry("status", "POSTED"));
+
+        // Step 4: JE-0004 below the limit posts without approval; the evaluation names the rule version.
+        String je4 = (String) ok(JournalProcesses.SAVE, accountant(), entry("2026-01-31",
+            "Estimated federal income tax provision", List.of(line("8000", "1362.90", null, null),
+                line("2400", null, "1362.90", null)))).get("journalId");
+        assertThat(ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", je4)))
+            .containsEntry("journalNo", "JE-0004").containsEntry("status", "POSTED")
+            .containsEntry("approval", "NOT_REQUIRED");
+        String rule = query("SELECT DISTINCT rule_id::text AS id FROM sys_approval_rule_version "
+            + "WHERE rule_code = 'FIN-MANUAL-10K'").getFirst().get("id") + ":1";
+        assertThat(query("SELECT outcome, rule_versions FROM sys_approval_evaluation WHERE entity_id = ?", je4))
+            .singleElement().satisfies(e -> assertThat((String) e.get("rule_versions")).contains(rule));
+        // The approvals of JE-0001 and JE-0002 are in the trail with the rule that asked for them.
+        assertThat(query("SELECT entity_id, matched_rule FROM sys_approval_evaluation WHERE outcome = 'PENDING' "
+            + "AND entity_id IN (?, ?)", je1, je2)).hasSize(3)
+            .allSatisfy(e -> assertThat(e).containsEntry("matched_rule", rule));
+
+        // Step 5: a posted amount does not change, and account 1200 takes no manual line.
+        Map<String, Object> raise = new LinkedHashMap<>(bonus);
+        raise.put("journalId", je1);
+        raise.put("lines", List.of(line("2100", "16000.00", null, null), line("1010", null, "16000.00", null)));
+        assertThat(refused(JournalProcesses.SAVE, accountant(), raise, 422)).isEqualTo(JournalProcesses.IS_POSTED);
+        Map<String, Object> firstLine = find(JournalEntities.LINE_DATASET, "journalId", je1).getFirst();
+        assertThat(commitRefused(JournalEntities.LINE_DATASET, as("admin", "*"), Map.of("action", "UPDATE",
+            "id", firstLine.get("lineId"), "version", 1, "attributes", Map.of("debit", "16000.00"))))
+            .isEqualTo("PROCESS_ONLY_DATASET");
+        String direct = (String) ok(JournalProcesses.SAVE, accountant(), entry("2026-01-31", "Direct to AR",
+            List.of(line("1200", "100.00", null, null), line("4000", null, "100.00", null)))).get("journalId");
+        assertThat(refused(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", direct), 422))
+            .isEqualTo(JournalValidator.CONTROL_ACCOUNT);
+
+        // Expected: the general ledger lines of the four entries are those of FIN-EXP-02; numbers without gaps.
+        Map<String, Map<String, BigDecimal>> expected = expectedJournals();
+        assertThat(expected).containsOnlyKeys("JE-0001", "JE-0002", "JE-0003", "JE-0004");
+        for (var journalNo : expected.keySet()) {
+            assertThat(ledgerLines(journalNo)).as(journalNo).isEqualTo(expected.get(journalNo));
+        }
+        assertThat(report("finance.gl.journal_register", accountant(),
+            Map.of("from", "2026-01-01", "to", "2026-01-31", "status", "POSTED")))
+            .extracting(r -> r.get("journalNo"))
+            .containsExactlyInAnyOrder("JE-0001", "JE-0002", "JE-0003", "JE-0004");
+        assertOnlyInserted("fi_journal_version", "fi_journal_line_version", "fi_posting_version",
+            "fi_journal_attachment_version");
+    }
+
+    private Map<String, Object> commit(String dataset, Map<String, Object> attributes) {
+        return post("/api/datasets/" + dataset + "/commit", accountant(), Map.of("changes", List.of(
+            Map.of("action", "INSERT", "attributes", attributes)))).expectStatus().isOk().expectBody(LIST)
+            .returnResult().getResponseBody().getFirst();
+    }
+
+    /** The ledger's lines of a posted entry: account code to signed amount, debits positive. */
+    private static Map<String, BigDecimal> ledgerLines(String journalNo) {
+        Map<String, BigDecimal> lines = new TreeMap<>();
+        for (Map<String, Object> row : query("""
+            SELECT DISTINCT a.account_code, e.entry_id::text AS entry, e.direction, e.amount
+            FROM fi_journal_version j
+            JOIN ledger_entry_version e ON e.transaction_id = j.transaction_id
+            JOIN ledger_account_version a ON a.account_id = e.account_id
+            WHERE j.journal_no = ? AND j.transaction_id IS NOT NULL""", journalNo)) {
+            BigDecimal amount = ((BigDecimal) row.get("amount")).setScale(2);
+            lines.merge((String) row.get("account_code"),
+                "DEBIT".equals(row.get("direction")) ? amount : amount.negate(), BigDecimal::add);
+        }
+        return lines;
+    }
+
+    /** FIN-EXP-02's journal rows: "2100 15,000.00; 1010 (15,000.00)", amounts in parentheses being credits. */
+    private static Map<String, Map<String, BigDecimal>> expectedJournals() throws IOException {
+        Pattern row = Pattern.compile("^\\| [0-9-]+ \\| (JE-\\d{4}) \\| journal \\| [^|]* \\| ([^|]+) \\|");
+        Pattern part = Pattern.compile("(\\d{4}) (\\(?)([0-9,]+\\.\\d{2})\\)?");
+        Map<String, Map<String, BigDecimal>> journals = new TreeMap<>();
+        for (String text : Files.readAllLines(SAMPLE_COMPANY.resolveSibling("21-expected-results.md"))) {
+            Matcher m = row.matcher(text);
+            if (m.find()) {
+                Map<String, BigDecimal> lines = new TreeMap<>();
+                Matcher p = part.matcher(m.group(2));
+                while (p.find()) {
+                    BigDecimal amount = new BigDecimal(p.group(3).replace(",", ""));
+                    lines.put(p.group(1), p.group(2).isEmpty() ? amount : amount.negate());
+                }
+                journals.put(m.group(1), lines);
+            }
+        }
+        return journals;
+    }
+}
