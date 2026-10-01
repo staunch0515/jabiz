@@ -598,6 +598,16 @@ public final class InvoiceProcesses {
             ctx.reject(new Violation("taxCode", TAX_RESTRICTED, "Tax code " + invoice.get("taxCode")
                 + " is not the customer's", Map.of("taxCode", (Object) invoice.get("taxCode"))));
         }
+        // Lines too: a draft made from a recurring template did not pass the save's check.
+        if (!ctx.request().hasPermission(FinancePermissions.CUSTOMER_TAX)) {
+            for (EntityInstance line : lines) {
+                Object lineCode = line.get("taxCode");
+                codesInUse(ctx).stream().filter(c -> lineCode != null && lineCode.equals(c.get("taxCode"))
+                    && !taxable(c) && !"NON_TAXABLE_SERVICE".equals(c.get("reason"))).findFirst()
+                    .ifPresent(c -> ctx.reject(new Violation("lines", TAX_RESTRICTED, "Tax code " + lineCode
+                        + " charges no tax", Map.of("taxCode", lineCode))));
+            }
+        }
         if (ctx.hasViolations()) {
             return;
         }
@@ -751,7 +761,9 @@ public final class InvoiceProcesses {
         }
         content.put("lines", lines);
         content.put("total", prepared.total());
-        return com.jabiz.runtime.approval.ApprovalCase.of(invoice.id(), facts, content);
+        // The draft's preparer, not whoever posts it, may not approve it (FIN-CT-001).
+        return com.jabiz.runtime.approval.ApprovalCase.of(invoice.id(), facts, content)
+            .preparedBy(invoice.get("preparedBy"));
     }
 
     /** The approval case of the document saved or deleted; a new draft has none, and nothing is filed under "none". */

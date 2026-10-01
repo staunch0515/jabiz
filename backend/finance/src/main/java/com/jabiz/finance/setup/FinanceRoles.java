@@ -51,7 +51,7 @@ public final class FinanceRoles {
             FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS,
             FinancePermissions.CUSTOMER_TAX, FinancePermissions.CUSTOMER_CREDIT, FinancePermissions.INVOICE_PREPARE,
             FinancePermissions.INVOICE_CREDIT, FinancePermissions.RECEIPT_RECORD, FinancePermissions.RECEIPT_VOID,
-            FinancePermissions.WRITE_OFF_REQUEST, FinancePermissions.WRITE_OFF_APPROVE,
+            FinancePermissions.RECEIPT_ADJUST, FinancePermissions.WRITE_OFF_REQUEST, FinancePermissions.WRITE_OFF_APPROVE,
             FinancePermissions.INVOICE_APPROVE, FinancePermissions.RECURRING_INVOICE_MAINTAIN));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,

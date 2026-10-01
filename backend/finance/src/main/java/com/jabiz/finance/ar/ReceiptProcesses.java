@@ -209,7 +209,8 @@ public final class ReceiptProcesses {
         }
         if (!"USD".equals(customer.get("currency"))) {
             ctx.reject(new Violation("customerCode", CURRENCY, "Receipts in " + customer.get("currency")
-                + " come with foreign currency settlement (F7)", Map.of("currency", (Object) customer.get("currency"))));
+                + " come with foreign currency settlement (F7)",
+                Map.of("currency", (Object) customer.get("currency"))));
         }
         EntityInstance bank = first(ctx, ACCOUNTS);
         if (bank == null || !"BANK".equals(bank.get("controlClass"))) {
@@ -220,7 +221,8 @@ public final class ReceiptProcesses {
             return;
         }
         List<ApplicationInput> applications = input.applications() == null ? List.of() : input.applications();
-        Plan plan = plan(ctx, customerCode, input.receiptDate(), input.amount(), applications, settings);
+        Plan plan = plan(ctx, customerCode, input.receiptDate(), input.receiptDate(), input.amount(), applications,
+            settings);
         if (plan == null) {
             return;
         }
@@ -331,7 +333,10 @@ public final class ReceiptProcesses {
                 "amount", receipt.get("unappliedAmount"), "applied", BigDecimal.ZERO)));
             return;
         }
-        Plan plan = plan(ctx, receipt.get("customerCode"), input.applicationDate(), receipt.get("unappliedAmount"),
+        // An invoice issued since the money came in may be paid by it (a prepayment); the discount is earned by
+        // when the money came in.
+        Plan plan = plan(ctx, receipt.get("customerCode"), input.applicationDate(), receipt.get("receiptDate"),
+            receipt.get("unappliedAmount"),
             input.applications(), settings);
         if (plan == null) {
             return;
@@ -367,10 +372,11 @@ public final class ReceiptProcesses {
     /**
      * Checks what a receipt of {@code customerCode} pays on {@code date} out of {@code available}: posted invoices of
      * the customer, in US dollars, dated on or before the day, each paid no more than is open of it; a discount only
-     * within the invoice's discount days and up to its terms' discount, less discounts taken before. Null, with the
+     * when the money came in ({@code paidOn}) within the invoice's discount days, and up to its terms' discount less
+     * discounts taken before. Null, with the
      * refusals recorded, when anything is wrong.
      */
-    static Plan plan(ProcessContext ctx, String customerCode, LocalDate date, BigDecimal available,
+    static Plan plan(ProcessContext ctx, String customerCode, LocalDate date, LocalDate paidOn, BigDecimal available,
         List<ApplicationInput> applications, EntityInstance settings) {
         Map<UUID, EntityInstance> invoices = new LinkedHashMap<>();
         for (EntityInstance invoice : list(ctx, INVOICES)) {
@@ -429,8 +435,9 @@ public final class ReceiptProcesses {
                 String why = null;
                 if (settings.get("discountAccount") == null) {
                     why = "there is no sales discount account";
-                } else if (paymentTerms == null || !paymentTerms.discountAvailable(invoice.get("invoiceDate"), date)) {
-                    why = "the terms give no discount on " + date;
+                } else if (paymentTerms == null
+                    || !paymentTerms.discountAvailable(invoice.get("invoiceDate"), paidOn)) {
+                    why = "the terms give no discount for money received on " + paidOn;
                 } else if (taken.compareTo(allowed) > 0) {
                     why = "the terms give at most " + allowed.max(BigDecimal.ZERO).toPlainString();
                 }
@@ -519,7 +526,7 @@ public final class ReceiptProcesses {
     public static final ProcessDefinition<ReverseInput, ReverseOutput, ProcessContext> REVERSE_PROCESS =
         ProcessDefinition.define(REVERSE, 1, ReverseInput.class, ReverseOutput.class, ProcessContext.class, pb -> pb
             .description("Takes back an application of a receipt or credit memo; the history keeps both.")
-            .permissions(FinancePermissions.RECEIPT_RECORD)
+            .permissions(FinancePermissions.RECEIPT_ADJUST)
             .actsOn(InvoiceEntities.APPLICATION, "applicationId")
             .contextFactory((start, input) -> {
                 ProcessContext ctx = InvoiceProcesses.withInput(start, input);
@@ -578,6 +585,10 @@ public final class ReceiptProcesses {
             reason = "what it applied is no longer posted";
         }
         EntityInstance settings = InvoiceEntities.RECEIPT_SOURCE.equals(kind) ? settings(ctx) : null;
+        // Who recorded a receipt or prepared a credit memo does not move what it paid (FIN-CT-001).
+        if (reason == null && Objects.equals(ctx.request().actorId(), source.get("preparedBy"))) {
+            reason = "its preparer does not take it back";
+        }
         if (reason == null && InvoiceEntities.RECEIPT_SOURCE.equals(kind) && settings != null
             && settings.get("unappliedCashAccount") == null) {
             reason = "there is no unapplied cash account to take the money back to";
@@ -674,7 +685,7 @@ public final class ReceiptProcesses {
     public static final ProcessDefinition<ReassignInput, ReceiptOutput, ProcessContext> REASSIGN_PROCESS =
         ProcessDefinition.define(REASSIGN, 1, ReassignInput.class, ReceiptOutput.class, ProcessContext.class, pb -> pb
             .description("Moves a receipt with nothing applied to the customer who paid it.")
-            .permissions(FinancePermissions.RECEIPT_RECORD)
+            .permissions(FinancePermissions.RECEIPT_ADJUST)
             .actsOn(ReceiptEntities.RECEIPT, "receiptId", a -> a.whenField("status", ReceiptEntities.POSTED))
             .contextFactory((start, input) -> {
                 ProcessContext ctx = InvoiceProcesses.withInput(start, input);
@@ -696,6 +707,12 @@ public final class ReceiptProcesses {
                 }
                 if (receipt.<BigDecimal>get("unappliedAmount").compareTo(receipt.get("amount")) != 0) {
                     ctx.reject(applied(receipt));
+                    return;
+                }
+                if (Objects.equals(ctx.request().actorId(), receipt.get("preparedBy"))) {
+                    ctx.reject(new Violation("receiptId", InvoiceProcesses.OWN_DOCUMENT, "The preparer of "
+                        + receipt.get("receiptNo") + " does not move it", Map.of("invoiceNo",
+                        (Object) receipt.get("receiptNo"))));
                     return;
                 }
                 if (customer == null || !"ACTIVE".equals(customer.get("status"))
@@ -752,6 +769,11 @@ public final class ReceiptProcesses {
                     return;
                 }
                 // All of it waits as unapplied cash: that, not receivables, leaves with the money.
+                if (settings.get("unappliedCashAccount") == null) {
+                    ctx.reject(new Violation("receiptId", UNAPPLIED, "There is no unapplied cash account",
+                        Map.of("amount", receipt.get("amount"), "applied", BigDecimal.ZERO)));
+                    return;
+                }
                 String number = receipt.get("receiptNo");
                 List<JournalProcesses.LineInput> lines = List.of(
                     debit(settings.get("unappliedCashAccount"), receipt.get("amount"), "Unapplied cash " + number),
@@ -811,6 +833,9 @@ public final class ReceiptProcesses {
                     reason = "it is not a posted credit memo";
                 } else if (!"USD".equals(credit.get("currency"))) {
                     reason = "refunds in " + credit.get("currency") + " come with foreign currency settlement (F7)";
+                } else if (Objects.equals(ctx.request().actorId(), credit.get("preparedBy"))) {
+                    // Cash leaves: not by who prepared the credit (FIN-CT-001).
+                    reason = "its preparer does not refund it";
                 } else if (input.amount().compareTo(credit.get("openAmount")) > 0) {
                     reason = credit.<BigDecimal>get("openAmount").toPlainString() + " of it is open";
                 } else if (input.refundDate().isBefore(credit.get("invoiceDate"))) {

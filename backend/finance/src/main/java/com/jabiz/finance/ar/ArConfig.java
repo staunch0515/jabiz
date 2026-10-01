@@ -440,7 +440,8 @@ class ArConfig {
     @Bean
     JobDefinition<RecurringInvoiceProcesses.RunInput> recurringInvoiceJob(BookingTime booking) {
         return JobDefinition.cron(RecurringInvoiceProcesses.JOB, "0 0 6 1 * *", booking.zone(),
-            RecurringInvoiceProcesses.RUN_PROCESS, time -> new RecurringInvoiceProcesses.RunInput(booking.dateOf(time)));
+            RecurringInvoiceProcesses.RUN_PROCESS,
+            time -> new RecurringInvoiceProcesses.RunInput(booking.dateOf(time)));
     }
 
     @Bean

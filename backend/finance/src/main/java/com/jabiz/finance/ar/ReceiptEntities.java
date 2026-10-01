@@ -114,7 +114,7 @@ public final class ReceiptEntities {
         eb.listView("default", lv -> lv
             .columns("invoiceNo", "customerCode", "writeOffDate", "amount", "status", "requestedBy",
                 "recoveredAmount", "reason")
-            .filters("invoiceId", "invoiceNo", "customerCode", "status", "writeOffDate")
+            .filters("invoiceId", "invoiceNo", "customerCode", "status", "writeOffDate", "approvalRequestId")
             .sorts("writeOffDate", "amount")
             .defaultSort("writeOffDate", false));
     });

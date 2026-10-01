@@ -80,6 +80,7 @@ SELECT finance_create_temporal_table('fi_write_off_version', 'write_off_id', '
     application_id      uuid          REFERENCES entity_registry (entity_id),
     recovered_amount    numeric(15,2)');
 CREATE INDEX fi_write_off_version_invoice_idx ON fi_write_off_version (invoice_id);
+CREATE INDEX fi_write_off_version_request_idx ON fi_write_off_version (approval_request_id);
 
 SELECT finance_create_temporal_table('fi_recurring_invoice_version', 'template_id', '
     template_code varchar(40)  NOT NULL,

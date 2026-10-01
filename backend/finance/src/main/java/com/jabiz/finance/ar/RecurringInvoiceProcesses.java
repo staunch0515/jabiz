@@ -36,6 +36,7 @@ public final class RecurringInvoiceProcesses {
     public static final String JOB = "fin.recurring-invoices";
 
     public static final String NO_PERIOD = "FIN_RECURRING_INVOICE_NO_PERIOD";
+    public static final String TOO_MANY = "FIN_RECURRING_INVOICE_TOO_MANY";
 
     /** Most templates one run handles, and most of their lines it reads. */
     static final int MAX_TEMPLATES = 200;
@@ -70,12 +71,12 @@ public final class RecurringInvoiceProcesses {
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> com.jabiz.finance.gl.SubledgerPosting.periodsOn(ctx.get(INPUT, RunInput.class).date()), PERIODS))
             .step("Load the active templates", QueryEntities.of(ReceiptEntities.RECURRING_DATASET,
-                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(MAX_TEMPLATES)
+                ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(MAX_TEMPLATES + 1)
                     .build(), TEMPLATES))
             .step("Load their lines", QueryEntities.of(ReceiptEntities.RECURRING_LINE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("templateId",
                     new ArrayList<>(list(ctx, TEMPLATES).stream().map(EntityInstance::id).toList())))
-                    .limit(MAX_LINES).build(), LINES))
+                    .limit(MAX_LINES + 1).build(), LINES))
             .step("Load the customers", QueryEntities.of(ArEntities.CUSTOMER_DATASET,
                 ctx -> CustomerProcesses.byCodes(list(ctx, TEMPLATES).stream()
                     .map(t -> (String) t.get("customerCode")).toList()), CUSTOMERS))
@@ -84,7 +85,7 @@ public final class RecurringInvoiceProcesses {
                 CURRENCIES))
             .step("Load the invoices made already", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("recurringKey", new ArrayList<>(keys(ctx))))
-                    .limit(MAX_TEMPLATES).build(), EXISTING))
+                    .limit(MAX_TEMPLATES + 1).build(), EXISTING))
             .compute("Make the invoices", (metadata, ctx) -> run(ctx)));
 
     static void run(ProcessContext ctx) {
@@ -93,6 +94,12 @@ public final class RecurringInvoiceProcesses {
         if (period == null) {
             ctx.reject(new Violation("date", NO_PERIOD, "No regular fiscal period holds " + date,
                 Map.of("date", date.toString())));
+            return;
+        }
+        // Refused rather than cut short: a template left out would silently bill nothing.
+        if (list(ctx, TEMPLATES).size() > MAX_TEMPLATES || list(ctx, LINES).size() > MAX_LINES) {
+            ctx.reject(new Violation("date", TOO_MANY, "The active templates are more than " + MAX_TEMPLATES
+                + " or have more than " + MAX_LINES + " lines", Map.of("limit", String.valueOf(MAX_TEMPLATES))));
             return;
         }
         LocalDate start = period.get("startDate");
@@ -135,7 +142,8 @@ public final class RecurringInvoiceProcesses {
             BigDecimal subtotal = BigDecimal.ZERO;
             List<Map<String, Object>> rows = new ArrayList<>();
             for (EntityInstance line : lines) {
-                BigDecimal amount = Money.round(line.<BigDecimal>get("quantity").multiply(line.get("unitPrice")), scale);
+                BigDecimal amount = Money.round(line.<BigDecimal>get("quantity").multiply(line.get("unitPrice")),
+                    scale);
                 subtotal = subtotal.add(amount);
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("lineNo", line.get("lineNo"));

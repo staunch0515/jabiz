@@ -33,7 +33,7 @@ class FinanceRolesTest {
         // The clerk records cash and asks for write-offs; approving them is another role's (FIN-AR-012).
         assertThat(role(FinanceRoles.RECEIVABLES_CLERK).permissions()).contains("fin.receipt.record",
             "fin.writeoff.request").doesNotContain("fin.writeoff.approve", "fin.invoice.approve", "approval.decide",
-            "fin.receipt.void", "fin.invoice.credit");
+            "fin.receipt.void", "fin.invoice.credit", "fin.receipt.adjust");
         assertThat(role(FinanceRoles.APPROVER).permissions()).contains("fin.writeoff.approve", "fin.invoice.approve")
             .doesNotContain("fin.writeoff.request", "fin.receipt.record");
         assertThat(role(FinanceRoles.EXECUTIVE).permissions()).noneMatch(p -> p.endsWith(".maintain")

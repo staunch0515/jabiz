@@ -299,16 +299,22 @@ class ReceivablesIT extends FinanceItSupport {
         // Not to another customer's invoice; not moved while applied; not more than is open.
         assertThat(refused(ReceiptProcesses.APPLY, clerk, Map.of("receiptId", receiptId, "applicationDate",
             "2026-01-28", "applications", List.of(pay(cascade, "1.00"))), 422)).isEqualTo(ReceiptProcesses.NOT_OPEN);
-        assertThat(refused(ReceiptProcesses.REASSIGN, clerk, Map.of("receiptId", receiptId, "customerCode", "C200",
-            "reason", "x"), 422)).isEqualTo(ReceiptProcesses.APPLIED);
+        assertThat(refused(ReceiptProcesses.REASSIGN, controller, Map.of("receiptId", receiptId, "customerCode",
+            "C200", "reason", "x"), 422)).isEqualTo(ReceiptProcesses.APPLIED);
+        // Moving a payment between customers is not the recording clerk's (lapping, FIN-CT-001).
+        assertThat(refused(ReceiptProcesses.REVERSE, clerk, Map.of("applicationId", applicationId,
+            "reverseDate", "2026-01-28", "reason", "mine"), 403)).isEqualTo("PERMISSION_DENIED");
+        assertThat(refused(ReceiptProcesses.REVERSE, inRoles("clerk", FinanceRoles.RECEIVABLES_CLERK,
+            FinanceRoles.CONTROLLER), Map.of("applicationId", applicationId, "reverseDate", "2026-01-28",
+            "reason", "mine"), 422)).isEqualTo(ReceiptProcesses.NOT_REVERSIBLE);
         // Taken back on the 28th, moved to Cascade and applied to its invoice.
-        Map<String, Object> reversed = ok(ReceiptProcesses.REVERSE, clerk, Map.of("applicationId", applicationId,
+        Map<String, Object> reversed = ok(ReceiptProcesses.REVERSE, controller, Map.of("applicationId", applicationId,
             "reverseDate", "2026-01-28", "reason", "Cascade's check, not Acme's"));
         assertThat(amount(reversed.get("invoiceOpen"))).isEqualByComparingTo("1000.00");
         assertThat(amount(reversed.get("sourceOpen"))).isEqualByComparingTo("1000.00");
-        assertThat(refused(ReceiptProcesses.REVERSE, clerk, Map.of("applicationId", applicationId,
+        assertThat(refused(ReceiptProcesses.REVERSE, controller, Map.of("applicationId", applicationId,
             "reverseDate", "2026-01-28", "reason", "again"), 422)).isEqualTo(ReceiptProcesses.NOT_REVERSIBLE);
-        ok(ReceiptProcesses.REASSIGN, clerk, Map.of("receiptId", receiptId, "customerCode", "C200",
+        ok(ReceiptProcesses.REASSIGN, controller, Map.of("receiptId", receiptId, "customerCode", "C200",
             "reason", "Cascade's check"));
         assertThat(refused(ReceiptProcesses.APPLY, clerk, Map.of("receiptId", receiptId, "applicationDate",
             "2026-01-28", "applications", List.of(pay(cascade, "1000.01"))), 422))
@@ -379,6 +385,16 @@ class ReceivablesIT extends FinanceItSupport {
         assertThat(postingLines((String) partly.get("receiptNo"))).doesNotContainKey("1250")
             .containsEntry("1200", new BigDecimal("-500.00"));
 
+        // Money received before the invoice pays it later; the discount counts from when the money came in.
+        Map<String, Object> prepaid = ok(ReceiptProcesses.RECORD, clerk, receipt("C500", "2026-01-25", "98.00", null,
+            List.of()));
+        String later = post("C500", "2026-01-26", List.of(invoiceLine("Engineering", "1", "100.00", "4100", null)));
+        assertThat(amount(ok(ReceiptProcesses.APPLY, clerk, Map.of("receiptId", prepaid.get("receiptId"),
+            "applicationDate", "2026-02-10", "applications", List.of(pay(later, "98.00", "2.00"))))
+            .get("unappliedAmount"))).isEqualByComparingTo("0.00");
+        assertThat(amount(read(InvoiceEntities.INVOICE_DATASET, later).get("openAmount")))
+            .isEqualByComparingTo("0.00");
+
         // Without an unapplied cash account a receipt is applied in full.
         settings(null);
         String third = post("C500", "2026-01-23", List.of(invoiceLine("Engineering", "1", "100.00", "4100", null)));
@@ -445,13 +461,16 @@ class ReceivablesIT extends FinanceItSupport {
         assertThat(postingLines((String) invoice.get("invoiceNo"))).isEqualTo(new TreeMap<>(Map.of(
             "1210", new BigDecimal("500.00"), "4100", new BigDecimal("-500.00"))));
 
-        // The customer pays 200.00 after all: recovered onto the invoice, then received as usual.
-        Map<String, Object> recovered = ok(WriteOffProcesses.RECOVER, clerk, Map.of("writeOffId",
+        // The customer pays 200.00 after all: recovered onto the invoice by someone else, then received as usual.
+        assertThat(refused(WriteOffProcesses.RECOVER, clerk, Map.of("writeOffId", posted.get("writeOffId"),
+            "recoveryDate", "2026-01-31", "amount", "200.00", "reason", "mine"), 422))
+            .isEqualTo(WriteOffProcesses.NOT_RECOVERABLE);
+        Map<String, Object> recovered = ok(WriteOffProcesses.RECOVER, controller, Map.of("writeOffId",
             posted.get("writeOffId"), "recoveryDate", "2026-01-31", "amount", "200.00", "reason", "Paid by trustee"));
         assertThat(amount(recovered.get("invoiceOpen"))).isEqualByComparingTo("200.00");
         assertThat(read(InvoiceEntities.INVOICE_DATASET, bad)).containsEntry("status", InvoiceEntities.POSTED);
         ok(ReceiptProcesses.RECORD, clerk, receipt("C200", "2026-01-31", "200.00", null, List.of(pay(bad, "200.00"))));
-        assertThat(refused(WriteOffProcesses.RECOVER, clerk, Map.of("writeOffId", posted.get("writeOffId"),
+        assertThat(refused(WriteOffProcesses.RECOVER, controller, Map.of("writeOffId", posted.get("writeOffId"),
             "recoveryDate", "2026-01-31", "amount", "300.01", "reason", "too much"), 422))
             .isEqualTo(WriteOffProcesses.NOT_RECOVERABLE);
 
@@ -532,6 +551,21 @@ class ReceivablesIT extends FinanceItSupport {
             .satisfies(i -> assertThat(i).containsEntry("source", "RECURRING").containsEntry("status", "DRAFT"));
         assertThat(ok(InvoiceProcesses.POST, clerk, Map.of("invoiceId", made.getFirst().get("invoiceId"))))
             .containsEntry("status", "POSTED");
+
+        // A template cannot take tax off: the posting checks the lines' codes as saving a draft does.
+        Object exempt = commit(ReceiptEntities.RECURRING_DATASET, Map.of("templateCode", "PARTS-C100",
+            "customerCode", "C100", "description", "Monthly parts", "invoiceDay", 5, "startDate", "2026-03-01",
+            "active", true)).get("id");
+        commit(ReceiptEntities.RECURRING_LINE_DATASET, Map.of("templateId", exempt, "lineNo", 1,
+            "description", "Parts", "quantity", 1, "unitPrice", "100.00", "revenueAccount", "4000",
+            "taxCode", "TX-RESALE"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> march = (List<Map<String, Object>>) ok(RecurringInvoiceProcesses.RUN, clerk,
+            Map.of("date", "2026-03-15")).get("invoices");
+        Map<String, Object> parts = march.stream().filter(m -> "PARTS-C100".equals(m.get("templateCode")))
+            .findFirst().orElseThrow();
+        assertThat(refused(InvoiceProcesses.POST, clerk, Map.of("invoiceId", parts.get("invoiceId")), 422))
+            .isEqualTo(InvoiceProcesses.TAX_RESTRICTED);
 
         // On any day the subledger's open items add up to the receivables account.
         for (String day : List.of("2026-01-05", "2026-01-15", "2026-01-28", "2026-01-31", "2026-02-28")) {

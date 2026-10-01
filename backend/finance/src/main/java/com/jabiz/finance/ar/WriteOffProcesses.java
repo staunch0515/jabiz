@@ -166,11 +166,11 @@ public final class WriteOffProcesses {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("amount", input.amount());
         facts.put("customerCode", invoice.get("customerCode"));
-        ctx.put(CASE, ApprovalCase.of(invoice.id(), facts, content(invoice, input)));
+        ctx.put(CASE, ApprovalCase.of(invoice.id(), facts, content(invoice, input, ctx.opTime())));
     }
 
     /** What an approval of a write-off is given for. */
-    static Map<String, Object> content(EntityInstance invoice, RequestInput input) {
+    static Map<String, Object> content(EntityInstance invoice, RequestInput input, java.time.Instant requestedAt) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("writeOff", true);
         content.put("invoiceNo", invoice.get("invoiceNo"));
@@ -178,6 +178,8 @@ public final class WriteOffProcesses {
         content.put("writeOffDate", input.writeOffDate());
         content.put("amount", input.amount());
         content.put("reason", input.reason().trim());
+        // Each request is its own: an approval of an earlier, identical one does not carry over.
+        content.put("requestedAt", requestedAt);
         return content;
     }
 
@@ -204,8 +206,12 @@ public final class WriteOffProcesses {
         values.put("status", ReceiptEntities.PENDING);
         values.put("requestedBy", ctx.request().actorId());
         values.put("approvalRequestId", approval.requestId());
-        values.put("contentHash", ContentHash.of(content(invoice, input)));
+        values.put("contentHash", ContentHash.of(content(invoice, input, ctx.opTime())));
         Object id = ctx.changes().insert(ReceiptEntities.WRITE_OFF, values);
+        // The invoice records the request it waits for: two requests at once conflict on its version, so one
+        // invoice never has two write-offs waiting.
+        ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(),
+            Map.of("approvalRequestId", approval.requestId()));
         ctx.put(OUTPUT, new WriteOffOutput(String.valueOf(id), invoice.get("invoiceNo"), ReceiptEntities.PENDING,
             input.amount(), approval.status().name(), approval.requestId(), null, null));
     }
@@ -222,11 +228,11 @@ public final class WriteOffProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, WriteOffOutput.class))
                 .step("Load the write-off", QueryEntities.of(ReceiptEntities.WRITE_OFF_DATASET, ctx -> {
                     ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
-                    // Approvals of other subjects are none of this process's business.
-                    List<Object> ids = SUBJECT.equals(input.subject()) && input.entityId() != null
-                        ? List.of(uuid(input.entityId())) : List.of();
+                    // Approvals of other subjects are none of this process's business; the request names its own.
+                    List<Object> requests = SUBJECT.equals(input.subject()) && input.requestId() != null
+                        ? List.of(input.requestId()) : List.of();
                     return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.In("invoiceId", new java.util.ArrayList<>(ids)),
+                        new QueryPredicate.In("approvalRequestId", new java.util.ArrayList<>(requests)),
                         new QueryPredicate.Eq("status", ReceiptEntities.PENDING)))).limit(1).build();
                 }, WRITE_OFFS))
                 .step("Load the invoice", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
@@ -361,6 +367,9 @@ public final class WriteOffProcesses {
                 String reason = null;
                 if (!ReceiptEntities.POSTED.equals(writeOff.get("status")) || invoice == null) {
                     reason = "it is " + writeOff.get("status");
+                } else if (Objects.equals(ctx.request().actorId(), writeOff.get("requestedBy"))) {
+                    // Reopening what one wrote off could hide the recovered money (FIN-CT-001).
+                    reason = "who asked for the write-off does not record its recovery";
                 } else if (input.amount().compareTo(writeOff.<BigDecimal>get("amount").subtract(recovered)) > 0) {
                     reason = writeOff.<BigDecimal>get("amount").subtract(recovered).toPlainString()
                         + " of it is left to recover";

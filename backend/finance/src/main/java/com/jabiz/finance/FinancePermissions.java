@@ -87,6 +87,11 @@ public final class FinancePermissions {
     public static final String AR_SETTINGS = "fin.ar.settings";
     /** Record customer receipts, apply and unapply them and credits, and move an unapplied receipt (FIN-AR-007, 008). */
     public static final String RECEIPT_RECORD = "fin.receipt.record";
+    /**
+     * Take back an application of a receipt or credit memo and move a receipt to another customer (FIN-AR-008):
+     * apart from recording receipts, so one person cannot move a payment from one customer to another (lapping).
+     */
+    public static final String RECEIPT_ADJUST = "fin.receipt.adjust";
     /** Void a receipt that bounced or was recorded in error: it takes cash back out of the books. */
     public static final String RECEIPT_VOID = "fin.receipt.void";
     /** Ask for an invoice to be written off, and record what was recovered of one (FIN-AR-012). */
