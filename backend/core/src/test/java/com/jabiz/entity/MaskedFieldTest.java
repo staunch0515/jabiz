@@ -38,10 +38,24 @@ class MaskedFieldTest {
     }
 
     @Test
+    void taxIdShowsTheFormOfTheNumberAndItsLastFourDigits() {
+        assertThat(MaskStyle.TAX_ID.apply("123-45-1234")).isEqualTo("***-**-1234");
+        assertThat(MaskStyle.TAX_ID.apply("123451234")).isEqualTo("***-**-1234");
+        assertThat(MaskStyle.TAX_ID.apply("12-3456789")).isEqualTo("**-***6789");
+        // Not nine digits: nothing of it is shown.
+        assertThat(MaskStyle.TAX_ID.apply("12345")).isEqualTo("****");
+        assertThat(MaskStyle.TAX_ID.apply("DE123456789")).isEqualTo("****");
+        assertThat(MaskStyle.TAX_ID.apply(null)).isNull();
+    }
+
+    @Test
     void theSqlFormMatchesTheJavaForm() {
         assertThat(MaskStyle.LAST4.sql("iban")).isEqualTo("CASE WHEN iban IS NULL THEN NULL WHEN char_length(iban) "
             + ">= 8 THEN '****' || right(iban, 4) ELSE '****' END");
         assertThat(MaskStyle.ALL.sql("tax_id")).isEqualTo("CASE WHEN tax_id IS NULL THEN NULL ELSE '****' END");
+        assertThat(MaskStyle.TAX_ID.sql("tin")).isEqualTo("CASE WHEN tin IS NULL THEN NULL"
+            + " WHEN tin ~ '^[0-9]{2}-[0-9]{7}$' THEN '**-***' || right(tin, 4)"
+            + " WHEN tin ~ '^[0-9]{3}-?[0-9]{2}-?[0-9]{4}$' THEN '***-**-' || right(tin, 4) ELSE '****' END");
     }
 
     @Test
@@ -51,6 +65,9 @@ class MaskedFieldTest {
         assertThat(MaskStyle.looksMasked("DE44")).isFalse();
         assertThat(MaskStyle.looksMasked(null)).isFalse();
         assertThat(MaskStyle.looksMasked(4931)).isFalse();
+        assertThat(MaskStyle.looksMasked("***-**-1234")).isTrue();
+        assertThat(MaskStyle.looksMasked("**-***6789")).isTrue();
+        assertThat(MaskStyle.looksMasked("123-45-1234")).isFalse();
     }
 
     @Test
