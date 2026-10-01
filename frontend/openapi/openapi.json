@@ -3817,6 +3817,33 @@
         "tags" : [ "file-controller" ]
       }
     },
+    "/api/generated-files/{fileId}" : {
+      "get" : {
+        "operationId" : "download",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "fileId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "format" : "byte",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "generated-file-controller" ]
+      }
+    },
     "/api/imports/runs" : {
       "get" : {
         "operationId" : "runs",
