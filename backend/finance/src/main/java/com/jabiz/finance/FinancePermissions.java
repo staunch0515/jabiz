@@ -42,6 +42,13 @@ public final class FinancePermissions {
      * after their own checks (platform decision D11), so posting happens only through them.
      */
     public static final String JOURNAL_POST = "fin.journal.post";
+    /**
+     * Run {@code FIN_SUBLEDGER_POST} / {@code FIN_SUBLEDGER_REVERSE} directly; granted to no role. Subledger documents
+     * post through their own processes, which call them after their checks (FIN-GL-021).
+     */
+    public static final String SUBLEDGER_POST = "fin.subledger.post";
+    /** Prepare, post and void invoices and credit memos, and apply credits (FIN-AR-003, 004, 006). */
+    public static final String INVOICE_PREPARE = "fin.invoice.prepare";
     /** Maintain recurring entry templates (FIN-GL-017). */
     public static final String RECURRING_MAINTAIN = "fin.recurring.maintain";
     /** Upload and read the files of the finance imports (FIN-DI-001); each import needs its own permission too. */

@@ -70,8 +70,8 @@ final class CustomerRows {
             : lower.contains("exempt organization") || lower.contains("nonprofit") ? "EXEMPT_ORGANIZATION"
             : "OTHER";
         return new CustomerProcesses.CertificateInput(state.group(1).toUpperCase(Locale.ROOT),
-            number.group(1).toUpperCase(Locale.ROOT), type, value.length() > 200 ? value.substring(0, 200) : value, null, date(ISSUED, value), date(VALID_TO, value),
-            true);
+            number.group(1).toUpperCase(Locale.ROOT), type, value.length() > 200 ? value.substring(0, 200) : value,
+            null, date(ISSUED, value), date(VALID_TO, value), true);
     }
 
     private static LocalDate date(Pattern pattern, String value) {

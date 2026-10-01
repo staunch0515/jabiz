@@ -22,6 +22,8 @@ import java.time.LocalDate;
  *       nothing.</li>
  *   <li>{@code finance.tax_codes}: one {@code FIN_TAX_CODE_SAVE} per row with its jurisdictions and their rates from
  *       the date given ({@link TaxCodeRows}).</li>
+ *   <li>{@code finance.open_receivables}: the legacy system's open invoices as one {@code FIN_AR_OPENING}, which
+ *       refuses them unless they add up to the receivables in the opening entry (FIN-DI-002).</li>
  * </ul>
  */
 @Configuration
@@ -90,6 +92,26 @@ class ReceivablesImports {
                 row.text("kind"), row.text("reason"), row.text("state"), row.text("jurisdictions"),
                 row.bool("certificateRequired"), row.text("chargeCode")), params == null ? null : params.ratesFrom()))
             .permissions(FinancePermissions.TAX_MAINTAIN)
+            .build();
+    }
+
+    @Bean
+    ImportDefinition<ImportDefinition.NoParams> openReceivablesImport() {
+        return ImportDefinition.define("finance.open_receivables", 1)
+            .file(FinanceImports.FILE_POLICY, ImportFormat.csv())
+            .field("document", new SemanticKind.Text(40, false), true, "document", "invoice", "invoice_no")
+            .field("customer", CODE, true, "customer", "customer_code")
+            .field("date", new SemanticKind.Date(), true, "date", "invoice_date")
+            .field("due", new SemanticKind.Date(), true, "due", "due_date")
+            .field("amount", new SemanticKind.Monetary("USD", 2), true, "amount_usd", "amount")
+            // The whole file is one set of open items: only together can they be checked against the ledger.
+            .perGroup(row -> "open-items", com.jabiz.finance.ar.InvoiceProcesses.OPENING, 1, (rows, params) ->
+                new com.jabiz.finance.ar.InvoiceProcesses.OpeningInput(rows.stream()
+                    .map(row -> new com.jabiz.finance.ar.InvoiceProcesses.OpeningItem(row.text("document"),
+                        row.text("customer"), (LocalDate) row.get("date"), (LocalDate) row.get("due"),
+                        row.decimal("amount"))).toList()))
+            .totals("amount")
+            .permissions(FinancePermissions.MIGRATION)
             .build();
     }
 

@@ -54,7 +54,7 @@ public final class FinanceRoles {
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ));
         add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of(FinancePermissions.AR_READ,
-            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT));
+            FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT, FinancePermissions.INVOICE_PREPARE));
         add(PAYABLES_CLERK, "Payables clerk", READ_BOOKS, List.of());
         add(APPROVER, "Approver", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_APPROVE,
             "approval.decide"));

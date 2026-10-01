@@ -7,6 +7,7 @@ import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.BookingTime;
+import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +36,118 @@ class ArConfig {
     @Bean
     EntityDefinition finArSettingsEntity() {
         return ArEntities.SETTINGS_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finInvoiceEntity() {
+        return InvoiceEntities.INVOICE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finInvoiceLineEntity() {
+        return InvoiceEntities.LINE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finInvoiceTaxEntity() {
+        return InvoiceEntities.TAX_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finApplicationEntity() {
+        return InvoiceEntities.APPLICATION_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finInvoiceDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(InvoiceEntities.INVOICE_DATASET, InvoiceEntities.INVOICE, FinancePermissions.INVOICE_PREPARE,
+            poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finInvoiceLineDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(InvoiceEntities.LINE_DATASET, InvoiceEntities.LINE, FinancePermissions.INVOICE_PREPARE,
+            poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finInvoiceTaxDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(InvoiceEntities.TAX_DATASET, InvoiceEntities.TAX, FinancePermissions.INVOICE_PREPARE, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finApplicationDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(InvoiceEntities.APPLICATION_DATASET, InvoiceEntities.APPLICATION,
+            FinancePermissions.INVOICE_PREPARE, poolRef);
+    }
+
+    /** Invoice numbers without gaps (FIN-AR-004); the first is configurable, the sample company's next is 1004. */
+    @Bean
+    NumberSequence invoiceNumbers(@Value("${finance.ar.invoice-numbers-start:1001}") long first) {
+        return InvoiceProcesses.invoiceNumbers(first);
+    }
+
+    @Bean
+    NumberSequence creditMemoNumbers(@Value("${finance.ar.credit-memo-numbers-start:2001}") long first) {
+        return InvoiceProcesses.creditMemoNumbers(first);
+    }
+
+    @Bean
+    StaticDictionary arDocumentKindDictionary() {
+        return StaticDictionary.define(InvoiceEntities.KINDS, d -> d
+            .item(InvoiceEntities.INVOICE_KIND, "en", "Invoice")
+            .item(InvoiceEntities.CREDIT_MEMO, "en", "Credit memo"));
+    }
+
+    @Bean
+    StaticDictionary arDocumentStatusDictionary() {
+        return StaticDictionary.define(InvoiceEntities.STATUSES, d -> d
+            .item(InvoiceEntities.DRAFT, "en", "Draft")
+            .item(InvoiceEntities.POSTED, "en", "Posted")
+            .item(InvoiceEntities.VOID, "en", "Void"));
+    }
+
+    @Bean
+    StaticDictionary arDocumentSourceDictionary() {
+        return StaticDictionary.define(InvoiceEntities.SOURCES, d -> d
+            .item(InvoiceEntities.MANUAL, "en", "Entered")
+            .item(InvoiceEntities.OPENING, "en", "Opening item"));
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.InvoiceInput, InvoiceProcesses.InvoiceOutput, ProcessContext>
+        finInvoiceSaveProcess() {
+        return InvoiceProcesses.SAVE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.InvoiceId, InvoiceProcesses.InvoiceOutput, ProcessContext>
+        finInvoiceDeleteProcess() {
+        return InvoiceProcesses.DELETE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.InvoiceId, InvoiceProcesses.InvoiceOutput, ProcessContext>
+        finInvoicePostProcess() {
+        return InvoiceProcesses.POST_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.VoidInput, InvoiceProcesses.InvoiceOutput, ProcessContext>
+        finInvoiceVoidProcess() {
+        return InvoiceProcesses.VOID_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.ApplyInput, InvoiceProcesses.ApplyOutput, ProcessContext>
+        finCreditApplyProcess() {
+        return InvoiceProcesses.APPLY_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<InvoiceProcesses.OpeningInput, InvoiceProcesses.OpeningOutput, ProcessContext>
+        finArOpeningProcess() {
+        return InvoiceProcesses.OPENING_PROCESS;
     }
 
     @Bean
