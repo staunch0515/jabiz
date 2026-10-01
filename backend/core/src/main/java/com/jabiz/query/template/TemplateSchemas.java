@@ -6,9 +6,12 @@ import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.QueryParameter;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The JSON Schema of a template's parameters (docs/design/19-reports.md section 3.2), in the same form as process
@@ -24,13 +27,7 @@ public final class TemplateSchemas {
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> required = new ArrayList<>();
         for (QueryParameter parameter : query.parameters()) {
-            Map<String, Object> property = kind(parameter.kind());
-            if (parameter.list()) {
-                Map<String, Object> array = new LinkedHashMap<>();
-                array.put("type", "array");
-                array.put("items", property);
-                property = array;
-            }
+            Map<String, Object> property = values(parameter);
             if (parameter.description() != null && !parameter.description().isBlank()) {
                 property.put("description", parameter.description());
             }
@@ -47,6 +44,42 @@ public final class TemplateSchemas {
         schema.put("type", "object");
         schema.put("properties", properties);
         schema.put("required", required);
+        schema.put("additionalProperties", false);
+        return schema;
+    }
+
+    /** The values a parameter takes as a schema: its kind, as an array for a list; no description or default. */
+    public static Map<String, Object> values(QueryParameter parameter) {
+        Map<String, Object> property = kind(parameter.kind());
+        if (parameter.list()) {
+            Map<String, Object> array = new LinkedHashMap<>();
+            array.put("type", "array");
+            array.put("items", property);
+            property = array;
+        }
+        return property;
+    }
+
+    /**
+     * The parameters of several templates run together (a document, docs/design/22-documents.md section 2) as one
+     * schema: each parameter once, as the first template declaring it has it; required when any template requires it.
+     *
+     * @param queries queries whose kinds have been resolved
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> params(Collection<AdvancedQueryDefinition> queries) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        Set<String> required = new LinkedHashSet<>();
+        for (AdvancedQueryDefinition query : queries) {
+            Map<String, Object> schema = params(query);
+            ((Map<String, Object>) schema.get("properties")).forEach(properties::putIfAbsent);
+            required.addAll((List<String>) schema.get("required"));
+        }
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("$schema", JsonSchemaExporter.DIALECT);
+        schema.put("type", "object");
+        schema.put("properties", properties);
+        schema.put("required", List.copyOf(required));
         schema.put("additionalProperties", false);
         return schema;
     }

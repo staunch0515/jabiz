@@ -2,6 +2,7 @@ package com.jabiz.app.commerce;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
 import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.numbering.NumberSequence;
@@ -166,5 +167,16 @@ class CommerceConfig {
     ProcessDefinition<CommerceProcesses.ShipInput, CommerceProcesses.ShipOutput, ProcessContext>
         orderShipProcess() {
         return CommerceProcesses.SHIP_PROCESS;
+    }
+
+    @Bean
+    DocumentLayout orderConfirmationLayout() {
+        return OrderConfirmations.LAYOUT;
+    }
+
+    @Bean
+    ProcessDefinition<OrderConfirmations.IssueInput, OrderConfirmations.IssueOutput, ProcessContext>
+        orderConfirmationIssueProcess() {
+        return OrderConfirmations.ISSUE_PROCESS;
     }
 }

@@ -229,7 +229,7 @@ public final class PdfReportWriter {
      * The fonts of one document: Noto Sans (regular or bold), then the fallbacks, chosen per character. A character
      * no font has is shown as a question mark rather than failing the report.
      */
-    static final class Fonts {
+    public static final class Fonts {
 
         private final PDType0Font regular;
         private final PDType0Font bold;
@@ -237,7 +237,7 @@ public final class PdfReportWriter {
         private final Map<Integer, Integer> regularChoice = new HashMap<>();
         private final Map<Integer, Integer> boldChoice = new HashMap<>();
 
-        Fonts(PDDocument pdf, PdfFonts fonts) throws IOException {
+        public Fonts(PDDocument pdf, PdfFonts fonts) throws IOException {
             this.regular = PDType0Font.load(pdf, new ByteArrayInputStream(fonts.regular()), true);
             this.bold = PDType0Font.load(pdf, new ByteArrayInputStream(fonts.bold()), true);
             for (byte[] fallback : fonts.fallbacks()) {
@@ -301,7 +301,7 @@ public final class PdfReportWriter {
             }
         }
 
-        float width(String value, boolean strong, float size) {
+        public float width(String value, boolean strong, float size) {
             float width = 0;
             try {
                 for (Map.Entry<PDType0Font, String> run : runs(value, strong)) {
@@ -313,7 +313,7 @@ public final class PdfReportWriter {
             return width;
         }
 
-        void draw(PDPageContentStream content, String value, boolean strong, float size, float x, float y)
+        public void draw(PDPageContentStream content, String value, boolean strong, float size, float x, float y)
             throws IOException {
             if (value == null || value.isEmpty()) {
                 return;

@@ -452,6 +452,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/runs/{runId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["documentPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/runs/{runId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifyDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{layoutId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entities/{entityType}": {
         parameters: {
             query?: never;
@@ -780,6 +860,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["datasets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meta/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["documentLayouts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1224,6 +1320,81 @@ export interface components {
             label?: string;
             /** Format: int32 */
             sortOrder?: number;
+        };
+        DocumentColumnEntry: {
+            label?: string;
+            name?: string;
+        };
+        DocumentDetail: {
+            params?: {
+                [key: string]: unknown;
+            };
+            run?: components["schemas"]["DocumentSummary"];
+            sources?: components["schemas"]["DocumentSourceEntry"][];
+            templateVersions?: {
+                [key: string]: string;
+            };
+        };
+        DocumentLayoutEntry: {
+            id?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            subjectEntity?: string;
+            subjectParam?: string;
+            title?: string;
+            version?: string;
+        };
+        DocumentPreviewRequest: {
+            /** Format: date-time */
+            asOf?: string;
+            /** Format: date-time */
+            knownAt?: string;
+            language?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        DocumentSourceEntry: {
+            columns?: components["schemas"]["DocumentColumnEntry"][];
+            rows?: unknown[][];
+            templateId?: string;
+        };
+        DocumentSummary: {
+            /** Format: date-time */
+            asOf?: string;
+            contentHash?: string;
+            documentNo?: string;
+            issuedBy?: string;
+            /** Format: date-time */
+            issuedTime?: string;
+            /** Format: date-time */
+            knownAt?: string;
+            language?: string;
+            layoutId?: string;
+            layoutVersion?: string;
+            pageSize?: string;
+            /** Format: int32 */
+            pages?: number;
+            pdfHash?: string;
+            /** Format: int32 */
+            pdfSize?: number;
+            /** Format: date-time */
+            readAt?: string;
+            recomputable?: boolean;
+            runId?: string;
+            subjectEntity?: string;
+            subjectId?: string;
+            title?: string;
+        };
+        DocumentVerification: {
+            contentHash?: string;
+            copyIntact?: boolean;
+            currentHash?: string;
+            currentLayoutVersion?: string;
+            layoutVersion?: string;
+            recomputable?: boolean;
+            verdict?: string;
         };
         DraftRule: {
             condition?: unknown;
@@ -2611,6 +2782,124 @@ export interface operations {
             };
         };
     };
+    listDocuments: {
+        parameters: {
+            query?: {
+                layout?: string;
+                subject?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+        };
+    };
+    getDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetail"];
+                };
+            };
+        };
+    };
+    documentPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                };
+            };
+        };
+    };
+    verifyDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentVerification"];
+                };
+            };
+        };
+    };
+    previewDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                layoutId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                    "application/pdf": string;
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query?: {
@@ -3184,6 +3473,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetEntry"][];
+                };
+            };
+        };
+    };
+    documentLayouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentLayoutEntry"][];
                 };
             };
         };

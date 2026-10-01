@@ -31,7 +31,7 @@ public class ReportScopes {
     }
 
     /** By dataset id, the caller-dependent scope values of the template's datasets, as text. */
-    Map<String, Map<String, String>> of(AdvancedQueryDefinition query, RequestContext request) {
+    public Map<String, Map<String, String>> of(AdvancedQueryDefinition query, RequestContext request) {
         Map<String, Map<String, String>> scopes = new TreeMap<>();
         for (DatasetDefinition dataset : templates.datasetsOf(query).values()) {
             if (dataset.scope().isDynamic()) {

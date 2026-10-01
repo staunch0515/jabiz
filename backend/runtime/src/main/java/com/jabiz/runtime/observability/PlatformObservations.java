@@ -47,6 +47,7 @@ public class PlatformObservations {
     public static final String DATA_EXPORT = "jabiz.data.export";
     public static final String AUTH_OIDC = "jabiz.auth.oidc";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
+    public static final String DOCUMENT_RENDER = "jabiz.document.render";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";
