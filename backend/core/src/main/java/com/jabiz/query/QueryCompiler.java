@@ -496,10 +496,21 @@ public class QueryCompiler {
                 }
                 yield parts.isEmpty() ? null : parts.size() == 1 ? parts.getFirst() : new QueryPredicate.And(parts);
             }
-            case QueryPredicate.Or or -> or.predicates().isEmpty() || !or.predicates().stream()
-                .allMatch(child -> immutablePart(child, def) == child) ? null : or;
+            case QueryPredicate.Or or -> wholly(or, def) ? or : null;
             case QueryPredicate.KeyAfter after -> after;
             default -> immutableField(def, fieldOf(predicate)) ? predicate : null;
+        };
+    }
+
+    /** Whether every field {@code predicate} reads is immutable. */
+    private static boolean wholly(QueryPredicate predicate, EntityDefinition def) {
+        return switch (predicate) {
+            case QueryPredicate.And and -> !and.predicates().isEmpty()
+                && and.predicates().stream().allMatch(child -> wholly(child, def));
+            case QueryPredicate.Or or -> !or.predicates().isEmpty()
+                && or.predicates().stream().allMatch(child -> wholly(child, def));
+            case QueryPredicate.KeyAfter after -> true;
+            default -> immutableField(def, fieldOf(predicate));
         };
     }
 
