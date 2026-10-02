@@ -7,7 +7,8 @@ description: >-
   Documents in a foreign currency show what is open in it and in US dollars (F7, FIN-FX-007); the total in US dollars
   equals the payables account at that day. Applications dated later do not count, so a later payment leaves
   an earlier day's aging as it was; run with knownAt, the books as recorded at that time.
-entities: [FinBill, FinApApplication, FinVendor]
+  Between a revaluation's day and its reversal the next day, a foreign document's dollars are as remeasured.
+entities: [FinFxRevaluationRun, FinFxRevaluationLine, FinBill, FinApApplication, FinVendor]
 params:
   agingDate:  { like: FinApApplication.applicationDate, required: true, description: "the day the aging is at, at its end" }
   basis:      { kind: { type: text, maxLength: 7 }, description: "DUE (the default): by due date; INVOICE: by invoice date" }
@@ -77,6 +78,15 @@ open_docs AS (
                AS open_amt,
            CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END
                * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
+               -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007); a
+               -- revaluation line carries what is owed as negative.
+               - COALESCE((SELECT SUM(l.{{FinFxRevaluationLine.difference}})
+                   FROM {{FinFxRevaluationLine}} l
+                   JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
+                   WHERE l.{{FinFxRevaluationLine.kind}} = 'PAYABLE'
+                     AND l.{{FinFxRevaluationLine.documentId}} = CAST(d.doc_key AS varchar)
+                     AND r.{{FinFxRevaluationRun.revaluationDate}} <= :agingDate
+                     AND r.{{FinFxRevaluationRun.reversalDate}} > :agingDate), 0)
                AS open_usd,
            CAST(:agingDate AS date) - CASE WHEN COALESCE(CAST(:basis AS varchar), 'DUE') = 'INVOICE'
                THEN d.doc_date ELSE COALESCE(d.due_on, d.doc_date) END AS age
