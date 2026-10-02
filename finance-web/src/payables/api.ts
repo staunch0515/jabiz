@@ -174,9 +174,13 @@ export interface BillRegisterRow {
   vendorInvoiceNo: string
   invoiceDate: string
   dueDate?: string | null
+  currency?: string | null
   total?: Amount | null
   useTaxTotal?: Amount | null
   openAmount?: Amount | null
+  /** In US dollars at the bill's rate (F7); a bill from before F7 is in dollars. */
+  totalUsd?: Amount | null
+  openAmountUsd?: Amount | null
   status: BillStatus
   approval?: Approval | null
   glNo?: string | null
@@ -317,6 +321,10 @@ export interface ProposeInput {
   vendorCodes?: string[] | null
   takeDiscounts?: boolean
   description?: string | null
+  /** The bills' currency; US dollars when absent (F7 plan decision D4). */
+  currency?: string | null
+  /** The rate the bank pays a foreign currency at; the payment day's spot rate when absent. */
+  exchangeRate?: string | null
 }
 
 export interface RunRegisterRow {
@@ -345,7 +353,10 @@ export interface PaymentRegisterRow {
   payee: string
   method: Method
   checkNo?: string | null
+  currency?: string | null
   amount: Amount
+  /** What the bank paid, in US dollars (F7). */
+  amountUsd?: Amount | null
   discount?: Amount | null
   status: 'POSTED' | 'VOID'
   voidDate?: string | null

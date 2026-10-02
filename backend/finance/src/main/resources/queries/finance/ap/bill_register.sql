@@ -26,6 +26,7 @@ results:
   useTaxTotal:     { from: FinBill.useTaxTotal }
   openAmount:      { from: FinBill.openAmount }
   totalUsd:        { from: FinBill.totalUsd }
+  openAmountUsd:   { from: FinBill.openAmountUsd }
   status:          { from: FinBill.status }
   approval:        { from: FinBill.approval }
   glNo:            { from: FinBill.glNo }
@@ -55,6 +56,8 @@ SELECT
     -- In US dollars at the bill's rate (F7); bills from before F7 are in dollars.
     CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END
         * COALESCE(b.{{FinBill.totalUsd}}, b.{{FinBill.total}}) AS totalUsd,
+    CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END
+        * COALESCE(b.{{FinBill.openAmountUsd}}, b.{{FinBill.openAmount}}) AS openAmountUsd,
     b.{{FinBill.status}}          AS status,
     b.{{FinBill.approval}}        AS approval,
     b.{{FinBill.glNo}}            AS glNo

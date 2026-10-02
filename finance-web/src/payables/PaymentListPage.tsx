@@ -25,7 +25,9 @@ export default function PaymentListPage() {
     enabled: Boolean(range.from && range.to),
   })
   const rows = useMemo(() => register.data?.items ?? [], [register.data])
-  const total = useMemo(() => sum(rows.filter((r) => r.status === 'POSTED').map((r) => r.amount)), [rows])
+  // What the bank paid, in US dollars: payments in other currencies do not add up in their own (F7).
+  const total = useMemo(() => sum(rows.filter((r) => r.status === 'POSTED').map((r) => r.amountUsd ?? r.amount)),
+    [rows])
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -72,8 +74,11 @@ export default function PaymentListPage() {
           { title: t('payables.payee'), dataIndex: 'payee', ellipsis: true },
           { title: t('payables.method'), dataIndex: 'method', render: (v: string) => t(`payables.methods.${v}`, v) },
           { title: t('payables.checkNo'), dataIndex: 'checkNo' },
+          { title: t('payables.currency'), dataIndex: 'currency' },
           { title: t('payables.amount'), dataIndex: 'amount', align: 'right',
             render: (v: number | string) => formatAmount(v, { scale: 2 }) },
+          { title: t('payables.amountUsd'), dataIndex: 'amountUsd', align: 'right',
+            render: (v: number | string | null, row) => formatAmount(v ?? row.amount, { scale: 2 }) },
           { title: t('payables.discount'), dataIndex: 'discount', align: 'right',
             render: (v: number | string | null) => (v === null || v === undefined ? '' : formatAmount(v, { scale: 2 })) },
           { title: t('payables.status'), dataIndex: 'status',
@@ -83,11 +88,11 @@ export default function PaymentListPage() {
         ]}
         summary={() => (
           <Table.Summary.Row>
-            <Table.Summary.Cell index={0} colSpan={8}>{t('payables.paymentCount', { count: rows.length })}</Table.Summary.Cell>
-            <Table.Summary.Cell index={8} align="right">
+            <Table.Summary.Cell index={0} colSpan={10}>{t('payables.paymentCount', { count: rows.length })}</Table.Summary.Cell>
+            <Table.Summary.Cell index={10} align="right">
               <span data-testid="register-total">{formatAmount(total, { scale: 2 })}</span>
             </Table.Summary.Cell>
-            <Table.Summary.Cell index={9} colSpan={2} />
+            <Table.Summary.Cell index={11} colSpan={2} />
           </Table.Summary.Row>
         )}
       />

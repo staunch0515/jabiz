@@ -1,4 +1,5 @@
-import { BankOutlined, BookOutlined, BuildOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, BuildOutlined, DollarOutlined, GlobalOutlined, ImportOutlined, ShoppingCartOutlined }
+  from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
 import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
   from './bank/api'
@@ -12,6 +13,9 @@ import MatchingPage from './bank/MatchingPage'
 import { MATCHING_PATH, RECONCILIATIONS_PATH } from './bank/paths'
 import ReconciliationListPage from './bank/ReconciliationListPage'
 import ReconciliationPage from './bank/ReconciliationPage'
+import { DATASETS as FX_DATASETS, PERMISSIONS as FX_PERMISSIONS, QUERIES as FX_QUERIES } from './fx/api'
+import { REVALUATIONS_PATH } from './fx/paths'
+import RevaluationPage from './fx/RevaluationPage'
 import JournalEntryRoute from './journal/JournalEntryRoute'
 import JournalListPage from './journal/JournalListPage'
 import { JOURNALS_PATH, NEW_JOURNAL_PATH } from './journal/paths'
@@ -35,7 +39,7 @@ import ReceiptRoute from './receivables/ReceiptRoute'
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
  * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
  * register and bill entry, payment runs and the payment register; bank matching and reconciliations; the assets and
- * the depreciation runs. Accounts,
+ * the depreciation runs; the foreign currency revaluations. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -63,6 +67,7 @@ export default defineExtension({
     { path: ASSETS_PATH, element: <AssetListPage /> },
     { path: DEPRECIATION_PATH, element: <DepreciationPage /> },
     { path: `${ASSETS_PATH}/:assetId`, element: <AssetPage /> },
+    { path: REVALUATIONS_PATH, element: <RevaluationPage /> },
   ],
   menu: [
     {
@@ -187,6 +192,20 @@ export default defineExtension({
           permission: FA_PERMISSIONS.maintain },
         { key: 'assetImport', label: 'menu.assetImport', path: paths.importRun(FA_IMPORTS.register),
           permission: FA_PERMISSIONS.migration },
+      ],
+    },
+    {
+      key: 'fx',
+      label: 'menu.fx',
+      icon: <GlobalOutlined />,
+      children: [
+        { key: 'revaluations', label: 'menu.revaluations', path: REVALUATIONS_PATH, permission: FX_PERMISSIONS.read },
+        { key: 'fxItems', label: 'menu.fxItems', path: paths.report(FX_QUERIES.items), permission: FX_PERMISSIONS.run },
+        { key: 'fxGainsLosses', label: 'menu.fxGainsLosses', path: paths.report(FX_QUERIES.gainsLosses),
+          permission: FX_PERMISSIONS.ledger },
+        { key: 'fxRates', label: 'menu.fxRates', path: paths.dataset(FX_DATASETS.rate), permission: FX_PERMISSIONS.read },
+        { key: 'fxSettings', label: 'menu.fxSettings', path: paths.dataset(FX_DATASETS.settings),
+          permission: FX_PERMISSIONS.settings },
       ],
     },
     {

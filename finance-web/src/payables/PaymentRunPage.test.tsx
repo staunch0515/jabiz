@@ -84,11 +84,28 @@ describe('payment runs', () => {
     await userEvent.click(screen.getByTestId('run-propose'))
     await waitFor(() => expect(calls.proposeRun).toHaveBeenCalled())
     expect(calls.proposeRun.mock.calls[0][0]).toEqual({ paymentDate: '2026-01-08', method: 'ACH', bankCode: null,
-      dueThrough: '2026-01-20', vendorCodes: ['V100', 'V600'], takeDiscounts: false, description: null })
+      dueThrough: '2026-01-20', vendorCodes: ['V100', 'V600'], takeDiscounts: false, description: null,
+      currency: null, exchangeRate: null })
     expect(await screen.findByTestId('run-page')).toBeInTheDocument()
     expect(screen.getByTestId('held-table')).toHaveTextContent('bank details pending approval')
     expect(screen.getByTestId('run-total')).toHaveTextContent('32,300.00')
     expect(screen.getByTestId('run-lines')).toHaveTextContent('Precision Parts Co.')
+  })
+
+  it('proposes a run in euros, by wire, without discounts, at the rate given', async () => {
+    calls.proposeRun.mockResolvedValue({ runId: 'r-1', runNo: 'PAY-RUN-01', status: 'DRAFT', lineCount: 2,
+      held: [], payments: [] })
+    calls.loadRun.mockResolvedValue(DRAFT)
+    renderAt('/payables/runs/new', ROUTES)
+    await userEvent.type(await screen.findByTestId('run-date'), '2026-01-31')
+    expect(screen.queryByTestId('run-rate')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByTestId('run-currency'), 'eur')
+    expect(screen.getByTestId('run-foreign-help')).toHaveTextContent('A run in EUR pays only bills in EUR')
+    await userEvent.type(screen.getByTestId('run-rate'), '1.0920')
+    await userEvent.click(screen.getByTestId('run-propose'))
+    await waitFor(() => expect(calls.proposeRun).toHaveBeenCalled())
+    expect(calls.proposeRun.mock.calls[0][0]).toEqual(expect.objectContaining({ currency: 'EUR',
+      exchangeRate: '1.0920', takeDiscounts: false, method: 'WIRE' }))
   })
 
   it('adds a bill by its number, removes a line and submits the draft', async () => {
