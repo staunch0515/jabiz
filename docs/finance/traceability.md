@@ -112,3 +112,14 @@
 | FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
 | FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
 
+
+## F5 银行与对账
+
+路径简写：`bank/` = `backend/finance/src/main/java/com/jabiz/finance/bank/`，`io/` = `backend/finance/src/main/java/com/jabiz/finance/io/`。
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-BK-001 | Bank accounts | 完成 | `FinBankAccount`（F4a；F5a 加对账单格式，一个现金科目只对应一个账户）、`FIN_BANK_ACCOUNT_SAVE`、`FinBankSettings` / `FIN_BANK_SETTINGS_SET` | `it/BankStatementIT`（1010、1050；账号遮蔽，Treasurer 逐值显示） |
+| FIN-BK-002 | Bank transfers | 完成 | `FinBankTransfer`（迁移 V14）、`FIN_BANK_TRANSFER_POST` / `_RECEIVE` / `_VOID`（`bank/TransferProcesses`，同日一笔，跨日经在途科目） | `it/BankStatementIT`（50,000.00：1050 减、1010 增；在途与作废）；两边的匹配随 F5b |
+| FIN-BK-003 | Statement import | 完成（OFX 不做，F5 计划 D3） | `FinBankStatement`、`FinStatementLine`、`FIN_BANK_STATEMENT_RECORD`（`bank/StatementProcesses`）、`calc/StatementCheck`、`io/Bai2Parser`、`io/Camt053Parser`、导入 `finance.bank_statement` / `_bai2` / `_camt053`（`io/StatementImports`） | `it/BankStatementIT`（10 行、256,555.00；同一文件 409；BAI2 与 camt.053 说明已记录、不增加；合计不符、不衔接、重叠、他人账户拒收）、`Bai2ParserTest`、`Camt053ParserTest`、`StatementCheckTest` |
+| FIN-DI-001 | Master-data import（未达银行项目） | 部分（银行） | `FinBankOpening`、`FinBankOpeningItem`、`FIN_BANK_OPENING_ITEMS`、导入 `finance.bank_opening_items` | `it/BankStatementIT`（253,200.00 − CHK-1045 3,200.00 = 1010 期初 250,000.00；不符拒收并给出差额；每个账户一次） |

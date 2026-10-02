@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>LNB-2026-01</MsgId><CreDtTm>2026-02-01T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>STMT-2026-01</Id>
+      <FrToDt><FrDtTm>2026-01-01T00:00:00</FrDtTm><ToDtTm>2026-01-31T23:59:59</ToDtTm></FrToDt>
+      <Acct><Id><Othr><Id>000123456789</Id></Othr></Id><Ccy>USD</Ccy></Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="USD">253200.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-01-01</Dt></Dt>
+      </Bal>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="USD">256555.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-01-31</Dt></Dt>
+      </Bal>
+      <Ntry>
+        <Amt Ccy="USD">3200.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-03</Dt></BookgDt>
+        <ValDt><Dt>2026-01-03</Dt></ValDt>
+        <AcctSvcrRef>BNK-0001</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>CHECK 1045</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">32475.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-05</Dt></BookgDt>
+        <ValDt><Dt>2026-01-05</Dt></ValDt>
+        <AcctSvcrRef>BNK-0002</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DEP</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>DEPOSIT ACME ROBOTICS INC</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">32300.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-08</Dt></BookgDt>
+        <ValDt><Dt>2026-01-08</Dt></ValDt>
+        <AcctSvcrRef>BNK-0003</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>ACH DEBIT BATCH 0001 NORTHWIND AP</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">15000.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-15</Dt></BookgDt>
+        <ValDt><Dt>2026-01-15</Dt></ValDt>
+        <AcctSvcrRef>BNK-0004</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>ACH DEBIT PAYROLLCO BONUS</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">24025.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-16</Dt></BookgDt>
+        <ValDt><Dt>2026-01-16</Dt></ValDt>
+        <AcctSvcrRef>BNK-0005</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DEP</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>DEPOSIT CASCADE MACHINING</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">3300.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-20</Dt></BookgDt>
+        <ValDt><Dt>2026-01-20</Dt></ValDt>
+        <AcctSvcrRef>BNK-0006</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>ACH DEBIT TX COMPTROLLER STX</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">19000.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-22</Dt></BookgDt>
+        <ValDt><Dt>2026-01-22</Dt></ValDt>
+        <AcctSvcrRef>BNK-0007</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>ACH DEBIT BATCH 0002 NORTHWIND AP</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">20000.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-26</Dt></BookgDt>
+        <ValDt><Dt>2026-01-26</Dt></ValDt>
+        <AcctSvcrRef>BNK-0008</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DEP</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>DEPOSIT LONE STAR DISTRIB</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">45.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-31</Dt></BookgDt>
+        <ValDt><Dt>2026-01-31</Dt></ValDt>
+        <AcctSvcrRef>BNK-0009</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>ACCOUNT SERVICE FEE</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="USD">300.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-01-31</Dt></BookgDt>
+        <ValDt><Dt>2026-01-31</Dt></ValDt>
+        <AcctSvcrRef>BNK-0010</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>DBT</Cd></Prtry></BkTxCd>
+        <AddtlNtryInf>LOAN INTEREST LOC 50000</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

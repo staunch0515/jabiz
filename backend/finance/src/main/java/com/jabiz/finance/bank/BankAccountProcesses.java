@@ -31,7 +31,8 @@ import java.util.Objects;
  * {@code FIN_BANK_ACCOUNT_SAVE}: a company bank account, new or changed, kept by the treasurer with a second factor
  * (F4 plan decisions D3, D7). Its ledger account is a {@code BANK} control account in the account's currency; the
  * routing number has a valid check digit; a masked account number is never taken as a new one, and an existing
- * account keeps its number unless a new one is given.
+ * account keeps its number unless a new one is given. A ledger account belongs to one bank account only (FIN-BK-001):
+ * its reconciliation is that account's.
  */
 public final class BankAccountProcesses {
 
@@ -42,6 +43,8 @@ public final class BankAccountProcesses {
     public static final String UNKNOWN_CURRENCY = "FIN_BANK_UNKNOWN_CURRENCY";
     public static final String INVALID_ROUTING = "FIN_BANK_ROUTING";
     public static final String INVALID_NUMBER = "FIN_BANK_ACCOUNT_NUMBER";
+    public static final String ACCOUNT_TAKEN = "FIN_BANK_ACCOUNT_TAKEN";
+    public static final String INVALID_FORMAT = "FIN_BANK_STATEMENT_FORMAT";
 
     /**
      * @param companyAccountNumber the account number (a distinctive name: {@code @Sensitive} masks it everywhere);
@@ -49,20 +52,21 @@ public final class BankAccountProcesses {
      * @param achCompanyId         the company identification the bank assigned for ACH files
      * @param achCompanyName       the company name as ACH files carry it, up to 16 characters
      * @param nextCheckNo          the number of the next check of the stock
+     * @param statementFormat      {@code CSV}, {@code BAI2} or {@code CAMT053}: the layout its statements come in
      */
     public record BankInput(@NotBlank @Size(max = 20) String bankCode, @Size(max = 100) String bankName,
         @Size(max = 20) String glAccount, @Size(max = 3) String currency, @Size(max = 20) String routingNumber,
         @Sensitive @Size(max = 40) String companyAccountNumber,
         @Size(max = 10) @Pattern(regexp = "[A-Za-z0-9 ]*") String achCompanyId,
         @Size(max = 16) @Pattern(regexp = "[A-Za-z0-9 .,&-]*") String achCompanyName,
-        @Min(1) @Max(9_999_999_999L) Long nextCheckNo, Boolean active) {
+        @Min(1) @Max(9_999_999_999L) Long nextCheckNo, Boolean active, @Size(max = 10) String statementFormat) {
 
         @Override
         public String toString() {
             return "BankInput[bankCode=" + bankCode + ", bankName=" + bankName + ", glAccount=" + glAccount
                 + ", currency=" + currency + ", routingNumber=" + routingNumber + ", companyAccountNumber=***"
                 + ", achCompanyId=" + achCompanyId + ", achCompanyName=" + achCompanyName + ", nextCheckNo="
-                + nextCheckNo + ", active=" + active + "]";
+                + nextCheckNo + ", active=" + active + ", statementFormat=" + statementFormat + "]";
         }
     }
 
@@ -73,6 +77,7 @@ public final class BankAccountProcesses {
     static final String BANKS = "banks";
     static final String ACCOUNTS = "accounts";
     static final String CURRENCIES = "currencies";
+    static final String SAME_ACCOUNT = "sameAccount";
 
     public static final ProcessDefinition<BankInput, BankOutput, ProcessContext> SAVE_PROCESS =
         ProcessDefinition.define(SAVE, 1, BankInput.class, BankOutput.class, ProcessContext.class, pb -> pb
@@ -87,6 +92,13 @@ public final class BankAccountProcesses {
                 ctx -> eq("accountCode", trim(input(ctx).glAccount())), ACCOUNTS))
             .step("Load the currency", QueryEntities.of(GlEntities.CURRENCY_DATASET,
                 ctx -> eq("currencyCode", code(input(ctx).currency())), CURRENCIES))
+            .step("Look for another bank account of the ledger account", QueryEntities.of(
+                BankEntities.BANK_ACCOUNT_DATASET, ctx -> {
+                    String glAccount = trim(input(ctx).glAccount());
+                    // Two at most: the account itself and another.
+                    return EntityQuery.builder().where(new QueryPredicate.In("glAccount",
+                        glAccount == null ? List.of() : List.of(glAccount))).limit(2).build();
+                }, SAME_ACCOUNT))
             .compute("Save the bank account", (metadata, ctx) -> save(ctx)));
 
     @SuppressWarnings("unchecked")
@@ -112,6 +124,16 @@ public final class BankAccountProcesses {
                 ctx.reject(new Violation("glAccount", WRONG_ACCOUNT, "A bank account's ledger account is a BANK "
                     + "control account; " + glAccount + " is not", Map.of("accountCode", glAccount)));
             }
+        }
+        if (glAccount != null && list(ctx, SAME_ACCOUNT).stream()
+            .anyMatch(other -> !bankCode.equals(other.get("bankCode")))) {
+            ctx.reject(new Violation("glAccount", ACCOUNT_TAKEN, "Ledger account " + glAccount + " is another bank "
+                + "account's", Map.of("accountCode", glAccount)));
+        }
+        String format = code(input.statementFormat());
+        if (format != null && !List.of(BankEntities.CSV, BankEntities.BAI2, BankEntities.CAMT053).contains(format)) {
+            ctx.reject(new Violation("statementFormat", INVALID_FORMAT, "A statement format is CSV, BAI2 or CAMT053",
+                Map.of("value", format)));
         }
         String currency = code(input.currency());
         List<EntityInstance> currencies = (List<EntityInstance>) ctx.get(CURRENCIES);
@@ -151,6 +173,9 @@ public final class BankAccountProcesses {
         if (input.nextCheckNo() != null) {
             values.put("nextCheckNo", BigDecimal.valueOf(input.nextCheckNo()));
         }
+        if (format != null) {
+            values.put("statementFormat", format);
+        }
         if (input.active() != null || current == null) {
             values.put("active", !Boolean.FALSE.equals(input.active()));
         }
@@ -173,6 +198,12 @@ public final class BankAccountProcesses {
             ctx.changes().update(BankEntities.BANK_ACCOUNT, current.id(), current.version(), changes);
         }
         ctx.put(OUTPUT, new BankOutput(String.valueOf(current.id()), bankCode, false, !changes.isEmpty()));
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<EntityInstance> list(ProcessContext ctx, String key) {
+        List<EntityInstance> found = (List<EntityInstance>) ctx.get(key);
+        return found == null ? List.of() : found;
     }
 
     private static void put(Map<String, Object> values, String field, Object value) {
