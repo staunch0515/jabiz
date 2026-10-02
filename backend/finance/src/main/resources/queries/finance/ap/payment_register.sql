@@ -21,7 +21,9 @@ results:
   payee:       { from: FinPayment.payee }
   method:      { from: FinPayment.method }
   checkNo:     { from: FinPayment.checkNo }
+  currency:    { from: FinPayment.currency }
   amount:      { from: FinPayment.amount }
+  amountUsd:   { from: FinPayment.amountUsd }
   discount:    { from: FinPayment.discount }
   status:      { from: FinPayment.status }
   voidDate:    { from: FinPayment.voidDate }
@@ -46,7 +48,10 @@ SELECT
     p.{{FinPayment.payee}}       AS payee,
     p.{{FinPayment.method}}      AS method,
     p.{{FinPayment.checkNo}}     AS checkNo,
+    COALESCE(p.{{FinPayment.currency}}, 'USD') AS currency,
     p.{{FinPayment.amount}}      AS amount,
+    -- What the bank paid (F7); payments from before F7 are in dollars.
+    COALESCE(p.{{FinPayment.amountUsd}}, p.{{FinPayment.amount}}) AS amountUsd,
     p.{{FinPayment.discount}}    AS discount,
     p.{{FinPayment.status}}      AS status,
     p.{{FinPayment.voidDate}}    AS voidDate

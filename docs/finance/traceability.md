@@ -31,8 +31,8 @@
 | FIN-PC-003 | Period states | 部分 | 开放 / 软关账 / 关账与子账状态；`calc/PeriodPolicy` | `PeriodPolicyTest`、`it/PeriodStateIT`、`it/JournalLifecycleIT`；结账清单与受控重开在 F8 |
 | FIN-FX-001 | Currencies | 完成 | `FinCurrency` | `it/SetupAndMasterDataIT` |
 | FIN-FX-002 | Exchange rates | 完成 | `FinExchangeRate`（更正保留历史） | `it/SetupAndMasterDataIT` |
-| FIN-FX-003 | Foreign-currency documents | 部分 | 发票（F3b）、收款、日记账外币行；`fx/FxRates`（单据日或此前容许天数的即期汇率） | `it/FxReceivablesIT`、`gl/JournalValidatorTest`；账单与付款在 F7b |
-| FIN-FX-004 | Realized gains and losses | 部分 | 收款核销与贷项核销的已实现损益（`FinApplication.fxGainLoss`，记 `FinFxSettings.realizedAccount`） | `it/FxReceivablesIT`；应付结算在 F7b |
+| FIN-FX-003 | Foreign-currency documents | 完成 | 发票（F3b）、收款、日记账外币行（F7a）；账单、贷项、付款批与付款（F7b）；`fx/FxRates`（单据日或此前容许天数的即期汇率）、`ap/ApFx` | `it/FxReceivablesIT`、`gl/JournalValidatorTest`、`it/FxPayablesIT` |
+| FIN-FX-004 | Realized gains and losses | 完成 | 收款、应收贷项（F7a）与付款、供应商贷项（F7b）结算的已实现损益（`FinApplication.fxGainLoss`、`FinApApplication.fxGainLoss`，记 `FinFxSettings.realizedAccount`） | `it/FxReceivablesIT`、`it/FxPayablesIT` |
 | FIN-CT-001 | Segregation of duties | 部分 | 日记账：准备人不能批准（平台 14b）、不能授权自己的例外；只有准备人改附件；Controller 不维护周期模板 | `it/JournalLifecycleIT`、`it/FinScn02IT`、`it/AttachmentIT`；其余职责分离规则在 F10 |
 | FIN-CT-002 | Approval rules are versioned | 部分 | 规则经四眼的控制变更发布；每次评估记下规则版本（`sys_approval_evaluation`） | `it/FinScn02IT`、`it/JournalLifecycleIT`；按生效日改阈值的验收在 F10 |
 | FIN-CT-003 | Approval integrity | 完成 | 批准绑定内容哈希与当前请求；修改使批准失效 | `it/JournalLifecycleIT` |
