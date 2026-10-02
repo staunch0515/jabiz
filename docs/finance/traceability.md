@@ -35,9 +35,9 @@
 | FIN-CT-002 | Approval rules are versioned | 部分 | 规则经四眼的控制变更发布；每次评估记下规则版本（`sys_approval_evaluation`） | `it/FinScn02IT`、`it/JournalLifecycleIT`；按生效日改阈值的验收在 F10 |
 | FIN-CT-003 | Approval integrity | 完成 | 批准绑定内容哈希与当前请求；修改使批准失效 | `it/JournalLifecycleIT` |
 | FIN-CT-005 | Suspense and clearing accounts | 部分 | `FinAccount.clearing` 标记 | `it/ChartOfAccountsIT`；期末清单检查在 F8 |
-| FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票与收款：`receivables/InvoicePage.test.tsx`、`ReceiptPage.test.tsx`、`e2e/receivables.spec.ts`；账单在 F4 |
+| FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票与收款：`receivables/InvoicePage.test.tsx`、`ReceiptPage.test.tsx`、`e2e/receivables.spec.ts`；账单（5 行，只用键盘，验收 1）：`payables/BillPage.test.tsx`、`e2e/payables.spec.ts` |
 | FIN-UI-003 | Grid entry | 完成 | 粘贴与复制到表格、向下填充、撤销与重做 | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`；验收中的可用性研究（50 行 ≤ 5 分钟）需由人进行 |
-| FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`；`receivables/InvoiceListPage.tsx`、`ReceiptListPage.tsx`） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）、`receivables/InvoiceListPage.test.tsx`、`e2e/receivables.spec.ts`；其他登记簿与报表钻取在 F4–F9 |
+| FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`；`receivables/InvoiceListPage.tsx`、`ReceiptListPage.tsx`） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）、`receivables/InvoiceListPage.test.tsx`、`e2e/receivables.spec.ts`；账单、付款批、付款登记簿（`queries/finance/ap/bill_register.sql`、`payment_run_register.sql`、`payment_register.sql`；`payables/BillListPage.tsx`、`RunListPage.tsx`、`PaymentListPage.tsx`）：`payables/registers.test.tsx`、`e2e/payables.spec.ts`、`it/PaymentIT`；银行登记簿与报表钻取在 F5–F9 |
 | FIN-NF-001 / 002 | Volumes / Response times | 摸底 | 生成器 `tools/finance/perf/`（直接写库） | 结果见 `docs/finance/perf.md`；带 50 用户的压测在 F11 |
 
 ## F2 导入、期初、迁移
@@ -66,7 +66,7 @@
 | FIN-AR-013 | Credit limit check | 完成 | `FIN_INVOICE_POST`（审批对象 `fin.ar.invoice`）、`FinArSettings.creditLimitCheck`、`FIN_INVOICE_APPROVAL_RESULT` | `it/InvoiceIT`（警告）、`it/ReceivablesIT`（审批） |
 | FIN-TX-005 | Credits and returns | 完成 | `FIN_INVOICE_POST`（原发票日期的税率） | `it/InvoiceIT`（165.00） |
 | FIN-GL-021 | Posting from subledgers | 应收完成 | `gl/SubledgerPosting`（`FIN_SUBLEDGER_POST`，账本交易引用单据、`FinPosting`） | `it/InvoiceIT` |
-| FIN-UI-007 | Explanations | 部分（税的说明完成；其他计算的说明随各模块） | `FinInvoiceTax`；发票页的计算说明（`receivables/InvoiceView.tsx`） | `it/InvoiceIT`、`receivables/InvoicePage.test.tsx`、`e2e/receivables.spec.ts` |
+| FIN-UI-007 | Explanations | 部分（销售税与使用税的说明完成；其他计算的说明随各模块） | `FinInvoiceTax`、`FinBillTax`；发票页与账单页的计算说明（`receivables/InvoiceView.tsx`、`payables/BillView.tsx`） | `it/InvoiceIT`、`receivables/InvoicePage.test.tsx`、`e2e/receivables.spec.ts`、`payables/BillPage.test.tsx` |
 | FIN-DI-002 | Migration of open items | 应收完成 | `FIN_AR_OPENING`、`finance.open_receivables`、`reconciliation.sql`（`OPEN_ITEMS`） | `it/InvoiceIT` |
 | FIN-AR-007 | Cash receipts | 完成（外币在 F7） | `ar/ReceiptEntities`（`FinReceipt`）、`ar/ReceiptProcesses`（`FIN_RECEIPT_RECORD`、`FIN_RECEIPT_VOID`） | `it/ReceivablesIT`（RCPT-0001…0003 = FIN-EXP-02） |
 | FIN-AR-008 | Application of receipts and credits | 完成 | `FIN_RECEIPT_APPLY`、`FIN_APPLICATION_REVERSE`、`FIN_RECEIPT_REASSIGN`、`queries/finance/ar/receipt_suggestions.sql` | `it/ReceivablesIT`（验收 1） |
@@ -85,11 +85,30 @@
 | 需求 | 标题 | 状态 | 实现 | 测试 |
 |---|---|---|---|---|
 | FIN-AP-001 | Vendor master | 完成 | `FinVendor`（迁移 V10）、`FIN_VENDOR_SAVE`（`ap/VendorProcesses`）；导入 `finance.vendors`（`io/PayablesImports`、`io/VendorRows`） | `it/PayablesMasterIT`、`VendorRowsTest` |
-| FIN-AP-002 | Tax identification (Form W-9) | 部分（验收 2 的警告在 F4b） | `FinVendorTaxInfo`（TIN `TAX_ID` 遮蔽，平台 14k）、`FIN_VENDOR_TAX_SAVE`、`calc/TaxIds` | `it/PayablesMasterIT`、`TaxIdsTest` |
-| FIN-AP-003 | Bank-detail change control | 部分（付款中的暂停在 F4c） | `FinVendorBankAccount`、`FIN_VENDOR_BANK_CHANGE` / `_APPROVAL_RESULT`（审批对象 `fin.ap.vendor-bank`、规则 `FIN-VENDOR-BANK`）、`calc/BankNumbers` | `it/PayablesMasterIT`、`BankNumbersTest` |
-| FIN-AP-021 | Reportable amounts and thresholds | 部分（报表在 F4d） | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds` | `it/PayablesMasterIT` |
+| FIN-AP-002 | Tax identification (Form W-9) | 完成（验收 2 的警告在 F4b 的过账中） | `FinVendorTaxInfo`（TIN `TAX_ID` 遮蔽，平台 14k）、`FIN_VENDOR_TAX_SAVE`、`calc/TaxIds` | `it/PayablesMasterIT`、`TaxIdsTest` |
+| FIN-AP-003 | Bank-detail change control | 完成 | `FinVendorBankAccount`、`FIN_VENDOR_BANK_CHANGE` / `_APPROVAL_RESULT`（审批对象 `fin.ap.vendor-bank`、规则 `FIN-VENDOR-BANK`）、`calc/BankNumbers`；付款建议与释放中的暂停（`ap/PaymentProcesses`） | `it/PayablesMasterIT`、`it/PaymentIT`、`BankNumbersTest` |
+| FIN-AP-021 | Reportable amounts and thresholds | 完成 | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds`；`Fin1099Amount`（迁移 V13）、报表 `finance.ap.form_1099` | `it/PayablesMasterIT`、`it/FinScn04IT`（= FIN-EXP-14；2027 年阈值 600.00） |
 | FIN-CT-001 | Segregation of duties | 部分（应付：F4a 的两条规则与冲突报告） | `FIN_SETUP` 提出 `FIN-SOD-VENDOR-BANK-RELEASE`、`FIN-SOD-PAYABLES-RELEASE`（平台 14b） | `it/PayablesMasterIT`（验收 2） |
 | FIN-CT-010 | Complete audit trail | 部分（银行信息变更） | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy` | `it/PayablesMasterIT`（验收 1） |
-| FIN-SC-001 | Authentication | 部分（银行信息变更；付款释放在 F4c） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE` 的 `requiresMfa(ALWAYS)` | `it/PayablesMasterIT` |
+| FIN-SC-001 | Authentication | 部分（应付：银行信息变更与付款释放；会话与单点登录由平台 14g） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)` | `it/PayablesMasterIT`、`it/PaymentIT` |
 | FIN-SC-004 | Sensitive data protection | 部分（TIN、银行账号） | `masked(…)`、`sys_reveal_record`；W-9 文件策略的读取权限 | `it/PayablesMasterIT` |
+| FIN-AP-004 | Vendor bill | 完成 | `FinBill`、`FinBillLine`（迁移 V11）、`FIN_BILL_SAVE` / `_POST`（`ap/BillProcesses`、`ap/BillPosting`） | `it/BillIT`、`BillPostingTest` |
+| FIN-AP-005 | Duplicate bill control | 完成 | `calc/BillDuplicates`，保存与过账时检查 | `it/BillIT`、`BillDuplicatesTest` |
+| FIN-AP-006 | Bill approval | 完成 | 审批对象 `fin.ap.bill`、规则 `FIN-AP-BILL-10K`、`FIN_BILL_APPROVAL_RESULT`；未批准的账单在付款中暂停 | `it/BillIT`、`it/PaymentIT` |
+| FIN-AP-007 | Capitalization from bills | 完成 | `FinAsset`、`FIN_ASSET_CREATE`（`fa/`） | `it/BillIT` |
+| FIN-AP-008 | Vendor credits and prepayments | 完成 | 种类 CREDIT、`FIN_AP_APPLY`、`FinApApplication`；预付款为付款批的行（`PREPAYMENT`），`FIN_AP_PREPAYMENT_APPLY` | `it/BillIT`、`it/PaymentIT` |
+| FIN-AP-009 | Payables aging | 完成 | `queries/finance/ap/aging.sql` | `it/BillIT`（合计 = 2000）、`it/PaymentIT`（= FIN-EXP-09，46,300.00） |
+| FIN-TX-007 | Use tax | 完成 | 行的使用税码、`FinBillTax`、`FinApSettings.useTaxAccount` | `it/BillIT`（82.50）、`BillPostingTest` |
+| FIN-AP-010 | Payment run proposal | 完成 | `FinPaymentRun`、`FinPaymentLine`（迁移 V12）、`FIN_PAYMENT_RUN_PROPOSE` / `_ADD` / `_REMOVE`（暂停与原因、提前付款折扣） | `it/PaymentIT` |
+| FIN-AP-011 | Payment approval and release | 完成 | 审批对象 `fin.ap.payment-run`、规则 `FIN-AP-PAYMENT`、`FIN_PAYMENT_RUN_SUBMIT` / `_APPROVAL_RESULT` / `_RELEASE` / `_CANCEL`（内容哈希锁定） | `it/PaymentIT` |
+| FIN-AP-012 | Payment posting | 完成 | `FinPayment`、`FIN_PAYMENT_RECORD`（内部）、`FinApApplication`（`PAYMENT`） | `it/PaymentIT`（PAY-RUN-01、PAY-RUN-02 = FIN-EXP-02） |
+| FIN-AP-013 | Payment methods and files | 完成（pain.001 不做，F4 计划 D6） | `calc/NachaWriter`、`calc/NachaValidator`、`calc/CheckFiles`、`calc/WireFile`、`FIN_PAYMENT_FILE_GENERATE`（`ap/PaymentFiles`） | `it/PaymentIT`、`NachaWriterTest`（含性质测试）、`CheckFilesTest` |
+| FIN-AP-014 | Voids and stopped payments | 完成 | `FIN_PAYMENT_VOID`（冲正、相反的核销） | `it/PaymentIT` |
+| FIN-AP-015 | Manual payments and non-vendor payments | 完成 | 付款批的其他付款行（非控制科目，支票或 MANUAL 批），同一审批规则 | `it/PaymentIT`（STX-PAY-2512） |
+| FIN-BK-011 | Payment files and positive pay | 完成（应付） | `FinPaymentFile`、`FIN_PAYMENT_FILE_GENERATE` / `_CANCEL`、生成文件存档（平台 14k） | `it/PaymentIT` |
+| FIN-AP-020 | 1099 classification | 完成 | 供应商与账单行的表与栏（F4a、F4b）；`FIN_PAYMENT_RECORD` 按行分摊（`calc/Form1099Allocation`）；方式 CARD 不计入 | `it/FinScn04IT`、`Form1099AllocationTest` |
+| FIN-AP-022 | 1099 outputs | 完成（州金额随联合申报列给出） | 审核报表 `finance.ap.form_1099_review`、`FIN_1099_ISSUE`（单据 `finance.ap.form_1099`）、`FIN_1099_EXPORT`（`calc/Form1099File`、`Fin1099Filing`） | `it/FinScn04IT`、`Form1099AllocationTest` |
+| FIN-AP-023 | 1099 corrections | 完成 | `FIN_1099_CORRECT`（与最后一次申报比较，CORRECTED） | `it/FinScn04IT` |
+| FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
+| FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
 

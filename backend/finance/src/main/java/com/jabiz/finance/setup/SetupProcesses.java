@@ -63,9 +63,21 @@ public final class SetupProcesses {
     public static final String SOD_VENDOR_BANK = "FIN-SOD-VENDOR-BANK-RELEASE";
     /** Segregation of duties (FIN-CT-001 acceptance 2): who prepares payables never releases payments. */
     public static final String SOD_PAYABLES = "FIN-SOD-PAYABLES-RELEASE";
+    /**
+     * FIN-AP-011: the platform keeps the last to change a run from approving it; this keeps anyone who prepares
+     * runs from approving them, so no preparer approves lines another preparer submitted.
+     */
+    public static final String SOD_PAYMENT_APPROVE = "FIN-SOD-PAYMENT-APPROVE";
 
-    private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE);
-    private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES);
+    /** The rule of FIN-AP-006: bills above 10,000.00 need a controller's approval before they are paid. */
+    public static final String BILL_RULE = "FIN-AP-BILL-10K";
+
+    /** The rule of FIN-AP-011: every payment run needs an approver of payments other than its preparer. */
+    public static final String PAYMENT_RULE = "FIN-AP-PAYMENT";
+
+    private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE,
+        BILL_RULE, PAYMENT_RULE);
+    private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES, SOD_PAYMENT_APPROVE);
 
     static final String ROLES = "roles";
     static final String GRANTS = "grants";
@@ -186,6 +198,16 @@ public final class SetupProcesses {
                 "Finance setup: vendor bank changes need another person's approval (FIN-AP-003)"));
             codes.add(VENDOR_BANK_RULE);
         }
+        if (missing(ctx, BILL_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, billRule(), null,
+                "Finance setup: bills above 10,000.00 need a controller's approval before payment (FIN-AP-006)"));
+            codes.add(BILL_RULE);
+        }
+        if (missing(ctx, PAYMENT_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, paymentRule(), null,
+                "Finance setup: payment runs need an approver of payments (FIN-AP-011)"));
+            codes.add(PAYMENT_RULE);
+        }
         if (missing(ctx, SOD_VENDOR_BANK)) {
             proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
                 sodRule(SOD_VENDOR_BANK, List.of(FinancePermissions.VENDOR_BANK_MAINTAIN),
@@ -199,6 +221,13 @@ public final class SetupProcesses {
                     "Who prepares bills or payment runs never releases payments"), null,
                 "Finance setup: preparing payables and releasing payments are apart (FIN-CT-001)"));
             codes.add(SOD_PAYABLES);
+        }
+        if (missing(ctx, SOD_PAYMENT_APPROVE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
+                sodRule(SOD_PAYMENT_APPROVE, List.of(FinancePermissions.PAYMENT_PREPARE),
+                    FinancePermissions.PAYMENT_APPROVE, "Who prepares payment runs never approves them"), null,
+                "Finance setup: preparing and approving payment runs are apart (FIN-AP-011, FIN-CT-001)"));
+            codes.add(SOD_PAYMENT_APPROVE);
         }
         ctx.put(PROPOSAL, List.copyOf(proposals));
         ctx.put(PROPOSED_CODES, List.copyOf(codes));
@@ -239,12 +268,42 @@ public final class SetupProcesses {
         return rule;
     }
 
+    /** Bills above 10,000.00 need an approver of bills (FIN-AP-006). */
+    static Map<String, Object> billRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", BILL_RULE);
+        rule.put("subject", com.jabiz.finance.ap.BillProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of("all", List.of(Map.of("fact", "amount", "op", "gt", "value", 10000))));
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.BILL_APPROVE)));
+        rule.put("description", "Bills above 10,000.00 need an approver of bills");
+        return rule;
+    }
+
+    /** Every payment run needs an approver of payments (FIN-AP-011, 015). */
+    static Map<String, Object> paymentRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", PAYMENT_RULE);
+        rule.put("subject", com.jabiz.finance.ap.PaymentProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of());
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.PAYMENT_APPROVE)));
+        rule.put("description", "Payment runs need an approver of payments");
+        return rule;
+    }
+
     /** A segregation-of-duties rule: no one holds a permission of each group (platform 18 section 4.1). */
     static Map<String, Object> sodRule(String code, List<String> left, String description) {
+        return sodRule(code, left, FinancePermissions.PAYMENT_RELEASE, description);
+    }
+
+    static Map<String, Object> sodRule(String code, List<String> left, String right, String description) {
         Map<String, Object> rule = new LinkedHashMap<>();
         rule.put("ruleCode", code);
         rule.put("leftPermissions", String.join(",", left));
-        rule.put("rightPermissions", FinancePermissions.PAYMENT_RELEASE);
+        rule.put("rightPermissions", right);
         rule.put("enabled", true);
         rule.put("description", description);
         return rule;

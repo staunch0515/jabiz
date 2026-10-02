@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
@@ -72,7 +73,7 @@ export async function run(request: APIRequestContext, bearer: string, process: s
 async function find(request: APIRequestContext, bearer: string, dataset: string, field: string, value: unknown) {
   const response = await request.post(`/api/datasets/${encodeURIComponent(dataset)}/query`, {
     headers: { Authorization: `Bearer ${bearer}` },
-    data: { filters: [{ field, op: 'eq', value }], limit: 10 },
+    data: { filters: [{ field, op: 'eq', value }], limit: 50 },
   })
   expect(response.status(), await response.text()).toBe(200)
   return ((await response.json()).items ?? []) as { id: string; attributes: Record<string, unknown> }[]
@@ -215,6 +216,158 @@ export async function newCustomer(request: APIRequestContext): Promise<string> {
   const saved = await run(request, admin, 'FIN_CUSTOMER_SAVE', { customerCode: code, legalName: `Customer ${code}`,
     currency: 'USD', termsDays: 30, taxCode: 'TX-AUSTIN', billing: address, shipping: address,
     contactEmail: `${code.toLowerCase()}@customers.example.com` })
+  expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+  return code
+}
+
+/** RFC 6238 with the authenticator defaults (SHA-1, 6 digits, 30 s), as the server checks it. */
+export function totp(secret: string, time = Date.now()): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = ''
+  for (const char of secret.replace(/=+$/, '')) bits += alphabet.indexOf(char).toString(2).padStart(5, '0')
+  const key = Buffer.from(bits.match(/.{8}/g)!.map((byte) => parseInt(byte, 2)))
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(time / 30_000)))
+  const hash = createHmac('sha1', key).update(counter).digest()
+  const offset = hash[hash.length - 1] & 0x0f
+  return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
+}
+
+export const AP_CLERK: User = {
+  userName: 'e2e-ap-clerk',
+  password: process.env.E2E_AP_CLERK_PASSWORD ?? 'e2e-ap-clerk-password-1',
+}
+
+/** A treasurer with a second factor of their own: made on every run, as only that run knows the key. */
+export interface Treasurer extends User {
+  secret: string
+  /** When the last code used was of: a code works once, so the next is of a later 30-second step. */
+  lastUsed: number
+}
+
+/**
+ * The treasurer's next code: of the current step, or of the one after the last used when that was the current one
+ * (waiting until it is within the server's drift of one step).
+ */
+export async function nextCode(treasurer: Treasurer): Promise<string> {
+  const step = (time: number) => Math.floor(time / 30_000)
+  let now = Date.now()
+  if (step(now) <= step(treasurer.lastUsed)) {
+    const next = (step(treasurer.lastUsed) + 1) * 30_000
+    // One step ahead is accepted; wait while it would be more.
+    if (next - now > 30_000) await new Promise((resolve) => setTimeout(resolve, next - now - 30_000 + 1_000))
+    now = next
+  }
+  treasurer.lastUsed = now
+  return totp(treasurer.secret, now)
+}
+
+const AP_ACCOUNTS = [
+  { accountCode: '2000', accountName: 'Accounts Payable', financialType: 'LIABILITY', normalBalance: 'CREDIT',
+    statementLine: 'Accounts payable', controlClass: 'AP' },
+  { accountCode: '2210', accountName: 'Use Tax Payable', financialType: 'LIABILITY', normalBalance: 'CREDIT',
+    statementLine: 'Accrued liabilities' },
+  { accountCode: '5900', accountName: 'Purchase Discounts', financialType: 'EXPENSE', normalBalance: 'CREDIT',
+    statementLine: 'Operating expenses' },
+  { accountCode: '1310', accountName: 'Vendor Prepayments', financialType: 'ASSET', normalBalance: 'DEBIT',
+    statementLine: 'Prepaid expenses' },
+]
+
+let payables: Treasurer | null = null
+
+/**
+ * The books for payables (ROADMAP F4e): the payables clerk, the accounts, the rules finance setup proposed (payment
+ * runs need another person's approval) published by the controller, the operating bank account with its check stock,
+ * the payables settings, and a treasurer who signs in with a code. Harmless when present.
+ */
+export async function preparePayables(request: APIRequestContext): Promise<Treasurer> {
+  await prepareBooks(request)
+  if (payables) return payables
+  const admin = await token(request, ADMIN)
+  await ensureUser(request, admin, AP_CLERK, 'PayablesClerk')
+  const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
+    headers: { Authorization: `Bearer ${admin}` },
+    data: { limit: 1000 },
+  })
+  const existing = new Set(((await lookup.json()).items as { accountCode: string }[]).map((a) => a.accountCode))
+  for (const account of AP_ACCOUNTS.filter((a) => !existing.has(a.accountCode))) {
+    const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', account)
+    expect(created.status, JSON.stringify(created.body)).toBe(200)
+  }
+  // Every rule finance setup proposed and nobody published yet (on this run or an earlier one): the controller
+  // publishes it (four eyes). Only finance setup's own, by their reason: other pending changes are not this test's.
+  const controller = await token(request, CONTROLLER)
+  const pending = await find(request, admin, 'urn:jabiz:dataset:platform:SysControlChange', 'status', 'PROPOSED')
+  for (const change of pending.filter((c) => String(c.attributes.reason ?? '').startsWith('Finance setup:'))) {
+    const published = await run(request, controller, 'CONTROL_CHANGE_PUBLISH', { changeId: change.id })
+    expect([200, 422], JSON.stringify(published.body)).toContain(published.status)
+  }
+
+  const treasurer = await newTreasurer(request, admin)
+  // Made once: saving it again would set its check stock back.
+  if ((await find(request, admin, 'urn:jabiz:dataset:default:FinBankAccount', 'bankCode', 'OPERATING')).length === 0) {
+    const bank = await run(request, await steppedUp(request, treasurer), 'FIN_BANK_ACCOUNT_SAVE', {
+      bankCode: 'OPERATING', bankName: 'Lakeside National Bank', glAccount: '1010', routingNumber: '111000025',
+      companyAccountNumber: '000123456789', achCompanyId: '1234567890', achCompanyName: 'NORTHWIND',
+      nextCheckNo: 10001 })
+    expect(bank.status, JSON.stringify(bank.body)).toBe(200)
+  }
+  const settings = await run(request, controller, 'FIN_AP_SETTINGS_SET', { payableAccount: '2000',
+    discountAccount: '5900', useTaxAccount: '2210', prepaymentAccount: '1310', defaultBank: 'OPERATING' })
+  expect(settings.status, JSON.stringify(settings.body)).toBe(200)
+  payables = treasurer
+  return treasurer
+}
+
+/** A new treasurer, enrolled in two-step verification through the API with a key only this run knows. */
+async function newTreasurer(request: APIRequestContext, admin: string): Promise<Treasurer> {
+  const user: User = { userName: unique('e2e-treasurer').replace(' ', '-').toLowerCase(),
+    password: 'e2e-treasurer-password-1' }
+  await ensureUser(request, admin, user, 'Treasurer')
+  const bearer = await token(request, user)
+  const enroll = await request.post('/api/auth/mfa/enroll', { headers: { Authorization: `Bearer ${bearer}` } })
+  expect(enroll.status(), await enroll.text()).toBe(200)
+  const secret = (await enroll.json()).secret as string
+  const treasurer: Treasurer = { ...user, secret, lastUsed: 0 }
+  const confirm = await request.post('/api/auth/mfa/enroll/confirm', {
+    headers: { Authorization: `Bearer ${bearer}` },
+    data: { code: await nextCode(treasurer) },
+  })
+  expect(confirm.status(), await confirm.text()).toBe(200)
+  return treasurer
+}
+
+/** The treasurer's token confirmed by a code: signed in with the password, then the code of the next step. */
+async function steppedUp(request: APIRequestContext, treasurer: Treasurer): Promise<string> {
+  const login = await request.post('/api/auth/login', { data: { userName: treasurer.userName,
+    password: treasurer.password } })
+  expect(login.status(), await login.text()).toBe(200)
+  const challenge = (await login.json()).challenge as string
+  const verified = await request.post('/api/auth/challenge/verify', {
+    data: { challenge, code: await nextCode(treasurer) },
+  })
+  expect(verified.status(), await verified.text()).toBe(200)
+  return (await verified.json()).accessToken
+}
+
+/** Signs a user with a second factor in: the password, then a code, landing on the extension's home. */
+export async function signInWithCode(page: Page, user: Treasurer) {
+  await page.goto('/login')
+  await page.getByPlaceholder('User name').fill(user.userName)
+  await page.getByPlaceholder('Password').fill(user.password)
+  await page.getByRole('button', { name: /Sign\s*in/ }).click()
+  await page.getByPlaceholder('Code').fill(await nextCode(user))
+  await page.getByRole('button', { name: /Verify/ }).click()
+  await page.waitForURL('**/gl/journals')
+}
+
+/** A vendor of its own, paid by check on net 30 days, its work going to professional fees. */
+export async function newVendor(request: APIRequestContext): Promise<string> {
+  const admin = await token(request, ADMIN)
+  const code = `V${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
+  const saved = await run(request, admin, 'FIN_VENDOR_SAVE', { vendorCode: code, legalName: `Vendor ${code}`,
+    currency: 'USD', termsDays: 30, expenseAccount: '6400', paymentMethod: 'CHECK', entityType: 'C_CORPORATION',
+    remit: { street: '1 Supply Way', city: 'Austin', state: 'TX', postalCode: '78701', country: 'United States' } })
   expect(saved.status, JSON.stringify(saved.body)).toBe(200)
   return code
 }

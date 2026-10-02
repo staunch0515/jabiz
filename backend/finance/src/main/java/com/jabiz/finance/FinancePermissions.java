@@ -138,6 +138,18 @@ public final class FinancePermissions {
     public static final String FORM_1099_MAINTAIN = "fin.1099.maintain";
     /** Enter and post vendor bills and credits (FIN-AP-004; phase F4b). */
     public static final String BILL_PREPARE = "fin.bill.prepare";
+    /**
+     * Void posted bills and vendor credits (F4b): what takes a liability out of the books is apart from entering it, and
+     * never the preparer's own.
+     */
+    public static final String BILL_VOID = "fin.bill.void";
+    /** Approve bills an approval rule stops, such as one above 10,000.00 (FIN-AP-006). */
+    public static final String BILL_APPROVE = "fin.bill.approve";
+    /**
+     * Run {@code FIN_ASSET_CREATE} and {@code FIN_BILL_APPROVAL_RESULT} directly; granted to no role. Assets are made by
+     * the bills that capitalize them, approvals of bills come from the platform's approval events.
+     */
+    public static final String AP_INTERNAL = "fin.ap.internal";
     /** Prepare payment runs (FIN-AP-010; phase F4c). */
     public static final String PAYMENT_PREPARE = "fin.payment.prepare";
     /**
@@ -145,6 +157,13 @@ public final class FinancePermissions {
      * payables or keeping vendors' bank details (FIN-CT-001).
      */
     public static final String PAYMENT_RELEASE = "fin.payment.release";
+
+    /** Approve payment runs and other payments (FIN-AP-011, 015): the level of the rule {@code FIN_SETUP} proposes. */
+    public static final String PAYMENT_APPROVE = "fin.payment.approve";
+    /** Void a posted payment, such as a stopped check (FIN-AP-014). */
+    public static final String PAYMENT_VOID = "fin.payment.void";
+    /** Issue Forms 1099, export them for filing and file corrections; reads the files with TINs in full (FIN-AP-022). */
+    public static final String FORM_1099_FILE = "fin.1099.file";
 
     private FinancePermissions() {}
 }
