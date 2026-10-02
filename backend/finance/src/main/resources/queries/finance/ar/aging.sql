@@ -7,6 +7,7 @@ description: >-
   three limits, then over the last) or by invoice date. The total in US dollars equals the receivables account at that
   day. Applications dated later do not count, so a later receipt or a correction leaves an earlier day's aging as it
   was; run with knownAt, the books as recorded at that time. For one customer it is the open-item statement (FIN-AR-009).
+  A document booked after its date (a prior-period item, FIN-PC-007) counts from the day it is booked.
   Between a revaluation's day and its reversal the next day, a foreign document's dollars are as remeasured.
 entities: [FinFxRevaluationRun, FinFxRevaluationLine, FinInvoice, FinApplication, FinCustomer]
 params:
@@ -46,7 +47,7 @@ WITH docs AS (
            i.{{FinInvoice.totalUsd}} AS doc_total_usd
     FROM {{FinInvoice}} i
     WHERE i.{{FinInvoice.status}} IN ('POSTED', 'VOID', 'WRITTEN_OFF')
-      AND i.{{FinInvoice.invoiceDate}} <= :agingDate
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :agingDate
       -- A document voided later was still open on the day.
       AND (i.{{FinInvoice.voidDate}} IS NULL OR i.{{FinInvoice.voidDate}} > :agingDate)
       AND (CAST(:customerCode AS varchar) IS NULL OR i.{{FinInvoice.customerCode}} = :customerCode)

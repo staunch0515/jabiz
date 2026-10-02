@@ -16,6 +16,7 @@ results:
   invoiceNo:     { from: FinInvoice.invoiceNo }
   kind:          { from: FinInvoice.kind }
   invoiceDate:   { from: FinInvoice.invoiceDate }
+  postingDate:   { from: FinInvoice.postingDate }
   dueDate:       { from: FinInvoice.dueDate }
   customerCode:  { from: FinInvoice.customerCode }
   customerName:  { from: FinCustomer.legalName }
@@ -42,6 +43,7 @@ SELECT
     i.{{FinInvoice.invoiceNo}}    AS invoiceNo,
     i.{{FinInvoice.kind}}         AS kind,
     i.{{FinInvoice.invoiceDate}}  AS invoiceDate,
+    COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) AS postingDate,
     i.{{FinInvoice.dueDate}}      AS dueDate,
     i.{{FinInvoice.customerCode}} AS customerCode,
     c.{{FinCustomer.legalName}}   AS customerName,

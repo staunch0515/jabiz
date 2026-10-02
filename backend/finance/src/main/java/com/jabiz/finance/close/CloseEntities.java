@@ -21,6 +21,20 @@ public final class CloseEntities {
     public static final String ARTIFACT_LINE = "FinCloseArtifactLine";
     public static final String ARTIFACT_LINE_DATASET = "urn:jabiz:dataset:default:FinCloseArtifactLine";
 
+    public static final String REOPEN = "FinPeriodReopen";
+    public static final String REOPEN_DATASET = "urn:jabiz:dataset:default:FinPeriodReopen";
+    public static final String REOPEN_STATUSES = "urn:jabiz:dict:finance:period-reopen-status";
+
+    /**
+     * A reopening asked for and waiting for its approver; approved, the period open again; rejected; withdrawn by its
+     * requester; lapsed, approved after a later period closed, so not done.
+     */
+    public static final String PENDING = "PENDING";
+    public static final String APPROVED = "APPROVED";
+    public static final String REJECTED = "REJECTED";
+    public static final String WITHDRAWN = "WITHDRAWN";
+    public static final String LAPSED = "LAPSED";
+
     public static final String KINDS = "urn:jabiz:dict:finance:close-task-kind";
     public static final String STATUSES = "urn:jabiz:dict:finance:close-task-status";
 
@@ -179,6 +193,38 @@ public final class CloseEntities {
             .filters("artifactId", "section", "code")
             .sorts("section", "seq")
             .defaultSort("seq", true));
+    });
+
+    /**
+     * A request to open a closed period again (FIN-PC-006): its reason, who asked, and the decision of a controller
+     * other than the requester (the platform's approval). Approved, the period and its subledgers are open; closed again,
+     * the new artifact supersedes the one the request names.
+     */
+    public static final EntityDefinition REOPEN_ENTITY = EntityDefinition.define(REOPEN, eb -> {
+        eb.physicalTable("fi_period_reopen_version");
+        eb.primaryKey("reopenId");
+        eb.field("reopenId", f -> f.physicalColumn("reopen_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:finance:period-reopen"));
+        eb.field("periodKey", f -> f.physicalColumn("period_key").immutable(true).required(true).asText(7));
+        eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).asText(1000));
+        // The artifact of the close the request undoes.
+        eb.field("artifactId", f -> f.physicalColumn("artifact_id").immutable(true).asReference(ARTIFACT));
+        eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true).asText(100));
+        eb.field("requestedAt", f -> f.physicalColumn("requested_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("status", f -> f.physicalColumn("status").processOnly().required(true)
+            .asCode(REOPEN_STATUSES, PENDING, APPROVED, REJECTED, WITHDRAWN, LAPSED));
+        eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(40));
+        eb.field("contentHash", f -> f.physicalColumn("content_hash").processOnly().asText(64));
+        eb.field("decidedBy", f -> f.physicalColumn("decided_by").processOnly().asText(100));
+        eb.field("decidedAt", f -> f.physicalColumn("decided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        eb.display("periodKey");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv
+            .columns("periodKey", "reason", "requestedBy", "requestedAt", "status", "decidedBy", "decidedAt")
+            .filters("periodKey", "status", "requestedBy")
+            .sorts("requestedAt", "periodKey")
+            .defaultSort("requestedAt", false));
     });
 
     private CloseEntities() {}

@@ -6,6 +6,7 @@ description: >-
   non-taxable sales by reason (resale, services, exports, no sales tax). Gross sales of a state are the sum of its
   rows. Credit memos count in their own period (FIN-TX-005), voids in theirs. Run with knownAt, as recorded at that time,
   so a past period reproduces.
+  An invoice booked after its date (a prior-period item, FIN-PC-007) counts in the period it is booked in, with its tax.
 entities: [FinInvoice, FinInvoiceTax, FinTaxCode, FinTaxJurisdiction]
 params:
   from:    { like: FinInvoice.invoiceDate, required: true, description: the first day of the filing period }
@@ -37,7 +38,8 @@ WITH counted AS (
            CASE WHEN i.{{FinInvoice.kind}} = 'CREDIT_MEMO' THEN -1 ELSE 1 END AS sign
     FROM {{FinInvoice}} i
     WHERE i.{{FinInvoice.status}} IN ('POSTED', 'VOID', 'WRITTEN_OFF') AND i.{{FinInvoice.source}} <> 'OPENING'
-      AND i.{{FinInvoice.invoiceDate}} >= :from AND i.{{FinInvoice.invoiceDate}} <= :to
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) >= :from
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :to
     UNION ALL
     SELECT i.{{FinInvoice.invoiceId}}, i.{{FinInvoice.exchangeRate}}, i.{{FinInvoice.taxCode}},
            CASE WHEN i.{{FinInvoice.kind}} = 'CREDIT_MEMO' THEN 1 ELSE -1 END

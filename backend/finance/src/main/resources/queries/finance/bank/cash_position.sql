@@ -69,7 +69,7 @@ FROM {{FinInvoice}} i
 CROSS JOIN reach
 LEFT JOIN {{FinCustomer}} c ON c.{{FinCustomer.customerCode}} = i.{{FinInvoice.customerCode}}
 WHERE i.{{FinInvoice.status}} = 'POSTED' AND i.{{FinInvoice.kind}} = 'INVOICE'
-  AND i.{{FinInvoice.openAmount}} > 0 AND i.{{FinInvoice.invoiceDate}} <= :asOf
+  AND i.{{FinInvoice.openAmount}} > 0 AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :asOf
   AND COALESCE(i.{{FinInvoice.dueDate}}, i.{{FinInvoice.invoiceDate}}) <= reach.last_day
 UNION ALL
 SELECT 'EXPECTED_PAYMENT', NULL, NULL, NULL, NULL, NULL, bl.{{FinBill.billNo}}, bl.{{FinBill.vendorInvoiceNo}}, v.{{FinVendor.legalName}},
@@ -79,5 +79,5 @@ CROSS JOIN reach
 LEFT JOIN {{FinVendor}} v ON v.{{FinVendor.vendorCode}} = bl.{{FinBill.vendorCode}}
 WHERE bl.{{FinBill.status}} = 'POSTED' AND bl.{{FinBill.kind}} = 'BILL'
   AND bl.{{FinBill.approval}} IN ('NOT_REQUIRED', 'APPROVED')
-  AND bl.{{FinBill.openAmount}} > 0 AND bl.{{FinBill.invoiceDate}} <= :asOf
+  AND bl.{{FinBill.openAmount}} > 0 AND COALESCE(bl.{{FinBill.postingDate}}, bl.{{FinBill.invoiceDate}}) <= :asOf
   AND COALESCE(bl.{{FinBill.dueDate}}, bl.{{FinBill.invoiceDate}}) <= reach.last_day

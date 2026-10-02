@@ -30,8 +30,8 @@ report:
   period: { from: from, to: to }
 ---*/
 WITH moves AS (
-    -- Bills raise what is owed and vendor credits lower it, on their dates.
-    SELECT b.{{FinBill.invoiceDate}} AS on_day, 1 AS ord, b.{{FinBill.kind}} AS what, b.{{FinBill.billNo}} AS doc_no,
+    -- Bills raise what is owed and vendor credits lower it, on the days they are booked (FIN-PC-007).
+    SELECT COALESCE(b.{{FinBill.postingDate}}, b.{{FinBill.invoiceDate}}) AS on_day, 1 AS ord, b.{{FinBill.kind}} AS what, b.{{FinBill.billNo}} AS doc_no,
            b.{{FinBill.vendorInvoiceNo}} AS ref, b.{{FinBill.description}} AS txt,
            CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END * b.{{FinBill.total}} AS amt,
            b.{{FinBill.billId}} AS tie

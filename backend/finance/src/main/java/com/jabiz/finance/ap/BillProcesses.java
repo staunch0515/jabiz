@@ -144,12 +144,14 @@ public final class BillProcesses {
      * @param kind            {@code BILL} (the default) or {@code CREDIT}
      * @param originalBillId  a vendor credit's bill, if it credits one
      * @param duplicateReason why a bill like another of the same vendor, amount and date is entered all the same
+     * @param postingDate     the day it is booked, on or after its date; its date when not given. A bill of a closed
+     *                        period is booked in an open one this way: a prior-period item (FIN-PC-007)
      */
     public record BillInput(UUID billId, @Size(max = 10) String kind, @NotBlank @Size(max = 20) String vendorCode,
         @NotBlank @Size(max = 40) String vendorInvoiceNo, @NotNull LocalDate invoiceDate, LocalDate receivedDate,
         @Size(max = 20) String termsCode, @Size(max = 500) String description, UUID originalBillId,
         UUID attachmentFileId, @Size(max = 500) String duplicateReason,
-        @NotEmpty @Size(max = 500) List<@Valid @NotNull LineInput> lines) {}
+        @NotEmpty @Size(max = 500) List<@Valid @NotNull LineInput> lines, LocalDate postingDate) {}
 
     public record BillId(@NotNull UUID billId) {}
 
@@ -305,6 +307,11 @@ public final class BillProcesses {
                 + "digits", Map.of()));
             return;
         }
+        if (input.postingDate() != null && input.postingDate().isBefore(input.invoiceDate())) {
+            ctx.reject(new Violation("postingDate", INVALID_VALUE, "A bill is booked on or after its date",
+                Map.of("value", input.postingDate().toString())));
+            return;
+        }
         if (input.receivedDate() != null && input.receivedDate().isBefore(input.invoiceDate())) {
             ctx.reject(new Violation("receivedDate", INVALID_VALUE, "A bill is received on or after its date",
                 Map.of("value", input.receivedDate().toString())));
@@ -382,6 +389,8 @@ public final class BillProcesses {
         // Whoever saved it last prepared it: only they post it, and the approval never lets them approve it.
         header.put("preparedBy", ctx.request().actorId());
         header.put("invoiceDate", input.invoiceDate());
+        header.put("postingDate", input.postingDate() == null || input.postingDate().equals(input.invoiceDate())
+            ? null : input.postingDate());
         header.put("receivedDate", input.receivedDate());
         header.put("currency", vendor.get("currency"));
         header.put("termsCode", VendorProcesses.code(input.termsCode()) == null ? vendor.get("termsCode")
@@ -529,7 +538,7 @@ public final class BillProcesses {
                     : (prepared.credit() ? "Vendor credit " : "Bill ") + bill.get("vendorInvoiceNo") + " "
                         + bill.get("vendorCode");
                 List<String> controls = prepared.capital().isEmpty() ? List.of("AP") : List.of("AP", "FA_COST");
-                ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AP", bill.get("invoiceDate"), description, number,
+                ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AP", postedOn(bill), description, number,
                     BillEntities.BILL, String.valueOf(bill.id()), lines, controls));
             })
             .step("Book it", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
@@ -714,6 +723,9 @@ public final class BillProcesses {
             "description")) {
             content.put(field, bill.get(field));
         }
+        if (bill.get("postingDate") != null) {
+            content.put("postingDate", bill.get("postingDate"));
+        }
         List<Map<String, Object>> lines = new ArrayList<>();
         for (EntityInstance line : prepared.lines()) {
             Map<String, Object> values = new LinkedHashMap<>();
@@ -744,7 +756,7 @@ public final class BillProcesses {
                     .get(r.line()).get("lineNo").equals(lineNo)).map(SalesTax.LineResult::tax)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             inputs.add(new AssetProcesses.AssetInput(line.get("description"), line.get("account"),
-                BillPosting.usd(line.get("amount"), prepared.rate()).add(tax), bill.get("invoiceDate"), line.get("department"),
+                BillPosting.usd(line.get("amount"), prepared.rate()).add(tax), postedOn(bill), line.get("department"),
                 line.get("location"), uuid(bill.id()), ctx.get(NUMBER, String.class), bill.get("vendorCode"),
                 UUID.fromString(booked.transactionId())));
         }
@@ -866,7 +878,7 @@ public final class BillProcesses {
                         Map.of("billNo", (Object) bill.get("billNo"), "assets", String.join(", ", used))));
                     return;
                 }
-                if (input.voidDate().isBefore(bill.get("invoiceDate"))) {
+                if (input.voidDate().isBefore(postedOn(bill))) {
                     ctx.reject(new Violation("voidDate", INVALID_VALUE, "A document is voided on or after its date",
                         Map.of("value", input.voidDate().toString())));
                     return;
@@ -947,9 +959,9 @@ public final class BillProcesses {
         } else if (input.amount().compareTo(credit.get("openAmount")) > 0
             || input.amount().compareTo(bill.get("openAmount")) > 0) {
             reason = "the amount is more than is open on the credit or the bill";
-        } else if (input.applicationDate().isBefore(credit.get("invoiceDate"))
-            || input.applicationDate().isBefore(bill.get("invoiceDate"))) {
-            reason = "a credit is applied on or after the dates of both documents";
+        } else if (input.applicationDate().isBefore(postedOn(credit))
+            || input.applicationDate().isBefore(postedOn(bill))) {
+            reason = "a credit is applied on or after both documents are booked";
         }
         if (reason != null) {
             ctx.reject(new Violation("amount", APPLY_REFUSED, "The credit cannot be applied: " + reason,
@@ -1337,6 +1349,12 @@ public final class BillProcesses {
         return EntityQuery.builder().where(new QueryPredicate.Or(List.of(
             new QueryPredicate.Eq("billId", documentId),
             new QueryPredicate.Eq("sourceId", String.valueOf(documentId))))).limit(5000).build();
+    }
+
+    /** The day a bill or credit is booked: its posting date, or its date (FIN-PC-007). */
+    public static LocalDate postedOn(EntityInstance bill) {
+        LocalDate posting = bill.get("postingDate");
+        return posting != null ? posting : bill.get("invoiceDate");
     }
 
     /** The vendor's documents that may duplicate a bill: the same number, or the same date. */

@@ -31,8 +31,8 @@ report:
   period: { from: from, to: to }
 ---*/
 WITH moves AS (
-    -- Documents on their dates, credit memos down.
-    SELECT i.{{FinInvoice.invoiceDate}} AS on_day, 1 AS ord, i.{{FinInvoice.kind}} AS what,
+    -- Documents on the days they are booked (FIN-PC-007), credit memos down.
+    SELECT COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) AS on_day, 1 AS ord, i.{{FinInvoice.kind}} AS what,
            i.{{FinInvoice.invoiceNo}} AS doc_no, i.{{FinInvoice.reference}} AS ref, i.{{FinInvoice.description}} AS txt,
            CASE WHEN i.{{FinInvoice.kind}} = 'CREDIT_MEMO' THEN -1 ELSE 1 END * i.{{FinInvoice.totalUsd}} AS amt
     FROM {{FinInvoice}} i

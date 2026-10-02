@@ -485,7 +485,7 @@ public final class ReceiptProcesses {
                 reason = "it is " + invoice.get("customerCode") + "'s, the receipt is " + customerCode + "'s";
             } else if (!Objects.equals(currency, invoice.get("currency"))) {
                 reason = "it is in " + invoice.get("currency") + ", the receipt in " + currency;
-            } else if (date.isBefore(invoice.get("invoiceDate"))) {
+            } else if (date.isBefore(InvoiceProcesses.postedOn(invoice))) {
                 reason = "it is dated after the receipt";
             }
             if (reason != null) {
@@ -987,7 +987,7 @@ public final class ReceiptProcesses {
                     reason = "its preparer does not refund it";
                 } else if (input.amount().compareTo(credit.get("openAmount")) > 0) {
                     reason = credit.<BigDecimal>get("openAmount").toPlainString() + " of it is open";
-                } else if (input.refundDate().isBefore(credit.get("invoiceDate"))) {
+                } else if (input.refundDate().isBefore(InvoiceProcesses.postedOn(credit))) {
                     reason = "a refund is dated on or after the credit memo";
                 } else if (!ReceiptEntities.METHOD_VALUES.contains(input.method().trim().toUpperCase(Locale.ROOT))) {
                     reason = "method must be one of " + ReceiptEntities.METHOD_VALUES;

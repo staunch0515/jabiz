@@ -162,3 +162,5 @@
 |---|---|---|---|---|
 | FIN-PC-004 | Close checklist | 完成（F8a） | `FinCloseTemplate`、`FinCloseTask`（迁移 V22）、`FIN_CLOSE_TEMPLATE_SAVE` / `FIN_CLOSE_START` / `FIN_CLOSE_TASK_COMPLETE` / `FIN_CLOSE_CHECK`（`close/CloseProcesses`）、`calc/CloseChecks`、模板 `finance.close.exceptions`、平台待办 | `CloseChecksTest`、`it/CloseIT`（每项检查失败与通过、结果、时间、证据；手工任务与待办）、`it/FinScn06IT`（营运账户未调节时失败并指明，调节签核后通过） |
 | FIN-PC-005 | Closing a period | 完成（F8a） | `FIN_PERIOD_CLOSE`、`FinCloseArtifact` / `FinCloseArtifactLine`（只记一次）、`REPORT_ISSUE` 签发试算表 | `it/FinScn06IT`（产物即 FIN-EXP-03、子账 = 控制科目、控制人与时刻；按关账时刻重跑哈希相同）、`it/CloseIT` |
+| FIN-PC-006 | Governed reopen | 完成（F8b） | `FinPeriodReopen`（迁移 V23）、`FIN_PERIOD_REOPEN_REQUEST` / `FIN_PERIOD_REOPEN_APPROVAL_RESULT`（`close/ReopenProcesses`）、审批对象 `fin.period.reopen`、规则 `FIN-PERIOD-REOPEN`、模板 `finance.close.artifacts` | `it/FinScn07IT`（拒绝后仍关闭；批准后再关账，第二份产物引用第一份；按第一次关账时刻重跑相同）、`it/ReopenIT`（无规则、更晚的已关期间） |
+| FIN-PC-007 | Prior-period items | 完成（F8b） | `FinBill.postingDate`、`FinInvoice.postingDate`、`FinJournal.documentDate`；报表 `finance.gl.prior_period_items` | `it/FinScn07IT`（BILL-OS-0120）、`it/ReopenIT`（发票） |

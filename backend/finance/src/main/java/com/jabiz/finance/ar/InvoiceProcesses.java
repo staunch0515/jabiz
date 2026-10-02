@@ -122,11 +122,14 @@ public final class InvoiceProcesses {
      *
      * @param kind              {@code INVOICE} (the default) or {@code CREDIT_MEMO}
      * @param originalInvoiceId a credit memo's invoice, whose date sets its tax rates
+     * @param postingDate       the day it is booked, on or after its date; its date when not given. An invoice of a
+     *                          closed period is booked in an open one this way: a prior-period item (FIN-PC-007)
      */
     public record InvoiceInput(UUID invoiceId, String kind, @NotBlank @Size(max = 20) String customerCode,
         @NotNull LocalDate invoiceDate, @Size(max = 20) String termsCode, @Size(max = 20) String taxCode,
         @Size(max = 3) String currency, @Size(max = 500) String description, @Size(max = 100) String reference,
-        UUID originalInvoiceId, @NotEmpty @Size(max = 500) List<@Valid @NotNull LineInput> lines) {}
+        UUID originalInvoiceId, @NotEmpty @Size(max = 500) List<@Valid @NotNull LineInput> lines,
+        LocalDate postingDate) {}
 
     public record InvoiceId(@NotNull UUID invoiceId) {}
 
@@ -271,6 +274,11 @@ public final class InvoiceProcesses {
                 Map.of("value", input.kind())));
             return;
         }
+        if (input.postingDate() != null && input.postingDate().isBefore(input.invoiceDate())) {
+            ctx.reject(new Violation("postingDate", INVALID_VALUE, "An invoice is booked on or after its date",
+                Map.of("value", input.postingDate().toString())));
+            return;
+        }
         String customerCode = input.customerCode().trim().toUpperCase(Locale.ROOT);
         if (current != null) {
             if (!InvoiceEntities.DRAFT.equals(current.get("status"))) {
@@ -384,6 +392,8 @@ public final class InvoiceProcesses {
         }
         Map<String, Object> header = new LinkedHashMap<>();
         header.put("invoiceDate", input.invoiceDate());
+        header.put("postingDate", input.postingDate() == null || input.postingDate().equals(input.invoiceDate())
+            ? null : input.postingDate());
         header.put("currency", currency);
         header.put("termsCode", upper(input.termsCode(), customer.get("termsCode")));
         header.put("taxCode", headerCode);
@@ -520,7 +530,7 @@ public final class InvoiceProcesses {
                 String description = invoice.get("description") != null ? invoice.get("description")
                     : (prepared.creditMemo() ? "Credit memo " : "Invoice ") + number + " "
                         + invoice.get("customerCode");
-                ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", invoice.get("invoiceDate"), description,
+                ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", postedOn(invoice), description,
                     number, InvoiceEntities.SOURCE_ENTITY, String.valueOf(invoice.id()), lines, List.of("AR")));
             })
             .step("Book it", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
@@ -752,6 +762,9 @@ public final class InvoiceProcesses {
             "description", "reference")) {
             content.put(field, invoice.get(field));
         }
+        if (invoice.get("postingDate") != null) {
+            content.put("postingDate", invoice.get("postingDate"));
+        }
         List<Map<String, Object>> lines = new ArrayList<>();
         for (EntityInstance line : prepared.lines()) {
             Map<String, Object> values = new LinkedHashMap<>();
@@ -893,7 +906,7 @@ public final class InvoiceProcesses {
                         Map.of("invoiceNo", (Object) invoice.get("invoiceNo"))));
                     return;
                 }
-                if (input.voidDate().isBefore(invoice.get("invoiceDate"))) {
+                if (input.voidDate().isBefore(postedOn(invoice))) {
                     ctx.reject(new Violation("voidDate", INVALID_VALUE, "A document is voided on or after its date",
                         Map.of("value", input.voidDate().toString())));
                     return;
@@ -963,9 +976,9 @@ public final class InvoiceProcesses {
         } else if (input.amount().compareTo(credit.get("openAmount")) > 0
             || input.amount().compareTo(invoice.get("openAmount")) > 0) {
             reason = "the amount is more than is open on the credit memo or the invoice";
-        } else if (input.applicationDate().isBefore(credit.get("invoiceDate"))
-            || input.applicationDate().isBefore(invoice.get("invoiceDate"))) {
-            reason = "a credit is applied on or after the dates of both documents";
+        } else if (input.applicationDate().isBefore(postedOn(credit))
+            || input.applicationDate().isBefore(postedOn(invoice))) {
+            reason = "a credit is applied on or after both documents are booked";
         } else if (!Money.fits(input.amount(), Money.USD_SCALE)) {
             reason = "the amount has more decimals than the currency";
         }
@@ -1320,6 +1333,12 @@ public final class InvoiceProcesses {
 
     private static InvoiceInput saveInput(ProcessContext ctx) {
         return ctx.get(INPUT, InvoiceInput.class);
+    }
+
+    /** The day an invoice or credit memo is booked: its posting date, or its date (FIN-PC-007). */
+    public static LocalDate postedOn(EntityInstance invoice) {
+        LocalDate posting = invoice.get("postingDate");
+        return posting != null ? posting : invoice.get("invoiceDate");
     }
 
     private static EntityInstance invoice(ProcessContext ctx) {

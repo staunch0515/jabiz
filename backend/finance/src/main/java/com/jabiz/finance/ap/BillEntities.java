@@ -78,6 +78,8 @@ public final class BillEntities {
         // The vendor's number as the duplicate check compares it: its letters and digits in capitals (FIN-AP-005).
         eb.field("vendorInvoiceKey", f -> f.physicalColumn("vendor_invoice_key").processOnly().asText(40));
         eb.field("invoiceDate", f -> f.physicalColumn("invoice_date").required(true).asDate());
+        // The day it is booked when later than its date: a prior-period item (FIN-PC-007); none: its date.
+        eb.field("postingDate", f -> f.physicalColumn("posting_date").asDate());
         eb.field("receivedDate", f -> f.physicalColumn("received_date").asDate());
         eb.field("dueDate", f -> f.physicalColumn("due_date").processOnly().asDate());
         eb.field("currency", f -> f.physicalColumn("currency").required(true).asText(3));
