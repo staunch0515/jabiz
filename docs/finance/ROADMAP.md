@@ -502,6 +502,46 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
 
 已知限制：应收发票的"准备人"同样只在新建草稿时记录（他人改过的草稿可由改的人批准），在 F10 的职责分离收尾中按本阶段的做法修正。
 
+### F4c 付款批、付款、预付款与付款文件
+
+**要求**
+1. 时态实体（V12）：`FinPaymentRun`（`PAY-RUN-{n:2}`；银行账户、付款日、方式 ACH / CHECK / WIRE、状态 DRAFT / SUBMITTED / APPROVED / RELEASED / CANCELLED、合计、
+   准备人、审批请求与内容哈希、批准人、释放人）、`FinPaymentLine`（账单 / 其他付款 / 预付款）、`FinPayment`（`PMT-{n:4}`；支票号、付往的供应商账户、预付款未核销、
+   作废日与原因）、`FinPaymentFile`（种类 NACHA / CHECKS / POSITIVE_PAY / WIRE、银行账户与生成日、生成的文件与哈希、状态 ACTIVE / CANCELLED、作废原因）。只经流程写入。
+2. 流程：`FIN_PAYMENT_RUN_PROPOSE`（到期日或提前付款折扣、供应商；暂停：未批准、银行信息待批准、ACH 没有启用账户、供应商停用、已在另一批中，输出列出原因）、
+   `_ADD` / `_REMOVE`（账单、其他付款到非控制科目（只在 CHECK 与 MANUAL 批中）、供应商预付款）、`_SUBMIT`（最后改动的人提交；审批对象 `fin.ap.payment-run`，没有适用的规则即拒绝）、
+   `_APPROVAL_RESULT`（内部，只相信平台的审批请求）、`_CANCEL`（撤回审批请求）、`_RELEASE`（`fin.payment.release` + 二次验证；内容哈希与暂停再查；支票号取自银行账户）、
+   内部 `FIN_PAYMENT_RECORD`（每个供应商一笔付款：借应付、贷折扣、贷银行；其他付款与预付款各一笔；写核销、减少未结）、`FIN_PAYMENT_VOID`（`fin.payment.void` + 二次验证；银行持有其文件的 ACH、电汇付款不能作废）、
+   `FIN_AP_PREPAYMENT_APPLY`（借应付 / 贷预付）、`FIN_PAYMENT_FILE_GENERATE` / `_CANCEL`。
+3. 纯计算：`calc.NachaWriter`、独立的 `calc.NachaValidator`、`calc.CheckFiles`（支票打印与正向支付 CSV）、`calc.WireFile`（电汇指示 CSV）。
+4. 权限与角色：`fin.payment.approve`（Controller、Approver）、`fin.payment.void`（Controller、Treasurer）；Treasurer 另有 `file.generated.read`（读取付款文件）。
+   `FIN_SETUP` 提出审批规则 `FIN-AP-PAYMENT`（每批需要 `fin.payment.approve`）与职责分离规则 `FIN-SOD-PAYMENT-APPROVE`（`fin.payment.prepare` × `fin.payment.approve`）。
+
+计划变更：职责分离"准备人不释放"由平台规则 `FIN-SOD-PAYABLES-RELEASE` 保证，流程不另写检查（CLAUDE.md 第 4 节）；供应商账户的数据视图查询上限提高到 10,000，
+付款流程只读启用与待批准的账户，避免被截断时漏掉待批准的变更；读到上限的查询一律拒绝而不是少读。
+**电汇指示由 PDF 单据改为 CSV 生成文件（变更 F4 计划 D6 的电汇部分，待确认）**：平台单据中遮蔽字段一律遮蔽（22 §3.1），PDF 只能显示 `****1234`，银行无法据以汇款。
+其他付款没有收款账户，因此只在支票批与新增的 MANUAL 批（在银行文件之外付，如州税务网站）中；STX-PAY-2512 以 MANUAL 批记录。代码审查的修正：作废需要二次验证，
+银行持有文件的 ACH、电汇付款不能作废；付款人名称随批准锁定；NACHA 修饰符按银行与日期计；校验器另查服务类别、日期、零金额与收款人名称。
+
+**验收标准**
+- [x] 1 月 8 日对 1 月 20 日前到期的已批准账单建议付款，选中 P-7781 与 CPL-1225，合计 32,300.00；V200 的银行信息待批准时 DC-2025-12 被暂停（"bank details pending approval"），
+      未批准的账单与已在批中的账单不能加入（AP-010、AP-003，`PaymentIT`）。
+- [x] 应付员提交的 PAY-RUN-01 不能由其本人批准（即使持有批准权限），Controller 批准；未批准不能释放；释放需要二次验证且应付员不能释放；伪造的审批结果不生效，驳回回到草稿；
+      ACH 批不能加入其他付款；银行持有文件的付款不能作废（AP-011、SC-001、CT-001，`PaymentIT`）。
+- [x] PAY-RUN-01 与 PAY-RUN-02 的付款分录合计等于 FIN-EXP-02（借 2000 32,300.00 / 19,000.00，贷 1010）；DC-2025-12、MP-2026-01、JR-014 已付并链接到付款，V200 的付款付往批准后的账户（AP-012，`PaymentIT`）。
+- [x] PAY-RUN-01 的 NACHA 文件通过校验器，一个 CCD 批、2 个条目、合计 32,300.00，哈希与存档一致；PAY-RUN-02 为 CCD 与 PPD（V800 为个人）两批；同一批再生成被拒，作废（带原因）后可重新生成，
+      文件标识修饰符变为 B；只有释放付款的人能读取（AP-013、BK-011，`PaymentIT`、`NachaWriterTest`（含 200 次性质测试）、`CheckFilesTest`）。
+- [x] STX-PAY-2512：在银行文件之外付给 Texas Comptroller（MANUAL 批），借 2200 3,300.00、贷 1010；控制科目不能作为其他付款；TS-5520 于 2 月 14 日电汇，
+      电汇指示 CSV 带付款账户与收款人账户全号、原样保存（AP-015、AP-013，`PaymentIT`）。
+- [x] 2 月的支票批：提前付款折扣（借 2000 1,000.00、贷 5900 20.00、贷 1010 980.00），支票号 10001–10003 取自银行账户；支票打印文件与正向支付文件列出支票号、日期、金额与付款人；
+      V500 的预付款（借 1310 / 贷 1010）核销到其账单（借 2000 / 贷 1310），不能核销到其他供应商的账单（AP-008、AP-010、BK-011，`PaymentIT`）。
+- [x] 支票 10001 于 2026-02-10 作废（需要二次验证）：当日冲正、CS-0126 重新打开、原付款仍可见（VOID）；不能再作废；新的正向支付文件将其标为 V（AP-014，`PaymentIT`）。
+- [x] 1 月 31 日的应付账龄等于 FIN-EXP-09（46,300.00）且等于 2000 的余额（AP-009，`PaymentIT`）。
+- [x] 只经流程写入；时态表只插入；`./gradlew :finance:check`（`platformCheck` 0 错误 0 警告）通过。
+
+已知限制：付款日不与当天比较：批准后晚于付款日才释放的批仍按原付款日过账，提前付款折扣按建议时的付款日计算（期间控制阻止过到已关闭的期间）；
+预付款核销后不能撤回或作废；电汇指示是 CSV，各银行的电汇格式在 F11 的接口中适配。
+
 ## F5 — F11
 
 范围、需求编号与验收口径见 `docs/finance-work/00-development-plan.md` §5.2；每个阶段开始时把详细要求与验收标准写入本节。

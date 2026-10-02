@@ -158,5 +158,10 @@ public final class FinancePermissions {
      */
     public static final String PAYMENT_RELEASE = "fin.payment.release";
 
+    /** Approve payment runs and other payments (FIN-AP-011, 015): the level of the rule {@code FIN_SETUP} proposes. */
+    public static final String PAYMENT_APPROVE = "fin.payment.approve";
+    /** Void a posted payment, such as a stopped check (FIN-AP-014). */
+    public static final String PAYMENT_VOID = "fin.payment.void";
+
     private FinancePermissions() {}
 }
