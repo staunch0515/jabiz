@@ -139,8 +139,10 @@
 | 需求 | 标题 | 状态 | 实现 | 测试 |
 |---|---|---|---|---|
 | FIN-FA-001 | Asset classes | 完成（F6a） | `FinAssetClass`（迁移 V17）、`FIN_FA_CLASS_SAVE`（`fa/AssetClassProcesses`）；资本化门槛在登记时检查 | `it/AssetIT`（FA-003 取 Computer equipment 36 月直线；门槛以下的账单行被拒） |
-| FIN-FA-002 | Asset register | 部分（F6a：登记、来源、历史；期末合计随 F6b 的运行） | `FinAsset`（类别、方法、年限、残值、惯例、地点、保管人、状态、来源 BILL / ACQUISITION / OPENING）、`FIN_FA_ASSET_SAVE`、`FIN_FA_ACQUIRE`、账单资本化 `FIN_ASSET_CREATE` | `it/AssetIT`、`it/AssetOpeningAfterBillsIT` |
-| FIN-FA-003 | Depreciation methods | 部分（F6a：计算） | `calc/Depreciation`（直线、200% / 150% 余额递减并转直线；工作量法 `byUse`） | `DepreciationTest`（FA-001 2,000.00、FA-002 1,666.67、转直线） |
-| FIN-FA-004 | Conventions and rounding | 部分（F6a：计算） | `calc/Depreciation`（全月、月中、次月；按资产 × 月舍入，尾差在资产年度与寿命末月） | `DepreciationTest`（FA-003 1 月 333.33、全寿命 12,000.00；属性测试：全寿命 = 成本 − 残值） |
-| FIN-FA-006 | Changes in estimates | 部分（F6a：计算） | `calc/Depreciation.restart` | `DepreciationTest`（FA-001 延长 12 个月：1,489.36） |
+| FIN-FA-002 | Asset register | 部分（F6a：登记、来源、历史；F6b：运行写入累计与状态；登记簿报表随 F6c） | `FinAsset`（类别、方法、年限、残值、惯例、地点、保管人、状态、来源 BILL / ACQUISITION / OPENING）、`FIN_FA_ASSET_SAVE`、`FIN_FA_ACQUIRE`、账单资本化 `FIN_ASSET_CREATE` | `it/AssetIT`、`it/AssetOpeningAfterBillsIT` |
+| FIN-FA-003 | Depreciation methods | 完成（F6a 计算，F6b 运行与工作量） | `calc/Depreciation`（直线、200% / 150% 余额递减并转直线；工作量法 `byUse`）、`FinAssetUsage`、`FIN_FA_USAGE_RECORD`（`fa/AssetEventProcesses`） | `DepreciationTest`（FA-001 2,000.00、FA-002 1,666.67、转直线）、`it/DepreciationIT`（工作量 150 / 1,000 单位 = 1,500.00；未录用量整体拒收） |
+| FIN-FA-004 | Conventions and rounding | 完成（F6a 计算，F6b 运行） | `calc/Depreciation`（全月、月中、次月；按资产 × 月舍入，尾差在资产年度与寿命末月） | `DepreciationTest`（FA-003 1 月 333.33、全寿命 12,000.00；属性测试：全寿命 = 成本 − 残值） |
+| FIN-FA-005 | Depreciation run | 完成（F6b） | `FinDepreciationRun` / `FinDepreciationLine`（迁移 V18）、`FIN_FA_DEPRECIATION_RUN` / `FIN_FA_DEPRECIATION_REVERSE`（`fa/DepreciationProcesses`）、`fa/AssetPlans` | `it/DepreciationIT`（DEP-2601 = FIN-EXP-11 的 6700 / 1590 4,000.00，明细 2,000.00 / 1,666.67 / 333.33；再运行不过账；已结期间、跳月、未分类拒绝；冲回后 DEP-2601-2） |
+| FIN-FA-006 | Changes in estimates | 完成（F6b） | `calc/Depreciation.restart`、`FinAssetChange`、`FIN_FA_CHANGE_ESTIMATE`（`fa/AssetEventProcesses`） | `DepreciationTest`、`it/DepreciationIT`（FA-001 自 2026-02 延长 12 个月：1,489.36，1 月不变；DEP-2602 取新条件） |
+| FIN-FA-007 | Disposal | 完成（F6b） | `FinAssetDisposal`、`FIN_FA_DISPOSE`（`fa/AssetEventProcesses`）、`FinFaSettings.gainLossAccount` | `it/DepreciationIT`（FA-002 1 月运行后以 60,000.00 出售：收益 1,666.67；报废损失 11,333.34；之前月份未运行拒绝） |
 | FIN-DI-001/002 | 资产期初导入 | 完成（资产） | `FIN_FA_OPENING`（`fa/AssetOpeningProcesses`）、导入 `finance.fixed_assets`（`io/AssetImports`） | `it/AssetIT`（合计 ≠ 1500 / 1510 / 1590 整体拒收；FA-001、FA-002 带累计登记；只一次）、`it/AssetOpeningAfterBillsIT`（FA-003 由账单在先时补齐类别与条件） |

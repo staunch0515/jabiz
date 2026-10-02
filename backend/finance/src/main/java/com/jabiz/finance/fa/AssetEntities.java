@@ -132,6 +132,8 @@ public final class AssetEntities {
         // The last month a depreciation run took, and what all runs took (F6b).
         eb.field("depreciatedThrough", f -> f.physicalColumn("depreciated_through").processOnly().asText(7));
         eb.field("accumulated", f -> f.physicalColumn("accumulated").processOnly().asNumeric(15, 2));
+        // Units of production: the units used in the months depreciated.
+        eb.field("unitsUsed", f -> f.physicalColumn("units_used").processOnly().asNumeric(15, 2));
         eb.unique("uk_fi_asset_no", "assetNo");
         eb.display("assetNo");
         eb.temporal(t -> t.allowScheduled(false));
