@@ -422,6 +422,22 @@ class PaymentIT extends FinanceItSupport {
         assertThat(report("finance.gl.trial_balance", controller, Map.of("through", "2026-01-31")).stream()
             .filter(r -> "2000".equals(r.get("accountCode"))).map(r -> amount(r.get("balance"))).findFirst()
             .orElseThrow()).isEqualByComparingTo("-46300.00");
+        // V200's statement for January: DC-2025-12 owed at the start, DC-2026-01 billed, PAY-RUN-02 pays the first; the
+        // closing balance is V200's aging.
+        List<Map<String, Object>> statement = report("finance.ap.vendor_statement", clerk, Map.of("vendorCode", "V200",
+            "from", "2026-01-01", "to", "2026-01-31"));
+        assertThat(statement).extracting(r -> r.get("entry") + " " + amount(r.get("balance")).toPlainString())
+            .containsExactly("OPENING 9000.00", "BILL 16500.00", "PAYMENT 7500.00", "CLOSING 7500.00");
+        // A payment names the bill it paid, to be ticked off against the vendor's own statement.
+        assertThat(statement).filteredOn(r -> "PAYMENT".equals(r.get("entry")))
+            .extracting(r -> r.get("reference")).containsExactly("DC-2025-12");
+        // The registers of January: the runs paid then and their payments.
+        assertThat(report("finance.ap.payment_run_register", clerk, Map.of("from", "2026-01-01", "to", "2026-01-31",
+            "status", "RELEASED"))).extracting(r -> (String) r.get("runNo")).contains("PAY-RUN-01", "PAY-RUN-02");
+        List<Map<String, Object>> payments = report("finance.ap.payment_register", clerk, Map.of("from", "2026-01-01",
+            "to", "2026-01-31", "status", "POSTED", "method", "ACH"));
+        assertThat(payments.stream().map(r -> amount(r.get("amount"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo("51300.00");
         assertOnlyInserted("fi_payment_run_version", "fi_payment_line_version", "fi_payment_version",
             "fi_payment_file_version", "fi_bill_version", "fi_ap_application_version", "fi_posting_version");
     }

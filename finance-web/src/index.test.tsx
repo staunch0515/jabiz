@@ -26,4 +26,26 @@ describe('the finance extension', () => {
       '/receivables/invoices', '/receivables/invoices/new', '/receivables/invoices/:invoiceId',
       '/receivables/receipts', '/receivables/receipts/new', '/receivables/receipts/:receiptId']))
   })
+
+  it('offers the payables pages, reports and imports, each behind its permission', () => {
+    const ap = extension.menu?.find((item) => item.key === 'ap')
+    const items = Object.fromEntries((ap?.children ?? []).map((item) => [item.key, item]))
+    expect(items.bills).toMatchObject({ path: '/payables/bills', permission: 'fin.ap.read' })
+    expect(items.newBill).toMatchObject({ path: '/payables/bills/new', permission: 'fin.bill.prepare' })
+    expect(items.paymentRuns).toMatchObject({ path: '/payables/runs', permission: 'fin.ap.read' })
+    expect(items.newPaymentRun).toMatchObject({ path: '/payables/runs/new', permission: 'fin.payment.prepare' })
+    expect(items.payments).toMatchObject({ path: '/payables/payments', permission: 'fin.ap.read' })
+    expect(items.apAging?.path).toBe('/reports/run?id=finance.ap.aging')
+    expect(items.vendorStatement?.path).toBe('/reports/run?id=finance.ap.vendor_statement')
+    expect(items.form1099?.path).toBe('/reports/run?id=finance.ap.form_1099')
+    expect(items.review1099).toMatchObject({ path: '/reports/run?id=finance.ap.form_1099_review',
+      permission: 'fin.1099.maintain' })
+    const imports = Object.fromEntries((extension.menu?.find((item) => item.key === 'imports')?.children ?? [])
+      .map((item) => [item.key, item]))
+    expect(imports.vendorImport).toMatchObject({ path: '/imports/run?id=finance.vendors', permission: 'fin.vendor.maintain' })
+    expect(imports.openPayablesImport?.permission).toBe('fin.migration')
+    expect(extension.routes?.map((route) => route.path)).toEqual(expect.arrayContaining([
+      '/payables/bills', '/payables/bills/new', '/payables/bills/:billId', '/payables/runs', '/payables/runs/new',
+      '/payables/runs/:runId', '/payables/payments']))
+  })
 })

@@ -1,9 +1,17 @@
-import { BookOutlined, DollarOutlined, ImportOutlined } from '@ant-design/icons'
+import { BookOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
 import JournalEntryRoute from './journal/JournalEntryRoute'
 import JournalListPage from './journal/JournalListPage'
 import { JOURNALS_PATH, NEW_JOURNAL_PATH } from './journal/paths'
 import { messages } from './messages'
+import { DATASETS as AP_DATASETS, PERMISSIONS as AP_PERMISSIONS, QUERIES as AP_QUERIES } from './payables/api'
+import BillListPage from './payables/BillListPage'
+import BillRoute from './payables/BillRoute'
+import PaymentListPage from './payables/PaymentListPage'
+import PaymentRunPage from './payables/PaymentRunPage'
+import { BILLS_PATH, NEW_BILL_PATH, NEW_RUN_PATH, PAYMENTS_PATH, RUNS_PATH } from './payables/paths'
+import ProposeRunPage from './payables/ProposeRunPage'
+import RunListPage from './payables/RunListPage'
 import { DATASETS, PERMISSIONS, QUERIES } from './receivables/api'
 import InvoiceListPage from './receivables/InvoiceListPage'
 import InvoiceRoute from './receivables/InvoiceRoute'
@@ -13,7 +21,8 @@ import ReceiptRoute from './receivables/ReceiptRoute'
 
 /**
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
- * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry. Accounts,
+ * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
+ * register and bill entry, payment runs and the payment register. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -28,6 +37,13 @@ export default defineExtension({
     { path: RECEIPTS_PATH, element: <ReceiptListPage /> },
     { path: NEW_RECEIPT_PATH, element: <ReceiptRoute /> },
     { path: `${RECEIPTS_PATH}/:receiptId`, element: <ReceiptRoute /> },
+    { path: BILLS_PATH, element: <BillListPage /> },
+    { path: NEW_BILL_PATH, element: <BillRoute /> },
+    { path: `${BILLS_PATH}/:billId`, element: <BillRoute /> },
+    { path: RUNS_PATH, element: <RunListPage /> },
+    { path: NEW_RUN_PATH, element: <ProposeRunPage /> },
+    { path: `${RUNS_PATH}/:runId`, element: <PaymentRunPage /> },
+    { path: PAYMENTS_PATH, element: <PaymentListPage /> },
   ],
   menu: [
     {
@@ -71,6 +87,29 @@ export default defineExtension({
       ],
     },
     {
+      key: 'ap',
+      label: 'menu.ap',
+      icon: <ShoppingCartOutlined />,
+      children: [
+        { key: 'bills', label: 'menu.bills', path: BILLS_PATH, permission: AP_PERMISSIONS.read },
+        { key: 'newBill', label: 'menu.newBill', path: NEW_BILL_PATH, permission: AP_PERMISSIONS.prepare },
+        { key: 'paymentRuns', label: 'menu.paymentRuns', path: RUNS_PATH, permission: AP_PERMISSIONS.read },
+        { key: 'newPaymentRun', label: 'menu.newPaymentRun', path: NEW_RUN_PATH, permission: AP_PERMISSIONS.payment },
+        { key: 'payments', label: 'menu.payments', path: PAYMENTS_PATH, permission: AP_PERMISSIONS.read },
+        { key: 'vendors', label: 'menu.vendors', path: paths.dataset(AP_DATASETS.vendor), permission: AP_PERMISSIONS.read },
+        { key: 'apAging', label: 'menu.apAging', path: paths.report(AP_QUERIES.aging), permission: AP_PERMISSIONS.read },
+        { key: 'vendorStatement', label: 'menu.vendorStatement', path: paths.report(AP_QUERIES.statement),
+          permission: AP_PERMISSIONS.read },
+        { key: 'form1099', label: 'menu.form1099', path: paths.report(AP_QUERIES.form1099), permission: AP_PERMISSIONS.read },
+        { key: 'review1099', label: 'menu.review1099', path: paths.report(AP_QUERIES.review1099),
+          permission: AP_PERMISSIONS.form1099 },
+        { key: 'apSettings', label: 'menu.apSettings', path: paths.dataset(AP_DATASETS.settings),
+          permission: AP_PERMISSIONS.settings },
+        { key: 'bankAccounts', label: 'menu.bankAccounts', path: paths.dataset(AP_DATASETS.bank),
+          permission: AP_PERMISSIONS.bank },
+      ],
+    },
+    {
       key: 'imports',
       label: 'menu.imports',
       icon: <ImportOutlined />,
@@ -83,6 +122,12 @@ export default defineExtension({
           permission: 'fin.migration' },
         { key: 'chartImport', label: 'menu.chartImport', path: paths.importRun('finance.chart'),
           permission: 'fin.account.maintain' },
+        { key: 'vendorImport', label: 'menu.vendorImport', path: paths.importRun('finance.vendors'),
+          permission: AP_PERMISSIONS.vendor },
+        { key: 'thresholdImport', label: 'menu.thresholdImport', path: paths.importRun('finance.ap_thresholds'),
+          permission: AP_PERMISSIONS.form1099 },
+        { key: 'openPayablesImport', label: 'menu.openPayablesImport', path: paths.importRun('finance.open_payables'),
+          permission: 'fin.migration' },
         {
           key: 'migrationReport',
           label: 'menu.migrationReport',
