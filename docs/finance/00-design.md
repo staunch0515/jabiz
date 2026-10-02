@@ -388,6 +388,13 @@
 - 收款记交易币种金额、汇率、`amountUsd` 与未核销的美元；核销记发票侧美元（`amountUsd`）、收款侧美元（`sourceAmountUsd`）与差额 `fxGainLoss`（记已实现损益科目）。
   结清发票的那次核销取发票剩余的美元，使发票美元恰好为零。旧的美元行不回填：汇率空为 1，美元金额空为交易金额。
 - 日记账外币行记 `currency`、`foreignAmount`、`exchangeRate`，只能记入非控制科目，每个外币借贷相等（账本 11 §1.8 同样要求）。
+- 应付（F7b）：账单与贷项用供应商币种，逐行折美元过账，记 `exchangeRate`、`totalUsd`、`openAmountUsd`。付款批有币种与汇率（外币批只电汇或手工、只付账单、不取折扣），
+  付款记 `currency`、`exchangeRate`、`amountUsd`；核销记 `amountUsd`（账单让出）、`sourceAmountUsd`（付款或贷项给出）与 `fxGainLoss`，差额记已实现损益科目。
+  1099 计供应商收到的美元。共用的换算在 `ap/ApFx`。
+- 重估（F7c）：`FinFxRevaluationRun` / `Line`，模板 `finance.fx.revaluation_items` 给出某日开放的外币项目（应收、应付单据与外币银行账户，后者以对账单余额为外币余额），
+  `FIN_FX_REVALUE` 按子账过账并于次日冲回（单据的美元不变，账龄在两日之间按重估显示），`FIN_FX_REVALUE_SIMULATE` 以当前或运行时刻的记录重新计算并比较。
+  损益报表 `finance.fx.gains_losses`。
+- 页面（F7d）：`finance-web/src/fx/RevaluationPage`（运行、模拟）；应付登记簿按美元合计，付款批可选币种与汇率。
 
 ---
 

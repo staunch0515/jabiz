@@ -79,6 +79,10 @@ public final class PaymentEntities {
         eb.field("method", f -> f.physicalColumn("method").immutable(true).required(true)
             .asCode(METHODS, values(METHOD_VALUES)));
         eb.field("description", f -> f.physicalColumn("description").asText(500));
+        // F7 (D4): the currency its bills are paid in and the rate the bank pays it at; empty for runs in US dollars
+        // before F7.
+        eb.field("currency", f -> f.physicalColumn("currency").processOnly().asText(3));
+        eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").processOnly().asNumeric(19, 10));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(RUN_STATUSES, values(RUN_STATUS_VALUES)));
         eb.field("total", f -> f.physicalColumn("total").processOnly().asNumeric(15, 2));
@@ -97,8 +101,8 @@ public final class PaymentEntities {
         eb.display("runNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("runNo", "paymentDate", "bankCode", "method", "total", "lineCount", "status", "preparedBy",
-                "approvedBy", "releasedBy")
+            .columns("runNo", "paymentDate", "bankCode", "method", "currency", "total", "lineCount", "status",
+                "preparedBy", "approvedBy", "releasedBy")
             .filters("runNo", "paymentDate", "bankCode", "method", "status")
             .sorts("runNo", "paymentDate", "total")
             .defaultSort("paymentDate", false));
@@ -150,6 +154,10 @@ public final class PaymentEntities {
         // Paid out of the bank: what the bills came to less the discounts.
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asNumeric(15, 2));
         eb.field("discount", f -> f.physicalColumn("discount").immutable(true).asNumeric(15, 2));
+        // F7: in the run's currency; the bank pays the US dollars. Empty for payments in US dollars before F7.
+        eb.field("currency", f -> f.physicalColumn("currency").immutable(true).asText(3));
+        eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").immutable(true).asNumeric(19, 10));
+        eb.field("amountUsd", f -> f.physicalColumn("amount_usd").immutable(true).asNumeric(15, 2));
         eb.field("checkNo", f -> f.physicalColumn("check_no").immutable(true).asText(20));
         // The vendor's bank account paid to, for an ACH payment: the one approved when the run was released.
         eb.field("vendorBankAccountId", f -> f.physicalColumn("vendor_bank_account_id").immutable(true)
@@ -167,7 +175,7 @@ public final class PaymentEntities {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("paymentNo", "runNo", "paymentDate", "kind", "vendorCode", "payee", "method", "checkNo",
-                "amount", "discount", "openAmount", "status")
+                "currency", "amount", "amountUsd", "discount", "openAmount", "status")
             .filters("paymentNo", "runId", "runNo", "paymentDate", "kind", "vendorCode", "method", "checkNo",
                 "status")
             .sorts("paymentNo", "paymentDate", "amount")

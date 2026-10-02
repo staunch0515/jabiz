@@ -21,9 +21,12 @@ results:
   vendorInvoiceNo: { from: FinBill.vendorInvoiceNo }
   invoiceDate:     { from: FinBill.invoiceDate }
   dueDate:         { from: FinBill.dueDate }
+  currency:        { from: FinBill.currency }
   total:           { from: FinBill.total }
   useTaxTotal:     { from: FinBill.useTaxTotal }
   openAmount:      { from: FinBill.openAmount }
+  totalUsd:        { from: FinBill.totalUsd }
+  openAmountUsd:   { from: FinBill.openAmountUsd }
   status:          { from: FinBill.status }
   approval:        { from: FinBill.approval }
   glNo:            { from: FinBill.glNo }
@@ -46,9 +49,15 @@ SELECT
     b.{{FinBill.vendorInvoiceNo}} AS vendorInvoiceNo,
     b.{{FinBill.invoiceDate}}     AS invoiceDate,
     b.{{FinBill.dueDate}}         AS dueDate,
+    b.{{FinBill.currency}}        AS currency,
     CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END * b.{{FinBill.total}} AS total,
     CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END * b.{{FinBill.useTaxTotal}} AS useTaxTotal,
     CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END * b.{{FinBill.openAmount}} AS openAmount,
+    -- In US dollars at the bill's rate (F7); bills from before F7 are in dollars.
+    CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END
+        * COALESCE(b.{{FinBill.totalUsd}}, b.{{FinBill.total}}) AS totalUsd,
+    CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END
+        * COALESCE(b.{{FinBill.openAmountUsd}}, b.{{FinBill.openAmount}}) AS openAmountUsd,
     b.{{FinBill.status}}          AS status,
     b.{{FinBill.approval}}        AS approval,
     b.{{FinBill.glNo}}            AS glNo

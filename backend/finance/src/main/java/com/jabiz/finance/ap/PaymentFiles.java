@@ -221,8 +221,9 @@ public final class PaymentFiles {
                         account.get("routingNumber"), account.get("accountNumber"),
                         payment.get("paymentNo") + " " + runNo));
                 }
+                // The run's currency: a run in euros wires euros (F7 plan decision D4).
                 String content = WireFile.write(bank.get("routingNumber"), bank.get("accountNumber"),
-                    bank.get("currency"), wires);
+                    run.get("currency") == null ? bank.get("currency") : run.get("currency"), wires);
                 archive(ctx, run, runNo + "-wires.csv", "text/csv", content, new Made(runNo + "-wires.csv",
                     paid.size(), total));
             }
