@@ -70,7 +70,7 @@ export async function run(request: APIRequestContext, bearer: string, process: s
   return { status: response.status(), body: await response.json().catch(() => ({})) }
 }
 
-async function find(request: APIRequestContext, bearer: string, dataset: string, field: string, value: unknown) {
+export async function find(request: APIRequestContext, bearer: string, dataset: string, field: string, value: unknown) {
   const response = await request.post(`/api/datasets/${encodeURIComponent(dataset)}/query`, {
     headers: { Authorization: `Bearer ${bearer}` },
     data: { filters: [{ field, op: 'eq', value }], limit: 50 },
@@ -338,7 +338,7 @@ async function newTreasurer(request: APIRequestContext, admin: string): Promise<
 }
 
 /** The treasurer's token confirmed by a code: signed in with the password, then the code of the next step. */
-async function steppedUp(request: APIRequestContext, treasurer: Treasurer): Promise<string> {
+export async function steppedUp(request: APIRequestContext, treasurer: Treasurer): Promise<string> {
   const login = await request.post('/api/auth/login', { data: { userName: treasurer.userName,
     password: treasurer.password } })
   expect(login.status(), await login.text()).toBe(200)
@@ -369,5 +369,61 @@ export async function newVendor(request: APIRequestContext): Promise<string> {
     currency: 'USD', termsDays: 30, expenseAccount: '6400', paymentMethod: 'CHECK', entityType: 'C_CORPORATION',
     remit: { street: '1 Supply Way', city: 'Austin', state: 'TX', postalCode: '78701', country: 'United States' } })
   expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+  return code
+}
+
+/**
+ * A bank account of its own for one run of the bank tests (ROADMAP F5d), on a cash account of its own: its cutover
+ * with nothing outstanding (an opening entry is posted first when the books have none), two transfers with the
+ * operating account in January, and its January statement imported with them and a 15.00 service fee. Returns the
+ * bank code. The tables only grow: every run makes new ones.
+ */
+export async function prepareBank(request: APIRequestContext, treasurer: Treasurer): Promise<string> {
+  const admin = await token(request, ADMIN)
+  const controller = await token(request, CONTROLLER)
+  const code = `E2E${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
+  if ((await find(request, admin, 'urn:jabiz:dataset:default:FinJournal', 'source', 'OPENING')).length === 0) {
+    const opening = await run(request, admin, 'FIN_OPENING_POST', { postingDate: '2025-12-31',
+      description: 'Opening balances', lines: [
+        { accountCode: '1010', debit: '1000.00' }, { accountCode: '2100', credit: '1000.00' }] })
+    expect(opening.status, JSON.stringify(opening.body)).toBe(200)
+  }
+  const account = await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: `C-${code}`,
+    accountName: `Cash ${code}`, financialType: 'ASSET', normalBalance: 'DEBIT',
+    statementLine: 'Cash and cash equivalents', controlClass: 'BANK' })
+  expect(account.status, JSON.stringify(account.body)).toBe(200)
+  const treasury = await steppedUp(request, treasurer)
+  const bank = await run(request, treasury, 'FIN_BANK_ACCOUNT_SAVE', { bankCode: code,
+    bankName: 'Lakeside National Bank', glAccount: `C-${code}`, routingNumber: '111000025',
+    companyAccountNumber: `9${Date.now().toString().slice(-9)}` })
+  expect(bank.status, JSON.stringify(bank.body)).toBe(200)
+  const cutover = await run(request, admin, 'FIN_BANK_OPENING_ITEMS', { bankCode: code, statementBalance: '0.00',
+    items: [] })
+  expect(cutover.status, JSON.stringify(cutover.body)).toBe(200)
+  for (const [from, to, amount, day] of [['OPERATING', code, '1200.00', '2026-01-10'],
+    [code, 'OPERATING', '300.00', '2026-01-20']]) {
+    const moved = await run(request, treasury, 'FIN_BANK_TRANSFER_POST', { fromBank: from, toBank: to, amount,
+      sentDate: day, receivedDate: day })
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200)
+  }
+  const rule = await run(request, controller, 'FIN_BANK_ENTRY_RULE_SAVE', { ruleCode: 'E2E-FEE',
+    keywords: 'service fee', direction: 'PAYMENT', account: '6400', documentPrefix: 'BANK-FEE',
+    description: 'Account service fee' })
+  expect(rule.status, JSON.stringify(rule.body)).toBe(200)
+
+  const accountant = await token(request, ACCOUNTANT)
+  const csv = ['date,bank_reference,description,amount', '2026-01-01,OPENING,OPENING LEDGER BALANCE,0.00',
+    `2026-01-10,${code}-1,TRANSFER FROM OPERATING,1200.00`, `2026-01-20,${code}-2,TRANSFER TO OPERATING,-300.00`,
+    `2026-01-31,${code}-3,ACCOUNT SERVICE FEE,-15.00`, '2026-01-31,CLOSING,CLOSING LEDGER BALANCE,885.00'].join('\n')
+  const uploaded = await request.post('/api/files?policy=fin.bank.statement', {
+    headers: { Authorization: `Bearer ${accountant}` },
+    multipart: { file: { name: `${code}.csv`, mimeType: 'text/csv', buffer: Buffer.from(csv) } },
+  })
+  expect(uploaded.status(), await uploaded.text()).toBe(201)
+  const imported = await request.post('/api/imports/finance.bank_statement/commit', {
+    headers: { Authorization: `Bearer ${accountant}` },
+    data: { fileId: (await uploaded.json()).fileId, params: { bankCode: code } },
+  })
+  expect(imported.status(), await imported.text()).toBe(200)
   return code
 }
