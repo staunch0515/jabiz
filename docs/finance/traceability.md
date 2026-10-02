@@ -131,3 +131,16 @@
 | FIN-BK-008 | Reconciliation report and sign-off | 完成 | 审批对象 `fin.bank.reconciliation`、规则 `FIN-BANK-REC`（`FIN_SETUP`）、`FIN_BANK_REC_APPROVAL_RESULT`、`FIN_BANK_REC_ISSUE`（`REPORT_ISSUE`）、签核后匹配不能撤销 | `it/BankReconciliationIT`（准备人不能签核；无规则不能完成；审批中账面变化回到准备；2 月过账后重印相同）、`it/FinScn05IT`、页面 `bank/ReconciliationPage.test.tsx`、`e2e/bank.spec.ts` |
 | FIN-BK-009 | Outstanding items carried forward | 完成 | 调节表按日计未达项（未匹配的项逐期带入）、模板 `finance.bank.stale_checks` | `it/BankReconciliationIT`（95 天的支票被列出） |
 | FIN-BK-010 | Cash position | 完成 | 模板 `finance.bank.cash_position` | `it/FinScn05IT`（1010 账面 211,555.00、对账单 256,555.00；P-7902 22,000.00 于 2026-02-08 到期）、`it/BankReconciliationIT` |
+
+## F6 固定资产
+
+路径简写：`fa/` = `backend/finance/src/main/java/com/jabiz/finance/fa/`，`calc/` = `backend/finance/src/main/java/com/jabiz/finance/calc/`
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-FA-001 | Asset classes | 完成（F6a） | `FinAssetClass`（迁移 V17）、`FIN_FA_CLASS_SAVE`（`fa/AssetClassProcesses`）；资本化门槛在登记时检查 | `it/AssetIT`（FA-003 取 Computer equipment 36 月直线；门槛以下的账单行被拒） |
+| FIN-FA-002 | Asset register | 部分（F6a：登记、来源、历史；期末合计随 F6b 的运行） | `FinAsset`（类别、方法、年限、残值、惯例、地点、保管人、状态、来源 BILL / ACQUISITION / OPENING）、`FIN_FA_ASSET_SAVE`、`FIN_FA_ACQUIRE`、账单资本化 `FIN_ASSET_CREATE` | `it/AssetIT`、`it/AssetOpeningAfterBillsIT` |
+| FIN-FA-003 | Depreciation methods | 部分（F6a：计算） | `calc/Depreciation`（直线、200% / 150% 余额递减并转直线；工作量法 `byUse`） | `DepreciationTest`（FA-001 2,000.00、FA-002 1,666.67、转直线） |
+| FIN-FA-004 | Conventions and rounding | 部分（F6a：计算） | `calc/Depreciation`（全月、月中、次月；按资产 × 月舍入，尾差在资产年度与寿命末月） | `DepreciationTest`（FA-003 1 月 333.33、全寿命 12,000.00；属性测试：全寿命 = 成本 − 残值） |
+| FIN-FA-006 | Changes in estimates | 部分（F6a：计算） | `calc/Depreciation.restart` | `DepreciationTest`（FA-001 延长 12 个月：1,489.36） |
+| FIN-DI-001/002 | 资产期初导入 | 完成（资产） | `FIN_FA_OPENING`（`fa/AssetOpeningProcesses`）、导入 `finance.fixed_assets`（`io/AssetImports`） | `it/AssetIT`（合计 ≠ 1500 / 1510 / 1590 整体拒收；FA-001、FA-002 带累计登记；只一次）、`it/AssetOpeningAfterBillsIT`（FA-003 由账单在先时补齐类别与条件） |
