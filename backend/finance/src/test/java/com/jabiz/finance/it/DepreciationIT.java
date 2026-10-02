@@ -6,6 +6,7 @@ import com.jabiz.finance.fa.AssetClassProcesses;
 import com.jabiz.finance.fa.AssetEntities;
 import com.jabiz.finance.fa.AssetEventProcesses;
 import com.jabiz.finance.fa.AssetProcesses;
+import com.jabiz.finance.fa.AssetScheduleProcesses;
 import com.jabiz.finance.fa.DepreciationEntities;
 import com.jabiz.finance.fa.DepreciationProcesses;
 import com.jabiz.finance.gl.AccountTypes;
@@ -278,7 +279,8 @@ class DepreciationIT extends FinanceItSupport {
         Map<String, Object> bill = new HashMap<>(Map.of("vendorCode", "V400", "vendorInvoiceNo", "FURN-01",
             "invoiceDate", "2026-02-03", "lines", List.of(Map.of("description", "Desks", "amount", "3600.00",
                 "account", "1530"))));
-        ok(BillProcesses.POST, clerk, Map.of("billId", ok(BillProcesses.SAVE, clerk, bill).get("billId")));
+        Object desksBill = ok(BillProcesses.SAVE, clerk, bill).get("billId");
+        ok(BillProcesses.POST, clerk, Map.of("billId", desksBill));
         Map<String, Object> desks = find(AssetEntities.ASSET_DATASET, "costAccount", "1530").getFirst();
         Map<String, Object> unclassified = run(DepreciationProcesses.RUN, accountant, Map.of("periodKey", "2026-02"))
             .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
@@ -300,6 +302,9 @@ class DepreciationIT extends FinanceItSupport {
         });
         assertThat(refused(AssetEventProcesses.USAGE, accountant, Map.of("assetId", assetId,
             "periodKey", "2026-02", "units", "200"), 422)).isEqualTo(AssetEventProcesses.USAGE_RUN);
+        // A bill whose asset has been depreciated is no longer voided: the asset's months would be lost.
+        assertThat(refused(BillProcesses.VOID, controller, Map.of("billId", desksBill, "voidDate", "2026-02-28",
+            "reason", "Entered twice"), 422)).isEqualTo(BillProcesses.ASSET_DEPRECIATED);
     }
 
     @Test
@@ -326,6 +331,12 @@ class DepreciationIT extends FinanceItSupport {
         // In service in January, registered after January and February were run: its disposal takes January too.
         Map<String, Object> late = ok(AssetProcesses.ACQUIRE, controller, acquisition("Late printer", "3600.00",
             "2026-01-10"));
+        // Its months ahead begin with the next run, March, which takes January and February too.
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> ahead = (List<Map<String, Object>>) ok(AssetScheduleProcesses.PROJECT, controller,
+            Map.of("assetId", late.get("assetId"), "months", 2)).get("months");
+        assertThat(ahead).extracting(m -> m.get("periodKey") + " " + amount(m.get("amount")).toPlainString())
+            .containsExactly("2026-03 300.00", "2026-04 100.00");
         Map<String, Object> printer = ok(AssetEventProcesses.DISPOSE, controller, Map.of("assetId",
             late.get("assetId"), "disposalDate", "2026-02-20", "kind", "WRITE_OFF", "proceeds", "0.00",
             "reason", "Stolen"));
@@ -369,6 +380,61 @@ class DepreciationIT extends FinanceItSupport {
 
     @Test
     @Order(8)
+    void theRegisterAndTheRollForwardEqualTheLedger() {
+        // January to March: three runs (March's reversed), two disposals and a write-off, a change in estimate,
+        // and a bill for a cabinet voided before anything was depreciated.
+        String clerk = inRoles("ap-clerk", FinanceRoles.PAYABLES_CLERK);
+        Object cabinetBill = ok(BillProcesses.SAVE, clerk, new HashMap<>(Map.of("vendorCode", "V400",
+            "vendorInvoiceNo", "FURN-02", "invoiceDate", "2026-03-05", "lines", List.of(Map.of(
+                "description", "Cabinet", "amount", "2600.00", "account", "1530"))))).get("billId");
+        ok(BillProcesses.POST, clerk, Map.of("billId", cabinetBill));
+        ok(BillProcesses.VOID, controller, Map.of("billId", cabinetBill, "voidDate", "2026-03-20",
+            "reason", "Returned"));
+        // Held on the days between: the register is the ledger's 1530 then too.
+        BigDecimal held = report("finance.fa.register", controller, Map.of("asOf", "2026-03-10")).stream()
+            .filter(r -> "1530".equals(r.get("costAccount"))).map(r -> amount(r.get("cost")))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(held).isEqualByComparingTo("6200.00").isEqualByComparingTo(ledgerBalances("2026-03-10").get("1530"));
+        Map<String, BigDecimal> ledger = ledgerBalances("2026-03-31");
+        Map<String, BigDecimal> registerCost = new java.util.TreeMap<>();
+        BigDecimal registerAccumulated = BigDecimal.ZERO;
+        for (Map<String, Object> row : report("finance.fa.register", controller, Map.of("asOf", "2026-03-31"))) {
+            registerCost.merge((String) row.get("costAccount"), amount(row.get("cost")), BigDecimal::add);
+            registerAccumulated = registerAccumulated.add(amount(row.get("accumulated")));
+        }
+        Map<String, BigDecimal> closingCost = new java.util.TreeMap<>();
+        BigDecimal closingAccumulated = BigDecimal.ZERO;
+        BigDecimal disposed = BigDecimal.ZERO;
+        BigDecimal depreciation = BigDecimal.ZERO;
+        for (Map<String, Object> row : report("finance.fa.roll_forward", controller, Map.of("from", "2026-01-01",
+            "to", "2026-03-31"))) {
+            closingCost.merge((String) row.get("costAccount"), amount(row.get("costClosing")), BigDecimal::add);
+            closingAccumulated = closingAccumulated.add(amount(row.get("accumulatedClosing")));
+            disposed = disposed.add(amount(row.get("disposals")));
+            depreciation = depreciation.add(amount(row.get("depreciation")));
+        }
+        for (String account : List.of("1500", "1510", "1520", "1530")) {
+            BigDecimal books = ledger.getOrDefault(account, BigDecimal.ZERO);
+            assertThat(registerCost.getOrDefault(account, BigDecimal.ZERO)).as(account).isEqualByComparingTo(books);
+            assertThat(closingCost.getOrDefault(account, BigDecimal.ZERO)).as(account).isEqualByComparingTo(books);
+        }
+        assertThat(registerAccumulated.negate()).isEqualByComparingTo(ledger.get("1590"));
+        assertThat(closingAccumulated.negate()).isEqualByComparingTo(ledger.get("1590"));
+        // FA-002, FA-003, the printer and the voided cabinet went; January 4,000.00, February 3,422.69, the
+        // printer's 100.00.
+        assertThat(disposed).isEqualByComparingTo("88200.00");
+        assertThat(depreciation).isEqualByComparingTo("7522.69");
+        // The schedule's past: FA-001 by month, the printer's disposal month among them.
+        assertThat(report("finance.fa.depreciation_schedule", controller, Map.of("assetNo", "FA-001")))
+            .extracting(r -> r.get("periodKey") + " " + amount(r.get("amount")).toPlainString())
+            .containsExactly("2026-01 2000.00", "2026-02 1489.36");
+        assertThat(report("finance.fa.depreciation_schedule", controller, Map.of("fromPeriod", "2026-02",
+            "toPeriod", "2026-02"))).filteredOn(r -> "DISPOSAL".equals(r.get("source"))).singleElement()
+            .satisfies(r -> assertThat(amount(r.get("amount"))).isEqualByComparingTo("100.00"));
+    }
+
+    @Test
+    @Order(9)
     void theRunsAndTheirLinesAreOnlyAppended() {
         assertOnlyInserted("fi_depreciation_run_version", "fi_depreciation_line_version", "fi_asset_change_version",
             "fi_asset_disposal_version", "fi_asset_usage_version", "fi_asset_version");

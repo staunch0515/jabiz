@@ -13,7 +13,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,32 +146,5 @@ class OpeningIT extends FinanceItSupport {
         assertThat(find(MigrationEntities.DECISION_DATASET, "legacyValue", "1199")).singleElement()
             .satisfies(decision -> assertThat(decision).containsEntry("decidedValue", "1200")
                 .containsEntry("decidedBy", "migrating-controller"));
-    }
-
-    /** FIN-EXP-01 as `21-expected-results.md` writes it: account, debit, credit. */
-    private static Map<String, BigDecimal[]> expectedOpeningTrialBalance() throws IOException {
-        Map<String, BigDecimal[]> expected = new LinkedHashMap<>();
-        boolean inTable = false;
-        for (String text : Files.readAllLines(SAMPLE_COMPANY.resolveSibling("21-expected-results.md"))) {
-            if (text.startsWith("## ")) {
-                inTable = text.contains("FIN-EXP-01");
-                continue;
-            }
-            if (!inTable || !text.startsWith("| ")) {
-                continue;
-            }
-            String[] cells = text.split("\\|", -1);
-            String code = cells[1].trim();
-            if (!code.matches("\\d{4}")) {
-                continue;
-            }
-            expected.put(code, new BigDecimal[] {money(cells[3]), money(cells[4])});
-        }
-        return expected;
-    }
-
-    private static BigDecimal money(String cell) {
-        String text = cell.trim().replace(",", "");
-        return text.isEmpty() ? BigDecimal.ZERO : new BigDecimal(text);
     }
 }

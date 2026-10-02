@@ -109,6 +109,7 @@
 | FIN-AP-020 | 1099 classification | 完成 | 供应商与账单行的表与栏（F4a、F4b）；`FIN_PAYMENT_RECORD` 按行分摊（`calc/Form1099Allocation`）；方式 CARD 不计入 | `it/FinScn04IT`、`Form1099AllocationTest` |
 | FIN-AP-022 | 1099 outputs | 完成（州金额随联合申报列给出） | 审核报表 `finance.ap.form_1099_review`、`FIN_1099_ISSUE`（单据 `finance.ap.form_1099`）、`FIN_1099_EXPORT`（`calc/Form1099File`、`Fin1099Filing`） | `it/FinScn04IT`、`Form1099AllocationTest` |
 | FIN-AP-023 | 1099 corrections | 完成 | `FIN_1099_CORRECT`（与最后一次申报比较，CORRECTED） | `it/FinScn04IT` |
+| FIN-SCN-01 | Set up the books | 完成 | F1–F6 | `it/FinScn01IT`（试算表 = FIN-EXP-01；应收、应付、资产子账 = 控制科目；不平衡期初文件被拒；无职责冲突；TIN 遮蔽；FIN-EXP-11） |
 | FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
 | FIN-SCN-05 | Bank reconciliation | 完成 | F5a–F5c | `it/FinScn05IT`（8 个匹配、手续费与利息分录、撤销再匹配、调节表 = FIN-EXP-10、2 月过账后重印相同） |
 | FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
@@ -139,10 +140,11 @@
 | 需求 | 标题 | 状态 | 实现 | 测试 |
 |---|---|---|---|---|
 | FIN-FA-001 | Asset classes | 完成（F6a） | `FinAssetClass`（迁移 V17）、`FIN_FA_CLASS_SAVE`（`fa/AssetClassProcesses`）；资本化门槛在登记时检查 | `it/AssetIT`（FA-003 取 Computer equipment 36 月直线；门槛以下的账单行被拒） |
-| FIN-FA-002 | Asset register | 部分（F6a：登记、来源、历史；F6b：运行写入累计与状态；登记簿报表随 F6c） | `FinAsset`（类别、方法、年限、残值、惯例、地点、保管人、状态、来源 BILL / ACQUISITION / OPENING）、`FIN_FA_ASSET_SAVE`、`FIN_FA_ACQUIRE`、账单资本化 `FIN_ASSET_CREATE` | `it/AssetIT`、`it/AssetOpeningAfterBillsIT` |
+| FIN-FA-002 | Asset register | 完成（F6a–F6c） | `FinAsset`（类别、方法、年限、残值、惯例、地点、保管人、状态、来源 BILL / ACQUISITION / OPENING）、`FIN_FA_ASSET_SAVE`、`FIN_FA_ACQUIRE`、账单资本化 `FIN_ASSET_CREATE` | `it/AssetIT`、`it/AssetOpeningAfterBillsIT`、`it/FinScn01IT`（资产子账 = 1500 / 1510 / 1520 / 1590） |
 | FIN-FA-003 | Depreciation methods | 完成（F6a 计算，F6b 运行与工作量） | `calc/Depreciation`（直线、200% / 150% 余额递减并转直线；工作量法 `byUse`）、`FinAssetUsage`、`FIN_FA_USAGE_RECORD`（`fa/AssetEventProcesses`） | `DepreciationTest`（FA-001 2,000.00、FA-002 1,666.67、转直线）、`it/DepreciationIT`（工作量 150 / 1,000 单位 = 1,500.00；未录用量整体拒收） |
 | FIN-FA-004 | Conventions and rounding | 完成（F6a 计算，F6b 运行） | `calc/Depreciation`（全月、月中、次月；按资产 × 月舍入，尾差在资产年度与寿命末月） | `DepreciationTest`（FA-003 1 月 333.33、全寿命 12,000.00；属性测试：全寿命 = 成本 − 残值） |
 | FIN-FA-005 | Depreciation run | 完成（F6b） | `FinDepreciationRun` / `FinDepreciationLine`（迁移 V18）、`FIN_FA_DEPRECIATION_RUN` / `FIN_FA_DEPRECIATION_REVERSE`（`fa/DepreciationProcesses`）、`fa/AssetPlans` | `it/DepreciationIT`（DEP-2601 = FIN-EXP-11 的 6700 / 1590 4,000.00，明细 2,000.00 / 1,666.67 / 333.33；再运行不过账；已结期间、跳月、未分类拒绝；冲回后 DEP-2601-2） |
 | FIN-FA-006 | Changes in estimates | 完成（F6b） | `calc/Depreciation.restart`、`FinAssetChange`、`FIN_FA_CHANGE_ESTIMATE`（`fa/AssetEventProcesses`） | `DepreciationTest`、`it/DepreciationIT`（FA-001 自 2026-02 延长 12 个月：1,489.36，1 月不变；DEP-2602 取新条件） |
 | FIN-FA-007 | Disposal | 完成（F6b） | `FinAssetDisposal`、`FIN_FA_DISPOSE`（`fa/AssetEventProcesses`）、`FinFaSettings.gainLossAccount` | `it/DepreciationIT`（FA-002 1 月运行后以 60,000.00 出售：收益 1,666.67；报废损失 11,333.34；之前月份未运行拒绝） |
+| FIN-FA-009 | Asset reports | 完成（F6c） | 模板 `finance.fa.register`、`finance.fa.roll_forward`、`finance.fa.depreciation_schedule`；预测 `FIN_FA_SCHEDULE_PROJECT`（`fa/AssetScheduleProcesses`）；页面 `finance-web/src/assets` | `it/FinScn01IT`（FIN-EXP-11；滚动表 190,000.00 → 202,000.00、58,000.00 → 62,000.00；FA-003 预测合计 12,000.00）、`it/DepreciationIT`（1–3 月与总账一致）、`assets.spec.ts` |
 | FIN-DI-001/002 | 资产期初导入 | 完成（资产） | `FIN_FA_OPENING`（`fa/AssetOpeningProcesses`）、导入 `finance.fixed_assets`（`io/AssetImports`） | `it/AssetIT`（合计 ≠ 1500 / 1510 / 1590 整体拒收；FA-001、FA-002 带累计登记；只一次）、`it/AssetOpeningAfterBillsIT`（FA-003 由账单在先时补齐类别与条件） |

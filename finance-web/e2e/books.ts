@@ -49,6 +49,10 @@ const ACCOUNTS = [
     statementLine: 'Operating expenses' },
   { accountCode: '6500', accountName: 'Software Subscriptions', financialType: 'EXPENSE', normalBalance: 'DEBIT',
     statementLine: 'Operating expenses' },
+  { accountCode: '1590', accountName: 'Accumulated Depreciation', financialType: 'ASSET', normalBalance: 'CREDIT',
+    statementLine: 'Property and equipment, net', controlClass: 'FA_ACCUM' },
+  { accountCode: '6700', accountName: 'Depreciation Expense', financialType: 'EXPENSE', normalBalance: 'DEBIT',
+    statementLine: 'Operating expenses' },
 ]
 
 /** A name no earlier run used: the tables only grow. */
@@ -382,12 +386,7 @@ export async function prepareBank(request: APIRequestContext, treasurer: Treasur
   const admin = await token(request, ADMIN)
   const controller = await token(request, CONTROLLER)
   const code = `E2E${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
-  if ((await find(request, admin, 'urn:jabiz:dataset:default:FinJournal', 'source', 'OPENING')).length === 0) {
-    const opening = await run(request, admin, 'FIN_OPENING_POST', { postingDate: '2025-12-31',
-      description: 'Opening balances', lines: [
-        { accountCode: '1010', debit: '1000.00' }, { accountCode: '2100', credit: '1000.00' }] })
-    expect(opening.status, JSON.stringify(opening.body)).toBe(200)
-  }
+  await ensureOpening(request, admin)
   const account = await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: `C-${code}`,
     accountName: `Cash ${code}`, financialType: 'ASSET', normalBalance: 'DEBIT',
     statementLine: 'Cash and cash equivalents', controlClass: 'BANK' })
@@ -426,4 +425,58 @@ export async function prepareBank(request: APIRequestContext, treasurer: Treasur
   })
   expect(imported.status(), await imported.text()).toBe(200)
   return code
+}
+
+/** The books' cutover: an opening entry is posted when the books have none. */
+async function ensureOpening(request: APIRequestContext, admin: string) {
+  if ((await find(request, admin, 'urn:jabiz:dataset:default:FinJournal', 'source', 'OPENING')).length === 0) {
+    const opening = await run(request, admin, 'FIN_OPENING_POST', { postingDate: '2025-12-31',
+      description: 'Opening balances', lines: [
+        { accountCode: '1010', debit: '1000.00' }, { accountCode: '2100', credit: '1000.00' }] })
+    expect(opening.status, JSON.stringify(opening.body)).toBe(200)
+  }
+}
+
+/**
+ * An asset of its own for one run of the asset tests (ROADMAP F6c): a class on a cost account of its own,
+ * straight-line over 36 months, and an asset of 3,600.00 acquired against the operating account and placed in service
+ * in January 2026, after the books' cutover. Runs an earlier, failed run of the tests left posted are taken back first,
+ * so the month to run is January again. Returns its description, which no other run uses.
+ */
+export async function prepareAsset(request: APIRequestContext): Promise<string> {
+  await prepareBooks(request)
+  const admin = await token(request, ADMIN)
+  const controller = await token(request, CONTROLLER)
+  await ensureOpening(request, admin)
+  await reverseRuns(request)
+  const code = `E${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
+  const account = await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: `A-${code}`,
+    accountName: `Equipment ${code}`, financialType: 'ASSET', normalBalance: 'DEBIT',
+    statementLine: 'Property and equipment, net', controlClass: 'FA_COST' })
+  expect(account.status, JSON.stringify(account.body)).toBe(200)
+  const assetClass = await run(request, controller, 'FIN_FA_CLASS_SAVE', { classCode: code, className: `Equipment ${code}`,
+    costAccount: `A-${code}`, accumulatedAccount: '1590', expenseAccount: '6700', method: 'SL', lifeMonths: 36,
+    convention: 'FULL_MONTH', threshold: '1000.00' })
+  expect(assetClass.status, JSON.stringify(assetClass.body)).toBe(200)
+  const description = `Workstation ${code}`
+  const acquired = await run(request, controller, 'FIN_FA_ACQUIRE', { classCode: code, description, cost: '3600.00',
+    inServiceDate: '2026-01-05', offsetAccount: '1010' })
+  expect(acquired.status, JSON.stringify(acquired.body)).toBe(200)
+  return description
+}
+
+/**
+ * Takes back the posted depreciation runs, latest first, so that every run of the asset tests starts from January
+ * (the tables only grow; a run is reversed, never deleted).
+ */
+export async function reverseRuns(request: APIRequestContext) {
+  const accountant = await token(request, ACCOUNTANT)
+  for (let i = 0; i < 24; i++) {
+    const posted = await find(request, accountant, 'urn:jabiz:dataset:default:FinDepreciationRun', 'status', 'POSTED')
+    const latest = posted.map((r) => String(r.attributes.periodKey)).sort().pop()
+    if (!latest) return
+    const reversed = await run(request, accountant, 'FIN_FA_DEPRECIATION_REVERSE', { periodKey: latest,
+      reason: 'End-to-end test: back to the first month' })
+    expect(reversed.status, JSON.stringify(reversed.body)).toBe(200)
+  }
 }

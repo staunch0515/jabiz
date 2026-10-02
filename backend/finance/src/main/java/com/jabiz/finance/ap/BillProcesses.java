@@ -108,6 +108,7 @@ public final class BillProcesses {
     public static final String EXCEEDS = "FIN_BILL_CREDIT_EXCEEDS";
     public static final String OWN_DOCUMENT = "FIN_BILL_OWN_DOCUMENT";
     public static final String APPLIED = "FIN_BILL_APPLIED";
+    public static final String ASSET_DEPRECIATED = "FIN_BILL_ASSET_DEPRECIATED";
     public static final String APPLY_REFUSED = "FIN_AP_APPLY_REFUSED";
     public static final String BOX = "FIN_BILL_1099_BOX";
     public static final String NOT_PREPARER = "FIN_BILL_NOT_PREPARER";
@@ -828,6 +829,18 @@ public final class BillProcesses {
                     || bill.<BigDecimal>get("openAmount").compareTo(bill.get("total")) != 0) {
                     ctx.reject(new Violation("billId", APPLIED, "Something was applied to or paid on "
                         + bill.get("billNo") + "; take it back first", Map.of("billNo", (Object) bill.get("billNo"))));
+                    return;
+                }
+                // Its assets go with it: not once something was depreciated or disposed of (F6c), which the
+                // register and the roll-forward could no longer show.
+                List<String> used = list(ctx, ASSETS).stream()
+                    .filter(a -> Boolean.TRUE.equals(a.get("active")) && (a.get("depreciatedThrough") != null
+                        || AssetEntities.DISPOSED.equals(a.get("status"))))
+                    .map(a -> (String) a.get("assetNo")).toList();
+                if (!used.isEmpty()) {
+                    ctx.reject(new Violation("billId", ASSET_DEPRECIATED, "Assets of " + bill.get("billNo")
+                        + " have been depreciated or disposed of: " + String.join(", ", used),
+                        Map.of("billNo", (Object) bill.get("billNo"), "assets", String.join(", ", used))));
                     return;
                 }
                 if (input.voidDate().isBefore(bill.get("invoiceDate"))) {

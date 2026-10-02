@@ -187,6 +187,12 @@ class FaConfig {
     }
 
     @Bean
+    ProcessDefinition<AssetScheduleProcesses.ProjectInput, AssetScheduleProcesses.ProjectOutput, ProcessContext>
+        finFaScheduleProjectProcess() {
+        return AssetScheduleProcesses.PROJECT_PROCESS;
+    }
+
+    @Bean
     StaticDictionary depreciationRunStatusDictionary() {
         return StaticDictionary.define(DepreciationEntities.RUN_STATUSES, d -> d
             .item(DepreciationEntities.POSTED, "en", "Posted")
