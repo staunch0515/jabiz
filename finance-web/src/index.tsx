@@ -1,5 +1,11 @@
-import { BookOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
+import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
+  from './bank/api'
+import MatchingPage from './bank/MatchingPage'
+import { MATCHING_PATH, RECONCILIATIONS_PATH } from './bank/paths'
+import ReconciliationListPage from './bank/ReconciliationListPage'
+import ReconciliationPage from './bank/ReconciliationPage'
 import JournalEntryRoute from './journal/JournalEntryRoute'
 import JournalListPage from './journal/JournalListPage'
 import { JOURNALS_PATH, NEW_JOURNAL_PATH } from './journal/paths'
@@ -22,7 +28,7 @@ import ReceiptRoute from './receivables/ReceiptRoute'
 /**
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
  * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
- * register and bill entry, payment runs and the payment register. Accounts,
+ * register and bill entry, payment runs and the payment register; bank matching and reconciliations. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -44,6 +50,9 @@ export default defineExtension({
     { path: NEW_RUN_PATH, element: <ProposeRunPage /> },
     { path: `${RUNS_PATH}/:runId`, element: <PaymentRunPage /> },
     { path: PAYMENTS_PATH, element: <PaymentListPage /> },
+    { path: MATCHING_PATH, element: <MatchingPage /> },
+    { path: RECONCILIATIONS_PATH, element: <ReconciliationListPage /> },
+    { path: `${RECONCILIATIONS_PATH}/:reconciliationId`, element: <ReconciliationPage /> },
   ],
   menu: [
     {
@@ -107,6 +116,42 @@ export default defineExtension({
           permission: AP_PERMISSIONS.settings },
         { key: 'bankAccounts', label: 'menu.bankAccounts', path: paths.dataset(AP_DATASETS.bank),
           permission: AP_PERMISSIONS.bank },
+      ],
+    },
+    {
+      key: 'bank',
+      label: 'menu.bank',
+      icon: <BankOutlined />,
+      children: [
+        { key: 'bankMatching', label: 'menu.bankMatching', path: MATCHING_PATH, permission: BANK_PERMISSIONS.read },
+        { key: 'reconciliations', label: 'menu.reconciliations', path: RECONCILIATIONS_PATH,
+          permission: BANK_PERMISSIONS.read },
+        { key: 'statementImport', label: 'menu.statementImport', path: paths.importRun(BANK_IMPORTS.csv),
+          permission: BANK_PERMISSIONS.statementImport },
+        { key: 'statementImportBai2', label: 'menu.statementImportBai2', path: paths.importRun(BANK_IMPORTS.bai2),
+          permission: BANK_PERMISSIONS.statementImport },
+        { key: 'statementImportCamt', label: 'menu.statementImportCamt', path: paths.importRun(BANK_IMPORTS.camt053),
+          permission: BANK_PERMISSIONS.statementImport },
+        { key: 'statements', label: 'menu.statements', path: paths.dataset(BANK_DATASETS.statement),
+          permission: BANK_PERMISSIONS.read },
+        { key: 'transfers', label: 'menu.transfers', path: paths.dataset(BANK_DATASETS.transfer),
+          permission: BANK_PERMISSIONS.read },
+        { key: 'newTransfer', label: 'menu.newTransfer', path: paths.process('FIN_BANK_TRANSFER_POST', 1),
+          permission: BANK_PERMISSIONS.transfer },
+        { key: 'cashPosition', label: 'menu.cashPosition', path: paths.report(BANK_QUERIES.cashPosition),
+          permission: BANK_PERMISSIONS.read },
+        { key: 'staleChecks', label: 'menu.staleChecks', path: paths.report(BANK_QUERIES.staleChecks),
+          permission: BANK_PERMISSIONS.read },
+        { key: 'matchHistory', label: 'menu.matchHistory', path: paths.report(BANK_QUERIES.matchHistory),
+          permission: BANK_PERMISSIONS.read },
+        { key: 'recArchive', label: 'menu.recArchive', path: paths.reportArchive(BANK_QUERIES.reconciliation),
+          permission: BANK_PERMISSIONS.archive },
+        { key: 'entryRules', label: 'menu.entryRules', path: paths.dataset(BANK_DATASETS.rule),
+          permission: BANK_PERMISSIONS.master },
+        { key: 'bankSettings', label: 'menu.bankSettings', path: paths.dataset(BANK_DATASETS.settings),
+          permission: BANK_PERMISSIONS.settings },
+        { key: 'openingItemsImport', label: 'menu.openingItemsImport', path: paths.importRun(BANK_IMPORTS.opening),
+          permission: BANK_PERMISSIONS.migration },
       ],
     },
     {

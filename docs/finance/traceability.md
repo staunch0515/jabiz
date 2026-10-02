@@ -110,5 +110,24 @@
 | FIN-AP-022 | 1099 outputs | 完成（州金额随联合申报列给出） | 审核报表 `finance.ap.form_1099_review`、`FIN_1099_ISSUE`（单据 `finance.ap.form_1099`）、`FIN_1099_EXPORT`（`calc/Form1099File`、`Fin1099Filing`） | `it/FinScn04IT`、`Form1099AllocationTest` |
 | FIN-AP-023 | 1099 corrections | 完成 | `FIN_1099_CORRECT`（与最后一次申报比较，CORRECTED） | `it/FinScn04IT` |
 | FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
+| FIN-SCN-05 | Bank reconciliation | 完成 | F5a–F5c | `it/FinScn05IT`（8 个匹配、手续费与利息分录、撤销再匹配、调节表 = FIN-EXP-10、2 月过账后重印相同） |
 | FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
 
+
+## F5 银行与对账
+
+路径简写：`bank/` = `backend/finance/src/main/java/com/jabiz/finance/bank/`，`io/` = `backend/finance/src/main/java/com/jabiz/finance/io/`。
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-BK-001 | Bank accounts | 完成 | `FinBankAccount`（F4a；F5a 加对账单格式，一个现金科目只对应一个账户）、`FIN_BANK_ACCOUNT_SAVE`、`FinBankSettings` / `FIN_BANK_SETTINGS_SET` | `it/BankStatementIT`（1010、1050；账号遮蔽，Treasurer 逐值显示） |
+| FIN-BK-002 | Bank transfers | 完成 | `FinBankTransfer`（迁移 V14）、`FIN_BANK_TRANSFER_POST` / `_RECEIVE` / `_VOID`（`bank/TransferProcesses`，同日一笔，跨日经在途科目） | `it/BankStatementIT`（50,000.00：1050 减、1010 增；在途与作废）；两边的匹配随 F5b |
+| FIN-BK-003 | Statement import | 完成（OFX 不做，F5 计划 D3） | `FinBankStatement`、`FinStatementLine`、`FIN_BANK_STATEMENT_RECORD`（`bank/StatementProcesses`）、`calc/StatementCheck`、`io/Bai2Parser`、`io/Camt053Parser`、导入 `finance.bank_statement` / `_bai2` / `_camt053`（`io/StatementImports`） | `it/BankStatementIT`（10 行、256,555.00；同一文件 409；BAI2 与 camt.053 说明已记录、不增加；合计不符、不衔接、重叠、他人账户拒收）、`Bai2ParserTest`、`Camt053ParserTest`、`StatementCheckTest` |
+| FIN-DI-001 | Master-data import（未达银行项目） | 部分（银行） | `FinBankOpening`、`FinBankOpeningItem`、`FIN_BANK_OPENING_ITEMS`、导入 `finance.bank_opening_items` | `it/BankStatementIT`（253,200.00 − CHK-1045 3,200.00 = 1010 期初 250,000.00；不符拒收并给出差额；每个账户一次） |
+| FIN-BK-004 | Automatic matching | 完成 | `calc/BankMatcher`、`FIN_BANK_MATCH_PROPOSE` / `_ACCEPT`（`bank/MatchProcesses`）、模板 `finance.bank.book_items`、`finance.bank.statement_items` | `BankMatcherTest`（1 月的 8 个匹配、原因与置信度、性质测试）、`it/BankMatchIT` |
+| FIN-BK-005 | Manual matching and bank-originated entries | 完成 | `FIN_BANK_MATCH`（一对一、一对多、多对一）、`FinBankEntryRule`、`FinBankEntry`、`FIN_BANK_ENTRY_RULE_SAVE`、`FIN_BANK_ENTRY_FROM_LINE`（`bank/BankEntryProcesses`） | `it/BankMatchIT`（BANK-FEE-2601、BANK-INT-2601 已过账并匹配）、页面 `bank/MatchingPage.test.tsx`、`e2e/bank.spec.ts` |
+| FIN-BK-006 | Match history | 完成 | `FinBankMatch` / `FinBankMatchItem`（只写一次，撤销是新记录）、`FIN_BANK_UNMATCH`、模板 `finance.bank.match_history` | `it/BankMatchIT` |
+| FIN-BK-007 | Reconciliation | 完成 | `FinBankReconciliation`（迁移 V16）、`FIN_BANK_REC_PREPARE` / `_COMPLETE`（`bank/ReconciliationProcesses`）、模板 `finance.bank.reconciliation` | `it/BankReconciliationIT`（差额 10.00 不能完成；之前未签核的月份先签核）、`it/FinScn05IT`（= FIN-EXP-10） |
+| FIN-BK-008 | Reconciliation report and sign-off | 完成 | 审批对象 `fin.bank.reconciliation`、规则 `FIN-BANK-REC`（`FIN_SETUP`）、`FIN_BANK_REC_APPROVAL_RESULT`、`FIN_BANK_REC_ISSUE`（`REPORT_ISSUE`）、签核后匹配不能撤销 | `it/BankReconciliationIT`（准备人不能签核；无规则不能完成；审批中账面变化回到准备；2 月过账后重印相同）、`it/FinScn05IT`、页面 `bank/ReconciliationPage.test.tsx`、`e2e/bank.spec.ts` |
+| FIN-BK-009 | Outstanding items carried forward | 完成 | 调节表按日计未达项（未匹配的项逐期带入）、模板 `finance.bank.stale_checks` | `it/BankReconciliationIT`（95 天的支票被列出） |
+| FIN-BK-010 | Cash position | 完成 | 模板 `finance.bank.cash_position` | `it/FinScn05IT`（1010 账面 211,555.00、对账单 256,555.00；P-7902 22,000.00 于 2026-02-08 到期）、`it/BankReconciliationIT` |

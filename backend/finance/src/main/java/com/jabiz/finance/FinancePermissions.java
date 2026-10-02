@@ -164,6 +164,20 @@ public final class FinancePermissions {
     public static final String PAYMENT_VOID = "fin.payment.void";
     /** Issue Forms 1099, export them for filing and file corrections; reads the files with TINs in full (FIN-AP-022). */
     public static final String FORM_1099_FILE = "fin.1099.file";
+    /** Read bank statements, transfers, matches and reconciliations (phase F5). */
+    public static final String BANK_ACTIVITY_READ = "fin.bank.activity.read";
+    /** Import bank statements (FIN-BK-003). */
+    public static final String BANK_STATEMENT_IMPORT = "fin.bank.statement.import";
+    /** Move money between the company's bank accounts (FIN-BK-002): the treasury's. */
+    public static final String BANK_TRANSFER = "fin.bank.transfer";
+    /** Set the bank settings: the in-transit account, the matching window, the age of a stale check. */
+    public static final String BANK_SETTINGS = "fin.bank.settings";
+    /** Match statement lines to the books, undo matches and make entries from statement lines (FIN-BK-004…006). */
+    public static final String BANK_RECONCILE = "fin.bank.reconcile";
+    /** Review and sign off bank reconciliations another person prepared (FIN-BK-008). */
+    public static final String BANK_REC_REVIEW = "fin.bank.rec.review";
+    /** Run the platform's approval results into reconciliations: the platform's events only, never a user. */
+    public static final String BANK_REC_RESULT = "fin.bank.rec.result";
 
     private FinancePermissions() {}
 }
