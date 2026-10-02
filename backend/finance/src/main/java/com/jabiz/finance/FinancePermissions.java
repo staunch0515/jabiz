@@ -179,5 +179,12 @@ public final class FinancePermissions {
     /** Run the platform's approval results into reconciliations: the platform's events only, never a user. */
     public static final String BANK_REC_RESULT = "fin.bank.rec.result";
 
+    /** Read the fixed asset register, its classes, depreciation and reports (phase F6). */
+    public static final String FA_READ = "fin.fa.read";
+    /** Keep asset classes, the asset settings and the assets; acquire, change in estimate and dispose (FIN-FA-001…007). */
+    public static final String FA_MAINTAIN = "fin.fa.maintain";
+    /** Run depreciation and record units used (FIN-FA-005). */
+    public static final String FA_RUN = "fin.fa.run";
+
     private FinancePermissions() {}
 }
