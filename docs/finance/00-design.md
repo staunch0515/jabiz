@@ -394,6 +394,7 @@
 - 重估（F7c）：`FinFxRevaluationRun` / `Line`，模板 `finance.fx.revaluation_items` 给出某日开放的外币项目（应收、应付单据与外币银行账户，后者以对账单余额为外币余额），
   `FIN_FX_REVALUE` 按子账过账并于次日冲回（单据的美元不变，账龄在两日之间按重估显示），`FIN_FX_REVALUE_SIMULATE` 以当前或运行时刻的记录重新计算并比较。
   损益报表 `finance.fx.gains_losses`。
+- 页面（F7d）：`finance-web/src/fx/RevaluationPage`（运行、模拟）；应付登记簿按美元合计，付款批可选币种与汇率。
 
 ---
 

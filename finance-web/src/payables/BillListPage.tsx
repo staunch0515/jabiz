@@ -46,8 +46,9 @@ export default function BillListPage() {
     enabled: Boolean(range.from && range.to),
   })
   const rows = useMemo(() => register.data?.items ?? [], [register.data])
-  const total = useMemo(() => sum(rows.map((row) => row.total)), [rows])
-  const open = useMemo(() => sum(rows.map((row) => row.openAmount)), [rows])
+  // In US dollars: documents in other currencies do not add up in their own (F7).
+  const total = useMemo(() => sum(rows.map((row) => row.totalUsd ?? row.total)), [rows])
+  const open = useMemo(() => sum(rows.map((row) => row.openAmountUsd ?? row.openAmount)), [rows])
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -122,10 +123,15 @@ export default function BillListPage() {
             sorter: (a, b) => byText(a.dueDate, b.dueDate),
             render: (value: string | null) => (value ? formatDate(value) : ''),
           },
+          { title: t('payables.currency'), dataIndex: 'currency' },
           { title: t('payables.total'), dataIndex: 'total', align: 'right', sorter: (a, b) => byAmount(a.total, b.total),
             render: money },
           { title: t('payables.open'), dataIndex: 'openAmount', align: 'right',
             sorter: (a, b) => byAmount(a.openAmount, b.openAmount), render: money },
+          { title: t('payables.totalUsd'), dataIndex: 'totalUsd', align: 'right',
+            sorter: (a, b) => byAmount(a.totalUsd, b.totalUsd), render: money },
+          { title: t('payables.openUsd'), dataIndex: 'openAmountUsd', align: 'right',
+            sorter: (a, b) => byAmount(a.openAmountUsd, b.openAmountUsd), render: money },
           {
             title: t('payables.status'),
             dataIndex: 'status',
@@ -135,14 +141,14 @@ export default function BillListPage() {
         ]}
         summary={() => (
           <Table.Summary.Row>
-            <Table.Summary.Cell index={0} colSpan={7}>{t('payables.registerCount', { count: rows.length })}</Table.Summary.Cell>
-            <Table.Summary.Cell index={7} align="right">
+            <Table.Summary.Cell index={0} colSpan={10}>{t('payables.registerCount', { count: rows.length })}</Table.Summary.Cell>
+            <Table.Summary.Cell index={10} align="right">
               <span data-testid="register-total">{money(total)}</span>
             </Table.Summary.Cell>
-            <Table.Summary.Cell index={8} align="right">
+            <Table.Summary.Cell index={11} align="right">
               <span data-testid="register-open">{money(open)}</span>
             </Table.Summary.Cell>
-            <Table.Summary.Cell index={9} colSpan={2} />
+            <Table.Summary.Cell index={12} colSpan={2} />
           </Table.Summary.Row>
         )}
       />

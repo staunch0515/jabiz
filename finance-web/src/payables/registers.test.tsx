@@ -29,12 +29,15 @@ const BILLS: BillRegisterRow[] = [
     invoiceDate: '2026-01-09', total: 22000, openAmount: 22000, status: 'POSTED', approval: 'PENDING' },
   { billId: 'c', billNo: 'VC-1', kind: 'CREDIT', vendorCode: 'V400', vendorInvoiceNo: 'CR-1',
     invoiceDate: '2026-01-25', total: '-500.00', openAmount: '-500.00', status: 'POSTED' },
+  { billId: 'd', billNo: 'BILL-9', kind: 'BILL', vendorCode: 'V900', vendorInvoiceNo: 'RW-1001', currency: 'EUR',
+    invoiceDate: '2026-01-12', total: '9500.00', openAmount: '9500.00', totalUsd: '10307.50',
+    openAmountUsd: '10307.50', status: 'POSTED', approval: 'APPROVED' },
 ]
 
 beforeAll(setUpTexts)
 
 beforeEach(() => {
-  calls.bills.mockReset().mockResolvedValue({ items: BILLS, offset: 0, limit: 500, total: 3 })
+  calls.bills.mockReset().mockResolvedValue({ items: BILLS, offset: 0, limit: 500, total: 4 })
   calls.runs.mockReset().mockResolvedValue({ items: [
     { runId: 'r1', runNo: 'PAY-RUN-01', paymentDate: '2026-01-08', method: 'ACH', bankCode: 'OPERATING',
       status: 'RELEASED', total: '32300.00', lineCount: 2 },
@@ -48,16 +51,20 @@ beforeEach(() => {
     { paymentId: 'p2', paymentNo: 'PMT-0005', paymentDate: '2026-02-05', runId: 'r3', runNo: 'PAY-RUN-04',
       kind: 'BILL', vendorCode: 'V400', payee: 'CloudStack, Inc.', method: 'CHECK', checkNo: '10001',
       amount: '1200.00', status: 'VOID', voidDate: '2026-02-10' },
-  ], offset: 0, limit: 500, total: 2 })
+    { paymentId: 'p3', paymentNo: 'PMT-0009', paymentDate: '2026-01-31', runId: 'r4', runNo: 'PAY-RUN-06',
+      kind: 'BILL', vendorCode: 'V900', payee: 'Rheinwerk GmbH', method: 'WIRE', currency: 'EUR', amount: '9500.00',
+      amountUsd: '10374.00', status: 'POSTED' },
+  ], offset: 0, limit: 500, total: 3 })
   calls.permissions = new Set(['fin.ap.read'])
 })
 
 describe('the payables registers', () => {
-  it('total the bills, credits less, show what waits for approval and open each document', async () => {
+  it('total the bills in US dollars, credits less, show what waits for approval and open each document', async () => {
     renderAt('/payables/bills', [{ path: '/payables/bills', element: <BillListPage /> }])
     expect(await screen.findByRole('link', { name: 'BILL-4' })).toHaveAttribute('href', '/payables/bills/a')
-    expect(screen.getByTestId('register-total')).toHaveTextContent('29,000.00')
-    expect(screen.getByTestId('register-open')).toHaveTextContent('29,000.00')
+    // The euro bill counts with its dollars, 10,307.50, not its 9,500.00 euros.
+    expect(screen.getByTestId('register-total')).toHaveTextContent('39,307.50')
+    expect(screen.getByTestId('register-open')).toHaveTextContent('39,307.50')
     expect(screen.getByText('Waiting for approval')).toBeInTheDocument()
     expect(screen.queryByTestId('new-bill')).not.toBeInTheDocument()
     await userEvent.type(screen.getByPlaceholderText('Any vendor'), 'v200')
@@ -72,10 +79,10 @@ describe('the payables registers', () => {
     expect(screen.getByTestId('new-run')).toBeInTheDocument()
   })
 
-  it('total the payments not voided and show the voided ones as such', async () => {
+  it('total the payments not voided in US dollars and show the voided ones as such', async () => {
     renderAt('/payables/payments', [{ path: '/payables/payments', element: <PaymentListPage /> }])
     expect(await screen.findByRole('link', { name: 'PAY-RUN-04' })).toHaveAttribute('href', '/payables/runs/r3')
-    expect(screen.getByTestId('register-total')).toHaveTextContent('28,300.00')
+    expect(screen.getByTestId('register-total')).toHaveTextContent('38,674.00')
     expect(screen.getByText(/^Void /)).toBeInTheDocument()
   })
 })

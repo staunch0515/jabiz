@@ -53,6 +53,10 @@ const ACCOUNTS = [
     statementLine: 'Property and equipment, net', controlClass: 'FA_ACCUM' },
   { accountCode: '6700', accountName: 'Depreciation Expense', financialType: 'EXPENSE', normalBalance: 'DEBIT',
     statementLine: 'Operating expenses' },
+  { accountCode: '7200', accountName: 'Realized Foreign Exchange (Gain) Loss', financialType: 'EXPENSE',
+    normalBalance: 'DEBIT', statementLine: 'Other income (expense), net' },
+  { accountCode: '7210', accountName: 'Unrealized Foreign Exchange (Gain) Loss', financialType: 'EXPENSE',
+    normalBalance: 'DEBIT', statementLine: 'Other income (expense), net' },
 ]
 
 /** A name no earlier run used: the tables only grow. */
@@ -479,4 +483,17 @@ export async function reverseRuns(request: APIRequestContext) {
       reason: 'End-to-end test: back to the first month' })
     expect(reversed.status, JSON.stringify(reversed.body)).toBe(200)
   }
+}
+
+/**
+ * The foreign currency settings (ROADMAP F7d): the realized and unrealized accounts, set by the controller; setting
+ * them again changes nothing. fx.spec.ts revalues November 2026 with no foreign items in these books: a test that
+ * brings foreign documents or bank accounts brings their month-end rates and statements too, or the revaluation is
+ * refused.
+ */
+export async function prepareFx(request: APIRequestContext) {
+  await prepareBooks(request)
+  const set = await run(request, await token(request, CONTROLLER), 'FIN_FX_SETTINGS_SET',
+    { realizedAccount: '7200', unrealizedAccount: '7210' })
+  expect(set.status, JSON.stringify(set.body)).toBe(200)
 }
