@@ -110,6 +110,7 @@
 | FIN-AP-022 | 1099 outputs | 完成（州金额随联合申报列给出） | 审核报表 `finance.ap.form_1099_review`、`FIN_1099_ISSUE`（单据 `finance.ap.form_1099`）、`FIN_1099_EXPORT`（`calc/Form1099File`、`Fin1099Filing`） | `it/FinScn04IT`、`Form1099AllocationTest` |
 | FIN-AP-023 | 1099 corrections | 完成 | `FIN_1099_CORRECT`（与最后一次申报比较，CORRECTED） | `it/FinScn04IT` |
 | FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
+| FIN-SCN-05 | Bank reconciliation | 完成 | F5a–F5c | `it/FinScn05IT`（8 个匹配、手续费与利息分录、撤销再匹配、调节表 = FIN-EXP-10、2 月过账后重印相同） |
 | FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
 
 
@@ -126,3 +127,7 @@
 | FIN-BK-004 | Automatic matching | 完成 | `calc/BankMatcher`、`FIN_BANK_MATCH_PROPOSE` / `_ACCEPT`（`bank/MatchProcesses`）、模板 `finance.bank.book_items`、`finance.bank.statement_items` | `BankMatcherTest`（1 月的 8 个匹配、原因与置信度、性质测试）、`it/BankMatchIT` |
 | FIN-BK-005 | Manual matching and bank-originated entries | 完成 | `FIN_BANK_MATCH`（一对一、一对多、多对一）、`FinBankEntryRule`、`FinBankEntry`、`FIN_BANK_ENTRY_RULE_SAVE`、`FIN_BANK_ENTRY_FROM_LINE`（`bank/BankEntryProcesses`） | `it/BankMatchIT`（BANK-FEE-2601、BANK-INT-2601 已过账并匹配） |
 | FIN-BK-006 | Match history | 完成 | `FinBankMatch` / `FinBankMatchItem`（只写一次，撤销是新记录）、`FIN_BANK_UNMATCH`、模板 `finance.bank.match_history` | `it/BankMatchIT` |
+| FIN-BK-007 | Reconciliation | 完成 | `FinBankReconciliation`（迁移 V16）、`FIN_BANK_REC_PREPARE` / `_COMPLETE`（`bank/ReconciliationProcesses`）、模板 `finance.bank.reconciliation` | `it/BankReconciliationIT`（差额 10.00 不能完成；之前未签核的月份先签核）、`it/FinScn05IT`（= FIN-EXP-10） |
+| FIN-BK-008 | Reconciliation report and sign-off | 完成 | 审批对象 `fin.bank.reconciliation`、规则 `FIN-BANK-REC`（`FIN_SETUP`）、`FIN_BANK_REC_APPROVAL_RESULT`、`FIN_BANK_REC_ISSUE`（`REPORT_ISSUE`）、签核后匹配不能撤销 | `it/BankReconciliationIT`（准备人不能签核；无规则不能完成；审批中账面变化回到准备；2 月过账后重印相同）、`it/FinScn05IT` |
+| FIN-BK-009 | Outstanding items carried forward | 完成 | 调节表按日计未达项（未匹配的项逐期带入）、模板 `finance.bank.stale_checks` | `it/BankReconciliationIT`（95 天的支票被列出） |
+| FIN-BK-010 | Cash position | 完成 | 模板 `finance.bank.cash_position` | `it/FinScn05IT`（1010 账面 211,555.00、对账单 256,555.00；P-7902 22,000.00 于 2026-02-08 到期）、`it/BankReconciliationIT` |

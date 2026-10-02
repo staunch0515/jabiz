@@ -64,6 +64,7 @@ public final class MatchProcesses {
     public static final String NOT_PROPOSED = "FIN_BANK_MATCH_NOT_PROPOSED";
     public static final String NOT_FOUND = "FIN_BANK_MATCH_NOT_FOUND";
     public static final String UNDONE = "FIN_BANK_MATCH_UNDONE";
+    public static final String RECONCILED = "FIN_BANK_MATCH_RECONCILED";
 
     /** A book item: a cash account's ledger transaction ({@code LEDGER}) or an outstanding cutover item. */
     public record BookRef(@NotBlank @Size(max = 10) String kind, @NotBlank @Size(max = 36) String id) {}
@@ -110,6 +111,8 @@ public final class MatchProcesses {
     static final String ITEMS = "items";
     static final String MATCHES = "matches";
     static final String UNDOS = "undos";
+    static final String MATCH_ITEMS = "matchItems";
+    static final String HELD = "held";
 
     public static final ProcessDefinition<ProposeInput, ProposeOutput, ProcessContext> PROPOSE_PROCESS =
         ProcessDefinition.define(PROPOSE, 1, ProposeInput.class, ProposeOutput.class, ProcessContext.class, pb -> pb
@@ -142,6 +145,9 @@ public final class MatchProcesses {
                 input.items().forEach(ref -> refs.add(ref.id().trim()));
                 return EntityQuery.builder().where(new QueryPredicate.In("refId", refs)).limit(MAX_ITEMS).build();
             }, ITEMS))
+            .step("Load the reconciliation that holds", QueryEntities.of(
+                ReconciliationEntities.RECONCILIATION_DATASET,
+                ctx -> heldQuery(code(ctx.get(INPUT, MatchInput.class).bankCode())), HELD))
             .compute("Match", (metadata, ctx) -> match(ctx)));
 
     public static final ProcessDefinition<AcceptInput, AcceptOutput, ProcessContext> ACCEPT_PROCESS =
@@ -164,6 +170,9 @@ public final class MatchProcesses {
                 });
                 return EntityQuery.builder().where(new QueryPredicate.In("refId", refs)).limit(MAX_ITEMS).build();
             }, ITEMS))
+            .step("Load the reconciliation that holds", QueryEntities.of(
+                ReconciliationEntities.RECONCILIATION_DATASET,
+                ctx -> heldQuery(code(ctx.get(INPUT, AcceptInput.class).bankCode())), HELD))
             .compute("Make the matches", (metadata, ctx) -> accept(ctx)));
 
     public static final ProcessDefinition<UnmatchInput, UnmatchOutput, ProcessContext> UNMATCH_PROCESS =
@@ -178,6 +187,14 @@ public final class MatchProcesses {
             .step("Look for its undo", QueryEntities.of(MatchEntities.MATCH_DATASET, ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.Eq("reversesMatchId", ctx.get(INPUT, UnmatchInput.class).matchId()))
                 .limit(1).build(), UNDOS))
+            .step("Load its items", QueryEntities.of(MatchEntities.ITEM_DATASET, ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.Eq("matchId", ctx.get(INPUT, UnmatchInput.class).matchId()))
+                .limit(MAX_ITEMS).build(), MATCH_ITEMS))
+            // A match counts in every reconciliation from its last item's day on: one submitted or signed off
+            // there keeps it, or what was reviewed would no longer be what the books say (FIN-BK-008).
+            .step("Load the reconciliation that holds", QueryEntities.of(
+                ReconciliationEntities.RECONCILIATION_DATASET, ctx -> heldQuery(list(ctx, MATCHES).stream()
+                    .findFirst().map(m -> (String) m.get("bankCode")).orElse(null)), HELD))
             .compute("Undo it", (metadata, ctx) -> unmatch(ctx)));
 
     static Map<String, Object> params(String bankCode, LocalDate to) {
@@ -235,6 +252,16 @@ public final class MatchProcesses {
             }
             chosen.add(p);
             proposed.remove(p.line().id());
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
+        for (BankMatcher.Proposal p : chosen) {
+            LocalDate last = p.line().date();
+            for (BankMatcher.Item i : p.items()) {
+                last = i.date().isAfter(last) ? i.date() : last;
+            }
+            held(ctx, last, "proposals");
         }
         if (ctx.hasViolations()) {
             return;
@@ -310,6 +337,11 @@ public final class MatchProcesses {
                 + ", the book items to " + book.toPlainString(), Map.of("statement", statement, "book", book)));
             return;
         }
+        LocalDate last = java.util.stream.Stream.concat(lines.stream(), books.stream()).map(Side::date)
+            .max(LocalDate::compareTo).orElseThrow();
+        if (held(ctx, last, "items")) {
+            return;
+        }
         Object matchId = write(ctx, code(input.bankCode()), lines, books, MatchEntities.MANUAL, null,
             trim(input.reason()), list(ctx, ITEMS));
         ctx.put(OUTPUT, new MatchOutput(String.valueOf(matchId), statement));
@@ -327,6 +359,9 @@ public final class MatchProcesses {
             ctx.reject(new Violation("matchId", UNDONE, "The match is undone already", Map.of()));
             return;
         }
+        if (held(ctx, lastItemDay(ctx), "matchId")) {
+            return;
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("bankCode", match.get("bankCode"));
         values.put("action", MatchEntities.UNMATCHED);
@@ -337,6 +372,38 @@ public final class MatchProcesses {
         values.put("actionTime", ctx.opTime());
         Object undoId = ctx.changes().insert(MatchEntities.MATCH, values);
         ctx.put(OUTPUT, new UnmatchOutput(String.valueOf(undoId), String.valueOf(match.id())));
+    }
+
+    /** The latest reconciliation of a bank account submitted or signed off: it holds every day up to its own. */
+    static EntityQuery heldQuery(String bankCode) {
+        if (bankCode == null) {
+            return ReconciliationProcesses.byId(null);
+        }
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.Eq("bankCode", bankCode),
+            new QueryPredicate.In("status", List.of(ReconciliationEntities.SUBMITTED,
+                ReconciliationEntities.SIGNED_OFF))))).orderBy("statementDate", false).limit(1).build();
+    }
+
+    /**
+     * Whether a match whose last line or item lies on {@code last} would change a reconciliation submitted or signed
+     * off: it counts in every reconciliation from that day on, so matching or undoing it there would make what was
+     * reviewed differ from the books (FIN-BK-008). Refuses it if so.
+     */
+    static boolean held(ProcessContext ctx, LocalDate last, String field) {
+        EntityInstance rec = list(ctx, HELD).stream().findFirst().orElse(null);
+        if (rec == null || last == null || last.isAfter(rec.get("statementDate"))) {
+            return false;
+        }
+        ctx.reject(new Violation(field, RECONCILED, "The match counts in the reconciliation of "
+            + rec.get("statementDate") + ", which is " + rec.get("status"), Map.of("statementDate",
+            String.valueOf((Object) rec.get("statementDate")), "status", String.valueOf((Object) rec.get("status")))));
+        return true;
+    }
+
+    private static LocalDate lastItemDay(ProcessContext ctx) {
+        return list(ctx, MATCH_ITEMS).stream().map(i -> (LocalDate) i.get("itemDate"))
+            .filter(java.util.Objects::nonNull).max(LocalDate::compareTo).orElse(null);
     }
 
     /** One side of a match: a statement line or a book item as it was when matched. */

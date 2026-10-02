@@ -174,6 +174,10 @@ public final class FinancePermissions {
     public static final String BANK_SETTINGS = "fin.bank.settings";
     /** Match statement lines to the books, undo matches and make entries from statement lines (FIN-BK-004…006). */
     public static final String BANK_RECONCILE = "fin.bank.reconcile";
+    /** Review and sign off bank reconciliations another person prepared (FIN-BK-008). */
+    public static final String BANK_REC_REVIEW = "fin.bank.rec.review";
+    /** Run the platform's approval results into reconciliations: the platform's events only, never a user. */
+    public static final String BANK_REC_RESULT = "fin.bank.rec.result";
 
     private FinancePermissions() {}
 }

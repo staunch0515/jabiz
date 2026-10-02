@@ -351,7 +351,12 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
      * receivables settings and the legacy open items INV-1001 to INV-1003.
      */
     protected void openReceivables() {
-        openBooks();
+        openReceivablesHolding();
+    }
+
+    /** {@link #openReceivables()}, holding the setup's changes of the rule codes given, as {@link #openBooksHolding}. */
+    protected Map<String, String> openReceivablesHolding(String... held) {
+        Map<String, String> holding = openBooksHolding(held);
         String controller = inRoles("controller", com.jabiz.finance.setup.FinanceRoles.CONTROLLER);
         post("/api/datasets/" + com.jabiz.finance.gl.GlEntities.CURRENCY_DATASET + "/commit", controller(),
             Map.of("changes", List.of(Map.of("action", "INSERT", "attributes", Map.of("currencyCode", "EUR",
@@ -377,6 +382,7 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
             "unappliedCashAccount", "1250", "lossRateCurrent", "1", "lossRate1", "5"));
         importCsv("finance.open_receivables", controller, sampleText("open-receivables.csv"), "commit", null, null,
             200);
+        return holding;
     }
 
     /**

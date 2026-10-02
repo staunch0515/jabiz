@@ -75,8 +75,11 @@ public final class SetupProcesses {
     /** The rule of FIN-AP-011: every payment run needs an approver of payments other than its preparer. */
     public static final String PAYMENT_RULE = "FIN-AP-PAYMENT";
 
+    /** The rule of FIN-BK-008: every bank reconciliation needs a reviewer of reconciliations to sign it off. */
+    public static final String BANK_REC_RULE = "FIN-BANK-REC";
+
     private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE,
-        BILL_RULE, PAYMENT_RULE);
+        BILL_RULE, PAYMENT_RULE, BANK_REC_RULE);
     private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES, SOD_PAYMENT_APPROVE);
 
     static final String ROLES = "roles";
@@ -208,6 +211,11 @@ public final class SetupProcesses {
                 "Finance setup: payment runs need an approver of payments (FIN-AP-011)"));
             codes.add(PAYMENT_RULE);
         }
+        if (missing(ctx, BANK_REC_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, bankRecRule(), null,
+                "Finance setup: bank reconciliations need a reviewer's sign-off (FIN-BK-008)"));
+            codes.add(BANK_REC_RULE);
+        }
         if (missing(ctx, SOD_VENDOR_BANK)) {
             proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
                 sodRule(SOD_VENDOR_BANK, List.of(FinancePermissions.VENDOR_BANK_MAINTAIN),
@@ -291,6 +299,19 @@ public final class SetupProcesses {
         rule.put("condition", Map.of());
         rule.put("levels", List.of(Map.of("permission", FinancePermissions.PAYMENT_APPROVE)));
         rule.put("description", "Payment runs need an approver of payments");
+        return rule;
+    }
+
+    /** Every bank reconciliation needs a reviewer of reconciliations other than its preparer (FIN-BK-008). */
+    static Map<String, Object> bankRecRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", BANK_REC_RULE);
+        rule.put("subject", com.jabiz.finance.bank.ReconciliationProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of());
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.BANK_REC_REVIEW)));
+        rule.put("description", "Bank reconciliations need a reviewer of reconciliations");
         return rule;
     }
 

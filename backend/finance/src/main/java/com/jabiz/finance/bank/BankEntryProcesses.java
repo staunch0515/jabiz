@@ -125,6 +125,9 @@ public final class BankEntryProcesses {
                 .limit(1).build(), LINE))
             .step("Load the open lines", RunTemplate.of(MatchProcesses.STATEMENT_ITEMS, ctx -> MatchProcesses.params(
                 bankOf(ctx), null), OPEN_LINES))
+            .step("Load the reconciliation that holds", QueryEntities.of(
+                ReconciliationEntities.RECONCILIATION_DATASET, ctx -> MatchProcesses.heldQuery(bankOf(ctx)),
+                MatchProcesses.HELD))
             .step("Load the bank account", QueryEntities.of(BankEntities.BANK_ACCOUNT_DATASET,
                 ctx -> BankAccountProcesses.eq("bankCode", bankOf(ctx)), BANKS))
             .step("Load the rules", QueryEntities.of(MatchEntities.RULE_DATASET, ctx -> EntityQuery.builder()
@@ -207,6 +210,10 @@ public final class BankEntryProcesses {
         if (!open) {
             ctx.reject(new Violation("lineId", NOT_OPEN, "Line " + input.lineId() + " is not an open statement line",
                 Map.of("lineId", String.valueOf(input.lineId()))));
+            return;
+        }
+        // Posted on the line's day and matched to it: refused where a reconciliation holds that day.
+        if (MatchProcesses.held(ctx, line.get("valueDate"), "lineId")) {
             return;
         }
         EntityInstance bank = list(ctx, BANKS).stream().findFirst().orElse(null);

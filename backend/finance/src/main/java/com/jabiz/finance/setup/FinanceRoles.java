@@ -59,7 +59,7 @@ public final class FinanceRoles {
             FinancePermissions.FORM_1099_MAINTAIN, FinancePermissions.BILL_VOID, FinancePermissions.BILL_APPROVE,
             FinancePermissions.PAYMENT_APPROVE, FinancePermissions.PAYMENT_VOID, FinancePermissions.FORM_1099_FILE,
             "file.generated.read", FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_STATEMENT_IMPORT,
-            FinancePermissions.BANK_SETTINGS, FinancePermissions.BANK_RECONCILE));
+            FinancePermissions.BANK_SETTINGS, FinancePermissions.BANK_RECONCILE, FinancePermissions.BANK_REC_REVIEW));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, FinancePermissions.AP_READ,

@@ -1,12 +1,16 @@
 package com.jabiz.finance.bank;
 
+import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.event.DomainEvent;
+import com.jabiz.event.EventSubscription;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.approval.ApprovalProcesses;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,7 +18,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Registers the bank module: the company's bank accounts ({@link BankEntities}), the bank settings, transfers
  * ({@link TransferEntities}), statements and the cutover's outstanding items ({@link StatementEntities}), matches and
- * entries from statement lines ({@link MatchEntities}). Everything
+ * entries from statement lines ({@link MatchEntities}) and reconciliations ({@link ReconciliationEntities}). Everything
  * but the bank accounts' master data is written by its processes only.
  */
 @Configuration
@@ -237,5 +241,78 @@ class BankConfig {
     ProcessDefinition<StatementProcesses.OpeningInput, StatementProcesses.OpeningOutput, ProcessContext>
         finBankOpeningItemsProcess() {
         return StatementProcesses.OPENING_PROCESS;
+    }
+
+    @Bean
+    EntityDefinition finBankReconciliationEntity() {
+        return ReconciliationEntities.RECONCILIATION_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finBankReconciliationDataset(
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return GlEntities.dataset(ReconciliationEntities.RECONCILIATION_DATASET, ReconciliationEntities.RECONCILIATION,
+            FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE, true, poolRef);
+    }
+
+    @Bean
+    ProcessDefinition<ReconciliationProcesses.PrepareInput, ReconciliationProcesses.RecOutput, ProcessContext>
+        finBankRecPrepareProcess() {
+        return ReconciliationProcesses.PREPARE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ReconciliationProcesses.RecId, ReconciliationProcesses.RecOutput, ProcessContext>
+        finBankRecCompleteProcess() {
+        return ReconciliationProcesses.COMPLETE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ReconciliationProcesses.ApprovalResultInput, ReconciliationProcesses.RecOutput, ProcessContext>
+        finBankRecApprovalResultProcess() {
+        return ReconciliationProcesses.APPROVAL_RESULT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ReconciliationProcesses.RecId, ReconciliationProcesses.RecOutput, ProcessContext>
+        finBankRecIssueProcess() {
+        return ReconciliationProcesses.ISSUE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ReconciliationProcesses.RecId, ReconciliationProcesses.RecOutput, ProcessContext>
+        finBankRecWithdrawProcess() {
+        return ReconciliationProcesses.WITHDRAW_PROCESS;
+    }
+
+    /** Every reconciliation is signed off by a reviewer (FIN-BK-008): the rule {@code FIN_SETUP} proposes says who. */
+    @Bean
+    ApprovalSubject bankReconciliationApprovals() {
+        return ApprovalSubject.define(ReconciliationProcesses.SUBJECT, s -> s
+            .entity(ReconciliationEntities.RECONCILIATION)
+            .number("amount")
+            .text("bankCode"));
+    }
+
+    @Bean
+    EventSubscription<ReconciliationProcesses.ApprovalResultInput> bankRecApprovedSubscription() {
+        return EventSubscription.of("fin.bank-rec-approved", ApprovalProcesses.APPROVED_EVENT,
+            ReconciliationProcesses.APPROVAL_RESULT_PROCESS, BankConfig::recDecision);
+    }
+
+    @Bean
+    EventSubscription<ReconciliationProcesses.ApprovalResultInput> bankRecRejectedSubscription() {
+        return EventSubscription.of("fin.bank-rec-rejected", ApprovalProcesses.REJECTED_EVENT,
+            ReconciliationProcesses.APPROVAL_RESULT_PROCESS, BankConfig::recDecision);
+    }
+
+    private static ReconciliationProcesses.ApprovalResultInput recDecision(DomainEvent event) {
+        return new ReconciliationProcesses.ApprovalResultInput(text(event, "subject"), text(event, "entityId"),
+            text(event, "status"), text(event, "contentHash"), text(event, "requestId"));
+    }
+
+    private static String text(DomainEvent event, String key) {
+        Object value = event.payload().get(key);
+        return value == null ? null : String.valueOf(value);
     }
 }
