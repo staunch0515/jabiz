@@ -28,7 +28,7 @@
 | FIN-GL-020 | Bulk journal entry grid | 完成 | `web/JournalGrid.tsx`、`web/grid.ts`（粘贴、合计、当场校验）、`web/JournalEntryPage.tsx` | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`（粘贴 50 行） |
 | FIN-GL-022 | Account inquiry | 部分 | `queries/account_inquiry.sql`（期初、逐行、滚动余额、期末，来源单据） | `it/GlReportsIT`；验收中的 1010 一月余额待期初导入（F2）与子账过账（F3–F5）后用样例公司验证 |
 | FIN-PC-001 | Fiscal calendar | 完成 | `FinFiscalYear`、`FinPeriod`（第 13 期）；`calc/FiscalCalendar` | `FiscalCalendarTest`、`it/PeriodStateIT` |
-| FIN-PC-003 | Period states | 部分 | 开放 / 软关账 / 关账与子账状态；`calc/PeriodPolicy` | `PeriodPolicyTest`、`it/PeriodStateIT`、`it/JournalLifecycleIT`；结账清单与受控重开在 F8 |
+| FIN-PC-003 | Period states | 部分 | 开放 / 软关账 / 关账与子账状态；`calc/PeriodPolicy`；关账只经清单（F8a） | `PeriodPolicyTest`、`it/PeriodStateIT`、`it/JournalLifecycleIT`、`it/CloseIT`；受控重开在 F8b |
 | FIN-FX-001 | Currencies | 完成 | `FinCurrency` | `it/SetupAndMasterDataIT` |
 | FIN-FX-002 | Exchange rates | 完成 | `FinExchangeRate`（更正保留历史） | `it/SetupAndMasterDataIT` |
 | FIN-FX-003 | Foreign-currency documents | 完成 | 发票（F3b）、收款、日记账外币行（F7a）；账单、贷项、付款批与付款（F7b）；`fx/FxRates`（单据日或此前容许天数的即期汇率）、`ap/ApFx` | `it/FxReceivablesIT`、`gl/JournalValidatorTest`、`it/FxPayablesIT` |
@@ -39,7 +39,7 @@
 | FIN-CT-001 | Segregation of duties | 部分 | 日记账：准备人不能批准（平台 14b）、不能授权自己的例外；只有准备人改附件；Controller 不维护周期模板 | `it/JournalLifecycleIT`、`it/FinScn02IT`、`it/AttachmentIT`；其余职责分离规则在 F10 |
 | FIN-CT-002 | Approval rules are versioned | 部分 | 规则经四眼的控制变更发布；每次评估记下规则版本（`sys_approval_evaluation`） | `it/FinScn02IT`、`it/JournalLifecycleIT`；按生效日改阈值的验收在 F10 |
 | FIN-CT-003 | Approval integrity | 完成 | 批准绑定内容哈希与当前请求；修改使批准失效 | `it/JournalLifecycleIT` |
-| FIN-CT-005 | Suspense and clearing accounts | 部分 | `FinAccount.clearing` 标记 | `it/ChartOfAccountsIT`；期末清单检查在 F8 |
+| FIN-CT-005 | Suspense and clearing accounts | 完成（F8a） | `FinAccount.clearing` 标记；结账检查 `CLEARING_ZERO`（模板 `finance.close.exceptions`） | `it/ChartOfAccountsIT`、`it/CloseIT`（暂记科目）、`it/FinScn06IT`（未核销收款 1250 使清单失败） |
 | FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票与收款：`receivables/InvoicePage.test.tsx`、`ReceiptPage.test.tsx`、`e2e/receivables.spec.ts`；账单（5 行，只用键盘，验收 1）：`payables/BillPage.test.tsx`、`e2e/payables.spec.ts` |
 | FIN-UI-003 | Grid entry | 完成 | 粘贴与复制到表格、向下填充、撤销与重做 | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`；验收中的可用性研究（50 行 ≤ 5 分钟）需由人进行 |
 | FIN-UI-004 | Registers and drill-down | 部分 | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`；`receivables/InvoiceListPage.tsx`、`ReceiptListPage.tsx`） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）、`receivables/InvoiceListPage.test.tsx`、`e2e/receivables.spec.ts`；账单、付款批、付款登记簿（`queries/finance/ap/bill_register.sql`、`payment_run_register.sql`、`payment_register.sql`；`payables/BillListPage.tsx`、`RunListPage.tsx`、`PaymentListPage.tsx`）：`payables/registers.test.tsx`、`e2e/payables.spec.ts`、`it/PaymentIT`；银行登记簿与报表钻取在 F5–F9 |
@@ -153,3 +153,12 @@
 | FIN-FA-007 | Disposal | 完成（F6b） | `FinAssetDisposal`、`FIN_FA_DISPOSE`（`fa/AssetEventProcesses`）、`FinFaSettings.gainLossAccount` | `it/DepreciationIT`（FA-002 1 月运行后以 60,000.00 出售：收益 1,666.67；报废损失 11,333.34；之前月份未运行拒绝） |
 | FIN-FA-009 | Asset reports | 完成（F6c） | 模板 `finance.fa.register`、`finance.fa.roll_forward`、`finance.fa.depreciation_schedule`；预测 `FIN_FA_SCHEDULE_PROJECT`（`fa/AssetScheduleProcesses`）；页面 `finance-web/src/assets` | `it/FinScn01IT`（FIN-EXP-11；滚动表 190,000.00 → 202,000.00、58,000.00 → 62,000.00；FA-003 预测合计 12,000.00）、`it/DepreciationIT`（1–3 月与总账一致）、`assets.spec.ts` |
 | FIN-DI-001/002 | 资产期初导入 | 完成（资产） | `FIN_FA_OPENING`（`fa/AssetOpeningProcesses`）、导入 `finance.fixed_assets`（`io/AssetImports`） | `it/AssetIT`（合计 ≠ 1500 / 1510 / 1590 整体拒收；FA-001、FA-002 带累计登记；只一次）、`it/AssetOpeningAfterBillsIT`（FA-003 由账单在先时补齐类别与条件） |
+
+## F8 结账、重开、年结
+
+路径简写：`close/` = `backend/finance/src/main/java/com/jabiz/finance/close/`
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-PC-004 | Close checklist | 完成（F8a） | `FinCloseTemplate`、`FinCloseTask`（迁移 V22）、`FIN_CLOSE_TEMPLATE_SAVE` / `FIN_CLOSE_START` / `FIN_CLOSE_TASK_COMPLETE` / `FIN_CLOSE_CHECK`（`close/CloseProcesses`）、`calc/CloseChecks`、模板 `finance.close.exceptions`、平台待办 | `CloseChecksTest`、`it/CloseIT`（每项检查失败与通过、结果、时间、证据；手工任务与待办）、`it/FinScn06IT`（营运账户未调节时失败并指明，调节签核后通过） |
+| FIN-PC-005 | Closing a period | 完成（F8a） | `FIN_PERIOD_CLOSE`、`FinCloseArtifact` / `FinCloseArtifactLine`（只记一次）、`REPORT_ISSUE` 签发试算表 | `it/FinScn06IT`（产物即 FIN-EXP-03、子账 = 控制科目、控制人与时刻；按关账时刻重跑哈希相同）、`it/CloseIT` |

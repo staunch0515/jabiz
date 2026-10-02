@@ -318,7 +318,7 @@ class JournalLifecycleIT extends FinanceItSupport {
     @Test
     void closedAndSoftClosedPeriodsRefuseEntries() {
         ok(PeriodProcesses.FISCAL_YEAR_CREATE, controller(), Map.of("fiscalYear", 2025));
-        ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2025-11", "status", "CLOSED"));
+        closePeriod("2025-11");
         ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2025-12", "status", "SOFT_CLOSED"));
 
         String closed = draft(accountant(), entry("2025-11-20", "Late", List.of(
