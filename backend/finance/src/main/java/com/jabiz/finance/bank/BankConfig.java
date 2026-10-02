@@ -13,7 +13,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Registers the bank module: the company's bank accounts ({@link BankEntities}), the bank settings, transfers
- * ({@link TransferEntities}), statements and the cutover's outstanding items ({@link StatementEntities}). Everything
+ * ({@link TransferEntities}), statements and the cutover's outstanding items ({@link StatementEntities}), matches and
+ * entries from statement lines ({@link MatchEntities}). Everything
  * but the bank accounts' master data is written by its processes only.
  */
 @Configuration
@@ -100,6 +101,95 @@ class BankConfig {
     DatasetDefinition finBankOpeningItemDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return GlEntities.dataset(StatementEntities.OPENING_ITEM_DATASET, StatementEntities.OPENING_ITEM,
             FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.MIGRATION, true, poolRef);
+    }
+
+    @Bean
+    EntityDefinition finBankMatchEntity() {
+        return MatchEntities.MATCH_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finBankMatchItemEntity() {
+        return MatchEntities.ITEM_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finBankEntryRuleEntity() {
+        return MatchEntities.RULE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finBankEntryEntity() {
+        return MatchEntities.ENTRY_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finBankMatchDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return GlEntities.dataset(MatchEntities.MATCH_DATASET, MatchEntities.MATCH,
+            FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE, true, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finBankMatchItemDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        // A reference's next round is read from all its items before: never cut short.
+        return DatasetDefinition.define(MatchEntities.ITEM_DATASET, d -> d
+            .targetEntityType(MatchEntities.ITEM)
+            .asDefault()
+            .permissions(FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE)
+            .policy(p -> p.maxQueryBatchSize(MatchProcesses.MAX_ITEMS).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    DatasetDefinition finBankEntryRuleDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return GlEntities.dataset(MatchEntities.RULE_DATASET, MatchEntities.RULE, FinancePermissions.MASTER_READ,
+            FinancePermissions.BANK_SETTINGS, true, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finBankEntryDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return GlEntities.dataset(MatchEntities.ENTRY_DATASET, MatchEntities.ENTRY,
+            FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE, true, poolRef);
+    }
+
+    @Bean
+    ProcessDefinition<MatchProcesses.ProposeInput, MatchProcesses.ProposeOutput, ProcessContext>
+        finBankMatchProposeProcess() {
+        return MatchProcesses.PROPOSE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<MatchProcesses.MatchInput, MatchProcesses.MatchOutput, ProcessContext> finBankMatchProcess() {
+        return MatchProcesses.MATCH_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<MatchProcesses.AcceptInput, MatchProcesses.AcceptOutput, ProcessContext>
+        finBankMatchAcceptProcess() {
+        return MatchProcesses.ACCEPT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<MatchProcesses.UnmatchInput, MatchProcesses.UnmatchOutput, ProcessContext>
+        finBankUnmatchProcess() {
+        return MatchProcesses.UNMATCH_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<BankEntryProcesses.RuleInput, BankEntryProcesses.RuleOutput, ProcessContext>
+        finBankEntryRuleSaveProcess() {
+        return BankEntryProcesses.RULE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<BankEntryProcesses.EntryInput, BankEntryProcesses.EntryOutput, ProcessContext>
+        finBankEntryFromLineProcess() {
+        return BankEntryProcesses.ENTRY_PROCESS;
+    }
+
+    @Bean
+    NumberSequence bankEntryNumbers() {
+        return BankEntryProcesses.numbers();
     }
 
     @Bean

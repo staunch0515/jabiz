@@ -172,6 +172,8 @@ public final class FinancePermissions {
     public static final String BANK_TRANSFER = "fin.bank.transfer";
     /** Set the bank settings: the in-transit account, the matching window, the age of a stale check. */
     public static final String BANK_SETTINGS = "fin.bank.settings";
+    /** Match statement lines to the books, undo matches and make entries from statement lines (FIN-BK-004…006). */
+    public static final String BANK_RECONCILE = "fin.bank.reconcile";
 
     private FinancePermissions() {}
 }

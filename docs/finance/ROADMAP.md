@@ -12,7 +12,7 @@
 | F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ☑ 已完成 |
 | F3 | 应收与销售税 | 14j（发票文件） | 8–10 天 | ☑ 已完成 |
 | F4 | 应付、付款与 1099 | 14k（TIN 遮蔽、生成文件存档） | 10–12 天 | ☑ 已完成 |
-| F5 | 银行与对账 | 14e | 6–8 天 | ◐ F5a 进行中 |
+| F5 | 银行与对账 | 14e | 6–8 天 | ◐ F5a、F5b 进行中 |
 | F6 | 固定资产 | — | 4–5 天 | ☐ |
 | F7 | 多币种 | — | 4–5 天 | ☐ |
 | F8 | 结账、重开、年结 | — | 5–6 天 | ☐ |
@@ -664,7 +664,35 @@ Treasurer；公司银行账户只在没有时建立（再保存会重置支票�
 
 ### F5b 匹配
 
-（F5a 完成后写入详细要求。）
+**要求**
+1. 只写一次的实体（V15）：`FinBankMatch`（动作 MATCH / UNMATCH、所撤销的匹配、方式 AUTO / MANUAL / ENTRY、金额、置信度、原因、操作人与时刻）、
+   `FinBankMatchItem`（对账单行或账面项：现金科目上的一笔总账交易 LEDGER 或切换日的未达项 OPENING；当时的日期、金额与标签；
+   每次匹配的"轮次"由唯一索引防止同时重复匹配）、`FinBankEntry`（由对账单行生成的分录，`BANK-FEE-2601`，每行一次）；时态的 `FinBankEntryRule`
+   （关键字、方向 PAYMENT / DEPOSIT / ANY、科目、编号前缀）。
+2. 模板：`finance.bank.book_items`（未匹配的账面项：交易在现金科目上的金额、单据号、客户或收款人、支票号、付款批）、
+   `finance.bank.statement_items`（未匹配的对账单行）、`finance.bank.match_history`（每次匹配与撤销：谁、何时、方式、原因、所涉及的行与账面项）。
+3. 纯计算 `calc.BankMatcher`：金额相等且在日期窗口内（缺省 3 天），或为同一付款批同日付款的合计；行中写明支票号的支票可以更早；
+   置信度 = 金额 50 + 日期（同日 20）+ 支票号 25 + 名称 10/15，并给出原因；同样好的候选降低 30 并说明；每行、每个账面项只给一次。
+4. 流程（`fin.bank.reconcile`：Accountant、Controller）：`FIN_BANK_MATCH_PROPOSE`（只读）、`FIN_BANK_MATCH`（一对一、一对多、多对一，不许多对多；
+   合计相等；都须未匹配且属于该账户；金额取账面，不取调用方）、`FIN_BANK_MATCH_ACCEPT`（批量接受，全部或全不）、`FIN_BANK_UNMATCH`（新记录，两者都留）；
+   `FIN_BANK_ENTRY_RULE_SAVE`（`fin.bank.settings`，Controller；非控制科目）、`FIN_BANK_ENTRY_FROM_LINE`（按指定或第一条适用的规则、或给出的科目生成分录，
+   以行的日期经 `FIN_SUBLEDGER_POST` 记账（来源 BANK），并立即与该行匹配）。
+
+**验收标准**
+- [x] 1 月对账单与账面：自动匹配给出 CSV 中 `expected_match` 的 8 个匹配（CHK-1045、RCPT-0001…0003、PAY-RUN-01 与 PAY-RUN-02 的批合计、JE-0001、STX-PAY-2512），
+      各带置信度与原因；手续费、利息与 PAYROLL-2601 不被匹配（BK-004 验收 1，`BankMatcherTest`；全套账面的回放在 F5c 的 `FinScn05IT`）。
+- [x] 经流程：收款与未达支票的建议被批量接受，之后不再是未匹配项；再次接受整体拒收；两笔转账手工匹配到同日的一笔借记；
+      合计不等、多对多、已匹配、他行的项、无权限者被拒（BK-004、BK-005，`BankMatchIT`）。
+- [x] "ACCOUNT SERVICE FEE" 45.00 与 "LOAN INTEREST" 300.00 按规则生成 BANK-FEE-2601（6800 / 1010）与 BANK-INT-2601（7100 / 1010）并已匹配；
+      已匹配的行不能再生成；无规则可用时须给出科目（BK-005 验收 1，`BankMatchIT`）。
+- [x] 一个匹配撤销后再匹配：历史中两次匹配与撤销都在，带操作人、时刻与原因；不能撤销两次（BK-006 验收 1，`BankMatchIT`）。
+- [x] 代码审查的修正：账面项只取切换日之后过账的（期初分录与之前的由未达项代表）；批量接受时重新运行匹配，只接受此刻的建议，置信度与原因取自匹配
+      （`FIN_BANK_MATCH_NOT_PROPOSED`），手工匹配一律记为 MANUAL；分录编号经平台编号序列（按前缀与月份计数，无缺号）；不经规则自选科目需要
+      `fin.bank.settings`（`FIN_BANK_ENTRY_FREE_ACCOUNT`）；摘要按长度截断；付款的冲正不带收款人、支票号与付款批；同样好的候选从行与账面项两边判断，
+      输入顺序不影响建议；轮次按银行账户计（转账在两个账户各匹配一次）（`BankMatcherTest`、`BankMatchIT`）。
+- [x] 只写一次的表只插入；`./gradlew :finance:check` 通过。
+
+已知限制：已匹配的账面项被作废（冲正）时，冲正是新的未匹配项，原匹配不变，两者在调节表中抵消；签核后不能撤销的限制随 F5c。
 
 ### F5c 调节表、签核与报表
 
