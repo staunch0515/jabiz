@@ -171,6 +171,7 @@ public final class InvoiceProcesses {
     static final String TERMS = "terms";
     static final String CURRENCIES = "currencies";
     static final String FX = "fx";
+    static final String FX_SETTINGS = "fxSettings";
     static final String ORIGINALS = "originals";
     static final String CODES = "codes";
     static final String RATES = "rates";
@@ -440,14 +441,13 @@ public final class InvoiceProcesses {
             .step("Load the terms", QueryEntities.of(ArEntities.PAYMENT_TERMS_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("termsCode", invoice(ctx).get("termsCode")))
                     .limit(1).build(), TERMS))
-            .step("Load the exchange rate", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET, ctx -> {
-                EntityInstance invoice = invoice(ctx);
-                return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                    new QueryPredicate.Eq("fromCurrency", invoice.get("currency")),
-                    new QueryPredicate.Eq("toCurrency", "USD"),
-                    new QueryPredicate.Eq("rateDate", invoice.get("invoiceDate")),
-                    new QueryPredicate.Eq("rateType", "SPOT")))).limit(1).build();
-            }, FX))
+            .step("Load the foreign currency settings", QueryEntities.of(
+                com.jabiz.finance.fx.FxEntities.SETTINGS_DATASET,
+                ctx -> com.jabiz.finance.fx.FxSettingsProcesses.current(), FX_SETTINGS))
+            // The spot rate of the invoice's day, or of the latest day just before it (F7 plan decision D1).
+            .step("Load the exchange rate", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET,
+                ctx -> com.jabiz.finance.fx.FxRates.spot(invoice(ctx).get("currency"), invoice(ctx).get("invoiceDate"),
+                    list(ctx, FX_SETTINGS).isEmpty() ? null : list(ctx, FX_SETTINGS).getFirst()), FX))
             .step("Load the original invoice", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
                 ctx -> byIds(uuid(invoice(ctx).get("originalInvoiceId"))), ORIGINALS))
             .step("Load the tax codes", QueryEntities.of(TaxEntities.CODE_DATASET, ctx -> {
@@ -572,11 +572,13 @@ public final class InvoiceProcesses {
             ctx.reject(new Violation("termsCode", UNKNOWN_TERMS, "There are no payment terms "
                 + invoice.get("termsCode"), Map.of("termsCode", (Object) invoice.get("termsCode"))));
         }
-        BigDecimal rate = "USD".equals(invoice.get("currency")) ? BigDecimal.ONE
-            : list(ctx, FX).isEmpty() ? null : list(ctx, FX).getFirst().get("rate");
+        BigDecimal rate = com.jabiz.finance.fx.FxRates.rate(invoice.get("currency"), null, list(ctx, FX));
         if (rate == null) {
+            int days = com.jabiz.finance.fx.FxRates.tolerance(
+                list(ctx, FX_SETTINGS).isEmpty() ? null : list(ctx, FX_SETTINGS).getFirst());
             ctx.reject(new Violation("currency", NO_RATE, "There is no spot rate of " + invoice.get("currency")
-                + " to USD on " + invoice.get("invoiceDate"), Map.of("currency", (Object) invoice.get("currency"),
+                + " to USD on " + invoice.get("invoiceDate") + " or the " + days + " days before",
+                Map.of("currency", (Object) invoice.get("currency"),
                 "date", String.valueOf((Object) invoice.get("invoiceDate")))));
         }
         LocalDate taxDate = invoice.get("invoiceDate");
@@ -934,7 +936,15 @@ public final class InvoiceProcesses {
             }, FOUND))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> SubledgerPosting.periodsOn(ctx.get(INPUT, ApplyInput.class).applicationDate()), PERIODS))
-            .compute("Apply the credit", (metadata, ctx) -> apply(ctx)));
+            .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
+                ctx -> ArSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(
+                com.jabiz.finance.fx.FxEntities.SETTINGS_DATASET,
+                ctx -> com.jabiz.finance.fx.FxSettingsProcesses.current(), FX_SETTINGS))
+            .compute("Apply the credit", (metadata, ctx) -> apply(ctx))
+            // At different rates the receivables take the difference, a realized gain or loss (FIN-FX-004).
+            .step("Book the difference", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
+                ctx -> ctx.get(SUB_INPUT), SUB_OUTPUT)));
 
     static void apply(ProcessContext ctx) {
         ApplyInput input = ctx.get(INPUT, ApplyInput.class);
@@ -958,10 +968,6 @@ public final class InvoiceProcesses {
             reason = "a credit is applied on or after the dates of both documents";
         } else if (!Money.fits(input.amount(), Money.USD_SCALE)) {
             reason = "the amount has more decimals than the currency";
-        } else if (((BigDecimal) credit.get("exchangeRate")).compareTo(invoice.get("exchangeRate")) != 0) {
-            // The difference is a realized gain or loss, booked from F7 (FIN-FX-003); until then the subledger and
-            // the receivables account would part.
-            reason = "the credit memo and the invoice were converted at different rates";
         }
         if (reason != null) {
             ctx.reject(new Violation("amount", APPLY_REFUSED, "The credit cannot be applied: " + reason,
@@ -981,6 +987,30 @@ public final class InvoiceProcesses {
             : Money.usd(input.amount().multiply(invoice.get("exchangeRate")));
         BigDecimal creditUsd = creditOpen.signum() == 0 ? credit.get("openAmountUsd")
             : Money.usd(input.amount().multiply(credit.get("exchangeRate")));
+        // The credit memo gives what it carries; the invoice gives up what it carries; the difference is realized.
+        BigDecimal gainLoss = creditUsd.subtract(invoiceUsd);
+        if (gainLoss.signum() != 0) {
+            EntityInstance settings = list(ctx, SETTINGS).isEmpty() ? null : list(ctx, SETTINGS).getFirst();
+            EntityInstance fx = list(ctx, FX_SETTINGS).isEmpty() ? null : list(ctx, FX_SETTINGS).getFirst();
+            if (settings == null || fx == null || fx.get("realizedAccount") == null) {
+                ctx.reject(new Violation("amount", com.jabiz.finance.fx.FxSettingsProcesses.NO_SETTINGS, "The credit "
+                    + "and the invoice carry different rates and the foreign currency settings name no account for "
+                    + "the exchange gain or loss", Map.of()));
+                return;
+            }
+            String number = credit.get("invoiceNo");
+            String memo = number + " to " + invoice.get("invoiceNo");
+            String account = settings.get("receivableAccount");
+            List<JournalProcesses.LineInput> lines = gainLoss.signum() > 0
+                ? List.of(new JournalProcesses.LineInput(account, gainLoss, null, memo, null, null),
+                    new JournalProcesses.LineInput(fx.get("realizedAccount"), null, gainLoss,
+                        "Realized exchange gain " + memo, null, null))
+                : List.of(new JournalProcesses.LineInput(fx.get("realizedAccount"), gainLoss.negate(), null,
+                        "Realized exchange loss " + memo, null, null),
+                    new JournalProcesses.LineInput(account, null, gainLoss.negate(), memo, null, null));
+            ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", input.applicationDate(), "Application of " + memo,
+                number, InvoiceEntities.SOURCE_ENTITY, String.valueOf(credit.id()), lines, List.of("AR")));
+        }
         Map<String, Object> application = new LinkedHashMap<>();
         application.put("sourceKind", InvoiceEntities.CREDIT_MEMO);
         application.put("sourceId", String.valueOf(credit.id()));
@@ -990,6 +1020,10 @@ public final class InvoiceProcesses {
         application.put("applicationDate", input.applicationDate());
         application.put("amount", input.amount());
         application.put("amountUsd", invoiceUsd);
+        if (gainLoss.signum() != 0) {
+            application.put("sourceAmountUsd", creditUsd);
+            application.put("fxGainLoss", gainLoss);
+        }
         Object id = ctx.changes().insert(InvoiceEntities.APPLICATION, application);
         ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(), Map.of(
             "openAmount", invoiceOpen, "openAmountUsd", invoice.<BigDecimal>get("openAmountUsd").subtract(invoiceUsd)));

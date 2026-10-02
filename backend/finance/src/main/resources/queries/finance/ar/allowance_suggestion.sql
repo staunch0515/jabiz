@@ -43,7 +43,8 @@ cleared AS (
     WHERE a.{{FinApplication.applicationDate}} <= :onDate
     GROUP BY a.{{FinApplication.invoiceId}}
     UNION ALL
-    SELECT CAST(a.{{FinApplication.sourceId}} AS uuid), SUM(a.{{FinApplication.amountUsd}})
+    SELECT CAST(a.{{FinApplication.sourceId}} AS uuid),
+           SUM(COALESCE(a.{{FinApplication.sourceAmountUsd}}, a.{{FinApplication.amountUsd}}))
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :onDate
     GROUP BY a.{{FinApplication.sourceId}}

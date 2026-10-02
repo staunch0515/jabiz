@@ -20,6 +20,8 @@ results:
   bankAccount:     { from: FinReceipt.bankAccount }
   currency:        { from: FinReceipt.currency }
   amount:          { from: FinReceipt.amount }
+  exchangeRate:    { from: FinReceipt.exchangeRate }
+  amountUsd:       { from: FinReceipt.amountUsd }
   unappliedAmount: { from: FinReceipt.unappliedAmount }
   status:          { from: FinReceipt.status }
 list:
@@ -43,6 +45,8 @@ SELECT
     r.{{FinReceipt.bankAccount}}     AS bankAccount,
     r.{{FinReceipt.currency}}        AS currency,
     r.{{FinReceipt.amount}}          AS amount,
+    COALESCE(r.{{FinReceipt.exchangeRate}}, 1) AS exchangeRate,
+    COALESCE(r.{{FinReceipt.amountUsd}}, r.{{FinReceipt.amount}}) AS amountUsd,
     r.{{FinReceipt.unappliedAmount}} AS unappliedAmount,
     r.{{FinReceipt.status}}          AS status
 FROM {{FinReceipt}} r

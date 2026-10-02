@@ -48,6 +48,39 @@ class JournalValidatorTest {
         assertThat(check(List.of(debit("6400", "25000.00"), credit("2100", "25000.00")), false)).isEmpty();
     }
 
+    private static JournalValidator.Line euros(String account, boolean debit, String euros, String dollars) {
+        BigDecimal usd = new BigDecimal(dollars);
+        return new JournalValidator.Line(account, debit ? usd : null, debit ? null : usd, null, null, null, "EUR",
+            new BigDecimal(euros), new BigDecimal("1.0850"));
+    }
+
+    /** F7 plan decision D5: each foreign currency balances by itself, as the ledger requires. */
+    @Test
+    void foreignLinesBalanceInTheirCurrency() {
+        assertThat(check(List.of(euros("6400", true, "1000.00", "1085.00"),
+            euros("2100", false, "1000.00", "1085.00")), false)).isEmpty();
+        List<Violation> problems = check(List.of(euros("6400", true, "1000.00", "1085.00"),
+            credit("2100", "1085.00")), false);
+        assertThat(problems).singleElement().satisfies(v -> {
+            assertThat(v.ruleCode()).isEqualTo(JournalValidator.UNBALANCED_IN_CURRENCY);
+            assertThat(v.params()).containsEntry("currency", "EUR")
+                .containsEntry("difference", new BigDecimal("1000.00"));
+        });
+        // A reversal mirrors both currencies.
+        assertThat(euros("6400", true, "1000.00", "1085.00").reversed()).satisfies(l -> {
+            assertThat(l.credit()).isEqualByComparingTo("1085.00");
+            assertThat(l.debit()).isNull();
+            assertThat(l.currency()).isEqualTo("EUR");
+        });
+    }
+
+    /** F7 plan decision D5: a control account takes no foreign line, even with the controller's exception. */
+    @Test
+    void aControlAccountTakesNoForeignLine() {
+        assertThat(codes(check(List.of(euros("1010", true, "1000.00", "1085.00"),
+            euros("2100", false, "1000.00", "1085.00")), true))).containsExactly(JournalValidator.CONTROL_ACCOUNT);
+    }
+
     /** FIN-GL-011 acceptance 1: the difference 0.01 is shown. */
     @Test
     void anUnbalancedEntryShowsTheDifference() {

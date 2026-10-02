@@ -137,9 +137,9 @@ public final class WriteOffProcesses {
             return;
         }
         if (!"USD".equals(invoice.get("currency"))) {
-            // Its dollars would differ from the allowance's at today's rate: F7 settles that (FIN-FX-003).
-            ctx.reject(new Violation("invoiceId", NOT_OPEN, "Write-offs of invoices in " + invoice.get("currency")
-                + " come with foreign currency settlement (F7)",
+            // Its dollars would differ from the allowance's at today's rate (F7a known limitation).
+            ctx.reject(new Violation("invoiceId", NOT_OPEN, "Invoices in " + invoice.get("currency")
+                + " are not written off here: settle them with a receipt or a credit memo",
                 Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")))));
             return;
         }

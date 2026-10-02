@@ -4,6 +4,9 @@ import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.Money;
 import com.jabiz.finance.calc.PaymentTerms;
+import com.jabiz.finance.fx.FxEntities;
+import com.jabiz.finance.fx.FxRates;
+import com.jabiz.finance.fx.FxSettingsProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.SubledgerPosting;
@@ -57,8 +60,11 @@ import static com.jabiz.finance.ar.InvoiceProcesses.uuid;
  *   <li>{@code FIN_RECEIPT_VOID}: a receipt that bounced or was recorded in error, with nothing of it applied, taken
  *       out of the bank again.</li>
  * </ul>
- * Receipts are in US dollars until F7 brings the gains and losses of foreign currency settlements (FIN-FX-003).
- * Everything posts in the receivables subledger, on a day in a period open for it.
+ * A receipt is in its customer's currency, in US dollars at the spot rate of its day or the rate given (F7 plan
+ * decision D3; FIN-FX-003): each application takes off the invoice what it carries at its own rate, and the
+ * difference to what the money is worth at the receipt's rate is a realized exchange gain or loss (FIN-FX-004);
+ * applying the last of a receipt or of an invoice clears its US dollars exactly. Early-payment discounts are taken
+ * on documents in US dollars only. Everything posts in the receivables subledger, on a day in a period open for it.
  */
 public final class ReceiptProcesses {
 
@@ -100,7 +106,8 @@ public final class ReceiptProcesses {
         @NotNull @DecimalMin("0.01") @Digits(integer = 13, fraction = 2) BigDecimal amount,
         @NotBlank @Size(max = 10) String method, @Size(max = 100) String reference,
         @NotBlank @Size(max = 20) String bankAccount, @Size(max = 500) String description,
-        @Size(max = 200) List<@Valid @NotNull ApplicationInput> applications) {}
+        @Size(max = 200) List<@Valid @NotNull ApplicationInput> applications,
+        @DecimalMin(value = "0", inclusive = false) @Digits(integer = 9, fraction = 10) BigDecimal exchangeRate) {}
 
     public record ApplyInput(@NotNull UUID receiptId, @NotNull LocalDate applicationDate,
         @NotEmpty @Size(max = 200) List<@Valid @NotNull ApplicationInput> applications) {}
@@ -149,15 +156,58 @@ public final class ReceiptProcesses {
     static final String SOURCES = "sources";
     static final String PERIODS = "periods";
     static final String PLAN = "plan";
+    static final String RATE = "rate";
     static final String NUMBER = "number";
     static final String SUB_INPUT = "subledgerInput";
     static final String SUB_OUTPUT = "subledgerOutput";
     static final String NEW_ID = "newId";
+    static final String FX_SETTINGS = "fxSettings";
+    static final String RATES = "rates";
 
     /** What a receipt pays: each invoice with the amount and the discount, all checked. */
-    record Plan(List<Planned> items, BigDecimal applied, BigDecimal discount) {}
+    record Plan(List<Planned> items, BigDecimal applied, BigDecimal discount) {
 
-    record Planned(EntityInstance invoice, BigDecimal amount, BigDecimal discount) {}
+        /** What the items take off the invoices in US dollars, at the invoices' rates. */
+        BigDecimal cleared() {
+            return items.stream().map(Planned::cleared).reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        /** What the money of the items is worth in US dollars, at the receipt's rate. */
+        BigDecimal source() {
+            return items.stream().map(Planned::source).reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        /** The realized exchange gain (positive) or loss of the items. */
+        BigDecimal gainLoss() {
+            return source().subtract(cleared());
+        }
+
+        /**
+         * The plan with the last item made to take what is left of {@code availableUsd} when it uses all of
+         * {@code available}: the receipt's US dollars come out exactly, the cent of rounding a gain or loss.
+         */
+        Plan finished(BigDecimal available, BigDecimal availableUsd) {
+            if (items.isEmpty() || applied.compareTo(available) != 0) {
+                return this;
+            }
+            BigDecimal residue = availableUsd.subtract(source());
+            if (residue.signum() == 0) {
+                return this;
+            }
+            List<Planned> adjusted = new ArrayList<>(items);
+            Planned last = adjusted.removeLast();
+            adjusted.add(new Planned(last.invoice(), last.amount(), last.discount(), last.cleared(),
+                last.source().add(residue)));
+            return new Plan(List.copyOf(adjusted), applied, discount);
+        }
+    }
+
+    /**
+     * @param cleared what it takes off the invoice in US dollars, at the invoice's rate
+     * @param source  what its money is worth in US dollars, at the receipt's rate
+     */
+    record Planned(EntityInstance invoice, BigDecimal amount, BigDecimal discount, BigDecimal cleared,
+        BigDecimal source) {}
 
     // ---- record ----------------------------------------------------------------------------------------------------
 
@@ -171,6 +221,13 @@ public final class ReceiptProcesses {
                 ctx -> CustomerProcesses.byCode(recordInput(ctx).customerCode()), CUSTOMERS))
             .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
                 ctx -> ArSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
+            .step("Load the exchange rate", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET, ctx -> {
+                EntityInstance customer = first(ctx, CUSTOMERS);
+                return FxRates.spot(customer == null ? null : customer.get("currency"), recordInput(ctx).receiptDate(),
+                    first(ctx, FX_SETTINGS));
+            }, RATES))
             .step("Load the bank account", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("accountCode",
                     recordInput(ctx).bankAccount().trim())).limit(1).build(), ACCOUNTS))
@@ -207,10 +264,10 @@ public final class ReceiptProcesses {
             ctx.reject(new Violation("method", INVALID_VALUE, "method must be one of "
                 + ReceiptEntities.METHOD_VALUES, Map.of("value", input.method())));
         }
-        if (!"USD".equals(customer.get("currency"))) {
-            ctx.reject(new Violation("customerCode", CURRENCY, "Receipts in " + customer.get("currency")
-                + " come with foreign currency settlement (F7)",
-                Map.of("currency", (Object) customer.get("currency"))));
+        String currency = customer.get("currency");
+        BigDecimal rate = FxRates.rate(currency, input.exchangeRate(), list(ctx, RATES));
+        if (rate == null) {
+            ctx.reject(FxRates.missing("receiptDate", currency, input.receiptDate(), first(ctx, FX_SETTINGS)));
         }
         EntityInstance bank = first(ctx, ACCOUNTS);
         if (bank == null || !"BANK".equals(bank.get("controlClass"))) {
@@ -221,9 +278,13 @@ public final class ReceiptProcesses {
             return;
         }
         List<ApplicationInput> applications = input.applications() == null ? List.of() : input.applications();
-        Plan plan = plan(ctx, customerCode, input.receiptDate(), input.receiptDate(), input.amount(), applications,
-            settings);
+        Plan plan = plan(ctx, customerCode, currency, rate, input.receiptDate(), input.receiptDate(), input.amount(),
+            applications, settings);
         if (plan == null) {
+            return;
+        }
+        plan = plan.finished(input.amount(), FxRates.usd(input.amount(), rate));
+        if (!realizedAccount(ctx, plan)) {
             return;
         }
         if (plan.applied().compareTo(input.amount()) < 0 && settings.get("unappliedCashAccount") == null) {
@@ -233,6 +294,7 @@ public final class ReceiptProcesses {
             return;
         }
         ctx.put(PLAN, plan);
+        ctx.put(RATE, rate);
     }
 
     static void buildRecord(ProcessContext ctx) {
@@ -244,12 +306,18 @@ public final class ReceiptProcesses {
         EntityInstance settings = settings(ctx);
         String number = ctx.get(NUMBER, String.class);
         BigDecimal unapplied = input.amount().subtract(plan.applied());
+        BigDecimal rate = ctx.get(RATE, BigDecimal.class);
+        BigDecimal amountUsd = FxRates.usd(input.amount(), rate);
+        BigDecimal unappliedUsd = amountUsd.subtract(plan.source());
         Map<String, Object> receipt = new LinkedHashMap<>();
         receipt.put("receiptNo", number);
         receipt.put("customerCode", code(input.customerCode()));
         receipt.put("receiptDate", input.receiptDate());
         receipt.put("amount", input.amount());
-        receipt.put("currency", "USD");
+        receipt.put("currency", first(ctx, CUSTOMERS).get("currency"));
+        receipt.put("exchangeRate", rate);
+        receipt.put("amountUsd", amountUsd);
+        receipt.put("unappliedAmountUsd", unappliedUsd);
         receipt.put("method", input.method().trim().toUpperCase(Locale.ROOT));
         receipt.put("reference", blankToNull(input.reference()));
         receipt.put("bankAccount", input.bankAccount().trim());
@@ -260,10 +328,10 @@ public final class ReceiptProcesses {
         Object id = ctx.changes().insert(ReceiptEntities.RECEIPT, receipt);
         ctx.put(NEW_ID, id);
         List<JournalProcesses.LineInput> lines = new ArrayList<>();
-        lines.add(debit(input.bankAccount().trim(), input.amount(), "Receipt " + number));
-        lines.addAll(applicationLines(plan, settings, number));
-        if (unapplied.signum() > 0) {
-            lines.add(credit(settings.get("unappliedCashAccount"), unapplied, "Unapplied cash " + number));
+        lines.add(debit(input.bankAccount().trim(), amountUsd, "Receipt " + number));
+        lines.addAll(applicationLines(ctx, plan, settings, number));
+        if (unappliedUsd.signum() > 0) {
+            lines.add(credit(settings.get("unappliedCashAccount"), unappliedUsd, "Unapplied cash " + number));
         }
         String description = input.description() != null && !input.description().isBlank()
             ? input.description().trim() : "Receipt " + number + " " + code(input.customerCode());
@@ -301,6 +369,8 @@ public final class ReceiptProcesses {
             .step("Load the receipt", LoadEntity.by(ReceiptEntities.RECEIPT_DATASET, RECEIPT_ID, RECEIPT))
             .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
                 ctx -> ArSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
             .step("Load the invoices", QueryEntities.of(InvoiceEntities.INVOICE_DATASET,
                 ctx -> invoicesOf(ctx.get(INPUT, ApplyInput.class).applications()), INVOICES))
             .step("Load their terms", QueryEntities.of(ArEntities.PAYMENT_TERMS_DATASET,
@@ -335,17 +405,22 @@ public final class ReceiptProcesses {
         }
         // An invoice issued since the money came in may be paid by it (a prepayment); the discount is earned by
         // when the money came in.
-        Plan plan = plan(ctx, receipt.get("customerCode"), input.applicationDate(), receipt.get("receiptDate"),
-            receipt.get("unappliedAmount"),
+        Plan plan = plan(ctx, receipt.get("customerCode"), receipt.get("currency"), rate(receipt),
+            input.applicationDate(), receipt.get("receiptDate"), receipt.get("unappliedAmount"),
             input.applications(), settings);
         if (plan == null) {
+            return;
+        }
+        // The money waiting as unapplied cash is worth what it was at the receipt's rate.
+        plan = plan.finished(receipt.get("unappliedAmount"), unappliedUsd(receipt));
+        if (!realizedAccount(ctx, plan)) {
             return;
         }
         ctx.put(PLAN, plan);
         String number = receipt.get("receiptNo");
         List<JournalProcesses.LineInput> lines = new ArrayList<>();
-        lines.add(debit(settings.get("unappliedCashAccount"), plan.applied(), "Unapplied cash " + number));
-        lines.addAll(applicationLines(plan, settings, number));
+        lines.add(debit(settings.get("unappliedCashAccount"), plan.source(), "Unapplied cash " + number));
+        lines.addAll(applicationLines(ctx, plan, settings, number));
         ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", input.applicationDate(), "Application of " + number,
             number, ReceiptEntities.SOURCE_ENTITY, String.valueOf(receipt.id()), lines, List.of("AR")));
     }
@@ -361,7 +436,7 @@ public final class ReceiptProcesses {
             input.applicationDate());
         BigDecimal unapplied = receipt.<BigDecimal>get("unappliedAmount").subtract(plan.applied());
         ctx.changes().update(ReceiptEntities.RECEIPT, receipt.id(), receipt.version(),
-            Map.of("unappliedAmount", unapplied));
+            Map.of("unappliedAmount", unapplied, "unappliedAmountUsd", unappliedUsd(receipt).subtract(plan.source())));
         ctx.put(OUTPUT, new ReceiptOutput(String.valueOf(receipt.id()), receipt.get("receiptNo"),
             receipt.get("customerCode"), receipt.get("status"), receipt.get("amount"), unapplied,
             ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo(), applied));
@@ -376,8 +451,8 @@ public final class ReceiptProcesses {
      * discounts taken before. Null, with the
      * refusals recorded, when anything is wrong.
      */
-    static Plan plan(ProcessContext ctx, String customerCode, LocalDate date, LocalDate paidOn, BigDecimal available,
-        List<ApplicationInput> applications, EntityInstance settings) {
+    static Plan plan(ProcessContext ctx, String customerCode, String currency, BigDecimal rate, LocalDate date,
+        LocalDate paidOn, BigDecimal available, List<ApplicationInput> applications, EntityInstance settings) {
         Map<UUID, EntityInstance> invoices = new LinkedHashMap<>();
         for (EntityInstance invoice : list(ctx, INVOICES)) {
             invoices.put(uuid(invoice.id()), invoice);
@@ -393,6 +468,7 @@ public final class ReceiptProcesses {
             }
         }
         Map<UUID, BigDecimal> taking = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> takingUsd = new LinkedHashMap<>();
         Map<UUID, BigDecimal> discounting = new LinkedHashMap<>();
         List<Planned> items = new ArrayList<>();
         BigDecimal applied = BigDecimal.ZERO;
@@ -407,8 +483,8 @@ public final class ReceiptProcesses {
                 reason = "it is not a posted invoice";
             } else if (!Objects.equals(customerCode, invoice.get("customerCode"))) {
                 reason = "it is " + invoice.get("customerCode") + "'s, the receipt is " + customerCode + "'s";
-            } else if (!"USD".equals(invoice.get("currency"))) {
-                reason = "it is in " + invoice.get("currency");
+            } else if (!Objects.equals(currency, invoice.get("currency"))) {
+                reason = "it is in " + invoice.get("currency") + ", the receipt in " + currency;
             } else if (date.isBefore(invoice.get("invoiceDate"))) {
                 reason = "it is dated after the receipt";
             }
@@ -421,6 +497,12 @@ public final class ReceiptProcesses {
             }
             BigDecimal amount = application.amount();
             BigDecimal taken = application.discount() == null ? BigDecimal.ZERO : application.discount();
+            if (taken.signum() > 0 && !FxRates.USD.equals(currency)) {
+                ctx.reject(new Violation(field + ".discount", DISCOUNT, "No discount on " + invoice.get("invoiceNo")
+                    + ": discounts are taken on documents in US dollars only", Map.of("invoiceNo",
+                    (Object) invoice.get("invoiceNo"), "reason", "discounts are taken in US dollars only")));
+                continue;
+            }
             if (taken.signum() > 0) {
                 EntityInstance invoiceTerms = terms.get(invoice.get("termsCode"));
                 PaymentTerms paymentTerms = invoiceTerms == null ? null : new PaymentTerms(
@@ -458,7 +540,18 @@ public final class ReceiptProcesses {
                 continue;
             }
             taking.put(application.invoiceId(), clearing);
-            items.add(new Planned(invoice, amount, taken));
+            // Off the invoice at its own rate; the last of it takes what it still carries in US dollars.
+            BigDecimal cleared;
+            if (FxRates.USD.equals(currency)) {
+                cleared = amount;
+            } else if (clearing.compareTo(invoice.get("openAmount")) == 0) {
+                cleared = invoice.<BigDecimal>get("openAmountUsd")
+                    .subtract(takingUsd.getOrDefault(application.invoiceId(), BigDecimal.ZERO));
+            } else {
+                cleared = FxRates.usd(amount, invoice.get("exchangeRate"));
+            }
+            takingUsd.merge(application.invoiceId(), cleared, BigDecimal::add);
+            items.add(new Planned(invoice, amount, taken, cleared, FxRates.usd(amount, rate)));
             applied = applied.add(amount);
             discount = discount.add(taken);
         }
@@ -470,14 +563,25 @@ public final class ReceiptProcesses {
         return ctx.hasViolations() ? null : new Plan(List.copyOf(items), applied, discount);
     }
 
-    /** Receivables credited with what is applied and discounted; the discounts debited to their account. */
-    private static List<JournalProcesses.LineInput> applicationLines(Plan plan, EntityInstance settings,
-        String number) {
+    /**
+     * Receivables credited with what is applied, at the invoices' rates, and discounted; the discounts debited to
+     * their account; the realized exchange gain credited, or loss debited, to the settings' account.
+     */
+    private static List<JournalProcesses.LineInput> applicationLines(ProcessContext ctx, Plan plan,
+        EntityInstance settings, String number) {
         List<JournalProcesses.LineInput> lines = new ArrayList<>();
         if (plan.discount().signum() > 0) {
             lines.add(debit(settings.get("discountAccount"), plan.discount(), "Sales discount " + number));
         }
-        BigDecimal cleared = plan.applied().add(plan.discount());
+        BigDecimal gainLoss = plan.gainLoss();
+        if (gainLoss.signum() < 0) {
+            lines.add(debit(first(ctx, FX_SETTINGS).get("realizedAccount"), gainLoss.negate(),
+                "Realized exchange loss " + number));
+        } else if (gainLoss.signum() > 0) {
+            lines.add(credit(first(ctx, FX_SETTINGS).get("realizedAccount"), gainLoss,
+                "Realized exchange gain " + number));
+        }
+        BigDecimal cleared = plan.cleared().add(plan.discount());
         if (cleared.signum() > 0) {
             Set<String> invoices = new LinkedHashSet<>();
             plan.items().forEach(p -> invoices.add(p.invoice().get("invoiceNo")));
@@ -490,6 +594,7 @@ public final class ReceiptProcesses {
     private static List<Applied> writeApplications(ProcessContext ctx, Plan plan, Object receiptId, String number,
         LocalDate date) {
         Map<Object, BigDecimal> open = new LinkedHashMap<>();
+        Map<Object, BigDecimal> openUsd = new LinkedHashMap<>();
         Map<Object, EntityInstance> invoices = new LinkedHashMap<>();
         List<Applied> applied = new ArrayList<>();
         for (Planned item : plan.items()) {
@@ -498,6 +603,8 @@ public final class ReceiptProcesses {
             BigDecimal before = open.getOrDefault(invoice.id(), invoice.get("openAmount"));
             BigDecimal after = before.subtract(item.amount()).subtract(item.discount());
             open.put(invoice.id(), after);
+            openUsd.put(invoice.id(), openUsd.getOrDefault(invoice.id(), invoice.get("openAmountUsd"))
+                .subtract(item.cleared()).subtract(item.discount()));
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("sourceKind", InvoiceEntities.RECEIPT_SOURCE);
             row.put("sourceId", String.valueOf(receiptId));
@@ -506,7 +613,11 @@ public final class ReceiptProcesses {
             row.put("customerCode", invoice.get("customerCode"));
             row.put("applicationDate", date);
             row.put("amount", item.amount());
-            row.put("amountUsd", item.amount());
+            row.put("amountUsd", item.cleared());
+            if (item.source().compareTo(item.cleared()) != 0) {
+                row.put("sourceAmountUsd", item.source());
+                row.put("fxGainLoss", item.source().subtract(item.cleared()));
+            }
             row.put("discount", item.discount().signum() == 0 ? null : item.discount());
             Object id = ctx.changes().insert(InvoiceEntities.APPLICATION, row);
             applied.add(new Applied(String.valueOf(id), String.valueOf(invoice.id()), invoice.get("invoiceNo"),
@@ -514,9 +625,8 @@ public final class ReceiptProcesses {
         }
         for (Map.Entry<Object, BigDecimal> entry : open.entrySet()) {
             EntityInstance invoice = invoices.get(entry.getKey());
-            // In US dollars, so the dollars open are the amount open.
             ctx.changes().update(InvoiceEntities.INVOICE, invoice.id(), invoice.version(),
-                Map.of("openAmount", entry.getValue(), "openAmountUsd", entry.getValue()));
+                Map.of("openAmount", entry.getValue(), "openAmountUsd", openUsd.get(entry.getKey())));
         }
         return applied;
     }
@@ -554,6 +664,8 @@ public final class ReceiptProcesses {
             }, SOURCES))
             .step("Load the settings", QueryEntities.of(ArEntities.SETTINGS_DATASET,
                 ctx -> ArSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> SubledgerPosting.periodsOn(ctx.get(INPUT, ReverseInput.class).reverseDate()), PERIODS))
             .compute("Check it", (metadata, ctx) -> checkReverse(ctx))
@@ -584,7 +696,14 @@ public final class ReceiptProcesses {
             "status")))) {
             reason = "what it applied is no longer posted";
         }
-        EntityInstance settings = InvoiceEntities.RECEIPT_SOURCE.equals(kind) ? settings(ctx) : null;
+        BigDecimal gainLoss = application.get("fxGainLoss") == null ? BigDecimal.ZERO : application.get("fxGainLoss");
+        // A receipt's money returns to unapplied cash; a gain or loss realized goes back too.
+        EntityInstance settings = InvoiceEntities.RECEIPT_SOURCE.equals(kind) || gainLoss.signum() != 0
+            ? settings(ctx) : null;
+        EntityInstance fx = first(ctx, FX_SETTINGS);
+        if (reason == null && gainLoss.signum() != 0 && (fx == null || fx.get("realizedAccount") == null)) {
+            reason = "the foreign currency settings name no account for the exchange gain or loss";
+        }
         // Who recorded a receipt or prepared a credit memo does not move what it paid (FIN-CT-001).
         if (reason == null && Objects.equals(ctx.request().actorId(), source.get("preparedBy"))) {
             reason = "its preparer does not take it back";
@@ -607,14 +726,33 @@ public final class ReceiptProcesses {
             return;
         }
         ctx.put(READY, Boolean.TRUE);
+        List<JournalProcesses.LineInput> fxLines = new ArrayList<>();
+        if (gainLoss.signum() > 0) {
+            fxLines.add(debit(fx.get("realizedAccount"), gainLoss, "Realized exchange gain taken back"));
+        } else if (gainLoss.signum() < 0) {
+            fxLines.add(credit(fx.get("realizedAccount"), gainLoss.negate(), "Realized exchange loss taken back"));
+        }
+        if (InvoiceEntities.CREDIT_MEMO.equals(kind) && gainLoss.signum() != 0) {
+            // The credit memo and the invoice carried different rates: the receivables take the difference back.
+            String number = source.get("invoiceNo");
+            String memo = memo(number + " taken back from " + invoice.get("invoiceNo"));
+            List<JournalProcesses.LineInput> lines = new ArrayList<>(fxLines);
+            lines.add(gainLoss.signum() > 0 ? credit(settings.get("receivableAccount"), gainLoss, memo)
+                : debit(settings.get("receivableAccount"), gainLoss.negate(), memo));
+            ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", input.reverseDate(), memo("Application of "
+                + number + " to " + invoice.get("invoiceNo") + " taken back: " + input.reason().trim()), number,
+                InvoiceEntities.SOURCE_ENTITY, String.valueOf(source.id()), lines, List.of("AR")));
+        }
         if (InvoiceEntities.RECEIPT_SOURCE.equals(kind)) {
             BigDecimal amount = application.get("amount");
             BigDecimal discount = application.get("discount") == null ? BigDecimal.ZERO : application.get("discount");
+            BigDecimal cleared = application.get("amountUsd");
+            BigDecimal sourceUsd = sourceUsd(application);
             String number = source.get("receiptNo");
-            List<JournalProcesses.LineInput> lines = new ArrayList<>();
-            lines.add(debit(settings.get("receivableAccount"), amount.add(discount), memo(number + " taken back from "
+            List<JournalProcesses.LineInput> lines = new ArrayList<>(fxLines);
+            lines.add(debit(settings.get("receivableAccount"), cleared.add(discount), memo(number + " taken back from "
                 + invoice.get("invoiceNo"))));
-            lines.add(credit(settings.get("unappliedCashAccount"), amount, "Unapplied cash " + number));
+            lines.add(credit(settings.get("unappliedCashAccount"), sourceUsd, "Unapplied cash " + number));
             if (discount.signum() > 0) {
                 if (settings.get("discountAccount") == null) {
                     ctx.reject(new Violation("applicationId", NOT_REVERSIBLE, "The application cannot be taken back: "
@@ -637,7 +775,7 @@ public final class ReceiptProcesses {
         ReverseInput input = ctx.get(INPUT, ReverseInput.class);
         EntityInstance application = application(ctx);
         boolean receipt = InvoiceEntities.RECEIPT_SOURCE.equals(application.get("sourceKind"));
-        if (receipt && !ctx.contains(SUB_OUTPUT)) {
+        if (ctx.contains(SUB_INPUT) && !ctx.contains(SUB_OUTPUT)) {
             return;
         }
         EntityInstance invoice = find(ctx, INVOICES, application.get("invoiceId"));
@@ -645,6 +783,7 @@ public final class ReceiptProcesses {
         BigDecimal amount = application.get("amount");
         BigDecimal discount = application.get("discount") == null ? BigDecimal.ZERO : application.get("discount");
         BigDecimal amountUsd = application.get("amountUsd");
+        BigDecimal sourceUsd = sourceUsd(application);
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("sourceKind", application.get("sourceKind"));
         row.put("sourceId", application.get("sourceId"));
@@ -654,6 +793,12 @@ public final class ReceiptProcesses {
         row.put("applicationDate", input.reverseDate());
         row.put("amount", amount.negate());
         row.put("amountUsd", amountUsd.negate());
+        if (application.get("sourceAmountUsd") != null) {
+            row.put("sourceAmountUsd", sourceUsd.negate());
+        }
+        if (application.get("fxGainLoss") != null) {
+            row.put("fxGainLoss", application.<BigDecimal>get("fxGainLoss").negate());
+        }
         row.put("discount", discount.signum() == 0 ? null : discount.negate());
         row.put("reversesApplicationId", application.id());
         row.put("reason", input.reason().trim());
@@ -670,14 +815,15 @@ public final class ReceiptProcesses {
         if (receipt) {
             sourceOpen = source.<BigDecimal>get("unappliedAmount").add(amount);
             ctx.changes().update(ReceiptEntities.RECEIPT, source.id(), source.version(),
-                Map.of("unappliedAmount", sourceOpen));
+                Map.of("unappliedAmount", sourceOpen, "unappliedAmountUsd", unappliedUsd(source).add(sourceUsd)));
         } else {
             sourceOpen = source.<BigDecimal>get("openAmount").add(amount);
             ctx.changes().update(InvoiceEntities.INVOICE, source.id(), source.version(), Map.of(
-                "openAmount", sourceOpen, "openAmountUsd", source.<BigDecimal>get("openAmountUsd").add(amountUsd)));
+                "openAmount", sourceOpen, "openAmountUsd", source.<BigDecimal>get("openAmountUsd").add(sourceUsd)));
         }
         ctx.put(OUTPUT, new ReverseOutput(String.valueOf(id), String.valueOf(application.id()), invoiceOpen,
-            sourceOpen, receipt ? ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo() : null));
+            sourceOpen, ctx.contains(SUB_OUTPUT) ? ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo()
+                : null));
     }
 
     // ---- reassign and void -----------------------------------------------------------------------------------------
@@ -775,9 +921,11 @@ public final class ReceiptProcesses {
                     return;
                 }
                 String number = receipt.get("receiptNo");
+                // In dollars: all of it is unapplied, at the dollars the bank was debited with.
+                BigDecimal usd = unappliedUsd(receipt);
                 List<JournalProcesses.LineInput> lines = List.of(
-                    debit(settings.get("unappliedCashAccount"), receipt.get("amount"), "Unapplied cash " + number),
-                    credit(receipt.get("bankAccount"), receipt.get("amount"), "Void of " + number));
+                    debit(settings.get("unappliedCashAccount"), usd, "Unapplied cash " + number),
+                    credit(receipt.get("bankAccount"), usd, "Void of " + number));
                 ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AR", input.voidDate(), memo("Void of " + number
                     + ": " + input.reason().trim()), number, ReceiptEntities.SOURCE_ENTITY,
                     String.valueOf(receipt.id()), lines, List.of("AR", "BANK")));
@@ -794,6 +942,7 @@ public final class ReceiptProcesses {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("status", ReceiptEntities.VOID);
                 values.put("unappliedAmount", BigDecimal.ZERO.setScale(2));
+                values.put("unappliedAmountUsd", BigDecimal.ZERO.setScale(2));
                 values.put("voidDate", input.voidDate());
                 values.put("voidReason", input.reason().trim());
                 values.put("voidGlNo", glNo);
@@ -832,7 +981,7 @@ public final class ReceiptProcesses {
                     || !InvoiceEntities.POSTED.equals(credit.get("status"))) {
                     reason = "it is not a posted credit memo";
                 } else if (!"USD".equals(credit.get("currency"))) {
-                    reason = "refunds in " + credit.get("currency") + " come with foreign currency settlement (F7)";
+                    reason = "credits in " + credit.get("currency") + " are not refunded here (F7a known limitation)";
                 } else if (Objects.equals(ctx.request().actorId(), credit.get("preparedBy"))) {
                     // Cash leaves: not by who prepared the credit (FIN-CT-001).
                     reason = "its preparer does not refund it";
@@ -919,6 +1068,35 @@ public final class ReceiptProcesses {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.In("invoiceId", new ArrayList<>(ids)),
             new QueryPredicate.Eq("sourceKind", InvoiceEntities.RECEIPT_SOURCE)))).limit(500).build();
+    }
+
+    /** The rate of a receipt; one for a receipt in US dollars from before F7. */
+    static BigDecimal rate(EntityInstance receipt) {
+        BigDecimal rate = receipt.get("exchangeRate");
+        return rate == null ? BigDecimal.ONE : rate;
+    }
+
+    /** What the source of an application gave in US dollars: the same as it took off the invoice unless noted. */
+    static BigDecimal sourceUsd(EntityInstance application) {
+        BigDecimal usd = application.get("sourceAmountUsd");
+        return usd == null ? application.get("amountUsd") : usd;
+    }
+
+    /** What is unapplied of a receipt in US dollars at its rate. */
+    static BigDecimal unappliedUsd(EntityInstance receipt) {
+        BigDecimal usd = receipt.get("unappliedAmountUsd");
+        return usd == null ? receipt.get("unappliedAmount") : usd;
+    }
+
+    /** A plan with a gain or loss needs the account of the foreign currency settings; false, refused, without. */
+    private static boolean realizedAccount(ProcessContext ctx, Plan plan) {
+        EntityInstance fx = first(ctx, FX_SETTINGS);
+        if (plan.gainLoss().signum() != 0 && (fx == null || fx.get("realizedAccount") == null)) {
+            ctx.reject(new Violation("applications", FxSettingsProcesses.NO_SETTINGS, "The applications realize an "
+                + "exchange gain or loss and the foreign currency settings name no account for it", Map.of()));
+            return false;
+        }
+        return true;
     }
 
     private static EntityInstance settings(ProcessContext ctx) {

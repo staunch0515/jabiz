@@ -103,11 +103,27 @@ public final class JournalProcesses {
     public static final String AUTO_REVERSE_DATE = "FIN_JOURNAL_AUTO_REVERSE_DATE";
     public static final String ADJUSTMENT_PERIOD = "FIN_JOURNAL_ADJUSTMENT_PERIOD";
     public static final String REVERSAL_LINES = "FIN_JOURNAL_REVERSAL_LINES";
+    public static final String CURRENCY = "FIN_JOURNAL_CURRENCY";
+    public static final String FOREIGN_NOT_HERE = "FIN_JOURNAL_FOREIGN_NOT_HERE";
 
     // ---- inputs and outputs ---------------------------------------------------------------------------------------
 
+    /**
+     * A line as entered. With a {@code currency} other than US dollars (F7 plan decision D5) its debit or credit
+     * is in that currency, converted at {@code exchangeRate} or else the spot rate of the posting date or the days
+     * just before.
+     */
     public record LineInput(String accountCode, BigDecimal debit, BigDecimal credit, @Size(max = 200) String memo,
-        @Size(max = 20) String department, @Size(max = 20) String location) {}
+        @Size(max = 20) String department, @Size(max = 20) String location,
+        @jakarta.validation.constraints.Pattern(regexp = "[A-Za-z]{3}") String currency,
+        @jakarta.validation.constraints.DecimalMin(value = "0", inclusive = false)
+        @jakarta.validation.constraints.Digits(integer = 9, fraction = 10) BigDecimal exchangeRate) {
+
+        public LineInput(String accountCode, BigDecimal debit, BigDecimal credit, String memo, String department,
+            String location) {
+            this(accountCode, debit, credit, memo, department, location, null, null);
+        }
+    }
 
     /**
      * @param journalId        absent: a new draft
@@ -153,6 +169,9 @@ public final class JournalProcesses {
     static final String JOURNALS = "journals";
     static final String JOURNAL_KEY = "journal";
     static final String LINES = "lines";
+    static final String FX_SETTINGS = "fxSettings";
+    static final String FX_RATES = "fxRates";
+    static final String CURRENCIES = "currencies";
     static final String FIN_ACCOUNTS = "finAccounts";
     static final String LEDGER_ACCOUNTS = "ledgerAccounts";
     static final String DEPARTMENTS = "departments";
@@ -190,6 +209,13 @@ public final class JournalProcesses {
                 ctx -> byIds(ctx.get(INPUT, JournalInput.class).journalId()), JOURNALS))
             .step("Load its lines", QueryEntities.of(LINE_DATASET,
                 ctx -> linesOf(ctx.get(INPUT, JournalInput.class).journalId()), LINES))
+            .step("Load the foreign currency settings", QueryEntities.of(
+                com.jabiz.finance.fx.FxEntities.SETTINGS_DATASET,
+                ctx -> com.jabiz.finance.fx.FxSettingsProcesses.current(), FX_SETTINGS))
+            .step("Load the currencies", QueryEntities.of(GlEntities.CURRENCY_DATASET,
+                JournalProcesses::currenciesOf, CURRENCIES))
+            .step("Load the exchange rates", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET,
+                JournalProcesses::ratesOf, FX_RATES))
             .compute("Save the draft", (metadata, ctx) -> save(ctx))
             // A pending approval of the old content is of no use any more; its tasks go too (FIN-GL-014).
             .step("Withdraw the approval request", WithdrawApproval.of(SUBJECT, JournalProcesses::approvalCase)));
@@ -364,7 +390,10 @@ public final class JournalProcesses {
 
     static void save(ProcessContext ctx) {
         JournalInput input = ctx.get(INPUT, JournalInput.class);
-        List<JournalValidator.Line> lines = input.lines().stream().map(JournalProcesses::line).toList();
+        List<JournalValidator.Line> lines = converted(ctx, input);
+        if (lines == null) {
+            return;
+        }
         for (Violation problem : JournalValidator.checkLines(lines)) {
             ctx.reject(problem);
         }
@@ -603,9 +632,11 @@ public final class JournalProcesses {
             Map<String, String> dimensions = new LinkedHashMap<>();
             putIfPresent(dimensions, "department", line.get("department"));
             putIfPresent(dimensions, "location", line.get("location"));
+            // A line in a foreign currency keeps that side in the ledger too (decision D24).
             entries.add(new LedgerProcesses.Line(line.get("accountCode"),
                 debit != null ? Direction.DEBIT : Direction.CREDIT, debit != null ? debit : line.get("credit"),
-                line.get("memo"), dimensions.isEmpty() ? null : dimensions));
+                line.get("memo"), dimensions.isEmpty() ? null : dimensions, line.get("currency"),
+                line.get("foreignAmount"), line.get("exchangeRate")));
         }
         LedgerProcesses.PostInput ledger = new LedgerProcesses.PostInput(booking.of(journal.get("postingDate")),
             journal.get("description"), journal.get("journalNo"), entries, SOURCE_ENTITY,
@@ -715,8 +746,7 @@ public final class JournalProcesses {
         List<JournalValidator.Line> reversed = new ArrayList<>();
         for (EntityInstance line : lines.stream()
             .sorted(java.util.Comparator.comparing(l -> l.<BigDecimal>get("lineNo"))).toList()) {
-            reversed.add(new JournalValidator.Line(line.get("accountCode"), line.get("credit"), line.get("debit"),
-                line.get("memo"), line.get("department"), line.get("location")));
+            reversed.add(line(line).reversed());
         }
         JournalValidator.Totals totals = JournalValidator.totals(reversed);
         Map<String, Object> header = new LinkedHashMap<>();
@@ -800,6 +830,9 @@ public final class JournalProcesses {
             row.put("memo", blankToNull(line.memo()));
             row.put("department", blankToNull(line.department()));
             row.put("location", blankToNull(line.location()));
+            row.put("currency", line.currency());
+            row.put("foreignAmount", line.foreignAmount());
+            row.put("exchangeRate", line.exchangeRate());
             ctx.changes().insert(LINE, row);
         }
     }
@@ -847,6 +880,12 @@ public final class JournalProcesses {
             map.put("memo", blankToNull(line.memo()));
             map.put("department", blankToNull(line.department()));
             map.put("location", blankToNull(line.location()));
+            // Only a line in a foreign currency has these: the content of the others stays as it was.
+            if (line.currency() != null) {
+                map.put("currency", line.currency());
+                map.put("foreignAmount", line.foreignAmount());
+                map.put("exchangeRate", line.exchangeRate());
+            }
             maps.add(map);
         }
         return maps;
@@ -869,6 +908,129 @@ public final class JournalProcesses {
         return result;
     }
 
+    /**
+     * The spot rates into US dollars of the foreign currencies of the lines, from the days the settings allow back
+     * to the posting date, latest first (F7 plan decisions D1, D5).
+     */
+    static EntityQuery ratesOf(ProcessContext ctx) {
+        JournalInput input = ctx.get(INPUT, JournalInput.class);
+        List<Object> currencies = foreignCurrencies(input.lines());
+        int days = com.jabiz.finance.fx.FxRates.tolerance(fxSettings(ctx));
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                new QueryPredicate.In("fromCurrency", new ArrayList<>(currencies)),
+                new QueryPredicate.Eq("toCurrency", com.jabiz.finance.fx.FxRates.USD),
+                new QueryPredicate.Eq("rateType", com.jabiz.finance.fx.FxEntities.SPOT),
+                new QueryPredicate.Gte("rateDate", input.postingDate().minusDays(days)),
+                new QueryPredicate.Lte("rateDate", input.postingDate()))))
+            .orderBy("rateDate", false).limit(200).build();
+    }
+
+    private static List<Object> foreignCurrencies(List<LineInput> lines) {
+        return lines.stream().map(l -> currency(l.currency()))
+            .filter(c -> c != null && !com.jabiz.finance.fx.FxRates.USD.equals(c)).distinct().map(c -> (Object) c)
+            .toList();
+    }
+
+    static EntityQuery currenciesOf(ProcessContext ctx) {
+        return EntityQuery.builder().where(new QueryPredicate.In("currencyCode",
+            new ArrayList<>(foreignCurrencies(ctx.get(INPUT, JournalInput.class).lines())))).limit(100).build();
+    }
+
+    /**
+     * Refusals of lines in a foreign currency where only dollars are taken (imports, subledger postings): the
+     * currency would otherwise be dropped and the amount taken as dollars.
+     */
+    public static List<Violation> dollarsOnly(List<LineInput> lines) {
+        List<Violation> problems = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            String currency = currency(lines.get(i).currency());
+            if (currency != null && !com.jabiz.finance.fx.FxRates.USD.equals(currency)) {
+                problems.add(new Violation("lines[" + i + "].currency", FOREIGN_NOT_HERE, "Line " + (i + 1)
+                    + " is in " + currency + ": only US dollars are taken here", Map.of("line", i + 1,
+                    "currency", currency)));
+            }
+        }
+        return problems;
+    }
+
+    /**
+     * The lines as stored: those in a foreign currency converted into US dollars at the rate given or the latest
+     * found. Null, refused, when a currency has no rate.
+     */
+    static List<JournalValidator.Line> converted(ProcessContext ctx, JournalInput input) {
+        List<JournalValidator.Line> lines = new ArrayList<>();
+        boolean converted = true;
+        for (int i = 0; i < input.lines().size(); i++) {
+            LineInput in = input.lines().get(i);
+            String currency = currency(in.currency());
+            if (currency == null || com.jabiz.finance.fx.FxRates.USD.equals(currency)) {
+                lines.add(line(in));
+                continue;
+            }
+            EntityInstance known = list(ctx, CURRENCIES).stream()
+                .filter(c -> currency.equals(c.get("currencyCode"))).findFirst().orElse(null);
+            BigDecimal amount = in.debit() != null && in.debit().signum() != 0 ? in.debit() : in.credit();
+            if (known == null) {
+                ctx.reject(new Violation("lines[" + i + "].currency", CURRENCY, "Line " + (i + 1) + ": there is no "
+                    + "currency " + currency, Map.of("line", i + 1, "currency", currency)));
+                converted = false;
+                continue;
+            }
+            int units = known.<BigDecimal>get("minorUnits").intValueExact();
+            if (amount != null && !com.jabiz.finance.calc.Money.fits(amount, units)) {
+                ctx.reject(new Violation("lines[" + i + "]." + (amount == in.debit() ? "debit" : "credit"),
+                    JournalValidator.LINE_AMOUNT, "Line " + (i + 1) + ": " + currency + " has " + units
+                    + " decimals", Map.of("line", i + 1)));
+                converted = false;
+                continue;
+            }
+            BigDecimal rate = in.exchangeRate() != null ? in.exchangeRate() : reversedRate(ctx, in, currency);
+            if (rate == null) {
+                rate = list(ctx, FX_RATES).stream()
+                    .filter(r -> currency.equals(r.get("fromCurrency"))).map(r -> r.<BigDecimal>get("rate"))
+                    .findFirst().orElse(null);
+            }
+            if (rate == null) {
+                ctx.reject(com.jabiz.finance.fx.FxRates.missing("lines[" + i + "].currency", currency,
+                    input.postingDate(), fxSettings(ctx)));
+                converted = false;
+                continue;
+            }
+            BigDecimal debit = in.debit() == null ? null : com.jabiz.finance.fx.FxRates.usd(in.debit(), rate);
+            BigDecimal credit = in.credit() == null ? null : com.jabiz.finance.fx.FxRates.usd(in.credit(), rate);
+            lines.add(new JournalValidator.Line(trim(in.accountCode()), debit, credit, in.memo(),
+                trim(in.department()), trim(in.location()), currency, amount, rate));
+        }
+        return converted ? lines : null;
+    }
+
+    /**
+     * A reversal's lines are its original's: changing its dates keeps the rates its lines were stored at rather
+     * than converting them again.
+     */
+    private static BigDecimal reversedRate(ProcessContext ctx, LineInput in, String currency) {
+        EntityInstance journal = list(ctx, JOURNALS).isEmpty() ? null : list(ctx, JOURNALS).getFirst();
+        if (journal == null || journal.get("reversesJournalId") == null) {
+            return null;
+        }
+        boolean debit = in.debit() != null && in.debit().signum() != 0;
+        BigDecimal amount = debit ? in.debit() : in.credit();
+        return list(ctx, LINES).stream().map(JournalProcesses::line)
+            .filter(l -> currency.equals(l.currency()) && Objects.equals(l.accountCode(), trim(in.accountCode()))
+                && l.foreignAmount() != null && amount != null && l.foreignAmount().compareTo(amount) == 0
+                && (l.debit() != null && l.debit().signum() != 0) == debit)
+            .map(JournalValidator.Line::exchangeRate).findFirst().orElse(null);
+    }
+
+    private static String currency(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static EntityInstance fxSettings(ProcessContext ctx) {
+        List<EntityInstance> found = list(ctx, FX_SETTINGS);
+        return found.isEmpty() ? null : found.getFirst();
+    }
+
     static JournalValidator.Line line(LineInput input) {
         return new JournalValidator.Line(trim(input.accountCode()), input.debit(), input.credit(), input.memo(),
             trim(input.department()), trim(input.location()));
@@ -876,7 +1038,8 @@ public final class JournalProcesses {
 
     static JournalValidator.Line line(EntityInstance row) {
         return new JournalValidator.Line(row.get("accountCode"), row.get("debit"), row.get("credit"),
-            row.get("memo"), row.get("department"), row.get("location"));
+            row.get("memo"), row.get("department"), row.get("location"), row.get("currency"),
+            row.get("foreignAmount"), row.get("exchangeRate"));
     }
 
     /** The accounts loaded under {@code FIN_ACCOUNTS} and {@code LEDGER_ACCOUNTS}, by code. */

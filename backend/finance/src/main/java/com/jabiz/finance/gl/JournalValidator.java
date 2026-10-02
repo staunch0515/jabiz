@@ -27,6 +27,7 @@ public final class JournalValidator {
     public static final String TOO_MANY_LINES = "FIN_JOURNAL_TOO_MANY_LINES";
     public static final String LINE_AMOUNT = "FIN_JOURNAL_LINE_AMOUNT";
     public static final String UNBALANCED = "FIN_JOURNAL_UNBALANCED";
+    public static final String UNBALANCED_IN_CURRENCY = "FIN_JOURNAL_UNBALANCED_IN_CURRENCY";
     public static final String ACCOUNT_UNKNOWN = "FIN_JOURNAL_ACCOUNT_UNKNOWN";
     public static final String ACCOUNT_INACTIVE = "FIN_JOURNAL_ACCOUNT_INACTIVE";
     public static final String ACCOUNT_SUMMARY = "FIN_JOURNAL_ACCOUNT_SUMMARY";
@@ -34,9 +35,23 @@ public final class JournalValidator {
     public static final String DIMENSION_REQUIRED = "FIN_JOURNAL_DIMENSION_REQUIRED";
     public static final String DIMENSION_INVALID = "FIN_JOURNAL_DIMENSION_INVALID";
 
-    /** One line as entered: exactly one of debit and credit, positive, in cents. */
+    /**
+     * One line as entered: exactly one of debit and credit, positive, in cents of US dollars. A line in a foreign
+     * currency (F7 plan decision D5) also keeps that currency, its amount in it and the rate it was converted at.
+     */
     public record Line(String accountCode, BigDecimal debit, BigDecimal credit, String memo, String department,
-        String location) {
+        String location, String currency, BigDecimal foreignAmount, BigDecimal exchangeRate) {
+
+        public Line(String accountCode, BigDecimal debit, BigDecimal credit, String memo, String department,
+            String location) {
+            this(accountCode, debit, credit, memo, department, location, null, null, null);
+        }
+
+        /** The same line on the other side, as a reversal has it. */
+        public Line reversed() {
+            return new Line(accountCode, credit, debit, memo, department, location, currency, foreignAmount,
+                exchangeRate);
+        }
 
         /** The amount on its side, debit positive and credit negative. */
         public BigDecimal signed() {
@@ -135,7 +150,12 @@ public final class JournalValidator {
                 problems.add(new Violation(field(i, "accountCode"), ACCOUNT_INACTIVE, "Account " + code
                     + " is inactive", params));
             }
-            if (account.controlClass() != null && !controlException) {
+            if (account.controlClass() != null && line.currency() != null) {
+                // A control account's subledger converts its own documents (F7 plan decision D5).
+                problems.add(new Violation(field(i, "currency"), CONTROL_ACCOUNT, "Account " + code
+                    + " is a control account: a line in a foreign currency goes to an account that is none",
+                    withEntry(params, "controlClass", account.controlClass())));
+            } else if (account.controlClass() != null && !controlException) {
                 problems.add(new Violation(field(i, "accountCode"), CONTROL_ACCOUNT, "Account " + code
                     + " is a control account: only its subledger posts to it, unless the controller grants this "
                     + "entry an exception", withEntry(params, "controlClass", account.controlClass())));
@@ -150,6 +170,22 @@ public final class JournalValidator {
                 + totals.difference().abs().toPlainString(), Map.of("debit", totals.debit(), "credit",
                 totals.credit(), "difference", totals.difference().abs())));
         }
+        // The ledger balances each foreign currency by itself: so must the entry.
+        Map<String, BigDecimal> foreign = new java.util.TreeMap<>();
+        for (Line line : lines) {
+            if (line.currency() != null && line.foreignAmount() != null) {
+                boolean debit = line.debit() != null && line.debit().signum() != 0;
+                foreign.merge(line.currency(), debit ? line.foreignAmount() : line.foreignAmount().negate(),
+                    BigDecimal::add);
+            }
+        }
+        foreign.forEach((currency, difference) -> {
+            if (difference.signum() != 0) {
+                problems.add(new Violation("lines", UNBALANCED_IN_CURRENCY, "In " + currency + " debits and credits"
+                    + " differ by " + difference.abs().toPlainString(), Map.of("currency", currency,
+                    "difference", difference.abs())));
+            }
+        });
         return List.copyOf(problems);
     }
 

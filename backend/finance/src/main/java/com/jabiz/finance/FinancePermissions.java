@@ -20,6 +20,10 @@ public final class FinancePermissions {
     public static final String DIMENSION_MAINTAIN = "fin.dimension.maintain";
     /** Maintain currencies and exchange rates. */
     public static final String FX_MAINTAIN = "fin.fx.maintain";
+    /** Set the accounts of exchange gains and losses and how rates are taken (F7). */
+    public static final String FX_SETTINGS = "fin.fx.settings";
+    /** Run and simulate the period-end revaluation (F7). */
+    public static final String FX_RUN = "fin.fx.run";
 
     /** Read fiscal years and periods. */
     public static final String PERIOD_READ = "fin.period.read";
