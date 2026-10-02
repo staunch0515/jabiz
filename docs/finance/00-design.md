@@ -285,8 +285,9 @@
 | `FinVendorBankAccount` | 每个账户一行；银行账号 `masked(fin.vendor.bank.read, LAST4)`。变更（`FIN_VENDOR_BANK_CHANGE`，二次验证）是一行"待批准"，经审批对象 `fin.ap.vendor-bank`（规则 `FIN-VENDOR-BANK`）由第二人批准后启用、原账户 REPLACED；审批事实与内容中没有账号。待批准期间该供应商的账单在付款建议中被暂停，原因"bank details pending approval"（AP-003） |
 | `FinBankAccount` | 公司银行账户（F4 计划 D3，F4a 起）：代码、银行、总账科目（`BANK` 控制科目）、币种、路由号、账号（`masked(fin.bank.read, LAST4)`）、ACH 公司 ID 与名称、下一支票号；Treasurer 以二次验证维护；对账的字段在 F5 |
 | `FinApSettings` | 应付科目（`AP` 控制科目）、现金折扣、使用税应付、供应商预付科目（样例科目表没有，由 Controller 新增，D5）、缺省付款银行 |
-| `FinBill` / `FinBillLine` | 供应商、供应商发票号（供应商 × 号码唯一 → 阻止）、日期、收到日、到期日、币种、条件；行：金额、费用或资产科目、税（使用税 TX-007）、维度、1099 栏（缺省来自供应商，可逐行覆盖） |
-| `FinVendorCredit`、`FinVendorPrepayment` | 应用到账单（AP-008） |
+| `FinBill` / `FinBillLine` / `FinBillTax` | 账单与供应商贷项同一实体（`kind`），过账时编号 `BILL-` / `VC-`；供应商发票号（供应商 × 号码重复 → 阻止，只比字母与数字）、日期、收到日、到期日、条件；行：金额、费用或资产科目、使用税码（TX-007，计算说明在 `FinBillTax`）、维度、1099 表与栏（缺省来自供应商，可逐行覆盖）。账单先过账，审批是单独的状态：未批准不能付款（AP-006）。F7 之前只用美元 |
+| `FinApApplication` | 贷项（F4c 起还有付款）核销到账单，只写一次（AP-008）；供应商预付款随 F4c 的付款 |
+| `FinAsset` | 最小的资产登记（F4 计划 D4）：资本化账单行由内部子流程 `FIN_ASSET_CREATE` 登记（`FA-{n:3}`）；折旧等在 F6 |
 | `FinPaymentRun` / `FinPayment` / `FinPaymentLine` | 建议（到期日、折扣日、供应商、币种、银行账户）、增删、提交、他人批准、财务主管释放（二次验证）、锁定；每笔付款 × 账单 |
 | `FinPaymentFile` | 生成的文件（NACHA CCD/PPD、pain.001、支票文件、正向支付）：只追加、哈希；同一付款批只能有一个有效文件，重新生成须先以原因作废（BK-011） |
 | `Fin1099Threshold` | 纳税年度 × 表（NEC、MISC）→ 阈值（时态，AP-021）；样例的一列阈值同时用于两种表 |
