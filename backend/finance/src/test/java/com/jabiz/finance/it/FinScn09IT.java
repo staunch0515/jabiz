@@ -10,7 +10,6 @@ import com.jabiz.finance.fx.FxRevaluationProcesses;
 import com.jabiz.finance.fx.FxSettingsProcesses;
 import com.jabiz.finance.gl.AccountTypes;
 import com.jabiz.finance.gl.JournalProcesses;
-import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.finance.setup.FinanceRoles;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
@@ -151,7 +150,9 @@ class FinScn09IT extends FinanceItSupport {
         // February's euro statement is not in yet.
         assertThat(refused(FxRevaluationProcesses.REVALUE, accountant, Map.of("periodKey", "2026-02"), 422))
             .isEqualTo(FxRevaluationProcesses.NO_STATEMENT);
-        ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2026-03", "status", "CLOSED"));
+        // These books hold only what the scenario needs: no revaluation of March, no payables or asset subledger
+        // behind the opening balances, no March statement of the euro account.
+        closePeriod("2026-03", "REVALUATION_RUN", "SUBLEDGERS", "BANK_RECONCILED");
         assertThat(refused(FxRevaluationProcesses.REVALUE, accountant, Map.of("periodKey", "2026-03"), 422))
             .isEqualTo(PeriodPolicy.PERIOD_CLOSED);
         // December reverses into a year not yet opened.

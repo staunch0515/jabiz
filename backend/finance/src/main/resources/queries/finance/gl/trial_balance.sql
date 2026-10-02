@@ -3,11 +3,12 @@ id: finance.gl.trial_balance
 description: >-
   Every account's debit or credit balance over the entries posted up to a date (FIN-RP-001 basis), with its type,
   normal balance and statement line; a summary account shows the total of the accounts under it (FIN-GL-003). The
-  adjustment period 13 counts unless left out; the books as recorded up to a time, if given.
-entities: [LedgerAccount, LedgerTransaction, LedgerEntry, FinAccount, FinPosting]
+  adjustment period 13 of the fiscal year holding the day counts unless left out (earlier years' always count: their
+  balances carry forward); the books as recorded up to a time, if given.
+entities: [LedgerAccount, LedgerTransaction, LedgerEntry, FinAccount, FinPosting, FinPeriod]
 params:
   through:     { like: FinPosting.postingDate, required: true, description: entries posted on or before this day count }
-  adjustments: { kind: { type: bool }, description: "whether period 13 counts; yes when not given" }
+  adjustments: { kind: { type: bool }, description: "whether period 13 of the day's fiscal year counts; yes when not given" }
   knownAt:     { like: LedgerTransaction.bookingTime, description: "if given, the books as recorded at this time" }
 results:
   accountCode:   { from: LedgerAccount.accountCode }
@@ -50,7 +51,10 @@ moves AS (
     JOIN {{FinPosting}} fp
       ON fp.{{FinPosting.transactionId}} = t.{{LedgerTransaction.transactionId}}
     WHERE fp.{{FinPosting.postingDate}} <= :through
-      AND (COALESCE(CAST(:adjustments AS boolean), true) OR fp.{{FinPosting.periodNo}} <> 13)
+      AND (COALESCE(CAST(:adjustments AS boolean), true) OR fp.{{FinPosting.periodNo}} <> 13
+           OR fp.{{FinPosting.fiscalYear}} <> (
+               SELECT MAX(yp.{{FinPeriod.fiscalYear}}) FROM {{FinPeriod}} yp
+               WHERE yp.{{FinPeriod.startDate}} <= :through AND yp.{{FinPeriod.endDate}} >= :through))
       AND (CAST(:knownAt AS timestamptz) IS NULL OR t.{{LedgerTransaction.createdTime}} <= :knownAt)
 ),
 totals AS (

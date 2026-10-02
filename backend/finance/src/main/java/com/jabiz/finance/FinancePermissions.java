@@ -190,5 +190,10 @@ public final class FinancePermissions {
     /** Run depreciation and record units used (FIN-FA-005). */
     public static final String FA_RUN = "fin.fa.run";
 
+    /** Start a period's close, run its automatic checks and complete its manual tasks (FIN-PC-004; phase F8a). */
+    public static final String CLOSE_TASK = "fin.close.task";
+    /** Run {@code FIN_CLOSE_TASK_ASSIGN} directly; granted to no role. The close's start assigns the tasks. */
+    public static final String CLOSE_INTERNAL = "fin.close.internal";
+
     private FinancePermissions() {}
 }

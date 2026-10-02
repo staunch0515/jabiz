@@ -88,10 +88,14 @@ class PeriodStateIT extends FinanceItSupport {
 
         assertThat(ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2040-01", "status",
             "SOFT_CLOSED"))).containsEntry("status", "SOFT_CLOSED").containsEntry("changed", true);
+        // A period closes through its checklist only (FIN-PC-005), and is closed for good until reopened.
+        assertThat(refused(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2040-01", "status",
+            "closed"), 422)).isEqualTo(PeriodProcesses.CLOSE_REQUIRED);
+        closePeriod("2040-01");
         assertThat(ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2040-01", "status",
-            "closed"))).containsEntry("status", "CLOSED");
-        assertThat(ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2040-01", "status",
-            "CLOSED"))).containsEntry("changed", false);
+            "CLOSED"))).containsEntry("status", "CLOSED").containsEntry("changed", false);
+        assertThat(refused(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2040-01", "status",
+            "SOFT_CLOSED"), 422)).isEqualTo(PeriodProcesses.REOPEN_REQUIRED);
         // Receivables close for February before the general ledger does.
         assertThat(ok(PeriodProcesses.SET_SUBLEDGER_STATE, controller(), Map.of("periodKey", "2040-02",
             "subledger", "AR", "status", "CLOSED")))
@@ -115,6 +119,6 @@ class PeriodStateIT extends FinanceItSupport {
 
         assertThat(find(GlEntities.PERIOD_DATASET, "periodKey", "2040-01").getFirst())
             .containsEntry("status", "CLOSED");
-        assertOnlyInserted("fi_period_version");
+        assertOnlyInserted("fi_period_version", "fi_close_artifact_version");
     }
 }

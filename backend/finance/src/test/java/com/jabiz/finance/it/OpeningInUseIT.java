@@ -18,7 +18,7 @@ class OpeningInUseIT extends FinanceItSupport {
     void aClosedPeriodEndsTheOpening() {
         loadSampleChart();
         ok("FIN_FISCAL_YEAR_CREATE", controller(), Map.of("fiscalYear", 2026, "adjustmentPeriod", true));
-        ok("FIN_PERIOD_SET_STATE", controller(), Map.of("periodKey", "2026-01", "status", "CLOSED"));
+        closePeriod("2026-01");
         Map<String, Object> refused = importCsv("finance.opening_balances",
             inRoles("migrating-controller", FinanceRoles.CONTROLLER), sampleText("opening-balances.csv"), "commit",
             null, null, 422);

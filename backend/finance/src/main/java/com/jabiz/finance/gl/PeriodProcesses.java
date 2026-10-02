@@ -29,12 +29,13 @@ import static com.jabiz.finance.gl.AccountProcesses.list;
  *   <li>{@code FIN_FISCAL_YEAR_CREATE}: a fiscal year and its twelve periods, and the adjustment period 13 when
  *       asked; every period starts open. Years do not overlap: the overlap is refused up front, and two requests
  *       racing each other are kept apart by the unique start day of the regular periods.</li>
- *   <li>{@code FIN_PERIOD_SET_STATE}: the general ledger's state of a period, open, soft-closed or closed.</li>
+ *   <li>{@code FIN_PERIOD_SET_STATE}: the general ledger's state of a period, open or soft-closed. A period closes
+ *       only through its checklist ({@code FIN_PERIOD_CLOSE}, FIN-PC-005) and opens again only through a governed
+ *       reopening (FIN-PC-006, phase F8b).</li>
  *   <li>{@code FIN_PERIOD_SET_SUBLEDGER_STATE}: a subledger's state of a period, open or closed; a subledger may close
- *       before the general ledger.</li>
+ *       before the general ledger, and stays closed with it.</li>
  * </ul>
- * The close checklist, its artifact and the governed reopening come with phase F8; until then a holder of
- * {@value FinancePermissions#PERIOD_CLOSE} moves between the states freely, each change kept in the period's history.
+ * Each change is kept in the period's history.
  */
 public final class PeriodProcesses {
 
@@ -48,6 +49,8 @@ public final class PeriodProcesses {
     public static final String INVALID_STATE = "FIN_PERIOD_INVALID_STATE";
     public static final String OPENING_PERIOD = "FIN_PERIOD_OPENING";
     public static final String BEFORE_OPENING = "FIN_FISCAL_YEAR_BEFORE_OPENING";
+    public static final String CLOSE_REQUIRED = "FIN_PERIOD_CLOSE_REQUIRED";
+    public static final String REOPEN_REQUIRED = "FIN_PERIOD_REOPEN_REQUIRED";
 
     /** Subledgers with a state of their own, and the period field holding it. */
     public static final Map<String, String> SUBLEDGER_FIELDS =
@@ -99,7 +102,7 @@ public final class PeriodProcesses {
 
     public static final ProcessDefinition<StateInput, PeriodOutput, ProcessContext> STATE_PROCESS =
         ProcessDefinition.define(SET_STATE, 1, StateInput.class, PeriodOutput.class, ProcessContext.class, pb -> pb
-            .description("Opens, soft-closes or closes a period of the general ledger.")
+            .description("Opens or soft-closes a period of the general ledger.")
             .permissions(FinancePermissions.PERIOD_CLOSE)
             .contextFactory(AccountProcesses::withInput)
             .outputMapper(ctx -> ctx.get(OUTPUT, PeriodOutput.class))
@@ -227,6 +230,17 @@ public final class PeriodProcesses {
             ctx.reject(new Violation("periodKey", OPENING_PERIOD, "Period " + period.get("periodKey")
                 + " holds the opening of the books: it changes only through the migration",
                 Map.of("periodKey", period.<String>get("periodKey"))));
+            return;
+        }
+        boolean closed = "CLOSED".equals(period.get("status"));
+        if ("status".equals(field) && "CLOSED".equals(wanted) && !closed) {
+            ctx.reject(new Violation("status", CLOSE_REQUIRED, "Period " + period.get("periodKey") + " closes through "
+                + "its checklist (FIN_PERIOD_CLOSE)", Map.of("periodKey", period.<String>get("periodKey"))));
+            return;
+        }
+        if (closed && !"CLOSED".equals(wanted)) {
+            ctx.reject(new Violation("status", REOPEN_REQUIRED, "Period " + period.get("periodKey") + " is closed: it "
+                + "opens again only through a reopening", Map.of("periodKey", period.<String>get("periodKey"))));
             return;
         }
         boolean change = !wanted.equals(period.get(field));

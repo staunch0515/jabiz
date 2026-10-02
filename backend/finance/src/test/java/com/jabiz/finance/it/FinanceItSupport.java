@@ -88,6 +88,37 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         return (Map<String, Object>) exchange.getResponseBody().get("output");
     }
 
+    /**
+     * Closes a period as its people would (FIN-PC-005): the close is started, every manual task done by a holder of
+     * its permission, and the period closed by a controller; its automatic checks must pass. Returns the close.
+     */
+    protected Map<String, Object> closePeriod(String periodKey) {
+        return closePeriod(periodKey, new String[0]);
+    }
+
+    /**
+     * {@link #closePeriod(String)} without the checklist's items of the codes given: the controller makes them
+     * inactive first, for books a test keeps only partly (say, a bank account it never reconciles).
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> closePeriod(String periodKey, String... without) {
+        String closer = inRoles("closer", com.jabiz.finance.setup.FinanceRoles.CONTROLLER,
+            com.jabiz.finance.setup.FinanceRoles.ACCOUNTANT);
+        for (String code : without) {
+            Map<String, Object> item = new LinkedHashMap<>(find(com.jabiz.finance.close.CloseEntities
+                .TEMPLATE_DATASET, "taskCode", code).getFirst());
+            item.put("active", false);
+            ok("FIN_CLOSE_TEMPLATE_SAVE", closer, item);
+        }
+        Map<String, Object> checklist = ok("FIN_CLOSE_START", closer, Map.of("periodKey", periodKey));
+        for (Map<String, Object> task : (List<Map<String, Object>>) checklist.get("tasks")) {
+            if ("MANUAL".equals(task.get("kind")) && "OPEN".equals(task.get("status"))) {
+                ok("FIN_CLOSE_TASK_COMPLETE", closer, Map.of("taskId", task.get("taskId")));
+            }
+        }
+        return ok("FIN_PERIOD_CLOSE", closer, Map.of("periodKey", periodKey));
+    }
+
     /** Runs a process that must be refused with {@code status}; returns the first violation's rule code. */
     @SuppressWarnings("unchecked")
     protected String refused(String process, String authorization, Object input, int status) {

@@ -220,15 +220,23 @@
 ### 7.2 状态与检查
 
 - 状态：`OPEN`、`SOFT_CLOSED`（只有 `fin.period.close` 且只允许调整分录）、`CLOSED`（拒绝，原因"period closed"）；子账（AR、AP、BANK、FA）可先于总账关闭（FIN-PC-003）。
-- 状态只经流程改变（`processOnly`）：`FIN_PERIOD_SET_STATE`（总账：三种状态）、`FIN_PERIOD_SET_SUBLEDGER_STATE`（子账：开放、关闭），都需要 `fin.period.close`；
-  F8 之前在各状态间自由切换，每次改变都在期间的历史中。总账关闭时子账自动视为关闭（`PeriodPolicy` 先看总账）。
+- 状态只经流程改变（`processOnly`）：`FIN_PERIOD_SET_STATE`（总账：开放、软关账）、`FIN_PERIOD_SET_SUBLEDGER_STATE`（子账：开放、关闭），都需要 `fin.period.close`；
+  每次改变都在期间的历史中。总账只经结账清单关闭（`FIN_PERIOD_CLOSE`，§7.3），已关期间只经重开（F8b）回到开放，它们拒绝改变已关期间（含打开其子账）。
+  总账关闭时子账自动视为关闭（`PeriodPolicy` 先看总账），关账也把各子账记为关闭。
 - 每个过账流程的期间检查是同一个纯函数 `PeriodPolicy.check(期间, 来源, 是否调整分录, 是否持有 fin.period.close)`。
 - 以前期间项目（PC-007）：单据日期在已结期间、过账日期在开放期间；保留两个日期；报表 `finance.gl.prior_period_items`。
 
 ### 7.3 结账（F8）
 
-- 清单模板（时态）+ 每期清单：任务、负责人、到期日、状态、证据文件；自动检查（未过账/未批准、银行已调节、子账 = 控制科目、周期/折旧/重估已运行、清算科目为零）各记录结果、时间、证据链接（FIN-PC-004、CT-005）。
-- 关账 `FIN_PERIOD_CLOSE`：全部必需项通过 → 写结账产物 `FinCloseArtifact`（只追加：期间、试算表、子账合计、清单结果、操作人、时间、`knownAt` = 关账时刻、内容哈希）。之后按"as known on 关账时刻"重跑试算表必须与产物一致（PC-005）。
+- 清单模板 `FinCloseTemplate`（时态，`FIN_CLOSE_TEMPLATE_SAVE`，`fin.period.close`）：代码、名称、手工或自动（自动项给检查代码，每种至多一项；手工项给负责权限）、到期天数（期末后）、是否必需、顺序、启用；
+  `FIN_SETUP` 在没有模板时建立样例（8 项自动检查、2 项手工任务）。
+- 每期清单 `FinCloseTask`：`FIN_CLOSE_START`（`fin.close.task`）按启用的模板生成（再运行只补新项），手工任务以平台待办指派给负责权限（来源键 `fin.close:<期间>:<代码>`）；
+  `FIN_CLOSE_TASK_COMPLETE` 由持有负责权限者完成（说明、证据文件 `fin.close.evidence`），关闭待办；`FIN_CLOSE_CHECK` 运行自动检查，把结果、时间、证据链接记在任务上（FIN-PC-004）。
+- 自动检查（`calc/CloseChecks`）：`ENTRIES_POSTED`、`BANK_RECONCILED`、`RECURRING_RUN`、`AUTO_REVERSALS`、`DEPRECIATION_RUN`、`CLEARING_ZERO`（CT-005）的例外由模板 `finance.close.exceptions` 列出，即其证据；
+  `SUBLEDGERS` 比较期末应收、应付账龄（美元）与资产登记簿（原值、累计折旧）和各控制类科目（AR、AP、FA_COST、FA_ACCUM）的余额；`REVALUATION_RUN` 在期末有外币项目（`finance.fx.revaluation_items`）时要求本期重估运行。
+- 关账 `FIN_PERIOD_CLOSE`（`fin.period.close`，只第 1–12 期；第 13 期随年结）：期间已开始结账（模板为空时不要求），重跑自动检查，必需的自动项未通过或必需的手工项未完成即 422 `FIN_CLOSE_CHECKS_FAILED` 逐项列出；
+  通过即总账与各子账关闭，以 `REPORT_ISSUE` 签发试算表（`knownAt` = 关账时刻），写结账产物 `FinCloseArtifact` 与 `FinCloseArtifactLine`（只记一次：期间、序号、试算表行、子账与控制科目、清单结果、操作人、时刻、
+  `knownAt`、试算表哈希与内容哈希、签发的报表、取代的上一份产物）。之后按"as known on 关账时刻"重跑试算表，其哈希与产物一致（PC-005）。
 - 重开 `FIN_PERIOD_REOPEN_REQUEST` / `…_APPROVE` / `…_REJECT`：他人批准；再次关账生成新产物并引用旧产物，旧产物标记被取代（PC-006）。
 - 年结（PC-008）：结账分录把当年损益类科目结转到留存收益（来源 CLS，过账到 12 月或第 13 期末），新年度从余额结转开始；调整后重新年结则冲回旧结账分录再生成新的，旧产物被取代。
 
@@ -490,7 +498,7 @@
 | CT-001 职责分离 | §4.6 的规则作为 14b 的配置数据；冲突报告 |
 | CT-002/003 审批规则版本、内容绑定 | 14b；审批记录保存规则版本与内容哈希 |
 | CT-004 影响预览 | 对所选期间的历史分录按新规则重算，列出结果不同的分录与评估总数 |
-| CT-005 清算科目 | `FinAccount` 标记 + 结账检查 |
+| CT-005 清算科目 | `FinAccount.clearing` 标记 + 结账检查 `CLEARING_ZERO`（F8a） |
 | CT-010/011 审计记录、防篡改 | 14f；账本行、单据、审计记录都在哈希链中；校验能指出被改的行 |
 | CT-012 审计证据包 | 按请求生成报表、分录、审批、访问列表、附件 + 清单与哈希，可离线校验 |
 | CT-020/021 保留期、可读归档 | 14f 的保留期（缺省财年末后 7 年）与法律保全；已结财年导出为 CSV/JSON + 模式 + 已发报表 PDF |

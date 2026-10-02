@@ -167,13 +167,15 @@ class JournalAutomationIT extends FinanceItSupport {
 
     @Test
     @SuppressWarnings("unchecked")
-    void aReversalWaitsWhileItsPeriodIsClosed() {
+    void aReversalWaitsWhileItsPeriodTakesNoEntries() {
         Map<String, Object> accrual = entry("2026-02-27", "Accrue utilities", List.of(
             line("6300", "90.00", null, null), line("2100", null, "90.00", null)));
         accrual.put("autoReverseDate", "2026-03-01");
         String id = (String) ok(JournalProcesses.SAVE, accountant(), accrual).get("journalId");
         ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", id));
-        ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2026-03", "status", "CLOSED"));
+        // Soft-closed: a reversal is no adjusting entry (closed for good, the period would open again only through
+        // a reopening).
+        ok(PeriodProcesses.SET_STATE, controller(), Map.of("periodKey", "2026-03", "status", "SOFT_CLOSED"));
         clock.set(Instant.parse("2026-03-02T12:00:00Z"));
 
         Map<String, Object> run = ok(JournalAutomation.AUTO_REVERSE_RUN, accountant(), Map.of("date", "2026-03-01"));
