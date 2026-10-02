@@ -7,6 +7,7 @@ description: >-
   Documents in a foreign currency show what is open in it and in US dollars (F7, FIN-FX-007); the total in US dollars
   equals the payables account at that day. Applications dated later do not count, so a later payment leaves
   an earlier day's aging as it was; run with knownAt, the books as recorded at that time.
+  A document booked after its date (a prior-period item, FIN-PC-007) counts from the day it is booked.
   Between a revaluation's day and its reversal the next day, a foreign document's dollars are as remeasured.
 entities: [FinFxRevaluationRun, FinFxRevaluationLine, FinBill, FinApApplication, FinVendor]
 params:
@@ -48,7 +49,7 @@ WITH docs AS (
            COALESCE(b.{{FinBill.totalUsd}}, b.{{FinBill.total}}) AS doc_total_usd
     FROM {{FinBill}} b
     WHERE b.{{FinBill.status}} IN ('POSTED', 'VOID')
-      AND b.{{FinBill.invoiceDate}} <= :agingDate
+      AND COALESCE(b.{{FinBill.postingDate}}, b.{{FinBill.invoiceDate}}) <= :agingDate
       -- A document voided later was still open on the day.
       AND (b.{{FinBill.voidDate}} IS NULL OR b.{{FinBill.voidDate}} > :agingDate)
       AND (CAST(:vendorCode AS varchar) IS NULL OR b.{{FinBill.vendorCode}} = :vendorCode)

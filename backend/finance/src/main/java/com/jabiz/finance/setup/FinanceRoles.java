@@ -61,13 +61,14 @@ public final class FinanceRoles {
             "file.generated.read", FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_STATEMENT_IMPORT,
             FinancePermissions.BANK_SETTINGS, FinancePermissions.BANK_RECONCILE, FinancePermissions.BANK_REC_REVIEW,
             FinancePermissions.FA_READ, FinancePermissions.FA_MAINTAIN, FinancePermissions.FA_RUN,
-            FinancePermissions.FX_SETTINGS, FinancePermissions.FX_RUN, FinancePermissions.CLOSE_TASK));
+            FinancePermissions.FX_SETTINGS, FinancePermissions.FX_RUN, FinancePermissions.CLOSE_TASK,
+            FinancePermissions.PERIOD_REOPEN_REQUEST));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, FinancePermissions.AP_READ,
             "document.archive.read", FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_STATEMENT_IMPORT,
             FinancePermissions.BANK_RECONCILE, FinancePermissions.FA_READ, FinancePermissions.FA_RUN,
-            FinancePermissions.FX_RUN, FinancePermissions.CLOSE_TASK));
+            FinancePermissions.FX_RUN, FinancePermissions.CLOSE_TASK, FinancePermissions.PERIOD_REOPEN_REQUEST));
         add(RECEIVABLES_CLERK, "Receivables clerk", READ_BOOKS, List.of(FinancePermissions.AR_READ,
             FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.IMPORT, FinancePermissions.INVOICE_PREPARE,
             FinancePermissions.RECEIPT_RECORD, FinancePermissions.WRITE_OFF_REQUEST,

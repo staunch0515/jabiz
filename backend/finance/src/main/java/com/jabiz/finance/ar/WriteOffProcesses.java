@@ -148,7 +148,7 @@ public final class WriteOffProcesses {
                 + " waits for approval already", Map.of("invoiceNo", (Object) invoice.get("invoiceNo"))));
             return;
         }
-        if (input.writeOffDate().isBefore(invoice.get("invoiceDate"))) {
+        if (input.writeOffDate().isBefore(InvoiceProcesses.postedOn(invoice))) {
             ctx.reject(new Violation("writeOffDate", INVALID_VALUE, "An invoice is written off on or after its date",
                 Map.of("value", input.writeOffDate().toString())));
             return;

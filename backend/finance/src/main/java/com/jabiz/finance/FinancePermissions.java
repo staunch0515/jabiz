@@ -195,5 +195,10 @@ public final class FinancePermissions {
     /** Run {@code FIN_CLOSE_TASK_ASSIGN} directly; granted to no role. The close's start assigns the tasks. */
     public static final String CLOSE_INTERNAL = "fin.close.internal";
 
+    /** Ask for a closed period to open again (FIN-PC-006; phase F8b); a controller other than the asker decides. */
+    public static final String PERIOD_REOPEN_REQUEST = "fin.period.reopen.request";
+    /** Run the platform's approval results into reopenings: the platform's events only, never a user. */
+    public static final String PERIOD_REOPEN_RESULT = "fin.period.reopen.result";
+
     private FinancePermissions() {}
 }

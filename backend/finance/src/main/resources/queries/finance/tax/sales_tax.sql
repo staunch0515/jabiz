@@ -6,6 +6,7 @@ description: >-
   credit memos (a credit memo counts in its own period, FIN-TX-005) and of documents voided in the period, in US
   dollars, with the documents and the certificates that exempted them. From the subledger's tax rows, as computed
   when each document was posted; run with knownAt, as recorded at that time, so a past period reproduces.
+  An invoice booked after its date (a prior-period item, FIN-PC-007) counts in the period it is booked in, with its tax.
 entities: [FinInvoice, FinInvoiceTax]
 params:
   from:    { like: FinInvoice.invoiceDate, required: true, description: the first day of the period }
@@ -35,7 +36,8 @@ WITH counted AS (
            CASE WHEN i.{{FinInvoice.kind}} = 'CREDIT_MEMO' THEN -1 ELSE 1 END AS sign
     FROM {{FinInvoice}} i
     WHERE i.{{FinInvoice.status}} IN ('POSTED', 'VOID', 'WRITTEN_OFF') AND i.{{FinInvoice.source}} <> 'OPENING'
-      AND i.{{FinInvoice.invoiceDate}} >= :from AND i.{{FinInvoice.invoiceDate}} <= :to
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) >= :from
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :to
     UNION ALL
     SELECT i.{{FinInvoice.invoiceId}}, i.{{FinInvoice.invoiceNo}}, i.{{FinInvoice.exchangeRate}},
            CASE WHEN i.{{FinInvoice.kind}} = 'CREDIT_MEMO' THEN 1 ELSE -1 END

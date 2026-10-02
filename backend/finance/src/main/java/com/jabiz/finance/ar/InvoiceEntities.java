@@ -75,6 +75,8 @@ public final class InvoiceEntities {
         eb.field("invoiceNo", f -> f.physicalColumn("invoice_no").processOnly().asText(40));
         eb.field("customerCode", f -> f.physicalColumn("customer_code").immutable(true).required(true).asText(20));
         eb.field("invoiceDate", f -> f.physicalColumn("invoice_date").required(true).asDate());
+        // The day it is booked when later than its date: a prior-period item (FIN-PC-007); none: its date.
+        eb.field("postingDate", f -> f.physicalColumn("posting_date").asDate());
         eb.field("dueDate", f -> f.physicalColumn("due_date").processOnly().asDate());
         eb.field("currency", f -> f.physicalColumn("currency").required(true).asText(3));
         // US dollars per unit of the currency on the invoice date (1 for US dollars); fixed when posted.

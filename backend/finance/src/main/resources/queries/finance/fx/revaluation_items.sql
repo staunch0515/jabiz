@@ -48,7 +48,7 @@ WITH receivables AS (
     FROM {{FinInvoice}} i
     WHERE i.{{FinInvoice.status}} IN ('POSTED', 'VOID', 'WRITTEN_OFF')
       AND i.{{FinInvoice.currency}} <> 'USD'
-      AND i.{{FinInvoice.invoiceDate}} <= :revaluationDate
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :revaluationDate
       AND (i.{{FinInvoice.voidDate}} IS NULL OR i.{{FinInvoice.voidDate}} > :revaluationDate)
 ),
 ar_cleared AS (
@@ -74,7 +74,7 @@ payables AS (
     FROM {{FinBill}} b
     WHERE b.{{FinBill.status}} IN ('POSTED', 'VOID')
       AND b.{{FinBill.currency}} <> 'USD'
-      AND b.{{FinBill.invoiceDate}} <= :revaluationDate
+      AND COALESCE(b.{{FinBill.postingDate}}, b.{{FinBill.invoiceDate}}) <= :revaluationDate
       AND (b.{{FinBill.voidDate}} IS NULL OR b.{{FinBill.voidDate}} > :revaluationDate)
 ),
 ap_cleared AS (

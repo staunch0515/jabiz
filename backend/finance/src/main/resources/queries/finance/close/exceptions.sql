@@ -68,7 +68,7 @@ SELECT 'ENTRIES_POSTED', CAST(i.{{FinInvoice.invoiceId}} AS text), COALESCE(i.{{
        i.{{FinInvoice.invoiceDate}}, i.{{FinInvoice.total}}
 FROM {{FinInvoice}} i CROSS JOIN p
 WHERE (i.{{FinInvoice.status}} = 'DRAFT' OR i.{{FinInvoice.approval}} = 'PENDING')
-  AND i.{{FinInvoice.invoiceDate}} BETWEEN p.start_day AND p.end_day
+  AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) BETWEEN p.start_day AND p.end_day
   AND NOT p.adj_period
 UNION ALL
 SELECT 'ENTRIES_POSTED', CAST(b.{{FinBill.billId}} AS text), COALESCE(b.{{FinBill.billNo}}, 'Draft'),
@@ -77,7 +77,7 @@ SELECT 'ENTRIES_POSTED', CAST(b.{{FinBill.billId}} AS text), COALESCE(b.{{FinBil
        b.{{FinBill.invoiceDate}}, b.{{FinBill.total}}
 FROM {{FinBill}} b CROSS JOIN p
 WHERE (b.{{FinBill.status}} = 'DRAFT' OR b.{{FinBill.approval}} = 'PENDING')
-  AND b.{{FinBill.invoiceDate}} BETWEEN p.start_day AND p.end_day
+  AND COALESCE(b.{{FinBill.postingDate}}, b.{{FinBill.invoiceDate}}) BETWEEN p.start_day AND p.end_day
   AND NOT p.adj_period
 UNION ALL
 SELECT 'ENTRIES_POSTED', CAST(r.{{FinPaymentRun.runId}} AS text), r.{{FinPaymentRun.runNo}},

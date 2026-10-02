@@ -1253,7 +1253,7 @@ public final class PaymentProcesses {
                         || input.amount().compareTo(bill.get("openAmount")) > 0) {
                         reason = "the amount is more than is open on the prepayment or the bill";
                     } else if (input.applicationDate().isBefore(payment.get("paymentDate"))
-                        || input.applicationDate().isBefore(bill.get("invoiceDate"))) {
+                        || input.applicationDate().isBefore(BillProcesses.postedOn(bill))) {
                         reason = "a prepayment is applied on or after the dates of both";
                     } else if (settings == null || settings.get("prepaymentAccount") == null) {
                         reason = "the payables settings name no prepayment account";

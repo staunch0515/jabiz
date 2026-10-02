@@ -224,7 +224,8 @@
   每次改变都在期间的历史中。总账只经结账清单关闭（`FIN_PERIOD_CLOSE`，§7.3），已关期间只经重开（F8b）回到开放，它们拒绝改变已关期间（含打开其子账）。
   总账关闭时子账自动视为关闭（`PeriodPolicy` 先看总账），关账也把各子账记为关闭。
 - 每个过账流程的期间检查是同一个纯函数 `PeriodPolicy.check(期间, 来源, 是否调整分录, 是否持有 fin.period.close)`。
-- 以前期间项目（PC-007）：单据日期在已结期间、过账日期在开放期间；保留两个日期；报表 `finance.gl.prior_period_items`。
+- 以前期间项目（PC-007）：单据日期在已结期间、过账日期在开放期间；保留两个日期；报表 `finance.gl.prior_period_items`。日记账本有 `documentDate`；账单与发票有可选的 `postingDate`
+  （空即单据日期）：期间检查、过账、核销与作废的最早日期、账龄、对账单、销售税申报、待重估项目与资本化资产的在用日期都按过账日期，汇率、税率与到期日按单据日期（F8b）。
 
 ### 7.3 结账（F8）
 
@@ -237,7 +238,8 @@
 - 关账 `FIN_PERIOD_CLOSE`（`fin.period.close`，只第 1–12 期；第 13 期随年结）：期间已开始结账（模板为空时不要求），重跑自动检查，必需的自动项未通过或必需的手工项未完成即 422 `FIN_CLOSE_CHECKS_FAILED` 逐项列出；
   通过即总账与各子账关闭，以 `REPORT_ISSUE` 签发试算表（`knownAt` = 关账时刻），写结账产物 `FinCloseArtifact` 与 `FinCloseArtifactLine`（只记一次：期间、序号、试算表行、子账与控制科目、清单结果、操作人、时刻、
   `knownAt`、试算表哈希与内容哈希、签发的报表、取代的上一份产物）。之后按"as known on 关账时刻"重跑试算表，其哈希与产物一致（PC-005）。
-- 重开 `FIN_PERIOD_REOPEN_REQUEST` / `…_APPROVE` / `…_REJECT`：他人批准；再次关账生成新产物并引用旧产物，旧产物标记被取代（PC-006）。
+- 重开 `FIN_PERIOD_REOPEN_REQUEST`（理由必填，只限其后没有已关期间的期间）→ 平台审批（对象 `fin.period.reopen`，规则 `FIN-PERIOD-REOPEN`，申请人以外的 Controller）→
+  `FIN_PERIOD_REOPEN_APPROVAL_RESULT`：批准即期间与子账打开（等待期间更晚的期间已关账则失效 `LAPSED`），拒绝即保持关闭，待批时申请人可撤回（`FinPeriodReopen` 记录申请与决定）。再次关账生成新产物并引用旧产物，模板 `finance.close.artifacts` 显示取代关系（PC-006，F8b）。
 - 年结（PC-008）：结账分录把当年损益类科目结转到留存收益（来源 CLS，过账到 12 月或第 13 期末），新年度从余额结转开始；调整后重新年结则冲回旧结账分录再生成新的，旧产物被取代。
 
 ---

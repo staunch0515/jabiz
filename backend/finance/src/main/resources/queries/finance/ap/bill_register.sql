@@ -20,6 +20,7 @@ results:
   vendorName:      { from: FinVendor.legalName }
   vendorInvoiceNo: { from: FinBill.vendorInvoiceNo }
   invoiceDate:     { from: FinBill.invoiceDate }
+  postingDate:     { from: FinBill.postingDate }
   dueDate:         { from: FinBill.dueDate }
   currency:        { from: FinBill.currency }
   total:           { from: FinBill.total }
@@ -48,6 +49,7 @@ SELECT
     v.{{FinVendor.legalName}}     AS vendorName,
     b.{{FinBill.vendorInvoiceNo}} AS vendorInvoiceNo,
     b.{{FinBill.invoiceDate}}     AS invoiceDate,
+    COALESCE(b.{{FinBill.postingDate}}, b.{{FinBill.invoiceDate}}) AS postingDate,
     b.{{FinBill.dueDate}}         AS dueDate,
     b.{{FinBill.currency}}        AS currency,
     CASE WHEN b.{{FinBill.kind}} = 'CREDIT' THEN -1 ELSE 1 END * b.{{FinBill.total}} AS total,

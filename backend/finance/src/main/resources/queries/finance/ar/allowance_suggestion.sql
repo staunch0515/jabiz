@@ -33,7 +33,7 @@ WITH docs AS (
            i.{{FinInvoice.totalUsd}} AS doc_total_usd
     FROM {{FinInvoice}} i
     WHERE i.{{FinInvoice.status}} IN ('POSTED', 'VOID', 'WRITTEN_OFF')
-      AND i.{{FinInvoice.invoiceDate}} <= :onDate
+      AND COALESCE(i.{{FinInvoice.postingDate}}, i.{{FinInvoice.invoiceDate}}) <= :onDate
       AND (i.{{FinInvoice.voidDate}} IS NULL OR i.{{FinInvoice.voidDate}} > :onDate)
 ),
 cleared AS (

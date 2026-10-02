@@ -82,8 +82,11 @@ public final class SetupProcesses {
     /** The rule of FIN-BK-008: every bank reconciliation needs a reviewer of reconciliations to sign it off. */
     public static final String BANK_REC_RULE = "FIN-BANK-REC";
 
+    /** The rule of FIN-PC-006: every reopening of a closed period needs a controller other than its requester. */
+    public static final String REOPEN_RULE = "FIN-PERIOD-REOPEN";
+
     private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE,
-        BILL_RULE, PAYMENT_RULE, BANK_REC_RULE);
+        BILL_RULE, PAYMENT_RULE, BANK_REC_RULE, REOPEN_RULE);
     private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES, SOD_PAYMENT_APPROVE);
 
     static final String ROLES = "roles";
@@ -223,6 +226,11 @@ public final class SetupProcesses {
                 "Finance setup: bank reconciliations need a reviewer's sign-off (FIN-BK-008)"));
             codes.add(BANK_REC_RULE);
         }
+        if (missing(ctx, REOPEN_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, reopenRule(), null,
+                "Finance setup: reopening a closed period needs another controller's approval (FIN-PC-006)"));
+            codes.add(REOPEN_RULE);
+        }
         if (missing(ctx, SOD_VENDOR_BANK)) {
             proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
                 sodRule(SOD_VENDOR_BANK, List.of(FinancePermissions.VENDOR_BANK_MAINTAIN),
@@ -327,6 +335,19 @@ public final class SetupProcesses {
         rule.put("condition", Map.of());
         rule.put("levels", List.of(Map.of("permission", FinancePermissions.BANK_REC_REVIEW)));
         rule.put("description", "Bank reconciliations need a reviewer of reconciliations");
+        return rule;
+    }
+
+    /** Every reopening of a closed period needs a controller other than its requester (FIN-PC-006). */
+    static Map<String, Object> reopenRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", REOPEN_RULE);
+        rule.put("subject", com.jabiz.finance.close.ReopenProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of());
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.PERIOD_CLOSE)));
+        rule.put("description", "Reopening a closed period needs a controller's approval");
         return rule;
     }
 
