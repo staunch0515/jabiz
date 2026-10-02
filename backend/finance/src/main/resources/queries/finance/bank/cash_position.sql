@@ -4,7 +4,8 @@ description: >-
   The cash position on a day (FIN-BK-010): every bank account's balance per the books at the end of the day and its
   last statement's closing balance by then; and the receipts and payments expected within the next days (30 if not
   given), overdue ones included: the open posted invoices and the open posted bills cleared for payment (approved,
-  or needing no approval), by due date. The open amounts are the documents' as recorded; run with knownAt for an
+  or needing no approval), by due date, in US dollars (a foreign document's at its own rate, F7). The open amounts are
+  the documents' as recorded; run with knownAt for an
   earlier day's.
 entities: [FinBankAccount, FinBankStatement, LedgerAccount, LedgerEntry, FinPosting, FinInvoice, FinCustomer, FinBill,
   FinVendor]
@@ -63,7 +64,7 @@ LEFT JOIN books bk ON bk.bank_key = b.{{FinBankAccount.bankCode}}
 LEFT JOIN last_statement ls ON ls.bank_key = b.{{FinBankAccount.bankCode}}
 UNION ALL
 SELECT 'EXPECTED_RECEIPT', NULL, NULL, NULL, NULL, NULL, i.{{FinInvoice.invoiceNo}}, NULL, c.{{FinCustomer.legalName}},
-       i.{{FinInvoice.dueDate}}, i.{{FinInvoice.openAmount}}
+       i.{{FinInvoice.dueDate}}, COALESCE(i.{{FinInvoice.openAmountUsd}}, i.{{FinInvoice.openAmount}})
 FROM {{FinInvoice}} i
 CROSS JOIN reach
 LEFT JOIN {{FinCustomer}} c ON c.{{FinCustomer.customerCode}} = i.{{FinInvoice.customerCode}}
@@ -72,7 +73,7 @@ WHERE i.{{FinInvoice.status}} = 'POSTED' AND i.{{FinInvoice.kind}} = 'INVOICE'
   AND COALESCE(i.{{FinInvoice.dueDate}}, i.{{FinInvoice.invoiceDate}}) <= reach.last_day
 UNION ALL
 SELECT 'EXPECTED_PAYMENT', NULL, NULL, NULL, NULL, NULL, bl.{{FinBill.billNo}}, bl.{{FinBill.vendorInvoiceNo}}, v.{{FinVendor.legalName}},
-       bl.{{FinBill.dueDate}}, bl.{{FinBill.openAmount}}
+       bl.{{FinBill.dueDate}}, COALESCE(bl.{{FinBill.openAmountUsd}}, bl.{{FinBill.openAmount}})
 FROM {{FinBill}} bl
 CROSS JOIN reach
 LEFT JOIN {{FinVendor}} v ON v.{{FinVendor.vendorCode}} = bl.{{FinBill.vendorCode}}

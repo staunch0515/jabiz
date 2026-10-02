@@ -106,6 +106,11 @@ public final class BillEntities {
         // What is owed the vendor: the lines; use tax is owed the state, not the vendor.
         eb.field("total", f -> f.physicalColumn("total").processOnly().asNumeric(15, 2));
         eb.field("openAmount", f -> f.physicalColumn("open_amount").processOnly().asNumeric(15, 2));
+        // F7 (FIN-FX-003): the rate it was posted at and what it owes in US dollars; empty on bills in US dollars
+        // posted before F7, whose rate is 1.
+        eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").processOnly().asNumeric(19, 10));
+        eb.field("totalUsd", f -> f.physicalColumn("total_usd").processOnly().asNumeric(15, 2));
+        eb.field("openAmountUsd", f -> f.physicalColumn("open_amount_usd").processOnly().asNumeric(15, 2));
         eb.field("glNo", f -> f.physicalColumn("gl_no").processOnly().asText(40));
         eb.field("postedTime", f -> f.physicalColumn("posted_time").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
@@ -118,8 +123,8 @@ public final class BillEntities {
         eb.display("billNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("billNo", "kind", "vendorCode", "vendorInvoiceNo", "invoiceDate", "dueDate", "total",
-                "openAmount", "status", "approval")
+            .columns("billNo", "kind", "vendorCode", "vendorInvoiceNo", "invoiceDate", "dueDate", "currency", "total",
+                "openAmount", "openAmountUsd", "status", "approval")
             .filters("billNo", "kind", "vendorCode", "vendorInvoiceNo", "vendorInvoiceKey", "invoiceDate", "dueDate",
                 "status", "approval", "source", "originalBillId", "openAmount")
             .sorts("billNo", "invoiceDate", "dueDate", "total", "openAmount")
@@ -198,13 +203,18 @@ public final class BillEntities {
             .asDate());
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asNumeric(15, 2));
         eb.field("discount", f -> f.physicalColumn("discount").immutable(true).asNumeric(15, 2));
+        // F7 (FIN-FX-004): what it took off the bill in US dollars at the bill's rate, what the payment or credit gave
+        // at its own, and the difference, the realized gain (positive) or loss. Empty on applications in US dollars.
+        eb.field("amountUsd", f -> f.physicalColumn("amount_usd").immutable(true).asNumeric(15, 2));
+        eb.field("sourceAmountUsd", f -> f.physicalColumn("source_amount_usd").immutable(true).asNumeric(15, 2));
+        eb.field("fxGainLoss", f -> f.physicalColumn("fx_gain_loss").immutable(true).asNumeric(15, 2));
         eb.field("reversesApplicationId", f -> f.physicalColumn("reverses_application_id").immutable(true)
             .asReference(APPLICATION));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).asText(500));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("applicationDate", "sourceKind", "sourceNo", "billId", "vendorCode", "amount", "discount",
-                "reversesApplicationId", "reason")
+                "amountUsd", "fxGainLoss", "reversesApplicationId", "reason")
             .filters("billId", "sourceId", "vendorCode", "applicationDate", "sourceKind")
             .sorts("applicationDate")
             .defaultSort("applicationDate", true));

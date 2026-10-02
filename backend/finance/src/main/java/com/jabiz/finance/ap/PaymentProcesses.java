@@ -7,6 +7,9 @@ import com.jabiz.finance.ar.ArEntities;
 import com.jabiz.finance.bank.BankEntities;
 import com.jabiz.finance.calc.Form1099Allocation;
 import com.jabiz.finance.calc.PaymentTerms;
+import com.jabiz.finance.fx.FxEntities;
+import com.jabiz.finance.fx.FxRates;
+import com.jabiz.finance.fx.FxSettingsProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.JournalEntities;
 import com.jabiz.finance.gl.JournalProcesses;
@@ -73,6 +76,10 @@ import java.util.UUID;
  *   <li>{@code FIN_AP_PREPAYMENT_APPLY}: a prepayment applied to a bill of its vendor: debit payables, credit
  *       prepayments (FIN-AP-008).</li>
  * </ul>
+ * A run pays bills in one currency (F7 plan decision D4): one in a foreign currency is a wire or manual run of bills
+ * only, without discounts, at the spot rate of the payment day or the rate given, fixed when it is proposed and
+ * approved with it. Each payment debits payables with the dollars its bills carry and credits the bank with the
+ * dollars paid; the difference is the realized gain or loss (FIN-FX-004). Form 1099 counts the dollars paid.
  */
 public final class PaymentProcesses {
 
@@ -110,6 +117,7 @@ public final class PaymentProcesses {
     public static final String TOO_MANY = "FIN_PAYMENT_TOO_MANY";
     public static final String OTHER_METHOD = "FIN_PAYMENT_OTHER_METHOD";
     public static final String SENT = "FIN_PAYMENT_SENT";
+    public static final String FOREIGN = "FIN_PAYMENT_FOREIGN";
 
     /** The reasons a bill is held out of a run (FIN-AP-003, 006, 010). */
     public static final String HOLD_NOT_APPROVED = "not approved";
@@ -118,6 +126,7 @@ public final class PaymentProcesses {
     public static final String HOLD_VENDOR = "vendor inactive";
     public static final String HOLD_IN_RUN = "in another payment run";
     public static final String HOLD_NOTHING_OPEN = "nothing open";
+    public static final String HOLD_CURRENCY = "in another currency";
 
     /**
      * @param bankCode     the company bank account paid from; the payables settings' default when absent
@@ -125,11 +134,14 @@ public final class PaymentProcesses {
      * @param dueThrough   the last due day of the bills proposed; none for a run that starts empty
      * @param vendorCodes  only these vendors' bills, if given
      * @param takeDiscounts propose bills whose early-payment discount runs to the payment day, and take it
+     * @param currency     the bills' currency; US dollars when absent (F7)
+     * @param exchangeRate the rate the bank pays a foreign currency at; the payment day's spot rate when absent
      */
     public record ProposeInput(@Size(max = 20) String bankCode, @NotNull LocalDate paymentDate,
         @NotBlank @Size(max = 10) String method, LocalDate dueThrough,
         @Size(max = 500) List<@NotBlank @Size(max = 20) String> vendorCodes, Boolean takeDiscounts,
-        @Size(max = 500) String description) {}
+        @Size(max = 500) String description, @Size(max = 3) String currency,
+        @DecimalMin(value = "0", inclusive = false) @Digits(integer = 9, fraction = 10) BigDecimal exchangeRate) {}
 
     /**
      * A line added to a draft run: a bill ({@code billId}), another payment ({@code payee}, {@code account},
@@ -166,7 +178,8 @@ public final class PaymentProcesses {
     public record PaymentInput(@NotNull UUID runId, @NotBlank String runNo, @NotBlank String kind, String vendorCode,
         @NotBlank String payee, @NotBlank String bankCode, @NotBlank String bankAccount, @NotBlank String method,
         @NotNull LocalDate paymentDate, String checkNo, UUID vendorBankAccountId, String account, String description,
-        @NotNull @Valid List<@NotNull @Valid PaidBill> bills, BigDecimal amount) {}
+        @NotNull @Valid List<@NotNull @Valid PaidBill> bills, BigDecimal amount, String currency,
+        BigDecimal exchangeRate) {}
 
     public record PaymentOutput(String paymentId, String paymentNo, BigDecimal amount, String glNo) {}
 
@@ -218,6 +231,10 @@ public final class PaymentProcesses {
     static final String SUB_INPUT = "subledgerInput";
     static final String SUB_OUTPUT = "subledgerOutput";
     static final String NEW_ID = "newId";
+    static final String FX_SETTINGS = "fxSettings";
+    static final String FX_RATES = "fxRates";
+    static final String SETTLED = "settled";
+    static final String RATE = "rate";
 
     // ---- propose ---------------------------------------------------------------------------------------------------
 
@@ -238,6 +255,11 @@ public final class PaymentProcesses {
             .step("Load the payment terms", QueryEntities.of(ArEntities.PAYMENT_TERMS_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(MAX_TERMS).build(),
                 TERMS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
+            .step("Load the exchange rate", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET,
+                ctx -> FxRates.spot(runCurrency(ctx.get(INPUT, ProposeInput.class).currency()),
+                    ctx.get(INPUT, ProposeInput.class).paymentDate(), first(ctx, FX_SETTINGS)), FX_RATES))
             .step("Load the open bills", QueryEntities.of(BillEntities.BILL_DATASET, ctx -> {
                 ProposeInput input = ctx.get(INPUT, ProposeInput.class);
                 if (input.dueThrough() == null) {
@@ -254,6 +276,7 @@ public final class PaymentProcesses {
                 List<QueryPredicate> where = new ArrayList<>(List.of(
                     new QueryPredicate.Eq("status", BillEntities.POSTED),
                     new QueryPredicate.Eq("kind", BillEntities.BILL_KIND),
+                    new QueryPredicate.Eq("currency", runCurrency(input.currency())),
                     new QueryPredicate.Ne("openAmount", BigDecimal.ZERO), due));
                 if (input.vendorCodes() != null && !input.vendorCodes().isEmpty()) {
                     where.add(new QueryPredicate.In("vendorCode", new ArrayList<>(input.vendorCodes().stream()
@@ -276,6 +299,18 @@ public final class PaymentProcesses {
         ProposeInput input = ctx.get(INPUT, ProposeInput.class);
         String method = method(ctx, input.method());
         EntityInstance bank = bank(ctx, input.bankCode());
+        String currency = runCurrency(input.currency());
+        BigDecimal rate = FxRates.rate(currency, input.exchangeRate(), list(ctx, FX_RATES));
+        if (!ApFx.dollars(currency)) {
+            if (!foreignAllowed(method)) {
+                ctx.reject(new Violation("method", FOREIGN, "Bills in " + currency + " are paid by wire or outside "
+                    + "the bank files (MANUAL), not by " + method, Map.of("currency", currency,
+                    "method", String.valueOf(method))));
+            }
+            if (rate == null) {
+                ctx.reject(FxRates.missing("exchangeRate", currency, input.paymentDate(), first(ctx, FX_SETTINGS)));
+            }
+        }
         // The datasets cut a query at its limit without a word: a full result may be missing rows that matter.
         if (list(ctx, BILLS).size() >= MAX_ROWS || list(ctx, OPEN_LINES).size() >= MAX_ROWS
             || list(ctx, TERMS).size() >= MAX_TERMS) {
@@ -286,7 +321,8 @@ public final class PaymentProcesses {
             return;
         }
         Map<String, String> inRun = runsOfBills(ctx, null);
-        boolean discounts = Boolean.TRUE.equals(input.takeDiscounts());
+        // Discounts are taken in US dollars only, as on receipts (F7a).
+        boolean discounts = Boolean.TRUE.equals(input.takeDiscounts()) && ApFx.dollars(currency);
         List<Map<String, Object>> lines = new ArrayList<>();
         List<Held> held = new ArrayList<>();
         List<EntityInstance> bills = new ArrayList<>(list(ctx, BILLS));
@@ -299,7 +335,7 @@ public final class PaymentProcesses {
             if (!dueNow && discount.signum() == 0) {
                 continue;
             }
-            String reason = hold(ctx, bill, method, inRun, null);
+            String reason = hold(ctx, bill, method, currency, inRun, null);
             BigDecimal open = bill.get("openAmount");
             if (reason != null) {
                 held.add(new Held(String.valueOf(bill.id()), bill.get("billNo"), bill.get("vendorCode"), open,
@@ -310,6 +346,7 @@ public final class PaymentProcesses {
         }
         ctx.put(PLAN, new Plan(lines, List.copyOf(held)));
         ctx.put(BANKS, List.of(bank));
+        ctx.put(RATE, rate);
     }
 
     static void recordProposal(ProcessContext ctx) {
@@ -325,6 +362,8 @@ public final class PaymentProcesses {
         run.put("paymentDate", input.paymentDate());
         run.put("method", VendorProcesses.code(input.method()));
         run.put("description", VendorProcesses.trim(input.description()));
+        run.put("currency", runCurrency(input.currency()));
+        run.put("exchangeRate", ctx.get(RATE));
         run.put("status", PaymentEntities.DRAFT);
         run.put("total", total(plan.lines()));
         run.put("lineCount", BigDecimal.valueOf(plan.lines().size()));
@@ -390,7 +429,7 @@ public final class PaymentProcesses {
                         Map.of("field", "billId", "value", String.valueOf(input.billId()))));
                     return;
                 }
-                String reason = hold(ctx, bill, run.get("method"), runsOfBills(ctx, null), null);
+                String reason = hold(ctx, bill, run.get("method"), ApFx.currency(run), runsOfBills(ctx, null), null);
                 if (reason != null) {
                     ctx.reject(new Violation("billId", HELD, bill.get("billNo") + " is held: " + reason,
                         Map.of("billNo", (Object) bill.get("billNo"), "reason", reason)));
@@ -406,6 +445,10 @@ public final class PaymentProcesses {
                 line = billLine(bill, payee(ctx, bill.get("vendorCode")), amount, BigDecimal.ZERO);
             }
             case PaymentEntities.OTHER_LINE -> {
+                if (!ApFx.dollars(ApFx.currency(run))) {
+                    ctx.reject(foreignLine(run));
+                    return;
+                }
                 if (!otherAllowed(run.get("method"))) {
                     ctx.reject(otherMethod(run));
                     return;
@@ -431,6 +474,10 @@ public final class PaymentProcesses {
                 line.put("amount", input.amount());
             }
             case PaymentEntities.PREPAYMENT_LINE -> {
+                if (!ApFx.dollars(ApFx.currency(run))) {
+                    ctx.reject(foreignLine(run));
+                    return;
+                }
                 String vendorCode = VendorProcesses.code(input.vendorCode());
                 EntityInstance vendor = list(ctx, VENDORS).isEmpty() ? null : list(ctx, VENDORS).getFirst();
                 EntityInstance settings = list(ctx, SETTINGS).isEmpty() ? null : list(ctx, SETTINGS).getFirst();
@@ -536,7 +583,8 @@ public final class PaymentProcesses {
                 }
                 Map<String, Object> content = content(run, list(ctx, LINES));
                 Map<String, Object> facts = new LinkedHashMap<>();
-                facts.put("amount", run.get("total"));
+                // In US dollars, as the rules' limits are: at the run's rate.
+                facts.put("amount", BillPosting.usd(run.get("total"), ApFx.rate(run)));
                 facts.put("method", run.get("method"));
                 facts.put("bankCode", run.get("bankCode"));
                 ctx.put(CASE, ApprovalCase.of(run.id(), facts, content).preparedBy(run.get("preparedBy")));
@@ -710,7 +758,7 @@ public final class PaymentProcesses {
                 BigDecimal amount = line.get("amount");
                 String reason = bill == null || !BillEntities.POSTED.equals(bill.get("status")) ? "not posted"
                     : amount.compareTo(bill.get("openAmount")) > 0 ? "paid or credited since"
-                    : hold(ctx, bill, method, inOtherRuns, run.id());
+                    : hold(ctx, bill, method, ApFx.currency(run), inOtherRuns, run.id());
                 if (reason != null) {
                     ctx.reject(new Violation("runId", HELD, line.get("billNo") + " is held: " + reason,
                         Map.of("billNo", (Object) line.get("billNo"), "reason", reason)));
@@ -730,7 +778,8 @@ public final class PaymentProcesses {
                 payments.add(new PaymentInput(uuid(run.id()), run.get("runNo"), PaymentEntities.PREPAYMENT_LINE,
                     vendor.get("vendorCode"), line.get("payee"), bank.get("bankCode"), bank.get("glAccount"),
                     method, run.get("paymentDate"), null, activeBank(ctx, vendor.get("vendorCode")),
-                    line.get("account"), line.get("description"), List.of(), line.get("amount")));
+                    line.get("account"), line.get("description"), List.of(), line.get("amount"),
+                    ApFx.currency(run), ApFx.rate(run)));
             } else {
                 if (!otherAllowed(method)) {
                     ctx.reject(otherMethod(run));
@@ -738,7 +787,8 @@ public final class PaymentProcesses {
                 }
                 payments.add(new PaymentInput(uuid(run.id()), run.get("runNo"), PaymentEntities.OTHER_LINE, null,
                     line.get("payee"), bank.get("bankCode"), bank.get("glAccount"), method, run.get("paymentDate"),
-                    null, null, line.get("account"), line.get("description"), List.of(), line.get("amount")));
+                    null, null, line.get("account"), line.get("description"), List.of(), line.get("amount"),
+                    ApFx.currency(run), ApFx.rate(run)));
             }
         }
         if (ctx.hasViolations()) {
@@ -748,7 +798,8 @@ public final class PaymentProcesses {
         byVendor.forEach((vendorCode, bills) -> {
             vendorPayments.add(new PaymentInput(uuid(run.id()), run.get("runNo"), PaymentEntities.BILL_LINE,
                 vendorCode, payees.get(vendorCode), bank.get("bankCode"), bank.get("glAccount"), method,
-                run.get("paymentDate"), null, activeBank(ctx, vendorCode), null, null, List.copyOf(bills), null));
+                run.get("paymentDate"), null, activeBank(ctx, vendorCode), null, null, List.copyOf(bills), null,
+                ApFx.currency(run), ApFx.rate(run)));
         });
         vendorPayments.addAll(payments);
         if ("CHECK".equals(method)) {
@@ -765,7 +816,8 @@ public final class PaymentProcesses {
                 numbered.add(new PaymentInput(payment.runId(), payment.runNo(), payment.kind(), payment.vendorCode(),
                     payment.payee(), payment.bankCode(), payment.bankAccount(), payment.method(),
                     payment.paymentDate(), String.valueOf(number++), payment.vendorBankAccountId(), payment.account(),
-                    payment.description(), payment.bills(), payment.amount()));
+                    payment.description(), payment.bills(), payment.amount(), payment.currency(),
+                    payment.exchangeRate()));
             }
             vendorPayments.clear();
             vendorPayments.addAll(numbered);
@@ -817,6 +869,8 @@ public final class PaymentProcesses {
                     .stream().map(b -> (Object) b.billId()).toList()))).limit(MAX_ROWS).build(), BILL_LINES))
             .step("Load the vendor", QueryEntities.of(ApEntities.VENDOR_DATASET, ctx -> VendorProcesses.eq(
                 "vendorCode", ctx.get(INPUT, PaymentInput.class).vendorCode()), VENDORS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
             .step("Number the payment", AssignNumber.of(PAYMENT_NUMBERS, NUMBER))
             .compute("Build the entry", (metadata, ctx) -> buildPayment(ctx))
             // The ledger checks that the source document exists: the payment is saved before it is booked.
@@ -843,17 +897,36 @@ public final class PaymentProcesses {
             return;
         }
         String memo = "Payment " + number + " " + input.payee();
+        // The bills give up the dollars they carry; the bank pays the cash at the run's rate (FIN-FX-004).
+        BigDecimal rate = input.exchangeRate() == null ? BigDecimal.ONE : input.exchangeRate();
+        BigDecimal cashUsd = BillPosting.usd(cash, rate);
+        Map<UUID, Settled> settled = settled(ctx, input, cashUsd);
+        BigDecimal clearedUsd = settled.values().stream().map(Settled::cleared).reduce(BigDecimal.ZERO,
+            BigDecimal::add);
+        BigDecimal gainLoss = bills ? clearedUsd.subtract(discount).subtract(cashUsd) : BigDecimal.ZERO;
+        EntityInstance fx = first(ctx, FX_SETTINGS);
+        if (gainLoss.signum() != 0 && (fx == null || fx.get("realizedAccount") == null)) {
+            ctx.reject(new Violation("runId", FxSettingsProcesses.NO_SETTINGS, "The payment's dollars differ from "
+                + "the bills' and the foreign currency settings name no account for the exchange gain or loss",
+                Map.of()));
+            return;
+        }
         List<JournalProcesses.LineInput> lines = new ArrayList<>();
         if (bills) {
-            lines.add(new JournalProcesses.LineInput(settings.get("payableAccount"), gross, null, memo, null, null));
+            lines.add(new JournalProcesses.LineInput(settings.get("payableAccount"), clearedUsd, null, memo, null,
+                null));
             if (discount.signum() != 0) {
                 lines.add(new JournalProcesses.LineInput(settings.get("discountAccount"), null, discount,
                     "Discounts taken " + number, null, null));
             }
+            if (gainLoss.signum() != 0) {
+                lines.add(ApFx.realized(fx.get("realizedAccount"), gainLoss, number));
+            }
         } else {
-            lines.add(new JournalProcesses.LineInput(input.account(), cash, null, memo, null, null));
+            lines.add(new JournalProcesses.LineInput(input.account(), cashUsd, null, memo, null, null));
         }
-        lines.add(new JournalProcesses.LineInput(input.bankAccount(), null, cash, memo, null, null));
+        lines.add(new JournalProcesses.LineInput(input.bankAccount(), null, cashUsd, memo, null, null));
+        ctx.put(SETTLED, settled);
         Map<String, Object> payment = new LinkedHashMap<>();
         payment.put("paymentNo", number);
         payment.put("runId", input.runId());
@@ -866,6 +939,9 @@ public final class PaymentProcesses {
         payment.put("paymentDate", input.paymentDate());
         payment.put("amount", cash);
         payment.put("discount", bills ? discount : null);
+        payment.put("currency", input.currency() == null ? FxRates.USD : input.currency());
+        payment.put("exchangeRate", rate);
+        payment.put("amountUsd", cashUsd);
         payment.put("checkNo", input.checkNo());
         payment.put("vendorBankAccountId", input.vendorBankAccountId());
         payment.put("openAmount", PaymentEntities.PREPAYMENT_LINE.equals(input.kind()) ? cash : null);
@@ -899,9 +975,15 @@ public final class PaymentProcesses {
             application.put("applicationDate", input.paymentDate());
             application.put("amount", paid.amount().subtract(discount));
             application.put("discount", discount.signum() == 0 ? null : discount);
+            Settled usd = settled(ctx).get(paid.billId());
+            if (!ApFx.dollars(input.currency())) {
+                application.put("amountUsd", usd.cleared());
+                application.put("sourceAmountUsd", usd.source());
+                application.put("fxGainLoss", usd.cleared().subtract(usd.source()));
+            }
             ctx.changes().insert(BillEntities.APPLICATION, application);
-            ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(),
-                Map.of("openAmount", bill.<BigDecimal>get("openAmount").subtract(paid.amount())));
+            ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), BillProcesses.open(bill,
+                bill.<BigDecimal>get("openAmount").subtract(paid.amount()), ApFx.openUsd(bill).subtract(usd.cleared())));
             cash = cash.add(paid.amount().subtract(discount));
         }
         if (!PaymentEntities.BILL_LINE.equals(input.kind())) {
@@ -947,7 +1029,10 @@ public final class PaymentProcesses {
                         b.get("total")));
             }
             BigDecimal discount = paid.discount() == null ? BigDecimal.ZERO : paid.discount();
-            Form1099Allocation.allocate(paid.amount().subtract(discount), parts).forEach((key, amount) -> {
+            // What the vendor received, in US dollars: a foreign bill's at the payment's rate.
+            BigDecimal received = ApFx.dollars(input.currency()) ? paid.amount().subtract(discount)
+                : settled(ctx).get(paid.billId()).source();
+            Form1099Allocation.allocate(received, parts).forEach((key, amount) -> {
                 String[] formBox = key.split("\\|");
                 insert1099(ctx, input.vendorCode(), formBox[0], formBox[1], amount,
                     Form1099Entities.PAYMENT_SOURCE, input.paymentDate().getYear(), input.paymentDate(), paymentId,
@@ -1058,6 +1143,7 @@ public final class PaymentProcesses {
                     }
                 });
                 Map<Object, BigDecimal> reopen = new LinkedHashMap<>();
+                Map<Object, BigDecimal> reopenUsd = new LinkedHashMap<>();
                 for (EntityInstance application : list(ctx, APPLICATIONS)) {
                     if (application.get("reversesApplicationId") != null
                         || reversed.contains(String.valueOf(application.id()))) {
@@ -1075,18 +1161,27 @@ public final class PaymentProcesses {
                     back.put("applicationDate", input.voidDate());
                     back.put("amount", amount.negate());
                     back.put("discount", discount.signum() == 0 ? null : discount.negate());
+                    if (application.get("amountUsd") != null) {
+                        back.put("amountUsd", ApFx.amountUsd(application).negate());
+                        back.put("sourceAmountUsd", ApFx.sourceUsd(application).negate());
+                        back.put("fxGainLoss", application.get("fxGainLoss") == null ? null
+                            : application.<BigDecimal>get("fxGainLoss").negate());
+                    }
                     back.put("reversesApplicationId", application.id());
                     back.put("reason", "Void of " + payment.get("paymentNo") + ": " + input.reason().trim());
                     ctx.changes().insert(BillEntities.APPLICATION, back);
                     reopen.merge(String.valueOf((Object) application.get("billId")), amount.add(discount),
                         BigDecimal::add);
+                    reopenUsd.merge(String.valueOf((Object) application.get("billId")),
+                        ApFx.amountUsd(application).add(discount), BigDecimal::add);
                 }
                 List<String> reopened = new ArrayList<>();
                 for (EntityInstance bill : list(ctx, BILLS)) {
                     BigDecimal back = reopen.get(String.valueOf(bill.id()));
                     if (back != null) {
-                        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(),
-                            Map.of("openAmount", bill.<BigDecimal>get("openAmount").add(back)));
+                        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), BillProcesses.open(bill,
+                            bill.<BigDecimal>get("openAmount").add(back),
+                            ApFx.openUsd(bill).add(reopenUsd.get(String.valueOf(bill.id())))));
                         reopened.add(bill.get("billNo"));
                     }
                 }
@@ -1152,6 +1247,8 @@ public final class PaymentProcesses {
                         reason = "the bill is not a posted bill";
                     } else if (!Objects.equals(payment.get("vendorCode"), bill.get("vendorCode"))) {
                         reason = "the prepayment and the bill are of different vendors";
+                    } else if (!ApFx.dollars(ApFx.currency(bill))) {
+                        reason = "prepayments are in US dollars and the bill is in " + ApFx.currency(bill);
                     } else if (input.amount().compareTo(payment.get("openAmount")) > 0
                         || input.amount().compareTo(bill.get("openAmount")) > 0) {
                         reason = "the amount is more than is open on the prepayment or the bill";
@@ -1195,7 +1292,8 @@ public final class PaymentProcesses {
                     Object id = ctx.changes().insert(BillEntities.APPLICATION, application);
                     BigDecimal billOpen = bill.<BigDecimal>get("openAmount").subtract(input.amount());
                     BigDecimal prepaymentOpen = payment.<BigDecimal>get("openAmount").subtract(input.amount());
-                    ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), Map.of("openAmount", billOpen));
+                    ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), BillProcesses.open(bill,
+                        billOpen, ApFx.openUsd(bill).subtract(input.amount())));
                     ctx.changes().update(PaymentEntities.PAYMENT, payment.id(), payment.version(),
                         Map.of("openAmount", prepaymentOpen));
                     ctx.put(OUTPUT, new PrepaymentApplyOutput(String.valueOf(id), billOpen, prepaymentOpen,
@@ -1205,10 +1303,13 @@ public final class PaymentProcesses {
     // ---- holds -----------------------------------------------------------------------------------------------------
 
     /** Why a bill may not be paid now, or null (FIN-AP-003, 006, 010). */
-    static String hold(ProcessContext ctx, EntityInstance bill, String method, Map<String, String> inRun,
-        Object ownRun) {
+    static String hold(ProcessContext ctx, EntityInstance bill, String method, String currency,
+        Map<String, String> inRun, Object ownRun) {
         if (bill.<BigDecimal>get("openAmount").signum() <= 0) {
             return HOLD_NOTHING_OPEN;
+        }
+        if (!ApFx.currency(bill).equals(currency)) {
+            return HOLD_CURRENCY + " (" + ApFx.currency(bill) + ")";
         }
         if (inRun.containsKey(String.valueOf(bill.id()))) {
             return HOLD_IN_RUN + " (" + inRun.get(String.valueOf(bill.id())) + ")";
@@ -1303,6 +1404,11 @@ public final class PaymentProcesses {
         Map<String, Object> content = new LinkedHashMap<>();
         for (String field : List.of("runNo", "bankCode", "paymentDate", "method")) {
             content.put(field, run.get(field));
+        }
+        // A foreign run is approved at its rate; runs in dollars keep the content they were approved with.
+        if (!ApFx.dollars(ApFx.currency(run))) {
+            content.put("currency", ApFx.currency(run));
+            content.put("exchangeRate", ApFx.rate(run).stripTrailingZeros().toPlainString());
         }
         List<Map<String, Object>> rows = new ArrayList<>();
         lines.stream().sorted(Comparator.comparing(l -> String.valueOf(l.id()))).forEach(line -> {
@@ -1419,6 +1525,58 @@ public final class PaymentProcesses {
     private static boolean otherAllowed(String method) {
         return "CHECK".equals(method) || PaymentEntities.MANUAL.equals(method)
             || PaymentEntities.CARD.equals(method);
+    }
+
+    /** Wires carry the currency; a manual payment is made outside the files. ACH and checks are in dollars. */
+    private static boolean foreignAllowed(String method) {
+        return "WIRE".equals(method) || PaymentEntities.MANUAL.equals(method);
+    }
+
+    private static Violation foreignLine(EntityInstance run) {
+        return new Violation("kind", FOREIGN, run.get("runNo") + " pays bills in " + ApFx.currency(run)
+            + ": other payments and prepayments are made in US dollars", Map.of("currency", ApFx.currency(run)));
+    }
+
+    static String runCurrency(String given) {
+        String code = VendorProcesses.code(given);
+        return code == null ? FxRates.USD : code;
+    }
+
+    static EntityInstance first(ProcessContext ctx, String key) {
+        List<EntityInstance> found = list(ctx, key);
+        return found.isEmpty() ? null : found.getFirst();
+    }
+
+    /**
+     * What a bill of a payment clears in US dollars (at the bill's rate, all it carries when paid in full) and what the
+     * payment gave for it (the cash in dollars spread over the bills, the last taking what is left).
+     */
+    record Settled(BigDecimal cleared, BigDecimal source) {}
+
+    private static Map<UUID, Settled> settled(ProcessContext ctx, PaymentInput input, BigDecimal cashUsd) {
+        Map<UUID, Settled> settled = new LinkedHashMap<>();
+        BigDecimal cash = BigDecimal.ZERO;
+        for (PaidBill paid : input.bills()) {
+            cash = cash.add(paid.amount().subtract(paid.discount() == null ? BigDecimal.ZERO : paid.discount()));
+        }
+        BigDecimal left = cashUsd;
+        for (int i = 0; i < input.bills().size(); i++) {
+            PaidBill paid = input.bills().get(i);
+            EntityInstance bill = list(ctx, BILLS).stream().filter(b -> paid.billId().equals(uuid(b.id())))
+                .findFirst().orElseThrow();
+            BigDecimal net = paid.amount().subtract(paid.discount() == null ? BigDecimal.ZERO : paid.discount());
+            BigDecimal source = i == input.bills().size() - 1 || cash.signum() == 0 ? left
+                : com.jabiz.finance.calc.Money.usd(cashUsd.multiply(net).divide(cash, 10,
+                    java.math.RoundingMode.HALF_UP));
+            left = left.subtract(source);
+            settled.put(paid.billId(), new Settled(ApFx.cleared(bill, paid.amount()), source));
+        }
+        return settled;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<UUID, Settled> settled(ProcessContext ctx) {
+        return (Map<UUID, Settled>) ctx.get(SETTLED);
     }
 
     private static Violation otherMethod(EntityInstance run) {

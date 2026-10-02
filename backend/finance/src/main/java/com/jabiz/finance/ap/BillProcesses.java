@@ -8,6 +8,9 @@ import com.jabiz.finance.calc.PaymentTerms;
 import com.jabiz.finance.calc.SalesTax;
 import com.jabiz.finance.fa.AssetEntities;
 import com.jabiz.finance.fa.AssetProcesses;
+import com.jabiz.finance.fx.FxEntities;
+import com.jabiz.finance.fx.FxRates;
+import com.jabiz.finance.fx.FxSettingsProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.JournalEntities;
 import com.jabiz.finance.gl.JournalProcesses;
@@ -72,7 +75,9 @@ import java.util.UUID;
  *   <li>{@code FIN_AP_OPENING}: the legacy system's open payables brought over as approved open bills, not posted
  *       again; together they equal the payables account in the opening entry (FIN-DI-002).</li>
  * </ul>
- * Bills are in US dollars until foreign currency settlement (F7).
+ * Bills are in the vendor's currency (F7 plan decision D4, FIN-FX-003): posted at the spot rate of the bill's day,
+ * they keep the rate and what they owe in US dollars; a credit applied at another rate realizes the difference
+ * (FIN-FX-004). Use tax accrues only on bills in US dollars.
  */
 public final class BillProcesses {
 
@@ -208,6 +213,8 @@ public final class BillProcesses {
     static final String JOURNALS = "journals";
     static final String CREDITS = "credits";
     static final String OPENING_LINES = "openingLines";
+    static final String FX_SETTINGS = "fxSettings";
+    static final String FX_RATES = "fxRates";
 
     // ---- save and delete -------------------------------------------------------------------------------------------
 
@@ -290,12 +297,6 @@ public final class BillProcesses {
         if (vendor == null || !"ACTIVE".equals(vendor.get("status"))) {
             ctx.reject(new Violation("vendorCode", UNKNOWN_VENDOR, "There is no active vendor " + vendorCode,
                 Map.of("vendorCode", vendorCode)));
-            return;
-        }
-        if (!"USD".equals(vendor.get("currency"))) {
-            // Its dollars would differ from the payables account's at the payment's rate: F7 settles that.
-            ctx.reject(new Violation("vendorCode", CURRENCY, "Bills of vendors in " + vendor.get("currency")
-                + " come with foreign currency settlement (F7)", Map.of("currency", (Object) vendor.get("currency"))));
             return;
         }
         boolean credit = BillEntities.CREDIT.equals(kind);
@@ -382,7 +383,7 @@ public final class BillProcesses {
         header.put("preparedBy", ctx.request().actorId());
         header.put("invoiceDate", input.invoiceDate());
         header.put("receivedDate", input.receivedDate());
-        header.put("currency", "USD");
+        header.put("currency", vendor.get("currency"));
         header.put("termsCode", VendorProcesses.code(input.termsCode()) == null ? vendor.get("termsCode")
             : VendorProcesses.code(input.termsCode()));
         header.put("description", VendorProcesses.trim(input.description()));
@@ -449,7 +450,7 @@ public final class BillProcesses {
     // ---- post ------------------------------------------------------------------------------------------------------
 
     /** What posting a document will write, computed before it is numbered. */
-    record Prepared(boolean credit, LocalDate dueDate, BigDecimal total, BigDecimal useTax,
+    record Prepared(boolean credit, LocalDate dueDate, BigDecimal total, BigDecimal useTax, BigDecimal rate,
         BillPosting.Result posting, SalesTax.Result taxes, List<EntityInstance> lines, List<EntityInstance> capital,
         List<String> warnings) {}
 
@@ -501,6 +502,11 @@ public final class BillProcesses {
             }, RATES))
             .step("Load the original bill", QueryEntities.of(BillEntities.BILL_DATASET,
                 ctx -> byIds(uuid(bill(ctx).get("originalBillId"))), FOUND))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
+            .step("Load the exchange rate", QueryEntities.of(GlEntities.EXCHANGE_RATE_DATASET,
+                ctx -> FxRates.spot(bill(ctx).get("currency"), bill(ctx).get("invoiceDate"), first(ctx, FX_SETTINGS)),
+                FX_RATES))
             .compute("Compute the document", (metadata, ctx) -> prepare(ctx))
             // Bills only: a vendor credit lowers what is owed.
             .step("Apply the approval rules", RequireApproval.when(ctx -> ctx.contains(PREPARED)
@@ -561,12 +567,20 @@ public final class BillProcesses {
         if (vendor == null || !"ACTIVE".equals(vendor.get("status"))) {
             ctx.reject(new Violation("vendorCode", UNKNOWN_VENDOR, "There is no active vendor "
                 + bill.get("vendorCode"), Map.of("vendorCode", (Object) bill.get("vendorCode"))));
-        } else if (!"USD".equals(vendor.get("currency"))) {
-            ctx.reject(new Violation("vendorCode", CURRENCY, "Bills of vendors in " + vendor.get("currency")
-                + " come with foreign currency settlement (F7)", Map.of("currency", (Object) vendor.get("currency"))));
+        }
+        String currency = ApFx.currency(bill);
+        BigDecimal rate = FxRates.rate(currency, null, list(ctx, FX_RATES));
+        if (rate == null) {
+            ctx.reject(FxRates.missing("invoiceDate", currency, bill.get("invoiceDate"), first(ctx, FX_SETTINGS)));
         }
         for (EntityInstance line : lines) {
             Object code = line.get("useTaxCode");
+            if (code != null && !ApFx.dollars(currency)) {
+                // Use tax is the state's on what was bought in dollars; a foreign bill's would be in euros.
+                ctx.reject(new Violation("lines", CURRENCY, "Use tax accrues on bills in US dollars; this one is in "
+                    + currency, Map.of("currency", currency)));
+                continue;
+            }
             if (code != null && list(ctx, CODES).stream().noneMatch(c -> code.equals(c.get("taxCode"))
                 && Boolean.TRUE.equals(c.get("active")) && "TAXABLE".equals(c.get("kind")))) {
                 ctx.reject(new Violation("lines", USE_TAX_CODE, "Use tax accrues at an active taxable code; " + code
@@ -587,6 +601,10 @@ public final class BillProcesses {
             if (original == null || !BillEntities.POSTED.equals(original.get("status"))) {
                 ctx.reject(new Violation("originalBillId", ORIGINAL, "The vendor credit's bill is not posted",
                     Map.of()));
+            } else if (!ApFx.currency(original).equals(ApFx.currency(bill))) {
+                // What is left of the bill is in its currency: a credit in another could not be weighed against it.
+                ctx.reject(new Violation("originalBillId", ORIGINAL, "The vendor credit is in " + ApFx.currency(bill)
+                    + " and its bill in " + ApFx.currency(original), Map.of()));
             }
         }
         if (ctx.hasViolations()) {
@@ -652,7 +670,7 @@ public final class BillProcesses {
         List<BillPosting.Line> postingLines = lines.stream().map(l -> new BillPosting.Line(l.get("amount"),
             l.get("account"), l.get("department"), l.get("location"),
             lineTax.getOrDefault(l.get("lineNo"), BigDecimal.ZERO))).toList();
-        BillPosting.Result posting = BillPosting.lines(credit, postingLines, settings.get("payableAccount"),
+        BillPosting.Result posting = BillPosting.lines(credit, postingLines, rate, settings.get("payableAccount"),
             settings.get("useTaxAccount"), null, taxes == null ? null : "Use tax "
                 + String.join(", ", taxes.taxes().stream().map(SalesTax.JurisdictionTax::jurisdiction).toList()));
         List<EntityInstance> capital = credit ? List.of() : lines.stream().filter(l -> list(ctx, ACCOUNTS).stream()
@@ -670,7 +688,8 @@ public final class BillProcesses {
             warnings.add(BACKUP_WITHHOLDING + ": " + bill.get("vendorCode") + " is reported on Form 1099 and has no "
                 + "TIN on file: backup withholding may apply");
         }
-        ctx.put(PREPARED, new Prepared(credit, dueDate, total, posting.useTax(), posting, taxes, List.copyOf(lines),
+        ctx.put(PREPARED, new Prepared(credit, dueDate, total, posting.useTax(), rate, posting, taxes,
+            List.copyOf(lines),
             List.copyOf(capital), List.copyOf(warnings)));
     }
 
@@ -684,7 +703,8 @@ public final class BillProcesses {
         EntityInstance largest = prepared.lines().stream().max(Comparator.comparing(l -> l.<BigDecimal>get("amount")))
             .orElseThrow();
         Map<String, Object> facts = new LinkedHashMap<>();
-        facts.put("amount", prepared.total());
+        // In US dollars, as the rules' limits are.
+        facts.put("amount", prepared.posting().total());
         facts.put("vendorCode", bill.get("vendorCode"));
         facts.put("account", largest.get("account"));
         facts.put("department", largest.get("department") == null ? "" : largest.get("department"));
@@ -724,7 +744,7 @@ public final class BillProcesses {
                     .get(r.line()).get("lineNo").equals(lineNo)).map(SalesTax.LineResult::tax)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             inputs.add(new AssetProcesses.AssetInput(line.get("description"), line.get("account"),
-                line.<BigDecimal>get("amount").add(tax), bill.get("invoiceDate"), line.get("department"),
+                BillPosting.usd(line.get("amount"), prepared.rate()).add(tax), bill.get("invoiceDate"), line.get("department"),
                 line.get("location"), uuid(bill.id()), ctx.get(NUMBER, String.class), bill.get("vendorCode"),
                 UUID.fromString(booked.transactionId())));
         }
@@ -747,6 +767,9 @@ public final class BillProcesses {
         values.put("useTaxTotal", prepared.useTax());
         values.put("total", prepared.total());
         values.put("openAmount", prepared.total());
+        values.put("exchangeRate", prepared.rate());
+        values.put("totalUsd", prepared.posting().total());
+        values.put("openAmountUsd", prepared.posting().total());
         values.put("glNo", booked.glNo());
         values.put("postedTime", ctx.opTime());
         values.put("transactionId", UUID.fromString(booked.transactionId()));
@@ -867,6 +890,9 @@ public final class BillProcesses {
                 values.put("voidReason", input.reason().trim());
                 values.put("voidGlNo", ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo());
                 values.put("openAmount", BigDecimal.ZERO.setScale(2));
+                if (bill.get("openAmountUsd") != null) {
+                    values.put("openAmountUsd", BigDecimal.ZERO.setScale(2));
+                }
                 ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), values);
                 // The cost the assets carried is reversed with the bill.
                 for (EntityInstance asset : list(ctx, ASSETS)) {
@@ -892,7 +918,14 @@ public final class BillProcesses {
             }, FOUND))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> SubledgerPosting.periodsOn(ctx.get(INPUT, ApplyInput.class).applicationDate()), PERIODS))
-            .compute("Apply the credit", (metadata, ctx) -> apply(ctx)));
+            .step("Load the settings", QueryEntities.of(ApEntities.SETTINGS_DATASET,
+                ctx -> ApSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
+            .compute("Apply the credit", (metadata, ctx) -> apply(ctx))
+            // At different rates payables take the difference, a realized gain or loss (FIN-FX-004).
+            .step("Book the difference", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
+                ctx -> ctx.get(SUB_INPUT), SUB_OUTPUT)));
 
     static void apply(ProcessContext ctx) {
         ApplyInput input = ctx.get(INPUT, ApplyInput.class);
@@ -909,6 +942,8 @@ public final class BillProcesses {
             reason = "the bill's approval was refused: it is voided, not paid or credited";
         } else if (!Objects.equals(credit.get("vendorCode"), bill.get("vendorCode"))) {
             reason = "the credit and the bill are of different vendors";
+        } else if (!ApFx.currency(credit).equals(ApFx.currency(bill))) {
+            reason = "the credit and the bill are in different currencies";
         } else if (input.amount().compareTo(credit.get("openAmount")) > 0
             || input.amount().compareTo(bill.get("openAmount")) > 0) {
             reason = "the amount is more than is open on the credit or the bill";
@@ -929,6 +964,15 @@ public final class BillProcesses {
         }
         BigDecimal billOpen = bill.<BigDecimal>get("openAmount").subtract(input.amount());
         BigDecimal creditOpen = credit.<BigDecimal>get("openAmount").subtract(input.amount());
+        // The bill gives up the dollars it carries for the amount; the credit gives what it carries. A bill carrying
+        // more than the credit leaves less owed: a gain.
+        BigDecimal billUsd = ApFx.cleared(bill, input.amount());
+        BigDecimal creditUsd = ApFx.cleared(credit, input.amount());
+        BigDecimal gainLoss = billUsd.subtract(creditUsd);
+        String memo = credit.get("billNo") + " to " + bill.get("billNo");
+        if (!difference(ctx, gainLoss, input.applicationDate(), memo, credit)) {
+            return;
+        }
         Map<String, Object> application = new LinkedHashMap<>();
         application.put("sourceKind", BillEntities.CREDIT_SOURCE);
         application.put("sourceId", String.valueOf(credit.id()));
@@ -937,10 +981,50 @@ public final class BillProcesses {
         application.put("vendorCode", bill.get("vendorCode"));
         application.put("applicationDate", input.applicationDate());
         application.put("amount", input.amount());
+        if (!ApFx.dollars(ApFx.currency(bill))) {
+            application.put("amountUsd", billUsd);
+            application.put("sourceAmountUsd", creditUsd);
+            application.put("fxGainLoss", gainLoss);
+        }
         Object id = ctx.changes().insert(BillEntities.APPLICATION, application);
-        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), Map.of("openAmount", billOpen));
-        ctx.changes().update(BillEntities.BILL, credit.id(), credit.version(), Map.of("openAmount", creditOpen));
+        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), open(bill, billOpen,
+            ApFx.openUsd(bill).subtract(billUsd)));
+        ctx.changes().update(BillEntities.BILL, credit.id(), credit.version(), open(credit, creditOpen,
+            ApFx.openUsd(credit).subtract(creditUsd)));
         ctx.put(OUTPUT, new ApplyOutput(String.valueOf(id), billOpen, creditOpen));
+    }
+
+    /** What is open on a document, in its currency and, when it keeps them, in US dollars. */
+    static Map<String, Object> open(EntityInstance document, BigDecimal open, BigDecimal openUsd) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("openAmount", open);
+        if (document.get("openAmountUsd") != null) {
+            values.put("openAmountUsd", openUsd);
+        }
+        return values;
+    }
+
+    /**
+     * Books a realized difference of applying a credit (a gain positive) to payables and the realized account; false,
+     * refused, when the settings name no account for it.
+     */
+    private static boolean difference(ProcessContext ctx, BigDecimal gainLoss, LocalDate day, String memo,
+        EntityInstance credit) {
+        if (gainLoss.signum() == 0) {
+            return true;
+        }
+        EntityInstance settings = first(ctx, SETTINGS);
+        EntityInstance fx = first(ctx, FX_SETTINGS);
+        if (settings == null || fx == null || fx.get("realizedAccount") == null) {
+            ctx.reject(new Violation("amount", FxSettingsProcesses.NO_SETTINGS, "The credit and the bill carry "
+                + "different rates and the foreign currency settings name no account for the exchange gain or loss",
+                Map.of()));
+            return false;
+        }
+        ctx.put(SUB_INPUT, new SubledgerPosting.PostInput("AP", day, "Application of " + memo, credit.get("billNo"),
+            BillEntities.BILL, String.valueOf(credit.id()), ApFx.difference(settings.get("payableAccount"),
+            fx.get("realizedAccount"), gainLoss, memo), List.of("AP")));
+        return true;
     }
 
     public static final ProcessDefinition<UnapplyInput, ApplyOutput, ProcessContext> UNAPPLY_PROCESS =
@@ -965,7 +1049,13 @@ public final class BillProcesses {
             }, FOUND))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> SubledgerPosting.periodsOn(ctx.get(INPUT, UnapplyInput.class).applicationDate()), PERIODS))
-            .compute("Take it back", (metadata, ctx) -> unapply(ctx)));
+            .step("Load the settings", QueryEntities.of(ApEntities.SETTINGS_DATASET,
+                ctx -> ApSettingsProcesses.current(), SETTINGS))
+            .step("Load the foreign currency settings", QueryEntities.of(FxEntities.SETTINGS_DATASET,
+                ctx -> FxSettingsProcesses.current(), FX_SETTINGS))
+            .compute("Take it back", (metadata, ctx) -> unapply(ctx))
+            .step("Take back the difference", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST,
+                1, ctx -> ctx.get(SUB_INPUT), SUB_OUTPUT)));
 
     static void unapply(ProcessContext ctx) {
         UnapplyInput input = ctx.get(INPUT, UnapplyInput.class);
@@ -998,6 +1088,11 @@ public final class BillProcesses {
             return;
         }
         BigDecimal amount = application.get("amount");
+        BigDecimal gainLoss = application.get("fxGainLoss") == null ? BigDecimal.ZERO : application.get("fxGainLoss");
+        if (!difference(ctx, gainLoss.negate(), input.applicationDate(), "back " + application.get("sourceNo")
+            + " to " + bill.get("billNo"), credit)) {
+            return;
+        }
         Map<String, Object> back = new LinkedHashMap<>();
         back.put("sourceKind", BillEntities.CREDIT_SOURCE);
         back.put("sourceId", application.get("sourceId"));
@@ -1006,13 +1101,20 @@ public final class BillProcesses {
         back.put("vendorCode", application.get("vendorCode"));
         back.put("applicationDate", input.applicationDate());
         back.put("amount", amount.negate());
+        if (application.get("amountUsd") != null) {
+            back.put("amountUsd", ApFx.amountUsd(application).negate());
+            back.put("sourceAmountUsd", ApFx.sourceUsd(application).negate());
+            back.put("fxGainLoss", gainLoss.negate());
+        }
         back.put("reversesApplicationId", application.id());
         back.put("reason", input.reason().trim());
         Object id = ctx.changes().insert(BillEntities.APPLICATION, back);
         BigDecimal billOpen = bill.<BigDecimal>get("openAmount").add(amount);
         BigDecimal creditOpen = credit.<BigDecimal>get("openAmount").add(amount);
-        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), Map.of("openAmount", billOpen));
-        ctx.changes().update(BillEntities.BILL, credit.id(), credit.version(), Map.of("openAmount", creditOpen));
+        ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(), open(bill, billOpen,
+            ApFx.openUsd(bill).add(ApFx.amountUsd(application))));
+        ctx.changes().update(BillEntities.BILL, credit.id(), credit.version(), open(credit, creditOpen,
+            ApFx.openUsd(credit).add(ApFx.sourceUsd(application))));
         ctx.put(OUTPUT, new ApplyOutput(String.valueOf(id), billOpen, creditOpen));
     }
 
