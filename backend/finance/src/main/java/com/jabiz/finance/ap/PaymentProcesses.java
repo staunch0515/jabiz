@@ -5,6 +5,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.ar.ArEntities;
 import com.jabiz.finance.bank.BankEntities;
+import com.jabiz.finance.calc.Form1099Allocation;
 import com.jabiz.finance.calc.PaymentTerms;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.JournalEntities;
@@ -211,6 +212,8 @@ public final class PaymentProcesses {
     static final String PAYMENT = "payment";
     static final String POSTINGS = "postings";
     static final String FILES = "files";
+    static final String BILL_LINES = "billLines";
+    static final String AMOUNTS_1099 = "amounts1099";
     static final String APPLICATIONS = "applications";
     static final String SUB_INPUT = "subledgerInput";
     static final String SUB_OUTPUT = "subledgerOutput";
@@ -809,6 +812,11 @@ public final class PaymentProcesses {
                 BILLS))
             .step("Load the settings", QueryEntities.of(ApEntities.SETTINGS_DATASET,
                 ctx -> ApSettingsProcesses.current(), SETTINGS))
+            .step("Load the bills' lines", QueryEntities.of(BillEntities.LINE_DATASET, ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.In("billId", new ArrayList<>(ctx.get(INPUT, PaymentInput.class).bills()
+                    .stream().map(b -> (Object) b.billId()).toList()))).limit(MAX_ROWS).build(), BILL_LINES))
+            .step("Load the vendor", QueryEntities.of(ApEntities.VENDOR_DATASET, ctx -> VendorProcesses.eq(
+                "vendorCode", ctx.get(INPUT, PaymentInput.class).vendorCode()), VENDORS))
             .step("Number the payment", AssignNumber.of(PAYMENT_NUMBERS, NUMBER))
             .compute("Build the entry", (metadata, ctx) -> buildPayment(ctx))
             // The ledger checks that the source document exists: the payment is saved before it is booked.
@@ -899,8 +907,71 @@ public final class PaymentProcesses {
         if (!PaymentEntities.BILL_LINE.equals(input.kind())) {
             cash = input.amount();
         }
+        record1099(ctx, input, id, number);
         ctx.put(OUTPUT, new PaymentOutput(String.valueOf(id), number, cash,
             ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo()));
+    }
+
+    /**
+     * What the payment counts on the vendor's Form 1099 (FIN-AP-020, FIN-AP-021): a bill's cash spread over its lines'
+     * boxes, a prepayment in the vendor's box. Card payments count nothing (the card processor reports them on Form
+     * 1099-K), and other payments are no vendor's.
+     */
+    private static void record1099(ProcessContext ctx, PaymentInput input, Object paymentId, String paymentNo) {
+        if (PaymentEntities.CARD.equals(input.method()) || PaymentEntities.OTHER_LINE.equals(input.kind())) {
+            return;
+        }
+        if (PaymentEntities.PREPAYMENT_LINE.equals(input.kind())) {
+            EntityInstance vendor = list(ctx, VENDORS).isEmpty() ? null : list(ctx, VENDORS).getFirst();
+            if (vendor != null && vendor.get("form1099") != null && vendor.get("box1099") != null) {
+                insert1099(ctx, input.vendorCode(), vendor.get("form1099"), vendor.get("box1099"), input.amount(),
+                    Form1099Entities.PREPAYMENT_SOURCE, input.paymentDate().getYear(), input.paymentDate(), paymentId,
+                    paymentNo, null, null);
+            }
+            return;
+        }
+        if (list(ctx, BILL_LINES).size() >= MAX_ROWS) {
+            ctx.reject(new Violation("runId", TOO_MANY, "The bills of " + input.payee() + " have more than "
+                + MAX_ROWS + " lines: pay them in parts", Map.of("limit", MAX_ROWS)));
+            return;
+        }
+        for (PaidBill paid : input.bills()) {
+            Map<String, BigDecimal> parts = new LinkedHashMap<>();
+            list(ctx, BILL_LINES).stream().filter(l -> paid.billId().equals(uuid(l.get("billId"))))
+                .forEach(l -> parts.merge(Form1099Allocation.key(l.get("form1099"), l.get("box1099")),
+                    l.get("amount"), BigDecimal::add));
+            if (parts.isEmpty()) {
+                // An open item brought over has no lines: the bill's own form and box (FIN-DI-002).
+                list(ctx, BILLS).stream().filter(b -> paid.billId().equals(uuid(b.id()))).findFirst()
+                    .ifPresent(b -> parts.put(Form1099Allocation.key(b.get("form1099"), b.get("box1099")),
+                        b.get("total")));
+            }
+            BigDecimal discount = paid.discount() == null ? BigDecimal.ZERO : paid.discount();
+            Form1099Allocation.allocate(paid.amount().subtract(discount), parts).forEach((key, amount) -> {
+                String[] formBox = key.split("\\|");
+                insert1099(ctx, input.vendorCode(), formBox[0], formBox[1], amount,
+                    Form1099Entities.PAYMENT_SOURCE, input.paymentDate().getYear(), input.paymentDate(), paymentId,
+                    paymentNo, paid.billId(),
+                    paid.billNo());
+            });
+        }
+    }
+
+    private static void insert1099(ProcessContext ctx, String vendorCode, String form, String box, BigDecimal amount,
+        String source, int taxYear, LocalDate day, Object paymentId, String paymentNo, Object billId, String billNo) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("vendorCode", vendorCode);
+        row.put("taxYear", BigDecimal.valueOf(taxYear));
+        row.put("form1099", form);
+        row.put("box1099", box);
+        row.put("amount", amount);
+        row.put("source", source);
+        row.put("paymentDate", day);
+        row.put("paymentId", paymentId);
+        row.put("paymentNo", paymentNo);
+        row.put("billId", billId);
+        row.put("billNo", billNo);
+        ctx.changes().insert(Form1099Entities.AMOUNT, row);
     }
 
     // ---- void ------------------------------------------------------------------------------------------------------
@@ -921,6 +992,9 @@ public final class PaymentProcesses {
             .step("Load the payment", LoadEntity.by(PaymentEntities.PAYMENT_DATASET, "paymentId", PAYMENT))
             .step("Load its entry", QueryEntities.of(JournalEntities.POSTING_DATASET, ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.Eq("documentNo", payment(ctx).get("paymentNo"))).limit(50).build(), POSTINGS))
+            .step("Load its 1099 amounts", QueryEntities.of(Form1099Entities.AMOUNT_DATASET, ctx -> EntityQuery
+                .builder().where(new QueryPredicate.Eq("paymentId", payment(ctx).id())).limit(MAX_ROWS).build(),
+                AMOUNTS_1099))
             .step("Load its run's files", QueryEntities.of(PaymentEntities.FILE_DATASET, ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.Eq("runId", payment(ctx).get("runId"))).limit(100).build(), FILES))
             .step("Load its applications", QueryEntities.of(BillEntities.APPLICATION_DATASET,
@@ -1014,6 +1088,21 @@ public final class PaymentProcesses {
                         ctx.changes().update(BillEntities.BILL, bill.id(), bill.version(),
                             Map.of("openAmount", bill.<BigDecimal>get("openAmount").add(back)));
                         reopened.add(bill.get("billNo"));
+                    }
+                }
+                // A voided payment was never received: its amounts come off the vendor's 1099 of the year they were
+                // counted in, even when voided the next year (a filed year is then corrected, FIN-AP-023).
+                if (list(ctx, AMOUNTS_1099).size() >= MAX_ROWS) {
+                    ctx.reject(new Violation("paymentId", TOO_MANY, payment.get("paymentNo") + " counts in more than "
+                        + MAX_ROWS + " Form 1099 boxes", Map.of("limit", MAX_ROWS)));
+                    return;
+                }
+                for (EntityInstance counted : list(ctx, AMOUNTS_1099)) {
+                    if (!Form1099Entities.VOID_SOURCE.equals(counted.get("source"))) {
+                        insert1099(ctx, counted.get("vendorCode"), counted.get("form1099"), counted.get("box1099"),
+                            counted.<BigDecimal>get("amount").negate(), Form1099Entities.VOID_SOURCE,
+                            counted.<BigDecimal>get("taxYear").intValueExact(), input.voidDate(), payment.id(),
+                            payment.get("paymentNo"), counted.get("billId"), counted.get("billNo"));
                     }
                 }
                 String glNo = ctx.get(SUB_OUTPUT, SubledgerPosting.PostOutput.class).glNo();
@@ -1328,7 +1417,8 @@ public final class PaymentProcesses {
      * on the authority's portal), never in an ACH or wire run, whose file could not carry it.
      */
     private static boolean otherAllowed(String method) {
-        return "CHECK".equals(method) || PaymentEntities.MANUAL.equals(method);
+        return "CHECK".equals(method) || PaymentEntities.MANUAL.equals(method)
+            || PaymentEntities.CARD.equals(method);
     }
 
     private static Violation otherMethod(EntityInstance run) {

@@ -32,6 +32,8 @@ public final class CompanyEntities {
         eb.field("email", f -> f.physicalColumn("email").asText(200));
         // Where and how customers pay, as printed on invoices: bank, account, reference to quote.
         eb.field("remittance", f -> f.physicalColumn("remittance").asText(1000, true));
+        // The payer's EIN on the company's Forms 1099 (FIN-AP-022), in full as the forms show it.
+        eb.field("taxId", f -> f.physicalColumn("tax_id").asText(11));
         eb.unique("uk_fi_company_profile_key", "profileKey");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

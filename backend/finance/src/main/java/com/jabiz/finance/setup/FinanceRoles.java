@@ -57,7 +57,8 @@ public final class FinanceRoles {
             "document.send", "document.send.any", FinancePermissions.AP_READ, FinancePermissions.VENDOR_MAINTAIN,
             FinancePermissions.TAX_DATA_READ, FinancePermissions.VENDOR_BANK_APPROVE, FinancePermissions.AP_SETTINGS,
             FinancePermissions.FORM_1099_MAINTAIN, FinancePermissions.BILL_VOID, FinancePermissions.BILL_APPROVE,
-            FinancePermissions.PAYMENT_APPROVE, FinancePermissions.PAYMENT_VOID));
+            FinancePermissions.PAYMENT_APPROVE, FinancePermissions.PAYMENT_VOID, FinancePermissions.FORM_1099_FILE,
+            "file.generated.read"));
         add(ACCOUNTANT, "Accountant", READ_BOOKS, READ_LEDGER, List.of(FinancePermissions.JOURNAL_PREPARE,
             FinancePermissions.JOURNAL_ATTACH, FinancePermissions.RECURRING_MAINTAIN, FinancePermissions.IMPORT,
             FinancePermissions.PAYROLL_IMPORT, FinancePermissions.AR_READ, FinancePermissions.AP_READ,

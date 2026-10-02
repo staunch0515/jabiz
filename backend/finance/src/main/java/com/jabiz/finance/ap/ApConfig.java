@@ -3,6 +3,7 @@ package com.jabiz.finance.ap;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
@@ -61,7 +62,13 @@ class ApConfig {
 
     @Bean
     DatasetDefinition finVendorTaxInfoDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(ApEntities.TAX_INFO_DATASET, ApEntities.TAX_INFO, FinancePermissions.VENDOR_MAINTAIN, poolRef);
+        // The 1099 export reads the tax information of every vendor paid in a year at once.
+        return DatasetDefinition.define(ApEntities.TAX_INFO_DATASET, d -> d
+            .targetEntityType(ApEntities.TAX_INFO)
+            .asDefault()
+            .permissions(FinancePermissions.AP_READ, FinancePermissions.VENDOR_MAINTAIN)
+            .policy(p -> p.maxQueryBatchSize(5000).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
@@ -491,7 +498,8 @@ class ApConfig {
             .item("ACH", "en", "ACH")
             .item("CHECK", "en", "Check")
             .item("WIRE", "en", "Wire")
-            .item(PaymentEntities.MANUAL, "en", "Paid outside the bank files"));
+            .item(PaymentEntities.MANUAL, "en", "Paid outside the bank files")
+            .item(PaymentEntities.CARD, "en", "Company card"));
     }
 
     @Bean
@@ -622,5 +630,65 @@ class ApConfig {
     ProcessDefinition<PaymentFiles.CancelInput, PaymentFiles.FileOutput, ProcessContext>
         finPaymentFileCancelProcess() {
         return PaymentFiles.CANCEL_PROCESS;
+    }
+
+    // ---- F4d: Form 1099 --------------------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition fin1099AmountEntity() {
+        return Form1099Entities.AMOUNT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition fin1099FilingEntity() {
+        return Form1099Entities.FILING_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition fin1099AmountDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(Form1099Entities.AMOUNT_DATASET, Form1099Entities.AMOUNT, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition fin1099FilingDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(Form1099Entities.FILING_DATASET, Form1099Entities.FILING, poolRef);
+    }
+
+    @Bean
+    StaticDictionary form1099SourceDictionary() {
+        return StaticDictionary.define(Form1099Entities.SOURCES, d -> d
+            .item(Form1099Entities.PAYMENT_SOURCE, "en", "Payment of bills")
+            .item(Form1099Entities.PREPAYMENT_SOURCE, "en", "Prepayment")
+            .item(Form1099Entities.VOID_SOURCE, "en", "Void"));
+    }
+
+    @Bean
+    StaticDictionary form1099FilingKindDictionary() {
+        return StaticDictionary.define(Form1099Entities.FILING_KINDS, d -> d
+            .item(Form1099Entities.ORIGINAL, "en", "Original")
+            .item(Form1099Entities.CORRECTION, "en", "Correction"));
+    }
+
+    @Bean
+    DocumentLayout form1099CopyLayout() {
+        return Form1099Processes.COPY;
+    }
+
+    @Bean
+    ProcessDefinition<Form1099Processes.IssueInput, Form1099Processes.IssueOutput, ProcessContext>
+        fin1099IssueProcess() {
+        return Form1099Processes.ISSUE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<Form1099Processes.YearInput, Form1099Processes.ExportOutput, ProcessContext>
+        fin1099ExportProcess() {
+        return Form1099Processes.EXPORT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<Form1099Processes.YearInput, Form1099Processes.ExportOutput, ProcessContext>
+        fin1099CorrectProcess() {
+        return Form1099Processes.CORRECT_PROCESS;
     }
 }

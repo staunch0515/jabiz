@@ -14,7 +14,7 @@ import java.util.List;
  * applications ({@code FinApApplication}, kind {@code PAYMENT}); a voided payment reverses its entry and takes its
  * applications back, the bills open again. The files given to the bank ({@code FinPaymentFile}) are kept by the
  * platform's generated file archive; a run has one active file of a kind at a time (FIN-BK-011). All written only
- * by {@link PaymentProcesses} and {@link PaymentFileProcesses}.
+ * by {@link PaymentProcesses} and {@link PaymentFiles}.
  */
 public final class PaymentEntities {
 
@@ -45,7 +45,9 @@ public final class PaymentEntities {
 
     /** {@code MANUAL}: paid outside the bank files, such as a tax paid on the authority's portal (FIN-AP-015). */
     public static final String MANUAL = "MANUAL";
-    public static final List<String> METHOD_VALUES = List.of("ACH", "CHECK", "WIRE", MANUAL);
+    /** {@code CARD}: paid by company card; not on the vendor's Form 1099 (the card processor files 1099-K). */
+    public static final String CARD = "CARD";
+    public static final List<String> METHOD_VALUES = List.of("ACH", "CHECK", "WIRE", MANUAL, CARD);
 
     /** A vendor's bill paid; another payment (a tax, FIN-AP-015) to an account; a vendor's prepayment. */
     public static final String BILL_LINE = "BILL";

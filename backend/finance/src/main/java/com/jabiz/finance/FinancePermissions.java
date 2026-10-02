@@ -162,6 +162,8 @@ public final class FinancePermissions {
     public static final String PAYMENT_APPROVE = "fin.payment.approve";
     /** Void a posted payment, such as a stopped check (FIN-AP-014). */
     public static final String PAYMENT_VOID = "fin.payment.void";
+    /** Issue Forms 1099, export them for filing and file corrections; reads the files with TINs in full (FIN-AP-022). */
+    public static final String FORM_1099_FILE = "fin.1099.file";
 
     private FinancePermissions() {}
 }
