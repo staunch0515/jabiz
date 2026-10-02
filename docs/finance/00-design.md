@@ -391,6 +391,9 @@
 - 应付（F7b）：账单与贷项用供应商币种，逐行折美元过账，记 `exchangeRate`、`totalUsd`、`openAmountUsd`。付款批有币种与汇率（外币批只电汇或手工、只付账单、不取折扣），
   付款记 `currency`、`exchangeRate`、`amountUsd`；核销记 `amountUsd`（账单让出）、`sourceAmountUsd`（付款或贷项给出）与 `fxGainLoss`，差额记已实现损益科目。
   1099 计供应商收到的美元。共用的换算在 `ap/ApFx`。
+- 重估（F7c）：`FinFxRevaluationRun` / `Line`，模板 `finance.fx.revaluation_items` 给出某日开放的外币项目（应收、应付单据与外币银行账户，后者以对账单余额为外币余额），
+  `FIN_FX_REVALUE` 按子账过账并于次日冲回（单据的美元不变，账龄在两日之间按重估显示），`FIN_FX_REVALUE_SIMULATE` 以当前或运行时刻的记录重新计算并比较。
+  损益报表 `finance.fx.gains_losses`。
 
 ---
 
