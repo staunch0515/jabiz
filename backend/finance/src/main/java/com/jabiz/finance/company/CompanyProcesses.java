@@ -1,6 +1,8 @@
 package com.jabiz.finance.company;
 
+import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
+import com.jabiz.finance.calc.TaxIds;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
@@ -27,9 +29,11 @@ public final class CompanyProcesses {
     public record ProfileInput(@NotBlank @Size(max = 200) String legalName, @Size(max = 200) String street,
         @Size(max = 100) String city, @Size(max = 20) String state, @Size(max = 20) String postalCode,
         @Size(max = 60) String country, @Size(max = 40) String phone, @Size(max = 200) String email,
-        @Size(max = 1000) String remittance) {}
+        @Size(max = 1000) String remittance, @Size(max = 11) String taxId) {}
 
     public record ProfileOutput(String profileId, boolean changed) {}
+
+    public static final String TAX_ID = "FIN_COMPANY_TAX_ID";
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";
@@ -68,6 +72,17 @@ public final class CompanyProcesses {
         // Line breaks are kept: the document prints the instructions as written.
         values.put("remittance", input.remittance() == null || input.remittance().isBlank() ? null
             : input.remittance().strip());
+        if (input.taxId() == null || input.taxId().isBlank()) {
+            values.put("taxId", null);
+        } else {
+            java.util.Optional<String> ein = TaxIds.normalize(TaxIds.EIN, input.taxId());
+            if (ein.isEmpty()) {
+                ctx.reject(new Violation("taxId", TAX_ID, "The company's taxpayer identification number is an EIN, "
+                    + "such as 12-3456789", Map.of("field", "taxId")));
+                return;
+            }
+            values.put("taxId", ein.get());
+        }
         @SuppressWarnings("unchecked")
         List<EntityInstance> found = (List<EntityInstance>) ctx.get(PROFILES);
         if (found == null || found.isEmpty()) {

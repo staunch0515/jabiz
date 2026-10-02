@@ -87,7 +87,7 @@
 | FIN-AP-001 | Vendor master | 完成 | `FinVendor`（迁移 V10）、`FIN_VENDOR_SAVE`（`ap/VendorProcesses`）；导入 `finance.vendors`（`io/PayablesImports`、`io/VendorRows`） | `it/PayablesMasterIT`、`VendorRowsTest` |
 | FIN-AP-002 | Tax identification (Form W-9) | 完成（验收 2 的警告在 F4b 的过账中） | `FinVendorTaxInfo`（TIN `TAX_ID` 遮蔽，平台 14k）、`FIN_VENDOR_TAX_SAVE`、`calc/TaxIds` | `it/PayablesMasterIT`、`TaxIdsTest` |
 | FIN-AP-003 | Bank-detail change control | 完成 | `FinVendorBankAccount`、`FIN_VENDOR_BANK_CHANGE` / `_APPROVAL_RESULT`（审批对象 `fin.ap.vendor-bank`、规则 `FIN-VENDOR-BANK`）、`calc/BankNumbers`；付款建议与释放中的暂停（`ap/PaymentProcesses`） | `it/PayablesMasterIT`、`it/PaymentIT`、`BankNumbersTest` |
-| FIN-AP-021 | Reportable amounts and thresholds | 部分（报表在 F4d） | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds` | `it/PayablesMasterIT` |
+| FIN-AP-021 | Reportable amounts and thresholds | 完成 | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds`；`Fin1099Amount`（迁移 V13）、报表 `finance.ap.form_1099` | `it/PayablesMasterIT`、`it/FinScn04IT`（= FIN-EXP-14；2027 年阈值 600.00） |
 | FIN-CT-001 | Segregation of duties | 部分（应付：F4a 的两条规则与冲突报告） | `FIN_SETUP` 提出 `FIN-SOD-VENDOR-BANK-RELEASE`、`FIN-SOD-PAYABLES-RELEASE`（平台 14b） | `it/PayablesMasterIT`（验收 2） |
 | FIN-CT-010 | Complete audit trail | 部分（银行信息变更） | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy` | `it/PayablesMasterIT`（验收 1） |
 | FIN-SC-001 | Authentication | 部分（应付：银行信息变更与付款释放；会话与单点登录由平台 14g） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)` | `it/PayablesMasterIT`、`it/PaymentIT` |
@@ -106,5 +106,9 @@
 | FIN-AP-014 | Voids and stopped payments | 完成 | `FIN_PAYMENT_VOID`（冲正、相反的核销） | `it/PaymentIT` |
 | FIN-AP-015 | Manual payments and non-vendor payments | 完成 | 付款批的其他付款行（非控制科目，支票或 MANUAL 批），同一审批规则 | `it/PaymentIT`（STX-PAY-2512） |
 | FIN-BK-011 | Payment files and positive pay | 完成（应付） | `FinPaymentFile`、`FIN_PAYMENT_FILE_GENERATE` / `_CANCEL`、生成文件存档（平台 14k） | `it/PaymentIT` |
+| FIN-AP-020 | 1099 classification | 完成 | 供应商与账单行的表与栏（F4a、F4b）；`FIN_PAYMENT_RECORD` 按行分摊（`calc/Form1099Allocation`）；方式 CARD 不计入 | `it/FinScn04IT`、`Form1099AllocationTest` |
+| FIN-AP-022 | 1099 outputs | 完成（州金额随联合申报列给出） | 审核报表 `finance.ap.form_1099_review`、`FIN_1099_ISSUE`（单据 `finance.ap.form_1099`）、`FIN_1099_EXPORT`（`calc/Form1099File`、`Fin1099Filing`） | `it/FinScn04IT`、`Form1099AllocationTest` |
+| FIN-AP-023 | 1099 corrections | 完成 | `FIN_1099_CORRECT`（与最后一次申报比较，CORRECTED） | `it/FinScn04IT` |
+| FIN-SCN-04 | Bills to payment with Form 1099 | 完成 | F4a–F4d | `it/FinScn04IT`（账龄 = FIN-EXP-09，1099 = FIN-EXP-14，PAY-RUN-02 的文件不能生成两次） |
 | FIN-DI-002 | Opening open items | 完成（应付部分） | `FIN_AP_OPENING`、导入 `finance.open_payables` | `it/BillIT` |
 

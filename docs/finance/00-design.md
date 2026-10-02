@@ -292,6 +292,8 @@
 | `FinPayment` | 释放时每个供应商的账单合为一笔付款（`PMT-{n:4}`），其他付款与预付款各一笔；支票号取自银行账户的下一支票号；ACH 记下付往的供应商账户（释放时有效的那个）；预付款的未核销余额；作废日、原因与冲正的总账号。分录经 `FinPosting.documentNo`（= 付款号）查找 |
 | `FinPaymentFile` | 生成的文件（F4 计划 D6，电汇按 F4c 的计划变更：NACHA CCD/PPD、支票打印 CSV、正向支付 CSV、电汇指示 CSV；pain.001 不做）：原样保存、带哈希（`FILE_ARCHIVE`），记下银行账户与生成日（同一银行同一天的 NACHA 文件按 A–Z 区分），读取需要 `fin.payment.release`；同一付款批同一种只能有一个有效文件，重新生成须先以原因作废（BK-011） |
 | `Fin1099Threshold` | 纳税年度 × 表（NEC、MISC）→ 阈值（时态，AP-021）；样例的一列阈值同时用于两种表 |
+| `Fin1099Amount` | 付款计入供应商 1099 的金额（F4d，只写一次）：供应商、纳税年度（付款日所在日历年；作废的金额回到原付款计入的年度）、表与栏、金额、来源 PAYMENT / PREPAYMENT / VOID、付款与账单。`FIN_PAYMENT_RECORD` 过账时写入：账单的现金（扣除已享折扣）按其行的表与栏分摊（`calc.Form1099Allocation` 经 `calc.Money.allocate`，最大余数；净额为负的栏不分得；没有行的期初未结项用账单的表与栏），预付款按供应商的表与栏在付款时计入；卡付款（方式 CARD）与其他付款不计入；作废写相反金额，年度为原金额的年度（未收到的钱不算任何一年的收入；已申报的年度随后更正） |
+| `Fin1099Filing` | 已申报的记录（只写一次）：年度、供应商、表与栏、金额、所报 TIN（`masked(fin.tax.data.read, TAX_ID)`）、ORIGINAL / CORRECTION、所更正的记录、导出文件 |
 
 - 职责分离（FIN-CT-001，F4a 起由 `FIN_SETUP` 提出、他人发布）：`fin.vendor.bank.maintain` × `fin.payment.release`；`fin.bill.prepare`、`fin.payment.prepare` × `fin.payment.release`。
 - 重复检查（AP-005）：同供应商同号 → 拒绝；同供应商、金额、日期而号不同 → 警告，需确认并填写原因。
@@ -314,7 +316,17 @@
   文件中有完整账号：只经生成文件存档，读取需要 `fin.payment.release`。
 - 规模：数据视图的查询到上限即静默截断，所以建议只读到期（或折扣仍有效）的账单，读到 5,000 张账单、未完成批的 5,000 行或 500 个条件即拒绝（`FIN_PAYMENT_TOO_MANY`），
   一个批最多 5,000 行；供应商账户只读启用与待批准的（每家至多两个），数据视图上限 10,000。释放时仍按账单的版本与未结金额再查，不会重复付款。
-- 1099（AP-020…023）：付款日所在日历年（收付实现制）按供应商 × 表 × 栏汇总；卡与第三方网络付款排除；与年度阈值表比较；审核报告（缺 TIN/地址）、收件人副本 PDF、电子申报导出、更正记录。
+- 1099（AP-020…023，F4d）：付款日所在日历年（收付实现制）按供应商 × 表 × 栏汇总 `Fin1099Amount`；卡付款排除（由发卡方以 1099-K 申报）；供应商某表的年度合计与阈值表中该年该表的阈值比较
+  （表中没有该年即视为申报，不在代码中写阈值；IRS 对 MISC 各栏的不同门槛（如特许权使用费 10 美元）简化为同一表的阈值）；只有金额为正的栏才申报与打印。
+  导出与更正从报表 `finance.ap.form_1099` 读取（每个供应商 × 栏一行，不受数据视图的行数上限截断）；唯一索引保证同一栏只有一个原始记录、同一记录只被更正一次（并发的导出不会重复申报）。
+  报表 `finance.ap.form_1099`（= FIN-EXP-14）；审核报表 `finance.ap.form_1099_review`（`fin.1099.maintain`）：报 1099 的在用供应商或当年有 1099 金额的供应商，缺 TIN（NO_TIN）、
+  TIN 不符（TIN_MISMATCH）、缺汇款地址（NO_ADDRESS），没有一行即可申报。
+  收件人副本 `FIN_1099_ISSUE`：单据 `finance.ap.form_1099`（付款人与 EIN（公司资料 `taxId`，F4d 新增），收件人与地址，收件人 TIN 按遮蔽字段截断为 `***-**-1234`，即 IRS 允许的收件人副本形式），
+  只对达到阈值且有 TIN 与地址的供应商，只列达到阈值的表的正数栏。电子申报 `FIN_1099_EXPORT`：申报服务 CSV（`calc.Form1099File`，列：record_type、tax_year、form、box、amount、payer_tin、payer_name、payer_street、
+  payer_city、payer_state、payer_zip、recipient_tin_type、recipient_tin、recipient_name、recipient_street、recipient_city、recipient_state、recipient_zip、account_number（供应商代码）、
+  state、state_income（联合联邦/州申报计划的州与金额）），每个达到阈值的供应商 × 表 × 栏一行，经 `FILE_ARCHIVE` 存档、读取需要 `fin.1099.file`；有缺 TIN 或地址的供应商即整体拒绝；
+  同一年度只能导出一次。更正 `FIN_1099_CORRECT`（AP-023）：与最后一次申报比较，金额或 TIN 变了的记录标 CORRECTED（低于阈值的以 0.00 更正），新达到阈值的作为原始记录补报。
+  均需 `fin.1099.file`（Controller）。
 - 文件格式是纯 Java（`calc` 包），用独立实现的校验器测试（NACHA 记录长度、块、批合计、条目数、哈希合计、路由号校验位），另有随机生成付款的性质测试。
 
 ---
