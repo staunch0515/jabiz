@@ -1,7 +1,13 @@
-import { BankOutlined, BookOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, BuildOutlined, DollarOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
 import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
   from './bank/api'
+import { DATASETS as FA_DATASETS, IMPORTS as FA_IMPORTS, PERMISSIONS as FA_PERMISSIONS, PROCESSES as FA_PROCESSES,
+  QUERIES as FA_QUERIES } from './assets/api'
+import AssetListPage from './assets/AssetListPage'
+import AssetPage from './assets/AssetPage'
+import DepreciationPage from './assets/DepreciationPage'
+import { ASSETS_PATH, DEPRECIATION_PATH } from './assets/paths'
 import MatchingPage from './bank/MatchingPage'
 import { MATCHING_PATH, RECONCILIATIONS_PATH } from './bank/paths'
 import ReconciliationListPage from './bank/ReconciliationListPage'
@@ -28,7 +34,8 @@ import ReceiptRoute from './receivables/ReceiptRoute'
 /**
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
  * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
- * register and bill entry, payment runs and the payment register; bank matching and reconciliations. Accounts,
+ * register and bill entry, payment runs and the payment register; bank matching and reconciliations; the assets and
+ * the depreciation runs. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -53,6 +60,9 @@ export default defineExtension({
     { path: MATCHING_PATH, element: <MatchingPage /> },
     { path: RECONCILIATIONS_PATH, element: <ReconciliationListPage /> },
     { path: `${RECONCILIATIONS_PATH}/:reconciliationId`, element: <ReconciliationPage /> },
+    { path: ASSETS_PATH, element: <AssetListPage /> },
+    { path: DEPRECIATION_PATH, element: <DepreciationPage /> },
+    { path: `${ASSETS_PATH}/:assetId`, element: <AssetPage /> },
   ],
   menu: [
     {
@@ -152,6 +162,31 @@ export default defineExtension({
           permission: BANK_PERMISSIONS.settings },
         { key: 'openingItemsImport', label: 'menu.openingItemsImport', path: paths.importRun(BANK_IMPORTS.opening),
           permission: BANK_PERMISSIONS.migration },
+      ],
+    },
+    {
+      key: 'fa',
+      label: 'menu.fa',
+      icon: <BuildOutlined />,
+      children: [
+        { key: 'assets', label: 'menu.assets', path: ASSETS_PATH, permission: FA_PERMISSIONS.read },
+        { key: 'depreciation', label: 'menu.depreciation', path: DEPRECIATION_PATH, permission: FA_PERMISSIONS.read },
+        { key: 'acquireAsset', label: 'menu.acquireAsset', path: paths.process(FA_PROCESSES.acquire, 1),
+          permission: FA_PERMISSIONS.maintain },
+        { key: 'assetRegister', label: 'menu.assetRegister', path: paths.report(FA_QUERIES.register),
+          permission: FA_PERMISSIONS.read },
+        { key: 'rollForward', label: 'menu.rollForward', path: paths.report(FA_QUERIES.rollForward),
+          permission: FA_PERMISSIONS.read },
+        { key: 'depreciationSchedule', label: 'menu.depreciationSchedule', path: paths.report(FA_QUERIES.schedule),
+          permission: FA_PERMISSIONS.read },
+        { key: 'assetRecords', label: 'menu.assetRecords', path: paths.dataset(FA_DATASETS.asset),
+          permission: FA_PERMISSIONS.read },
+        { key: 'assetClasses', label: 'menu.assetClasses', path: paths.dataset(FA_DATASETS.assetClass),
+          permission: FA_PERMISSIONS.read },
+        { key: 'faSettings', label: 'menu.faSettings', path: paths.dataset(FA_DATASETS.settings),
+          permission: FA_PERMISSIONS.maintain },
+        { key: 'assetImport', label: 'menu.assetImport', path: paths.importRun(FA_IMPORTS.register),
+          permission: FA_PERMISSIONS.migration },
       ],
     },
     {

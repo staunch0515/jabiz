@@ -502,4 +502,65 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         }
         return journals;
     }
+
+    /**
+     * The rows of a table of {@code 21-expected-results.md} in the section of {@code expected} ("FIN-EXP-11"): each
+     * row's cells, trimmed, the header and its rule left out.
+     */
+    protected static List<String[]> expectedRows(String expected) throws IOException {
+        List<String[]> rows = new java.util.ArrayList<>();
+        boolean inSection = false;
+        boolean header = true;
+        for (String text : Files.readAllLines(SAMPLE_COMPANY.resolveSibling("21-expected-results.md"))) {
+            if (text.startsWith("## ")) {
+                inSection = text.contains("(" + expected + ")");
+                header = true;
+                continue;
+            }
+            if (!inSection || !text.startsWith("| ")) {
+                continue;
+            }
+            if (header || text.startsWith("|---")) {
+                header = false;
+                continue;
+            }
+            String[] cells = text.split("\\|", -1);
+            String[] trimmed = new String[cells.length - 2];
+            for (int i = 1; i < cells.length - 1; i++) {
+                trimmed[i - 1] = cells[i].trim();
+            }
+            rows.add(trimmed);
+        }
+        return rows;
+    }
+
+    /** FIN-EXP-01 as {@code 21-expected-results.md} writes it: account, debit, credit. */
+    protected static Map<String, BigDecimal[]> expectedOpeningTrialBalance() throws IOException {
+        Map<String, BigDecimal[]> expected = new LinkedHashMap<>();
+        for (String[] row : expectedRows("FIN-EXP-01")) {
+            if (row[0].matches("\\d{4}")) {
+                expected.put(row[0], new BigDecimal[] {money(row[2]), money(row[3])});
+            }
+        }
+        return expected;
+    }
+
+    /** An amount of the expected results: 1,234.56, empty as zero, a dash as zero. */
+    protected static BigDecimal money(String cell) {
+        String text = cell.trim().replace(",", "");
+        return text.isEmpty() || "—".equals(text) ? BigDecimal.ZERO : new BigDecimal(text);
+    }
+
+    /** The trial balance on the day: account to balance, debits positive, summaries and accounts at zero left out. */
+    protected Map<String, BigDecimal> ledgerBalances(String day) {
+        Map<String, BigDecimal> balances = new TreeMap<>();
+        for (Map<String, Object> row : report("finance.gl.trial_balance", as("reader", "ledger.read"),
+            Map.of("through", day))) {
+            BigDecimal balance = amount(row.get("debit")).subtract(amount(row.get("credit")));
+            if (balance.signum() != 0 && !Boolean.TRUE.equals(row.get("summary"))) {
+                balances.put((String) row.get("accountCode"), balance);
+            }
+        }
+        return balances;
+    }
 }
