@@ -210,6 +210,11 @@ public final class InvoiceEntities {
         eb.field("reversesApplicationId", f -> f.physicalColumn("reverses_application_id").immutable(true)
             .asReference(APPLICATION));
         eb.field("discount", f -> f.physicalColumn("discount").immutable(true).asNumeric(15, 2));
+        // F7 (FIN-FX-004): what the receipt or credit memo gave in US dollars at its own rate, where amountUsd is
+        // what it took off the invoice at the invoice's; the difference is the realized gain (positive) or loss.
+        // Empty when both are the same.
+        eb.field("sourceAmountUsd", f -> f.physicalColumn("source_amount_usd").immutable(true).asNumeric(15, 2));
+        eb.field("fxGainLoss", f -> f.physicalColumn("fx_gain_loss").immutable(true).asNumeric(15, 2));
         // The number of what was applied (CM-2001, RCPT-0003), for the history.
         eb.field("sourceNo", f -> f.physicalColumn("source_no").immutable(true).asText(40));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).asText(500));

@@ -68,6 +68,11 @@ public final class ReceiptEntities {
         eb.field("description", f -> f.physicalColumn("description").immutable(true).asText(500));
         eb.field("unappliedAmount", f -> f.physicalColumn("unapplied_amount").required(true).processOnly()
             .asNumeric(15, 2));
+        // F7: the rate of a receipt in a foreign currency and its US dollars; empty on a receipt in US dollars from
+        // before, which counts at one.
+        eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").immutable(true).asNumeric(19, 10));
+        eb.field("amountUsd", f -> f.physicalColumn("amount_usd").immutable(true).asNumeric(15, 2));
+        eb.field("unappliedAmountUsd", f -> f.physicalColumn("unapplied_amount_usd").processOnly().asNumeric(15, 2));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(RECEIPT_STATUSES, values(RECEIPT_STATUS_VALUES)));
         eb.field("preparedBy", f -> f.physicalColumn("prepared_by").processOnly().asText(100));
@@ -78,8 +83,8 @@ public final class ReceiptEntities {
         eb.display("receiptNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("receiptNo", "customerCode", "receiptDate", "amount", "method", "reference", "bankAccount",
-                "unappliedAmount", "status")
+            .columns("receiptNo", "customerCode", "receiptDate", "currency", "amount", "exchangeRate", "amountUsd",
+                "method", "reference", "bankAccount", "unappliedAmount", "status")
             .filters("receiptNo", "customerCode", "receiptDate", "status", "reference", "bankAccount")
             .sorts("receiptNo", "receiptDate", "amount", "unappliedAmount")
             .defaultSort("receiptDate", false));

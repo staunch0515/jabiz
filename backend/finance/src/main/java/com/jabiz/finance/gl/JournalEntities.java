@@ -158,6 +158,11 @@ public final class JournalEntities {
         eb.field("memo", f -> f.physicalColumn("memo").immutable(true).asText(200));
         eb.field("department", f -> f.physicalColumn("department").immutable(true).asText(20));
         eb.field("location", f -> f.physicalColumn("location").immutable(true).asText(20));
+        // F7: a line entered in a foreign currency keeps it, its amount in it and its rate; debit or credit are its
+        // US dollars (F7 plan decision D5).
+        eb.field("currency", f -> f.physicalColumn("currency").immutable(true).asText(3));
+        eb.field("foreignAmount", f -> f.physicalColumn("foreign_amount").immutable(true).asNumeric(15, 2));
+        eb.field("exchangeRate", f -> f.physicalColumn("exchange_rate").immutable(true).asNumeric(19, 10));
         eb.unique("uk_fi_journal_line", "journalId", "lineNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

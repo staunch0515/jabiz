@@ -71,6 +71,9 @@ public final class JournalImportProcesses {
                 + (found.get("journalNo") == null ? "" : " as " + found.get("journalNo")), Map.of("externalRef", ref)));
             return;
         }
+        for (Violation problem : JournalProcesses.dollarsOnly(input.lines())) {
+            ctx.reject(problem);
+        }
         List<JournalValidator.Line> lines = input.lines().stream().map(JournalProcesses::line).toList();
         for (Violation problem : JournalValidator.checkLines(lines)) {
             ctx.reject(problem);

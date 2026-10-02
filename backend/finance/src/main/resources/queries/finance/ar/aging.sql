@@ -60,8 +60,9 @@ cleared AS (
     GROUP BY a.{{FinApplication.invoiceId}}
     UNION ALL
     -- …and what of each credit memo was applied to invoices.
+    -- A credit memo gives what it carries at its own rate (F7: sourceAmountUsd when the rates differ).
     SELECT CAST(a.{{FinApplication.sourceId}} AS uuid), SUM(a.{{FinApplication.amount}}),
-           SUM(a.{{FinApplication.amountUsd}})
+           SUM(COALESCE(a.{{FinApplication.sourceAmountUsd}}, a.{{FinApplication.amountUsd}}))
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :agingDate
     GROUP BY a.{{FinApplication.sourceId}}

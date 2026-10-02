@@ -198,6 +198,9 @@ public final class SubledgerPosting {
         if (source == null) {
             return;
         }
+        for (Violation problem : JournalProcesses.dollarsOnly(input.lines())) {
+            ctx.reject(problem);
+        }
         List<JournalValidator.Line> lines = input.lines().stream().map(JournalProcesses::line).toList();
         Map<String, JournalValidator.Account> accounts = JournalProcesses.accounts(ctx);
         for (Violation problem : JournalValidator.checkForPosting(lines, accounts, JournalProcesses.dimensions(ctx),
