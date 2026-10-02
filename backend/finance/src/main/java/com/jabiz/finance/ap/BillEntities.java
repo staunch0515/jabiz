@@ -121,8 +121,7 @@ public final class BillEntities {
             .columns("billNo", "kind", "vendorCode", "vendorInvoiceNo", "invoiceDate", "dueDate", "total",
                 "openAmount", "status", "approval")
             .filters("billNo", "kind", "vendorCode", "vendorInvoiceNo", "vendorInvoiceKey", "invoiceDate", "dueDate",
-                "status",
-                "approval", "source", "originalBillId")
+                "status", "approval", "source", "originalBillId", "openAmount")
             .sorts("billNo", "invoiceDate", "dueDate", "total", "openAmount")
             .defaultSort("invoiceDate", false));
     });

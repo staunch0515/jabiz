@@ -66,8 +66,13 @@ class ApConfig {
 
     @Bean
     DatasetDefinition finVendorBankAccountDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(ApEntities.VENDOR_BANK_DATASET, ApEntities.VENDOR_BANK, FinancePermissions.VENDOR_BANK_MAINTAIN,
-            poolRef);
+        // A payment run reads the accounts of up to 5,000 bills' vendors at once: in use and waiting, two each.
+        return DatasetDefinition.define(ApEntities.VENDOR_BANK_DATASET, d -> d
+            .targetEntityType(ApEntities.VENDOR_BANK)
+            .asDefault()
+            .permissions(FinancePermissions.AP_READ, FinancePermissions.VENDOR_BANK_MAINTAIN)
+            .policy(p -> p.maxQueryBatchSize(10000).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
@@ -406,5 +411,216 @@ class ApConfig {
     ProcessDefinition<ApSettingsProcesses.ThresholdInput, ApSettingsProcesses.ThresholdOutput, ProcessContext>
         fin1099ThresholdSetProcess() {
         return ApSettingsProcesses.THRESHOLD_PROCESS;
+    }
+
+    // ---- F4c: payments ---------------------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition finPaymentRunEntity() {
+        return PaymentEntities.RUN_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finPaymentLineEntity() {
+        return PaymentEntities.LINE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finPaymentEntity() {
+        return PaymentEntities.PAYMENT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finPaymentFileEntity() {
+        return PaymentEntities.FILE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finPaymentRunDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(PaymentEntities.RUN_DATASET, PaymentEntities.RUN, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finPaymentLineDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(PaymentEntities.LINE_DATASET, PaymentEntities.LINE, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finPaymentDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(PaymentEntities.PAYMENT_DATASET, PaymentEntities.PAYMENT, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finPaymentFileDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return payments(PaymentEntities.FILE_DATASET, PaymentEntities.FILE, poolRef);
+    }
+
+    /** A run proposes from up to 5,000 open bills at once. */
+    private static DatasetDefinition payments(String id, String entity, String poolRef) {
+        return DatasetDefinition.define(id, d -> d
+            .targetEntityType(entity)
+            .asDefault()
+            .permissions(FinancePermissions.AP_READ, FinancePermissions.PAYMENT_PREPARE)
+            .policy(p -> p.maxQueryBatchSize(5000).maxWriteBatchSize(5000).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    NumberSequence paymentRunNumbers() {
+        return PaymentProcesses.runNumbers();
+    }
+
+    @Bean
+    NumberSequence paymentNumbers() {
+        return PaymentProcesses.paymentNumbers();
+    }
+
+    @Bean
+    StaticDictionary paymentRunStatusDictionary() {
+        return StaticDictionary.define(PaymentEntities.RUN_STATUSES, d -> d
+            .item(PaymentEntities.DRAFT, "en", "Draft")
+            .item(PaymentEntities.SUBMITTED, "en", "Waiting for approval")
+            .item(PaymentEntities.APPROVED, "en", "Approved")
+            .item(PaymentEntities.RELEASED, "en", "Released")
+            .item(PaymentEntities.CANCELLED, "en", "Cancelled"));
+    }
+
+    @Bean
+    StaticDictionary paymentRunMethodDictionary() {
+        return StaticDictionary.define(PaymentEntities.METHODS, d -> d
+            .item("ACH", "en", "ACH")
+            .item("CHECK", "en", "Check")
+            .item("WIRE", "en", "Wire")
+            .item(PaymentEntities.MANUAL, "en", "Paid outside the bank files"));
+    }
+
+    @Bean
+    StaticDictionary paymentLineKindDictionary() {
+        return StaticDictionary.define(PaymentEntities.LINE_KINDS, d -> d
+            .item(PaymentEntities.BILL_LINE, "en", "Bills")
+            .item(PaymentEntities.OTHER_LINE, "en", "Other payment")
+            .item(PaymentEntities.PREPAYMENT_LINE, "en", "Prepayment"));
+    }
+
+    @Bean
+    StaticDictionary paymentStatusDictionary() {
+        return StaticDictionary.define(PaymentEntities.PAYMENT_STATUSES, d -> d
+            .item(PaymentEntities.POSTED, "en", "Posted")
+            .item(PaymentEntities.VOID, "en", "Void"));
+    }
+
+    @Bean
+    StaticDictionary paymentFileKindDictionary() {
+        return StaticDictionary.define(PaymentEntities.FILE_KINDS, d -> d
+            .item(PaymentEntities.NACHA, "en", "NACHA file")
+            .item(PaymentEntities.CHECK_FILE, "en", "Check print file")
+            .item(PaymentEntities.POSITIVE_PAY, "en", "Positive pay file")
+            .item(PaymentEntities.WIRE, "en", "Wire instruction file"));
+    }
+
+    @Bean
+    StaticDictionary paymentFileStatusDictionary() {
+        return StaticDictionary.define(PaymentEntities.FILE_STATUSES, d -> d
+            .item(PaymentEntities.ACTIVE, "en", "Active")
+            .item(PaymentEntities.CANCELLED, "en", "Cancelled"));
+    }
+
+    /** What the approval rules of payment runs can ask about (FIN-AP-011): the total, the method and the bank. */
+    @Bean
+    ApprovalSubject paymentRunApprovals() {
+        return ApprovalSubject.define(PaymentProcesses.SUBJECT, s -> s
+            .entity(PaymentEntities.RUN)
+            .number("amount")
+            .text("method")
+            .text("bankCode"));
+    }
+
+    @Bean
+    EventSubscription<PaymentProcesses.ApprovalResultInput> paymentRunApprovedSubscription() {
+        return EventSubscription.of("fin.payment-run-approved", ApprovalProcesses.APPROVED_EVENT,
+            PaymentProcesses.APPROVAL_RESULT_PROCESS, ApConfig::runDecision);
+    }
+
+    @Bean
+    EventSubscription<PaymentProcesses.ApprovalResultInput> paymentRunRejectedSubscription() {
+        return EventSubscription.of("fin.payment-run-rejected", ApprovalProcesses.REJECTED_EVENT,
+            PaymentProcesses.APPROVAL_RESULT_PROCESS, ApConfig::runDecision);
+    }
+
+    private static PaymentProcesses.ApprovalResultInput runDecision(DomainEvent event) {
+        return new PaymentProcesses.ApprovalResultInput(text(event, "subject"), text(event, "entityId"),
+            text(event, "status"), text(event, "requestId"));
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.ProposeInput, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunProposeProcess() {
+        return PaymentProcesses.PROPOSE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.AddInput, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunAddProcess() {
+        return PaymentProcesses.ADD_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.RemoveInput, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunRemoveProcess() {
+        return PaymentProcesses.REMOVE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.RunId, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunSubmitProcess() {
+        return PaymentProcesses.SUBMIT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.ApprovalResultInput, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunApprovalResultProcess() {
+        return PaymentProcesses.APPROVAL_RESULT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.CancelInput, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunCancelProcess() {
+        return PaymentProcesses.CANCEL_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.RunId, PaymentProcesses.RunOutput, ProcessContext>
+        finPaymentRunReleaseProcess() {
+        return PaymentProcesses.RELEASE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.PaymentInput, PaymentProcesses.PaymentOutput, ProcessContext>
+        finPaymentRecordProcess() {
+        return PaymentProcesses.RECORD_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.VoidInput, PaymentProcesses.VoidOutput, ProcessContext>
+        finPaymentVoidProcess() {
+        return PaymentProcesses.VOID_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentProcesses.PrepaymentApplyInput, PaymentProcesses.PrepaymentApplyOutput, ProcessContext>
+        finApPrepaymentApplyProcess() {
+        return PaymentProcesses.PREPAYMENT_APPLY_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PaymentFiles.GenerateInput, PaymentFiles.FileOutput, ProcessContext>
+        finPaymentFileGenerateProcess(BookingTime booking) {
+        return PaymentFiles.generateProcess(booking);
+    }
+
+    @Bean
+    ProcessDefinition<PaymentFiles.CancelInput, PaymentFiles.FileOutput, ProcessContext>
+        finPaymentFileCancelProcess() {
+        return PaymentFiles.CANCEL_PROCESS;
     }
 }

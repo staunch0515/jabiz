@@ -116,7 +116,7 @@
 | ReceivablesClerk | 客户、发票、贷项通知单、收款与核销 |
 | PayablesClerk | 供应商（不含银行信息批准）、账单、付款建议、1099 数据 |
 | Approver | 限额内的账单、付款、分录审批 |
-| Treasurer | 付款释放、银行账户、正向支付文件、银行账号明文 |
+| Treasurer | 付款释放（二次验证）、付款作废、银行账户、付款文件（`file.generated.read`）、银行账号明文 |
 | Executive | 报表与仪表盘只读 |
 | ExternalAuditor | 只读（账簿、审计记录、证据），数据期限为审计期（14g） |
 | SystemAdministrator | 用户、角色、配置、集成；**无任何过账权限** |
@@ -286,19 +286,36 @@
 | `FinBankAccount` | 公司银行账户（F4 计划 D3，F4a 起）：代码、银行、总账科目（`BANK` 控制科目）、币种、路由号、账号（`masked(fin.bank.read, LAST4)`）、ACH 公司 ID 与名称、下一支票号；Treasurer 以二次验证维护；对账的字段在 F5 |
 | `FinApSettings` | 应付科目（`AP` 控制科目）、现金折扣、使用税应付、供应商预付科目（样例科目表没有，由 Controller 新增，D5）、缺省付款银行 |
 | `FinBill` / `FinBillLine` / `FinBillTax` | 账单与供应商贷项同一实体（`kind`），过账时编号 `BILL-` / `VC-`；供应商发票号（供应商 × 号码重复 → 阻止，只比字母与数字）、日期、收到日、到期日、条件；行：金额、费用或资产科目、使用税码（TX-007，计算说明在 `FinBillTax`）、维度、1099 表与栏（缺省来自供应商，可逐行覆盖）。账单先过账，审批是单独的状态：未批准不能付款（AP-006）。F7 之前只用美元 |
-| `FinApApplication` | 贷项（F4c 起还有付款）核销到账单，只写一次（AP-008）；供应商预付款随 F4c 的付款 |
+| `FinApApplication` | 贷项、付款（`PAYMENT`）与预付款（`PREPAYMENT`）核销到账单，只写一次；撤回与作废写相反金额（AP-008、AP-012、AP-014） |
 | `FinAsset` | 最小的资产登记（F4 计划 D4）：资本化账单行由内部子流程 `FIN_ASSET_CREATE` 登记（`FA-{n:3}`）；折旧等在 F6 |
-| `FinPaymentRun` / `FinPayment` / `FinPaymentLine` | 建议（到期日、折扣日、供应商、币种、银行账户）、增删、提交、他人批准、财务主管释放（二次验证）、锁定；每笔付款 × 账单 |
-| `FinPaymentFile` | 生成的文件（NACHA CCD/PPD、pain.001、支票文件、正向支付）：只追加、哈希；同一付款批只能有一个有效文件，重新生成须先以原因作废（BK-011） |
+| `FinPaymentRun` / `FinPaymentLine` | 付款批（`PAY-RUN-{n:2}`，F4c）：银行账户、付款日、方式 ACH / CHECK / WIRE / MANUAL（在银行文件之外付，如在州税务网站缴税）、状态 DRAFT → SUBMITTED → APPROVED → RELEASED（或 CANCELLED）、合计、准备人（最后改动的人）、审批请求与内容哈希、批准人、释放人。行：账单（可部分付款，带已享折扣）、其他付款（付款人 + 非控制科目，如州销售税，AP-015；只在 CHECK 与 MANUAL 批中，ACH 与电汇文件没有可付的账户）、供应商预付款（预付科目，AP-008）；账单与预付款行记下供应商名称（付款人），随批准的内容锁定 |
+| `FinPayment` | 释放时每个供应商的账单合为一笔付款（`PMT-{n:4}`），其他付款与预付款各一笔；支票号取自银行账户的下一支票号；ACH 记下付往的供应商账户（释放时有效的那个）；预付款的未核销余额；作废日、原因与冲正的总账号。分录经 `FinPosting.documentNo`（= 付款号）查找 |
+| `FinPaymentFile` | 生成的文件（F4 计划 D6，电汇按 F4c 的计划变更：NACHA CCD/PPD、支票打印 CSV、正向支付 CSV、电汇指示 CSV；pain.001 不做）：原样保存、带哈希（`FILE_ARCHIVE`），记下银行账户与生成日（同一银行同一天的 NACHA 文件按 A–Z 区分），读取需要 `fin.payment.release`；同一付款批同一种只能有一个有效文件，重新生成须先以原因作废（BK-011） |
 | `Fin1099Threshold` | 纳税年度 × 表（NEC、MISC）→ 阈值（时态，AP-021）；样例的一列阈值同时用于两种表 |
 
 - 职责分离（FIN-CT-001，F4a 起由 `FIN_SETUP` 提出、他人发布）：`fin.vendor.bank.maintain` × `fin.payment.release`；`fin.bill.prepare`、`fin.payment.prepare` × `fin.payment.release`。
 - 重复检查（AP-005）：同供应商同号 → 拒绝；同供应商、金额、日期而号不同 → 警告，需确认并填写原因。
 - 审批（AP-006）：规则（金额、供应商、科目、维度）与审批人限额；未批准的账单不能被选入付款。
 - 资本化（AP-007）：行科目为资产成本科目 → 过账时创建或更新资产登记并链接账单（资产的折旧在 F6）。
-- 付款过账（AP-012）：借应付（及已享折扣）/ 贷银行；标记已付并链接。作废（AP-014）：冲正，账单重新打开，原付款仍可见。
+- 付款批（AP-010、AP-011，F4c）：`FIN_PAYMENT_RUN_PROPOSE` 选出到期日不晚于给定日（或提前付款折扣到付款日仍有效，`takeDiscounts`）的已过账、有未结的账单，可限供应商；
+  暂停并给出原因：未批准（"not approved"）、银行信息待批准（"bank details pending approval"，AP-003）、ACH 而没有启用的账户、供应商停用、已在另一个未完成的批中；
+  `_ADD` / `_REMOVE` 改草稿（暂停同样检查）；`_SUBMIT` 由最后改动的人提交，经审批对象 `fin.ap.payment-run`（规则 `FIN-AP-PAYMENT`：每批需要 `fin.payment.approve`，由他人批准；职责分离规则 `FIN-SOD-PAYMENT-APPROVE` 使准备付款批的人都不能批准），
+  没有适用的规则即拒绝；提交后不再改动，批准绑定内容哈希；`_APPROVAL_RESULT`（内部）只相信平台的审批请求与决定，驳回回到草稿；`_CANCEL` 撤回审批请求。
+- 释放（AP-011、SC-001）：`FIN_PAYMENT_RUN_RELEASE` 需要 `fin.payment.release` 与二次验证（`requiresMfa(ALWAYS)`）；内容须与批准时一致，暂停条件与未结金额再查一次；
+  职责分离由平台规则 `FIN-SOD-PAYABLES-RELEASE` 保证（准备人不持有释放权限），流程不另写检查。
+- 付款过账（AP-012）：内部子流程 `FIN_PAYMENT_RECORD` 先保存付款（账本校验来源单据存在）再经 `FIN_SUBLEDGER_POST`（控制类 AP、BANK）记账：
+  账单 = 借应付（总额）/ 贷现金折扣（已享）/ 贷银行；其他付款 = 借该科目 / 贷银行；预付款 = 借预付 / 贷银行。每张账单写 `sourceKind = PAYMENT` 的核销并减少未结。
+  预付款以 `FIN_AP_PREPAYMENT_APPLY` 核销到同一供应商的账单：借应付 / 贷预付（AP-008）。
+- 作废（AP-014）：`FIN_PAYMENT_VOID`（`fin.payment.void`，二次验证：重新打开的账单可以再付）在作废日冲正付款的分录，写相反的核销使账单重新打开，原付款仍可见（状态 VOID）；
+  已部分核销的预付款不能作废；ACH 与电汇付款在银行持有的有效文件中时不能作废（钱已付出，须先作废文件，即银行没有接受）。
+- 付款文件（AP-013、BK-011）：`FIN_PAYMENT_FILE_GENERATE` / `_CANCEL`（`fin.payment.release`）；纯 Java 的 `calc.NachaWriter`（94 字符记录、10 行一块、条目哈希；
+  企业 CCD、个人（实体类型 INDIVIDUAL）PPD；交易码 22 / 32）与独立实现的 `calc.NachaValidator`（保存前检查，测试用同一校验器）、`calc.CheckFiles`（支票打印与正向支付 CSV，
+  作废的支票标 V）、`calc.WireFile`（电汇指示 CSV，付款账户与收款人账户为全号）。电汇不做成单据：单据中遮蔽字段一律遮蔽（平台 22 §3.1），银行需要全号。
+  文件中有完整账号：只经生成文件存档，读取需要 `fin.payment.release`。
+- 规模：数据视图的查询到上限即静默截断，所以建议只读到期（或折扣仍有效）的账单，读到 5,000 张账单、未完成批的 5,000 行或 500 个条件即拒绝（`FIN_PAYMENT_TOO_MANY`），
+  一个批最多 5,000 行；供应商账户只读启用与待批准的（每家至多两个），数据视图上限 10,000。释放时仍按账单的版本与未结金额再查，不会重复付款。
 - 1099（AP-020…023）：付款日所在日历年（收付实现制）按供应商 × 表 × 栏汇总；卡与第三方网络付款排除；与年度阈值表比较；审核报告（缺 TIN/地址）、收件人副本 PDF、电子申报导出、更正记录。
-- 文件格式在 `io` 包中，纯 Java，用公开规范的校验器做测试（NACHA 记录长度、批合计、条目数、哈希合计）。
+- 文件格式是纯 Java（`calc` 包），用独立实现的校验器测试（NACHA 记录长度、块、批合计、条目数、哈希合计、路由号校验位），另有随机生成付款的性质测试。
 
 ---
 
