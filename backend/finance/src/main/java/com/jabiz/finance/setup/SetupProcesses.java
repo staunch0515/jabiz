@@ -47,20 +47,32 @@ public final class SetupProcesses {
      * @param approvalRuleChange the proposed change creating the journal approval rule, which another person
      *                           publishes (four eyes, FIN-CT-002); null when the rule exists or is proposed already
      * @param writeOffRuleChange the same for the rule that write-offs need an approver of write-offs (FIN-AR-012)
+     * @param proposedChanges    every change proposed by this run, by the code of its rule: the approval rules above,
+     *                           the rule of vendor bank changes and the segregation-of-duties rules of payables
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, boolean currencyCreated,
-        String approvalRuleChange, String writeOffRuleChange) {}
+        String approvalRuleChange, String writeOffRuleChange, Map<String, String> proposedChanges) {}
 
     /** The rule of FIN-GL-015: manual entries above 10,000.00 need an approver of journal entries. */
     public static final String APPROVAL_RULE = "FIN-MANUAL-10K";
     /** The rule of FIN-AR-012: every write-off needs an approver of write-offs. */
     public static final String WRITE_OFF_RULE = "FIN-WRITE-OFF";
+    /** The rule of FIN-AP-003: every change of a vendor's bank details needs another person's approval. */
+    public static final String VENDOR_BANK_RULE = "FIN-VENDOR-BANK";
+    /** Segregation of duties (FIN-CT-001): who keeps vendors' bank details never releases payments. */
+    public static final String SOD_VENDOR_BANK = "FIN-SOD-VENDOR-BANK-RELEASE";
+    /** Segregation of duties (FIN-CT-001 acceptance 2): who prepares payables never releases payments. */
+    public static final String SOD_PAYABLES = "FIN-SOD-PAYABLES-RELEASE";
+
+    private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE);
+    private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES);
 
     static final String ROLES = "roles";
     static final String GRANTS = "grants";
     static final String CURRENCIES = "currencies";
     static final String OUTPUT = "output";
     static final String RULES = "rules";
+    static final String SOD = "sodRules";
     static final String PROPOSALS = "proposals";
     static final String PROPOSAL = "proposal";
     static final String PROPOSED = "proposed";
@@ -90,14 +102,18 @@ public final class SetupProcesses {
                     .limit(1).build(), CURRENCIES))
             .step("Load the approval rules", QueryEntities.of(ApprovalEntities.RULE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("ruleCode",
-                    List.of(APPROVAL_RULE, WRITE_OFF_RULE))).limit(2).build(), RULES))
+                    new ArrayList<>(APPROVAL_RULES))).limit(APPROVAL_RULES.size()).build(), RULES))
+            .step("Load the segregation rules", QueryEntities.of(ApprovalEntities.SOD_RULE_DATASET,
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("ruleCode",
+                    new ArrayList<>(SOD_RULES))).limit(SOD_RULES.size()).build(), SOD))
             .step("Look for their proposals", QueryEntities.of(ApprovalEntities.CONTROL_CHANGE_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("status", ApprovalEntities.PROPOSED),
-                        new QueryPredicate.Or(List.of(
-                            new QueryPredicate.Like("changeValues", "%\"" + APPROVAL_RULE + "\"%"),
-                            new QueryPredicate.Like("changeValues", "%\"" + WRITE_OFF_RULE + "\"%"))))))
-                    .limit(10).build(), PROPOSALS))
+                        new QueryPredicate.Or(java.util.stream.Stream.concat(APPROVAL_RULES.stream(),
+                                SOD_RULES.stream())
+                            .map(code -> (QueryPredicate) new QueryPredicate.Like("changeValues",
+                                "%\"" + code + "\"%")).toList()))))
+                    .limit(20).build(), PROPOSALS))
             .compute("Add what is missing", (metadata, ctx) -> setup(ctx))
             // Proposed only: rules change with four eyes, so another person publishes them (FIN-CT-002).
             .step("Propose the approval rules", CallProcess.forEach(ControlChanges.PROPOSE, 1,
@@ -110,17 +126,12 @@ public final class SetupProcesses {
         List<String> codes = ctx.contains(PROPOSED_CODES) ? (List<String>) ctx.get(PROPOSED_CODES) : List.of();
         List<ControlChanges.ChangeOutput> proposed = ctx.contains(PROPOSED)
             ? (List<ControlChanges.ChangeOutput>) ctx.get(PROPOSED) : List.of();
-        String journal = null;
-        String writeOff = null;
+        Map<String, String> changes = new LinkedHashMap<>();
         for (int i = 0; i < codes.size() && i < proposed.size(); i++) {
-            if (APPROVAL_RULE.equals(codes.get(i))) {
-                journal = proposed.get(i).changeId();
-            } else {
-                writeOff = proposed.get(i).changeId();
-            }
+            changes.put(codes.get(i), proposed.get(i).changeId());
         }
-        return new SetupOutput(output.rolesCreated(), output.permissionsAdded(), output.currencyCreated(), journal,
-            writeOff);
+        return new SetupOutput(output.rolesCreated(), output.permissionsAdded(), output.currencyCreated(),
+            changes.get(APPROVAL_RULE), changes.get(WRITE_OFF_RULE), Map.copyOf(changes));
     }
 
     static void setup(ProcessContext ctx) {
@@ -170,14 +181,34 @@ public final class SetupProcesses {
                 "Finance setup: write-offs need an approver of write-offs (FIN-AR-012)"));
             codes.add(WRITE_OFF_RULE);
         }
+        if (missing(ctx, VENDOR_BANK_RULE)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, null, vendorBankRule(), null,
+                "Finance setup: vendor bank changes need another person's approval (FIN-AP-003)"));
+            codes.add(VENDOR_BANK_RULE);
+        }
+        if (missing(ctx, SOD_VENDOR_BANK)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
+                sodRule(SOD_VENDOR_BANK, List.of(FinancePermissions.VENDOR_BANK_MAINTAIN),
+                    "Who keeps vendors' bank details never releases payments"), null,
+                "Finance setup: keeping vendor bank details and releasing payments are apart (FIN-CT-001)"));
+            codes.add(SOD_VENDOR_BANK);
+        }
+        if (missing(ctx, SOD_PAYABLES)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
+                sodRule(SOD_PAYABLES, List.of(FinancePermissions.BILL_PREPARE, FinancePermissions.PAYMENT_PREPARE),
+                    "Who prepares bills or payment runs never releases payments"), null,
+                "Finance setup: preparing payables and releasing payments are apart (FIN-CT-001)"));
+            codes.add(SOD_PAYABLES);
+        }
         ctx.put(PROPOSAL, List.copyOf(proposals));
         ctx.put(PROPOSED_CODES, List.copyOf(codes));
-        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null, null));
+        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null, null, Map.of()));
     }
 
     /** Neither the rule nor a proposal of it exists. */
     private static boolean missing(ProcessContext ctx, String code) {
         return list(ctx, RULES).stream().noneMatch(r -> code.equals(r.get("ruleCode")))
+            && list(ctx, SOD).stream().noneMatch(r -> code.equals(r.get("ruleCode")))
             && list(ctx, PROPOSALS).stream().noneMatch(p -> String.valueOf((Object) p.get("changeValues"))
                 .contains("\"" + code + "\""));
     }
@@ -192,6 +223,30 @@ public final class SetupProcesses {
         rule.put("condition", Map.of());
         rule.put("levels", List.of(Map.of("permission", FinancePermissions.WRITE_OFF_APPROVE)));
         rule.put("description", "Write-offs need an approver of write-offs");
+        return rule;
+    }
+
+    /** Every change of a vendor's bank details needs an approver of them (FIN-AP-003). */
+    static Map<String, Object> vendorBankRule() {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", VENDOR_BANK_RULE);
+        rule.put("subject", com.jabiz.finance.ap.VendorBankProcesses.SUBJECT);
+        rule.put("priority", 100);
+        rule.put("enabled", true);
+        rule.put("condition", Map.of());
+        rule.put("levels", List.of(Map.of("permission", FinancePermissions.VENDOR_BANK_APPROVE)));
+        rule.put("description", "Vendor bank changes need an approver of them");
+        return rule;
+    }
+
+    /** A segregation-of-duties rule: no one holds a permission of each group (platform 18 section 4.1). */
+    static Map<String, Object> sodRule(String code, List<String> left, String description) {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("ruleCode", code);
+        rule.put("leftPermissions", String.join(",", left));
+        rule.put("rightPermissions", FinancePermissions.PAYMENT_RELEASE);
+        rule.put("enabled", true);
+        rule.put("description", description);
         return rule;
     }
 

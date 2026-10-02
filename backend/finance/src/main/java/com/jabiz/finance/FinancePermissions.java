@@ -108,5 +108,43 @@ public final class FinancePermissions {
     /** Keep the company's profile: the name, address and remittance instructions its documents show (FIN-AR-005). */
     public static final String COMPANY_MAINTAIN = "fin.company.maintain";
 
+    /** Read vendors, their 1099 settings, the 1099 thresholds and the payables settings (F4). */
+    public static final String AP_READ = "fin.ap.read";
+    /** Create and change vendors and record their W-9 (FIN-AP-001, 002); the TIN stays masked to the clerk. */
+    public static final String VENDOR_MAINTAIN = "fin.vendor.maintain";
+    /**
+     * Ask for a vendor's bank details to change (FIN-AP-003): they take effect only once another person approves, and
+     * whoever keeps them never releases payments (FIN-CT-001).
+     */
+    public static final String VENDOR_BANK_MAINTAIN = "fin.vendor.bank.maintain";
+    /** Approve changes of vendors' bank details: the level of the approval rule {@code FIN_SETUP} proposes. */
+    public static final String VENDOR_BANK_APPROVE = "fin.vendor.bank.approve";
+    /**
+     * Run {@code FIN_VENDOR_BANK_APPROVAL_RESULT} directly; granted to no role. Only the platform's approval events run
+     * it, so a bank change takes effect only through an approval by another person.
+     */
+    public static final String VENDOR_BANK_RESULT = "fin.vendor.bank.result";
+    /** See vendors' bank account numbers in plain text, one at a time and on the record (FIN-SC-004). */
+    public static final String VENDOR_BANK_READ = "fin.vendor.bank.read";
+    /** See taxpayer identification numbers in plain text, one at a time and on the record (FIN-AP-002, FIN-SC-004). */
+    public static final String TAX_DATA_READ = "fin.tax.data.read";
+    /** Keep the company's own bank accounts: what payments are made from (F4, design decision D3). */
+    public static final String BANK_MAINTAIN = "fin.bank.maintain";
+    /** See the company's bank account numbers in plain text, one at a time and on the record (FIN-SC-004). */
+    public static final String BANK_READ = "fin.bank.read";
+    /** Set the payables accounts and the default bank (F4). */
+    public static final String AP_SETTINGS = "fin.ap.settings";
+    /** Keep the 1099 threshold table (FIN-AP-021). */
+    public static final String FORM_1099_MAINTAIN = "fin.1099.maintain";
+    /** Enter and post vendor bills and credits (FIN-AP-004; phase F4b). */
+    public static final String BILL_PREPARE = "fin.bill.prepare";
+    /** Prepare payment runs (FIN-AP-010; phase F4c). */
+    public static final String PAYMENT_PREPARE = "fin.payment.prepare";
+    /**
+     * Release approved payment runs to the bank (FIN-AP-011; phase F4c): the treasury's alone, never with preparing
+     * payables or keeping vendors' bank details (FIN-CT-001).
+     */
+    public static final String PAYMENT_RELEASE = "fin.payment.release";
+
     private FinancePermissions() {}
 }

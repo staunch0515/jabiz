@@ -10,8 +10,8 @@
 | F0 | 设计与骨架 | — | 3–4 天 | ☑ 已完成（设计待确认） |
 | F1 | 总账、期间、日记账与审批 | 14a 14b 14c 14h 14i | 8–10 天 | ☑ 已完成 |
 | F2 | 主数据导入、期初与迁移、工资导入 | 14e | 4–5 天 | ☑ 已完成 |
-| F3 | 应收与销售税 | 14j（发票文件） | 8–10 天 | ◐ F3a–F3d-1 已合入；F3d-2 进行中 |
-| F4 | 应付、付款与 1099 | — | 8–10 天 | ☐ |
+| F3 | 应收与销售税 | 14j（发票文件） | 8–10 天 | ☑ 已完成 |
+| F4 | 应付、付款与 1099 | 14k（TIN 遮蔽、生成文件存档） | 10–12 天 | ◐ F4a 进行中 |
 | F5 | 银行与对账 | 14e | 6–8 天 | ☐ |
 | F6 | 固定资产 | — | 4–5 天 | ☐ |
 | F7 | 多币种 | — | 4–5 天 | ☐ |
@@ -417,6 +417,56 @@ TX-007（使用税）随 F4；AR-015（Could）不做。计划已确认（2026-1
 已知限制：无障碍检查（UI-009，axe）需要平台前端提供 `@axe-core/playwright`，扩展不能自带依赖（D22），留给平台；贷项核销到发票、退款、坏账核销与周期发票仍用平台的流程页；
 页面不提供草稿预览（财务角色不持有 `document.issue`，F3d-1 第 5 条）。
 
-## F4 — F11
+## F4 应付、付款与 1099
+
+需求：FIN-AP-001…015、020…022，AP-023 与 TX-007（Should），以及 CT-001、CT-010、SC-001、SC-004、BK-011 的应付部分；主验收 FIN-SCN-04
+（FIN-EXP-09 应付账龄、FIN-EXP-14 1099、FIN-EXP-02 的账单与付款行）。计划已确认（2026-10-01，接受全部推荐）：
+
+1. TIN 显示为 `***-**-1234` / `**-***1234`：平台阶段 14k 新增 `MaskStyle.TAX_ID`（D1）。
+2. 付款文件、1099 申报文件原样保存并带哈希：平台阶段 14k 的生成文件存档（`FILE_ARCHIVE`、`sys_generated_file`、`GET /api/generated-files/{id}`，平台决策 D31）（D2）。
+3. 最小的公司银行账户 `FinBankAccount` 提前到 F4a（账号按 `fin.bank.read` 显示明文；对账单与对账的字段在 F5 扩展）（D3）。
+4. AP-007 在 F4b 建最小的资产登记 `FinAsset`；F6 的资产导入按编号匹配已有资产，不重复创建（D4）。
+5. 样例科目表没有的现金折扣、使用税应付、供应商预付科目由 Controller 新增（测试中 5900、2210、1310），在应付设置中指定（D5）。
+6. 格式：ACH 只做 NACHA CCD/PPD；支票文件与正向支付文件为 CSV；电汇指示为 PDF 单据；1099 电子申报为一种有公开说明的申报服务 CSV（D6）。
+7. 释放付款与银行信息变更声明 `requiresMfa(ALWAYS)`（D7）。
+8. 分 PR：平台 14k，F4a 供应商与主数据，F4b 账单，F4c 付款，F4d 1099 与 FIN-SCN-04，F4e `finance-web`。
+
+### F4a 供应商、税务信息、银行信息变更与应付主数据
+
+**要求**
+1. 时态实体（V10）：`FinVendor`（代码、法定名称、DBA、汇款地址（可预定自以后某日生效）、联系人、币种、付款条件、缺省费用科目、缺省付款方式、实体类型、
+   1099 表与栏、W-9 已收、状态）、`FinVendorTaxInfo`（TIN 类型与号码 `masked(fin.tax.data.read, TAX_ID)`、W-9 文件（策略 `fin.w9`，读取需要 `fin.tax.data.read`）与日期、
+   TIN 验证结果、备用预扣）、`FinVendorBankAccount`（路由号、账号 `masked(fin.vendor.bank.read, LAST4)`、账户类型、状态 PENDING / ACTIVE / REJECTED / REPLACED、
+   提出人与时间、决定人、审批请求与内容哈希）、`Fin1099Threshold`（纳税年度 × 表 → 阈值）、`FinApSettings`、`FinBankAccount`。数据视图只经流程写入。
+2. 流程：`FIN_VENDOR_SAVE`（新建或修改；条件可写天数，`NET<n>` 缺少即建；1099 表与栏一起检查：NEC 栏 1，MISC 栏 1、2、3、6、10；空表清除）、
+   `FIN_VENDOR_TAX_SAVE`（TIN 按类型校验并保存为书写形式；遮蔽形式不能写入；应付员可以登记，之后同样只看到遮蔽形式）、
+   `FIN_VENDOR_BANK_CHANGE`（二次验证；路由号校验位、账号 4–17 位；同一供应商同时只能有一个待批准的变更；经审批对象 `fin.ap.vendor-bank` 由他人批准，
+   没有适用的规则即拒绝；账号不进审批的事实与内容）、`FIN_VENDOR_BANK_APPROVAL_RESULT`（内部，只由平台的审批事件运行：批准后新账户启用、旧账户 REPLACED；驳回 REJECTED；
+   记录决定人）、`FIN_AP_SETTINGS_SET`（应付 = `AP` 控制科目，其余非控制科目，缺省银行为有效的公司银行账户）、`FIN_1099_THRESHOLD_SET`（不指定表即 NEC 与 MISC）、
+   `FIN_BANK_ACCOUNT_SAVE`（Treasurer，二次验证；总账科目为 `BANK` 控制科目）。
+3. 纯计算：`calc.TaxIds`（SSN / ITIN / EIN 的规则与书写形式）、`calc.BankNumbers`（ABA 校验位、账号）；`io.VendorRows`（实体类型与"1099-MISC box 1 (rents)"的文字）。
+4. 导入：`finance.vendors`（样例 `vendors.csv`；币种缺省 USD，`terms_days` 读作 `NET<n>`，`tin_on_file` 读作"W-9 已收"；一行无效即整个文件拒收）、
+   `finance.ap_thresholds`（样例 `thresholds-1099.csv`，一列阈值同时用于 NEC 与 MISC）。
+5. 权限与角色：`fin.ap.read`、`fin.vendor.maintain`、`fin.vendor.bank.maintain`（PayablesClerk）、`fin.vendor.bank.approve`（Controller、Approver）、
+   `fin.vendor.bank.read`、`fin.bank.maintain`、`fin.bank.read`、`fin.payment.release`（Treasurer）、`fin.tax.data.read`、`fin.ap.settings`（Controller）、
+   `fin.1099.maintain`（PayablesClerk、Controller）、`fin.bill.prepare`、`fin.payment.prepare`（PayablesClerk，F4b/c 使用）；`fin.vendor.bank.result` 不授予任何角色。
+6. `FIN_SETUP` 另提出（由他人发布）：审批规则 `FIN-VENDOR-BANK`（每次银行变更需要 `fin.vendor.bank.approve`）、职责分离规则 `FIN-SOD-VENDOR-BANK-RELEASE`
+   （`fin.vendor.bank.maintain` × `fin.payment.release`）与 `FIN-SOD-PAYABLES-RELEASE`（`fin.bill.prepare`、`fin.payment.prepare` × `fin.payment.release`）；输出按规则代码列出提出的变更。
+
+计划变更：未结应付的导入（`finance.open_payables` / `FIN_AP_OPENING`）需要账单实体，移到 F4b。
+
+**验收标准**
+- [x] 导入 `vendors.csv` 后有 8 家供应商，实体类型与 1099 设置正确（V200、V800 为 NEC 栏 1，V300 为 MISC 栏 1）；一行无效则整个文件拒收（AP-001、DI-001，`PayablesMasterIT`、`VendorRowsTest`）。
+- [x] 应付员登记 V800 的 SSN 后看到 `***-**-1234`，不能显示明文；Controller 显示明文时记入 `sys_reveal_record`；操作记录中没有 TIN；遮蔽形式与无效号码被拒（AP-002 验收 1、SC-004，`PayablesMasterIT`、`TaxIdsTest`）。
+- [x] 结果流程只相信平台的审批请求与决定记录：持有 `*` 的人直接运行它也不能让待批准的变更生效；同时提出的两个变更在审批锁之下再查一次，后一个被拒（安全审查的修正，`PayablesMasterIT`）。
+- [x] V200 的银行信息变更经二次验证提出，提出人不能批准，由 Controller 批准后生效、旧账户 REPLACED；待批准时不能再提出；驳回的账户不启用；审计中有遮蔽后的新旧账号、
+      提出人与决定人，没有明文账号（AP-003 的数据部分、CT-010 验收 1、SC-001，`PayablesMasterIT`、`BankNumbersTest`）。
+- [x] 同时持有 PayablesClerk 与 Treasurer 的用户出现在职责分离冲突报告中；规则发布后这样的分配被拒绝（CT-001 验收 2，`PayablesMasterIT`）。
+- [x] 1099 阈值按年度导入（2025 年 600.00、2026 年 2,000.00），改阈值不需要改代码；应付设置与公司银行账户的科目检查（AP-021 的数据部分，`PayablesMasterIT`）。
+- [x] 时态表只插入；`./gradlew :finance:check`（`platformCheck` 0 错误 0 警告）通过。
+
+已知限制：付款建议中的暂停（"bank details pending approval"）在 F4c 验收。
+
+## F5 — F11
 
 范围、需求编号与验收口径见 `docs/finance-work/00-development-plan.md` §5.2；每个阶段开始时把详细要求与验收标准写入本节。
