@@ -876,7 +876,8 @@ Treasurer；公司银行账户只在没有时建立（再保存会重置支票�
 
 已知限制：页面上不直接做估计变更、处置与用量录入（用资产记录通用页的行操作）；预测不含工作量法资产；F6 的 FA-008、FA-010 留到最后（D11）。
 平台问题（不在应用分支修改）：测试中平台的链路追踪（OpenTelemetry `BatchSpanProcessor` 入队时的锁）偶尔被 BlockHound 判为阻塞，使某个测试类的首个请求返回 500，
-其后的用例连带失败；单独重跑即通过，需在平台的 `JabizBlockHoundIntegration` 中放行。
+其后的用例连带失败（本地与 CI 各见过，如 `AssetOpeningAfterBillsIT`）。财务的测试配置因此不采样链路（`management.tracing.sampling.probability=0.0`：
+未采样的 span 不进入该队列），财务测试不检查链路；平台的根本修正（在 `JabizBlockHoundIntegration` 中放行）留给平台分支。
 
 ## F7 — F11
 
