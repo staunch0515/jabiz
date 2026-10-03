@@ -48,4 +48,15 @@ describe('the finance extension', () => {
       '/payables/bills', '/payables/bills/new', '/payables/bills/:billId', '/payables/runs', '/payables/runs/new',
       '/payables/runs/:runId', '/payables/payments']))
   })
+
+  it('offers the close workspace and the close reports and records, each behind its permission', () => {
+    const close = extension.menu?.find((item) => item.key === 'close')
+    const items = Object.fromEntries((close?.children ?? []).map((item) => [item.key, item]))
+    expect(items.closeWorkspace).toMatchObject({ path: '/close', permission: 'fin.period.read' })
+    expect(items.closeOverview?.path).toBe('/reports/run?id=finance.close.overview')
+    expect(items.priorPeriodItems?.path).toBe('/reports/run?id=finance.gl.prior_period_items')
+    expect(items.closeTemplateSave).toMatchObject({ path: '/processes/FIN_CLOSE_TEMPLATE_SAVE/1',
+      permission: 'fin.period.close' })
+    expect(extension.routes?.map((route) => route.path)).toContain('/close')
+  })
 })

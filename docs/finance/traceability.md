@@ -71,6 +71,7 @@
 | FIN-AR-013 | Credit limit check | 完成 | `FIN_INVOICE_POST`（审批对象 `fin.ar.invoice`）、`FinArSettings.creditLimitCheck`、`FIN_INVOICE_APPROVAL_RESULT` | `it/InvoiceIT`（警告）、`it/ReceivablesIT`（审批） |
 | FIN-TX-005 | Credits and returns | 完成 | `FIN_INVOICE_POST`（原发票日期的税率） | `it/InvoiceIT`（165.00） |
 | FIN-GL-021 | Posting from subledgers | 应收完成 | `gl/SubledgerPosting`（`FIN_SUBLEDGER_POST`，账本交易引用单据、`FinPosting`） | `it/InvoiceIT` |
+| FIN-UI-006 | Close workspace | 完成（F8d） | `finance-web/src/close/ClosePage.tsx`（清单、调节表、未结例外、子账状态、开始、检查、手工任务、软关账、关账、产物、重开申请、年结），模板 `finance.close.overview` | `close/ClosePage.test.tsx`（一步关账；被拒时逐项列出）、`e2e/close.spec.ts` |
 | FIN-UI-007 | Explanations | 部分（销售税与使用税的说明完成；其他计算的说明随各模块） | `FinInvoiceTax`、`FinBillTax`；发票页与账单页的计算说明（`receivables/InvoiceView.tsx`、`payables/BillView.tsx`） | `it/InvoiceIT`、`receivables/InvoicePage.test.tsx`、`e2e/receivables.spec.ts`、`payables/BillPage.test.tsx` |
 | FIN-DI-002 | Migration of open items | 应收完成 | `FIN_AR_OPENING`、`finance.open_receivables`、`reconciliation.sql`（`OPEN_ITEMS`） | `it/InvoiceIT` |
 | FIN-AR-007 | Cash receipts | 完成（外币在 F7） | `ar/ReceiptEntities`（`FinReceipt`）、`ar/ReceiptProcesses`（`FIN_RECEIPT_RECORD`、`FIN_RECEIPT_VOID`） | `it/ReceivablesIT`（RCPT-0001…0003 = FIN-EXP-02） |
@@ -165,3 +166,4 @@
 | FIN-PC-006 | Governed reopen | 完成（F8b） | `FinPeriodReopen`（迁移 V23）、`FIN_PERIOD_REOPEN_REQUEST` / `FIN_PERIOD_REOPEN_APPROVAL_RESULT`（`close/ReopenProcesses`）、审批对象 `fin.period.reopen`、规则 `FIN-PERIOD-REOPEN`、模板 `finance.close.artifacts` | `it/FinScn07IT`（拒绝后仍关闭；批准后再关账，第二份产物引用第一份；按第一次关账时刻重跑相同）、`it/ReopenIT`（无规则、更晚的已关期间） |
 | FIN-PC-007 | Prior-period items | 完成（F8b） | `FinBill.postingDate`、`FinInvoice.postingDate`、`FinJournal.documentDate`；报表 `finance.gl.prior_period_items` | `it/FinScn07IT`（BILL-OS-0120）、`it/ReopenIT`（发票） |
 | FIN-PC-008 | Year-end close | 完成（F8c） | `FinCloseSettings`、`FinYearClose`（迁移 V24）、`FIN_CLOSE_SETTINGS_SET` / `FIN_YEAR_CLOSE`（`gl/YearCloseProcesses`）、日记账来源 `CLOSING`（总账 CLS）、试算表参数 `closingEntries` | `it/FinScn11IT`（CLS-2026、再年结 CLS-2026-R 与 CLS-2026-2、产物被取代、2027 损益为零）、`it/YearCloseIT` |
+| FIN-PC-009 | Close status overview | 完成（F8d） | 模板 `finance.close.overview`（进度、任务未完成在前、子账状态、调节表）、结账工作区 `finance-web/src/close/ClosePage.tsx` | `it/FinScn06IT`（2 / 10 未完成时先列出、负责权限与到期日）、`close/ClosePage.test.tsx`、`e2e/close.spec.ts` |
