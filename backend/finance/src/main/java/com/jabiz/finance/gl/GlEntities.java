@@ -258,10 +258,25 @@ public final class GlEntities {
     /** The default dataset of a finance entity. */
     public static DatasetDefinition dataset(String id, String entity, String readPermission, String writePermission,
         boolean processOnlyWrites, String poolRef) {
+        return dataset(id, entity, readPermission, writePermission, processOnlyWrites, false, poolRef);
+    }
+
+    /**
+     * As {@link #dataset(String, String, String, String, boolean, String)}; {@code booked}: a reader limited to a data
+     * period (an auditor of a fiscal year, FIN-SC-002) sees the instances whose ledger transaction ({@code transactionId})
+     * was booked within it, as the ledger's own datasets do (docs/design/10-security.md section 13.2), and no draft.
+     */
+    public static DatasetDefinition dataset(String id, String entity, String readPermission, String writePermission,
+        boolean processOnlyWrites, boolean booked, String poolRef) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(readPermission, writePermission)
+            .scope(s -> {
+                if (booked) {
+                    s.withinDataPeriod(BOOKED_BY, BOOKING_TIME);
+                }
+            })
             .policy(p -> {
                 p.maxQueryBatchSize(500);
                 if (processOnlyWrites) {
@@ -270,6 +285,10 @@ public final class GlEntities {
             })
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
+
+    /** The reference to the ledger transaction a booked document's data period follows, and that transaction's time. */
+    public static final String BOOKED_BY = "transactionId";
+    public static final String BOOKING_TIME = "bookingTime";
 
     private GlEntities() {}
 }

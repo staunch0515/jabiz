@@ -11,6 +11,7 @@ import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.BookingTime;
+import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
@@ -66,8 +67,8 @@ class ArConfig {
 
     @Bean
     DatasetDefinition finInvoiceDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(InvoiceEntities.INVOICE_DATASET, InvoiceEntities.INVOICE, FinancePermissions.INVOICE_PREPARE,
-            poolRef);
+        return GlEntities.dataset(InvoiceEntities.INVOICE_DATASET, InvoiceEntities.INVOICE, FinancePermissions.AR_READ,
+            FinancePermissions.INVOICE_PREPARE, true, true, poolRef);
     }
 
     @Bean

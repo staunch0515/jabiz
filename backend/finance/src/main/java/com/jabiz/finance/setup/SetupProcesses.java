@@ -75,6 +75,14 @@ public final class SetupProcesses {
      * runs from approving them, so no preparer approves lines another preparer submitted.
      */
     public static final String SOD_PAYMENT_APPROVE = "FIN-SOD-PAYMENT-APPROVE";
+    /** Segregation of duties (FIN-CT-001): who keeps users and roles never prepares or posts the books' documents. */
+    public static final String SOD_ADMIN_POST = "FIN-SOD-ADMIN-POST";
+    /** The permissions that keep users and roles, and those that make the books' documents (FIN-CT-001). */
+    static final List<String> ADMIN_PERMISSIONS = List.of("security.user.create", "security.user.write",
+        "security.role.write", "security.user-role.write");
+    static final List<String> POSTING_PERMISSIONS = List.of(FinancePermissions.JOURNAL_PREPARE,
+        FinancePermissions.INVOICE_PREPARE, FinancePermissions.RECEIPT_RECORD, FinancePermissions.BILL_PREPARE,
+        FinancePermissions.PAYMENT_PREPARE);
 
     /** The rule of FIN-AP-006: bills above 10,000.00 need a controller's approval before they are paid. */
     public static final String BILL_RULE = "FIN-AP-BILL-10K";
@@ -90,7 +98,8 @@ public final class SetupProcesses {
 
     private static final List<String> APPROVAL_RULES = List.of(APPROVAL_RULE, WRITE_OFF_RULE, VENDOR_BANK_RULE,
         BILL_RULE, PAYMENT_RULE, BANK_REC_RULE, REOPEN_RULE);
-    private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES, SOD_PAYMENT_APPROVE);
+    private static final List<String> SOD_RULES = List.of(SOD_VENDOR_BANK, SOD_PAYABLES, SOD_PAYMENT_APPROVE,
+        SOD_ADMIN_POST);
 
     static final String ROLES = "roles";
     static final String GRANTS = "grants";
@@ -260,6 +269,13 @@ public final class SetupProcesses {
                     FinancePermissions.PAYMENT_APPROVE, "Who prepares payment runs never approves them"), null,
                 "Finance setup: preparing and approving payment runs are apart (FIN-AP-011, FIN-CT-001)"));
             codes.add(SOD_PAYMENT_APPROVE);
+        }
+        if (missing(ctx, SOD_ADMIN_POST)) {
+            proposals.add(new ControlChanges.ProposeInput(ApprovalEntities.SOD_RULE, null, null,
+                sodRule(SOD_ADMIN_POST, ADMIN_PERMISSIONS, String.join(",", POSTING_PERMISSIONS),
+                    "Who keeps users and roles never prepares or posts the books' documents"), null,
+                "Finance setup: keeping users and roles and posting transactions are apart (FIN-CT-001)"));
+            codes.add(SOD_ADMIN_POST);
         }
         ctx.put(PROPOSAL, List.copyOf(proposals));
         ctx.put(PROPOSED_CODES, List.copyOf(codes));
