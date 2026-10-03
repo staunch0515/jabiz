@@ -1,6 +1,5 @@
 package com.jabiz.finance.it;
 
-import com.jabiz.finance.gl.AccountProcesses;
 import com.jabiz.finance.report.CashFlowProcesses;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,9 +23,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 class FinCashFlowIT extends JanuaryBooks {
 
-    /** The sample company's cash flow classes: its chart file has none. */
-    private static final Map<String, String> CLASSES = classes();
-
     @Test
     void januarysCashFlows() throws IOException {
         januaryPostings();
@@ -43,8 +39,7 @@ class FinCashFlowIT extends JanuaryBooks {
             .isEqualTo(CashFlowProcesses.UNEXPLAINED);
 
         // The controller classifies the accounts and names the settings' accounts.
-        CLASSES.forEach((account, cashFlowClass) -> ok(AccountProcesses.UPDATE, controller,
-            Map.of("accountCode", account, "cashFlowClass", cashFlowClass)));
+        classifyCashFlows();
         assertThat(refused(CashFlowProcesses.SETTINGS_SET, controller, Map.of("interestAccounts", "7100-"), 422))
             .isEqualTo(CashFlowProcesses.SETTINGS_INVALID);
         run(CashFlowProcesses.SETTINGS_SET, accountant, Map.of("interestAccounts", "7100")).expectStatus()
@@ -148,22 +143,5 @@ class FinCashFlowIT extends JanuaryBooks {
     private static List<String> amounts(Map<String, Map<String, Object>> rows) {
         return rows.values().stream().map(r -> r.get("amount") == null ? (String) r.get("lineCode")
             : r.get("lineCode") + " " + amount(r.get("amount")).toPlainString()).toList();
-    }
-
-    private static Map<String, String> classes() {
-        Map<String, String> classes = new LinkedHashMap<>();
-        for (String code : List.of("1010", "1050")) {
-            classes.put(code, "CASH");
-        }
-        for (String code : List.of("1200", "1210", "1300", "2000", "2100", "2150", "2200", "2400")) {
-            classes.put(code, "OPERATING");
-        }
-        for (String code : List.of("1500", "1510", "1520", "1590")) {
-            classes.put(code, "INVESTING");
-        }
-        for (String code : List.of("2300", "3000", "3100", "3200")) {
-            classes.put(code, "FINANCING");
-        }
-        return classes;
     }
 }

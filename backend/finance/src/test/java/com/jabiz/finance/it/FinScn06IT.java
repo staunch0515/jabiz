@@ -27,6 +27,8 @@ import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.finance.payroll.PayrollEntities;
 import com.jabiz.finance.setup.FinanceRoles;
+import com.jabiz.finance.report.CashFlowProcesses;
+import com.jabiz.finance.report.StatementProcesses;
 import com.jabiz.runtime.event.OutboxDeliverer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,8 +55,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * JE-0004 posted. The checklist then fails on the operating account not reconciled (and on unapplied cash, FIN-CT-005)
  * and passes once FIN-SCN-05's reconciliation is signed off and the receipt applied; the controller soft-closes and
  * closes January. The close artifact holds FIN-EXP-03 and the subledgers equal their control accounts; run as known
- * at the close, the trial balance is the artifact's, after February's postings too. The financial statements of
- * step 5 come with F9.
+ * at the close, the trial balance is the artifact's, after February's postings too. Step 5: the balance sheet, the
+ * income statement, the statement of equity and the statement of cash flows are FIN-EXP-04 to 07, Professional fees
+ * drills to BILL-DC-2601, BILL-JR-014 and JE-0002, and the income statement exports to PDF and Excel.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 class FinScn06IT extends JanuaryBooks {
@@ -232,6 +235,46 @@ class FinScn06IT extends JanuaryBooks {
             .isEqualByComparingTo("34000.00");
         assertThat(fees).hasSize(3).allSatisfy(r -> assertThat(r).containsEntry("accountCode", "6400"));
 
+        // Step 5: the statements of January (FIN-EXP-04 to 07, read from the period balances the close kept).
+        Map<String, Object> asOfJanuary = Map.of("asOf", "2026-01-31");
+        Map<String, Object> january = Map.of("through", "2026-01-31");
+        assertThat(figure(report(StatementProcesses.BALANCE_SHEET, controller, asOfJanuary), "TOTAL_ASSETS", "amount"))
+            .isEqualByComparingTo("617415.00");
+        assertThat(figure(report(StatementProcesses.INCOME_STATEMENT, controller, january), "NET_INCOME", "month"))
+            .isEqualByComparingTo("5127.10");
+        assertThat(figure(report(StatementProcesses.EQUITY, controller, january), "TOTAL", "closing"))
+            .isEqualByComparingTo("464027.10");
+        classifyCashFlows();
+        List<Map<String, Object>> cashFlows = report(CashFlowProcesses.CASH_FLOW, controller, january);
+        assertThat(figure(cashFlows, "NET_CHANGE", "amount")).isEqualByComparingTo("-38320.00");
+        assertThat(figure(cashFlows, "UNEXPLAINED", "amount")).isEqualByComparingTo("0.00");
+        // FIN-RP-006 acceptance 1: Professional fees, the income statement's line of 6400 (34,000.00), drills to its
+        // entries and their documents.
+        List<Map<String, Object>> feeLines = report(StatementProcesses.LINE_DETAIL, controller, Map.of("accounts", "6400",
+            "through", "2026-01-31", "span", "MONTH"));
+        // The bills are known by their vendors' invoice numbers, on the bill each line opens: BILL-DC-2601 of the
+        // sample is the bill these books enter with V200's invoice DC-2026-01.
+        assertThat(feeLines).extracting(r -> ("FinBill".equals(r.get("sourceEntity"))
+            ? "BILL-" + read(com.jabiz.finance.ap.BillEntities.BILL_DATASET, r.get("sourceId")).get("vendorInvoiceNo")
+            : r.get("documentNo")) + " " + r.get("sourceEntity"))
+            .containsExactlyInAnyOrder("BILL-DC-2026-01 FinBill", "BILL-JR-014 FinBill", "JE-0002 FinJournal");
+        assertThat(feeLines.stream().map(r -> amount(r.get("amount"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo(figure(report(StatementProcesses.INCOME_STATEMENT, controller, january),
+                "OPERATING_EXPENSES.6400", "month").negate());
+        assertThat(feeLines).allSatisfy(r -> assertThat(r.get("sourceId")).isNotNull());
+        // A balance: the account's balance before the month and the month's lines add up to it (1010: 211,555.00).
+        List<Map<String, Object>> cash = report(StatementProcesses.LINE_DETAIL, controller, Map.of("accounts", "1010",
+            "through", "2026-01-31"));
+        assertThat(cash).filteredOn(r -> "OPENING".equals(r.get("kind"))).singleElement()
+            .satisfies(r -> assertThat(amount(r.get("amount"))).isEqualByComparingTo("250000.00"));
+        assertThat(cash.stream().map(r -> amount(r.get("amount"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo("211555.00");
+        // Exported to PDF and Excel (FIN-RP-010) through the platform's export.
+        for (String format : List.of("pdf", "xlsx")) {
+            post("/api/queries/" + StatementProcesses.INCOME_STATEMENT + "/export?format=" + format, controller,
+                Map.of("params", january)).expectStatus().isOk();
+        }
+
         // FIN-PC-005 acceptance 2: February moves on; January as known at the close is the artifact's.
         clock.advance(Duration.ofDays(5));
         people();
@@ -247,6 +290,12 @@ class FinScn06IT extends JanuaryBooks {
         assertThat(refused(JournalProcesses.SUBMIT, accountant, Map.of("journalId", late), 422))
             .isEqualTo(PeriodPolicy.PERIOD_CLOSED);
         assertOnlyInserted("fi_close_task_version", "fi_close_artifact_version", "fi_close_artifact_line_version");
+    }
+
+    /** The figure of a statement's line in a column. */
+    private static BigDecimal figure(List<Map<String, Object>> rows, String lineCode, String column) {
+        return rows.stream().filter(r -> lineCode.equals(r.get("lineCode"))).map(r -> amount(r.get(column)))
+            .findFirst().orElseThrow(() -> new AssertionError("no line " + lineCode));
     }
 
     /** January's close overview, in its order (FIN-PC-009). */

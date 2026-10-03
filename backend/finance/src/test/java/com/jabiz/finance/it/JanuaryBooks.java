@@ -320,6 +320,25 @@ abstract class JanuaryBooks extends FinanceItSupport {
             .returnResult().getResponseBody().getFirst();
     }
 
+    /** The controller gives the sample company's accounts their cash flow classes: its chart file has none. */
+    protected void classifyCashFlows() {
+        Map<String, String> classes = new LinkedHashMap<>();
+        for (String code : List.of("1010", "1050")) {
+            classes.put(code, "CASH");
+        }
+        for (String code : List.of("1200", "1210", "1300", "2000", "2100", "2150", "2200", "2400")) {
+            classes.put(code, "OPERATING");
+        }
+        for (String code : List.of("1500", "1510", "1520", "1590")) {
+            classes.put(code, "INVESTING");
+        }
+        for (String code : List.of("2300", "3000", "3100", "3200")) {
+            classes.put(code, "FINANCING");
+        }
+        classes.forEach((account, cashFlowClass) -> ok(com.jabiz.finance.gl.AccountProcesses.UPDATE, controller,
+            Map.of("accountCode", account, "cashFlowClass", cashFlowClass)));
+    }
+
     protected void account(String code, String name, String type, String balance) {
         ok("FIN_ACCOUNT_CREATE", controller(), Map.of("accountCode", code, "accountName", name,
             "financialType", AccountTypes.fromChart(type), "normalBalance", AccountTypes.normalBalanceFromChart(

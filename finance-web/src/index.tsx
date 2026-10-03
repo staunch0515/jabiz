@@ -1,5 +1,5 @@
-import { BankOutlined, BookOutlined, BuildOutlined, CalendarOutlined, DollarOutlined, GlobalOutlined, ImportOutlined,
-  ShoppingCartOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, BuildOutlined, CalendarOutlined, DollarOutlined, FundOutlined, GlobalOutlined,
+  ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
 import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
   from './bank/api'
@@ -38,12 +38,17 @@ import InvoiceRoute from './receivables/InvoiceRoute'
 import { INVOICES_PATH, NEW_INVOICE_PATH, NEW_RECEIPT_PATH, RECEIPTS_PATH } from './receivables/paths'
 import ReceiptListPage from './receivables/ReceiptListPage'
 import ReceiptRoute from './receivables/ReceiptRoute'
+import DashboardPage from './reports/DashboardPage'
+import LineDetailPage from './reports/LineDetailPage'
+import { DASHBOARD_PATH, LINE_DETAIL_PATH, statementPath, STATEMENTS_PATH } from './reports/paths'
+import StatementPage from './reports/StatementPage'
 
 /**
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
  * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
  * register and bill entry, payment runs and the payment register; bank matching and reconciliations; the assets and
- * the depreciation runs; the foreign currency revaluations; the close workspace. Accounts,
+ * the depreciation runs; the foreign currency revaluations; the close workspace; the financial statements with their
+ * drill-down and the dashboard. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -73,8 +78,25 @@ export default defineExtension({
     { path: `${ASSETS_PATH}/:assetId`, element: <AssetPage /> },
     { path: REVALUATIONS_PATH, element: <RevaluationPage /> },
     { path: CLOSE_PATH, element: <ClosePage /> },
+    { path: LINE_DETAIL_PATH, element: <LineDetailPage /> },
+    { path: `${STATEMENTS_PATH}/:kind`, element: <StatementPage /> },
+    { path: DASHBOARD_PATH, element: <DashboardPage /> },
   ],
   menu: [
+    {
+      key: 'statementPages',
+      label: 'menu.statementPages',
+      icon: <FundOutlined />,
+      children: [
+        { key: 'dashboard', label: 'menu.dashboard', path: DASHBOARD_PATH, permission: 'ledger.read' },
+        { key: 'balanceSheetPage', label: 'menu.balanceSheetPage', path: statementPath('balance-sheet'),
+          permission: 'ledger.read' },
+        { key: 'incomeStatementPage', label: 'menu.incomeStatementPage', path: statementPath('income-statement'),
+          permission: 'ledger.read' },
+        { key: 'equityPage', label: 'menu.equityPage', path: statementPath('equity'), permission: 'ledger.read' },
+        { key: 'cashFlowPage', label: 'menu.cashFlowPage', path: statementPath('cash-flow'), permission: 'ledger.read' },
+      ],
+    },
     {
       key: 'gl',
       label: 'menu.gl',
@@ -96,14 +118,7 @@ export default defineExtension({
         },
         { key: 'periodTrialBalance', label: 'menu.periodTrialBalance', path: paths.report('finance.report.trial_balance'),
           permission: 'ledger.read' },
-        { key: 'balanceSheet', label: 'menu.balanceSheet', path: paths.report('finance.report.balance_sheet'),
-          permission: 'ledger.read' },
-        { key: 'incomeStatement', label: 'menu.incomeStatement', path: paths.report('finance.report.income_statement'),
-          permission: 'ledger.read' },
-        { key: 'equityStatement', label: 'menu.equityStatement', path: paths.report('finance.report.equity'),
-          permission: 'ledger.read' },
-        { key: 'cashFlowStatement', label: 'menu.cashFlowStatement', path: paths.report('finance.report.cash_flow'),
-          permission: 'ledger.read' },
+        // The statements have their own pages (menu statementPages); the platform's report catalog runs them too.
         { key: 'issueStatement', label: 'menu.issueStatement', path: paths.process('FIN_STATEMENT_ISSUE', 1),
           permission: 'report.issue' },
         { key: 'issueCashFlow', label: 'menu.issueCashFlow', path: paths.process('FIN_CASH_FLOW_ISSUE', 1),

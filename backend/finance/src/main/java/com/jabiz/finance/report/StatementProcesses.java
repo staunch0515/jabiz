@@ -48,6 +48,8 @@ public final class StatementProcesses {
     public static final String BALANCE_SHEET = "finance.report.balance_sheet";
     public static final String INCOME_STATEMENT = "finance.report.income_statement";
     public static final String EQUITY = "finance.report.equity";
+    /** The entry lines behind a figure (FIN-RP-006): the drill-down of the statements. */
+    public static final String LINE_DETAIL = "finance.report.line_detail";
     /** Each statement's template and the layout it uses unless told. */
     public static final Map<String, String> DEFAULT_LAYOUTS = Map.of(BALANCE_SHEET, "BS", INCOME_STATEMENT, "IS",
         EQUITY, "EQ");
