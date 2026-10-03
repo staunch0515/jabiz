@@ -104,6 +104,7 @@
 | FIN-CT-021 | Readable archives | 已满足 | 平台导出（CSV + `schema.json` + `manifest.json` + 报表 PDF）、`tools/finance/trial-balance-from-archive.py` | `it/FinScn12IT` |
 | FIN-SC-001 | Authentication | 已满足（单点登录只有 OIDC，无 SAML） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)`；`FIN_SETUP` 的 `ADMINISTRATION`；平台二次验证、闲置锁定、OIDC（14g） | `it/PayablesMasterIT`、`it/PaymentIT`、`it/FinScn04IT` |
 | FIN-SC-003 | Access review | 已满足 | 平台 `jabiz.security.access_review`、`ACCESS_REVIEW_SIGN_OFF`；`FIN_AUDIT_PACKAGE` 签发 | `it/FinScn12IT` |
+| FIN-SC-005 | Configuration change control | 已满足 | `FIN_CONFIG_EXPORT`、`FIN_CONFIG_IMPORT_PROPOSE` / `PUBLISH` / `WITHDRAW`（四眼，经各维护流程应用）、`FinConfigImport`；审批规则经平台控制变更 | `config/ConfigPackageTest`、`it/ConfigPromotionIT` |
 | FIN-SC-004 | Sensitive data protection | 部分（到期匿名化不做，F10 D9） | `masked(…)`、`sys_reveal_record`；W-9 文件策略的读取权限；报表与导出中遮蔽 | `it/PayablesMasterIT`、`it/FinScn04IT` |
 | FIN-AP-004 | Vendor bill | 完成 | `FinBill`、`FinBillLine`（迁移 V11）、`FIN_BILL_SAVE` / `_POST`（`ap/BillProcesses`、`ap/BillPosting`） | `it/BillIT`、`BillPostingTest` |
 | FIN-AP-005 | Duplicate bill control | 完成 | `calc/BillDuplicates`，保存与过账时检查 | `it/BillIT`、`BillDuplicatesTest` |

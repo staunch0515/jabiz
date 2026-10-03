@@ -334,6 +334,14 @@ export default defineExtension({
           permission: AUDIT_PERMISSIONS.package },
         { key: 'manualEntries', label: 'menu.manualEntries', path: paths.report(AUDIT_QUERIES.manualEntries),
           permission: AUDIT_PERMISSIONS.manualEntries },
+        // Configuration promotion (F10d): the platform's process forms and the proposals' list, whose rows offer
+        // publishing and withdrawing.
+        { key: 'configExport', label: 'menu.configExport', path: paths.process('FIN_CONFIG_EXPORT', 1),
+          permission: 'fin.config.export' },
+        { key: 'configPropose', label: 'menu.configPropose', path: paths.process('FIN_CONFIG_IMPORT_PROPOSE', 1),
+          permission: 'fin.config.promote' },
+        { key: 'configImports', label: 'menu.configImports',
+          path: paths.dataset('urn:jabiz:dataset:default:FinConfigImport'), permission: 'fin.config.promote' },
       ],
     },
   ],

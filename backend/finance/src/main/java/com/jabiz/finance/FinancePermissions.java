@@ -203,5 +203,10 @@ public final class FinancePermissions {
     /** Issue the reports of an audit request as one package ({@code FIN_AUDIT_PACKAGE}; phase F10b). */
     public static final String AUDIT_PACKAGE = "fin.audit.package";
 
+    /** Export the configuration (chart, tax, statement layouts, report settings) as a package (phase F10d). */
+    public static final String CONFIG_EXPORT = "fin.config.export";
+    /** Propose, publish (another person than the proposer) and withdraw configuration packages (phase F10d). */
+    public static final String CONFIG_PROMOTE = "fin.config.promote";
+
     private FinancePermissions() {}
 }

@@ -47,6 +47,7 @@ public final class FinanceRoles {
             FinancePermissions.PERIOD_MAINTAIN, FinancePermissions.PERIOD_CLOSE, FinancePermissions.JOURNAL_APPROVE,
             FinancePermissions.JOURNAL_CONTROL_EXCEPTION, FinancePermissions.JOURNAL_ATTACH, "approval.decide", "control.propose", "control.publish",
             "sod.read", "report.issue", "audit.read", "operation.read", FinancePermissions.AUDIT_PACKAGE,
+            FinancePermissions.CONFIG_EXPORT, FinancePermissions.CONFIG_PROMOTE,
             "security.access-review.read", "data.export", FinancePermissions.IMPORT,
             FinancePermissions.MIGRATION, FinancePermissions.PAYROLL_MAINTAIN, FinancePermissions.AR_READ,
             FinancePermissions.CUSTOMER_MAINTAIN, FinancePermissions.TAX_MAINTAIN, FinancePermissions.AR_SETTINGS,

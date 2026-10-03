@@ -544,7 +544,7 @@
 | SC-002 角色 | 权限只经角色授予；审批限额；审计师的角色分配带 `dataFrom` / `dataTo`（财年），日记账、账本与财务单据的数据视图经总账交易声明 `withinDataPeriod("transactionId", "bookingTime")`（平台 10 §13.2；数据期限只给只读角色，F10a） |
 | SC-003 访问审查 | 平台模板 `jabiz.security.access_review` 按期末以 `REPORT_ISSUE` 签发，`ACCESS_REVIEW_SIGN_OFF` 签核（平台 10 §13.3）；后台 `/access-review` |
 | SC-004 敏感数据 | TIN、银行账号字段声明 `f.masked(权限, MaskStyle.LAST4)`：读接口、审计、报表中遮蔽，持有权限者逐值显示并记入 `sys_reveal_record`（平台 10 §13.1）；到期后匿名化不做（F10 D9） |
-| SC-005 配置变更控制 | 科目表、税率、审批规则、报表格式、集成的变更记录审批人；测试配置到生产的"提升"（导出配置包 → 导入并记录审批人） |
+| SC-005 配置变更控制 | 审批规则、职责分离经平台控制变更（四眼）；科目表、税务、报表格式与设置以配置包提升（F10d）：测试环境 `FIN_CONFIG_EXPORT`，生产环境 `FIN_CONFIG_IMPORT_PROPOSE` 校验哈希并列出差异，另一人 `FIN_CONFIG_IMPORT_PUBLISH` 经各维护流程应用，记下发布人与时间；本环境独有的科目只列出 |
 
 ---
 
