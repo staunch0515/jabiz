@@ -486,15 +486,39 @@ public final class CloseProcesses {
             return;
         }
         EntityInstance period = list(ctx, PERIODS).getFirst();
-        String periodKey = period.get("periodKey");
         List<TaskOutput> checklist = (List<TaskOutput>) ctx.get(RESULTS);
         ReportProcesses.IssueOutput issued = ctx.contains(ISSUED)
             ? ctx.get(ISSUED, ReportProcesses.IssueOutput.class) : null;
-        EntityInstance previous = list(ctx, ARTIFACTS).stream()
-            .max(Comparator.comparing(a -> a.<BigDecimal>get("seq"))).orElse(null);
-        int seq = previous == null ? 1 : previous.<BigDecimal>get("seq").intValue() + 1;
-        List<CloseChecks.Account> accounts = accounts(ctx);
-        List<CloseChecks.Subledger> subledgers = (List<CloseChecks.Subledger>) ctx.get(SUBLEDGER_TOTALS);
+        List<List<Object>> items = new ArrayList<>();
+        for (TaskOutput t : checklist) {
+            String result = CloseEntities.MANUAL.equals(t.kind())
+                ? (t.completedBy() == null ? null : "Done by " + t.completedBy() + " at " + t.completedAt())
+                : t.result();
+            items.add(java.util.Arrays.asList(CloseEntities.CHECKLIST, t.taskCode(), t.name(), t.status(), result));
+        }
+        Written written = writeArtifact(ctx, period, accounts(ctx),
+            (List<CloseChecks.Subledger>) ctx.get(SUBLEDGER_TOTALS), items, issued, list(ctx, ARTIFACTS));
+        ctx.put(OUTPUT, new CloseOutput(period.get("periodKey"), PeriodPolicy.Status.CLOSED.name(),
+            written.artifactId(), written.seq(), issued == null ? null : issued.runId(), written.trialBalanceHash(),
+            written.contentHash(), checklist));
+    }
+
+    /** An artifact as written: its identity, its number among the period's closes and its hashes. */
+    public record Written(String artifactId, int seq, String trialBalanceHash, String contentHash) {}
+
+    /**
+     * Writes a close artifact of a period (FIN-PC-005): the trial balance's accounts, the subledgers beside their
+     * control accounts, and items (each {@code section, code, name, status, result}), closed by the actor now and as
+     * known now; it supersedes the period's latest artifact among {@code previous}. Shared by the period close and
+     * the year close (period 13).
+     */
+    public static Written writeArtifact(ProcessContext ctx, EntityInstance period, List<CloseChecks.Account> accounts,
+        List<CloseChecks.Subledger> subledgers, List<List<Object>> items, ReportProcesses.IssueOutput issued,
+        List<EntityInstance> previous) {
+        String periodKey = period.get("periodKey");
+        EntityInstance latest = previous.stream().max(Comparator.comparing(a -> a.<BigDecimal>get("seq")))
+            .orElse(null);
+        int seq = latest == null ? 1 : latest.<BigDecimal>get("seq").intValue() + 1;
         BigDecimal debit = accounts.stream().map(CloseChecks.Account::debit).reduce(BigDecimal.ZERO,
             BigDecimal::add).setScale(2);
         BigDecimal credit = accounts.stream().map(CloseChecks.Account::credit).reduce(BigDecimal.ZERO,
@@ -502,28 +526,25 @@ public final class CloseProcesses {
         List<List<Object>> lines = new ArrayList<>();
         int n = 0;
         for (CloseChecks.Account a : accounts) {
-            lines.add(java.util.Arrays.asList(CloseEntities.TRIAL_BALANCE, BigDecimal.valueOf(++n), a.code(), a.name(), a.debit(),
-                a.credit(), null, null, null, null));
+            lines.add(java.util.Arrays.asList(CloseEntities.TRIAL_BALANCE, BigDecimal.valueOf(++n), a.code(),
+                a.name(), a.debit(), a.credit(), null, null, null, null));
         }
-        for (CloseChecks.Subledger s : subledgers) {
-            lines.add(java.util.Arrays.asList(CloseEntities.SUBLEDGER, BigDecimal.valueOf(++n), s.code(), s.name(), null, null,
-                s.subledger(), s.ledger(), s.difference().signum() == 0 ? CloseEntities.PASSED : CloseEntities.FAILED,
-                null));
+        for (CloseChecks.Subledger s : subledgers == null ? List.<CloseChecks.Subledger>of() : subledgers) {
+            lines.add(java.util.Arrays.asList(CloseEntities.SUBLEDGER, BigDecimal.valueOf(++n), s.code(), s.name(),
+                null, null, s.subledger(), s.ledger(),
+                s.difference().signum() == 0 ? CloseEntities.PASSED : CloseEntities.FAILED, null));
         }
-        for (TaskOutput t : checklist) {
-            String result = CloseEntities.MANUAL.equals(t.kind())
-                ? (t.completedBy() == null ? null : "Done by " + t.completedBy() + " at " + t.completedAt())
-                : t.result();
-            lines.add(java.util.Arrays.asList(CloseEntities.CHECKLIST, BigDecimal.valueOf(++n), t.taskCode(), t.name(), null, null, null,
-                null, t.status(), result));
+        for (List<Object> item : items) {
+            lines.add(java.util.Arrays.asList(item.get(0), BigDecimal.valueOf(++n), item.get(1), item.get(2), null,
+                null, null, null, item.get(3), item.get(4)));
         }
         String closedBy = ctx.request().actorId();
         Instant at = ctx.opTime();
         String tbHash = CloseChecks.trialBalanceHash(accounts);
         // Hashed as stored: numbers as numbers, so the rows of the artifact give its hash again.
         String contentHash = CloseChecks.contentHash(java.util.Arrays.asList(periodKey, BigDecimal.valueOf(seq),
-            period.get("endDate"),
-            closedBy, at, at, debit, credit, tbHash, issued == null ? null : issued.runId()), lines);
+            period.get("endDate"), closedBy, at, at, debit, credit, tbHash, issued == null ? null : issued.runId()),
+            lines);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("periodKey", periodKey);
         values.put("seq", BigDecimal.valueOf(seq));
@@ -536,7 +557,7 @@ public final class CloseProcesses {
         values.put("trialBalanceHash", tbHash);
         values.put("contentHash", contentHash);
         values.put("reportRunId", issued == null ? null : issued.runId());
-        values.put("supersedesId", previous == null ? null : previous.id());
+        values.put("supersedesId", latest == null ? null : latest.id());
         Object artifactId = ctx.changes().insert(CloseEntities.ARTIFACT, values);
         String[] names = {"section", "seq", "code", "name", "debit", "credit", "amount", "ledgerAmount", "status",
             "result"};
@@ -544,13 +565,11 @@ public final class CloseProcesses {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("artifactId", artifactId);
             for (int i = 0; i < names.length; i++) {
-                Object value = line.get(i);
-                row.put(names[i], value);
+                row.put(names[i], line.get(i));
             }
             ctx.changes().insert(CloseEntities.ARTIFACT_LINE, row);
         }
-        ctx.put(OUTPUT, new CloseOutput(periodKey, PeriodPolicy.Status.CLOSED.name(), String.valueOf(artifactId), seq,
-            issued == null ? null : issued.runId(), tbHash, contentHash, checklist));
+        return new Written(String.valueOf(artifactId), seq, tbHash, contentHash);
     }
 
     // ---- the checks -----------------------------------------------------------------------------------------------

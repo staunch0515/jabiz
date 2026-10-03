@@ -10,6 +10,7 @@ params:
   through:     { like: FinPosting.postingDate, required: true, description: entries posted on or before this day count }
   adjustments: { kind: { type: bool }, description: "whether period 13 of the day's fiscal year counts; yes when not given" }
   knownAt:     { like: LedgerTransaction.bookingTime, description: "if given, the books as recorded at this time" }
+  closingEntries: { kind: { type: bool }, description: "whether the closing entry of the day's fiscal year counts; yes when not given (FIN-RP-001: before or after closing)" }
 results:
   accountCode:   { from: LedgerAccount.accountCode }
   accountName:   { from: LedgerAccount.accountName }
@@ -56,6 +57,12 @@ moves AS (
                SELECT MAX(yp.{{FinPeriod.fiscalYear}}) FROM {{FinPeriod}} yp
                WHERE yp.{{FinPeriod.startDate}} <= :through AND yp.{{FinPeriod.endDate}} >= :through))
       AND (CAST(:knownAt AS timestamptz) IS NULL OR t.{{LedgerTransaction.createdTime}} <= :knownAt)
+      -- CLS: the general ledger source of the year-end closing entries (JournalEntities.postingSource). Earlier
+      -- years' closings always count: they are what carries income into retained earnings.
+      AND (COALESCE(CAST(:closingEntries AS boolean), true) OR fp.{{FinPosting.source}} <> 'CLS'
+           OR fp.{{FinPosting.fiscalYear}} <> (
+               SELECT MAX(cy.{{FinPeriod.fiscalYear}}) FROM {{FinPeriod}} cy
+               WHERE cy.{{FinPeriod.startDate}} <= :through AND cy.{{FinPeriod.endDate}} >= :through))
 ),
 totals AS (
     SELECT tree.ancestor_id AS acct_key, SUM(m.signed_amount) AS net

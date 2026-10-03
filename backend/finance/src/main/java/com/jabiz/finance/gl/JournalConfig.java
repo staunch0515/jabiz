@@ -111,7 +111,9 @@ class JournalConfig {
             .item(JournalEntities.REVERSING, "en", "Reversing")
             .item(JournalEntities.AUTO_REVERSING, "en", "Automatic reversal")
             .item(JournalEntities.IMPORT, "en", "Import")
-            .item(JournalEntities.OPENING, "en", "Opening balances"));
+            .item(JournalEntities.OPENING, "en", "Opening balances")
+            .item(JournalEntities.PAYROLL, "en", "Payroll")
+            .item(JournalEntities.CLOSING, "en", "Year-end closing"));
     }
 
     @Bean

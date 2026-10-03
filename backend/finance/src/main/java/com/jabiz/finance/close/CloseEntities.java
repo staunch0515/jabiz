@@ -21,6 +21,14 @@ public final class CloseEntities {
     public static final String ARTIFACT_LINE = "FinCloseArtifactLine";
     public static final String ARTIFACT_LINE_DATASET = "urn:jabiz:dataset:default:FinCloseArtifactLine";
 
+    public static final String SETTINGS = "FinCloseSettings";
+    public static final String SETTINGS_DATASET = "urn:jabiz:dataset:default:FinCloseSettings";
+    public static final String SETTINGS_KEY = "CLOSE";
+    public static final String YEAR_CLOSE = "FinYearClose";
+    public static final String YEAR_CLOSE_DATASET = "urn:jabiz:dataset:default:FinYearClose";
+    /** The section of a year-end artifact's line that records the closing entry. */
+    public static final String YEAR_END = "YEAR_END";
+
     public static final String REOPEN = "FinPeriodReopen";
     public static final String REOPEN_DATASET = "urn:jabiz:dataset:default:FinPeriodReopen";
     public static final String REOPEN_STATUSES = "urn:jabiz:dict:finance:period-reopen-status";
@@ -225,6 +233,58 @@ public final class CloseEntities {
             .filters("periodKey", "status", "requestedBy")
             .sorts("requestedAt", "periodKey")
             .defaultSort("requestedAt", false));
+    });
+
+    /** The settings of the close (FIN-PC-008): the retained earnings account the year's net income goes to. */
+    public static final EntityDefinition SETTINGS_ENTITY = EntityDefinition.define(SETTINGS, eb -> {
+        eb.physicalTable("fi_close_settings_version");
+        eb.primaryKey("settingsId");
+        eb.field("settingsId", f -> f.physicalColumn("settings_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:finance:close-settings"));
+        eb.field("settingsKey", f -> f.physicalColumn("settings_key").immutable(true).required(true).asText(10));
+        // 3200 in the sample.
+        eb.field("retainedEarningsAccount", f -> f.physicalColumn("retained_earnings_account").processOnly()
+            .asText(20));
+        eb.unique("uk_fi_close_settings_key", "settingsKey");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv.columns("settingsKey", "retainedEarningsAccount").filters("settingsKey"));
+    });
+
+    /**
+     * A year-end close (FIN-PC-008): the closing entry it posted in the adjustment period, the reversal of the
+     * year's earlier closing entry when the year is closed again, the net income it carried to retained earnings and
+     * the artifact of period 13 it left. Written once; closed again, the year has a later one.
+     */
+    public static final EntityDefinition YEAR_CLOSE_ENTITY = EntityDefinition.define(YEAR_CLOSE, eb -> {
+        eb.physicalTable("fi_year_close_version");
+        eb.primaryKey("yearCloseId");
+        eb.field("yearCloseId", f -> f.physicalColumn("year_close_id").immutable(true).required(true)
+            .generated(true).asSemanticIdentity("urn:jabiz:entity:finance:year-close"));
+        eb.field("fiscalYear", f -> f.physicalColumn("fiscal_year").immutable(true).required(true)
+            .asNumeric(4, 0));
+        eb.field("seq", f -> f.physicalColumn("seq").immutable(true).required(true).asNumeric(3, 0));
+        // None when the year's income and expense accounts were at zero already.
+        eb.field("journalId", f -> f.physicalColumn("journal_id").immutable(true).asText(40));
+        eb.field("journalNo", f -> f.physicalColumn("journal_no").immutable(true).asText(40));
+        eb.field("reversalJournalNo", f -> f.physicalColumn("reversal_journal_no").immutable(true).asText(40));
+        eb.field("netIncome", f -> f.physicalColumn("net_income").immutable(true).required(true)
+            .asNumeric(17, 2));
+        eb.field("retainedEarningsAccount", f -> f.physicalColumn("retained_earnings_account").immutable(true)
+            .required(true).asText(20));
+        eb.field("artifactId", f -> f.physicalColumn("artifact_id").immutable(true).required(true)
+            .asReference(ARTIFACT));
+        eb.field("closedBy", f -> f.physicalColumn("closed_by").immutable(true).required(true).asText(100));
+        eb.field("closedAt", f -> f.physicalColumn("closed_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.unique("uk_fi_year_close_seq", "fiscalYear", "seq");
+        eb.display("journalNo");
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
+        eb.listView("default", lv -> lv
+            .columns("fiscalYear", "seq", "journalNo", "reversalJournalNo", "netIncome", "retainedEarningsAccount",
+                "closedBy", "closedAt")
+            .filters("fiscalYear")
+            .sorts("fiscalYear", "closedAt")
+            .defaultSort("closedAt", false));
     });
 
     private CloseEntities() {}

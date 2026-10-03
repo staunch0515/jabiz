@@ -240,7 +240,10 @@
   `knownAt`、试算表哈希与内容哈希、签发的报表、取代的上一份产物）。之后按"as known on 关账时刻"重跑试算表，其哈希与产物一致（PC-005）。
 - 重开 `FIN_PERIOD_REOPEN_REQUEST`（理由必填，只限其后没有已关期间的期间）→ 平台审批（对象 `fin.period.reopen`，规则 `FIN-PERIOD-REOPEN`，申请人以外的 Controller）→
   `FIN_PERIOD_REOPEN_APPROVAL_RESULT`：批准即期间与子账打开（等待期间更晚的期间已关账则失效 `LAPSED`），拒绝即保持关闭，待批时申请人可撤回（`FinPeriodReopen` 记录申请与决定）。再次关账生成新产物并引用旧产物，模板 `finance.close.artifacts` 显示取代关系（PC-006，F8b）。
-- 年结（PC-008）：结账分录把当年损益类科目结转到留存收益（来源 CLS，过账到 12 月或第 13 期末），新年度从余额结转开始；调整后重新年结则冲回旧结账分录再生成新的，旧产物被取代。
+- 年结（PC-008，F8c）：`FIN_YEAR_CLOSE` 在第 1–12 期已关、第 13 期未关时，以结账分录（日记账来源 `CLOSING`、总账来源 CLS，`CLS-2026`）于年末日记入第 13 期，把当年损益类科目（REVENUE、EXPENSE、TAX、OTHER）
+  结转到留存收益（`FinCloseSettings.retainedEarningsAccount`，`FIN_CLOSE_SETTINGS_SET`），关闭第 13 期并写其产物（`FinYearClose` 记录每次年结）；账内的上一财年须先年结。
+  新年度从余额结转开始，不另做期初分录。第 13 期经重开记入调整后再年结：冲回旧结账分录（`CLS-2026-R`）再生成新的（`CLS-2026-2`），旧产物被取代。
+  试算表的 `closingEntries=false` 给出结账前的数字；年度利润表不计 CLS 分录（F9）。
 
 ---
 
