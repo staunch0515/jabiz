@@ -141,6 +141,24 @@ class IntegrityIT extends SecurityItSupport {
     }
 
     @Test
+    void manyTablesAreSealedAndVerified() {
+        // More append-only tables than a stream's prefetch (an application has dozens): each table's own queries
+        // must not wait on the list of tables still being read on the same connection.
+        for (int i = 0; i < 80; i++) {
+            execute("CREATE TABLE it_sealed_many_" + i + " (id bigint PRIMARY KEY, v text)");
+            query("SELECT 1 AS done FROM (SELECT jabiz_protect_append_only('it_sealed_many_" + i + "')) AS p");
+            execute("INSERT INTO it_sealed_many_" + i + " VALUES (1, 'v')");
+        }
+        long sealNo = sealNo(seal());
+        assertThat(sealedKeys("it_sealed_many_0")).containsExactly("[1]");
+        assertThat(sealedKeys("it_sealed_many_79")).containsExactly("[1]");
+        assertThat(verify(sealNo)).containsEntry("intact", true);
+        bypassingTheGuard("UPDATE it_sealed_many_79 SET v = 'w' WHERE id = 1");
+        assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"))
+            .containsExactly(tuple("MODIFIED", "it_sealed_many_79"));
+    }
+
+    @Test
     void aColumnAddedLaterLeavesTheSealsIntactButTheirColumnListsCannotBeChanged() {
         // A column named like the query's alias for the row must not be mistaken for the row.
         execute("CREATE TABLE it_sealed_evolving (id bigint PRIMARY KEY, amount numeric(12, 2), t text)");
