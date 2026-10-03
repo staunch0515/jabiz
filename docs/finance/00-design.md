@@ -514,6 +514,19 @@
 `FIN_STATEMENT_ISSUE` 拒绝签发空报表：格式不是该报表的、`knownAt` 早于格式发布的、没有科目行与合计行的格式都被拒；只给 `knownAt` 时取当时最新的版本（`FIN_STATEMENT_NO_LAYOUT` / `FIN_STATEMENT_EMPTY`）。
 "差异"列（本期与比较列之差）未实现，读者以两列自行比较；利润表缺省计入第 13 期（`adjustments` 缺省为是，与试算表一致）。
 
+### 14.4 现金流量表与附注明细（RP-004、RP-012，F9c）
+
+`finance.report.cash_flow` 按间接法：经营活动 = 净利润 + 非现金项目 + 经营类科目按报表行的变动；投资、筹资活动 = 其科目按报表行的变动；金额以现金流入为正。
+科目去向由 `FinAccount.cashFlowClass`（CASH、OPERATING、INVESTING、FINANCING）决定，损益类科目不需要分类。非现金项目按来源识别，不靠科目：
+折旧运行（`sourceEntity = FinDepreciationRun`）与外币重估及其冲回（`FinFxRevaluationRun`）的过账，资产负债表一侧从变动中剔除、损益一侧作为调整行加回；
+不动现金却动了投资或筹资科目的过账（如赊购资产），若该过账中最大的反向经营科目分录足以对冲，投资/筹资一侧与它等额剔除，列为补充披露的非现金活动；
+不足以对冲的（如资产核销计入损失、债务豁免计入收益）照记账列示，损益一侧在净利润中。外币银行账户的重估列为"汇率变动对现金的影响"。
+另列现金期初、期末、净变动与"未解释差额"（有变动而无分类的科目列为 `UNCLASSIFIED`）；`FIN_CASH_FLOW_ISSUE` 在差额为 0 且没有未分类科目时才经 `REPORT_ISSUE` 签发。
+补充披露的已付利息、已付所得税 = 费用 − 应付的增加，科目取自报表设置 `FinReportSettings`（`FIN_REPORT_SETTINGS_SET`，科目范围的写法同报表格式）。
+
+附注明细 `finance.report.note_rollforward`（`note` = RECEIVABLES / ACCRUED / DEBT，科目取自报表设置）：每个科目的期初、按来源（应收、应付、银行、固定资产、手工、导入、重估）的变动与期末，
+以科目的正常余额方向为正，合计按第一个科目的方向（应收扣减准备）。资产滚动与汇兑损益沿用 `finance.fa.roll_forward` 与 `finance.fx.gains_losses`。
+
 ---
 
 ## 15. 控制、审计与安全（F10，平台 14b/14f/14g 提供机制）

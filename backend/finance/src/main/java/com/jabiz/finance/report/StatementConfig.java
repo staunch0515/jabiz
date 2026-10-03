@@ -12,7 +12,10 @@ import org.springframework.context.annotation.Configuration;
 
 import static com.jabiz.finance.gl.GlEntities.dataset;
 
-/** Registers the statement layouts ({@link StatementEntities}) and their processes ({@link StatementProcesses}). */
+/**
+ * Registers the statement layouts and report settings ({@link StatementEntities}) and their processes
+ * ({@link StatementProcesses}, {@link CashFlowProcesses}).
+ */
 @Configuration
 class StatementConfig {
 
@@ -37,6 +40,17 @@ class StatementConfig {
     DatasetDefinition finStatementLayoutRowDataset(
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(StatementEntities.ROW_DATASET, StatementEntities.ROW, FinancePermissions.PERIOD_READ,
+            FinancePermissions.PERIOD_CLOSE, true, poolRef);
+    }
+
+    @Bean
+    EntityDefinition finReportSettingsEntity() {
+        return StatementEntities.SETTINGS_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finReportSettingsDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(StatementEntities.SETTINGS_DATASET, StatementEntities.SETTINGS, FinancePermissions.PERIOD_READ,
             FinancePermissions.PERIOD_CLOSE, true, poolRef);
     }
 
@@ -66,5 +80,17 @@ class StatementConfig {
     ProcessDefinition<StatementProcesses.IssueInput, StatementProcesses.IssueOutput, ProcessContext>
         finStatementIssueProcess() {
         return StatementProcesses.ISSUE_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<CashFlowProcesses.SettingsInput, CashFlowProcesses.SettingsOutput, ProcessContext>
+        finReportSettingsSetProcess() {
+        return CashFlowProcesses.SETTINGS_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<CashFlowProcesses.IssueInput, CashFlowProcesses.IssueOutput, ProcessContext>
+        finCashFlowIssueProcess() {
+        return CashFlowProcesses.ISSUE_PROCESS;
     }
 }
