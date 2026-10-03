@@ -167,3 +167,14 @@
 | FIN-PC-007 | Prior-period items | 完成（F8b） | `FinBill.postingDate`、`FinInvoice.postingDate`、`FinJournal.documentDate`；报表 `finance.gl.prior_period_items` | `it/FinScn07IT`（BILL-OS-0120）、`it/ReopenIT`（发票） |
 | FIN-PC-008 | Year-end close | 完成（F8c） | `FinCloseSettings`、`FinYearClose`（迁移 V24）、`FIN_CLOSE_SETTINGS_SET` / `FIN_YEAR_CLOSE`（`gl/YearCloseProcesses`）、日记账来源 `CLOSING`（总账 CLS）、试算表参数 `closingEntries` | `it/FinScn11IT`（CLS-2026、再年结 CLS-2026-R 与 CLS-2026-2、产物被取代、2027 损益为零）、`it/YearCloseIT` |
 | FIN-PC-009 | Close status overview | 完成（F8d） | 模板 `finance.close.overview`（进度、任务未完成在前、子账状态、调节表）、结账工作区 `finance-web/src/close/ClosePage.tsx` | `it/FinScn06IT`（2 / 10 未完成时先列出、负责权限与到期日）、`close/ClosePage.test.tsx`、`e2e/close.spec.ts` |
+
+## F9 财务报表与报告
+
+路径简写：`gl/` = `backend/finance/src/main/java/com/jabiz/finance/gl/`，`it/` = `backend/finance/src/test/java/com/jabiz/finance/it/`
+
+| 需求 | 标题 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-RP-001 | Trial balance | 完成（F9a） | 报表 `finance.report.trial_balance`（期初、借、贷、期末，汇总、部门与地点、结账分录前后、第 13 期），读期间余额 `FinPeriodBalance`（`gl/PeriodBalances`，迁移 V25，关账与年结时写，`FIN_PERIOD_BALANCE_SNAPSHOT` 补写） | `it/PeriodBalanceIT`（FIN-EXP-03 合计 826,012.90；与逐行汇总相同；重开后按两个时刻）、`it/FinScn11IT`（年结后全年） |
+| FIN-RP-007 | Subledger reconciliation reports | 完成（F9a） | `finance.gl.subledger_reconciliation`（应收、应付、资产原值、累计折旧对控制科目） | `it/FinScn06IT`（2026-01-31 差额 0.00） |
+| FIN-RP-008 | General ledger and journal reports | 完成（F9a） | `finance.gl.posting_register`、`finance.gl.detail`（准备人、审批人），`finance.gl.journal_register` 增加审批人 | `it/FinScn06IT` |
+| FIN-RP-020 | "As of" and "as known on" reporting | 完成（F9a） | 各报表的 `knownAt`；`finance.gl.trial_balance_compare`（两个记录时点与差额） | `it/FinScn08IT`（FIN-EXP-16；签发的报表核对相同） |

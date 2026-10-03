@@ -157,7 +157,9 @@ public final class YearCloseProcesses {
             .compute("Close period 13", (metadata, ctx) -> closePeriod(ctx))
             .step("Issue the trial balance", CallProcess.when(ctx -> ctx.contains(ISSUE), ReportProcesses.ISSUE, 1,
                 ctx -> ctx.get(ISSUE), ISSUED))
-            .compute("Keep the artifact", (metadata, ctx) -> record(ctx)));
+            .compute("Keep the artifact", (metadata, ctx) -> record(ctx))
+            .step("Keep period 13's balances", PeriodBalances.keep(ctx -> year(ctx) + "-13",
+                ctx -> ctx.contains(OUTPUT))));
 
     // ---- settings --------------------------------------------------------------------------------------------------
 

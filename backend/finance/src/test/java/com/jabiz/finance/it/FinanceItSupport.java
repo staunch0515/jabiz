@@ -256,6 +256,42 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         return (List<Map<String, Object>>) exchange.getResponseBody().get("items");
     }
 
+    /**
+     * The report trial balance (finance.report.trial_balance, read from the period balance snapshots) beside the
+     * ledger's (finance.gl.trial_balance, summed from the entries), with the same {@code through}, {@code knownAt},
+     * {@code adjustments} and {@code closingEntries} (ROADMAP F9 decision D1): every account's closing balance the
+     * same; with neither period 13 nor closing entries left out, its opening the ledger's on the day before
+     * {@code from}. Returns the report's rows by account.
+     */
+    protected Map<String, Map<String, Object>> sameAsEntries(String authorization, String from, String through,
+        Map<String, Object> options) {
+        Map<String, Object> params = new LinkedHashMap<>(options);
+        params.put("through", through);
+        Map<String, Map<String, Object>> ledger = byAccount(report("finance.gl.trial_balance", authorization, params));
+        if (from != null) {
+            params.put("from", from);
+        }
+        Map<String, Map<String, Object>> books = byAccount(report("finance.report.trial_balance", authorization,
+            params));
+        assertThat(books.keySet()).isEqualTo(ledger.keySet());
+        ledger.forEach((code, row) -> assertThat(amount(books.get(code).get("closing"))).as(code + " closing")
+            .isEqualByComparingTo(amount(row.get("balance"))));
+        if (from != null && !options.containsKey("adjustments") && !options.containsKey("closingEntries")) {
+            Map<String, Object> before = new LinkedHashMap<>(options);
+            before.put("through", java.time.LocalDate.parse(from).minusDays(1).toString());
+            byAccount(report("finance.gl.trial_balance", authorization, before)).forEach((code, row) ->
+                assertThat(amount(books.get(code).get("opening"))).as(code + " opening")
+                    .isEqualByComparingTo(amount(row.get("balance"))));
+        }
+        return books;
+    }
+
+    private static Map<String, Map<String, Object>> byAccount(List<Map<String, Object>> rows) {
+        Map<String, Map<String, Object>> byCode = new TreeMap<>();
+        rows.forEach(r -> byCode.put((String) r.get("accountCode"), r));
+        return byCode;
+    }
+
     /** An amount as the API returns it (a JSON number, or null), for exact comparison. */
     protected static java.math.BigDecimal amount(Object value) {
         return value == null ? null : new java.math.BigDecimal(String.valueOf(value)).setScale(2);

@@ -33,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -192,6 +193,44 @@ class FinScn06IT extends JanuaryBooks {
             as("auditor", "report.archive.read", "ledger.read")).expectStatus().isOk().expectBody(byte[].class)
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
         assertThat(issued).contains("211555.00", "158735.00", "1362.90");
+
+        // FIN-RP-007 acceptance 1: on 2026-01-31 each control account equals its subledger.
+        assertThat(report("finance.gl.subledger_reconciliation", controller, Map.of("asOf", "2026-01-31")))
+            .extracting(r -> r.get("controlClass") + " " + r.get("accounts") + " " + amount(r.get("subledger")) + " "
+                + amount(r.get("ledger")) + " " + amount(r.get("difference")))
+            .containsExactly("AP 2000 46300.00 46300.00 0.00", "AR 1200 158735.00 158735.00 0.00",
+                "FA_ACCUM 1590 62000.00 62000.00 0.00", "FA_COST 1500, 1510, 1520 202000.00 202000.00 0.00");
+        // Its subledgers are the agings' and the register's totals.
+        assertThat(report("finance.ar.aging", controller, Map.of("agingDate", "2026-01-31")).stream()
+            .map(r -> amount(r.get("openAmountUsd"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo("158735.00");
+        assertThat(report("finance.ap.aging", controller, Map.of("agingDate", "2026-01-31")).stream()
+            .map(r -> amount(r.get("openAmountUsd"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo("46300.00");
+
+        // FIN-RP-008 acceptance 1: January's register, in general ledger number order, every entry with its
+        // preparer and, where one was needed, its approver.
+        List<Map<String, Object>> register = report("finance.gl.posting_register", controller,
+            Map.of("from", "2026-01-01", "to", "2026-01-31"));
+        assertThat(register).hasSize(find(JournalEntities.POSTING_DATASET, "periodKey", "2026-01").size());
+        assertThat(register).filteredOn(r -> "JE-0001".equals(r.get("documentNo"))).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("preparer", "accountant").containsEntry("approver",
+                "controller"));
+        assertThat(register).filteredOn(r -> "JE-0003".equals(r.get("documentNo"))).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("preparer", "accountant").containsEntry("approver", null));
+        assertThat(register).filteredOn(r -> "FinBill".equals(r.get("sourceEntity"))).isNotEmpty()
+            .allSatisfy(r -> assertThat(r).containsEntry("preparer", "ap-clerk").containsEntry("source", "AP"));
+        assertThat(register).filteredOn(r -> "FinInvoice".equals(r.get("sourceEntity"))).isNotEmpty()
+            .allSatisfy(r -> assertThat(r).containsEntry("preparer", "ar-clerk"));
+        assertThat(report("finance.gl.journal_register", controller, Map.of("from", "2026-01-01", "to", "2026-01-31")))
+            .filteredOn(r -> "JE-0002".equals(r.get("journalNo"))).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("approver", "controller"));
+        // The detail of Professional fees: 34,000.00 of debits, BILL-DC-2601, BILL-JR-014 and JE-0002 (FIN-RP-006).
+        List<Map<String, Object>> fees = report("finance.gl.detail", controller, Map.of("from", "2026-01-01",
+            "to", "2026-01-31", "accountCode", "6400"));
+        assertThat(fees.stream().map(r -> amount(r.get("debit"))).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo("34000.00");
+        assertThat(fees).hasSize(3).allSatisfy(r -> assertThat(r).containsEntry("accountCode", "6400"));
 
         // FIN-PC-005 acceptance 2: February moves on; January as known at the close is the artifact's.
         clock.advance(Duration.ofDays(5));
