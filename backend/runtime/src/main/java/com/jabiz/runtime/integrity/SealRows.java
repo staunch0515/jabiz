@@ -44,7 +44,9 @@ public class SealRows implements StepHandler<NoMetadata, ProcessContext> {
         return store.pin(engine)
             .then(store.lock(engine))
             .then(store.head(engine).map(Optional::of).defaultIfEmpty(Optional.empty()))
-            .flatMap(head -> store.appendOnlyTables(engine)
+            // The tables are read to the end before each table's own queries on the same connection (VerifySeals).
+            .flatMap(head -> store.appendOnlyTables(engine).collectList()
+                .flatMapIterable(tables -> tables)
                 .filter(table -> !table.keyColumns().isEmpty())
                 // Each table's rows are digested over all its columns, and the block keeps which those were. The
                 // columns are read after the rows: the rows' query holds the table's lock until the commit, so no
