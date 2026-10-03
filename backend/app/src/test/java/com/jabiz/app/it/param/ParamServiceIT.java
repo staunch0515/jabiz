@@ -31,6 +31,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -271,6 +272,18 @@ class ParamServiceIT extends PostgresIntegrationTest {
         assertThat(value(key, later)).isEqualByComparingTo("0.15");
         assertThatThrownBy(() -> execute("UPDATE sys_param_version SET param_value = '1' WHERE param_key = ?", key))
             .hasMessageContaining("append-only table");
+    }
+
+    /** Review finding (phase 14p, decision D32): more keys than a page of the dataset (100) are all found. */
+    @Test
+    void moreKeysThanAPageAreAllLoaded() {
+        List<String> keys = new ArrayList<>();
+        for (int i = 0; i < 101; i++) {
+            String key = key();
+            run(ParamProcesses.CREATE, new ParamProcesses.CreateInput(key, RATE, "0." + (i % 10), "rate"));
+            keys.add(key);
+        }
+        assertThat(asTestRequest(params.load(keys, clock.instant())).block().values()).hasSize(101);
     }
 
     private static String key() {

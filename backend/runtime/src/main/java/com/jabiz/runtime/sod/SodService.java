@@ -110,7 +110,7 @@ public class SodService {
         DatasetDefinition dataset = datasets.findById(ApprovalEntities.SOD_RULE_DATASET).orElseThrow();
         EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq("enabled", true)).limit(MAX_RULES)
             .build();
-        return entities.query(dataset, ApprovalEntities.SOD, query).collectList().map(rows -> {
+        return entities.queryAll(dataset, ApprovalEntities.SOD, query).collectList().map(rows -> {
             if (rows.size() >= MAX_RULES) {
                 throw new IllegalStateException("More than " + MAX_RULES + " SoD rules");
             }

@@ -12,8 +12,10 @@ import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.runtime.process.steps.ProcessReads;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -67,6 +69,7 @@ public class DictionaryRegistry {
     private final DatasetRegistry datasets;
     private final MessageCatalog messages;
     private final Clock clock;
+    private final int maxItems;
     private final Map<String, Mono<Loaded>> cache = new ConcurrentHashMap<>();
 
     /** Entries of a dictionary in every language; {@code expiresAt} (clock time) is null when they do not expire. */
@@ -88,8 +91,11 @@ public class DictionaryRegistry {
         DatabaseClient db,
         ObjectProvider<AdvancedQueryExecutor> queries,
         MessageCatalog messages,
-        Clock clock
+        Clock clock,
+        @Value("${jabiz.process.max-read-rows:100000}") int maxItems
     ) {
+        ProcessReads.checkMaximum(maxItems);
+        this.maxItems = maxItems;
         this.providers = providers.orderedStream().toList();
         sqlDictionaries.orderedStream().forEach(dict -> {
             if (this.sqlDictionaries.putIfAbsent(dict.urn(), dict) != null) {
@@ -250,9 +256,12 @@ public class DictionaryRegistry {
             .concatMap(locale -> {
                 Map<String, Object> params = dict.localized()
                     ? Map.of(SqlDictionary.LOCALE_PARAMETER, locale.getLanguage()) : Map.of();
-                return executor.execute(dataset, dict.query(), params)
-                    .map(DictionaryRegistry::toItem)
-                    .collectList()
+                // The whole dictionary, not a page of its dataset (decision D32); one more row tells a cut one.
+                return executor.all(dict.query().withDataset(dataset.targetEntityType(), dataset.resourceId()), params,
+                        AdvancedQueryExecutor.At.NOW, null, List.of(), maxItems + 1)
+                    .flatMap(page -> page.items().size() > maxItems
+                        ? Mono.error(ProcessReads.tooLarge("SQL dictionary " + dict.urn(), maxItems))
+                        : Mono.just(page.items().stream().map(DictionaryRegistry::toItem).toList()))
                     .map(items -> Map.entry(locale, sorted(items)));
             })
             .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap::new)
