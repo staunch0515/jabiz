@@ -200,5 +200,8 @@ public final class FinancePermissions {
     /** Run the platform's approval results into reopenings: the platform's events only, never a user. */
     public static final String PERIOD_REOPEN_RESULT = "fin.period.reopen.result";
 
+    /** Issue the reports of an audit request as one package ({@code FIN_AUDIT_PACKAGE}; phase F10b). */
+    public static final String AUDIT_PACKAGE = "fin.audit.package";
+
     private FinancePermissions() {}
 }

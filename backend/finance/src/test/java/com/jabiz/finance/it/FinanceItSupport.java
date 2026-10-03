@@ -479,6 +479,26 @@ public abstract class FinanceItSupport extends PostgresIntegrationTest {
         }
     }
 
+    /** The platform's open export ({@code POST /api/exports/data}) as it comes: the ZIP's bytes. */
+    protected byte[] exportZip(String authorization, Map<String, Object> request) {
+        return post("/api/exports/data", authorization, request).expectStatus().isOk().expectBody(byte[].class)
+            .returnResult().getResponseBody();
+    }
+
+    /** The files of a ZIP by their paths. */
+    protected static Map<String, byte[]> unzip(byte[] zip) {
+        Map<String, byte[]> files = new LinkedHashMap<>();
+        try (java.util.zip.ZipInputStream in = new java.util.zip.ZipInputStream(
+            new java.io.ByteArrayInputStream(zip))) {
+            for (java.util.zip.ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
+                files.put(entry.getName(), in.readAllBytes());
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return files;
+    }
+
     protected static String sha256(byte[] bytes) {
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")

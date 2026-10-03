@@ -98,9 +98,13 @@
 | FIN-AP-003 | Bank-detail change control | 完成 | `FinVendorBankAccount`、`FIN_VENDOR_BANK_CHANGE` / `_APPROVAL_RESULT`（审批对象 `fin.ap.vendor-bank`、规则 `FIN-VENDOR-BANK`）、`calc/BankNumbers`；付款建议与释放中的暂停（`ap/PaymentProcesses`） | `it/PayablesMasterIT`、`it/PaymentIT`、`BankNumbersTest` |
 | FIN-AP-021 | Reportable amounts and thresholds | 完成 | `Fin1099Threshold`、`FIN_1099_THRESHOLD_SET`、导入 `finance.ap_thresholds`；`Fin1099Amount`（迁移 V13）、报表 `finance.ap.form_1099` | `it/PayablesMasterIT`、`it/FinScn04IT`（= FIN-EXP-14；2027 年阈值 600.00） |
 | FIN-CT-001 | Segregation of duties | 部分（应付：F4a 的两条规则与冲突报告） | `FIN_SETUP` 提出 `FIN-SOD-VENDOR-BANK-RELEASE`、`FIN-SOD-PAYABLES-RELEASE`（平台 14b） | `it/PayablesMasterIT`（验收 2） |
-| FIN-CT-010 | Complete audit trail | 部分（银行信息变更） | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy` | `it/PayablesMasterIT`（验收 1） |
-| FIN-SC-001 | Authentication | 部分（应付：银行信息变更与付款释放；会话与单点登录由平台 14g） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)` | `it/PayablesMasterIT`、`it/PaymentIT` |
-| FIN-SC-004 | Sensitive data protection | 部分（TIN、银行账号） | `masked(…)`、`sys_reveal_record`；W-9 文件策略的读取权限 | `it/PayablesMasterIT` |
+| FIN-CT-010 | Complete audit trail | 已满足 | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy`；审计表的改动由封存校验发现 | `it/PayablesMasterIT`（验收 1）、`it/FinScn12IT`（验收 2） |
+| FIN-CT-011 | Tamper evidence | 已满足 | 平台 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`（14f-2，14l） | `it/FinScn12IT` |
+| FIN-CT-012 | Audit evidence package | 已满足 | `finance.audit.manual_entries`、`FIN_AUDIT_PACKAGE`、平台导出、`tools/finance/verify-package.py` | `it/FinScn12IT` |
+| FIN-CT-021 | Readable archives | 已满足 | 平台导出（CSV + `schema.json` + `manifest.json` + 报表 PDF）、`tools/finance/trial-balance-from-archive.py` | `it/FinScn12IT` |
+| FIN-SC-001 | Authentication | 已满足（单点登录只有 OIDC，无 SAML） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)`；`FIN_SETUP` 的 `ADMINISTRATION`；平台二次验证、闲置锁定、OIDC（14g） | `it/PayablesMasterIT`、`it/PaymentIT`、`it/FinScn04IT` |
+| FIN-SC-003 | Access review | 已满足 | 平台 `jabiz.security.access_review`、`ACCESS_REVIEW_SIGN_OFF`；`FIN_AUDIT_PACKAGE` 签发 | `it/FinScn12IT` |
+| FIN-SC-004 | Sensitive data protection | 部分（到期匿名化不做，F10 D9） | `masked(…)`、`sys_reveal_record`；W-9 文件策略的读取权限；报表与导出中遮蔽 | `it/PayablesMasterIT`、`it/FinScn04IT` |
 | FIN-AP-004 | Vendor bill | 完成 | `FinBill`、`FinBillLine`（迁移 V11）、`FIN_BILL_SAVE` / `_POST`（`ap/BillProcesses`、`ap/BillPosting`） | `it/BillIT`、`BillPostingTest` |
 | FIN-AP-005 | Duplicate bill control | 完成 | `calc/BillDuplicates`，保存与过账时检查 | `it/BillIT`、`BillDuplicatesTest` |
 | FIN-AP-006 | Bill approval | 完成 | 审批对象 `fin.ap.bill`、规则 `FIN-AP-BILL-10K`、`FIN_BILL_APPROVAL_RESULT`；未批准的账单在付款中暂停 | `it/BillIT`、`it/PaymentIT` |

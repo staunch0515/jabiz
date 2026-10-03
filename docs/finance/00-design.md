@@ -57,7 +57,7 @@
 | `backend/finance/CLAUDE.md` | 财务开发规则 |
 | `finance-web/` | 财务后台 SPA（14a 之后） |
 | `deploy/finance/` | compose（数据库端口 5438）、Dockerfile |
-| `tools/finance/` | 大数据量生成器、压测、备份恢复脚本 |
+| `tools/finance/` | 大数据量生成器、压测、备份恢复脚本；审计证据包的离线校验与由归档重算试算表（只用 Python 标准库，F10b） |
 | `docs/finance/`、`docs/finance-work/` | 设计与路线图；工作记录、缺陷、验收记录 |
 
 纯计算放在 `calc` 等包中的纯 Java 类（没有 I/O），由流程的计算步骤调用，单元测试与属性测试直接覆盖（CLAUDE.md §3）。
@@ -538,12 +538,12 @@
 | CT-004 影响预览 | 对所选期间的历史分录按新规则重算，列出结果不同的分录与评估总数 |
 | CT-005 清算科目 | `FinAccount.clearing` 标记 + 结账检查 `CLEARING_ZERO`（F8a） |
 | CT-010/011 审计记录、防篡改 | 14f；账本行、单据、审计记录都在哈希链中；校验能指出被改的行 |
-| CT-012 审计证据包 | 按请求生成报表、分录、审批、访问列表、附件 + 清单与哈希，可离线校验 |
-| CT-020/021 保留期、可读归档 | 14f 的保留期（缺省财年末后 7 年）与法律保全；已结财年导出为 CSV/JSON + 模式 + 已发报表 PDF |
+| CT-012 审计证据包 | `FIN_AUDIT_PACKAGE`（F10b）在一次操作中经 `REPORT_ISSUE` 签发人工分录（`finance.audit.manual_entries`，带准备人、规则版本与批准人）、访问审查与已签核的银行调节表，回答平台导出的请求（分录、分录行、审批数据视图 + 正好这些报表的 PDF + 带 SHA-256 的清单）；`tools/finance/verify-package.py` 离线校验 |
+| CT-020/021 保留期、可读归档 | 14f 的保留期（财年末后 7 年，只对写入后不删除的记录，F10a）与法律保全；平台导出 CSV + 模式 + 已发报表 PDF，`tools/finance/trial-balance-from-archive.py` 只用账本科目、分录与过账的 CSV 重算试算表 |
 | SC-001 认证 | 14g：OIDC（`jabiz.security.oidc.providers[i]`，账号经 `SecUserIdentity` 关联）；付款释放、供应商银行信息的流程声明 `requiresMfa(ALWAYS)`，管理操作为平台的 `ADMINISTRATION` 级；会话闲置锁定（`jabiz.security.session.idle-timeout`） |
-| SC-002 角色 | 权限只经角色授予；审批限额；审计师的角色分配带 `dataFrom` / `dataTo`（财年），日记账、账本与财务单据的数据视图声明 `withinDataPeriod(过账日期)`（平台 10 §13.2） |
+| SC-002 角色 | 权限只经角色授予；审批限额；审计师的角色分配带 `dataFrom` / `dataTo`（财年），日记账、账本与财务单据的数据视图经总账交易声明 `withinDataPeriod("transactionId", "bookingTime")`（平台 10 §13.2；数据期限只给只读角色，F10a） |
 | SC-003 访问审查 | 平台模板 `jabiz.security.access_review` 按期末以 `REPORT_ISSUE` 签发，`ACCESS_REVIEW_SIGN_OFF` 签核（平台 10 §13.3）；后台 `/access-review` |
-| SC-004 敏感数据 | TIN、银行账号字段声明 `f.masked(权限, MaskStyle.LAST4)`：读接口、审计、报表中遮蔽，持有权限者逐值显示并记入 `sys_reveal_record`（平台 10 §13.1）；到期后匿名化 |
+| SC-004 敏感数据 | TIN、银行账号字段声明 `f.masked(权限, MaskStyle.LAST4)`：读接口、审计、报表中遮蔽，持有权限者逐值显示并记入 `sys_reveal_record`（平台 10 §13.1）；到期后匿名化不做（F10 D9） |
 | SC-005 配置变更控制 | 科目表、税率、审批规则、报表格式、集成的变更记录审批人；测试配置到生产的"提升"（导出配置包 → 导入并记录审批人） |
 
 ---
