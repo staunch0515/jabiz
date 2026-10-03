@@ -1,6 +1,11 @@
 spring:
   application:
     name: finance
+  # A configuration package (FIN_CONFIG_IMPORT_PROPOSE) is sent whole in one request: a chart of some thousand
+  # accounts is larger than the default 256 KB. A package of the most characters allowed (2,000,000), its quotes
+  # escaped and its letters in UTF-8, fits (docs/finance/ROADMAP.md F10d).
+  codec:
+    max-in-memory-size: 8MB
   r2dbc:
     url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5438/finance}
     username: ${SPRING_R2DBC_USERNAME:finance}
