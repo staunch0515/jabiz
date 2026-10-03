@@ -3,6 +3,8 @@ package com.jabiz.finance.setup;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.close.CloseEntities;
 import com.jabiz.finance.close.CloseProcesses;
+import com.jabiz.finance.report.StatementEntities;
+import com.jabiz.finance.report.StatementProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.runtime.approval.ApprovalEntities;
@@ -52,10 +54,11 @@ public final class SetupProcesses {
      * @param proposedChanges    every change proposed by this run, by the code of its rule: the approval rules above,
      *                           the rule of vendor bank changes and the segregation-of-duties rules of payables
      * @param closeItemsCreated  the items of the sample close checklist made, when there was no checklist (F8a)
+     * @param layoutsCreated     the sample statement layouts made, each when there was none of its code (F9b)
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, boolean currencyCreated,
         String approvalRuleChange, String writeOffRuleChange, Map<String, String> proposedChanges,
-        int closeItemsCreated) {}
+        int closeItemsCreated, int layoutsCreated) {}
 
     /** The rule of FIN-GL-015: manual entries above 10,000.00 need an approver of journal entries. */
     public static final String APPROVAL_RULE = "FIN-MANUAL-10K";
@@ -100,6 +103,7 @@ public final class SetupProcesses {
     static final String PROPOSED = "proposed";
     static final String PROPOSED_CODES = "proposedCodes";
     static final String CLOSE_ITEMS = "closeItems";
+    static final String LAYOUTS = "layouts";
 
     public static final ProcessDefinition<SetupInput, SetupOutput, ProcessContext> PROCESS =
         ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
@@ -139,6 +143,10 @@ public final class SetupProcesses {
                     .limit(20).build(), PROPOSALS))
             .step("Load the close checklist", QueryEntities.of(CloseEntities.TEMPLATE_DATASET,
                 ctx -> EntityQuery.builder().limit(1).build(), CLOSE_ITEMS))
+            .step("Load the statement layouts", QueryEntities.of(StatementEntities.LAYOUT_DATASET,
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("layoutCode", new ArrayList<>(
+                    StatementProcesses.SAMPLES.stream().map(StatementProcesses.Sample::code).toList())))
+                    .limit(1000).build(), LAYOUTS))
             .compute("Add what is missing", (metadata, ctx) -> setup(ctx))
             // Proposed only: rules change with four eyes, so another person publishes them (FIN-CT-002).
             .step("Propose the approval rules", CallProcess.forEach(ControlChanges.PROPOSE, 1,
@@ -156,7 +164,8 @@ public final class SetupProcesses {
             changes.put(codes.get(i), proposed.get(i).changeId());
         }
         return new SetupOutput(output.rolesCreated(), output.permissionsAdded(), output.currencyCreated(),
-            changes.get(APPROVAL_RULE), changes.get(WRITE_OFF_RULE), Map.copyOf(changes), output.closeItemsCreated());
+            changes.get(APPROVAL_RULE), changes.get(WRITE_OFF_RULE), Map.copyOf(changes), output.closeItemsCreated(),
+            output.layoutsCreated());
     }
 
     static void setup(ProcessContext ctx) {
@@ -262,7 +271,16 @@ public final class SetupProcesses {
                 closeItems++;
             }
         }
-        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null, null, Map.of(), closeItems));
+        // The sample statement layouts (FIN-RP-002, RP-011), each when there is none of its code.
+        int layouts = 0;
+        for (StatementProcesses.Sample sample : StatementProcesses.SAMPLES) {
+            if (list(ctx, LAYOUTS).stream().noneMatch(l -> sample.code().equals(l.get("layoutCode")))) {
+                StatementProcesses.write(ctx, sample.code(), sample.statement(), sample.title(), 1, sample.rows());
+                layouts++;
+            }
+        }
+        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, currency, null, null, Map.of(), closeItems,
+            layouts));
     }
 
     /** Neither the rule nor a proposal of it exists. */

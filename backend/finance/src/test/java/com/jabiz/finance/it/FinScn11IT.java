@@ -8,6 +8,7 @@ import com.jabiz.finance.gl.JournalEntities;
 import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.finance.gl.YearCloseProcesses;
+import com.jabiz.finance.report.StatementProcesses;
 import com.jabiz.finance.setup.FinanceRoles;
 import com.jabiz.runtime.event.OutboxDeliverer;
 import org.junit.jupiter.api.Test;
@@ -212,7 +213,40 @@ class FinScn11IT extends FinanceItSupport {
         sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of("closingEntries", false));
         sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of("knownAt", firstArtifact.get("knownAt")));
         sameAsEntries(controller, "2027-01-01", "2027-01-31", Map.of());
+        // The statements of the year (FIN-RP-002, RP-003, RP-005): the income statement and the equity statement
+        // carry the year's income with the audit adjustment, closing entries left out; the balance sheet balances;
+        // every account is on a line.
+        Map<String, Map<String, Object>> income = byLine(report(StatementProcesses.INCOME_STATEMENT, controller,
+            Map.of("through", "2026-12-31")));
+        assertThat(amount(income.get("NET_INCOME").get("yearToDate"))).isEqualByComparingTo(adjusted);
+        assertThat(amount(income.get("NET_INCOME").get("quarter"))).isEqualByComparingTo(adjusted.subtract(
+            sums(1, 10)));
+        Map<String, Map<String, Object>> equity = byLine(report(StatementProcesses.EQUITY, controller,
+            Map.of("through", "2026-12-31")));
+        assertThat(amount(equity.get("RETAINED").get("netIncome"))).isEqualByComparingTo(adjusted);
+        Map<String, Map<String, Object>> sheet = byLine(report(StatementProcesses.BALANCE_SHEET, controller,
+            Map.of("asOf", "2026-12-31")));
+        assertThat(amount(sheet.get("TOTAL_ASSETS").get("amount"))).isEqualByComparingTo(after.entrySet().stream()
+            .filter(b -> b.getKey().startsWith("1")).map(Map.Entry::getValue).reduce(BigDecimal.ZERO, BigDecimal::add))
+            .isEqualByComparingTo(amount(sheet.get("TOTAL_LIABILITIES_EQUITY").get("amount")));
+        assertThat(java.util.stream.Stream.of(income, equity, sheet).flatMap(m -> m.keySet().stream()))
+            .noneMatch(line -> line.startsWith("UNMAPPED"));
         assertOnlyInserted("fi_period_balance_version", "fi_year_close_version", "fi_close_artifact_version", "fi_close_settings_version");
+    }
+
+    /** The income of the months from {@code from} to before {@code to}: each month's sale less rent and power. */
+    private static BigDecimal sums(int from, int to) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (int month = from; month < to; month++) {
+            sum = sum.add(BigDecimal.valueOf(8000 + month * 50L - 3000 - 500 - month * 10L));
+        }
+        return sum;
+    }
+
+    private static Map<String, Map<String, Object>> byLine(List<Map<String, Object>> rows) {
+        Map<String, Map<String, Object>> byLine = new LinkedHashMap<>();
+        rows.forEach(r -> byLine.put((String) r.get("lineCode"), r));
+        return byLine;
     }
 
     /** Every account's balance (debit positive) on a day, period 13 of its year counted or not. */
