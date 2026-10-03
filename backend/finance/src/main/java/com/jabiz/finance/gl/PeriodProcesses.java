@@ -106,6 +106,7 @@ public final class PeriodProcesses {
             .permissions(FinancePermissions.PERIOD_CLOSE)
             .contextFactory(AccountProcesses::withInput)
             .outputMapper(ctx -> ctx.get(OUTPUT, PeriodOutput.class))
+            .step("Take the period's lock", PeriodLocks.exclusive(ctx -> ctx.get(INPUT, StateInput.class).periodKey()))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> byKey(ctx.get(INPUT, StateInput.class).periodKey()), PERIODS))
             .compute("Change its state", (metadata, ctx) -> {
@@ -120,6 +121,8 @@ public final class PeriodProcesses {
                 .permissions(FinancePermissions.PERIOD_CLOSE)
                 .contextFactory(AccountProcesses::withInput)
                 .outputMapper(ctx -> ctx.get(OUTPUT, PeriodOutput.class))
+                .step("Take the period's lock", PeriodLocks.exclusive(
+                    ctx -> ctx.get(INPUT, SubledgerStateInput.class).periodKey()))
                 .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ctx -> byKey(ctx.get(INPUT, SubledgerStateInput.class).periodKey()), PERIODS))
                 .compute("Change the subledger's state", (metadata, ctx) -> {

@@ -5,6 +5,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.PeriodPolicy;
 import com.jabiz.finance.gl.GlEntities;
+import com.jabiz.finance.gl.PeriodLocks;
 import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -126,6 +127,9 @@ public final class ReopenProcesses {
                         SUBJECT.equals(input.subject()) && uuid(input.entityId()) != null
                             ? List.of(uuid(input.entityId())) : List.of())).limit(1).build();
                 }, REOPENS))
+                // Whether a later period or the year is closed is read under the year's lock, as closing them is.
+                .step("Take the year's lock", PeriodLocks.year(
+                    ctx -> first(ctx, REOPENS) == null ? null : first(ctx, REOPENS).get("periodKey")))
                 .step("Load its period", QueryEntities.of(GlEntities.PERIOD_DATASET, ctx -> CloseProcesses.byPeriod(
                     first(ctx, REOPENS) == null ? "" : first(ctx, REOPENS).get("periodKey")), PERIODS))
                 .step("Load a later closed period", QueryEntities.of(GlEntities.PERIOD_DATASET,

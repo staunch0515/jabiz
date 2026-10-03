@@ -9,6 +9,7 @@ import com.jabiz.finance.fx.FxEntities;
 import com.jabiz.finance.fx.FxRevaluationProcesses;
 import com.jabiz.finance.gl.GlEntities;
 import com.jabiz.finance.gl.PeriodBalances;
+import com.jabiz.finance.gl.PeriodLocks;
 import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -264,7 +265,11 @@ public final class CloseProcesses {
                 .description("Closes a period once its checklist passes, and keeps the close artifact.")
                 .permissions(FinancePermissions.PERIOD_CLOSE)
                 .contextFactory(CloseProcesses::withInput)
-                .outputMapper(ctx -> ctx.get(OUTPUT, CloseOutput.class)))
+                .outputMapper(ctx -> ctx.get(OUTPUT, CloseOutput.class))
+                // Before anything is read: the postings that read the period open have committed by then.
+                .step("Take the year's lock", PeriodLocks.year(ctx -> ctx.get(INPUT, PeriodInput.class).periodKey()))
+                .step("Take the period's lock", PeriodLocks.exclusive(
+                    ctx -> ctx.get(INPUT, PeriodInput.class).periodKey())))
                 .step("Load the template", QueryEntities.of(CloseEntities.TEMPLATE_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(1).build(),
                     TEMPLATES))

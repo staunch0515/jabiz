@@ -122,6 +122,10 @@ public final class YearCloseProcesses {
             .outputMapper(ctx -> ctx.get(OUTPUT, YearOutput.class))
             .step("Load the settings", QueryEntities.of(CloseEntities.SETTINGS_DATASET, ctx -> current(), SETTINGS))
             .step("Load the year", QueryEntities.of(GlEntities.FISCAL_YEAR_DATASET, ctx -> byYear(year(ctx)), YEARS))
+            .step("Take the year's lock", PeriodLocks.year(
+                ctx -> com.jabiz.finance.calc.FiscalCalendar.key(year(ctx), com.jabiz.finance.calc.FiscalCalendar.ADJUSTMENT)))
+            .step("Take the lock of period 13", PeriodLocks.exclusive(
+                ctx -> com.jabiz.finance.calc.FiscalCalendar.key(year(ctx), com.jabiz.finance.calc.FiscalCalendar.ADJUSTMENT)))
             .step("Load its periods", QueryEntities.of(GlEntities.PERIOD_DATASET, ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.Eq("fiscalYear", BigDecimal.valueOf(year(ctx)))).limit(20).build(),
                 PERIODS))

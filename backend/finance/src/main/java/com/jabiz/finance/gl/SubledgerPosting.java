@@ -87,6 +87,7 @@ public final class SubledgerPosting {
             .outputMapper(ctx -> ctx.get(OUTPUT, PostOutput.class))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> JournalProcesses.periodsOf(input(ctx).postingDate()), JournalProcesses.PERIODS))
+            .steps(b -> PeriodLocks.share(b, ctx -> JournalProcesses.periodsOf(input(ctx).postingDate())))
             .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
                 ctx -> JournalProcesses.byCodes("accountCode", values(ctx, "account")), JournalProcesses.FIN_ACCOUNTS))
             .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET,
@@ -115,6 +116,7 @@ public final class SubledgerPosting {
                 .outputMapper(ctx -> ctx.get(OUTPUT, PostOutput.class))
                 .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ctx -> JournalProcesses.periodsOf(reverseInput(ctx).reverseDate()), JournalProcesses.PERIODS))
+                .steps(b -> PeriodLocks.share(b, ctx -> JournalProcesses.periodsOf(reverseInput(ctx).reverseDate())))
                 .step("Load the posting", QueryEntities.of(JournalEntities.POSTING_DATASET,
                     ctx -> com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.Eq(
                         "documentNo", reverseInput(ctx).documentNo())).limit(50).build(), POSTINGS))
