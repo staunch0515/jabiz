@@ -10,6 +10,7 @@ import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.finance.FinancePermissions;
 import com.jabiz.finance.calc.BookingTime;
+import com.jabiz.finance.gl.YearCloseProcesses;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.approval.ApprovalProcesses;
@@ -67,6 +68,40 @@ class CloseConfig {
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(CloseEntities.ARTIFACT_LINE_DATASET, CloseEntities.ARTIFACT_LINE,
             FinancePermissions.PERIOD_READ, FinancePermissions.PERIOD_CLOSE, true, poolRef);
+    }
+
+    @Bean
+    EntityDefinition finCloseSettingsEntity() {
+        return CloseEntities.SETTINGS_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition finYearCloseEntity() {
+        return CloseEntities.YEAR_CLOSE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition finCloseSettingsDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CloseEntities.SETTINGS_DATASET, CloseEntities.SETTINGS, FinancePermissions.PERIOD_READ,
+            FinancePermissions.PERIOD_CLOSE, true, poolRef);
+    }
+
+    @Bean
+    DatasetDefinition finYearCloseDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CloseEntities.YEAR_CLOSE_DATASET, CloseEntities.YEAR_CLOSE, FinancePermissions.PERIOD_READ,
+            FinancePermissions.PERIOD_CLOSE, true, poolRef);
+    }
+
+    @Bean
+    ProcessDefinition<YearCloseProcesses.SettingsInput, YearCloseProcesses.SettingsOutput, ProcessContext>
+        finCloseSettingsSetProcess() {
+        return YearCloseProcesses.SETTINGS_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<YearCloseProcesses.YearInput, YearCloseProcesses.YearOutput, ProcessContext>
+        finYearCloseProcess() {
+        return YearCloseProcesses.YEAR_CLOSE_PROCESS;
     }
 
     @Bean

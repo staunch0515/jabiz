@@ -55,6 +55,7 @@ public final class ReopenProcesses {
     public static final String PENDING_ALREADY = "FIN_PERIOD_REOPEN_PENDING";
     public static final String NO_RULE = "FIN_PERIOD_REOPEN_NO_RULE";
     public static final String NOT_FOUND = "FIN_PERIOD_REOPEN_NOT_FOUND";
+    public static final String YEAR_CLOSED = "FIN_PERIOD_REOPEN_YEAR_CLOSED";
     public static final String NOT_PENDING = "FIN_PERIOD_REOPEN_NOT_PENDING";
     public static final String NOT_REQUESTER = "FIN_PERIOD_REOPEN_NOT_REQUESTER";
 
@@ -74,6 +75,7 @@ public final class ReopenProcesses {
     static final String OUTPUT = "output";
     static final String PERIODS = "periods";
     static final String LATER = "later";
+    static final String YEAR_END = "yearEnd";
     static final String PENDING = "pending";
     static final String ARTIFACTS = "artifacts";
     static final String REOPENS = "reopens";
@@ -93,6 +95,8 @@ public final class ReopenProcesses {
                 ctx -> CloseProcesses.byPeriod(ctx.get(INPUT, RequestInput.class).periodKey()), PERIODS))
             .step("Load a later closed period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ReopenProcesses::laterClosed, LATER))
+            .step("Load its year's period 13", QueryEntities.of(GlEntities.PERIOD_DATASET,
+                ReopenProcesses::yearEnd, YEAR_END))
             .step("Load the requests waiting", QueryEntities.of(CloseEntities.REOPEN_DATASET,
                 ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                     new QueryPredicate.Eq("periodKey", ctx.get(INPUT, RequestInput.class).periodKey().trim()),
@@ -126,6 +130,8 @@ public final class ReopenProcesses {
                     first(ctx, REOPENS) == null ? "" : first(ctx, REOPENS).get("periodKey")), PERIODS))
                 .step("Load a later closed period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                     ReopenProcesses::laterClosed, LATER))
+            .step("Load its year's period 13", QueryEntities.of(GlEntities.PERIOD_DATASET,
+                ReopenProcesses::yearEnd, YEAR_END))
                 .step("Load the approval request", QueryEntities.of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> byRequestId(ctx.get(INPUT, ApprovalResultInput.class).requestId()), REQUESTS))
                 .step("Load its decisions", QueryEntities.of(ApprovalEntities.DECISION_DATASET,
@@ -168,6 +174,24 @@ public final class ReopenProcesses {
             PeriodPolicy.Status.CLOSED.name(), null, ctx.request().actorId()));
     }
 
+    /** The adjustment period of the loaded period's year. */
+    private static EntityQuery yearEnd(ProcessContext ctx) {
+        EntityInstance period = first(ctx, PERIODS);
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.Eq("fiscalYear", period == null ? BigDecimal.ZERO : period.get("fiscalYear")),
+            new QueryPredicate.Eq("adjustment", true)))).limit(1).build();
+    }
+
+    /**
+     * A month of a year closed (its period 13 closed by the year close, FIN-PC-008) stays closed: reopened, its new
+     * entries would miss the closing entry and be carried into the next year's income.
+     */
+    private static boolean yearClosed(ProcessContext ctx, EntityInstance period) {
+        EntityInstance thirteen = first(ctx, YEAR_END);
+        return !Boolean.TRUE.equals(period.get("adjustment")) && thirteen != null
+            && PeriodPolicy.Status.CLOSED.name().equals(thirteen.get("status"));
+    }
+
     /** Regular periods after the period loaded that are closed: one is enough. */
     private static EntityQuery laterClosed(ProcessContext ctx) {
         EntityInstance period = first(ctx, PERIODS);
@@ -201,6 +225,12 @@ public final class ReopenProcesses {
             String later = first(ctx, LATER).get("periodKey");
             ctx.reject(new Violation("periodKey", LATER_CLOSED, "Period " + later + " after it is closed: it is "
                 + "reopened first", Map.of("periodKey", periodKey, "later", later)));
+            return;
+        }
+        if (yearClosed(ctx, period)) {
+            ctx.reject(new Violation("periodKey", YEAR_CLOSED, "Fiscal year " + period.get("fiscalYear") + " is "
+                + "closed: its period 13 is reopened first", Map.of("periodKey", periodKey,
+                "fiscalYear", String.valueOf((Object) period.get("fiscalYear")))));
             return;
         }
         if (first(ctx, PENDING) != null) {
@@ -266,7 +296,7 @@ public final class ReopenProcesses {
             .map(d -> String.valueOf((Object) d.get("approverId"))).orElse(null);
         // A later period closed while the request waited: opening this one now would change the later one's
         // opening balances behind its artifact, so the approval lapses (the later one is reopened first).
-        boolean lapsed = approved && first(ctx, LATER) != null;
+        boolean lapsed = approved && (first(ctx, LATER) != null || yearClosed(ctx, period));
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", lapsed ? CloseEntities.LAPSED : approved ? CloseEntities.APPROVED
             : CloseEntities.REJECTED);

@@ -51,8 +51,10 @@ public final class JournalEntities {
     public static final String OPENING = "OPENING";
     /** A payroll summary from the external provider's file (FIN-DI-004). */
     public static final String PAYROLL = "PAYROLL";
+    /** The year-end closing entry and its reversal (FIN-PC-008): posted by the year close, never submitted. */
+    public static final String CLOSING = "CLOSING";
     public static final List<String> SOURCE_VALUES = List.of(MANUAL, RECURRING_SOURCE, REVERSING, AUTO_REVERSING,
-        IMPORT, OPENING, PAYROLL);
+        IMPORT, OPENING, PAYROLL, CLOSING);
 
     /**
      * Sources of general ledger numbers (design section 4.5), counted apart per fiscal year: manual journals (MAN)
@@ -66,6 +68,7 @@ public final class JournalEntities {
         return switch (journalSource == null ? "" : journalSource) {
             case IMPORT, PAYROLL -> "IMP";
             case OPENING -> "OPN";
+            case CLOSING -> "CLS";
             default -> "MAN";
         };
     }

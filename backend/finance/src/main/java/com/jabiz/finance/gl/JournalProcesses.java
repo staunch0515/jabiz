@@ -99,6 +99,7 @@ public final class JournalProcesses {
     public static final String NOT_POSTED = "FIN_JOURNAL_NOT_POSTED";
     public static final String ALREADY_REVERSED = "FIN_JOURNAL_ALREADY_REVERSED";
     public static final String OPENING_NOT_REVERSED = "FIN_JOURNAL_OPENING_NOT_REVERSED";
+    public static final String CLOSING_NOT_REVERSED = "FIN_JOURNAL_CLOSING_NOT_REVERSED";
     public static final String NO_PERIOD = "FIN_JOURNAL_NO_PERIOD";
     public static final String AUTO_REVERSE_DATE = "FIN_JOURNAL_AUTO_REVERSE_DATE";
     public static final String ADJUSTMENT_PERIOD = "FIN_JOURNAL_ADJUSTMENT_PERIOD";
@@ -368,6 +369,12 @@ public final class JournalProcesses {
                         // them is corrected by an adjusting entry in the first year, never by undoing the opening.
                         ctx.reject(refusal("journalId", OPENING_NOT_REVERSED, "The opening entry is not reversed; "
                             + "correct it with an entry in the first year", original));
+                        return;
+                    }
+                    if (JournalEntities.CLOSING.equals(original.get("source"))) {
+                        // The year close reverses its own entry when the year is closed again (FIN-PC-008).
+                        ctx.reject(refusal("journalId", CLOSING_NOT_REVERSED, "A closing entry is reversed only by "
+                            + "closing its year again", original));
                         return;
                     }
                     if (!list(ctx, REVERSALS).isEmpty()) {
