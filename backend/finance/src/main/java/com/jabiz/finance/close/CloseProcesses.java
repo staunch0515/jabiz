@@ -79,6 +79,9 @@ public final class CloseProcesses {
     /** The trial balance a close issues and keeps (FIN-PC-005). */
     public static final String TRIAL_BALANCE = "finance.gl.trial_balance";
 
+    /** Where a period's close stands: progress, tasks (open first), subledgers, reconciliations (FIN-PC-009). */
+    public static final String OVERVIEW = "finance.close.overview";
+
     /** The platform task of a manual close task; its title is the message {@code task.fin.close}. */
     public static final String TASK_TYPE = "fin.close";
 

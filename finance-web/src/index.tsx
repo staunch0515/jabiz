@@ -1,5 +1,5 @@
-import { BankOutlined, BookOutlined, BuildOutlined, DollarOutlined, GlobalOutlined, ImportOutlined, ShoppingCartOutlined }
-  from '@ant-design/icons'
+import { BankOutlined, BookOutlined, BuildOutlined, CalendarOutlined, DollarOutlined, GlobalOutlined, ImportOutlined,
+  ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
 import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
   from './bank/api'
@@ -10,6 +10,10 @@ import AssetPage from './assets/AssetPage'
 import DepreciationPage from './assets/DepreciationPage'
 import { ASSETS_PATH, DEPRECIATION_PATH } from './assets/paths'
 import MatchingPage from './bank/MatchingPage'
+import { DATASETS as CLOSE_DATASETS, PERMISSIONS as CLOSE_PERMISSIONS, PROCESSES as CLOSE_PROCESSES,
+  QUERIES as CLOSE_QUERIES } from './close/api'
+import ClosePage from './close/ClosePage'
+import { CLOSE_PATH } from './close/paths'
 import { MATCHING_PATH, RECONCILIATIONS_PATH } from './bank/paths'
 import ReconciliationListPage from './bank/ReconciliationListPage'
 import ReconciliationPage from './bank/ReconciliationPage'
@@ -39,7 +43,7 @@ import ReceiptRoute from './receivables/ReceiptRoute'
  * The finance application's own admin pages (decision D22, docs/finance/00-design.md section 17): the journal
  * register and the journal entry grid; the invoice and receipt registers, invoice and receipt entry; the bill
  * register and bill entry, payment runs and the payment register; bank matching and reconciliations; the assets and
- * the depreciation runs; the foreign currency revaluations. Accounts,
+ * the depreciation runs; the foreign currency revaluations; the close workspace. Accounts,
  * customers, dimensions, periods and the other master data keep the generated pages; the reports run on the
  * platform's report page and the imports in its import wizard (section 13).
  */
@@ -68,6 +72,7 @@ export default defineExtension({
     { path: DEPRECIATION_PATH, element: <DepreciationPage /> },
     { path: `${ASSETS_PATH}/:assetId`, element: <AssetPage /> },
     { path: REVALUATIONS_PATH, element: <RevaluationPage /> },
+    { path: CLOSE_PATH, element: <ClosePage /> },
   ],
   menu: [
     {
@@ -206,6 +211,39 @@ export default defineExtension({
         { key: 'fxRates', label: 'menu.fxRates', path: paths.dataset(FX_DATASETS.rate), permission: FX_PERMISSIONS.read },
         { key: 'fxSettings', label: 'menu.fxSettings', path: paths.dataset(FX_DATASETS.settings),
           permission: FX_PERMISSIONS.settings },
+      ],
+    },
+    {
+      key: 'close',
+      label: 'menu.close',
+      icon: <CalendarOutlined />,
+      children: [
+        { key: 'closeWorkspace', label: 'menu.closeWorkspace', path: CLOSE_PATH, permission: CLOSE_PERMISSIONS.read },
+        { key: 'closeOverview', label: 'menu.closeOverview', path: paths.report(CLOSE_QUERIES.overview),
+          permission: CLOSE_PERMISSIONS.read },
+        // Both reports need the journal, receivables and payables reads; the roles with the receivables read have all three.
+        { key: 'closeExceptions', label: 'menu.closeExceptions', path: paths.report(CLOSE_QUERIES.exceptions),
+          permission: 'fin.ar.read' },
+        { key: 'closeArtifacts', label: 'menu.closeArtifacts', path: paths.report(CLOSE_QUERIES.artifacts),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'priorPeriodItems', label: 'menu.priorPeriodItems', path: paths.report(CLOSE_QUERIES.priorPeriod),
+          permission: 'fin.ar.read' },
+        { key: 'periods', label: 'menu.periods', path: paths.dataset(CLOSE_DATASETS.period),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'fiscalYears', label: 'menu.fiscalYears', path: paths.dataset(CLOSE_DATASETS.fiscalYear),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'reopenRequests', label: 'menu.reopenRequests', path: paths.dataset(CLOSE_DATASETS.reopen),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'yearCloses', label: 'menu.yearCloses', path: paths.dataset(CLOSE_DATASETS.yearClose),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'closeChecklist', label: 'menu.closeChecklist', path: paths.dataset(CLOSE_DATASETS.template),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'closeTemplateSave', label: 'menu.closeTemplateSave', path: paths.process(CLOSE_PROCESSES.templateSave, 1),
+          permission: CLOSE_PERMISSIONS.close },
+        { key: 'closeSettings', label: 'menu.closeSettings', path: paths.dataset(CLOSE_DATASETS.settings),
+          permission: CLOSE_PERMISSIONS.read },
+        { key: 'closeSettingsSet', label: 'menu.closeSettingsSet', path: paths.process(CLOSE_PROCESSES.settings, 1),
+          permission: CLOSE_PERMISSIONS.close },
       ],
     },
     {

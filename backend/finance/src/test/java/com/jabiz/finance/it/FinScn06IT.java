@@ -106,6 +106,8 @@ class FinScn06IT extends JanuaryBooks {
             .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
         assertThat(String.valueOf(refusal.get("violations"))).contains("BANK_RECONCILED", "OPERATING",
             "CLEARING_ZERO", "1250");
+        assertThat(overview()).filteredOn(r -> "RECONCILIATION".equals(r.get("section")))
+            .extracting(r -> r.get("code") + " " + r.get("status")).contains("OPERATING MISSING");
 
         // RCPT-0003 applied to INV-1003; FIN-SCN-05's reconciliation signed off.
         ok(ReceiptProcesses.APPLY, arClerk, Map.of("receiptId", rcpt3, "applicationDate", "2026-01-25",
@@ -126,6 +128,26 @@ class FinScn06IT extends JanuaryBooks {
             "Asset register cost 202000.00 against the control accounts 202000.00",
             "Asset register accumulated depreciation 62000.00 against the control accounts 62000.00");
         assertThat(checked).containsEntry("ready", false);
+
+        // FIN-PC-009 acceptance 1: with 2 of 10 tasks open, the overview shows them first, with owners and due dates.
+        List<Map<String, Object>> overview = overview();
+        assertThat(overview.getFirst()).containsEntry("section", "PROGRESS").containsEntry("name", "8 of 10 done")
+            .containsEntry("status", "IN_PROGRESS");
+        assertThat(overview.subList(1, 3)).extracting(r -> r.get("section") + " " + r.get("code") + " "
+            + r.get("status") + " " + r.get("owner") + " " + r.get("dueDate"))
+            .containsExactlyInAnyOrder("TASK ACCRUALS OPEN fin.journal.prepare 2026-02-03",
+                "TASK REVIEW OPEN fin.period.close " + tasks.get("REVIEW").get("dueDate"));
+        assertThat(overview.subList(3, 11)).allSatisfy(r -> assertThat(r).containsEntry("section", "TASK")
+            .containsEntry("status", "PASSED"));
+        assertThat(overview).filteredOn(r -> "SUBLEDGER".equals(r.get("section")))
+            .extracting(r -> r.get("code") + " " + r.get("status"))
+            .containsExactly("GL OPEN", "AR OPEN", "AP OPEN", "BANK OPEN", "FA OPEN");
+        assertThat(overview).filteredOn(r -> "RECONCILIATION".equals(r.get("section")))
+            .extracting(r -> r.get("code") + " " + r.get("status")).contains("OPERATING SIGNED_OFF");
+        Map<String, Map<String, Object>> checklist = tasks;
+        assertThat(overview.subList(1, 3)).allSatisfy(r -> assertThat(r.get("taskId"))
+            .isEqualTo(checklist.get((String) r.get("code")).get("taskId")));
+        assertThat(report(CloseProcesses.OVERVIEW, controller, Map.of("periodKey", "2099-01"))).isEmpty();
 
         // The manual tasks; the controller soft-closes, then closes January.
         ok(CloseProcesses.TASK_COMPLETE, accountant, Map.of("taskId", tasks.get("ACCRUALS").get("taskId"),
@@ -186,6 +208,11 @@ class FinScn06IT extends JanuaryBooks {
         assertThat(refused(JournalProcesses.SUBMIT, accountant, Map.of("journalId", late), 422))
             .isEqualTo(PeriodPolicy.PERIOD_CLOSED);
         assertOnlyInserted("fi_close_task_version", "fi_close_artifact_version", "fi_close_artifact_line_version");
+    }
+
+    /** January's close overview, in its order (FIN-PC-009). */
+    private List<Map<String, Object>> overview() {
+        return report(CloseProcesses.OVERVIEW, controller, Map.of("periodKey", "2026-01"));
     }
 
     private Map<String, Map<String, Object>> tasks() {

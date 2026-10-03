@@ -497,3 +497,31 @@ export async function prepareFx(request: APIRequestContext) {
     { realizedAccount: '7200', unrealizedAccount: '7210' })
   expect(set.status, JSON.stringify(set.body)).toBe(200)
 }
+
+/**
+ * The close tests' year (ROADMAP F8d): fiscal year 2028 with its adjustment period, which no other test posts in; the
+ * close test never closes its months, so it runs again on the same database. Retained earnings is set, so a year
+ * close is refused for the months still open rather than for the settings.
+ */
+export async function prepareCloseYear(request: APIRequestContext) {
+  await prepareBooks(request)
+  const admin = await token(request, ADMIN)
+  const year = await run(request, admin, 'FIN_FISCAL_YEAR_CREATE', { fiscalYear: 2028, adjustmentPeriod: true })
+  expect([200, 422], JSON.stringify(year.body)).toContain(year.status)
+  expect(await find(request, admin, 'urn:jabiz:dataset:default:FinPeriod', 'periodKey', '2028-13')).toHaveLength(1)
+  if ((await find(request, admin, 'urn:jabiz:dataset:default:FinCloseSettings', 'settingsKey', 'CLOSE')).length === 0) {
+    const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
+      headers: { Authorization: `Bearer ${admin}` },
+      data: { limit: 1000 },
+    })
+    if (!((await lookup.json()).items as { accountCode: string }[]).some((a) => a.accountCode === '3300')) {
+      const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: '3300',
+        accountName: 'Retained Earnings', financialType: 'EQUITY', normalBalance: 'CREDIT',
+        statementLine: 'Retained earnings' })
+      expect(created.status, JSON.stringify(created.body)).toBe(200)
+    }
+    const set = await run(request, await token(request, CONTROLLER), 'FIN_CLOSE_SETTINGS_SET',
+      { retainedEarningsAccount: '3300' })
+    expect(set.status, JSON.stringify(set.body)).toBe(200)
+  }
+}
