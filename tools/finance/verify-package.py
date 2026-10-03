@@ -6,13 +6,14 @@ of CSV files, schema.json, the issued reports' PDFs and manifest.json, which lis
 its size and, for a CSV, its rows. The check recomputes each of them, refuses a file the manifest does not list and,
 given the answer of FIN_AUDIT_PACKAGE (--expect), that the package holds exactly the reports issued for the request. With
 --seal-hash it also compares the head of the seal chain the manifest names with one kept outside the system
-(GET /api/integrity/head at the time), and with --manifest-sha256 the manifest itself with the hash the exporter
-handed over outside the system: the manifest is not signed, so only that hash shows that the files and their listing
-were not changed together.
+(GET /api/integrity/head at the time), and with --package-sha256 (the whole file, as the evidence package page shows
+it) or --manifest-sha256 (the manifest alone) with the hash the exporter handed over outside the system: the manifest
+is not signed, so only such a hash shows that the files and their listing were not changed together.
 
 Only the Python standard library is used. Exit status: 0 when the package is intact, 1 when not, 2 on bad usage.
 
-    python3 verify-package.py package.zip [--expect package.json] [--seal-hash HEX] [--manifest-sha256 HEX]
+    python3 verify-package.py package.zip [--expect package.json] [--seal-hash HEX] [--package-sha256 HEX]
+                                          [--manifest-sha256 HEX]
 """
 import argparse
 import csv
@@ -41,9 +42,19 @@ def expected_runs(expect):
     return [(r["runId"], r.get("templateId")) for r in reports]
 
 
-def check(path, expect=None, seal_hash=None, manifest_sha256=None):
+def check(path, expect=None, seal_hash=None, manifest_sha256=None, package_sha256=None):
     """The problems found in the package at path, as texts; none when it is intact."""
     problems = []
+    if package_sha256 is not None:
+        try:
+            digest = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != package_sha256.lower():
+                problems.append(f"{path}: SHA-256 differs from the one handed over")
+        except OSError as e:
+            return [f"{path}: cannot be read ({e})"]
     try:
         archive = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as e:
@@ -110,6 +121,7 @@ def main(argv=None):
     parser.add_argument("package", help="the package (ZIP)")
     parser.add_argument("--expect", help="the answer of FIN_AUDIT_PACKAGE (JSON): its reports must be in the package")
     parser.add_argument("--seal-hash", help="the seal chain's head hash kept outside the system")
+    parser.add_argument("--package-sha256", help="the package's SHA-256 the exporter handed over outside the system")
     parser.add_argument("--manifest-sha256", help="the manifest's SHA-256 the exporter handed over outside the system")
     args = parser.parse_args(argv)
     expect = None
@@ -120,7 +132,7 @@ def main(argv=None):
         except (OSError, ValueError) as e:
             print(f"cannot read {args.expect}: {e}", file=sys.stderr)
             return 2
-    problems = check(args.package, expect, args.seal_hash, args.manifest_sha256)
+    problems = check(args.package, expect, args.seal_hash, args.manifest_sha256, args.package_sha256)
     for problem in problems:
         print(f"FAIL {problem}")
     if problems:

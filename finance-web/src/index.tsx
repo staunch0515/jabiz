@@ -1,6 +1,9 @@
-import { BankOutlined, BookOutlined, BuildOutlined, CalendarOutlined, DollarOutlined, FundOutlined, GlobalOutlined,
-  ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
+import { AuditOutlined, BankOutlined, BookOutlined, BuildOutlined, CalendarOutlined, DollarOutlined, FundOutlined,
+  GlobalOutlined, ImportOutlined, ShoppingCartOutlined } from '@ant-design/icons'
 import { defineExtension, paths } from '@jabiz/admin'
+import { PERMISSIONS as AUDIT_PERMISSIONS, QUERIES as AUDIT_QUERIES } from './audit/api'
+import AuditPackagePage from './audit/AuditPackagePage'
+import { AUDIT_PACKAGE_PATH } from './audit/paths'
 import { DATASETS as BANK_DATASETS, IMPORTS as BANK_IMPORTS, PERMISSIONS as BANK_PERMISSIONS, QUERIES as BANK_QUERIES }
   from './bank/api'
 import { DATASETS as FA_DATASETS, IMPORTS as FA_IMPORTS, PERMISSIONS as FA_PERMISSIONS, PROCESSES as FA_PROCESSES,
@@ -81,6 +84,7 @@ export default defineExtension({
     { path: LINE_DETAIL_PATH, element: <LineDetailPage /> },
     { path: `${STATEMENTS_PATH}/:kind`, element: <StatementPage /> },
     { path: DASHBOARD_PATH, element: <DashboardPage /> },
+    { path: AUDIT_PACKAGE_PATH, element: <AuditPackagePage /> },
   ],
   menu: [
     {
@@ -317,6 +321,19 @@ export default defineExtension({
           permission: 'fin.journal.read',
         },
         { key: 'importRuns', label: 'menu.importRuns', path: paths.importRuns(), permission: 'fin.import' },
+      ],
+    },
+    {
+      // The platform's own pages keep the access review with the conflicts, the audit trail, the seals and the
+      // retention; finance adds what is its own.
+      key: 'controls',
+      label: 'menu.controls',
+      icon: <AuditOutlined />,
+      children: [
+        { key: 'auditPackage', label: 'menu.auditPackage', path: AUDIT_PACKAGE_PATH,
+          permission: AUDIT_PERMISSIONS.package },
+        { key: 'manualEntries', label: 'menu.manualEntries', path: paths.report(AUDIT_QUERIES.manualEntries),
+          permission: AUDIT_PERMISSIONS.manualEntries },
       ],
     },
   ],
