@@ -67,7 +67,8 @@ public class ParamService {
             .where(new QueryPredicate.In(ParamEntities.KEY, List.copyOf(wanted)))
             .limit(wanted.size())
             .build();
-        return entityManager.query(dataset, ParamEntities.SYS_PARAM, query, asOf, null)
+        // Every key asked for, however many: a page of the dataset would report the rest missing (decision D32).
+        return entityManager.queryAll(dataset, ParamEntities.SYS_PARAM, query, asOf, null)
             .collectList()
             .map(found -> values(found, wanted, asOf));
     }
