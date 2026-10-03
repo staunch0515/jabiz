@@ -178,3 +178,7 @@
 | FIN-RP-007 | Subledger reconciliation reports | 完成（F9a） | `finance.gl.subledger_reconciliation`（应收、应付、资产原值、累计折旧对控制科目） | `it/FinScn06IT`（2026-01-31 差额 0.00） |
 | FIN-RP-008 | General ledger and journal reports | 完成（F9a） | `finance.gl.posting_register`、`finance.gl.detail`（准备人、审批人），`finance.gl.journal_register` 增加审批人 | `it/FinScn06IT` |
 | FIN-RP-020 | "As of" and "as known on" reporting | 完成（F9a） | 各报表的 `knownAt`；`finance.gl.trial_balance_compare`（两个记录时点与差额） | `it/FinScn08IT`（FIN-EXP-16；签发的报表核对相同） |
+| FIN-RP-002 | Balance sheet | 完成（F9b） | 格式 `FinStatementLayout` / `FinStatementLayoutRow`（迁移 V26，`report/StatementProcesses`），模板 `finance.report.balance_sheet`（上月末、上年末），`FIN_STATEMENT_ISSUE` 拒绝未映射 | `it/FinStatementsIT`（FIN-EXP-05；2150 未映射时拒绝签发） |
+| FIN-RP-003 | Income statement | 完成（F9b） | `finance.report.income_statement`（本月、季累计、年累计、上年同期；部门、地点） | `it/FinStatementsIT`（FIN-EXP-04，净利润 5,127.10） |
+| FIN-RP-005 | Statement of stockholders' equity | 完成（F9b） | `finance.report.equity`（期初、净利润、其他变动、期末，按格式行） | `it/FinStatementsIT`（FIN-EXP-07） |
+| FIN-RP-011 | Report layouts | 完成（F9b） | `FIN_STATEMENT_LAYOUT_PUBLISH`（版本化）、签发带格式版本 | `it/FinStatementsIT`（旧版本签发的报表核对相同）、`report/StatementLayoutTest` |
