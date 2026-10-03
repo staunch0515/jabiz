@@ -102,10 +102,20 @@ class ApConfig {
      * import's up to 5,000 open items in one change set.
      */
     private static DatasetDefinition documents(String id, String entity, String poolRef) {
+        return documents(id, entity, false, poolRef);
+    }
+
+    /** {@code booked}: limited to a data period by the bill's ledger transaction (GlEntities.dataset). */
+    private static DatasetDefinition documents(String id, String entity, boolean booked, String poolRef) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(FinancePermissions.AP_READ, FinancePermissions.BILL_PREPARE)
+            .scope(s -> {
+                if (booked) {
+                    s.withinDataPeriod(GlEntities.BOOKED_BY, GlEntities.BOOKING_TIME);
+                }
+            })
             .policy(p -> p.maxQueryBatchSize(5000).maxWriteBatchSize(5000).processOnlyWrites())
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
@@ -243,7 +253,7 @@ class ApConfig {
 
     @Bean
     DatasetDefinition finBillDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return documents(BillEntities.BILL_DATASET, BillEntities.BILL, poolRef);
+        return documents(BillEntities.BILL_DATASET, BillEntities.BILL, true, poolRef);
     }
 
     @Bean

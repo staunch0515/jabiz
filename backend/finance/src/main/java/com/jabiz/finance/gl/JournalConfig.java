@@ -58,7 +58,7 @@ class JournalConfig {
     @Bean
     DatasetDefinition finJournalDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(JournalEntities.JOURNAL_DATASET, JournalEntities.JOURNAL, FinancePermissions.JOURNAL_READ,
-            FinancePermissions.JOURNAL_PREPARE, true, poolRef);
+            FinancePermissions.JOURNAL_PREPARE, true, true, poolRef);
     }
 
     @Bean
@@ -77,7 +77,7 @@ class JournalConfig {
     @Bean
     DatasetDefinition finPostingDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(JournalEntities.POSTING_DATASET, JournalEntities.POSTING, FinancePermissions.JOURNAL_READ,
-            FinancePermissions.JOURNAL_POST, true, poolRef);
+            FinancePermissions.JOURNAL_POST, true, true, poolRef);
     }
 
     @Bean
