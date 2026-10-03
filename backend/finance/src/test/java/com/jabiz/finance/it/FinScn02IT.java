@@ -7,10 +7,16 @@ import com.jabiz.finance.gl.JournalProcesses;
 import com.jabiz.finance.gl.JournalValidator;
 import com.jabiz.finance.setup.FinanceRoles;
 import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.runtime.security.SecurityEntities;
+import com.jabiz.runtime.task.MailMessage;
+import com.jabiz.runtime.task.NotificationSender;
 import com.jabiz.runtime.test.FileSamples;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -19,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,10 +37,50 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Acceptance scenario FIN-SCN-02 (docs/finance-requirements/30-acceptance-scenarios.md), steps 1 to 5, on books of
  * their own: journal entries with maker–checker approval. The general ledger lines of JE-0001 … JE-0004 are compared
  * with FIN-EXP-02, read from the requirements in the test only. Entering JE-0002 in the grid is F1c's; here the
- * grid's process takes it.
+ * grid's process takes it. Submitted, JE-0002 is the controller's task in the application and in an e-mail linking
+ * to it (FIN-DI-009).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {"jabiz.mail.enabled=true",
+    "jabiz.mail.from=books@northwind.example", "spring.mail.host=localhost",
+    "jabiz.mail.base-url=https://books.northwind.example"})
 class FinScn02IT extends FinanceItSupport {
+
+    /** Keeps what would go out by e-mail. */
+    @TestConfiguration
+    static class Mailbox {
+
+        static final List<MailMessage> SENT = new CopyOnWriteArrayList<>();
+
+        @Bean
+        @Primary
+        NotificationSender keptMail() {
+            return new NotificationSender() {
+                @Override
+                public void send(String to, String subject, String body) {
+                    SENT.add(new MailMessage(to, subject, body, List.of()));
+                }
+
+                @Override
+                public void send(MailMessage message) {
+                    SENT.add(message);
+                }
+            };
+        }
+    }
+
+    private static final String CONTROLLER_MAIL = "controller@northwind.example";
+
+    /** The mail to {@code to}, once the notifications sent after their commit have gone out. */
+    private static List<MailMessage> awaitMail(String to) throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            List<MailMessage> mail = Mailbox.SENT.stream().filter(m -> m.to().equals(to)).toList();
+            if (!mail.isEmpty()) {
+                return mail;
+            }
+            Thread.sleep(100);
+        }
+        return List.of();
+    }
 
     @Autowired
     OutboxDeliverer deliverer;
@@ -59,7 +106,9 @@ class FinScn02IT extends FinanceItSupport {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void journalEntriesWithMakerCheckerApproval() throws Exception {
+        Mailbox.SENT.clear();
         openBooks();
 
         // Step 1: JE-0001 with its support; 1010 is a control account, so the controller allows the manual line.
@@ -79,11 +128,26 @@ class FinScn02IT extends FinanceItSupport {
         assertThat(journal(je1)).containsEntry("status", "POSTED");
 
         // Step 2: JE-0002; the preparer may not approve; a change after approval needs approval again.
+        String admin = as("admin", "*");
+        String anna = (String) ok("SEC_USER_CREATE", admin, Map.of("userName", "ctl-anna", "displayName", "Anna",
+            "password", "password-123", "email", CONTROLLER_MAIL)).get("userId");
+        post("/api/datasets/" + SecurityEntities.USER_ROLE_DATASET + "/commit", admin, Map.of("changes", List.of(
+            Map.of("action", "INSERT", "attributes", Map.of("userId", anna, "roleId", find(
+                SecurityEntities.ROLE_DATASET, "roleCode", FinanceRoles.CONTROLLER).getFirst().get("roleId"))))))
+            .expectStatus().isOk();
         Map<String, Object> audit = entry("2026-01-31", "Accrue annual audit fee", List.of(
             line("6400", "25000.00", null, null), line("2100", null, "25000.00", null)));
         String je2 = (String) ok(JournalProcesses.SAVE, accountant(), audit).get("journalId");
         Map<String, Object> submitted2 = ok(JournalProcesses.SUBMIT, accountant(), Map.of("journalId", je2));
         assertThat(submitted2).containsEntry("journalNo", "JE-0002").containsEntry("approval", "PENDING");
+        // FIN-DI-009 acceptance 1: the controller's task in the application, and an e-mail linking to it.
+        List<Map<String, Object>> tasks = (List<Map<String, Object>>) get("/api/tasks/mine", controllerUser())
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody().get("tasks");
+        assertThat(tasks).filteredOn(t -> submitted2.get("approvalRequestId").equals(t.get("subjectId")))
+            .singleElement().satisfies(t -> assertThat(t).containsEntry("link", "/tasks"));
+        deliver();
+        assertThat(awaitMail(CONTROLLER_MAIL)).singleElement().satisfies(m -> assertThat(m.body())
+            .contains("https://books.northwind.example/tasks"));
         Map<String, Object> approve = Map.of("requestId", submitted2.get("approvalRequestId"), "decision", "APPROVE");
         assertThat(refused("APPROVAL_DECIDE", accountant(), approve, 403)).isEqualTo("PERMISSION_DENIED");
         // Also when the accountant holds the approver role besides: nobody approves their own entry.

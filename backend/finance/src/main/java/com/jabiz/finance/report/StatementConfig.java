@@ -36,11 +36,16 @@ class StatementConfig {
             FinancePermissions.PERIOD_CLOSE, true, poolRef);
     }
 
+    // A layout's rows are written in one go: up to StatementProcesses.MAX_ROWS, more than a dataset's default 100.
     @Bean
     DatasetDefinition finStatementLayoutRowDataset(
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(StatementEntities.ROW_DATASET, StatementEntities.ROW, FinancePermissions.PERIOD_READ,
-            FinancePermissions.PERIOD_CLOSE, true, poolRef);
+        return DatasetDefinition.define(StatementEntities.ROW_DATASET, d -> d
+            .targetEntityType(StatementEntities.ROW)
+            .asDefault()
+            .permissions(FinancePermissions.PERIOD_READ, FinancePermissions.PERIOD_CLOSE)
+            .policy(p -> p.maxQueryBatchSize(500).maxWriteBatchSize(StatementProcesses.MAX_ROWS).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean

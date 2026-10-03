@@ -197,3 +197,12 @@
 | FIN-RP-010 | Export formats | 完成（F9d） | 平台 `POST /api/queries/{id}/export?format=pdf|xlsx|csv`；报表页的导出按钮 | `it/FinScn06IT`（利润表导出 PDF 与 Excel）、`e2e/reports.spec.ts`（PDF 下载） |
 | FIN-RP-021 | Dashboard | 完成（F9d） | 页面 `reports/DashboardPage`：账面现金（`finance.bank.cash_position`）、应收与应付（账龄合计）、本月收入与净利润（利润表）、本月结账状态，各链接到来源报表 | `reports/StatementPage.test.tsx`（311,680.00、158,735.00、46,300.00 与链接）、`e2e/reports.spec.ts` |
 | FIN-UI-005 | Financial number presentation | 完成（F9d） | 报表页金额右对齐、千分位、两位小数、负数括号（`formatAmount` 的 `parentheses`），合计取服务端值不在页面重算 | `reports/StatementPage.test.tsx`（(2,000.00)）、`e2e/reports.spec.ts` |
+
+## F11 接口、性能、运维、全场景验收
+
+| 需求 | 名称 | 状态 | 实现 | 测试 |
+|---|---|---|---|---|
+| FIN-DI-005 | Application programming interface | 完成（F11a） | 平台的流程、数据视图、模板接口（Bearer 令牌，按元数据权限检查）；`docs/finance/api.md` | `it/FinScn13IT`（接口建的账单与页面一样过账待审批；无权限的过账 403） |
+| FIN-DI-006 | Idempotent interfaces | 完成（F11a） | 平台 `Idempotency-Key`（同一调用者同键返回首次结果，另一流程 409）；账单号重复拒绝；导入按文件与外部引用只一次 | `it/FinScn13IT`（同键两次建账单、发票各只一张） |
+| FIN-DI-008 | Full data export | 部分（F11a：验收 1 满足；附件内容与审计记录不在导出中，经各自接口取） | 平台 `POST /api/exports/data`（每批 100 个数据视图）；api.md §5 | `it/FinScn12IT`（全部数据视图导出，已过账分录行数等于系统内） |
+| FIN-DI-009 | Notifications | 完成（F11a） | 平台待办（审批待办链接到待办列表 `/tasks`，平台不给单条待办的地址）与 `TASK_NOTIFY` 邮件 | `it/FinScn02IT`（JE-0002 的待办与带链接的邮件） |

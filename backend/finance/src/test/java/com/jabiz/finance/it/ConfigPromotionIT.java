@@ -37,12 +37,13 @@ class ConfigPromotionIT extends FinanceItSupport {
         String controller = inRoles("controller", FinanceRoles.CONTROLLER);
         String other = inRoles("controller-2", FinanceRoles.CONTROLLER);
 
-        // A layout published six times holds 600 rows: more than a dataset gives in one read, all of them read.
+        // A layout of 200 rows, the most a layout has, published three times: 600 rows, more than a dataset gives in
+        // one read, all of them read.
         List<Map<String, Object>> headings = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 200; i++) {
             headings.add(Map.of("lineCode", "H" + i, "label", "Heading " + i, "kind", "HEADING"));
         }
-        for (int version = 1; version <= 6; version++) {
+        for (int version = 1; version <= 3; version++) {
             ok("FIN_STATEMENT_LAYOUT_PUBLISH", controller, Map.of("layoutCode", "BIG", "statement",
                 "INCOME_STATEMENT", "title", "Long layout " + version, "rows", headings));
         }
@@ -56,9 +57,9 @@ class ConfigPromotionIT extends FinanceItSupport {
         assertThat(here.accounts()).hasSize(((Number) exported.get("accounts")).intValue()).isNotEmpty();
         assertThat(here.taxCodes()).extracting(ConfigPackage.TaxCode::taxCode).contains("TX-AUSTIN", "TX-RESALE");
         assertThat(here.layouts()).filteredOn(l -> "BIG".equals(l.layoutCode())).singleElement()
-            .satisfies(l -> assertThat(l.rows()).hasSize(100).first().satisfies(r -> assertThat(r.lineCode())
+            .satisfies(l -> assertThat(l.rows()).hasSize(200).first().satisfies(r -> assertThat(r.lineCode())
                 .isEqualTo("H0")))
-            .satisfies(l -> assertThat(l.title()).isEqualTo("Long layout 6"));
+            .satisfies(l -> assertThat(l.title()).isEqualTo("Long layout 3"));
         assertThat(refused(ConfigProcesses.PROPOSE, controller, Map.of("packageText", text, "sha256",
             exported.get("sha256")), 422)).isEqualTo(ConfigProcesses.NO_CHANGES);
 
