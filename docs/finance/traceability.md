@@ -100,7 +100,7 @@
 | FIN-CT-001 | Segregation of duties | 部分（应付：F4a 的两条规则与冲突报告） | `FIN_SETUP` 提出 `FIN-SOD-VENDOR-BANK-RELEASE`、`FIN-SOD-PAYABLES-RELEASE`（平台 14b） | `it/PayablesMasterIT`（验收 2） |
 | FIN-CT-010 | Complete audit trail | 已满足 | 平台审计（遮蔽字段存遮蔽形式）；`FinVendorBankAccount.requestedBy` / `decidedBy`；审计表的改动由封存校验发现 | `it/PayablesMasterIT`（验收 1）、`it/FinScn12IT`（验收 2） |
 | FIN-CT-011 | Tamper evidence | 已满足 | 平台 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`（14f-2，14l） | `it/FinScn12IT` |
-| FIN-CT-012 | Audit evidence package | 已满足 | `finance.audit.manual_entries`、`FIN_AUDIT_PACKAGE`、平台导出、`tools/finance/verify-package.py` | `it/FinScn12IT` |
+| FIN-CT-012 | Audit evidence package | 已满足 | `finance.audit.manual_entries`、`FIN_AUDIT_PACKAGE`、平台导出、`tools/finance/verify-package.py`；finance-web 证据包页 | `it/FinScn12IT`、`audit/AuditPackagePage.test.tsx`、`e2e/controls.spec.ts` |
 | FIN-CT-021 | Readable archives | 已满足 | 平台导出（CSV + `schema.json` + `manifest.json` + 报表 PDF）、`tools/finance/trial-balance-from-archive.py` | `it/FinScn12IT` |
 | FIN-SC-001 | Authentication | 已满足（单点登录只有 OIDC，无 SAML） | `FIN_VENDOR_BANK_CHANGE`、`FIN_BANK_ACCOUNT_SAVE`、`FIN_PAYMENT_RUN_RELEASE` 的 `requiresMfa(ALWAYS)`；`FIN_SETUP` 的 `ADMINISTRATION`；平台二次验证、闲置锁定、OIDC（14g） | `it/PayablesMasterIT`、`it/PaymentIT`、`it/FinScn04IT` |
 | FIN-SC-003 | Access review | 已满足 | 平台 `jabiz.security.access_review`、`ACCESS_REVIEW_SIGN_OFF`；`FIN_AUDIT_PACKAGE` 签发 | `it/FinScn12IT` |

@@ -158,6 +158,11 @@ class FinScn12IT extends JanuaryBooks {
         Tool caught = python("verify-package.py", rewrittenZip.toString(), "--manifest-sha256", manifestHash);
         assertThat(caught.exit()).isEqualTo(1);
         assertThat(caught.output()).contains("FAIL manifest.json: SHA-256 differs from the one handed over");
+        // The whole package's hash, as the evidence package page shows it, catches it too.
+        assertThat(python("verify-package.py", packageZip.toString(), "--package-sha256", sha256(zip)).exit()).isZero();
+        Tool other = python("verify-package.py", rewrittenZip.toString(), "--package-sha256", sha256(zip));
+        assertThat(other.exit()).isEqualTo(1);
+        assertThat(other.output()).contains("SHA-256 differs from the one handed over");
         // A second entry of a listed name is refused.
         Tool duplicated = python("verify-package.py", Files.write(dir.resolve("twice.zip"),
             appendEntry(zip, journalCsv, forged)).toString());
