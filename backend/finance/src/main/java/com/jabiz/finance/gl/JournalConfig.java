@@ -81,6 +81,38 @@ class JournalConfig {
     }
 
     @Bean
+    EntityDefinition finPeriodBalanceEntity() {
+        return PeriodBalances.ENTITY;
+    }
+
+    // Read with the ledger; written only by the close, the year close and the snapshot process.
+    @Bean
+    DatasetDefinition finPeriodBalanceDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return DatasetDefinition.define(PeriodBalances.DATASET, d -> d
+            .targetEntityType(PeriodBalances.BALANCE)
+            .asDefault()
+            .permissions(FinancePermissions.JOURNAL_READ, FinancePermissions.PERIOD_CLOSE)
+            // A reader limited to a data period sees the snapshots of the periods wholly within it only; the reports
+            // read the others entry by entry, through the ledger's own scope (10 section 13.2).
+            .scope(s -> s.withinDataPeriod("firstBooking").withinDataPeriod("lastBooking"))
+            // A bucket of a snapshot is written in one go (PeriodBalances.CAP rows at most); the reports read many.
+            .policy(p -> p.maxQueryBatchSize(5000).maxWriteBatchSize(PeriodBalances.CAP).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    ProcessDefinition<PeriodBalances.PeriodInput, PeriodBalances.SnapshotOutput, ProcessContext>
+        finPeriodBalanceSnapshotProcess() {
+        return PeriodBalances.SNAPSHOT_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<PeriodBalances.WriteInput, PeriodBalances.WriteOutput, ProcessContext>
+        finPeriodBalanceWriteProcess(BookingTime booking) {
+        return PeriodBalances.writeProcess(booking);
+    }
+
+    @Bean
     DatasetDefinition finRecurringTemplateDataset(
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         return dataset(JournalEntities.RECURRING_DATASET, JournalEntities.RECURRING, FinancePermissions.JOURNAL_READ,

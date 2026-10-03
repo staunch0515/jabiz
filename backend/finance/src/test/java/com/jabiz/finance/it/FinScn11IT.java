@@ -200,7 +200,19 @@ class FinScn11IT extends FinanceItSupport {
         assertThat(amount(closedAgain.get("netIncome"))).isEqualByComparingTo(adjusted);
         assertThat(balances("2027-01-01", false).get("3200")).isEqualByComparingTo(adjusted.negate());
         assertThat(find(CloseEntities.YEAR_CLOSE_DATASET, "fiscalYear", 2026)).hasSize(3);
-        assertOnlyInserted("fi_year_close_version", "fi_close_artifact_version", "fi_close_settings_version");
+        // Every month and each of period 13's closes kept the period's balances; read from them, the year's trial
+        // balance is the entries' sum, with and without period 13 and the closing entries, and as known at the first
+        // year close; 2027 opens with the balances carried forward (ROADMAP F9 decision D1).
+        assertThat(find(com.jabiz.finance.gl.PeriodBalances.DATASET, "periodKey", "2026-13").stream()
+            .map(b -> b.get("countedTo")).distinct()).hasSize(3);
+        assertThat(find(com.jabiz.finance.gl.PeriodBalances.DATASET, "periodKey", "2026-06")).isNotEmpty();
+        sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of());
+        sameAsEntries(controller, "2026-07-01", "2026-12-31", Map.of());
+        sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of("adjustments", false));
+        sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of("closingEntries", false));
+        sameAsEntries(controller, "2026-01-01", "2026-12-31", Map.of("knownAt", firstArtifact.get("knownAt")));
+        sameAsEntries(controller, "2027-01-01", "2027-01-31", Map.of());
+        assertOnlyInserted("fi_period_balance_version", "fi_year_close_version", "fi_close_artifact_version", "fi_close_settings_version");
     }
 
     /** Every account's balance (debit positive) on a day, period 13 of its year counted or not. */

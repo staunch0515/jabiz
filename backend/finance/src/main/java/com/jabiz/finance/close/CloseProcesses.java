@@ -8,6 +8,7 @@ import com.jabiz.finance.calc.PeriodPolicy;
 import com.jabiz.finance.fx.FxEntities;
 import com.jabiz.finance.fx.FxRevaluationProcesses;
 import com.jabiz.finance.gl.GlEntities;
+import com.jabiz.finance.gl.PeriodBalances;
 import com.jabiz.finance.gl.PeriodProcesses;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -272,7 +273,9 @@ public final class CloseProcesses {
                 .compute("Check the checklist", (metadata, ctx) -> close(ctx))
                 .step("Issue the trial balance", CallProcess.when(ctx -> ctx.contains(ISSUE), ReportProcesses.ISSUE,
                     1, ctx -> ctx.get(ISSUE), ISSUED))
-                .compute("Keep the artifact", (metadata, ctx) -> artifact(ctx)));
+                .compute("Keep the artifact", (metadata, ctx) -> artifact(ctx))
+                .step("Keep the period's balances", PeriodBalances.keep(CloseProcesses::periodKey,
+                    ctx -> ctx.contains(OUTPUT))));
 
     /** What the automatic checks read: the period, its tasks and the reports at its end. */
     private static <I, O> ProcessDefinitionBuilder<I, O, ProcessContext> checks(
@@ -513,7 +516,8 @@ public final class CloseProcesses {
      * Writes a close artifact of a period (FIN-PC-005): the trial balance's accounts, the subledgers beside their
      * control accounts, and items (each {@code section, code, name, status, result}), closed by the actor now and as
      * known now; it supersedes the period's latest artifact among {@code previous}. Shared by the period close and
-     * the year close (period 13).
+     * the year close (period 13), which then keep the period's balances counted to the close
+     * ({@link PeriodBalances#keep}).
      */
     public static Written writeArtifact(ProcessContext ctx, EntityInstance period, List<CloseChecks.Account> accounts,
         List<CloseChecks.Subledger> subledgers, List<List<Object>> items, ReportProcesses.IssueOutput issued,

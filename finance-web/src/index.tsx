@@ -94,6 +94,16 @@ export default defineExtension({
           path: paths.report('finance.gl.account_inquiry'),
           permission: 'ledger.read',
         },
+        { key: 'periodTrialBalance', label: 'menu.periodTrialBalance', path: paths.report('finance.report.trial_balance'),
+          permission: 'ledger.read' },
+        { key: 'glRegister', label: 'menu.glRegister', path: paths.report('finance.gl.posting_register'),
+          permission: 'ledger.read' },
+        { key: 'glDetail', label: 'menu.glDetail', path: paths.report('finance.gl.detail'), permission: 'ledger.read' },
+        // The reconciliation needs the receivables, payables and asset reads too.
+        { key: 'subledgerReconciliation', label: 'menu.subledgerReconciliation',
+          path: paths.report('finance.gl.subledger_reconciliation'), permission: 'fin.fa.read' },
+        { key: 'trialBalanceCompare', label: 'menu.trialBalanceCompare',
+          path: paths.report('finance.gl.trial_balance_compare'), permission: 'ledger.read' },
       ],
     },
     {
