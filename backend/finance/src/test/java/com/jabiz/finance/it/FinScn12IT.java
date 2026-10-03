@@ -257,6 +257,39 @@ class FinScn12IT extends JanuaryBooks {
         }
         assertThat(trialBalance).isEqualTo(expected);
         assertThat(total).isEqualTo("826012.90 826012.90");
+
+        // FIN-DI-008 acceptance 1: every dataset there is, exported (at most 100 to an export); the posted lines in
+        // the files are the lines in the books.
+        String everything = as("archivist", "*");
+        List<String> all = get("/api/meta/datasets", everything).expectStatus().isOk().expectBody(LIST)
+            .returnResult().getResponseBody().stream().map(d -> (String) d.get("id")).toList();
+        assertThat(all).contains(LedgerEntities.ENTRY_DATASET, JournalEntities.JOURNAL_DATASET,
+            BillEntities.BILL_DATASET, SecurityEntities.USER_DATASET);
+        Map<String, Integer> rows = new TreeMap<>();
+        String exportedLines = null;
+        for (int from = 0; from < all.size(); from += 100) {
+            Map<String, byte[]> part = unzip(exportZip(everything, Map.of("datasets",
+                all.subList(from, Math.min(all.size(), from + 100)))));
+            byte[] csv = part.get("data/urn_jabiz_dataset_platform_LedgerEntry.csv");
+            if (csv != null) {
+                exportedLines = new String(csv, StandardCharsets.UTF_8);
+            }
+            for (Map<String, Object> file : (List<Map<String, Object>>) JSON.readValue(part.get("manifest.json"),
+                Map.class).get("files")) {
+                if (file.get("rows") != null) {
+                    rows.put((String) file.get("path"), ((Number) file.get("rows")).intValue());
+                }
+            }
+        }
+        assertThat(rows).hasSize(all.size());
+        // The lines in the file (its header left out; no memo of the sample holds a line break) are the posted lines
+        // in the database, counted there, and what the manifest says.
+        int postedLines = ((Number) query("SELECT count(*) AS n FROM ledger_entry_version e WHERE NOT e.is_deleted"
+            + " AND EXISTS (SELECT 1 FROM ledger_transaction_version t WHERE t.transaction_id = e.transaction_id)")
+            .getFirst().get("n")).intValue();
+        assertThat(exportedLines).isNotNull();
+        assertThat(exportedLines.split("\r\n").length - 1).isEqualTo(postedLines).isPositive()
+            .isEqualTo(rows.get("data/urn_jabiz_dataset_platform_LedgerEntry.csv"));
     }
 
     /** Sealing and verifying go through every append-only row of the books: longer than a request usually takes. */
