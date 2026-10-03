@@ -42,6 +42,7 @@
 | `AssignNumber.of(序列, [ctx -> 范围,] targetKey)` / `AssignNumber.when(条件, 序列, ctx -> 范围 或 null, targetKey)` | 该序列在该范围内的下一个号码（文本）；在流程事务内取号，回滚即归还，无缺号、无重复（18 §2、D23） |
 | `RequireApproval.of(审批对象, ctx -> ApprovalCase, targetKey)` / `RequireApproval.when(条件, …)` | 该单据是否需要审批：`ApprovalOutcome`（`NOT_REQUIRED` / `PENDING` / `APPROVED`）；需要时建请求，批准绑定内容哈希（18 §3.3、D23） |
 | `WithdrawApproval.of(审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3） |
+| `HoldLock.shared(ctx -> 名称)` / `HoldLock.exclusive(ctx -> 名称)` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取 |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
@@ -99,6 +100,19 @@ public class ProcessContext {
   不执行提交后步骤，不接受 `Idempotency-Key`。导入的预览即如此（20 §5）。
 - **保存点**（`StorageEngine.inSavepoint`，决策 D26）：平台步骤可在事务内把一段工作放在保存点之后，失败时只撤销这一段、事务继续；
   只供平台自己的步骤使用（导入按单元执行子流程，20 §5），不对业务开放。
+
+### 4.1 命名锁（阶段 14o）
+
+两个流程各自读了对方要改的状态后提交（如过账读到期间开放、同时关账把它关上）时，单靠事务看不见对方未提交的写入。
+业务流程以 `HoldLock` 步骤声明这类互斥：同一名称的 `exclusive` 与任何持有者互斥，`shared` 之间不互斥；锁一直持有到根流程的事务提交或回滚
+（子流程取的锁同样如此），等待者随后读到持有者留下的状态（事务隔离为平台默认的 READ COMMITTED，每条语句看到已提交的数据）。
+实现为 PostgreSQL 事务级咨询锁（`pg_advisory_xact_lock[_shared]`，名称加前缀 `jabiz.app-lock:` 后取 64 位哈希），不建表、不写数据；
+名称与平台自己的锁键（账本科目层级、审批、导入等）不同，只可能因哈希碰撞而相遇（只影响并发，不影响正确性）。
+
+- 在读取受保护的状态**之前**取锁；一个流程取多个锁时各处按同一顺序，否则可能互相等待。
+- 等待最长 `jabiz.process.lock-timeout`（缺省 30 秒，只对取锁这一条语句生效）；超时或数据库判定死锁时流程失败，回滚，返回 409（可重试）。
+  平台把这两种数据库错误（`55P03`、`40P01`）一律译为 `ConcurrentUpdateException`。持有者应短：不要在持锁的流程里做长时间的外部调用。
+- 只用于事务内的步骤：提交后步骤没有事务，锁取得即释放。试运行同样取锁，在回滚时释放；导入的单元在保存点中回滚时，其中取的锁随之释放。
 
 ## 5. 流程组合
 

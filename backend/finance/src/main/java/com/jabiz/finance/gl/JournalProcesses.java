@@ -251,6 +251,9 @@ public final class JournalProcesses {
                 ctx -> byCodes("locationCode", dimensionValues(ctx, "location")), LOCATIONS))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class).get("postingDate")), PERIODS))
+            // The soft-close rule is applied here, so the period is read under its lock here too.
+            .steps(b -> PeriodLocks.share(b,
+                ctx -> periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class).get("postingDate"))))
             .compute("Check the entry", (metadata, ctx) -> checkSubmission(ctx, booking))
             // Numbered only once all checks passed: a refused entry uses no number (FIN-GL-013).
             .step("Number the entry", AssignNumber.when(
@@ -280,6 +283,8 @@ public final class JournalProcesses {
             .step("Load its lines", QueryEntities.of(LINE_DATASET, ctx -> linesOf(ctx.get(JOURNAL_ID)), LINES))
             .step("Load the period", QueryEntities.of(GlEntities.PERIOD_DATASET,
                 ctx -> periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class).get("postingDate")), PERIODS))
+            .steps(b -> PeriodLocks.share(b,
+                ctx -> periodsOf(ctx.get(JOURNAL_KEY, EntityInstance.class).get("postingDate"))))
             // The accounts may have changed since submission: what the ledger would refuse is not posted.
             .step("Load the accounts", QueryEntities.of(GlEntities.ACCOUNT_DATASET,
                 ctx -> byCodes("accountCode", accountCodes(ctx, LINES)), FIN_ACCOUNTS))

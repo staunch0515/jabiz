@@ -206,3 +206,4 @@
 | FIN-DI-006 | Idempotent interfaces | 完成（F11a） | 平台 `Idempotency-Key`（同一调用者同键返回首次结果，另一流程 409）；账单号重复拒绝；导入按文件与外部引用只一次 | `it/FinScn13IT`（同键两次建账单、发票各只一张） |
 | FIN-DI-008 | Full data export | 部分（F11a：验收 1 满足；附件内容与审计记录不在导出中，经各自接口取） | 平台 `POST /api/exports/data`（每批 100 个数据视图）；api.md §5 | `it/FinScn12IT`（全部数据视图导出，已过账分录行数等于系统内） |
 | FIN-DI-009 | Notifications | 完成（F11a） | 平台待办（审批待办链接到待办列表 `/tasks`，平台不给单条待办的地址）与 `TASK_NOTIFY` 邮件 | `it/FinScn02IT`（JE-0002 的待办与带链接的邮件） |
+| FIN-NF-003 | Correctness under concurrency | 完成（F11b，开发环境） | 过账与关账按期间、关账/年结/重开按财年串行（`gl/PeriodLocks`，平台 14o）；幂等键与事务内取号 | `it/PeriodLockIT`；`tools/finance/concurrency`（20 人 30 分钟、两次 `kill -9`，结果见 perf.md §7） |
