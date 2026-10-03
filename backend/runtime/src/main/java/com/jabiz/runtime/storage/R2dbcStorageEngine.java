@@ -4,6 +4,7 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
+import com.jabiz.runtime.ConcurrentUpdateException;
 import io.r2dbc.postgresql.api.PostgresqlException;
 import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.ColumnMetadata;
@@ -33,6 +34,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     /** SQLSTATE of unique_violation. */
     private static final String UNIQUE_VIOLATION = "23505";
+    /** The database broke a deadlock by failing this statement, or gave up waiting for a lock (lock_timeout). */
+    private static final java.util.Set<String> LOCK_FAILURES = java.util.Set.of("40P01", "55P03");
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -224,7 +227,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     /**
      * Unique index violations become {@link UniqueKeyViolationException} carrying the index name; refusals of the
-     * append-only guard become {@link AppendOnlyViolationException}.
+     * append-only guard become {@link AppendOnlyViolationException}; a deadlock or a lock not obtained in time becomes
+     * {@link ConcurrentUpdateException} (409: the request may be retried).
      */
     private static Throwable translate(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
@@ -235,6 +239,10 @@ public final class R2dbcStorageEngine implements StorageEngine {
                 }
                 if (AppendOnlyViolationException.SQL_STATE.equals(code)) {
                     return new AppendOnlyViolationException(pg.getErrorDetails().getMessage(), error);
+                }
+                if (LOCK_FAILURES.contains(code)) {
+                    return new ConcurrentUpdateException("Another operation holds what this one needs; try again",
+                        error);
                 }
             }
         }
