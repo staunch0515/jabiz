@@ -1,5 +1,6 @@
 package com.jabiz.finance.it;
 
+import com.jabiz.finance.ap.ApEntities;
 import com.jabiz.finance.ap.ApSettingsProcesses;
 import com.jabiz.finance.ap.BillEntities;
 import com.jabiz.finance.ap.BillProcesses;
@@ -282,6 +283,17 @@ class FinScn04IT extends FinanceItSupport {
             422)).isEqualTo(Form1099Processes.NOT_REPORTABLE);
         run(Form1099Processes.ISSUE, clerk, Map.of("taxYear", 2026, "vendorCode", "V200"))
             .expectStatus().isForbidden();
+
+        // FIN-SC-004 acceptance 1: without the tax-data permission the TIN is masked in a report as on the screen,
+        // and in the open export too.
+        Object v200 = find(ApEntities.VENDOR_DATASET, "vendorCode", "V200").getFirst().get("vendorId");
+        assertThat(report("finance.ap.form_1099_copy_header", as("filer", "fin.1099.file"), Map.of("vendorId", v200,
+            "taxYear", 2026))).singleElement().satisfies(r -> assertThat(r).containsEntry("recipientTin",
+                "**-***4567"));
+        String taxInfo = new String(unzip(exportZip(as("exporter", "data.export", "fin.ap.read"), Map.of(
+            "datasets", List.of(ApEntities.TAX_INFO_DATASET)))).get(
+                "data/urn_jabiz_dataset_default_FinVendorTaxInfo.csv"), StandardCharsets.UTF_8);
+        assertThat(taxInfo).contains("**-***4567").doesNotContain("45-1234567").doesNotContain("451234567");
     }
 
     @Test

@@ -108,7 +108,10 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
 
     /** Each table with sealed rows: still guarded, and its rows as sealed. */
     private Mono<Void> tables(StorageEngine engine, long from, long to, Problems problems) {
-        return store.sealedTables(engine, from, to)
+        // The list is read to its end first: each table's queries run on the same connection, and one sent while
+        // the list is still being read would wait for it forever (the list waits for the table, the table for it).
+        return store.sealedTables(engine, from, to).collectList()
+            .flatMapIterable(names -> names)
             .concatMap(name -> store.table(engine, name).map(Optional::of).defaultIfEmpty(Optional.empty())
                 .flatMapMany(found -> {
                     if (found.isEmpty()) {
@@ -130,7 +133,8 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
     }
 
     private Mono<Long> unsealed(StorageEngine engine) {
-        return store.appendOnlyTables(engine)
+        return store.appendOnlyTables(engine).collectList()
+            .flatMapIterable(tables -> tables)
             .filter(table -> !table.keyColumns().isEmpty())
             .concatMap(table -> store.unsealedCount(engine, table))
             .reduce(0L, Long::sum);

@@ -503,7 +503,7 @@ public final class ReconciliationProcesses {
         return content;
     }
 
-    static Map<String, Object> params(String bankCode, LocalDate statementDate, String preparedBy,
+    public static Map<String, Object> params(String bankCode, LocalDate statementDate, String preparedBy,
         String reviewedBy) {
         Map<String, Object> params = new HashMap<>();
         params.put("bankCode", bankCode);
