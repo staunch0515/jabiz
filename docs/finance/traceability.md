@@ -180,5 +180,7 @@
 | FIN-RP-020 | "As of" and "as known on" reporting | 完成（F9a） | 各报表的 `knownAt`；`finance.gl.trial_balance_compare`（两个记录时点与差额） | `it/FinScn08IT`（FIN-EXP-16；签发的报表核对相同） |
 | FIN-RP-002 | Balance sheet | 完成（F9b） | 格式 `FinStatementLayout` / `FinStatementLayoutRow`（迁移 V26，`report/StatementProcesses`），模板 `finance.report.balance_sheet`（上月末、上年末），`FIN_STATEMENT_ISSUE` 拒绝未映射 | `it/FinStatementsIT`（FIN-EXP-05；2150 未映射时拒绝签发） |
 | FIN-RP-003 | Income statement | 完成（F9b） | `finance.report.income_statement`（本月、季累计、年累计、上年同期；部门、地点） | `it/FinStatementsIT`（FIN-EXP-04，净利润 5,127.10） |
+| FIN-RP-004 | Statement of cash flows | 完成（F9c） | `finance.report.cash_flow`（间接法，科目 `cashFlowClass`，非现金项目按来源：折旧运行、外币重估、不动现金的投资/筹资过账），报表设置 `FinReportSettings`（迁移 V27），`FIN_CASH_FLOW_ISSUE` 拒绝未解释差额 | `it/FinCashFlowIT`（FIN-EXP-06，赊购服务器 12,000.00 为非现金活动，净减少 38,320.00） |
 | FIN-RP-005 | Statement of stockholders' equity | 完成（F9b） | `finance.report.equity`（期初、净利润、其他变动、期末，按格式行） | `it/FinStatementsIT`（FIN-EXP-07） |
 | FIN-RP-011 | Report layouts | 完成（F9b） | `FIN_STATEMENT_LAYOUT_PUBLISH`（版本化）、签发带格式版本 | `it/FinStatementsIT`（旧版本签发的报表核对相同）、`report/StatementLayoutTest` |
+| FIN-RP-012 | Notes support | 完成（F9c） | `finance.report.note_rollforward`（应收与准备、应计负债、借款），资产滚动 `finance.fa.roll_forward`、汇兑损益 `finance.fx.gains_losses` | `it/FinCashFlowIT`（各科目期初 + 变动 = 期末，合计等于资产负债表各行） |

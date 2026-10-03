@@ -16,6 +16,9 @@ public final class StatementEntities {
     public static final String LAYOUT_DATASET = "urn:jabiz:dataset:default:FinStatementLayout";
     public static final String ROW = "FinStatementLayoutRow";
     public static final String ROW_DATASET = "urn:jabiz:dataset:default:FinStatementLayoutRow";
+    public static final String SETTINGS = "FinReportSettings";
+    public static final String SETTINGS_DATASET = "urn:jabiz:dataset:default:FinReportSettings";
+    public static final String SETTINGS_KEY = "REPORTS";
 
     public static final String STATEMENTS = "urn:jabiz:dict:finance:statement";
     public static final String BALANCE_SHEET = "BALANCE_SHEET";
@@ -86,4 +89,34 @@ public final class StatementEntities {
     });
 
     private StatementEntities() {}
+
+    /** The account fields of the report settings and their columns; before the entity, which reads them. */
+    static final String[][] SETTINGS_FIELDS = {
+        {"interestAccounts", "interest_accounts"},
+        {"interestPayableAccounts", "interest_payable_accounts"},
+        {"incomeTaxAccounts", "income_tax_accounts"},
+        {"incomeTaxPayableAccounts", "income_tax_payable_accounts"},
+        {"receivablesAccounts", "receivables_accounts"},
+        {"accruedAccounts", "accrued_accounts"},
+        {"debtAccounts", "debt_accounts"}};
+
+    /**
+     * The settings of the reports (ROADMAP F9 decisions D5, D11): the accounts behind the cash flow statement's
+     * supplemental interest and income taxes paid, and those of the note schedules. Each is code ranges, comma
+     * separated, as layout rows write them ({@code 2100-2199,2150}).
+     */
+    public static final EntityDefinition SETTINGS_ENTITY = EntityDefinition.define(SETTINGS, eb -> {
+        eb.physicalTable("fi_report_settings_version");
+        eb.primaryKey("settingsId");
+        eb.field("settingsId", f -> f.physicalColumn("settings_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:finance:report-settings"));
+        eb.field("settingsKey", f -> f.physicalColumn("settings_key").immutable(true).required(true).asText(10));
+        for (String[] field : SETTINGS_FIELDS) {
+            eb.field(field[0], f -> f.physicalColumn(field[1]).processOnly().asText(500));
+        }
+        eb.unique("uk_fi_report_settings_key", "settingsKey");
+        eb.temporal(t -> t.allowScheduled(false));
+        eb.listView("default", lv -> lv.columns("settingsKey", "interestAccounts", "incomeTaxAccounts")
+            .filters("settingsKey"));
+    });
 }

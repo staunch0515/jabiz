@@ -255,7 +255,8 @@ public final class StatementProcesses {
         return problems;
     }
 
-    private static List<String> ranges(String line, String field, String value, boolean required) {
+    /** Problems of comma separated code ranges ({@code 1000-1199,1300}); the report settings' too. */
+    static List<String> ranges(String line, String field, String value, boolean required) {
         if (blank(value)) {
             return required ? List.of(line + ": " + field + " are needed") : List.of();
         }
