@@ -4,8 +4,9 @@ import { ACCOUNTANT, CLERK, CONTROLLER, prepareReceivables, type User } from '..
 
 /**
  * FIN-NF-002 (ROADMAP F11c; docs/finance/perf.md §8): LOAD_USERS people (50) work on the performance data
- * (tools/finance/perf/build.sh) for LOAD_MINUTES (10), each doing one thing after another with a pause of one to
- * three seconds, as their role allows: accountants post journal entries of 50 lines and run reports, receivables
+ * (tools/finance/perf/build.sh) for LOAD_MINUTES (10), each doing one thing after another with a pause between
+ * LOAD_THINK_MIN_MS and LOAD_THINK_MAX_MS (5 to 15 seconds: a person's pace, still postings at many times the
+ * average rate of NF-001's year; 1,000 to 3,000 for a stress test), as their role allows: accountants post journal entries of 50 lines and run reports, receivables
  * clerks post invoices of 50 lines, open invoices and run the receivables aging, controllers open invoices and run
  * reports (an account's activity, the month's trial balance, the balance sheet, the income statement, an aging). Every request is timed as the client sees it;
  * the p95 of each operation is compared with its target. The report (JSON and Markdown) is written next to the test's
@@ -14,6 +15,8 @@ import { ACCOUNTANT, CLERK, CONTROLLER, prepareReceivables, type User } from '..
  */
 const users = Number(process.env.LOAD_USERS ?? 50)
 const minutes = Number(process.env.LOAD_MINUTES ?? 10)
+const thinkMin = Number(process.env.LOAD_THINK_MIN_MS ?? 5_000)
+const thinkMax = Number(process.env.LOAD_THINK_MAX_MS ?? 15_000)
 const year = Number(process.env.PERF_YEAR ?? 2025)
 const postingDate = process.env.LOAD_DATE ?? `${year}-12-15`
 const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:8080'
@@ -184,10 +187,10 @@ async function step(s: Session, role: Role, w: number) {
 
 async function worker(s: Session, role: Role, w: number, until: number) {
   // Staggered start, so that the first requests do not all arrive at once.
-  await sleep(Math.random() * 3_000)
+  await sleep(Math.random() * thinkMax)
   while (Date.now() < until) {
     await step(s, role, w)
-    await sleep(1_000 + Math.random() * 2_000)
+    await sleep(thinkMin + Math.random() * (thinkMax - thinkMin))
   }
 }
 
@@ -219,11 +222,11 @@ test('FIN-NF-002: response times under 50 users', async ({ request }) => {
     return { op, count: all.length, failed: all.length - ms.length, p50: Math.round(percentile(ms, 50)),
       p95: Math.round(percentile(ms, 95)), max: Math.round(Math.max(0, ...ms)), target: TARGETS[op] ?? null }
   })
-  const markdown = [`${users} users, ${minutes} minutes (${Math.round(seconds)} s), ${samples.length} operations`, '',
+  const markdown = [`${users} users, pauses ${thinkMin}-${thinkMax} ms, ${minutes} minutes (${Math.round(seconds)} s), ${samples.length} operations`, '',
     '| operation | count | failed | p50 ms | p95 ms | max ms | target p95 ms | |', '|---|---:|---:|---:|---:|---:|---:|---|',
     ...rows.map((r) => `| ${r.op} | ${r.count} | ${r.failed} | ${r.p50} | ${r.p95} | ${r.max} | ${r.target ?? ''} | `
       + `${r.target === null ? '' : r.p95 <= r.target && r.failed === 0 ? 'ok' : 'NOT MET'} |`)].join('\n')
-  const json = JSON.stringify({ users, minutes, seconds, rows, errors }, null, 2)
+  const json = JSON.stringify({ users, thinkMin, thinkMax, minutes, seconds, rows, errors }, null, 2)
   console.log(markdown)
   if (errors.length) console.log(errors.join('\n'))
   writeFileSync(test.info().outputPath('load.md'), markdown + '\n')

@@ -51,6 +51,13 @@ WITH docs AS (
       -- A document voided later was still open on the day.
       AND (i.{{FinInvoice.voidDate}} IS NULL OR i.{{FinInvoice.voidDate}} > :agingDate)
       AND (CAST(:customerCode AS varchar) IS NULL OR i.{{FinInvoice.customerCode}} = :customerCode)
+      -- Only what can be open on the day (F11c): open now, voided later, or settled, credited or written off by an
+      -- application dated after it. Every other document was closed by then and needs none of its applications summed.
+      AND (i.{{FinInvoice.openAmount}} <> 0 OR i.{{FinInvoice.voidDate}} IS NOT NULL
+           OR i.{{FinInvoice.invoiceId}} IN (SELECT a.{{FinApplication.invoiceId}} FROM {{FinApplication}} a
+               WHERE a.{{FinApplication.applicationDate}} > :agingDate)
+           OR CAST(i.{{FinInvoice.invoiceId}} AS varchar) IN (SELECT a.{{FinApplication.sourceId}} FROM {{FinApplication}} a
+               WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} > :agingDate))
 ),
 cleared AS (
     -- What was taken off each invoice by the day: cash, discounts, credits, write-offs (recoveries negative)…
@@ -59,6 +66,7 @@ cleared AS (
            SUM(a.{{FinApplication.amountUsd}} + COALESCE(a.{{FinApplication.discount}}, 0)) AS done_usd
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApplication.invoiceId}} IN (SELECT doc_key FROM docs)
     GROUP BY a.{{FinApplication.invoiceId}}
     UNION ALL
     -- …and what of each credit memo was applied to invoices.
@@ -67,6 +75,7 @@ cleared AS (
            SUM(COALESCE(a.{{FinApplication.sourceAmountUsd}}, a.{{FinApplication.amountUsd}}))
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApplication.sourceId}} IN (SELECT CAST(doc_key AS varchar) FROM docs)
     GROUP BY a.{{FinApplication.sourceId}}
 ),
 -- Summed once a document and joined (F11c): looked up a document at a time they took time growing with the square of

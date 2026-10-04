@@ -53,6 +53,13 @@ WITH docs AS (
       -- A document voided later was still open on the day.
       AND (b.{{FinBill.voidDate}} IS NULL OR b.{{FinBill.voidDate}} > :agingDate)
       AND (CAST(:vendorCode AS varchar) IS NULL OR b.{{FinBill.vendorCode}} = :vendorCode)
+      -- Only what can be open on the day (F11c): open now, voided later, or paid or credited by an application dated
+      -- after it. Every other bill was closed by then and needs none of its applications summed.
+      AND (b.{{FinBill.openAmount}} <> 0 OR b.{{FinBill.voidDate}} IS NOT NULL
+           OR b.{{FinBill.billId}} IN (SELECT a.{{FinApApplication.billId}} FROM {{FinApApplication}} a
+               WHERE a.{{FinApApplication.applicationDate}} > :agingDate)
+           OR CAST(b.{{FinBill.billId}} AS varchar) IN (SELECT a.{{FinApApplication.sourceId}} FROM {{FinApApplication}} a
+               WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} > :agingDate))
 ),
 cleared AS (
     -- What was taken off each bill by the day: payments, discounts, credits…
@@ -62,6 +69,7 @@ cleared AS (
                + COALESCE(a.{{FinApApplication.discount}}, 0)) AS done_usd
     FROM {{FinApApplication}} a
     WHERE a.{{FinApApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApApplication.billId}} IN (SELECT doc_key FROM docs)
     GROUP BY a.{{FinApApplication.billId}}
     UNION ALL
     -- …and what of each vendor credit was applied to bills, at the credit's own rate.
@@ -70,6 +78,7 @@ cleared AS (
                a.{{FinApApplication.amount}}))
     FROM {{FinApApplication}} a
     WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApApplication.sourceId}} IN (SELECT CAST(doc_key AS varchar) FROM docs)
     GROUP BY a.{{FinApApplication.sourceId}}
 ),
 -- Summed once a document and joined (F11c): looked up a document at a time they took time growing with the square of
