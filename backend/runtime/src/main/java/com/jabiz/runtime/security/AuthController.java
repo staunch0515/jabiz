@@ -88,8 +88,8 @@ class AuthController {
      * @param dataFrom           start of the data period the session is limited to, or null (section 13.2)
      * @param dataTo             its (exclusive) end, or null; both null: not limited in time
      */
-    record Me(String userId, String tenantId, List<String> roles, List<String> permissions, Instant mfaAt,
-        long idleTimeoutSeconds, Instant dataFrom, Instant dataTo) {}
+    record Me(String userId, String displayName, String tenantId, List<String> roles, List<String> permissions,
+        Instant mfaAt, long idleTimeoutSeconds, Instant dataFrom, Instant dataTo) {}
 
     private final ProcessExecutor processes;
     private final JwtService tokens;
@@ -97,15 +97,17 @@ class AuthController {
     private final RbacService rbac;
     private final MenuService menus;
     private final MfaSettings mfa;
+    private final UserNames userNames;
 
     AuthController(ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens, RbacService rbac,
-        MenuService menus, MfaSettings mfa) {
+        MenuService menus, MfaSettings mfa, UserNames userNames) {
         this.processes = processes;
         this.tokens = tokens;
         this.refreshTokens = refreshTokens;
         this.rbac = rbac;
         this.menus = menus;
         this.mfa = mfa;
+        this.userNames = userNames;
     }
 
     @PostMapping(LOGIN)
@@ -155,11 +157,15 @@ class AuthController {
 
     @GetMapping("/api/auth/me")
     Mono<Me> me() {
-        return RequestContexts.current().map(context -> new Me(context.actorId(), context.tenantId(),
-            context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList(),
-            context.mfaAt(), mfa.idleTimeout().toSeconds(),
-            context.dataPeriod() == null ? null : context.dataPeriod().from(),
-            context.dataPeriod() == null ? null : context.dataPeriod().to()));
+        // The name shown for the signed-in user; none for an actor that is no user (the development headers').
+        return RequestContexts.current().flatMap(context -> userNames.own(context.actorId())
+            // A name is a convenience: the identity is still answered when it cannot be read.
+            .onErrorReturn("")
+            .map(name -> new Me(context.actorId(), name.isEmpty() ? null : name, context.tenantId(),
+                context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList(),
+                context.mfaAt(), mfa.idleTimeout().toSeconds(),
+                context.dataPeriod() == null ? null : context.dataPeriod().from(),
+                context.dataPeriod() == null ? null : context.dataPeriod().to())));
     }
 
     @GetMapping("/api/auth/menus")

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { changesOf, isScheduled, newestFirst } from '../meta/history'
 import { fieldLabel, findField, formatValue } from '../meta/kinds'
 import type { DictItem, EntityMeta, HistoryVersion } from '../meta/types'
+import UserName from './UserName'
 
 interface Props {
   entity: EntityMeta
@@ -63,7 +64,7 @@ export default function HistoryTimeline(props: Props) {
               <div>
                 <Typography.Text type="secondary">
                   {t('history.effective')} {time(version.effectStartTime)} · {t('history.recorded')}{' '}
-                  {time(version.createdTime)} · {t('history.by')} {version.actorId} · {version.processName}
+                  {time(version.createdTime)} · {t('history.by')} <UserName id={version.actorId} /> · {version.processName}
                   {version.reason ? ` · ${t('history.reason')}: ${version.reason}` : ''}
                 </Typography.Text>
               </div>

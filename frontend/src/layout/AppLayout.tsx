@@ -49,7 +49,7 @@ function toRoutes(items: MenuItem[] | undefined): MenuDataItem[] {
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
-  const { userId, signOut, can, idleTimeoutSeconds, dataPeriod } = useAuth()
+  const { userId, displayName, signOut, can, idleTimeoutSeconds, dataPeriod } = useAuth()
   const menus = useMenus()
   const tasks = useMyTasks()
   const catalog = useQueryCatalog()
@@ -143,7 +143,7 @@ export default function AppLayout() {
       ]}
       avatarProps={{
         icon: <UserOutlined />,
-        title: <span data-testid="current-user">{userId}</span>,
+        title: <span data-testid="current-user">{displayName ?? userId}</span>,
         size: 'small',
         render: (_, dom) => (
           <Dropdown

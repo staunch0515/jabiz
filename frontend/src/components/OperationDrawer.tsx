@@ -4,6 +4,7 @@ import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
+import UserName from './UserName'
 
 interface Operation {
   processSeqId: number
@@ -42,7 +43,7 @@ export default function OperationDrawer({ seq, onClose }: { seq: number | null; 
             <Descriptions.Item label={t('history.process')}>
               {data.processName} v{data.processVersion}
             </Descriptions.Item>
-            <Descriptions.Item label={t('history.by')}>{data.actorId}</Descriptions.Item>
+            <Descriptions.Item label={t('history.by')}><UserName id={data.actorId} /></Descriptions.Item>
             <Descriptions.Item label={t('history.recorded')}>{dayjs(data.opTime).format('YYYY-MM-DD HH:mm:ss')}</Descriptions.Item>
             <Descriptions.Item label={t('history.reason')}>{data.reason ?? '—'}</Descriptions.Item>
             {data.parentSeqId != null && <Descriptions.Item label="parent">#{data.parentSeqId}</Descriptions.Item>}

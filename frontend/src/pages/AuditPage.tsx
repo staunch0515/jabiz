@@ -6,6 +6,7 @@ import { AUDIT_FILTERS, type AuditRecord, type AuditFieldChange, type RevealReco
 import { api, unwrap } from '../api/client'
 import { expandIcon } from '../components/expandIcon'
 import { formatDateTime } from '../meta/format'
+import UserName from '../components/UserName'
 
 const ACTION_COLORS: Record<string, string> = { INSERT: 'green', UPDATE: 'blue', DELETE: 'red' }
 
@@ -60,7 +61,7 @@ export default function AuditPage() {
       render: (_, record) => (
         <Space direction="vertical" size={0}>
           <span>{record.recordedTime ? formatDateTime(record.recordedTime) : ''}</span>
-          <Typography.Text type="secondary">{record.actorId}</Typography.Text>
+          <Typography.Text type="secondary"><UserName id={record.actorId} /></Typography.Text>
         </Space>
       ),
     },
@@ -146,7 +147,7 @@ function RevealRecords() {
       valueType: 'dateTimeRange',
       render: (_, record) => (record.revealedAt ? formatDateTime(record.revealedAt) : ''),
     },
-    { title: t('audit.actor'), dataIndex: 'actorId' },
+    { title: t('audit.actor'), dataIndex: 'actorId', render: (_, record) => <UserName id={record.actorId} /> },
     {
       title: t('audit.revealKind'),
       dataIndex: 'kind',

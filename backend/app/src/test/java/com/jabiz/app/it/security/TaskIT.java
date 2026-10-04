@@ -98,7 +98,7 @@ class TaskIT extends ApprovalItSupport {
         assertThat(tasks).filteredOn(t -> requestId.equals(t.get("subjectId"))).singleElement().satisfies(t -> {
             assertThat(t).containsEntry("type", "approval").containsEntry("subjectEntity", "SysApprovalRequest")
                 .containsEntry("link", "/tasks");
-            assertThat((String) t.get("title")).contains(paymentId).contains("承認");
+            assertThat((String) t.get("title")).contains(paymentId).contains("承認").contains("IT 支払");
         });
         String secondHolder = as("it-second", ApprovalPermissions.DECIDE, second);
         assertThat(mine(secondHolder, "en")).noneMatch(t -> requestId.equals(t.get("subjectId")));
@@ -113,6 +113,27 @@ class TaskIT extends ApprovalItSupport {
         assertThat(query("SELECT DISTINCT ON (task_id) status FROM sys_task_version WHERE source_key = ?"
             + " ORDER BY task_id, version_no DESC", "approval:" + requestId))
             .extracting(row -> row.get("status")).containsExactly("DONE", "DONE");
+    }
+
+    @Test
+    void anApprovalTaskShowsTheDocumentsReferenceThroughEveryLevel() {
+        String channel = unique("C");
+        String first = unique("it.first");
+        String second = unique("it.second");
+        rule(channel, 1, List.of(Map.of("permission", first), Map.of("permission", second)));
+        String paymentId = unique("P");
+        String reference = unique("PAY-");
+        String requestId = (String) pay(preparer(), paymentId, channel, 10, reference).get("requestId");
+
+        String firstHolder = as("it-first", ApprovalPermissions.DECIDE, first);
+        assertThat(mine(firstHolder, "en")).filteredOn(t -> requestId.equals(t.get("subjectId"))).singleElement()
+            .satisfies(t -> assertThat((String) t.get("title"))
+                .isEqualTo("Approve IT payment " + reference + " (level 1)"));
+        decide(firstHolder, requestId, "APPROVE", null);
+        assertThat(mine(as("it-second", ApprovalPermissions.DECIDE, second), "en"))
+            .filteredOn(t -> requestId.equals(t.get("subjectId"))).singleElement()
+            .satisfies(t -> assertThat((String) t.get("title"))
+                .isEqualTo("Approve IT payment " + reference + " (level 2)"));
     }
 
     @Test
