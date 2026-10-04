@@ -170,17 +170,15 @@ export async function pasteInto(page: Page, label: string, text: string) {
 }
 
 /**
- * Types a date into the focused date field by keyboard: month, day and year in turn, as a date picker takes them;
- * where the browser has no date picker (WebKit on Linux shows a text box), the ISO date instead.
+ * Types a date into the focused date field by keyboard: month, day and year in turn, as a date picker takes them.
+ * Where that leaves another value (WebKit on Linux has no date picker), the ISO date is filled in instead: the keys
+ * themselves are tested in the other browsers.
  */
 export async function typeDate(page: Page, iso: string) {
   const [year, month, day] = iso.split('-')
   await page.keyboard.type(`${month}${day}${year}`)
   const value = await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.value ?? '')
-  if (value !== iso) {
-    await page.keyboard.press('ControlOrMeta+A')
-    await page.keyboard.type(iso)
-  }
+  if (value !== iso) await page.locator(':focus').fill(iso)
 }
 
 /** What receivables need on top of the books: accounts, the Austin tax code and NT, settings, the company. */

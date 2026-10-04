@@ -60,7 +60,11 @@ test('a bill is keyed in, posted, found in the register, and paid by a check run
       }
     }
     await expect(page.getByTestId('lines-total')).toHaveText('4,500.00')
+    await expect(page.getByTestId('bill-date')).toHaveValue('2026-01-20')
     await page.keyboard.press('Control+Enter')
+    // A refusal shows its reasons instead of the posted bill: say them rather than only that the bill is missing.
+    await expect(page.getByTestId('bill-view').or(page.getByTestId('bill-problems'))).toBeVisible()
+    await expect(page.getByTestId('bill-problems')).toHaveCount(0)
     await expect(page.getByTestId('bill-view')).toBeVisible()
     await expect(page.getByTestId('page-title')).toHaveText(/^Bill BILL-\d+$/)
     await expect(page.getByTestId('bill-status')).toHaveText('Posted')
