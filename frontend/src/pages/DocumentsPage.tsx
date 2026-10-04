@@ -11,6 +11,7 @@ import type { components } from '../api/schema'
 import { useAuth } from '../auth/AuthContext'
 import DocumentDeliveries from '../components/DocumentDeliveries'
 import SendDocumentModal from '../components/SendDocumentModal'
+import { expandIcon } from '../components/expandIcon'
 import { formatDateTime } from '../meta/format'
 
 type DocumentSummary = components['schemas']['DocumentSummary']
@@ -133,7 +134,7 @@ export default function DocumentsPage() {
         params={{ layout, subject }}
         pagination={false}
         data-testid="documents"
-        expandable={{ expandedRowRender: (run) => <DocumentDeliveries runId={run.runId!} /> }}
+        expandable={{ expandedRowRender: (run) => <DocumentDeliveries runId={run.runId!} />, expandIcon: expandIcon(t) }}
         request={async () => {
           try {
             const runs = await unwrap(
