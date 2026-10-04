@@ -9,6 +9,7 @@ import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
 import { runProcess } from '../lib/calls'
 import { formatDateTime } from '../meta/format'
+import UserName from '../components/UserName'
 
 const KIND_COLORS: Record<string, string> = {
   MODIFIED: 'red', MISSING: 'red', CHAIN_BROKEN: 'red', SEAL_ALTERED: 'red', UNPROTECTED: 'orange', OTHER_KEY: 'gold',
@@ -130,7 +131,7 @@ export default function IntegrityPage() {
                 render: (_, check) => (
                   <Space direction="vertical" size={0}>
                     <span>{formatDateTime(check.checkedTime)}</span>
-                    <Typography.Text type="secondary">{check.actorId}</Typography.Text>
+                    <Typography.Text type="secondary"><UserName id={check.actorId} /></Typography.Text>
                   </Space>
                 ),
               },

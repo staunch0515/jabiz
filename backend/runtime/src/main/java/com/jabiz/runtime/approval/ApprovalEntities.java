@@ -161,6 +161,8 @@ public class ApprovalEntities {
         eb.field("levels", f -> f.physicalColumn("levels").immutable(true).required(true).asText(4000, true));
         eb.field("currentLevel", f -> f.physicalColumn("current_level").required(true).asNumeric(9, 0));
         eb.field("facts", f -> f.physicalColumn("facts").immutable(true).required(true).asText(20_000, true));
+        // How people know the document, for the approvers' tasks; requests made before it was kept have none.
+        eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("subject", "entityId", "status", "currentLevel", "preparerId")

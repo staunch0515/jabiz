@@ -16,6 +16,8 @@ interface AuthState {
   ready: boolean
   signedIn: boolean
   userId: string | null
+  /** The signed-in user's display name (or user name); null for an actor that is no user. */
+  displayName: string | null
   permissions: ReadonlySet<string>
   /** After how many seconds without activity the session is locked (section 11); null until known. */
   idleTimeoutSeconds: number | null
@@ -41,6 +43,7 @@ export interface DataPeriod {
 
 interface Identity {
   userId: string
+  displayName: string | null
   permissions: string[]
   idleTimeoutSeconds: number
   dataPeriod: DataPeriod | null
@@ -92,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const answer = await unwrap(api.GET('/api/auth/me'))
       return {
         userId: answer.userId ?? '',
+        displayName: answer.displayName ?? null,
         permissions: answer.permissions ?? [],
         idleTimeoutSeconds: answer.idleTimeoutSeconds ?? 0,
         dataPeriod:
@@ -156,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready,
       signedIn: !!token,
       userId: identity?.userId ?? null,
+      displayName: identity?.displayName ?? null,
       permissions,
       idleTimeoutSeconds: identity?.idleTimeoutSeconds || null,
       dataPeriod: identity?.dataPeriod ?? null,
