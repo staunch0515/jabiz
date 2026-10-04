@@ -49,6 +49,8 @@ test('FIN-UI-009: the finance pages pass the automatic accessibility checks', as
     await page.goto(path)
     await expect(page.getByTestId('page-title').or(page.locator('.ant-pro-page-container-children-container'))
       .first(), `${name} rendered`).toBeVisible()
+    // The user's permissions and the page's data loaded: forms are disabled until the permissions arrive.
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('.ant-spin-spinning')).toHaveCount(0)
     await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
     await expectAccessible(page, name)

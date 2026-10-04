@@ -155,13 +155,32 @@ export async function signIn(page: Page, user: User) {
   await page.waitForURL('**/gl/journals')
 }
 
-/** Pastes text into a cell as a spreadsheet's copy arrives: a paste event carrying text/plain. */
+/**
+ * Pastes text into a cell as a spreadsheet's copy arrives: a paste event carrying text/plain. The data is given as
+ * the event's own clipboardData: Firefox does not let a page read the DataTransfer of a paste event it made itself.
+ */
 export async function pasteInto(page: Page, label: string, text: string) {
   await page.getByLabel(label, { exact: true }).evaluate((element, data) => {
-    const transfer = new DataTransfer()
-    transfer.setData('text/plain', data)
-    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }))
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: { getData: (type: string) => (type === 'text/plain' || type === 'text' ? data : ''), types: ['text/plain'] },
+    })
+    element.dispatchEvent(event)
   }, text)
+}
+
+/**
+ * Types a date into the focused date field by keyboard: month, day and year in turn, as a date picker takes them;
+ * where the browser has no date picker (WebKit on Linux shows a text box), the ISO date instead.
+ */
+export async function typeDate(page: Page, iso: string) {
+  const [year, month, day] = iso.split('-')
+  await page.keyboard.type(`${month}${day}${year}`)
+  const value = await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.value ?? '')
+  if (value !== iso) {
+    await page.keyboard.press('ControlOrMeta+A')
+    await page.keyboard.type(iso)
+  }
 }
 
 /** What receivables need on top of the books: accounts, the Austin tax code and NT, settings, the company. */

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { AP_CLERK, CONTROLLER, newVendor, preparePayables, signIn, signInWithCode, type Treasurer } from './books'
+import { AP_CLERK, CONTROLLER, newVendor, preparePayables, signIn, signInWithCode, typeDate, type Treasurer } from './books'
 
 /**
  * Payables in the browser (ROADMAP F4e): the payables clerk enters a five-line bill by keyboard alone and posts it
@@ -39,8 +39,7 @@ test('a bill is keyed in, posted, found in the register, and paid by a check run
     await expect(page.getByTestId('bill-number')).toBeFocused()
     await page.keyboard.type(number)
     await page.keyboard.press('Tab')
-    // The date field takes the month, day and year in turn.
-    await page.keyboard.type('01202026')
+    await typeDate(page, '2026-01-20')
     await page.getByLabel('Description, line 1', { exact: true }).focus()
     const lines = [
       ['Strategy workshop', '1500'],
@@ -85,7 +84,7 @@ test('a bill is keyed in, posted, found in the register, and paid by a check run
   await test.step('propose a check run for the vendor and submit it', async () => {
     await page.goto('/payables/runs/new')
     await expect(page.getByTestId('run-date')).toBeFocused()
-    await page.keyboard.type('01302026')
+    await typeDate(page, '2026-01-30')
     await page.getByTestId('run-method').click()
     await page.getByTitle('Check', { exact: true }).click()
     await page.getByTestId('run-due').fill('2026-12-31')
