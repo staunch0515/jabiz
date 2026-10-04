@@ -4,3 +4,24 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/*
+ * The text of preset tags one shade darker than Ant Design's, for a contrast of at least 4.5:1 on their pale
+ * backgrounds (WCAG 2.2 AA 1.4.3; docs/design/12-frontend.md section 11). The repeated class outranks Ant Design's
+ * rule (:where(.css-…).ant-tag.ant-tag-green, two classes) whatever the order the styles are inserted in.
+ */
+.ant-tag.ant-tag.ant-tag-green {
+  color: #135200;
+}
+.ant-tag.ant-tag.ant-tag-orange {
+  color: #873800;
+}
+.ant-tag.ant-tag.ant-tag-gold {
+  color: #874d00;
+}
+.ant-tag.ant-tag.ant-tag-red {
+  color: #a8071a;
+}
+.ant-tag.ant-tag.ant-tag-blue {
+  color: #003eb3;
+}
