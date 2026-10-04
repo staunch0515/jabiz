@@ -68,3 +68,43 @@
 建账并过账，读升级前的报表，换成新版本的 jar 启动（迁移自动执行），再读一次并比较。2026-10-04 在开发环境以 F9b 的发布
 （合入 #77 时的 `060bb7c`）升级到 F11d：执行了 2 个迁移，FIN-EXP-01 … 14 的报表全部相同（现金流量表为新报表）。
 示范公司的完整账（FIN-EXP 的全部单据）只在集成测试中构建，演练的账只有日记账；对示范公司的账做升级检查由使用方在其副本上按 §4 运行。
+
+## 6. 演示环境
+
+用示范公司 Northwind Components（`docs/finance-requirements/sample-company/`）的账演示：1 月 2026 的全部单据按 FIN-EXP-02 录入并关账，
+2 月有一笔日记账与一张账单等待控制人审批。数据经接口由各角色的人录入，与集成测试的 `JanuaryBooks` 相同。只用于新装的演示环境，不要对正式账运行。
+
+1. `.env` 中除 §2 的各项外再写（编号接着样例的旧单据，管理员不必登记二次验证即可运行财务设置）：
+   ```bash
+   JABIZ_SECURITY_MFA_ADMINISTRATION=false
+   FINANCE_AR_INVOICE_NUMBERS_START=1004
+   FINANCE_AR_CREDIT_MEMO_NUMBERS_START=2001
+   FINANCE_FA_ASSET_NUMBERS_START=3
+   ```
+   本机演示时 §2 的密钥可以不写（首次启动自动生成），只写 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 与上面四行。
+2. 按 §2 启动，等 `healthy`。
+3. 在仓库根目录（需要 Node 22 与 pnpm）：
+   ```bash
+   (cd frontend && pnpm install)
+   read -rsp 'admin password: ' E2E_ADMIN_PASSWORD; echo; read -rsp 'demo password (12+): ' DEMO_PASSWORD; echo
+   export E2E_ADMIN_PASSWORD DEMO_PASSWORD   # 不写在命令行上，免得留在 shell 历史中
+   tools/finance/demo/seed.sh
+   ```
+   约一分钟；途中核对发票、付款批、资产与日记账的编号，最后核对资产负债表合计 617,415.00、净利润 5,127.10（FIN-EXP-05、04），并列出演示用户。
+   账里已有完整的演示数据时什么也不做；上一次中途失败（或账里有别的数据）时拒绝运行，按下面"重来一次"从空库开始。
+   应用不在本机 8080 时设 `E2E_BASE_URL`。
+   运行完后如要给别人演示，从 `.env` 删去 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 并重启应用（管理员登录即要求登记二次验证）。
+4. 用下列用户登录（密码都是 `DEMO_PASSWORD`）：
+
+   | 用户 | 角色 | 可以演示的 |
+   |---|---|---|
+   | `controller` | 控制人 | 待办中审批 2 月的日记账与账单；三张报表、仪表盘、钻取；关账工作台（1 月已关）；审计、访问审查 |
+   | `accountant` | 会计 | 日记账登记簿与录入、试算表、银行匹配与调节、折旧、重估 |
+   | `ar-clerk` | 应收职员 | 客户、发票（INV-1004 的税额说明）、收款 |
+   | `ap-clerk` | 应付职员 | 供应商、账单、付款批；登录要二次验证 |
+   | `treasurer` | 出纳 | 银行账户、放行付款批；登录要二次验证 |
+
+   `ap-clerk` 与 `treasurer` 的认证器密钥在脚本输出的最后（`otpauth://` 地址，可在认证器应用中手工添加密钥）。
+
+演示数据的业务日期在 2026 年 1、2 月：仪表盘与报表选到这两个月（默认的"本月"按当天，可能没有数据）。重来一次：删除数据库卷
+（`docker compose -f deploy/finance/docker-compose.yml down -v`，会删除全部数据）后重新启动并运行脚本。
