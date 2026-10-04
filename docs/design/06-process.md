@@ -33,8 +33,8 @@
 | 工厂 | 放入上下文的结果 |
 |---|---|
 | `LoadEntity.by(datasetId, idKey, targetKey)` / `LoadEntity.optional(...)` | `EntityInstance`（`by` 找不到时 404） |
-| `QueryEntities.of(datasetId, ctx -> EntityQuery, targetKey)` | `List<EntityInstance>` |
-| `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】） |
+| `QueryEntities.of(datasetId, ctx -> EntityQuery, targetKey)` | `List<EntityInstance>`：查询自己的 `limit` 那么多行，不按数据视图的 `maxQueryBatchSize`（浏览的一页）截断；实际行数超过 `jabiz.process.max-read-rows` 即 422 `PROCESS_READ_TOO_LARGE`（`limit` 大也照常，只读到上限多一行）【D32】 |
+| `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】）；全部行，不按数据视图的 `maxQueryBatchSize`（那只限浏览的一页）截断，超过 `jabiz.process.max-read-rows`（缺省 100,000）即 422 `PROCESS_READ_TOO_LARGE`，不取一部分【D32】 |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
 | `CallProcess.forEach(name, version, ctx -> 输入列表, outputKey)` | 对列表中每个输入依次调用一次（列表为空时不调用），输出为同序的列表（阶段 13e） |

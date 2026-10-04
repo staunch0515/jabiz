@@ -108,7 +108,17 @@ public class QueryCompiler {
      */
     public PhysicalQueryPlan compile(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
         Map<String, Object> scopeValues, TimeSlice slice) {
-        int safeLimit = Math.min(query.limit(), dataset.policy().maxQueryBatchSize());
+        return compile(dataset, def, query, scopeValues, slice, true);
+    }
+
+    /**
+     * As {@link #compile(DatasetDefinition, EntityDefinition, EntityQuery, Map, TimeSlice)}; with {@code capped} false
+     * the query's own limit is kept as given: the dataset's {@code maxQueryBatchSize} limits browsing a page only
+     * (decision D32), and a reader of a whole result, such as a process, checks its limit itself.
+     */
+    public PhysicalQueryPlan compile(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        Map<String, Object> scopeValues, TimeSlice slice, boolean capped) {
+        int safeLimit = capped ? Math.min(query.limit(), dataset.policy().maxQueryBatchSize()) : query.limit();
 
         Binder binder = new Binder("p");
         List<String> fragments = new ArrayList<>();

@@ -74,6 +74,9 @@ import java.util.Map;
  */
 public final class ScenarioRunner {
 
+    /** The most rows a query expectation reads; more fails the replay rather than compare part of them. */
+    private static final int MAX_QUERY_ROWS = 100_000;
+
     /** What a replay produced. */
     public record Result(Scenario scenario, Map<String, Object> variables, Map<Integer, Object> outputs,
         Map<String, List<Map<String, Object>>> snapshot, Instant snapshotAsOf) {}
@@ -236,9 +239,14 @@ public final class ScenarioRunner {
             case Scenario.QueryExpectation q -> {
                 AdvancedQueryDefinition template = templates.find(q.query())
                     .orElseThrow(() -> failure(scenario, step, "unknown SQL template " + q.query(), null));
-                List<Map<String, Object>> rows = as(scenario, queries.execute(template,
+                // The whole result, not a page of the datasets' maxQueryBatchSize (decision D32).
+                List<Map<String, Object>> rows = as(scenario, queries.all(template,
                     ScenarioValues.resolveMap(q.params(), variables),
-                    new AdvancedQueryExecutor.At(q.asOf(), q.knownAt())).map(ScenarioRunner::row).collectList());
+                    new AdvancedQueryExecutor.At(q.asOf(), q.knownAt()), null, List.of(), MAX_QUERY_ROWS + 1)
+                    .map(page -> page.items().stream().map(ScenarioRunner::row).toList()));
+                if (rows.size() > MAX_QUERY_ROWS) {
+                    throw failure(scenario, step, q.query() + " returned more than " + MAX_QUERY_ROWS + " rows", null);
+                }
                 if (q.rows() != null && rows.size() != q.rows()) {
                     throw failure(scenario, step, q.query() + " returned " + rows.size() + " rows, expected "
                         + q.rows() + ": " + rows, null);
