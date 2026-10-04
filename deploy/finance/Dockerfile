@@ -7,6 +7,8 @@ FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
 COPY backend backend
 COPY frontend frontend
+# The finance pages: the platform frontend compiles them in as the application's extension (decision D22).
+COPY finance-web finance-web
 COPY spec spec
 # node-gradle downloads Node and pnpm and builds the single-page application before packaging it.
 RUN --mount=type=cache,target=/root/.gradle \
