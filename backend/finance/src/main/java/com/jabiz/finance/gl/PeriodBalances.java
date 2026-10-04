@@ -39,9 +39,9 @@ import java.util.function.Predicate;
  * Postings and the close are not serialized by period (ROADMAP F8a, F11): an entry recorded before a close began but
  * committed after it read the movements is missing from that snapshot until the period is closed again.
  * <p>
- * The movements are read and written {@value #BUCKETS} account buckets at a time by {@value #WRITE}: a template read
- * in a process returns at most {@value #CAP} rows (the ledger's datasets' page), and a bucket reaching that is refused
- * rather than cut short. Snapshots follow the data period (10 section 13.2): an actor limited to one keeps none (they
+ * The movements are read and written {@value #BUCKETS} account buckets at a time by {@value #WRITE}: a bucket is saved
+ * in one write of at most {@value #CAP} rows (the snapshots' {@code maxWriteBatchSize}), and a bucket with more is
+ * refused rather than kept in part. Snapshots follow the data period (10 section 13.2): an actor limited to one keeps none (they
  * would count only what the actor sees), and a reader limited to one sees only the snapshots of periods wholly within
  * it, the others read entry by entry through the ledger's own scope.
  */
@@ -60,7 +60,7 @@ public final class PeriodBalances {
 
     /** How many account buckets a snapshot is read and written in. */
     public static final int BUCKETS = 16;
-    /** The most rows a template read in a process returns: the ledger's datasets' {@code maxQueryBatchSize}. */
+    /** The most balances of one bucket: the snapshots' {@code maxWriteBatchSize}, one bucket being one write. */
     public static final int CAP = 500;
 
     public static final EntityDefinition ENTITY = EntityDefinition.define(BALANCE, eb -> {
@@ -209,10 +209,10 @@ public final class PeriodBalances {
                 + input.periodKey(), Map.of("periodKey", input.periodKey())));
             return;
         }
-        // At the cap the read may have been cut short: refused, never kept partial.
-        if (movements.size() >= CAP) {
-            ctx.reject(new Violation("periodKey", TOO_MANY, "Period " + input.periodKey() + " has " + CAP
-                + " or more balances in account bucket " + input.bucket() + "; its balances cannot be kept",
+        // More than one write takes: refused, never kept in part.
+        if (movements.size() > CAP) {
+            ctx.reject(new Violation("periodKey", TOO_MANY, "Period " + input.periodKey() + " has more than " + CAP
+                + " balances in account bucket " + input.bucket() + "; its balances cannot be kept",
                 Map.of("periodKey", input.periodKey(), "bucket", String.valueOf(input.bucket()))));
             return;
         }

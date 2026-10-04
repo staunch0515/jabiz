@@ -2,7 +2,6 @@ package com.jabiz.finance.report;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
-import com.jabiz.finance.gl.PeriodBalances;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
@@ -42,7 +41,6 @@ public final class CashFlowProcesses {
     public static final String SETTINGS_INVALID = "FIN_REPORT_SETTINGS_INVALID";
     /** Accounts with a change and no cash flow class, or a change in cash the statement does not explain. */
     public static final String UNEXPLAINED = "FIN_CASH_FLOW_UNEXPLAINED";
-    public static final String TOO_LONG = "FIN_CASH_FLOW_TOO_LONG";
 
     /** Every field code ranges, comma separated ({@code 2100-2199,2150}); none leaves it unset. */
     public record SettingsInput(@Size(max = 500) String interestAccounts,
@@ -140,12 +138,6 @@ public final class CashFlowProcesses {
     @SuppressWarnings("unchecked")
     static void check(ProcessContext ctx) {
         List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(ROWS);
-        if (rows.size() >= PeriodBalances.CAP) {
-            // A read cut at the cap could leave out the unclassified rows at its end.
-            ctx.reject(new Violation("params", TOO_LONG, "The statement has " + PeriodBalances.CAP + " rows or more",
-                Map.of("max", PeriodBalances.CAP - 1)));
-            return;
-        }
         List<String> unclassified = rows.stream().filter(r -> "UNCLASSIFIED".equals(r.get("kind")))
             .map(r -> String.valueOf(r.get("label"))).toList();
         BigDecimal difference = rows.stream().filter(r -> "UNEXPLAINED".equals(r.get("lineCode")))

@@ -105,6 +105,20 @@ async function ensureUser(request: APIRequestContext, admin: string, user: User,
   }
 }
 
+/** Which of the accounts {@code codes} exist: asked one by one, as the books may hold more than a page of accounts. */
+async function existingAccounts(request: APIRequestContext, admin: string, codes: string[]): Promise<Set<string>> {
+  const found = new Set<string>()
+  for (const code of codes) {
+    const response = await request.post('/api/queries/finance.gl.account_lookup', {
+      headers: { Authorization: `Bearer ${admin}` },
+      data: { filters: [{ field: 'accountCode', op: 'eq', value: code }], limit: 1 },
+    })
+    expect(response.status(), await response.text()).toBe(200)
+    if (((await response.json()).items as unknown[]).length > 0) found.add(code)
+  }
+  return found
+}
+
 let prepared = false
 
 export async function prepareBooks(request: APIRequestContext) {
@@ -124,11 +138,7 @@ export async function prepareBooks(request: APIRequestContext) {
   const year = await run(request, admin, 'FIN_FISCAL_YEAR_CREATE', { fiscalYear: 2026, adjustmentPeriod: true })
   expect([200, 422], JSON.stringify(year.body)).toContain(year.status)
 
-  const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
-    headers: { Authorization: `Bearer ${admin}` },
-    data: { limit: 1000 },
-  })
-  const existing = new Set(((await lookup.json()).items as { accountCode: string }[]).map((a) => a.accountCode))
+  const existing = await existingAccounts(request, admin, ACCOUNTS.map((a) => a.accountCode))
   for (const account of ACCOUNTS.filter((a) => !existing.has(a.accountCode))) {
     const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', account)
     expect(created.status, JSON.stringify(created.body)).toBe(200)
@@ -185,11 +195,7 @@ export async function prepareReceivables(request: APIRequestContext) {
   if (receivables) return
   const admin = await token(request, ADMIN)
   await ensureUser(request, admin, CLERK, 'ReceivablesClerk')
-  const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
-    headers: { Authorization: `Bearer ${admin}` },
-    data: { limit: 1000 },
-  })
-  const existing = new Set(((await lookup.json()).items as { accountCode: string }[]).map((a) => a.accountCode))
+  const existing = await existingAccounts(request, admin, AR_ACCOUNTS.map((a) => a.accountCode))
   for (const account of AR_ACCOUNTS.filter((a) => !existing.has(a.accountCode))) {
     const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', account)
     expect(created.status, JSON.stringify(created.body)).toBe(200)
@@ -293,11 +299,7 @@ export async function preparePayables(request: APIRequestContext): Promise<Treas
   if (payables) return payables
   const admin = await token(request, ADMIN)
   await ensureUser(request, admin, AP_CLERK, 'PayablesClerk')
-  const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
-    headers: { Authorization: `Bearer ${admin}` },
-    data: { limit: 1000 },
-  })
-  const existing = new Set(((await lookup.json()).items as { accountCode: string }[]).map((a) => a.accountCode))
+  const existing = await existingAccounts(request, admin, AP_ACCOUNTS.map((a) => a.accountCode))
   for (const account of AP_ACCOUNTS.filter((a) => !existing.has(a.accountCode))) {
     const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', account)
     expect(created.status, JSON.stringify(created.body)).toBe(200)
@@ -510,11 +512,7 @@ export async function prepareCloseYear(request: APIRequestContext) {
   expect([200, 422], JSON.stringify(year.body)).toContain(year.status)
   expect(await find(request, admin, 'urn:jabiz:dataset:default:FinPeriod', 'periodKey', '2028-13')).toHaveLength(1)
   if ((await find(request, admin, 'urn:jabiz:dataset:default:FinCloseSettings', 'settingsKey', 'CLOSE')).length === 0) {
-    const lookup = await request.post('/api/queries/finance.gl.account_lookup', {
-      headers: { Authorization: `Bearer ${admin}` },
-      data: { limit: 1000 },
-    })
-    if (!((await lookup.json()).items as { accountCode: string }[]).some((a) => a.accountCode === '3300')) {
+    if (!(await existingAccounts(request, admin, ['3300'])).has('3300')) {
       const created = await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: '3300',
         accountName: 'Retained Earnings', financialType: 'EQUITY', normalBalance: 'CREDIT',
         statementLine: 'Retained earnings' })
