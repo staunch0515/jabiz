@@ -82,7 +82,7 @@ jobs:
   # The finance pages in a browser against the packaged application (finance-web/e2e).
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:16
@@ -138,9 +138,12 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
-      - run: pnpm exec playwright install --with-deps chromium
+      # FIN-UI-010: Chrome (Chromium), Firefox, Safari (WebKit) and Edge; the others than Chromium at 1366 x 768.
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit msedge
         working-directory: frontend
       - run: tools/finance/e2e.sh
+        env:
+          E2E_BROWSERS: chromium,firefox,webkit,msedge
       # FIN-NF-007: none of the TINs and bank account numbers the tests entered is in the application's log.
       - name: No TIN or bank account number in the log
         run: python3 tools/finance/ops/scan-logs.py finance.log

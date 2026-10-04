@@ -89,4 +89,27 @@ POST /api/queries/finance.report.trial_balance
 
 ## 7. 事件（FIN-DI-007）
 
-向外部系统推送"发票过账"等事件需要平台的 webhook（阶段 14n），随 F11d。
+发票（不含贷项通知单）过账时，财务发布事件 `finance.invoice-posted`，载荷：
+
+```json
+{"invoiceId": "…", "invoiceNo": "INV-1004", "customerCode": "C100", "invoiceDate": "2026-01-06",
+ "dueDate": "2026-02-05", "currency": "USD", "subtotal": 50000.00, "taxTotal": 3300.00, "total": 53300.00,
+ "totalUsd": 53300.00}
+```
+
+由平台的 webhook（docs/design/11-ledger-events-jobs.md §2.4，决策 D33）签名后 POST 给订阅的系统，失败按退避重试（至多 `jabiz.events.delivery.max-attempts` 次，默认 10），至少送达一次
+（接收方按请求头 `X-Jabiz-Event-Id` 去重，并按 `X-Jabiz-Signature` 验证）。订阅写在配置中（应用的 `application.yml`；
+用 Compose 部署时也可全部以环境变量给出，如 `JABIZ_WEBHOOKS_ALLOWED_HOSTS`、`JABIZ_WEBHOOKS_SUBSCRIPTIONS_0_NAME`、`…_0_SECRET`，同一订阅的各项须来自同一处）：
+
+```yaml
+jabiz:
+  webhooks:
+    allowed-hosts: [erp.example.com]
+    subscriptions:
+      - name: erp-invoices
+        event-type: finance.invoice-posted
+        url: https://erp.example.com/hooks/invoices
+        secret: ${ERP_WEBHOOK_SECRET}   # 至少 32 字符，openssl rand -base64 32
+```
+
+新加的订阅会收到此前全部已过账发票的事件；只想要今后的，接收方按 `createdTime` 丢弃更早的。载荷不含客户的税号、地址与银行信息。期初导入的未结发票（`FIN_AR_OPENING`）不发布此事件。
