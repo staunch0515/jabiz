@@ -24,6 +24,7 @@ import com.jabiz.runtime.process.entity.EntityIdGenerator;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.runtime.security.MaskedFields;
 import com.jabiz.runtime.security.MfaPolicy;
+import com.jabiz.runtime.query.PageTotals;
 import com.jabiz.runtime.security.RevealRecorder;
 import com.jabiz.runtime.security.Permissions;
 import com.jabiz.runtime.security.SensitiveDataMasker;
@@ -149,10 +150,13 @@ class DatasetController {
             EntityQuery compiled = query.build();
             int effectiveLimit = Math.min(limit, dataset.policy().maxQueryBatchSize());
 
+            // A page not filled tells the total itself: counted only when it does not (phase 14q).
             return entityManager.query(dataset, def, compiled, body.asOf(), body.knownAt()).map(masker::hide)
                 .collectList()
-                .zipWith(entityManager.count(dataset, def, compiled, body.asOf(), body.knownAt()))
-                .map(result -> new QueryResponse(result.getT1(), result.getT2(), offset, effectiveLimit));
+                .flatMap(items -> PageTotals.known(offset, effectiveLimit, items.size())
+                    .map(n -> Mono.just(new QueryResponse(items, n, offset, effectiveLimit)))
+                    .orElseGet(() -> entityManager.count(dataset, def, compiled, body.asOf(), body.knownAt())
+                        .map(n -> new QueryResponse(items, n, offset, effectiveLimit))));
         });
     }
 
