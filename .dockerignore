@@ -8,3 +8,5 @@ frontend/dist
 frontend/playwright-report
 frontend/test-results
 .env
+finance-web/e2e/test-results
+finance-web/e2e/playwright-report
