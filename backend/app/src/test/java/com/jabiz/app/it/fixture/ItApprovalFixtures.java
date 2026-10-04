@@ -55,8 +55,9 @@ public final class ItApprovalFixtures {
                 content.put("amount", input.amount());
                 content.put("channel", input.channel());
                 content.put("memo", input.memo());
+                // A memo is how people know the payment: the approvers' task shows it instead of the id.
                 return new ApprovalCase(input.paymentId(), Map.of("amount", input.amount(), "channel",
-                    input.channel()), content, input.businessTime(), null);
+                    input.channel()), content, input.businessTime(), null, input.memo());
             }, APPROVAL)));
 
     public static final ProcessDefinition<PayInput, PayOutput, ProcessContext> CANCEL =

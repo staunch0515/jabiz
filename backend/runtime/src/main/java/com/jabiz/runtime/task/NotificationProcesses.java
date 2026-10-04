@@ -3,7 +3,6 @@ package com.jabiz.runtime.task;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.i18n.MessageCatalog;
-import com.jabiz.i18n.MessageTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.RetryPolicy;
@@ -78,8 +77,7 @@ public class NotificationProcesses {
         }
         String key = task.get("titleKey");
         Map<String, String> params = json.readValue(task.<String>get("titleParams"), PARAMS);
-        String title = messages.find(key, messages.defaultLocale())
-            .map(text -> MessageTemplate.format(text, params)).orElse(key);
+        String title = TaskTitles.title(task.get("taskType"), key, params, messages, messages.defaultLocale());
         String subject = title.length() > 300 ? title.substring(0, 300) : title;
         String link = task.get("link");
         String body = link == null ? title : title + "\n\n" + baseUrl + link;

@@ -234,6 +234,8 @@ runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与
 ### 5.2 审批待办
 
 每个待审批的请求有一个待办：类型 `approval`、指派给当前层级的权限、关联 `SysApprovalRequest`、链接 `/tasks`、来源键 `approval:<请求>`。
+标题为"审批 {对象} {单据}（第 n 级）"：对象显示消息 `approval.subject.<对象名>`（没有时为对象名），单据显示 `ApprovalCase.reference(…)` 给出的、人认得的标识
+（如日记账号，存于请求的 `reference`，各层级的待办都用它；没有时为主键）。标识不在内容哈希中：内容相同的再次提交沿用待审批的请求与其原标识。【阶段 14r】
 `RequireApproval` 建请求时同时建第一层的待办；`APPROVAL_DECIDE` 关闭当前层级的待办（`DONE`），还有下一层时建下一层的待办；请求被作废（内容变化）或撤回时待办取消。
 
 ### 5.3 我的待办与页面

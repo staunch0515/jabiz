@@ -21,12 +21,13 @@ import java.util.Map;
 class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTasks.Metadata, C> {
 
     /** Type of the tasks of approval requests. */
-    static final String TYPE = "approval";
+    static final String TYPE = com.jabiz.runtime.task.TaskTitles.APPROVAL_TYPE;
     static final String TITLE = "task.approval";
     static final String LINK = "/tasks";
 
     /** What {@code APPROVAL_DECIDE} decided: {@code nextPermission} null when no level remains. */
-    record Passed(String requestId, String subject, String entityId, int nextLevel, String nextPermission) {}
+    record Passed(String requestId, String subject, String entityId, String reference, int nextLevel,
+        String nextPermission) {}
 
     record Metadata(String passedKey) {}
 
@@ -38,9 +39,14 @@ class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTas
         return "approval:" + requestId;
     }
 
-    static TaskSpec task(String subject, String entityId, String requestId, int level, String permission) {
-        return TaskSpec.forPermission(TYPE, TITLE, Map.of("subject", subject, "entity", entityId, "level",
-                String.valueOf(level)), permission)
+    /**
+     * The task of a request's level: titled by the subject (its label, {@code approval.subject.<name>}, when the
+     * messages have one) and the document's reference, or its id when the case gave none.
+     */
+    static TaskSpec task(String subject, String entityId, String reference, String requestId, int level,
+        String permission) {
+        return TaskSpec.forPermission(TYPE, TITLE, Map.of("subject", subject, "entity",
+                reference == null ? entityId : reference, "level", String.valueOf(level)), permission)
             .about(ApprovalEntities.REQUEST, requestId).link(LINK).source(sourceKey(requestId));
     }
 
@@ -59,7 +65,7 @@ class ApprovalTasks<C extends ProcessContext> implements StepHandler<ApprovalTas
             Passed passed = ctx.get(metadata.passedKey(), Passed.class);
             Mono<Void> closed = tasks.close(ctx, sourceKey(passed.requestId()), TaskEntities.DONE);
             return passed.nextPermission() == null ? closed : closed.then(tasks.create(ctx,
-                task(passed.subject(), passed.entityId(), passed.requestId(), passed.nextLevel(),
+                task(passed.subject(), passed.entityId(), passed.reference(), passed.requestId(), passed.nextLevel(),
                     passed.nextPermission())));
         });
     }

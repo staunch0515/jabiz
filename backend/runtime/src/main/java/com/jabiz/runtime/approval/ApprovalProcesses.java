@@ -185,7 +185,8 @@ public class ApprovalProcesses {
                 request.get("preparerId"), request.get("contentHash"), status, actor, reason));
         }
         ctx.put(OUTPUT, new DecideOutput(requestId, status, next));
-        ctx.put(PASSED, new ApprovalTasks.Passed(requestId, request.get("subject"), request.get("entityId"), next,
+        ctx.put(PASSED, new ApprovalTasks.Passed(requestId, request.get("subject"), request.get("entityId"),
+            request.get("reference"), next,
             status.equals(ApprovalEntities.PENDING) ? String.valueOf(levels.get(next - 1).get("permission")) : null));
     }
 

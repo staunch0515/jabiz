@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
@@ -31,7 +32,9 @@ describe('HistoryTimeline', () => {
       version(2, { name: 'Bravo' }),
       version(3, { name: 'Charlie' }, { effectStartTime: '2099-01-01T00:00:00Z', reason: 'rename' }),
     ]
+    // Who made each version is shown by name, asked for through the query client.
     render(
+      <QueryClientProvider client={new QueryClient()}>
       <HistoryTimeline
         entity={entity}
         versions={versions}
@@ -42,7 +45,8 @@ describe('HistoryTimeline', () => {
         onViewAt={onViewAt}
         onOperation={() => {}}
         onRevert={onRevert}
-      />,
+      />
+      </QueryClientProvider>,
     )
     const items = screen.getAllByTestId(/^version-/)
     expect(items.map((i) => i.dataset.testid)).toEqual(['version-3', 'version-2', 'version-1'])

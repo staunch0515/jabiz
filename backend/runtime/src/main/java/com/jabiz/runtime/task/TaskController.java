@@ -82,7 +82,9 @@ class TaskController {
 
     private Task task(Map<String, Object> row, RequestContext request) {
         String key = (String) row.get("title_key");
-        Map<String, String> params = json.readValue((String) row.get("title_params"), PARAMS);
+        String type = (String) row.get("task_type");
+        Map<String, String> params = TaskTitles.params(type, json.readValue((String) row.get("title_params"), PARAMS),
+            messages, request.locale());
         String title = messages.find(key, request.locale()).map(text -> MessageTemplate.format(text, params))
             .orElse(key);
         return new Task(String.valueOf(row.get("task_id")), (String) row.get("task_type"), title, key, params,

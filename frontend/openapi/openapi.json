@@ -1429,6 +1429,9 @@
             "format" : "date-time",
             "type" : "string"
           },
+          "displayName" : {
+            "type" : "string"
+          },
           "idleTimeoutSeconds" : {
             "format" : "int64",
             "type" : "integer"
@@ -2308,6 +2311,17 @@
           "version" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "UserNamesResponse" : {
+        "properties" : {
+          "names" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
           }
         },
         "type" : "object"
@@ -4965,6 +4979,35 @@
           }
         },
         "tags" : [ "task-controller" ]
+      }
+    },
+    "/api/users/names" : {
+      "get" : {
+        "operationId" : "userNames",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "ids",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserNamesResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-name-controller" ]
       }
     }
   }

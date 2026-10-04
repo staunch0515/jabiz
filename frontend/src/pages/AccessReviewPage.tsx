@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext'
 import { runProcess } from '../lib/calls'
 import { formatDateTime } from '../meta/format'
 import { paths } from './paths'
+import UserName from '../components/UserName'
 
 type Review = components['schemas']['Review']
 type Conflict = components['schemas']['Conflict']
@@ -147,7 +148,7 @@ export default function AccessReviewPage() {
                 dataIndex: 'recordedTime',
                 render: (value?: string) => (value ? formatDateTime(value) : ''),
               },
-              { title: t('audit.actor'), dataIndex: 'actorId' },
+              { title: t('audit.actor'), dataIndex: 'actorId', render: (value?: string) => <UserName id={value} /> },
               { title: t('audit.entityType'), dataIndex: 'entityType' },
               { title: t('audit.entityId'), dataIndex: 'entityId' },
               { title: t('audit.action'), dataIndex: 'action', render: (value: string) => <Tag>{value}</Tag> },
