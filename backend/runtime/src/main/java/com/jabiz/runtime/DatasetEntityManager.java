@@ -566,10 +566,30 @@ public class DatasetEntityManager {
     /** As {@link #query(DatasetDefinition, EntityDefinition, EntityQuery)}, at a point in time for temporal entities. */
     public Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
         Instant asOf, Instant knownAt) {
+        return query(dataset, def, query, asOf, knownAt, true);
+    }
+
+    /**
+     * As {@link #query(DatasetDefinition, EntityDefinition, EntityQuery)}, up to the query's own limit however large:
+     * not a page of the dataset's {@code maxQueryBatchSize}, which limits browsing only (decision D32). For readers that
+     * bound the limit themselves (a process's {@code QueryEntities}).
+     */
+    public Flux<EntityInstance> queryAll(DatasetDefinition dataset, EntityDefinition def, EntityQuery query) {
+        return queryAll(dataset, def, query, null, null);
+    }
+
+    /** As {@link #queryAll(DatasetDefinition, EntityDefinition, EntityQuery)}, at a point in time. */
+    public Flux<EntityInstance> queryAll(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        Instant asOf, Instant knownAt) {
+        return query(dataset, def, query, asOf, knownAt, false);
+    }
+
+    private Flux<EntityInstance> query(DatasetDefinition dataset, EntityDefinition def, EntityQuery query,
+        Instant asOf, Instant knownAt, boolean capped) {
         return observations.flux(PlatformObservations.DATASET_QUERY, "query " + def.name, tags(dataset),
             RequestContexts.current().flatMapMany(request -> {
                 PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
-                    timeSlice(dataset, def, asOf, knownAt));
+                    timeSlice(dataset, def, asOf, knownAt), capped);
                 return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
             }));
     }

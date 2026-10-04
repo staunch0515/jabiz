@@ -9,6 +9,7 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -18,7 +19,10 @@ import java.util.function.Function;
 
 /**
  * Runs an entity query through a dataset and puts the result, a {@code List<}{@link EntityInstance}{@code >}, into
- * the context (docs/design/06-process.md section 2.1). The query is built from the context when the step runs.
+ * the context (docs/design/06-process.md section 2.1). The query is built from the context when the step runs. Up to
+ * the query's own limit, not a page of the dataset's {@code maxQueryBatchSize} (decision D32); more rows than {@code jabiz.process.max-read-rows} are
+ * refused (422 {@code PROCESS_READ_TOO_LARGE}). Rows past the query's own limit are not read: a query that must see
+ * them all asks for more than it expects.
  */
 @Component
 public class QueryEntities<C extends ProcessContext> implements StepHandler<QueryEntities.Metadata<C>, C>,
@@ -40,12 +44,15 @@ public class QueryEntities<C extends ProcessContext> implements StepHandler<Quer
     private final DatasetRegistry datasets;
     private final EntityDefinitionRegistry entities;
     private final DatasetEntityManager entityManager;
+    private final int maxRows;
 
     public QueryEntities(DatasetRegistry datasets, EntityDefinitionRegistry entities,
-        DatasetEntityManager entityManager) {
+        DatasetEntityManager entityManager, @Value("${jabiz.process.max-read-rows:100000}") int maxRows) {
+        ProcessReads.checkMaximum(maxRows);
         this.datasets = datasets;
         this.entities = entities;
         this.entityManager = entityManager;
+        this.maxRows = maxRows;
     }
 
     @Override
@@ -53,10 +60,16 @@ public class QueryEntities<C extends ProcessContext> implements StepHandler<Quer
         return Mono.defer(() -> {
             DatasetDefinition dataset = datasets.findById(metadata.datasetId()).orElseThrow();
             EntityQuery query = Objects.requireNonNull(metadata.query().apply(ctx), "query must not be null");
-            return entityManager.query(dataset, entities.getOrThrow(dataset.targetEntityType()), query)
+            // The query's own limit, not a page of the dataset (decision D32). A limit above the processes' maximum is
+            // read to one row past it: refused only when there are that many rows, not for asking.
+            boolean bounded = query.limit() > maxRows;
+            EntityQuery read = bounded
+                ? new EntityQuery(query.predicate(), query.sorts(), query.offset(), maxRows + 1) : query;
+            return entityManager.queryAll(dataset, entities.getOrThrow(dataset.targetEntityType()), read)
                 .collectList()
-                .doOnNext(found -> ctx.put(metadata.targetKey(), List.copyOf(found)))
-                .then();
+                .flatMap(found -> bounded && found.size() > maxRows
+                    ? Mono.<Void>error(ProcessReads.tooLarge("dataset " + metadata.datasetId(), maxRows))
+                    : Mono.fromRunnable(() -> ctx.put(metadata.targetKey(), List.copyOf(found))));
         });
     }
 

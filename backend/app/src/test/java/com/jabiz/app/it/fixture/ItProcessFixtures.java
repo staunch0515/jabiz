@@ -322,6 +322,39 @@ public final class ItProcessFixtures {
             .step("Save", SaveChanges.now())
             .step("Reload", LoadEntity.by(ItFixtures.TICKET_DATASET, "id", "reloaded")));
 
+    /** Reads every title of an owner's tickets through a template (more than the dataset's page). */
+    public static final ProcessDefinition<String, Integer, ProcessContext> TITLES =
+        ProcessDefinition.define("IT_TICKET_TITLES", 1, String.class, Integer.class, ProcessContext.class, pb -> pb
+            .permissions(PERMISSION)
+            .contextFactory((start, owner) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put("owner", owner);
+                return ctx;
+            })
+            .outputMapper(ctx -> ctx.get("titles", List.class).size())
+            .step("Template", RunTemplate.of("it.ticket_titles", ctx -> Map.of("owner", ctx.get("owner")),
+                "titles")));
+
+    /** An owner's tickets, at most {@code limit} of them. */
+    public record OwnerTicketsInput(String owner, int limit) {}
+
+    /** Queries an owner's tickets with the limit given (more than the dataset's page): how many it got. */
+    public static final ProcessDefinition<OwnerTicketsInput, Integer, ProcessContext> OWNER_TICKETS =
+        ProcessDefinition.define("IT_OWNER_TICKETS", 1, OwnerTicketsInput.class, Integer.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, in) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("in", in);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get("tickets", List.class).size())
+                .step("Query", QueryEntities.of(ItFixtures.TICKET_DATASET, ctx -> {
+                    OwnerTicketsInput in = ctx.get("in", OwnerTicketsInput.class);
+                    return EntityQuery.builder().where(new QueryPredicate.Eq("owner", in.owner()))
+                        .limit(in.limit()).build();
+                }, "tickets")));
+
     /** Runs a template as known at the given time (docs/design/19-reports.md section 2.1). */
     public static final ProcessDefinition<PricesAtInput, PricesAtOutput, ProcessContext> PRICES_AT =
         ProcessDefinition.define("IT_PRICES_AT", 1, PricesAtInput.class, PricesAtOutput.class, ProcessContext.class,
@@ -504,6 +537,16 @@ public final class ItProcessFixtures {
         @Bean
         ProcessDefinition<ReadsInput, ReadsOutput, ProcessContext> itReads() {
             return READS;
+        }
+
+        @Bean
+        ProcessDefinition<String, Integer, ProcessContext> itTicketTitles() {
+            return TITLES;
+        }
+
+        @Bean
+        ProcessDefinition<OwnerTicketsInput, Integer, ProcessContext> itOwnerTickets() {
+            return OWNER_TICKETS;
         }
 
         @Bean
