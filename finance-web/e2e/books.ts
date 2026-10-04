@@ -371,7 +371,10 @@ export async function signInWithCode(page: Page, user: Treasurer) {
   await page.waitForURL('**/gl/journals')
 }
 
-/** A vendor of its own, paid by check on net 30 days, its work going to professional fees. */
+/**
+ * A vendor of its own, paid by check on net 30 days, its work going to professional fees, with a W-9 (an EIN of its
+ * own: the application's log is searched for the TINs the tests enter, FIN-NF-007).
+ */
 export async function newVendor(request: APIRequestContext): Promise<string> {
   const admin = await token(request, ADMIN)
   const code = `V${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296).toString(36).toUpperCase()}`
@@ -379,6 +382,10 @@ export async function newVendor(request: APIRequestContext): Promise<string> {
     currency: 'USD', termsDays: 30, expenseAccount: '6400', paymentMethod: 'CHECK', entityType: 'C_CORPORATION',
     remit: { street: '1 Supply Way', city: 'Austin', state: 'TX', postalCode: '78701', country: 'United States' } })
   expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+  const digits = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('')
+  const tax = await run(request, admin, 'FIN_VENDOR_TAX_SAVE', { vendorCode: code, tinType: 'EIN',
+    tin: `${10 + Math.floor(Math.random() * 89)}-${digits(7)}`, w9Date: '2026-01-02' })
+  expect(tax.status, JSON.stringify(tax.body)).toBe(200)
   return code
 }
 

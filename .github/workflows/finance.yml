@@ -141,6 +141,14 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: frontend
       - run: tools/finance/e2e.sh
+      # FIN-NF-007: none of the TINs and bank account numbers the tests entered is in the application's log.
+      - name: No TIN or bank account number in the log
+        run: python3 tools/finance/ops/scan-logs.py finance.log
+        env:
+          PGHOST: localhost
+          PGUSER: finance
+          PGPASSWORD: finance
+          PGDATABASE: finance_e2e
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
