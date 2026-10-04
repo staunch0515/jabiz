@@ -9,8 +9,8 @@
 # JABIZ_INTEGRITY_KEY and JABIZ_MFA_KEY (each: openssl rand -base64 48) and JABIZ_BOOTSTRAP_ADMIN_PASSWORD; on a first
 # local start the entrypoint generates the three keys into the secrets volume. Keep copies of the integrity and MFA
 # keys: without them the seals cannot be verified and enrolled users cannot sign in. Single sign-on: see
-# docs/guide/quickstart.md (JABIZ_SECURITY_OIDC_PROVIDERS_0_…). Back up the database, the files volume and the secrets
-# volume together.
+# docs/guide/quickstart.md (JABIZ_SECURITY_OIDC_PROVIDERS_0_…). Backups and recovery to a point in time: backup.sh and
+# restore.sh beside this file (docs/finance/operations.md); installation and upgrade: docs/finance/install.md.
 name: finance
 
 services:
@@ -18,13 +18,23 @@ services:
     image: postgres:16
     # JIT compiles the large report and close templates anew on every run, taking seconds more than they need
     # (docs/finance/perf.md §8). Memory settings belong to the host: size shared_buffers and the rest for it.
-    command: ["postgres", "-c", "jit=off"]
+    #
+    # Every WAL segment is archived into the finance-wal volume once full, and at the latest after archive_timeout
+    # (300 s), so a base backup (backup.sh) and the archive restore the books to any moment since that backup with at
+    # most five minutes lost (FIN-NF-005: RPO 15 minutes; backup.sh wal copies the archive off the volume, run it
+    # every five minutes). A segment is written in full and synced before it takes its name; one archived already
+    # (a crash before PostgreSQL noted it) counts as done when identical. restore_command is read only while
+    # recovering (restore.sh).
+    entrypoint: ["sh", "-c", "install -d -o postgres -g postgres -m 700 /var/lib/postgresql/wal && exec docker-entrypoint.sh \"$$@\"", "--"]
+    command: ["postgres", "-c", "jit=off", "-c", "archive_mode=on", "-c", "archive_timeout=300",
+      "-c", "archive_command=if [ -f /var/lib/postgresql/wal/%f ]; then cmp -s %p /var/lib/postgresql/wal/%f; else cp %p /var/lib/postgresql/wal/%f.part && sync /var/lib/postgresql/wal/%f.part && mv /var/lib/postgresql/wal/%f.part /var/lib/postgresql/wal/%f; fi",
+      "-c", "restore_command=cp /var/lib/postgresql/wal/%f %p"]
     environment:
       POSTGRES_DB: finance
       POSTGRES_USER: finance
       POSTGRES_PASSWORD: ${DB_PASSWORD:-finance}
-    ports: ["127.0.0.1:5438:5432"]
-    volumes: [finance-db:/var/lib/postgresql/data]
+    ports: ["127.0.0.1:${FINANCE_DB_PORT:-5438}:5432"]
+    volumes: [finance-db:/var/lib/postgresql/data, finance-wal:/var/lib/postgresql/wal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U finance -d finance"]
       interval: 5s
@@ -53,5 +63,6 @@ services:
 
 volumes:
   finance-db:
+  finance-wal:
   finance-secrets:
   finance-files:

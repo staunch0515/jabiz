@@ -207,3 +207,6 @@
 | FIN-DI-008 | Full data export | 部分（F11a：验收 1 满足；附件内容与审计记录不在导出中，经各自接口取） | 平台 `POST /api/exports/data`（每批 100 个数据视图）；api.md §5 | `it/FinScn12IT`（全部数据视图导出，已过账分录行数等于系统内） |
 | FIN-DI-009 | Notifications | 完成（F11a） | 平台待办（审批待办链接到待办列表 `/tasks`，平台不给单条待办的地址）与 `TASK_NOTIFY` 邮件 | `it/FinScn02IT`（JE-0002 的待办与带链接的邮件） |
 | FIN-NF-003 | Correctness under concurrency | 完成（F11b，开发环境） | 过账与关账按期间、关账/年结/重开按财年串行（`gl/PeriodLocks`，平台 14o）；幂等键与事务内取号 | `it/PeriodLockIT`；`tools/finance/concurrency`（20 人 30 分钟、两次 `kill -9`，结果见 perf.md §7） |
+| FIN-NF-005 | Backup and recovery | 完成（F11d，开发环境演练） | 数据库 WAL 归档（≤ 300 s）、`deploy/finance/backup.sh`（基础备份、文件与密钥卷、WAL 复制、保留）、`restore.sh`（恢复到时点）；`docs/finance/operations.md` | `tools/finance/ops/drill.sh restore`：删除数据库与归档卷后从备份目录恢复到故障点，试算表相同、故障点后的过账不在（operations.md §4）；全量的恢复时间由使用方演练 |
+| FIN-NF-006 | Installation and upgrade | 完成（F11d） | `docs/finance/install.md`；迁移在启动时自动执行并经启动检查；`tools/finance/ops/upgrade-check.sh`（升级前后 FIN-EXP-01 … 14 报表比较） | `tools/finance/ops/drill.sh upgrade`（F9b → F11d，2 个迁移，报表相同，install.md §5）；示范公司全部单据上的升级检查由使用方运行 |
+| FIN-NF-007 | Monitoring | 完成（F11d） | 平台健康检查、OTLP 指标链路日志、ECS 日志（operations.md §5）；`tools/finance/ops/scan-logs.py`（数据库中的全部税号、银行账号与税号形状的文本） | CI `finance.yml` 的 `e2e` 作业在端到端测试后扫描应用日志（e2e 的供应商带 W-9 税号）；开发环境的端到端日志 0 处 |
