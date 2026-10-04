@@ -130,10 +130,33 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   - 流程失败 → 标记随之回滚，之后重试（至少一次）；
   - 并发或重复的投递（另一个实例、另一轮轮询、崩溃后重来）在该主键上等待，第一个提交后失败回滚，**不产生任何效果**（只处理一次）；
     之后的轮询按标记跳过它。
+- 每个消费者的一轮在其第一次失败处结束（失败的事件等待退避，其余的由下一轮取出），一个持续失败的消费者不拖住其他消费者。
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
 - 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean。
+
+### 2.4 Webhook：把事件送给其他系统【D33】
+
+- **订阅是配置**（`jabiz.webhooks.subscriptions[i]`：`name`、`event-type`、`url`、`secret`），不是数据。签名密钥（≥ 32 字符）只来自环境变量，
+  在配置中写占位符（`secret: ${ERP_WEBHOOK_SECRET}`；Spring 的列表只从一个配置源绑定，不能只用环境变量补其中一项），
+  不写入数据库、日志与 `toString()`；消息与日志中的地址只显示协议、主机与端口（接收方的路径常含令牌）。
+- 每个订阅是一个独立的消费者 `jabiz.webhook.<name>`（2.3 的全部规则照用）：对该类型的每个事件执行内部流程 `WEBHOOK_DELIVER`
+  （输入只有订阅名与事件 ID，权限 `webhook.deliver`），其步骤 `SendWebhook`：
+  - 只在平台的投递（系统身份）中执行，其他调用者（包括持有全部权限的管理员）得到 403；事件从 `sys_outbox_event` 读取，类型须是订阅的类型，
+    因此没有人能让平台签发别的内容；
+  - 以 JDK `HttpClient` 异步 POST（不占线程），正文 `{"eventId","eventType","createdTime","payload"}`，载荷即 Outbox 中存的 JSON 原样（发布时已去掉秘密）；
+  - 请求头：`X-Jabiz-Event-Id`、`X-Jabiz-Event-Type`、`X-Jabiz-Timestamp`（秒）、`X-Jabiz-Signature: v1=<hex HMAC-SHA256(secret, 时间戳 + "." + 正文)>`
+    （core `WebhookSignature`；接收方以同样方式计算、常量时间比较，并拒绝过旧的时间戳以防重放）；
+  - 在 `jabiz.webhooks.timeout`（默认 5 s，含读完响应）内的 2xx 即送达（消费标记随流程提交）；其他状态、超时、被拒的地址都使流程失败，
+    由 Outbox 记录尝试并按退避重试；不跟随重定向。
+- **至少一次**：接收方按 `X-Jabiz-Event-Id` 去重（送达之后、提交之前崩溃会再送一次）。各订阅互不影响：一个接收方失败不使另一个重复收到，
+  也只结束它自己的这一轮（2.3）。
+- **目标地址白名单**：只发往 `jabiz.webhooks.allowed-hosts` 中的主机（精确匹配，缺省为空即不发任何地方）；必须 https，http 只允许本机
+  （localhost、127.0.0.1、::1）；地址不得带用户信息。启动检查（类别 `WEBHOOK`）一次报告名字、事件类型、密钥、地址的全部问题，发送时再检查一次地址。
+- **载荷中的内容由发布者负责**：`f.masked(...)` 的字段（税号、账号）不会被自动遮蔽，有 webhook 订阅的事件不要放入这类值。
+- 新加的订阅会收到该类型的全部历史事件（2.3）；只想要今后的事件时，在订阅之前不发布该类型，或接收方按 `createdTime` 丢弃。
+- 观测：`jabiz.webhook.delivery`（标签 `subscription`，即订阅名）。
 
 ## 3. 审计视图
 

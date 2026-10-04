@@ -137,8 +137,11 @@ public class OutboxDeliverer {
     /** Delivers what is due now to every consumer, one batch per consumer; returns the number of deliveries tried. */
     public Mono<Integer> deliverPending() {
         return Flux.fromStream(subscriptions.orderedStream())
+            // A consumer's batch ends at its first failure: the failed event waits for its backoff, the others are
+            // taken by the next poll, and a receiver that is down does not hold up every other consumer.
             .concatMap(subscription -> pending(subscription)
                 .concatMap(pending -> deliver(subscription, pending.event(), pending.failures() + 1))
+                .takeUntil(outcome -> outcome == Outcome.FAILED)
                 .count())
             .reduce(0L, Long::sum)
             .map(Math::toIntExact);
