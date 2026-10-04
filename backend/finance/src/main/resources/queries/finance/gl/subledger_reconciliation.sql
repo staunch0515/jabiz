@@ -50,21 +50,27 @@ ar_cleared AS (
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :asOf
     GROUP BY a.{{FinApplication.sourceId}}
 ),
+-- Summed once a document and joined (F11c), as in the agings.
+ar_cleared_by AS (
+    SELECT doc_key, SUM(done) AS done, SUM(done_usd) AS done_usd FROM ar_cleared GROUP BY doc_key
+),
+ar_revalued AS (
+    -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007).
+    SELECT l.{{FinFxRevaluationLine.documentId}} AS doc_ref, SUM(l.{{FinFxRevaluationLine.difference}}) AS diff
+    FROM {{FinFxRevaluationLine}} l
+    JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
+    WHERE l.{{FinFxRevaluationLine.kind}} = 'RECEIVABLE'
+      AND r.{{FinFxRevaluationRun.revaluationDate}} <= :asOf AND r.{{FinFxRevaluationRun.reversalDate}} > :asOf
+    GROUP BY l.{{FinFxRevaluationLine.documentId}}
+),
 -- Each document's open amount in its currency and in dollars, as the receivables aging has them.
 ar_open AS (
-    SELECT CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END
-               * (d.doc_total - COALESCE((SELECT SUM(c.done) FROM ar_cleared c WHERE c.doc_key = d.doc_key), 0))
-               AS open_amt,
-           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END
-               * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM ar_cleared c WHERE c.doc_key = d.doc_key), 0))
-               + COALESCE((SELECT SUM(l.{{FinFxRevaluationLine.difference}})
-                   FROM {{FinFxRevaluationLine}} l
-                   JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
-                   WHERE l.{{FinFxRevaluationLine.kind}} = 'RECEIVABLE'
-                     AND l.{{FinFxRevaluationLine.documentId}} = CAST(d.doc_key AS varchar)
-                     AND r.{{FinFxRevaluationRun.revaluationDate}} <= :asOf
-                     AND r.{{FinFxRevaluationRun.reversalDate}} > :asOf), 0) AS open_usd
+    SELECT CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END * (d.doc_total - COALESCE(c.done, 0)) AS open_amt,
+           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END * (d.doc_total_usd - COALESCE(c.done_usd, 0))
+               + COALESCE(v.diff, 0) AS open_usd
     FROM ar_docs d
+    LEFT JOIN ar_cleared_by c ON c.doc_key = d.doc_key
+    LEFT JOIN ar_revalued v ON v.doc_ref = CAST(d.doc_key AS varchar)
 ),
 -- The aging lists the documents still open in their currency only.
 ar_total AS (
@@ -93,18 +99,25 @@ ap_cleared AS (
     WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} <= :asOf
     GROUP BY a.{{FinApApplication.sourceId}}
 ),
+ap_cleared_by AS (
+    SELECT doc_key, SUM(done_usd) AS done_usd FROM ap_cleared GROUP BY doc_key
+),
+ap_revalued AS (
+    -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007).
+    SELECT l.{{FinFxRevaluationLine.documentId}} AS doc_ref, SUM(l.{{FinFxRevaluationLine.difference}}) AS diff
+    FROM {{FinFxRevaluationLine}} l
+    JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
+    WHERE l.{{FinFxRevaluationLine.kind}} = 'PAYABLE'
+      AND r.{{FinFxRevaluationRun.revaluationDate}} <= :asOf AND r.{{FinFxRevaluationRun.reversalDate}} > :asOf
+    GROUP BY l.{{FinFxRevaluationLine.documentId}}
+),
 ap_total AS (
     SELECT COALESCE(SUM(
-           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END
-               * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM ap_cleared c WHERE c.doc_key = d.doc_key), 0))
-               - COALESCE((SELECT SUM(l.{{FinFxRevaluationLine.difference}})
-                   FROM {{FinFxRevaluationLine}} l
-                   JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
-                   WHERE l.{{FinFxRevaluationLine.kind}} = 'PAYABLE'
-                     AND l.{{FinFxRevaluationLine.documentId}} = CAST(d.doc_key AS varchar)
-                     AND r.{{FinFxRevaluationRun.revaluationDate}} <= :asOf
-                     AND r.{{FinFxRevaluationRun.reversalDate}} > :asOf), 0)), 0) AS open_total
+           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END * (d.doc_total_usd - COALESCE(c.done_usd, 0))
+               - COALESCE(v.diff, 0)), 0) AS open_total
     FROM ap_docs d
+    LEFT JOIN ap_cleared_by c ON c.doc_key = d.doc_key
+    LEFT JOIN ap_revalued v ON v.doc_ref = CAST(d.doc_key AS varchar)
 ),
 fa_taken AS (
     SELECT l.{{FinDepreciationLine.assetId}} AS asset_key, SUM(l.{{FinDepreciationLine.amount}}) AS run_total

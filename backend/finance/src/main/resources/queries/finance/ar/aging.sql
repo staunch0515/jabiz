@@ -51,6 +51,16 @@ WITH docs AS (
       -- A document voided later was still open on the day.
       AND (i.{{FinInvoice.voidDate}} IS NULL OR i.{{FinInvoice.voidDate}} > :agingDate)
       AND (CAST(:customerCode AS varchar) IS NULL OR i.{{FinInvoice.customerCode}} = :customerCode)
+      -- Only what can be open on the day (F11c): open now, voided later, or settled, credited or written off by an
+      -- application dated after it. Every other document was closed by then and needs none of its applications summed.
+      AND (COALESCE(i.{{FinInvoice.openAmount}}, i.{{FinInvoice.total}}) <> 0 OR i.{{FinInvoice.voidDate}} IS NOT NULL
+           -- Looked up a document at a time (by its index): for an early day most later documents have applications
+           -- after it, and collecting those first made a plan far slower than the scan it saves.
+           OR EXISTS (SELECT 1 FROM {{FinApplication}} a WHERE a.{{FinApplication.invoiceId}} = i.{{FinInvoice.invoiceId}}
+               AND a.{{FinApplication.applicationDate}} > :agingDate)
+           OR (i.{{FinInvoice.kind}} = 'CREDIT_MEMO' AND EXISTS (SELECT 1 FROM {{FinApplication}} a
+               WHERE a.{{FinApplication.sourceId}} = CAST(i.{{FinInvoice.invoiceId}} AS varchar)
+                 AND a.{{FinApplication.applicationDate}} > :agingDate)))
 ),
 cleared AS (
     -- What was taken off each invoice by the day: cash, discounts, credits, write-offs (recoveries negative)…
@@ -59,6 +69,7 @@ cleared AS (
            SUM(a.{{FinApplication.amountUsd}} + COALESCE(a.{{FinApplication.discount}}, 0)) AS done_usd
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApplication.invoiceId}} IN (SELECT doc_key FROM docs)
     GROUP BY a.{{FinApplication.invoiceId}}
     UNION ALL
     -- …and what of each credit memo was applied to invoices.
@@ -67,27 +78,33 @@ cleared AS (
            SUM(COALESCE(a.{{FinApplication.sourceAmountUsd}}, a.{{FinApplication.amountUsd}}))
     FROM {{FinApplication}} a
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :agingDate
+      AND a.{{FinApplication.sourceId}} IN (SELECT CAST(doc_key AS varchar) FROM docs)
     GROUP BY a.{{FinApplication.sourceId}}
+),
+-- Summed once a document and joined (F11c): looked up a document at a time they took time growing with the square of
+-- the documents.
+cleared_by AS (
+    SELECT doc_key, SUM(done) AS done, SUM(done_usd) AS done_usd FROM cleared GROUP BY doc_key
+),
+revalued AS (
+    -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007).
+    SELECT l.{{FinFxRevaluationLine.documentId}} AS doc_ref, SUM(l.{{FinFxRevaluationLine.difference}}) AS diff
+    FROM {{FinFxRevaluationLine}} l
+    JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
+    WHERE l.{{FinFxRevaluationLine.kind}} = 'RECEIVABLE'
+      AND r.{{FinFxRevaluationRun.revaluationDate}} <= :agingDate AND r.{{FinFxRevaluationRun.reversalDate}} > :agingDate
+    GROUP BY l.{{FinFxRevaluationLine.documentId}}
 ),
 open_docs AS (
     SELECT d.*,
-           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END
-               * (d.doc_total - COALESCE((SELECT SUM(c.done) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
-               AS open_amt,
-           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END
-               * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
-               -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007).
-               + COALESCE((SELECT SUM(l.{{FinFxRevaluationLine.difference}})
-                   FROM {{FinFxRevaluationLine}} l
-                   JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
-                   WHERE l.{{FinFxRevaluationLine.kind}} = 'RECEIVABLE'
-                     AND l.{{FinFxRevaluationLine.documentId}} = CAST(d.doc_key AS varchar)
-                     AND r.{{FinFxRevaluationRun.revaluationDate}} <= :agingDate
-                     AND r.{{FinFxRevaluationRun.reversalDate}} > :agingDate), 0)
-               AS open_usd,
+           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END * (d.doc_total - COALESCE(c.done, 0)) AS open_amt,
+           CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END * (d.doc_total_usd - COALESCE(c.done_usd, 0))
+               + COALESCE(v.diff, 0) AS open_usd,
            CAST(:agingDate AS date) - CASE WHEN COALESCE(CAST(:basis AS varchar), 'DUE') = 'INVOICE'
                THEN d.doc_date ELSE COALESCE(d.due_on, d.doc_date) END AS age
     FROM docs d
+    LEFT JOIN cleared_by c ON c.doc_key = d.doc_key
+    LEFT JOIN revalued v ON v.doc_ref = CAST(d.doc_key AS varchar)
 ),
 limits AS (
     SELECT CAST(COALESCE(:limit1, 30) AS integer) AS l1, CAST(COALESCE(:limit2, 60) AS integer) AS l2,

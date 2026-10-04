@@ -7,6 +7,7 @@ import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -22,7 +23,9 @@ import java.util.function.Function;
  * Runs a registered SQL template and puts its rows, a {@code List<Map<String, Object>>} of result column to value,
  * into the context (docs/design/06-process.md section 2.1). Every entity of the template is read through its
  * dataset with the caller's scope (decision D10). The template's own permissions are not checked: running the
- * process required the process's permissions (decision D11).
+ * process required the process's permissions (decision D11). All its rows, not a page: the datasets'
+ * {@code maxQueryBatchSize} limits browsing only; more than {@code jabiz.process.max-read-rows} (100,000 by default)
+ * fails the process (422 {@code PROCESS_READ_TOO_LARGE}) rather than giving it part of the result (decision D32).
  */
 @Component
 public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTemplate.Metadata<C>, C>,
@@ -60,10 +63,14 @@ public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTem
 
     private final SqlTemplateRegistry templates;
     private final AdvancedQueryExecutor executor;
+    private final int maxRows;
 
-    public RunTemplate(SqlTemplateRegistry templates, AdvancedQueryExecutor executor) {
+    public RunTemplate(SqlTemplateRegistry templates, AdvancedQueryExecutor executor,
+        @Value("${jabiz.process.max-read-rows:100000}") int maxRows) {
+        ProcessReads.checkMaximum(maxRows);
         this.templates = templates;
         this.executor = executor;
+        this.maxRows = maxRows;
     }
 
     @Override
@@ -73,11 +80,15 @@ public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTem
             Map<String, Object> params = metadata.params().apply(ctx);
             AdvancedQueryExecutor.At at = new AdvancedQueryExecutor.At(metadata.asOf().apply(ctx),
                 metadata.knownAt().apply(ctx));
-            return executor.execute(template, params == null ? Map.of() : params, at)
-                .map(RunTemplate::values)
-                .collectList()
-                .doOnNext(rows -> ctx.put(metadata.targetKey(), List.copyOf(rows)))
-                .then();
+            // One row more than accepted tells a complete result from a cut one.
+            return executor.all(template, params == null ? Map.of() : params, at, null, List.of(), maxRows + 1)
+                .flatMap(page -> {
+                    if (page.items().size() > maxRows) {
+                        return Mono.error(ProcessReads.tooLarge("template " + metadata.templateId(), maxRows));
+                    }
+                    ctx.put(metadata.targetKey(), page.items().stream().map(RunTemplate::values).toList());
+                    return Mono.<Void>empty();
+                });
         });
     }
 

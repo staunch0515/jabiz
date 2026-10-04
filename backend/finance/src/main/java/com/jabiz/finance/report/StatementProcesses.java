@@ -2,7 +2,6 @@ package com.jabiz.finance.report;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.finance.FinancePermissions;
-import com.jabiz.finance.gl.PeriodBalances;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
@@ -42,8 +41,6 @@ public final class StatementProcesses {
     public static final String NO_LAYOUT = "FIN_STATEMENT_NO_LAYOUT";
     public static final String NOT_A_STATEMENT = "FIN_STATEMENT_NOT_A_STATEMENT";
     public static final String EMPTY = "FIN_STATEMENT_EMPTY";
-    /** A statement the process cannot read whole: its template read is cut at {@link PeriodBalances#CAP} rows. */
-    public static final String TOO_LONG = "FIN_STATEMENT_TOO_LONG";
 
     public static final String BALANCE_SHEET = "finance.report.balance_sheet";
     public static final String INCOME_STATEMENT = "finance.report.income_statement";
@@ -383,12 +380,6 @@ public final class StatementProcesses {
             || StatementEntities.TOTAL.equals(r.get("kind")))) {
             ctx.reject(new Violation("params", EMPTY, "The statement has no lines to issue",
                 Map.of("layoutCode", layoutCode(ctx))));
-            return;
-        }
-        if (rows.size() >= PeriodBalances.CAP) {
-            // A cut read could leave out the unmapped rows at its end: never issue what was not read whole.
-            ctx.reject(new Violation("params", TOO_LONG, "The statement has " + PeriodBalances.CAP
-                + " rows or more", Map.of("layoutCode", layoutCode(ctx), "max", PeriodBalances.CAP - 1)));
             return;
         }
         List<String> unmapped = rows.stream()

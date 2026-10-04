@@ -337,6 +337,18 @@ class QueryCompilerTest {
         assertThat(small.limit()).isEqualTo(5);
     }
 
+    /** Decision D32: a whole-result read (a process) keeps its own limit; the page cap is for browsing only. */
+    @Test
+    void anUncappedCompileKeepsTheQueryLimit() {
+        DatasetDefinition capped = dataset(d -> d.policy(p -> p.maxQueryBatchSize(20).queryTimeout(Duration.ofSeconds(2))));
+
+        PhysicalQueryPlan all = compiler.compile(capped, ITEM, EntityQuery.builder().limit(500).build(), Map.of(),
+            null, false);
+
+        assertThat(all.limit()).isEqualTo(500);
+        assertThat(all.timeout()).isEqualTo(Duration.ofSeconds(2));
+    }
+
     @Test
     void entityQueryRejectsInvalidPaging() {
         assertThatThrownBy(() -> EntityQuery.builder().offset(-1).build()).isInstanceOf(IllegalArgumentException.class);

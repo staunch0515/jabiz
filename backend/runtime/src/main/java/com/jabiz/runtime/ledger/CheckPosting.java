@@ -102,7 +102,8 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
                 EntityQuery query = EntityQuery.builder()
                     .where(new QueryPredicate.In(source.field(), List.copyOf(values)))
                     .limit(values.size() + 1).build();
-                yield entityManager.query(dataset, def, query)
+                // Every value of the posting, not a page of the source's dataset (decision D32).
+                yield entityManager.queryAll(dataset, def, query)
                     .map(found -> String.valueOf(found.<Object>get(source.field())))
                     .collect(Collectors.toSet());
             }

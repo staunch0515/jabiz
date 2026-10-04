@@ -77,7 +77,7 @@ public final class MatchProcesses {
     public record MatchOutput(String matchId, BigDecimal amount) {}
 
     public record AcceptInput(@NotBlank @Size(max = 20) String bankCode,
-        @NotNull @Size(min = 1, max = 500) List<@Valid @NotNull Accepted> proposals) {}
+        @NotNull @Size(min = 1, max = MAX_ACCEPTED) List<@Valid @NotNull Accepted> proposals) {}
 
     /** A proposal as {@code FIN_BANK_MATCH_PROPOSE} gave it: its line and its items. */
     public record Accepted(@NotNull UUID lineId, @NotNull @Size(min = 1, max = 500) List<@Valid @NotNull BookRef> items) {}
@@ -102,6 +102,8 @@ public final class MatchProcesses {
 
     /** A reference matched this often before is no limit: its items, all of them, decide its next round. */
     static final int MAX_ITEMS = 10_000;
+    /** The most proposals accepted at once: one write of their matches. */
+    static final int MAX_ACCEPTED = 500;
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";

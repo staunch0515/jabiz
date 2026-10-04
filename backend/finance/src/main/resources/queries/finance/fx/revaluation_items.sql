@@ -93,6 +93,13 @@ ap_cleared AS (
     WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} <= :revaluationDate
     GROUP BY a.{{FinApApplication.sourceId}}
 ),
+-- Summed once a document and joined (F11c), as in the agings.
+ar_cleared_by AS (
+    SELECT doc_key, SUM(done) AS done, SUM(done_usd) AS done_usd FROM ar_cleared GROUP BY doc_key
+),
+ap_cleared_by AS (
+    SELECT doc_key, SUM(done) AS done, SUM(done_usd) AS done_usd FROM ap_cleared GROUP BY doc_key
+),
 banks AS (
     SELECT b.{{FinBankAccount.bankCode}} AS bank_key, b.{{FinBankAccount.currency}} AS cur,
            b.{{FinBankAccount.glAccount}} AS gl
@@ -123,17 +130,15 @@ bank_statements AS (
 items AS (
     SELECT 'RECEIVABLE' AS kind, d.doc_key, d.doc_no, d.party, CAST(NULL AS varchar) AS gl,
            CAST(NULL AS date) AS stmt_on, d.cur,
-           d.sign * (d.doc_total - COALESCE((SELECT SUM(c.done) FROM ar_cleared c WHERE c.doc_key = d.doc_key), 0))
-               AS open_amt,
-           d.sign * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM ar_cleared c
-               WHERE c.doc_key = d.doc_key), 0)) AS carry_usd
+           d.sign * (d.doc_total - COALESCE(c.done, 0)) AS open_amt,
+           d.sign * (d.doc_total_usd - COALESCE(c.done_usd, 0)) AS carry_usd
     FROM receivables d
+    LEFT JOIN ar_cleared_by c ON c.doc_key = d.doc_key
     UNION ALL
     SELECT 'PAYABLE', d.doc_key, d.doc_no, d.party, CAST(NULL AS varchar), CAST(NULL AS date), d.cur,
-           d.sign * (d.doc_total - COALESCE((SELECT SUM(c.done) FROM ap_cleared c WHERE c.doc_key = d.doc_key), 0)),
-           d.sign * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM ap_cleared c
-               WHERE c.doc_key = d.doc_key), 0))
+           d.sign * (d.doc_total - COALESCE(c.done, 0)), d.sign * (d.doc_total_usd - COALESCE(c.done_usd, 0))
     FROM payables d
+    LEFT JOIN ap_cleared_by c ON c.doc_key = d.doc_key
     UNION ALL
     -- A bank account in a foreign currency: what its last statement says it holds, and what its account carries.
     SELECT 'BANK', k.bank_key, k.bank_key, CAST(NULL AS varchar), k.gl, st.closed_on, k.cur, COALESCE(st.closing, 0),

@@ -1058,7 +1058,11 @@ public final class InvoiceProcesses {
                 .permissions(FinancePermissions.SUBLEDGER_POST)
                 .internal()
                 .contextFactory(InvoiceProcesses::withInput)
-                .outputMapper(ctx -> ctx.get(OUTPUT, InvoiceOutput.class))
+                // Every approval comes here: one of another subject, or of an invoice no longer waiting for it, marks
+                // nothing and says so (an output, as the platform requires).
+                .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, InvoiceOutput.class)
+                    : new InvoiceOutput(null, null, null, null, null, null, null, null, null, null, null,
+                        List.of("not a decision on an invoice waiting for it"), null))
                 .step("Load the invoice", QueryEntities.of(InvoiceEntities.INVOICE_DATASET, ctx -> {
                     ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
                     // Approvals of other subjects are none of this process's business.

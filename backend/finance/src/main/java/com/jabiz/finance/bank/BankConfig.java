@@ -86,12 +86,14 @@ class BankConfig {
 
     @Bean
     DatasetDefinition finStatementLineDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        // A statement of up to 5,000 lines looks all of them up at once among those stored before.
+        // A statement of up to 5,000 lines looks all of them up at once among those stored before, and is stored in one
+        // write.
         return DatasetDefinition.define(StatementEntities.LINE_DATASET, d -> d
             .targetEntityType(StatementEntities.LINE)
             .asDefault()
             .permissions(FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_STATEMENT_IMPORT)
-            .policy(p -> p.maxQueryBatchSize(StatementProcesses.MAX_LINES + 1).processOnlyWrites())
+            .policy(p -> p.maxQueryBatchSize(StatementProcesses.MAX_LINES + 1)
+                .maxWriteBatchSize(StatementProcesses.MAX_LINES).processOnlyWrites())
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -129,18 +131,25 @@ class BankConfig {
 
     @Bean
     DatasetDefinition finBankMatchDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return GlEntities.dataset(MatchEntities.MATCH_DATASET, MatchEntities.MATCH,
-            FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE, true, poolRef);
+        // Up to 500 proposals are accepted in one write.
+        return DatasetDefinition.define(MatchEntities.MATCH_DATASET, d -> d
+            .targetEntityType(MatchEntities.MATCH)
+            .asDefault()
+            .permissions(FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE)
+            .policy(p -> p.maxQueryBatchSize(500).maxWriteBatchSize(MatchProcesses.MAX_ACCEPTED).processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean
     DatasetDefinition finBankMatchItemDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        // A reference's next round is read from all its items before: never cut short.
+        // A reference's next round is read from all its items before: never cut short. The items of the proposals
+        // accepted together are written in one go.
         return DatasetDefinition.define(MatchEntities.ITEM_DATASET, d -> d
             .targetEntityType(MatchEntities.ITEM)
             .asDefault()
             .permissions(FinancePermissions.BANK_ACTIVITY_READ, FinancePermissions.BANK_RECONCILE)
-            .policy(p -> p.maxQueryBatchSize(MatchProcesses.MAX_ITEMS).processOnlyWrites())
+            .policy(p -> p.maxQueryBatchSize(MatchProcesses.MAX_ITEMS).maxWriteBatchSize(MatchProcesses.MAX_ITEMS)
+                .processOnlyWrites())
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

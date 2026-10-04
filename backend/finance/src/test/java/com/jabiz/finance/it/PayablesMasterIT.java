@@ -229,7 +229,7 @@ class PayablesMasterIT extends FinanceItSupport {
             "44443333", "Phone call from someone claiming to be the vendor"));
         ok("APPROVAL_DECIDE", controller, Map.of("requestId", asked.get("approvalRequestId"), "decision", "REJECT",
             "reason", "Not confirmed with the vendor"));
-        deliverer.deliverPending().block();
+        delivered();
         assertThat(account(asked)).containsEntry("status", "REJECTED").containsEntry("decidedBy", "controller");
 
         assertThat(refused(VendorBankProcesses.CHANGE, clerk, bankChange("V300", "111000026", "44443333", "Typo"),
@@ -344,6 +344,15 @@ class PayablesMasterIT extends FinanceItSupport {
 
     // ---- helpers ---------------------------------------------------------------------------------------------------
 
+    /**
+     * Delivers the decisions; every consumer of an approval takes it, the subscribers of other subjects by doing nothing
+     * (ROADMAP F11c: the invoices' failed on every approval not theirs and were tried again and again).
+     */
+    private void delivered() {
+        deliverer.deliverPending().block();
+        assertThat(query("SELECT consumer FROM sys_outbox_attempt")).isEmpty();
+    }
+
     private static Map<String, Object> vendor(String code, String name, Map<String, Object> more) {
         Map<String, Object> input = new LinkedHashMap<>(Map.of("vendorCode", code, "legalName", name,
             "currency", "USD", "entityType", "SINGLE_MEMBER_LLC"));
@@ -359,7 +368,7 @@ class PayablesMasterIT extends FinanceItSupport {
     private void approve(Map<String, Object> change) {
         ok("APPROVAL_DECIDE", controller, Map.of("requestId", change.get("approvalRequestId"),
             "decision", "APPROVE"));
-        deliverer.deliverPending().block();
+        delivered();
     }
 
     private Map<String, Object> account(Map<String, Object> change) {

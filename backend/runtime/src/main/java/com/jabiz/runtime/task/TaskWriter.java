@@ -76,7 +76,7 @@ public class TaskWriter {
         EntityQuery query = EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.Eq("sourceKey", sourceKey),
             new QueryPredicate.Eq("status", TaskEntities.OPEN)))).limit(TaskEntities.MAX_ROWS).build();
-        return entities.query(dataset, TaskEntities.SYS_TASK, query)
+        return entities.queryAll(dataset, TaskEntities.SYS_TASK, query)
             .doOnNext(task -> {
                 Map<String, Object> closed = new LinkedHashMap<>();
                 closed.put("status", status);

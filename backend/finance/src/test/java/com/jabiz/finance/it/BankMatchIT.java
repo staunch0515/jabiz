@@ -2,10 +2,12 @@ package com.jabiz.finance.it;
 
 import com.jabiz.finance.ar.InvoiceEntities;
 import com.jabiz.finance.ar.ReceiptProcesses;
+import com.jabiz.finance.gl.AccountProcesses;
 import com.jabiz.finance.bank.BankAccountProcesses;
 import com.jabiz.finance.bank.BankEntryProcesses;
 import com.jabiz.finance.bank.MatchEntities;
 import com.jabiz.finance.bank.MatchProcesses;
+import com.jabiz.finance.bank.StatementProcesses;
 import com.jabiz.finance.bank.StatementEntities;
 import com.jabiz.finance.bank.TransferProcesses;
 import com.jabiz.finance.setup.FinanceRoles;
@@ -249,8 +251,62 @@ class BankMatchIT extends FinanceItSupport {
         return report("finance.bank.match_history", accountant, Map.of("bankCode", "OPERATING"));
     }
 
+    /**
+     * ROADMAP F11c: a statement of more lines than a dataset writes by default (100) is imported whole, and as many
+     * proposals are accepted at once; found by the performance test, whose statements are thousands of lines.
+     */
     @Test
     @Order(5)
+    @SuppressWarnings("unchecked")
+    void aStatementOfMoreThanAHundredLinesIsImportedAndMatchedAtOnce() {
+        int count = 150;
+        ok(AccountProcesses.CREATE, controller(), Map.of("accountCode", "1060", "accountName", "Cash Lockbox",
+            "financialType", "ASSET", "normalBalance", "DEBIT", "statementLine", "Cash and cash equivalents",
+            "controlClass", "BANK"));
+        ok(BankAccountProcesses.SAVE, inRoles("treasurer", FinanceRoles.TREASURER), Map.of("bankCode", "LOCKBOX",
+            "bankName", "Lakeside National Bank", "glAccount", "1060", "routingNumber", "111000025",
+            "companyAccountNumber", "000555000111"));
+        ok(StatementProcesses.OPENING_ITEMS, as("migrator", "fin.migration", "fin.import", "fin.bank.activity.read"),
+            Map.of("bankCode", "LOCKBOX", "statementBalance", "0.00", "items", List.of()));
+        String clerk = inRoles("ar-clerk", FinanceRoles.RECEIVABLES_CLERK);
+        StringBuilder csv = new StringBuilder("date,bank_reference,description,amount\n"
+            + "2026-01-01,OPENING,OPENING LEDGER BALANCE,0.00\n");
+        BigDecimal total = BigDecimal.ZERO;
+        for (int i = 1; i <= count; i++) {
+            String day = String.format("2026-01-%02d", 1 + i % 28);
+            BigDecimal amount = new BigDecimal(100 + i).add(new BigDecimal(i % 100).movePointLeft(2));
+            Map<String, Object> receipt = new LinkedHashMap<>();
+            receipt.put("customerCode", "C100");
+            receipt.put("receiptDate", day);
+            receipt.put("amount", amount.toPlainString());
+            receipt.put("method", "ACH");
+            receipt.put("reference", "LBX-" + i);
+            receipt.put("bankAccount", "1060");
+            receipt.put("applications", List.of());
+            ok(ReceiptProcesses.RECORD, clerk, receipt);
+            csv.append(day).append(",LBX-").append(i).append(",DEPOSIT LBX-").append(i).append(',')
+                .append(amount.toPlainString()).append('\n');
+            total = total.add(amount);
+        }
+        csv.append("2026-01-31,CLOSING,CLOSING LEDGER BALANCE,").append(total.toPlainString()).append('\n');
+        String fileId = upload(accountant, "fin.bank.statement", csv.toString().getBytes(StandardCharsets.UTF_8),
+            "lockbox.csv", "text/csv");
+        post("/api/imports/finance.bank_statement/commit", accountant, Map.of("fileId", fileId, "params",
+            Map.of("bankCode", "LOCKBOX"))).expectStatus().isOk();
+        assertThat(find(StatementEntities.LINE_DATASET, "bankCode", "LOCKBOX")).hasSize(count);
+
+        List<Map<String, Object>> accepted = ((List<Map<String, Object>>) ok(MatchProcesses.PROPOSE, accountant,
+            Map.of("bankCode", "LOCKBOX")).get("proposals")).stream().map(p -> Map.<String, Object>of(
+                "lineId", p.get("lineId"), "items", ((List<Map<String, Object>>) p.get("items")).stream()
+                    .map(i -> Map.of("kind", i.get("kind"), "id", i.get("id"))).toList())).toList();
+        assertThat(accepted).hasSize(count);
+        assertThat(ok(MatchProcesses.ACCEPT, accountant, Map.of("bankCode", "LOCKBOX", "proposals", accepted)))
+            .containsEntry("matched", count);
+        assertThat(find(MatchEntities.MATCH_DATASET, "bankCode", "LOCKBOX")).hasSize(count);
+    }
+
+    @Test
+    @Order(6)
     void theMatchTablesAreOnlyInsertedInto() {
         assertOnlyInserted("fi_bank_match_version", "fi_bank_match_item_version", "fi_bank_entry_version",
             "fi_bank_entry_rule_version");

@@ -49,12 +49,16 @@ cleared AS (
     WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} <= :onDate
     GROUP BY a.{{FinApplication.sourceId}}
 ),
+-- Summed once a document and joined (F11c), as in the agings.
+cleared_by AS (
+    SELECT doc_key, SUM(done_usd) AS done_usd FROM cleared GROUP BY doc_key
+),
 aged AS (
-    SELECT CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END
-               * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
+    SELECT CASE WHEN d.doc_kind = 'CREDIT_MEMO' THEN -1 ELSE 1 END * (d.doc_total_usd - COALESCE(c.done_usd, 0))
                AS open_usd,
            CAST(:onDate AS date) - d.due_on AS age
     FROM docs d
+    LEFT JOIN cleared_by c ON c.doc_key = d.doc_key
 ),
 buckets (seq, label, low, high) AS (
     VALUES (0, 'Current', -100000, 0), (1, '1-30', 1, 30), (2, '31-60', 31, 60), (3, '61-90', 61, 90),
