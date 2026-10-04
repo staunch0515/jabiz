@@ -1,6 +1,7 @@
 import { PageContainer } from '@ant-design/pro-components'
 import { useQuery } from '@tanstack/react-query'
-import { App, Button, Card, Checkbox, DatePicker, Form, Select, Space, Table, Tag, Typography } from 'antd'
+import { App, Button, Card, Checkbox, DatePicker, Form, Space, Table, Tag, Typography } from 'antd'
+import AccessibleSelect from '../components/AccessibleSelect'
 import type { Dayjs } from 'dayjs'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -120,7 +121,7 @@ export default function RetentionPage() {
             <Form<ExportForm> form={form} layout="vertical" onFinish={(values) => void submit(values)}
               data-testid="export-form">
               <Form.Item name="datasets" label={t('retention.datasets')} rules={[{ required: true }]}>
-                <Select
+                <AccessibleSelect
                   mode="multiple"
                   showSearch
                   optionFilterProp="label"
