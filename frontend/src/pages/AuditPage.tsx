@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { AUDIT_FILTERS, type AuditRecord, type AuditFieldChange, type RevealRecord } from '../api/audit'
 import { api, unwrap } from '../api/client'
+import { expandIcon } from '../components/expandIcon'
 import { formatDateTime } from '../meta/format'
 
 const ACTION_COLORS: Record<string, string> = { INSERT: 'green', UPDATE: 'blue', DELETE: 'red' }
@@ -95,7 +96,7 @@ export default function AuditPage() {
         columns={columns}
         form={{ initialValues: initial, syncToUrl: false }}
         pagination={{ defaultPageSize: 50 }}
-        expandable={{ expandedRowRender: (record) => <ChangeTable record={record} /> }}
+        expandable={{ expandedRowRender: (record) => <ChangeTable record={record} />, expandIcon: expandIcon(t) }}
         data-testid="audit-records"
         request={async ({ current = 1, pageSize = 50, recordedTime, ...filters }) => {
           const query: Record<string, string | number | undefined> = {

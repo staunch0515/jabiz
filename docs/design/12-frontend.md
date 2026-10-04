@@ -228,3 +228,16 @@ jabizApp {
 
 扩展经 `@jabiz/admin` 使用 `formatAmount`、`formatDate`、`formatDateTime`、`enabledLanguages`。
 
+## 11. 无障碍（WCAG 2.2 AA，阶段 14m）
+
+通用后台以 WCAG 2.2 A / AA 为目标。自动检查找得到的部分由 e2e 守住，审计由使用方组织（自动检查约能发现审计问题的三分之一）。
+
+| 方面 | 做法 |
+|---|---|
+| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页、数据目录、列表、新建表单、历史、流程目录、流程表单（含必填的选择）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
+| 对比度 | `App.tsx` 的 `ACCESSIBLE_THEME`：主色 `#0958d9`、错误色 `#cf1322`、说明与三级文字（及随之的图标色）`rgba(0,0,0,0.65)`、成功色 `#237804`、警告色 `#874d00`（其浅色背景与边框保持 Ant Design 的默认值，否则成功、警告标签的文字只有 2.7:1）、表格的文字空状态 `rgba(0,0,0,0.65)`（Ant Design 默认分别为 4.1、3.3、3.4、2.3、1.8、1.8:1）；预置标签（green、orange、gold、red、blue）的文字在 `index.css` 中加深一档。都 ≥ 4.5:1 |
+| 名称与属性 | 有展开行的表格（审计、单据）用 `components/expandIcon` 的展开按钮，带"展开行 / 收起行"的名称（Ant Design 的按钮在这些 ProTable 中没有名称）；只给有 `expandedRowRender` 的表格，否则表格会被当作树。表单项中直接使用的 antd `Select` 换成 `components/AccessibleSelect`（去掉表单项给的、被放在外层元素上的 `aria-required`）；ProForm 的选择字段没有这个问题 |
+| 扩展 | 扩展的页面在同一个 `ConfigProvider` 下，主题自动适用；扩展的 e2e 以平台前端的依赖运行时可直接引用 `@axe-core/playwright`，规则集与上表相同 |
+
+新增或修改页面时：在 `a11y.spec.ts` 中加上该页面；颜色用主题 token，不写死 Ant Design 的默认色值。
+

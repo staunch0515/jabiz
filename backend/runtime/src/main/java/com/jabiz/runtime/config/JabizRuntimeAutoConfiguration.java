@@ -4,6 +4,7 @@ import com.jabiz.query.QueryCompiler;
 import com.jabiz.runtime.JabizApplication;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.file.FileProperties;
+import com.jabiz.runtime.webhook.WebhookProperties;
 import com.jabiz.runtime.publicread.PublicProperties;
 import com.jabiz.runtime.web.JabizWebProperties;
 import org.slf4j.Logger;
@@ -22,7 +23,8 @@ import reactor.core.scheduler.Schedulers;
  */
 @AutoConfiguration
 @ComponentScan("com.jabiz.runtime")
-@EnableConfigurationProperties({JabizWebProperties.class, FileProperties.class, PublicProperties.class})
+@EnableConfigurationProperties({JabizWebProperties.class, FileProperties.class, PublicProperties.class,
+    WebhookProperties.class})
 public class JabizRuntimeAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(JabizRuntimeAutoConfiguration.class);

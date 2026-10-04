@@ -41,7 +41,6 @@ test('a statement figure drills to its entries and their documents', async ({ pa
     await expect(fee).toContainText('123.45')
     await fee.getByRole('link').click()
     await expect(page).toHaveURL(/\/gl\/journals\/[^/]+$/)
-    await page.goBack()
   })
 
   await test.step('the statement exports to PDF through the platform', async () => {

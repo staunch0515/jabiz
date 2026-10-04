@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { App as AntApp, ConfigProvider } from 'antd'
+import { App as AntApp, ConfigProvider, type ThemeConfig } from 'antd'
 import enUS from 'antd/locale/en_US'
 import jaJP from 'antd/locale/ja_JP'
 import zhCN from 'antd/locale/zh_CN'
@@ -93,11 +93,49 @@ const router = createBrowserRouter([
 
 const antdLocales = { zh: zhCN, ja: jaJP, en: enUS } as const
 
+/**
+ * Colours with a contrast of at least 4.5:1 against their backgrounds (WCAG 2.2 AA 1.4.3; docs/design/12-frontend.md
+ * section 11): Ant Design's defaults fall short — the primary blue on white and white on it 4.1, description and
+ * tertiary text (and with it icons) 3.4, the red of danger 3.3, success and warning text 2.3 and 1.8, a table's text
+ * placeholder 1.8. The text of green, orange and gold tags (about 3) is darkened in index.css: their palettes
+ * are generated, and darker seeds would darken the backgrounds with them.
+ */
+const ACCESSIBLE_THEME: ThemeConfig = {
+  token: {
+    colorPrimary: '#0958d9',
+    colorInfo: '#0958d9',
+    colorLink: '#0958d9',
+    colorError: '#cf1322',
+    colorTextDescription: 'rgba(0, 0, 0, 0.65)',
+    colorTextTertiary: 'rgba(0, 0, 0, 0.65)',
+    // Success and warning text (Typography type="success" / "warning") 2.3 and 1.8:1 by default; the warning colour
+    // is a shade darker still, for warning tags on their pale background (4.2:1 with #ad6800).
+    colorSuccess: '#237804',
+    colorWarning: '#874d00',
+    // Their pale backgrounds and borders stay Ant Design's: derived from the darker colours they would darken too,
+    // and the text of success and warning tags (drawn on them) would fall to 2.7:1.
+    colorSuccessBg: '#f6ffed',
+    colorSuccessBorder: '#b7eb8f',
+    colorWarningBg: '#fffbe6',
+    colorWarningBorder: '#ffe58f',
+  },
+  components: {
+    // A table's text placeholder (emptyText given as text) is drawn in the disabled colour, 1.8:1.
+    Table: { colorTextDisabled: 'rgba(0, 0, 0, 0.65)' },
+  },
+}
+
+/**
+ * The expand button of table rows, named for screen readers (WCAG 4.1.2): ProTable replaces the table's texts, so
+ * Ant Design's own button lost its name. Same classes, so it looks the same. A render function, not a component: the
+ * table calls it per row, so it takes the texts from its caller instead of a hook.
+ */
+
 export default function App() {
   const { i18n } = useTranslation()
   const locale = antdLocales[i18n.language as keyof typeof antdLocales] ?? zhCN
   return (
-    <ConfigProvider locale={locale}>
+    <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>

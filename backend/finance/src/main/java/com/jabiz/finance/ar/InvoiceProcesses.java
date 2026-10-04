@@ -23,6 +23,7 @@ import com.jabiz.runtime.approval.WithdrawApproval;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -72,6 +73,8 @@ public final class InvoiceProcesses {
     public static final String SAVE = "FIN_INVOICE_SAVE";
     public static final String DELETE = "FIN_INVOICE_DELETE";
     public static final String POST = "FIN_INVOICE_POST";
+    /** Published when an invoice (not a credit memo) posts. */
+    public static final String POSTED_EVENT = "finance.invoice-posted";
     public static final String VOID = "FIN_INVOICE_VOID";
     public static final String APPLY = "FIN_CREDIT_APPLY";
     public static final String OPENING = "FIN_AR_OPENING";
@@ -535,7 +538,28 @@ public final class InvoiceProcesses {
             })
             .step("Book it", CallProcess.when(ctx -> ctx.contains(SUB_INPUT), SubledgerPosting.POST, 1,
                 ctx -> ctx.get(SUB_INPUT), SUB_OUTPUT))
-            .compute("Record the posting", (metadata, ctx) -> recordPosting(ctx)));
+            .compute("Record the posting", (metadata, ctx) -> recordPosting(ctx))
+            // FIN-DI-007: other systems hear of posted invoices through the platform's webhooks (decision D33).
+            .step("Announce the invoice", PublishEvent.when(ctx -> ctx.contains(SUB_OUTPUT)
+                && !prepared(ctx).creditMemo(), POSTED_EVENT, InvoiceProcesses::postedEvent)));
+
+    /** The payload of {@value #POSTED_EVENT}: the invoice's number and totals, nothing about the customer but its code. */
+    static Map<String, Object> postedEvent(ProcessContext ctx) {
+        EntityInstance invoice = invoice(ctx);
+        Prepared prepared = prepared(ctx);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("invoiceId", String.valueOf(invoice.id()));
+        payload.put("invoiceNo", ctx.get(NUMBER, String.class));
+        payload.put("customerCode", invoice.get("customerCode"));
+        payload.put("invoiceDate", String.valueOf(invoice.<Object>get("invoiceDate")));
+        payload.put("dueDate", String.valueOf(prepared.dueDate()));
+        payload.put("currency", invoice.get("currency"));
+        payload.put("subtotal", prepared.subtotal());
+        payload.put("taxTotal", prepared.tax());
+        payload.put("total", prepared.total());
+        payload.put("totalUsd", prepared.posting().totalUsd());
+        return payload;
+    }
 
     static void prepare(ProcessContext ctx) {
         EntityInstance invoice = invoice(ctx);
