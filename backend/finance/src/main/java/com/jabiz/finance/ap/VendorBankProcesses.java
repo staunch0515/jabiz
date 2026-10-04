@@ -211,7 +211,7 @@ public final class VendorBankProcesses {
         ctx.put(VALUES, values);
         // The case is the vendor: its audit trail lists the approvals of its bank changes.
         ctx.put(CASE, ApprovalCase.of(list(ctx, VENDORS).getFirst().id(), Map.of("vendorCode", vendorCode),
-            content));
+            content).reference(vendorCode));
     }
 
     @SuppressWarnings("unchecked")

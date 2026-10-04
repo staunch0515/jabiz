@@ -303,7 +303,8 @@ public final class ReconciliationProcesses {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("amount", figures.statementBalance());
         facts.put("bankCode", rec.get("bankCode"));
-        ctx.put(CASE, ApprovalCase.of(rec.id(), facts, content(rec, ctx)).preparedBy(rec.get("preparedBy")));
+        ctx.put(CASE, ApprovalCase.of(rec.id(), facts, content(rec, ctx)).preparedBy(rec.get("preparedBy"))
+            .reference(rec.get("bankCode") + " " + rec.get("statementDate")));
     }
 
     static void recordComplete(ProcessContext ctx) {

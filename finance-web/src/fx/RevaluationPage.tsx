@@ -1,5 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, formatDateTime, useAuth } from '@jabiz/admin'
+import {
+  ApiError,
+  EXTENSION_NAMESPACE,
+  formatAmount,
+  formatDate,
+  formatDateTime,
+  useAuth,
+  UserName,
+} from '@jabiz/admin'
 import { Alert, Button, Card, Checkbox, Input, Space, Table, Typography } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -60,7 +68,7 @@ export default function RevaluationPage() {
           { title: t('fx.rateType'), dataIndex: 'rateType' },
           { title: t('fx.total'), dataIndex: 'total', align: 'right', render: money },
           { title: t('fx.lineCount'), dataIndex: 'lineCount', align: 'right' },
-          { title: t('fx.runBy'), dataIndex: 'actor' },
+          { title: t('fx.runBy'), dataIndex: 'actor', render: (value?: string | null) => <UserName id={value} /> },
           { title: t('fx.runTime'), dataIndex: 'runTime', render: (v: string) => formatDateTime(v) },
         ]}
       />

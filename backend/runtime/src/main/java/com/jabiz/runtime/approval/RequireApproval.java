@@ -165,13 +165,16 @@ public class RequireApproval<C extends ProcessContext> implements StepHandler<Re
             request.put("levels", ApprovalJson.write(levels));
             request.put("currentLevel", BigDecimal.ONE);
             request.put("facts", ApprovalJson.write(facts));
+            if (approvalCase.reference() != null) {
+                request.put("reference", approvalCase.reference());
+            }
             String requestId = String.valueOf(ctx.changes().insert(ApprovalEntities.REQUEST, request));
             record(ctx, subject, approvalCase, ApprovalOutcome.Status.PENDING, matched,
                 evaluation.versionKeys(), requestId, hash, facts, businessTime);
             ctx.put(metadata.targetKey(), new ApprovalOutcome(ApprovalOutcome.Status.PENDING, requestId));
             return publisher().publish(REQUESTED, new Requested(requestId, subject.name(),
                     approvalCase.entityId(), preparer, levels.size()), ctx.processSeqId())
-                .then(tasks.create(ctx, ApprovalTasks.task(subject.name(), approvalCase.entityId(),
+                .then(tasks.create(ctx, ApprovalTasks.task(subject.name(), approvalCase.entityId(), approvalCase.reference(),
                     requestId, 1, evaluation.levels().getFirst().permission())));
         });
     }

@@ -587,7 +587,8 @@ public final class PaymentProcesses {
                 facts.put("amount", BillPosting.usd(run.get("total"), ApFx.rate(run)));
                 facts.put("method", run.get("method"));
                 facts.put("bankCode", run.get("bankCode"));
-                ctx.put(CASE, ApprovalCase.of(run.id(), facts, content).preparedBy(run.get("preparedBy")));
+                ctx.put(CASE, ApprovalCase.of(run.id(), facts, content).preparedBy(run.get("preparedBy"))
+                    .reference(run.get("runNo")));
             })
             .step("Ask for approval", RequireApproval.when(ctx -> ctx.contains(CASE), SUBJECT,
                 ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))

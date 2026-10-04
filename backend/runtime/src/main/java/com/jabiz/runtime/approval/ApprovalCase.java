@@ -15,9 +15,11 @@ import java.util.Objects;
  *                     operation time
  * @param preparerId   who prepared the case (may not approve it); null: the acting user. A process continuing
  *                     after an approval, running as the system, passes the preparer of the approved request
+ * @param reference    how people know the document (a journal entry's number, at most 100 characters), shown in
+ *                     the approvers' task instead of the id; null: the id
  */
 public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?> content, Instant businessTime,
-    String preparerId) {
+    String preparerId, String reference) {
 
     public ApprovalCase {
         if (entityId == null || entityId.isBlank() || entityId.length() > 100) {
@@ -25,6 +27,14 @@ public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?>
         }
         Objects.requireNonNull(facts, "facts must not be null");
         Objects.requireNonNull(content, "content must not be null");
+        if (reference != null && (reference.isBlank() || reference.length() > 100)) {
+            throw new IllegalArgumentException("reference must be 1 to 100 characters");
+        }
+    }
+
+    public ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?> content, Instant businessTime,
+        String preparerId) {
+        this(entityId, facts, content, businessTime, preparerId, null);
     }
 
     public static ApprovalCase of(Object entityId, Map<String, ?> facts, Map<String, ?> content) {
@@ -32,10 +42,15 @@ public record ApprovalCase(String entityId, Map<String, ?> facts, Map<String, ?>
     }
 
     public ApprovalCase at(Instant time) {
-        return new ApprovalCase(entityId, facts, content, time, preparerId);
+        return new ApprovalCase(entityId, facts, content, time, preparerId, reference);
     }
 
     public ApprovalCase preparedBy(String preparer) {
-        return new ApprovalCase(entityId, facts, content, businessTime, preparer);
+        return new ApprovalCase(entityId, facts, content, businessTime, preparer, reference);
+    }
+
+    /** The case known to people as {@code reference} (see the parameter). */
+    public ApprovalCase reference(String reference) {
+        return new ApprovalCase(entityId, facts, content, businessTime, preparerId, reference);
     }
 }

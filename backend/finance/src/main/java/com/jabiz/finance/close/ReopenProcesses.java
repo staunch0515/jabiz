@@ -257,7 +257,7 @@ public final class ReopenProcesses {
         Object id = ctx.changes().insert(CloseEntities.REOPEN, values);
         ctx.put(REOPEN_ID, id);
         ctx.put(CASE, ApprovalCase.of(id, Map.of("periodKey", periodKey), content)
-            .preparedBy(ctx.request().actorId()));
+            .preparedBy(ctx.request().actorId()).reference(periodKey));
     }
 
     static void recordRequest(ProcessContext ctx) {

@@ -199,7 +199,7 @@ frontend/
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
-| 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、格式化函数 |
+| 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数 |
 | 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径与 `virtual:jabiz-extension`） |
 
 - 扩展页面调用的仍是 `/api/**`：权限、数据视图范围与校验都在服务端，页面上的隐藏只是导航。

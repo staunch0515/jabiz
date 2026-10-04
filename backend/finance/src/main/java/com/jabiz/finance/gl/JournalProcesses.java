@@ -259,8 +259,13 @@ public final class JournalProcesses {
             .step("Number the entry", AssignNumber.when(
                 ctx -> ctx.contains(PREPARED) && ctx.get(PREPARED, Prepared.class).journalNo() == null,
                 JOURNAL_NUMBERS, ctx -> String.valueOf((Object) ctx.get(PREPARED, Prepared.class).fiscalYear()), JE_NO))
+            // The approvers' task names the entry by the number it has or was just given.
             .step("Apply the approval rules", RequireApproval.when(ctx -> ctx.contains(PREPARED), SUBJECT,
-                ctx -> ctx.get(PREPARED, Prepared.class).approvalCase(), APPROVAL))
+                ctx -> {
+                    Prepared prepared = ctx.get(PREPARED, Prepared.class);
+                    return prepared.approvalCase().reference(prepared.journalNo() != null ? prepared.journalNo()
+                        : ctx.get(JE_NO, String.class));
+                }, APPROVAL))
             .compute("Record the submission", (metadata, ctx) -> recordSubmission(ctx))
             .step("Save", SaveChanges.now())
             .step("Post it", CallProcess.when(ctx -> ctx.contains(POST_INPUT), POST, 1,

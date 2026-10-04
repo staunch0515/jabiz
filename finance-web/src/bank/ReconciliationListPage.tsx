@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth } from '@jabiz/admin'
+import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth, UserName } from '@jabiz/admin'
 import { Alert, Button, Card, Select, Space, Table, Typography } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -46,8 +46,8 @@ export default function ReconciliationListPage() {
           { title: t('bank.bookBalance'), dataIndex: 'bookBalance', align: 'right', render: money },
           { title: t('bank.difference'), dataIndex: 'difference', align: 'right', render: money },
           { title: t('bank.status'), dataIndex: 'status', render: (v: Reconciliation['status']) => <RecStatusTag status={v} /> },
-          { title: t('bank.preparedBy'), dataIndex: 'preparedBy' },
-          { title: t('bank.reviewedBy'), dataIndex: 'reviewedBy' },
+          { title: t('bank.preparedBy'), dataIndex: 'preparedBy', render: (value?: string | null) => <UserName id={value} /> },
+          { title: t('bank.reviewedBy'), dataIndex: 'reviewedBy', render: (value?: string | null) => <UserName id={value} /> },
         ]}
       />
     </Space>

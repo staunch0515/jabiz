@@ -9,6 +9,7 @@ import {
   paths,
   runProcess,
   useAuth,
+  UserName,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Descriptions, Popconfirm, Space, Table, Typography } from 'antd'
 import { useState } from 'react'
@@ -75,8 +76,8 @@ export default function ReconciliationPage() {
             {money(rec.difference)}
           </Typography.Text>
         </Descriptions.Item>
-        <Descriptions.Item label={t('bank.preparedBy')}>{rec.preparedBy ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label={t('bank.reviewedBy')}>{rec.reviewedBy ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('bank.preparedBy')}>{rec.preparedBy ? <UserName id={rec.preparedBy} /> : '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('bank.reviewedBy')}>{rec.reviewedBy ? <UserName id={rec.reviewedBy} /> : '—'}</Descriptions.Item>
         <Descriptions.Item label={t('bank.signedOff')}>{rec.signedOffTime ? formatDateTime(rec.signedOffTime) : '—'}</Descriptions.Item>
         <Descriptions.Item label={t('bank.matching')}>
           <Link to={`${MATCHING_PATH}?bank=${encodeURIComponent(rec.bankCode)}`}>{t('bank.openMatching')}</Link>

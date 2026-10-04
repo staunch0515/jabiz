@@ -49,7 +49,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **标识**：新实体主键使用 UUIDv7（默认 `EntityIdGenerator` 即 `UuidV7Generator`）；`process_seq_id` 来自数据库序列。
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
-  以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批规则、限额、职责分离规则只经
+  以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知与单据的发送（`DOCUMENT_SEND`，22 §5；`jabiz.mail.enabled`，缺省关闭），不在流程中直接发邮件。
@@ -106,6 +106,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   依赖服务端状态的判断写成仅服务端规则。新增规则种类或语义约束时，先在 `spec/validation-cases.json` 加用例，前后端都要通过。
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
   元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台、不自带依赖，路由不占平台路径。
+  手写页面与扩展中的用户编号（准备人、审批人等）以 `UserName`（`@jabiz/admin`，10 §14）显示为名字，不显示编号。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
   绝不放主键、操作人、字段值。遥测默认不外发，只经 OTLP 推送，不开放匿名的指标端点。

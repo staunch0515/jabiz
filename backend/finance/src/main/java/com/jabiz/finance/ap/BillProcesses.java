@@ -737,7 +737,10 @@ public final class BillProcesses {
         }
         content.put("lines", lines);
         content.put("total", prepared.total());
-        return ApprovalCase.of(bill.id(), facts, content).preparedBy(bill.get("preparedBy"));
+        // Known by its number once it has one, before that by the vendor's invoice number.
+        String number = bill.get("billNo");
+        return ApprovalCase.of(bill.id(), facts, content).preparedBy(bill.get("preparedBy"))
+            .reference(number != null ? number : bill.get("vendorCode") + " " + bill.get("vendorInvoiceNo"));
     }
 
     static void assetInputs(ProcessContext ctx) {
