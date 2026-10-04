@@ -10,7 +10,7 @@
 
 | 优先级 | 完成 | 部分 | 待使用方 | 不做 | 合计 |
 |---|---:|---:|---:|---:|---:|
-| Must | 122 | 6 | 2 | 0 | 130 |
+| Must | 123 | 5 | 2 | 0 | 130 |
 | Should | 17 | 2 | 1 | 0 | 20 |
 | Could | 0 | 0 | 0 | 3 | 3 |
 
@@ -22,7 +22,6 @@
 - **FIN-UI-001 易用性研究**、**FIN-UI-009 外部无障碍审计**：材料见 `usability.md`；自动无障碍检查已通过。
 - **FIN-NF-001 / 002 全量压测**：工具与数据生成器就绪（`tools/finance/perf`、`tools/finance/load`），结果模板见 `perf.md` §8，在正式硬件上以 3 年数据复跑。
 - **FIN-NF-005 全量恢复演练**（开发环境的演练已完成）：`tools/finance/ops/drill.sh restore` 的步骤在正式环境以全量数据进行，记下恢复时间（RTO ≤ 4 小时）。
-- **FIN-UI-010**：CI 的四个浏览器全部通过后改为完成。
 - 部分满足的 Must（验收标准满足，需求中有未做的部分）：FIN-SC-004（到期匿名化）、FIN-UI-007（统一的计算说明）、FIN-DI-008（导出包不含附件与审计记录）。
 
 ## 3. 已知上限（D9）
@@ -205,6 +204,6 @@
 | FIN-UI-007 | Explanations | Must | FIN-SCN-03 | 部分（验收满足） | 税额说明满足验收（`it/InvoiceIT`）；折旧、汇兑、审批要求的说明分散在各页面，没有统一的"为什么" |
 | FIN-UI-008 | History view | Must | FIN-SCN-08 | 完成 | 平台历史时间线；`e2e/history.spec.ts`（C100 式的客户两次修改） |
 | FIN-UI-009 | Accessibility | Must | FIN-SCN-14 | 待使用方（自动检查通过） | 验收为外部审计（usability.md §4）；自动检查（axe，WCAG 2.2 A/AA）通过：`e2e/a11y.spec.ts`（19 个财务页面）与平台 `frontend/e2e/a11y.spec.ts` |
-| FIN-UI-010 | Browsers and locale | Must | FIN-SCN-14 | 部分（以 CI 为准） | CI 以 Chromium、Firefox、WebKit、Edge 运行全部 e2e（后三者 1366 × 768）；e2e 覆盖 usability.md 的任务卡 T1–T11（§5）；本地只跑过 Chromium（含 1366 × 768） |
+| FIN-UI-010 | Browsers and locale | Must | FIN-SCN-14 | 完成 | CI 以 Chromium、Firefox、WebKit、Edge 运行全部 e2e（后三者 1366 × 768），2026-10-04 全部通过；e2e 覆盖 usability.md 的任务卡 T1–T11（§5） |
 | FIN-NF-006 | Installation and upgrade | Must | FIN-SCN-14 | 完成 | install.md；`tools/finance/ops/drill.sh upgrade` |
 | FIN-NF-007 | Monitoring | Must | FIN-SCN-14 | 完成 | 平台监控；CI 日志扫描（`scan-logs.py`） |

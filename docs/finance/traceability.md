@@ -215,7 +215,7 @@
 | FIN-UI-001 | Professional workbench | 待使用方（研究） | 全部财务页面；任务卡与 SUS 问卷（`usability.md`） | 易用性研究由使用方组织 |
 | FIN-UI-008 | History view | 完成（F11e） | 平台历史时间线与回看 | `e2e/history.spec.ts` |
 | FIN-UI-009 | Accessibility | 待使用方（审计；自动检查通过） | 平台主题（14m、14m-2） | `e2e/a11y.spec.ts`（19 页）、平台 `frontend/e2e/a11y.spec.ts`；外部审计见 usability.md §4 |
-| FIN-UI-010 | Browsers and locale | 部分（以 CI 为准） | US English、US 格式（`jabizApp { languages("en"); region = "en-US" }`） | CI 的 `e2e` 作业：Chromium、Firefox、WebKit、Edge，后三者 1366 × 768 |
+| FIN-UI-010 | Browsers and locale | 完成 | US English、US 格式（`jabizApp { languages("en"); region = "en-US" }`） | CI 的 `e2e` 作业：Chromium、Firefox、WebKit、Edge，后三者 1366 × 768，全部通过 |
 | FIN-AR-015、FA-008、FA-010 | Could | 不做 | — | — |
 
 FIN-SCN-15（FIN-GL-004、AR-012、AP-008、AP-014、BK-002、FA-006、FA-007）：`it/FinScn15IT`。全部需求的验收状态见 `acceptance.md`。
