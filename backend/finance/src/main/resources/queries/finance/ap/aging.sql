@@ -72,26 +72,31 @@ cleared AS (
     WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} <= :agingDate
     GROUP BY a.{{FinApApplication.sourceId}}
 ),
+-- Summed once a document and joined (F11c): looked up a document at a time they took time growing with the square of
+-- the documents.
+cleared_by AS (
+    SELECT doc_key, SUM(done) AS done, SUM(done_usd) AS done_usd FROM cleared GROUP BY doc_key
+),
+revalued AS (
+    -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007).
+    SELECT l.{{FinFxRevaluationLine.documentId}} AS doc_ref, SUM(l.{{FinFxRevaluationLine.difference}}) AS diff
+    FROM {{FinFxRevaluationLine}} l
+    JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
+    WHERE l.{{FinFxRevaluationLine.kind}} = 'PAYABLE'
+      AND r.{{FinFxRevaluationRun.revaluationDate}} <= :agingDate AND r.{{FinFxRevaluationRun.reversalDate}} > :agingDate
+    GROUP BY l.{{FinFxRevaluationLine.documentId}}
+),
 open_docs AS (
     SELECT d.*,
-           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END
-               * (d.doc_total - COALESCE((SELECT SUM(c.done) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
-               AS open_amt,
-           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END
-               * (d.doc_total_usd - COALESCE((SELECT SUM(c.done_usd) FROM cleared c WHERE c.doc_key = d.doc_key), 0))
-               -- Between a revaluation's day and its reversal the dollars are as remeasured (F7, FIN-FX-007); a
-               -- revaluation line carries what is owed as negative.
-               - COALESCE((SELECT SUM(l.{{FinFxRevaluationLine.difference}})
-                   FROM {{FinFxRevaluationLine}} l
-                   JOIN {{FinFxRevaluationRun}} r ON r.{{FinFxRevaluationRun.runId}} = l.{{FinFxRevaluationLine.runId}}
-                   WHERE l.{{FinFxRevaluationLine.kind}} = 'PAYABLE'
-                     AND l.{{FinFxRevaluationLine.documentId}} = CAST(d.doc_key AS varchar)
-                     AND r.{{FinFxRevaluationRun.revaluationDate}} <= :agingDate
-                     AND r.{{FinFxRevaluationRun.reversalDate}} > :agingDate), 0)
-               AS open_usd,
+           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END * (d.doc_total - COALESCE(c.done, 0)) AS open_amt,
+           -- A revaluation line carries what is owed as negative.
+           CASE WHEN d.doc_kind = 'CREDIT' THEN -1 ELSE 1 END * (d.doc_total_usd - COALESCE(c.done_usd, 0))
+               - COALESCE(v.diff, 0) AS open_usd,
            CAST(:agingDate AS date) - CASE WHEN COALESCE(CAST(:basis AS varchar), 'DUE') = 'INVOICE'
                THEN d.doc_date ELSE COALESCE(d.due_on, d.doc_date) END AS age
     FROM docs d
+    LEFT JOIN cleared_by c ON c.doc_key = d.doc_key
+    LEFT JOIN revalued v ON v.doc_ref = CAST(d.doc_key AS varchar)
 ),
 limits AS (
     SELECT CAST(COALESCE(:limit1, 30) AS integer) AS l1, CAST(COALESCE(:limit2, 60) AS integer) AS l2,

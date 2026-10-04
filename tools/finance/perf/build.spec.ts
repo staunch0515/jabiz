@@ -121,6 +121,8 @@ test('FIN-NF-001: a year of performance data', async ({ request }) => {
     before = lastSeq()
     await bill('PT-AP-OPEN', month, `PT-OPEN-${month}`)
     clone(rootsSince(before), openBills - 1, `ap-open-${month}`, subst('PT-AP-OPEN', vendors))
+    // A month of copies at once outruns autovacuum: the planner would choose by the tables' sizes of months before.
+    psql('ANALYZE')
   }
   // 500 assets from one acquisition in January (the depreciation run of NF-002 is of 500).
   const controllerNow = await token(request, CONTROLLER)
