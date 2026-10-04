@@ -96,7 +96,8 @@ const antdLocales = { zh: zhCN, ja: jaJP, en: enUS } as const
 /**
  * Colours with a contrast of at least 4.5:1 against their backgrounds (WCAG 2.2 AA 1.4.3; docs/design/12-frontend.md
  * section 11): Ant Design's defaults fall short — the primary blue on white and white on it 4.1, description and
- * tertiary text (and with it icons) 3.4, the red of danger 3.3. The text of green, orange and gold tags (about 3) is darkened in index.css: their palettes
+ * tertiary text (and with it icons) 3.4, the red of danger 3.3, success and warning text 2.3 and 1.8, a table's text
+ * placeholder 1.8. The text of green, orange and gold tags (about 3) is darkened in index.css: their palettes
  * are generated, and darker seeds would darken the backgrounds with them.
  */
 const ACCESSIBLE_THEME: ThemeConfig = {
@@ -107,6 +108,13 @@ const ACCESSIBLE_THEME: ThemeConfig = {
     colorError: '#cf1322',
     colorTextDescription: 'rgba(0, 0, 0, 0.65)',
     colorTextTertiary: 'rgba(0, 0, 0, 0.65)',
+    // Success and warning text (Typography type="success" / "warning") 2.3 and 1.8:1 by default.
+    colorSuccess: '#237804',
+    colorWarning: '#ad6800',
+  },
+  components: {
+    // A table's text placeholder (emptyText given as text) is drawn in the disabled colour, 1.8:1.
+    Table: { colorTextDisabled: 'rgba(0, 0, 0, 0.65)' },
   },
 }
 
