@@ -8,6 +8,7 @@ import {
   paths,
   runProcess,
   useAuth,
+  UserName,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Checkbox, Descriptions, Input, Space, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
@@ -417,7 +418,7 @@ function EntryFacts({ journal }: { journal: Journal }) {
   return (
     <Descriptions size="small" column={{ xs: 1, md: 3 }} bordered data-testid="journal-facts">
       <Descriptions.Item label={t('journal.source')}>{t(`journal.sources.${journal.source}`, journal.source)}</Descriptions.Item>
-      <Descriptions.Item label={t('journal.preparer')}>{journal.preparer}</Descriptions.Item>
+      <Descriptions.Item label={t('journal.preparer')}><UserName id={journal.preparer} /></Descriptions.Item>
       <Descriptions.Item label={t('journal.period')}>{journal.periodKey ?? '—'}</Descriptions.Item>
       <Descriptions.Item label={t('journal.totalDebit')}>{formatAmount(journal.totalDebit, { scale: 2 })}</Descriptions.Item>
       <Descriptions.Item label={t('journal.glNo')}>

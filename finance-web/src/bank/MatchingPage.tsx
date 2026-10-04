@@ -1,5 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, formatDateTime, useAuth } from '@jabiz/admin'
+import {
+  ApiError,
+  EXTENSION_NAMESPACE,
+  formatAmount,
+  formatDate,
+  formatDateTime,
+  useAuth,
+  UserName,
+} from '@jabiz/admin'
 import { Alert, App, Button, Card, Col, Input, Popconfirm, Row, Select, Space, Table, Tag, Typography } from 'antd'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -324,7 +332,7 @@ function HistoryCard({ bankCode, rows, loading, capped }: { bankCode: string; ro
           { title: t('bank.amount'), dataIndex: 'amount', align: 'right', render: money },
           { title: t('bank.confidence'), dataIndex: 'confidence', align: 'right' },
           { title: t('bank.reason'), dataIndex: 'reason', ellipsis: true },
-          { title: t('bank.by'), dataIndex: 'actor' },
+          { title: t('bank.by'), dataIndex: 'actor', render: (value?: string | null) => <UserName id={value} /> },
           { title: '', key: 'undo', render: (_: unknown, row) => row.action === 'MATCH' && !undone.has(row.matchId)
             && can(PERMISSIONS.reconcile) && (
             <Popconfirm

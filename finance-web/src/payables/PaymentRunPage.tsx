@@ -8,6 +8,7 @@ import {
   paths,
   runProcess,
   useAuth,
+  UserName,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Descriptions, Input, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
 import { useRef, useState } from 'react'
@@ -74,9 +75,9 @@ export default function PaymentRunPage() {
         <Descriptions.Item label={t('payables.total')}><span data-testid="run-total">{money(run.total)}</span></Descriptions.Item>
         <Descriptions.Item label={t('payables.lineCount')}>{String(run.lineCount ?? 0)}</Descriptions.Item>
         <Descriptions.Item label={t('payables.description')}>{run.description ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label={t('payables.preparedBy')}>{run.preparedBy ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label={t('payables.approvedBy')}>{run.approvedBy ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label={t('payables.releasedBy')}>{run.releasedBy ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('payables.preparedBy')}>{run.preparedBy ? <UserName id={run.preparedBy} /> : '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('payables.approvedBy')}>{run.approvedBy ? <UserName id={run.approvedBy} /> : '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('payables.releasedBy')}>{run.releasedBy ? <UserName id={run.releasedBy} /> : '—'}</Descriptions.Item>
         {run.cancelReason && (
           <Descriptions.Item label={t('payables.cancelReason')} span={3}>{run.cancelReason}</Descriptions.Item>
         )}

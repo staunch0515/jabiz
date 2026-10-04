@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, formatDateTime, paths, useAuth } from '@jabiz/admin'
+import {
+  ApiError,
+  EXTENSION_NAMESPACE,
+  formatAmount,
+  formatDate,
+  formatDateTime,
+  paths,
+  useAuth,
+  UserName,
+} from '@jabiz/admin'
 import { Alert, Button, Card, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -198,7 +207,7 @@ function Workspace({ period, busy, act }: {
               { title: t('close.required'), dataIndex: 'required', render: (v: boolean) => (v ? t('close.yes') : '') },
               { title: t('close.owner'), dataIndex: 'owner' },
               { title: t('close.due'), dataIndex: 'dueDate', render: date },
-              { title: t('close.doneBy'), dataIndex: 'doneBy' },
+              { title: t('close.doneBy'), dataIndex: 'doneBy', render: (value?: string | null) => <UserName id={value} /> },
               { title: t('close.doneAt'), dataIndex: 'doneAt', render: dateTime },
               { title: t('close.detail'), dataIndex: 'detail', ellipsis: true },
               {
@@ -243,7 +252,7 @@ function Workspace({ period, busy, act }: {
                 { title: t('close.glAccount'), dataIndex: 'name' },
                 { title: t('close.status'), dataIndex: 'status', render: (v: string) => <StatusTag status={v} /> },
                 { title: t('close.preparedBy'), dataIndex: 'owner' },
-                { title: t('close.reviewedBy'), dataIndex: 'doneBy' },
+                { title: t('close.reviewedBy'), dataIndex: 'doneBy', render: (value?: string | null) => <UserName id={value} /> },
                 { title: t('close.detail'), dataIndex: 'detail' },
               ]}
             />
@@ -346,7 +355,7 @@ function ArtifactsCard({ periodKey }: { periodKey: string }) {
         locale={{ emptyText: artifacts.error ? messages(artifacts.error).join(' ') : t('close.noArtifacts') }}
         columns={[
           { title: t('close.seq'), dataIndex: 'seq' },
-          { title: t('close.closedBy'), dataIndex: 'closedBy' },
+          { title: t('close.closedBy'), dataIndex: 'closedBy', render: (value?: string | null) => <UserName id={value} /> },
           { title: t('close.closedAt'), dataIndex: 'closedAt', render: dateTime },
           { title: t('close.totalDebit'), dataIndex: 'totalDebit', align: 'right', render: money },
           { title: t('close.totalCredit'), dataIndex: 'totalCredit', align: 'right', render: money },
@@ -405,10 +414,10 @@ function ReopenCard({ period, busy, act }: {
           locale={{ emptyText: reopens.error ? messages(reopens.error).join(' ') : t('close.noReopens') }}
           columns={[
             { title: t('close.requestedAt'), dataIndex: 'requestedAt', render: dateTime },
-            { title: t('close.requestedBy'), dataIndex: 'requestedBy' },
+            { title: t('close.requestedBy'), dataIndex: 'requestedBy', render: (value?: string | null) => <UserName id={value} /> },
             { title: t('close.reason'), dataIndex: 'reason' },
             { title: t('close.status'), dataIndex: 'status', render: (v: string) => <StatusTag status={v} /> },
-            { title: t('close.decidedBy'), dataIndex: 'decidedBy' },
+            { title: t('close.decidedBy'), dataIndex: 'decidedBy', render: (value?: string | null) => <UserName id={value} /> },
             {
               title: '',
               key: 'actions',

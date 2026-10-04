@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth } from '@jabiz/admin'
+import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth, UserName } from '@jabiz/admin'
 import { Alert, Button, Input, Select, Space, Table, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -77,9 +77,9 @@ export default function RunListPage() {
           { title: t('payables.total'), dataIndex: 'total', align: 'right',
             render: (v: number | string | null) => formatAmount(v, { scale: 2 }) },
           { title: t('payables.status'), dataIndex: 'status', render: (v: RunStatus) => <RunStatusTag status={v} /> },
-          { title: t('payables.preparedBy'), dataIndex: 'preparedBy' },
-          { title: t('payables.approvedBy'), dataIndex: 'approvedBy' },
-          { title: t('payables.releasedBy'), dataIndex: 'releasedBy' },
+          { title: t('payables.preparedBy'), dataIndex: 'preparedBy', render: (value?: string | null) => <UserName id={value} /> },
+          { title: t('payables.approvedBy'), dataIndex: 'approvedBy', render: (value?: string | null) => <UserName id={value} /> },
+          { title: t('payables.releasedBy'), dataIndex: 'releasedBy', render: (value?: string | null) => <UserName id={value} /> },
         ]}
         summary={() => (
           <Table.Summary.Row>

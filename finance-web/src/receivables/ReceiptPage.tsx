@@ -1,5 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, paths, runProcess, useAuth } from '@jabiz/admin'
+import {
+  ApiError,
+  EXTENSION_NAMESPACE,
+  formatAmount,
+  formatDate,
+  paths,
+  runProcess,
+  useAuth,
+  UserName,
+} from '@jabiz/admin'
 import { Alert, App, Button, Card, Descriptions, Input, Select, Space, Table, Typography } from 'antd'
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -232,7 +241,7 @@ function ExistingReceipt({ loaded }: { loaded: LoadedReceipt }) {
         <Descriptions.Item label={t('receivables.receipt.unapplied')}>
           <span data-testid="receipt-unapplied">{money(receipt.unappliedAmount)}</span>
         </Descriptions.Item>
-        <Descriptions.Item label={t('receivables.facts.preparedBy')}>{receipt.preparedBy ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('receivables.facts.preparedBy')}>{receipt.preparedBy ? <UserName id={receipt.preparedBy} /> : '—'}</Descriptions.Item>
         <Descriptions.Item label={t('receivables.facts.history')}>
           <Link to={paths.history(DATASETS.receipt, receipt.receiptId)}>{t('receivables.facts.viewHistory')}</Link>
         </Descriptions.Item>

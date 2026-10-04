@@ -801,8 +801,11 @@ public final class InvoiceProcesses {
         content.put("lines", lines);
         content.put("total", prepared.total());
         // The draft's preparer, not whoever posts it, may not approve it (FIN-CT-001).
+        // A draft has no number yet: known by its customer and date until then.
+        String number = invoice.get("invoiceNo");
         return com.jabiz.runtime.approval.ApprovalCase.of(invoice.id(), facts, content)
-            .preparedBy(invoice.get("preparedBy"));
+            .preparedBy(invoice.get("preparedBy"))
+            .reference(number != null ? number : invoice.get("customerCode") + " " + invoice.get("invoiceDate"));
     }
 
     /** The approval case of the document saved or deleted; a new draft has none, and nothing is filed under "none". */

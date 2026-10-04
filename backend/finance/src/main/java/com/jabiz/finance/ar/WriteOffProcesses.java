@@ -166,7 +166,8 @@ public final class WriteOffProcesses {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("amount", input.amount());
         facts.put("customerCode", invoice.get("customerCode"));
-        ctx.put(CASE, ApprovalCase.of(invoice.id(), facts, content(invoice, input, ctx.opTime())));
+        ctx.put(CASE, ApprovalCase.of(invoice.id(), facts, content(invoice, input, ctx.opTime()))
+            .reference(invoice.get("invoiceNo")));
     }
 
     /** What an approval of a write-off is given for. */

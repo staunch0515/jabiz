@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth } from '@jabiz/admin'
+import { ApiError, EXTENSION_NAMESPACE, formatAmount, formatDate, useAuth, UserName } from '@jabiz/admin'
 import { Alert, Button, Input, Select, Space, Table, Typography } from 'antd'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -113,7 +113,7 @@ export default function JournalListPage() {
             sorter: (a, b) => Number(a.totalDebit) - Number(b.totalDebit),
             render: (value: number | string) => formatAmount(value, { scale: 2 }),
           },
-          { title: t('journal.preparer'), dataIndex: 'preparer' },
+          { title: t('journal.preparer'), dataIndex: 'preparer', render: (value?: string | null) => <UserName id={value} /> },
           { title: t('journal.glNo'), dataIndex: 'glNo', sorter: (a, b) => (a.glNo ?? '').localeCompare(b.glNo ?? '') },
         ]}
         summary={() => (

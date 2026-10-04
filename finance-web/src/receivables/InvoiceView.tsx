@@ -9,6 +9,7 @@ import {
   paths,
   runProcess,
   useAuth,
+  UserName,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Descriptions, Input, Space, Table, Tag, Typography } from 'antd'
 import { useState } from 'react'
@@ -96,7 +97,7 @@ export default function InvoiceView({ loaded, warnings }: { loaded: LoadedInvoic
         <Descriptions.Item label={t('receivables.facts.glNo')}>
           <span data-testid="invoice-gl-no">{invoice.glNo ?? '—'}</span>
         </Descriptions.Item>
-        <Descriptions.Item label={t('receivables.facts.preparedBy')}>{invoice.preparedBy ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('receivables.facts.preparedBy')}>{invoice.preparedBy ? <UserName id={invoice.preparedBy} /> : '—'}</Descriptions.Item>
         <Descriptions.Item label={t('receivables.facts.history')}>
           <Link to={paths.history(DATASETS.invoice, invoice.invoiceId)}>{t('receivables.facts.viewHistory')}</Link>
         </Descriptions.Item>

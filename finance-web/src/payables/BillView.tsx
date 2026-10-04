@@ -9,6 +9,7 @@ import {
   paths,
   runProcess,
   useAuth,
+  UserName,
 } from '@jabiz/admin'
 import { Alert, App, Button, Card, Descriptions, Input, Space, Table, Tag, Typography } from 'antd'
 import { useState } from 'react'
@@ -92,7 +93,7 @@ export default function BillView({ loaded, warnings }: { loaded: LoadedBill; war
         <Descriptions.Item label={t('payables.facts.glNo')}>
           <span data-testid="bill-gl-no">{bill.glNo ?? '—'}</span>
         </Descriptions.Item>
-        <Descriptions.Item label={t('payables.facts.preparedBy')}>{bill.preparedBy ?? '—'}</Descriptions.Item>
+        <Descriptions.Item label={t('payables.facts.preparedBy')}>{bill.preparedBy ? <UserName id={bill.preparedBy} /> : '—'}</Descriptions.Item>
         {bill.duplicateReason && (
           <Descriptions.Item label={t('payables.duplicateReason')} span={3}>{bill.duplicateReason}</Descriptions.Item>
         )}

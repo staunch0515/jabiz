@@ -144,7 +144,9 @@ class FinScn02IT extends FinanceItSupport {
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) get("/api/tasks/mine", controllerUser())
             .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody().get("tasks");
         assertThat(tasks).filteredOn(t -> submitted2.get("approvalRequestId").equals(t.get("subjectId")))
-            .singleElement().satisfies(t -> assertThat(t).containsEntry("link", "/tasks"));
+            .singleElement().satisfies(t -> assertThat(t).containsEntry("link", "/tasks")
+                // Named by its subject's label and the entry's number, not by ids (platform phase 14r).
+                .containsEntry("title", "Approve journal entry JE-0002 (level 1)"));
         deliver();
         assertThat(awaitMail(CONTROLLER_MAIL)).singleElement().satisfies(m -> assertThat(m.body())
             .contains("https://books.northwind.example/tasks"));
