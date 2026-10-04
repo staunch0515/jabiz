@@ -12,6 +12,8 @@ import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.reactive.TransactionSynchronizationManager;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -207,6 +209,14 @@ public final class R2dbcStorageEngine implements StorageEngine {
         return db.sql(sql).then();
     }
 
+    /**
+     * A query bounded by {@code timeout} for its whole result, not the gap between rows. Outside a transaction (the
+     * query and dataset APIs, exports) it runs in one of its own with {@code SET LOCAL statement_timeout}, so that the
+     * database stops it (phase 14q): stopped at the client only, it would go on running, holding its connection,
+     * after its caller gave up, and an overloaded server would fall further behind with every timeout. The client's
+     * deadline, a moment later, stays as the backstop. Inside a transaction (a process) the client's deadline alone
+     * applies: the transaction's rollback then waits for the statement, and its connection is clean afterwards.
+     */
     private Flux<Map<String, Object>> run(String sql, Map<String, BoundValue> params, Duration timeout) {
         DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
         for (Map.Entry<String, BoundValue> e : params.entrySet()) {
@@ -215,14 +225,40 @@ public final class R2dbcStorageEngine implements StorageEngine {
                 ? spec.bindNull(e.getKey(), storageType(bound.type()))
                 : spec.bind(e.getKey(), toStorage(bound.value()));
         }
-        // The timeout covers the whole result, not the gap between rows.
-        return spec.map(R2dbcStorageEngine::toMap)
-            .all()
-            .collectList()
-            .timeout(timeout)
+        Mono<List<Map<String, Object>>> rows = spec.map(R2dbcStorageEngine::toMap).all().collectList();
+        return inTransaction()
+            .flatMap(active -> active ? rows.timeout(timeout)
+                : tx.transactional(statementTimeout(timeout).then(rows)).timeout(timeout.plus(BACKSTOP)))
             .onErrorMap(TimeoutException.class, ex -> new QueryTimeoutException("Query exceeded " + timeout, ex))
+            .onErrorMap(R2dbcStorageEngine::canceled, ex -> new QueryTimeoutException("Query exceeded " + timeout, ex))
             .onErrorMap(R2dbcStorageEngine::translate)
             .flatMapMany(Flux::fromIterable);
+    }
+
+    /** How long the client waits beyond a query's own limit, for the database to stop it first. */
+    static final Duration BACKSTOP = Duration.ofSeconds(1);
+
+    /** SQLSTATE of query_canceled: here, a statement past its statement_timeout. */
+    private static final String QUERY_CANCELED = "57014";
+
+    private Mono<Void> statementTimeout(Duration timeout) {
+        return db.sql("SELECT set_config('statement_timeout', :limit, true) AS t")
+            .bind("limit", Math.max(1, timeout.toMillis()) + "ms").then();
+    }
+
+    private static Mono<Boolean> inTransaction() {
+        return TransactionSynchronizationManager.forCurrentTransaction()
+            .map(TransactionSynchronizationManager::isActualTransactionActive)
+            .onErrorResume(NoTransactionException.class, e -> Mono.just(false));
+    }
+
+    private static boolean canceled(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof PostgresqlException pg && QUERY_CANCELED.equals(pg.getErrorDetails().getCode())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -21,6 +21,7 @@ import com.jabiz.runtime.storage.AppendOnlyViolationException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -79,6 +80,15 @@ public class GlobalExceptionHandler {
     /** A dataset scope needs a value the caller's context lacks: access is refused, not widened. */
     @ExceptionHandler(ScopeUnavailableException.class)
     ProblemDetail handleScopeUnavailable(ScopeUnavailableException ex, ServerWebExchange exchange) {
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /**
+     * A query the database stopped at its time limit (docs/design/03-dataset.md section 2): 503, with nothing logged
+     * as an error — under load it is expected, and the request may be narrowed or tried again.
+     */
+    @ExceptionHandler(QueryTimeoutException.class)
+    ProblemDetail handleQueryTimeout(QueryTimeoutException ex, ServerWebExchange exchange) {
         return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
     }
 

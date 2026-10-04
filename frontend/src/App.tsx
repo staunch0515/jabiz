@@ -36,8 +36,10 @@ import { Spin } from 'antd'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Client errors (403, 404, 400) do not get better by asking again.
-      retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+      // Client errors (403, 404, 400) do not get better by asking again, nor does a query stopped at its time limit
+      // (503): asking again only loads the database further.
+      retry: (count, error) => !(error instanceof ApiError && (error.status < 500 || error.status === 503))
+        && count < 2,
       refetchOnWindowFocus: false,
     },
   },

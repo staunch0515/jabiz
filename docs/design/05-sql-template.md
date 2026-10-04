@@ -117,7 +117,8 @@ ORDER BY <白名单内的排序，缺省为 defaultSort，最后追加稳定排�
 LIMIT :__limit OFFSET :__offset
 ```
 
-- 另生成 `SELECT count(*) FROM ( <带筛选的外层查询> ) c` 用于总数（可由调用方关闭）。
+- 另生成 `SELECT count(*) FROM ( <带筛选的外层查询> ) c` 用于总数（可由调用方关闭）；一页未取满（且不是越过末尾的空页）时总数即
+  `offset` 加本页行数，不执行计数查询（阶段 14q：重报表不再执行两遍）。超时由数据库执行，超时返回 503 `QUERY_TIMEOUT`（03 §1）。
 - 模板**不得**在最外层包含 `LIMIT` / `OFFSET` / `FETCH`（静态检查报错）；最外层 `ORDER BY` 没有意义（外层总会重新排序），不要写（静态检查给出警告），
   顺序用 `list.defaultSort` 表达。
 - 排序：请求的排序（白名单）或 `defaultSort`，最后追加稳定排序键 `list.key`；未声明 `key` 时追加全部结果列（JSON 类型的列除外）。

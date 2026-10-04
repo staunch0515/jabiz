@@ -85,6 +85,11 @@ public final class PlatformErrorCodes {
      * rows than {@code jabiz.process.max-read-rows} (decision D32): refused rather than cut short.
      */
     public static final String PROCESS_READ_TOO_LARGE = "PROCESS_READ_TOO_LARGE";
+    /**
+     * A query did not finish within its time limit (the dataset's {@code queryTimeout} or the template's
+     * {@code timeoutMs}): stopped by the database, answered 503 (phase 14q).
+     */
+    public static final String QUERY_TIMEOUT = "QUERY_TIMEOUT";
     /** A report run can supersede an earlier run of the same template only (19 section 5). */
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */
@@ -171,7 +176,7 @@ public final class PlatformErrorCodes {
         LEDGER_REVERSAL_NOT_REVERSIBLE, LEDGER_ACCOUNT_NOT_POSTABLE, LEDGER_DIMENSION_UNKNOWN, LEDGER_DIMENSION_INVALID,
         LEDGER_SOURCE_NOT_FOUND, LEDGER_PARENT_NOT_SUMMARY, LEDGER_ACCOUNT_CYCLE, LEDGER_SUMMARY_HAS_ENTRIES,
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
-        LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, REPORT_SUPERSEDE_MISMATCH,
+        LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
