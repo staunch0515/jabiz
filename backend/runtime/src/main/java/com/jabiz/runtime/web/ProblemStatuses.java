@@ -18,6 +18,8 @@ import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.sod.SodConflictException;
 
+import org.springframework.dao.QueryTimeoutException;
+
 import java.util.List;
 import java.util.Map;
 
@@ -46,6 +48,8 @@ public final class ProblemStatuses {
             case BusinessRuleViolationException e -> 422;
             case PayloadTooLargeException e -> 413;
             case RateLimitedException e -> 429;
+            // Too much asked of the database just now: not the caller's mistake, and not a defect.
+            case QueryTimeoutException e -> 503;
             default -> 500;
         };
     }
@@ -69,6 +73,8 @@ public final class ProblemStatuses {
             case ImportConflictException e -> List.of(new Violation(null, e.code(), e.getMessage(), e.params()));
             case PayloadTooLargeException e -> e.violations();
             case RateLimitedException e -> e.violations();
+            case QueryTimeoutException e -> List.of(new Violation(null, PlatformErrorCodes.QUERY_TIMEOUT,
+                "The query did not finish within its time limit", Map.of()));
             default -> List.of();
         };
     }

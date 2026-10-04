@@ -6,6 +6,11 @@
 
 `DatasetDefinition(resourceId, targetEntityType, storage, policy, defaultPartitionFilter)`：
 - 策略：只读、逻辑删除、单次查询行数上限、单次写入条数上限、查询超时。
+  查询超时由数据库执行（阶段 14q）：流程事务之外的读取（查询与数据视图接口、导出）在自己的事务中以 `SET LOCAL statement_timeout` 执行
+  （每次读取多三个往返：开始、设置、提交；每个绑定的事务操作器须属于它自己的连接工厂），
+  超时即由数据库中止，不再在调用方放弃后继续运行、占用连接；应用一侧的时限晚 1 秒，只作兜底。流程事务中的读取只有应用一侧的时限（回滚时等待该语句结束）。
+  超时的请求返回 503 `QUERY_TIMEOUT`（可缩小范围或稍后重试），不是 500；通用后台不自动重试 503。
+  流程事务中的读取在数据库中没有时限，超时后回滚要等该语句结束（后续可按 `HoldLock` 的方式为单条语句设置）。
 - 存储路由：主库、读库（`readReplicaRef`）、物理表覆盖。
 - 分区过滤：读取时自动附加；**写入时强制检查**（写入范围外的值被拒绝，缺失时自动填充）——这一点必须保持。
 - SQL 模板中的每个 `{{Entity}}` 都按一个数据视图（指定的或默认的）渲染为带范围的子查询，手写 SQL 也绕不过范围【决策 D10】。
@@ -96,6 +101,8 @@ d.scope(s -> s
 - `query` 请求体：`{filters: [{field, op, value | values | from, to}], sorts: [{field, asc}], offset, limit}`；
   `op` 为 `eq ne gt gte lt lte in like isNull isNotNull between`，多个条件为 AND；字段须在列表视图白名单中，运算符按语义类型检查。
   响应：`{items, total, offset, limit}`（`limit` 为实际生效值，不超过 `maxQueryBatchSize`）。
+  一页未取满（且不是越过末尾的空页）时，`total` 就是 `offset` 加本页行数，不再另执行计数查询（阶段 14q）；
+  满页时在取得本页之后再计数（不再与本页同时执行：少占一个连接，但这一页的耗时为两者之和）。
   时态实体另可带 `asOf`、`knownAt`（ISO-8601）。
 - `commit` 请求体：`{changes: [{action: INSERT | UPDATE | DELETE, id, version, attributes}]}`，返回插入/更新后的快照。
   **只接受该视图的目标实体**（变更的实体类型一律取视图目标），否则会绕过其他实体自身视图的范围；主键为生成字段时由平台生成（UUIDv7）。

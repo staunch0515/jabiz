@@ -252,7 +252,10 @@ public class AdvancedQueryExecutor {
             Mono<Long> total = engine.executeRawQuery(new RawQueryPlan(outer.countSql(), countParams, timeout))
                 .next()
                 .map(row -> ((Number) row.get("total")).longValue());
-            return rows.zipWith(total, (items, n) -> new Page(items, n, offset, effectiveLimit, slice));
+            // A page not filled tells the total itself: no second run of the query to count it (phase 14q).
+            return rows.flatMap(items -> PageTotals.known(offset, effectiveLimit, items.size())
+                .map(n -> Mono.just(new Page(items, n, offset, effectiveLimit, slice)))
+                .orElseGet(() -> total.map(n -> new Page(items, n, offset, effectiveLimit, slice))));
         });
     }
 
