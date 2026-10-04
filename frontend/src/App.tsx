@@ -108,9 +108,10 @@ const ACCESSIBLE_THEME: ThemeConfig = {
     colorError: '#cf1322',
     colorTextDescription: 'rgba(0, 0, 0, 0.65)',
     colorTextTertiary: 'rgba(0, 0, 0, 0.65)',
-    // Success and warning text (Typography type="success" / "warning") 2.3 and 1.8:1 by default.
+    // Success and warning text (Typography type="success" / "warning") 2.3 and 1.8:1 by default; the warning colour
+    // is a shade darker still, for warning tags on their pale background (4.2:1 with #ad6800).
     colorSuccess: '#237804',
-    colorWarning: '#ad6800',
+    colorWarning: '#874d00',
     // Their pale backgrounds and borders stay Ant Design's: derived from the darker colours they would darken too,
     // and the text of success and warning tags (drawn on them) would fall to 2.7:1.
     colorSuccessBg: '#f6ffed',
