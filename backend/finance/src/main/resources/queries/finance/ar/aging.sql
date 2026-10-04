@@ -53,11 +53,14 @@ WITH docs AS (
       AND (CAST(:customerCode AS varchar) IS NULL OR i.{{FinInvoice.customerCode}} = :customerCode)
       -- Only what can be open on the day (F11c): open now, voided later, or settled, credited or written off by an
       -- application dated after it. Every other document was closed by then and needs none of its applications summed.
-      AND (i.{{FinInvoice.openAmount}} <> 0 OR i.{{FinInvoice.voidDate}} IS NOT NULL
-           OR i.{{FinInvoice.invoiceId}} IN (SELECT a.{{FinApplication.invoiceId}} FROM {{FinApplication}} a
-               WHERE a.{{FinApplication.applicationDate}} > :agingDate)
-           OR CAST(i.{{FinInvoice.invoiceId}} AS varchar) IN (SELECT a.{{FinApplication.sourceId}} FROM {{FinApplication}} a
-               WHERE a.{{FinApplication.sourceKind}} = 'CREDIT_MEMO' AND a.{{FinApplication.applicationDate}} > :agingDate))
+      AND (COALESCE(i.{{FinInvoice.openAmount}}, i.{{FinInvoice.total}}) <> 0 OR i.{{FinInvoice.voidDate}} IS NOT NULL
+           -- Looked up a document at a time (by its index): for an early day most later documents have applications
+           -- after it, and collecting those first made a plan far slower than the scan it saves.
+           OR EXISTS (SELECT 1 FROM {{FinApplication}} a WHERE a.{{FinApplication.invoiceId}} = i.{{FinInvoice.invoiceId}}
+               AND a.{{FinApplication.applicationDate}} > :agingDate)
+           OR (i.{{FinInvoice.kind}} = 'CREDIT_MEMO' AND EXISTS (SELECT 1 FROM {{FinApplication}} a
+               WHERE a.{{FinApplication.sourceId}} = CAST(i.{{FinInvoice.invoiceId}} AS varchar)
+                 AND a.{{FinApplication.applicationDate}} > :agingDate)))
 ),
 cleared AS (
     -- What was taken off each invoice by the day: cash, discounts, credits, write-offs (recoveries negative)…

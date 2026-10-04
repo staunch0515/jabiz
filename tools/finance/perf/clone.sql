@@ -35,6 +35,11 @@ DECLARE
     'sys_audit_record', 'sys_outbox_event', 'sys_event_consumption', 'sys_notification', 'sys_integrity_seal',
     'sys_integrity_check', 'sys_number_assignment', 'entity_registry'];
 BEGIN
+  -- It writes the tables directly: only a database of its own, named so.
+  IF current_database() NOT LIKE '%perf%' THEN
+    RAISE EXCEPTION 'perf_clone: database % is not a performance database (its name must contain perf)',
+      current_database();
+  END IF;
   -- The unit's processes, in order: copy k of the i-th is base + (k - 1) * n + i.
   CREATE TEMP TABLE perf_seq ON COMMIT DROP AS
   WITH RECURSIVE tree AS (

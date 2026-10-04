@@ -79,37 +79,37 @@ class Session {
     return { Authorization: `Bearer ${this.bearer}`, ...extra }
   }
 
-  private async answer(response: Awaited<ReturnType<APIRequestContext['get']>>, what: string) {
+  /** Sends the request; a token past its life (a long run) is renewed and the request sent again, once. */
+  private async answer(send: () => Promise<Awaited<ReturnType<APIRequestContext['get']>>>, what: string) {
+    let response = await send()
     if (response.status() === 401) {
       await this.signIn()
-      throw new Error(`${what}: 401 (signed in again)`)
+      response = await send()
     }
     if (response.status() !== 200) throw new Error(`${what}: ${response.status()} ${(await response.text()).slice(0, 200)}`)
     return response.json()
   }
 
   async process(name: string, input: unknown) {
-    const response = await this.api.post(`/api/processes/${name}/latest`, {
-      headers: this.headers({ 'Idempotency-Key': crypto.randomUUID() }), data: input, timeout: 120_000 })
-    return (await this.answer(response, name)).output
+    const key = crypto.randomUUID()
+    return (await this.answer(() => this.api.post(`/api/processes/${name}/latest`, {
+      headers: this.headers({ 'Idempotency-Key': key }), data: input, timeout: 120_000 }), name)).output
   }
 
   async query(id: string, params: Record<string, unknown>, limit = 500) {
-    const response = await this.api.post(`/api/queries/${id}`, { headers: this.headers(), data: { params, limit },
-      timeout: 120_000 })
-    return (await this.answer(response, id)).items as Record<string, unknown>[]
+    return (await this.answer(() => this.api.post(`/api/queries/${id}`, { headers: this.headers(),
+      data: { params, limit }, timeout: 120_000 }), id)).items as Record<string, unknown>[]
   }
 
   async entity(dataset: string, id: string) {
-    const response = await this.api.get(`/api/datasets/${encodeURIComponent(dataset)}/entities/${id}`,
-      { headers: this.headers(), timeout: 120_000 })
-    return this.answer(response, dataset)
+    return this.answer(() => this.api.get(`/api/datasets/${encodeURIComponent(dataset)}/entities/${id}`,
+      { headers: this.headers(), timeout: 120_000 }), dataset)
   }
 
   async rows(dataset: string, field: string, value: unknown) {
-    const response = await this.api.post(`/api/datasets/${encodeURIComponent(dataset)}/query`, {
-      headers: this.headers(), data: { filters: [{ field, op: 'eq', value }], offset: 0, limit: 500 }, timeout: 120_000 })
-    return (await this.answer(response, dataset)).items as unknown[]
+    return (await this.answer(() => this.api.post(`/api/datasets/${encodeURIComponent(dataset)}/query`, {
+      headers: this.headers(), data: { filters: [{ field, op: 'eq', value }], offset: 0, limit: 500 },
+      timeout: 120_000 }), dataset)).items as unknown[]
   }
 }
 

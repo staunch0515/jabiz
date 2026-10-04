@@ -25,7 +25,7 @@ test('FIN-NF-001: a year of performance data', async ({ request }) => {
   expect(process.env.PGDATABASE ?? '', 'a performance database of its own (PGDATABASE with "perf")').toContain('perf')
   await prepareReceivables(request)
   const treasurer: Treasurer = await preparePayables(request)
-  const admin = await token(request, ADMIN)
+  let admin = await token(request, ADMIN)
   const created = await run(request, admin, 'FIN_FISCAL_YEAR_CREATE', { fiscalYear: year, adjustmentPeriod: true })
   expect([200, 422], JSON.stringify(created.body)).toContain(created.status)
   // The books' cutover, the day before the year: where a bank account's reconciliation starts (load/batch.spec.ts).
@@ -124,7 +124,9 @@ test('FIN-NF-001: a year of performance data', async ({ request }) => {
     // A month of copies at once outruns autovacuum: the planner would choose by the tables' sizes of months before.
     psql('ANALYZE')
   }
-  // 500 assets from one acquisition in January (the depreciation run of NF-002 is of 500).
+  // 500 assets from one acquisition in January (the depreciation run of NF-002 is of 500). Signed in again: the
+  // documents take longer than a token lasts.
+  admin = await token(request, ADMIN)
   const controllerNow = await token(request, CONTROLLER)
   if (Number(psql(`SELECT count(DISTINCT asset_id) FROM fi_asset_version`)) < 500) {
     await run(request, admin, 'FIN_ACCOUNT_CREATE', { accountCode: '1530', accountName: 'Office Equipment',

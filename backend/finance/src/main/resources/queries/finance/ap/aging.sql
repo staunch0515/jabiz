@@ -55,11 +55,15 @@ WITH docs AS (
       AND (CAST(:vendorCode AS varchar) IS NULL OR b.{{FinBill.vendorCode}} = :vendorCode)
       -- Only what can be open on the day (F11c): open now, voided later, or paid or credited by an application dated
       -- after it. Every other bill was closed by then and needs none of its applications summed.
-      AND (b.{{FinBill.openAmount}} <> 0 OR b.{{FinBill.voidDate}} IS NOT NULL
-           OR b.{{FinBill.billId}} IN (SELECT a.{{FinApApplication.billId}} FROM {{FinApApplication}} a
-               WHERE a.{{FinApApplication.applicationDate}} > :agingDate)
-           OR CAST(b.{{FinBill.billId}} AS varchar) IN (SELECT a.{{FinApApplication.sourceId}} FROM {{FinApApplication}} a
-               WHERE a.{{FinApApplication.sourceKind}} = 'CREDIT' AND a.{{FinApApplication.applicationDate}} > :agingDate))
+      -- A dollar remainder alone (a bill settled on its revaluation's day) is open too.
+      AND (COALESCE(b.{{FinBill.openAmount}}, b.{{FinBill.total}}) <> 0 OR COALESCE(b.{{FinBill.openAmountUsd}}, 0) <> 0
+           OR b.{{FinBill.voidDate}} IS NOT NULL
+           -- Looked up a bill at a time (by its index): for an early day most later bills have applications after it.
+           OR EXISTS (SELECT 1 FROM {{FinApApplication}} a WHERE a.{{FinApApplication.billId}} = b.{{FinBill.billId}}
+               AND a.{{FinApApplication.applicationDate}} > :agingDate)
+           OR (b.{{FinBill.kind}} = 'CREDIT' AND EXISTS (SELECT 1 FROM {{FinApApplication}} a
+               WHERE a.{{FinApApplication.sourceId}} = CAST(b.{{FinBill.billId}} AS varchar)
+                 AND a.{{FinApApplication.applicationDate}} > :agingDate)))
 ),
 cleared AS (
     -- What was taken off each bill by the day: payments, discounts, credits…

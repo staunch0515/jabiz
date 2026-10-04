@@ -16,6 +16,9 @@ name: finance
 services:
   db:
     image: postgres:16
+    # JIT compiles the large report and close templates anew on every run, taking seconds more than they need
+    # (docs/finance/perf.md §8). Memory settings belong to the host: size shared_buffers and the rest for it.
+    command: ["postgres", "-c", "jit=off"]
     environment:
       POSTGRES_DB: finance
       POSTGRES_USER: finance

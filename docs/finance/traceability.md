@@ -46,7 +46,7 @@
 | FIN-UI-002 | Keyboard-first entry | 部分 | 网格的键盘操作与快捷键（Ctrl+S / Ctrl+Enter / Ctrl+D / Ctrl+Z / Alt+N）、科目联想、金额不用分隔符 | `web/JournalGrid.test.tsx`、`web/JournalEntryPage.test.tsx`、`e2e/journal.spec.ts`（只用键盘）；发票与收款：`receivables/InvoicePage.test.tsx`、`ReceiptPage.test.tsx`、`e2e/receivables.spec.ts`；账单（5 行，只用键盘，验收 1）：`payables/BillPage.test.tsx`、`e2e/payables.spec.ts` |
 | FIN-UI-003 | Grid entry | 完成 | 粘贴与复制到表格、向下填充、撤销与重做 | `web/grid.test.ts`、`web/JournalGrid.test.tsx`、`e2e/journal.spec.ts`；验收中的可用性研究（50 行 ≤ 5 分钟）需由人进行 |
 | FIN-UI-004 | Registers and drill-down | 完成（F9d） | 日记账登记簿（`queries/journal_register.sql`、`web/JournalListPage.tsx`：排序、筛选、合计、打开单据）；发票、收款登记簿（`queries/finance/ar/invoice_register.sql`、`receipt_register.sql`；`receivables/InvoiceListPage.tsx`、`ReceiptListPage.tsx`） | `web/JournalListPage.test.tsx`、`it/GlReportsIT`、`e2e/journal.spec.ts`、`it/FinScn03IT`（1 月发票登记簿合计）、`receivables/InvoiceListPage.test.tsx`、`e2e/receivables.spec.ts`；账单、付款批、付款登记簿（`queries/finance/ap/bill_register.sql`、`payment_run_register.sql`、`payment_register.sql`；`payables/BillListPage.tsx`、`RunListPage.tsx`、`PaymentListPage.tsx`）：`payables/registers.test.tsx`、`e2e/payables.spec.ts`、`it/PaymentIT`；报表行钻取到分录与单据（`reports/LineDetailPage`，F9d）：`it/FinScn06IT`、`e2e/reports.spec.ts` |
-| FIN-NF-001 / 002 | Volumes / Response times | 摸底 | 生成器 `tools/finance/perf/`（直接写库） | 结果见 `docs/finance/perf.md`；带 50 用户的压测在 F11 |
+| FIN-NF-001 / 002 | Volumes / Response times | F11c | 造数 `tools/finance/perf/build.sh`、压测与批处理 `tools/finance/load/run.sh` | `docs/finance/perf.md` §8：1/10 数据量 50 人全部达标；全量压测未做完（已知限制） |
 
 ## F2 导入、期初、迁移
 

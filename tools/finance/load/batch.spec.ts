@@ -30,9 +30,8 @@ async function timed<T>(name: string, work: () => Promise<T>): Promise<T> {
 
 test('FIN-NF-002: batch timings', async ({ request }) => {
   expect(process.env.PGDATABASE ?? '', 'a performance database of its own (PGDATABASE with "perf")').toContain('perf')
-  const admin = await token(request, ADMIN)
-  const [accountant, controller] = await Promise.all([ACCOUNTANT, CONTROLLER]
-    .map((user) => token(request, user)))
+  let admin = await token(request, ADMIN)
+  let [accountant, controller] = await Promise.all([ACCOUNTANT, CONTROLLER].map((user) => token(request, user)))
   const december = `${year}-12`
 
   // December's depreciation, every asset in service.
@@ -65,6 +64,8 @@ test('FIN-NF-002: batch timings', async ({ request }) => {
     })
   }
   console.log(`  ${lines} deposits posted in ${((Date.now() - started) / 1000).toFixed(0)} s`)
+  // Signed in again: the deposits take longer than a token lasts.
+  ;[admin, accountant, controller] = await Promise.all([ADMIN, ACCOUNTANT, CONTROLLER].map((user) => token(request, user)))
 
   // The bank's statement of them, and matching: the proposals, accepted 500 at a time.
   const opening = psql(`SELECT coalesce(max(closing_balance), 0) FROM fi_bank_statement_version
