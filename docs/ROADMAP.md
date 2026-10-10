@@ -20,8 +20,8 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ☐ 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已完成（PR #103）；16i 已完成；决策 D35–D39 已确认 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b–15d 计划中 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1044,7 +1044,7 @@ finance F11 的 FIN-DI-007（Should）：把发票过账等事件以 webhook 通
 | 子阶段 | 内容 | 预估 |
 |---|---|---|
 | 15a | 基础：工作区与两个包、Tailwind v4 与主题、shadcn 基础组件、组合组件（数据表格、表单字段、日期、金额、确认、提示）、页面外壳、step-up 对话框、检查脚本 | 5–7 天 |
-| 15b | 元数据生成的页面：登录与二次验证、单点登录回调、数据视图目录与列表、表单抽屉与字段、子实体列表、文件字段、历史、流程目录与表单、行操作 | 5–7 天 |
+| 15b | 元数据生成的页面（15b-1 / 15b-2）：登录与二次验证、单点登录回调、数据视图目录与列表、表单抽屉与字段、子实体列表、文件字段、历史、流程目录与表单、行操作 | 7–9 天 |
 | 15c | 其余页面：待办、报表与存档、单据、导入、审计、访问审查、防篡改、保留与导出、账户安全；示范扩展 | 5–7 天 |
 | 15d | 删除 antd、ProComponents、icons 与 React 19 补丁；e2e 与 a11y 选择器全部改为角色 / 名称；文档（12、`guide/admin-extension.md`、功能清单） | 2–3 天 |
 
@@ -1090,15 +1090,103 @@ finance F11 的 FIN-DI-007（Should）：把发票过账等事件以 webhook 通
 shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`）。
 
 **验收标准**
-- [ ] `frontend/` 为 pnpm 工作区，`@jabiz/client`、`@jabiz/ui` 可被平台前端与示范扩展引用；`pnpm lint`、`typecheck`、`test`、`build`、`check:api`、`ext:check` 全部通过。
-- [ ] 后台外壳与 step-up 对话框已不依赖 antd；其余页面仍为 antd 且功能不变（现有 e2e 全部通过）。
-- [ ] 组合组件在亮、暗两种外观下 axe 无违规；后台主要页面在暗色外观下 axe 无违规（新外壳部分）。
-- [ ] `pnpm app:check` 能发现版本不一致。
-- [ ] `./gradlew check` 通过（含 `:app:bootJar` 的前端构建）。
+- [x] `frontend/` 为 pnpm 工作区，`@jabiz/client`、`@jabiz/ui` 可被平台前端与示范扩展引用；`pnpm lint`、`typecheck`、`test`、`build`、`check:api`、`ext:check` 全部通过。
+- [x] 后台外壳与 step-up 对话框已不依赖 antd；其余页面仍为 antd 且功能不变（现有 e2e 全部通过：35 个用例）。
+- [x] 组合组件在亮、暗两种外观下 axe 无违规；后台主要页面在暗色外观下 axe 无违规（a11y.spec.ts 对同一组页面与外壳的菜单在暗色外观下再查一遍，整页无违规）。
+- [x] `pnpm app:check` 能发现版本不一致。
+- [x] `./gradlew check` 通过（含 `:app:bootJar` 的前端构建）。
 
-### 15b – 15d
+**状态**：☑ 已完成（分支 `1.2/phase-15a-ui-foundation`，PR 待建）。
 
-详细计划在开工前给出（CLAUDE.md 第 7 节）。15b 与 15c 可并行。15d 的验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；
+**与计划的出入**
+- shadcn 组件没有经 CLI 生成：构建环境访问不到 shadcn 的 registry（ui.shadcn.com，代理拒绝），按其 new-york（Tailwind v4）源码在 `packages/ui` 中手写；
+  `components.json` 已备好，今后在该目录用 CLI 合入，对上游的修改列在 `packages/ui/README.md`。另加了 `alert-dialog`（`ConfirmDialog` 的基础）。
+- 共存的层顺序：除作用域 preflight 外，antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`（`theme, antd, base, components, utilities`），
+  否则 antd 的全局 `a { color }` 会盖过侧栏链接的颜色（暗色下对比度 3.1:1）。为此加了依赖 `@ant-design/cssinjs`（antd 已带的同一版本，15d 删除）。
+- antd 页面所在的内容区固定为亮色 token（`light`，底色 `muted`，与 ProLayout 的灰底相近），暗色外观只作用于外壳与弹出层；`dark:` 变体与 `color-scheme` 都不作用于 `.light` 之内。
+- preflight 的作用域：不是给内容区加 `.jabiz-ui`（那会重置 antd 页面里的普通元素，且 `base` 层排在 `antd` 层之后会盖过 antd 的组件样式），
+  而是让 `@jabiz/ui` 组件画出的每个元素都带 `.jabiz-ui`，生成的选择器也匹配带该类的元素本身；扩展自己的普通 HTML 元素需放进 `UI_SCOPE` 容器（见扩展指南）。
+- 侧栏收起时移出屏幕并设为 `inert`，不收成图标条（服务端菜单没有图标、分组在图标条中无法展开）。
+- `setAmountUnit(币种, 标签)`：只改变该币种金额的显示（如 JPY 显示为 "Kudos"），不影响无币种的数字与其他币种；`app:check` 另查 `react-i18next`，以及使用 `@jabiz/client` 时其运行时依赖（`dayjs`、`openapi-fetch`）。
+- `DropdownMenu` 默认非模态：模态菜单把页面其余部分设为 `aria-hidden` 而仍可聚焦，axe 报 `aria-hidden-focus`。
+- 迁入 `@jabiz/client` 的模块在原位置保留只做重新导出的文件，原有页面与测试（含 `vi.mock` 的路径）不变；15b–15d 随页面迁移去掉。
+- 版本：新依赖固定为发布至少数周的确切版本；`@tanstack/react-table` 用 8.21.3、`react-day-picker` 用 9.14.0（各自的新大版本发布不久，API 有变），
+  `recharts` 需要的 `react-is` 固定为 19.3.0（与 React 一致）。
+- Vitest 的单个用例时限放宽到 15 秒（页面测试在负载下接近默认的 5 秒）。
+- 视觉回归以截图人工对比：登录页逐像素一致；列表页与表单抽屉中 antd 的部分外观不变，外框改为新侧栏（ProLayout 的面包屑随之没有了，见已知问题）。
+
+**产物大小**（`vite build`，未压缩 / gzip）：15a 前 JS 2 651.0 kB / 819.2 kB、CSS 0.3 kB；15a 后 JS 2 735.9 kB / 846.6 kB、CSS 73.5 kB / 12.5 kB（共存期间的增量，15d 删除 antd 后回落）。
+
+**已知问题**
+- ProLayout 给 `PageContainer` 的面包屑（数据 / 承运商）在新外壳中不再显示；15b 以 `PageHeader` 的面包屑取代。
+- 暗色外观下 antd 页面仍是亮色（内容区固定为亮色 token），15b、15c 迁移后才随外观变化。
+- jsdom 不计算样式，组件测试中的 axe 不查颜色对比度；对比度由 `theme.test.ts`（token）与 e2e 的 a11y 检查（浏览器中）覆盖。
+- step-up 对话框（Radix `Dialog`，模态）没有 e2e 的 axe 检查（需要开启二次验证的会话）；组件测试中的 axe 无违规。
+- 内容区里的 `@jabiz/ui` 组件打开的弹出层（选择框、菜单、日期）渲染在 `body` 下，暗色外观时是暗色，而所在页面是亮色；15b、15c 页面迁移、取消亮色固定后消失。
+- antd 组件若放进 `@jabiz/ui` 组件之内（如 `Dialog` 里放 antd 表单），会受 preflight 影响；迁移期间不要这样混用。
+
+### 15b 元数据生成的页面（7–9 天，分 15b-1 / 15b-2 两个 PR）
+
+依据：决策 D34；12 §5、§6、§11、§12；15a 的出入与已知问题。目标：元数据生成的页面不再用 antd、ProComponents 与 icons，行为不变；这些页面在暗色外观下随外观变化（取消对它们的亮色固定）；e2e 与 a11y 中涉及这些页面的 `.ant-*` 选择器改为角色、名称或稳定的 `data-*`。比原估 5–7 天多的部分：给 15c 共用的组合组件、可键入的日期控件、e2e 选择器的迁移。
+
+**现状**（`frontend/src`，22 个文件、约 2 360 行）：`LoginPage`（`LoginForm`、`ProFormText`）、`MfaEnrollment`（15c 的账户安全页也用）、`OidcCallbackPage`、`DatasetCatalogPage` / `ProcessCatalogPage`（本地数据的 `ProTable`）、`DatasetListPage`（`ProTable` 远程分页 / 排序 / 筛选与自动查询表单、回看时间、`Popconfirm`）、`meta/columns.ts`（`ProColumns`；15c 的报表页也用）、`EntityFormDrawer` / `EntityField`（`DrawerForm`、`ProForm*`）、`SchemaInputs`（流程表单；15c 的报表与导入页也用）、`ReferenceSelect`（远程查找 `Select`）、`I18nTextInput`（`Tabs`）、`FileField`（`Upload`）、`FilePreview`（`Image`）、`MaskedValue`、`FieldErrors`（借用 antd 的类名）、`ChildEntityList`、`EntityHistoryPage` / `HistoryTimeline` / `OperationDrawer`、`ProcessFormPage`、`RowActions`。列表页、表单抽屉、子实体列表、流程表单、历史页、操作详情与两个目录页目前**没有**单元测试。e2e 中约 10 个规格用到这些页面的 `.ant-*` 选择器。本阶段所需依赖都已在 15a 的包中，**不加依赖**。
+
+**拆分原则**：同一棵弹出层子树一次迁完——Radix 弹出层 `z-50`，antd 抽屉 / 对话框 `1000`，把新的下拉或确认框放进 antd 抽屉会被盖住。
+
+**共用部分的归属**（15b 与 15c 并行时以此为准）：新的组合组件全部在 15b-1 加入，15c 在其后开工；`MfaEnrollment` 由 15b-1 迁移；新建 `SchemaForm`（15b-1），旧 `SchemaInputs` 由 15c 迁完报表与导入页后删除；`buildColumns` 的无界面部分移到 `meta/cells.ts`、新增 `meta/dataColumns.tsx`（15b-2），旧 `buildColumns` 由 15c 删除；`FilePreview`、`MaskedValue` 由 15b-2 迁移；审批面板、单据面板、`expandIcon`、`AccessibleSelect` 归 15c。
+
+#### 15b-1（3.5–4.5 天）：组合组件、登录、单点登录回调、目录、流程表单、历史
+
+**要求**
+1. **`@jabiz/ui` 新组合组件**（通用，不认识元数据；元数据适配留在平台前端，经 `@jabiz/admin` 导出；只用 token；`ui` 命名空间三语；带 `UI_SCOPE`）：
+   - `DatePicker` / `DateTimePicker` 可**键入**（本地时间 `YYYY-MM-DD HH:mm:ss` / `YYYY-MM-DD`，失焦或 Enter 解析，无效值不提交并设 `aria-invalid`），`DateTimePicker` 加 `disabledDays` / `toDate`，日历标题可按年月选择；输入框有 `id` / `aria-label`，`getByLabel(...).fill(...)` 照常可用。
+   - `Combobox`（Popover + cmdk；静态或远程模式、清除；`role="combobox"`、`aria-expanded` / `required` / `invalid`，选项 `role="option"`）。
+   - `FilterBar`（文本、选项、数值区间、时间区间、日期区间；区间为以标签命名的 `group`；"查询""重置"，Enter 提交）。
+   - `FileUpload`（真实的 file 输入；上传前检查类型与大小；上传中状态；`role="alert"` 的错误）。
+   - `Timeline`、`DescriptionList`、`TagsInput`、`CopyButton`、`PageState`（加载 / 不存在 / 出错 / 警告，取代 `Spin` 与 `Result`）、`Spinner`。
+   - `DataTable`：数据行带 `data-slot="data-table-row"`；列可固定在右侧；列的 `className`。
+2. **外壳**：路由 `handle: { ui: 'jabiz' }` 标出已迁移的页面，这些页面不再固定为亮色（15d 去掉此开关）；新增 `AdminPage`（`UI_SCOPE` + `PageHeader` + 面包屑），取代 `PageContainer`；面包屑：数据 › 实体（› 历史）、流程 › 流程名（修复 15a 已知问题）。
+3. **登录与二次验证**：react-hook-form；占位符、`autoComplete`、三个步骤、闲置锁定提示、预填用户名、`from` 跳转、回调带来的步骤都不变；恢复码用 `CopyButton`；全部测试 id 保留；按钮文字"登录""验证"。
+4. **单点登录回调**：`PageState` 加载与警告；授权码只送一次不变。
+5. **两个目录**：`DataTable` 本地分页（每页 50，只有一页时不显示分页）；`CopyButton`、`Badge`；测试 id 与空状态文案不变。
+6. **流程表单**（`ProcessFormPage` + 新 `SchemaForm`）：各种输入（密码、可键入的时间与日期、十进制 / 整数 / 数字、开关、枚举、标签、对象分组、可增删的列表、JSON）；校验只保留原有的必填与 `pattern`，写成纯函数 `checkInputs`，不引入新校验库；数字输入转为 JSON 数字；预填只读；`Idempotency-Key` 打开时生成、失败不变、成功更换；step-up 重试同键（由 `@jabiz/client` 完成）；违规列表与结果的测试 id、字段标签不变。
+7. **历史**：两列布局；`Timeline`（动作标签颜色集中一处，预定与墓碑标记不变）；时间点用两个可清除的 `DateTimePicker` 并写入 URL；结果用 `DescriptionList`，与现在不同时标记；404 视为"那时不存在"；操作详情用 `Sheet`；撤销用 `Dialog`（原因必填）；按钮的出现条件与权限不变。
+
+#### 15b-2（3.5–4.5 天）：列表页这棵子树
+
+**要求**
+8. **列表**（`DatasetListPage` + `meta/dataColumns.tsx`）：TanStack Query 保留上一页数据；请求体由 `buildFilters`、`buildSorts`、分页、`asOf` / `knownAt` 组成（`buildSorts` 增加 `SortingState` 重载，白名单检查不变）；每页 10 / 20 / 50 / 100；默认排序；查询与重置回到第 1 页；只有白名单内且可比较的列可排序；筛选栏只含白名单字段，不含敏感字段，遮蔽字段只给持有权限者；回看时只读并提示；操作列固定在右侧（编辑 / 查看、行操作、删除确认、历史、审计）；引用显示名、多语言回退、文件缩略图、遮蔽值"显示"仍经 `renderCell`。
+9. **表单抽屉**（`EntityFormDrawer`、`EntityField`、`FieldErrors`）：右侧 `Sheet`；react-hook-form 保存值（`toFormValue` 改为返回字符串）；**校验仍只走 `meta/validation.ts`**（输入时查改动的字段；新建查全部、修改查改动的；什么都没改时提示）；服务端 400 / 422 违规回填到字段并带 `aria-describedby` 与规则码，409 提示冲突；各语义类型对应的控件（十进制不传小数位、不截断不取整，金额显示币种）；只读规则（`processOnly`、修改时不可变字段与主键、无权限的遮蔽字段、预填、只读模式）；时态实体的生效时间（不允许预定时不能选未来）与原因；回看时无操作与子实体。
+10. **字段组件**：`ReferenceSelect` 用远程 `Combobox`（250 ms 防抖、当前值显示名、按语言回退）；`I18nTextInput` 用 `Tabs`（必填与出错的语言标记、Markdown 预览）；`FileField` 用 `FileUpload`（按策略上传、超限不上传、替换与移除）；`FilePreview` 点击用 `Dialog` 放大，非图片为下载按钮，`blob:` 卸载时释放；`MaskedValue` 每次点击请求服务端、明文只在组件状态。
+11. **子实体列表与行操作**：`Card` + `DataTable`（每页 5、按父引用筛选、新建时预填引用、无写权限只读，嵌套 `Sheet`）；`RowActions` 用 `ConfirmDialog`，每次执行新的幂等键。
+12. **`@jabiz/admin` 契约**：`EntityFormDrawer` 的 props 不变（现为 Radix 模态 `Sheet`，不再需要 antd 的 `App`）；`ReferenceSelect` 增加 `id` / `aria-*` / `placeholder`；`FieldErrors` 增加可选 `id`；新组合组件随 `@jabiz/ui` 一并导出；变化写入 `docs/guide/admin-extension.md`。
+13. 文案：`ui` 命名空间新增筛选、组合框、上传、复制、标签、页面状态、日期的键（三语）；"查询""重置""确定""保存""执行"用词不变。
+
+**改动**：`packages/ui` 新增 9 个组件（各配测试）并修改日期与表格组件；平台前端 22 个文件、新增 `SchemaForm`、`AdminPage`、`meta/cells.ts`、`meta/dataColumns.tsx`，修改 `meta/columns.ts`（只剩给 15c 的旧部分）、`kinds.ts`、`listQuery.ts`、`processForm.ts`、`i18n/resources.ts`、`lib/index.ts`、`App.tsx`、`AppLayout.tsx`；`e2e/support.ts` 新增按角色的辅助函数（对话框、数据行、确认、选项、区间、排序、页面已渲染），相关规格改用它们；文档 12 §5 / §6 / §11 / §12、扩展指南、ROADMAP。无后端改动、无迁移、无新依赖。
+
+**测试**
+- `@jabiz/ui`：每个新组件的 Vitest，并在亮、暗两种外观下 axe 检查；日期键入（有效、无效、范围、Enter、本地时间转 UTC、日期不经时区）；`DataTable` 的行标记与固定列。
+- 平台前端：已有测试按新结构改写、断言的行为不变；新增两个目录页、`SchemaForm`、`ProcessFormPage`（幂等键、step-up 同键重发、违规、结果）、`EntityHistoryPage` / `OperationDrawer`、`DatasetListPage`（分页、只限白名单的排序与筛选、遮蔽字段筛选只给有权限者、查询回第 1 页、回看只读、删除后刷新、引用显示名、按权限的操作）、`EntityFormDrawer`（新建与修改发送的内容、清空发 `null`、时间按毫秒比较、只读规则、生效时间与原因、违规回填、409、只读与回看模式）、`EntityField`、`ChildEntityList`、`dataColumns` 的测试；`validation.test`、`validation.cases.test`、`entityForm.test`、`masked.test` 原样通过。
+- 外壳：已迁移的路由不再固定亮色，其余照旧。
+- e2e：现有 35 个用例全部通过；`a11y.spec.ts` 对本阶段的页面（含登录页）在亮、暗两种外观下检查，并在打开删除确认、引用下拉、日期弹出层后各查一次。
+
+**风险**：弹出层层级（按子树拆分；15b-2 合入前 step-up 对话框弹在 antd 抽屉上仍会被盖住，15a 已如此）；修改 15a 的日期控件（区域、夏令时、秒与毫秒）；ProTable 的隐含行为容易漏掉（逐条写进列表页测试）；嵌套 `Sheet` 的焦点与 Escape（e2e 覆盖）；迁移期间两套实现并存（转换只有一份，旧的由 15c 删除，记入已知问题）；15b 与 15c 都改 `@jabiz/ui` 的导出与文案（组合组件先在 15b-1 合入）；产物大小在 15d 前继续增加（记录前后大小）。
+
+**验收标准**
+- [ ] 22 个文件及新增的 `SchemaForm`、`AdminPage`、`cells`、`dataColumns` 不引用 antd 系包；`meta/columns.ts` 只剩给 15c 的旧部分并注明。
+- [ ] `@jabiz/ui` 新增 9 个组合组件，日期控件可键入并可限定范围；每个组件有 Vitest，亮、暗 axe 无违规。
+- [ ] "要保持的行为"逐条有 Vitest 覆盖并通过；`validation.cases.test` 不变且通过；不引入第二套校验库，没有新依赖。
+- [ ] 已迁移的页面在暗色外观下为暗色，未迁移的页面与扩展页仍为亮色；列表、历史、流程表单有面包屑。
+- [ ] e2e 35 个用例全部通过；涉及本阶段页面的地方不再使用 `.ant-*`。
+- [ ] `a11y.spec.ts`：本阶段页面在亮、暗外观下无违规，弹出层也检查过。
+- [ ] `@jabiz/admin` 导出的 `EntityFormDrawer`、`ReferenceSelect`、`FilePreview`、`FieldErrors` 不再依赖 antd，契约变化已写入扩展指南；`pnpm ext:check` 通过。
+- [ ] 前端全部检查与 `./gradlew check` 通过；ROADMAP 记下产物大小与出入；12 已更新。
+
+要保持的行为（逐条测试）：远程分页 / 排序 / 筛选只限白名单；回看写在 URL、回看时只读；遮蔽值每次请求服务端；多语言页签的必填、出错、回退与预览；文件按策略上传、预览释放、下载、移除为 `null`；引用显示名按页批量取；`processOnly` 只读不发送；生效时间与原因；只发送改动的字段；违规回填带规则码；step-up 后同键重试；二次验证绑定与恢复码；单点登录的授权码只送一次。
+
+### 15c – 15d
+
+详细计划在开工前给出（CLAUDE.md 第 7 节）。15c 在 15b-1 合入后开工（共用的组合组件在 15b-1）。15d 的验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；
 12 与扩展指南改写完毕。
 
 ## 阶段 16：应用所需的通用能力（由 QuizBuks 提出，线 1.2）
@@ -1108,7 +1196,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 子阶段 | 内容 | 决策 | 预估 | 依赖 |
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
-| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源 | D36 | 5–7 天 | 16a |
+| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 / 16b-2） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
 | 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
@@ -1200,6 +1288,119 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 - 退订链接无过期，轮换 `JABIZ_JWT_SECRET` 会使已发出的退订链接失效（用户仍可在账户设置中退订）。
 - 退订接口匿名且未单独限流（每次只校验签名并至多写一条偏好）。
 - 待办通知（`TASK_NOTIFY`）与单据发送不迁移（本计划第 10 条），仍是纯文本、进程内重试。
+
+### 16b 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（6–8 天，分 16b-1 / 16b-2 两个 PR）
+
+决策 D36（含 G4）；依赖 16a（D35）。比阶段表中的 5–7 天多约 1 天：下面"实施细则"补了 D36 未写明、但必须做的几处（加入与重置时的账号预占、验证随邮箱改变而失效、不区分大小写的唯一性）。
+
+现状（`1.2/platform`）
+- **登录**：`AuthController` 的 `POST /api/auth/login`（`LoginRequest(userName, password)`）执行 `SPONSOR_SIGN_IN`：按 `userName` 查用户 → 读最新登录记录 → `AuthenticationStep`（BCrypt，名字不存在也比对哑哈希）→ `accessSteps`（角色分配、角色、权限，`Rbac.access`，无角色即 `NO_ROLE`）→ 二次验证 → `LoginRecordStep`；除 `SUCCESS` 外一律 401 `LOGIN_FAILED`。`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN` 共用 `accessSteps`，入口过滤与 `SignInGuard` 只需加在一处。
+- **令牌**：访问令牌声明 `sub`、`tenant`、`roles`、`perms`、`mfa_at`、`data_from`、`data_to`；按 `typ` 区分访问令牌、挑战令牌（`jabiz-mfa+jwt`）、退订令牌（`jabiz-unsub+jwt`），`verify()` 只接受访问令牌。
+- **刷新**：`RefreshTokenStore.rotate` + `RbacService.currentActor` 重读启用、锁定、角色与二次验证要求；`sec_refresh_token` 有 `mfa_at`、`identity_id`；`revokeUser` 已有。
+- **身份对象**：`Actor`、`RequestContext` 有 `mfaAt`、`dataPeriod`，没有入口与邮箱验证状态。
+- **step-up**：流程 `requiresMfa`、数据视图 `writeRequiresMfa`（只管写），在六个入口调用 `MfaPolicy.require`（`ProcessController`、`DatasetController`、`EntityController`、`ResolveEntityHandler`、`ImportAccess`、`RevertService`），系统身份与场景回放不查。
+- **匿名接口**：`SecurityConfig.PUBLIC`；只有 `/api/public/**` 有按地址限流（`TokenBucketLimiter`）；客户端地址取连接地址或 Spring `forward-headers-strategy` 改写后的地址，没有"可信代理"；登录接口无限流。
+- **用户**：`SecUser.email` 可选、**不唯一**；`locale`（16a）；没有验证时间；`passwordHash` 可空（只用 OIDC）。时态唯一检查（D6）区分大小写。
+- **登录记录**：没有来源信息。**16a 的邮件部件**：`MailTemplate.token`、`SendMail`、`MailTokens.consume`（只认同一收件人同一用途的最新令牌）、`ActingUser`；链接只有全局 `{baseUrl}`。最新平台迁移 V31；示范应用 V15（`Customer.userId`）。
+- **前端**：登录不传 `entry`（15a 后在 `packages/client`）。
+
+#### 实施细则（D36 未写明之处的处理；写入 D36 的实现说明）
+
+1. `SignInGuard` 是 core 的同步接口，所需的应用数据由它声明 `loads()`（数据视图 + 存用户编号的字段），平台预读后传入；多个守卫全部放行才放行，守卫抛异常即拒绝（fail closed）。
+2. 只在密码正确之后才区分：守卫拒绝答 403 `SIGN_IN_REFUSED`，入口要求已验证而未验证答 403 `EMAIL_NOT_VERIFIED`（请求者已证明持有密码，不泄露账号存在）；入口不接受其角色仍答 401 `LOGIN_FAILED`（记 `NO_ROLE` 与入口）。
+3. 刷新时守卫拒绝：不写登录记录（刷新不是流程），记日志与指标 `jabiz.auth.refresh.refused`，吊销该令牌族。
+4. 新增 `verifiedEmail` 与 `emailVerifiedAt`（都 `processOnly`，只由验证类流程写）；"已验证" = `lower(verifiedEmail) = lower(email)`，管理员改邮箱即自动失效。
+5. 证明邮箱所有权的三处都写验证字段：验证邮箱、找回密码的确认、"你已有账号"邮件的加入链接。
+6. **账号预占**：已有账号**未验证**时，加入链接必须同时设置新密码并吊销全部令牌族；已验证的账号只追加角色。注册请求中的密码从不用于已有账号。
+7. 不新增"待验证"状态：未验证即待验证，由入口的 `require-verified-email` 决定能否登录。
+8. 数据视图的 `requiresVerifiedEmail()` 同二次验证只管写；读取的限制以后另议。
+9. 缺省入口 `admin` 总是存在：未配置时接受全部角色，显式配置则以配置为准；请求不带 `entry` 即 `admin`，现有后台前端无需改动。
+10. 新建 `ClientAddresses`（登录记录与公开接口限流共用），按 `jabiz.security.trusted-proxies` 取地址；与 `server.forward-headers-strategy` 同时配置时启动检查报错（避免转发头被处理两次而可伪造）；不配置时保持现有行为。
+11. 不区分大小写的唯一：core `UniqueConstraint` 增加 `ignoreCase`，时态唯一检查按 `lower` 取锁与查找，索引建在 `lower(email)` 上；迁移遇到已有重复即明确失败，须先由管理员处理。
+12. 自助注册的 `userName` 取邮箱小写，已被占用时加 `-` 与 6 位随机字符；按标识登录先精确匹配用户名，再按**已验证**的邮箱（不区分大小写）匹配。
+13. 邮件链接为 `{baseUrl}/auth/<页>?entry=<入口>&token=<令牌>`，由通用后台的落地页处理（同 16a 的退订页），完成后跳到入口配置的 `app-path`；应用 SPA 自己的页面在 16c。
+
+#### 16b-1 登录入口、令牌入口、`SignInGuard`、`requiresVerifiedEmail`、登录记录带来源（3–4 天）
+
+改动所有登录的关键路径，单独评审并证明后台行为不变；不需要邮件。
+
+**要求**
+1. **入口配置** `jabiz.security.entries.<名>`（名字 `[a-z][a-z0-9-]{0,39}`）：`accepted-roles`（角色码，`*` 为全部）、`self-registration`（缺省否）、`registration-roles`、`require-verified-email`（缺省否）、`app-path`（缺省 `/`）。缺省入口见细则 9。启动检查 `SECURITY` 一次报告全部问题（名字非法、注册角色不在接受的角色中、允许注册却无注册角色、`app-path` 格式）；邮件未启用而允许注册、角色码不存在为告警。
+2. **登录带入口**：`LoginRequest.entry`（可选，缺省 `admin`），`userName` 也可填已验证的邮箱；未知入口 401。`accessSteps` 先按入口过滤角色分配与角色再算权限，因此权限、`mfaRequired`、数据期限都只来自该入口接受的角色。
+3. **令牌**：访问令牌加 `entry`、`email_verified`（旧令牌无 `entry` 视为 `admin`）；挑战令牌加 `entry`，`SPONSOR_MFA_VERIFY` 的入口取自挑战令牌而非请求；`Actor`、`RequestContext` 加 `entry`、`emailVerified`（保留旧构造器）；`/api/auth/me` 加 `entry`、`email`、`emailVerified`。
+4. **刷新**：`sec_refresh_token.entry` 随族沿用；请求的入口与令牌不符即 401 且不消费；`currentActor` 按入口过滤、重读 `emailVerified` 并调用守卫。
+5. **`SignInGuard`**（core）：`check(SignInAttempt)` + `loads()`；`SignInAttempt` 含用户、入口、过滤后的角色、`emailVerified`、因素（密码 / OIDC / TOTP / 刷新）、时间、预读数据。平台步骤 `SignInGuardStep` 放在角色检查之后、签发之前（三条登录路径与二次验证步骤都经过），刷新也调用。拒绝：`REFUSED`，写登录记录，不计失败。
+6. **`requiresVerifiedEmail()`**：流程与数据视图（只管写）声明；`VerifiedEmailPolicy` 与 `MfaPolicy` 放在同样六个入口，403 `EMAIL_NOT_VERIFIED`；流程目录公开该要求；场景回放、子流程、事件消费者不查。
+7. **邮箱**：`SecUser.email` 非空时不区分大小写唯一；新增 `emailVerifiedAt`、`verifiedEmail`（本 PR 尚无写入者）；入口要求已验证时未验证者登录为 `EMAIL_NOT_VERIFIED`（写记录、不计失败、403）；按已验证邮箱登录见细则 12。
+8. **`LoginOutcome`** 增加 `REFUSED`、`EMAIL_NOT_VERIFIED`、`PASSWORD_RESET`（后者清零并解锁，供 16b-2）。
+9. **登录记录带来源**：`entry`、`clientIp`、`userAgent`（截断 256、去控制字符）；`ClientAddresses` 只在连接来自可信代理时读 `X-Forwarded-For`，从右向左跳过可信地址取第一个不可信地址；格式错误的头忽略；`PublicAccessWebFilter` 改用它。
+10. **OIDC**：`start` 可带 `entry`，存入 `sec_oidc_state.entry`，回调用存下的值。
+11. 文档：10（令牌声明表、新 §15）、15 §6、07、D36 实现说明、CLAUDE.md 第 4 节。
+
+**表与迁移**（`db/jabiz/V32__sign_in_entries.sql`，只加列与索引，不建新表）：`sec_user_version` 加 `email_verified_at`、`verified_email`，索引 `lower(email)`（非空），遇到已有不区分大小写的重复即 `RAISE EXCEPTION`；`sec_login_record_version` 加 `entry`、`client_ip`、`user_agent`；`sec_refresh_token`、`sec_oidc_state` 加 `entry`（旧行为空，读作 `admin`）。`MetaModelConsistencyChecker` 认可表达式索引。
+
+**改动**：core（`SignInGuard` 等、`LoginOutcome`、`LoginAttemptPolicy`、`UniqueConstraint.ignoreCase`、流程与数据视图的声明、`RequestContext`、错误码与三语消息）；runtime security（`SignInEntries`、`ClientAddresses`、`SignInGuards` / `SignInGuardStep`、`VerifiedEmailPolicy`、`JwtService`、`RefreshTokenStore`、`RbacService`、`Rbac`、`AuthController`、`MfaController`、`OidcController`、`OidcStateStore`、`SecurityEntities`、`SecurityConfig`）；登录流程与 `LoginRecordStep`、`Actor`、认证过滤器、开发用请求头（`admin`）、`TemporalStore.checkUnique`、六个入口、`MetaModelController`、`ProblemStatuses`、`PublicAccessWebFilter`。前端不改代码，只更新 OpenAPI 快照与生成的类型。
+
+**测试**
+- 单元：`LoginAttemptPolicyTest`（新结果不计数，`PASSWORD_RESET` 清零解锁）；`SignInEntriesTest`（缺省、覆盖、错误一次报全）；`ClientAddressesTest`（不可信连接伪造 XFF 无效、可信链取最右侧不可信地址、全链可信取最左、格式错误、IPv6、CIDR 边界、与 `forward-headers-strategy` 同配报错）；`JwtServiceTest`（新声明往返、旧令牌为 `admin`、挑战令牌的入口、其他类型冒充访问令牌被拒、篡改入口签名失败）；`RbacTest`（按入口过滤权限、`mfaRequired`、数据期限）；不区分大小写唯一；`VerifiedEmailPolicyTest`。
+- 集成（`backend/app`，本地 PostgreSQL；`SignInEntryIT`、`ClientAddressIT`）：
+  - 后台不变：不带入口的登录、刷新、MFA、OIDC 与现在相同（`SignInIT`、`MfaIT`、`OidcIT` 原样通过）。
+  - 入口隔离：兼有 `ADMIN` 与 `CUSTOMER` 的用户登录 `portal`，令牌只有 `CUSTOMER` 的权限、后台流程 403；只有 `ADMIN` 的用户登录 `portal` 得 401 并记 `NO_ROLE`；刷新保持入口，入口不符 401 且不消费；`portal` 的挑战只换得 `portal` 会话；OIDC 回调用 state 中的入口；`requireMfa` 角色只在接受它的入口要求二次验证。
+  - 守卫：拒绝 403 并记 `REFUSED`，反复拒绝不锁定；封禁后下一次刷新 401 并吊销族；守卫异常即拒绝；`loads()` 的数据到达守卫。
+  - 验证邮箱：未验证者在流程 API、数据视图写、实体 API、导入四处 403；系统身份与场景回放照常；入口要求已验证时拒绝登录、失败计数不变；`A@x.com` 与 `a@x.com` 冲突，并发只成功一个。
+  - 来源：未配置可信代理时伪造 XFF 无效；可信代理链取正确地址；UA 截断；公开接口限流按同一地址。
+  - 加列的表上没有 UPDATE / DELETE；OpenAPI 快照更新。
+- 前端：`LoginPage.test.tsx`、`e2e/login.spec.ts`、`mfa.spec.ts` 不改即通过。
+
+**风险**：`RequestContext` / `Actor` 构造处多（保留旧构造器）；守卫预读限为按用户编号的等值查询且有上限；已有重复邮箱时迁移中止（升级说明写明）；入口过滤改变 `mfaRequired` 的含义（有意，写入 10 §15）；升级前签发的令牌在有效期内按 `admin` 处理。
+
+**验收标准**
+- [ ] 不带 `entry` 的登录、刷新、MFA、OIDC 行为不变，后台前端不改即可用。
+- [ ] 访问令牌带 `entry` 与 `email_verified`，只含该入口接受角色的权限；刷新保持入口，不符即拒且不消费；挑战与 OIDC 的入口不能被请求改写。
+- [ ] `SignInGuard` 在三条登录路径与刷新时调用；拒绝写记录、不计失败；异常即拒绝。
+- [ ] `requiresVerifiedEmail` 在各入口返回 403 `EMAIL_NOT_VERIFIED` 并在目录中可见；入口可要求已验证才能登录。
+- [ ] 邮箱不区分大小写唯一；已有重复时迁移明确失败。
+- [ ] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
+- [ ] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
+
+#### 16b-2 自助注册、邮箱验证、找回密码、示范（3–4 天）
+
+新增匿名写入接口，单独做安全审查。
+
+**要求**
+1. **平台邮件模板**（`TRANSACTIONAL`，三语）：`jabiz.auth.verify-email`（令牌 `verify`，缺省 24 小时）、`jabiz.auth.account-exists`（令牌 `join`，24 小时）、`jabiz.auth.password-reset`（令牌 `reset`，缺省 1 小时）；链接见细则 13。
+2. **注册** `POST /api/auth/register {entry, email, password, displayName?, locale?}` → `SPONSOR_SIGN_UP`：入口不存在或不允许注册 403 `SIGN_UP_DISABLED`；格式与密码长度先校验；按 `lower(email)` 查用户；**两种情况都计算 BCrypt**；未被使用 → 建用户、授予注册角色、发验证邮件；已被使用 → 不建用户、不用提交的密码、给已有用户发"你已有账号"（禁用的不发）。两种情况都答 **202，状态、响应头、正文完全相同**。
+3. **加入** `POST /api/auth/join {token, password?}` → `SPONSOR_SIGN_UP_JOIN`：消费 `join` 令牌，地址须等于用户当前邮箱；从该邮件的参数读出入口，追加其注册角色；写验证字段；原先未验证时必须设新密码并吊销全部令牌族（细则 6）。204。
+4. **验证邮箱** `POST /api/auth/verify-email {token}`（匿名）→ `SPONSOR_EMAIL_VERIFY`；重发：匿名 `POST /api/auth/verify-email/resend {email, entry}`（只对未验证用户发，始终 202），已登录 `POST /api/auth/account/verify-email`。新邮件使旧令牌作废。
+5. **找回密码** `POST /api/auth/password-reset/request {email, entry?}`（始终 202，只对启用的用户发信）；`confirm {token, password}`：消费令牌、地址等于当前邮箱、设密码（只用 OIDC 的用户也可）、写验证字段、吊销全部令牌族、写登录记录 `PASSWORD_RESET`（清零并解锁）。204，不自动登录。
+6. **限流**：按 `ClientAddresses` 得出的地址与小写邮箱，超限 429 `RATE_LIMITED` 带 `Retry-After`；缺省每地址每小时 20 次、每邮箱每小时 3 次；对存在与不存在的邮箱一致。
+7. 以上接口加入 `SecurityConfig.PUBLIC`（`/api/auth/account/verify-email` 需登录）；`GET /api/auth/entries/{name}`（匿名）返回 `selfRegistration`、`requireVerifiedEmail`、`appPath`。
+8. **通用后台页面**：`/auth/verify-email`、`/auth/join`（未验证时要求新密码）、`/auth/password-reset`（申请与确认），登录页加"忘记密码"；三语，Vitest。用 `@jabiz/ui` 组件（15a 已合入时）。注册表单在 16c。
+9. **示范**（`backend/app`）：入口 `portal`（接受并授予 `CUSTOMER`，允许注册，要求已验证）；应用迁移 `V16__customer_blocked.sql`；`PortalSignInGuard`（`blocked` 的客户被拒）；流程 `PORTAL_ORDER_PLACE`（`requiresVerifiedEmail()`，客户取自调用者而非输入，子流程调用 `ORDER_PLACE`）。
+
+**改动**：runtime security（`SignUpController`、五个流程与 `AuthMailTemplates`、`SignUpRateLimits`、平台步骤 `LoadUserByEmail` 与 `MailMessageParams`、`RefreshTokenStore` 的吊销原因、错误码 `SIGN_UP_DISABLED`、三语消息）；前端三个页面与登录页链接；app 的入口配置、守卫、流程、消息、V16；文档 10 §15、D36 实现说明、07、功能清单（删去"不做自助注册"）、扩展指南。平台无新迁移。
+
+**测试**（GreenMail，参照 `MailIT`；`SignUpIT`、`PasswordResetIT`、`PortalIT`）
+- **不可枚举**：新邮箱与已有邮箱的注册响应逐字节相同，只是邮件不同；重发与找回对未知邮箱同样 202 且不发信；两条注册路径都经过哈希步骤；未验证的邮箱不能用于登录（同未知名字）。
+- **令牌**：`verify` 令牌用于 reset / join 得 422 `TOKEN_INVALID`；访问令牌、挑战令牌当作邮件令牌无效；二次使用、过期、重发后的旧令牌、发信后邮箱被改都无效；库中查不到令牌原文。
+- **流程**：注册后有注册角色、未验证、`portal` 拒绝登录；验证后可登录、令牌 `email_verified=true`、可运行 `PORTAL_ORDER_PLACE`；已有账号注册不追加角色，点击加入链接后才追加；`admin` 入口注册 403。
+- **账号预占**：攻击者先以受害人邮箱注册，受害人注册后加入时须设新密码，完成后攻击者的密码失效、会话被吊销。
+- **找回密码**：确认后旧刷新令牌 401、锁定解除、记录 `PASSWORD_RESET`；禁用用户收不到信；只用 OIDC 的用户可设密码。
+- **限流**：超限 429，存在与不存在的邮箱一致；伪造 XFF 不能绕过。
+- **守卫示范**：被封禁的客户登录 `portal` 得 403；封禁后下一次刷新失败。
+- 涉及的表上没有 UPDATE / DELETE；OpenAPI 快照更新；场景 `security/sign_up.yml`、`commerce/portal_order.yml`；前端页面的 Vitest。
+
+**风险**：匿名注册每次计算 BCrypt，可被用来耗 CPU（靠限流与线程池上限；限流按实例，同 15 的已知限制）；邮件关闭时注册的用户无法验证（启动告警）；找回密码的申请两种情况仍有极小的耗时差（多写一条邮件消息），记为已知限制；与 15b 改同一批前端文件，合并顺序需协调。
+
+**验收标准**
+- [ ] 允许注册的入口可以注册；新旧邮箱响应完全相同；已有账号只有点击邮件链接后才追加角色，未验证的已有账号须同时设新密码。
+- [ ] 验证令牌只能用一次，过期、被取代、用途不符、邮箱已改都无效；验证后令牌带 `email_verified`。
+- [ ] 找回密码不泄露邮箱是否存在；确认后吊销全部令牌族、写登录记录、解除锁定。
+- [ ] 注册、重发、找回按地址与邮箱限流，伪造转发头不能绕过。
+- [ ] 示范 `portal` 的注册、验证、登录与下单可运行，被封禁的客户被拒。
+- [ ] 通用后台有验证、加入、找回密码页面与"忘记密码"链接；`./gradlew check` 与前端检查通过；D36、10、07、功能清单已更新。
+
+**不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 
 ### 16h 账本维度接受身份与引用字段（0.5 天）
 

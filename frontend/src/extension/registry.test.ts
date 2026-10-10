@@ -83,13 +83,13 @@ describe('extensionMenu', () => {
   it('shows what the user may use, labelled, under keys of its own', () => {
     const items = extensionMenu(menu, (p) => p === 'stock.read', label)
     expect(items).toEqual([
-      { key: 'ext:stock', name: '<menu.stock>', path: '/stock', icon: undefined, children: undefined },
+      { key: 'ext:stock', label: '<menu.stock>', path: '/stock', icon: undefined, children: undefined },
       {
         key: 'ext:gl',
-        name: '<menu.gl>',
+        label: '<menu.gl>',
         path: '/ext/gl',
         icon: undefined,
-        children: [{ key: 'ext:journal', name: '<menu.journal>', path: '/gl/journal', icon: undefined, children: undefined }],
+        children: [{ key: 'ext:journal', label: '<menu.journal>', path: '/gl/journal', icon: undefined, children: undefined }],
       },
     ])
   })

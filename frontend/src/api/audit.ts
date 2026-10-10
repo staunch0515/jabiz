@@ -1,4 +1,4 @@
-import type { components } from './schema'
+import type { components } from '@jabiz/client'
 
 /** The audit trail (docs/design/21-audit-retention.md section 1). */
 export type AuditRecord = components['schemas']['AuditRecordEntry']

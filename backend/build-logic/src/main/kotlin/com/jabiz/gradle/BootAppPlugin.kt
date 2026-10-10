@@ -144,7 +144,12 @@ class BootAppPlugin : Plugin<Project> {
             usesService(pnpm)
             workingDir.set(sourceDir)
             pnpmCommand.set(listOf("install", "--frozen-lockfile"))
-            inputs.files(sourceDir.file("package.json"), sourceDir.file("pnpm-lock.yaml"))
+            // A pnpm workspace (decision D34): the frontend packages' manifests are installed with it.
+            inputs.files(
+                sourceDir.file("package.json"),
+                sourceDir.file("pnpm-lock.yaml"),
+                project.fileTree(sourceDir) { include("pnpm-workspace.yaml", "packages/*/package.json") },
+            )
             outputs.file(sourceDir.file("node_modules/.modules.yaml"))
         }
 
@@ -173,8 +178,13 @@ class BootAppPlugin : Plugin<Project> {
                 project.fileTree(sourceDir.dir("src")),
                 project.fileTree(sourceDir.dir("public")),
                 project.fileTree(sourceDir.dir("openapi")),
+                // @jabiz/client and @jabiz/ui, built from source with the admin frontend.
+                project.fileTree(sourceDir.dir("packages")) { exclude("**/node_modules/**") },
                 project.fileTree(sourceDir) {
-                    include("index.html", "package.json", "pnpm-lock.yaml", "vite.config.ts", "tsconfig*.json", "scripts/**")
+                    include(
+                        "index.html", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "vite.config.ts",
+                        "tsconfig*.json", "scripts/**",
+                    )
                 },
             )
             outputs.dir(outDir)

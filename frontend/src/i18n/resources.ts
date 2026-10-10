@@ -1127,5 +1127,4 @@ const ja: Texts = {
 }
 
 export const resources = { zh: { translation: zh }, ja: { translation: ja }, en: { translation: en } } as const
-export const languages = ['zh', 'ja', 'en'] as const
-export type Language = (typeof languages)[number]
+export { PLATFORM_LANGUAGES as languages, type Language } from '@jabiz/client'

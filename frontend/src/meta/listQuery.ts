@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 import { findField } from './kinds'
 import type { EntityMeta, FieldMeta, ListViewMeta } from './types'
 

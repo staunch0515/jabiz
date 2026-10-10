@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { exportRun, type ExportFormat } from '../api/reports'
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 import { formatDateTime } from '../meta/format'
 
 type RunSummary = components['schemas']['RunSummary']

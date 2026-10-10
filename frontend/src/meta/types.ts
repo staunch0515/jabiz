@@ -1,4 +1,4 @@
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 
 /**
  * The entity export of GET /api/meta/entities/{name} (docs/design/02-metamodel.md section 8). The server returns it
@@ -103,12 +103,7 @@ export type MenuItem = components['schemas']['MenuItem']
 export type Me = components['schemas']['Me']
 
 /** One reported problem, the same shape as the server's ProblemDetail violations. */
-export interface Violation {
-  field: string | null
-  ruleCode: string
-  message: string
-  params?: Record<string, unknown>
-}
+export type { Violation } from '@jabiz/client'
 
 /** A version in the history of a temporal entity (docs/design/03-dataset.md section 3). */
 export interface HistoryVersion {

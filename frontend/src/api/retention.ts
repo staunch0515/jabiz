@@ -1,6 +1,6 @@
 import { sessionFetch } from './client'
 import { saveResponse } from './reports'
-import type { components } from './schema'
+import type { components } from '@jabiz/client'
 
 /** Retention, legal holds and the open-format export (docs/design/21-audit-retention.md sections 3 and 4). */
 export type RetentionReport = components['schemas']['RetentionReportResult']

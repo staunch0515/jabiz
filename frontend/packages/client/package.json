@@ -1,0 +1,26 @@
+{
+  "name": "@jabiz/client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The headless part of a jabiz frontend: session, API client, processes and templates, i18n, formatting (decision D34).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.23",
+    "openapi-fetch": "^0.17.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.104.0",
+    "i18next": "^26.4.2",
+    "react": "^19.3.0",
+    "react-i18next": "^17.0.15"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.104.0",
+    "i18next": "^26.4.2",
+    "react": "^19.3.0",
+    "react-i18next": "^17.0.15"
+  }
+}
