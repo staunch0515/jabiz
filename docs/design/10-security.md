@@ -1,7 +1,8 @@
 # 10 安全
 
 认证、授权、菜单与敏感数据遮蔽（ROADMAP 阶段 7）。原则只有一条：**默认拒绝**——没有认证就是匿名，没有声明的权限就是没有权限，
-没有配置的密钥就不启动。约束性细则见【决策 D12】；二次验证、按操作要求二次验证、闲置锁定、单点登录、明文显示、数据期限与访问审查见【决策 D28】（第 9–13 节）。
+没有配置的密钥就不启动。约束性细则见【决策 D12】；二次验证、按操作要求二次验证、闲置锁定、单点登录、明文显示、数据期限与访问审查见【决策 D28】（第 9–13 节）；
+登录入口、登录前的应用检查、邮箱验证与登录来源见【决策 D36】（第 15 节）。
 
 ## 1. 总体结构
 
@@ -26,7 +27,7 @@
 
 | | 访问令牌 | 刷新令牌 |
 |---|---|---|
-| 形式 | JWT，HS256 签名（Nimbus），`iss=jabiz`、`sub`、`tenant`、`roles`、`perms`、`iat`、`exp` | 256 位随机串（Base64URL），不透明 |
+| 形式 | JWT，HS256 签名（Nimbus），`iss=jabiz`、`sub`、`tenant`、`roles`、`perms`、`iat`、`exp`；另有 `mfa_at`（§9）、`data_from` / `data_to`（§13.2）、`entry` 与 `email_verified`（§15） | 256 位随机串（Base64URL），不透明；行记下令牌族的 `mfa_at`、`identity_id` 与 `entry` |
 | 有效期 | 默认 15 分钟（`jabiz.security.jwt.access-token-ttl`） | 默认 8 小时（`jabiz.security.refresh-token-ttl`） |
 | 存储 | 不存储 | 库中只存 SHA-256（`sec_refresh_token`） |
 | 校验 | 只接受 HS256 与本服务的密钥；过期按注入的 `Clock` 判断 | 未过期、未使用、所属族未吊销 |
@@ -50,7 +51,7 @@
 
 | 实体 | 表 | 要点 | 数据视图权限（读 / 写） |
 |---|---|---|---|
-| `SecUser` | `sec_user_version` | `userName`（唯一）、`displayName`、`email`（可选，通知用，18 §5.4）、`locale`（可选，邮件语言，18 §5.6）、`tenantId`、`enabled`、`passwordHash`（**敏感**） | `security.user.read` / `security.user.write` |
+| `SecUser` | `sec_user_version` | `userName`（唯一）、`displayName`、`email`（可选，通知用，18 §5.4；非空时不区分大小写唯一，§15）、`locale`（可选，邮件语言，18 §5.6）、`tenantId`、`enabled`、`passwordHash`（**敏感**）、`verifiedEmail` / `emailVerifiedAt`（只由流程写，§15） | `security.user.read` / `security.user.write` |
 | `SecUserMailPreference` | `sec_user_mail_preference_version` | `userId`、`template`、`subscribed`；唯一（用户, 模板）；只经 `SEC_MAIL_PREFERENCE_SET`（用户本人）写入，18 §5.6 | 同 `SecUser`（写入只经流程） |
 | `SecRole` | `sec_role_version` | `roleCode`（唯一）、`labels`（`jabiz.labels`）、`enabled`；可预定 | `security.role.read` / `security.role.write` |
 | `SecRolePermission` | `sec_role_permission_version` | `roleId` → `SecRole`、`permission`；唯一 `(roleId, permission)` | 同 `SecRole` |
@@ -90,7 +91,8 @@
 - **被拒绝的登录不是失败的流程**：否则登录记录随事务回滚，失败次数永远不会累积。流程正常结束，输出 `outcome`：
   `SUCCESS`、`BAD_CREDENTIALS`、`LOCKED`、`DISABLED`、`NO_ROLE`（另有管理员解锁写入的 `UNLOCKED`）。
 - 登录接口对 `SUCCESS` 以外的一切结果统一返回 401 `LOGIN_FAILED`（不区分原因，防止探测账号；原因只在登录记录与 info 日志里）。
-  不存在的用户名不写登录记录（没有可锁定的账号）。
+  不存在的用户名不写登录记录（没有可锁定的账号）。例外只有密码正确之后的两种（§15）：守卫拒绝 403 `SIGN_IN_REFUSED`（结果 `REFUSED`）、
+  入口要求已验证的邮箱 403 `EMAIL_NOT_VERIFIED`（结果 `EMAIL_NOT_VERIFIED`）；两者都写记录、不计失败。另有找回密码写入的 `PASSWORD_RESET`（清零并解锁，16b-2）。
 - **锁定**（`LoginAttemptPolicy`，core 纯逻辑）：每条登录记录携带其后生效的 `attemptNo`、`failureCount`、`lockedUntil`，下一次尝试只需读最新一条。
   密码错误 → 计数 +1；达到阈值（默认 5，`jabiz.security.login.max-failures`）→ 锁定到 `当前时间 + 锁定时长`（默认 15 分钟，`…login.lock-duration`）。
   锁定期间一律 `LOCKED`（不论密码对错，也不延长锁定）；锁定到期后重新计数；成功登录或管理员解锁清零。
@@ -165,6 +167,11 @@
   模板在 SQL 中遮蔽、持有权限者的运行与导出留记录，签发的报表一律遮蔽；数据导出；记录表只插入）、`DataPeriodIT`（审计师只看到期间内的交易、分录与报表；
   审计记录按记录时间；期限外写入被拒；期限来自角色分配、刷新保持、外包与不限期）、`AccessReviewIT`（签发、变更、冲突、签核与存储；权限、二次验证、期间与报表的检查；表只插入）；
   core `MaskedFieldTest`、`DataPeriodTest`、`AccessControlCompilerTest`。
+- 登录入口（16b-1，§15）：`SignInEntryIT`（不带入口与现在相同；`portal` 只有其角色的权限、后台操作 403、无其角色 401 记 `NO_ROLE`；刷新保持入口，入口不符 401 且不消费；
+  挑战只换得其入口的会话；要求二次验证的角色只在接受它的入口生效；守卫拒绝 403 记 `REFUSED` 不锁定、异常即拒绝、预读数据到达守卫、刷新时拒绝吊销族；
+  未验证者在流程 API、数据视图写、实体 API、导入四处 403，目录可见，系统身份照常；入口要求已验证；按已验证邮箱登录；邮箱不区分大小写唯一（含并发）与迁移遇重复即失败；表只插入）、
+  `ClientAddressIT`（可信代理链、伪造与格式错误的转发头、UA 截断、公开接口限流同一地址）、`OidcEntryIT`（入口存于 state、回调不能改写、守卫）；
+  runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`、`JwtServiceTest`、`RbacTest`；core `SignInGuardTypesTest`、`LoginAttemptPolicyTest`。
 - 验收测试：`AccessControlIT`（401 / 403 覆盖数据视图、模板、流程、实体 API、操作）、`SignInIT`（登录、锁定、并发、角色生效、刷新、菜单、安全表只插入）、
   `SensitiveDataIT`（日志、`input_summary`、`op_process_result`、读接口中不出现密码与哈希）、`BootstrapAdminIT`。
 
@@ -355,3 +362,92 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   不是用户的编号（系统操作人、无效编号）没有条目；调用方有租户时只含本租户与无租户的用户；一次至多 200 个（多出的忽略）。
 - 前端以 `UserName` / `useUserName`（`@jabiz/admin`）显示：同一时刻要显示的编号合并为一次请求（超过 200 个分批），取不到名字时显示编号、下次显示时再取。
   导出、PDF、签发的报表仍是编号（存档内容不随人改名而变）；元数据生成的数据页面中的用户编号字段也仍显示编号。
+
+## 15. 登录入口、登录前的应用检查、邮箱验证与登录来源【决策 D36，阶段 16b-1】
+
+一个平台上可以有几个前端（后台、应用的 App、商家后台），各自只接受部分角色；签发的令牌只含该入口所接受角色的权限，令牌泄露不会越出它所属的前端。
+自助注册、验证邮件与找回密码在 16b-2（D36 第 2、3、5 条）。
+
+### 15.1 入口配置
+
+```properties
+jabiz.security.entries.portal.accepted-roles=CUSTOMER        # 角色码，* 为全部
+jabiz.security.entries.portal.self-registration=true          # 缺省 false（16b-2）
+jabiz.security.entries.portal.registration-roles=CUSTOMER     # 注册时授予，须在 accepted-roles 中
+jabiz.security.entries.portal.require-verified-email=true     # 缺省 false
+jabiz.security.entries.portal.app-path=/portal/               # 缺省 /，邮件链接完成后跳到这里（16b-2）
+```
+
+- 名字 `[a-z][a-z0-9-]{0,39}`。缺省入口 `admin` **总是存在**：未配置时接受全部角色（与引入入口之前相同），显式配置则以配置为准。
+  请求不带 `entry` 即 `admin`，现有后台前端无需改动。
+- 启动检查（类别 `SECURITY`）一次报告全部问题：名字非法、`accepted-roles` 为空、角色码格式、注册角色为 `*` 或不在接受的角色中、允许注册却无注册角色、
+  `app-path` 不是绝对路径（含 `.` / `..` 段）；允许注册而 `jabiz.mail.enabled` 未开启、角色码（当前版本中）不存在为**警告**。有错误的入口不提供（请求它即 401）。
+- 已不存在的入口（例如升级前签发的挑战或刷新令牌所属的入口被删除）不接受任何角色：默认拒绝。
+
+### 15.2 登录、令牌与刷新
+
+- `POST /api/auth/login {userName, password, entry?}`：未知入口 401 `LOGIN_FAILED`（不写记录）。`userName` 也可以是**已验证**的邮箱（不区分大小写）：
+  先按用户名精确匹配，没有时（且含 `@`）再按邮箱找，只有地址已验证的用户才算；未验证的地址与不存在的名字一样（401、无记录）。登录记录的 `userName` 是用户的名字。
+- 三条登录路径（密码、二次验证的第二步与 step-up、OIDC）共用 `accessSteps`：先解析入口（`SignInEntryStep`），**只取该入口接受的角色**，再由这些角色计算权限、
+  `mfaRequired`（§9）与数据期限（§13.2）。因此"要求二次验证的角色"只在接受它的入口要求二次验证（有意的语义变化）。没有被接受的启用角色 → `NO_ROLE`，401，记录带入口。
+- 角色检查之后、签发之前（`entrySteps`）：入口要求已验证而用户未验证 → `EMAIL_NOT_VERIFIED`（403 `EMAIL_NOT_VERIFIED`）；然后是应用的守卫（§15.3），
+  拒绝 → `REFUSED`（403 `SIGN_IN_REFUSED`）。两者都写登录记录、不计失败（`LoginAttemptPolicy`）；只在密码（或身份提供方、第二因素）已证明之后才区分，
+  不泄露账号是否存在。之后才是 §9 的第二步。
+- **访问令牌**加 `entry`（升级前签发、没有它的令牌按 `admin` 处理）与 `email_verified`；**挑战令牌**加 `entry`，`SPONSOR_MFA_VERIFY` 的入口取自挑战令牌而非请求；
+  step-up 留在调用者会话的入口。`Actor`、`RequestContext` 加 `entry`、`emailVerified`（旧构造器保留：无入口、未验证）。`GET /api/auth/me` 加 `entry`、`email`、`emailVerified`。
+- **刷新**：`sec_refresh_token.entry` 随令牌族沿用（旧行为空，读作 `admin`）。`POST /api/auth/refresh {refreshToken, entry?}` 的入口与令牌的不符 →
+  401 `INVALID_REFRESH_TOKEN`，**不消费**、不吊销。刷新时 `RbacService.renew` 按入口过滤角色、重读 `emailVerified`（入口要求已验证而现在未验证 → 401，
+  例如管理员改了邮箱）并调用守卫。
+- **OIDC**：`POST /api/auth/oidc/{id}/start?entry=…` 把入口存入 `sec_oidc_state.entry`（未知入口 401），回调用存下的值；回调请求中的任何入口都不算。
+- 开发用请求头的操作人属于 `admin`、视为已验证（同二次验证）；`TestTokens.bearer(…)` 签发的令牌属于 `admin`、已验证，`TestTokens.unverified(…)` 未验证。
+
+### 15.3 登录前的应用检查 `SignInGuard`
+
+```java
+@Component
+class PortalSignInGuard implements SignInGuard {
+    // 平台预读：数据视图中"用户编号字段 = 该用户"的行，每项至多 SignInGuard.MAX_ROWS（100）行
+    public List<SignInLoad> loads() {
+        return List.of(SignInLoad.of("customers", "urn:jabiz:dataset:default:Customer", "userId"));
+    }
+
+    // 同步、无 I/O
+    public SignInDecision check(SignInAttempt attempt) {
+        return attempt.rows("customers").stream().anyMatch(c -> Boolean.TRUE.equals(c.get("blocked")))
+            ? SignInDecision.refuse("blocked") : SignInDecision.ALLOW;
+    }
+}
+```
+
+- `SignInAttempt`：用户编号与名字、入口、**过滤后的**角色码、`emailVerified`、因素（`PASSWORD` / `OIDC` / `TOTP` / `RECOVERY_CODE` / `REFRESH`）、时间、预读数据。
+- 平台步骤 `SignInGuardStep` 在三条登录路径与第二步中、角色检查之后签发之前运行；刷新时 `RbacService` 同样调用。多个守卫全部放行才放行；
+  守卫抛异常、返回 null、预读失败或超过行数上限即拒绝（fail closed）；拒绝原因只记日志，不给调用者。
+- **刷新时被拒绝**：不写登录记录（刷新不是流程），记 info 日志与指标 `jabiz.auth.refresh.refused`（无标签），事务回滚（令牌不消费）后吊销该令牌族（原因 `REFUSED`），401。
+  因此封禁在下一次刷新时生效（访问令牌在到期前仍有效，同 §2 的已知限制）。
+- 启动检查：预读的数据视图或字段不存在、同名的预读含义不同、`loads()` 抛异常 → 错误。预读经数据视图（其范围适用，权限不适用，同流程内的平台 I/O 步骤）。
+
+### 15.4 邮箱验证状态与 `requiresVerifiedEmail`
+
+- `SecUser.verifiedEmail` / `emailVerifiedAt`（`processOnly`，只由验证类流程写，16b-2）。**已验证 = `lower(verifiedEmail) = lower(email)`**：
+  管理员改邮箱即自动失效，不需要清除标记。不新增"待验证"状态：未验证即待验证，由入口的 `require-verified-email` 决定能否登录。
+- `SecUser.email` 非空时**不区分大小写唯一**（`eb.uniqueIgnoreCase(…)`，core `UniqueConstraint.ignoreCase`）：时态唯一检查（D6）按小写值取锁与查找
+  （`col IS NOT NULL AND lower(col) = :v`，走部分索引 `sec_user_version_email_idx ON (lower(email)) WHERE email IS NOT NULL`）；普通实体的同类约束是 `lower(列)` 上的唯一索引。
+  `V32__sign_in_entries.sql` 遇到已有的不区分大小写的重复（各用户当前版本、未删除）即 `RAISE EXCEPTION` 并列出地址：**升级前须由管理员处理**。
+- 声明：流程 `pb.requiresVerifiedEmail()`（或 `ProcessDefinition.withVerifiedEmail(true)`），数据视图 `policy(p -> p.requiresVerifiedEmail())`（**只管写**，读取的限制以后另议）。
+- 检查（`VerifiedEmailPolicy`，与 `Permissions`、`MfaPolicy` 同在六个入口）：流程 API、数据视图 `commit`、实体 API 的增改删（流程或默认视图要求时）、导入（行流程要求时）、
+  撤销（所涉数据视图要求时）、通用实体流程在流程内再查一次。依据是访问令牌的 `email_verified`；未验证 → 403 `EMAIL_NOT_VERIFIED`。
+  系统身份、子流程、场景回放（回放的操作人视为已验证）、事件消费者与定时任务不检查。
+- 目录：`/api/meta/processes` 的 `requiresVerifiedEmail`、`/api/meta/datasets` 的 `writeRequiresVerifiedEmail`。
+
+### 15.5 登录来源
+
+- 登录记录增加 `entry`、`clientIp`、`userAgent`（去掉控制与格式字符后截断为 256 个字符；防火墙拒绝的头不记，登录照常）。
+- `ClientAddresses`（登录记录与公开接口限流共用，15 §5）：`jabiz.security.trusted-proxies`（地址或 CIDR 列表）。连接来自可信代理时才读 `X-Forwarded-For`
+  （多个头按顺序合并），从右向左跳过可信地址，取第一个不可信地址；全链可信取最左；任一段格式错误（非 IP 字面量、带端口、超过 20 跳）则整个头忽略、取连接地址。
+  不配置可信代理时取连接地址（保持原行为）；与 `server.forward-headers-strategy` 同时配置 → 启动检查报错（转发头会被处理两次而可伪造）。地址只进登录记录，不进日志与观测标签。
+
+### 15.6 已知限制
+
+- 升级前签发的访问令牌在有效期内按 `admin` 处理，且 `email_verified` 为假（要求已验证的操作需重新登录）。
+- 守卫在刷新时才再次生效；已签发的访问令牌在到期前仍可用。
+- 按邮箱登录时，名字不匹配才多一次按邮箱的查询，响应时间与"名字存在"略有差别（不比现有的不存在名字更多泄露）。

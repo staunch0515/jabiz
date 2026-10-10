@@ -993,6 +993,27 @@ D22 第 2 条的导出中含 ProComponents 的类型（菜单项），换组件�
 **放弃的方案**：①注册即可用、不验证邮箱（被滥用来刷奖与冒名）；②各应用自写注册接口（安全敏感的逻辑重复）；③引入外部身份服务（Keycloak 等，多一个要运维的服务，
 且会话模型与 D12 不同）；④入口只在前端区分（服务端签发的令牌仍含全部权限）。
 
+**实现说明**（阶段 16b 的实施细则，已确认；16b-1 实现了第 1–4、7–11 条与第 12 条的登录部分，其余在 16b-2；详见 10 §15）：
+1. `SignInGuard` 是 core 的同步接口，所需的应用数据由它声明 `loads()`（数据视图 + 存用户编号的字段），平台预读后传入；多个守卫全部放行才放行，守卫抛异常即拒绝（fail closed）。
+2. 只在密码正确之后才区分：守卫拒绝答 403 `SIGN_IN_REFUSED`，入口要求已验证而未验证答 403 `EMAIL_NOT_VERIFIED`（请求者已证明持有密码，不泄露账号存在）；
+   入口不接受其角色仍答 401 `LOGIN_FAILED`（记 `NO_ROLE` 与入口）。
+3. 刷新时守卫拒绝：不写登录记录（刷新不是流程），记日志与指标 `jabiz.auth.refresh.refused`，吊销该令牌族。
+4. 新增 `verifiedEmail` 与 `emailVerifiedAt`（都 `processOnly`，只由验证类流程写）；"已验证" = `lower(verifiedEmail) = lower(email)`，管理员改邮箱即自动失效。
+5. 证明邮箱所有权的三处都写验证字段：验证邮箱、找回密码的确认、"你已有账号"邮件的加入链接。
+6. **账号预占**：已有账号**未验证**时，加入链接必须同时设置新密码并吊销全部令牌族；已验证的账号只追加角色。注册请求中的密码从不用于已有账号。
+7. 不新增"待验证"状态：未验证即待验证，由入口的 `require-verified-email` 决定能否登录。
+8. 数据视图的 `requiresVerifiedEmail()` 同二次验证只管写；读取的限制以后另议。
+9. 缺省入口 `admin` 总是存在：未配置时接受全部角色，显式配置则以配置为准；请求不带 `entry` 即 `admin`，现有后台前端无需改动。
+10. 新建 `ClientAddresses`（登录记录与公开接口限流共用），按 `jabiz.security.trusted-proxies` 取地址；与 `server.forward-headers-strategy` 同时配置时启动检查报错
+    （避免转发头被处理两次而可伪造）；不配置时保持现有行为。
+11. 不区分大小写的唯一：core `UniqueConstraint` 增加 `ignoreCase`，时态唯一检查按 `lower` 取锁与查找，索引建在 `lower(email)` 上；迁移遇到已有重复即明确失败，须先由管理员处理。
+12. 自助注册的 `userName` 取邮箱小写，已被占用时加 `-` 与 6 位随机字符；按标识登录先精确匹配用户名，再按**已验证**的邮箱（不区分大小写）匹配。
+13. 邮件链接为 `{baseUrl}/auth/<页>?entry=<入口>&token=<令牌>`，由通用后台的落地页处理（同 16a 的退订页），完成后跳到入口配置的 `app-path`；应用 SPA 自己的页面在 16c。
+
+16b-1 的实现细节（不改变上述约定）：入口经 `SignInEntryStep` 解析，已不存在的入口不接受任何角色；守卫的预读每项至多 `SignInGuard.MAX_ROWS`（100）行，超出即拒绝；
+OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明写作 `policy(p -> p.requiresVerifiedEmail())`，目录字段为 `writeRequiresVerifiedEmail`；
+防火墙拒绝的请求头（控制字符）不记入登录记录、也不使登录失败。
+
 ## D37 入站 Webhook
 
 **背景**：QuizBuks 的充值到账、向用户转账的结果、收款账户状态都由 Stripe 以 Webhook 通知；平台只有出站 Webhook（D33），功能清单明确"不做入站 Webhook"。
