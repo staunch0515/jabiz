@@ -1115,6 +1115,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16f | OIDC 自动开户（Google、Apple） | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
+| 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改 | D40 | 1 天 | — |
 
 ### 16a 事务邮件（3–4 天）
 
@@ -1186,3 +1187,35 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 - [x] 时态实体的身份与引用来源通过启动检查，非时态实体的编号、其他种类被拒绝，可变字段告警（`LedgerChecksTest`）；规范形式（`LedgerDimensionTest`）与存储（`CheckPostingTest`）。
 - [x] 过账时现存的编号通过（大写也存为小写），不存在、格式不对的被拒绝；维度余额模板按它汇总（`LedgerEnhancementsIT`）。
 - [x] 11 §1.5、功能清单 §8 已更新；`./gradlew :core:check :runtime:check :app:check` 通过。
+
+### 16i 业务参数的四眼修改（1 天）
+
+现状：受控变更（D23，18 §3.5）只能改审批规则、限额与职责分离规则；业务参数（`SysParam`，04 §9）任何持有 `platform.param.write` 的人都可以一个人改。
+QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修改（提出人与发布人不同）。
+
+**要求**（决策 D40）
+1. 应用以 Bean `ControlledParams.of(键…)`（core）事先声明受控的参数键；是否受控只在代码中，数据里没有可改的标记。
+2. 受控键的一切写入（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`、数据视图、通用实体流程、业务流程的 `ChangeSet`、撤销操作）一律 422 `PARAM_CONTROLLED`（三语），
+   只有 `CONTROL_CHANGE_PUBLISH` 能写（平台在 `VersionAppender` 中检查，覆盖所有时态写入途径）。
+3. `CONTROL_CHANGE_PROPOSE` 可以 `targetEntity: SysParam`：`values` 为 `paramKey`、`value`、可选 `description`（新建时另加 `valueKind`），`effectiveTime` 为预定时间；
+   `delete: true` 加 `effectiveTime` 取消该时间的预定值。提出与发布时都按参数的类型检查值（422 `CONTROL_CHANGE_INVALID`）；发布人不能是提出人。
+4. 启动检查 `PARAM`：声明的键格式不对即报错（全部一次报告）；尚不存在的键不是问题。
+5. 示范：`backend/app` 把 `logistics.fuel-surcharge-rate` 声明为受控；场景 `freight/monthly_close` 改为经受控变更新建与预定，并演示直接 `PARAM_SET` 被拒。
+
+**改动**：core `com.jabiz.param.ControlledParams`、`PlatformErrorCodes.PARAM_CONTROLLED` 与三语消息；runtime `param`（`ControlledParamRegistry`、`ControlledParamGuard`、`ParamChecks`、
+受控变更的参数部分 `ParamControlChanges`）、`temporal`（`TemporalWriteGuard` 接口，`VersionAppender` 调用）、`approval`（`ControlChanges`、`LoadControlTarget` 支持 `SysParam`）；
+`app` 的声明与场景；文档 09 D40、04 §9、18 §3.5、功能清单、CLAUDE.md 第 4 节"审批与职责分离"。没有迁移。
+
+**测试**
+- core：`ControlledParamsTest`（键格式、合并、问题列表）。
+- runtime 单元：`ParamChecksTest`（格式错误一次全部报告、不存在的键不报）。
+- 集成 `ControlledParamIT`（本地库）：直接修改被拒（四个流程、数据视图、撤销）；提出 + 发布立即生效与预定生效（历史、审计照常）；取消预定；同一人不能发布；提出时值不合类型被拒；
+  不能经数据视图删除再新建、改键等方式解除受控；未受控的键不能用受控变更。
+- 场景回放：`freight/monthly_close` 与 `ScenarioAcceptanceIT` 的内联场景改用受控变更，快照更新。
+
+**风险**：受控变更的发布要求二次验证（`ADMINISTRATION`），参数修改因此也要求；示范与 QuizBuks 均可接受。
+
+**验收标准**
+- [ ] 受控键的直接修改在所有写入途径上被拒（422 `PARAM_CONTROLLED`），一个人无法解除受控。
+- [ ] 经提出与另一人发布修改受控参数，立即与预定生效、可取消预定，值按类型检查，历史与审计照常。
+- [ ] 声明格式错误在启动时一次报告；示范场景通过；`./gradlew check` 通过。
