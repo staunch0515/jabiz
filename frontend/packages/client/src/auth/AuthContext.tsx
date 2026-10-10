@@ -52,7 +52,6 @@ interface Identity {
 const USER_NAME_KEY = 'jabiz.userName'
 
 /** The name last signed in with in this tab, to fill in again after an idle lock (not a secret). */
-// eslint-disable-next-line react-refresh/only-export-components
 export function lastUserName(): string | undefined {
   try {
     return window.sessionStorage.getItem(USER_NAME_KEY) ?? undefined
@@ -175,7 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthState {
   const state = useContext(AuthContext)
   if (!state) throw new Error('useAuth outside AuthProvider')

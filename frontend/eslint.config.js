@@ -19,4 +19,10 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Libraries, not an application: their modules export helpers next to components, and fast refresh of the
+    // admin's pages does not depend on them.
+    files: ['packages/*/src/**/*.{ts,tsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

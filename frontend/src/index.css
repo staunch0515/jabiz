@@ -1,3 +1,10 @@
+/*
+ * The theme of @jabiz/ui (decision D34): Tailwind with its preflight scoped to .jabiz-ui while Ant Design pages
+ * remain, and the light and dark tokens. Ant Design's own styles are unlayered and so outrank Tailwind's layers on
+ * the elements they style.
+ */
+@import '@jabiz/ui/theme.css';
+
 html,
 body,
 #root {

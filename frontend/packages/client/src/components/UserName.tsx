@@ -41,7 +41,6 @@ async function flush() {
  * The display name of the user `id` (docs/design/10-security.md section 14): null while unknown, for an actor that is
  * no user and for a user without a display name.
  */
-// eslint-disable-next-line react-refresh/only-export-components
 export function useUserName(id: string | null | undefined): string | null {
   const query = useQuery({
     queryKey: ['user-name', id],
