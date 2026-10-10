@@ -227,7 +227,7 @@
 ## 12. OIDC 单点登录【D28 第 6 条，阶段 14g-2】
 
 授权码 + PKCE（S256）+ nonce；平台自己校验 ID 令牌，然后照常签发自己的访问令牌与刷新令牌（第 2 节不变）。不用 Spring 的 oauth2-client（它依赖服务端会话），
-只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不自动开户、不做单点登出。
+只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不做单点登出；缺省不自动开户（线 1.2 起可按提供方开启，【决策 D39】）。
 
 **配置**（`jabiz.security.oidc.providers[i]`）
 
@@ -269,7 +269,7 @@
 
 - 时态实体 `SecUserIdentity`（`sec_user_identity_version`，`V24__oidc.sql`）：`userId`、`provider`、`subject`，`(provider, subject)` 唯一；
   管理员经其数据视图维护（读 `security.user.read`，写 `security.user.identity.write`：关联让对方以该用户登录，是独立的凭证，不随修改用户的权限一并授予；
-  写入为管理级二次验证）。**不自动开户**：没有关联即拒绝。
+  写入为管理级二次验证）。**缺省不自动开户**：没有关联即拒绝（线 1.2 起按提供方开启自动开户，见【决策 D39】；自助注册见【决策 D36】）。
 - `SPONSOR_OIDC_SIGN_IN`（`auth.sign-in`，内部）与密码登录一样写登录记录（`factor = OIDC`）：没有关联 → 不写记录；锁定中 → `LOCKED`；禁用 → `DISABLED`；
   无角色 → `NO_ROLE`；然后二次验证：`amr` 符合 `mfa-amr` 且 ID 令牌带 `auth_time` → 登录，会话的 `mfa_at` 取 `auth_time`（不是现在：
   提供方很久以前的二次验证不算第 10 节的"最近"；没有 `auth_time` 则不视同）；否则已绑定 TOTP → `MFA_REQUIRED`（第 9 节的第二步）；
