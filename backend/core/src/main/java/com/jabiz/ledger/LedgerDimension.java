@@ -1,6 +1,7 @@
 package com.jabiz.ledger;
 
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -64,6 +65,25 @@ public record LedgerDimension(int position, String name, Source source) {
         Builder builder = new Builder();
         spec.accept(builder);
         return new LedgerDimension(position, name, builder.source);
+    }
+
+    /**
+     * The value of a dimension whose source holds ids (an identity or a reference field), in the form it is looked
+     * up and stored in: trimmed and parsed as {@link com.jabiz.entity.EntityDefinition#normalizeId} reads an id, in
+     * canonical lower case. Null if it is not a UUID written in full: {@link UUID#fromString} also takes shortened
+     * groups such as {@code 1-2-3-4-5}, which would be stored as a different text than the id they parse to.
+     */
+    public static String canonicalId(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        try {
+            String canonical = UUID.fromString(trimmed).toString();
+            return canonical.equalsIgnoreCase(trimmed) ? canonical : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Name of the entry field that holds this dimension. */

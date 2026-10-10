@@ -2,7 +2,6 @@ package com.jabiz.runtime.ledger;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.ledger.LedgerDimension;
@@ -22,13 +21,12 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -44,8 +42,11 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
     /** Context key of the declared dimensions, a {@code List<LedgerDimension>}. */
     static final String DIMENSIONS = "ledger_dimensions";
 
-    /** Context key of the names of the dimensions whose values are instance ids, a {@code Set<String>}. */
-    static final String ID_DIMENSIONS = "ledger_id_dimensions";
+    /**
+     * Context key of the values of the dimensions whose values are ids as they are checked and stored, a
+     * {@code Map<String, Map<String, String>>}: dimension name, then value as given to its canonical form.
+     */
+    static final String ID_VALUES = "ledger_id_values";
 
     record Metadata(String inputKey) {
         Metadata {
@@ -82,44 +83,82 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
         return Mono.defer(() -> {
             LedgerProcesses.PostInput input = ctx.get(metadata.inputKey(), LedgerProcesses.PostInput.class);
             ctx.put(DIMENSIONS, dimensions.all());
-            ctx.put(ID_DIMENSIONS, dimensions.all().stream().filter(this::takesIds).map(LedgerDimension::name)
-                .collect(Collectors.toUnmodifiableSet()));
+            Map<String, IdValues> ids = new LinkedHashMap<>();
+            Map<String, Map<String, String>> stored = new LinkedHashMap<>();
+            for (String name : dimensions.idValued()) {
+                IdValues values = IdValues.of(input.entries(), name);
+                ids.put(name, values);
+                stored.put(name, values.canonical());
+            }
+            ctx.put(ID_VALUES, Map.copyOf(stored));
             return LedgerAccountCheck.lock(storages.getEngine(poolRef), true)
                 .thenMany(Flux.fromIterable(dimensions.all()).concatMap(dimension -> checkDimension(ctx, input,
-                    dimension)))
+                    dimension, ids.get(dimension.name()))))
                 .then(checkSource(ctx, input));
         });
     }
 
-    private Mono<Void> checkDimension(C ctx, LedgerProcesses.PostInput input, LedgerDimension dimension) {
-        boolean ids = takesIds(dimension);
-        // Values as given (longer ones are refused by LedgerPosting), and the form they are looked up and stored in.
-        Map<String, String> values = new java.util.LinkedHashMap<>();
-        input.entries().forEach(line -> {
-            String value = line.dimensions() == null ? null : line.dimensions().get(dimension.name());
+    /**
+     * The values of an id dimension in a posting: each value given (not blank, not too long, which LedgerPosting
+     * refuses) that is an id, with its canonical form ({@link LedgerDimension#canonicalId}), and those that are not.
+     */
+    record IdValues(Map<String, String> canonical, Set<String> malformed) {
+        static IdValues of(List<LedgerProcesses.Line> lines, String dimension) {
+            Map<String, String> canonical = new LinkedHashMap<>();
+            Set<String> malformed = new LinkedHashSet<>();
+            for (String value : given(lines, dimension)) {
+                String id = LedgerDimension.canonicalId(value);
+                if (id == null) {
+                    malformed.add(value);
+                } else {
+                    canonical.put(value, id);
+                }
+            }
+            return new IdValues(Map.copyOf(canonical), Set.copyOf(malformed));
+        }
+    }
+
+    /** The values of a dimension in the lines that are checked against its list. */
+    private static Set<String> given(List<LedgerProcesses.Line> lines, String dimension) {
+        Set<String> values = new LinkedHashSet<>();
+        lines.forEach(line -> {
+            String value = line.dimensions() == null ? null : line.dimensions().get(dimension);
             if (value != null && !value.isBlank() && value.length() <= LedgerDimension.MAX_VALUE_LENGTH) {
-                values.put(value, ids ? canonicalId(value) : value);
+                values.add(value);
             }
         });
-        if (values.isEmpty()) {
+        return values;
+    }
+
+    /** {@code ids}: the values of a dimension whose values are ids; null for any other. */
+    private Mono<Void> checkDimension(C ctx, LedgerProcesses.PostInput input, LedgerDimension dimension,
+        IdValues ids) {
+        // Each value as given, and the form it is looked up in; a malformed id is invalid as it stands.
+        Map<String, String> lookup = new LinkedHashMap<>();
+        Set<String> malformed = ids == null ? Set.of() : ids.malformed();
+        if (ids == null) {
+            given(input.entries(), dimension.name()).forEach(value -> lookup.put(value, value));
+        } else {
+            lookup.putAll(ids.canonical());
+        }
+        if (lookup.isEmpty() && malformed.isEmpty()) {
             return Mono.empty();
         }
-        // A malformed id is not looked up: it is invalid as it stands.
-        Set<String> lookup = values.values().stream().filter(Objects::nonNull)
-            .collect(Collectors.toCollection(LinkedHashSet::new));
         Mono<Set<String>> valid = switch (dimension.source()) {
             case LedgerDimension.DictionarySource dictionary -> dictionaries.enabledCodes(dictionary.dictionaryUrn());
             case LedgerDimension.EntitySource source when lookup.isEmpty() -> Mono.just(Set.of());
             case LedgerDimension.EntitySource source -> {
                 EntityDefinition def = entities.getOrThrow(source.entity());
                 DatasetDefinition dataset = datasets.findForEntity(source.entity()).orElseThrow();
+                List<Object> wanted = List.copyOf(new LinkedHashSet<>(lookup.values()));
                 EntityQuery query = EntityQuery.builder()
-                    .where(new QueryPredicate.In(source.field(), List.copyOf(lookup)))
-                    .limit(lookup.size() + 1).build();
+                    .where(new QueryPredicate.In(source.field(), wanted))
+                    .limit(wanted.size() + 1).build();
                 // Every value of the posting, not a page of the source's dataset (decision D32).
                 yield entityManager.queryAll(dataset, def, query)
                     .map(found -> String.valueOf(found.<Object>get(source.field())))
-                    .map(found -> ids ? found.toLowerCase(Locale.ROOT) : found)
+                    .map(found -> ids == null ? found : LedgerDimension.canonicalId(found))
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             }
         };
@@ -127,8 +166,10 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
             for (int i = 0; i < input.entries().size(); i++) {
                 LedgerProcesses.Line line = input.entries().get(i);
                 String value = line.dimensions() == null ? null : line.dimensions().get(dimension.name());
-                String key = value == null ? null : values.get(value);
-                if (value != null && values.containsKey(value) && (key == null || !known.contains(key))) {
+                if (value == null) {
+                    continue;
+                }
+                if (malformed.contains(value) || (lookup.containsKey(value) && !known.contains(lookup.get(value)))) {
                     ctx.reject(new Violation("entries", PlatformErrorCodes.LEDGER_DIMENSION_INVALID,
                         "Entry " + (i + 1) + ": " + value + " is not a valid " + dimension.name(),
                         Map.of("line", i + 1, "dimension", dimension.name(), "value", value)));
@@ -171,40 +212,18 @@ class CheckPosting<C extends ProcessContext> implements StepHandler<CheckPosting
     }
 
     /**
-     * Whether the dimension's values are instance ids: its source is an identity or reference field. They are
-     * compared and stored in canonical form, as the platform writes UUIDs.
-     */
-    private boolean takesIds(LedgerDimension dimension) {
-        return dimension.source() instanceof LedgerDimension.EntitySource source
-            && entities.find(source.entity()).map(def -> def.fields.get(source.field()))
-                .map(field -> field.kind() instanceof SemanticKind.SemanticIdentity
-                    || field.kind() instanceof SemanticKind.Reference)
-                .orElse(false);
-    }
-
-    /**
-     * The canonical (lower-case) form of a UUID written in full, or null for anything else: {@link java.util.UUID#fromString}
-     * also takes shortened groups such as {@code 1-2-3-4-5}, which no stored id matches as text.
-     */
-    static String canonicalId(String value) {
-        return value != null && UUID_TEXT.matcher(value).matches() ? value.toLowerCase(Locale.ROOT) : null;
-    }
-
-    private static final Pattern UUID_TEXT =
-        Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
-
-    /**
-     * The entry fields of a line's memo and dimensions: {@code memo}, {@code dimension1} … The values of the
-     * dimensions named in {@code idDimensions} (checked to be ids) are stored in canonical form.
+     * The entry fields of a line's memo and dimensions: {@code memo}, {@code dimension1} … A dimension whose values
+     * are ids stores the form its value was checked in ({@code idValues}, from {@link #ID_VALUES}).
      */
     static Map<String, Object> entryFields(LedgerProcesses.Line line, List<LedgerDimension> declared,
-        Set<String> idDimensions) {
-        Map<String, Object> fields = new java.util.LinkedHashMap<>();
+        Map<String, Map<String, String>> idValues) {
+        Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("memo", line.memo());
         for (LedgerDimension dimension : declared) {
             String value = line.dimensions() == null ? null : line.dimensions().get(dimension.name());
-            if (value != null && idDimensions.contains(dimension.name())) {
-                value = value.toLowerCase(Locale.ROOT);
+            Map<String, String> canonical = idValues.get(dimension.name());
+            if (value != null && canonical != null && canonical.containsKey(value)) {
+                value = canonical.get(value);
             }
             fields.put(dimension.field(), value == null || value.isBlank() ? null : value);
         }
