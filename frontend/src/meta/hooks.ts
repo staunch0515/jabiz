@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 import type { QueryEntry } from './reports'
 import type { DatasetEntry, DictItem, EntityMeta, Me, MenuItem, ProcessEntry } from './types'
 

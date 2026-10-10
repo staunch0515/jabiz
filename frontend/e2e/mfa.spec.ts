@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
-import { adminToken, insert, PRICES, signIn, test, unique } from './support'
+import { adminToken, insert, PRICES, signIn, signOut, test, unique } from './support'
 
 /** RFC 6238 with the authenticator defaults (SHA-1, 6 digits, 30 s), as the server checks it. */
 function totp(secret: string, time = Date.now()): string {
@@ -72,11 +72,7 @@ test('a user sets up two-step verification, steps up for a price change and sign
   await expect(page.getByTestId('process-result')).toContainText('110')
 
   // A recovery code instead of a code at sign-in, once.
-  await expect(async () => {
-    await page.getByTestId('current-user').hover()
-    await page.getByRole('menuitem', { name: '退出登录' }).click({ timeout: 2_000 })
-    await expect(page).toHaveURL(/\/login$/, { timeout: 1_000 })
-  }).toPass({ timeout: 15_000 })
+  await signOut(page)
   await page.getByPlaceholder('用户名').fill(userName)
   await page.getByPlaceholder('密码').fill(password)
   await page.getByRole('button', { name: /登\s*录/ }).click()

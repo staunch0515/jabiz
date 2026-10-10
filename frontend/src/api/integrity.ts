@@ -1,4 +1,4 @@
-import type { components } from './schema'
+import type { components } from '@jabiz/client'
 
 /** The integrity seals (docs/design/21-audit-retention.md section 2). */
 export type IntegrityHead = components['schemas']['IntegrityHead']

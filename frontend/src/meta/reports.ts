@@ -1,4 +1,4 @@
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 import type { EntityMeta, FieldMeta } from './types'
 
 /**

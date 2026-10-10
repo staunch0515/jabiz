@@ -53,7 +53,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
-  验证与重置链接用发送时才生成的 `MailParam.oneTimeToken`，决策 D35）；`jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。
+  验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
+  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝、503 查询超时（`QUERY_TIMEOUT`，由数据库按时限中止，03 §1）。错误码可多语言（见设计文档）。
@@ -174,6 +175,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
 - 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
   应用扩展（12 §9）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm ext:check`（类型、lint、测试；`app` 的示范为 `../backend/app/admin-extension`）
+  应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败）
   挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
 - 公开模板目录快照（15 §7）：`./gradlew :app:test --tests '*PublicQueriesSnapshotIT' -Dpublic-queries.update-snapshot=true`

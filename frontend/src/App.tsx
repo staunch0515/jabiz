@@ -1,3 +1,5 @@
+import { StyleProvider } from '@ant-design/cssinjs'
+import { AppearanceProvider, Toaster } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App as AntApp, ConfigProvider, type ThemeConfig } from 'antd'
 import enUS from 'antd/locale/en_US'
@@ -23,6 +25,7 @@ import ImportPage from './pages/ImportPage'
 import ImportRunsPage from './pages/ImportRunsPage'
 import IntegrityPage from './pages/IntegrityPage'
 import LoginPage from './pages/LoginPage'
+import MailUnsubscribePage from './pages/MailUnsubscribePage'
 import OidcCallbackPage from './pages/OidcCallbackPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
 import ProcessFormPage from './pages/ProcessFormPage'
@@ -57,6 +60,8 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // Where identity providers send users back (docs/design/10-security.md section 12).
   { path: '/login/oidc', element: <OidcCallbackPage /> },
+  // The unsubscribe link of notification mail: its token is the credential (18 section 5.6).
+  { path: '/mail/unsubscribe', element: <MailUnsubscribePage /> },
   {
     element: <RequireSignIn />,
     children: [
@@ -134,15 +139,24 @@ const ACCESSIBLE_THEME: ThemeConfig = {
 export default function App() {
   const { i18n } = useTranslation()
   const locale = antdLocales[i18n.language as keyof typeof antdLocales] ?? zhCN
+  // The appearance and the toasts are @jabiz/ui's (decision D34); Ant Design's provider stays for the pages that
+  // still use it (until phase 15d).
+  // Ant Design's styles go into the CSS layer "antd", ordered before Tailwind's base and utilities (index.css), so
+  // its global rules (the colour of every link, for one) yield to the new components' styles.
   return (
-    <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
-      <AntApp>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <RouterProvider router={router} />
-          </AuthProvider>
-        </QueryClientProvider>
-      </AntApp>
-    </ConfigProvider>
+    <AppearanceProvider>
+      <StyleProvider layer>
+        <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
+          <AntApp>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <RouterProvider router={router} />
+              </AuthProvider>
+            </QueryClientProvider>
+          </AntApp>
+        </ConfigProvider>
+      </StyleProvider>
+      <Toaster />
+    </AppearanceProvider>
   )
 }

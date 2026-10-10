@@ -1,0 +1,54 @@
+# The shipment notice (ROADMAP phase 16a, docs/design/18-numbering-approvals-tasks.md section 5.6): an order of a
+# customer whose master record names an account is shipped, and the customer hears of it by mail in their own
+# language. Who is mailed comes from the customer master, which administrators keep, never from the order. The mail is queued
+# in the shipment's transaction and sent by the outbox; mail is off in tests, so its attempt is SKIPPED. An order of a
+# customer without an account sends nothing.
+name: Shipment notice by mail
+clock: 2026-04-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "1130", accountName: Accounts receivable, accountType: ASSET }
+  - process: LEDGER_ACCOUNT_OPEN@latest
+    input: { accountCode: "4120", accountName: Sales revenue, accountType: REVENUE }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Warehouse, attributes: { warehouseCode: OSK, warehouseName: Osaka, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: TEA-1, productName: Green tea, unitPrice: 500, active: true } }
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: OSK, sku: TEA-1, quantity: 10 }
+
+  - note: The customer has an account, an address and Japanese as the language of their mail.
+    process: SEC_USER_CREATE@latest
+    input: { userName: hanako, displayName: Hanako, email: hanako@example.com, locale: ja }
+    save: { hanako: $.userId }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Customer, attributes: { customerCode: CUST-HANAKO, customerName: Hanako, userId: "${hanako}" } }
+  - note: A customer in the master without an account.
+    process: ADD_ENTITY@latest
+    input: { entityType: Customer, attributes: { customerCode: CUST-WALKIN, customerName: Walk-in } }
+
+  - process: ORDER_PLACE@latest
+    input:
+      orderNo: SO-MAIL-1
+      customerCode: CUST-HANAKO
+      warehouseCode: OSK
+      lines: [{ sku: TEA-1, quantity: 2 }]
+    save: { order: $.orderId }
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-MAIL-2, customerCode: CUST-WALKIN, warehouseCode: OSK, lines: [{ sku: TEA-1, quantity: 1 }] }
+    save: { walkIn: $.orderId }
+
+  - advanceClock: PT2H
+  - note: Shipping queues one mail for Hanako; the walk-in customer has no account and gets none.
+    process: ORDER_SHIP@latest
+    input: { orderId: "${order}" }
+    expectOutput: { status: SHIPPED }
+  - process: ORDER_SHIP@latest
+    input: { orderId: "${walkIn}" }
+    expectOutput: { status: SHIPPED }
+  - note: The outbox runs MAIL_SEND; with mail off the message is recorded as skipped.
+    deliverEvents: true
+snapshot:
+  entities: [Customer, SalesOrder, MailMessage, MailAttempt]
+  asOf: end
