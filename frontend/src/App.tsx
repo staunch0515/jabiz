@@ -6,7 +6,7 @@ import enUS from 'antd/locale/en_US'
 import jaJP from 'antd/locale/ja_JP'
 import zhCN from 'antd/locale/zh_CN'
 import { useTranslation } from 'react-i18next'
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, type RouteObject } from 'react-router'
 import { ApiError } from './api/problem'
 import { routerBasename } from './base'
 import { AuthProvider, useAuth } from './auth/AuthContext'
@@ -61,7 +61,9 @@ function RequireSignIn() {
   return <Outlet />
 }
 
-const router = createBrowserRouter([
+/** The routes of the admin; exported for the test of which pages are marked as built with @jabiz/ui. */
+// eslint-disable-next-line react-refresh/only-export-components
+export const appRoutes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   // Where identity providers send users back (docs/design/10-security.md section 12).
   { path: '/login/oidc', element: <OidcCallbackPage /> },
@@ -75,7 +77,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to={homePath(extension)} replace /> },
           { path: '/data', element: <DatasetCatalogPage />, handle: JABIZ_UI },
-          { path: '/data/:datasetId', element: <DatasetListPage /> },
+          { path: '/data/:datasetId', element: <DatasetListPage />, handle: JABIZ_UI },
           { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage />, handle: JABIZ_UI },
           { path: '/processes', element: <ProcessCatalogPage />, handle: JABIZ_UI },
           { path: '/processes/:name/:version', element: <ProcessFormPage />, handle: JABIZ_UI },
@@ -99,7 +101,9 @@ const router = createBrowserRouter([
       },
     ],
   },
-], { basename: routerBasename(import.meta.env.BASE_URL) })
+]
+
+const router = createBrowserRouter(appRoutes, { basename: routerBasename(import.meta.env.BASE_URL) })
 
 const antdLocales = { zh: zhCN, ja: jaJP, en: enUS } as const
 
