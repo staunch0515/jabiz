@@ -12,6 +12,8 @@ export interface PageStateProps {
   kind: PageStateKind
   /** The headline; a general one per kind when absent ("Not found", "Something went wrong", …). */
   title?: ReactNode
+  /** The title's element: a heading when the state is all the page shows (`h1`), a paragraph by default. */
+  titleAs?: 'h1' | 'h2' | 'p'
   /** What happened, in more words (the server's message). */
   description?: ReactNode
   /** What the user can do next (a button back). */
@@ -26,7 +28,7 @@ const ICONS = { notFound: SearchXIcon, error: CircleAlertIcon, warning: Triangle
  * A page that cannot show its content (yet): loading, not found, failed, or a warning with a way on. Replaces
  * antd's `Spin` and `Result`. Errors and warnings are announced (`role="alert"`); loading is a polite status.
  */
-export function PageState({ kind, title, description, action, className, ...rest }: PageStateProps) {
+export function PageState({ kind, title, titleAs: Title = 'p', description, action, className, ...rest }: PageStateProps) {
   const { t } = useTranslation(UI_NAMESPACE)
   if (kind === 'loading') {
     return (
@@ -57,7 +59,7 @@ export function PageState({ kind, title, description, action, className, ...rest
           kind === 'error' ? 'text-destructive' : kind === 'warning' ? 'text-warning' : 'text-muted-foreground',
         )}
       />
-      <p className="text-lg font-semibold">{title ?? t(`pageState.${kind}`)}</p>
+      <Title className="text-lg font-semibold">{title ?? t(`pageState.${kind}`)}</Title>
       {description && <div className="text-muted-foreground max-w-prose text-sm">{description}</div>}
       {action && <div className="mt-2 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>

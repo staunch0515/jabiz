@@ -8,6 +8,7 @@ import './i18n'
 export { cn, UI_SCOPE } from './lib/utils'
 export { UI_NAMESPACE, uiMessages } from './i18n'
 export { useIsMobile } from './hooks/use-mobile'
+export * from './form-state'
 
 // shadcn/ui
 export * from './components/ui/alert'

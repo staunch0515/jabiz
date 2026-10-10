@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import LoginPage from './LoginPage'
+import { ApiError } from '../api/problem'
+import { expectAccessible } from '../test/axe'
 
 const signIn = vi.fn()
 const verify = vi.fn()
@@ -33,7 +34,6 @@ vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }
 function page(state?: object) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-    <App>
       <MemoryRouter initialEntries={[{ pathname: '/login', state }]}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -41,7 +41,6 @@ function page(state?: object) {
           <Route path="/finance/journals" element={<div data-testid="extension-home" />} />
         </Routes>
       </MemoryRouter>
-    </App>
     </QueryClientProvider>,
   )
 }
@@ -121,5 +120,41 @@ describe('LoginPage', () => {
     fireEvent.change(await screen.findByPlaceholderText('Code'), { target: { value: '654321' } })
     fireEvent.click(screen.getByRole('button', { name: /Verify/ }))
     await waitFor(() => expect(verify).toHaveBeenCalledWith('from-oidc', '654321'))
+  })
+
+  it('asks for what is missing before sending, and shows the server refusal', async () => {
+    page()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText('Enter your user name.')).toBeInTheDocument()
+    expect(screen.getByText('Enter your password.')).toBeInTheDocument()
+    expect(screen.getByLabelText('User name')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('User name')).toHaveAccessibleDescription('Enter your user name.')
+    expect(signIn).not.toHaveBeenCalled()
+
+    signIn.mockRejectedValue(new ApiError(401, { violations: [{ ruleCode: 'LOGIN_FAILED', message: 'Wrong.' }] }))
+    await submitPassword()
+    expect((await screen.findByTestId('login-error')).textContent).toBe('Wrong.')
+    expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'current-password')
+    expect(screen.getByLabelText('User name')).toHaveAttribute('autocomplete', 'username')
+  })
+
+  it('names its fields and is accessible, light and dark', async () => {
+    providers.mockResolvedValue([{ id: 'corp', label: 'Corporate directory' }])
+    page({ idle: true })
+    expect(await screen.findByTestId('oidc-corp')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('jabiz')
+    expect(screen.getByRole('combobox', { name: 'Language' })).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('verifies the code only once one is entered, and the code field is for one-time codes', async () => {
+    page({ step: { status: 'MFA_REQUIRED', challenge: 'c' } })
+    const code = await screen.findByPlaceholderText('Code')
+    expect(code).toHaveAttribute('autocomplete', 'one-time-code')
+    expect(code).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+    expect(await screen.findByText('Enter the code.')).toBeInTheDocument()
+    expect(verify).not.toHaveBeenCalled()
+    await expectAccessible()
   })
 })
