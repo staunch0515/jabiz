@@ -249,6 +249,19 @@ class EntityBuilderTest {
     }
 
     @Test
+    void uniqueRegardlessOfCaseNeedsTextFields() {
+        EntityDefinition def = define(eb -> {
+            eb.field("email", f -> f.physicalColumn("f_email").asText(320));
+            eb.uniqueIgnoreCase("uk_email", "email");
+        });
+        assertThat(def.uniqueConstraints).containsExactly(new UniqueConstraint("uk_email", List.of("email"), true));
+        assertThat(new UniqueConstraint("uk", List.of("a")).ignoreCase()).isFalse();
+
+        assertInvalid(eb -> eb.uniqueIgnoreCase("uk_x", "parcelId"),
+            "unique constraint 'uk_x' ignores case, but field 'parcelId' is not text");
+    }
+
+    @Test
     void listViewsAreValidated() {
         EntityDefinition def = define(eb -> {
             statusField(eb);

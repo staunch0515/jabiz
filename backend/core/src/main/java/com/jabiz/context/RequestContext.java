@@ -24,6 +24,11 @@ import java.util.Set;
  * @param dataPeriod  the span of business time whose data the actor may see in datasets declaring
  *                    {@code withinDataPeriod}, or null when the actor is not limited in time
  *                    (docs/design/10-security.md section 13.2)
+ * @param entry       the sign-in entry the session belongs to (decision D36; {@link #DEFAULT_ENTRY} for the
+ *                    administration), or null for actors that did not sign in (the system, anonymous callers,
+ *                    scenario replays)
+ * @param emailVerified whether the actor's e-mail address was verified when the session's token was issued
+ *                    (docs/design/10-security.md section 15)
  */
 public record RequestContext(
     String actorId,
@@ -33,8 +38,19 @@ public record RequestContext(
     Set<String> roles,
     Set<String> permissions,
     Instant mfaAt,
-    DataPeriod dataPeriod
+    DataPeriod dataPeriod,
+    String entry,
+    boolean emailVerified
 ) {
+
+    /** The sign-in entry that exists always: the administration (decision D36 item 1). */
+    public static final String DEFAULT_ENTRY = "admin";
+
+    /** A context outside any sign-in entry, of an actor whose e-mail address is not known to be verified. */
+    public RequestContext(String actorId, String tenantId, Locale locale, String requestId, Set<String> roles,
+        Set<String> permissions, Instant mfaAt, DataPeriod dataPeriod) {
+        this(actorId, tenantId, locale, requestId, roles, permissions, mfaAt, dataPeriod, null, false);
+    }
 
     /** Actor id of work the platform performs on its own behalf. */
     public static final String SYSTEM_ACTOR = "system";

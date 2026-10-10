@@ -61,6 +61,18 @@ public class UserNames {
         }).orElse(""));
     }
 
+    /** How the signed-in user is shown to themselves, and their own e-mail address (null if none). */
+    public record Self(String name, String email) {}
+
+    /** {@link #own} with the user's own e-mail address (docs/design/10-security.md section 15); empty for non-users. */
+    public Mono<Self> self(String actorId) {
+        return users(List.of(actorId), null).map(users -> users.stream().findFirst().map(user -> {
+            String display = user.get("displayName");
+            return new Self(display == null || display.isBlank() ? user.<String>get("userName") : display,
+                user.<String>get("email"));
+        }).orElse(new Self("", null)));
+    }
+
     private Mono<List<EntityInstance>> users(Collection<String> ids, String tenantId) {
         List<Object> wanted = ids.stream().filter(Objects::nonNull).distinct().limit(MAX_IDS).map(UserNames::uuid)
             .filter(Objects::nonNull).map(Object.class::cast).toList();

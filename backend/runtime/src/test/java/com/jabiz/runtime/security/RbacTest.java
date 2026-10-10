@@ -37,6 +37,41 @@ class RbacTest {
     }
 
     @Test
+    void anEntryCountsOnlyTheRolesItAccepts() {
+        // ADMIN requires a second factor and is limited to 2025; CUSTOMER neither (decision D36 item 1).
+        EntityInstance admin = new EntityInstance("r1", SecurityEntities.ROLE, 1, null,
+            Map.of("roleId", "r1", "roleCode", "ADMIN", "enabled", true, "requireMfa", true));
+        EntityInstance customer = role("r2", "CUSTOMER", true);
+        Instant from = Instant.parse("2025-01-01T00:00:00Z");
+        Instant to = Instant.parse("2026-01-01T00:00:00Z");
+        List<EntityInstance> assignments = List.of(
+            new EntityInstance("a1", SecurityEntities.USER_ROLE, 1, null,
+                Map.of("userId", "u", "roleId", "r1", "dataFrom", from, "dataTo", to)),
+            new EntityInstance("a2", SecurityEntities.USER_ROLE, 1, null, Map.of("userId", "u", "roleId", "r2")));
+        List<EntityInstance> grants = List.of(grant("r1", "*"), grant("r2", "order.place"));
+        SignInEntries.Entry portal = new SignInEntries.Entry("portal", Set.of("CUSTOMER"), false, Set.of(), false,
+            "/");
+        SignInEntries.Entry everything = new SignInEntries.Entry("admin", Set.of("*"), false, Set.of(), false, "/");
+
+        List<EntityInstance> portalRoles = Rbac.acceptedBy(List.of(admin, customer), portal);
+        Rbac.Access inPortal = Rbac.access(assignments, portalRoles, grants);
+        assertThat(inPortal.roles()).containsExactly("CUSTOMER");
+        assertThat(inPortal.permissions()).containsExactly("order.place");
+        assertThat(inPortal.mfaRequired()).isFalse();
+        // The only accepted assignment is not limited in time.
+        assertThat(inPortal.dataPeriod()).isNull();
+
+        Rbac.Access inAdmin = Rbac.access(assignments, Rbac.acceptedBy(List.of(admin, customer), everything), grants);
+        assertThat(inAdmin.roles()).containsExactlyInAnyOrder("ADMIN", "CUSTOMER");
+        assertThat(inAdmin.mfaRequired()).isTrue();
+        SignInEntries.Entry adminOnly = new SignInEntries.Entry("back", Set.of("ADMIN"), false, Set.of(), false, "/");
+        assertThat(Rbac.access(assignments, Rbac.acceptedBy(List.of(admin, customer), adminOnly), grants)
+            .dataPeriod()).isEqualTo(com.jabiz.context.DataPeriod.of(from, to));
+
+        assertThat(Rbac.acceptedBy(List.of(admin, customer), null)).isEmpty();
+    }
+
+    @Test
     void queriesReadEverythingInAStableOrderAndNeverFromATruncatedList() {
         EntityQuery query = Rbac.assignmentsOf("u1");
         assertThat(query.limit()).isEqualTo(Rbac.MAX_ROWS);

@@ -36,6 +36,8 @@ import java.util.function.Function;
  *                    of the process catalog clients build forms from; its permissions still apply wherever it runs
  * @param actsOn      the entity the process acts on, offered as an action on its rows; null if none
  * @param mfa         whether callers need a recent second factor (docs/design/10-security.md section 10)
+ * @param verifiedEmail whether callers need a verified e-mail address (docs/design/10-security.md section 15;
+ *                    decision D36 item 3); checked at the entry points like the permissions
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -51,8 +53,18 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     boolean deprecated,
     boolean internal,
     ActsOn actsOn,
-    MfaRequirement mfa
+    MfaRequirement mfa,
+    boolean verifiedEmail
 ) {
+
+    /** A definition whose callers need no verified e-mail address. */
+    public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
+        Class<C> contextType, ContextFactory<I, C> contextFactory, Function<C, O> outputMapper,
+        List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, boolean internal, ActsOn actsOn,
+        MfaRequirement mfa) {
+        this(name, version, description, inputType, outputType, contextType, contextFactory, outputMapper, steps,
+            permissions, deprecated, internal, actsOn, mfa, false);
+    }
 
     /** Context key under which {@link #single} processes keep their input and output. */
     public static final String SINGLE_INPUT = "jabiz.single.input";
@@ -133,7 +145,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal,
-            actsOn, mfa);
+            actsOn, mfa, verifiedEmail);
     }
 
     /** This definition acting on {@code entity}, whose primary key is the input component {@code input}. */
@@ -148,18 +160,24 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, internal,
-            ActsOn.of(entity, input, condition), mfa);
+            ActsOn.of(entity, input, condition), mfa, verifiedEmail);
     }
 
     /** This definition marked as internal: not listed in the process catalog (decision D15). */
     public ProcessDefinition<I, O, C> asInternal() {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn, mfa);
+            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn, mfa, verifiedEmail);
     }
 
     /** This definition requiring a recent second factor of its callers as given. */
     public ProcessDefinition<I, O, C> withMfa(MfaRequirement requirement) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, requirement);
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, requirement, verifiedEmail);
+    }
+
+    /** This definition requiring (or not) a verified e-mail address of its callers (decision D36 item 3). */
+    public ProcessDefinition<I, O, C> withVerifiedEmail(boolean required) {
+        return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa, required);
     }
 }

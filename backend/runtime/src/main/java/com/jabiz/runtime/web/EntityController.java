@@ -164,6 +164,8 @@ class EntityController {
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing " + entityType + " through dataset " + dataset.resourceId());
             mfa.require(context, dataset.policy().writeMfa(), "Writing " + entityType);
+            com.jabiz.runtime.security.VerifiedEmailPolicy.require(context,
+                process.verifiedEmail() || dataset.policy().writeVerifiedEmail(), "Writing " + entityType);
         }).then();
     }
 

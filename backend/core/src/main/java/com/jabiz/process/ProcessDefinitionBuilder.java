@@ -26,6 +26,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private boolean deprecated;
     private boolean internal;
     private com.jabiz.security.MfaRequirement mfa = com.jabiz.security.MfaRequirement.NONE;
+    private boolean verifiedEmail;
     private ActsOn actsOn;
 
     ProcessDefinitionBuilder(String name, int version, Class<I> inputType, Class<O> outputType, Class<C> contextType) {
@@ -75,6 +76,15 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
      */
     public ProcessDefinitionBuilder<I, O, C> requiresMfa(com.jabiz.security.MfaRequirement requirement) {
         this.mfa = java.util.Objects.requireNonNull(requirement, "requirement must not be null");
+        return this;
+    }
+
+    /**
+     * Callers need a verified e-mail address (docs/design/10-security.md section 15; decision D36 item 3); checked at
+     * the entry points like the permissions (403 {@code EMAIL_NOT_VERIFIED}).
+     */
+    public ProcessDefinitionBuilder<I, O, C> requiresVerifiedEmail() {
+        this.verifiedEmail = true;
         return this;
     }
 
@@ -156,6 +166,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa);
+            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa, verifiedEmail);
     }
 }

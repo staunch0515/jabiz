@@ -45,7 +45,10 @@ public final class DevHeaderActorResolver implements ActorResolver {
             tokens(headers.getFirst(ROLES_HEADER), ROLES_HEADER),
             tokens(headers.getFirst(PERMISSIONS_HEADER), PERMISSIONS_HEADER), clock.instant(),
             com.jabiz.context.DataPeriod.of(instant(headers.getFirst(DATA_FROM_HEADER), DATA_FROM_HEADER),
-                instant(headers.getFirst(DATA_TO_HEADER), DATA_TO_HEADER)));
+                instant(headers.getFirst(DATA_TO_HEADER), DATA_TO_HEADER)),
+            // Development actors belong to the administration and, like their second factor, count as verified
+            // (docs/design/10-security.md section 15).
+            com.jabiz.context.RequestContext.DEFAULT_ENTRY, true);
     }
 
     private static java.time.Instant instant(String value, String header) {
