@@ -1,4 +1,4 @@
-import { Fragment, useState, type HTMLAttributes, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react'
 import {
   flexRender,
   getCoreRowModel,
@@ -19,7 +19,7 @@ import { cn, UI_SCOPE } from '../lib/utils'
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Skeleton } from './ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 
 export type { ColumnDef, ColumnFiltersState, PaginationState, SortingState }
 
@@ -81,6 +81,26 @@ function apply<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
 }
 
+/**
+ * Whether an element scrolls sideways (its content is wider than it): a region that scrolls must be reachable with
+ * the keyboard (WCAG 2.1.1, axe `scrollable-region-focusable`), one that does not should not be an extra tab stop.
+ */
+function useScrollsSideways<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [scrolls, setScrolls] = useState(false)
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const measure = () => setScrolls(element.scrollWidth > element.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    if (element.firstElementChild) observer.observe(element.firstElementChild)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, scrolls] as const
+}
+
 const NO_SORTING: SortingState = []
 const NO_FILTERS: ColumnFiltersState = []
 
@@ -110,6 +130,7 @@ export function DataTable<Row>({
   className,
 }: DataTableProps<Row>) {
   const { t } = useTranslation(UI_NAMESPACE)
+  const [scrollRef, scrolls] = useScrollsSideways<HTMLDivElement>()
   const [expanded, setExpanded] = useState<ExpandedState>({})
   // Other rows (another page, another order) close what was open: without getRowId the keys are row indexes and
   // would open the wrong rows. Reset while rendering, React's pattern for state derived from a prop.
@@ -164,121 +185,134 @@ export function DataTable<Row>({
   return (
     <div data-slot="data-table" className={cn(UI_SCOPE, 'flex flex-col gap-3', className)}>
       <div className="rounded-md border">
-        <Table aria-label={label} aria-busy={loading || undefined}>
-          <TableHeader>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {renderExpanded && (
-                  <TableHead className="w-10">
-                    <span className="sr-only">{t('dataTable.expandRow')}</span>
-                  </TableHead>
-                )}
-                {group.headers.map((header) => {
-                  const sortable = header.column.getCanSort()
-                  const direction = header.column.getIsSorted()
-                  const content = header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={columnClass(header.column.columnDef.meta, true)}
-                      aria-sort={
-                        !sortable ? undefined : direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'
-                      }
-                    >
-                      {sortable ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="-ml-3 h-8"
-                          onClick={header.column.getToggleSortingHandler()}
-                          title={
-                            direction === 'asc'
-                              ? t('dataTable.sortDescending')
-                              : direction === 'desc'
-                                ? t('dataTable.clearSort')
-                                : t('dataTable.sortAscending')
-                          }
-                        >
-                          {content}
-                          {direction === 'asc' ? (
-                            <ArrowUpIcon aria-hidden />
-                          ) : direction === 'desc' ? (
-                            <ArrowDownIcon aria-hidden />
-                          ) : (
-                            <ArrowUpDownIcon aria-hidden className="opacity-60" />
-                          )}
-                        </Button>
-                      ) : (
-                        content
-                      )}
+        {/* shadcn's Table with its container here: a container that scrolls is a named, focusable region. */}
+        <div
+          ref={scrollRef}
+          data-slot="table-container"
+          className="focus-visible:ring-ring/50 relative w-full overflow-x-auto rounded-md outline-none focus-visible:ring-[3px]"
+          {...(scrolls ? { role: 'region', 'aria-label': label, tabIndex: 0 } : {})}
+        >
+          <table
+            data-slot="table"
+            className={cn(UI_SCOPE, 'w-full caption-bottom text-sm')}
+            aria-label={label}
+            aria-busy={loading || undefined}
+          >
+            <TableHeader>
+              {table.getHeaderGroups().map((group) => (
+                <TableRow key={group.id}>
+                  {renderExpanded && (
+                    <TableHead className="w-10">
+                      <span className="sr-only">{t('dataTable.expandRow')}</span>
                     </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {loading && data.length === 0 ? (
-              Array.from({ length: 3 }, (_, i) => (
-                <TableRow key={`loading-${i}`}>
-                  <TableCell colSpan={columnCount}>
-                    <Skeleton className="h-5 w-full" />
-                    <span className="sr-only">{i === 0 ? t('loading') : ''}</span>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : table.getRowModel().rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columnCount} className="text-muted-foreground h-24 text-center">
-                  {empty ?? t('dataTable.empty')}
-                </TableCell>
-              </TableRow>
-            ) : (
-              table.getRowModel().rows.map((row) => {
-                const open = row.getIsExpanded()
-                return (
-                  <Fragment key={row.id}>
-                    <TableRow
-                      data-slot="data-table-row"
-                      data-state={open ? 'expanded' : undefined}
-                      className="group/row"
-                      {...rowProps?.(row.original)}
-                    >
-                      {renderExpanded && (
-                        <TableCell className="w-10">
+                  )}
+                  {group.headers.map((header) => {
+                    const sortable = header.column.getCanSort()
+                    const direction = header.column.getIsSorted()
+                    const content = header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())
+                    return (
+                      <TableHead
+                        key={header.id}
+                        colSpan={header.colSpan}
+                        className={columnClass(header.column.columnDef.meta, true)}
+                        aria-sort={
+                          !sortable ? undefined : direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'
+                        }
+                      >
+                        {sortable ? (
                           <Button
                             variant="ghost"
-                            size="icon-sm"
-                            aria-expanded={open}
-                            aria-label={open ? t('dataTable.collapseRow') : t('dataTable.expandRow')}
-                            onClick={row.getToggleExpandedHandler()}
+                            size="sm"
+                            className="-ml-3 h-8"
+                            onClick={header.column.getToggleSortingHandler()}
+                            title={
+                              direction === 'asc'
+                                ? t('dataTable.sortDescending')
+                                : direction === 'desc'
+                                  ? t('dataTable.clearSort')
+                                  : t('dataTable.sortAscending')
+                            }
                           >
-                            <ChevronRightIcon aria-hidden className={cn(UI_SCOPE, 'transition-transform', open && 'rotate-90')} />
+                            {content}
+                            {direction === 'asc' ? (
+                              <ArrowUpIcon aria-hidden />
+                            ) : direction === 'desc' ? (
+                              <ArrowDownIcon aria-hidden />
+                            ) : (
+                              <ArrowUpDownIcon aria-hidden className="opacity-60" />
+                            )}
                           </Button>
-                        </TableCell>
-                      )}
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id} className={columnClass(cell.column.columnDef.meta)}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                    {open && renderExpanded && (
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={columnCount} className="bg-muted/40 whitespace-normal">
-                          {renderExpanded(row.original)}
-                        </TableCell>
+                        ) : (
+                          content
+                        )}
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {loading && data.length === 0 ? (
+                Array.from({ length: 3 }, (_, i) => (
+                  <TableRow key={`loading-${i}`}>
+                    <TableCell colSpan={columnCount}>
+                      <Skeleton className="h-5 w-full" />
+                      <span className="sr-only">{i === 0 ? t('loading') : ''}</span>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : table.getRowModel().rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columnCount} className="text-muted-foreground h-24 text-center">
+                    {empty ?? t('dataTable.empty')}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                table.getRowModel().rows.map((row) => {
+                  const open = row.getIsExpanded()
+                  return (
+                    <Fragment key={row.id}>
+                      <TableRow
+                        data-slot="data-table-row"
+                        data-state={open ? 'expanded' : undefined}
+                        className="group/row"
+                        {...rowProps?.(row.original)}
+                      >
+                        {renderExpanded && (
+                          <TableCell className="w-10">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-expanded={open}
+                              aria-label={open ? t('dataTable.collapseRow') : t('dataTable.expandRow')}
+                              onClick={row.getToggleExpandedHandler()}
+                            >
+                              <ChevronRightIcon aria-hidden className={cn(UI_SCOPE, 'transition-transform', open && 'rotate-90')} />
+                            </Button>
+                          </TableCell>
+                        )}
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id} className={columnClass(cell.column.columnDef.meta)}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
                       </TableRow>
-                    )}
-                  </Fragment>
-                )
-              })
-            )}
-          </TableBody>
-        </Table>
+                      {open && renderExpanded && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={columnCount} className="bg-muted/40 whitespace-normal">
+                            {renderExpanded(row.original)}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  )
+                })
+              )}
+            </TableBody>
+          </table>
+        </div>
       </div>
       {paged && (
         <div className="flex flex-wrap items-center justify-end gap-4 text-sm">

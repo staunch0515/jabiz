@@ -106,7 +106,8 @@ export function Combobox({
             data-testid={testId}
             className={cn(
               UI_SCOPE,
-              'w-full min-w-40 justify-between font-normal',
+              // On the outline button's dark tint the muted placeholder would fall below 4.5:1.
+              'w-full min-w-40 justify-between font-normal dark:bg-transparent',
               clearable && shown !== undefined && !disabled && 'pr-16',
               shown === undefined && 'text-muted-foreground',
             )}

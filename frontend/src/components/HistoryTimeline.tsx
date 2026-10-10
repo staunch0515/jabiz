@@ -123,7 +123,8 @@ export default function HistoryTimeline(props: Props) {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-destructive"
+                    // Untinted in the dark appearance: the outline tint would take the red below 4.5:1.
+                    className="text-destructive dark:bg-transparent"
                     onClick={() => props.onRevert(version.processSeqId)}
                     data-testid="revert"
                   >

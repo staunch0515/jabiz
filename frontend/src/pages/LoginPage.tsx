@@ -71,7 +71,7 @@ function SignInField({
 function SignInFrame({ subtitle, children, testId }: { subtitle: string; children: ReactNode; testId?: string }) {
   const { t, i18n } = useTranslation()
   return (
-    <main className={cn(UI_SCOPE, 'bg-muted/40 text-foreground flex min-h-screen flex-col items-center px-4 pt-20')}>
+    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20')}>
       <Card className="w-full max-w-sm" data-testid={testId}>
         <CardHeader className="text-center">
           <CardTitle>

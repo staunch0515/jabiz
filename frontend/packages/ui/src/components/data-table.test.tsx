@@ -172,6 +172,22 @@ describe('DataTable', () => {
     await expectAccessible()
   })
 
+  it('makes a table that scrolls sideways a named region the keyboard reaches', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    try {
+      render(<DataTable label="Carriers" columns={columns} data={rows} />)
+      const region = screen.getByRole('region', { name: 'Carriers' })
+      expect(region).toHaveAttribute('tabindex', '0')
+      await expectAccessible()
+    } finally {
+      width.mockRestore()
+      client.mockRestore()
+    }
+    render(<DataTable label="Narrow" columns={columns} data={rows} />)
+    expect(screen.queryByRole('region', { name: 'Narrow' })).toBeNull()
+  })
+
   it('marks the table busy while loading', () => {
     render(<DataTable label="Carriers" columns={columns} data={[]} loading />)
     expect(screen.getByRole('table', { name: 'Carriers' })).toHaveAttribute('aria-busy', 'true')
