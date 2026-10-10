@@ -5,11 +5,14 @@
 
 ```sh
 docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
-docker compose -f deploy/quizbuks/docker-compose.yml logs quizbuks      # 首次启动打印管理员密码
+docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次启动打印管理员密码
 ```
 
+- 管理员密码只在首次启动时打印一次；之后在仓库根目录用
+  `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取
+  （入口脚本提示中的 `docker compose exec app …` 省略了 `-f`；应用服务因此命名为 `app`）。
 - 管理员后台：<http://localhost:8080/admin/>。答题 App（`/`）与商家后台（`/sponsor/`）在后续阶段加入。
-- 首次登录后执行一次流程 `QB_SETUP`（建角色、账本科目、国家、业务参数；可重复执行，只补缺少的）。它要求二次验证：
+- 首次登录后执行一次流程 `QB_SETUP`（建角色、账本科目、国家、业务参数；可重复执行，只补从未存在过的，不加回已删除的）。它要求二次验证：
   先在后台的"安全设置"中开启两步验证（TOTP）；只在本机演示时可设 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 跳过。
 - 只起数据库做本地开发：`docker compose -f deploy/quizbuks/docker-compose.yml up -d db`，再在 `backend/` 下
   `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`。

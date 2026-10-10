@@ -1,7 +1,20 @@
 name: QuizBuks
 on:
+  # As the platform's ci.yml: pushes run only on the long-lived line branch ('1.2/quizbuks');
+  # work branches ('1.2/quizbuks-2-accounts') run as pull requests, so a commit is not checked twice.
   push:
+    branches:
+      - '[0-9]*.[0-9]*/*'
+      - '!*/phase-*'
+      - '!*/*-[0-9]*'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# A new push to a pull request cancels its run in progress; runs on the long-lived branches all complete.
+concurrency:
+  group: quizbuks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The application's own checks (docs/quizbuks/plans/Q1-skeleton.md item 9); the backend (./gradlew check, which
 # includes :quizbuks:check with platformCheck) and the application-path check run in the platform's ci.yml.
@@ -22,12 +35,15 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U quizbuks -d quizbuks_smoke" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      # Pull requests read the cache their base branch wrote (as ci.yml).
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - run: ./gradlew :quizbuks:bootJar
         working-directory: backend
       - name: Start the application and wait for health
@@ -58,7 +74,7 @@ jobs:
       - name: The API still needs a token
         run: test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/meta/datasets)" = 401
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: quizbuks-package-log
           path: quizbuks.log

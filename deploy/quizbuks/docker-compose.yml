@@ -3,8 +3,9 @@
 #   docker compose -f deploy/quizbuks/docker-compose.yml up -d --build
 #
 # then open http://localhost:8080/admin/; the first administrator's password is printed by
-# `docker compose -f deploy/quizbuks/docker-compose.yml logs quizbuks`. Settings come from deploy/quizbuks/.env
-# (never committed); the variables are listed in README.md beside this file.
+# `docker compose -f deploy/quizbuks/docker-compose.yml logs app`. The application's service is named "app", as the
+# platform's entrypoint (docker/app-entrypoint.sh) names it in its hint for reading the password again. Settings come
+# from deploy/quizbuks/.env (never committed); the variables are listed in README.md beside this file.
 name: quizbuks
 
 services:
@@ -21,7 +22,7 @@ services:
       interval: 5s
       retries: 10
 
-  quizbuks:
+  app:
     build:
       context: ../..
       dockerfile: deploy/quizbuks/Dockerfile
