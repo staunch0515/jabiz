@@ -1,0 +1,65 @@
+name: QuizBuks
+on:
+  push:
+  pull_request:
+
+# The application's own checks (docs/quizbuks/plans/Q1-skeleton.md item 9); the backend (./gradlew check, which
+# includes :quizbuks:check with platformCheck) and the application-path check run in the platform's ci.yml.
+jobs:
+  # The packaged application starts on an empty database, migrates, passes its startup checks, reports healthy and
+  # serves the admin frontend under /admin/.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: quizbuks_smoke
+          POSTGRES_USER: quizbuks
+          POSTGRES_PASSWORD: quizbuks
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U quizbuks -d quizbuks_smoke" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :quizbuks:bootJar
+        working-directory: backend
+      - name: Start the application and wait for health
+        working-directory: backend
+        run: |
+          # Throwaway keys for this run only.
+          export JABIZ_JWT_SECRET=$(openssl rand -base64 48)
+          export JABIZ_INTEGRITY_KEY=$(openssl rand -base64 48)
+          export JABIZ_MFA_KEY=$(openssl rand -base64 48)
+          nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
+            -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
+          cat ../quizbuks.log; exit 1
+        env:
+          SPRING_R2DBC_URL: r2dbc:postgresql://localhost:5432/quizbuks_smoke
+          SPRING_R2DBC_USERNAME: quizbuks
+          SPRING_FLYWAY_URL: jdbc:postgresql://localhost:5432/quizbuks_smoke
+          SPRING_FLYWAY_USER: quizbuks
+          DB_PASSWORD: quizbuks
+          JABIZ_BOOTSTRAP_ADMIN_USER: admin
+          JABIZ_BOOTSTRAP_ADMIN_PASSWORD: smoke-admin-password
+          JABIZ_FILES_LOCAL_ROOT: ${{ runner.temp }}/quizbuks-files
+      - name: The admin frontend is served under /admin/
+        run: |
+          curl -sf localhost:8080/admin/ | grep -q 'id="root"'
+          # A client-side route of the admin frontend falls back to its page.
+          curl -sf localhost:8080/admin/datasets | grep -q 'id="root"'
+      - name: The API still needs a token
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/meta/datasets)" = 401
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quizbuks-package-log
+          path: quizbuks.log
+          retention-days: 7
