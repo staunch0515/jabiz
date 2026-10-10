@@ -64,6 +64,7 @@ docs/quizbuks/               本文件等
 | `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`ledger.read`、`report.issue`、`approval.decide`、`task.read` |
 | `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read/write`、`control.propose`、平台安全管理权限 |
 
+- 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
 - 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）。
 - 二次验证：管理员角色要求二次验证（`SecRole.requireMfa`）；商家可自行开启。
@@ -79,7 +80,7 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | `QbProfile` | T | `userId`（唯一）、`displayName`、`countryCode`（字典）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考）、`status`（ACTIVE / BANNED，`processOnly`）、`banReason` | 答题人与商家共用的资料；激活状态由平台（G1）管 |
 | `QbSponsor` | T | `userId`（唯一）、`company`、`intro`（Markdown）、`avatar`（文件，公开）、`reviewStatus`（PENDING / APPROVED / REJECTED，`processOnly`）、`termsAcceptedAt` | 商家入驻；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
-| `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射 |
+| `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | T | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（`f.masked(qb.admin.finance.read, LAST4)`）、`payoutsEnabled`（`processOnly`，由 Stripe 通知更新） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号 |
 
 ### 3.2 内容：模版、版本、题目、资料
