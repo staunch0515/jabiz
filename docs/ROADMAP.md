@@ -1115,7 +1115,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16f | OIDC 自动开户（Google、Apple） | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
-| 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改 | D40 | 1 天 | — |
+| 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
 
 ### 16a 事务邮件（3–4 天）
 
@@ -1208,7 +1208,7 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 
 **测试**
 - core：`ControlledParamsTest`（键格式、合并、问题列表）。
-- runtime 单元：`ParamChecksTest`（格式错误一次全部报告、不存在的键不报）。
+- runtime 单元：`ControlledParamsChecksTest`（格式错误一次全部报告、不存在的键不报；写入守卫只放行 `CONTROL_CHANGE_PUBLISH`）。
 - 集成 `ControlledParamIT`（本地库）：直接修改被拒（四个流程、数据视图、撤销）；提出 + 发布立即生效与预定生效（历史、审计照常）；取消预定；同一人不能发布；提出时值不合类型被拒；
   不能经数据视图删除再新建、改键等方式解除受控；未受控的键不能用受控变更。
 - 场景回放：`freight/monthly_close` 与 `ScenarioAcceptanceIT` 的内联场景改用受控变更，快照更新。
@@ -1216,6 +1216,6 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 **风险**：受控变更的发布要求二次验证（`ADMINISTRATION`），参数修改因此也要求；示范与 QuizBuks 均可接受。
 
 **验收标准**
-- [ ] 受控键的直接修改在所有写入途径上被拒（422 `PARAM_CONTROLLED`），一个人无法解除受控。
-- [ ] 经提出与另一人发布修改受控参数，立即与预定生效、可取消预定，值按类型检查，历史与审计照常。
-- [ ] 声明格式错误在启动时一次报告；示范场景通过；`./gradlew check` 通过。
+- [x] 受控键的直接修改在所有写入途径上被拒（422 `PARAM_CONTROLLED`），一个人无法解除受控（`ControlledParamIT`、`ControlledParamsChecksTest`）。
+- [x] 经提出与另一人发布修改受控参数，立即与预定生效、可取消预定，值按类型检查，历史与审计照常（`ControlledParamIT`）。
+- [x] 声明格式错误在启动时一次报告（`ControlledParamsTest`、`ControlledParamsChecksTest`）；示范场景 `freight/monthly_close` 通过；`./gradlew check` 通过。
