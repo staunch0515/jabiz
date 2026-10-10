@@ -4,6 +4,7 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.job.JobDefinition;
+import com.jabiz.param.ControlledParams;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.retention.RetentionPolicy;
@@ -27,6 +28,15 @@ class FreightBillingConfig {
     RetentionPolicy freightChargeRetention() {
         return RetentionPolicy.of(FreightBilling.CHARGE).keep(Period.ofYears(7)).from("shippedTime")
             .afterFiscalYearEnd();
+    }
+
+    /**
+     * The surcharge rate prices every charge, so one person alone may not change it: it is created, changed and
+     * scheduled only through controlled changes that another person publishes (decision D40).
+     */
+    @Bean
+    ControlledParams freightControlledParams() {
+        return ControlledParams.of(FreightBilling.SURCHARGE_RATE);
     }
 
     @Bean
