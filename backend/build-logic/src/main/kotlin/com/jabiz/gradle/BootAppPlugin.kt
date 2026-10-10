@@ -6,6 +6,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
@@ -115,12 +116,16 @@ class BootAppPlugin : Plugin<Project> {
             systemProperty("scenario.update-snapshots", updateScenarios)
             // The OpenAPI document the frontend generates its types from (docs/design/12-frontend.md section 3);
             // -Dopenapi.update-snapshot=true rewrites it when the API changed.
+            // The paths come from the application's jabizApp block, which may run after this (a root build that
+            // configures every Test task eagerly realizes this one as soon as the java plugin creates it), so they
+            // are read only when the task runs.
             val updateOpenApi = providers.systemProperty("openapi.update-snapshot").orElse("false").get()
-            systemProperty("openapi.snapshot", app.openApiSnapshot.get().asFile.absolutePath)
+            jvmArgumentProviders.add(SystemPropertyArgument("openapi.snapshot", app.openApiSnapshot.absolutePath()))
             systemProperty("openapi.update-snapshot", updateOpenApi)
             // The catalog of the public templates (docs/design/15-public-access.md section 7), the same way.
             val updatePublicQueries = providers.systemProperty("public-queries.update-snapshot").orElse("false").get()
-            systemProperty("public-queries.snapshot", app.publicQueriesSnapshot.get().asFile.absolutePath)
+            jvmArgumentProviders.add(
+                SystemPropertyArgument("public-queries.snapshot", app.publicQueriesSnapshot.absolutePath()))
             systemProperty("public-queries.update-snapshot", updatePublicQueries)
             if (updateScenarios == "true" || updateOpenApi == "true" || updatePublicQueries == "true") {
                 outputs.upToDateWhen { false }
@@ -218,10 +223,28 @@ class BootAppPlugin : Plugin<Project> {
         }
     }
 
+    /**
+     * `-D<name>=<value>` with the value read when the task runs rather than when it is configured, so that the
+     * application's `jabizApp` block has run (see [configureTests]). The value is a task input, like a plain
+     * system property.
+     */
+    class SystemPropertyArgument(
+        @get:Input val name: String,
+        private val value: Provider<String>,
+    ) : CommandLineArgumentProvider {
+
+        @get:Input
+        val propertyValue: String get() = value.get()
+
+        override fun asArguments(): Iterable<String> = listOf("-D$name=${value.get()}")
+    }
+
     /** Serializes pnpm runs across the build (see [apply]). */
     abstract class PnpmLock : BuildService<BuildServiceParameters.None>
 
     private companion object {
+        fun RegularFileProperty.absolutePath(): Provider<String> = map { it.asFile.absolutePath }
+
         /** Integration tests and platformCheck connect to a local PostgreSQL when these are set (CLAUDE.md section 6). */
         val TEST_DB_VARIABLES = listOf("JABIZ_TEST_DB_URL", "JABIZ_TEST_DB_USER", "JABIZ_TEST_DB_PASSWORD")
     }

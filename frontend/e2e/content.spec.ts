@@ -56,7 +56,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
 
   // An action with more input opens its form with the certification filled in and read-only.
   await row.getByTestId('row-action-CERTIFICATION_REJECT').click()
-  await expect(page.getByLabel('certificationId')).toBeDisabled()
+  await expect(page.getByLabel('certificationId')).not.toBeEditable()
   await page.getByLabel('comment').fill('The certificate copy is missing.')
   await page.getByRole('button', { name: /执\s*行/ }).click()
   await expect(page.getByTestId('process-result')).toContainText('REJECTED')

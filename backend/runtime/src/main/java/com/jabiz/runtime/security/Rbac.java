@@ -66,6 +66,17 @@ public final class Rbac {
         return all(new QueryPredicate.In("roleId", ids(complete(assignments), "roleId")), "roleCode");
     }
 
+    /**
+     * The roles among {@code roles} that the sign-in entry accepts (decision D36 item 1): only they count towards the
+     * permissions, the second-factor requirement and the data period of a session of that entry. None for no entry.
+     */
+    public static List<EntityInstance> acceptedBy(Collection<EntityInstance> roles, SignInEntries.Entry entry) {
+        if (entry == null) {
+            return List.of();
+        }
+        return complete(roles).stream().filter(role -> entry.accepts(role.get("roleCode"))).toList();
+    }
+
     /** The permissions granted to the enabled roles among {@code roles}. */
     public static EntityQuery permissionsOf(Collection<EntityInstance> roles) {
         List<Object> enabled = complete(roles).stream().filter(Rbac::enabled).map(EntityInstance::id).toList();

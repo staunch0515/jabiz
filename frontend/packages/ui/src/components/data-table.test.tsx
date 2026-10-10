@@ -151,6 +151,59 @@ describe('DataTable', () => {
     await expectAccessible()
   })
 
+  it("keeps the row's own mark and classes when the caller adds attributes", () => {
+    const { container } = render(
+      <DataTable
+        label="Carriers"
+        columns={columns}
+        data={rows}
+        rowProps={(r) => ({ className: 'font-bold', 'data-slot': 'mine', 'data-state': 'selected', 'data-code': r.code })}
+      />,
+    )
+    const [first] = container.querySelectorAll('tbody tr')
+    expect(first).toHaveAttribute('data-slot', 'data-table-row')
+    expect(first).toHaveAttribute('data-state', 'selected')
+    expect(first).toHaveAttribute('data-code', 'A1')
+    expect(first).toHaveClass('group/row', 'font-bold')
+  })
+
+  it('marks data rows, and keeps a pinned column at the right edge with its own classes', async () => {
+    const withActions: ColumnDef<Carrier, unknown>[] = [
+      { accessorKey: 'code', header: 'Code', meta: { className: 'w-24' } },
+      {
+        id: 'actions',
+        header: 'Actions',
+        meta: { pinned: 'right' },
+        cell: ({ row }) => <button type="button">Edit {row.original.code}</button>,
+      },
+    ]
+    const { container } = render(
+      <DataTable label="Carriers" columns={withActions} data={rows} rowProps={(r) => ({ 'data-code': r.code })} />,
+    )
+    const dataRows = container.querySelectorAll('[data-slot="data-table-row"]')
+    expect([...dataRows].map((row) => row.getAttribute('data-code'))).toEqual(['A1', 'B2'])
+    expect(screen.getByRole('columnheader', { name: 'Code' })).toHaveClass('w-24')
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveClass('sticky', 'right-0')
+    expect(screen.getByRole('button', { name: 'Edit A1' }).closest('td')).toHaveClass('sticky', 'right-0')
+    await expectAccessible()
+  })
+
+  it('makes a table that scrolls sideways a named region the keyboard reaches', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    try {
+      render(<DataTable label="Carriers" columns={columns} data={rows} />)
+      const region = screen.getByRole('region', { name: 'Carriers' })
+      expect(region).toHaveAttribute('tabindex', '0')
+      await expectAccessible()
+    } finally {
+      width.mockRestore()
+      client.mockRestore()
+    }
+    render(<DataTable label="Narrow" columns={columns} data={rows} />)
+    expect(screen.queryByRole('region', { name: 'Narrow' })).toBeNull()
+  })
+
   it('marks the table busy while loading', () => {
     render(<DataTable label="Carriers" columns={columns} data={[]} loading />)
     expect(screen.getByRole('table', { name: 'Carriers' })).toHaveAttribute('aria-busy', 'true')

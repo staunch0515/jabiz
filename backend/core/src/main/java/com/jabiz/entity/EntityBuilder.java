@@ -92,6 +92,15 @@ public final class EntityBuilder {
         uniqueConstraints.add(new UniqueConstraint(constraintName, List.of(fieldNames)));
     }
 
+    /**
+     * Declares that the combination of the text fields {@code fieldNames} is unique regardless of case
+     * (decision D36): {@code A@x.com} and {@code a@x.com} are the same. The supporting index is on
+     * {@code lower(column)}.
+     */
+    public void uniqueIgnoreCase(String constraintName, String... fieldNames) {
+        uniqueConstraints.add(new UniqueConstraint(constraintName, List.of(fieldNames), true));
+    }
+
     /** Makes the entity append-only and bitemporal with default settings (docs/design/04-temporal-append-only.md). */
     public void temporal() {
         temporal(t -> { });
@@ -320,6 +329,13 @@ public final class EntityBuilder {
                 throw invalid("unique constraint '" + unique.name() + "' lists a field twice");
             }
             unique.fields().forEach(f -> requireField(f, "unique constraint '" + unique.name() + "'"));
+            if (unique.ignoreCase()) {
+                unique.fields().stream().filter(f -> !(fields.get(f).kind() instanceof SemanticKind.Text))
+                    .findFirst().ifPresent(f -> {
+                        throw invalid("unique constraint '" + unique.name() + "' ignores case, but field '" + f
+                            + "' is not text");
+                    });
+            }
         }
     }
 

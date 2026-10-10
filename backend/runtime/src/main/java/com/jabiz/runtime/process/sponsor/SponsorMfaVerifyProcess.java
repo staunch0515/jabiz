@@ -34,6 +34,7 @@ public final class SponsorMfaVerifyProcess {
                 .contextFactory(MfaContext::new)
                 .outputMapper(LoginContext::output)
 
+                .step("Resolve the entry", SignInEntryStep.<MfaContext>spec())
                 .step("Load the user", QueryEntities.<MfaContext>of(SecurityEntities.USER_DATASET,
                     ctx -> Rbac.all(new QueryPredicate.Eq("userId", UUID.fromString(ctx.userIdArgument())),
                         "userId"),
@@ -54,6 +55,7 @@ public final class SponsorMfaVerifyProcess {
                 .step("Check the second factor", MfaCheckStep.class, NoMetadata.INSTANCE)
 
                 .steps(SponsorSignInProcess::accessSteps)
+                .steps(SponsorSignInProcess::entrySteps)
 
                 .compute("Use up the recovery code", (metadata, ctx) -> {
                     // Spent only by a sign-in that succeeds.

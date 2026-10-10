@@ -60,6 +60,10 @@ class ImportAccess {
     void requireAtEntry(ImportDefinition<?> definition, RequestContext context) {
         require(definition, context);
         processes.find(definition.target().process(), definition.target().version()).ifPresent(process ->
-            mfa.require(context, process.mfa(), "Import " + definition.id()));
+            {
+                mfa.require(context, process.mfa(), "Import " + definition.id());
+                com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, process.verifiedEmail(),
+                    "Import " + definition.id());
+            });
     }
 }

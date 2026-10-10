@@ -68,7 +68,8 @@ public record LoginAttemptPolicy(int maxFailures, Duration lockDuration) {
         boolean lockExpired = previous.lockedUntil() != null && !now.isBefore(previous.lockedUntil());
         int carried = lockExpired ? 0 : previous.failureCount();
         return switch (outcome) {
-            case SUCCESS, UNLOCKED -> new State(attemptNo, 0, null);
+            // A reset password proves the mail box, as an unlock proves an administrator's decision: a fresh start.
+            case SUCCESS, UNLOCKED, PASSWORD_RESET -> new State(attemptNo, 0, null);
             case LOCKED -> {
                 if (!isLocked(previous, now)) {
                     throw new IllegalArgumentException("The account is not locked at " + now);
@@ -81,7 +82,10 @@ public record LoginAttemptPolicy(int maxFailures, Duration lockDuration) {
             }
             // The password was right, so nothing is added; the refusal (or the pending second factor) has other
             // causes. Only a complete sign-in clears the counter, so wrong codes after a right password still lock.
-            case DISABLED, NO_ROLE, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED -> new State(attemptNo, carried, null);
+            // A guard's refusal and an unverified address are not guesses either (decision D36): repeated refusals
+            // must not lock the account.
+            case DISABLED, NO_ROLE, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED, REFUSED, EMAIL_NOT_VERIFIED ->
+                new State(attemptNo, carried, null);
         };
     }
 }
