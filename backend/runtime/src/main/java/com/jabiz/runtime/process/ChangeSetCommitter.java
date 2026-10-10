@@ -129,7 +129,7 @@ public class ChangeSetCommitter {
         };
         EntityInstance instance = new EntityInstance(change.id(), change.entityType(), change.version(), null,
             new LinkedHashMap<>(change.attributes()));
-        return new EntityChange(action, instance, change.effectiveTime());
+        return new EntityChange(action, instance, change.effectiveTime(), change.grant());
     }
 
     private static ChangeSet.Saved toSaved(EntityInstance instance) {

@@ -61,7 +61,8 @@ final class TemporalWriter {
                 "Writes of temporal entity " + def.name + " need an operation in the Reactor context"));
             Instant effective = effectiveTime(def, change, operation, validation.request());
             String table = queryCompiler.resolveTable(dataset, def);
-            Write write = new Write(engine, dataset, scope, def, table, operation, effective, validation);
+            Write write = new Write(engine, dataset, scope, def, table, operation, effective, validation,
+                change.grant());
             EntityInstance instance = change.instance();
             return switch (change.action()) {
                 case INSERT -> insert(write, instance);
@@ -74,7 +75,8 @@ final class TemporalWriter {
 
     /** What one change works with. */
     private record Write(StorageEngine engine, DatasetDefinition dataset, Map<String, Object> scope,
-        EntityDefinition def, String table, Operation operation, Instant effective, ValidationContext validation) {}
+        EntityDefinition def, String table, Operation operation, Instant effective, ValidationContext validation,
+        Object grant) {}
 
     /**
      * The effective time of a change, checked against the time of the operation: later times need an entity that
@@ -236,7 +238,8 @@ final class TemporalWriter {
 
     private Mono<EntityInstance> append(Write w, UUID id, Timeline timeline, VersionPlanner.Write write,
         boolean checkUnique) {
-        return versions.append(w.engine(), w.table(), w.def(), id, timeline, write, w.operation(), checkUnique)
+        return versions.append(w.engine(), w.table(), w.def(), id, timeline, write, w.operation(), w.grant(),
+                checkUnique)
             .map(written -> {
                 PlannedVersion first = written.getFirst();
                 return snapshot(w.def(), new EntityVersion(first.versionNo(), first.effectiveFrom(),
