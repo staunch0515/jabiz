@@ -259,8 +259,22 @@ class AuthController {
 
     /** Where a sign-in comes from: the entry asked for, the client's address and user agent (decision D36 item 7). */
     static SignInSource source(ClientAddresses clients, ServerHttpRequest http, String entry) {
-        return new SignInSource(entry, http == null ? null : clients.clientOf(http),
-            http == null ? null : http.getHeaders().getFirst(HttpHeaders.USER_AGENT));
+        return new SignInSource(entry, http == null ? null : clients.addressOf(http), userAgent(http));
+    }
+
+    /**
+     * The user agent, or null; a header the firewall rejects (control characters) is left out rather than failing
+     * the sign-in.
+     */
+    private static String userAgent(ServerHttpRequest http) {
+        if (http == null) {
+            return null;
+        }
+        try {
+            return http.getHeaders().getFirst(HttpHeaders.USER_AGENT);
+        } catch (RuntimeException rejected) {
+            return null;
+        }
     }
 
     /** Tokens of a new session; the refresh tokens of the session remember when it passed a second factor. */

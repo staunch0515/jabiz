@@ -87,17 +87,29 @@ public class ClientAddresses implements PlatformCheck {
         }
     }
 
-    /** The client's address as text; {@value #UNKNOWN} when the connection has none. */
+    /** The client's address as text; {@value #UNKNOWN} when the connection has none (a key for rate limits). */
     public String clientOf(ServerHttpRequest request) {
+        String address = addressOf(request);
+        return address == null ? UNKNOWN : address;
+    }
+
+    /** The client's address as text, or null when the connection has none (as login records keep it). */
+    public String addressOf(ServerHttpRequest request) {
         InetSocketAddress remote = request.getRemoteAddress();
         InetAddress connection = remote == null ? null : remote.getAddress();
         if (connection == null) {
-            return remote == null ? UNKNOWN : remote.getHostString();
+            return remote == null ? null : remote.getHostString();
         }
         if (trusted.isEmpty() || !trusted(connection)) {
             return text(connection);
         }
-        List<String> headers = request.getHeaders().getOrEmpty(FORWARDED_FOR);
+        List<String> headers;
+        try {
+            headers = request.getHeaders().getOrEmpty(FORWARDED_FOR);
+        } catch (RuntimeException rejected) {
+            // A value the firewall refuses (control characters): malformed, so ignored.
+            return text(connection);
+        }
         List<InetAddress> chain = chain(headers);
         if (chain == null || chain.isEmpty()) {
             return text(connection);

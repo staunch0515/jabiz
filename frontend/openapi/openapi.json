@@ -282,6 +282,9 @@
           },
           "writeRequiresMfa" : {
             "type" : "boolean"
+          },
+          "writeRequiresVerifiedEmail" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -1397,6 +1400,9 @@
       },
       "LoginRequest" : {
         "properties" : {
+          "entry" : {
+            "type" : "string"
+          },
           "password" : {
             "type" : "string"
           },
@@ -1449,6 +1455,15 @@
             "type" : "string"
           },
           "displayName" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "emailVerified" : {
+            "type" : "boolean"
+          },
+          "entry" : {
             "type" : "string"
           },
           "idleTimeoutSeconds" : {
@@ -1673,6 +1688,9 @@
           "requiresMfa" : {
             "type" : "boolean"
           },
+          "requiresVerifiedEmail" : {
+            "type" : "boolean"
+          },
           "version" : {
             "format" : "int32",
             "type" : "integer"
@@ -1811,6 +1829,9 @@
       },
       "RefreshRequest" : {
         "properties" : {
+          "entry" : {
+            "type" : "string"
+          },
           "refreshToken" : {
             "type" : "string"
           }
@@ -3099,6 +3120,13 @@
           "in" : "path",
           "name" : "id",
           "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entry",
+          "required" : false,
           "schema" : {
             "type" : "string"
           }
