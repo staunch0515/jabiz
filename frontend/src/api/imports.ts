@@ -1,7 +1,7 @@
 import { api, sessionFetch, unwrap } from './client'
 import { ApiError, toApiError } from './problem'
 import { saveResponse } from './reports'
-import type { components } from './schema'
+import type { components } from '@jabiz/client'
 
 /** Imports (docs/design/20-imports.md section 6). */
 export type ImportEntry = components['schemas']['ImportEntry']

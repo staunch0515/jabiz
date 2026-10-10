@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { displayLocale, formatAmount, formatDate, formatDateTime, regionOf } from './format'
+import { afterEach, describe, expect, it } from 'vitest'
+import { displayLocale, formatAmount, formatDate, formatDateTime, regionOf, setAmountUnit } from './format'
 
 describe('regionOf', () => {
   it('accepts a language with a region, canonically', () => {
@@ -58,6 +58,26 @@ describe('formatAmount', () => {
   it('shows what is not a number as text', () => {
     expect(formatAmount('abc', { scale: 2 })).toBe('abc')
     expect(formatAmount(null, { scale: 2 })).toBe('')
+  })
+})
+
+describe('the display unit of amounts (decision D34)', () => {
+  afterEach(() => setAmountUnit(undefined))
+
+  it('follows the number when given, and never with a currency', () => {
+    expect(formatAmount('1234.5', { scale: 2, locale: 'en-US', unit: 'Kudos' })).toBe('1,234.50\u00a0Kudos')
+    expect(formatAmount('-20', { scale: 0, locale: 'en-US', unit: 'Kudos', negative: 'parentheses' })).toBe('(20\u00a0Kudos)')
+    expect(formatAmount('5', { scale: 2, locale: 'en-US', unit: 'Kudos', currency: 'USD' })).toBe('$5.00')
+  })
+
+  it("is the application's unit unless a call names its own or none", () => {
+    setAmountUnit('Kudos')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US' })).toBe('12\u00a0Kudos')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US', unit: 'pts' })).toBe('12\u00a0pts')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US', unit: null })).toBe('12')
+    expect(formatAmount('12', { scale: 2, locale: 'en-US', currency: 'JPY' })).toMatch(/^¥/)
+    setAmountUnit(' ')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US' })).toBe('12')
   })
 })
 

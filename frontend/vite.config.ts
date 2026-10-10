@@ -41,6 +41,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: [
       'src/**/*.test.{ts,tsx}',
+      'packages/*/src/**/*.test.{ts,tsx}',
       'scripts/**/*.test.ts',
       ...(extension ? [`${extension}/src/**/*.test.{ts,tsx}`] : []),
     ],

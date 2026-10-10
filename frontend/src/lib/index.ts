@@ -12,7 +12,7 @@ export type { AdminExtension, ExtensionMenuItem } from '../extension/api'
 export { api, unwrap, sessionFetch, ApiError } from '../api/client'
 export { runQuery, runProcess } from './calls'
 export type { QueryPage, QueryOptions, ProcessOptions, Filter, Sort } from './calls'
-export type { components as ApiSchemas } from '../api/schema'
+export type { components as ApiSchemas } from '@jabiz/client'
 export { uploadFile, fetchFileContent, fetchFileDownload } from '../api/files'
 
 // Who is signed in; `can` only decides what the UI offers, the server checks every call.
