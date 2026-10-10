@@ -17,7 +17,7 @@
 | Q14 商家退款 | 不做（以后加"商家退款"交易与分录） |
 | Q15 数据迁移 | 从零开始，不迁移原型数据 |
 | Q16 语言 | App：英 / 中 / 日；商家后台：中 / 英；Quiz 内容单一语言（商家用什么语言写就是什么语言） |
-| Q18 Stripe | 平台 Stripe 账户与用户的收款方式经接口 `PayoutGateway` 隔离：先实现 Stripe Connect（Express 账户），Global Payouts 作为第二种实现预留 |
+| Q18 Stripe（已答） | 当前为 Stripe 测试模式；正式时每个部署（美国、日本）各用本国的 Stripe 账户，配置随部署。转账先实现 Stripe Connect（Express 账户），仍经接口 `PayoutGateway` 调用 |
 | Q19 AI 费用 | 不收费，只记用量（按商家、按月汇总） |
 
 ---
