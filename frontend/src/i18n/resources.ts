@@ -339,6 +339,9 @@ const en = {
     field: 'Field',
     before: 'Before',
     after: 'After',
+    crumb: 'History',
+    revertReasonRequired: 'Enter why it is reverted.',
+    changes: 'Changes in version {{no}}',
     action: {
       INSERT: 'Created',
       UPDATE: 'Changed',
@@ -721,6 +724,9 @@ const zh: Texts = {
     field: '字段',
     before: '修改前',
     after: '修改后',
+    crumb: '历史',
+    revertReasonRequired: '请填写撤销原因。',
+    changes: '版本 {{no}} 的修改',
     action: {
       INSERT: '新建',
       UPDATE: '修改',
@@ -1100,6 +1106,9 @@ const ja: Texts = {
     field: '項目',
     before: '変更前',
     after: '変更後',
+    crumb: '履歴',
+    revertReasonRequired: '取り消す理由を入力してください。',
+    changes: 'バージョン {{no}} の変更',
     action: {
       INSERT: '作成',
       UPDATE: '変更',

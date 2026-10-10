@@ -31,7 +31,7 @@ export interface FilterBarProps {
   fields: FilterField[]
   /** The filters in force, shown when the bar appears (from the URL, after a reset). */
   values?: FilterValues
-  /** "Query" or Enter in a field: the filled-in fields (empty ones left out). */
+  /** "Query" or Enter in a field (in a date field, once the typed date is taken): the filled-in fields. */
   onSubmit: (values: FilterValues) => void
   /** "Reset": the fields are emptied; {@link onSubmit} with no values when absent. */
   onReset?: () => void
@@ -76,8 +76,8 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
     setDraftState(values)
     setGeneration(generation + 1)
   }
-  // The values as of now, also within one event: a date field reads its text on Enter just before the form
-  // submits, before React has rendered the change. Stale once the caller's values replaced the draft.
+  // The values as of now, also within one event: a date field takes its typed text when it is left, in the same
+  // event that clicks "Query", before React has rendered the change. Stale once the caller's values replaced the draft.
   const latest = useRef({ generation, values: draft })
   const current = () => (latest.current.generation === generation ? latest.current.values : draft)
   const setDraft = (next: FilterValues) => {

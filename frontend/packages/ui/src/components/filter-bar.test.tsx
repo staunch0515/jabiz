@@ -39,13 +39,19 @@ describe('FilterBar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Query' }))
     expect(onSubmit).toHaveBeenLastCalledWith({ code: 'A', limit: { from: '100' } })
 
-    // Enter in a date field reads the typed date first.
+    // Enter in a date field first takes the typed date, then (with nothing new typed) submits.
+    onSubmit.mockClear()
     await userEvent.type(screen.getByLabelText('Due, to'), '2026-02-01{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+    await userEvent.keyboard('{Enter}')
     expect(onSubmit).toHaveBeenLastCalledWith({ code: 'A', limit: { from: '100' }, due: { to: '2026-02-01' } })
-    // An invalid date does not submit.
+    // An invalid date is not taken: Enter keeps it for correcting.
     onSubmit.mockClear()
     await userEvent.type(screen.getByLabelText('Due, from'), '2026-02-31{Enter}')
+    expect(screen.getByLabelText('Due, from')).toHaveAttribute('aria-invalid', 'true')
     expect(onSubmit).not.toHaveBeenCalled()
+    await userEvent.clear(screen.getByLabelText('Due, from'))
+    await userEvent.tab()
 
     await userEvent.type(screen.getByLabelText('Code'), 'B{Enter}')
     expect(onSubmit).toHaveBeenLastCalledWith({ code: 'AB', limit: { from: '100' }, due: { to: '2026-02-01' } })

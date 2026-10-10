@@ -131,8 +131,12 @@ function useTypedText(shown: string, read: (text: string) => 'same' | 'invalid' 
     },
     commit,
     onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-      // Enter reads the text; a form around the field is submitted only with a valid value.
-      if (event.key === 'Enter' && !commit()) event.preventDefault()
+      // Enter reads what was typed (as a date picker confirms its choice) without submitting a form around the
+      // field; Enter with nothing new typed submits it as in any other field.
+      if (event.key === 'Enter' && draft !== null) {
+        event.preventDefault()
+        commit()
+      }
     },
   }
 }
@@ -159,8 +163,9 @@ export interface DatePickerProps extends InputAttributes {
 /**
  * A calendar date (a posting date, a due date; CLAUDE.md "time"): typed as `YYYY-MM-DD` or picked from a calendar in
  * the interface language (month and year can be chosen in its heading). The text is read when the field is left or
- * on Enter; a text that is no date (or a date not allowed) is not taken and marks the field `aria-invalid`. Name the
- * text field with a <Label htmlFor={id}> or `aria-label`; it takes the other input attributes too.
+ * on Enter (which then does not submit a form around the field); a text that is no date (or a date not allowed) is
+ * not taken and marks the field `aria-invalid`. Name the text field with a <Label htmlFor={id}> or `aria-label`; it
+ * takes the other input attributes too.
  */
 export function DatePicker({
   value,
