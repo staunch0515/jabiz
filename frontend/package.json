@@ -16,6 +16,7 @@
     "ext:lint": "node scripts/ext.mjs lint",
     "ext:test": "node scripts/ext.mjs test",
     "ext:check": "node scripts/ext.mjs check",
+    "app:check": "node scripts/app-check.mjs",
     "e2e": "playwright test",
     "preview": "vite preview"
   },
