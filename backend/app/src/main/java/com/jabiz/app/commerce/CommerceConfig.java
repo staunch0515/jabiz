@@ -134,6 +134,12 @@ class CommerceConfig {
         return LedgerDimension.define(2, "salesChannel", d -> d.dictionary(SALES_CHANNELS));
     }
 
+    /** Purchases and payables by supplier: the value is the supplier's id (an identity source, phase 16h). */
+    @Bean
+    LedgerDimension supplierDimension() {
+        return LedgerDimension.define(3, "supplier", d -> d.entity(SupplierDefinitions.SUPPLIER, "supplierId"));
+    }
+
     static final String SALES_CHANNELS = "urn:jabiz:dict:commerce:sales-channel";
 
     @Bean
