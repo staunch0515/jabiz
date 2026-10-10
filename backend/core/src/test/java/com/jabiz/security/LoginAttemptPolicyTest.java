@@ -74,6 +74,29 @@ class LoginAttemptPolicyTest {
     }
 
     @Test
+    void guardRefusalsAndUnverifiedAddressesNeitherCountNorReset() {
+        LoginAttemptPolicy.State two = fail(fail(null, T0), T0);
+        LoginAttemptPolicy.State state = two;
+        // However often a guard refuses, the account is not locked (decision D36 item 6).
+        for (int i = 0; i < 10; i++) {
+            state = policy.next(state, i % 2 == 0 ? LoginOutcome.REFUSED : LoginOutcome.EMAIL_NOT_VERIFIED, T0);
+            assertThat(state.failureCount()).isEqualTo(2);
+            assertThat(policy.isLocked(state, T0)).isFalse();
+        }
+        assertThat(state.attemptNo()).isEqualTo(12);
+    }
+
+    @Test
+    void aPasswordResetClearsTheCounterAndLiftsTheLock() {
+        LoginAttemptPolicy.State locked = fail(fail(fail(null, T0), T0), T0);
+        assertThat(policy.isLocked(locked, T0.plusSeconds(1))).isTrue();
+
+        LoginAttemptPolicy.State reset = policy.next(locked, LoginOutcome.PASSWORD_RESET, T0.plusSeconds(1));
+        assertThat(reset).isEqualTo(new LoginAttemptPolicy.State(4, 0, null));
+        assertThat(policy.isLocked(reset, T0.plusSeconds(2))).isFalse();
+    }
+
+    @Test
     void wrongSecondFactorsCountWithWrongPasswordsTowardsTheLock() {
         LoginAttemptPolicy.State state = null;
         for (int i = 0; i < 2; i++) {
@@ -107,6 +130,7 @@ class LoginAttemptPolicyTest {
     @Test
     void outcomeCodesAreTheEnumNames() {
         assertThat(LoginOutcome.codes()).containsExactly("SUCCESS", "BAD_CREDENTIALS", "LOCKED", "DISABLED", "NO_ROLE",
-            "UNLOCKED", "MFA_REQUIRED", "MFA_ENROLLMENT_REQUIRED", "MFA_FAILED");
+            "UNLOCKED", "MFA_REQUIRED", "MFA_ENROLLMENT_REQUIRED", "MFA_FAILED", "REFUSED", "EMAIL_NOT_VERIFIED",
+            "PASSWORD_RESET");
     }
 }

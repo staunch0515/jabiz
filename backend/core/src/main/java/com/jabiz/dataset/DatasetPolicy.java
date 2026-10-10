@@ -21,6 +21,8 @@ import java.util.Objects;
  *                            entity processes refuse them, and operations that wrote through it cannot be reverted
  *                            (docs/design/03-dataset.md section 2.6)
  * @param writeMfa            whether writers need a recent second factor (docs/design/10-security.md section 10)
+ * @param writeVerifiedEmail  whether writers need a verified e-mail address (docs/design/10-security.md section 15;
+ *                            decision D36); like {@code writeMfa} it governs writes only
  */
 public record DatasetPolicy(
     boolean readOnly,
@@ -32,8 +34,17 @@ public record DatasetPolicy(
     Duration queryTimeout,
     boolean allowTimeTravel,
     boolean processOnlyWrites,
-    MfaRequirement writeMfa
+    MfaRequirement writeMfa,
+    boolean writeVerifiedEmail
 ) {
+
+    /** A policy whose writers need no verified e-mail address. */
+    public DatasetPolicy(boolean readOnly, boolean softDelete, String softDeleteField, String softDeleteTimeField,
+        int maxQueryBatchSize, int maxWriteBatchSize, Duration queryTimeout, boolean allowTimeTravel,
+        boolean processOnlyWrites, MfaRequirement writeMfa) {
+        this(readOnly, softDelete, softDeleteField, softDeleteTimeField, maxQueryBatchSize, maxWriteBatchSize,
+            queryTimeout, allowTimeTravel, processOnlyWrites, writeMfa, false);
+    }
     public DatasetPolicy {
         if (softDelete && (softDeleteField == null || softDeleteField.isBlank())) {
             throw new IllegalArgumentException("softDeleteField is required when softDelete is enabled");

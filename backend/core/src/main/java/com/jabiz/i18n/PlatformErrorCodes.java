@@ -148,6 +148,13 @@ public final class PlatformErrorCodes {
     public static final String PERMISSION_DENIED = "PERMISSION_DENIED";
     /** The operation needs a recent second factor (docs/design/10-security.md section 10). */
     public static final String MFA_REQUIRED = "MFA_REQUIRED";
+    /**
+     * The operation, or signing in through this entry, needs a verified e-mail address (decision D36 item 3; 10
+     * section 15).
+     */
+    public static final String EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
+    /** An application's sign-in guard refused the sign-in after the credentials were found right (D36 item 6). */
+    public static final String SIGN_IN_REFUSED = "SIGN_IN_REFUSED";
 
     // Files (docs/design/14-files.md): 400 unless noted
     public static final String FILE_TYPE_NOT_ALLOWED = "FILE_TYPE_NOT_ALLOWED";
@@ -193,7 +200,7 @@ public final class PlatformErrorCodes {
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED,
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, SIGN_IN_REFUSED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         RATE_LIMITED);
 

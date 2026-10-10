@@ -8,6 +8,11 @@ import java.util.List;
  */
 public sealed interface QueryPredicate {
     record Eq(String field, Object value) implements QueryPredicate {}
+    /**
+     * A text field equal to {@code value} regardless of case ({@code lower(column) = lower(value)}): for values such
+     * as e-mail addresses that are unique regardless of case (decision D36). Not for templates.
+     */
+    record EqIgnoreCase(String field, String value) implements QueryPredicate {}
     record Ne(String field, Object value) implements QueryPredicate {}
     record Gt(String field, Object value) implements QueryPredicate {}
     record Gte(String field, Object value) implements QueryPredicate {}

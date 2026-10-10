@@ -112,7 +112,9 @@ public final class MetaModelExporter {
             .toList());
         root.put("checks", def.checks.stream().map(CheckDefinition::code).toList());
         root.put("unique", def.uniqueConstraints.stream()
-            .map(u -> Map.of("name", u.name(), "fields", u.fields()))
+            .map(u -> u.ignoreCase()
+                ? Map.<String, Object>of("name", u.name(), "fields", u.fields(), "ignoreCase", true)
+                : Map.<String, Object>of("name", u.name(), "fields", u.fields()))
             .toList());
         root.put("listViews", def.listViews.values().stream().map(MetaModelExporter::listView).toList());
         root.put("dictionaries", def.dictionaryUrns());

@@ -189,6 +189,8 @@ public final class OuterQueryCompiler {
                 }
                 case QueryPredicate.KeyAfter after ->
                     throw new IllegalArgumentException("Templates have no primary key to page by");
+                case QueryPredicate.EqIgnoreCase eq ->
+                    throw new IllegalArgumentException("Templates do not compare regardless of case");
                 case QueryPredicate.Between between -> {
                     ProjectedField column = filterable(between.field(), QueryOperator.BETWEEN);
                     if (between.low() == null || between.high() == null) {
