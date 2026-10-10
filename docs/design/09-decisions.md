@@ -38,12 +38,12 @@
 | D31 | 纳税人号码的遮蔽样式与生成文件的存档（补充 D18、D28 第 7 条，不取代） | 已确认（阶段 14k）；已实施 | 10 §13.1、14 |
 | D32 | `maxQueryBatchSize` 只限浏览的一页；流程、字典读取全部结果，超过上限即拒绝（取代 D10 第 2 条中行数上限的一句） | 已确认（阶段 14p 已合入） | 05 §5、06 §2.1 |
 | D33 | Webhook：配置中的订阅、每个订阅一个 Outbox 消费者、HMAC 签名、目标主机白名单（补充 D14，不取代） | 已确认（finance F11 计划，阶段 14n）；已实施 | 11 §2.4 |
-| D34 | 后台前端改用 Radix Themes；应用前端共用平台的前端包 `@jabiz/client` 与 `@jabiz/ui`（取代 CLAUDE.md 第 2 节"前端"一行中的 Ant Design 5 + ProComponents 与 D22 第 2 条的导出内容；补充 D19、D22） | 草案（待确认，线 1.2，阶段 15、16c） | 12 |
-| D35 | 事务邮件：消息资源中的邮件模板、经 Outbox 可靠投递、发送时才生成的一次性令牌、收件偏好（扩展 CLAUDE.md 第 4 节"邮件只经待办与单据"；补充 D14、D23） | 草案（待确认，线 1.2，阶段 16a） | 18 §5.4 |
-| D36 | 登录入口、自助注册、邮箱验证、找回密码、登录前的应用检查、登录记录带来源（取代 10 与功能清单中的"不做自助注册"；补充 D12、D28） | 草案（待确认，线 1.2，阶段 16b） | 10 |
-| D37 | 入站 Webhook：按提供方验签、原样存档、按外部事件号去重、经 Outbox 交给流程（取代功能清单中的"不做入站 Webhook"；补充 D14、D33） | 草案（待确认，线 1.2，阶段 16d） | 11 §2 |
-| D38 | 外部调用：声明的外部服务、长时间调用用异步外部作业（澄清 06 §2 与 D33 第 5 条的范围；补充 D11、D14） | 草案（待确认，线 1.2，阶段 16e） | 06 §2 |
-| D39 | OIDC 自动开户：按提供方开启、只在邮箱已验证且未被占用时开户、Apple 提供方（修改 D28 第 6 条"不自动开户"） | 草案（待确认，线 1.2，阶段 16f） | 10 §12 |
+| D34 | 后台前端改用 shadcn/ui（Radix Primitives + Tailwind CSS v4，组件源码只在平台的 `@jabiz/ui`）；应用前端共用 `@jabiz/client` 与 `@jabiz/ui`（取代 CLAUDE.md 第 2 节"前端"一行中的 Ant Design 5 + ProComponents 与 D22 第 2 条的导出内容；补充 D19、D22） | 已确认（线 1.2，阶段 15、16c） | 12 |
+| D35 | 事务邮件：消息资源中的邮件模板、经 Outbox 可靠投递、发送时才生成的一次性令牌、收件偏好（扩展 CLAUDE.md 第 4 节"邮件只经待办与单据"；补充 D14、D23） | 已确认（线 1.2，阶段 16a） | 18 §5.4 |
+| D36 | 登录入口、自助注册、邮箱验证、找回密码、登录前的应用检查、登录记录带来源（取代 10 与功能清单中的"不做自助注册"；补充 D12、D28） | 已确认（线 1.2，阶段 16b） | 10 |
+| D37 | 入站 Webhook：按提供方验签、原样存档、按外部事件号去重、经 Outbox 交给流程（取代功能清单中的"不做入站 Webhook"；补充 D14、D33） | 已确认（线 1.2，阶段 16d） | 11 §2 |
+| D38 | 外部调用：声明的外部服务、长时间调用用异步外部作业（澄清 06 §2 与 D33 第 5 条的范围；补充 D11、D14） | 已确认（线 1.2，阶段 16e） | 06 §2 |
+| D39 | OIDC 自动开户：按提供方开启、只在邮箱已验证且未被占用时开户、Apple 提供方（修改 D28 第 6 条"不自动开户"） | 已确认（线 1.2，阶段 16f） | 10 §12 |
 
 ---
 
@@ -895,40 +895,44 @@ D12 的会话只有密码一个因素，没有单点登录与闲置限制；敏�
 
 ---
 
-> 以下 D34–D39 为**草案**（线 1.2，由 QuizBuks 提出，`docs/quizbuks/` 在 `1.2/quizbuks` 上）。确认前不写相关代码；确认后把状态改为"已确认"，
-> 并同步 CLAUDE.md 与对应设计文档。
+> D34–D39 由 QuizBuks 提出（线 1.2，需求与设计见 `1.2/quizbuks` 的 `docs/quizbuks/`），2026-10-10 确认。各设计文档的详细章节随对应阶段（15、16a–16f）改写。
 
-## D34 后台前端改用 Radix Themes；应用前端共用平台的前端包
+## D34 后台前端改用 shadcn/ui；应用前端共用平台的前端包
 
 **背景**：通用后台用 Ant Design 5 + ProComponents（CLAUDE.md 第 2 节、12），外观不符合要求，且深色模式、与应用自有前端统一外观都要额外工作。
 QuizBuks 有三个前端（答题人 PWA、商家后台、管理员后台），要求同一套外观与深色模式；前两个是应用自己的 SPA（与 D19 第 4 条的公开前端同样的工程形态），
 但需要登录、令牌刷新、二次验证、调用流程与模板——这些平台前端已有，却只经 `@jabiz/admin` 提供给后台扩展（D22）。
 D22 第 2 条的导出中含 ProComponents 的类型（菜单项），换组件库必然破坏它，因此是不兼容改动，放在线 1.2（D21 第 2 条）。
+曾考虑 Radix Themes（草案初稿），确认时改为 shadcn/ui：面向消费者的 PWA 对外观要求高，而 Radix Themes 的外观可调范围有限、缺少数据表格与组合框。
 
 **决策**
-1. **组件库**：通用后台改用 Radix Themes（3.x）与需要时的 Radix Primitives，图标用 `@radix-ui/react-icons`；移除 `antd`、`@ant-design/pro-components`、
-   `@ant-design/icons`、`@ant-design/v5-patch-for-react-19`。Radix 不提供的部分固定为：表格 TanStack Table（无头，以 Radix 的 Table 呈现）、
-   表单状态 react-hook-form（字段规则仍只来自元数据与 `spec/validation-cases.json`，不引入第二套校验库）、日期选择 react-day-picker（放在 Radix Popover 中）、
-   图表 Recharts；`dayjs`、TanStack Query、React Router、i18next 不变。
-2. **外观**：亮、暗、跟随系统三种外观，用户可切换（存于浏览器）；颜色只用 Radix 的颜色 token 与平台定义的语义 token，不写死色值；
-   axe 自动检查对亮、暗两种外观都执行，任何违规即失败（12 §11 的做法不变）。
-3. **两个共用包**（平台前端目录中，源码形式，不发布到 npm）：
+1. **组件**：shadcn/ui——以 Radix Primitives 为行为层、Tailwind CSS v4 为样式层的组件源码（配套 `class-variance-authority`、`tailwind-merge`、`clsx`），
+   图标 `lucide-react`。配套库与其做法一致并固定为：表格 TanStack Table、表单状态 react-hook-form（字段规则仍只来自元数据与 `spec/validation-cases.json`，
+   不引入第二套校验库）、日期选择 react-day-picker、图表 Recharts、提示 sonner、命令面板与组合框 cmdk；`dayjs`、TanStack Query、React Router、i18next 不变。
+   移除 `antd`、`@ant-design/pro-components`、`@ant-design/icons`、`@ant-design/v5-patch-for-react-19`。
+2. **组件源码只有一份**：shadcn 的组件经其 CLI 生成到平台的 `@jabiz/ui` 中，由平台维护（含无障碍与多语言的修改）；应用与扩展**不自行生成或复制** shadcn 组件，
+   需要新组件时先加到平台（同 D22 第 2 条"需要新的通用依赖时先加到平台"）。上游更新由平台按需合入。
+3. **外观**：主题是 `@jabiz/ui` 的 CSS 变量（shadcn 的语义 token：`--background`、`--foreground`、`--primary` …），深色以 `.dark` 类切换；
+   亮、暗、跟随系统三种外观，用户可切换（存于浏览器）。应用可在自己的样式表中覆盖 token（品牌色），不改组件源码；样式只用 Tailwind 的工具类与 token，
+   不写死色值。axe 自动检查对亮、暗两种外观都执行，任何违规即失败（12 §11 的做法不变）。
+4. **两个共用包**（平台前端目录中，源码形式，不发布到 npm）：
    - `@jabiz/client`：无界面的部分——登录（带登录入口，D36）、令牌刷新、闲置锁定、step-up、OpenAPI 类型的 API 客户端、`runProcess` / `runQuery`、
      i18n 初始化、金额 / 日期 / 数字格式化（金额的显示单位可由应用设定，如 "Kudos"）、`UserName`。
-   - `@jabiz/ui`：以 Radix Themes 实现的通用组件——数据表格、表单字段、金额与日期输入、确认对话框、外观切换、页面外壳的积木。
+   - `@jabiz/ui`：shadcn 组件与平台的组合组件（数据表格、元数据驱动的表单字段、金额与日期输入、确认对话框、外观切换、页面外壳的积木）、主题样式表。
    `@jabiz/admin`（D22）继续是后台扩展的唯一入口，改为在这两个包之上导出；导出内容随本条变化（不兼容，线 1.2）。
-4. **应用自有 SPA**（如 `quizbuks-web/app`）：自己的 `package.json` 与 lockfile（同 D19 第 4 条的公开前端），以路径依赖（`link:`）引用上述两个包；
-   `react`、`react-dom`、`@radix-ui/themes`、`@tanstack/react-query`、`i18next` 的版本必须与平台前端相同，由平台提供的检查脚本（`pnpm app:check`）验证，
-   不一致即失败（避免两份 React 或两份主题上下文）。应用 SPA 只调用 `/api/**`，权限仍只由服务端判断（D22 第 3 条同样适用）。
-5. **迁移**：阶段 15a–15d 进行；迁移期间平台分支上 antd 与 Radix 可以共存，15d 删除 antd，线 1.2 的第一个发布标签之前必须完成。
+5. **应用自有 SPA**（如 `quizbuks-web/app`）：自己的 `package.json` 与 lockfile（同 D19 第 4 条的公开前端），以路径依赖（`link:`）引用上述两个包，
+   样式表引入 `@jabiz/ui` 的主题并把该包加入 Tailwind 的扫描源；`react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next` 及 `@jabiz/ui` 的运行时依赖
+   的版本必须与平台前端相同，由平台提供的检查脚本（`pnpm app:check`）验证，不一致即失败（避免两份 React 或样式不一致）。
+   应用 SPA 只调用 `/api/**`，权限仍只由服务端判断（D22 第 3 条同样适用）。公开前端（D19 第 4 条）可以用 `@jabiz/ui`，也可以完全自行设计。
+6. **迁移**：阶段 15a–15d 进行；迁移期间平台分支上 antd 与 shadcn 可以共存，15d 删除 antd，线 1.2 的第一个发布标签之前必须完成。
    示范应用的扩展（`backend/app/admin-extension`）随 15c 迁移。
-6. 同步修改：CLAUDE.md 第 2 节"前端"一行；12；D22 第 1 条的"一份 React 与 antd"改为"一份 React 与 Radix Themes"；D19 第 4 条"公开前端不用 Ant Design"自然成立。
+7. 同步修改：CLAUDE.md 第 2 节"前端"一行；12（随阶段 15 改写）；D22 第 1 条的"一份 React 与 antd"读作"一份 React 与 `@jabiz/ui`"。
 
-**理由**：Radix Themes 自带深色模式与可访问的基础组件，体积小、外观可控；无头表格与表单状态库让平台继续以元数据驱动表格与表单，而不被组件库的数据模型约束；
-共用包以源码路径依赖，不需要制品仓库，平台修复随合并到达应用。
+**理由**：shadcn/ui 的组件是自己的源码，外观可以完全按产品要求调整，又有 Radix 的可访问行为；它的配套做法（TanStack Table、react-hook-form、react-day-picker、Recharts）
+正是平台需要的无头组合，平台继续以元数据驱动表格与表单而不被组件库的数据模型约束；组件源码只放在平台一处，修复随合并到达所有应用。
 
-**放弃的方案**：①继续用 Ant Design 只换主题（外观与体积的问题仍在）；②shadcn/ui（依赖 Tailwind，且组件复制进各个工程后无法随平台更新）；
-③MUI、Mantine（又一套重量级组件库与样式方案）；④只用 Radix Primitives 自写样式（工作量大，外观一致性要自己保证）；
+**放弃的方案**：①继续用 Ant Design 只换主题（外观与体积的问题仍在）；②Radix Themes（外观可调范围有限，缺少数据表格、组合框等组件）；
+③MUI、Mantine（又一套重量级组件库与样式方案）；④各应用自行生成 shadcn 组件（各自分叉，平台修复无法到达）；
 ⑤平台前端发布为 npm 包（D22 放弃方案①的理由仍然成立）。
 
 ## D35 事务邮件

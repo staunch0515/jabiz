@@ -20,7 +20,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 | 数据访问 | **R2DBC**（请求路径）；Flyway 迁移和 `platformCheck` 静态校验允许使用 JDBC（不在请求路径上） |
 | 数据库 | PostgreSQL 16 |
 | 阻塞调用兜底 | Reactor `boundedElastic`，开启 `reactor.schedulers.defaultBoundedElasticOnVirtualThreads=true` |
-| 前端 | 通用后台：pnpm、React 19、TypeScript、Vite、Ant Design 5 + ProComponents、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12）。应用的公开前端工具链相同但不用 Ant Design（见 17 §4 与决策 D19） |
+| 前端 | 通用后台：pnpm、React 19、TypeScript、Vite、shadcn/ui（Radix Primitives + Tailwind CSS v4，组件源码只在平台的 `@jabiz/ui`）、TanStack Table、react-hook-form、Recharts、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12 与决策 D34；阶段 15 迁移完成前与 Ant Design 5 共存）。应用自有前端（公开网站、需登录的应用前端）工具链相同，经 `@jabiz/client` / `@jabiz/ui` 复用平台（见 17 §4 与决策 D19、D34） |
 | 测试 | JUnit 5、Reactor Test、ArchUnit、BlockHound、jqwik、PostgreSQL（Testcontainers 或本地实例）；前端 Vitest、Playwright |
 
 选择 WebFlux 的前提是：**业务开发者不写响应式代码**。所有业务扩展点必须是同步接口（见第 3 节）。
@@ -52,7 +52,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
-  邮件只经待办的通知与单据的发送（`DOCUMENT_SEND`，22 §5；`jabiz.mail.enabled`，缺省关闭），不在流程中直接发邮件。
+  邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
+  验证与重置链接用发送时才生成的 `MailParam.oneTimeToken`，决策 D35）；`jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。
 - **不可变数据**：优先使用 `record` 和不可变集合（`List.copyOf` / `Map.copyOf`）。
 - **错误**：领域错误使用现有异常体系，经 `GlobalExceptionHandler` 转为 `ProblemDetail`：
   400 校验失败（附 `violations`）、404 不存在、409 并发冲突、422 业务规则拒绝、503 查询超时（`QUERY_TIMEOUT`，由数据库按时限中止，03 §1）。错误码可多语言（见设计文档）。
@@ -65,12 +66,14 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **敏感信息**：密码、令牌等字段在 `toString()`、日志、`op_process.input_summary` 中必须遮蔽。实体字段用 `f.sensitive()`
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
-  未声明即拒绝。唯一的例外是公开只读接口 `/api/public/**`（见下条）。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+  未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+- **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
+  自助注册、邮箱验证、找回密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
 - **二次验证**（见 10 §9–§11 与决策 D28）：只用 TOTP 与恢复码（`SecUserMfa`，密钥以 `JABIZ_MFA_KEY` 加密）；登录与 step-up 都是写登录记录的流程，不另写验证逻辑。
   需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
 - **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
-  平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 由管理员关联，不自动开户；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
+  平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 关联（管理员关联，或本人登录后 `SEC_IDENTITY_LINK_SELF`）；缺省不自动开户，提供方开启 `auto-provision` 且入口允许注册时才为已验证、未被占用的邮箱开户（决策 D39）；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
 - **按权限显示明文**（见 10 §13.1 与决策 D28 第 7 条）：税号、账号等只让部分人看明文的字段用 `f.masked(权限, MaskStyle.LAST4|ALL|TAX_ID)`（文本字段；纳税人号码用 `TAX_ID`）；
   读接口、历史、审计、签发的报表中一律遮蔽，持有权限者经 `POST /api/datasets/{id}/reveal` 逐值显示（记入 `sys_reveal_record`），不另写"脱敏"或显示记录。
   模板与导出由平台在 SQL 中遮蔽并为持有权限者留记录；只有持有权限者能写入、筛选、排序。不要把遮蔽字段设为显示字段、默认排序或公开字段。
@@ -98,7 +101,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   子账单据过账时带上来源（`sourceEntity` / `sourceId`）。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
   送给其他系统的事件用 webhook（11 §2.4 与决策 D33）：订阅只写在 `jabiz.webhooks.subscriptions`（密钥以占位符取自环境变量，主机须在 `allowed-hosts` 中；有订阅的事件不放遮蔽字段的值），
-  由平台签名投递并重试；业务代码不自己发 HTTP 请求。
+  由平台签名投递并重试。接收外部回调只经入站 Webhook（`/api/inbound/{提供方}`，验签、存档、去重后以事件交给流程，D37），不自写接收接口。
+  业务的出站调用只在 `BlockingStep` 中经声明的 `ExternalService` 进行（有副作用的放提交后或带幂等键）；耗时的调用用异步外部作业 `StartExternalJob`（决策 D38）。
 - **内容编辑**（见 16 与决策 D20）：多语言内容用 `f.apply(I18nText.of(...))`（值为 `{语言: 文本}`，存 `jsonb`，语言即平台支持的语言）；
   被引用的实体用 `eb.display(字段)` 声明显示字段；状态、审核意见等只由流程改变的字段用 `f.processOnly()`（照常可读，数据视图 API 与通用实体流程不能写）；
   以某实体为对象的流程用 `actsOn(实体, 输入组件[, when])` 声明，后台据此显示行操作（`when` 只是显示提示）。Markdown 只在前端渲染，不允许原始 HTML。
@@ -106,6 +110,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   依赖服务端状态的判断写成仅服务端规则。新增规则种类或语义约束时，先在 `spec/validation-cases.json` 加用例，前后端都要通过。
 - **前端**（见 12）：业务对象不写前端代码，页面由元数据生成；界面按目录与权限隐藏操作，但权限只由服务端判断。
   元数据表达不了的工作流，由应用在自己目录中的**扩展**写页面（12 §9、决策 D22）：只经 `@jabiz/admin` 引用平台、不自带依赖，路由不占平台路径。
+  界面组件只用 `@jabiz/ui`（shadcn 组件源码只在平台一处，应用与扩展不自行生成或复制；需要新组件先加到平台）；颜色只用主题 token，亮暗两种外观都过 axe（决策 D34）。
   手写页面与扩展中的用户编号（准备人、审批人等）以 `UserName`（`@jabiz/admin`，10 §14）显示为名字，不显示编号。
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
