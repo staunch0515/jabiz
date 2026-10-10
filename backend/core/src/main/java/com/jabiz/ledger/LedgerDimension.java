@@ -38,7 +38,10 @@ public record LedgerDimension(int position, String name, Source source) {
         }
     }
 
-    /** The values of a text field of an entity's current instances (read through its default dataset). */
+    /**
+     * The values of a text, code, identity (the primary key) or reference field of an entity's current instances
+     * (read through its default dataset). Ids are given and stored as canonical UUID text.
+     */
     public record EntitySource(String entity, String field) implements Source {
         public EntitySource {
             Objects.requireNonNull(entity, "entity must not be null");

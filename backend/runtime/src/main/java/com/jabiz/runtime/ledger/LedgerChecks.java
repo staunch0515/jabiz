@@ -17,7 +17,7 @@ import java.util.Set;
 /**
  * Startup self-check of the ledger's analysis dimensions (docs/design/11-ledger-events-jobs.md section 1.5): each
  * position and name declared once; a dimension whose values come from an entity names an entity with a default
- * dataset and a text or code field. Dictionaries may be filled in the database later, so they are not checked here.
+ * dataset and a text, code, identity (its primary key) or reference field. Dictionaries may be filled in the database later, so they are not checked here.
  */
 @Component
 public class LedgerChecks implements PlatformCheck {
@@ -57,10 +57,24 @@ public class LedgerChecks implements PlatformCheck {
                     continue;
                 }
                 FieldDefinition field = entity.get().fields.get(source.field());
-                if (field == null || !(field.kind() instanceof SemanticKind.Text
-                    || field.kind() instanceof SemanticKind.Code)) {
-                    problems.add(CheckProblem.error(CATEGORY, location, source.entity() + "." + source.field()
-                        + " is not a text or code field"));
+                String label = source.entity() + "." + source.field();
+                switch (field == null ? null : field.kind()) {
+                    case SemanticKind.Text text -> { }
+                    case SemanticKind.Code code -> { }
+                    // Ids are found through the primary key's index (for a temporal entity, the current-version
+                    // index); another identity column need not have one.
+                    case SemanticKind.SemanticIdentity identity when !source.field().equals(entity.get().primaryKey) ->
+                        problems.add(CheckProblem.error(CATEGORY, location, label
+                            + " is an identity field but not the primary key of " + source.entity()));
+                    case SemanticKind.SemanticIdentity identity -> { }
+                    // Only a condition on an immutable field narrows the versions read (decision D29).
+                    case SemanticKind.Reference reference when !field.immutable() ->
+                        problems.add(CheckProblem.warning(CATEGORY, location, label + " is a reference that may"
+                            + " change, so its values are looked up among all current instances of "
+                            + source.entity() + "; make it immutable"));
+                    case SemanticKind.Reference reference -> { }
+                    case null, default -> problems.add(CheckProblem.error(CATEGORY, location, label
+                        + " is not a text, code, identity or reference field"));
                 }
                 if (datasets.findForEntity(source.entity()).isEmpty()) {
                     problems.add(CheckProblem.error(CATEGORY, location, "entity " + source.entity()

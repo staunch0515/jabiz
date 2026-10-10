@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -217,6 +218,8 @@ public class LedgerProcesses {
         PostInput input = ctx.get("input", PostInput.class);
         @SuppressWarnings("unchecked")
         List<LedgerDimension> dimensions = (List<LedgerDimension>) ctx.get(CheckPosting.DIMENSIONS);
+        @SuppressWarnings("unchecked")
+        Set<String> idDimensions = (Set<String>) ctx.get(CheckPosting.ID_DIMENSIONS);
         List<PostingLine> lines = new ArrayList<>();
         for (int i = 0; i < input.entries().size(); i++) {
             PostingLine line = postingLine(input.entries().get(i), i + 1, settings, ctx);
@@ -253,7 +256,7 @@ public class LedgerProcesses {
         Instant booking = input.bookingTime() == null ? ctx.opTime() : input.bookingTime();
         List<Map<String, Object>> extras = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            Map<String, Object> extra = CheckPosting.entryFields(input.entries().get(i), dimensions);
+            Map<String, Object> extra = CheckPosting.entryFields(input.entries().get(i), dimensions, idDimensions);
             ForeignAmount foreign = lines.get(i).foreign();
             if (foreign != null) {
                 extra.put("currency", foreign.currency());

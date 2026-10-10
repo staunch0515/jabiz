@@ -25,6 +25,9 @@ class LedgerChecksTest {
             .asSemanticIdentity("urn:location"));
         eb.field("code", f -> f.physicalColumn("code").required(true).asText(10));
         eb.field("size", f -> f.physicalColumn("size").asNumeric(5, 0));
+        eb.field("regionId", f -> f.physicalColumn("region_id").immutable(true).asReference("Region"));
+        eb.field("managerId", f -> f.physicalColumn("manager_id").asReference("SecUser"));
+        eb.field("externalId", f -> f.physicalColumn("external_id").asSemanticIdentity("urn:external"));
     });
 
     private static LedgerChecks checks(boolean dataset, LedgerDimension... dimensions) {
@@ -57,7 +60,24 @@ class LedgerChecksTest {
             LedgerDimension.define(3, "place", d -> d.entity("Nowhere", "code"))).check())
             .extracting(CheckProblem::message)
             .containsExactly("position 1 is declared by more than one dimension", "declared more than once",
-                "Location.size is not a text or code field", "entity Location has no default dataset",
-                "entity Nowhere is not declared");
+                "Location.size is not a text, code, identity or reference field",
+                "entity Location has no default dataset", "entity Nowhere is not declared");
+    }
+
+    @Test
+    void theIdentityOfTheSourceAndItsReferencesAreSourcesToo() {
+        // Values are instance ids, looked up through the primary key's index or by an immutable column.
+        assertThat(checks(true, LedgerDimension.define(1, "location", d -> d.entity("Location", "locationId")),
+            LedgerDimension.define(2, "region", d -> d.entity("Location", "regionId"))).check()).isEmpty();
+    }
+
+    @Test
+    void anIdentityOtherThanThePrimaryKeyIsRefusedAndAMutableReferenceWarned() {
+        assertThat(checks(true, LedgerDimension.define(1, "external", d -> d.entity("Location", "externalId")),
+            LedgerDimension.define(2, "manager", d -> d.entity("Location", "managerId"))).check())
+            .extracting(problem -> problem.severity() + " " + problem.message())
+            .containsExactly("ERROR Location.externalId is an identity field but not the primary key of Location",
+                "WARNING Location.managerId is a reference that may change, so its values are looked up among all"
+                    + " current instances of Location; make it immutable");
     }
 }
