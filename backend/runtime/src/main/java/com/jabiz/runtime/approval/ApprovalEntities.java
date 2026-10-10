@@ -3,6 +3,7 @@ package com.jabiz.runtime.approval;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.security.SecurityEntities;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -124,7 +125,7 @@ public class ApprovalEntities {
         eb.field("changeId", f -> f.physicalColumn("change_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:platform:control-change"));
         eb.field("targetEntity", f -> f.physicalColumn("target_entity").immutable(true).required(true)
-            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE));
+            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE, ParamEntities.ENTITY));
         eb.field("targetId", f -> f.physicalColumn("target_id").immutable(true).asText(36));
         eb.field("changeAction", f -> f.physicalColumn("change_action").immutable(true).required(true)
             .asCode(CHANGE_ACTIONS, ControlChanges.UPSERT, ControlChanges.DELETE));

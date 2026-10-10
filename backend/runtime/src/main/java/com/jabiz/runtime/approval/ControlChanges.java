@@ -9,6 +9,9 @@ import com.jabiz.process.ChangeSet;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.param.ControlledParamRegistry;
+import com.jabiz.runtime.param.ParamControlChanges;
+import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.security.SodRule;
 import jakarta.validation.constraints.NotBlank;
@@ -31,8 +34,8 @@ import java.util.function.Function;
 
 /**
  * Four-eyes changes of the controls themselves (docs/design/18-numbering-approvals-tasks.md section 3.5): approval
- * rules, approver limits and SoD rules change only through a {@code SysControlChange} that one person proposes and
- * another publishes.
+ * rules, approver limits, SoD rules and controlled business parameters (decision D40, {@link ParamControlChanges})
+ * change only through a {@code SysControlChange} that one person proposes and another publishes.
  * <ul>
  *   <li>{@code CONTROL_CHANGE_PROPOSE}: a new instance ({@code targetId} empty), a change of some fields, or a
  *       deletion; optionally effective at a later time (scheduled). The values are checked at once: fields of the
@@ -87,15 +90,17 @@ public class ControlChanges {
             case ApprovalEntities.RULE -> ApprovalEntities.RULE_DATASET;
             case ApprovalEntities.LIMIT -> ApprovalEntities.LIMIT_DATASET;
             case ApprovalEntities.SOD_RULE -> ApprovalEntities.SOD_RULE_DATASET;
+            case ParamEntities.ENTITY -> ParamEntities.DATASET;
             case null, default -> null;
         };
     }
 
     public static ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> propose(
-        ApprovalSubjectRegistry subjects) {
+        ApprovalSubjectRegistry subjects, ControlledParamRegistry controlled) {
         return ProcessDefinition.define(PROPOSE, 1, ProposeInput.class, ChangeOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Proposes a change of an approval rule, approver limit or SoD rule.")
+                .description("Proposes a change of an approval rule, approver limit, SoD rule or controlled"
+                    + " business parameter.")
                 .permissions(ApprovalPermissions.CONTROL_PROPOSE)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
@@ -105,13 +110,17 @@ public class ControlChanges {
                 .outputMapper(ctx -> ctx.get(OUTPUT, ChangeOutput.class))
                 .step("Load the target", LoadControlTarget.of(ctx -> {
                     ProposeInput input = ctx.get(INPUT, ProposeInput.class);
+                    if (ParamEntities.ENTITY.equals(input.targetEntity())) {
+                        return new LoadControlTarget.Target(input.targetEntity(), null,
+                            ParamControlChanges.key(input.values()), paramTime(input.effectiveTime(), ctx));
+                    }
                     return new LoadControlTarget.Target(input.targetEntity(), input.targetId());
                 }, TARGET))
-                .compute("Record the proposal", (metadata, ctx) -> propose(ctx, subjects)));
+                .compute("Record the proposal", (metadata, ctx) -> propose(ctx, subjects, controlled)));
     }
 
     public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> publish(
-        ApprovalSubjectRegistry subjects) {
+        ApprovalSubjectRegistry subjects, ControlledParamRegistry controlled) {
         return ProcessDefinition.define(PUBLISH, 1, ChangeInput.class, ChangeOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Publishes a change of a control that another person proposed.")
@@ -124,11 +133,15 @@ public class ControlChanges {
                 .step("Load the change", LoadEntity.by(ApprovalEntities.CONTROL_CHANGE_DATASET, CHANGE_ID, CHANGE))
                 .step("Load the target", LoadControlTarget.of(ctx -> {
                     EntityInstance change = ctx.get(CHANGE, EntityInstance.class);
+                    if (ParamEntities.ENTITY.equals(change.get("targetEntity"))) {
+                        return new LoadControlTarget.Target(change.get("targetEntity"), null,
+                            ParamControlChanges.key(storedValues(change)), paramTime(change.get("effectiveTime"), ctx));
+                    }
                     Object id = change.get("targetId");
                     return new LoadControlTarget.Target(change.get("targetEntity"), id == null ? null
                         : UUID.fromString(String.valueOf(id)));
                 }, TARGET))
-                .compute("Publish", (metadata, ctx) -> publish(ctx, subjects)));
+                .compute("Publish", (metadata, ctx) -> publish(ctx, subjects, controlled)));
     }
 
     public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> withdraw() {
@@ -150,14 +163,44 @@ public class ControlChanges {
         return ctx;
     }
 
-    private static void propose(ProcessContext ctx, ApprovalSubjectRegistry subjects) {
+    /**
+     * The time a change of a parameter is based on: its effective time, or now when it takes effect when published
+     * (a time that is not later than now is refused by {@link ParamControlChanges#prepare}).
+     */
+    private static Instant paramTime(Instant effective, ProcessContext ctx) {
+        return effective != null && effective.isAfter(ctx.opTime()) ? effective : ctx.opTime();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> storedValues(EntityInstance change) {
+        Object json = change.get("changeValues");
+        return json == null ? Map.of() : (Map<String, Object>) ApprovalJson.read((String) json);
+    }
+
+    private static void propose(ProcessContext ctx, ApprovalSubjectRegistry subjects,
+        ControlledParamRegistry controlled) {
         ProposeInput input = ctx.get(INPUT, ProposeInput.class);
         if (datasetOf(input.targetEntity()) == null) {
-            ctx.reject(invalid("targetEntity", "changes are proposed for " + String.join(", ",
-                new TreeSet<>(WRITABLE.keySet())) + ", not " + input.targetEntity()));
+            Set<String> targets = new TreeSet<>(WRITABLE.keySet());
+            targets.add(ParamEntities.ENTITY);
+            ctx.reject(invalid("targetEntity", "changes are proposed for " + String.join(", ", targets) + ", not "
+                + input.targetEntity()));
             return;
         }
         EntityInstance target = ctx.contains(TARGET) ? ctx.get(TARGET, EntityInstance.class) : null;
+        if (ParamEntities.ENTITY.equals(input.targetEntity())) {
+            if (input.targetId() != null) {
+                ctx.reject(invalid("targetId", "a parameter is named by values.paramKey, not by its id"));
+                return;
+            }
+            ParamControlChanges.Prepared prepared = ParamControlChanges.prepare(input.values(), target,
+                Boolean.TRUE.equals(input.delete()), input.effectiveTime(), ctx.opTime(), controlled);
+            prepared.violations().forEach(ctx::reject);
+            if (!ctx.hasViolations()) {
+                record(ctx, input, target == null ? null : String.valueOf(target.id()), prepared.values());
+            }
+            return;
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         if (Boolean.TRUE.equals(input.delete())) {
             if (input.targetId() == null) {
@@ -172,22 +215,28 @@ public class ControlChanges {
         if (ctx.hasViolations()) {
             return;
         }
+        record(ctx, input, input.targetId() == null ? null : input.targetId().toString(),
+            Boolean.TRUE.equals(input.delete()) ? null : values);
+    }
+
+    /** Records the proposal; {@code values} null stores none (the deletion of a control). */
+    private static void record(ProcessContext ctx, ProposeInput input, String targetId, Map<String, Object> values) {
         Map<String, Object> change = new LinkedHashMap<>();
         change.put("targetEntity", input.targetEntity());
-        change.put("targetId", input.targetId() == null ? null : input.targetId().toString());
+        change.put("targetId", targetId);
         change.put("changeAction", Boolean.TRUE.equals(input.delete()) ? DELETE : UPSERT);
-        change.put("changeValues", Boolean.TRUE.equals(input.delete()) ? null : ApprovalJson.write(values));
+        change.put("changeValues", values == null ? null : ApprovalJson.write(values));
         change.put("effectiveTime", input.effectiveTime());
         change.put("reason", input.reason().strip());
         change.put("status", ApprovalEntities.PROPOSED);
         change.put("proposedBy", ctx.request().actorId());
         Object id = ctx.changes().insert(ApprovalEntities.CONTROL_CHANGE, change);
-        ctx.put(OUTPUT, new ChangeOutput(String.valueOf(id), ApprovalEntities.PROPOSED,
-            input.targetId() == null ? null : input.targetId().toString()));
+        ctx.put(OUTPUT, new ChangeOutput(String.valueOf(id), ApprovalEntities.PROPOSED, targetId));
     }
 
     @SuppressWarnings("unchecked")
-    private static void publish(ProcessContext ctx, ApprovalSubjectRegistry subjects) {
+    private static void publish(ProcessContext ctx, ApprovalSubjectRegistry subjects,
+        ControlledParamRegistry controlled) {
         EntityInstance change = ctx.get(CHANGE, EntityInstance.class);
         String changeId = String.valueOf(change.id());
         if (!ApprovalEntities.PROPOSED.equals(change.get("status"))) {
@@ -208,7 +257,12 @@ public class ControlChanges {
             writes = writes.effectiveAt(effective);
         }
         Object targetId;
-        if (DELETE.equals(change.get("changeAction"))) {
+        if (ParamEntities.ENTITY.equals(entity)) {
+            targetId = publishParam(ctx, change, target, effective, writes, controlled);
+            if (targetId == null) {
+                return;
+            }
+        } else if (DELETE.equals(change.get("changeAction"))) {
             writes.delete(entity, target.id(), target.version());
             targetId = target.id();
         } else {
@@ -230,6 +284,33 @@ public class ControlChanges {
         published.put("publishedBy", ctx.request().actorId());
         ctx.changes().update(ApprovalEntities.CONTROL_CHANGE, change.id(), change.version(), published);
         ctx.put(OUTPUT, new ChangeOutput(changeId, ApprovalEntities.PUBLISHED, String.valueOf(targetId)));
+    }
+
+    /**
+     * Writes a change of a parameter after checking it again against the version it is based on now; the only write
+     * of a controlled parameter the platform lets pass ({@code ControlledParamGuard}).
+     *
+     * @return the parameter's id; null after rejecting the change
+     */
+    private static Object publishParam(ProcessContext ctx, EntityInstance change, EntityInstance target,
+        Instant effective, ChangeSet.Target writes, ControlledParamRegistry controlled) {
+        boolean delete = DELETE.equals(change.get("changeAction"));
+        ParamControlChanges.Prepared prepared = ParamControlChanges.prepare(storedValues(change), target, delete,
+            effective, ctx.opTime(), controlled);
+        prepared.violations().forEach(ctx::reject);
+        if (ctx.hasViolations()) {
+            return null;
+        }
+        if (delete) {
+            writes.cancelScheduled(ParamEntities.ENTITY, target.id(), target.version());
+            return target.id();
+        }
+        if (target == null) {
+            return writes.insert(ParamEntities.ENTITY, ParamControlChanges.writes(prepared.values(), true));
+        }
+        writes.update(ParamEntities.ENTITY, target.id(), target.version(),
+            ParamControlChanges.writes(prepared.values(), false));
+        return target.id();
     }
 
     private static void withdraw(ProcessContext ctx) {
@@ -329,14 +410,14 @@ public class ControlChanges {
 
     @Bean
     ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> controlChangeProposeProcess(
-        ApprovalSubjectRegistry subjects) {
-        return propose(subjects);
+        ApprovalSubjectRegistry subjects, ControlledParamRegistry controlled) {
+        return propose(subjects, controlled);
     }
 
     @Bean
     ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> controlChangePublishProcess(
-        ApprovalSubjectRegistry subjects) {
-        return publish(subjects);
+        ApprovalSubjectRegistry subjects, ControlledParamRegistry controlled) {
+        return publish(subjects, controlled);
     }
 
     @Bean

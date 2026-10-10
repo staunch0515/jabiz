@@ -1,7 +1,9 @@
 # Freight billing across a month end (ROADMAP phase 8): the fuel surcharge rate changes on 1 February (Japan time)
 # by a scheduled parameter change; each waybill is charged at the rate in effect when it was shipped, whenever it is
 # charged; January is closed in February and takes no more charges afterwards. Since ROADMAP phase 9 the monthly job
-# closes January, each close publishes an event, and its consumer posts the month's revenue to the ledger.
+# closes January, each close publishes an event, and its consumer posts the month's revenue to the ledger. Since
+# phase 16i the rate is a controlled parameter (decision D40): one person proposes each change, another publishes it,
+# and nobody changes it directly, not even with every permission.
 name: Freight billing across a month end
 clock: 2026-01-05T00:00:00Z
 actor: { id: billing-admin, permissions: ["*"] }
@@ -12,17 +14,52 @@ steps:
   - process: LEDGER_ACCOUNT_OPEN@latest
     input: { accountCode: "4110", accountName: Freight revenue, accountType: REVENUE }
 
-  - note: The rate starts at 10 % and is scheduled to rise to 15 % on 1 February 00:00 Japan time.
-    process: PARAM_CREATE@latest
+  - note: The rate is controlled, so even its creation is a change one person proposes and another publishes.
+    expectError:
+      process: PARAM_CREATE@latest
+      input:
+        key: logistics.fuel-surcharge-rate
+        valueKind: { type: numeric, precision: 5, scale: 4 }
+        value: "0.1"
+      status: 422
+      ruleCode: PARAM_CONTROLLED
+  - note: The rate starts at 10 %.
+    actor: { id: rate-setter, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
     input:
-      key: logistics.fuel-surcharge-rate
-      valueKind: { type: numeric, precision: 5, scale: 4 }
-      value: "0.1"
-      description: Fuel surcharge as a fraction of the freight
-    expectOutput: { value: "0.1000" }
-  - process: PARAM_SCHEDULE@latest
-    input: { key: logistics.fuel-surcharge-rate, value: "0.15", effectiveTime: 2026-01-31T15:00:00Z }
-    expectOutput: { value: "0.1500", effectiveTime: 2026-01-31T15:00:00Z }
+      targetEntity: SysParam
+      reason: Fuel surcharge from January
+      values:
+        paramKey: logistics.fuel-surcharge-rate
+        valueKind: { type: numeric, precision: 5, scale: 4 }
+        value: "0.1"
+        description: Fuel surcharge as a fraction of the freight
+    save: { createRate: $.changeId }
+  - actor: { id: rate-approver, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${createRate}" }
+    expectOutput: { status: PUBLISHED }
+  - expect: { param: logistics.fuel-surcharge-rate, value: 0.1 }
+
+  - note: It is scheduled to rise to 15 % on 1 February 00:00 Japan time; its proposer cannot publish the change.
+    actor: { id: rate-setter, permissions: [control.propose, control.publish] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysParam
+      reason: Fuel prices rose
+      values: { paramKey: logistics.fuel-surcharge-rate, value: "0.15" }
+      effectiveTime: 2026-01-31T15:00:00Z
+    save: { february: $.changeId }
+  - expectError:
+      actor: { id: rate-setter, permissions: [control.propose, control.publish] }
+      process: CONTROL_CHANGE_PUBLISH@latest
+      input: { changeId: "${february}" }
+      status: 422
+      ruleCode: CONTROL_SAME_PERSON
+  - actor: { id: rate-approver, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${february}" }
+    expectOutput: { status: PUBLISHED }
   - expect: { param: logistics.fuel-surcharge-rate, value: 0.1 }
   - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-02-01T00:00:00+09:00, value: 0.15 }
 
@@ -93,27 +130,80 @@ steps:
       ruleCode: FREIGHT_MONTH_CLOSED
       field: waybillId
 
-  - note: A rise to 20 % from March is scheduled, then cancelled; cancelling twice finds nothing scheduled.
-    process: PARAM_SCHEDULE@latest
-    input: { key: logistics.fuel-surcharge-rate, value: "0.2", effectiveTime: 2026-02-28T15:00:00Z }
+  - note: A rise to 20 % from March is scheduled, then cancelled, both with four eyes; cancelling twice finds nothing
+      scheduled.
+    actor: { id: rate-setter, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysParam
+      reason: Further rise
+      values: { paramKey: logistics.fuel-surcharge-rate, value: "0.2" }
+      effectiveTime: 2026-02-28T15:00:00Z
+    save: { march: $.changeId }
+  - actor: { id: rate-approver, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${march}" }
   - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-03-01T00:00:00+09:00, value: 0.2 }
-  - process: PARAM_CANCEL_SCHEDULED@latest
-    input: { key: logistics.fuel-surcharge-rate, effectiveTime: 2026-02-28T15:00:00Z }
-  - expectError:
+  - note: Nobody cancels it alone.
+    expectError:
       process: PARAM_CANCEL_SCHEDULED@latest
       input: { key: logistics.fuel-surcharge-rate, effectiveTime: 2026-02-28T15:00:00Z }
       status: 422
-      ruleCode: NOT_SCHEDULED
+      ruleCode: PARAM_CONTROLLED
+  - actor: { id: rate-setter, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysParam
+      reason: Rise withdrawn
+      values: { paramKey: logistics.fuel-surcharge-rate }
+      delete: true
+      effectiveTime: 2026-02-28T15:00:00Z
+    save: { cancelMarch: $.changeId }
+  - actor: { id: rate-approver, permissions: [control.publish] }
+    process: CONTROL_CHANGE_PUBLISH@latest
+    input: { changeId: "${cancelMarch}" }
+  - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-03-01T00:00:00+09:00, value: 0.15 }
+  - actor: { id: rate-setter, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysParam
+      reason: Rise withdrawn
+      values: { paramKey: logistics.fuel-surcharge-rate }
+      delete: true
+      effectiveTime: 2026-02-28T15:00:00Z
+    save: { cancelAgain: $.changeId }
   - expectError:
-      process: PARAM_SCHEDULE@latest
-      input: { key: logistics.fuel-surcharge-rate, value: "0.2", effectiveTime: 2026-01-01T00:00:00Z }
+      actor: { id: rate-approver, permissions: [control.publish] }
+      process: CONTROL_CHANGE_PUBLISH@latest
+      input: { changeId: "${cancelAgain}" }
+      status: 422
+      ruleCode: NOT_SCHEDULED
+  - note: Proposals are checked at once against the time and the parameter's kind.
+    expectError:
+      actor: { id: rate-setter, permissions: [control.propose] }
+      process: CONTROL_CHANGE_PROPOSE@latest
+      input:
+        targetEntity: SysParam
+        reason: Backdated
+        values: { paramKey: logistics.fuel-surcharge-rate, value: "0.2" }
+        effectiveTime: 2026-01-01T00:00:00Z
       status: 422
       ruleCode: EFFECTIVE_TIME_NOT_FUTURE
   - expectError:
-      process: PARAM_SET@latest
-      input: { key: logistics.fuel-surcharge-rate, value: "12.5" }
+      actor: { id: rate-setter, permissions: [control.propose] }
+      process: CONTROL_CHANGE_PROPOSE@latest
+      input:
+        targetEntity: SysParam
+        reason: Typo
+        values: { paramKey: logistics.fuel-surcharge-rate, value: "12.5" }
       status: 422
       ruleCode: PARAM_VALUE_INVALID
+  - note: A direct change is refused, whatever the permissions.
+    expectError:
+      process: PARAM_SET@latest
+      input: { key: logistics.fuel-surcharge-rate, value: "0.12" }
+      status: 422
+      ruleCode: PARAM_CONTROLLED
 
   - note: In March the rate is still 15 %; February is closed.
     setClock: 2026-03-02T00:00:00Z
@@ -145,6 +235,6 @@ steps:
         - { waybillId: WB-A, surchargeRate: 0.1, surchargeAmount: 2000, settled: true }
         - { waybillId: WB-B, surchargeRate: 0.1, surchargeAmount: 1500, settled: true }
 snapshot:
-  entities: [SysParam, WaybillTracking, FreightCharge, FreightStatement, LedgerAccount, LedgerTransaction,
-             LedgerEntry]
+  entities: [SysParam, SysControlChange, WaybillTracking, FreightCharge, FreightStatement, LedgerAccount,
+             LedgerTransaction, LedgerEntry]
   asOf: end

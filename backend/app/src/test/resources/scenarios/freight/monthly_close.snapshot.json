@@ -15,7 +15,83 @@
       "versionNo" : 4,
       "effectStartTime" : "2026-02-28T15:00:00Z",
       "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:7"
+    } ],
+    "SysControlChange" : [ {
+      "changeId" : "#uuid:2",
+      "targetEntity" : "SysParam",
+      "targetId" : null,
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"logistics.fuel-surcharge-rate\",\"valueKind\":{\"type\":\"numeric\",\"precision\":5,\"scale\":4},\"value\":\"0.1000\",\"description\":\"Fuel surcharge as a fraction of the freight\"}",
+      "effectiveTime" : null,
+      "reason" : "Fuel surcharge from January",
+      "status" : "PUBLISHED",
+      "proposedBy" : "rate-setter",
+      "publishedBy" : "rate-approver",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-01-05T00:00:00Z",
+      "createdTime" : "2026-01-05T00:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "changeId" : "#uuid:3",
+      "targetEntity" : "SysParam",
+      "targetId" : "#uuid:1",
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"logistics.fuel-surcharge-rate\",\"value\":\"0.1500\"}",
+      "effectiveTime" : "2026-01-31T15:00:00Z",
+      "reason" : "Fuel prices rose",
+      "status" : "PUBLISHED",
+      "proposedBy" : "rate-setter",
+      "publishedBy" : "rate-approver",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-01-05T00:00:00Z",
+      "createdTime" : "2026-01-05T00:00:00Z",
       "processSeqId" : "#op:4"
+    }, {
+      "changeId" : "#uuid:4",
+      "targetEntity" : "SysParam",
+      "targetId" : "#uuid:1",
+      "changeAction" : "UPSERT",
+      "changeValues" : "{\"paramKey\":\"logistics.fuel-surcharge-rate\",\"value\":\"0.2000\"}",
+      "effectiveTime" : "2026-02-28T15:00:00Z",
+      "reason" : "Further rise",
+      "status" : "PUBLISHED",
+      "proposedBy" : "rate-setter",
+      "publishedBy" : "rate-approver",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "changeId" : "#uuid:5",
+      "targetEntity" : "SysParam",
+      "targetId" : "#uuid:1",
+      "changeAction" : "DELETE",
+      "changeValues" : "{\"paramKey\":\"logistics.fuel-surcharge-rate\"}",
+      "effectiveTime" : "2026-02-28T15:00:00Z",
+      "reason" : "Rise withdrawn",
+      "status" : "PUBLISHED",
+      "proposedBy" : "rate-setter",
+      "publishedBy" : "rate-approver",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:7"
+    }, {
+      "changeId" : "#uuid:6",
+      "targetEntity" : "SysParam",
+      "targetId" : "#uuid:1",
+      "changeAction" : "DELETE",
+      "changeValues" : "{\"paramKey\":\"logistics.fuel-surcharge-rate\"}",
+      "effectiveTime" : "2026-02-28T15:00:00Z",
+      "reason" : "Rise withdrawn",
+      "status" : "PROPOSED",
+      "proposedBy" : "rate-setter",
+      "publishedBy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-01-31T16:00:00Z",
+      "createdTime" : "2026-01-31T16:00:00Z",
+      "processSeqId" : "#op:8"
     } ],
     "WaybillTracking" : [ {
       "waybillId" : "WB-A",
@@ -64,7 +140,7 @@
       "status" : "CREATED"
     } ],
     "FreightCharge" : [ {
-      "chargeId" : "#uuid:2",
+      "chargeId" : "#uuid:7",
       "waybillId" : "WB-A",
       "chargeMonth" : "2026-01",
       "shippedTime" : "2026-01-10T01:00:00Z",
@@ -76,7 +152,7 @@
       "recordedTime" : "2026-01-10T01:00:00Z",
       "rowVersion" : 2
     }, {
-      "chargeId" : "#uuid:3",
+      "chargeId" : "#uuid:8",
       "waybillId" : "WB-C",
       "chargeMonth" : "2026-02",
       "shippedTime" : "2026-01-31T16:00:00Z",
@@ -88,7 +164,7 @@
       "recordedTime" : "2026-01-31T16:00:00Z",
       "rowVersion" : 2
     }, {
-      "chargeId" : "#uuid:4",
+      "chargeId" : "#uuid:9",
       "waybillId" : "WB-B",
       "chargeMonth" : "2026-01",
       "shippedTime" : "2026-01-31T14:00:00Z",
@@ -100,7 +176,7 @@
       "recordedTime" : "2026-01-31T16:00:00Z",
       "rowVersion" : 2
     }, {
-      "chargeId" : "#uuid:5",
+      "chargeId" : "#uuid:10",
       "waybillId" : "WB-E",
       "chargeMonth" : "2026-03",
       "shippedTime" : "2026-03-02T00:00:00Z",
@@ -113,7 +189,7 @@
       "rowVersion" : 1
     } ],
     "FreightStatement" : [ {
-      "statementId" : "#uuid:6",
+      "statementId" : "#uuid:11",
       "statementMonth" : "2026-01",
       "chargeCount" : "2",
       "totalAmount" : "38500",
@@ -123,7 +199,7 @@
       "recordedTime" : "2026-01-10T01:00:00Z",
       "rowVersion" : 3
     }, {
-      "statementId" : "#uuid:7",
+      "statementId" : "#uuid:12",
       "statementMonth" : "2026-02",
       "chargeCount" : "1",
       "totalAmount" : "34500",
@@ -133,7 +209,7 @@
       "recordedTime" : "2026-01-31T16:00:00Z",
       "rowVersion" : 2
     }, {
-      "statementId" : "#uuid:8",
+      "statementId" : "#uuid:13",
       "statementMonth" : "2026-03",
       "chargeCount" : "1",
       "totalAmount" : "11500",
@@ -144,7 +220,7 @@
       "rowVersion" : 1
     } ],
     "LedgerAccount" : [ {
-      "accountId" : "#uuid:9",
+      "accountId" : "#uuid:14",
       "accountCode" : "1130",
       "accountName" : "Accounts receivable",
       "accountType" : "ASSET",
@@ -156,7 +232,7 @@
       "createdTime" : "2026-01-05T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "accountId" : "#uuid:10",
+      "accountId" : "#uuid:15",
       "accountCode" : "4110",
       "accountName" : "Freight revenue",
       "accountType" : "REVENUE",
@@ -169,34 +245,34 @@
       "processSeqId" : "#op:2"
     } ],
     "LedgerTransaction" : [ {
-      "transactionId" : "#uuid:11",
+      "transactionId" : "#uuid:16",
       "bookingTime" : "2026-01-31T14:59:59Z",
       "description" : "Freight revenue 2026-01",
-      "reference" : "#uuid:6",
+      "reference" : "#uuid:11",
       "reversesTransactionId" : null,
       "sourceEntity" : null,
       "sourceId" : null,
       "versionNo" : 1,
       "effectStartTime" : "2026-01-31T16:00:00Z",
       "createdTime" : "2026-01-31T16:00:00Z",
-      "processSeqId" : "#op:3"
+      "processSeqId" : "#op:5"
     }, {
-      "transactionId" : "#uuid:12",
+      "transactionId" : "#uuid:17",
       "bookingTime" : "2026-02-28T14:59:59Z",
       "description" : "Freight revenue 2026-02",
-      "reference" : "#uuid:7",
+      "reference" : "#uuid:12",
       "reversesTransactionId" : null,
       "sourceEntity" : null,
       "sourceId" : null,
       "versionNo" : 1,
       "effectStartTime" : "2026-03-02T00:00:00Z",
       "createdTime" : "2026-03-02T00:00:00Z",
-      "processSeqId" : "#op:5"
+      "processSeqId" : "#op:9"
     } ],
     "LedgerEntry" : [ {
-      "entryId" : "#uuid:13",
-      "transactionId" : "#uuid:11",
-      "accountId" : "#uuid:9",
+      "entryId" : "#uuid:18",
+      "transactionId" : "#uuid:16",
+      "accountId" : "#uuid:14",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "38500.0000",
@@ -211,11 +287,11 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-01-31T16:00:00Z",
       "createdTime" : "2026-01-31T16:00:00Z",
-      "processSeqId" : "#op:3"
+      "processSeqId" : "#op:5"
     }, {
-      "entryId" : "#uuid:14",
-      "transactionId" : "#uuid:11",
-      "accountId" : "#uuid:10",
+      "entryId" : "#uuid:19",
+      "transactionId" : "#uuid:16",
+      "accountId" : "#uuid:15",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "38500.0000",
@@ -230,11 +306,11 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-01-31T16:00:00Z",
       "createdTime" : "2026-01-31T16:00:00Z",
-      "processSeqId" : "#op:3"
+      "processSeqId" : "#op:5"
     }, {
-      "entryId" : "#uuid:15",
-      "transactionId" : "#uuid:12",
-      "accountId" : "#uuid:9",
+      "entryId" : "#uuid:20",
+      "transactionId" : "#uuid:17",
+      "accountId" : "#uuid:14",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "34500.0000",
@@ -249,11 +325,11 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-03-02T00:00:00Z",
       "createdTime" : "2026-03-02T00:00:00Z",
-      "processSeqId" : "#op:5"
+      "processSeqId" : "#op:9"
     }, {
-      "entryId" : "#uuid:16",
-      "transactionId" : "#uuid:12",
-      "accountId" : "#uuid:10",
+      "entryId" : "#uuid:21",
+      "transactionId" : "#uuid:17",
+      "accountId" : "#uuid:15",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "34500.0000",
@@ -268,7 +344,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-03-02T00:00:00Z",
       "createdTime" : "2026-03-02T00:00:00Z",
-      "processSeqId" : "#op:5"
+      "processSeqId" : "#op:9"
     } ]
   }
 }

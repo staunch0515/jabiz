@@ -32,8 +32,9 @@ import java.util.UUID;
 /**
  * Appends one write to a temporal entity: plans its versions and rebased copies (decision D1), evaluates the
  * entity's checks on every version it will insert (docs/design/02-metamodel.md section 4.1: a rebased copy or a
- * reverted state combines values no single write supplied), checks uniqueness (decision D6) and inserts versions and
- * operation items. Shared by the writes of the dataset API and by reverts.
+ * reverted state combines values no single write supplied), asks the platform's {@link TemporalWriteGuard}s, checks
+ * uniqueness (decision D6) and inserts versions and operation items. Shared by the writes of the dataset API and by
+ * reverts.
  */
 @Component
 public class VersionAppender {
@@ -43,8 +44,11 @@ public class VersionAppender {
     private final Outbox outbox;
 
     private final AuditRecorder audit;
+    private final List<TemporalWriteGuard> guards;
 
-    public VersionAppender(TemporalStore store, Clock clock, Outbox outbox, AuditRecorder audit) {
+    public VersionAppender(TemporalStore store, Clock clock, Outbox outbox, AuditRecorder audit,
+        List<TemporalWriteGuard> guards) {
+        this.guards = List.copyOf(guards);
         this.audit = Objects.requireNonNull(audit, "audit must not be null");
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -63,6 +67,12 @@ public class VersionAppender {
         Timeline timeline, VersionPlanner.Write write, Operation operation, boolean checkUnique) {
         return RequestContexts.current().flatMap(request -> {
             VersionPlanner.Plan plan = VersionPlanner.plan(timeline, write);
+            // A write that may not happen at all is refused as such, before any conflict with later versions.
+            List<Violation> refused = new ArrayList<>();
+            guards.forEach(guard -> refused.addAll(guard.check(def, timeline, plan.versions(), operation)));
+            if (!refused.isEmpty()) {
+                return Mono.error(new BusinessRuleViolationException(List.copyOf(new LinkedHashSet<>(refused))));
+            }
             if (plan.hasConflicts()) {
                 return Mono.error(conflict(def, id, write, plan));
             }
