@@ -282,6 +282,13 @@ WHERE NOT v.is_deleted AND <范围条件> AND <查询条件>
 - 维护流程（权限都是 `platform.param.write`：数据视图本身也能插入参数，另设“建参数”权限并不能成立）：`PARAM_CREATE`（建参数与首个值，立即生效）、`PARAM_SET`（立即生效）、
   `PARAM_SCHEDULE`（生效时间须晚于操作时间，否则 422 `EFFECTIVE_TIME_NOT_FUTURE`）、`PARAM_CANCEL_SCHEDULED`（无预定 → 422 `NOT_SCHEDULED`）。修改按 D1 变基：存在修改同一值的预定时 `PARAM_SET` 被拒绝（409），先取消预定。
 
+### 9.1 受控的参数【D40】
+
+费率、门槛等不应由一个人修改的参数，由应用以 Bean `ControlledParams.of(键…)` 声明为受控（键可以尚不存在；格式错误由启动检查 `PARAM` 一次报告）。
+受控键的一切写入——上述四个流程、数据视图、通用实体流程、其他流程的 `ChangeSet`、撤销——一律 422 `PARAM_CONTROLLED`（检查在 `VersionAppender` 中，覆盖所有时态写入途径），
+只经受控变更（18 §3.5）：`CONTROL_CHANGE_PROPOSE` 以 `targetEntity: SysParam`、`values: {paramKey, value?, description?, valueKind?（新建时）}`、可选 `effectiveTime`（预定）提出，
+`delete: true` 加 `effectiveTime` 取消预定值；由他人以 `CONTROL_CHANGE_PUBLISH` 发布后才写入（普通的参数版本，历史与审计照常）。是否受控只在代码中，运行时不能解除。
+
 ## 10. 归档与个人信息
 
 - 数据增长：按 `created_time` 分区；冷分区归档到只读存储。

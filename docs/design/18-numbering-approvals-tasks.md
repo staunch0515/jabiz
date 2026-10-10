@@ -153,7 +153,8 @@
 
 ### 3.5 规则的修改：提出与发布（四眼）
 
-审批规则、审批人限额、职责分离规则（第 4 节）的数据视图都是 `processOnlyWrites`，只经受控变更 `SysControlChange`（时态实体）修改：
+审批规则、审批人限额、职责分离规则（第 4 节）的数据视图都是 `processOnlyWrites`，只经受控变更 `SysControlChange`（时态实体）修改；
+应用声明为受控的业务参数（04 §9.1，【D40】）同样只经受控变更修改：
 
 | 流程 | 权限 | 做什么 |
 |---|---|---|
@@ -162,6 +163,10 @@
 | `CONTROL_CHANGE_WITHDRAW` | `control.propose` | 提出人撤回自己的提案 |
 
 规则按业务时间生效：预定在将来生效的修改，只影响业务时间在其后的案件。
+
+**业务参数**（【D40】）：`targetEntity: SysParam`，以 `values.paramKey` 指定参数（不给 `targetId`）；`values` 可有 `value`、`description`，参数尚不存在时另给 `valueKind` 即新建；
+`effectiveTime` 须晚于当时（422 `EFFECTIVE_TIME_NOT_FUTURE`，发布时再检查一次）；`delete: true` 加 `effectiveTime` 取消该时刻的预定值。
+提出与发布时都按参数类型检查并规范化值（422 `PARAM_VALUE_INVALID`）；只能用于受控的键。发布以参数在生效时刻的版本为基础写入新版本。
 
 ### 3.6 影响预览
 
