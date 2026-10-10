@@ -161,10 +161,15 @@ export interface InputProblem {
   /** `<name>: REQUIRED` or `<name>: INVALID_VALUE`, as the server's rule codes. */
   message: string
   ruleCode: 'REQUIRED' | 'INVALID_VALUE'
+  /** The field shows the problem itself (a date field holding text that is no date). */
+  shownByField?: boolean
 }
 
-/** The schema's pattern, when this browser can compile it; otherwise the server checks it alone. */
-function compiledPattern(pattern: string | undefined): RegExp | undefined {
+/**
+ * The schema's pattern, when this browser can compile it; otherwise the server checks it alone. Shared by the
+ * process form (`checkInputs`) and the old form inputs of the report and import pages (`SchemaInputs`, until 15c).
+ */
+export function compiledPattern(pattern: string | undefined): RegExp | undefined {
   if (!pattern) return undefined
   try {
     return new RegExp(pattern, 'u')
@@ -182,20 +187,31 @@ function missing(node: InputNode, value: unknown): boolean {
  * What the process form checks before sending (docs/design/12-frontend.md section 6): only that required inputs are
  * filled in and that text matches the schema's `pattern`; everything else is the server's to judge, and its answer
  * is shown as it comes. Objects and the items of lists are checked field by field; a required boolean is always
- * filled in (false until switched on).
+ * filled in (false until switched on). `typedInvalid` names the fields (by path) holding typed text the field could
+ * not take (a date that is no date): they are INVALID_VALUE whatever their value, so the form is not sent without
+ * them.
  */
-export function checkInputs(nodes: InputNode[], values: Record<string, unknown> | undefined, prefix = ''): InputProblem[] {
+export function checkInputs(
+  nodes: InputNode[],
+  values: Record<string, unknown> | undefined,
+  prefix = '',
+  typedInvalid: ReadonlySet<string> = new Set(),
+): InputProblem[] {
   const problems: InputProblem[] = []
   for (const node of nodes) {
     const path = prefix + node.name
     const value = values?.[node.name]
     if (node.kind === 'object') {
-      problems.push(...checkInputs(node.children ?? [], value as Record<string, unknown> | undefined, `${path}.`))
+      problems.push(...checkInputs(node.children ?? [], value as Record<string, unknown> | undefined, `${path}.`, typedInvalid))
       continue
     }
     if (node.kind === 'list') {
       const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
-      items.forEach((item, i) => problems.push(...checkInputs(node.children ?? [], item, `${path}.${i}.`)))
+      items.forEach((item, i) => problems.push(...checkInputs(node.children ?? [], item, `${path}.${i}.`, typedInvalid)))
+      continue
+    }
+    if (typedInvalid.has(path)) {
+      problems.push({ path, message: `${node.name}: INVALID_VALUE`, ruleCode: 'INVALID_VALUE', shownByField: true })
       continue
     }
     if (missing(node, value)) {

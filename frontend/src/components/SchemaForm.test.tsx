@@ -98,6 +98,29 @@ describe('SchemaForm', () => {
     await expectAccessible()
   })
 
+  it('is not sent while a date field holds text that is no date', async () => {
+    const onSubmit = vi.fn()
+    const dates = inputNodes({
+      type: 'object',
+      properties: { at: { type: 'string', format: 'date-time' }, day: { type: 'string', format: 'date' } },
+    })
+    render(<SchemaForm nodes={dates} submitLabel="Run" onSubmit={onSubmit} />)
+    await userEvent.type(screen.getByLabelText('day'), '2026-13-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('day')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('day')).toHaveFocus()
+    // The field says why, once.
+    expect(screen.getByLabelText('day')).toHaveAccessibleDescription('Not a valid date (YYYY-MM-DD).')
+    expect(screen.queryByText('day: INVALID_VALUE')).toBeNull()
+    await expectAccessible()
+
+    await userEvent.clear(screen.getByLabelText('day'))
+    await userEvent.type(screen.getByLabelText('day'), '2026-12-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ day: '2026-12-01' }))
+  })
+
   it('shows inputs filled in from the row as read-only', () => {
     render(<SchemaForm nodes={inputNodes({ type: 'object', properties: { id: { type: 'string' } } })} preset={{ id: 'x-1' }}
       submitLabel="Run" onSubmit={() => {}} />)

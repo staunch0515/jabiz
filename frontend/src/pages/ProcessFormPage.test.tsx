@@ -1,4 +1,5 @@
 import { session, setStepUpHandler } from '@jabiz/client'
+import { notify } from '@jabiz/ui'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -132,6 +133,19 @@ describe('ProcessFormPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
     expect(await screen.findByText('data: Not valid JSON.')).toBeInTheDocument()
     expect(sent).toHaveLength(2)
+  })
+
+  it('says when the server cannot be reached, keeps the key and lets the user try again', async () => {
+    const error = vi.spyOn(notify, 'error')
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
+    page()
+    await userEvent.type(screen.getByLabelText(/priceId/), 'p-1')
+    await userEvent.type(screen.getByLabelText(/percent/), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+    await waitFor(() => expect(error).toHaveBeenCalledWith('Failed to fetch'))
+    expect(screen.queryByTestId('process-result')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled()
+    error.mockRestore()
   })
 
   it('sends a request answered with a step-up again with the same key', async () => {

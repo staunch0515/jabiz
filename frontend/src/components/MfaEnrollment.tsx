@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, Button, cn, CopyButton, Input, Spinner, UI_SCOPE } from '@jabiz/ui'
+import { Alert, AlertDescription, Button, cn, CopyButton, Input, Spinner, UI_NAMESPACE, UI_SCOPE } from '@jabiz/ui'
 import { TriangleAlert } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useEffect, useRef, useState } from 'react'
@@ -78,7 +78,7 @@ export default function MfaEnrollment({ begin, confirm, onDone }: Props) {
               <code className="font-mono text-sm" data-testid="mfa-recovery-code">
                 {item}
               </code>
-              <CopyButton value={item} label={`${t('copy.copy', { ns: 'ui' })} ${item}`} />
+              <CopyButton value={item} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: item })} />
             </li>
           ))}
         </ul>
@@ -117,7 +117,7 @@ export default function MfaEnrollment({ begin, confirm, onDone }: Props) {
         <code className="bg-muted rounded px-1.5 py-0.5 font-mono break-all" data-testid="mfa-secret">
           {enrollment.secret}
         </code>
-        <CopyButton value={enrollment.secret} label={`${t('copy.copy', { ns: 'ui' })} ${t('mfa.key')}`} />
+        <CopyButton value={enrollment.secret} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: t('mfa.key') })} />
       </p>
       {error && <ErrorAlert message={error} testId="mfa-error" />}
       <form

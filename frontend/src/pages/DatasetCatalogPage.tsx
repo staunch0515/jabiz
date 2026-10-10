@@ -1,4 +1,4 @@
-import { Badge, CopyButton, DataTable, type ColumnDef } from '@jabiz/ui'
+import { Badge, CopyButton, DataTable, UI_NAMESPACE, type ColumnDef } from '@jabiz/ui'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useLocalPage } from '../components/useLocalPage'
@@ -33,7 +33,7 @@ export default function DatasetCatalogPage() {
       cell: ({ row: { original: d } }) => (
         <span className="inline-flex items-center gap-1">
           <code className="text-muted-foreground font-mono text-xs">{d.id}</code>
-          <CopyButton value={d.id} label={`${t('copy.copy', { ns: 'ui' })} ${d.id}`} />
+          <CopyButton value={d.id} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: d.id })} />
         </span>
       ),
     },

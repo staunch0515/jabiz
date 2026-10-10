@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { i18n } from '@jabiz/client'
 import { useState } from 'react'
@@ -121,6 +121,21 @@ describe('TagsInput', () => {
     await userEvent.tab()
     expect(screen.getByRole('status')).toHaveTextContent('red|green|blue|teal')
     await expectAccessible()
+  })
+
+  it('ignores Enter while an input method composes, and takes full-width and ideographic commas', async () => {
+    render(<Field />)
+    const input = screen.getByLabelText('Tags')
+    fireEvent.change(input, { target: { value: 'とうきょう' } })
+    // Enter confirming the composition (isComposing, or keyCode 229 in some browsers) adds nothing.
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    fireEvent.change(input, { target: { value: '東京' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('status')).toHaveTextContent('東京')
+    await userEvent.type(input, '大阪，京都、奈良，')
+    expect(screen.getByRole('status')).toHaveTextContent('東京|大阪|京都|奈良')
   })
 
   it('removes a tag with its button or Backspace in the empty field', async () => {

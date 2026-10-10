@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
 import {
   checkInputs,
+  compiledPattern,
   initialInputValues,
   InvalidJson,
   inputKindOf,
@@ -141,6 +142,18 @@ describe('process form', () => {
     expect(checkInputs(nodes, { description: 'x', entries: [] })).toEqual([])
     // A pattern this browser cannot compile is left to the server.
     expect(checkInputs(inputNodes({ type: 'object', properties: { a: { type: 'string', pattern: '(?<' } } }), { a: 'x' })).toEqual([])
+  })
+
+  it('refuses fields holding typed text that is no value, whatever their value', () => {
+    const nodes = inputNodes(schema)
+    const values = { description: 'x', day: '', entries: [{ accountCode: '1', direction: 'DEBIT', amount: '1' }] }
+    expect(checkInputs(nodes, values, '', new Set(['day', 'entries.0.amount']))).toEqual([
+      { path: 'entries.0.amount', message: 'amount: INVALID_VALUE', ruleCode: 'INVALID_VALUE', shownByField: true },
+      { path: 'day', message: 'day: INVALID_VALUE', ruleCode: 'INVALID_VALUE', shownByField: true },
+    ])
+    expect(compiledPattern('\\d+')?.test('42')).toBe(true)
+    expect(compiledPattern('(?<')).toBeUndefined()
+    expect(compiledPattern(undefined)).toBeUndefined()
   })
 
   it('starts with the row key filled in, a required boolean off and required tags empty', () => {

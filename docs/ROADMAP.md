@@ -1158,6 +1158,12 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 - react-hook-form 由 `@jabiz/ui` 再导出（`useForm`、`useFieldArray`、`useWatch`、`Controller`，`src/form-state.ts`）：平台前端与扩展不另加依赖。
 - 日期控件改为"文本框 + 打开日历的按钮"：`id` / `aria-*` / `data-testid` 落在文本框上，原来按钮上的名称移到文本框（扩展中用 `getByRole('button', …)` 找日期字段的要改）。
   Enter 读取键入的值且不提交外围的表单（与选择器确认一致），再按一次 Enter 才提交；`FilterBar` 中同样如此。
+  日期以应用的区域格式显示与键入（D22 第 7 条；en-US 为 `MM/DD/YYYY, hh:mm:ss AM`，占位符为该格式），ISO 形式在任何区域都可键入且先读：以四位年和连字符开头即为年-月-日；
+  区域格式按该区域年月日的顺序读，年须为四位。不是日期（或不允许的日子）的键入文字留在框中、`aria-invalid`、框下说明原因，并经 `onInvalidChange` 告知调用方：
+  `FilterBar` 与 `SchemaForm`（`checkInputs` 的 `typedInvalid`）在有这样的字段时不提交；重置（`resetKey`）丢弃这些文字。
+  弹出层中的时间框清空或只输入一半时时间不变，只给出时与分时保留秒，禁用的日子不能经时间框选中。
+- `TagsInput`：输入法组字时的 Enter 不加标签；全角逗号 `，` 与顿号 `、` 也作分隔。
+- 界面设置减少动态效果（`prefers-reduced-motion: reduce`）时，`@jabiz/ui` 的弹出层没有淡入与滑动；`a11y.spec` 在 axe 检查前等有限的动画结束（菜单淡入中的混合颜色曾使暗色检查偶发失败）。
 - 流程表单：必填的布尔值默认"否"（原来未拨动的开关报 `REQUIRED`）；预填的行键为只读（`readonly`）而非禁用，`content.spec` 改为断言不可编辑；
   必填的标签输入为空数组时报 `REQUIRED`，不必填的空标签不发送。
 - 历史页：两个时间点都清除后不再把当前状态显示为"时间点的状态"（原有的缺陷：查询键与当前状态相同）。

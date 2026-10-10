@@ -54,6 +54,13 @@ describe('catalog pages', () => {
     await expectAccessible()
   })
 
+  it('names the copy button in the word order of the language', async () => {
+    await act(() => i18n.changeLanguage('ja'))
+    hooks.datasets.data = [dataset(1)]
+    show(<DatasetCatalogPage />)
+    expect(screen.getByRole('button', { name: 'urn:jabiz:dataset:default:E1 をコピー' })).toBeInTheDocument()
+  })
+
   it('pages 50 at a time in the browser', async () => {
     hooks.datasets.data = Array.from({ length: 51 }, (_, i) => dataset(i + 1))
     show(<DatasetCatalogPage />)

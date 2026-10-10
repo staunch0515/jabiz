@@ -19,7 +19,7 @@ import {
   type Control,
 } from '@jabiz/ui'
 import { Plus, Trash2 } from 'lucide-react'
-import { createContext, useContext, useId, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { checkInputs, initialInputValues, type InputNode, type InputProblem } from '../meta/processForm'
 
@@ -33,6 +33,8 @@ interface FormContext {
   idPrefix: string
   /** Top-level inputs filled in by the row an action was started on: shown, not changed. */
   fixed: ReadonlySet<string>
+  /** A date field holds (true) or no longer holds (false) typed text that is no date. */
+  onTypedInvalid: (path: string, invalid: boolean) => void
 }
 
 const SchemaFormContext = createContext<FormContext | null>(null)
@@ -61,7 +63,9 @@ function FieldShell({
   const { t } = useTranslation()
   const { problems, idPrefix } = useSchemaForm()
   const id = fieldId(idPrefix, path)
-  const problem = problems.get(path)
+  // A date field shows its own problem with typed text; the form only keeps it from being sent.
+  const found = problems.get(path)
+  const problem = found?.shownByField ? undefined : found
   const errorId = `${id}-error`
   const label = (
     <Label htmlFor={id}>
@@ -102,7 +106,7 @@ function FieldShell({
 /** One input of the schema: a control by its kind, a group for an object, repeatable items for a list. */
 function SchemaField({ node, path }: { node: InputNode; path: string }) {
   const { t } = useTranslation()
-  const { control, fixed } = useSchemaForm()
+  const { control, fixed, onTypedInvalid } = useSchemaForm()
   // Only top-level inputs are filled in from the row (16 section 3).
   const readOnly = fixed.has(path)
 
@@ -141,11 +145,13 @@ function SchemaField({ node, path }: { node: InputNode; path: string }) {
               case 'datetime':
                 return (
                   <DateTimePicker {...common} value={text || null} onChange={(v) => field.onChange(v ?? '')}
+                    onInvalidChange={(invalid) => onTypedInvalid(path, invalid)}
                     readOnly={readOnly} clearable={!readOnly} />
                 )
               case 'date':
                 return (
                   <DatePicker {...common} value={text || null} onChange={(v) => field.onChange(v ?? '')}
+                    onInvalidChange={(invalid) => onTypedInvalid(path, invalid)}
                     readOnly={readOnly} clearable={!readOnly} />
                 )
               case 'decimal':
@@ -255,36 +261,54 @@ export interface SchemaFormProps {
 /**
  * A form generated from a JSON Schema (process inputs; template parameters and import parameters from phase 15c):
  * one control per property by its kind, a group per nested object, removable items for a list of objects. It checks
- * only that required inputs are filled in and that text matches the schema's pattern (`checkInputs`), on submitting
- * and, after that, as the user types; the server judges the rest.
+ * only that required inputs are filled in, that text matches the schema's pattern and that date fields hold no text
+ * that is no date (`checkInputs`), on submitting and, after that, as the user types; the server judges the rest.
+ * Values are watched only after the first submission, so typing does not re-render the whole form before.
  */
 export default function SchemaForm({ nodes, preset, submitLabel, submitTestId, onSubmit, className }: SchemaFormProps) {
   const idPrefix = useId()
   const defaultValues = useMemo(() => initialInputValues(nodes, preset), [nodes, preset])
   const form = useForm<Values>({ defaultValues })
-  const values = useWatch({ control: form.control }) as Values
   const [submitted, setSubmitted] = useState(false)
+  const values = useWatch({ control: form.control, disabled: !submitted }) as Values
+  // Read by the submit handler within the event that left a date field (a ref), and shown after a submission (state).
+  const typedInvalidNow = useRef(new Set<string>())
+  const [typedInvalid, setTypedInvalid] = useState<ReadonlySet<string>>(new Set())
+  const onTypedInvalid = useCallback((path: string, invalid: boolean) => {
+    const next = new Set(typedInvalidNow.current)
+    if (invalid) next.add(path)
+    else next.delete(path)
+    typedInvalidNow.current = next
+    setTypedInvalid(next)
+  }, [])
   const problems = useMemo(
-    () => new Map(submitted ? checkInputs(nodes, values).map((p) => [p.path, p]) : []),
-    [submitted, nodes, values],
+    () => new Map(submitted ? checkInputs(nodes, values, '', typedInvalid).map((p) => [p.path, p]) : []),
+    [submitted, nodes, values, typedInvalid],
   )
   const fixed = useMemo(() => new Set(Object.keys(preset ?? {})), [preset])
+  const context = useMemo(
+    () => ({ control: form.control, problems, idPrefix, fixed, onTypedInvalid }),
+    [form.control, problems, idPrefix, fixed, onTypedInvalid],
+  )
   const busy = form.formState.isSubmitting
 
   return (
-    <SchemaFormContext.Provider value={{ control: form.control, problems, idPrefix, fixed }}>
+    <SchemaFormContext.Provider value={context}>
       <form
         noValidate
         className={cn(UI_SCOPE, 'flex flex-col gap-4', className)}
-        onSubmit={form.handleSubmit(async (current) => {
-          setSubmitted(true)
-          const found = checkInputs(nodes, current)
-          if (found.length > 0) {
-            document.getElementById(fieldId(idPrefix, found[0].path))?.focus()
-            return
-          }
-          await onSubmit(current)
-        })}
+        onSubmit={(event) =>
+          // react-hook-form's handler made within the event: it reads the date fields' state as of now.
+          form.handleSubmit(async (current) => {
+            setSubmitted(true)
+            const found = checkInputs(nodes, current, '', typedInvalidNow.current)
+            if (found.length > 0) {
+              document.getElementById(fieldId(idPrefix, found[0].path))?.focus()
+              return
+            }
+            await onSubmit(current)
+          })(event)
+        }
       >
         {nodes.map((node) => (
           <SchemaField key={node.name} node={node} path={node.name} />

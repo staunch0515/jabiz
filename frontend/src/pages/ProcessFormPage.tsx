@@ -79,7 +79,8 @@ export default function ProcessFormPage() {
         )
         return
       }
-      throw e
+      // No answer at all (the network, the server unreachable): said, not thrown out of the form's handler.
+      notify.error(e instanceof Error && e.message ? e.message : t('app.error'))
     }
   }
 

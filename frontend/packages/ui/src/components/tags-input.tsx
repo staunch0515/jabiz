@@ -11,6 +11,9 @@ type InputAttributes = Omit<
   'value' | 'onChange' | 'type' | 'defaultValue' | 'className' | 'children'
 >
 
+/** Between tags: the ASCII comma, the full-width comma and the ideographic comma. */
+const SEPARATORS = /[,，、]/
+
 export interface TagsInputProps extends InputAttributes {
   value: string[]
   onChange: (value: string[]) => void
@@ -18,8 +21,8 @@ export interface TagsInputProps extends InputAttributes {
 }
 
 /**
- * A list of short texts (tags, codes): typed into one field, each added on Enter or a comma (or when the field is
- * left), removed with its own button or Backspace in the empty field. A tag already in the list is not added twice.
+ * A list of short texts (tags, codes): typed into one field, each added on Enter or a comma (ASCII `,`, full-width
+ * `，` or `、`; or when the field is left); Enter that confirms an input method's composition adds nothing, removed with its own button or Backspace in the empty field. A tag already in the list is not added twice.
  * The text field takes the id, name and aria attributes.
  */
 export function TagsInput({
@@ -38,7 +41,7 @@ export function TagsInput({
 
   const add = (raw: string) => {
     const tags = raw
-      .split(',')
+      .split(SEPARATORS)
       .map((tag) => tag.trim())
       .filter((tag) => tag !== '' && !value.includes(tag))
     if (tags.length > 0) onChange([...value, ...new Set(tags)])
@@ -88,10 +91,18 @@ export function TagsInput({
         className={cn(UI_SCOPE, 'placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent py-1 text-base outline-none md:text-sm')}
         onChange={(event) => {
           const next = event.target.value
-          if (next.includes(',')) add(next)
+          // While an input method composes, the text is not final: separators are taken once it is committed.
+          const composing = (event.nativeEvent as InputEvent).isComposing === true
+          if (!composing && SEPARATORS.test(next)) add(next)
           else setText(next)
         }}
+        onCompositionEnd={(event) => {
+          const next = event.currentTarget.value
+          if (SEPARATORS.test(next)) add(next)
+        }}
         onKeyDown={(event) => {
+          // Enter (or a comma) confirming a Chinese or Japanese input method's composition is not the user's Enter.
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return
           if (event.key === 'Enter') {
             // Enter adds the tag; with nothing typed it may submit the form around the field.
             if (text.trim() !== '') {

@@ -82,7 +82,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 |---|---|---|---|
 | `text` | 文本框（`multiline` → 多行） | 原样 | 允许 `LIKE` → 包含；否则等于 |
 | `monetary` / `numeric` | 数字框（文本模式，不取整，金额带币种后缀） | 按币种与小数位 / 精确小数 | 区间（`between` / `gte` / `lte`） |
-| `temporal` | 日期时间（可键入本地时间 `YYYY-MM-DD HH:mm:ss`，或从日历选择） | 本地时间 | 时间区间 |
+| `temporal` | 日期时间（按应用区域的格式键入，ISO `YYYY-MM-DD HH:mm:ss` 也可；或从日历选择；无效的键入不提交） | 本地时间 | 时间区间 |
 | `date` | 日期（按所选的那一天发送 `YYYY-MM-DD`，不经时区换算） | 日期（区域格式） | 日期区间（含两端） |
 | `code` | 下拉（字典的启用项按顺序，否则固定值） | 字典标签 | 等于 |
 | `bool` | 开关（新建时默认"否"） | 是 / 否 | 等于 |

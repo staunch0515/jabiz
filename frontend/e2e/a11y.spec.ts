@@ -9,7 +9,22 @@ import { adminToken, CARRIERS, datasetPath, dialog, insert, pageRendered, signIn
  */
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
+/**
+ * Waits until every animation that ends (menus and dialogs fading and sliding in) has ended: checked mid fade-in, a
+ * half-transparent menu has blended colours whose contrast is not the one the user reads. Endless animations (a
+ * spinner) are left alone.
+ */
+async function animationsSettled(page: Page) {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+      .every((a) => a.playState === 'finished' || a.playState === 'idle'),
+  )
+}
+
 async function expectAccessible(page: Page, name: string) {
+  await animationsSettled(page)
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze()
   const found = results.violations.map((v) => ({
     rule: v.id,

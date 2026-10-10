@@ -72,7 +72,10 @@ export interface DataTableProps<Row> {
   onColumnFiltersChange?: (filters: ColumnFiltersState) => void
   /** The content under an expanded row; rows get an expand button when given. */
   renderExpanded?: (row: Row) => ReactNode
-  /** Further attributes of a row's <tr> (test ids, a selected state). */
+  /**
+   * Further attributes of a row's <tr> (test ids, a selected state, classes added to the row's own). The row's
+   * `data-slot` is the table's; `data-state` is "expanded" while the row is open.
+   */
   rowProps?: (row: Row) => HTMLAttributes<HTMLTableRowElement> & Record<`data-${string}`, string | undefined>
   className?: string
 }
@@ -272,13 +275,15 @@ export function DataTable<Row>({
               ) : (
                 table.getRowModel().rows.map((row) => {
                   const open = row.getIsExpanded()
+                  const extra = rowProps?.(row.original) ?? {}
                   return (
                     <Fragment key={row.id}>
+                      {/* The caller's attributes first: the row's own mark, hover group and expanded state stay. */}
                       <TableRow
+                        {...extra}
                         data-slot="data-table-row"
-                        data-state={open ? 'expanded' : undefined}
-                        className="group/row"
-                        {...rowProps?.(row.original)}
+                        data-state={open ? 'expanded' : extra['data-state']}
+                        className={cn('group/row', extra.className)}
                       >
                         {renderExpanded && (
                           <TableCell className="w-10">

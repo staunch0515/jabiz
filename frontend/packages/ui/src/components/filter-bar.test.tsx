@@ -61,6 +61,44 @@ describe('FilterBar', () => {
     expect(screen.getByLabelText('Code')).toHaveValue('')
   })
 
+  it('is not submitted while a date field holds text that is no date, and says why', async () => {
+    const onSubmit = vi.fn()
+    render(<FilterBar fields={fields} onSubmit={onSubmit} />)
+    const from = screen.getByLabelText('Due, from')
+    await userEvent.type(from, 'soon')
+    await userEvent.click(screen.getByRole('button', { name: 'Query' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    expect(from).toHaveAccessibleDescription('Not a valid date (YYYY-MM-DD).')
+    expect(from).toHaveFocus()
+    // Enter in another field does not submit either.
+    await userEvent.type(screen.getByLabelText('Code'), 'A{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+    await expectAccessible()
+
+    // Corrected: submitted.
+    await userEvent.clear(from)
+    await userEvent.type(from, '2026-03-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Query' }))
+    expect(onSubmit).toHaveBeenLastCalledWith({ code: 'A', due: { from: '2026-03-01' } })
+  })
+
+  it('drops text that is no date on reset', async () => {
+    const onSubmit = vi.fn()
+    render(<FilterBar fields={fields} onSubmit={onSubmit} />)
+    const from = screen.getByLabelText('Created, from')
+    await userEvent.type(from, 'not a time')
+    await userEvent.tab()
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(from).toHaveValue('')
+    expect(from).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByText(/Not a valid date/)).toBeNull()
+    onSubmit.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Query' }))
+    expect(onSubmit).toHaveBeenCalledWith({})
+  })
+
   it('takes new values from the caller and calls its reset', async () => {
     const onReset = vi.fn()
     const { rerender } = render(<FilterBar fields={fields} values={{ code: 'A' }} onSubmit={() => {}} onReset={onReset} />)

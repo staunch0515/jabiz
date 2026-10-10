@@ -233,3 +233,113 @@ describe('DateTimePicker', () => {
     expect(screen.getByRole('button', { name: /January 11th, 2026/ })).toBeDisabled()
   })
 })
+
+describe('typed text the pickers do not take', () => {
+  beforeEach(async () => {
+    await act(() => i18n.changeLanguage('en'))
+  })
+
+  it('says why under the field, tells the caller, and drops the text on a reset', async () => {
+    const onInvalidChange = vi.fn()
+    const { rerender } = render(
+      <DatePicker aria-label="Due" value={null} onChange={() => {}} onInvalidChange={onInvalidChange} resetKey={1} />,
+    )
+    const input = screen.getByLabelText('Due')
+    await userEvent.type(input, '2026-02-30')
+    await userEvent.tab()
+    expect(input).toHaveAccessibleDescription('Not a valid date (YYYY-MM-DD).')
+    expect(onInvalidChange).toHaveBeenLastCalledWith(true)
+    await expectAccessible()
+
+    // The same value again (null) with a new reset key: the text goes.
+    rerender(
+      <DatePicker aria-label="Due" value={null} onChange={() => {}} onInvalidChange={onInvalidChange} resetKey={2} />,
+    )
+    expect(input).toHaveValue('')
+    expect(input).not.toHaveAttribute('aria-invalid')
+    expect(onInvalidChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('says when a typed day is not allowed', async () => {
+    render(<DatePicker aria-label="Due" value={null} onChange={() => {}} disabledDays={{ before: new Date(2026, 0, 10) }} />)
+    await userEvent.type(screen.getByLabelText('Due'), '2026-01-01{Enter}')
+    expect(screen.getByLabelText('Due')).toHaveAccessibleDescription('This date cannot be chosen.')
+  })
+
+  it('reports false when a field holding invalid text goes away', async () => {
+    const onInvalidChange = vi.fn()
+    const { unmount } = render(
+      <DateTimePicker aria-label="At" value={null} onChange={() => {}} onInvalidChange={onInvalidChange} />,
+    )
+    await userEvent.type(screen.getByLabelText('At'), 'later{Enter}')
+    expect(onInvalidChange).toHaveBeenLastCalledWith(true)
+    unmount()
+    expect(onInvalidChange).toHaveBeenLastCalledWith(false)
+  })
+})
+
+describe('the time of a DateTimePicker', () => {
+  beforeEach(async () => {
+    await act(() => i18n.changeLanguage('en'))
+  })
+
+  it('stays when the time field is emptied or half typed, and keeps the seconds of hours and minutes', async () => {
+    const onChange = vi.fn()
+    const value = new Date(2026, 0, 15, 9, 30, 45).toISOString()
+    render(<DateTimePicker aria-label="At" value={value} onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open calendar' }))
+    const time = screen.getByLabelText('Time')
+    fireEvent.change(time, { target: { value: '' } })
+    fireEvent.change(time, { target: { value: '1' } })
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.change(time, { target: { value: '10:15' } })
+    expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 0, 15, 10, 15, 45).toISOString())
+  })
+
+  it('is not set on a disabled day', async () => {
+    const onChange = vi.fn()
+    // 11 January 2026 is a Sunday.
+    const value = new Date(2026, 0, 11, 9, 0, 0).toISOString()
+    render(<DateTimePicker aria-label="At" value={value} onChange={onChange} disabledDays={{ dayOfWeek: [0] }} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open calendar' }))
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '10:00:00' } })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('in a region (en-US)', () => {
+  beforeEach(async () => {
+    await act(() => i18n.changeLanguage('en'))
+  })
+
+  it('reads and writes the regional form as well as ISO', () => {
+    expect(parseDateText('01/31/2026', 'en-US')).toBe('2026-01-31')
+    expect(parseDateText('2026-01-31', 'en-US')).toBe('2026-01-31')
+    expect(parseDateText('31/01/2026', 'en-US')).toBeUndefined()
+    expect(parseDateText('31/01/2026', 'en-GB')).toBe('2026-01-31')
+    expect(parseDateText('01/31/26', 'en-US')).toBeUndefined()
+    expect(parseDateTimeText('01/31/2026, 02:05:09 PM', 'en-US')).toEqual(new Date(2026, 0, 31, 14, 5, 9))
+    expect(parseDateTimeText('01/31/2026 12:00 am', 'en-US')).toEqual(new Date(2026, 0, 31, 0, 0, 0))
+    expect(parseDateTimeText('01/31/2026, 13:00 PM', 'en-US')).toBeUndefined()
+    expect(parseDateTimeText('01/31/2026 soon', 'en-US')).toBeUndefined()
+    const at = new Date(2026, 0, 31, 14, 5, 9)
+    expect(parseDateTimeText(formatDateTimeText(at, 'en-US'), 'en-US')).toEqual(at)
+  })
+
+  it('shows the regional form with its pattern as the placeholder', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<DatePicker aria-label="Due" value="2026-01-31" onChange={onChange} region="en-US" />)
+    const input = screen.getByLabelText('Due')
+    expect(input).toHaveValue('01/31/2026')
+    expect(input).toHaveAttribute('placeholder', 'MM/DD/YYYY')
+    await userEvent.clear(input)
+    await userEvent.type(input, '02/01/2026{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-01')
+
+    rerender(<DateTimePicker aria-label="At" value={null} onChange={onChange} region="en-US" />)
+    const at = screen.getByLabelText('At') as HTMLInputElement
+    expect(at).toHaveAttribute('placeholder', 'MM/DD/YYYY, hh:mm:ss AM')
+    await userEvent.type(at, '02/01/2026 3:04 PM{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 1, 1, 15, 4, 0).toISOString())
+  })
+})

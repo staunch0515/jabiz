@@ -151,6 +151,22 @@ describe('DataTable', () => {
     await expectAccessible()
   })
 
+  it("keeps the row's own mark and classes when the caller adds attributes", () => {
+    const { container } = render(
+      <DataTable
+        label="Carriers"
+        columns={columns}
+        data={rows}
+        rowProps={(r) => ({ className: 'font-bold', 'data-slot': 'mine', 'data-state': 'selected', 'data-code': r.code })}
+      />,
+    )
+    const [first] = container.querySelectorAll('tbody tr')
+    expect(first).toHaveAttribute('data-slot', 'data-table-row')
+    expect(first).toHaveAttribute('data-state', 'selected')
+    expect(first).toHaveAttribute('data-code', 'A1')
+    expect(first).toHaveClass('group/row', 'font-bold')
+  })
+
   it('marks data rows, and keeps a pinned column at the right edge with its own classes', async () => {
     const withActions: ColumnDef<Carrier, unknown>[] = [
       { accessorKey: 'code', header: 'Code', meta: { className: 'w-24' } },

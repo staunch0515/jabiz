@@ -90,16 +90,31 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
     const range = typeof currentValue === 'object' && currentValue !== null ? currentValue : {}
     set(name, { ...range, [end]: value })
   }
+  // Date fields holding typed text that is no date: the bar is not submitted while there are any (the field says
+  // why). A reset or new values from the caller drop that text (`resetKey`).
+  const invalid = useRef(new Set<string>())
+  const [resets, setResets] = useState(0)
+  const resetKey = `${generation}.${resets}`
+  const markInvalid = (key: string) => (isInvalid: boolean) => {
+    if (isInvalid) invalid.current.add(key)
+    else invalid.current.delete(key)
+  }
   const range = (name: string): FilterRange => {
     const value = draft[name]
     return typeof value === 'object' && value !== null ? value : {}
   }
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (invalid.current.size > 0) {
+      event.currentTarget.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      return
+    }
     onSubmit(filledFilters(current()))
   }
   const reset = () => {
+    invalid.current.clear()
+    setResets(resets + 1)
     setDraft({})
     if (onReset) onReset()
     else onSubmit({})
@@ -178,6 +193,8 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
                         aria-label={fromLabel}
                         value={value.from}
                         onChange={(day) => setEnd(field.name, 'from', day)}
+                        onInvalidChange={markInvalid(`${field.name}.from`)}
+                        resetKey={resetKey}
                         clearable
                       />
                       <span aria-hidden>–</span>
@@ -185,6 +202,8 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
                         aria-label={toLabel}
                         value={value.to}
                         onChange={(day) => setEnd(field.name, 'to', day)}
+                        onInvalidChange={markInvalid(`${field.name}.to`)}
+                        resetKey={resetKey}
                         clearable
                       />
                     </>
@@ -194,6 +213,8 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
                         aria-label={fromLabel}
                         value={value.from}
                         onChange={(at) => setEnd(field.name, 'from', at)}
+                        onInvalidChange={markInvalid(`${field.name}.from`)}
+                        resetKey={resetKey}
                         clearable
                       />
                       <span aria-hidden>–</span>
@@ -201,6 +222,8 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
                         aria-label={toLabel}
                         value={value.to}
                         onChange={(at) => setEnd(field.name, 'to', at)}
+                        onInvalidChange={markInvalid(`${field.name}.to`)}
+                        resetKey={resetKey}
                         clearable
                       />
                     </>
