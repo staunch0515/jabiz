@@ -319,7 +319,7 @@ public class RevertService {
                     ? entityManager.ensureNotReferenced(def, snapshot)
                         .then(entityManager.ensureDeletable(engine, def, snapshot))
                     : Mono.empty();
-                return referenced.then(versions.append(engine, table, def, id, timeline, write, operation, true))
+                return referenced.then(versions.append(engine, table, def, id, timeline, write, operation, null, true))
                     .onErrorMap(UniqueKeyViolationException.class, e -> new ConcurrentUpdateException(
                         def.name + " [ID: " + id + "] was changed concurrently; retry the revert"))
                     .then();

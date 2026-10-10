@@ -1,12 +1,7 @@
 package com.jabiz.runtime.approval;
 
-import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
-import com.jabiz.runtime.DatasetEntityManager;
-import com.jabiz.runtime.EntityNotFoundException;
-import com.jabiz.runtime.dataset.DatasetRegistry;
-import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.StepHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -15,49 +10,42 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Loads the current state of the rule, limit or SoD rule a controlled change targets, when it names one; the
- * entity and so the dataset are only known from the change ({@link ControlChanges}).
+ * Builds the {@link ControlTarget.Request} of a controlled change once (from the proposal's input or from the
+ * recorded change) and loads the state it is based on through the change's {@link ControlTarget}: the entity and so
+ * the target are only known from the change ({@link ControlChanges}). Nothing is loaded for an entity no target
+ * changes, or when there is nothing to base the change on.
  */
 @Component
 class LoadControlTarget<C extends ProcessContext> implements StepHandler<LoadControlTarget.Metadata<C>, C> {
 
-    /** @param target the entity name and id, or null when the change creates a new instance */
-    record Metadata<C>(Function<C, Target> target, String targetKey) {
+    record Metadata<C>(Function<C, ControlTarget.Request> request, String requestKey, String targetKey) {
         Metadata {
-            Objects.requireNonNull(target, "target must not be null");
+            Objects.requireNonNull(request, "request must not be null");
+            Objects.requireNonNull(requestKey, "requestKey must not be null");
             Objects.requireNonNull(targetKey, "targetKey must not be null");
         }
     }
 
-    record Target(String entity, Object id) {}
-
-    static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(Function<C, Target> target, String targetKey) {
-        return StepSpec.of(LoadControlTarget.class, new Metadata<>(target, targetKey));
+    static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(Function<C, ControlTarget.Request> request,
+        String requestKey, String targetKey) {
+        return StepSpec.of(LoadControlTarget.class, new Metadata<>(request, requestKey, targetKey));
     }
 
-    private final DatasetRegistry datasets;
-    private final EntityDefinitionRegistry entities;
-    private final DatasetEntityManager entityManager;
+    private final ControlTargets targets;
 
-    LoadControlTarget(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager) {
-        this.datasets = datasets;
-        this.entities = entities;
-        this.entityManager = entityManager;
+    LoadControlTarget(ControlTargets targets) {
+        this.targets = targets;
     }
 
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
-            Target target = metadata.target().apply(ctx);
-            if (target == null || target.id() == null || ControlChanges.datasetOf(target.entity()) == null) {
-                return Mono.empty();
-            }
-            DatasetDefinition dataset = datasets.findById(ControlChanges.datasetOf(target.entity())).orElseThrow();
-            return entityManager.findById(dataset, entities.getOrThrow(target.entity()), target.id())
-                .switchIfEmpty(Mono.error(() -> new EntityNotFoundException(target.entity() + " " + target.id()
-                    + " not found")))
-                .doOnNext(found -> ctx.put(metadata.targetKey(), found))
-                .then();
+            ControlTarget.Request request = metadata.request().apply(ctx);
+            ctx.put(metadata.requestKey(), request);
+            return targets.find(request.entity())
+                .map(target -> target.load(request, ctx).doOnNext(found -> ctx.put(metadata.targetKey(), found))
+                    .then())
+                .orElseGet(Mono::empty);
         });
     }
 }

@@ -28,14 +28,22 @@ public final class ChangeSet {
      * @param version       version the change is based on (ignored for inserts)
      * @param attributes    values by logical field name
      * @param effectiveTime temporal entities only: when the change takes effect; null for the operation time
+     * @param grant         platform use: an object only the platform can make that lets this one write pass a
+     *                      platform rule it would otherwise break (a controlled parameter written by the publication
+     *                      of a controlled change, decision D40); null for ordinary writes
      */
     public record Change(String datasetId, Action action, String entityType, Object id, long version,
-        Map<String, Object> attributes, Instant effectiveTime) {
+        Map<String, Object> attributes, Instant effectiveTime, Object grant) {
 
         public Change {
             Objects.requireNonNull(action, "action must not be null");
             requireText(entityType, "entityType");
             attributes = attributes == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
+        }
+
+        public Change(String datasetId, Action action, String entityType, Object id, long version,
+            Map<String, Object> attributes, Instant effectiveTime) {
+            this(datasetId, action, entityType, id, version, attributes, effectiveTime, null);
         }
 
         /** Without the values, which may be personal or secret: safe in logs. */
@@ -65,15 +73,22 @@ public final class ChangeSet {
 
         private final String datasetId;
         private final Instant effectiveTime;
+        private final Object grant;
 
-        private Target(String datasetId, Instant effectiveTime) {
+        private Target(String datasetId, Instant effectiveTime, Object grant) {
             this.datasetId = datasetId;
             this.effectiveTime = effectiveTime;
+            this.grant = grant;
         }
 
         /** Same dataset, changes taking effect at {@code time} (temporal entities; later schedules, earlier corrects). */
         public Target effectiveAt(Instant time) {
-            return new Target(datasetId, Objects.requireNonNull(time, "time must not be null"));
+            return new Target(datasetId, Objects.requireNonNull(time, "time must not be null"), grant);
+        }
+
+        /** Platform use: the same, the changes carrying {@code grant} ({@link Change#grant()}). */
+        public Target granted(Object grant) {
+            return new Target(datasetId, effectiveTime, Objects.requireNonNull(grant, "grant must not be null"));
         }
 
         /**
@@ -86,16 +101,18 @@ public final class ChangeSet {
             requireText(entityType, "entityType");
             Map<String, Object> values = new LinkedHashMap<>(attributes == null ? Map.of() : attributes);
             Object id = ids.assign(entityType, values);
-            add(new Change(datasetId, Action.INSERT, entityType, id, 0L, values, effectiveTime));
+            add(new Change(datasetId, Action.INSERT, entityType, id, 0L, values, effectiveTime, grant));
             return id;
         }
 
         public void update(String entityType, Object id, long version, Map<String, Object> attributes) {
-            add(new Change(datasetId, Action.UPDATE, entityType, requireId(id), version, attributes, effectiveTime));
+            add(new Change(datasetId, Action.UPDATE, entityType, requireId(id), version, attributes, effectiveTime,
+                grant));
         }
 
         public void delete(String entityType, Object id, long version) {
-            add(new Change(datasetId, Action.DELETE, entityType, requireId(id), version, Map.of(), effectiveTime));
+            add(new Change(datasetId, Action.DELETE, entityType, requireId(id), version, Map.of(), effectiveTime,
+                grant));
         }
 
         /** Cancels the version scheduled at this target's effective time; {@code version} is that version's number. */
@@ -105,12 +122,12 @@ public final class ChangeSet {
                     + "use effectiveAt(...) first");
             }
             add(new Change(datasetId, Action.CANCEL_SCHEDULED, entityType, requireId(id), version, Map.of(),
-                effectiveTime));
+                effectiveTime, grant));
         }
     }
 
     private final IdAssigner ids;
-    private final Target defaults = new Target(null, null);
+    private final Target defaults = new Target(null, null, null);
     private final List<Change> pending = new ArrayList<>();
     private final List<Saved> saved = new ArrayList<>();
 
@@ -120,7 +137,7 @@ public final class ChangeSet {
 
     /** Changes written through the given dataset instead of the entity's default dataset. */
     public Target in(String datasetId) {
-        return new Target(requireText(datasetId, "datasetId"), null);
+        return new Target(requireText(datasetId, "datasetId"), null, null);
     }
 
     /** Changes taking effect at {@code time} (temporal entities), through the default datasets. */

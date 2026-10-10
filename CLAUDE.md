@@ -49,7 +49,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **标识**：新实体主键使用 UUIDv7（默认 `EntityIdGenerator` 即 `UuidV7Generator`）；`process_seq_id` 来自数据库序列。
   业务单据号（不能缺号、不能重复）只经 `NumberSequence` Bean 与流程步骤 `AssignNumber` 取得（18 §2、决策 D23），不自己计数。
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
-  以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则只经
+  以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则与受控的业务参数（`ControlledParams` Bean，04 §9.1、决策 D40）只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
