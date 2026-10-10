@@ -61,7 +61,7 @@ tools/culture/**
     `docs/design` `docs/guide`）下的任何改动（包括新文件）都算越界，不论 `.jabiz-app-paths` 如何写。
   - 检查用的脚本与工作流来自被检查的分支本身，因此只有在分支保护把 `app-paths` 设为必需检查、且对这两个文件的修改经过评审时才有约束力。
   - 退出码：0 通过（或没有 `.jabiz-app-paths`，不是应用分支）；1 有越界或线不一致；2 无法检查（找不到平台分支或共同祖先、线号格式不对），不放行。
-- 平台 CI（`ci.yml`）对推送到任何分支都运行（应用分支不能改 `ci.yml`）；其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时取该线的平台分支，
+- 平台 CI（`ci.yml`）对推送到长期分支（各线的平台分支与应用分支）和所有 PR 运行（应用分支不能改 `ci.yml`）；工作分支（`<线>/phase-…`、`<线>/<应用>-<N>-…`）只经 PR 运行，同一提交不重复检查；PR 的新推送取消其进行中的运行；`e2e` 与 `compose` 在 `build`、`frontend` 通过后运行，草稿 PR 不运行（标为就绪时补跑）；也可手动运行（`workflow_dispatch`）。其 `app-paths` 作业取完整历史，存在 `.jabiz-app-paths` 时取该线的平台分支，
   在每个分支上运行检查（线的检查对平台分支同样有效）与脚本自己的测试 `tools/test/check-app-paths.test.sh`。
 - 应用自己的开发规则写在应用目录内的 `CLAUDE.md`（如 `backend/culture/CLAUDE.md`、`site/CLAUDE.md`）与 `docs/<应用>/` 中；
   根目录的 `CLAUDE.md` 只属于平台，应用分支不改它（避免合并冲突）。

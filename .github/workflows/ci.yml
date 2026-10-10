@@ -1,9 +1,22 @@
 name: CI
 on:
-  # Every branch: platform and its work branches, and application branches, which cannot change this file
-  # (docs/design/17-apps-and-branches.md section 3.3).
+  # Pushes run only on the long-lived branches: platform and application branches of every line ('1.1/platform',
+  # '1.1/culture'), which application branches cannot change (docs/design/17-apps-and-branches.md section 2).
+  # Work branches ('1.1/phase-12a-x', '1.1/culture-3-x') run as pull requests, so a commit is not checked twice.
   push:
+    branches:
+      - '[0-9]*.[0-9]*/*'
+      - '!*/phase-*'
+      - '!*/*-[0-9]*'
   pull_request:
+    # ready_for_review: a draft skips the end-to-end jobs below, so they run when it is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# A new push to a pull request cancels its run in progress; runs on the long-lived branches all complete.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -92,7 +105,10 @@ jobs:
           tools/check-app-paths.sh
 
   # End-to-end: the packaged application (API + frontend in one jar) against PostgreSQL, driven by Playwright.
+  # The two slow jobs below start only after the fast ones pass, and not on draft pull requests.
   e2e:
+    needs: [build, frontend]
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -170,6 +186,8 @@ jobs:
   # One command starts the whole system (ROADMAP phase 11): the image is built from source, the first administrator's
   # password is generated on first start, and the demo seed signs in and places and ships an order through the API.
   compose:
+    needs: [build, frontend]
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
