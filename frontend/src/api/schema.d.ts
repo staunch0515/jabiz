@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/locale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["setLocale"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/challenge/enroll": {
         parameters: {
             query?: never;
@@ -158,6 +174,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mail/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preferences"];
+        put?: never;
+        post: operations["setPreference"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mail/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unsubscribe"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1782,6 +1830,9 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LocaleRequest: {
+            locale?: string;
+        };
         LoginRequest: {
             password?: string;
             userName?: string;
@@ -1789,6 +1840,9 @@ export interface components {
         LookupItem: {
             id?: unknown;
             label?: unknown;
+        };
+        MailPreferences: {
+            templates?: components["schemas"]["TemplatePreference"][];
         };
         MappingOutput: {
             importId?: string;
@@ -1848,6 +1902,14 @@ export interface components {
         PeriodEntry: {
             from?: string;
             to?: string;
+        };
+        PreferenceOutput: {
+            subscribed?: boolean;
+            template?: string;
+        };
+        PreferenceRequest: {
+            subscribed?: boolean;
+            template?: string;
         };
         PreviewRequest: {
             draft?: components["schemas"]["DraftRule"];
@@ -2107,6 +2169,10 @@ export interface components {
             };
             type?: string;
         };
+        TemplatePreference: {
+            subscribed?: boolean;
+            template?: string;
+        };
         TimeSliceEntry: {
             asOf?: string;
             knownAt?: string;
@@ -2128,12 +2194,18 @@ export interface components {
             tokenType?: string;
             userId?: string;
         };
+        UnsubscribeRequest: {
+            token?: string;
+        };
         UpdateRequest: {
             attributes?: {
                 [key: string]: unknown;
             };
             /** Format: int64 */
             version?: number;
+        };
+        UserIdOutput: {
+            userId?: string;
         };
         UserNamesResponse: {
             names?: {
@@ -2296,6 +2368,30 @@ export interface operations {
             };
         };
     };
+    setLocale: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LocaleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserIdOutput"];
+                };
+            };
+        };
+    };
     enrollUnderChallenge: {
         parameters: {
             query?: never;
@@ -2402,6 +2498,72 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailPreferences"];
+                };
+            };
+        };
+    };
+    setPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceOutput"];
+                };
+            };
+        };
+    };
+    unsubscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UnsubscribeRequest"];
             };
         };
         responses: {

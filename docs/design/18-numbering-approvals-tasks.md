@@ -274,6 +274,85 @@ runtime `ApprovalChecksTest`；app `ApprovalIT`（四眼修改规则、结论与
 | `sys_task_version` | 时态（D5），平台实体 `SysTask` |
 | `sys_notification`、`sys_notification_attempt` | 只追加（D5 触发器）；前者为平台实体 `Notification`（只读视图） |
 
-测试：runtime `TaskSpecAndMailChecksTest`；app `TaskIT`（按用户 / 权限 / `*` 可见、开关待办与事件、审批待办逐层传递与关闭、作废与撤回取消、只追加）、
+测试：runtime `TaskSpecTest`、`MailChecksTest`；app `TaskIT`（按用户 / 权限 / `*` 可见、开关待办与事件、审批待办逐层传递与关闭、作废与撤回取消、只追加）、
 `NotificationIT`（GreenMail：指派用户收一封、按权限只发给启用且明确持有的有邮箱用户、失败记录后重试成功）；前端 `ApprovalPanel.test`、`TasksPage.test`、
 e2e `tasks.spec`。
+
+### 5.6 事务邮件（16a，决策 D35）
+
+流程中发送的通用邮件：验证邮箱、找回密码（D36）、"已发货"等通知。与 §5.4 的待办通知不同，它经 Outbox 投递（持久的退避重试），按收件人的语言渲染，
+带一次性令牌与退订。
+
+**模板**：`MailTemplate` Bean，`MailTemplate.define(名, t -> t.category(TRANSACTIONAL | NOTIFICATION).param("…").token("verify", Duration.ofHours(24)))`。
+
+- 名称规则同事件名；参数与令牌用途为不含下划线的标识符（`[a-z][A-Za-z0-9]*`，免得 Markdown 把 `_` 当作强调），不能与内置占位符同名，不能重复。
+- `TRANSACTIONAL`（验证、重置、安全通知）不能退订；`NOTIFICATION` 可按用户与模板退订，其正文必须使用 `{unsubscribeUrl}`。
+- 标题与正文在消息 `mail.<名>.subject` / `mail.<名>.body`（应用所选的每种语言）；正文为 Markdown。占位符：声明的参数、令牌（以用途为名，值为令牌原文）、
+  `{baseUrl}`（`jabiz.mail.base-url`）、`{unsubscribeUrl}`（仅 NOTIFICATION）。
+
+**渲染**（core `MailRenderer`，commonmark-java）：先解析 Markdown，再把值放进解析结果（文本、代码、链接目标与标题）——值从不被当作 Markdown 或 HTML。
+HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原值；链接只允许 `http`、`https`、`mailto` 或相对地址（包括由值拼出的地址，其他一律去掉）；
+链接目标中的参数做百分号编码，`{baseUrl}`、`{unsubscribeUrl}` 与令牌原样代入；标题为纯文本、去换行、截断 300。不做模板样式，只用 commonmark 的基本元素。
+
+**发送**：步骤 `SendMail.of(模板, 收件人, Map<参数名, 取值函数>)` / `SendMail.when(条件, …)`（平台 I/O 步骤）。
+
+- 收件人 `MailRecipient.user(用户)`（取其 `email` 与 `locale`）、`user(用户, 地址, 语言)`（显式给出）、`address(地址, 语言)`。NOTIFICATION 只发给用户（退订按用户）。
+- 用户没有地址：登记违规 `MAIL_NO_ADDRESS`（422）；流程可用 `when` 跳过。
+- 语言：显式给出 → 用户的 `SecUser.locale` → 平台缺省语言；不在应用语言中时取缺省。
+- 参数值以文本**原样**保存（`BigDecimal` 为普通写法；日期、金额的格式由流程决定），邮件即由它渲染；`op_process.input_summary` 照旧遮蔽。
+  邮件中唯一的秘密是发送时才生成的令牌，因此秘密不能作为参数：名称像秘密或遮蔽字段的参数（`SensitiveDataMasker.hidesByName`）在启动检查中报错，
+  `@Sensitive` 的值在 `SendMail` 中以 422 `MAIL_PARAM_SECRET` 拒绝；参数的 JSON 超过 16 KiB（`SendMail.MAX_PARAMS`）以 422 `MAIL_PARAMS_TOO_LARGE` 拒绝，不截断。
+- 在流程事务内经变更集写 `MailMessage`（`sys_mail_message`，经审计），并发布 `jabiz.mail.queued`（`{messageId}`）。流程回滚即无消息、不发信。
+- 启动检查（`CheckedStep`）：模板是已声明的 Bean、参数名与声明一致。
+
+**投递**：平台消费者 `jabiz.mail`（始终注册）对每个 `jabiz.mail.queued` 以系统身份运行 `MAIL_SEND`（权限 `mail.send`，内部流程）：
+
+1. 已有 `SENT` 或 `SKIPPED` 尝试 → 不再处理。
+2. `jabiz.mail.enabled=false`（缺省）→ 记 `SKIPPED`（`MAIL_DISABLED`）；NOTIFICATION 且收件用户已退订 → `SKIPPED`（`UNSUBSCRIBED`）。
+3. 否则在 `boundedElastic` 上取随机数，为每个令牌用途生成 32 字节（URL 安全 Base64）的令牌，在**独立事务**中把 SHA-256 写入 `sys_mail_token`
+   （`StorageEngine.inNewTransaction`，`PROPAGATION_REQUIRES_NEW`），然后按消息的语言渲染，经 `NotificationSender.send(MailMessage)` 发送
+   （`MailMessage` 增加 `htmlBody`，SMTP 发 `multipart/alternative`）；服务器收下后立即在独立事务中记 `SENT`（时间为发送之后）。
+   之后再失败（例如投递事务提交失败）既不会重发（重试见到 `SENT`），也不会丢掉已发出邮件中的令牌。
+4. 发送前或发送中失败：在独立事务中记 `FAILED`（同 `OutboxDeliverer` 记录失败的做法），再使流程失败，由 Outbox 的退避重试（D14，`jabiz.events.delivery.*`）重发；
+   每次重试生成新令牌，使失败那次已入库的令牌失效（若重试次数用尽，收件人此前邮件中的同用途令牌也已被这次未发出的令牌取代）。
+
+风险与限制：SMTP 在投递事务中调用，慢服务器会占用数据库连接；`OutboxDeliverer` 依次处理各消费者，慢的邮件服务器因此也推迟其他消费者
+（Webhook、业务订阅）的投递。以 `jabiz.mail.timeout`（缺省 10 秒，在 `JavaMailSender` Bean 创建时设置 `mail.smtp(s).connectiontimeout` / `timeout` /
+`writetimeout`（`MailSenderTimeouts`），`spring.mail.properties` 可覆盖）与 `jabiz.events.delivery.batch-size` 控制，本阶段不改投递器。令牌与尝试的独立事务各取一个连接。
+服务器收下了邮件却报告失败（应答丢失）时会再发一次（至少一次），前一封中的令牌已被取代。
+
+**一次性令牌的使用**：步骤 `MailTokens.consume(用途, 取令牌的函数, 目标键)`（平台 I/O 步骤；D36 的验证邮箱与找回密码用它）。按 SHA-256 查找，要求：用途一致；
+操作时间早于过期；是同一收件人（用户；无用户时为地址）同一用途的**最新**令牌（`issue_seq`，后发的邮件与重试都使先前的失效）；未用过
+（`INSERT … ON CONFLICT DO NOTHING` 到 `sys_mail_token_use`，主键保证只用一次，冲突不中止事务）。成功时目标键为 `MailTokens.Consumed(messageId, userId, address)`；
+否则一律 422 `TOKEN_INVALID`（不告诉调用方原因）。启动检查：用途须由某个模板声明。
+
+**退订与语言**（D35 第 4–5 条）：
+
+- `SecUser.locale`（可选，`zh` / `ja` / `en`）；用户本人经 `POST /api/auth/account/locale {locale}`（流程 `SEC_USER_SET_LOCALE`，权限 `auth.account` 不授予角色，
+  只能改自己的）修改，管理员经 `SecUser` 数据视图修改。
+- `SecUserMailPreference`（时态，用户 × 模板 → `subscribed`；无记录即接收）只经 `SEC_MAIL_PREFERENCE_SET` 写入（权限 `auth.mail-preference` 不授予角色，
+  只能由该用户本人运行；只接受 NOTIFICATION 模板）。
+- `{unsubscribeUrl}` = `jabiz.mail.base-url` + `jabiz.mail.unsubscribe-path`（缺省 `/mail/unsubscribe`，通用后台的 `MailUnsubscribePage`，无需登录）+ `?token=`；令牌为 `JwtService` 的
+  `jabiz-unsub+jwt`（用户 + 模板，签名，无过期；轮换 `JABIZ_JWT_SECRET` 使旧链接失效），不能代替访问令牌或挑战令牌，反之亦然。
+- `POST /api/auth/mail/unsubscribe {token}`：匿名（令牌即凭证）、幂等，204；篡改或其他类型的令牌、非 NOTIFICATION 模板 → 422 `TOKEN_INVALID`。
+- 登录用户：`GET /api/auth/mail/preferences`（NOTIFICATION 模板及是否接收）、`POST /api/auth/mail/preferences {template, subscribed}`。后台页面在 15c 或 16c 加入。
+
+**查询**：平台实体 `MailMessage`（`sys_mail_message`，`mail.read`，`processOnlyWrites()`，经变更集写入并审计）与 `MailAttempt`
+（`sys_mail_attempt`，每次尝试一条；最新一条即消息的状态；数据视图 `readOnly`）。尝试与令牌是投递日志，由平台直接插入，不进审计（21 §1），靠封存防篡改。实体不能连接其他表，所以"最近一次尝试的结果"是 `MailAttempt` 中按 `messageId` 筛选的最新一行；场景回放把两者列入快照即可看到。
+
+**启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
+NOTIFICATION 缺 `{unsubscribeUrl}`）；开启邮件时需 `jabiz.mail.from`、邮件服务器，以及有模板链接到应用（`{baseUrl}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
+
+**不变**：`TASK_NOTIFY` 与单据发送（22 §5）仍是 `AFTER_COMMIT` 的进程内重试、纯文本，以后另议。
+
+| 表（`V31__mail.sql`） | 性质 |
+|---|---|
+| `sec_user_version.locale` | 新列 |
+| `sys_mail_message` | 只追加；平台实体 `MailMessage` |
+| `sys_mail_attempt` | 只追加；主键（消息, 次序）；`attempt_id` 为平台实体 `MailAttempt` 的键 |
+| `sys_mail_token` | 只追加；主键 `token_hash`（SHA-256），`issue_seq` 定先后 |
+| `sys_mail_token_use` | 只追加；主键 `token_hash` |
+| `sec_user_mail_preference_version` | 时态，平台实体 `SecUserMailPreference`，唯一（用户, 模板） |
+
+示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
+`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`；前端 `MailUnsubscribePage.test`。

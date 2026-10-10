@@ -81,6 +81,18 @@ public class SensitiveDataMasker {
 
     /** Whether values held under this property name are masked. */
     public boolean isSensitive(String name) {
+        return isSecretName(name);
+    }
+
+    /**
+     * Whether values under this name are hidden anywhere: secrets ({@link #isSensitive}) or values of masked entity
+     * fields. Mail parameters may not be named so (docs/design/18-numbering-approvals-tasks.md section 5.6).
+     */
+    public boolean hidesByName(String name) {
+        return isSecretName(name) || (name != null && maskedNames.containsKey(name.toLowerCase(Locale.ROOT)));
+    }
+
+    private boolean isSecretName(String name) {
         if (name == null) {
             return false;
         }

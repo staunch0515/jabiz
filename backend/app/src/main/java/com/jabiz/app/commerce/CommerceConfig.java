@@ -4,6 +4,7 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.ledger.LedgerDimension;
+import com.jabiz.mail.MailTemplate;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
@@ -22,6 +23,23 @@ class CommerceConfig {
     @Bean
     NumberSequence orderNumbers() {
         return NumberSequence.define(CommerceProcesses.ORDER_NUMBERS, s -> s.format("SO-{scope}-{n:6}").scoped());
+    }
+
+    /** The shipment notice of {@code ORDER_SHIP} (docs/design/18-numbering-approvals-tasks.md section 5.6). */
+    @Bean
+    MailTemplate orderShippedMail() {
+        return CommerceProcesses.ORDER_SHIPPED_MAIL;
+    }
+
+    @Bean
+    EntityDefinition customerEntityDefinition() {
+        return CommerceEntities.CUSTOMER_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition customerDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CommerceEntities.CUSTOMER_DATASET, CommerceEntities.CUSTOMER, "commerce.customer.read",
+            "commerce.customer.write", false, poolRef);
     }
 
     @Bean

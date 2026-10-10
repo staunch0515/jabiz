@@ -122,6 +122,30 @@ class JwtServiceTest {
             .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("Expired");
     }
 
+    @Test
+    void unsubscribeTokensDoNotExpireAndStandInForNothingElse() {
+        String token = service.issueUnsubscribe("u1", "shop.news");
+        clock.advance(Duration.ofDays(400));
+        assertThat(service.verifyUnsubscribe(token)).isEqualTo(new JwtService.Unsubscribe("u1", "shop.news"));
+        assertThatThrownBy(() -> service.verify(token))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("type");
+        assertThatThrownBy(() -> service.verifyChallenge(token, JwtService.Purpose.VERIFY))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("type");
+        String access = service.issue(new Actor("u1", null, Set.of(), Set.of())).token();
+        assertThatThrownBy(() -> service.verifyUnsubscribe(access))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("type");
+        // Another template in the same signature: tampered.
+        String[] parts = token.split("\\.");
+        String claims = new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8)
+            .replace("shop.news", "shop.else");
+        String tampered = parts[0] + "." + java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(claims.getBytes(StandardCharsets.UTF_8)) + "." + parts[2];
+        assertThatThrownBy(() -> service.verifyUnsubscribe(tampered))
+            .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("signature");
+        assertThatThrownBy(() -> new JwtService(OTHER_KEY, Duration.ofMinutes(15), clock).verifyUnsubscribe(token))
+            .isInstanceOf(JwtService.InvalidTokenException.class);
+    }
+
     private static String untyped(JWTClaimsSet claims) throws Exception {
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
         jwt.sign(new MACSigner(KEY));

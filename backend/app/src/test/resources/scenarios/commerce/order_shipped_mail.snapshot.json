@@ -1,0 +1,74 @@
+{
+  "scenario" : "Shipment notice by mail",
+  "asOf" : "2026-04-01T02:00:00Z",
+  "entities" : {
+    "Customer" : [ {
+      "customerId" : "#uuid:1",
+      "customerCode" : "CUST-HANAKO",
+      "customerName" : "Hanako",
+      "userId" : "#uuid:2",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "customerId" : "#uuid:3",
+      "customerCode" : "CUST-WALKIN",
+      "customerName" : "Walk-in",
+      "userId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-04-01T00:00:00Z",
+      "createdTime" : "2026-04-01T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "SalesOrder" : [ {
+      "orderId" : "#uuid:4",
+      "orderNo" : "SO-MAIL-1",
+      "customerCode" : "CUST-HANAKO",
+      "warehouseId" : "#uuid:5",
+      "orderedTime" : "2026-04-01T00:00:00Z",
+      "status" : "SHIPPED",
+      "totalAmount" : "1000",
+      "shippedTime" : "2026-04-01T02:00:00Z",
+      "waybillId" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-04-01T02:00:00Z",
+      "createdTime" : "2026-04-01T02:00:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "orderId" : "#uuid:6",
+      "orderNo" : "SO-MAIL-2",
+      "customerCode" : "CUST-WALKIN",
+      "warehouseId" : "#uuid:5",
+      "orderedTime" : "2026-04-01T00:00:00Z",
+      "status" : "SHIPPED",
+      "totalAmount" : "500",
+      "shippedTime" : "2026-04-01T02:00:00Z",
+      "waybillId" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-04-01T02:00:00Z",
+      "createdTime" : "2026-04-01T02:00:00Z",
+      "processSeqId" : "#op:4"
+    } ],
+    "MailMessage" : [ {
+      "messageId" : "#uuid:7",
+      "template" : "commerce.order-shipped",
+      "category" : "NOTIFICATION",
+      "userId" : "#uuid:2",
+      "address" : "hanako@example.com",
+      "locale" : "ja",
+      "params" : "{\"orderNo\":\"SO-MAIL-1\",\"totalAmount\":\"1000\"}",
+      "createdTime" : "2026-04-01T02:00:00Z",
+      "processSeqId" : "#op:3",
+      "version" : 1
+    } ],
+    "MailAttempt" : [ {
+      "attemptId" : "#uuid:8",
+      "messageId" : "#uuid:7",
+      "attemptNo" : "1",
+      "outcome" : "SKIPPED",
+      "detail" : "MAIL_DISABLED",
+      "attemptedTime" : "2026-04-01T02:00:00Z"
+    } ]
+  }
+}

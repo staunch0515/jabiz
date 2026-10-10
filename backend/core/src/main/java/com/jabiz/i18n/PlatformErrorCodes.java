@@ -106,6 +106,14 @@ public final class PlatformErrorCodes {
     public static final String DOCUMENT_NO_RECIPIENT = "DOCUMENT_NO_RECIPIENT";
     /** Sending e-mail needs {@code jabiz.mail.enabled} (22 section 5). */
     public static final String MAIL_DISABLED = "MAIL_DISABLED";
+    /** A mail was to go to a user without an e-mail address (18 section 5.6). */
+    public static final String MAIL_NO_ADDRESS = "MAIL_NO_ADDRESS";
+    /** A one-time token of a mail is unknown, expired, used, superseded or of another purpose (18 section 5.6). */
+    public static final String TOKEN_INVALID = "TOKEN_INVALID";
+    /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
+    public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
+    /** The parameters of a mail are larger than {limit} characters as JSON. */
+    public static final String MAIL_PARAMS_TOO_LARGE = "MAIL_PARAMS_TOO_LARGE";
     /** The entry is within its retention period (docs/design/21-audit-retention.md section 3). */
     public static final String RETENTION_ACTIVE = "RETENTION_ACTIVE";
     /** The entry is under a legal hold (21 section 3.3). */
@@ -182,7 +190,8 @@ public final class PlatformErrorCodes {
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
+        RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,

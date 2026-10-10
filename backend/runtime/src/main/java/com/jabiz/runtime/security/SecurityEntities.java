@@ -6,6 +6,7 @@ import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.i18n.PlatformLanguages;
 import com.jabiz.runtime.dictionary.LabelsKindSupport;
 import com.jabiz.security.LoginOutcome;
 import com.jabiz.security.MfaRequirement;
@@ -33,6 +34,7 @@ public class SecurityEntities {
     public static final String LOGIN_RECORD = "SecLoginRecord";
     public static final String USER_MFA = "SecUserMfa";
     public static final String USER_IDENTITY = "SecUserIdentity";
+    public static final String USER_MAIL_PREFERENCE = "SecUserMailPreference";
 
     public static final String USER_DATASET = "urn:jabiz:dataset:platform:SecUser";
     public static final String ROLE_DATASET = "urn:jabiz:dataset:platform:SecRole";
@@ -42,6 +44,7 @@ public class SecurityEntities {
     public static final String LOGIN_RECORD_DATASET = "urn:jabiz:dataset:platform:SecLoginRecord";
     public static final String USER_MFA_DATASET = "urn:jabiz:dataset:platform:SecUserMfa";
     public static final String USER_IDENTITY_DATASET = "urn:jabiz:dataset:platform:SecUserIdentity";
+    public static final String USER_MAIL_PREFERENCE_DATASET = "urn:jabiz:dataset:platform:SecUserMailPreference";
 
     /** How a login record's attempt proved the user (docs/design/10-security.md section 9). */
     public static final String FACTOR_PASSWORD = "PASSWORD";
@@ -64,10 +67,14 @@ public class SecurityEntities {
         // Where notifications go (docs/design/18-numbering-approvals-tasks.md section 5.4); optional.
         eb.field("email", f -> f.physicalColumn("email").asText(320)
             .apply(Rules.pattern("INVALID_VALUE", "[^@ ]+@[^@ ]+[.][^@ ]+")));
+        // The language of the user's mail (docs/design/18-numbering-approvals-tasks.md section 5.6); optional, one of
+        // the platform's languages. Empty: the platform's default language.
+        eb.field("locale", f -> f.physicalColumn("locale").asText(10)
+            .apply(Rules.pattern("INVALID_VALUE", String.join("|", PlatformLanguages.CODES))));
         eb.unique("uk_sec_user_name", "userName");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("userName", "displayName", "email", "tenantId", "enabled")
+            .columns("userName", "displayName", "email", "locale", "tenantId", "enabled")
             .filters("userName", "tenantId", "enabled")
             .sorts("userName")
             .defaultSort("userName", true));
@@ -230,6 +237,45 @@ public class SecurityEntities {
             .sorts("provider", "subject")
             .defaultSort("provider", true));
     });
+
+    /**
+     * Whether a user receives the notifications of one mail template (docs/design/18-numbering-approvals-tasks.md
+     * section 5.6; decision D35 item 5). No row: they do. Set by the user (account settings, the unsubscribe link)
+     * through {@code SEC_MAIL_PREFERENCE_SET} only.
+     */
+    public static final EntityDefinition SEC_USER_MAIL_PREFERENCE = EntityDefinition.define(USER_MAIL_PREFERENCE,
+        eb -> {
+            eb.physicalTable("sec_user_mail_preference_version");
+            eb.primaryKey("userMailPreferenceId");
+            eb.field("userMailPreferenceId", f -> f.physicalColumn("user_mail_preference_id").immutable(true)
+                .required(true).generated(true).asSemanticIdentity("urn:jabiz:entity:platform:user-mail-preference"));
+            eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asReference(USER));
+            eb.field("template", f -> f.physicalColumn("template").immutable(true).required(true).asText(100));
+            eb.field("subscribed", f -> f.physicalColumn("subscribed").required(true).asBool());
+            eb.unique("uk_sec_user_mail_preference", "userId", "template");
+            eb.temporal(t -> t.allowScheduled(false));
+            eb.listView("default", lv -> lv
+                .columns("userId", "template", "subscribed")
+                .filters("userId", "template", "subscribed")
+                .sorts("template")
+                .defaultSort("template", true));
+        });
+
+    @Bean
+    EntityDefinition secUserMailPreferenceEntity() {
+        return SEC_USER_MAIL_PREFERENCE;
+    }
+
+    @Bean
+    DatasetDefinition secUserMailPreferenceDataset(
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return DatasetDefinition.define(USER_MAIL_PREFERENCE_DATASET, d -> d
+            .targetEntityType(USER_MAIL_PREFERENCE)
+            .asDefault()
+            .permissions(SecurityPermissions.USER_READ, SecurityPermissions.USER_WRITE)
+            .policy(p -> p.processOnlyWrites().maxQueryBatchSize(Rbac.MAX_ROWS))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
 
     @Bean
     EntityDefinition secUserIdentityEntity() {

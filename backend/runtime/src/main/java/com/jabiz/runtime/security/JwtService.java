@@ -59,6 +59,12 @@ public final class JwtService {
     static final String DATA_TO = "data_to";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
+    /**
+     * Type of unsubscribe tokens (docs/design/18-numbering-approvals-tasks.md section 5.6): the link in a notification
+     * mail, which turns one template off for one user. They do not expire; they are worthless anywhere else.
+     */
+    static final JOSEObjectType UNSUBSCRIBE_TYPE = new JOSEObjectType("jabiz-unsub+jwt");
+    static final String TEMPLATE = "tpl";
 
     /** What a challenge token lets its holder do (docs/design/10-security.md section 9). */
     public enum Purpose {
@@ -67,6 +73,9 @@ public final class JwtService {
         /** Set up a second factor, then sign in again. */
         ENROLL
     }
+
+    /** A verified unsubscribe token: whose, and which mail template it turns off. */
+    public record Unsubscribe(String userId, String template) {}
 
     /** A verified challenge: whose, and the login record it followed. */
     /**
@@ -178,6 +187,38 @@ public final class JwtService {
         }
     }
 
+    /**
+     * The token of an unsubscribe link: same key, another type, no expiry (a mail may be read months later). It only
+     * ever turns the template off for the user; rotating the signing key invalidates the links of mail sent before.
+     */
+    public String issueUnsubscribe(String userId, String template) {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+            .issuer(ISSUER)
+            .subject(Objects.requireNonNull(userId, "userId must not be null"))
+            .issueTime(Date.from(clock.instant().truncatedTo(ChronoUnit.SECONDS)))
+            .claim(TEMPLATE, Objects.requireNonNull(template, "template must not be null"))
+            .build();
+        return sign(claims, UNSUBSCRIBE_TYPE);
+    }
+
+    /**
+     * The user and template of a valid unsubscribe token.
+     *
+     * @throws InvalidTokenException if the token is malformed, forged or of another type
+     */
+    public Unsubscribe verifyUnsubscribe(String token) {
+        JWTClaimsSet claims = verified(token, UNSUBSCRIBE_TYPE, "unsubscribe", false);
+        try {
+            String template = claims.getStringClaim(TEMPLATE);
+            if (template == null || template.isBlank()) {
+                throw new InvalidTokenException("Unsubscribe token without template");
+            }
+            return new Unsubscribe(claims.getSubject(), template);
+        } catch (ParseException e) {
+            throw new InvalidTokenException("Malformed unsubscribe claims");
+        }
+    }
+
     private String sign(JWTClaimsSet claims, JOSEObjectType type) {
         SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.HS256).type(type).build(), claims);
         try {
@@ -214,6 +255,11 @@ public final class JwtService {
 
     /** The claims of a token of the given type, signed by this service with HS256, of this issuer, unexpired. */
     private JWTClaimsSet verified(String token, JOSEObjectType type, String what) {
+        return verified(token, type, what, true);
+    }
+
+    /** As above; {@code expiring}: whether the token must carry an expiry (all but unsubscribe tokens). */
+    private JWTClaimsSet verified(String token, JOSEObjectType type, String what, boolean expiring) {
         SignedJWT jwt;
         JWTClaimsSet claims;
         try {
@@ -241,7 +287,7 @@ public final class JwtService {
             throw new InvalidTokenException("Token of another issuer");
         }
         Date expires = claims.getExpirationTime();
-        if (expires == null || !clock.instant().isBefore(expires.toInstant())) {
+        if ((expiring && expires == null) || (expires != null && !clock.instant().isBefore(expires.toInstant()))) {
             throw new InvalidTokenException("Expired " + what + " token");
         }
         String subject = claims.getSubject();

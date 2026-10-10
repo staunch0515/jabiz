@@ -39,6 +39,11 @@ public final class SecurityPermissions {
      */
     public static final String MFA_ENROLL = "auth.mfa-enroll";
     /**
+     * Declared by the processes of a user's own account settings (the language of their mail), which run only through
+     * {@code /api/auth/account/**} as that user; granted to no role.
+     */
+    public static final String ACCOUNT = "auth.account";
+    /**
      * Reading the access review: the access report (its template), the security changes of a period, the signed
      * reviews (docs/design/10-security.md section 13.3).
      */

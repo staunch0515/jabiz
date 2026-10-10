@@ -20,7 +20,7 @@
 | 业务流程 | 事务、I/O、违规累积、子流程、权限、幂等、提交后步骤、试运行 | 写同步的计算步骤 | 4 |
 | 查询与报表 | 模板渲染、范围与时态包装、预编译校验、时点运行、导出、签发存档、核对 | 写 `.sql` 文件 | 5 |
 | 单据 | 版式排版、确定性 PDF、存档原样字节、重印、核对、邮件发送 | 声明版式与模板 | 6 |
-| 编号、审批、职责分离、待办 | 无缺号编号、规则审批、限额、四眼修改、冲突报告、待办与邮件 | 声明序列、审批对象、规则 | 7 |
+| 编号、审批、职责分离、待办 | 无缺号编号、规则审批、限额、四眼修改、冲突报告、待办、通知与事务邮件（模板、一次性令牌、退订） | 声明序列、审批对象、规则 | 7 |
 | 账本 | 复式记账、借贷平衡、冲正、科目层级、维度、多币种、余额与明细模板 | 调用 `LEDGER_POST` | 8 |
 | 事件与定时任务 | Outbox、至少一次投递、消费只处理一次、集群锁、执行记录 | 声明订阅与任务 | 9 |
 | 导入 | 文件解析、映射、预览、整体拒收、去重、导入记录与报告 | 声明导入定义 | 10 |
@@ -198,6 +198,7 @@
 - 职责分离：规则（互斥的两组权限）；授予角色或权限造成冲突即拒绝；流程入口对已存在冲突的操作人兜底拒绝；冲突报告接口。
 - 待办 `SysTask`：指派给用户或权限（持有者皆可见、先做先关）、标题文案键 + 参数、关联实体、链接、截止、来源键；步骤 `CreateTask` / `CloseTasks`；审批请求自动产生逐层待办（标题为"审批 <对象显示名> <人认得的单据标识>（第 n 级）"）；"我的待办"接口与页面、页头计数；`ApprovalPanel` 组件。
 - 邮件通知：新待办自动邮件（指派用户，或明确持有该权限的启用用户）；通知与尝试只追加、失败重试；`jabiz.mail.enabled` 缺省关闭。
+- 事务邮件（18 §5.6，D35）：模板 `MailTemplate`（`TRANSACTIONAL` 不可退订 / `NOTIFICATION` 可退订），标题与 Markdown 正文写在三语消息中；流程步骤 `SendMail`在事务内登记、经 Outbox 投递（回滚不发、持久的退避重试、已发不重发），按收件人语言（`SecUser.locale`）渲染为纯文本与 HTML（值一律转义）；一次性令牌在发送时生成、库中只存哈希，以步骤 `MailTokens.consume` 只能使用一次、会过期、后发的邮件使旧令牌失效；NOTIFICATION 带签名的退订链接，用户可在账户设置中开关（退订页 `/mail/unsubscribe` 无需登录）；参数原样保存、不能是秘密；消息与每次尝试可在数据视图 `MailMessage` / `MailAttempt` 中查询；邮件关闭时照常登记、记 `SKIPPED`。
 
 **写需求时应给出**
 
@@ -206,8 +207,9 @@
 3. 职责分离规则（哪些权限不能同时持有）。
 4. 哪些事情要生成待办（给谁：用户还是权限）、标题文案、链接到哪个页面、截止时间、何时自动关闭。
 5. 是否开邮件通知、发件人与邮件服务器（部署配置）。
+6. 流程发出的邮件：模板名、类别（能否退订）、参数、是否带一次性链接（用途、有效期）、三语标题与正文、收件人（用户或地址）与语言、收件人没有邮箱时怎么办。
 
-**平台不做**：代理审批 / 转签；审批委托期；移动端推送、短信、即时通讯；待办的 SLA 升级（可用定时任务 + 流程自行实现）。
+**平台不做**：代理审批 / 转签；审批委托期；移动端推送、短信、即时通讯；待办的 SLA 升级（可用定时任务 + 流程自行实现）；群发营销邮件、模板设计器、打开 / 点击追踪、邮件附件（单据发送除外）；待办通知与单据发送仍是纯文本、进程内重试。
 
 ## 8. 账本（11 §1）
 
@@ -442,10 +444,10 @@
 | 安全 | SAML、单点登出、密码复杂度 / 过期 / 历史、IP 白名单、自助注册、代理审批 |
 | 文件 | WebP / HEIC、视频、病毒扫描、S3 等对象存储实现、多实例共享存储 |
 | 报表与单据 | 图表 / 透视、报表与版式设计器、电子签章、非 PDF 单据、打印机对接 |
-| 通知 | 短信、即时通讯、移动推送；入站 Webhook；经界面管理的 Webhook 订阅 |
+| 通知 | 短信、即时通讯、移动推送；群发营销邮件、邮件模板设计器、打开 / 点击追踪（事务邮件已支持，见第 7 节）；入站 Webhook；经界面管理的 Webhook 订阅 |
 | 前端 | 拖拽式低代码、移动端原生、离线、仪表盘组件 |
 | 其他 | 三种之外的界面语言、按用户时区显示、全文检索、CDN |
-| 已知限制 | 公开文件与限流的缓存按实例（多实例近似）；访问令牌到期前权限变更不生效；数据期限按分配取外包而不按权限分别计算；准备人持审批权限时会看到自己请求的待办；流程事务内的读取没有数据库侧时限；导出、PDF、签发的报表与元数据生成的数据页中的用户编号字段仍显示编号；Webhook 投递占用消费流程的事务连接直到超时，新订阅会收到历史事件 |
+| 已知限制 | 公开文件与限流的缓存按实例（多实例近似）；访问令牌到期前权限变更不生效；数据期限按分配取外包而不按权限分别计算；准备人持审批权限时会看到自己请求的待办；流程事务内的读取没有数据库侧时限；导出、PDF、签发的报表与元数据生成的数据页中的用户编号字段仍显示编号；Webhook 投递与事务邮件的发送占用消费流程的事务连接直到超时，新订阅会收到历史事件；通知邮件只能发给用户（退订按用户） |
 
 ## 21. 需求整理检查清单
 
@@ -468,6 +470,7 @@
 | 审计与任务 | `audit.read`、`job.read` |
 | 审批与控制 | `approval.decide`、`approval.read`、`control.propose`、`control.publish`、`sod.read` |
 | 待办与编号 | `task.read`、`task.notify`（系统）、`numbering.read` |
+| 邮件 | `mail.read`、`mail.send`（系统）；`auth.account`、`auth.mail-preference`（用户本人，不授予角色） |
 | 文件 | `file.read`、`file.write`、`file.delete`、`file.generated.read`、`file.generated.archive`（不授予角色）；各文件策略自己的上传 / 读取权限 |
 | 报表与单据 | `report.issue`、`report.archive.read`、`document.issue`、`document.archive.read`、`document.send`、`document.send.any` |
 | 合规 | `integrity.seal`、`integrity.verify`、`integrity.read`、`legal.hold.read/.write`、`retention.read`、`data.export` |
@@ -476,10 +479,10 @@
 
 ## 附录 B 平台内置的流程、事件与任务
 
-- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
-- 事件：`jabiz.entity-changed.<实体>`、`jabiz.approval.requested` / `approved` / `rejected`、`jabiz.task.created`、`jabiz.report.issued`、`jabiz.document.issued`、`jabiz.import.committed`。
+- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
+- 事件：`jabiz.entity-changed.<实体>`、`jabiz.approval.requested` / `approved` / `rejected`、`jabiz.task.created`、`jabiz.mail.queued`、`jabiz.report.issued`、`jabiz.document.issued`、`jabiz.import.committed`。
 - 定时任务：`FILE_SWEEP`（每日）、`jabiz.integrity-seal`（每 5 分钟）、`jabiz.integrity-verify`（每日）。
 
 ## 附录 C 需求中常涉及的应用级配置
 
-本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.*`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥）。
+本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥）。

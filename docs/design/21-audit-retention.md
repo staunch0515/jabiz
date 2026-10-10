@@ -25,6 +25,10 @@
 - 表只追加（`jabiz_protect_append_only`），管理员经应用也改不了；14f-2 将其纳入封存，绕过触发器的修改可被发现。
 - 写入位置：`DatasetEntityManager` 的插入、更新、删除（普通实体）与 `VersionAppender`（时态实体，所有时态写入都经过它）。
   数据视图 API、通用实体流程、业务流程的 `SaveChanges`、平台流程（账本、审批、导入……）都经过这两处，因此不需要各自记录。
+- 投递记录与操作日志不是实体数据，不进审计：`op_*`、`sys_outbox_*`、`sys_event_consumption`、待办通知与单据发送的尝试
+  （`sys_notification_attempt`、`sys_document_delivery_attempt`）、事务邮件的尝试与令牌（`sys_mail_attempt`、`sys_mail_token`、`sys_mail_token_use`，18 §5.6）
+  由平台直接插入；它们只追加并被封存（第 2 节），可追溯性来自封存而不是审计记录。其中以平台实体展示的（`MailAttempt`）只有只读数据视图，
+  不能经任何写入路径修改。邮件消息本身（`MailMessage`）经变更集写入，照常审计。
 - "前"：普通实体取更新或删除前读到的当前行（CAS 本来就要读）；时态实体取基础版本的状态（同一次写入中先写的版本优先），基础版本是墓碑时为空。
 
 ### 1.2 值与遮蔽

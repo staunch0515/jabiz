@@ -26,6 +26,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
 
     public static final String PRODUCT = "Product";
     public static final String WAREHOUSE = "Warehouse";
+    public static final String CUSTOMER = "Customer";
     public static final String STOCK_LEVEL = "StockLevel";
     public static final String STOCK_RECEIPT = "StockReceipt";
     public static final String ORDER = "SalesOrder";
@@ -34,6 +35,7 @@ public final class CommerceEntities extends BaseEntityDefinitions {
     public static final String PRODUCT_DATASET = "urn:jabiz:dataset:default:Product";
     public static final String PUBLIC_PRODUCT_DATASET = "urn:jabiz:dataset:public:Product";
     public static final String WAREHOUSE_DATASET = "urn:jabiz:dataset:default:Warehouse";
+    public static final String CUSTOMER_DATASET = "urn:jabiz:dataset:default:Customer";
     public static final String STOCK_LEVEL_DATASET = "urn:jabiz:dataset:default:StockLevel";
     public static final String STOCK_RECEIPT_DATASET = "urn:jabiz:dataset:default:StockReceipt";
     public static final String ORDER_DATASET = "urn:jabiz:dataset:default:SalesOrder";
@@ -73,6 +75,29 @@ public final class CommerceEntities extends BaseEntityDefinitions {
             .defaultSort("sku", true));
         // Price changes are scheduled ahead: an order is priced at what is in effect when it is placed.
         eb.temporal(t -> t.allowScheduled(true));
+    });
+
+    /**
+     * A customer, kept by administrators. Its optional {@code userId} is the account that hears of shipments by mail
+     * (docs/design/18-numbering-approvals-tasks.md section 5.6): the recipient comes from here, never from an order.
+     */
+    public static final EntityDefinition CUSTOMER_ENTITY = EntityDefinition.define(CUSTOMER, eb -> {
+        eb.physicalTable("customer_version");
+        eb.primaryKey("customerId");
+        eb.field("customerId", f -> f.physicalColumn("customer_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:commerce:customer"));
+        eb.field("customerCode", f -> f.physicalColumn("customer_code").immutable(true).required(true).asText(30)
+            .apply(Rules.notBlank("ORDER_CUSTOMER_BLANK")));
+        eb.field("customerName", f -> f.physicalColumn("customer_name").required(true).asText(100));
+        eb.field("userId", f -> f.physicalColumn("user_id").asReference("SecUser"));
+        eb.unique("uk_customer_code", "customerCode");
+        eb.display("customerName");
+        eb.listView("default", lv -> lv
+            .columns("customerCode", "customerName")
+            .filters("customerCode", "customerName")
+            .sorts("customerCode", "customerName")
+            .defaultSort("customerCode", true));
+        eb.temporal(t -> t.allowScheduled(false));
     });
 
     public static final EntityDefinition WAREHOUSE_ENTITY = EntityDefinition.define(WAREHOUSE, eb -> {
