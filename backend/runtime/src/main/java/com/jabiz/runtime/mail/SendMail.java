@@ -11,16 +11,18 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.steps.CheckedStep;
 import com.jabiz.runtime.process.steps.EventPublisher;
-import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.security.Sensitive;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,13 +42,21 @@ import java.util.function.Predicate;
  *     Map.of("orderNo", ctx -> order(ctx).get("orderNo"))))
  * }</pre>
  * In the process's transaction it records a {@code MailMessage} (template, recipient, language and the parameters as
- * text, sensitive ones masked) and publishes {@value #QUEUED}; the platform's consumer sends it after the commit,
- * retried through the outbox. A rolled back process sends nothing. A user without an address is a violation
+ * text, which the mail is rendered from) and publishes {@value #QUEUED}; the platform's consumer sends it after the
+ * commit, retried through the outbox. A rolled back process sends nothing. A user without an address is a violation
  * ({@code MAIL_NO_ADDRESS}), which a process avoids with {@link #when}. Notifications go to users only.
+ *
+ * <p>A mail carries no secret but its one-time tokens, drawn when it is sent: parameters are stored as they are, so
+ * a parameter named like a secret or a masked field is refused at startup ({@code MailChecks}) and an {@code @Sensitive}
+ * value with {@code MAIL_PARAM_SECRET}; parameters longer than {@value #MAX_PARAMS} characters as JSON are refused
+ * ({@code MAIL_PARAMS_TOO_LARGE}), never cut.
  */
 @Component
 public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.Metadata<C>, C>,
     CheckedStep<SendMail.Metadata<C>> {
+
+    /** Longest parameters, as JSON. */
+    public static final int MAX_PARAMS = 16 * 1024;
 
     /** Published for every recorded message; the payload names it. */
     public static final String QUEUED = "jabiz.mail.queued";
@@ -81,17 +91,17 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
 
     private final MailTemplates templates;
     private final MessageCatalog messages;
-    private final SensitiveDataMasker masker;
+    private final JsonMapper json;
     private final ObjectProvider<EventPublisher> publisher;
     private final StorageAdapterRegistry storages;
     private final String poolRef;
 
-    public SendMail(MailTemplates templates, MessageCatalog messages, SensitiveDataMasker masker,
+    public SendMail(MailTemplates templates, MessageCatalog messages, JsonMapper json,
         ObjectProvider<EventPublisher> publisher, StorageAdapterRegistry storages,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         this.templates = templates;
         this.messages = messages;
-        this.masker = masker;
+        this.json = json;
         this.publisher = publisher;
         this.storages = storages;
         this.poolRef = poolRef;
@@ -117,7 +127,18 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
             for (String param : template.params()) {
                 Function<C, ?> value = metadata.params().get(param);
                 Object raw = value == null ? null : value.apply(ctx);
+                if (secret(raw)) {
+                    ctx.reject(new Violation(null, PlatformErrorCodes.MAIL_PARAM_SECRET, "Mail " + template.name()
+                        + " was given a secret as " + param, Map.of("param", param)));
+                    return Mono.empty();
+                }
                 values.put(param, raw == null ? "" : text(raw));
+            }
+            String params = json.writeValueAsString(values);
+            if (params.length() > MAX_PARAMS) {
+                ctx.reject(new Violation(null, PlatformErrorCodes.MAIL_PARAMS_TOO_LARGE, "The parameters of mail "
+                    + template.name() + " are " + params.length() + " characters", Map.of("limit", MAX_PARAMS)));
+                return Mono.empty();
             }
             Mono<UserMail> user = recipient.userId() == null ? Mono.just(new UserMail(null, null))
                 : findUser(recipient.userId());
@@ -137,7 +158,7 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
                 row.put("userId", recipient.userId());
                 row.put("address", address);
                 row.put("locale", locale.getLanguage());
-                row.put("params", masker.summary(values));
+                row.put("params", params);
                 row.put("createdTime", ctx.opTime());
                 row.put("processSeqId", BigDecimal.valueOf(ctx.processSeqId()));
                 Object id = ctx.changes().insert(MailEntities.MESSAGE, row);
@@ -148,6 +169,12 @@ public class SendMail<C extends ProcessContext> implements StepHandler<SendMail.
                 return target.publish(QUEUED, new Queued(String.valueOf(id)), ctx.processSeqId());
             });
         });
+    }
+
+    /** A record with an {@code @Sensitive} component: a secret by its declaration. */
+    private static boolean secret(Object raw) {
+        return raw instanceof Record && Arrays.stream(raw.getClass().getRecordComponents())
+            .anyMatch(component -> component.isAnnotationPresent(Sensitive.class));
     }
 
     /** A parameter as the mail shows it; the process formats what needs formatting (amounts, dates). */

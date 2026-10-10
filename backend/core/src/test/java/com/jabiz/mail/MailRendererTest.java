@@ -92,6 +92,11 @@ class MailRendererTest {
         assertThat(subject).isEqualTo("Order 1 2 Bcc: x@example.com");
         assertThat(MailRenderer.render("{userName}", "b", Map.of("userName", "x".repeat(400)), Set.of()).subject())
             .hasSize(MailRenderer.MAX_SUBJECT);
+        // Cut on characters, not UTF-16 units: an emoji across the limit is kept whole, never halved.
+        String emoji = "x".repeat(MailRenderer.MAX_SUBJECT - 1) + "😀" + "tail";
+        String cut = MailRenderer.render("{userName}", "b", Map.of("userName", emoji), Set.of()).subject();
+        assertThat(cut.codePointCount(0, cut.length())).isEqualTo(MailRenderer.MAX_SUBJECT);
+        assertThat(cut).endsWith("😀");
     }
 
     @Test

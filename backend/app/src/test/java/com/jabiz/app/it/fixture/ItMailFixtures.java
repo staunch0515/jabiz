@@ -9,6 +9,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.mail.MailTokens;
 import com.jabiz.runtime.mail.SendMail;
+import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -60,7 +61,7 @@ public final class ItMailFixtures {
             })
             .outputMapper(ctx -> new Done(input(ctx).userId(), input(ctx).address()))
             .step("Send the verification", SendMail.when(ctx -> "verify".equals(input(ctx).template()), VERIFY,
-                ItMailFixtures::recipient, Map.of("userName", ctx -> input(ctx).value())))
+                ItMailFixtures::recipient, Map.of("userName", ItMailFixtures::userName)))
             .step("Send the reset", SendMail.when(ctx -> "reset".equals(input(ctx).template()), RESET,
                 ItMailFixtures::recipient, Map.of()))
             .step("Send the news", SendMail.when(ctx -> "news".equals(input(ctx).template()), NEWS,
@@ -89,6 +90,20 @@ public final class ItMailFixtures {
             })
             .step("Use the token", MailTokens.consume(purpose, ctx -> ctx.get(INPUT, UseInput.class).token(),
                 USED)));
+    }
+
+    /** A secret by its declaration, which no mail may carry. */
+    public record Secret(@Sensitive String pin) {
+        @Override
+        public String toString() {
+            return "Secret[***]";
+        }
+    }
+
+    /** The value; {@code secret:…} passes a {@link Secret} instead. */
+    private static Object userName(ProcessContext ctx) {
+        String value = input(ctx).value();
+        return value != null && value.startsWith("secret:") ? new Secret(value) : value;
     }
 
     private static SendInput input(ProcessContext ctx) {

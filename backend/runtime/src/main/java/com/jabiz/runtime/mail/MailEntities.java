@@ -13,9 +13,10 @@ import java.util.Arrays;
 
 /**
  * Template mail as platform entities (docs/design/18-numbering-approvals-tasks.md section 5.6): a {@code MailMessage}
- * (append-only) is one mail a process decided to send, written by {@code SendMail}; a {@code MailAttempt}
- * (append-only, read-only) is one try to send it, written by the delivery. Both are read through datasets that only
- * processes write; the latest attempt of a message is its state.
+ * (append-only) is one mail a process decided to send, written by {@code SendMail} through the change set (audited
+ * like other entity writes); a {@code MailAttempt} (append-only) is one try to send it, a delivery log the platform
+ * inserts itself and that is not entity data (no audit record): its dataset is read-only. The latest attempt of a
+ * message is its state.
  */
 @Configuration
 public class MailEntities {
@@ -92,20 +93,22 @@ public class MailEntities {
 
     @Bean
     DatasetDefinition mailMessageDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(MESSAGE_DATASET, MESSAGE, poolRef);
+        return dataset(MESSAGE_DATASET, MESSAGE, false, poolRef);
     }
 
     @Bean
     DatasetDefinition mailAttemptDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
-        return dataset(ATTEMPT_DATASET, ATTEMPT, poolRef);
+        // Read-only: attempts are a delivery log the platform writes itself, like sys_notification_attempt and the
+        // operation tables, outside the entity write path and its auditing (docs/design/21-audit-retention.md section 1).
+        return dataset(ATTEMPT_DATASET, ATTEMPT, true, poolRef);
     }
 
-    private static DatasetDefinition dataset(String id, String entity, String poolRef) {
+    private static DatasetDefinition dataset(String id, String entity, boolean readOnly, String poolRef) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(MailPermissions.READ, MailPermissions.WRITE)
-            .policy(p -> p.processOnlyWrites().maxQueryBatchSize(MAX_ROWS))
+            .policy(p -> (readOnly ? p.readOnly(true) : p.processOnlyWrites()).maxQueryBatchSize(MAX_ROWS))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 }

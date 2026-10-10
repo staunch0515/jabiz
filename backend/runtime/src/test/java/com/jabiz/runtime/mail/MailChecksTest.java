@@ -40,7 +40,7 @@ class MailChecksTest {
             beans.addBean("template" + i, templates[i]);
         }
         return new MailChecks(enabled, from, baseUrl, beans.getBeanProvider(JavaMailSender.class),
-            beans.getBeanProvider(MailTemplate.class), messages);
+            beans.getBeanProvider(MailTemplate.class), messages, name -> name.toLowerCase().contains("password"));
     }
 
     @Test
@@ -77,6 +77,15 @@ class MailChecksTest {
             org.assertj.core.groups.Tuple.tuple("mail template t.news", "[zh] does not use the declared {name}"),
             org.assertj.core.groups.Tuple.tuple("mail template t.news",
                 "[zh] is a notification but its body has no {unsubscribeUrl}"));
+    }
+
+    @Test
+    void refusesParametersNamedLikeSecrets() {
+        MailTemplate secret = MailTemplate.define("t.ok", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("userName", "newPassword").token("verify", Duration.ofHours(1)));
+        assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), secret).check())
+            .extracting(CheckProblem::message).contains("parameter newPassword is named like a secret or a masked "
+                + "field; a mail carries no secret but its one-time tokens");
     }
 
     @Test

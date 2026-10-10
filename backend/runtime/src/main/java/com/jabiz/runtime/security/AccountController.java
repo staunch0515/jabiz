@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,15 +30,13 @@ class AccountController {
     @PostMapping("/api/auth/account/locale")
     Mono<UserProcesses.UserIdOutput> setLocale(@RequestBody(required = false) LocaleRequest request) {
         return RequestContexts.current().flatMap(context -> {
-            String user;
-            try {
-                user = UUID.fromString(context.actorId()).toString();
-            } catch (IllegalArgumentException | NullPointerException e) {
+            Optional<UUID> user = ActingUser.userId(context);
+            if (user.isEmpty()) {
                 return Mono.error(new PermissionDeniedException(SecurityPermissions.ACCOUNT,
                     "Only users of the platform have account settings"));
             }
             return processes.execute(UserProcesses.SET_LOCALE,
-                new UserProcesses.LocaleInput(user, request == null ? null : request.locale()));
+                new UserProcesses.LocaleInput(user.get().toString(), request == null ? null : request.locale()));
         });
     }
 }

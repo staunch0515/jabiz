@@ -43,10 +43,14 @@ import java.util.UUID;
  * Sends one recorded message: the only step of {@code MAIL_SEND} (docs/design/18-numbering-approvals-tasks.md
  * section 5.6; decision D35). A message with a {@code SENT} or {@code SKIPPED} attempt is done and left alone. With
  * mail off, or a notification the recipient turned off, the attempt is {@code SKIPPED}. Otherwise the template's
- * one-time tokens are drawn (only their SHA-256 is stored, in the delivery's transaction), the mail is rendered in
- * the message's language and handed to the {@link NotificationSender}; the attempt is {@code SENT}. A failure is
- * recorded as {@code FAILED} in a transaction of its own and fails the delivery, which rolls back (its tokens with it)
- * and is retried by the outbox.
+ * one-time tokens are drawn and their SHA-256 stored, the mail is rendered in the message's language and handed to the
+ * {@link NotificationSender}, and the attempt is {@code SENT}.
+ *
+ * <p>Around the send, every write has a transaction of its own ({@code inNewTransaction}): the tokens are committed
+ * before the mail leaves, and {@code SENT} right after the server took it. Whatever fails later (the delivery's
+ * commit) can therefore neither send the mail again (the retry finds it {@code SENT}) nor lose the tokens of a mail
+ * that went out. A failure before or during the send is recorded as {@code FAILED}, again in a transaction of its own,
+ * and fails the delivery, which the outbox retries with new tokens (the earlier ones are superseded).
  */
 @Component
 class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
@@ -112,9 +116,10 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                     return skip(ctx, metadata, pending, "UNSUBSCRIBED");
                 }
                 return send(pending)
-                    .then(attempt(pending, MailEntities.SENT, null, now()))
-                    .doOnSuccess(sent -> ctx.put(metadata.outcomeKey(), MailEntities.SENT))
-                    .onErrorResume(error -> recordFailure(pending, error).then(Mono.error(error)));
+                    .onErrorResume(error -> recordFailure(pending, error).then(Mono.error(error)))
+                    // The server has the mail: recorded at once and for good, whatever happens to the delivery.
+                    .then(engine().inNewTransaction(attempt(pending, MailEntities.SENT, null)))
+                    .doOnSuccess(sent -> ctx.put(metadata.outcomeKey(), MailEntities.SENT));
             });
         });
     }
@@ -143,11 +148,11 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     }
 
     private Mono<Void> skip(ProcessContext ctx, Metadata metadata, Pending pending, String reason) {
-        return attempt(pending, MailEntities.SKIPPED, reason, now())
+        return attempt(pending, MailEntities.SKIPPED, reason)
             .doOnSuccess(skipped -> ctx.put(metadata.outcomeKey(), MailEntities.SKIPPED));
     }
 
-    /** Draws the tokens, renders and sends; the tokens are written in the delivery's transaction. */
+    /** Draws the tokens, commits their hashes, renders and sends. */
     private Mono<Void> send(Pending pending) {
         MailTemplate template = pending.template();
         if (template == null) {
@@ -180,7 +185,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             MailRenderer.Rendered mail = render(template, pending.locale(), values);
             MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
                 List.of());
-            return stored.then(Mono.fromCallable(() -> {
+            return engine().inNewTransaction(stored.then()).then(Mono.fromCallable(() -> {
                     sender.send(message);
                     return true;
                 })
@@ -210,15 +215,18 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         return engine().insert("sys_mail_token", row);
     }
 
-    private Mono<Void> attempt(Pending pending, String outcome, String detail, Instant time) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("message_id", pending.messageId());
-        row.put("attempt_no", pending.attempt());
-        row.put("attempt_id", ids.next(MailEntities.ATTEMPT_ENTITY));
-        row.put("outcome", outcome);
-        row.put("detail", detail);
-        row.put("attempted_time", time);
-        return engine().insert("sys_mail_attempt", row);
+    /** The attempt, timed when it is written (after the send, for {@code SENT}). */
+    private Mono<Void> attempt(Pending pending, String outcome, String detail) {
+        return Mono.defer(() -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("message_id", pending.messageId());
+            row.put("attempt_no", pending.attempt());
+            row.put("attempt_id", ids.next(MailEntities.ATTEMPT_ENTITY));
+            row.put("outcome", outcome);
+            row.put("detail", detail);
+            row.put("attempted_time", now());
+            return engine().insert("sys_mail_attempt", row);
+        });
     }
 
     /** In a transaction of its own: the delivery's rolls back. */
@@ -228,7 +236,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         String text = error.getClass().getName() + (error.getMessage() == null ? "" : ": " + error.getMessage());
         StorageEngine engine = engine();
         return engine.inNewTransaction(attempt(pending, MailEntities.FAILED,
-                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text, now()))
+                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text))
             // A concurrent delivery recorded this attempt number already: one row is enough.
             .onErrorResume(UniqueKeyViolationException.class, duplicate -> Mono.empty());
     }

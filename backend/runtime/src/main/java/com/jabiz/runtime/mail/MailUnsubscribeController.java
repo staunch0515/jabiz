@@ -12,6 +12,7 @@ import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
+import com.jabiz.runtime.security.ActingUser;
 import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
@@ -27,7 +28,6 @@ import reactor.core.publisher.Mono;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -102,7 +102,7 @@ public class MailUnsubscribeController {
             if (templates.find(link.template()).filter(MailTemplate::unsubscribable).isEmpty()) {
                 return Mono.error(tokenInvalid());
             }
-            return asUser(link.userId(), processes.execute(preferenceSet,
+            return ActingUser.as(link.userId(), processes.execute(preferenceSet,
                 new MailProcesses.PreferenceInput(link.userId(), link.template(), false))).then();
         });
     }
@@ -145,17 +145,8 @@ public class MailUnsubscribeController {
 
     /** Only users of the platform receive template mail; development header actors are not users. */
     private static UUID requireUser(RequestContext context) {
-        try {
-            return UUID.fromString(context.actorId());
-        } catch (IllegalArgumentException | NullPointerException e) {
-            throw new PermissionDeniedException(MailPermissions.PREFERENCE, "Only users of the platform have mail "
-                + "preferences");
-        }
+        return ActingUser.userId(context).orElseThrow(() -> new PermissionDeniedException(MailPermissions.PREFERENCE,
+            "Only users of the platform have mail preferences"));
     }
 
-    /** Runs work as the user a link names: the operation record shows who unsubscribed. */
-    private static <T> Mono<T> asUser(String userId, Mono<T> work) {
-        return RequestContexts.current().flatMap(started -> work.contextWrite(view -> RequestContexts.put(view,
-            new RequestContext(userId, null, started.locale(), started.requestId(), Set.of(), Set.of()))));
-    }
 }

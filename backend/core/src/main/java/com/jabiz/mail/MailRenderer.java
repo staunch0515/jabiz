@@ -84,11 +84,13 @@ public final class MailRenderer {
         return new Rendered(subject(subject, values), text, html);
     }
 
-    /** The subject with its values, on one line and cut to {@value #MAX_SUBJECT} characters. */
+    /** The subject with its values, on one line and cut to {@value #MAX_SUBJECT} characters (code points). */
     static String subject(String subject, Map<String, String> values) {
         String filled = fill(Objects.requireNonNull(subject, "subject must not be null"), values, false, Set.of())
             .replaceAll("[\\r\\n\\t]+", " ").strip();
-        return filled.length() > MAX_SUBJECT ? filled.substring(0, MAX_SUBJECT) : filled;
+        // On characters, not UTF-16 units: a cut must not halve a surrogate pair (an emoji).
+        return filled.codePointCount(0, filled.length()) > MAX_SUBJECT
+            ? filled.substring(0, filled.offsetByCodePoints(0, MAX_SUBJECT)) : filled;
     }
 
     /** Fills the placeholders of a text; in a link target, values not known to be URL-safe are percent-encoded. */

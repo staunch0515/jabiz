@@ -11,6 +11,8 @@ import com.jabiz.runtime.security.secret.SingleUseSecrets;
 import com.jabiz.runtime.task.MailMessage;
 import com.jabiz.runtime.task.NotificationSender;
 import com.jabiz.runtime.task.SmtpNotificationSender;
+import com.jabiz.runtime.task.MailSenderTimeouts;
+import com.jabiz.runtime.test.MutableClock;
 import com.jabiz.runtime.test.TestTokens;
 import jakarta.mail.BodyPart;
 import jakarta.mail.Multipart;
@@ -67,7 +69,7 @@ class MailIT extends SecurityItSupport {
 
         @Bean
         @Primary
-        NotificationSender flakyMailSender(SmtpNotificationSender smtp) {
+        NotificationSender flakyMailSender(SmtpNotificationSender smtp, MutableClock clock) {
             return new NotificationSender() {
                 @Override
                 public void send(String to, String subject, String body) {
@@ -78,6 +80,9 @@ class MailIT extends SecurityItSupport {
                 public void send(MailMessage message) throws Exception {
                     if (message.to().startsWith("flaky") && FAILED.add(message.to())) {
                         throw new IllegalStateException("mail server busy");
+                    }
+                    if (message.to().startsWith("slow")) {
+                        clock.advance(Duration.ofMinutes(1));
                     }
                     smtp.send(message);
                     if (message.to().startsWith("lost") && FAILED.add(message.to())) {
@@ -93,6 +98,9 @@ class MailIT extends SecurityItSupport {
 
     @Autowired
     JwtService jwt;
+
+    @Autowired
+    org.springframework.context.ApplicationContext beans;
 
     private String caller() {
         return bearer(ItMailFixtures.PERMISSION);
@@ -243,7 +251,8 @@ class MailIT extends SecurityItSupport {
         assertThat(attempts(address)).singleElement().satisfies(row -> assertThat(row)
             .containsEntry("outcome", "FAILED").extractingByKey("detail").asString().contains("mail server busy"));
         assertThat(to(address)).isEmpty();
-        assertThat(query("SELECT * FROM sys_mail_token WHERE address = ?", address)).isEmpty();
+        // Its token was stored before the send; the retry's token supersedes it.
+        assertThat(query("SELECT * FROM sys_mail_token WHERE address = ?", address)).hasSize(1);
 
         // Not before the outbox's backoff.
         deliver();
@@ -413,6 +422,78 @@ class MailIT extends SecurityItSupport {
         // Only the platform's languages.
         post("/api/auth/account/locale", TestTokens.bearer(jwt, user), Map.of("locale", "fr"))
             .expectStatus().isBadRequest();
+    }
+
+    @Test
+    void aMailTheServerTookIsNotSentAgainWhenTheDeliveryFailsAfterwards() throws Exception {
+        // The delivery's commit fails once, after the send (a deferred trigger on its consumption row).
+        execute("CREATE TABLE it_fail_mail_commit (address varchar(320))");
+        execute("""
+            CREATE FUNCTION it_fail_mail_commit() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.consumer = 'jabiz.mail' AND EXISTS (SELECT 1 FROM it_fail_mail_commit) THEN
+                    RAISE EXCEPTION 'commit refused by the test';
+                END IF;
+                RETURN NULL;
+            END $$""");
+        execute("CREATE CONSTRAINT TRIGGER it_fail_mail_commit AFTER INSERT ON sys_event_consumption"
+            + " DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION it_fail_mail_commit()");
+        String address = address("commit");
+        execute("INSERT INTO it_fail_mail_commit VALUES (?)", address);
+        try {
+            send("verify", user(address, "en"), "Hal");
+            deliver();
+            assertThat(to(address)).hasSize(1);
+            assertThat(attempts(address)).extracting(row -> row.get("outcome")).containsExactly("SENT");
+            assertThat(query("SELECT 1 FROM sys_outbox_attempt WHERE consumer = 'jabiz.mail' AND error LIKE ?",
+                "%commit refused%")).isNotEmpty();
+        } finally {
+            execute("DROP TRIGGER it_fail_mail_commit ON sys_event_consumption");
+        }
+        // The retry finds the mail sent: no second copy, and the token of the one that went out is good.
+        clock.advance(Duration.ofMinutes(1));
+        deliver();
+        assertThat(to(address)).hasSize(1);
+        assertThat(attempts(address)).hasSize(1);
+        use("IT_MAIL_TOKEN_USE", link(VERIFY_LINK, to(address).getFirst()), 200);
+    }
+
+    @Test
+    void aSentAttemptIsTimedAfterTheSend() {
+        String address = address("slow");
+        send("verify", user(address, "en"), "Ivy");
+        java.time.Instant queued = clock.instant();
+        deliver();
+        assertThat(query("SELECT a.attempted_time FROM sys_mail_attempt a JOIN sys_mail_message m"
+            + " ON m.message_id = a.message_id WHERE m.address = ?", address)).singleElement()
+            .satisfies(row -> assertThat(((java.sql.Timestamp) row.get("attempted_time")).toInstant())
+                .isEqualTo(queued.plus(Duration.ofMinutes(1))));
+    }
+
+    @Test
+    void theMailServersTimeoutsAreSetOnTheSender() throws Exception {
+        // Spring's mail classes are the runtime's own dependency: reached through the bean.
+        Object sender = beans.getBean("mailSender");
+        assertThat((java.util.Properties) sender.getClass().getMethod("getJavaMailProperties").invoke(sender))
+            .containsKeys(MailSenderTimeouts.PROPERTIES.toArray())
+            .containsEntry("mail.smtp.connectiontimeout", "10000");
+    }
+
+    @Test
+    void parametersAreStoredAsTheyAreAndSecretsOrOversizedOnesRefused() throws Exception {
+        String address = address("param");
+        String user = user(address, "en");
+        String longName = "n".repeat(10_000);
+        send("verify", user, longName);
+        deliver();
+        assertThat(part(to(address).getFirst(), "text/plain")).contains(longName);
+        assertThat(query("SELECT params FROM sys_mail_message WHERE address = ?", address)).singleElement()
+            .satisfies(row -> assertThat((String) row.get("params")).contains(longName));
+
+        assertThat(ruleCode(send("verify", user, null, null, "secret:1234", false, 422)))
+            .isEqualTo("MAIL_PARAM_SECRET");
+        assertThat(ruleCode(send("verify", user, null, null, "x".repeat(17_000), false, 422)))
+            .isEqualTo("MAIL_PARAMS_TOO_LARGE");
     }
 
     @Test

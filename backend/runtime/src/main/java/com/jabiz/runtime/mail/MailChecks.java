@@ -5,7 +5,9 @@ import com.jabiz.mail.MailPlaceholders;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.security.SensitiveDataMasker;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Startup self-check of e-mail (docs/design/18-numbering-approvals-tasks.md sections 5.4 and 5.6), category
@@ -26,7 +29,9 @@ import java.util.Set;
  *       when a template has links to it (every notification has its unsubscribe link), rather than mail failing one
  *       by one;</li>
  *   <li>every mail template has a unique name, a subject and a body in every language of the application, and uses
- *       exactly the placeholders it declares ({@link MailPlaceholders}).</li>
+ *       exactly the placeholders it declares ({@link MailPlaceholders});</li>
+ *   <li>no parameter is named like a secret or a masked field: parameters are stored and sent as they are, and a mail
+ *       carries no secret but its one-time tokens.</li>
  * </ul>
  */
 @Component
@@ -40,10 +45,19 @@ public class MailChecks implements PlatformCheck {
     private final ObjectProvider<JavaMailSender> mail;
     private final List<MailTemplate> templates;
     private final MessageCatalog messages;
+    private final Predicate<String> hidden;
 
+    @Autowired
     public MailChecks(@Value("${jabiz.mail.enabled:false}") boolean enabled, @Value("${jabiz.mail.from:}") String from,
         @Value("${jabiz.mail.base-url:}") String baseUrl, ObjectProvider<JavaMailSender> mail,
-        ObjectProvider<MailTemplate> templates, MessageCatalog messages) {
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, SensitiveDataMasker masker) {
+        this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName);
+    }
+
+    /** @param hidden whether values under a name are hidden (secrets, masked fields) */
+    MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
+        ObjectProvider<MailTemplate> templates, MessageCatalog messages, Predicate<String> hidden) {
+        this.hidden = hidden;
         this.enabled = enabled;
         this.from = from;
         this.baseUrl = baseUrl;
@@ -62,6 +76,12 @@ public class MailChecks implements PlatformCheck {
             if (!names.add(template.name())) {
                 problems.add(CheckProblem.error(CATEGORY, location, "is declared more than once"));
                 continue;
+            }
+            for (String param : template.params()) {
+                if (hidden.test(param)) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "parameter " + param + " is named like a "
+                        + "secret or a masked field; a mail carries no secret but its one-time tokens"));
+                }
             }
             for (Locale locale : messages.supportedLocales()) {
                 Optional<String> subject = messages.find(template.subjectKey(), locale);
