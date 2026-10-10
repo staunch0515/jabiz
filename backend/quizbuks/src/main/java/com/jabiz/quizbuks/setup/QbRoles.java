@@ -33,7 +33,7 @@ public final class QbRoles {
     }
 
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
-        QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
+        QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
         "approval.decide", "task.read");
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
@@ -54,9 +54,9 @@ public final class QbRoles {
         add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
-            QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.AI_USE,
-            QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP, QbPermissions.SPONSOR_FINANCE_READ,
-            QbPermissions.BROADCAST_WRITE));
+            QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
+            QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
+            QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,

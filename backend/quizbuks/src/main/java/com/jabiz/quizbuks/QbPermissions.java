@@ -23,6 +23,8 @@ public final class QbPermissions {
     public static final String SPONSOR_ME = "qb.sponsor.me";
     /** Edit quizzes, materials, questions and versions. */
     public static final String CONTENT_WRITE = "qb.content.write";
+    /** Read the files of quiz content: covers, question and option images, material images, PDFs and audio. */
+    public static final String CONTENT_FILE_READ = "qb.content.file.read";
     /** Ask the AI for questions and covers. */
     public static final String AI_USE = "qb.ai.use";
     /** Create, submit, pause and resume publications. */
@@ -38,6 +40,8 @@ public final class QbPermissions {
     public static final String ADMIN_USERS_READ = "qb.admin.users.read";
     /** Ban and unban users. */
     public static final String ADMIN_USERS_BAN = "qb.admin.users.ban";
+    /** Read every sponsor's quizzes, their content and their versions (read only). */
+    public static final String ADMIN_QUIZ_READ = "qb.admin.quiz.read";
     /** Review sponsor onboarding. */
     public static final String REVIEW_SPONSOR = "qb.review.sponsor";
     /** Review publications. */

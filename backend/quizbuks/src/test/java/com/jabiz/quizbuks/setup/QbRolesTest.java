@@ -42,6 +42,23 @@ class QbRolesTest {
     }
 
     @Test
+    void contentIsWrittenBySponsorsAndReadByContentAdministrators() {
+        // Q3 (docs/quizbuks/plans/Q3-content.md, requirement 1); takers get the file permission in Q5.
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions())
+            .contains(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ)
+            .doesNotContain(QbPermissions.ADMIN_QUIZ_READ);
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+            .contains(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ)
+            .doesNotContain(QbPermissions.CONTENT_WRITE);
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
+            .contains(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ)
+            .doesNotContain(QbPermissions.CONTENT_WRITE);
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.CONTENT_FILE_READ);
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions())
+            .doesNotContain(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ);
+    }
+
+    @Test
     void noRoleWritesTheLedgerDirectly() {
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContainAnyElementsOf(List.of("ledger.post", "ledger.reverse", "ledger.account.write", "*")));
