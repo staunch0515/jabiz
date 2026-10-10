@@ -11,12 +11,18 @@ import java.util.Objects;
  * @param effectiveTime for temporal entities, the business time from which the change takes effect; null means
  *                      the time of the operation. Later times schedule the change, earlier times correct the past
  *                      (docs/design/04-temporal-append-only.md section 3.1). Must be null for other entities.
+ * @param grant         platform use: what lets this write pass a platform rule ({@code ChangeSet.Change#grant()});
+ *                      only change sets carry one, never what a caller sends
  */
-public record EntityChange(EntityAction action, EntityInstance instance, Instant effectiveTime) {
+public record EntityChange(EntityAction action, EntityInstance instance, Instant effectiveTime, Object grant) {
 
     public EntityChange {
         Objects.requireNonNull(action, "action must not be null");
         Objects.requireNonNull(instance, "instance must not be null");
+    }
+
+    public EntityChange(EntityAction action, EntityInstance instance, Instant effectiveTime) {
+        this(action, instance, effectiveTime, null);
     }
 
     public EntityChange(EntityAction action, EntityInstance instance) {
