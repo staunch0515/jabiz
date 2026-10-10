@@ -1,8 +1,10 @@
 // Tailwind's preflight, scoped to the elements of the new components (phase 15a, decision D34 item 6):
 //   node packages/ui/scripts/scoped-preflight.mjs        rewrites src/styles/preflight.scoped.css
-// While Ant Design pages remain, a global reset would restyle them; the scoped copy resets only `.jabiz-ui` and what
-// is inside it. Selectors keep their specificity (the scope is inside :where), so utilities override them as they
-// would the global preflight. theme.test.ts fails when the copy no longer matches the installed Tailwind.
+// While Ant Design pages remain, a global reset would restyle them; the scoped copy resets only elements that are
+// `.jabiz-ui` or inside one. Every element the components draw carries the class, so the reset reaches a component
+// wherever a page puts it, and never the page around it. Selectors keep their specificity (the scope is inside
+// :where), so utilities override them as they would the global preflight. theme.test.ts fails when the copy no
+// longer matches the installed Tailwind.
 // Phase 15d removes this script and imports 'tailwindcss/preflight.css'.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -50,7 +52,9 @@ export function scopeSelector(selector, scope = SCOPE) {
   const at = pseudoElementAt(selector)
   const base = at < 0 ? selector : selector.slice(0, at)
   const pseudo = at < 0 ? '' : selector.slice(at)
-  const scoped = base === '' || base === '*' ? `:where(.${scope}, .${scope} *)` : `:where(.${scope}) ${base}`
+  // The subject itself is a scoped element or inside one: the condition goes onto the last compound.
+  const within = `:where(.${scope}, .${scope} *)`
+  const scoped = base === '' || base === '*' ? within : `${base}${within}`
   return scoped + pseudo
 }
 

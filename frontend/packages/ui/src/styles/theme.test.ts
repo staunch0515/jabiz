@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { compile } from 'tailwindcss'
 import { describe, expect, it } from 'vitest'
 import { generate, OUTPUT, scopeSelector } from '../../scripts/scoped-preflight.mjs'
 
@@ -85,6 +86,22 @@ describe('theme tokens (WCAG 2.2 AA, docs/design/12-frontend.md section 11)', ()
   })
 })
 
+describe('the dark variant', () => {
+  it('does not reach an area pinned to the light tokens (.light inside .dark)', async () => {
+    const variant = /@custom-variant dark [^;]+;/.exec(css)![0]
+    const compiler = await compile(`${variant}\n@tailwind utilities;`)
+    const out = compiler.build(['dark:underline'])
+    const selector = /([^{}]*)\{[^{}]*text-decoration-line: underline/.exec(out)![1].replace(/\s+/g, ' ').trim()
+    // A light subtree is excluded however deep the element is.
+    expect(selector).toContain(':where(.dark, .dark *)')
+    expect(selector).toContain(':not(:where(.light, .light *))')
+  })
+
+  it('leaves color-scheme light inside the pinned area', () => {
+    expect(css).toMatch(/:where\(\.dark \.jabiz-ui, \.dark\.jabiz-ui\):not\(:where\(\.light, \.light \*\)\)\s*\{\s*color-scheme: dark;/)
+  })
+})
+
 describe('the scoped preflight (phase 15a)', () => {
   it('is what the installed Tailwind generates (run packages/ui/scripts/scoped-preflight.mjs after an upgrade)', () => {
     expect(readFileSync(OUTPUT, 'utf8')).toBe(generate())
@@ -94,7 +111,11 @@ describe('the scoped preflight (phase 15a)', () => {
     expect(scopeSelector('*')).toBe(':where(.jabiz-ui, .jabiz-ui *)')
     expect(scopeSelector('::after')).toBe(':where(.jabiz-ui, .jabiz-ui *)::after')
     expect(scopeSelector('html')).toBe(':where(.jabiz-ui)')
-    expect(scopeSelector('abbr:where([title])')).toBe(':where(.jabiz-ui) abbr:where([title])')
-    expect(scopeSelector('input::placeholder')).toBe(':where(.jabiz-ui) input::placeholder')
+    expect(scopeSelector('abbr:where([title])')).toBe('abbr:where([title]):where(.jabiz-ui, .jabiz-ui *)')
+    expect(scopeSelector('input::placeholder')).toBe('input:where(.jabiz-ui, .jabiz-ui *)::placeholder')
+    // A component's own root is reset too (a <button class="jabiz-ui …">), not only what is inside it.
+    expect(scopeSelector('button')).toBe('button:where(.jabiz-ui, .jabiz-ui *)')
+    expect(scopeSelector(':where(select:is([multiple], [size])) optgroup'))
+      .toBe(':where(select:is([multiple], [size])) optgroup:where(.jabiz-ui, .jabiz-ui *)')
   })
 })

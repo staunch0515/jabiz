@@ -21,6 +21,7 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from './ui/sidebar'
 
 /**
@@ -64,7 +65,11 @@ export interface AppShellProps {
 export function AppShell({ brand, navigation, sidebarFooter, header, children, contentClassName }: AppShellProps) {
   return (
     <SidebarProvider>
-      <Sidebar collapsible="icon">
+      {/*
+        Collapsed, the sidebar leaves the screen (and is inert) rather than shrinking to icons: menu entries from the
+        server have no icon, and groups could not open in an icon strip.
+      */}
+      <Sidebar collapsible="offcanvas">
         <SidebarHeader>{brand}</SidebarHeader>
         <SidebarContent>{navigation}</SidebarContent>
         {sidebarFooter && <SidebarFooter>{sidebarFooter}</SidebarFooter>}
@@ -75,7 +80,7 @@ export function AppShell({ brand, navigation, sidebarFooter, header, children, c
           data-slot="app-shell-header"
           className={cn(
             UI_SCOPE,
-            'bg-background sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b px-3',
+            'bg-background text-foreground sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b px-3',
           )}
         >
           <SidebarTrigger className="-ml-1" />
@@ -98,7 +103,7 @@ export interface ShellNavProps {
    * Renders an entry's link (a router's <Link>); it receives the props the menu puts on it and must pass them on
    * to the element it renders. A plain <a href> when absent.
    */
-  renderLink?: (item: ShellMenuItem & { path: string }, props: { children: ReactNode }) => ReactNode
+  renderLink?: (item: ShellMenuItem & { path: string }, props: LinkProps) => ReactNode
   /** The navigation landmark's name. */
   label: string
 }
@@ -107,7 +112,13 @@ function contains(item: ShellMenuItem, isActive: (path: string) => boolean): boo
   return (item.path !== undefined && isActive(item.path)) || (item.children ?? []).some((c) => contains(c, isActive))
 }
 
-function defaultLink(item: ShellMenuItem & { path: string }, props: { children: ReactNode }) {
+/** What the menu puts on an entry's link: its content, and closing the sheet on narrow screens once followed. */
+export interface LinkProps {
+  children: ReactNode
+  onClick: () => void
+}
+
+function defaultLink(item: ShellMenuItem & { path: string }, props: LinkProps) {
   return <a href={item.path} {...props} />
 }
 
@@ -135,6 +146,11 @@ interface ItemProps {
 
 function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps) {
   const [open, setOpen] = useState(() => contains(item, isActive))
+  const { isMobile, setOpenMobile } = useSidebar()
+  // On narrow screens the menu is a sheet over the page: following a link closes it.
+  const followed = () => {
+    if (isMobile) setOpenMobile(false)
+  }
   const Icon = item.icon
   const content = (
     <>
@@ -149,7 +165,7 @@ function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps)
       <Collapsible.Root open={open} onOpenChange={setOpen} asChild>
         <Item data-testid={`menu-${item.key}`}>
           <Collapsible.Trigger asChild>
-            <SidebarMenuButton tooltip={item.label} isActive={!open && contains(item, isActive)}>
+            <SidebarMenuButton isActive={!open && contains(item, isActive)}>
               {content}
               <ChevronRightIcon
                 aria-hidden
@@ -171,7 +187,7 @@ function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps)
 
   const active = item.path !== undefined && isActive(item.path)
   const link = item.path !== undefined
-    ? renderLink({ ...item, path: item.path }, { children: content })
+    ? renderLink({ ...item, path: item.path }, { children: content, onClick: followed })
     : <span>{content}</span>
   return (
     <Item data-testid={`menu-${item.key}`}>
@@ -180,7 +196,7 @@ function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps)
           {link}
         </SidebarMenuSubButton>
       ) : (
-        <SidebarMenuButton asChild isActive={active} tooltip={item.label} aria-current={active ? 'page' : undefined}>
+        <SidebarMenuButton asChild isActive={active} aria-current={active ? 'page' : undefined}>
           {link}
         </SidebarMenuButton>
       )}

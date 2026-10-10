@@ -59,7 +59,7 @@
   3. Reset the default border style to a 1px solid border.
 */
 
-:where(.jabiz-ui) hr {
+hr:where(.jabiz-ui, .jabiz-ui *) {
   height: 0; /* 1 */
   color: inherit; /* 2 */
   border-top-width: 1px; /* 3 */
@@ -69,7 +69,7 @@
   Add the correct text decoration in Chrome, Edge, and Safari.
 */
 
-:where(.jabiz-ui) abbr:where([title]) {
+abbr:where([title]):where(.jabiz-ui, .jabiz-ui *) {
   -webkit-text-decoration: underline dotted;
   text-decoration: underline dotted;
 }
@@ -78,12 +78,12 @@
   Remove the default font size and weight for headings.
 */
 
-:where(.jabiz-ui) h1,
-:where(.jabiz-ui) h2,
-:where(.jabiz-ui) h3,
-:where(.jabiz-ui) h4,
-:where(.jabiz-ui) h5,
-:where(.jabiz-ui) h6 {
+h1:where(.jabiz-ui, .jabiz-ui *),
+h2:where(.jabiz-ui, .jabiz-ui *),
+h3:where(.jabiz-ui, .jabiz-ui *),
+h4:where(.jabiz-ui, .jabiz-ui *),
+h5:where(.jabiz-ui, .jabiz-ui *),
+h6:where(.jabiz-ui, .jabiz-ui *) {
   font-size: inherit;
   font-weight: inherit;
 }
@@ -92,7 +92,7 @@
   Reset links to optimize for opt-in styling instead of opt-out.
 */
 
-:where(.jabiz-ui) a {
+a:where(.jabiz-ui, .jabiz-ui *) {
   color: inherit;
   -webkit-text-decoration: inherit;
   text-decoration: inherit;
@@ -102,8 +102,8 @@
   Add the correct font weight in Edge and Safari.
 */
 
-:where(.jabiz-ui) b,
-:where(.jabiz-ui) strong {
+b:where(.jabiz-ui, .jabiz-ui *),
+strong:where(.jabiz-ui, .jabiz-ui *) {
   font-weight: bolder;
 }
 
@@ -114,10 +114,10 @@
   4. Correct the odd `em` font sizing in all browsers.
 */
 
-:where(.jabiz-ui) code,
-:where(.jabiz-ui) kbd,
-:where(.jabiz-ui) samp,
-:where(.jabiz-ui) pre {
+code:where(.jabiz-ui, .jabiz-ui *),
+kbd:where(.jabiz-ui, .jabiz-ui *),
+samp:where(.jabiz-ui, .jabiz-ui *),
+pre:where(.jabiz-ui, .jabiz-ui *) {
   font-family: --theme(
     --default-mono-font-family,
     ui-monospace,
@@ -138,7 +138,7 @@
   Add the correct font size in all browsers.
 */
 
-:where(.jabiz-ui) small {
+small:where(.jabiz-ui, .jabiz-ui *) {
   font-size: 80%;
 }
 
@@ -146,19 +146,19 @@
   Prevent `sub` and `sup` elements from affecting the line height in all browsers.
 */
 
-:where(.jabiz-ui) sub,
-:where(.jabiz-ui) sup {
+sub:where(.jabiz-ui, .jabiz-ui *),
+sup:where(.jabiz-ui, .jabiz-ui *) {
   font-size: 75%;
   line-height: 0;
   position: relative;
   vertical-align: baseline;
 }
 
-:where(.jabiz-ui) sub {
+sub:where(.jabiz-ui, .jabiz-ui *) {
   bottom: -0.25em;
 }
 
-:where(.jabiz-ui) sup {
+sup:where(.jabiz-ui, .jabiz-ui *) {
   top: -0.5em;
 }
 
@@ -168,7 +168,7 @@
   3. Remove gaps between table borders by default.
 */
 
-:where(.jabiz-ui) table {
+table:where(.jabiz-ui, .jabiz-ui *) {
   text-indent: 0; /* 1 */
   border-color: inherit; /* 2 */
   border-collapse: collapse; /* 3 */
@@ -178,7 +178,7 @@
   Use the modern Firefox focus style for all focusable elements.
 */
 
-:where(.jabiz-ui) :-moz-focusring:where(:not(iframe)) {
+:-moz-focusring:where(:not(iframe)):where(.jabiz-ui, .jabiz-ui *) {
   outline: auto;
 }
 
@@ -186,7 +186,7 @@
   Add the correct vertical alignment in Chrome and Firefox.
 */
 
-:where(.jabiz-ui) progress {
+progress:where(.jabiz-ui, .jabiz-ui *) {
   vertical-align: baseline;
 }
 
@@ -194,7 +194,7 @@
   Add the correct display in Chrome and Safari.
 */
 
-:where(.jabiz-ui) summary {
+summary:where(.jabiz-ui, .jabiz-ui *) {
   display: list-item;
 }
 
@@ -202,9 +202,9 @@
   Make lists unstyled by default.
 */
 
-:where(.jabiz-ui) ol,
-:where(.jabiz-ui) ul,
-:where(.jabiz-ui) menu {
+ol:where(.jabiz-ui, .jabiz-ui *),
+ul:where(.jabiz-ui, .jabiz-ui *),
+menu:where(.jabiz-ui, .jabiz-ui *) {
   list-style: none;
 }
 
@@ -214,14 +214,14 @@
       This can trigger a poorly considered lint error in some tools but is included by design.
 */
 
-:where(.jabiz-ui) img,
-:where(.jabiz-ui) svg,
-:where(.jabiz-ui) video,
-:where(.jabiz-ui) canvas,
-:where(.jabiz-ui) audio,
-:where(.jabiz-ui) iframe,
-:where(.jabiz-ui) embed,
-:where(.jabiz-ui) object {
+img:where(.jabiz-ui, .jabiz-ui *),
+svg:where(.jabiz-ui, .jabiz-ui *),
+video:where(.jabiz-ui, .jabiz-ui *),
+canvas:where(.jabiz-ui, .jabiz-ui *),
+audio:where(.jabiz-ui, .jabiz-ui *),
+iframe:where(.jabiz-ui, .jabiz-ui *),
+embed:where(.jabiz-ui, .jabiz-ui *),
+object:where(.jabiz-ui, .jabiz-ui *) {
   display: block; /* 1 */
   vertical-align: middle; /* 2 */
 }
@@ -230,8 +230,8 @@
   Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
 */
 
-:where(.jabiz-ui) img,
-:where(.jabiz-ui) video {
+img:where(.jabiz-ui, .jabiz-ui *),
+video:where(.jabiz-ui, .jabiz-ui *) {
   max-width: 100%;
   height: auto;
 }
@@ -243,11 +243,11 @@
   4. Ensure consistent opacity for disabled states in all browsers.
 */
 
-:where(.jabiz-ui) button,
-:where(.jabiz-ui) input,
-:where(.jabiz-ui) select,
-:where(.jabiz-ui) optgroup,
-:where(.jabiz-ui) textarea,
+button:where(.jabiz-ui, .jabiz-ui *),
+input:where(.jabiz-ui, .jabiz-ui *),
+select:where(.jabiz-ui, .jabiz-ui *),
+optgroup:where(.jabiz-ui, .jabiz-ui *),
+textarea:where(.jabiz-ui, .jabiz-ui *),
 :where(.jabiz-ui, .jabiz-ui *)::file-selector-button {
   font: inherit; /* 1 */
   font-feature-settings: inherit; /* 1 */
@@ -263,7 +263,7 @@
   Restore default font weight.
 */
 
-:where(.jabiz-ui) :where(select:is([multiple], [size])) optgroup {
+:where(select:is([multiple], [size])) optgroup:where(.jabiz-ui, .jabiz-ui *) {
   font-weight: bolder;
 }
 
@@ -271,7 +271,7 @@
   Restore indentation.
 */
 
-:where(.jabiz-ui) :where(select:is([multiple], [size])) optgroup option {
+:where(select:is([multiple], [size])) optgroup option:where(.jabiz-ui, .jabiz-ui *) {
   padding-inline-start: 20px;
 }
 
@@ -307,7 +307,7 @@
   Prevent resizing textareas horizontally by default.
 */
 
-:where(.jabiz-ui) textarea {
+textarea:where(.jabiz-ui, .jabiz-ui *) {
   resize: vertical;
 }
 
@@ -369,7 +369,7 @@
   Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
 */
 
-:where(.jabiz-ui) :-moz-ui-invalid {
+:-moz-ui-invalid:where(.jabiz-ui, .jabiz-ui *) {
   box-shadow: none;
 }
 
@@ -377,8 +377,8 @@
   Correct the inability to style the border radius in iOS Safari.
 */
 
-:where(.jabiz-ui) button,
-:where(.jabiz-ui) input:where([type='button'], [type='reset'], [type='submit']),
+button:where(.jabiz-ui, .jabiz-ui *),
+input:where([type='button'], [type='reset'], [type='submit']):where(.jabiz-ui, .jabiz-ui *),
 :where(.jabiz-ui, .jabiz-ui *)::file-selector-button {
   appearance: button;
 }
@@ -396,6 +396,6 @@
   Make elements with the HTML hidden attribute stay hidden by default.
 */
 
-:where(.jabiz-ui) [hidden]:where(:not([hidden='until-found'])) {
+[hidden]:where(:not([hidden='until-found'])):where(.jabiz-ui, .jabiz-ui *) {
   display: none !important;
 }

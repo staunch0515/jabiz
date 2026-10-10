@@ -1,6 +1,6 @@
 import { useId, type ComponentProps } from 'react'
 import { formatDecimal, parseDecimal } from '@jabiz/client'
-import { cn } from '../lib/utils'
+import { cn, UI_SCOPE } from '../lib/utils'
 import { Input } from './ui/input'
 
 type InputProps = Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type' | 'inputMode' | 'defaultValue'>
@@ -60,7 +60,7 @@ export function DecimalInput({
       inputMode="decimal"
       autoComplete="off"
       value={value}
-      className={cn('text-right tabular-nums', className)}
+      className={cn(UI_SCOPE, 'text-right tabular-nums', className)}
       onChange={(event) => {
         const text = event.target.value.replace(/[\s,]/g, '')
         if (acceptsDecimalText(text, scale, allowNegative)) onChange(text)
@@ -91,7 +91,7 @@ export function MoneyInput({ currency, unit, className, 'aria-describedby': desc
   const id = useId()
   const label = currency ?? unit
   return (
-    <div className={cn('relative', className)} data-slot="money-input">
+    <div className={cn(UI_SCOPE, 'relative', className)} data-slot="money-input">
       <DecimalInput
         padToScale
         {...props}

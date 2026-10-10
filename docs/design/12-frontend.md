@@ -247,14 +247,15 @@ jabizApp {
 ## 12. 前端包、外观与迁移【D34，阶段 15】
 
 - **两个包**（源码形式，`exports` 指向 `src/index.ts`，不发布）：`@jabiz/client`（登录与令牌刷新、闲置锁定、step-up、API 客户端、
-  `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit` 设定无币种金额的显示单位）、`UserName`）；
+  `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit(币种, 标签)` 让应用的账本币种显示为标签，如 JPY 显示为 "Kudos"；无币种的数字与其他币种不变）、`UserName`）；
   `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
   `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
   （示范扩展在 15c 前豁免）。shadcn 组件只在 `packages/ui` 中生成或修改。
 - **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
   亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
-- **共存（15a–15c）**：Tailwind 的 preflight 只作用于 `.jabiz-ui` 及其后代（`packages/ui/scripts/scoped-preflight.mjs` 生成，测试比对已安装的 Tailwind）；
-  外壳、各弹出层与 `PageHeader` 带此类。antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`，层顺序 `theme, antd, base, components, utilities`
+- **共存（15a–15c）**：Tailwind 的 preflight 只作用于带 `.jabiz-ui` 的元素及其后代（`packages/ui/scripts/scoped-preflight.mjs` 生成，测试比对已安装的 Tailwind）；
+  `@jabiz/ui` 的组件画出的每个元素都带此类，因此组件放在哪里（antd 页面、扩展页面）都有 preflight，而周围的页面不受影响；外壳的包裹层与内容区不带。
+  暗色的 `dark:` 变体不作用于 `.light` 之内。侧栏收起时整体移出屏幕并设为 `inert`（不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`，层顺序 `theme, antd, base, components, utilities`
   （`src/index.css`），antd 的全局规则（链接颜色等）不影响新组件；antd 页面所在的内容区固定为亮色 token（`light`），暗色外观只作用于外壳与弹出层。
   15d 删除 antd 后 preflight 改为全局、去掉层 `antd` 与 `light` 固定。
 - **应用自有 SPA**（D34 第 5 条）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'` 并 `@source` 该包的 `src`；

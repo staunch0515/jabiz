@@ -77,4 +77,4 @@ export type { DecimalInputProps, MoneyInputProps } from './components/decimal-in
 export { PageHeader } from './components/page-header'
 export type { PageHeaderProps } from './components/page-header'
 export { AppShell, ShellNav } from './components/app-shell'
-export type { AppShellProps, ShellMenuItem, ShellNavProps } from './components/app-shell'
+export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'

@@ -22,7 +22,8 @@ single-page applications.
 | Change | Where |
 | --- | --- |
 | Imports are relative (`../../lib/utils`), not `@/…` | all |
-| Portal roots (dialog, sheet, alert dialog, popover, dropdown, select, tooltip, toaster) and the sidebar carry `UI_SCOPE` (`.jabiz-ui`), the scope of the preflight (see below) | those files |
+| Every element drawn with `cn(…)` carries `UI_SCOPE` (`.jabiz-ui`), the scope of the preflight (see below), so a component is reset wherever a page puts it; the sidebar's wrapper and inset, which hold the page, do not | all but sonner |
+| Collapsed with `offcanvas`, the sidebar container is `inert` | sidebar |
 | Fixed texts ("Close", "Toggle sidebar", "Previous page", …) come from the `ui` namespace | dialog, sheet, sidebar, pagination, breadcrumb |
 | The overlay is the `overlay` token, not `bg-black/50`; the destructive button's text is `destructive-foreground` | dialog, sheet, alert dialog, button, badge |
 | `Button` defaults to `type="button"` | button |
@@ -46,8 +47,8 @@ then re-apply the changes in the table (git diff shows them), rewrite `@/` impor
 ## The scoped preflight (phase 15 only)
 
 While Ant Design pages remain, Tailwind's preflight (its CSS reset) would restyle them. `theme.css` therefore imports
-`src/styles/preflight.scoped.css`, Tailwind's preflight with every selector limited to `.jabiz-ui` and its
-descendants (specificity unchanged). It is generated:
+`src/styles/preflight.scoped.css`, Tailwind's preflight with every selector limited to elements that are `.jabiz-ui`
+or inside one (specificity unchanged). It is generated:
 
 ```sh
 node packages/ui/scripts/scoped-preflight.mjs   # in frontend/, after upgrading Tailwind

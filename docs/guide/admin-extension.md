@@ -28,6 +28,9 @@ finance-web/
 
 扩展没有 `package.json`，也不 `pnpm install`：React、TanStack Query、dayjs、i18next、lucide-react 等都用平台前端的；组件经 `@jabiz/admin` 取自 `@jabiz/ui`
 （线 1.2 起，决策 D34；扩展的 lint 拒绝引用 antd，示范扩展在阶段 15c 前豁免）。
+阶段 15 期间页面所在的内容区仍固定为亮色、没有全局的 Tailwind preflight：`@jabiz/ui` 的组件各自带着 preflight 的作用域（`.jabiz-ui`），
+扩展自己写的 HTML 元素（`<h2>`、`<ul>`、`<button>` …）若要同样的重置，放在带 `className={UI_SCOPE}` 的容器里（`UI_SCOPE` 由 `@jabiz/admin` 导出），
+不要把 antd 组件放进这样的容器。15d 后 preflight 改为全局，这一步不再需要。
 
 ## 2. 写入口
 
