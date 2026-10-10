@@ -1387,6 +1387,14 @@
         },
         "type" : "object"
       },
+      "LocaleRequest" : {
+        "properties" : {
+          "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "LoginRequest" : {
         "properties" : {
           "password" : {
@@ -1402,6 +1410,17 @@
         "properties" : {
           "id" : { },
           "label" : { }
+        },
+        "type" : "object"
+      },
+      "MailPreferences" : {
+        "properties" : {
+          "templates" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TemplatePreference"
+            },
+            "type" : "array"
+          }
         },
         "type" : "object"
       },
@@ -1564,6 +1583,28 @@
             "type" : "string"
           },
           "to" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PreferenceOutput" : {
+        "properties" : {
+          "subscribed" : {
+            "type" : "boolean"
+          },
+          "template" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PreferenceRequest" : {
+        "properties" : {
+          "subscribed" : {
+            "type" : "boolean"
+          },
+          "template" : {
             "type" : "string"
           }
         },
@@ -2243,6 +2284,17 @@
         },
         "type" : "object"
       },
+      "TemplatePreference" : {
+        "properties" : {
+          "subscribed" : {
+            "type" : "boolean"
+          },
+          "template" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "TimeSliceEntry" : {
         "properties" : {
           "asOf" : {
@@ -2302,6 +2354,14 @@
         },
         "type" : "object"
       },
+      "UnsubscribeRequest" : {
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "UpdateRequest" : {
         "properties" : {
           "attributes" : {
@@ -2311,6 +2371,14 @@
           "version" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "UserIdOutput" : {
+        "properties" : {
+          "userId" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2656,6 +2724,33 @@
         "tags" : [ "audit-controller" ]
       }
     },
+    "/api/auth/account/locale" : {
+      "post" : {
+        "operationId" : "setLocale",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LocaleRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserIdOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
     "/api/auth/challenge/enroll" : {
       "post" : {
         "operationId" : "enrollUnderChallenge",
@@ -2782,6 +2877,69 @@
           }
         },
         "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/mail/preferences" : {
+      "get" : {
+        "operationId" : "preferences",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MailPreferences"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-unsubscribe-controller" ]
+      },
+      "post" : {
+        "operationId" : "setPreference",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreferenceRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PreferenceOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-unsubscribe-controller" ]
+      }
+    },
+    "/api/auth/mail/unsubscribe" : {
+      "post" : {
+        "operationId" : "unsubscribe",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UnsubscribeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "mail-unsubscribe-controller" ]
       }
     },
     "/api/auth/me" : {
