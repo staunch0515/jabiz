@@ -1,8 +1,27 @@
-import { LockOutlined, SafetyOutlined, UserOutlined } from '@ant-design/icons'
-import { LoginForm, ProFormText } from '@ant-design/pro-components'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  cn,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Separator,
+  Spinner,
+  UI_SCOPE,
+  useForm,
+} from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Card, Divider, Select, Space } from 'antd'
-import { useState } from 'react'
+import { CircleCheck, Info, KeyRound, LockKeyhole, TriangleAlert, User, type LucideIcon } from 'lucide-react'
+import { useId, useState, type ComponentProps, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { api, unwrap } from '../api/client'
@@ -19,6 +38,116 @@ type Step =
   | { kind: 'password'; notice?: 'enrolled' }
   | { kind: 'code'; challenge: string }
   | { kind: 'enroll'; challenge: string }
+
+/** A text field of the sign-in form: an icon, the placeholder as its name, and its error under it. */
+function SignInField({
+  icon: Icon,
+  error,
+  ...input
+}: { icon: LucideIcon; error?: string } & ComponentProps<'input'>) {
+  const errorId = useId()
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="relative">
+        <Icon aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <Input
+          {...input}
+          aria-label={input.placeholder}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="h-10 pl-9"
+        />
+      </div>
+      {error && (
+        <p id={errorId} className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** The frame of every step: the application's name, the step's title and the language choice. */
+function SignInFrame({ subtitle, children, testId }: { subtitle: string; children: ReactNode; testId?: string }) {
+  const { t, i18n } = useTranslation()
+  return (
+    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20')}>
+      <Card className="w-full max-w-sm" data-testid={testId}>
+        <CardHeader className="text-center">
+          <CardTitle>
+            <h1 className="text-2xl font-semibold tracking-tight">{t('app.title')}</h1>
+          </CardTitle>
+          <CardDescription>{subtitle}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">{children}</CardContent>
+      </Card>
+      {languages.length > 1 && (
+        <div className="mt-4">
+          <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
+            <SelectTrigger size="sm" aria-label={t('app.language')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {languages.map((lang) => (
+                <SelectItem key={lang} value={lang} lang={lang}>
+                  {LANGUAGE_NAMES[lang]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </main>
+  )
+}
+
+function SubmitButton({ busy, children }: { busy: boolean; children: ReactNode }) {
+  return (
+    <Button type="submit" size="lg" className="w-full" disabled={busy} aria-busy={busy || undefined}>
+      {busy && <Spinner className="text-current" />}
+      {children}
+    </Button>
+  )
+}
+
+/** The second step: a code from the authenticator, or a recovery code. */
+function CodeStep({ onVerify, onBack, error }: { onVerify(code: string): Promise<void>; onBack(): void; error: string | null }) {
+  const { t } = useTranslation()
+  const form = useForm<{ code: string }>({ defaultValues: { code: '' } })
+  return (
+    <SignInFrame subtitle={t('login.codeTitle')}>
+      <Alert role="note">
+        <Info aria-hidden />
+        <AlertDescription>{t('login.codeHint')}</AlertDescription>
+      </Alert>
+      {error && (
+        <Alert variant="destructive" data-testid="login-error">
+          <TriangleAlert aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <form
+        noValidate
+        className="flex flex-col gap-4"
+        onSubmit={form.handleSubmit(({ code }) => onVerify(code.trim()))}
+      >
+        <SignInField
+          icon={KeyRound}
+          placeholder={t('login.code')}
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          autoFocus
+          error={form.formState.errors.code?.message}
+          {...form.register('code', { validate: (v) => v.trim() !== '' || t('login.codeRequired') })}
+        />
+        <SubmitButton busy={form.formState.isSubmitting}>{t('login.verify')}</SubmitButton>
+      </form>
+      <Button variant="link" onClick={onBack}>
+        {t('login.back')}
+      </Button>
+    </SignInFrame>
+  )
+}
 
 /**
  * Signing in (docs/design/10-security.md sections 4 and 9): the password, then — for users with two-step
@@ -45,90 +174,90 @@ export default function LoginPage() {
     queryFn: () => unwrap(api.GET('/api/auth/oidc/providers')),
     staleTime: Infinity,
   })
+  const form = useForm<{ userName: string; password: string }>({
+    defaultValues: { userName: (state?.idle ? lastUserName() : undefined) ?? '', password: '' },
+  })
 
   if (ready && signedIn) return <Navigate to={from} replace />
 
   const failed = (e: unknown) => setError(e instanceof ApiError ? e.display : t('app.error'))
 
-  const language = languages.length > 1 && (
-    <Select
-      size="small"
-      value={i18n.language}
-      onChange={(lang) => void changeLanguage(lang as Language)}
-      options={languages.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))}
-      aria-label={t('app.language')}
-    />
-  )
-
   if (step.kind === 'enroll') {
     const challenge = step.challenge
     return (
-      <div style={{ paddingTop: 80, display: 'flex', justifyContent: 'center' }}>
-        <Card title={t('login.enrollTitle')} style={{ width: 420 }} data-testid="mfa-enroll">
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Alert type="info" showIcon message={t('login.enrollHint')} />
-            <MfaEnrollment
-              begin={async () => {
-                const answer = await unwrap(api.POST('/api/auth/challenge/enroll', { body: { challenge } }))
-                return { secret: answer.secret!, otpauthUri: answer.otpauthUri! }
-              }}
-              confirm={async (code) =>
-                (await unwrap(api.POST('/api/auth/challenge/enroll/confirm', { body: { challenge, code } })))
-                  .recoveryCodes ?? []
-              }
-              onDone={() => setStep({ kind: 'password', notice: 'enrolled' })}
-            />
-            <Button type="link" onClick={() => setStep({ kind: 'password' })}>{t('login.back')}</Button>
-          </Space>
-        </Card>
-      </div>
+      <SignInFrame subtitle={t('login.enrollTitle')} testId="mfa-enroll">
+        <Alert role="note">
+          <Info aria-hidden />
+          <AlertDescription>{t('login.enrollHint')}</AlertDescription>
+        </Alert>
+        <MfaEnrollment
+          begin={async () => {
+            const answer = await unwrap(api.POST('/api/auth/challenge/enroll', { body: { challenge } }))
+            return { secret: answer.secret!, otpauthUri: answer.otpauthUri! }
+          }}
+          confirm={async (code) =>
+            (await unwrap(api.POST('/api/auth/challenge/enroll/confirm', { body: { challenge, code } })))
+              .recoveryCodes ?? []
+          }
+          onDone={() => setStep({ kind: 'password', notice: 'enrolled' })}
+        />
+        <Button variant="link" onClick={() => setStep({ kind: 'password' })}>
+          {t('login.back')}
+        </Button>
+      </SignInFrame>
     )
   }
 
   if (step.kind === 'code') {
     const challenge = step.challenge
     return (
-      <div style={{ paddingTop: 80 }}>
-        <LoginForm
-          title={t('app.title')}
-          subTitle={t('login.codeTitle')}
-          submitter={{ searchConfig: { submitText: t('login.verify') } }}
-          actions={<Button type="link" onClick={() => { setError(null); setStep({ kind: 'password' }) }}>{t('login.back')}</Button>}
-          onFinish={async (values: { code: string }) => {
-            setError(null)
-            try {
-              await verify(challenge, values.code.trim())
-              navigate(from, { replace: true })
-            } catch (e) {
-              failed(e)
-            }
-          }}
-        >
-          <Alert type="info" showIcon message={t('login.codeHint')} style={{ marginBottom: 24 }} />
-          {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 24 }} data-testid="login-error" />}
-          <ProFormText
-            name="code"
-            fieldProps={{ size: 'large', prefix: <SafetyOutlined />, autoComplete: 'one-time-code', inputMode: 'numeric', autoFocus: true }}
-            placeholder={t('login.code')}
-            rules={[{ required: true, message: t('login.codeRequired') }]}
-          />
-        </LoginForm>
-      </div>
+      <CodeStep
+        error={error}
+        onBack={() => {
+          setError(null)
+          setStep({ kind: 'password' })
+        }}
+        onVerify={async (code) => {
+          setError(null)
+          try {
+            await verify(challenge, code)
+            navigate(from, { replace: true })
+          } catch (e) {
+            failed(e)
+          }
+        }}
+      />
     )
   }
 
+  const errors = form.formState.errors
   return (
-    <div style={{ paddingTop: 80 }}>
-      <LoginForm
-        title={t('app.title')}
-        subTitle={t('login.title')}
-        submitter={{ searchConfig: { submitText: t('login.submit') } }}
-        actions={language}
-        initialValues={{ userName: state?.idle ? lastUserName() : undefined }}
-        onFinish={async (values: { userName: string; password: string }) => {
+    <SignInFrame subtitle={t('login.title')}>
+      {state?.idle && step.notice !== 'enrolled' && (
+        <Alert variant="warning" data-testid="idle-locked">
+          <TriangleAlert aria-hidden />
+          <AlertDescription className="text-current">{t('login.idleLocked')}</AlertDescription>
+        </Alert>
+      )}
+      {step.notice === 'enrolled' && (
+        <Alert data-testid="mfa-enrolled">
+          <CircleCheck aria-hidden className="text-success" />
+          <AlertDescription className="text-foreground">{t('login.enrolled')}</AlertDescription>
+        </Alert>
+      )}
+      {error && (
+        <Alert variant="destructive" data-testid="login-error">
+          <TriangleAlert aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <form
+        noValidate
+        className="flex flex-col gap-4"
+        onSubmit={form.handleSubmit(async ({ userName, password }) => {
           setError(null)
           try {
-            const next = await signIn(values.userName, values.password)
+            const next = await signIn(userName, password)
             if (next.status === 'SIGNED_IN') {
               navigate(from, { replace: true })
             } else {
@@ -140,48 +269,50 @@ export default function LoginPage() {
             // The server answers every refusal with the same LOGIN_FAILED, in the language of the request.
             failed(e)
           }
-        }}
+        })}
       >
-        {state?.idle && step.notice !== 'enrolled' && (
-          <Alert type="warning" showIcon message={t('login.idleLocked')} style={{ marginBottom: 24 }} data-testid="idle-locked" />
-        )}
-        {step.notice === 'enrolled' && (
-          <Alert type="success" showIcon message={t('login.enrolled')} style={{ marginBottom: 24 }} data-testid="mfa-enrolled" />
-        )}
-        {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 24 }} data-testid="login-error" />}
-        <ProFormText
-          name="userName"
-          fieldProps={{ size: 'large', prefix: <UserOutlined />, autoComplete: 'username' }}
+        <SignInField
+          icon={User}
           placeholder={t('login.userName')}
-          rules={[{ required: true, message: t('login.userNameRequired') }]}
+          autoComplete="username"
+          error={errors.userName?.message}
+          {...form.register('userName', { validate: (v) => v.trim() !== '' || t('login.userNameRequired') })}
         />
-        <ProFormText.Password
-          name="password"
-          fieldProps={{ size: 'large', prefix: <LockOutlined />, autoComplete: 'current-password' }}
+        <SignInField
+          icon={LockKeyhole}
+          type="password"
           placeholder={t('login.password')}
-          rules={[{ required: true, message: t('login.passwordRequired') }]}
+          autoComplete="current-password"
+          error={errors.password?.message}
+          {...form.register('password', { validate: (v) => v !== '' || t('login.passwordRequired') })}
         />
-        {(providers.data ?? []).length > 0 && (
-          <>
-            <Divider plain>{t('login.orWith')}</Divider>
-            <Space direction="vertical" style={{ width: '100%', marginBottom: 24 }}>
-              {(providers.data ?? []).map((provider) => (
-                <Button
-                  key={provider.id}
-                  block
-                  data-testid={`oidc-${provider.id}`}
-                  onClick={() => {
-                    setError(null)
-                    startProviderSignIn(provider.id!, from).catch(failed)
-                  }}
-                >
-                  {provider.label}
-                </Button>
-              ))}
-            </Space>
-          </>
-        )}
-      </LoginForm>
-    </div>
+        <SubmitButton busy={form.formState.isSubmitting}>{t('login.submit')}</SubmitButton>
+      </form>
+      {(providers.data ?? []).length > 0 && (
+        <>
+          <div className="text-muted-foreground flex items-center gap-3 text-sm">
+            <Separator className="flex-1" />
+            {t('login.orWith')}
+            <Separator className="flex-1" />
+          </div>
+          <div className="flex flex-col gap-2">
+            {(providers.data ?? []).map((provider) => (
+              <Button
+                key={provider.id}
+                variant="outline"
+                className="w-full"
+                data-testid={`oidc-${provider.id}`}
+                onClick={() => {
+                  setError(null)
+                  startProviderSignIn(provider.id!, from).catch(failed)
+                }}
+              >
+                {provider.label}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
+    </SignInFrame>
   )
 }

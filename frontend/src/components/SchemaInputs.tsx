@@ -10,17 +10,7 @@ import {
   ProFormTextArea,
 } from '@ant-design/pro-components'
 import type { ReactNode } from 'react'
-import type { InputNode } from '../meta/processForm'
-
-/** The schema's pattern, when this browser can compile it; otherwise the server checks it alone. */
-function compiled(pattern: string | undefined): RegExp[] {
-  if (!pattern) return []
-  try {
-    return [new RegExp(pattern, 'u')]
-  } catch {
-    return []
-  }
-}
+import { compiledPattern, type InputNode } from '../meta/processForm'
 
 /**
  * The form inputs of a JSON Schema node (process inputs, template parameters): one ProForm field per property,
@@ -34,7 +24,9 @@ export function renderNode(
 ): ReactNode {
   const name = [...path, node.name]
   const rules = node.required ? [{ required: true, message: `${node.name}: REQUIRED` }] : []
-  const pattern = compiled(node.schema.pattern).map((regex) => ({ pattern: regex, message: `${node.name}: INVALID_VALUE` }))
+  const pattern = [compiledPattern(node.schema.pattern)]
+    .filter((regex): regex is RegExp => regex !== undefined)
+    .map((regex) => ({ pattern: regex, message: `${node.name}: INVALID_VALUE` }))
   const common = {
     key: node.name,
     name: name.length === 1 ? node.name : name,

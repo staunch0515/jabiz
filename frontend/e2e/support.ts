@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 /**
  * Playwright's test, failing any test during which the page reported a Content-Security-Policy violation: the server
@@ -99,6 +99,36 @@ export async function chooseLanguage(page: Page, name: string, code: string) {
   await page.getByTestId('language-switch').click()
   await page.getByRole('menuitemradio', { name }).click()
   await expect(page.locator('html')).toHaveAttribute('lang', code)
+}
+
+/*
+ * Finding things on pages built with @jabiz/ui by role, name or a stable data-* attribute (phase 15b), rather than
+ * by Ant Design's class names.
+ */
+
+/** A dialog or sheet (Radix, role "dialog"), by its title. */
+export function dialog(page: Page, name: string | RegExp): Locator {
+  return page.getByRole('dialog', { name })
+}
+
+/** The data rows of the DataTables within `scope` (not the header, empty or loading rows). */
+export function dataRows(scope: Page | Locator): Locator {
+  return scope.locator('[data-slot="data-table-row"]')
+}
+
+/** An option of an open combobox or select. */
+export function option(page: Page, name: string | RegExp): Locator {
+  return page.getByRole('option', { name })
+}
+
+/** One end of a range filter, named "<label>（起）" / "<label>（止）" in Chinese. */
+export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to'): Locator {
+  return scope.getByRole('group', { name: label }).getByLabel(end === 'from' ? `${label}（起）` : `${label}（止）`)
+}
+
+/** Waits until a page built with @jabiz/ui shows its content: no loading state, no error or "not found". */
+export async function pageRendered(page: Page) {
+  await expect(page.locator('[data-slot="page-state"]')).toHaveCount(0)
 }
 
 /** Signs out from the user's menu in the header (in any interface language) and waits for the sign-in page. */

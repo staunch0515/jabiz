@@ -168,3 +168,16 @@
     color-scheme: dark;
   }
 }
+
+/*
+ * Users who ask for less motion get none (WCAG 2.3.3): menus, dialogs and popovers appear and go at once instead of
+ * fading and sliding. `animation: none` lets Radix unmount closing content without waiting for an animation end.
+ * Outside the layers, so it overrides the components' animate-in / animate-out utilities.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .jabiz-ui,
+  .jabiz-ui * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

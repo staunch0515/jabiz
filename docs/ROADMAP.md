@@ -1152,6 +1152,32 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 6. **流程表单**（`ProcessFormPage` + 新 `SchemaForm`）：各种输入（密码、可键入的时间与日期、十进制 / 整数 / 数字、开关、枚举、标签、对象分组、可增删的列表、JSON）；校验只保留原有的必填与 `pattern`，写成纯函数 `checkInputs`，不引入新校验库；数字输入转为 JSON 数字；预填只读；`Idempotency-Key` 打开时生成、失败不变、成功更换；step-up 重试同键（由 `@jabiz/client` 完成）；违规列表与结果的测试 id、字段标签不变。
 7. **历史**：两列布局；`Timeline`（动作标签颜色集中一处，预定与墓碑标记不变）；时间点用两个可清除的 `DateTimePicker` 并写入 URL；结果用 `DescriptionList`，与现在不同时标记；404 视为"那时不存在"；操作详情用 `Sheet`；撤销用 `Dialog`（原因必填）；按钮的出现条件与权限不变。
 
+**15b-1 状态**：☑ 已完成（分支 `1.2/phase-15b1-ui-components`，PR 待建）。
+
+**15b-1 与计划的出入**
+- react-hook-form 由 `@jabiz/ui` 再导出（`useForm`、`useFieldArray`、`useWatch`、`Controller`，`src/form-state.ts`）：平台前端与扩展不另加依赖。
+- 日期控件改为"文本框 + 打开日历的按钮"：`id` / `aria-*` / `data-testid` 落在文本框上，原来按钮上的名称移到文本框（扩展中用 `getByRole('button', …)` 找日期字段的要改）。
+  Enter 读取键入的值且不提交外围的表单（与选择器确认一致），再按一次 Enter 才提交；`FilterBar` 中同样如此。
+  日期以应用的区域格式显示与键入（D22 第 7 条；en-US 为 `MM/DD/YYYY, hh:mm:ss AM`，占位符为该格式），ISO 形式在任何区域都可键入且先读：以四位年和连字符开头即为年-月-日；
+  区域格式按该区域年月日的顺序读，年须为四位。不是日期（或不允许的日子）的键入文字留在框中、`aria-invalid`、框下说明原因，并经 `onInvalidChange` 告知调用方：
+  `FilterBar` 与 `SchemaForm`（`checkInputs` 的 `typedInvalid`）在有这样的字段时不提交；重置（`resetKey`）丢弃这些文字。
+  弹出层中的时间框清空或只输入一半时时间不变，只给出时与分时保留秒，禁用的日子不能经时间框选中。
+- `TagsInput`：输入法组字时的 Enter 不加标签；全角逗号 `，` 与顿号 `、` 也作分隔。
+- 界面设置减少动态效果（`prefers-reduced-motion: reduce`）时，`@jabiz/ui` 的弹出层没有淡入与滑动；`a11y.spec` 在 axe 检查前等有限的动画结束（菜单淡入中的混合颜色曾使暗色检查偶发失败）。
+- 流程表单：必填的布尔值默认"否"（原来未拨动的开关报 `REQUIRED`）；预填的行键为只读（`readonly`）而非禁用，`content.spec` 改为断言不可编辑；
+  必填的标签输入为空数组时报 `REQUIRED`，不必填的空标签不发送。
+- 历史页：两个时间点都清除后不再把当前状态显示为"时间点的状态"（原有的缺陷：查询键与当前状态相同）。
+- `FilterBar` 的选项字段用 `Combobox`（可清除、可搜索），不用 `Select`。
+- e2e：`a11y.spec` 的登录页检查拆为亮、暗两个用例（共 36 个用例），并加查必填提示、身份提供方的拒绝、历史页的日历 / 操作详情 / 撤销对话框、流程表单展开的选项。
+- `SchemaForm` 已就绪；旧 `SchemaInputs` 仍供报表与导入页（15c 删除）。`processForm.toProcessInput` 同时接受 Dayjs（旧表单）与文本（新表单）。
+
+**15b-1 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 2 733.4 kB / 845.4 kB、CSS 74.6 kB / 12.5 kB；之后 JS 3 001.3 kB / 924.8 kB、CSS 79.0 kB / 13.2 kB。
+增量主要是此前被摇树去掉、现在用到的 react-day-picker（含 date-fns）、cmdk、react-hook-form 与新组件；超过 3 000 kB 的提示只是警告，15d 删除 antd 后回落。
+
+**15b-1 已知问题**
+- 已迁移页面中由 15b-2 / 15c 负责的部分仍是 antd（列表页、表单抽屉、账户安全页内嵌的 `MfaEnrollment` 所在的 antd 页仍固定亮色）。
+- jsdom 不计算样式，组件测试的 axe 不查对比度；对比度由 e2e 的 a11y 检查覆盖。
+
 #### 15b-2（3.5–4.5 天）：列表页这棵子树
 
 **要求**

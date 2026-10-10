@@ -1,8 +1,10 @@
 # @jabiz/ui
 
 The components of jabiz frontends (decision D34): shadcn/ui's components, the platform's composite components
-(`DataTable`, `ConfirmDialog`, `notify`, `DatePicker` / `DateTimePicker`, `DecimalInput` / `MoneyInput`,
-`ThemeToggle`, `PageHeader`, `AppShell` / `ShellNav`) and the theme (`@jabiz/ui/theme.css`). It builds on
+(`DataTable`, `ConfirmDialog`, `notify`, `DatePicker` / `DateTimePicker` (typeable), `DecimalInput` / `MoneyInput`,
+`ThemeToggle`, `PageHeader`, `AppShell` / `ShellNav`, `Combobox`, `FilterBar`, `FileUpload`, `Timeline`,
+`DescriptionList`, `TagsInput`, `CopyButton`, `PageState`, `Spinner`), react-hook-form's form state re-exported
+(`useForm`, `useFieldArray`, `useWatch`, `Controller`; `src/form-state.ts`) and the theme (`@jabiz/ui/theme.css`). It builds on
 `@jabiz/client` and is used by the admin frontend, its extensions (through `@jabiz/admin`) and applications' own
 single-page applications.
 
