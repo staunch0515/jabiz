@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * the customer role only; {@code strict} also requires a verified address.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
-    "it.sql-log.enabled=true",
+    "it.sql-log.enabled=true", "it.sign-in.import=true",
     "jabiz.security.entries.portal.accepted-roles=IT_CUSTOMER,IT_STAFF",
     "jabiz.security.entries.portal.app-path=/portal/",
     "jabiz.security.entries.strict.accepted-roles=IT_CUSTOMER",

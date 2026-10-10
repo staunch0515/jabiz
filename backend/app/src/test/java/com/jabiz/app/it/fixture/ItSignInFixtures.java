@@ -172,7 +172,10 @@ public final class ItSignInFixtures extends BaseEntityDefinitions {
                 .storage(s -> s.connectionPoolRef(pool)));
         }
 
+        /** Only where a test asks for it: the import catalogs of other tests stay as they are. */
         @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "it.sign-in.import",
+            havingValue = "true")
         ImportDefinition<ImportDefinition.NoParams> itVerifiedOnlyImport() {
             return ImportDefinition.define("it.verified-only", 1)
                 .file("app.import", ImportFormat.csv())
