@@ -21,6 +21,21 @@ class LedgerDimensionTest {
         LedgerDimension.define(3, "location", d -> d.entity("Location", "code")));
 
     @Test
+    void anIdValueIsTakenInItsCanonicalFormOnly() {
+        assertThat(LedgerDimension.canonicalId("0190F1A2-3B4C-7D5E-8F60-718293A4B5C6"))
+            .isEqualTo("0190f1a2-3b4c-7d5e-8f60-718293a4b5c6");
+        // Trimmed as EntityDefinition.normalizeId trims.
+        assertThat(LedgerDimension.canonicalId(" 0190f1a2-3b4c-7d5e-8f60-718293a4b5c6 "))
+            .isEqualTo("0190f1a2-3b4c-7d5e-8f60-718293a4b5c6");
+        // UUID.fromString takes shortened groups, but no stored id is written so.
+        assertThat(LedgerDimension.canonicalId("1-2-3-4-5")).isNull();
+        assertThat(LedgerDimension.canonicalId("0190f1a23b4c7d5e8f60718293a4b5c6")).isNull();
+        assertThat(LedgerDimension.canonicalId("not-a-uuid")).isNull();
+        assertThat(LedgerDimension.canonicalId("")).isNull();
+        assertThat(LedgerDimension.canonicalId(null)).isNull();
+    }
+
+    @Test
     void aDimensionNamesItsColumnAndItsValues() {
         LedgerDimension department = DIMENSIONS.getFirst();
         assertThat(department.field()).isEqualTo("dimension1");
