@@ -26,6 +26,7 @@ single-page applications.
 | Fixed texts ("Close", "Toggle sidebar", "Previous page", …) come from the `ui` namespace | dialog, sheet, sidebar, pagination, breadcrumb |
 | The overlay is the `overlay` token, not `bg-black/50`; the destructive button's text is `destructive-foreground` | dialog, sheet, alert dialog, button, badge |
 | `Button` defaults to `type="button"` | button |
+| `DropdownMenu` is not modal by default (a modal menu leaves the page `aria-hidden` but focusable: axe `aria-hidden-focus`) | dropdown-menu |
 | The sidebar remembers its state in `localStorage` (guarded), not a cookie; its rail is hidden from assistive technology (the header's trigger does the same) | sidebar |
 | Days of neighbouring months keep 4.5:1 text contrast | calendar |
 | `success` and `warning` variants | badge, alert |

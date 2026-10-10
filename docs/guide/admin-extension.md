@@ -26,18 +26,19 @@ finance-web/
 }
 ```
 
-扩展没有 `package.json`，也不 `pnpm install`：React、antd、ProComponents、TanStack Query、dayjs、i18next 等都用平台前端的。
+扩展没有 `package.json`，也不 `pnpm install`：React、TanStack Query、dayjs、i18next、lucide-react 等都用平台前端的；组件经 `@jabiz/admin` 取自 `@jabiz/ui`
+（线 1.2 起，决策 D34；扩展的 lint 拒绝引用 antd，示范扩展在阶段 15c 前豁免）。
 
 ## 2. 写入口
 
 ```tsx
-import { BookOutlined } from '@ant-design/icons'
 import { defineExtension } from '@jabiz/admin'
+import { BookOpen } from 'lucide-react'
 import JournalGridPage from './JournalGridPage'
 
 export default defineExtension({
   routes: [{ path: '/gl/journals/new', element: <JournalGridPage /> }],
-  menu: [{ key: 'journal', label: 'menu.journal', path: '/gl/journals/new', icon: <BookOutlined />,
+  menu: [{ key: 'journal', label: 'menu.journal', path: '/gl/journals/new', icon: BookOpen,
            permission: 'fin.journal.prepare' }],
   messages: {
     en: { menu: { journal: 'New journal entry' } },

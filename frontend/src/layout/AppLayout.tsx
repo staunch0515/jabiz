@@ -210,7 +210,7 @@ export default function AppLayout() {
         />
       }
       header={header}
-      contentClassName="light bg-background text-foreground"
+      contentClassName="light bg-muted text-foreground"
     >
       <StepUpProvider>
         <Outlet />

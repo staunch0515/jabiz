@@ -70,11 +70,12 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
 
   // The shell's menus, which open in portals of their own.
   await page.getByTestId('current-user').click()
-  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(page.getByRole('menuitem').first()).toBeVisible()
   await expectAccessible(page, at('account menu'))
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem')).toHaveCount(0)
   await page.getByTestId('appearance-switch').click()
-  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(page.getByRole('menuitemradio').first()).toBeVisible()
   await expectAccessible(page, at('appearance menu'))
   await page.keyboard.press('Escape')
 }

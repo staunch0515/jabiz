@@ -1,8 +1,10 @@
 /*
  * The theme of @jabiz/ui (decision D34): Tailwind with its preflight scoped to .jabiz-ui while Ant Design pages
- * remain, and the light and dark tokens. Ant Design's own styles are unlayered and so outrank Tailwind's layers on
- * the elements they style.
+ * remain, and the light and dark tokens. Ant Design's styles are in the layer "antd" (StyleProvider in App.tsx),
+ * declared here before Tailwind's base, so its global rules (a { color }) do not reach the new components; nothing of
+ * Tailwind reaches Ant Design's elements, whose classes are their own. Phase 15d drops the antd layer.
  */
+@layer theme, antd, base, components, utilities;
 @import '@jabiz/ui/theme.css';
 
 html,
