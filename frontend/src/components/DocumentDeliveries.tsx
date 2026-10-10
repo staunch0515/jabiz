@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Table, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
-import type { components } from '../api/schema'
+import type { components } from '@jabiz/client'
 import { formatDateTime } from '../meta/format'
 
 type Delivery = components['schemas']['DocumentDeliveryEntry']

@@ -1,7 +1,7 @@
 import { fileNameOf } from './files'
 import { sessionFetch } from './client'
 import { toApiError } from './problem'
-import type { components } from './schema'
+import type { components } from '@jabiz/client'
 
 /** An export format of POST /api/queries/{id}/export (docs/design/19-reports.md section 4). */
 export type ExportFormat = 'csv' | 'xlsx' | 'pdf'

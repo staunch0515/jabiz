@@ -94,25 +94,16 @@ export function datasetPath(dataset: string): string {
   return `/data/${encodeURIComponent(dataset)}`
 }
 
-/**
- * Picks a language from the hover menu of the header and waits until the page uses it. The header's menus open on
- * hover and close when the pointer leaves them; a click that lands while one is still opening is lost, so the choice
- * is repeated until it has taken effect.
- */
+/** Picks a language from the header's language menu and waits until the page uses it. */
 export async function chooseLanguage(page: Page, name: string, code: string) {
-  await expect(async () => {
-    await page.getByTestId('language-switch').hover()
-    await page.getByRole('menuitem', { name }).click({ timeout: 2_000 })
-    await expect(page.locator('html')).toHaveAttribute('lang', code, { timeout: 1_000 })
-  }).toPass({ timeout: 15_000 })
+  await page.getByTestId('language-switch').click()
+  await page.getByRole('menuitemradio', { name }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', code)
 }
 
-/** Signs out from the user's hover menu in the header (see {@link chooseLanguage}) and waits for the sign-in page. */
+/** Signs out from the user's menu in the header (in any interface language) and waits for the sign-in page. */
 export async function signOut(page: Page) {
-  await expect(async () => {
-    await page.getByTestId('current-user').hover()
-    await page.getByRole('menuitem', { name: 'Sign out' }).click({ timeout: 2_000 })
-    await expect(page).toHaveURL(/\/login$/, { timeout: 1_000 })
-  }).toPass({ timeout: 15_000 })
+  await page.getByTestId('current-user').click()
+  await page.getByRole('menuitem', { name: /Sign out|退出登录|ログアウト/ }).click()
+  await expect(page).toHaveURL(/\/login$/)
 }
-

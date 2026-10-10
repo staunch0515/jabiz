@@ -1,0 +1,3 @@
+# The admin frontend and the platform's frontend packages (decision D34): one install, one lockfile.
+packages:
+  - packages/*

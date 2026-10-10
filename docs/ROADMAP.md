@@ -20,8 +20,8 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ☐ 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已完成（PR #103）；决策 D35–D39 已确认 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b–15d 计划中 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1090,11 +1090,40 @@ finance F11 的 FIN-DI-007（Should）：把发票过账等事件以 webhook 通
 shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`）。
 
 **验收标准**
-- [ ] `frontend/` 为 pnpm 工作区，`@jabiz/client`、`@jabiz/ui` 可被平台前端与示范扩展引用；`pnpm lint`、`typecheck`、`test`、`build`、`check:api`、`ext:check` 全部通过。
-- [ ] 后台外壳与 step-up 对话框已不依赖 antd；其余页面仍为 antd 且功能不变（现有 e2e 全部通过）。
-- [ ] 组合组件在亮、暗两种外观下 axe 无违规；后台主要页面在暗色外观下 axe 无违规（新外壳部分）。
-- [ ] `pnpm app:check` 能发现版本不一致。
-- [ ] `./gradlew check` 通过（含 `:app:bootJar` 的前端构建）。
+- [x] `frontend/` 为 pnpm 工作区，`@jabiz/client`、`@jabiz/ui` 可被平台前端与示范扩展引用；`pnpm lint`、`typecheck`、`test`、`build`、`check:api`、`ext:check` 全部通过。
+- [x] 后台外壳与 step-up 对话框已不依赖 antd；其余页面仍为 antd 且功能不变（现有 e2e 全部通过：35 个用例）。
+- [x] 组合组件在亮、暗两种外观下 axe 无违规；后台主要页面在暗色外观下 axe 无违规（a11y.spec.ts 对同一组页面与外壳的菜单在暗色外观下再查一遍，整页无违规）。
+- [x] `pnpm app:check` 能发现版本不一致。
+- [x] `./gradlew check` 通过（含 `:app:bootJar` 的前端构建）。
+
+**状态**：☑ 已完成（分支 `1.2/phase-15a-ui-foundation`，PR 待建）。
+
+**与计划的出入**
+- shadcn 组件没有经 CLI 生成：构建环境访问不到 shadcn 的 registry（ui.shadcn.com，代理拒绝），按其 new-york（Tailwind v4）源码在 `packages/ui` 中手写；
+  `components.json` 已备好，今后在该目录用 CLI 合入，对上游的修改列在 `packages/ui/README.md`。另加了 `alert-dialog`（`ConfirmDialog` 的基础）。
+- 共存的层顺序：除作用域 preflight 外，antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`（`theme, antd, base, components, utilities`），
+  否则 antd 的全局 `a { color }` 会盖过侧栏链接的颜色（暗色下对比度 3.1:1）。为此加了依赖 `@ant-design/cssinjs`（antd 已带的同一版本，15d 删除）。
+- antd 页面所在的内容区固定为亮色 token（`light`，底色 `muted`，与 ProLayout 的灰底相近），暗色外观只作用于外壳与弹出层；`dark:` 变体与 `color-scheme` 都不作用于 `.light` 之内。
+- preflight 的作用域：不是给内容区加 `.jabiz-ui`（那会重置 antd 页面里的普通元素，且 `base` 层排在 `antd` 层之后会盖过 antd 的组件样式），
+  而是让 `@jabiz/ui` 组件画出的每个元素都带 `.jabiz-ui`，生成的选择器也匹配带该类的元素本身；扩展自己的普通 HTML 元素需放进 `UI_SCOPE` 容器（见扩展指南）。
+- 侧栏收起时移出屏幕并设为 `inert`，不收成图标条（服务端菜单没有图标、分组在图标条中无法展开）。
+- `setAmountUnit(币种, 标签)`：只改变该币种金额的显示（如 JPY 显示为 "Kudos"），不影响无币种的数字与其他币种；`app:check` 另查 `react-i18next`，以及使用 `@jabiz/client` 时其运行时依赖（`dayjs`、`openapi-fetch`）。
+- `DropdownMenu` 默认非模态：模态菜单把页面其余部分设为 `aria-hidden` 而仍可聚焦，axe 报 `aria-hidden-focus`。
+- 迁入 `@jabiz/client` 的模块在原位置保留只做重新导出的文件，原有页面与测试（含 `vi.mock` 的路径）不变；15b–15d 随页面迁移去掉。
+- 版本：新依赖固定为发布至少数周的确切版本；`@tanstack/react-table` 用 8.21.3、`react-day-picker` 用 9.14.0（各自的新大版本发布不久，API 有变），
+  `recharts` 需要的 `react-is` 固定为 19.3.0（与 React 一致）。
+- Vitest 的单个用例时限放宽到 15 秒（页面测试在负载下接近默认的 5 秒）。
+- 视觉回归以截图人工对比：登录页逐像素一致；列表页与表单抽屉中 antd 的部分外观不变，外框改为新侧栏（ProLayout 的面包屑随之没有了，见已知问题）。
+
+**产物大小**（`vite build`，未压缩 / gzip）：15a 前 JS 2 651.0 kB / 819.2 kB、CSS 0.3 kB；15a 后 JS 2 735.9 kB / 846.6 kB、CSS 73.5 kB / 12.5 kB（共存期间的增量，15d 删除 antd 后回落）。
+
+**已知问题**
+- ProLayout 给 `PageContainer` 的面包屑（数据 / 承运商）在新外壳中不再显示；15b 以 `PageHeader` 的面包屑取代。
+- 暗色外观下 antd 页面仍是亮色（内容区固定为亮色 token），15b、15c 迁移后才随外观变化。
+- jsdom 不计算样式，组件测试中的 axe 不查颜色对比度；对比度由 `theme.test.ts`（token）与 e2e 的 a11y 检查（浏览器中）覆盖。
+- step-up 对话框（Radix `Dialog`，模态）没有 e2e 的 axe 检查（需要开启二次验证的会话）；组件测试中的 axe 无违规。
+- 内容区里的 `@jabiz/ui` 组件打开的弹出层（选择框、菜单、日期）渲染在 `body` 下，暗色外观时是暗色，而所在页面是亮色；15b、15c 页面迁移、取消亮色固定后消失。
+- antd 组件若放进 `@jabiz/ui` 组件之内（如 `Dialog` 里放 antd 表单），会受 preflight 影响；迁移期间不要这样混用。
 
 ### 15b – 15d
 

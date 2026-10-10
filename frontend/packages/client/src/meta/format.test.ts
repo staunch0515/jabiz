@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { displayLocale, formatAmount, formatDate, formatDateTime, regionOf } from './format'
+import { afterEach, describe, expect, it } from 'vitest'
+import { displayLocale, formatAmount, formatDate, formatDateTime, regionOf, setAmountUnit } from './format'
 
 describe('regionOf', () => {
   it('accepts a language with a region, canonically', () => {
@@ -58,6 +58,29 @@ describe('formatAmount', () => {
   it('shows what is not a number as text', () => {
     expect(formatAmount('abc', { scale: 2 })).toBe('abc')
     expect(formatAmount(null, { scale: 2 })).toBe('')
+  })
+})
+
+describe('the display unit of amounts (decision D34)', () => {
+  afterEach(() => setAmountUnit('JPY', undefined))
+
+  it('replaces the symbol of the application currency by its label', () => {
+    setAmountUnit('jpy', 'Kudos')
+    expect(formatAmount('1234', { scale: 0, locale: 'en-US', currency: 'JPY' })).toBe('1,234\u00a0Kudos')
+    expect(formatAmount('-20', { scale: 0, locale: 'en-US', currency: 'JPY', negative: 'parentheses' }))
+      .toBe('(20\u00a0Kudos)')
+  })
+
+  it('leaves numbers without a currency and other currencies as they are', () => {
+    setAmountUnit('JPY', 'Kudos')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US' })).toBe('12')
+    expect(formatAmount('5', { scale: 2, locale: 'en-US', currency: 'USD' })).toBe('$5.00')
+  })
+
+  it('restores the symbol when the label is removed', () => {
+    setAmountUnit('JPY', 'Kudos')
+    setAmountUnit('JPY', ' ')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US', currency: 'JPY' })).toBe('¥12')
   })
 })
 

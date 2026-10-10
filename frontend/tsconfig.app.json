@@ -23,6 +23,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "../spec/*.json"],
+  "include": ["src", "packages/*/src", "../spec/*.json"],
   "exclude": []
 }

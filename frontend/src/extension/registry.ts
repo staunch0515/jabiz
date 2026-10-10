@@ -1,4 +1,4 @@
-import type { MenuDataItem } from '@ant-design/pro-components'
+import type { ShellMenuItem } from '@jabiz/ui'
 import type { RouteObject } from 'react-router'
 import type { AdminExtension, ExtensionMenuItem } from './api'
 
@@ -71,19 +71,19 @@ export function checkedExtension(extension: AdminExtension): AdminExtension {
   return extension
 }
 
-/** Menu entries the user may see, as ProLayout routes, labelled by `label`. Empty groups are left out. */
+/** Menu entries the user may see, as entries of the shell's menu, labelled by `label`. Empty groups are left out. */
 export function extensionMenu(
   items: ExtensionMenuItem[] | undefined,
   can: (permission: string) => boolean,
   label: (key: string) => string,
-): MenuDataItem[] {
-  return (items ?? []).flatMap((item): MenuDataItem[] => {
+): ShellMenuItem[] {
+  return (items ?? []).flatMap((item): ShellMenuItem[] => {
     if (item.permission && !can(item.permission)) return []
     const children = item.children ? extensionMenu(item.children, can, label) : undefined
     if (item.children && children!.length === 0 && !item.path) return []
     return [{
       key: `ext:${item.key}`,
-      name: label(item.label),
+      label: label(item.label),
       path: item.path ?? `/ext/${item.key}`,
       icon: item.icon,
       children: children && children.length > 0 ? children : undefined,

@@ -4,7 +4,7 @@ import { cleanup } from '@testing-library/react'
 
 afterEach(() => cleanup())
 
-// antd reads these browser APIs, which jsdom does not provide. (Tests of build scripts run without a DOM.)
+// antd and Radix UI read these browser APIs, which jsdom does not provide. (Tests of build scripts run without a DOM.)
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -20,4 +20,15 @@ if (typeof window !== 'undefined') {
     }),
   })
   window.getComputedStyle = ((original) => (element: Element) => original(element))(window.getComputedStyle)
+
+  // Radix UI (the @jabiz/ui components) measures and captures the pointer with APIs jsdom does not have.
+  window.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Element.prototype.hasPointerCapture ??= () => false
+  Element.prototype.setPointerCapture ??= () => {}
+  Element.prototype.releasePointerCapture ??= () => {}
+  Element.prototype.scrollIntoView ??= () => {}
 }

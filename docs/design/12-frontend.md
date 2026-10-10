@@ -8,20 +8,23 @@
 | 项 | 选择 |
 |---|---|
 | 工具链 | pnpm、Vite、TypeScript |
-| 界面 | React 19、Ant Design 5 + ProComponents（ProLayout / ProTable / ProForm），`@ant-design/v5-patch-for-react-19` |
+| 界面 | React 19；shadcn/ui（Radix + Tailwind CSS v4，组件在 `@jabiz/ui`）与 Ant Design 5 + ProComponents 共存，阶段 15 迁移完毕后只剩前者（第 12 节、决策 D34）。外壳与 step-up 对话框已是 `@jabiz/ui`（15a） |
 | 数据 | TanStack Query（缓存键含界面语言）；请求经 `openapi-fetch`，类型由 OpenAPI 生成 |
 | 路由、多语言 | React Router；i18next（zh / ja / en，应用可只选其中几种），antd 与 dayjs 的语言随之切换；可按区域（如 `en-US`）显示日期、数字与金额（第 10 节） |
 | 测试 | Vitest + Testing Library（适配层、组件）；Playwright（端到端） |
 
 ```
-frontend/
+frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*），一个 lockfile
   openapi/openapi.json      后端 OpenAPI 快照（由后端测试写出并比对，见第 3 节）
-  src/api/                  schema.d.ts（生成）、client.ts（令牌、语言、401 时刷新一次）、session.ts、problem.ts
+  packages/client/          `@jabiz/client`（无界面，第 12 节）：api/schema.d.ts（生成）、client.ts（令牌、语言、401 时刷新一次）、
+                            session.ts、problem.ts、files.ts、auth/、lib/calls.ts、i18n/、meta/format.ts、meta/decimal.ts、UserName
+  packages/ui/              `@jabiz/ui`（第 12 节）：shadcn 组件、组合组件、theme.css；README.md 记录对上游的修改与升级方法
+  src/api/ auth/ meta/…     迁入两个包的模块在原位置只重新导出（供原有页面与测试的 mock 使用，15b–15d 逐步去掉）
   src/meta/                 适配层（纯函数）：kinds、listQuery、columns、entityForm、validation、decimal、processForm、history
   src/components/ pages/    通用页面：目录、列表、表单抽屉、历史、流程
   src/extension/            应用扩展的约定与加载（第 9 节）
   src/lib/index.ts          `@jabiz/admin`：扩展可用的全部内容（第 9 节）
-  scripts/                  扩展的解析与检查（ext.mjs、extension.ts、extension-lint.mjs）
+  scripts/                  扩展的解析与检查（ext.mjs、extension.ts、extension-lint.mjs）；应用 SPA 的版本检查（app-check.mjs）
   e2e/                      Playwright
 ../spec/validation-cases.json  前后端共享的校验用例（第 5 节）
 ```
@@ -54,7 +57,7 @@ frontend/
   （生成过程扫描类路径，不能发生在事件循环上）、响应类型 `application/json`、按键排序。
 - `OpenApiSnapshotIT`（app）取出文档、去掉 `servers`，与仓库中的 `frontend/openapi/openapi.json` 比较；不一致即失败。
   更新：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`，再在 `frontend/` 下 `pnpm gen:api`，两者一起提交。
-  `CI` 环境下快照缺失即失败。前端 CI 的 `pnpm check:api` 确认 `schema.d.ts` 与快照一致。
+  `CI` 环境下快照缺失即失败。前端 CI 的 `pnpm check:api` 确认 `packages/client/src/api/schema.d.ts` 与快照一致。
 - 以 `Map` 返回的接口（实体导出、历史、操作详情）在 OpenAPI 中是自由对象，前端在 `src/meta/types.ts` 中声明其形状。
 
 ## 4. 登录与令牌
@@ -194,13 +197,13 @@ frontend/
 
 | 项 | 规定 |
 |---|---|
-| 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 antd） |
+| 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 `@jabiz/ui`；共存期间也是一份 antd） |
 | `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
 | 可用的平台内容 | 只有 `@jabiz/admin`（`frontend/src/lib/index.ts`）：`api` / `unwrap` / `ApiError`、`runQuery`（SQL 模板）、`runProcess`（流程，自动带幂等键）、`useAuth`、元数据 hooks、`EntityFormDrawer` 等通用组件、`UserName`（用户编号显示为名字，10 §14）、格式化函数 |
-| 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径与 `virtual:jabiz-extension`） |
+| 检查 | 启动时 `checkedExtension` 一次报告全部问题并停止；`pnpm build` 先对扩展做类型检查；`pnpm ext:typecheck / ext:lint / ext:test / ext:check`（lint 另加规则：拒绝引用 `frontend/` 下的路径、`virtual:jabiz-extension` 与 antd（示范扩展在 15c 前豁免））。菜单项的 `icon` 是 lucide 图标组件（`icon: Boxes`），菜单类型是平台的 `ShellMenuItem` |
 
 - 扩展页面调用的仍是 `/api/**`：权限、数据视图范围与校验都在服务端，页面上的隐藏只是导航。
 - 扩展不能自带依赖（没有自己的 `package.json`）；需要新的通用依赖时先加到平台前端。平台前端的依赖（含只在 `exports` 中声明类型的 `react-router`）
@@ -241,3 +244,19 @@ jabizApp {
 
 新增或修改页面时：在 `a11y.spec.ts` 中加上该页面；颜色用主题 token，不写死 Ant Design 的默认色值。
 
+## 12. 前端包、外观与迁移【D34，阶段 15】
+
+- **两个包**（源码形式，`exports` 指向 `src/index.ts`，不发布）：`@jabiz/client`（登录与令牌刷新、闲置锁定、step-up、API 客户端、
+  `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit(币种, 标签)` 让应用的账本币种显示为标签，如 JPY 显示为 "Kudos"；无币种的数字与其他币种不变）、`UserName`）；
+  `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
+  `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
+  （示范扩展在 15c 前豁免）。shadcn 组件只在 `packages/ui` 中生成或修改。
+- **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
+  亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
+- **共存（15a–15c）**：Tailwind 的 preflight 只作用于带 `.jabiz-ui` 的元素及其后代（`packages/ui/scripts/scoped-preflight.mjs` 生成，测试比对已安装的 Tailwind）；
+  `@jabiz/ui` 的组件画出的每个元素都带此类，因此组件放在哪里（antd 页面、扩展页面）都有 preflight，而周围的页面不受影响；外壳的包裹层与内容区不带。
+  暗色的 `dark:` 变体不作用于 `.light` 之内。侧栏收起时整体移出屏幕并设为 `inert`（不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`，层顺序 `theme, antd, base, components, utilities`
+  （`src/index.css`），antd 的全局规则（链接颜色等）不影响新组件；antd 页面所在的内容区固定为亮色 token（`light`），暗色外观只作用于外壳与弹出层。
+  15d 删除 antd 后 preflight 改为全局、去掉层 `antd` 与 `light` 固定。
+- **应用自有 SPA**（D34 第 5 条）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'` 并 `@source` 该包的 `src`；
+  `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`（以及使用 `@jabiz/ui` 时其运行时依赖）的版本与平台前端一致，不一致即失败。
