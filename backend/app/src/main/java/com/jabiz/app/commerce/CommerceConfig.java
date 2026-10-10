@@ -32,6 +32,17 @@ class CommerceConfig {
     }
 
     @Bean
+    EntityDefinition customerEntityDefinition() {
+        return CommerceEntities.CUSTOMER_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition customerDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return dataset(CommerceEntities.CUSTOMER_DATASET, CommerceEntities.CUSTOMER, "commerce.customer.read",
+            "commerce.customer.write", false, poolRef);
+    }
+
+    @Bean
     EntityDefinition productEntityDefinition() {
         return CommerceEntities.PRODUCT_ENTITY;
     }

@@ -1,5 +1,6 @@
 # The shipment notice (ROADMAP phase 16a, docs/design/18-numbering-approvals-tasks.md section 5.6): an order of a
-# customer with an account is shipped, and the customer hears of it by mail in their own language. The mail is queued
+# customer whose master record names an account is shipped, and the customer hears of it by mail in their own
+# language. Who is mailed comes from the customer master, which administrators keep, never from the order. The mail is queued
 # in the shipment's transaction and sent by the outbox; mail is off in tests, so its attempt is SKIPPED. An order of a
 # customer without an account sends nothing.
 name: Shipment notice by mail
@@ -21,12 +22,16 @@ steps:
     process: SEC_USER_CREATE@latest
     input: { userName: hanako, displayName: Hanako, email: hanako@example.com, locale: ja }
     save: { hanako: $.userId }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Customer, attributes: { customerCode: CUST-HANAKO, customerName: Hanako, userId: "${hanako}" } }
+  - note: A customer in the master without an account.
+    process: ADD_ENTITY@latest
+    input: { entityType: Customer, attributes: { customerCode: CUST-WALKIN, customerName: Walk-in } }
 
   - process: ORDER_PLACE@latest
     input:
       orderNo: SO-MAIL-1
       customerCode: CUST-HANAKO
-      customerUserId: "${hanako}"
       warehouseCode: OSK
       lines: [{ sku: TEA-1, quantity: 2 }]
     save: { order: $.orderId }
@@ -45,5 +50,5 @@ steps:
   - note: The outbox runs MAIL_SEND; with mail off the message is recorded as skipped.
     deliverEvents: true
 snapshot:
-  entities: [SalesOrder, MailMessage, MailAttempt]
+  entities: [Customer, SalesOrder, MailMessage, MailAttempt]
   asOf: end
