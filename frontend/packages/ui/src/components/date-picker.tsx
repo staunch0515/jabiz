@@ -6,7 +6,7 @@ import { enUS, ja, zhCN } from 'react-day-picker/locale'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn } from '../lib/utils'
+import { cn, UI_SCOPE } from '../lib/utils'
 import { Button } from './ui/button'
 import { Calendar } from './ui/calendar'
 import { Input } from './ui/input'
@@ -89,13 +89,13 @@ export function DatePicker({
   const selected = parseDateValue(value)
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div className={cn(UI_SCOPE, 'flex items-center gap-1', className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             disabled={disabled}
-            className={cn('w-full min-w-40 justify-start font-normal', !selected && 'text-muted-foreground')}
+            className={cn(UI_SCOPE, 'w-full min-w-40 justify-start font-normal', !selected && 'text-muted-foreground')}
             {...trigger}
           >
             <CalendarIcon aria-hidden />
@@ -108,7 +108,9 @@ export function DatePicker({
             selected={selected}
             defaultMonth={selected}
             onSelect={(date) => {
-              onChange(date ? toDateValue(date) : null)
+              // The calendar unselects a day clicked again; only a clearable field may become empty that way.
+              if (date) onChange(toDateValue(date))
+              else if (clearable) onChange(null)
               setOpen(false)
             }}
             disabled={disabledDays}
@@ -169,13 +171,13 @@ export function DateTimePicker({
   }
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div className={cn(UI_SCOPE, 'flex items-center gap-1', className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             disabled={disabled}
-            className={cn('w-full min-w-52 justify-start font-normal', !current && 'text-muted-foreground')}
+            className={cn(UI_SCOPE, 'w-full min-w-52 justify-start font-normal', !current && 'text-muted-foreground')}
             {...trigger}
           >
             <CalendarIcon aria-hidden />
@@ -187,7 +189,9 @@ export function DateTimePicker({
             mode="single"
             selected={current}
             defaultMonth={current}
-            onSelect={(date) => emit(date, time || '00:00:00')}
+            onSelect={(date) => {
+              if (date || clearable) emit(date, time || '00:00:00')
+            }}
             locale={calendar.locale}
             weekStartsOn={calendar.weekStartsOn}
             autoFocus

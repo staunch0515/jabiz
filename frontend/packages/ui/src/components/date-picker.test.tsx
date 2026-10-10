@@ -33,6 +33,20 @@ describe('DatePicker', () => {
     expect(screen.queryByRole('grid')).toBeNull()
   })
 
+  it('keeps the date when the chosen day is clicked again, unless the field may be emptied', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<DatePicker aria-label="Due date" value="2026-01-15" onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Due date' }))
+    await userEvent.click(screen.getByRole('button', { name: /January 15th, 2026/ }))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('grid')).toBeNull()
+
+    rerender(<DatePicker aria-label="Due date" value="2026-01-15" onChange={onChange} clearable />)
+    await userEvent.click(screen.getByRole('button', { name: 'Due date' }))
+    await userEvent.click(screen.getByRole('button', { name: /January 15th, 2026/ }))
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
+
   it('is used with the keyboard: the chosen day has focus, arrows move it, Enter picks', async () => {
     function Field() {
       const [value, setValue] = useState<string | null>('2026-01-15')
@@ -79,6 +93,11 @@ describe('DateTimePicker', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Effective from' }))
     await userEvent.click(screen.getByRole('button', { name: /January 20th, 2026/ }))
     expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 0, 20, 9, 30, 0).toISOString())
+
+    // Clicking the chosen day again keeps it (the field is not clearable).
+    onChange.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: /January 15th, 2026/ }))
+    expect(onChange).not.toHaveBeenCalled()
 
     // The value is the caller's (still the 15th here); a time input changes as a whole.
     fireEvent.change(screen.getByLabelText('Time'), { target: { value: '14:05:09' } })

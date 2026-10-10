@@ -82,6 +82,43 @@ describe('DataTable', () => {
     await expectAccessible()
   })
 
+  it('pages without a count: Next while the page is full, or as the caller says', async () => {
+    const onPaginationChange = vi.fn()
+    const { rerender } = render(
+      <DataTable label="Carriers" columns={columns} data={rows}
+        pagination={{ pageIndex: 0, pageSize: 2 }} onPaginationChange={onPaginationChange} />,
+    )
+    expect(screen.getByText('Page 1')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 2 })
+
+    rerender(
+      <DataTable label="Carriers" columns={columns} data={rows.slice(0, 1)}
+        pagination={{ pageIndex: 1, pageSize: 2 }} onPaginationChange={onPaginationChange} />,
+    )
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled()
+
+    rerender(
+      <DataTable label="Carriers" columns={columns} data={rows} hasNextPage={false}
+        pagination={{ pageIndex: 0, pageSize: 2 }} onPaginationChange={onPaginationChange} />,
+    )
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
+  })
+
+  it('closes expanded rows when other rows arrive (another page or order)', async () => {
+    const renderExpanded = (row: Carrier) => <p>Details of {row.name}</p>
+    const { rerender } = render(
+      <DataTable label="Carriers" columns={columns} data={rows} renderExpanded={renderExpanded} />,
+    )
+    await userEvent.click(screen.getAllByRole('button', { name: 'Expand row' })[0])
+    expect(screen.getByText('Details of Alpha')).toBeInTheDocument()
+    const next = [{ code: 'C3', name: 'Gamma' }, { code: 'D4', name: 'Delta' }]
+    rerender(<DataTable label="Carriers" columns={columns} data={next} renderExpanded={renderExpanded} />)
+    expect(screen.queryByText('Details of Gamma')).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Expand row' })).toHaveLength(2)
+  })
+
   it('expands rows with a named button that says whether the row is open', async () => {
     render(
       <DataTable

@@ -15,7 +15,7 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRi
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn } from '../lib/utils'
+import { cn, UI_SCOPE } from '../lib/utils'
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Skeleton } from './ui/skeleton'
@@ -36,8 +36,13 @@ export interface DataTableProps<Row> {
   /** The current page; the pager shows when it and {@link onPaginationChange} are given. */
   pagination?: PaginationState
   onPaginationChange?: (pagination: PaginationState) => void
-  /** All rows of all pages, as the server counted them. */
+  /** All rows of all pages, as the server counted them; unknown when the caller did not ask for a count. */
   rowCount?: number
+  /**
+   * Whether a page follows the current one, when there is no {@link rowCount}. Absent: assumed while the current
+   * page is full.
+   */
+  hasNextPage?: boolean
   pageSizeOptions?: number[]
   /** Sorting (columns with `enableSorting: false` are not sortable); applied by the server. */
   sorting?: SortingState
@@ -74,6 +79,7 @@ export function DataTable<Row>({
   pagination,
   onPaginationChange,
   rowCount,
+  hasNextPage,
   pageSizeOptions = [10, 20, 50, 100],
   sorting = NO_SORTING,
   onSortingChange,
@@ -85,6 +91,13 @@ export function DataTable<Row>({
 }: DataTableProps<Row>) {
   const { t } = useTranslation(UI_NAMESPACE)
   const [expanded, setExpanded] = useState<ExpandedState>({})
+  // Other rows (another page, another order) close what was open: without getRowId the keys are row indexes and
+  // would open the wrong rows. Reset while rendering, React's pattern for state derived from a prop.
+  const [expandedRows, setExpandedRows] = useState(data)
+  if (expandedRows !== data) {
+    setExpandedRows(data)
+    setExpanded({})
+  }
   const paged = pagination !== undefined && onPaginationChange !== undefined
 
   const handleSorting: OnChangeFn<SortingState> = (updater) => onSortingChange?.(apply(updater, sorting))
@@ -120,10 +133,16 @@ export function DataTable<Row>({
   })
 
   const columnCount = columns.length + (renderExpanded ? 1 : 0)
-  const pageCount = paged ? Math.max(1, Math.ceil((rowCount ?? 0) / pagination.pageSize)) : 1
+  const pageCount =
+    paged && rowCount !== undefined ? Math.max(1, Math.ceil(rowCount / pagination.pageSize)) : undefined
+  const hasNext = !paged
+    ? false
+    : pageCount !== undefined
+      ? pagination.pageIndex + 1 < pageCount
+      : (hasNextPage ?? data.length >= pagination.pageSize)
 
   return (
-    <div data-slot="data-table" className={cn('flex flex-col gap-3', className)}>
+    <div data-slot="data-table" className={cn(UI_SCOPE, 'flex flex-col gap-3', className)}>
       <div className="rounded-md border">
         <Table aria-label={label} aria-busy={loading || undefined}>
           <TableHeader>
@@ -211,7 +230,7 @@ export function DataTable<Row>({
                             aria-label={open ? t('dataTable.collapseRow') : t('dataTable.expandRow')}
                             onClick={row.getToggleExpandedHandler()}
                           >
-                            <ChevronRightIcon aria-hidden className={cn('transition-transform', open && 'rotate-90')} />
+                            <ChevronRightIcon aria-hidden className={cn(UI_SCOPE, 'transition-transform', open && 'rotate-90')} />
                           </Button>
                         </TableCell>
                       )}
@@ -253,7 +272,9 @@ export function DataTable<Row>({
               </SelectContent>
             </Select>
           </div>
-          <span aria-live="polite">{t('pagination.page', { page: pagination.pageIndex + 1, pages: pageCount })}</span>
+          <span aria-live="polite">{pageCount !== undefined
+              ? t('pagination.page', { page: pagination.pageIndex + 1, pages: pageCount })
+              : t('pagination.pageOnly', { page: pagination.pageIndex + 1 })}</span>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
@@ -268,7 +289,7 @@ export function DataTable<Row>({
               variant="outline"
               size="icon-sm"
               aria-label={t('pagination.next')}
-              disabled={pagination.pageIndex + 1 >= pageCount}
+              disabled={!hasNext}
               onClick={() => onPaginationChange({ ...pagination, pageIndex: pagination.pageIndex + 1 })}
             >
               <ChevronRightIcon aria-hidden />
