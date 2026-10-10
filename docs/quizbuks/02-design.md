@@ -34,7 +34,7 @@ backend/quizbuks/            Gradle 模块（jabiz.boot-app 插件），com.jabi
   …/messaging                 站内信、公告、帮助内容
   …/stats                     统计与分析模板
   src/main/resources/queries/qb/**.sql      SQL 模板与报表
-  src/main/resources/db/migration/          应用迁移（V1000+，避开平台与示范应用）
+  src/main/resources/db/migration/          应用迁移（`V<n>__quizbuks_<名>.sql`，自 V1 起；平台迁移有自己的历史表，互不冲突）
   src/test/resources/scenarios/qb/**.yml    场景回放
 quizbuks-web/                应用前端（pnpm 工作区，`@jabiz/ui` 与 `@jabiz/client`，与平台同一工具链，D34）
   app/                       答题人 PWA（挂在 /）

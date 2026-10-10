@@ -9,6 +9,8 @@
   每项带平台自己的测试与示范（`backend/app`），不提 QuizBuks。登记在平台的 `docs/ROADMAP.md`。
 - **应用**（`1.2/quizbuks`，工作分支 `1.2/quizbuks-<N>-<名>`）：Q1–Q10。平台阶段合入后，把 `1.2/platform` 合并进 `1.2/quizbuks` 再继续依赖它的应用阶段。
 
+每个阶段的详细实施计划在 `plans/` 中（平台阶段的计划在平台的 `docs/ROADMAP.md`）。
+
 ## 1. 平台阶段（`1.2/platform`）
 
 | 阶段 | 内容 | 决策 | 预估 | 依赖 |
