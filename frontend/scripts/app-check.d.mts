@@ -5,6 +5,7 @@ export interface ProjectVersions {
 
 export interface PlatformVersions {
   shared: Map<string, string | undefined>
+  client: Map<string, string | undefined>
   ui: Map<string, string | undefined>
 }
 

@@ -62,22 +62,25 @@ describe('formatAmount', () => {
 })
 
 describe('the display unit of amounts (decision D34)', () => {
-  afterEach(() => setAmountUnit(undefined))
+  afterEach(() => setAmountUnit('JPY', undefined))
 
-  it('follows the number when given, and never with a currency', () => {
-    expect(formatAmount('1234.5', { scale: 2, locale: 'en-US', unit: 'Kudos' })).toBe('1,234.50\u00a0Kudos')
-    expect(formatAmount('-20', { scale: 0, locale: 'en-US', unit: 'Kudos', negative: 'parentheses' })).toBe('(20\u00a0Kudos)')
-    expect(formatAmount('5', { scale: 2, locale: 'en-US', unit: 'Kudos', currency: 'USD' })).toBe('$5.00')
+  it('replaces the symbol of the application currency by its label', () => {
+    setAmountUnit('jpy', 'Kudos')
+    expect(formatAmount('1234', { scale: 0, locale: 'en-US', currency: 'JPY' })).toBe('1,234\u00a0Kudos')
+    expect(formatAmount('-20', { scale: 0, locale: 'en-US', currency: 'JPY', negative: 'parentheses' }))
+      .toBe('(20\u00a0Kudos)')
   })
 
-  it("is the application's unit unless a call names its own or none", () => {
-    setAmountUnit('Kudos')
-    expect(formatAmount('12', { scale: 0, locale: 'en-US' })).toBe('12\u00a0Kudos')
-    expect(formatAmount('12', { scale: 0, locale: 'en-US', unit: 'pts' })).toBe('12\u00a0pts')
-    expect(formatAmount('12', { scale: 0, locale: 'en-US', unit: null })).toBe('12')
-    expect(formatAmount('12', { scale: 2, locale: 'en-US', currency: 'JPY' })).toMatch(/^¥/)
-    setAmountUnit(' ')
+  it('leaves numbers without a currency and other currencies as they are', () => {
+    setAmountUnit('JPY', 'Kudos')
     expect(formatAmount('12', { scale: 0, locale: 'en-US' })).toBe('12')
+    expect(formatAmount('5', { scale: 2, locale: 'en-US', currency: 'USD' })).toBe('$5.00')
+  })
+
+  it('restores the symbol when the label is removed', () => {
+    setAmountUnit('JPY', 'Kudos')
+    setAmountUnit('JPY', ' ')
+    expect(formatAmount('12', { scale: 0, locale: 'en-US', currency: 'JPY' })).toBe('¥12')
   })
 })
 

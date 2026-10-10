@@ -51,13 +51,11 @@ export function formatDate(value: string, region: string | undefined = appRegion
 }
 
 export interface AmountFormat {
-  /** ISO 4217 code: shown as the currency's symbol or code. Absent: the number alone, or with {@link unit}. */
-  currency?: string
   /**
-   * A unit that is no currency, shown after the number ("1,234.50 Kudos"); without a currency only. Absent: the
-   * application's unit ({@link setAmountUnit}), if any; `null`: none, even when the application has one.
+   * ISO 4217 code: shown as the currency's symbol or code, or as the label the application gave it
+   * ({@link setAmountUnit}). Absent: the number alone.
    */
-  unit?: string | null
+  currency?: string
   /** Digits after the point, always shown (2 → 1,234.50). */
   scale: number
   /** `parentheses` for financial statements: (2,000.00). Default: a minus sign. */
@@ -65,38 +63,42 @@ export interface AmountFormat {
   locale?: string
 }
 
+const currencyLabels = new Map<string, string>()
+
+/**
+ * Shows amounts in `currency` with `label` after the number instead of the currency's symbol (decision D34 item 4):
+ * an application whose ledger currency stands for points shows "1,234 Kudos" rather than "¥1,234". Only amounts
+ * given in that currency change; numbers without a currency and amounts in other currencies keep their forms.
+ * Set once at startup; an empty or undefined label restores the symbol.
+ */
+export function setAmountUnit(currency: string, label: string | undefined) {
+  const code = currency.trim().toUpperCase()
+  if (label === undefined || label.trim() === '') currencyLabels.delete(code)
+  else currencyLabels.set(code, label.trim())
+}
+
 /**
  * An exact amount with grouping and a fixed number of decimals. The text of the decimal is formatted, never a
  * binary floating-point copy of it, so what is shown is what is stored (a value with more digits than `scale` is
  * rounded half away from zero for display only).
  */
-let applicationUnit: string | undefined
-
-/**
- * The unit an application shows its amounts in when they have no currency (decision D34 item 4: points, credits,
- * "Kudos"). Set once at startup; undefined shows the bare number again.
- */
-export function setAmountUnit(unit: string | undefined) {
-  applicationUnit = unit === undefined || unit.trim() === '' ? undefined : unit.trim()
-}
-
 export function formatAmount(value: unknown, format: AmountFormat): string {
   const d = toDecimal(value)
   if (!d) return value === null || value === undefined ? '' : String(value)
   const locale = format.locale ?? appRegion ?? 'en'
   const negative = signum(d) < 0
   const text = formatDecimal(negative ? negate(d) : d)
+  const label = format.currency ? currencyLabels.get(format.currency.toUpperCase()) : undefined
   const options: Intl.NumberFormatOptions = {
     minimumFractionDigits: format.scale,
     maximumFractionDigits: format.scale,
     roundingMode: 'halfExpand',
-    ...(format.currency ? { style: 'currency', currency: format.currency } : {}),
+    ...(format.currency && !label ? { style: 'currency', currency: format.currency } : {}),
   }
   // Intl formats decimal strings exactly (ES2023); the cast only satisfies the older signature.
   const number = new Intl.NumberFormat(locale, options).format(text as unknown as number)
-  const unit = format.currency ? null : format.unit === undefined ? applicationUnit : format.unit
-  // A no-break space: the unit never wraps away from its number.
-  const body = unit ? `${number}\u00a0${unit}` : number
+  // A no-break space: the label never wraps away from its number.
+  const body = label ? `${number}\u00a0${label}` : number
   if (!negative) return body
   return format.negative === 'parentheses' ? `(${body})` : `-${body}`
 }

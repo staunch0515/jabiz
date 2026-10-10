@@ -28,8 +28,8 @@ function spa(dependencies: Record<string, string>, lock?: { pnpm?: Record<string
 }
 
 /** The platform's versions of the shared packages, and of @jabiz/ui's runtime dependencies when asked. */
-function platformDeps(withUi: boolean): Record<string, string> {
-  const all = [...platform.shared, ...(withUi ? platform.ui : [])]
+function platformDeps(withUi: boolean, withClient = withUi): Record<string, string> {
+  const all = [...platform.shared, ...(withClient ? platform.client : []), ...(withUi ? platform.ui : [])]
   return Object.fromEntries(all.map(([name, version]) => [name, version!]))
 }
 
@@ -54,6 +54,22 @@ describe('the platform versions', () => {
 })
 
 describe('app:check (decision D34 item 5)', () => {
+  it('covers react-i18next, whose context binds the shared i18next instance', () => {
+    expect(SHARED).toContain('react-i18next')
+    const versions = { ...platformDeps(false), 'react-i18next': '16.0.0' }
+    expect(checkApp(spa(versions, { pnpm: versions }), frontend)).toEqual([
+      `react-i18next: 16.0.0, the platform has ${platform.shared.get('react-i18next')}`,
+    ])
+  })
+
+  it("requires @jabiz/client's runtime dependencies from SPAs that use it", () => {
+    const shared = platformDeps(false)
+    const problems = checkApp(spa({ ...shared, '@jabiz/client': 'link:x' }, { pnpm: shared }), frontend)
+    expect(problems.some((p) => p.startsWith('dayjs: not a dependency'))).toBe(true)
+    const withClient = platformDeps(false, true)
+    expect(checkApp(spa({ ...withClient, '@jabiz/client': 'link:x' }, { pnpm: withClient }), frontend)).toEqual([])
+  })
+
   it('passes an SPA with the platform versions in its pnpm lockfile', () => {
     const deps = { ...platformDeps(true), '@jabiz/ui': 'link:../../frontend/packages/ui' }
     expect(checkApp(spa(deps, { pnpm: platformDeps(true) }), frontend)).toEqual([])

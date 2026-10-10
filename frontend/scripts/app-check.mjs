@@ -1,14 +1,15 @@
 // Checks an application's own single-page application against the platform's frontend (decision D34 item 5):
 //   pnpm app:check <directory of the SPA>
-// React, React DOM, Tailwind CSS, TanStack Query and i18next, and, when the SPA uses @jabiz/ui, that package's
-// runtime dependencies, must be the very versions the platform's frontend resolves: two Reacts break hooks and
+// React, React DOM, Tailwind CSS, TanStack Query, i18next and react-i18next (they hold state the packages share with
+// the SPA: hooks, contexts, the i18next instance), and the runtime dependencies of @jabiz/client and @jabiz/ui when the
+// SPA uses them, must be the very versions the platform's frontend resolves: two Reacts break hooks and
 // context, two Tailwinds or Radix versions make the shared components look or behave differently. The versions are
 // read from the lockfiles (pnpm-lock.yaml, else package-lock.json), else from exact versions in package.json.
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 
 /** What every SPA that uses the platform's packages shares with the platform. */
-export const SHARED = ['react', 'react-dom', 'tailwindcss', '@tanstack/react-query', 'i18next']
+export const SHARED = ['react', 'react-dom', 'tailwindcss', '@tanstack/react-query', 'i18next', 'react-i18next']
 
 const SECTIONS = new Set(['dependencies', 'devDependencies', 'optionalDependencies'])
 
@@ -87,16 +88,25 @@ export function projectVersions(dir) {
   return { declared, resolved }
 }
 
-/** The versions the platform's frontend resolves: the shared packages, and @jabiz/ui's runtime dependencies. */
+/** The runtime dependencies of one workspace package, as the lockfile resolves them. */
+function packageVersions(lock, frontendRoot, name) {
+  const resolved = pnpmImporterVersions(lock, `packages/${name}`)
+  const manifest = readJson(resolve(frontendRoot, `packages/${name}/package.json`))
+  const runtime = Object.keys(manifest.dependencies ?? {}).filter((dep) => !dep.startsWith('@jabiz/'))
+  return new Map(runtime.map((dep) => [dep, resolved.get(dep)]))
+}
+
+/**
+ * The versions the platform's frontend resolves: the shared packages, and the runtime dependencies of @jabiz/client
+ * (dayjs, whose locale it sets, and the API client) and of @jabiz/ui.
+ */
 export function platformVersions(frontendRoot) {
   const lock = readFileSync(resolve(frontendRoot, 'pnpm-lock.yaml'), 'utf8')
   const admin = pnpmImporterVersions(lock, '.')
-  const ui = pnpmImporterVersions(lock, 'packages/ui')
-  const uiManifest = readJson(resolve(frontendRoot, 'packages/ui/package.json'))
-  const runtime = Object.keys(uiManifest.dependencies ?? {}).filter((name) => !name.startsWith('@jabiz/'))
   return {
-    shared: new Map(SHARED.map((name) => [name, admin.get(name) ?? ui.get(name)])),
-    ui: new Map(runtime.map((name) => [name, ui.get(name)])),
+    shared: new Map(SHARED.map((name) => [name, admin.get(name)])),
+    client: packageVersions(lock, frontendRoot, 'client'),
+    ui: packageVersions(lock, frontendRoot, 'ui'),
   }
 }
 
@@ -104,7 +114,9 @@ export function platformVersions(frontendRoot) {
 export function appCheckProblems(app, platform) {
   const problems = []
   const usesUi = '@jabiz/ui' in app.declared
-  const wanted = [...platform.shared, ...(usesUi ? platform.ui : [])]
+  // @jabiz/ui builds on @jabiz/client, so an SPA with the former has the latter's dependencies too.
+  const usesClient = usesUi || '@jabiz/client' in app.declared
+  const wanted = new Map([...platform.shared, ...(usesClient ? platform.client : []), ...(usesUi ? platform.ui : [])])
   for (const [name, version] of wanted) {
     if (!version) {
       problems.push(`${name}: the platform's frontend does not resolve it (run pnpm install in frontend/)`)
