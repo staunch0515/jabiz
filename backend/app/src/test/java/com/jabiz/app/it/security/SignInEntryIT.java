@@ -227,6 +227,23 @@ class SignInEntryIT extends SecurityItSupport {
     }
 
     @Test
+    void aConsumedTokenReplayedAfterItsIdleWindowStillEndsTheSession() {
+        String name = unique("rex");
+        String userId = user(name, null, CUSTOMER);
+        Map<String, Object> session = signInTo(name, "portal");
+        Map<String, Object> next = refresh(session, "portal").expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody();
+
+        // Long after both would have gone idle: a replay is still a replay.
+        clock.advance(Duration.ofHours(1));
+        assertThat(refused(refresh(session, "portal"), 401)).isEqualTo("INVALID_REFRESH_TOKEN");
+        assertThat(query("SELECT DISTINCT r.reason FROM sec_refresh_family_revocation r JOIN sec_refresh_token t "
+            + "ON t.family_id = r.family_id WHERE t.user_id = ?::uuid", userId)).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("reason", "REUSE"));
+        assertThat(refused(refresh(next, "portal"), 401)).isEqualTo("INVALID_REFRESH_TOKEN");
+    }
+
+    @Test
     void anEntryAcceptsNobodyWithoutItsRoles() {
         String name = unique("dan");
         String userId = user(name, null, BACK);

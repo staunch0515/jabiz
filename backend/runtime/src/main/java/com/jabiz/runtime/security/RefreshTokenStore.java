@@ -174,8 +174,14 @@ public class RefreshTokenStore {
     private Mono<Grant> use(String hash, String entry) {
         Instant now = now();
         return find(hash).flatMap(found -> {
+            // A revoked session stays a plain 401: it has ended already, there is nothing left to revoke.
             if (found.revoked()) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
+            }
+            // Replayed: whenever it comes back (also after its expiry or idle window) and whatever entry it names, the
+            // session ends (decision D12 item 1).
+            if (found.used()) {
+                return Mono.<Grant>error(new Reused());
             }
             if (!now.isBefore(found.expiresAt())) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
@@ -183,10 +189,6 @@ public class RefreshTokenStore {
             // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed.
             if (!now.isBefore(found.issuedAt().plus(idleWindow))) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
-            }
-            // Replayed: whatever entry it names, the session ends (checked before the entry, decision D12 item 1).
-            if (found.used()) {
-                return Mono.<Grant>error(new Reused());
             }
             // Another front end's live session: not this client's to renew. Not consumed, not revoked.
             if (!entry.equals(found.grant().entry())) {
