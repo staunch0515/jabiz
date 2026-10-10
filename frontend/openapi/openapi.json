@@ -565,6 +565,17 @@
         },
         "type" : "object"
       },
+      "EmailRequest" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "Enrollment" : {
         "properties" : {
           "otpauthUri" : {
@@ -592,6 +603,23 @@
           "version" : {
             "format" : "int64",
             "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "EntryInfo" : {
+        "properties" : {
+          "appPath" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "requireVerifiedEmail" : {
+            "type" : "boolean"
+          },
+          "selfRegistration" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -1381,6 +1409,17 @@
         },
         "type" : "object"
       },
+      "JoinRequest" : {
+        "properties" : {
+          "password" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "LabelsRequest" : {
         "properties" : {
           "ids" : {
@@ -1838,6 +1877,26 @@
         },
         "type" : "object"
       },
+      "RegisterRequest" : {
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "entry" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ReportEntry" : {
         "properties" : {
           "landscape" : {
@@ -1845,6 +1904,17 @@
           },
           "period" : {
             "$ref" : "#/components/schemas/PeriodEntry"
+          }
+        },
+        "type" : "object"
+      },
+      "ResetConfirmRequest" : {
+        "properties" : {
+          "password" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2327,6 +2397,14 @@
         },
         "type" : "object"
       },
+      "TokenRequest" : {
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "TokenResponse" : {
         "properties" : {
           "accessToken" : {
@@ -2772,6 +2850,17 @@
         "tags" : [ "account-controller" ]
       }
     },
+    "/api/auth/account/verify-email" : {
+      "post" : {
+        "operationId" : "resendOwn",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/challenge/enroll" : {
       "post" : {
         "operationId" : "enrollUnderChallenge",
@@ -2828,7 +2917,7 @@
     },
     "/api/auth/challenge/verify" : {
       "post" : {
-        "operationId" : "verify_1",
+        "operationId" : "verify_2",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -2851,6 +2940,52 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/entries/{name}" : {
+      "get" : {
+        "operationId" : "entry",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EntryInfo"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/join" : {
+      "post" : {
+        "operationId" : "join",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/JoinRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
       }
     },
     "/api/auth/login" : {
@@ -3146,6 +3281,46 @@
         "tags" : [ "oidc-controller" ]
       }
     },
+    "/api/auth/password-reset/confirm" : {
+      "post" : {
+        "operationId" : "resetConfirm",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ResetConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/password-reset/request" : {
+      "post" : {
+        "operationId" : "resetRequest",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/refresh" : {
       "post" : {
         "operationId" : "refresh",
@@ -3173,6 +3348,26 @@
         "tags" : [ "auth-controller" ]
       }
     },
+    "/api/auth/register" : {
+      "post" : {
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
     "/api/auth/step-up" : {
       "post" : {
         "operationId" : "stepUp",
@@ -3198,6 +3393,46 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/verify-email" : {
+      "post" : {
+        "operationId" : "verify_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/verify-email/resend" : {
+      "post" : {
+        "operationId" : "resend",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EmailRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
       }
     },
     "/api/datasets/{resourceId}/commit" : {

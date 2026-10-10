@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resendOwn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/challenge/enroll": {
         parameters: {
             query?: never;
@@ -141,7 +157,39 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["verify_1"];
+        post: operations["verify_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/entries/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["entry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["join"];
         delete?: never;
         options?: never;
         head?: never;
@@ -340,6 +388,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -356,6 +436,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/step-up": {
         parameters: {
             query?: never;
@@ -366,6 +462,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["stepUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verify_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/verify-email/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resend"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1501,6 +1629,10 @@ export interface components {
             priority?: number;
             ruleCode?: string;
         };
+        EmailRequest: {
+            email?: string;
+            entry?: string;
+        };
         Enrollment: {
             otpauthUri?: string;
             secret?: string;
@@ -1514,6 +1646,12 @@ export interface components {
             state?: string;
             /** Format: int64 */
             version?: number;
+        };
+        EntryInfo: {
+            appPath?: string;
+            name?: string;
+            requireVerifiedEmail?: boolean;
+            selfRegistration?: boolean;
         };
         ExecuteResponse: {
             output?: unknown;
@@ -1828,6 +1966,10 @@ export interface components {
             /** Format: int64 */
             offset?: number;
         };
+        JoinRequest: {
+            password?: string;
+            token?: string;
+        };
         LabelsRequest: {
             ids?: unknown[];
         };
@@ -1992,9 +2134,20 @@ export interface components {
             entry?: string;
             refreshToken?: string;
         };
+        RegisterRequest: {
+            displayName?: string;
+            email?: string;
+            entry?: string;
+            locale?: string;
+            password?: string;
+        };
         ReportEntry: {
             landscape?: boolean;
             period?: components["schemas"]["PeriodEntry"];
+        };
+        ResetConfirmRequest: {
+            password?: string;
+            token?: string;
         };
         ResultEntry: {
             kind?: {
@@ -2183,6 +2336,9 @@ export interface components {
         TimeSliceEntry: {
             asOf?: string;
             knownAt?: string;
+        };
+        TokenRequest: {
+            token?: string;
         };
         TokenResponse: {
             accessToken?: string;
@@ -2399,6 +2555,24 @@ export interface operations {
             };
         };
     };
+    resendOwn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     enrollUnderChallenge: {
         parameters: {
             query?: never;
@@ -2447,7 +2621,7 @@ export interface operations {
             };
         };
     };
-    verify_1: {
+    verify_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -2468,6 +2642,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
+            };
+        };
+    };
+    entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntryInfo"];
+                };
+            };
+        };
+    };
+    join: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["JoinRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2755,6 +2973,50 @@ export interface operations {
             };
         };
     };
+    resetConfirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ResetConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resetRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     refresh: {
         parameters: {
             query?: never;
@@ -2779,6 +3041,28 @@ export interface operations {
             };
         };
     };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     stepUp: {
         parameters: {
             query?: never;
@@ -2800,6 +3084,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StepUpResponse"];
                 };
+            };
+        };
+    };
+    verify_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
