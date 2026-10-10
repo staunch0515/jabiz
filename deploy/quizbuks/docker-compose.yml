@@ -1,0 +1,48 @@
+# QuizBuks (docs/quizbuks/02-design.md). From the repository root:
+#
+#   docker compose -f deploy/quizbuks/docker-compose.yml up -d --build
+#
+# then open http://localhost:8080/admin/; the first administrator's password is printed by
+# `docker compose -f deploy/quizbuks/docker-compose.yml logs quizbuks`. Settings come from deploy/quizbuks/.env
+# (never committed); the variables are listed in README.md beside this file.
+name: quizbuks
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: quizbuks
+      POSTGRES_USER: quizbuks
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-quizbuks}
+    ports: ["127.0.0.1:${QUIZBUKS_DB_PORT:-5440}:5432"]
+    volumes: [quizbuks-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quizbuks -d quizbuks"]
+      interval: 5s
+      retries: 10
+
+  quizbuks:
+    build:
+      context: ../..
+      dockerfile: deploy/quizbuks/Dockerfile
+    image: quizbuks:local
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["127.0.0.1:${QUIZBUKS_PORT:-8080}:8080"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/quizbuks
+      SPRING_R2DBC_USERNAME: quizbuks
+      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD:-quizbuks}
+      SPRING_FLYWAY_URL: jdbc:postgresql://db:5432/quizbuks
+      SPRING_FLYWAY_USER: quizbuks
+      SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-quizbuks}
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]
+
+volumes:
+  quizbuks-db:
+  quizbuks-secrets:
+  quizbuks-files:
