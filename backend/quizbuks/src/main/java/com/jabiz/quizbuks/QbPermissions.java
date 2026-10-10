@@ -25,6 +25,11 @@ public final class QbPermissions {
     public static final String CONTENT_WRITE = "qb.content.write";
     /** Read the files of quiz content: covers, question and option images, material images, PDFs and audio. */
     public static final String CONTENT_FILE_READ = "qb.content.file.read";
+    /**
+     * The write permission of the sponsors' read-only content datasets. A dataset must declare one; this one is
+     * granted to no role, so the datasets stay unwritable even if their read-only policy were dropped.
+     */
+    public static final String SPONSOR_VIEW_WRITE = "qb.content.view.write";
     /** Ask the AI for questions and covers. */
     public static final String AI_USE = "qb.ai.use";
     /** Create, submit, pause and resume publications. */

@@ -40,5 +40,43 @@ public final class Reorder {
         return Optional.of(moves);
     }
 
+    /**
+     * The place of a new item at the end.
+     *
+     * @param seq   the new item's place
+     * @param moves the places of existing items that move first, in their order
+     */
+    public record Next<T>(int seq, Map<T, Integer> moves) {
+        public Next {
+            moves = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(moves));
+        }
+    }
+
+    /**
+     * The place after the last one, while it fits ({@code max}, the largest place the column holds). Deletions leave
+     * gaps, so the last place can grow past the number of items; when it would pass {@code max}, the items are first
+     * numbered 1..n again (in their order) and the new one goes to n + 1.
+     *
+     * @param current each item's place, in their order
+     */
+    public static <T> Next<T> next(Map<T, Integer> current, int max) {
+        int last = current.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        if (last < max) {
+            return new Next<>(last + 1, Map.of());
+        }
+        Map<T, Integer> moves = new LinkedHashMap<>();
+        int place = 0;
+        for (Map.Entry<T, Integer> item : current.entrySet()) {
+            place++;
+            if (item.getValue() != place) {
+                moves.put(item.getKey(), place);
+            }
+        }
+        if (place >= max) {
+            throw new IllegalStateException("No place left: " + place + " items, at most " + max);
+        }
+        return new Next<>(place + 1, moves);
+    }
+
     private Reorder() {}
 }

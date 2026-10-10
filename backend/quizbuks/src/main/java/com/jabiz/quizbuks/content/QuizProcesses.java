@@ -8,9 +8,12 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -55,6 +58,8 @@ public final class QuizProcesses {
     public static final String DELETE = "QB_QUIZ_DELETE";
     public static final String CLONE = "QB_QUIZ_CLONE";
     public static final String PUBLISH_VERSION = "QB_QUIZ_PUBLISH_VERSION";
+    /** Internal: tombstones one chunk of a removed quiz's version files (see {@link #releaseFiles()}). */
+    public static final String RELEASE_FILES = "QB_QUIZ_RELEASE_FILES";
 
     /**
      * A new draft (no {@code quizId}) or the heading of one. Every field is written as given: an empty one clears it.
@@ -68,6 +73,12 @@ public final class QuizProcesses {
 
     public record QuizRef(@NotNull UUID quizId, Long baseRevision) {}
 
+    /** One chunk of the version files of a removed quiz of the caller's to release. */
+    public record ReleaseInput(@NotNull UUID quizId,
+        @NotNull @Size(max = ContentLimits.RELEASE_CHUNK) List<@NotNull UUID> versionFileIds) {}
+
+    public record ReleaseOutput(int released) {}
+
     /**
      * @param versionNo the version to copy; the draft when not given
      * @param title     the new quiz's title; the source's when not given
@@ -80,6 +91,7 @@ public final class QuizProcesses {
         int materialCount, int fullScore, String contentHash, long revision) {}
 
     static final String FOUND = "found";
+    static final String RELEASE = "release";
 
     // ---- save ------------------------------------------------------------------------------------------------------
 
@@ -88,6 +100,7 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Creates a draft quiz or changes its title, introduction, cover or time limit.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .step("Lock the quiz", HoldLock.<ProcessContext>exclusive(
@@ -96,6 +109,11 @@ public final class QuizProcesses {
                 .step("Load the quiz", QueryEntities.<ProcessContext>of(QbContent.sponsorDataset(QbContent.QUIZ),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("quizId", ctx.get(QUIZ_ID) == null
                         ? List.of() : List.of(ctx.get(QUIZ_ID)))).limit(1).build(), FOUND))
+                .steps(b -> QuizEditing.loadFiles(b, ctx -> {
+                    List<UUID> files = new ArrayList<>();
+                    files.add(ctx.get(INPUT, QuizInput.class).cover());
+                    return files;
+                }))
                 .compute("Save the quiz", (metadata, ctx) -> save(ctx)));
     }
 
@@ -107,6 +125,10 @@ public final class QuizProcesses {
         heading.put("cover", input.cover());
         heading.put("timeLimitSec", input.timeLimitSec() == null ? null : decimal(input.timeLimitSec()));
         if (input.quizId() == null) {
+            QuizEditing.requireOwnFile(ctx, ctx.request().actorId(), "cover", input.cover(), null);
+            if (ctx.hasViolations()) {
+                return;
+            }
             Map<String, Object> values = newQuiz(ctx, heading, false, null);
             UUID id = uuid(ctx.changes().insert(QbContent.QUIZ, values));
             ctx.put(OUTPUT, new EditOutput(id, 1, ctx.opTime(), null, List.of()));
@@ -118,6 +140,10 @@ public final class QuizProcesses {
         }
         EntityInstance quiz = found.getFirst();
         if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
+            return;
+        }
+        QuizEditing.requireOwnFile(ctx, quiz.get("ownerId"), "cover", input.cover(), quiz.get("cover"));
+        if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> changed = QuizEditing.differences(quiz, heading);
@@ -164,7 +190,47 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
-                .compute("Remove the quiz", (metadata, ctx) -> remove(ctx)));
+                .compute("Remove the quiz", (metadata, ctx) -> remove(ctx))
+                // The release reads the quiz as removed.
+                .step("Save", SaveChanges.now())
+                .step("Release the files of its versions", CallProcess.forEach(RELEASE_FILES, 1,
+                    ctx -> ctx.contains(RELEASE) ? (List<?>) ctx.get(RELEASE) : List.of(), null)));
+    }
+
+    /**
+     * {@code QB_QUIZ_RELEASE_FILES}: tombstones up to {@link ContentLimits#RELEASE_CHUNK} version files of a quiz the
+     * caller owns and has removed, so that a quiz with any number of version files is removed in commits each within
+     * the dataset's write limit. Run by {@code QB_QUIZ_DELETE}, one call per chunk; called directly it can only
+     * release files of the caller's own removed quizzes, which nothing needs any more.
+     */
+    public static ProcessDefinition<ReleaseInput, ReleaseOutput, ProcessContext> releaseFiles() {
+        return ProcessDefinition.define(RELEASE_FILES, 1, ReleaseInput.class, ReleaseOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Releases the files of the versions of a removed quiz.")
+                .permissions(QbPermissions.CONTENT_WRITE)
+                .internal()
+                .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, ReleaseOutput.class))
+                .step("Load the removed quiz", QueryEntities.<ProcessContext>of(QbContent.defaultDataset(QbContent.QUIZ),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
+                        new QueryPredicate.Eq("ownerId", ctx.request().actorId()),
+                        new QueryPredicate.Eq("removed", true)))).limit(1).build(), FOUND))
+                .step("Load the version files", QueryEntities.<ProcessContext>of(
+                    QbContent.defaultDataset(QbContent.VERSION_FILE), ctx -> {
+                        List<Object> ids = new ArrayList<>(ctx.get(INPUT, ReleaseInput.class).versionFileIds());
+                        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
+                            new QueryPredicate.In("versionFileId", ids)))).limit(Integer.MAX_VALUE).build();
+                    }, VERSION_FILES))
+                .compute("Release them", (metadata, ctx) -> {
+                    if (list(ctx, FOUND).isEmpty()) {
+                        throw new EntityNotFoundException(QbContent.QUIZ + " " + ctx.get(QUIZ_ID) + " not found");
+                    }
+                    list(ctx, VERSION_FILES).forEach(file -> ctx.changes().delete(QbContent.VERSION_FILE, file.id(),
+                        file.version()));
+                    ctx.put(OUTPUT, new ReleaseOutput(list(ctx, VERSION_FILES).size()));
+                }));
     }
 
     static void remove(ProcessContext ctx) {
@@ -182,12 +248,13 @@ public final class QuizProcesses {
             };
             list(ctx, key).forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
         }
+        // The version files are released in chunks, each its own commit within the dataset's write limit.
         Set<UUID> needed = filesStillNeeded(ctx);
-        for (EntityInstance file : list(ctx, VERSION_FILES)) {
-            if (!needed.contains(fileOf(file))) {
-                ctx.changes().delete(QbContent.VERSION_FILE, file.id(), file.version());
-            }
-        }
+        List<UUID> released = list(ctx, VERSION_FILES).stream().filter(file -> !needed.contains(fileOf(file)))
+            .map(file -> uuid(file.id())).toList();
+        UUID quizId = uuid(quiz.id());
+        ctx.put(RELEASE, Chunks.of(released, ContentLimits.RELEASE_CHUNK).stream()
+            .map(chunk -> new ReleaseInput(quizId, chunk)).toList());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("removed", true);
         values.put("cover", null);

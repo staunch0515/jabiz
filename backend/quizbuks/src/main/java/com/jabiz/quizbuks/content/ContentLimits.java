@@ -33,6 +33,19 @@ public final class ContentLimits {
     public static final int MIN_POINTS = 1;
     public static final int MAX_POINTS = 1_000;
 
+    /** Largest place ({@code seq}, column {@code numeric(4, 0)}) of a question, material, option or image. */
+    public static final int MAX_SEQ = 9_999;
+
+    /** The most files one version can refer to: the cover, each question's and option's image, the materials'. */
+    public static final int MAX_FILES_PER_VERSION = 1 + MAX_QUESTIONS * (1 + MAX_OPTIONS)
+        + MAX_MATERIALS * MAX_IMAGES;
+
+    /**
+     * Version files released per commit when a quiz is removed, and the write limit of their dataset: a version
+     * registers at most {@link #MAX_FILES_PER_VERSION} files at once, and a removal any number, chunk by chunk.
+     */
+    public static final int RELEASE_CHUNK = 1_000;
+
     /** Largest canonical snapshot text of a version, in UTF-8 bytes; the limits above keep it near 1 MB. */
     public static final int MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 

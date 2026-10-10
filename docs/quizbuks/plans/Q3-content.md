@@ -165,6 +165,7 @@
 
 - **版本号字段名**：`versionNo` 是平台给每个时态实体的行版本（保留名），所以 `QbQuizVersion` 的版本号字段为 `versionNumber`（列 `quiz_version_no`）。
   流程输入输出与模板 `qb.sponsor.quiz-versions` 的结果列仍叫 `versionNo`。
+- **数据视图**：版本与版本文件没有商家视图（见评审后的修改 2），另有模板 `qb.sponsor.quiz-version`；内部流程 `QB_QUIZ_RELEASE_FILES`（第 11 个流程）。
 - **按标题搜索**：`qb.sponsor.quizzes` 用 `strpos(lower(title), lower(:q)) > 0`，输入本来就按字面匹配，`%`、`_`、`\` 不必转义（效果同计划，`ContentIT` 验证）。
 - **链接规则**：平台的 `PATTERN` 只接受前后端一致的正则，`\S` 不可用；`QB_MATERIAL_URL_FORMAT` 为 `https?://[^\p{Z}\p{Cc}]+`（不含任何 Unicode 空白与控制字符）。
 - **路径**：完整性检查的 `field` 路径下标自 0 起（`questions[0].stem`），参数中的题号、选项号、资料号自 1 起。
@@ -174,10 +175,29 @@
   另发现平台缺口 4（见下）：`jabizApp.openApiSnapshot` 的设置不生效，应用的快照测试会写到平台的 `frontend/openapi/openapi.json`。
 - **随本分支一起完成的 Q1 后续**（平台 16i，决策 D40）：受控参数、`QB_SETUP` 以受控变更提出首个值、`QB_ADMIN_SUPER` 不再有 `platform.param.write`（见 `Q1-skeleton.md` 已知问题）。
 
+### 评审后的修改（2026-10-10）
+
+1. **不给选项 / 图片列表即不动它们**：`QB_QUESTION_SAVE` 的 `options`、`QB_MATERIAL_SAVE` 的 `images` 为 null 时子项保持原样；给出的列表是完整列表（没出现的删除，空列表删除全部）。
+   商家后台把一道题连同选项、一条资料连同图片一起保存，所以列表语义不变，只是不再把"没给"当作"清空"。
+2. **版本与版本文件没有商家数据视图**：版本比模版活得久（发布引用它），其 `content` 含正确答案；数据视图的范围表达不了"所属模版未移除"，
+   只写一次的版本也不能加标记。商家只经模板读版本：`qb.sponsor.quiz-versions`（列表）与新增的 `qb.sponsor.quiz-version`（按 `versionId` 取全文），
+   两者都从默认视图读版本、再连接商家视图的模版（本人且未移除）。其他子实体在移除时已写墓碑。`ContentOwnerIT` 检查移除后经任何商家视图与模板都读不到该模版的任何内容。
+3. **版本文件分块释放**：一个版本至多 901 个文件（`ContentLimits.MAX_FILES_PER_VERSION`），默认视图的写入上限为 `RELEASE_CHUNK`（1 000）。
+   移除模版时先保存（`SaveChanges.now`），再按每块 1 000 个调用内部子流程 `QB_QUIZ_RELEASE_FILES`（每次子流程一次提交）；它只释放调用者本人、已移除的模版的版本文件，
+   所以直接调用也伤不到别的数据。版本数不设上限。分块由 `ChunksTest` 验证（超过 1 000 个版本文件的端到端测试需要上千次上传，没有做）。
+4. **`seq` 不会越界**：新项放在最后一项之后；当下一个位置会超过列（`numeric(4,0)`，`ContentLimits.MAX_SEQ` = 9 999）时，先把现有各项按顺序重编为 1..n（`Reorder.next`，边界由 `ReorderTest` 验证）。
+5. **只能用自己上传的文件**：每个新放入的文件（与字段原值不同）须由模版所有者上传（经平台文件数据视图 `urn:jabiz:dataset:platform:SysFile` 的 `uploadedBy` 读取，平台已支持），
+   否则 422 `QB_CONTENT_FILE_NOT_OWN`；字段原有的文件保持不查；平台不认识的文件仍由平台检查（400）。克隆不再检查：源模版是调用者自己的，其文件写入时已查过。
+   Q8 的 AI 封面若由系统上传，需要再放宽（例如"由该所有者的 AI 作业生成"）。
+6. **`actsOn`**：`QB_QUESTION_DELETE`（`QbQuestion`）、`QB_MATERIAL_DELETE`（`QbMaterial`）、`QB_QUIZ_SAVE`（`QbQuiz`，编辑已有模版时）。
+7. **锁内少读**：保存、删除题目只读该题的选项；保存、删除资料只读该资料的图片（按 `quizId` 与父引用，均有索引）。
+8. **一处转换**：`content.Values`（主键与整数；小数与越界报错），`QuizEditing` 与 `QuizSnapshots` 共用。
+9. **商家视图的写权限**：声明为 `qb.content.view.write`（`QbPermissions.SPONSOR_VIEW_WRITE`），不授予任何角色（`QbRolesTest`），即使以后去掉只读也不会放开写入。
+
 ### 测试
 
-单元：`QuizSnapshotsTest`、`QuizCompletenessTest`（含 300 例 jqwik 与独立实现对照）、`ReorderTest`、`VersionLabelsTest`、`QbRolesTest`、`MessagesTest`。
-集成：`ContentIT`（10）、`ContentOwnerIT`（4）、`VersionSnapshotIT`、`ContentFilesIT`（2），每个测试后检查 7 张表没有 UPDATE / DELETE；场景 `qb/content.yml`，`qb/setup.yml` 快照随新授权与受控参数更新。
+单元：`QuizSnapshotsTest`、`QuizCompletenessTest`（含 300 例 jqwik 与独立实现对照）、`ReorderTest`、`VersionLabelsTest`、`ValuesTest`、`ChunksTest`、`QbRolesTest`、`MessagesTest`。
+集成：`ContentIT`（11）、`ContentOwnerIT`（6）、`VersionSnapshotIT`、`ContentFilesIT`（4），每个测试后检查 7 张表没有 UPDATE / DELETE；场景 `qb/content.yml`，`qb/setup.yml` 快照随新授权与受控参数更新。
 
 ### 已知问题
 

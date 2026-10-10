@@ -21,7 +21,6 @@ import static com.jabiz.quizbuks.content.QuizEditing.INPUT;
 import static com.jabiz.quizbuks.content.QuizEditing.MATERIALS;
 import static com.jabiz.quizbuks.content.QuizEditing.OUTPUT;
 import static com.jabiz.quizbuks.content.QuizEditing.decimal;
-import static com.jabiz.quizbuks.content.QuizEditing.key;
 import static com.jabiz.quizbuks.content.QuizEditing.list;
 import static com.jabiz.quizbuks.content.QuizEditing.quiz;
 import static com.jabiz.quizbuks.content.QuizEditing.text;
@@ -44,7 +43,8 @@ public final class MaterialProcesses {
     /**
      * One material; a new one (no {@code materialId}) goes to the end. Only the content field of its kind may be
      * given: {@code body} (ARTICLE, Markdown), {@code url} (LINK, VIDEO_LINK), {@code pdf}, {@code audio} or
-     * {@code images} (IMAGES; those left out are deleted).
+     * {@code images} (IMAGES). {@code images} is the whole list, as the sponsor console saves a material with its
+     * images: those left out are deleted, an empty list deletes them all, and without it (null) they stay as they are.
      */
     public record MaterialInput(@NotNull UUID quizId, UUID materialId,
         @NotNull @Pattern(regexp = "ARTICLE|LINK|VIDEO_LINK|PDF|IMAGES|AUDIO") String kind, String title,
@@ -66,7 +66,18 @@ public final class MaterialProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the materials", QbContent.MATERIAL, MATERIALS))
-                .steps(b -> QuizEditing.loadAll(b, "Load the images", QbContent.MATERIAL_IMAGE, IMAGES))
+                .steps(b -> QuizEditing.loadPartsOf(b, "Load its images", QbContent.MATERIAL_IMAGE, "materialId",
+                    ctx -> ctx.get(INPUT, MaterialInput.class).materialId(), IMAGES))
+                .steps(b -> QuizEditing.loadFiles(b, ctx -> {
+                    MaterialInput input = ctx.get(INPUT, MaterialInput.class);
+                    List<UUID> files = new ArrayList<>();
+                    files.add(input.pdf());
+                    files.add(input.audio());
+                    if (input.images() != null) {
+                        input.images().forEach(image -> files.add(image.image()));
+                    }
+                    return files;
+                }))
                 .compute("Save the material", (metadata, ctx) -> save(ctx)));
     }
 
@@ -95,23 +106,38 @@ public final class MaterialProcesses {
             return;
         }
         MaterialKind kind = MaterialKind.valueOf(input.kind());
-        List<ImageInput> images = input.images() == null ? List.of() : input.images();
+        List<ImageInput> images = input.images();
         Map<String, Boolean> given = new LinkedHashMap<>();
         given.put("body", text(input.body()) != null);
         given.put("url", text(input.url()) != null);
         given.put("pdf", input.pdf() != null);
         given.put("audio", input.audio() != null);
-        given.put("images", !images.isEmpty());
+        given.put("images", images != null && !images.isEmpty());
         given.forEach((field, present) -> {
             if (present && !field.equals(kind.contentField())) {
                 ctx.reject(new Violation(field, ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A material of kind " + kind
                     + " has no " + field, Map.of("kind", kind.name(), "field", field)));
             }
         });
-        List<EntityInstance> existing = material == null ? List.of()
-            : QuizEditing.groups(list(ctx, IMAGES), "materialId").getOrDefault(key(material.id()), List.of());
-        if (ctx.hasViolations() || !QuizEditing.knownParts(ctx, images.stream().map(ImageInput::imageId).toList(),
-            existing, "images", "imageId")) {
+        // Loaded by the input's materialId: only when that material is in this quiz are they its images.
+        List<EntityInstance> existing = material == null ? List.of() : list(ctx, IMAGES);
+        if (ctx.hasViolations() || images != null && !QuizEditing.knownParts(ctx,
+            images.stream().map(ImageInput::imageId).toList(), existing, "images", "imageId")) {
+            return;
+        }
+        Object owner = quiz.get("ownerId");
+        QuizEditing.requireOwnFile(ctx, owner, "pdf", input.pdf(), material == null ? null : material.get("pdf"));
+        QuizEditing.requireOwnFile(ctx, owner, "audio", input.audio(),
+            material == null ? null : material.get("audio"));
+        if (images != null) {
+            for (int i = 0; i < images.size(); i++) {
+                EntityInstance part = images.get(i).imageId() == null ? null
+                    : QuizEditing.find(existing, images.get(i).imageId());
+                QuizEditing.requireOwnFile(ctx, owner, "images[" + i + "].image", images.get(i).image(),
+                    part == null ? null : part.get("image"));
+            }
+        }
+        if (ctx.hasViolations()) {
             return;
         }
 
@@ -127,7 +153,7 @@ public final class MaterialProcesses {
         if (material == null) {
             values.put("quizId", quiz.id());
             values.put("ownerId", quiz.get("ownerId"));
-            values.put("seq", decimal(QuizEditing.nextSeq(materials)));
+            values.put("seq", decimal(QuizEditing.nextSeq(ctx, QbContent.MATERIAL, materials)));
             values.put("kind", kind.name());
             materialId = ctx.changes().insert(QbContent.MATERIAL, values);
             changed = true;
@@ -140,18 +166,22 @@ public final class MaterialProcesses {
             }
         }
 
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (int i = 0; i < images.size(); i++) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("seq", decimal(i + 1));
-            row.put("image", images.get(i).image());
-            row.put("caption", text(images.get(i).caption()));
-            rows.add(row);
-        }
         List<UUID> imageIds = new ArrayList<>();
-        changed |= QuizEditing.saveParts(ctx, QbContent.MATERIAL_IMAGE, existing,
-            images.stream().map(ImageInput::imageId).toList(), rows,
-            Map.of("materialId", materialId, "quizId", quiz.id(), "ownerId", quiz.get("ownerId")), imageIds);
+        if (images == null) {
+            QuizEditing.ordered(existing).forEach(image -> imageIds.add(uuid(image.id())));
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (int i = 0; i < images.size(); i++) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("seq", decimal(i + 1));
+                row.put("image", images.get(i).image());
+                row.put("caption", text(images.get(i).caption()));
+                rows.add(row);
+            }
+            changed |= QuizEditing.saveParts(ctx, QbContent.MATERIAL_IMAGE, existing,
+                images.stream().map(ImageInput::imageId).toList(), rows,
+                Map.of("materialId", materialId, "quizId", quiz.id(), "ownerId", owner), imageIds);
+        }
 
         if (!changed) {
             QuizEditing.unchanged(ctx, quiz, uuid(materialId), imageIds);
@@ -169,11 +199,13 @@ public final class MaterialProcesses {
             ProcessContext.class, pb -> pb
                 .description("Deletes a reference material of a quiz with its images.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .actsOn(QbContent.MATERIAL, "materialId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the materials", QbContent.MATERIAL, MATERIALS))
-                .steps(b -> QuizEditing.loadAll(b, "Load the images", QbContent.MATERIAL_IMAGE, IMAGES))
+                .steps(b -> QuizEditing.loadPartsOf(b, "Load its images", QbContent.MATERIAL_IMAGE, "materialId",
+                    ctx -> ctx.get(INPUT, MaterialRef.class).materialId(), IMAGES))
                 .compute("Delete the material", (metadata, ctx) -> {
                     MaterialRef input = ctx.get(INPUT, MaterialRef.class);
                     EntityInstance quiz = quiz(ctx);
@@ -187,9 +219,8 @@ public final class MaterialProcesses {
                         return;
                     }
                     // Images first: a material still referred to cannot be deleted.
-                    QuizEditing.groups(list(ctx, IMAGES), "materialId").getOrDefault(key(material.id()), List.of())
-                        .forEach(image -> ctx.changes().delete(QbContent.MATERIAL_IMAGE, image.id(),
-                            image.version()));
+                    list(ctx, IMAGES).forEach(image -> ctx.changes().delete(QbContent.MATERIAL_IMAGE, image.id(),
+                        image.version()));
                     ctx.changes().delete(QbContent.MATERIAL, material.id(), material.version());
                     QuizEditing.touch(ctx, quiz, Map.of("materialCount", decimal(materials.size() - 1)),
                         uuid(material.id()), List.of());

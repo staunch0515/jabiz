@@ -174,14 +174,15 @@ public final class QuizSnapshots {
     }
 
     private static UUID uuid(Object value) {
-        return value == null ? null : UUID.fromString(value.toString());
+        return Values.uuid(value);
     }
 
+    /** A whole number that must be there: absent or a fraction is not a snapshot of this schema. */
     private static int number(Object value) {
-        if (value instanceof Number n) {
-            return n.intValue();
+        if (value == null) {
+            throw new IllegalArgumentException("A number is missing");
         }
-        throw new IllegalArgumentException("Not a number: " + value);
+        return Values.intValue(value);
     }
 
     @SuppressWarnings("unchecked")

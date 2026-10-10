@@ -33,4 +33,24 @@ class ReorderTest {
         assertThat(Reorder.changes(CURRENT, List.of("a", "b", "x"))).isEmpty();
         assertThat(Reorder.changes(Map.of(), List.of())).hasValue(Map.of());
     }
+
+    @Test
+    void aNewItemGoesAfterTheLastWhileThereIsRoom() {
+        Map<String, Integer> places = new LinkedHashMap<>();
+        places.put("a", 1);
+        places.put("b", 9_998);
+        assertThat(Reorder.next(places, 9_999)).isEqualTo(new Reorder.Next<>(9_999, Map.of()));
+        assertThat(Reorder.next(Map.<String, Integer>of(), 9_999)).isEqualTo(new Reorder.Next<>(1, Map.of()));
+    }
+
+    @Test
+    void atTheLastPlaceTheItemsAreNumberedAgainFirst() {
+        Map<String, Integer> places = new LinkedHashMap<>();
+        places.put("a", 1);
+        places.put("b", 5_000);
+        places.put("c", 9_999);
+        Reorder.Next<String> next = Reorder.next(places, 9_999);
+        assertThat(next.seq()).isEqualTo(4);
+        assertThat(next.moves()).containsExactly(Map.entry("b", 2), Map.entry("c", 3));
+    }
 }

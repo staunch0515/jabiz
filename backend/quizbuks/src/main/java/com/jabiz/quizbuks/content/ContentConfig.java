@@ -21,6 +21,11 @@ import org.springframework.context.annotation.Configuration;
  * by the processes only ({@code processOnlyWrites}): the platform's reference checks and the processes' writes go
  * through it. A sponsor reads their own rows through the sponsor dataset ({@code ownerId} = the caller; of quizzes,
  * not removed ones), read only and without history. Nobody writes through a dataset: only the processes do.
+ *
+ * <p>Versions and version files have no sponsor dataset: a version outlives its quiz (publications refer to it) and
+ * its content holds the correct answers, but a dataset's scope cannot say "of a quiz that is not removed". A sponsor
+ * reads versions through the templates {@code qb.sponsor.quiz-versions} and {@code qb.sponsor.quiz-version}, which
+ * join the sponsor's quizzes; the parts of a removed quiz are tombstoned, so its other datasets show nothing either.
  */
 @Configuration
 public class ContentConfig {
@@ -43,8 +48,9 @@ public class ContentConfig {
 
     private DatasetDefinition sponsorDataset(String entity) {
         return DatasetDefinition.define(QbContent.sponsorDataset(entity), d -> {
+            // Read only: the write permission is one no role holds, so making it writable later grants nothing.
             d.targetEntityType(entity)
-                .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_WRITE)
+                .permissions(QbPermissions.CONTENT_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
                 .policy(p -> p.readOnly(true).allowTimeTravel(false))
                 .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
             d.scope(s -> {
@@ -123,8 +129,8 @@ public class ContentConfig {
 
     @Bean
     DatasetDefinition qbVersionFileDataset() {
-        // A quiz removed after many versions tombstones the files of all of them.
-        return defaultDataset(QbContent.VERSION_FILE, 5_000);
+        // A version registers at most MAX_FILES_PER_VERSION files; a removal releases them in chunks of this size.
+        return defaultDataset(QbContent.VERSION_FILE, ContentLimits.RELEASE_CHUNK);
     }
 
     @Bean
@@ -150,16 +156,6 @@ public class ContentConfig {
     @Bean
     DatasetDefinition qbSponsorOptionDataset() {
         return sponsorDataset(QbContent.OPTION);
-    }
-
-    @Bean
-    DatasetDefinition qbSponsorQuizVersionDataset() {
-        return sponsorDataset(QbContent.VERSION);
-    }
-
-    @Bean
-    DatasetDefinition qbSponsorVersionFileDataset() {
-        return sponsorDataset(QbContent.VERSION_FILE);
     }
 
     @Bean
@@ -222,6 +218,11 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<QuizProcesses.CloneInput, QuizProcesses.CloneOutput, ProcessContext> qbQuizClone() {
         return QuizProcesses.cloneQuiz();
+    }
+
+    @Bean
+    ProcessDefinition<QuizProcesses.ReleaseInput, QuizProcesses.ReleaseOutput, ProcessContext> qbQuizReleaseFiles() {
+        return QuizProcesses.releaseFiles();
     }
 
     @Bean

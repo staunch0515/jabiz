@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
@@ -108,6 +109,44 @@ class ContentFilesIT extends ContentItSupport {
             .exchange().expectStatus().value(status -> assertThat(status).isIn(403, 404));
         client.get().uri("/api/files/" + paper + "/content").header(HttpHeaders.AUTHORIZATION, contentAdmin())
             .exchange().expectStatus().isOk();
+    }
+
+    @Test
+    void imagesStayWithoutAListAndGoWithAnEmptyOne() {
+        String quizId = newQuiz(sponsorA(), "Image group");
+        String material = (String) run("QB_MATERIAL_SAVE", sponsorA(), body("quizId", quizId, "kind", "IMAGES",
+            "title", "Pictures", "images", List.of(body("image", image()), body("image", image())))).get("itemId");
+        Map<String, Object> kept = run("QB_MATERIAL_SAVE", sponsorA(), body("quizId", quizId, "materialId",
+            material, "kind", "IMAGES", "title", "Photos"));
+        assertThat((List<?>) kept.get("partIds")).hasSize(2);
+        run("QB_MATERIAL_SAVE", sponsorA(), body("quizId", quizId, "materialId", material, "kind", "IMAGES",
+            "title", "Photos", "images", List.of()));
+        assertThat(latest("qb_material_image_version", "image_id", "material_id = '" + material
+            + "' AND NOT is_deleted")).isEmpty();
+    }
+
+    @Test
+    void aSponsorCannotUseAnotherSponsorsFile() {
+        String picture = image();
+        String paper = pdf();
+        String quizOfB = newQuiz(sponsorB(), "B's quiz");
+        String questionOfB = question(sponsorB(), quizOfB, "Q");
+        assertThat(codes(refused("QB_QUIZ_SAVE", sponsorB(), body("quizId", quizOfB, "title", "B's quiz",
+            "cover", picture), 422))).containsExactly(ContentCodes.FILE_NOT_OWN);
+        assertThat(codes(refused("QB_QUIZ_SAVE", sponsorB(), body("title", "New", "cover", picture), 422)))
+            .containsExactly(ContentCodes.FILE_NOT_OWN);
+        assertThat(violations(refused("QB_QUESTION_SAVE", sponsorB(), body("quizId", quizOfB, "questionId",
+            questionOfB, "image", picture, "options", List.of(body("text", "a", "correct", true),
+                body("image", picture))), 422))).extracting(v -> v.get("field"))
+            .containsExactly("image", "options[1].image");
+        assertThat(codes(refused("QB_MATERIAL_SAVE", sponsorB(), body("quizId", quizOfB, "kind", "PDF",
+            "pdf", paper), 422))).containsExactly(ContentCodes.FILE_NOT_OWN);
+        assertThat(codes(refused("QB_MATERIAL_SAVE", sponsorB(), body("quizId", quizOfB, "kind", "IMAGES",
+            "images", List.of(body("image", picture))), 422))).containsExactly(ContentCodes.FILE_NOT_OWN);
+        // Their own file is fine.
+        String own = (String) upload(QbContent.IMAGE_POLICY, FileSamples.jpeg(40, 30), "b.jpg", "image/jpeg",
+            sponsorB()).expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+        run("QB_QUIZ_SAVE", sponsorB(), body("quizId", quizOfB, "title", "B's quiz", "cover", own));
     }
 
     @Test

@@ -48,10 +48,13 @@ class ContentOwnerIT extends ContentItSupport {
             readEntity(QbContent.sponsorDataset(entity), id, sponsorA()).expectStatus().isOk();
             readEntity(QbContent.sponsorDataset(entity), id, sponsorB()).expectStatus().isNotFound();
         }
-        assertThat(queryDataset(QbContent.sponsorDataset(QbContent.VERSION), sponsorB()))
-            .extracting(ContentOwnerIT::quizIdOf).doesNotContain(a.quizId());
-        assertThat(queryDataset(QbContent.sponsorDataset(QbContent.VERSION), sponsorA()))
-            .extracting(ContentOwnerIT::quizIdOf).contains(a.quizId());
+        // Versions have no sponsor dataset; their templates go through the sponsor's own quizzes.
+        String versionId = (String) items("qb.sponsor.quiz-versions", sponsorA(), body("params",
+            body("quizId", a.quizId()))).getFirst().get("versionId");
+        assertThat(items("qb.sponsor.quiz-version", sponsorA(), body("params", body("versionId", versionId))))
+            .singleElement().satisfies(row -> assertThat((String) row.get("content")).contains("A's question"));
+        assertThat(items("qb.sponsor.quiz-version", sponsorB(), body("params", body("versionId", versionId))))
+            .isEmpty();
         assertThat(items("qb.sponsor.quizzes", sponsorB(), body())).extracting(row -> row.get("quizId"))
             .doesNotContain(a.quizId());
         assertThat(items("qb.sponsor.quiz-versions", sponsorB(), body("params", body("quizId", a.quizId()))))
@@ -94,7 +97,8 @@ class ContentOwnerIT extends ContentItSupport {
             for (String entity : List.of(QbContent.QUIZ, QbContent.QUESTION, QbContent.VERSION)) {
                 int status = commit(QbContent.defaultDataset(entity), token, change);
                 assertThat(status).as(entity).isIn(403, 422);
-                assertThat(commit(QbContent.sponsorDataset(entity), token, change)).as(entity).isIn(400, 403, 422);
+                assertThat(commit(QbContent.sponsorDataset(entity), token, change)).as(entity)
+                    .isIn(400, 403, 404, 422);
             }
             assertThat(commit(QbContent.defaultDataset(QbContent.QUIZ), token, body("action", "INSERT",
                 "attributes", body("title", "Sneaked in")))).isIn(403, 422);
@@ -151,6 +155,53 @@ class ContentOwnerIT extends ContentItSupport {
             .bodyValue(body("limit", 100)).exchange().expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody();
         return (List<Map<String, Object>>) page.get("items");
+    }
+
+    @Test
+    void afterRemovalNothingOfTheQuizIsReadableByItsSponsor() {
+        Quiz a = quizOfA();
+        String optionId = (String) latest("qb_option_version", "option_id", "question_id = '" + a.questionId() + "'")
+            .getFirst().get("option_id").toString();
+        String versionId = (String) items("qb.sponsor.quiz-versions", sponsorA(), body("params",
+            body("quizId", a.quizId()))).getFirst().get("versionId");
+        run("QB_QUIZ_DELETE", sponsorA(), body("quizId", a.quizId()));
+
+        readEntity(QbContent.sponsorDataset(QbContent.QUIZ), a.quizId(), sponsorA()).expectStatus().isNotFound();
+        readEntity(QbContent.sponsorDataset(QbContent.QUESTION), a.questionId(), sponsorA()).expectStatus()
+            .isNotFound();
+        readEntity(QbContent.sponsorDataset(QbContent.OPTION), optionId, sponsorA()).expectStatus().isNotFound();
+        readEntity(QbContent.sponsorDataset(QbContent.MATERIAL), a.materialId(), sponsorA()).expectStatus()
+            .isNotFound();
+        for (String entity : List.of(QbContent.QUIZ, QbContent.QUESTION, QbContent.OPTION, QbContent.MATERIAL,
+            QbContent.MATERIAL_IMAGE)) {
+            assertThat(queryDataset(QbContent.sponsorDataset(entity), sponsorA()))
+                .extracting(ContentOwnerIT::quizIdOrIdOf).as(entity).doesNotContain(a.quizId());
+        }
+        // No sponsor dataset reaches versions or their files at all.
+        for (String entity : List.of(QbContent.VERSION, QbContent.VERSION_FILE)) {
+            readEntity(QbContent.sponsorDataset(entity), versionId, sponsorA()).expectStatus().isNotFound();
+        }
+        assertThat(items("qb.sponsor.quizzes", sponsorA(), body())).extracting(row -> row.get("quizId"))
+            .doesNotContain(a.quizId());
+        assertThat(items("qb.sponsor.quiz-versions", sponsorA(), body("params", body("quizId", a.quizId()))))
+            .isEmpty();
+        assertThat(items("qb.sponsor.quiz-version", sponsorA(), body("params", body("versionId", versionId))))
+            .isEmpty();
+        // The version itself stays, for publications.
+        assertThat(query("SELECT 1 FROM qb_quiz_version_version WHERE version_id = ?::uuid", versionId)).hasSize(1);
+    }
+
+    @Test
+    void releasingFilesDirectlyNeedsAQuizOfOnesOwnThatIsRemoved() {
+        Quiz a = quizOfA();
+        Map<String, Object> release = body("quizId", a.quizId(), "versionFileIds", List.of());
+        refused("QB_QUIZ_RELEASE_FILES", sponsorA(), release, 404);
+        refused("QB_QUIZ_RELEASE_FILES", sponsorB(), release, 404);
+    }
+
+    private static Object quizIdOrIdOf(Map<String, Object> row) {
+        Object quizId = ((Map<?, ?>) row.get("attributes")).get("quizId");
+        return quizId == null ? row.get("id") : quizId;
     }
 
     private static Object quizIdOf(Map<String, Object> row) {

@@ -93,7 +93,7 @@ docs/quizbuks/               本文件等
 | `QbMaterial` | T | `quizId`、`ownerId`、`seq`、`kind`（ARTICLE / LINK / VIDEO_LINK / PDF / IMAGES / AUDIO，不可改）、`title`、`description`、`body`（Markdown，ARTICLE）、`url`（LINK / VIDEO_LINK）、`pdf`、`audio` | 参考资料；视频只存链接（已确认）；只填其类型的内容字段；图片组的每张图为子实体 `QbMaterialImage`（`materialId`、`seq`、`image`、`caption`） |
 | `QbQuestion` | T | `quizId`、`ownerId`、`seq`、`stem`、`image`（可选）、`points`（1–1 000） | |
 | `QbOption` | T | `questionId`、`quizId`、`ownerId`、`seq`、`text`、`image`（可选）、`correct` | 2–6 个、至少 1 个正确：在"保存版本"时检查（`QuizCompleteness`；草稿允许不完整，M-22），提交审核时（Q4）再查 |
-| `QbQuizVersion` | W | `quizId`、`ownerId`、`versionNumber`（1、2…，`label` 为 v1.0、v1.1…）、`title`、`content`（规范 JSON 文本：题目、选项、资料的完整快照，题与选项按 1 起的序号）、`contentHash`（平台 `ContentHash`）、`questionCount`、`materialCount`、`fullScore`、`versionedAt` | **整体快照**（分析 4.2），由"保存版本"（`QB_QUIZ_PUBLISH_VERSION`）显式生成，草稿的保存不生成版本（Q3 D-Q3-1）。没有文件字段。发布引用版本，答题与结算只读快照 |
+| `QbQuizVersion` | W | `quizId`、`ownerId`、`versionNumber`（1、2…，`label` 为 v1.0、v1.1…）、`title`、`content`（规范 JSON 文本：题目、选项、资料的完整快照，题与选项按 1 起的序号）、`contentHash`（平台 `ContentHash`）、`questionCount`、`materialCount`、`fullScore`、`versionedAt` | **整体快照**（分析 4.2），由"保存版本"（`QB_QUIZ_PUBLISH_VERSION`）显式生成，草稿的保存不生成版本（Q3 D-Q3-1）。没有文件字段。发布引用版本，答题与结算只读快照。没有商家数据视图（内容含正确答案、版本比模版活得久）：商家只经模板读取，模板只连接本人未移除的模版 |
 | `QbVersionFile` | T | `quizId`、`ownerId`、`firstVersionNo`、`image` / `pdf` / `audio`（各对应一个文件策略，恰好一个非空） | 快照引用的每个文件按"模版 + 文件"一行，使平台的文件引用检查与孤儿清扫看得到 JSON 中的文件；普通时态实体（不是只写一次）：移除模版时写墓碑，被发布引用的版本的文件除外（Q4） |
 | `QbAiJob` | T | `sponsorId`、`quizId`、`kind`（COVER / QUESTIONS）、`input`（资料、题数、难度）、`status`（G7 的状态）、`model`、`promptTokens`、`completionTokens`、`result`（jsonb：候选图片文件或候选题目） | AI 生成请求；候选题目经商家校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"） |
 

@@ -20,9 +20,7 @@ import static com.jabiz.quizbuks.content.QuizEditing.OPTIONS;
 import static com.jabiz.quizbuks.content.QuizEditing.OUTPUT;
 import static com.jabiz.quizbuks.content.QuizEditing.QUESTIONS;
 import static com.jabiz.quizbuks.content.QuizEditing.decimal;
-import static com.jabiz.quizbuks.content.QuizEditing.key;
 import static com.jabiz.quizbuks.content.QuizEditing.list;
-import static com.jabiz.quizbuks.content.QuizEditing.number;
 import static com.jabiz.quizbuks.content.QuizEditing.quiz;
 import static com.jabiz.quizbuks.content.QuizEditing.text;
 import static com.jabiz.quizbuks.content.QuizEditing.uuid;
@@ -43,8 +41,9 @@ public final class QuestionProcesses {
     public record OptionInput(UUID optionId, String text, UUID image, Boolean correct) {}
 
     /**
-     * One question with all its options; a new one (no {@code questionId}) goes to the end. Options left out are
-     * deleted.
+     * One question with its options; a new one (no {@code questionId}) goes to the end. The sponsor console saves a
+     * question together with its options, so {@code options} is the whole list: options left out of it are deleted,
+     * and an empty list deletes them all. Without {@code options} (null) the options stay as they are.
      *
      * @param points 1 when not given
      */
@@ -66,7 +65,17 @@ public final class QuestionProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
-                .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
+                .steps(b -> QuizEditing.loadPartsOf(b, "Load its options", QbContent.OPTION, "questionId",
+                    ctx -> ctx.get(INPUT, QuestionInput.class).questionId(), OPTIONS))
+                .steps(b -> QuizEditing.loadFiles(b, ctx -> {
+                    QuestionInput input = ctx.get(INPUT, QuestionInput.class);
+                    List<UUID> files = new ArrayList<>();
+                    files.add(input.image());
+                    if (input.options() != null) {
+                        input.options().forEach(option -> files.add(option.image()));
+                    }
+                    return files;
+                }))
                 .compute("Save the question", (metadata, ctx) -> save(ctx)));
     }
 
@@ -89,10 +98,24 @@ public final class QuestionProcesses {
                 + ContentLimits.MAX_QUESTIONS + " questions", Map.of("max", ContentLimits.MAX_QUESTIONS)));
             return;
         }
-        List<OptionInput> options = input.options() == null ? List.of() : input.options();
-        List<EntityInstance> existing = question == null ? List.of()
-            : QuizEditing.groups(list(ctx, OPTIONS), "questionId").getOrDefault(key(question.id()), List.of());
-        if (!QuizEditing.knownParts(ctx, options.stream().map(OptionInput::optionId).toList(), existing, "options", "optionId")) {
+        // Loaded by the input's questionId: only when that question is in this quiz are they its options.
+        List<EntityInstance> existing = question == null ? List.of() : list(ctx, OPTIONS);
+        List<OptionInput> options = input.options();
+        if (options != null && !QuizEditing.knownParts(ctx, options.stream().map(OptionInput::optionId).toList(),
+            existing, "options", "optionId")) {
+            return;
+        }
+        Object owner = quiz.get("ownerId");
+        QuizEditing.requireOwnFile(ctx, owner, "image", input.image(), question == null ? null : question.get("image"));
+        if (options != null) {
+            for (int i = 0; i < options.size(); i++) {
+                EntityInstance part = options.get(i).optionId() == null ? null
+                    : QuizEditing.find(existing, options.get(i).optionId());
+                QuizEditing.requireOwnFile(ctx, owner, "options[" + i + "].image", options.get(i).image(),
+                    part == null ? null : part.get("image"));
+            }
+        }
+        if (ctx.hasViolations()) {
             return;
         }
 
@@ -105,7 +128,7 @@ public final class QuestionProcesses {
         if (question == null) {
             values.put("quizId", quiz.id());
             values.put("ownerId", quiz.get("ownerId"));
-            values.put("seq", decimal(QuizEditing.nextSeq(questions)));
+            values.put("seq", decimal(QuizEditing.nextSeq(ctx, QbContent.QUESTION, questions)));
             questionId = ctx.changes().insert(QbContent.QUESTION, values);
             changed = true;
         } else {
@@ -117,20 +140,24 @@ public final class QuestionProcesses {
             }
         }
 
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (int i = 0; i < options.size(); i++) {
-            OptionInput option = options.get(i);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("seq", decimal(i + 1));
-            row.put("text", text(option.text()));
-            row.put("image", option.image());
-            row.put("correct", Boolean.TRUE.equals(option.correct()));
-            rows.add(row);
-        }
         List<UUID> optionIds = new ArrayList<>();
-        changed |= QuizEditing.saveParts(ctx, QbContent.OPTION, existing,
-            options.stream().map(OptionInput::optionId).toList(), rows,
-            Map.of("questionId", questionId, "quizId", quiz.id(), "ownerId", quiz.get("ownerId")), optionIds);
+        if (options == null) {
+            QuizEditing.ordered(existing).forEach(option -> optionIds.add(uuid(option.id())));
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (int i = 0; i < options.size(); i++) {
+                OptionInput option = options.get(i);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("seq", decimal(i + 1));
+                row.put("text", text(option.text()));
+                row.put("image", option.image());
+                row.put("correct", Boolean.TRUE.equals(option.correct()));
+                rows.add(row);
+            }
+            changed |= QuizEditing.saveParts(ctx, QbContent.OPTION, existing,
+                options.stream().map(OptionInput::optionId).toList(), rows,
+                Map.of("questionId", questionId, "quizId", quiz.id(), "ownerId", owner), optionIds);
+        }
 
         if (!changed) {
             QuizEditing.unchanged(ctx, quiz, uuid(questionId), optionIds);
@@ -148,11 +175,13 @@ public final class QuestionProcesses {
             ProcessContext.class, pb -> pb
                 .description("Deletes a question of a quiz with its options.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .actsOn(QbContent.QUESTION, "questionId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
-                .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
+                .steps(b -> QuizEditing.loadPartsOf(b, "Load its options", QbContent.OPTION, "questionId",
+                    ctx -> ctx.get(INPUT, QuestionRef.class).questionId(), OPTIONS))
                 .compute("Delete the question", (metadata, ctx) -> {
                     QuestionRef input = ctx.get(INPUT, QuestionRef.class);
                     EntityInstance quiz = quiz(ctx);
@@ -166,8 +195,8 @@ public final class QuestionProcesses {
                         return;
                     }
                     // Options first: a question still referred to cannot be deleted.
-                    QuizEditing.groups(list(ctx, OPTIONS), "questionId").getOrDefault(key(question.id()), List.of())
-                        .forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(), option.version()));
+                    list(ctx, OPTIONS).forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(),
+                        option.version()));
                     ctx.changes().delete(QbContent.QUESTION, question.id(), question.version());
                     QuizEditing.touch(ctx, quiz, Map.of("questionCount", decimal(questions.size() - 1)),
                         uuid(question.id()), List.of());

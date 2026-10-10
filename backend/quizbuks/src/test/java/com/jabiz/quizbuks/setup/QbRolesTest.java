@@ -39,6 +39,9 @@ class QbRolesTest {
         // role an administrator grants it to, publishes them.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain("platform.param.write", "control.publish"));
+        // The sponsors' content datasets are read only; their write permission is held by nobody.
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
+            .doesNotContain(QbPermissions.SPONSOR_VIEW_WRITE));
     }
 
     @Test

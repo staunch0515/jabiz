@@ -147,6 +147,31 @@ class ContentIT extends ContentItSupport {
     }
 
     @Test
+    void withoutAListThePartsStayAndAnEmptyListRemovesThem() {
+        String quizId = newQuiz(sponsorA(), "Parts");
+        String questionId = question(sponsorA(), quizId, "Q");
+        // No options given: the text changes, the two options stay.
+        Map<String, Object> kept = run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "questionId",
+            questionId, "stem", "Q, reworded"));
+        assertThat((List<?>) kept.get("partIds")).hasSize(2);
+        assertThat(latest("qb_option_version", "option_id", "question_id = '" + questionId + "' AND NOT is_deleted"))
+            .hasSize(2);
+        run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "questionId", questionId, "stem", "Q",
+            "options", List.of()));
+        assertThat(latest("qb_option_version", "option_id", "question_id = '" + questionId + "' AND NOT is_deleted"))
+            .isEmpty();
+
+        // The same for the images of an image group (no files needed to show it: the list is never read).
+        String material = (String) run("QB_MATERIAL_SAVE", sponsorA(), body("quizId", quizId, "kind", "IMAGES",
+            "title", "Pictures")).get("itemId");
+        Map<String, Object> renamed = run("QB_MATERIAL_SAVE", sponsorA(), body("quizId", quizId, "materialId",
+            material, "kind", "IMAGES", "title", "Photos"));
+        assertThat((List<?>) renamed.get("partIds")).isEmpty();
+        assertThat(latest("qb_material_version", "material_id", "material_id = '" + material + "'").getFirst())
+            .containsEntry("title", "Photos");
+    }
+
+    @Test
     void aQuizHasAtMostAHundredQuestions() {
         String quizId = newQuiz(sponsorA(), "Many");
         for (int i = 0; i < ContentLimits.MAX_QUESTIONS; i++) {

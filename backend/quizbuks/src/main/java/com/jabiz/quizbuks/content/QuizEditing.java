@@ -6,6 +6,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -40,6 +41,7 @@ final class QuizEditing {
     static final String OPTIONS = "options";
     static final String VERSIONS = "versions";
     static final String VERSION_FILES = "versionFiles";
+    static final String FILES = "files";
     static final String OUTPUT = "output";
 
     static String lockName(Object quizId) {
@@ -62,6 +64,53 @@ final class QuizEditing {
         String key) {
         pb.step(step, QueryEntities.<ProcessContext>of(QbContent.defaultDataset(entity),
             ctx -> ofQuiz(ctx.get(QUIZ_ID)), key));
+    }
+
+    /**
+     * Loads into {@code key} the parts (options, images) of one item of the quiz only, the item named by
+     * {@code item} (none when it gives no key): the lock is held, so read no more than needed.
+     */
+    static <I, O> void loadPartsOf(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String step, String entity,
+        String parent, java.util.function.Function<ProcessContext, UUID> item, String key) {
+        pb.step(step, QueryEntities.<ProcessContext>of(QbContent.defaultDataset(entity), ctx -> {
+            UUID id = item.apply(ctx);
+            QueryPredicate where = id == null ? new QueryPredicate.In(parent, new ArrayList<>())
+                : new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
+                    new QueryPredicate.Eq(parent, id)));
+            return EntityQuery.builder().where(where).limit(Integer.MAX_VALUE).build();
+        }, key));
+    }
+
+    /**
+     * Loads into {@link #FILES} the platform's records of the files the input names, to see who uploaded them
+     * ({@code SysFile.uploadedBy}, read through the platform's file dataset).
+     */
+    static <I, O> void loadFiles(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        java.util.function.Function<ProcessContext, List<UUID>> files) {
+        pb.step("Load the files", QueryEntities.<ProcessContext>of(FileEntities.DATASET, ctx -> {
+            List<Object> ids = new ArrayList<>();
+            files.apply(ctx).stream().filter(Objects::nonNull).distinct().forEach(ids::add);
+            return EntityQuery.builder().where(new QueryPredicate.In(FileEntities.FILE_ID, ids))
+                .limit(Integer.MAX_VALUE).build();
+        }, FILES));
+    }
+
+    /**
+     * Refuses a file newly put into a field that the quiz's owner did not upload (422 {@code QB_CONTENT_FILE_NOT_OWN}):
+     * a sponsor cannot show another sponsor's file by knowing its key. A file the field already holds stays; a file
+     * the platform does not know is left to the platform's own check (400).
+     *
+     * @param stored the field's present value; null for a new row
+     */
+    static void requireOwnFile(ProcessContext ctx, Object owner, String field, UUID given, Object stored) {
+        if (given == null || same(stored, given)) {
+            return;
+        }
+        EntityInstance file = find(list(ctx, FILES), given);
+        if (file != null && !String.valueOf(owner).equals(file.get(FileEntities.UPLOADED_BY))) {
+            ctx.reject(new Violation(field, ContentCodes.FILE_NOT_OWN, "File " + given + " was not uploaded by the "
+                + "quiz's owner", Map.of("fileId", given.toString())));
+        }
     }
 
     static ProcessContext start(com.jabiz.process.ProcessStart start, Object input, UUID quizId) {
@@ -239,9 +288,19 @@ final class QuizEditing {
         return groups;
     }
 
-    /** The next place at the end: one after the last, gaps left by deletions stay. */
-    static int nextSeq(List<EntityInstance> rows) {
-        return (int) rows.stream().mapToLong(row -> number(row.get("seq"))).max().orElse(0) + 1;
+    /**
+     * The next place at the end: one after the last; gaps left by deletions stay until the last place would not fit
+     * the column, then the items are numbered again first ({@link Reorder#next}).
+     */
+    static int nextSeq(ProcessContext ctx, String entity, List<EntityInstance> rows) {
+        Map<String, Integer> places = new LinkedHashMap<>();
+        ordered(rows).forEach(row -> places.put(key(row.id()), (int) number(row.get("seq"))));
+        Reorder.Next<String> next = Reorder.next(places, ContentLimits.MAX_SEQ);
+        next.moves().forEach((id, seq) -> {
+            EntityInstance row = find(rows, id);
+            ctx.changes().update(entity, row.id(), row.version(), Map.of("seq", decimal(seq)));
+        });
+        return next.seq();
     }
 
     @SuppressWarnings("unchecked")
@@ -265,12 +324,11 @@ final class QuizEditing {
     }
 
     static UUID uuid(Object value) {
-        return value == null ? null : value instanceof UUID id ? id : UUID.fromString(value.toString());
+        return Values.uuid(value);
     }
 
     static long number(Object value) {
-        return value == null ? 0 : value instanceof BigDecimal d ? d.longValueExact()
-            : ((Number) value).longValue();
+        return Values.longValue(value);
     }
 
     static Instant instant(Object value) {
