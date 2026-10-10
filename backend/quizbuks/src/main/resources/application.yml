@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: quizbuks
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5440/quizbuks}
+    username: ${SPRING_R2DBC_USERNAME:quizbuks}
+    password: ${DB_PASSWORD:quizbuks}
+  flyway:
+    url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5440/quizbuks}
+    user: ${SPRING_FLYWAY_USER:quizbuks}
+    password: ${DB_PASSWORD:quizbuks}
+
+jabiz:
+  # The wallets are the ledger, kept in yen without decimals and shown as Kudos (docs/quizbuks/02-design.md
+  # sections 4 and 7.4). The fiscal year is the calendar year.
+  ledger:
+    currency: JPY
+    scale: 0
+  fiscal-year-end: 12
+  # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
+  # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
+  integrity:
+    key: ${JABIZ_INTEGRITY_KEY:}
+  security:
+    # The key signing access tokens comes from the environment only (docs/design/10-security.md).
+    jwt:
+      secret: ${JABIZ_JWT_SECRET:}
+    # The key encrypting the users' TOTP secrets (docs/design/10-security.md section 9), from the environment only:
+    # Base64, at least 32 bytes. Startup fails without it; without it, enrolled users cannot pass their second factor.
+    mfa:
+      key: ${JABIZ_MFA_KEY:}
+    # The first administrator, created at startup when both are set and no user exists yet.
+    bootstrap-admin:
+      user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
+      password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  files:
+    # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
+    local:
+      root: ${JABIZ_FILES_LOCAL_ROOT:}
+  i18n:
+    # Error messages in English when Accept-Language names none of the application's languages.
+    default-locale: en
+    bundles: messages
+  web:
+    # The platform's admin frontend under /admin/ (docs/quizbuks/02-design.md section 1); the app (/) and the
+    # sponsor console (/sponsor/) come in later phases.
+    spa:
+      - path: /admin
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:--}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
