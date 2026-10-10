@@ -5,7 +5,10 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInInput;
+import com.jabiz.runtime.web.ClientAddresses;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInProcess;
 import com.jabiz.security.LoginOutcome;
 import io.micrometer.common.KeyValues;
@@ -64,10 +67,14 @@ class OidcController {
     private final MfaSettings mfa;
     private final PlatformObservations observations;
     private final Clock clock;
+    private final SignInEntries entries;
+    private final ClientAddresses clients;
 
     OidcController(OidcProviders providers, OidcClient client, OidcStateStore states, ProcessExecutor processes,
         JwtService tokens, RefreshTokenStore refreshTokens, MfaSettings mfa, PlatformObservations observations,
-        Clock clock) {
+        Clock clock, SignInEntries entries, ClientAddresses clients) {
+        this.entries = entries;
+        this.clients = clients;
         this.providers = providers;
         this.client = client;
         this.states = states;
@@ -86,12 +93,21 @@ class OidcController {
             .toList());
     }
 
+    /**
+     * @param entry the sign-in entry to sign in to (decision D36); none: the administration. Stored with the state:
+     *              the callback cannot pick another one.
+     */
     @PostMapping(BASE + "/{id}/start")
-    Mono<StartResponse> start(@PathVariable String id) {
+    Mono<StartResponse> start(@PathVariable String id,
+        @org.springframework.web.bind.annotation.RequestParam(name = "entry", required = false) String entry) {
         return Mono.defer(() -> {
             OidcProvider provider = providers.find(id)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown identity provider " + id));
-            return states.start(provider.id()).flatMap(started -> client.authorizationUrl(provider, started)
+            if (entries.find(entry).isEmpty()) {
+                return Mono.error(AuthController.loginFailed("Unknown sign-in entry"));
+            }
+            String resolved = entries.find(entry).orElseThrow().name();
+            return states.start(provider.id(), resolved).flatMap(started -> client.authorizationUrl(provider, started)
                     .map(url -> new StartResponse(url, started.binder())))
                 .onErrorMap(OidcClient.ProviderException.class, e -> {
                     log.warn("Identity provider {} unavailable: {}", provider.id(), e.getMessage());
@@ -105,7 +121,8 @@ class OidcController {
      * sign in whom the subject is linked to, like {@code POST /api/auth/login} answers.
      */
     @PostMapping(BASE + "/callback")
-    Mono<AuthController.TokenResponse> callback(@RequestBody(required = false) CallbackRequest request) {
+    Mono<AuthController.TokenResponse> callback(@RequestBody(required = false) CallbackRequest request,
+        ServerHttpRequest http) {
         return Mono.defer(() -> {
             if (request == null || blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
@@ -117,10 +134,13 @@ class OidcController {
                 Mono<AuthController.TokenResponse> work = client.idToken(provider, request.code(),
                         pending.codeVerifier())
                     .flatMap(idToken -> identity(provider, idToken, pending.nonceHash()))
-                    .flatMap(identity -> signIn(provider, identity));
+                    .flatMap(identity -> signIn(provider, identity,
+                        AuthController.source(clients, http, pending.entry())));
                 return observations.mono(PlatformObservations.AUTH_OIDC, "oidc " + provider.id(),
                     KeyValues.of("provider", provider.id()), work);
-            }).onErrorMap(e -> !(e instanceof AuthenticationFailedException), e -> {
+            // Refusals after the identity was proven (a guard, an unverified address) keep their 403.
+            }).onErrorMap(e -> !(e instanceof AuthenticationFailedException)
+                && !(e instanceof SignInRefusedException) && !(e instanceof EmailNotVerifiedException), e -> {
                 log.info("Sign-in through an identity provider refused: {}", e.getMessage());
                 return AuthController.loginFailed("Sign-in through the identity provider refused");
             });
@@ -138,21 +158,19 @@ class OidcController {
                     nonceHash, clock.instant())));
     }
 
-    private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity) {
+    private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity,
+        SignInSource source) {
         java.time.Instant mfaAt = IdTokenValidator.secondFactorAt(identity, provider, clock.instant());
         return processes.execute(SponsorOidcSignInProcess.DEFINITION,
-                new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null))
-            .flatMap(result -> switch (result.outcome()) {
-                case SUCCESS -> AuthController.session(refreshTokens, tokens, AuthController.actor(result, mfaAt),
-                    UUID.fromString(result.userId()), UUID.fromString(result.identityId()));
-                case MFA_REQUIRED -> Mono.just(AuthController.TokenResponse.challenge(
-                    AuthController.SignInStatus.MFA_REQUIRED, tokens.issueChallenge(result.userId(),
-                        JwtService.Purpose.VERIFY, result.attemptNo(), result.identityId(), mfa.challengeTtl())));
-                case MFA_ENROLLMENT_REQUIRED -> Mono.just(AuthController.TokenResponse.challenge(
-                    AuthController.SignInStatus.MFA_ENROLLMENT_REQUIRED, tokens.issueChallenge(result.userId(),
-                        JwtService.Purpose.ENROLL, result.attemptNo(), mfa.challengeTtl())));
-                default -> Mono.error(AuthController.loginFailed(result.outcome() == LoginOutcome.BAD_CREDENTIALS
-                    ? "No user is linked to the subject" : "Sign-in refused: " + result.outcome()));
+                new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null, source))
+            .flatMap(result -> {
+                if (result.outcome() == LoginOutcome.BAD_CREDENTIALS) {
+                    return Mono.error(AuthController.loginFailed("No user is linked to the subject"));
+                }
+                return AuthController.answer(result, mfaAt,
+                    result.identityId() == null ? null : UUID.fromString(result.identityId()),
+                    source.entryOrDefault(), refreshTokens, tokens, mfa,
+                    "Sign-in through identity provider " + provider.id());
             });
     }
 

@@ -4,8 +4,11 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.security.Rbac;
+import com.jabiz.runtime.security.SecurityEntities;
+import com.jabiz.runtime.security.SignInEntries;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
+import com.jabiz.security.SignInAttempt;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +20,8 @@ import java.util.Optional;
 public class LoginContext extends ProcessContext {
 
     public static final String KEY_USERS = "users";
+    /** Users whose address equals the name signed in with (decision D36 item 4), before the verified one is kept. */
+    public static final String KEY_USERS_BY_EMAIL = "users_by_email";
     public static final String KEY_LATEST_RECORD = "latest_login_record";
     public static final String KEY_ASSIGNMENTS = "role_assignments";
     public static final String KEY_ROLES = "roles";
@@ -24,28 +29,43 @@ public class LoginContext extends ProcessContext {
     public static final String KEY_MFA = "mfa";
 
     private final String userName;
+    private final SignInSource source;
     /** Cleared by the authentication step once checked, so that nothing later can see it. */
     private volatile String password;
     private volatile LoginOutcome outcome;
     private volatile Rbac.Access access;
     private volatile Object loginRecordId;
     private volatile long attemptNo;
-    private volatile String factor = com.jabiz.runtime.security.SecurityEntities.FACTOR_PASSWORD;
+    private volatile String factor = SecurityEntities.FACTOR_PASSWORD;
     private volatile Long acceptedMfaStep;
+    private volatile SignInEntries.Entry entry;
 
     public LoginContext(ProcessStart start, SponsorSignInInput input) {
-        this(start, input.userName(), input.password());
+        this(start, input.userName(), input.password(), input.source());
     }
 
     protected LoginContext(ProcessStart start, String userName, String password) {
+        this(start, userName, password, SignInSource.NONE);
+    }
+
+    protected LoginContext(ProcessStart start, String userName, String password, SignInSource source) {
         super(start);
         this.userName = userName;
         this.password = password;
+        this.source = source == null ? SignInSource.NONE : source;
     }
 
-    /** The name signed in with, or the loaded user's name when the attempt names the user by id. */
+    /**
+     * The loaded user's name; the name signed in with while no user is loaded (it may be an e-mail address, decision
+     * D36 item 4).
+     */
     public String userName() {
-        return userName != null ? userName : user().<String>map(u -> u.get("userName")).orElse(null);
+        return user().<String>map(u -> u.get("userName")).orElse(userName);
+    }
+
+    /** The name (or address) signed in with, as given. */
+    public String identifier() {
+        return userName;
     }
 
     /** The submitted password, once: later calls return null. */
@@ -64,6 +84,30 @@ public class LoginContext extends ProcessContext {
 
     public Object userId() {
         return user().map(EntityInstance::id).orElse(null);
+    }
+
+    /** Whether the user's current e-mail address is verified (decision D36 implementation note 4). */
+    public boolean emailVerified() {
+        return user().map(SecurityEntities::emailVerified).orElse(false);
+    }
+
+    /** Where the attempt came from: the entry asked for, the client's address and user agent. */
+    public SignInSource source() {
+        return source;
+    }
+
+    /** The entry the attempt is for, once resolved; null before. */
+    public SignInEntries.Entry entry() {
+        return entry;
+    }
+
+    public void setEntry(SignInEntries.Entry entry) {
+        this.entry = entry;
+    }
+
+    /** The loaded roles the entry accepts: only these count towards permissions, second factor and data period. */
+    public List<EntityInstance> acceptedRoles() {
+        return Rbac.acceptedBy(list(KEY_ROLES), entry);
     }
 
     /** Counters of the user's latest login record. */
@@ -125,6 +169,16 @@ public class LoginContext extends ProcessContext {
         this.factor = factor;
     }
 
+    /** The factor as sign-in guards see it. */
+    public SignInAttempt.Factor guardFactor() {
+        return switch (factor) {
+            case SecurityEntities.FACTOR_TOTP -> SignInAttempt.Factor.TOTP;
+            case SecurityEntities.FACTOR_RECOVERY_CODE -> SignInAttempt.Factor.RECOVERY_CODE;
+            case SecurityEntities.FACTOR_OIDC -> SignInAttempt.Factor.OIDC;
+            default -> SignInAttempt.Factor.PASSWORD;
+        };
+    }
+
     /** The TOTP step this attempt accepted, or null: the record then carries the previous one. */
     public Long acceptedMfaStep() {
         return acceptedMfaStep;
@@ -139,23 +193,28 @@ public class LoginContext extends ProcessContext {
         return list(KEY_MFA).stream().filter(mfa -> Boolean.TRUE.equals(mfa.get("confirmed"))).findFirst();
     }
 
+    /** The entry's name as the session will carry it. */
+    private String entryName() {
+        return entry != null ? entry.name() : source.entryOrDefault();
+    }
+
     public SponsorSignInOutput output() {
         String recordId = loginRecordId == null ? null : String.valueOf(loginRecordId);
         if (outcome == LoginOutcome.MFA_REQUIRED || outcome == LoginOutcome.MFA_ENROLLMENT_REQUIRED) {
             // The second step needs to know whose attempt it continues; roles come only with the second factor.
             return new SponsorSignInOutput(outcome, String.valueOf(user().orElseThrow().id()), null, null, null,
-                recordId, attemptNo, null, identityId());
+                recordId, attemptNo, null, identityId(), null, null, entryName(), false);
         }
         if (outcome != LoginOutcome.SUCCESS) {
             return new SponsorSignInOutput(outcome == null ? LoginOutcome.BAD_CREDENTIALS : outcome, null, null,
-                null, null, recordId, null, refusal(), null);
+                null, null, recordId, null, refusal(), null, null, null, entryName(), false);
         }
         EntityInstance user = user().orElseThrow();
         return new SponsorSignInOutput(outcome, String.valueOf(user.id()), user.get("tenantId"),
             access.roles().stream().sorted().toList(), access.permissions().stream().sorted().toList(),
             recordId, attemptNo, null, identityId(),
             access.dataPeriod() == null ? null : access.dataPeriod().from(),
-            access.dataPeriod() == null ? null : access.dataPeriod().to());
+            access.dataPeriod() == null ? null : access.dataPeriod().to(), entryName(), emailVerified());
     }
 
     /** The provider account the attempt came through; null for passwords. */

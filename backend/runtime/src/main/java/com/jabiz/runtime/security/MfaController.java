@@ -12,7 +12,10 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.sponsor.MfaContext;
+import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorMfaVerifyInput;
+import com.jabiz.runtime.web.ClientAddresses;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import com.jabiz.runtime.process.sponsor.SponsorMfaVerifyProcess;
 import com.jabiz.runtime.process.sponsor.SponsorSignInOutput;
 import com.jabiz.security.LoginOutcome;
@@ -76,9 +79,11 @@ class MfaController {
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final Clock clock;
+    private final ClientAddresses clients;
 
     MfaController(ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens,
-        DatasetEntityManager entities, DatasetRegistry datasets, Clock clock) {
+        DatasetEntityManager entities, DatasetRegistry datasets, Clock clock, ClientAddresses clients) {
+        this.clients = clients;
         this.processes = processes;
         this.tokens = tokens;
         this.refreshTokens = refreshTokens;
@@ -89,19 +94,23 @@ class MfaController {
 
     /** The second step of a sign-in: a TOTP or recovery code under the challenge the password step returned. */
     @PostMapping(CHALLENGE + "/verify")
-    Mono<AuthController.TokenResponse> verify(@RequestBody(required = false) ChallengeRequest request) {
+    Mono<AuthController.TokenResponse> verify(@RequestBody(required = false) ChallengeRequest request,
+        ServerHttpRequest http) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request, JwtService.Purpose.VERIFY);
             if (blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
-            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo())
+            // The session belongs to the entry the challenge was issued for, never to one the request names.
+            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo(),
+                    AuthController.source(clients, http, challenge.entry()))
                 .onErrorMap(MfaController::concurrentAttempt, e -> AuthController.loginFailed("Concurrent attempt"))
                 .flatMap(result -> {
                     if (result.outcome() != LoginOutcome.SUCCESS) {
                         log.info("Second factor of user {} refused: {}", challenge.userId(),
                             result.refusal() != null ? result.refusal() : result.outcome());
-                        return Mono.error(AuthController.loginFailed("Second factor refused"));
+                        return Mono.error(result.refusal() == null ? AuthController.refusal(result)
+                            : AuthController.loginFailed("Second factor refused"));
                     }
                     // A sign-in through an identity provider stays tied to its account link (section 12).
                     return AuthController.session(refreshTokens, tokens,
@@ -169,7 +178,9 @@ class MfaController {
             if (request == null || blank(request.code())) {
                 return Mono.error(codeInvalid());
             }
-            return verifyCode(user.toString(), request.code(), null)
+            // A step-up stays in the entry of the caller's session (decision D36).
+            return verifyCode(user.toString(), request.code(), null,
+                    new SignInSource(context.entry(), null, null))
                 .onErrorMap(MfaController::concurrentAttempt, e -> codeInvalid())
                 .map(result -> {
                     if (MfaContext.NOT_ENROLLED.equals(result.refusal())) {
@@ -186,9 +197,9 @@ class MfaController {
         });
     }
 
-    private Mono<SponsorSignInOutput> verifyCode(String userId, String code, Long attemptNo) {
+    private Mono<SponsorSignInOutput> verifyCode(String userId, String code, Long attemptNo, SignInSource source) {
         return processes.execute(SponsorMfaVerifyProcess.DEFINITION, new SponsorMfaVerifyInput(userId, code,
-            attemptNo));
+            attemptNo, source));
     }
 
 

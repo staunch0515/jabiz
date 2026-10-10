@@ -391,7 +391,8 @@ public final class ScenarioRunner {
 
     private <T> T as(Scenario.Actor actor, Mono<T> pipeline) {
         RequestContext request = new RequestContext(actor.id(), actor.tenant(), Locale.ENGLISH, "scenario",
-            actor.roles(), actor.permissions(), null, actor.dataPeriod());
+            // Not an entry point: a replayed actor's address counts as verified (docs/design/10-security.md section 15).
+            actor.roles(), actor.permissions(), null, actor.dataPeriod(), null, true);
         try {
             return pipeline.contextWrite(view -> RequestContexts.put(view, request)).block();
         } catch (RuntimeException e) {

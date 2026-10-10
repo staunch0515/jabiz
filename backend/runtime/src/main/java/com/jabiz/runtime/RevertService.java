@@ -247,6 +247,8 @@ public class RevertService {
                     Permissions.requireDeclared(request, dataset.permissions().write(), development,
                         "Reverting changes of " + def.name + " through dataset " + dataset.resourceId());
                     mfa.require(request, dataset.policy().writeMfa(), "Reverting changes of " + def.name);
+                    com.jabiz.runtime.security.VerifiedEmailPolicy.require(request,
+                        dataset.policy().writeVerifiedEmail(), "Reverting changes of " + def.name);
                     // Written by processes only (decision D14): such data is corrected by the process that owns
                     // it (a reversing ledger transaction), never by restoring older versions.
                     if (dataset.policy().processOnlyWrites()) {

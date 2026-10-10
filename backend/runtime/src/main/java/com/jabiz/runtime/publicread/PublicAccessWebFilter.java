@@ -23,7 +23,7 @@ import org.springframework.web.util.pattern.PathPatternParser;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.net.InetSocketAddress;
+import com.jabiz.runtime.web.ClientAddresses;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,8 +37,8 @@ import java.util.Set;
  * {@code GET} and {@code HEAD} are answered 405 and never reach a write path; each client address may make
  * {@code jabiz.public.rate-limit.per-minute} requests (429 {@code RATE_LIMITED} with {@code Retry-After}).
  *
- * <p>The client address is the connection's, or, when {@code server.forward-headers-strategy} is configured, the one
- * the proxy forwarded (Spring applies the headers before this filter). It is never logged or tagged.
+ * <p>The client address comes from {@link ClientAddresses}: forwarded headers count only from trusted proxies
+ * (decision D36 item 7), the same address login records keep. It is never logged or tagged.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
@@ -57,13 +57,15 @@ public class PublicAccessWebFilter implements WebFilter {
     private final MessageCatalog messages;
     private final TokenBucketLimiter limiter;
     private final PlatformObservations observations;
+    private final ClientAddresses clients;
 
     public PublicAccessWebFilter(PublicProperties properties, JsonMapper json, MessageCatalog messages,
-        PlatformObservations observations) {
+        PlatformObservations observations, ClientAddresses clients) {
         this.properties = properties;
         this.json = json;
         this.messages = messages;
         this.observations = observations;
+        this.clients = clients;
         this.limiter = new TokenBucketLimiter(Math.max(1, properties.rateLimit().perMinute()), Duration.ofMinutes(1),
             Math.max(1, properties.rateLimit().maxClients()));
     }
@@ -85,7 +87,7 @@ public class PublicAccessWebFilter implements WebFilter {
             exchange.getResponse().getHeaders().setAllow(READ);
             return problem(exchange, HttpStatus.METHOD_NOT_ALLOWED, "Public resources are read-only", null);
         }
-        TokenBucketLimiter.Decision decision = limiter.tryAcquire(client(exchange));
+        TokenBucketLimiter.Decision decision = limiter.tryAcquire(clients.clientOf(exchange.getRequest()));
         if (!decision.allowed()) {
             observations.event(PlatformObservations.PUBLIC_RATE_LIMITED);
             RateLimitedException limited = new RateLimitedException(
@@ -97,14 +99,6 @@ public class PublicAccessWebFilter implements WebFilter {
                 limited.violations().getFirst());
         }
         return chain.filter(exchange);
-    }
-
-    private static String client(ServerWebExchange exchange) {
-        InetSocketAddress remote = exchange.getRequest().getRemoteAddress();
-        if (remote == null) {
-            return "unknown";
-        }
-        return remote.getAddress() != null ? remote.getAddress().getHostAddress() : remote.getHostString();
     }
 
     private Mono<Void> problem(ServerWebExchange exchange, HttpStatus status, String detail, Violation violation) {

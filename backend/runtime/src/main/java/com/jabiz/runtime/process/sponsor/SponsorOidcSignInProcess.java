@@ -33,6 +33,7 @@ public final class SponsorOidcSignInProcess {
                 .contextFactory(OidcContext::new)
                 .outputMapper(LoginContext::output)
 
+                .step("Resolve the entry", SignInEntryStep.<OidcContext>spec())
                 .step("Load the linked account", QueryEntities.<OidcContext>of(
                     SecurityEntities.USER_IDENTITY_DATASET,
                     ctx -> Rbac.all(new QueryPredicate.And(List.of(
@@ -47,6 +48,7 @@ public final class SponsorOidcSignInProcess {
                     LoginContext.KEY_LATEST_RECORD))
                 .step("Check the account", OidcAccountStep.class, NoMetadata.INSTANCE)
                 .steps(SponsorSignInProcess::accessSteps)
+                .steps(SponsorSignInProcess::entrySteps)
                 .steps(SponsorSignInProcess::secondFactorSteps)
                 .step("Create the login record", OidcLoginRecordStep.class, NoMetadata.INSTANCE));
 

@@ -135,7 +135,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             for (UniqueConstraint unique : def.uniqueConstraints) {
                 List<String> columns = unique.fields().stream()
                     .map(field -> def.physicalColumn(field).toLowerCase(Locale.ROOT)).toList();
-                if (found.stream().noneMatch(ix -> ix.full() && ix.columns().size() >= columns.size()
+                // Regardless of case (decision D36): an expression index on lower(column), which may leave out nulls.
+                if (unique.ignoreCase() ? found.stream().noneMatch(ix -> ix.lowerOf(columns))
+                    : found.stream().noneMatch(ix -> ix.full() && ix.columns().size() >= columns.size()
                     && Set.copyOf(ix.columns().subList(0, columns.size())).equals(Set.copyOf(columns)))) {
                     problems.add(WARNING + label + " -> unique constraint " + unique.name() + " has no index starting "
                         + "with " + columns + ": checking it reads every version of the table");
@@ -200,13 +202,23 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             });
     }
 
-    private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full) {
+    /**
+     * @param definition the index definition ({@code pg_get_indexdef}) in lower case without blanks, parentheses and
+     *                   {@code ::text} casts: {@code lower((email)::text)} reads {@code loweremail}
+     */
+    private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full,
+        String definition) {
         boolean startsWith(String column, boolean descending) {
             return !columns.isEmpty() && columns.getFirst().equals(column) && descending(0) == descending;
         }
 
         boolean descending(int position) {
             return position < options.size() && (options.get(position) & 1) != 0;
+        }
+
+        /** Whether the index is on {@code lower(column)} of every one of the columns (decision D36). */
+        boolean lowerOf(List<String> columns) {
+            return !columns.isEmpty() && columns.stream().allMatch(column -> definition.contains("lower" + column));
         }
     }
 
@@ -219,7 +231,8 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                            order by k.ord), ',') as cols,
                        array_to_string(i.indoption::int2[], ',') as opts,
                        i.indisunique as is_unique,
-                       (i.indpred is null and i.indexprs is null) as is_full
+                       (i.indpred is null and i.indexprs is null) as is_full,
+                       pg_get_indexdef(i.indexrelid) as definition
                 from pg_index i
                 where i.indrelid = to_regclass(:tableName)
                 """)
@@ -228,8 +241,14 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 split(row.get("cols", String.class)).stream().map(c -> c.toLowerCase(Locale.ROOT)).toList(),
                 split(row.get("opts", String.class)).stream().map(Integer::valueOf).toList(),
                 Boolean.TRUE.equals(row.get("is_unique", Boolean.class)),
-                Boolean.TRUE.equals(row.get("is_full", Boolean.class))))
+                Boolean.TRUE.equals(row.get("is_full", Boolean.class)),
+                normalizedDefinition(row.get("definition", String.class))))
             .all();
+    }
+
+    private static String normalizedDefinition(String definition) {
+        return definition == null ? "" : definition.toLowerCase(Locale.ROOT).replace("::text", "")
+            .replaceAll("[\\s()\"]", "");
     }
 
     /** Single-column foreign keys of the table as {@code column->referenced table}. */
@@ -255,6 +274,18 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
         Set<String> expected = new HashSet<>();
         unique.fields().forEach(f -> expected.add(def.physicalColumn(f).toLowerCase(Locale.ROOT)));
         String label = "Entity " + def.name + ": unique constraint " + unique.name();
+        if (unique.ignoreCase()) {
+            // A unique index of the constraint's name on lower(column) of each field (decision D36).
+            List<String> columns = unique.fields().stream()
+                .map(f -> def.physicalColumn(f).toLowerCase(Locale.ROOT)).toList();
+            String named = "createuniqueindex" + unique.name().toLowerCase(Locale.ROOT) + "on";
+            return fetchIndexes(def.physicalTable)
+                .filter(ix -> ix.unique() && ix.definition().startsWith(named) && ix.lowerOf(columns))
+                .hasElements()
+                .flatMap(present -> present ? Mono.<String>empty() : Mono.just(label + " -> no unique index named "
+                    + unique.name() + " on lower(" + String.join("), lower(", columns) + ") of table "
+                    + def.physicalTable));
+        }
         return fetchUniqueIndexColumns(def.physicalTable, unique.name().toLowerCase(Locale.ROOT))
             .flatMap(actual -> {
                 if (actual.isEmpty()) {

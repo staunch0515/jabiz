@@ -71,7 +71,15 @@ public class SecurityEntities {
         // the platform's languages. Empty: the platform's default language.
         eb.field("locale", f -> f.physicalColumn("locale").asText(10)
             .apply(Rules.pattern("INVALID_VALUE", String.join("|", PlatformLanguages.CODES))));
+        // The address a verification proved and when (docs/design/10-security.md section 15; decision D36): written by
+        // the processes that prove the mail box only. The address is verified while it equals the current one
+        // regardless of case, so changing the address ends its verification.
+        eb.field("verifiedEmail", f -> f.physicalColumn("verified_email").asText(320).processOnly());
+        eb.field("emailVerifiedAt", f -> f.physicalColumn("email_verified_at").asTemporal(TemporalRole.EVENT_TIME)
+            .processOnly());
         eb.unique("uk_sec_user_name", "userName");
+        // One user per address, regardless of case: the address may stand for the user name (decision D36 item 4).
+        eb.uniqueIgnoreCase("uk_sec_user_email", "email");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("userName", "displayName", "email", "locale", "tenantId", "enabled")
@@ -184,12 +192,18 @@ public class SecurityEntities {
         // so that a code cannot be used twice).
         eb.field("factor", f -> f.physicalColumn("factor").immutable(true).asText(20));
         eb.field("mfaStep", f -> f.physicalColumn("mfa_step").immutable(true).asNumeric(18, 0));
+        // Where the attempt came from (decision D36 item 7): the sign-in entry, the client's address (forwarded
+        // headers count only from trusted proxies) and its user agent, cut to 256 characters.
+        eb.field("entry", f -> f.physicalColumn("entry").immutable(true).asText(40));
+        eb.field("clientIp", f -> f.physicalColumn("client_ip").immutable(true).asText(45));
+        eb.field("userAgent", f -> f.physicalColumn("user_agent").immutable(true).asText(256));
         // Concurrent attempts cannot both build on the same latest record (decision D6 locks the pair).
         eb.unique("uk_sec_login_record_attempt", "userId", "attemptNo");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("userName", "attemptNo", "outcome", "factor", "failureCount", "lockedUntil", "attemptTime")
-            .filters("userId", "userName", "outcome", "attemptTime")
+            .columns("userName", "attemptNo", "outcome", "factor", "entry", "clientIp", "failureCount", "lockedUntil",
+                "attemptTime")
+            .filters("userId", "userName", "outcome", "entry", "attemptTime")
             .sorts("attemptTime", "attemptNo")
             .defaultSort("attemptTime", false));
     });
@@ -260,6 +274,12 @@ public class SecurityEntities {
                 .sorts("template")
                 .defaultSort("template", true));
         });
+
+    /** Whether the user's current e-mail address is verified (decision D36 implementation note 4). */
+    public static boolean emailVerified(com.jabiz.runtime.EntityInstance user) {
+        return user != null && com.jabiz.security.EmailVerification.verified(user.get("email"),
+            user.get("verifiedEmail"));
+    }
 
     @Bean
     EntityDefinition secUserMailPreferenceEntity() {

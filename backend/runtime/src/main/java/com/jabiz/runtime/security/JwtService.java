@@ -57,6 +57,13 @@ public final class JwtService {
     /** Ends of the actor's data period as ISO-8601 instants, absent when not limited (section 13.2). */
     static final String DATA_FROM = "data_from";
     static final String DATA_TO = "data_to";
+    /**
+     * The sign-in entry of the session (decision D36): tokens without one, issued before entries existed, are of the
+     * administration entry.
+     */
+    static final String ENTRY = "entry";
+    /** Whether the user's e-mail address was verified when the token was issued (decision D36 item 3). */
+    static final String EMAIL_VERIFIED = "email_verified";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
     /**
@@ -82,7 +89,15 @@ public final class JwtService {
      * @param identityId the provider account the sign-in came through (docs/design/10-security.md section 12), or
      *                   null: the session the challenge leads to depends on it as one signed in directly would
      */
-    public record Challenge(String userId, Purpose purpose, long attemptNo, String identityId) {
+    /**
+     * @param entry the sign-in entry the challenge leads into: the second step cannot pick another one
+     *              (decision D36); challenges without one are of the administration entry
+     */
+    public record Challenge(String userId, Purpose purpose, long attemptNo, String identityId, String entry) {
+
+        public Challenge(String userId, Purpose purpose, long attemptNo, String identityId) {
+            this(userId, purpose, attemptNo, identityId, com.jabiz.context.RequestContext.DEFAULT_ENTRY);
+        }
 
         public Challenge(String userId, Purpose purpose, long attemptNo) {
             this(userId, purpose, attemptNo, null);
@@ -137,6 +152,8 @@ public final class JwtService {
                 : actor.dataPeriod().from().toString())
             .claim(DATA_TO, actor.dataPeriod() == null || actor.dataPeriod().to() == null ? null
                 : actor.dataPeriod().to().toString())
+            .claim(ENTRY, actor.entry() == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : actor.entry())
+            .claim(EMAIL_VERIFIED, actor.emailVerified())
             .build();
         return new Issued(sign(claims, JOSEObjectType.JWT), expires);
     }
@@ -152,6 +169,12 @@ public final class JwtService {
     /** As above, for a sign-in through the provider account {@code identityId}. */
     public Issued issueChallenge(String userId, Purpose purpose, long attemptNo, String identityId,
         Duration lifetime) {
+        return issueChallenge(userId, purpose, attemptNo, identityId, null, lifetime);
+    }
+
+    /** As above, into the sign-in entry {@code entry} (null: the administration). */
+    public Issued issueChallenge(String userId, Purpose purpose, long attemptNo, String identityId, String entry,
+        Duration lifetime) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         Instant expires = now.plus(lifetime);
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
@@ -162,6 +185,7 @@ public final class JwtService {
             .claim(PURPOSE, purpose.name())
             .claim(ATTEMPT, attemptNo)
             .claim(IDENTITY, identityId)
+            .claim(ENTRY, entry == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry)
             .build();
         return new Issued(sign(claims, CHALLENGE_TYPE), expires);
     }
@@ -181,7 +205,8 @@ public final class JwtService {
             if (attempt == null) {
                 throw new InvalidTokenException("Challenge without attempt");
             }
-            return new Challenge(claims.getSubject(), purpose, attempt, claims.getStringClaim(IDENTITY));
+            return new Challenge(claims.getSubject(), purpose, attempt, claims.getStringClaim(IDENTITY),
+                entryOf(claims));
         } catch (ParseException e) {
             throw new InvalidTokenException("Malformed challenge claims");
         }
@@ -243,10 +268,17 @@ public final class JwtService {
                 Set.copyOf(strings(claims.getStringListClaim(ROLES))),
                 Set.copyOf(strings(claims.getStringListClaim(PERMISSIONS))),
                 mfaAt == null ? null : Instant.ofEpochSecond(mfaAt),
-                DataPeriod.of(instant(claims.getStringClaim(DATA_FROM)), instant(claims.getStringClaim(DATA_TO))));
+                DataPeriod.of(instant(claims.getStringClaim(DATA_FROM)), instant(claims.getStringClaim(DATA_TO))),
+                entryOf(claims), Boolean.TRUE.equals(claims.getBooleanClaim(EMAIL_VERIFIED)));
         } catch (ParseException | java.time.format.DateTimeParseException | IllegalArgumentException e) {
             throw new InvalidTokenException("Malformed token claims");
         }
+    }
+
+    /** The entry of a token; tokens from before entries existed are of the administration (decision D36). */
+    private static String entryOf(JWTClaimsSet claims) throws ParseException {
+        String entry = claims.getStringClaim(ENTRY);
+        return entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
     }
 
     private static Instant instant(String text) {

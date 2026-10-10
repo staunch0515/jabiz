@@ -160,7 +160,10 @@ public class TemporalStore {
             for (Map<String, Object> state : states) {
                 List<Object> values = new ArrayList<>();
                 for (String field : unique.fields()) {
-                    values.add(state.get(field));
+                    Object value = state.get(field);
+                    // Regardless of case: the lock and the lookup both see the lower-case value (decision D36).
+                    values.add(unique.ignoreCase() && value instanceof String text
+                        ? text.toLowerCase(java.util.Locale.ROOT) : value);
                 }
                 if (values.contains(null)) {
                     continue;
@@ -199,23 +202,30 @@ public class TemporalStore {
         // Only an instance that has used the values in some version can use them now or later: its candidates come
         // from the index on the values (decision D29), and only their versions are looked at.
         String sql = "WITH cand AS (SELECT DISTINCT " + id + " AS cid FROM " + source
-            + " WHERE " + matches(columns, "") + " AND " + id + " <> :self)"
+            + " WHERE " + matches(columns, "", candidate.unique().ignoreCase()) + " AND " + id + " <> :self)"
             // The version in effect now …
             + " SELECT 1 AS hit FROM cand JOIN LATERAL (SELECT * FROM " + source + " v WHERE v." + id + " = cand.cid"
             + " AND v." + effective + " <= :now ORDER BY v." + effective + " DESC, v." + version + " DESC LIMIT 1) c"
-            + " ON true WHERE NOT c." + deleted + " AND " + matches(columns, "c.")
+            + " ON true WHERE NOT c." + deleted + " AND " + matches(columns, "c.", candidate.unique().ignoreCase())
             // … and the winning version of every later effective time (the scheduled ones).
             + " UNION ALL SELECT 1 AS hit FROM cand JOIN LATERAL (SELECT DISTINCT ON (v." + effective + ") * FROM "
             + source + " v WHERE v." + id + " = cand.cid AND v." + effective + " > :now ORDER BY v." + effective
-            + ", v." + version + " DESC) s ON true WHERE NOT s." + deleted + " AND " + matches(columns, "s.")
+            + ", v." + version + " DESC) s ON true WHERE NOT s." + deleted + " AND "
+            + matches(columns, "s.", candidate.unique().ignoreCase())
             + " LIMIT 1";
         return engine.select(sql, params).hasElements();
     }
 
-    private static String matches(List<String> columns, String alias) {
+    /**
+     * The columns equal to the bound values; regardless of case as {@code col IS NOT NULL AND lower(col) = :u},
+     * the form of the partial index on {@code lower(col)} (the values are lower case already).
+     */
+    private static String matches(List<String> columns, String alias, boolean ignoreCase) {
         List<String> parts = new ArrayList<>();
         for (int i = 0; i < columns.size(); i++) {
-            parts.add(alias + columns.get(i) + " = :u" + i);
+            String column = alias + columns.get(i);
+            parts.add(ignoreCase ? column + " IS NOT NULL AND lower(" + column + ") = :u" + i
+                : column + " = :u" + i);
         }
         return String.join(" AND ", parts);
     }
