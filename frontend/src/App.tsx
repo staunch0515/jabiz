@@ -25,6 +25,7 @@ import ImportPage from './pages/ImportPage'
 import ImportRunsPage from './pages/ImportRunsPage'
 import IntegrityPage from './pages/IntegrityPage'
 import LoginPage from './pages/LoginPage'
+import MailUnsubscribePage from './pages/MailUnsubscribePage'
 import OidcCallbackPage from './pages/OidcCallbackPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
 import ProcessFormPage from './pages/ProcessFormPage'
@@ -59,6 +60,8 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // Where identity providers send users back (docs/design/10-security.md section 12).
   { path: '/login/oidc', element: <OidcCallbackPage /> },
+  // The unsubscribe link of notification mail: its token is the credential (18 section 5.6).
+  { path: '/mail/unsubscribe', element: <MailUnsubscribePage /> },
   {
     element: <RequireSignIn />,
     children: [

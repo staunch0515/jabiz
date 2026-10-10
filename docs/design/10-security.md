@@ -14,7 +14,8 @@
 
 - Spring Security（WebFlux）只负责"是谁"和"`/api/**` 必须已认证"；"能做什么"由各入口按元数据声明检查（D11 第 2 条的位置不变）。
 - 无状态：不建会话、不存安全上下文、不保存请求；不用 Cookie，因此关闭 CSRF。保留 Spring Security 默认的安全响应头。
-- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节）、`/api/auth/oidc/**`（第 12 节），以及 `/api` 以外的静态资源与 `/actuator/health`。
+- 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节）、`/api/auth/oidc/**`（第 12 节）、
+  `POST /api/auth/mail/unsubscribe`（通知邮件的退订链接，签名令牌即凭证，18 §5.6），以及 `/api` 以外的静态资源与 `/actuator/health`。
   认证过滤器不处理这三个会话接口：客户端随手带上的过期访问令牌不会妨碍刷新与登录。
 - 401、403 与控制器的错误一样是 `ProblemDetail`，带按 `Accept-Language` 本地化的 `violations`（`UNAUTHENTICATED`、`PERMISSION_DENIED`），
   401 带 `WWW-Authenticate: Bearer`。
@@ -49,7 +50,8 @@
 
 | 实体 | 表 | 要点 | 数据视图权限（读 / 写） |
 |---|---|---|---|
-| `SecUser` | `sec_user_version` | `userName`（唯一）、`displayName`、`email`（可选，通知用，18 §5.4）、`tenantId`、`enabled`、`passwordHash`（**敏感**） | `security.user.read` / `security.user.write` |
+| `SecUser` | `sec_user_version` | `userName`（唯一）、`displayName`、`email`（可选，通知用，18 §5.4）、`locale`（可选，邮件语言，18 §5.6）、`tenantId`、`enabled`、`passwordHash`（**敏感**） | `security.user.read` / `security.user.write` |
+| `SecUserMailPreference` | `sec_user_mail_preference_version` | `userId`、`template`、`subscribed`；唯一（用户, 模板）；只经 `SEC_MAIL_PREFERENCE_SET`（用户本人）写入，18 §5.6 | 同 `SecUser`（写入只经流程） |
 | `SecRole` | `sec_role_version` | `roleCode`（唯一）、`labels`（`jabiz.labels`）、`enabled`；可预定 | `security.role.read` / `security.role.write` |
 | `SecRolePermission` | `sec_role_permission_version` | `roleId` → `SecRole`、`permission`；唯一 `(roleId, permission)` | 同 `SecRole` |
 | `SecUserRole` | `sec_user_role_version` | `userId`、`roleId`；唯一；**可预定**（角色从生效时间起才算数） | `security.user-role.read` / `.write` |
@@ -72,6 +74,8 @@
 | `SEC_USER_SET_PASSWORD` | `security.user.password` | 重设密码 |
 | `SEC_USER_UNLOCK` | `security.user.unlock` | 解除锁定 |
 | `SEC_BOOTSTRAP_ADMIN` | `security.bootstrap` | 只由平台在启动时执行（第 7 节） |
+| `SEC_USER_SET_LOCALE` | `auth.account`（不授予角色） | 本人设置邮件语言；只经 `POST /api/auth/account/locale` 执行（18 §5.6） |
+| `SEC_MAIL_PREFERENCE_SET` | `auth.mail-preference`（不授予角色） | 本人开关通知邮件；只经退订链接与 `/api/auth/mail/preferences` 执行（18 §5.6） |
 
 ## 4. 登录流程与锁定
 

@@ -1,5 +1,6 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.runtime.security.secret.SingleUseSecrets;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageEngine;

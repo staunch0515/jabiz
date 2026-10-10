@@ -1,6 +1,7 @@
 package com.jabiz.app.it.ledger;
 
 import com.jabiz.app.commerce.CommerceEntities;
+import com.jabiz.app.commerce.SupplierDefinitions;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.ledger.Direction;
@@ -169,6 +170,50 @@ class LedgerEnhancementsIT extends LedgerItSupport {
         assertThat(query("SELECT count(*) AS n FROM ledger_entry_version e JOIN ledger_transaction_version t"
             + " ON t.transaction_id = e.transaction_id WHERE t.reverses_transaction_id = ?::uuid AND e.memo = 'sale'"
             + " AND e.dimension_1 = ?", sale.transactionId(), warehouse).getFirst().get("n")).isEqualTo(1L);
+    }
+
+    /** A new supplier; returns its id. */
+    String supplier() {
+        String id = UUID.randomUUID().toString();
+        String code = "S" + id.substring(0, 6).toUpperCase(Locale.ROOT);
+        asRequest(ACCOUNTANT, entities.commitBatch(datasets.findById(SupplierDefinitions.DATASET).orElseThrow(),
+            List.of(new EntityChange(EntityAction.INSERT, new EntityInstance(id, SupplierDefinitions.SUPPLIER, 0, null,
+                Map.of("supplierId", id, "supplierCode", code, "supplierName", "IT " + code, "countryCode", "JP",
+                    "leadTimeDays", 5, "active", true)), null)))).block();
+        return id;
+    }
+
+    @Test
+    void aDimensionByIdentityTakesTheIdsOfExistingInstances() {
+        String p = prefix();
+        open(p, "2100", null, null);
+        open(p, "5000", null, null);
+        String acme = supplier();
+        String globex = supplier();
+
+        for (String value : List.of(UUID.randomUUID().toString(), "not-a-uuid", "1-2-3-4-5")) {
+            assertThatThrownBy(() -> post(p, null, null,
+                line("5000", Direction.DEBIT, 5, null, Map.of("supplier", value)),
+                line("2100", Direction.CREDIT, 5, null, Map.of("supplier", acme))))
+                .satisfies(e -> assertThat(codes(e)).containsExactly(PlatformErrorCodes.LEDGER_DIMENSION_INVALID));
+        }
+
+        // An id in capitals is the same id, stored as the platform writes ids.
+        LedgerProcesses.PostOutput bill = post(p, null, null,
+            line("5000", Direction.DEBIT, 40, null, Map.of("supplier", acme.toUpperCase(Locale.ROOT))),
+            line("5000", Direction.DEBIT, 60, null, Map.of("supplier", globex)),
+            line("2100", Direction.CREDIT, 40, null, Map.of("supplier", acme)),
+            line("2100", Direction.CREDIT, 60, null, Map.of("supplier", globex)));
+        assertThat(query("SELECT dimension_3 FROM ledger_entry_version WHERE transaction_id = ?::uuid ORDER BY"
+            + " line_no", bill.transactionId())).extracting(row -> row.get("dimension_3"))
+            .containsExactly(acme, globex, acme, globex);
+
+        Instant later = clock.instant().plusSeconds(60);
+        assertThat(rows("jabiz.ledger.dimension_balances", Map.of("dimension", 3, "asOf", later.toString()), p))
+            .extracting(row -> row.get("accountcode") + "/" + row.get("dimensionvalue") + "="
+                + amount(row.get("balance")).toPlainString())
+            .containsExactlyInAnyOrder(p + "5000/" + acme + "=40", p + "5000/" + globex + "=60",
+                p + "2100/" + acme + "=-40", p + "2100/" + globex + "=-60");
     }
 
     @Test

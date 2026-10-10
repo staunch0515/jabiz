@@ -27,8 +27,6 @@ import reactor.core.publisher.Mono;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -118,7 +116,7 @@ class MfaController {
     Mono<MfaProcesses.Enrollment> enrollUnderChallenge(@RequestBody(required = false) ChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request, JwtService.Purpose.ENROLL);
-            return asUser(challenge.userId(), processes.execute(MfaProcesses.ENROLL_BEGIN,
+            return ActingUser.as(challenge.userId(), processes.execute(MfaProcesses.ENROLL_BEGIN,
                 new MfaProcesses.UserInput(challenge.userId())));
         });
     }
@@ -127,14 +125,14 @@ class MfaController {
     Mono<MfaProcesses.RecoveryCodeList> confirmUnderChallenge(@RequestBody(required = false) ChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request, JwtService.Purpose.ENROLL);
-            return asUser(challenge.userId(), processes.execute(MfaProcesses.ENROLL_CONFIRM,
+            return ActingUser.as(challenge.userId(), processes.execute(MfaProcesses.ENROLL_CONFIRM,
                 new MfaProcesses.ConfirmInput(challenge.userId(), request.code())));
         });
     }
 
     @GetMapping("/api/auth/mfa")
     Mono<MfaStatus> status() {
-        return RequestContexts.current().flatMap(context -> userId(context)
+        return RequestContexts.current().flatMap(context -> ActingUser.userId(context)
             .map(user -> entities.query(datasets.findById(SecurityEntities.USER_MFA_DATASET).orElseThrow(),
                     SecurityEntities.SEC_USER_MFA, EntityQuery.builder()
                         .where(new QueryPredicate.Eq("userId", user)).limit(1).build())
@@ -193,11 +191,6 @@ class MfaController {
             attemptNo));
     }
 
-    /** Runs work as the user a challenge names: the operation record shows who enrolled. */
-    private static <T> Mono<T> asUser(String userId, Mono<T> work) {
-        return RequestContexts.current().flatMap(started -> work.contextWrite(view -> RequestContexts.put(view,
-            new RequestContext(userId, null, started.locale(), started.requestId(), Set.of(), Set.of()))));
-    }
 
     private JwtService.Challenge challenge(ChallengeRequest request, JwtService.Purpose purpose) {
         if (request == null || blank(request.challenge())) {
@@ -212,17 +205,9 @@ class MfaController {
         }
     }
 
-    /** Only users of the platform have a second factor; development header actors are not users. */
-    private static Optional<UUID> userId(RequestContext context) {
-        try {
-            return Optional.of(UUID.fromString(context.actorId()));
-        } catch (IllegalArgumentException e) {
-            return Optional.empty();
-        }
-    }
 
     private static UUID requireUser(RequestContext context) {
-        return userId(context).orElseThrow(() -> new BusinessRuleViolationException(new Violation(null,
+        return ActingUser.userId(context).orElseThrow(() -> new BusinessRuleViolationException(new Violation(null,
             PlatformErrorCodes.MFA_NOT_ENROLLED, "Only users of the platform have a second factor")));
     }
 
