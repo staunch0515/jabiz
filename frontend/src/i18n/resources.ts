@@ -357,6 +357,9 @@ const en = {
     invalidJson: 'Not valid JSON.',
     succeeded: 'The process completed.',
     addItem: 'Add',
+    removeItem: 'Remove item {{no}} of {{list}}',
+    item: 'Item {{no}}',
+    required: 'required',
   },
   file: {
     upload: 'Upload',
@@ -736,6 +739,9 @@ const zh: Texts = {
     invalidJson: '不是有效的 JSON。',
     succeeded: '流程已完成。',
     addItem: '添加',
+    removeItem: '删除 {{list}} 的第 {{no}} 项',
+    item: '第 {{no}} 项',
+    required: '必填',
   },
   file: {
     upload: '上传',
@@ -1112,6 +1118,9 @@ const ja: Texts = {
     invalidJson: 'JSON として正しくありません。',
     succeeded: 'プロセスが完了しました。',
     addItem: '追加',
+    removeItem: '{{list}} の {{no}} 件目を削除',
+    item: '{{no}} 件目',
+    required: '必須',
   },
   file: {
     upload: 'アップロード',

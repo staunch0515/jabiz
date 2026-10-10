@@ -106,6 +106,8 @@ class InvalidJson extends Error {
 function convert(node: InputNode, value: unknown, path: string): unknown {
   if (blank(value)) return undefined
   switch (node.kind) {
+    // The new form (SchemaForm) holds instants and dates as their API text; the old one (SchemaInputs, until
+    // phase 15c) as Dayjs.
     case 'datetime':
       return dayjs.isDayjs(value) ? value.toISOString() : value
     case 'date':
@@ -113,6 +115,16 @@ function convert(node: InputNode, value: unknown, path: string): unknown {
     case 'decimal':
       // Exact text: the server reads it into a BigDecimal without passing through binary floating point.
       return String(value)
+    case 'integer':
+    case 'number': {
+      // Number fields hold their text; the API takes a JSON number. Text that is no number goes as it is, for the
+      // server to refuse.
+      if (typeof value !== 'string') return value
+      const number = Number(value.trim())
+      return value.trim() !== '' && Number.isFinite(number) ? number : value
+    }
+    case 'tags':
+      return Array.isArray(value) && value.length === 0 ? undefined : value
     case 'object':
       return toProcessInput(node.children ?? [], value as Record<string, unknown>, `${path}.`)
     case 'list':
@@ -142,3 +154,86 @@ export function toProcessInput(nodes: InputNode[], values: Record<string, unknow
 }
 
 export { InvalidJson }
+
+/** A field the form refuses to send: its path in the form's values (`entries.0.amount`) and the message. */
+export interface InputProblem {
+  path: string
+  /** `<name>: REQUIRED` or `<name>: INVALID_VALUE`, as the server's rule codes. */
+  message: string
+  ruleCode: 'REQUIRED' | 'INVALID_VALUE'
+}
+
+/** The schema's pattern, when this browser can compile it; otherwise the server checks it alone. */
+function compiledPattern(pattern: string | undefined): RegExp | undefined {
+  if (!pattern) return undefined
+  try {
+    return new RegExp(pattern, 'u')
+  } catch {
+    return undefined
+  }
+}
+
+function missing(node: InputNode, value: unknown): boolean {
+  if (node.kind === 'tags') return !Array.isArray(value) || value.length === 0
+  return blank(value)
+}
+
+/**
+ * What the process form checks before sending (docs/design/12-frontend.md section 6): only that required inputs are
+ * filled in and that text matches the schema's `pattern`; everything else is the server's to judge, and its answer
+ * is shown as it comes. Objects and the items of lists are checked field by field; a required boolean is always
+ * filled in (false until switched on).
+ */
+export function checkInputs(nodes: InputNode[], values: Record<string, unknown> | undefined, prefix = ''): InputProblem[] {
+  const problems: InputProblem[] = []
+  for (const node of nodes) {
+    const path = prefix + node.name
+    const value = values?.[node.name]
+    if (node.kind === 'object') {
+      problems.push(...checkInputs(node.children ?? [], value as Record<string, unknown> | undefined, `${path}.`))
+      continue
+    }
+    if (node.kind === 'list') {
+      const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+      items.forEach((item, i) => problems.push(...checkInputs(node.children ?? [], item, `${path}.${i}.`)))
+      continue
+    }
+    if (missing(node, value)) {
+      if (node.required) problems.push({ path, message: `${node.name}: REQUIRED`, ruleCode: 'REQUIRED' })
+      continue
+    }
+    const pattern = compiledPattern(node.schema.pattern)
+    if (pattern && typeof value === 'string' && !pattern.test(value)) {
+      problems.push({ path, message: `${node.name}: INVALID_VALUE`, ruleCode: 'INVALID_VALUE' })
+    }
+  }
+  return problems
+}
+
+/**
+ * The values a new process form starts with: empty text, no tags, a required boolean switched off, one empty item
+ * for a required list; and the inputs filled in by the row an action was started on (`preset`, top level only).
+ */
+export function initialInputValues(nodes: InputNode[], preset: Record<string, string> = {}): Record<string, unknown> {
+  const values: Record<string, unknown> = {}
+  for (const node of nodes) {
+    switch (node.kind) {
+      case 'boolean':
+        values[node.name] = node.required ? false : undefined
+        break
+      case 'tags':
+        values[node.name] = []
+        break
+      case 'object':
+        values[node.name] = initialInputValues(node.children ?? [])
+        break
+      case 'list':
+        values[node.name] = node.required ? [initialInputValues(node.children ?? [])] : []
+        break
+      default:
+        values[node.name] = ''
+    }
+    if (preset[node.name] !== undefined) values[node.name] = preset[node.name]
+  }
+  return values
+}
