@@ -1,0 +1,285 @@
+package com.jabiz.runtime.security;
+
+import com.jabiz.entity.ValidationException;
+import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.i18n.PlatformLanguages;
+import com.jabiz.mail.MailRecipient;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.web.ClientAddresses;
+import com.jabiz.security.Sensitive;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Self-registration, address verification and password reset over HTTP (docs/design/10-security.md section 15;
+ * decision D36 items 2, 3 and 5). Anonymous, except {@value #ACCOUNT_VERIFY}; each runs one process of
+ * {@link SignUpProcesses}.
+ *
+ * <p>Nothing here tells whether an address belongs to an account: registering, resending a verification and asking
+ * for a password reset answer 202 with no body whatever the address, after checking every value of the request first
+ * (so that a bad value fails alike for every address) and counting the request against the rate limits of the client
+ * and of the address ({@link SignUpRateLimits}). The links of the mails (joining, verifying, resetting) answer 204,
+ * or 422 {@code TOKEN_INVALID} for any link that is not good, and count against the client's limit.
+ */
+@RestController
+class SignUpController {
+
+    static final String REGISTER = "/api/auth/register";
+    static final String JOIN = "/api/auth/join";
+    static final String VERIFY = "/api/auth/verify-email";
+    static final String VERIFY_RESEND = "/api/auth/verify-email/resend";
+    static final String ACCOUNT_VERIFY = "/api/auth/account/verify-email";
+    static final String RESET_REQUEST = "/api/auth/password-reset/request";
+    static final String RESET_CONFIRM = "/api/auth/password-reset/confirm";
+    static final String ENTRIES = "/api/auth/entries";
+
+    /** Longest display name ({@code SecUser.displayName}). */
+    static final int MAX_DISPLAY_NAME = 200;
+    /** Longest address ({@code SecUser.email}). */
+    static final int MAX_EMAIL = 320;
+
+    /**
+     * @param entry       the sign-in entry to register with; it must allow registration
+     * @param displayName optional
+     * @param locale      the language of the user's mail ({@code zh}, {@code ja}, {@code en}); optional
+     */
+    record RegisterRequest(String entry, String email, @Sensitive String password, String displayName,
+        String locale) {
+        @Override
+        public String toString() {
+            return "RegisterRequest[entry=" + entry + ", email=" + email + ", password=***]";
+        }
+    }
+
+    /** @param password required when the account's address was not verified (422 {@code REQUIRED} without) */
+    record JoinRequest(@Sensitive String token, @Sensitive String password) {
+        @Override
+        public String toString() {
+            return "JoinRequest[***]";
+        }
+    }
+
+    record TokenRequest(@Sensitive String token) {
+        @Override
+        public String toString() {
+            return "TokenRequest[***]";
+        }
+    }
+
+    /** @param entry whose pages the mailed link leads to; none: the administration's */
+    record EmailRequest(String email, String entry) {}
+
+    record ResetConfirmRequest(@Sensitive String token, @Sensitive String password) {
+        @Override
+        public String toString() {
+            return "ResetConfirmRequest[***]";
+        }
+    }
+
+    /** What a front end needs to know about its sign-in entry; nothing secret. */
+    record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath) {}
+
+    private final ProcessExecutor processes;
+    private final SignInEntries entries;
+    private final SignUpRateLimits limits;
+    private final ClientAddresses clients;
+    private final PasswordHasher hasher;
+    private final ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp;
+    private final ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join;
+    private final ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify;
+    private final ProcessDefinition<SignUpProcesses.VerifySendInput, SignUpProcesses.Done, AccountContext> verifySend;
+    private final ProcessDefinition<SignUpProcesses.ResetRequestInput, SignUpProcesses.Done, AccountContext>
+        resetRequest;
+    private final ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext>
+        resetConfirm;
+
+    SignUpController(ProcessExecutor processes, SignInEntries entries, SignUpRateLimits limits,
+        ClientAddresses clients, PasswordHasher hasher,
+        ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp,
+        ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join,
+        ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify,
+        ProcessDefinition<SignUpProcesses.VerifySendInput, SignUpProcesses.Done, AccountContext> verifySend,
+        ProcessDefinition<SignUpProcesses.ResetRequestInput, SignUpProcesses.Done, AccountContext> resetRequest,
+        ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext> resetConfirm) {
+        this.processes = processes;
+        this.entries = entries;
+        this.limits = limits;
+        this.clients = clients;
+        this.hasher = hasher;
+        this.signUp = signUp;
+        this.join = join;
+        this.verify = verify;
+        this.verifySend = verifySend;
+        this.resetRequest = resetRequest;
+        this.resetConfirm = resetConfirm;
+    }
+
+    /** 202 whether or not the address is in use; 403 {@code SIGN_UP_DISABLED} for an entry without registration. */
+    @PostMapping(REGISTER)
+    Mono<ResponseEntity<Void>> register(@RequestBody(required = false) RegisterRequest request,
+        ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.REGISTER, clients.clientOf(http));
+            RegisterRequest body = request == null ? new RegisterRequest(null, null, null, null, null) : request;
+            if (entries.find(body.entry()).filter(SignInEntries.Entry::selfRegistration).isEmpty()) {
+                return Mono.error(new SignUpDisabledException("Registration is not open at entry " + body.entry()));
+            }
+            List<Violation> problems = new ArrayList<>(emailProblems(body.email()));
+            problems.addAll(hasher.check("password", body.password()));
+            String displayName = blank(body.displayName()) ? null : body.displayName().strip();
+            if (displayName != null && (displayName.length() > MAX_DISPLAY_NAME || hasControl(displayName))) {
+                problems.add(invalid("displayName", "A display name has at most " + MAX_DISPLAY_NAME
+                    + " characters and no control characters"));
+            }
+            String locale = blank(body.locale()) ? null : body.locale().strip();
+            if (locale != null && !PlatformLanguages.isSupported(locale)) {
+                problems.add(invalid("locale", "Not one of the platform's languages"));
+            }
+            if (!problems.isEmpty()) {
+                return Mono.error(new ValidationException(problems));
+            }
+            String email = body.email().strip();
+            limits.email(SignUpRateLimits.Kind.REGISTER, email);
+            return processes.execute(signUp, new SignUpProcesses.SignUpInput(entries.find(body.entry()).orElseThrow()
+                    .name(), email, body.password(), displayName, locale))
+                // A concurrent registration of the same address got there first: it is in use now, as answered.
+                .onErrorResume(e -> e instanceof ValidationException v && v.violations().stream()
+                    .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode())),
+                    e -> Mono.just(SignUpProcesses.Done.DONE))
+                .thenReturn(ResponseEntity.accepted().<Void>build());
+        });
+    }
+
+    @PostMapping(JOIN)
+    Mono<ResponseEntity<Void>> join(@RequestBody(required = false) JoinRequest request, ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
+            return processes.execute(join, new SignUpProcesses.JoinInput(request == null ? null : request.token(),
+                    request == null ? null : request.password()))
+                .thenReturn(ResponseEntity.noContent().<Void>build());
+        });
+    }
+
+    @PostMapping(VERIFY)
+    Mono<ResponseEntity<Void>> verify(@RequestBody(required = false) TokenRequest request, ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
+            return processes.execute(verify, new SignUpProcesses.VerifyInput(request == null ? null : request.token()))
+                .thenReturn(ResponseEntity.noContent().<Void>build());
+        });
+    }
+
+    /** 202 whatever the address; only an enabled user whose address is not verified gets a mail. */
+    @PostMapping(VERIFY_RESEND)
+    Mono<ResponseEntity<Void>> resend(@RequestBody(required = false) EmailRequest request, ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.VERIFY_RESEND, clients.clientOf(http));
+            String[] valid = emailAndEntry(request);
+            limits.email(SignUpRateLimits.Kind.VERIFY_RESEND, valid[0]);
+            return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(valid[1], valid[0], null))
+                .thenReturn(ResponseEntity.accepted().<Void>build());
+        });
+    }
+
+    /** The signed-in user's own request for a new verification mail, for the entry of the session; 202. */
+    @PostMapping(ACCOUNT_VERIFY)
+    Mono<ResponseEntity<Void>> resendOwn() {
+        return RequestContexts.current().flatMap(context -> {
+            UUID user = ActingUser.userId(context).orElseThrow(() -> new PermissionDeniedException(
+                SecurityPermissions.ACCOUNT, "Only users of the platform have an address to verify"));
+            limits.user(SignUpRateLimits.Kind.VERIFY_RESEND, user.toString());
+            return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(context.entry(), null,
+                    user.toString()))
+                .thenReturn(ResponseEntity.accepted().<Void>build());
+        });
+    }
+
+    /** 202 whatever the address; only an enabled user gets a mail. */
+    @PostMapping(RESET_REQUEST)
+    Mono<ResponseEntity<Void>> resetRequest(@RequestBody(required = false) EmailRequest request,
+        ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.PASSWORD_RESET, clients.clientOf(http));
+            String[] valid = emailAndEntry(request);
+            limits.email(SignUpRateLimits.Kind.PASSWORD_RESET, valid[0]);
+            return processes.execute(resetRequest, new SignUpProcesses.ResetRequestInput(valid[1], valid[0]))
+                .thenReturn(ResponseEntity.accepted().<Void>build());
+        });
+    }
+
+    /** 204; the user signs in with the new password afterwards (no session is opened here). */
+    @PostMapping(RESET_CONFIRM)
+    Mono<ResponseEntity<Void>> resetConfirm(@RequestBody(required = false) ResetConfirmRequest request,
+        ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
+            return processes.execute(resetConfirm, new SignUpProcesses.ResetConfirmInput(
+                    request == null ? null : request.token(), request == null ? null : request.password(),
+                    AuthController.source(clients, http, null)))
+                .thenReturn(ResponseEntity.noContent().<Void>build());
+        });
+    }
+
+    /** Whether the entry lets people register, requires a verified address, and where its pages are; 404 if none. */
+    @GetMapping(ENTRIES + "/{name}")
+    Mono<EntryInfo> entry(@PathVariable String name) {
+        return Mono.fromCallable(() -> entries.find(name)
+            .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
+                entry.appPath()))
+            .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
+    }
+
+    /** The checked address (without surrounding blanks) and the entry's name; 400 for either one wrong. */
+    private String[] emailAndEntry(EmailRequest request) {
+        EmailRequest body = request == null ? new EmailRequest(null, null) : request;
+        List<Violation> problems = new ArrayList<>(emailProblems(body.email()));
+        java.util.Optional<SignInEntries.Entry> entry = entries.find(body.entry());
+        if (entry.isEmpty()) {
+            problems.add(invalid("entry", "No such sign-in entry"));
+        }
+        if (!problems.isEmpty()) {
+            throw new ValidationException(problems);
+        }
+        return new String[] {body.email().strip(), entry.get().name()};
+    }
+
+    private static List<Violation> emailProblems(String email) {
+        if (blank(email)) {
+            return List.of(new Violation("email", PlatformErrorCodes.REQUIRED, "An e-mail address is required",
+                Map.of("field", "email")));
+        }
+        String value = email.strip();
+        if (value.length() > MAX_EMAIL || !MailRecipient.ADDRESS.matcher(value).matches()) {
+            return List.of(invalid("email", "Not an e-mail address"));
+        }
+        return List.of();
+    }
+
+    private static Violation invalid(String field, String message) {
+        return new Violation(field, PlatformErrorCodes.INVALID_VALUE, message, Map.of("field", field));
+    }
+
+    private static boolean hasControl(String value) {
+        return value.codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT);
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+}

@@ -34,14 +34,21 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     /**
      * Who runs the processes; permissions {@code ["*"]} grant everything. {@code dataFrom} / {@code dataTo} limit the
-     * actor to the data of a period (docs/design/10-security.md section 13.2); null when not limited.
+     * actor to the data of a period (docs/design/10-security.md section 13.2); null when not limited. {@code mfa: true}
+     * means the actor passed a second factor at the time of each step (docs/design/10-security.md section 10), as
+     * writing what the administration's second factor guards needs.
      */
     public record Actor(String id, String tenant, Set<String> roles, Set<String> permissions,
-        com.jabiz.context.DataPeriod dataPeriod) {
+        com.jabiz.context.DataPeriod dataPeriod, boolean mfa) {
         public Actor {
             Objects.requireNonNull(id, "actor id");
             roles = Set.copyOf(roles);
             permissions = Set.copyOf(permissions);
+        }
+
+        public Actor(String id, String tenant, Set<String> roles, Set<String> permissions,
+            com.jabiz.context.DataPeriod dataPeriod) {
+            this(id, tenant, roles, permissions, dataPeriod, false);
         }
 
         public Actor(String id, String tenant, Set<String> roles, Set<String> permissions) {
@@ -146,11 +153,12 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     }
 
     private static Actor actor(Map<String, Object> actor) {
-        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions", "dataFrom", "dataTo"));
+        onlyKeys(actor, "actor", Set.of("id", "tenant", "roles", "permissions", "dataFrom", "dataTo", "mfa"));
         return new Actor(text(actor, "id", true), text(actor, "tenant", false), strings(actor.get("roles")),
             strings(actor.get("permissions")), com.jabiz.context.DataPeriod.of(
                 actor.get("dataFrom") == null ? null : instant(actor.get("dataFrom"), "actor.dataFrom"),
-                actor.get("dataTo") == null ? null : instant(actor.get("dataTo"), "actor.dataTo")));
+                actor.get("dataTo") == null ? null : instant(actor.get("dataTo"), "actor.dataTo")),
+            Boolean.TRUE.equals(actor.get("mfa")));
     }
 
     private static SnapshotSpec snapshot(Object raw) {

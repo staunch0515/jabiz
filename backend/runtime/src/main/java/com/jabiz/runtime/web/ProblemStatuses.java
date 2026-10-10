@@ -18,6 +18,7 @@ import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.security.EmailNotVerifiedException;
 import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.security.SignInRefusedException;
+import com.jabiz.runtime.security.SignUpDisabledException;
 import com.jabiz.runtime.sod.SodConflictException;
 
 import org.springframework.dao.QueryTimeoutException;
@@ -70,6 +71,8 @@ public final class ProblemStatuses {
             case EmailNotVerifiedException e -> List.of(new Violation(null, PlatformErrorCodes.EMAIL_NOT_VERIFIED,
                 e.getMessage()));
             case SignInRefusedException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_IN_REFUSED,
+                e.getMessage()));
+            case SignUpDisabledException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_UP_DISABLED,
                 e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,
                 e.getMessage(), Map.of("permission", e.permission())));

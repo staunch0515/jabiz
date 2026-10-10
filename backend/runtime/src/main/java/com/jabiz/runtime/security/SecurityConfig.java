@@ -71,6 +71,12 @@ public class SecurityConfig {
         // The unsubscribe link of a notification mail: its signed token is the credential
         // (docs/design/18-numbering-approvals-tasks.md section 5.6).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, MailUnsubscribeController.UNSUBSCRIBE),
+        // Self-registration, the links of its mail and password reset (decision D36): rate limited, and telling
+        // nothing about which addresses have accounts. Asking for one's own verification mail needs a session.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, SignUpController.REGISTER, SignUpController.JOIN,
+            SignUpController.VERIFY, SignUpController.VERIFY_RESEND, SignUpController.RESET_REQUEST,
+            SignUpController.RESET_CONFIRM),
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SignUpController.ENTRIES + "/*"),
         // Signing in through an identity provider (docs/design/10-security.md section 12).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",

@@ -72,6 +72,13 @@ public class RefreshTokenStore {
     public static final String REASON_PASSWORD = "PASSWORD";
     /** A sign-in guard refused the session at a refresh (decision D36 item 6). */
     public static final String REASON_REFUSED = "REFUSED";
+    /** The password was reset through a mailed link (decision D36 item 5). */
+    public static final String REASON_PASSWORD_RESET = "PASSWORD_RESET";
+    /**
+     * Joining an entry through a mailed link set a new password on an account whose address had not been proven
+     * (decision D36 implementation note 6): whoever registered it before may hold sessions.
+     */
+    public static final String REASON_JOIN = "JOIN";
 
     private static final int TOKEN_BYTES = 32;
     private static final int MAX_TOKEN_LENGTH = 128;
