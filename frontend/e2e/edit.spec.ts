@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, commit, datasetPath, insert, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, commit, confirm, dataRows, datasetPath, entityForm, insert, option, signIn, test, unique } from './support'
 
 /**
  * Acceptance criteria 1 and 2 of ROADMAP phase 10: the generated form creates and edits a Carrier, and for the same
@@ -11,11 +11,11 @@ test.describe('the generated form', () => {
     await signIn(page)
     await page.getByTestId('dataset-Carrier').click()
     await page.getByTestId('create').click()
-    const drawer = page.locator('.ant-drawer')
+    const drawer = entityForm(page)
     await drawer.getByLabel('代码').fill(code)
     await drawer.getByLabel('名称').fill('Echo Express')
     await drawer.getByLabel('国家').click()
-    await page.locator('.ant-select-item-option', { hasText: '德国' }).click()
+    await option(page, '德国').click()
     await drawer.getByLabel('信用额度').fill('500000')
     await drawer.getByLabel('联系邮箱').fill('ops@echo.example')
     await drawer.getByRole('switch').click()
@@ -24,7 +24,7 @@ test.describe('the generated form', () => {
 
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = page.locator('.ant-table-tbody tr.ant-table-row').first()
+    const row = dataRows(page).first()
     await expect(row).toContainText('Echo Express')
     await expect(row).toContainText('德国')
 
@@ -36,8 +36,8 @@ test.describe('the generated form', () => {
     await expect(row).toContainText('Echo Express Ltd')
 
     await row.getByTestId('row-delete').click()
-    await page.locator('.ant-popconfirm').getByRole('button', { name: /确\s*定|OK/ }).click()
-    await expect(page.locator('.ant-table-tbody tr.ant-table-row')).toHaveCount(0)
+    await confirm(page)
+    await expect(dataRows(page)).toHaveCount(0)
   })
 
   // Regression: the effective time of the form reached the submit handler as ProForm's formatted string, not a date,
@@ -56,9 +56,9 @@ test.describe('the generated form', () => {
     await page.goto(datasetPath(CARRIERS))
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = page.locator('.ant-table-tbody tr.ant-table-row').first()
+    const row = dataRows(page).first()
     await row.getByTestId('row-edit').click()
-    const drawer = page.locator('.ant-drawer-content')
+    const drawer = entityForm(page)
     await drawer.getByLabel('名称').fill('Sierra Shipping 2031')
     await drawer.getByLabel('生效时间').fill('2031-01-01 09:00:00')
     await drawer.getByLabel('生效时间').press('Enter')
@@ -113,9 +113,9 @@ test.describe('the generated form', () => {
       await signIn(page)
       await page.getByTestId('dataset-Carrier').click()
       await page.getByTestId('create').click()
-      const drawer = page.locator('.ant-drawer')
+      const drawer = entityForm(page)
       await drawer.getByLabel(c.label).fill(c.input)
-      const item = drawer.locator('.ant-form-item', { has: page.getByLabel(c.label) })
+      const item = drawer.locator('[data-slot="form-item"]', { has: page.getByLabel(c.label) })
       await expect(item.locator('[data-rule-code]')).toHaveAttribute('data-rule-code', c.code)
       await expect(item.locator('[data-rule-code]')).toHaveCount(serverCodes.length)
     })

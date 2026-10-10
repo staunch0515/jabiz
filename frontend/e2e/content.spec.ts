@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { adminToken, datasetPath, insert, signIn, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, signIn, unique } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -24,7 +24,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await page.goto(datasetPath(CERTIFICATIONS))
   await expect(page.getByTestId('page-title')).toHaveText('供应商资质')
   await page.getByTestId('create').click()
-  const drawer = page.locator('.ant-drawer')
+  const drawer = entityForm(page)
 
   // Status and review comment are the processes' business: not offered on creation.
   await expect(drawer.getByTestId('i18n-title')).toBeVisible()
@@ -32,7 +32,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(drawer.getByLabel('审核意见')).toHaveCount(0)
   await drawer.getByTestId('reference-select').click()
   await page.keyboard.type(code)
-  await page.locator('.ant-select-item-option', { hasText: supplierName }).click()
+  await option(page, supplierName).click()
 
   await page.getByTestId('i18n-title-zh').fill(`有机认证 ${code}`)
   await page.getByTestId('i18n-title-tab-en').click()
@@ -43,14 +43,14 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await drawer.getByRole('button', { name: /保\s*存/ }).click()
   await expect(page.getByText('已保存。').or(page.getByText('Saved.'))).toBeVisible()
 
-  const row = page.locator('.ant-table-tbody tr.ant-table-row', { hasText: `有机认证 ${code}` })
+  const row = dataRows(page).filter({ hasText: `有机认证 ${code}` })
   await expect(row).toHaveCount(1)
   // The reference column shows the supplier's name, not its key; the status its dictionary label.
   await expect(row).toContainText(supplierName)
   await expect(row).toContainText('草稿')
 
   await row.getByTestId('row-action-CERTIFICATION_SUBMIT').click()
-  await page.locator('.ant-popconfirm').getByRole('button', { name: /确\s*定|OK/ }).click()
+  await confirm(page)
   await expect(row).toContainText('审核中')
   await expect(row.getByTestId('row-action-CERTIFICATION_SUBMIT')).toHaveCount(0)
 
@@ -65,7 +65,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await page.goto(datasetPath(SUPPLIERS))
   await page.getByLabel('代码').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  await page.locator('.ant-table-tbody tr.ant-table-row').first().getByTestId('row-edit').click()
+  await dataRows(page).first().getByTestId('row-edit').click()
   const children = page.getByTestId('child-list-SupplierCertification')
   await expect(children).toContainText(`有机认证 ${code}`)
   await expect(children).toContainText('已驳回')

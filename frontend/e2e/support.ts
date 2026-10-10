@@ -126,6 +126,23 @@ export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to
   return scope.getByRole('group', { name: label }).getByLabel(end === 'from' ? `${label}（起）` : `${label}（止）`)
 }
 
+/** Confirms the open confirmation (an alert dialog, "确定"), as a row's delete or action asks for. */
+export async function confirm(page: Page) {
+  const question = page.getByRole('alertdialog')
+  await question.getByRole('button', { name: '确定' }).click()
+  await expect(question).toHaveCount(0)
+}
+
+/** Sorts a DataTable by a column: the sort button in its header (each click: ascending, descending, none). */
+export async function sortBy(scope: Page | Locator, label: string) {
+  await scope.getByRole('columnheader', { name: label }).getByRole('button').click()
+}
+
+/** The form sheet of an entry (a dialog: "新建…", "编辑…" or the entity's name). */
+export function entityForm(page: Page): Locator {
+  return page.getByTestId('entity-form')
+}
+
 /** Waits until a page built with @jabiz/ui shows its content: no loading state, no error or "not found". */
 export async function pageRendered(page: Page) {
   await expect(page.locator('[data-slot="page-state"]')).toHaveCount(0)

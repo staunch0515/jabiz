@@ -1,6 +1,9 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { adminToken, CARRIERS, datasetPath, dialog, insert, pageRendered, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
+
+const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
+const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
 
 /**
  * WCAG 2.2 level A and AA, checked automatically with axe on the admin frontend's pages (ROADMAP phase 14m;
@@ -37,13 +40,19 @@ async function expectAccessible(page: Page, name: string) {
 
 /**
  * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and the
- * pages built with @jabiz/ui are dark; the Ant Design pages keep the light tokens until they move (phases 15b–15c).
+ * pages built with @jabiz/ui (sign-in, catalogs, list and form sheet, history, process form) are dark; the Ant Design
+ * pages keep the light tokens until they move (phase 15c).
  */
 async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, appearance: 'light' | 'dark') {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
   const token = await adminToken(request)
   const carrier = await insert(request, token, CARRIERS, {
     carrierCode: unique('A'), carrierName: 'Alpha Access', countryCode: 'JP', creditLimit: 1000, active: true,
+  })
+  // A supplier for the reference picker to offer.
+  const supplierCode = unique('A').slice(0, 10)
+  await insert(request, token, SUPPLIERS, {
+    supplierCode, supplierName: `Access Tea ${supplierCode}`, countryCode: 'JP', leadTimeDays: 7, active: true,
   })
   await signIn(page)
   await expect(page.getByTestId('dataset-Carrier')).toBeVisible()
@@ -52,13 +61,53 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expectAccessible(page, at('dataset catalog'))
 
   await page.goto(datasetPath(CARRIERS))
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row').first()).toBeVisible()
+  await expect(dataRows(page).first()).toBeVisible()
+  await pageRendered(page)
+  await expect(page.locator('[data-slot="app-shell-content"]')).not.toHaveClass(/(^|\s)light(\s|$)/)
   await expectAccessible(page, at('dataset list'))
 
-  await page.getByTestId('create').click()
-  await expect(page.locator('.ant-drawer').getByLabel('代码')).toBeVisible()
-  await expectAccessible(page, at('create form'))
+  // The pop-ups of the list: the delete confirmation, the calendar of the point in time.
+  await dataRows(page).first().getByTestId('row-delete').click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  await expectAccessible(page, at('delete confirmation'))
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await page.getByRole('button', { name: '打开日历' }).first().click()
+  await expect(page.getByRole('grid')).toBeVisible()
+  await expectAccessible(page, at('list date picker'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('grid')).toHaveCount(0)
+
+  // The form sheet, and its pop-ups: a dictionary's choices, the calendar of the effective time.
+  await page.getByTestId('create').click()
+  const form = entityForm(page)
+  await expect(form.getByLabel('代码')).toBeVisible()
+  await expectAccessible(page, at('create form'))
+  await form.getByRole('combobox', { name: /国家/ }).click()
+  await expect(page.getByRole('option').first()).toBeVisible()
+  await expectAccessible(page, at('create form choice'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('option')).toHaveCount(0)
+  await form.getByRole('button', { name: '打开日历' }).first().click()
+  await expect(page.getByRole('grid')).toBeVisible()
+  await expectAccessible(page, at('create form date picker'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('grid')).toHaveCount(0)
+  await expect(form).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(form).toHaveCount(0)
+
+  // A reference picker, its matches fetched from the server.
+  await page.goto(datasetPath(CERTIFICATIONS))
+  await pageRendered(page)
+  await page.getByTestId('create').click()
+  await entityForm(page).getByTestId('reference-select').click()
+  await expect(page.getByRole('listbox').getByRole('option').first()).toBeVisible()
+  await expectAccessible(page, at('reference picker'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('listbox')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(entityForm(page)).toHaveCount(0)
 
   await page.goto(`${datasetPath(CARRIERS)}/${encodeURIComponent(carrier.id)}/history`)
   await expect(page.getByText('Alpha Access').first()).toBeVisible()
