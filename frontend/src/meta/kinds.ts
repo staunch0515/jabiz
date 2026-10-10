@@ -7,7 +7,7 @@ import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './t
 
 /**
  * Semantic kind → how a value is shown and entered (docs/design/12-frontend.md section 5). Pure functions: the
- * React components only put their results into ProTable / ProForm.
+ * React components only put their results into tables and form controls.
  */
 
 /** The field's label: the server's (from message resources), else the UI's name for system fields, else its name. */
@@ -173,13 +173,19 @@ export function toWireValue(field: FieldMeta, value: unknown): unknown {
   }
 }
 
-/** A stored value as the form control wants it. */
+/**
+ * A stored value as the form control wants it: text (times, days, decimals, JSON), a boolean, texts by language. The
+ * date pickers keep a time to the millisecond and give back an ISO instant.
+ */
 export function toFormValue(field: FieldMeta, value: unknown): unknown {
   if (value === null || value === undefined) return undefined
   switch (controlOf(field)) {
     case 'datetime':
     case 'date':
-      return dayjs(String(value))
+      // Times as stored (ISO 8601, any precision: unchanged ones are compared to the millisecond), days as `YYYY-MM-DD`.
+      return String(value)
+    case 'integer':
+      return String(value)
     case 'decimal': {
       const d = toDecimal(value)
       return d ? formatDecimal(d) : value

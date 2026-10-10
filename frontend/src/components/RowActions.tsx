@@ -1,4 +1,4 @@
-import { App, Popconfirm } from 'antd'
+import { Button, ConfirmDialog, notify } from '@jabiz/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
@@ -17,13 +17,15 @@ interface Props {
   onDone(): void
 }
 
+const LINK = 'h-auto px-1'
+
 /**
  * The actions of one row (docs/design/16-content-authoring.md section 3). A process that needs only the key runs
- * after a confirmation; any other opens its form with the key filled in and read-only.
+ * after a confirmation, each time with a new idempotency key; any other opens its form with the key filled in and
+ * read-only.
  */
 export default function RowActions({ actions, id, attributes, onDone }: Props) {
   const { t } = useTranslation()
-  const { message } = App.useApp()
   const navigate = useNavigate()
   const [running, setRunning] = useState<string | null>(null)
 
@@ -39,10 +41,10 @@ export default function RowActions({ actions, id, attributes, onDone }: Props) {
           body: { [process.actsOn!.input!]: String(id) },
         }),
       )
-      message.success(t('process.succeeded'))
+      notify.success(t('process.succeeded'))
       onDone()
     } catch (e) {
-      message.error(e instanceof ApiError ? e.display : String(e))
+      notify.error(e instanceof ApiError ? e.display : String(e))
     } finally {
       setRunning(null)
     }
@@ -54,18 +56,28 @@ export default function RowActions({ actions, id, attributes, onDone }: Props) {
         .filter((process) => actionShown(process, attributes))
         .map((process) =>
           needsOnlyTheKey(process) ? (
-            <Popconfirm
+            <ConfirmDialog
               key={process.name}
               title={t('list.actionConfirm', { action: process.label })}
               onConfirm={() => run(process)}
-            >
-              <a data-testid={`row-action-${process.name}`} aria-disabled={running === process.name}>
-                {process.label}
-              </a>
-            </Popconfirm>
+              trigger={
+                <Button
+                  variant="link"
+                  size="sm"
+                  className={LINK}
+                  disabled={running === process.name}
+                  data-testid={`row-action-${process.name}`}
+                >
+                  {process.label}
+                </Button>
+              }
+            />
           ) : (
-            <a
+            <Button
               key={process.name}
+              variant="link"
+              size="sm"
+              className={LINK}
               data-testid={`row-action-${process.name}`}
               onClick={() =>
                 navigate(
@@ -76,7 +88,7 @@ export default function RowActions({ actions, id, attributes, onDone }: Props) {
               }
             >
               {process.label}
-            </a>
+            </Button>
           ),
         )}
     </>

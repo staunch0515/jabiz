@@ -1,7 +1,23 @@
-import { DrawerForm, ProFormDateTimePicker, ProFormText } from '@ant-design/pro-components'
-import { Alert, App, Form, Space } from 'antd'
-import dayjs, { type Dayjs } from 'dayjs'
-import { useMemo, useState } from 'react'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  cn,
+  Controller,
+  DateTimePicker,
+  Input,
+  Label,
+  notify,
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  Spinner,
+  useForm,
+} from '@jabiz/ui'
+import { CircleAlert } from 'lucide-react'
+import { useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
@@ -38,11 +54,18 @@ interface Props {
 }
 
 type Errors = Record<string, Violation[]>
+type Values = Record<string, unknown>
+
+/** The form's own inputs beside the entity's fields: when a temporal change takes effect, and why it is made. */
+const EFFECTIVE_TIME = '__effectiveTime'
+const REASON = '__reason'
 
 /**
- * The generated create / edit form of any entity (docs/design/12-frontend.md section 5). Inputs come from the
- * semantic kinds; the client check reports the server's rule codes before anything is sent, and whatever the server
- * still refuses (400/422 violations) is shown at the same place.
+ * The generated create / edit form of any entity (docs/design/12-frontend.md section 5), in a sheet from the right.
+ * Inputs come from the semantic kinds and hold their values in react-hook-form; the only check is meta/validation.ts
+ * (the server's rules, decision D15): a field is checked as it changes, and on saving everything (new entry) or what
+ * changed (update). Whatever the server still refuses (400/422 violations) is shown at the same place, a conflict
+ * (409) above the fields.
  */
 export default function EntityFormDrawer({
   dataset,
@@ -57,11 +80,13 @@ export default function EntityFormDrawer({
   onSaved,
 }: Props) {
   const { t } = useTranslation()
-  const { message } = App.useApp()
   const { can } = useAuth()
-  const [form] = Form.useForm()
+  const formId = useId()
   const [errors, setErrors] = useState<Errors>({})
   const [general, setGeneral] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  // Date fields holding typed text that is no date: the form is not sent while there are any (the field says why).
+  const typedInvalid = useRef(new Set<string>())
   const mode = instance ? 'edit' : 'create'
   const fields = useMemo(() => {
     const base = formFieldsOf(entity, mode, preset, can)
@@ -84,30 +109,40 @@ export default function EntityFormDrawer({
     () => (historical ? [] : actionsFor(entity.entity, processes)),
     [historical, entity.entity, processes],
   )
-  const original = useMemo(() => (instance?.attributes ?? {}) as Record<string, unknown>, [instance])
+  const original = useMemo(() => (instance?.attributes ?? {}) as Values, [instance])
   const codes = useMemo(() => enabledCodes(dictionaries), [dictionaries])
   const temporal = entity.temporal
   const showEffectiveTime = temporal && (dataset.allowScheduled || can('temporal.backdate'))
 
   const initialValues = useMemo(() => {
-    const values: Record<string, unknown> = {}
+    const values: Values = {}
     for (const { field } of fields) {
       // A new entry starts with "no" for yes/no fields: an untouched switch means false, not "not given".
       values[field.name] = instance || field.type !== 'bool' ? toFormValue(field, original[field.name]) : false
       if (preset && field.name in preset) values[field.name] = toFormValue(field, preset[field.name])
     }
+    values[EFFECTIVE_TIME] = null
+    values[REASON] = ''
     return values
   }, [fields, original, instance, preset])
+  const form = useForm<Values>({ defaultValues: initialValues })
 
   const messageOf = (v: { field: string; ruleCode: string; params: Record<string, unknown> }): Violation => {
     const field = findField(entity, v.field)
     return describe(entity, v, field ? fieldLabel(field, t) : v.field)
   }
 
-  const checkField = (formField: FormField, allValues: Record<string, unknown>) => {
-    const attributes = wireAttributes([formField], allValues)
+  /** Checks one field as it changes, with the same rules as on saving; a server message of that field is replaced. */
+  const recheck = (formField: FormField) => {
+    const attributes = wireAttributes([formField], form.getValues())
     const raw = formField.field.name in attributes ? attributes[formField.field.name] : undefined
-    return validateField(formField.field, raw, { insert: mode === 'create', dictionaries: codes }).map(messageOf)
+    const violations = validateField(formField.field, raw, { insert: mode === 'create', dictionaries: codes }).map(messageOf)
+    setErrors((previous) => {
+      const next = { ...previous }
+      if (violations.length > 0) next[formField.field.name] = violations
+      else delete next[formField.field.name]
+      return next
+    })
   }
 
   const showServerViolations = (error: ApiError) => {
@@ -123,7 +158,8 @@ export default function EntityFormDrawer({
     setGeneral(rest)
   }
 
-  const submit = async (values: Record<string, unknown>) => {
+  const save = async () => {
+    const values = form.getValues()
     setGeneral([])
     const attributes = mode === 'create' ? wireAttributes(fields, values) : changedAttributes(fields, original, values)
     // The same check the server runs on what is sent: everything on insert, the changed fields on update.
@@ -138,20 +174,21 @@ export default function EntityFormDrawer({
       if (violations.length > 0) found[field.name] = violations
     }
     setErrors(found)
-    if (Object.keys(found).length > 0) return false
-    if (mode === 'edit' && Object.keys(attributes).length === 0 && !values.__effectiveTime) {
+    if (Object.keys(found).length > 0) return
+    const effectiveTime = typeof values[EFFECTIVE_TIME] === 'string' && values[EFFECTIVE_TIME] ? values[EFFECTIVE_TIME] : undefined
+    if (mode === 'edit' && Object.keys(attributes).length === 0 && !effectiveTime) {
       setGeneral([t('form.nothingChanged')])
-      return false
+      return
     }
+    const reasonText = typeof values[REASON] === 'string' ? values[REASON].trim() : ''
 
-    const effectiveTime = values.__effectiveTime ? (values.__effectiveTime as Dayjs).toISOString() : undefined
-    const reason = typeof values.__reason === 'string' && values.__reason.trim() ? values.__reason.trim() : undefined
+    setBusy(true)
     try {
       await unwrap(
         api.POST('/api/datasets/{resourceId}/commit', {
           params: { path: { resourceId: dataset.id } },
           body: {
-            reason,
+            reason: reasonText || undefined,
             changes: [
               {
                 action: mode === 'create' ? 'INSERT' : 'UPDATE',
@@ -165,87 +202,147 @@ export default function EntityFormDrawer({
         }),
       )
     } catch (e) {
+      setBusy(false)
       if (e instanceof ApiError) {
         showServerViolations(e)
-        return false
+        return
       }
       throw e
     }
-    message.success(t('list.saved'))
+    setBusy(false)
+    notify.success(t('list.saved'))
     onSaved()
-    return true
   }
 
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    // Not the forms of a sheet opened from this one (a child's), whose events reach here through React's tree.
+    event.stopPropagation()
+    if (readOnly || busy) return
+    if (typedInvalid.current.size > 0) {
+      event.currentTarget.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      return
+    }
+    void save()
+  }
+
+  const title = t(readOnly ? 'form.viewTitle' : mode === 'create' ? 'form.createTitle' : 'form.editTitle', {
+    entity: entity.label,
+  })
+  const effectiveTimeId = `${formId}-effective-time`
+  const reasonId = `${formId}-reason`
+
   return (
-    <DrawerForm
-      form={form}
-      name="entity"
-      title={t(readOnly ? 'form.viewTitle' : mode === 'create' ? 'form.createTitle' : 'form.editTitle', {
-        entity: entity.label,
-      })}
+    <Sheet
       open={open}
       onOpenChange={(next) => {
+        if (busy) return
         if (!next) {
           setErrors({})
           setGeneral([])
         }
         onOpenChange(next)
       }}
-      initialValues={initialValues}
-      // Dates reach onFinish as Dayjs, converted to ISO-8601 with offset by the adapter (toWireValue, effective time).
-      // ProForm's default formats them as local text without a zone, which the server rejects.
-      dateFormatter={false}
-      drawerProps={{ destroyOnHidden: true, width: children.length > 0 ? 720 : 560 }}
-      submitter={readOnly ? false : { searchConfig: { submitText: t('form.submit'), resetText: t('form.cancel') } }}
-      onValuesChange={(changed: Record<string, unknown>, all: Record<string, unknown>) => {
-        // Checked while typing, with the same rules as on submit; a server message of that field is replaced.
-        setErrors((previous) => {
-          const next = { ...previous }
-          for (const name of Object.keys(changed)) {
-            const formField = fields.find((f) => f.field.name === name)
-            if (!formField) continue
-            const violations = checkField(formField, all)
-            if (violations.length > 0) next[name] = violations
-            else delete next[name]
-          }
-          return next
-        })
-      }}
-      onFinish={submit}
     >
-      {general.length > 0 && (
-        <Alert type="error" showIcon message={general.join(' ')} style={{ marginBottom: 16 }} data-testid="form-error" />
-      )}
-      {instance && actions.length > 0 && (
-        <Space size="middle" style={{ marginBottom: 16 }} data-testid="detail-actions">
-          <RowActions actions={actions} id={instance.id} attributes={original} onDone={onSaved} />
-        </Space>
-      )}
-      {fields.map((formField) => (
-        <EntityField
-          key={formField.field.name}
-          field={formField.field}
-          disabled={formField.disabled}
-          dictionaries={dictionaries}
-          violations={errors[formField.field.name]}
-          t={t}
-          referenceDatasetId={referenceSourceOf(formField.field, datasets, metas)?.id}
-          defaultLocale={entity.defaultLocale}
-        />
-      ))}
-      {showEffectiveTime && !readOnly && (
-        <ProFormDateTimePicker
-          name="__effectiveTime"
-          label={t('form.effectiveTime')}
-          tooltip={t('form.effectiveTimeHint')}
-          fieldProps={{ style: { width: '100%' }, disabledDate: dataset.allowScheduled ? undefined : (d) => d.isAfter(dayjs()) }}
-        />
-      )}
-      {temporal && !readOnly && <ProFormText name="__reason" label={t('form.reason')} />}
-      {instance &&
-        children.map((child) => (
-          <ChildEntityList key={`${child.entity.entity}.${child.field}`} child={child} parentId={String(instance.id)} />
-        ))}
-    </DrawerForm>
+      <SheetContent
+        aria-describedby={undefined}
+        data-testid="entity-form"
+        className={cn('w-full gap-0', children.length > 0 ? 'sm:max-w-3xl' : 'sm:max-w-xl')}
+      >
+        <SheetHeader className="border-b pr-12">
+          <SheetTitle>{title}</SheetTitle>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto p-4">
+          <form id={formId} noValidate onSubmit={submit} className="flex flex-col gap-4">
+            {general.length > 0 && (
+              <Alert variant="destructive" data-testid="form-error">
+                <CircleAlert aria-hidden />
+                <AlertDescription>{general.join(' ')}</AlertDescription>
+              </Alert>
+            )}
+            {instance && actions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2" data-testid="detail-actions">
+                <RowActions actions={actions} id={instance.id} attributes={original} onDone={onSaved} />
+              </div>
+            )}
+            {fields.map((formField) => (
+              <Controller
+                key={formField.field.name}
+                control={form.control}
+                name={formField.field.name}
+                render={({ field: control }) => (
+                  <EntityField
+                    field={formField.field}
+                    disabled={formField.disabled}
+                    dictionaries={dictionaries}
+                    violations={errors[formField.field.name]}
+                    t={t}
+                    value={control.value}
+                    onChange={(value) => {
+                      control.onChange(value)
+                      recheck(formField)
+                    }}
+                    onTypedInvalid={(invalid) => {
+                      if (invalid) typedInvalid.current.add(formField.field.name)
+                      else typedInvalid.current.delete(formField.field.name)
+                    }}
+                    referenceDatasetId={referenceSourceOf(formField.field, datasets, metas)?.id}
+                    defaultLocale={entity.defaultLocale}
+                  />
+                )}
+              />
+            ))}
+            {showEffectiveTime && !readOnly && (
+              <Controller
+                control={form.control}
+                name={EFFECTIVE_TIME}
+                render={({ field: control }) => (
+                  <div className="flex flex-col gap-1.5" data-slot="form-item" data-field={EFFECTIVE_TIME}>
+                    <Label htmlFor={effectiveTimeId}>{t('form.effectiveTime')}</Label>
+                    <DateTimePicker
+                      id={effectiveTimeId}
+                      aria-describedby={`${effectiveTimeId}-hint`}
+                      value={(control.value as string | null) ?? null}
+                      onChange={(value) => control.onChange(value)}
+                      onInvalidChange={(invalid) => {
+                        if (invalid) typedInvalid.current.add(EFFECTIVE_TIME)
+                        else typedInvalid.current.delete(EFFECTIVE_TIME)
+                      }}
+                      // Without scheduling (only backdating) a change cannot take effect later than now.
+                      toDate={dataset.allowScheduled ? undefined : new Date()}
+                      clearable
+                    />
+                    <p id={`${effectiveTimeId}-hint`} className="text-muted-foreground text-sm">
+                      {t('form.effectiveTimeHint')}
+                    </p>
+                  </div>
+                )}
+              />
+            )}
+            {temporal && !readOnly && (
+              <div className="flex flex-col gap-1.5" data-slot="form-item" data-field={REASON}>
+                <Label htmlFor={reasonId}>{t('form.reason')}</Label>
+                <Input id={reasonId} {...form.register(REASON)} />
+              </div>
+            )}
+          </form>
+          {instance &&
+            children.map((child) => (
+              <ChildEntityList key={`${child.entity.entity}.${child.field}`} child={child} parentId={String(instance.id)} />
+            ))}
+        </div>
+        {!readOnly && (
+          <SheetFooter className="flex-row justify-end border-t">
+            <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+              {t('form.cancel')}
+            </Button>
+            <Button type="submit" form={formId} disabled={busy} aria-busy={busy || undefined}>
+              {busy && <Spinner className="text-current" />}
+              {t('form.submit')}
+            </Button>
+          </SheetFooter>
+        )}
+      </SheetContent>
+    </Sheet>
   )
 }

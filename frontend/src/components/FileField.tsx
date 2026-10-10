@@ -1,8 +1,5 @@
-import { UploadOutlined } from '@ant-design/icons'
-import { ProForm } from '@ant-design/pro-components'
-import { Button, Space, Typography, Upload } from 'antd'
+import { Button, FileUpload, UI_SCOPE } from '@jabiz/ui'
 import type { TFunction } from 'i18next'
-import { useState } from 'react'
 import { formatBytes, uploadFile } from '../api/files'
 import { ApiError } from '../api/problem'
 import type { FileFieldMeta } from '../meta/types'
@@ -14,90 +11,54 @@ interface InputProps {
   t: TFunction
   value?: string | null
   onChange?: (value: string | null) => void
+  /** The id of the file input, which the field's label points at. */
+  id?: string
+  'aria-describedby'?: string
 }
 
 /**
  * The input of a `jabiz.file` field (docs/design/14-files.md section 4): uploads under the field's policy and keeps
- * the returned id; shows the current file (images as a preview). The picker's filter and the size check only save a
- * round trip: the server recognises the type by content and enforces the limit.
+ * the returned id; shows the current file (images as a preview); removing it empties the field (sent as null). The
+ * picker's filter and the size check only save a round trip: the server recognises the type by content and enforces
+ * the limit.
  */
-export function FileInput({ field, disabled, t, value, onChange }: InputProps) {
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string>()
+export function FileInput({ field, disabled, t, value, onChange, id, 'aria-describedby': describedBy }: InputProps) {
   const types = (field.accept ?? []).filter((a) => a.startsWith('.')).join(', ')
   const hint =
     field.maxBytes !== undefined
       ? t('file.accepted', { types: types || '—', max: formatBytes(field.maxBytes) })
       : undefined
   return (
-    <Space direction="vertical" size="small">
+    <div className={`${UI_SCOPE} flex flex-col gap-2`}>
       {value ? <FilePreview fileId={value} field={field} width={320} /> : null}
-      <Space>
-        <Upload
+      <div className="flex flex-wrap items-start gap-2">
+        <FileUpload
+          id={id}
+          aria-describedby={describedBy}
           accept={field.accept?.join(',')}
-          showUploadList={false}
-          disabled={disabled || uploading}
-          beforeUpload={(file) => {
-            setError(undefined)
-            if (field.maxBytes !== undefined && file.size > field.maxBytes) {
-              setError(t('file.tooLarge', { max: formatBytes(field.maxBytes) }))
-              return Upload.LIST_IGNORE
+          maxSize={field.maxBytes}
+          maxSizeText={field.maxBytes !== undefined ? formatBytes(field.maxBytes) : undefined}
+          disabled={disabled}
+          label={value ? t('file.replace') : t('file.upload')}
+          hint={hint}
+          onUpload={async (file) => {
+            try {
+              const uploaded = await uploadFile(field.policy, file, file.name)
+              onChange?.(uploaded.fileId ?? null)
+            } catch (e) {
+              // The upload field shows the message; the server's own words, not the error's type.
+              throw new Error(e instanceof ApiError ? e.display : String(e), { cause: e })
             }
-            return true
           }}
-          customRequest={({ file, onSuccess, onError }) => {
-            const blob = file as File
-            setUploading(true)
-            uploadFile(field.policy, blob, blob.name)
-              .then((uploaded) => {
-                onChange?.(uploaded.fileId ?? null)
-                onSuccess?.(uploaded)
-              })
-              .catch((e: unknown) => {
-                setError(e instanceof ApiError ? e.display : String(e))
-                onError?.(e as Error)
-              })
-              .finally(() => setUploading(false))
-          }}
-        >
-          <Button icon={<UploadOutlined />} loading={uploading} disabled={disabled}>
-            {value ? t('file.replace') : t('file.upload')}
-          </Button>
-        </Upload>
+        />
         {value && !disabled ? (
-          <Button
-            onClick={() => {
-              setError(undefined)
-              onChange?.(null)
-            }}
-          >
+          <Button variant="outline" onClick={() => onChange?.(null)}>
             {t('file.remove')}
           </Button>
         ) : null}
-      </Space>
-      {hint ? <Typography.Text type="secondary">{hint}</Typography.Text> : null}
-      {error ? (
-        <Typography.Text type="danger" role="alert">
-          {error}
-        </Typography.Text>
-      ) : null}
-    </Space>
+      </div>
+    </div>
   )
 }
 
-interface Props {
-  field: FileFieldMeta
-  label: string
-  disabled: boolean
-  formItemProps: Record<string, unknown>
-  t: TFunction
-}
-
-/** The form item of a file field. */
-export default function FileField({ field, label, disabled, formItemProps, t }: Props) {
-  return (
-    <ProForm.Item name={field.name} label={label} {...formItemProps}>
-      <FileInput field={field} disabled={disabled} t={t} />
-    </ProForm.Item>
-  )
-}
+export default FileInput

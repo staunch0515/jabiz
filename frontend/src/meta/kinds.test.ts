@@ -75,7 +75,10 @@ describe('semantic kinds', () => {
     expect(toWireValue(field('cell'), 'not json')).toBe('not json')
     expect(toWireValue(field('carrierCode'), undefined)).toBeUndefined()
     expect(toFormValue(field('creditLimit'), 1e3)).toBe('1000')
-    expect(dayjs.isDayjs(toFormValue(field('effectStartTime'), '2026-01-31T09:00:00Z'))).toBe(true)
+    // Times stay text as stored: the picker shows them and gives back an ISO instant.
+    expect(toFormValue(field('effectStartTime'), '2026-01-31T09:00:00.123456Z')).toBe('2026-01-31T09:00:00.123456Z')
+    expect(toWireValue(field('effectStartTime'), '2026-01-31T09:00:00.000Z')).toBe('2026-01-31T09:00:00.000Z')
+    expect(toWireValue(field('effectStartTime'), null)).toBeNull()
     expect(toFormValue(field('cell'), { a: 1 })).toBe('{"a":1}')
     expect(toFormValue(field('carrierCode'), null)).toBeUndefined()
   })
@@ -87,6 +90,7 @@ describe('semantic kinds', () => {
     // The picker's local day as written, whatever the offset of the browser.
     expect(toWireValue(due, dayjs('2026-01-31T23:30:00'))).toBe('2026-01-31')
     expect(toWireValue(due, '')).toBeNull()
-    expect(toFormValue(due, '2026-01-31')).toSatisfy((v: unknown) => dayjs.isDayjs(v) && v.format('YYYY-MM-DD') === '2026-01-31')
+    expect(toFormValue(due, '2026-01-31')).toBe('2026-01-31')
+    expect(toWireValue(due, '2026-01-31')).toBe('2026-01-31')
   })
 })

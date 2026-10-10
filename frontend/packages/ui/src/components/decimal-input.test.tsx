@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { expectAccessible } from '../test/axe'
 import { acceptsDecimalText, DecimalInput, MoneyInput, normalizeDecimalText } from './decimal-input'
 
@@ -69,5 +69,16 @@ describe('MoneyInput', () => {
     await userEvent.tab()
     expect(input).toHaveValue('5.00')
     await expectAccessible()
+  })
+
+  it('without a scale takes any decimals and adds none, leaving a wrong scale to the rules', async () => {
+    const onChange = vi.fn()
+    render(<MoneyInput aria-label="Limit" value="10.555" onChange={onChange} currency="JPY" />)
+    const input = screen.getByRole('textbox', { name: 'Limit' })
+    expect(input).toHaveAccessibleDescription('JPY')
+    await userEvent.type(input, '5')
+    expect(onChange).toHaveBeenLastCalledWith('10.5555')
+    await userEvent.tab()
+    expect(onChange).toHaveBeenCalledTimes(1)
   })
 })
