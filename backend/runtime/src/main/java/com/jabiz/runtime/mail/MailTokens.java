@@ -43,7 +43,7 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
     static final int MAX_TOKEN_LENGTH = 128;
 
     /** A used token: to whom its mail went. */
-    public record Consumed(UUID messageId, String userId, String address) {}
+    public record Consumed(String messageId, String userId, String address) {}
 
     public record Metadata<C>(String purpose, Function<C, String> token, String targetKey) {
         public Metadata {
@@ -120,7 +120,7 @@ public class MailTokens<C extends ProcessContext> implements StepHandler<MailTok
                                 return invalid(ctx, "used");
                             }
                             UUID user = Rows.uuid(row.get("user_id"));
-                            ctx.put(metadata.targetKey(), new Consumed(Rows.uuid(row.get("message_id")),
+                            ctx.put(metadata.targetKey(), new Consumed(Rows.string(row.get("message_id")),
                                 user == null ? null : user.toString(), Rows.string(row.get("address"))));
                             return Mono.<Void>empty();
                         });

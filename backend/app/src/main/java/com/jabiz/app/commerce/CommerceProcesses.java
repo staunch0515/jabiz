@@ -7,12 +7,17 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.mail.MailCategory;
+import com.jabiz.mail.MailRecipient;
+import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.publicread.FileAccess;
+import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -70,6 +75,13 @@ public final class CommerceProcesses {
     public static final String ORDER_PLACE = "ORDER_PLACE";
     public static final String ORDER_CANCEL = "ORDER_CANCEL";
     public static final String ORDER_SHIP = "ORDER_SHIP";
+
+    /**
+     * The shipment notice (docs/design/18-numbering-approvals-tasks.md section 5.6): a notification, which the customer
+     * may turn off; texts in the messages {@code mail.commerce.order-shipped.subject} and {@code .body}.
+     */
+    public static final MailTemplate ORDER_SHIPPED_MAIL = MailTemplate.define("commerce.order-shipped", t -> t
+        .category(MailCategory.NOTIFICATION).param("orderNo", "totalAmount"));
     public static final String PRODUCT_REPRICE = "PRODUCT_REPRICE";
     public static final String PRODUCT_WITHDRAW = "PRODUCT_WITHDRAW";
 
@@ -106,10 +118,19 @@ public final class CommerceProcesses {
 
     public record LineInput(@NotBlank String sku, @NotNull @Positive @Max(MAX_QUANTITY) Integer quantity) {}
 
-    /** @param orderNo the order's number; absent: the next number of {@link #ORDER_NUMBERS} (SO-2026-000001) */
+    /**
+     * @param orderNo        the order's number; absent: the next number of {@link #ORDER_NUMBERS} (SO-2026-000001)
+     * @param customerUserId the customer's user, if they have an account: told of the shipment by mail
+     */
     public record PlaceInput(@Pattern(regexp = "\\S(.*\\S)?") String orderNo, @NotBlank String customerCode,
         @NotBlank String warehouseCode,
-        @NotEmpty @Size(max = MAX_ORDER_LINES) List<@Valid @NotNull LineInput> lines) {}
+        @NotEmpty @Size(max = MAX_ORDER_LINES) List<@Valid @NotNull LineInput> lines, String customerUserId) {
+
+        /** An order of a customer without an account. */
+        public PlaceInput(String orderNo, String customerCode, String warehouseCode, List<LineInput> lines) {
+            this(orderNo, customerCode, warehouseCode, lines, null);
+        }
+    }
 
     public record LineOutput(int lineNo, String sku, int quantity, BigDecimal unitPrice, BigDecimal lineAmount) {}
 
@@ -133,6 +154,7 @@ public final class CommerceProcesses {
     static final String PRODUCTS = "products";
     static final String STOCK = "stock";
     static final String ORDER_KEY = "order";
+    static final String CUSTOMER = "customer";
     static final String LINES = "lines";
     static final String OUTPUT = "output";
     static final String PRICED = "priced";
@@ -251,7 +273,33 @@ public final class CommerceProcesses {
                 .compute("Take the goods out", (metadata, ctx) -> ship(ctx))
                 // Same transaction: the sale is booked exactly when the goods leave (docs/design/11 section 1.2).
                 .step("Post the sale", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POSTING_INPUT),
-                    LedgerProcesses.POST, 1, ctx -> ctx.get(POSTING_INPUT), POSTING)));
+                    LedgerProcesses.POST, 1, ctx -> ctx.get(POSTING_INPUT), POSTING))
+                // A customer with an account and an address hears of it; the mail leaves after the commit, so a
+                // shipment that fails sends nothing (docs/design/18-numbering-approvals-tasks.md section 5.6).
+                .step("Find the customer", QueryEntities.of(SecurityEntities.USER_DATASET,
+                    CommerceProcesses::customerQuery, CUSTOMER))
+                .step("Tell the customer", SendMail.<ProcessContext>when(CommerceProcesses::customerHasAddress,
+                    ORDER_SHIPPED_MAIL, ctx -> MailRecipient.user(customer(ctx).id()), Map.of(
+                        "orderNo", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("orderNo"),
+                        "totalAmount", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("totalAmount")))));
+
+    /** The order's customer among the users: none when the order has no customer user. */
+    private static EntityQuery customerQuery(ProcessContext ctx) {
+        Object customer = ctx.get(ORDER_KEY, EntityInstance.class).get("customerUserId");
+        return EntityQuery.builder()
+            .where(new QueryPredicate.In("userId", customer == null ? List.of() : List.of(customer)))
+            .limit(1).build();
+    }
+
+    private static EntityInstance customer(ProcessContext ctx) {
+        return list(ctx, CUSTOMER).getFirst();
+    }
+
+    /** Only a shipment that went through, to a customer user with an address. */
+    private static boolean customerHasAddress(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.contains(CUSTOMER) && !list(ctx, CUSTOMER).isEmpty()
+            && customer(ctx).get("email") != null;
+    }
 
     // ---- queries built from the context -------------------------------------------------------------------------
 
@@ -436,6 +484,7 @@ public final class CommerceProcesses {
         Map<String, Object> order = new LinkedHashMap<>();
         order.put("orderNo", orderNo);
         order.put("customerCode", input.customerCode());
+        order.put("customerUserId", input.customerUserId());
         order.put("warehouseId", warehouse.id());
         order.put("orderedTime", ctx.opTime());
         order.put("status", PLACED);

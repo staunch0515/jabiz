@@ -8,7 +8,7 @@ ALTER TABLE sec_user_version ADD COLUMN locale varchar(10);
 -- The parameters are kept as JSON text with the sensitive ones masked; the one-time tokens are not among them; they
 -- are drawn when the mail is sent.
 CREATE TABLE sys_mail_message (
-    message_id     uuid          PRIMARY KEY,
+    message_id     varchar(36)   PRIMARY KEY,
     template       varchar(100)  NOT NULL,
     category       varchar(20)   NOT NULL CHECK (category IN ('TRANSACTIONAL', 'NOTIFICATION')),
     user_id        uuid,
@@ -28,9 +28,9 @@ SELECT jabiz_protect_append_only('sys_mail_message');
 -- own, since the delivery rolls back. A message is done once it has a SENT or SKIPPED attempt. attempt_id is the key of
 -- the platform entity MailAttempt.
 CREATE TABLE sys_mail_attempt (
-    message_id     uuid          NOT NULL REFERENCES sys_mail_message (message_id),
+    message_id     varchar(36)   NOT NULL REFERENCES sys_mail_message (message_id),
     attempt_no     integer       NOT NULL,
-    attempt_id     uuid          NOT NULL UNIQUE,
+    attempt_id     varchar(36)   NOT NULL UNIQUE,
     outcome        varchar(10)   NOT NULL CHECK (outcome IN ('SENT', 'FAILED', 'SKIPPED')),
     detail         varchar(2000),
     attempted_time timestamptz   NOT NULL,
@@ -44,7 +44,7 @@ SELECT jabiz_protect_append_only('sys_mail_attempt');
 CREATE TABLE sys_mail_token (
     token_hash   char(64)     PRIMARY KEY,
     issue_seq    bigint       GENERATED ALWAYS AS IDENTITY UNIQUE,
-    message_id   uuid         NOT NULL REFERENCES sys_mail_message (message_id),
+    message_id   varchar(36)  NOT NULL REFERENCES sys_mail_message (message_id),
     attempt_no   integer      NOT NULL,
     purpose      varchar(40)  NOT NULL,
     user_id      uuid,

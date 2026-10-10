@@ -157,6 +157,9 @@ public final class CommerceEntities extends BaseEntityDefinitions {
         eb.field("totalAmount", f -> f.physicalColumn("total_amount").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("shippedTime", f -> f.physicalColumn("shipped_time").asTemporal(TemporalRole.EVENT_TIME));
+        // The customer as a user of the platform, if they have an account: told of the shipment by mail
+        // (docs/design/18-numbering-approvals-tasks.md section 5.6).
+        eb.field("customerUserId", f -> f.physicalColumn("customer_user_id").immutable(true).asReference("SecUser"));
         // Links the order to the logistics sample: the waybill it travels on.
         eb.field("waybillId", f -> f.physicalColumn("waybill_id").asReference("WaybillTracking"));
         eb.stateTransitions("status", st -> {

@@ -68,7 +68,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     }
 
     /** What a message is to the delivery. */
-    private record Pending(UUID messageId, MailTemplate template, String templateName, UUID userId, String address,
+    private record Pending(String messageId, MailTemplate template, String templateName, UUID userId, String address,
         Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed) {}
 
     private final MailTemplates templates;
@@ -99,7 +99,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     @Override
     public Mono<Void> execute(Metadata metadata, ProcessContext ctx) {
         return Mono.defer(() -> {
-            UUID messageId = UUID.fromString(String.valueOf(ctx.get(metadata.messageKey())));
+            String messageId = String.valueOf(ctx.get(metadata.messageKey()));
             return load(messageId).flatMap(pending -> {
                 if (pending.done()) {
                     ctx.put(metadata.outcomeKey(), "DONE");
@@ -119,7 +119,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         });
     }
 
-    private Mono<Pending> load(UUID messageId) {
+    private Mono<Pending> load(String messageId) {
         return engine().select("""
                 SELECT m.template, m.user_id, m.address, m.locale, m.params,
                        (SELECT count(*) FROM sys_mail_attempt a WHERE a.message_id = m.message_id) AS attempts,

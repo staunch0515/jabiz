@@ -22,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Sending template mail and the recipients' choices (docs/design/18-numbering-approvals-tasks.md section 5.6;
@@ -38,7 +37,7 @@ public class MailProcesses {
     public static final String CONSUMER = "jabiz.mail";
     public static final String PREFERENCE_SET = "SEC_MAIL_PREFERENCE_SET";
 
-    public record SendInput(@NotNull UUID messageId) {}
+    public record SendInput(@NotBlank String messageId) {}
 
     /** @param outcome {@code SENT}, {@code SKIPPED}, or {@code DONE} for a message that was done before */
     public record SendOutput(String outcome) {}
@@ -141,6 +140,6 @@ public class MailProcesses {
     }
 
     private static SendInput input(DomainEvent event) {
-        return new SendInput(UUID.fromString(String.valueOf(event.payload().get(MESSAGE_ID))));
+        return new SendInput(String.valueOf(event.payload().get(MESSAGE_ID)));
     }
 }
