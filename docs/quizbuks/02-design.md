@@ -235,14 +235,14 @@ LIVE / PAUSED / FUNDS_SHORT ──到结束时间或名额 / 预算用完──�
 
 ### 7.1 答题人 PWA（`quizbuks-web/app`）
 
-- React 19 + TypeScript + Vite + Radix Themes（与平台阶段 15 相同的组件选型）+ TanStack Query + React Router + i18next；类型由 OpenAPI 生成。
+- React 19 + TypeScript + Vite + `@jabiz/ui`（shadcn/ui + Tailwind CSS v4，与平台阶段 15 相同，决策 D34）+ TanStack Query + React Router + i18next；类型由 OpenAPI 生成。
 - PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送）。
 - 宽度 ≤ 430px 设计，底部 5 个导航；卡片紧凑，一屏 ≥ 6 张（U-10）。
 - 认证、令牌刷新、API 客户端来自平台提供的应用前端库（G12）。
 
 ### 7.2 商家后台（`quizbuks-web/sponsor`）
 
-- 同一工具链；左侧 7 项导航；中 / 英；深色模式（Radix Themes 的外观切换）；图表用平台选定的图表库（G11）。
+- 同一工具链与 `@jabiz/ui`；左侧 7 项导航；中 / 英；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
 
 ### 7.3 管理员后台（`/admin/`）
@@ -278,7 +278,7 @@ LIVE / PAUSED / FUNDS_SHORT ──到结束时间或名额 / 预算用完──�
 
 | 编号 | 能力 | QuizBuks 的用处 | 必须在哪个应用阶段前完成 |
 |---|---|---|---|
-| 阶段 15 | 后台前端改用 Radix Themes | 三个前端同一套组件与外观；扩展页 | 商家后台、管理员扩展页 |
+| 阶段 15 | 后台前端改用 shadcn/ui（D34） | 三个前端同一套组件与外观；扩展页 | 商家后台、管理员扩展页 |
 | G1 ★ | 登录入口（入口 → 角色、令牌只含入口角色的权限）、自助注册、邮箱验证、按邮箱登录、登录前应用检查 | 三个入口分开登录、注册、激活、封禁 | 账户阶段 |
 | G2 ★ | OIDC 自动开户（Google、Apple） | U-02 社交注册 | 账户阶段（可晚于邮箱注册） |
 | G3 ★ | 事务邮件（模板、Outbox、重试、偏好） | 激活、欢迎、转账结果 | 账户阶段 |
