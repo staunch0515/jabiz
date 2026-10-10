@@ -26,20 +26,20 @@ test.describe('sign-in and navigation', () => {
     })
 
     await signIn(page)
-    await expect(page.getByRole('menuitem', { name: `承运商菜单${code}` })).toBeVisible()
-    await page.getByRole('menuitem', { name: `承运商菜单${code}` }).click()
+    await expect(page.getByRole('link', { name: `承运商菜单${code}` })).toBeVisible()
+    await page.getByRole('link', { name: `承运商菜单${code}` }).click()
     await expect(page).toHaveURL(new RegExp(encodeURIComponent(CARRIERS)))
     await expect(page.getByTestId('page-title')).toHaveText('承运商')
 
     await chooseLanguage(page, '日本語', 'ja')
-    await expect(page.getByRole('menuitem', { name: `運送会社メニュー${code}` })).toBeVisible()
+    await expect(page.getByRole('link', { name: `運送会社メニュー${code}` })).toBeVisible()
     await expect(page.getByTestId('page-title')).toHaveText('運送会社')
     await chooseLanguage(page, 'English', 'en')
-    await expect(page.getByRole('menuitem', { name: `Carrier menu ${code}` })).toBeVisible()
+    await expect(page.getByRole('link', { name: `Carrier menu ${code}` })).toBeVisible()
 
     // A reload keeps the session (the refresh token lives in sessionStorage).
     await page.reload()
-    await expect(page.getByRole('menuitem', { name: `Carrier menu ${code}` })).toBeVisible()
+    await expect(page.getByRole('link', { name: `Carrier menu ${code}` })).toBeVisible()
 
     await signOut(page)
     await page.goto(datasetPath(CARRIERS))

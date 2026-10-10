@@ -26,7 +26,6 @@
 
 :root,
 .light {
-  color-scheme: light;
   --radius: 0.625rem;
   --background: #ffffff;
   --foreground: #0a0a0a;
@@ -68,7 +67,6 @@
 }
 
 .dark {
-  color-scheme: dark;
   --background: #0a0a0a;
   --foreground: #fafafa;
   --card: #18181b;
@@ -160,5 +158,12 @@
   :where(.jabiz-ui) {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+  /*
+   * Native controls and scroll bars follow the appearance inside the new components only: on <html> it would turn
+   * the canvas of the Ant Design pages dark too (phase 15d moves it to :root and .dark).
+   */
+  :where(.dark .jabiz-ui, .dark.jabiz-ui) {
+    color-scheme: dark;
   }
 }
