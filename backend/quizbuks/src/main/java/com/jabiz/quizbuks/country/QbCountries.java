@@ -35,7 +35,7 @@ public class QbCountries {
         eb.field("name", f -> f.physicalColumn("name").required(true)
             .apply(I18nText.of(100).required("en", "zh", "ja")));
         eb.field("regions", f -> f.physicalColumn("regions").required(true).asText(Regions.MAX_LENGTH)
-            .apply(Rules.pattern(REGIONS_FORMAT, Regions.SET.pattern())));
+            .apply(Rules.pattern(REGIONS_FORMAT, Regions.CANONICAL.pattern())));
         eb.unique("uk_qb_country_code", "code");
         eb.display("name");
         eb.temporal(t -> t.allowScheduled(false));

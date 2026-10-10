@@ -30,9 +30,12 @@ public final class Regions {
     /** The dictionary of the regions' names. */
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:region";
 
-    /** A written set of regions: one or more codes joined by commas. */
-    public static final Pattern SET = Pattern.compile("(" + String.join("|", ALL) + ")(,(" + String.join("|", ALL)
-        + "))*");
+    /**
+     * A set of regions in its one written form: GLOBAL first, then the others in the order of {@link #ALL}, each at
+     * most once, joined by commas. Checked on the server and, as a portable pattern, by the client too.
+     */
+    public static final Pattern CANONICAL = Pattern.compile(GLOBAL + ALL.stream().skip(1)
+        .map(region -> "(," + region + ")?").collect(Collectors.joining()));
 
     /** Longest written set: every region once. */
     public static final int MAX_LENGTH = String.join(",", ALL).length();

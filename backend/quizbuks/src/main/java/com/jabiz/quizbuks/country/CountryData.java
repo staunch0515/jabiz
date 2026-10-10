@@ -1,25 +1,25 @@
 package com.jabiz.quizbuks.country;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * The countries {@code QB_SETUP} brings in: every ISO 3166-1 country with its name in English, Chinese and Japanese
- * and the regions it belongs to, from {@value #RESOURCE}. The file lists only the regions beyond {@link Regions#GLOBAL}
- * ({@code ;}-separated); every country is in GLOBAL.
+ * Reads the country file {@value #RESOURCE}: every ISO 3166-1 country with its name in English, Chinese and Japanese
+ * and the regions it belongs to. The format has no quoting, so nothing in it can be misread: one country per line,
+ * five cells separated by {@code |} ({@code code|en|zh|ja|regions}), the regions beyond {@link Regions#GLOBAL}
+ * separated by commas (every country is in GLOBAL). Blank lines and lines starting with {@code #} are skipped; the
+ * first other line is the header. Pure: {@link CountryCatalog} loads the file and reports the problems at startup.
  */
 public final class CountryData {
 
-    public static final String RESOURCE = "quizbuks/countries.csv";
+    public static final String RESOURCE = "quizbuks/countries.txt";
+
+    static final String HEADER = "code|en|zh|ja|regions";
+    private static final List<String> LANGUAGES = List.of("en", "zh", "ja");
 
     /**
      * One country.
@@ -33,101 +33,81 @@ public final class CountryData {
         }
     }
 
-    private static final List<Country> COUNTRIES = load();
+    /** A problem of the file: the line (from 1) and what is wrong. */
+    public record Problem(int line, String message) {}
 
-    /** All countries, in the order of their codes. */
-    public static List<Country> all() {
-        return COUNTRIES;
-    }
-
-    private static List<Country> load() {
-        // Read once when the class loads (at startup), never on a request.
-        try (InputStream in = CountryData.class.getClassLoader().getResourceAsStream(RESOURCE)) {
-            if (in == null) {
-                throw new IllegalStateException("Missing resource " + RESOURCE);
-            }
-            return parse(new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)).lines().toList());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+    /** The countries read without problems, in file order, and every problem of the file. */
+    public record Result(List<Country> countries, List<Problem> problems) {
+        public Result {
+            countries = List.copyOf(countries);
+            problems = List.copyOf(problems);
         }
     }
 
-    /**
-     * Reads the lines of the file: a header {@code code,en,zh,ja,regions}, then one country per line.
-     *
-     * @throws IllegalArgumentException naming the line of the first problem
-     */
-    static List<Country> parse(List<String> lines) {
-        if (lines.isEmpty() || !List.of("code", "en", "zh", "ja", "regions").equals(cells(lines.getFirst()))) {
-            throw new IllegalArgumentException("The header must be code,en,zh,ja,regions");
-        }
+    /** Reads the lines of the file; never throws for its content, every problem is in the result. */
+    public static Result parse(List<String> lines) {
         List<Country> countries = new ArrayList<>();
+        List<Problem> problems = new ArrayList<>();
         Set<String> codes = new HashSet<>();
-        for (int i = 1; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.isBlank()) {
+        boolean header = false;
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i).strip();
+            int lineNo = i + 1;
+            if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
-            List<String> cells = cells(line);
-            int lineNo = i + 1;
-            if (cells.size() != 5) {
-                throw new IllegalArgumentException("Line " + lineNo + ": 5 cells expected, found " + cells.size());
+            if (!header) {
+                header = true;
+                if (!HEADER.equals(line.replace(" ", ""))) {
+                    problems.add(new Problem(lineNo, "the header must be " + HEADER));
+                }
+                continue;
             }
+            List<String> cells = Arrays.stream(line.split("\\|", -1)).map(String::strip).toList();
+            if (cells.size() != 5) {
+                problems.add(new Problem(lineNo, "5 cells separated by '|' expected, found " + cells.size()));
+                continue;
+            }
+            List<String> wrong = new ArrayList<>();
             String code = cells.get(0);
             if (!code.matches("[A-Z]{2}")) {
-                throw new IllegalArgumentException("Line " + lineNo + ": '" + code + "' is not a country code");
-            }
-            if (!codes.add(code)) {
-                throw new IllegalArgumentException("Line " + lineNo + ": " + code + " appears twice");
+                wrong.add("'" + code + "' is not a country code");
+            } else if (!codes.add(code)) {
+                wrong.add(code + " appears twice");
             }
             for (int c = 1; c <= 3; c++) {
-                if (cells.get(c).isBlank()) {
-                    throw new IllegalArgumentException("Line " + lineNo + ": " + code + " has no name in "
-                        + List.of("en", "zh", "ja").get(c - 1));
+                if (cells.get(c).isEmpty()) {
+                    wrong.add("no name in " + LANGUAGES.get(c - 1));
+                } else if (cells.get(c).contains("\"")) {
+                    wrong.add("the name in " + LANGUAGES.get(c - 1) + " holds a quote: the format has no quoting");
                 }
             }
-            String regions;
-            try {
-                regions = Regions.withGlobal(cells.get(4).isBlank() ? List.of() : List.of(cells.get(4).split(";")));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Line " + lineNo + ": " + e.getMessage(), e);
+            List<String> regions = cells.get(4).isEmpty() ? List.of()
+                : Arrays.stream(cells.get(4).split(",", -1)).map(String::strip).toList();
+            if (regions.contains("")) {
+                wrong.add("empty region in '" + cells.get(4) + "'");
+            }
+            List<String> unknown = regions.stream().filter(r -> !r.isEmpty() && !Regions.ALL.contains(r)).toList();
+            if (!unknown.isEmpty()) {
+                wrong.add("not regions: " + unknown);
+            }
+            if (regions.stream().distinct().count() != regions.size()) {
+                wrong.add("a region is listed twice in '" + cells.get(4) + "'");
+            }
+            if (regions.contains(Regions.GLOBAL)) {
+                wrong.add("GLOBAL is implied and not listed");
+            }
+            if (!wrong.isEmpty()) {
+                wrong.forEach(message -> problems.add(new Problem(lineNo, message)));
+                continue;
             }
             countries.add(new Country(code, Map.of("en", cells.get(1), "zh", cells.get(2), "ja", cells.get(3)),
-                regions));
+                Regions.withGlobal(regions)));
         }
-        return List.copyOf(countries);
-    }
-
-    /** The cells of one CSV line; a cell in double quotes may hold commas and doubled quotes. */
-    static List<String> cells(String line) {
-        List<String> cells = new ArrayList<>();
-        StringBuilder cell = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
-            char ch = line.charAt(i);
-            if (quoted) {
-                if (ch == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                    cell.append('"');
-                    i++;
-                } else if (ch == '"') {
-                    quoted = false;
-                } else {
-                    cell.append(ch);
-                }
-            } else if (ch == '"' && cell.isEmpty()) {
-                quoted = true;
-            } else if (ch == ',') {
-                cells.add(cell.toString().strip());
-                cell.setLength(0);
-            } else {
-                cell.append(ch);
-            }
+        if (!header) {
+            problems.add(new Problem(0, "the file is empty; the header must be " + HEADER));
         }
-        if (quoted) {
-            throw new IllegalArgumentException("Unclosed quote in: " + line);
-        }
-        cells.add(cell.toString().strip());
-        return cells;
+        return new Result(countries, problems);
     }
 
     private CountryData() {}

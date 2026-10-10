@@ -1,0 +1,5 @@
+# A country file with two bad rows (CountryDataTest).
+code|en|zh|ja|regions
+xx|Nowhere|无|なし|
+JP|Japan|日本|日本|ASIA,MARS
+KR|South Korea|韩国|韓国|ASIA
