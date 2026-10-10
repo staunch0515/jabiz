@@ -27,18 +27,23 @@ class QbRolesTest {
     void theSuperAdministratorHoldsWhatTheOtherAdministratorsHold() {
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
-            .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions())
+            .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions().stream()
+                .filter(permission -> !permission.equals("control.publish")).toList())
             .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.read", "control.propose",
                 "security.user-role.write")
             .doesNotHaveDuplicates();
     }
 
     @Test
-    void noRoleWritesParametersOrPublishesControlledChanges() {
-        // Parameters change through controlled changes (platform decision D40); the platform's administrator, or a
-        // role an administrator grants it to, publishes them.
+    void noRoleWritesParametersAndOnlyFinancePublishesControlledChanges() {
+        // Parameters change through controlled changes (platform decision D40): the super administrator proposes,
+        // the finance administrator publishes, and no role holds both.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
-            .doesNotContain("platform.param.write", "control.publish"));
+            .doesNotContain("platform.param.write"));
+        assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("control.publish"))
+            .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_FINANCE);
+        assertThat(QbRoles.all()).noneSatisfy(role -> assertThat(role.permissions())
+            .contains("control.propose", "control.publish"));
         // The sponsors' content datasets are read only; their write permission is held by nobody.
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain(QbPermissions.SPONSOR_VIEW_WRITE));

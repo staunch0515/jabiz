@@ -43,9 +43,8 @@ public final class QbRoles {
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
      * users and roles. No role writes parameters directly: the controlled ones change only through controlled changes
-     * (platform decision D40), and the others are only the AI model and the oldest app version. Nobody holds
-     * {@code control.publish} by default: the platform's administrator (or a role an administrator grants it to)
-     * publishes, so one person never both proposes and publishes.
+     * (platform decision D40), and the others are only the AI model and the oldest app version. The super
+     * administrator proposes controlled changes but does not publish them: see {@link #PUBLISH}.
      */
     private static final List<String> SUPER = List.of(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN,
         "platform.param.read", "control.propose",
@@ -53,6 +52,13 @@ public final class QbRoles {
         "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",
         "security.role.read", "security.role.write", "security.user-role.read", "security.user-role.write",
         "security.menu.read", "security.menu.write", "security.login-record.read", "security.access-review.read");
+
+    /**
+     * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance
+     * administrator alone, so the super administrator who proposes them is never also the one who publishes. Kept
+     * apart from {@link #FINANCE} because the super administrator's role is built from that list.
+     */
+    private static final List<String> PUBLISH = List.of("control.publish");
 
     private static final Map<String, Role> ROLES = new LinkedHashMap<>();
 
@@ -64,7 +70,7 @@ public final class QbRoles {
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
-        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE);
+        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,
             SUPER);
     }

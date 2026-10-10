@@ -108,7 +108,7 @@
   （输出 `paramsProposed` / `proposals`），由另一位管理员 `CONTROL_CHANGE_PUBLISH` 发布；撤回的提案不再提出（`QbSetupRecord`）。
   `QB_ADMIN_SUPER` 不再有 `platform.param.write`（保留 `platform.param.read`、`control.propose`）。`QB_SETUP` 只增不减，所以**已有安装中的这项授权要由管理员收回一次**
   （角色权限页面删除 `QB_ADMIN_SUPER` 的 `platform.param.write`）；之后 `QB_SETUP` 不会加回。
-  默认没有 QuizBuks 角色持有 `control.publish`：发布由平台管理员（或管理员另行授权的人）执行。建议以后把它授予 `QB_ADMIN_FINANCE`（金额参数由财务复核），待需求方确认。
+  `control.publish` 只授予 `QB_ADMIN_FINANCE`（2026-10-10 确认，Q3 的 PR 中实施）：超级管理员提议、财务管理员发布；已有安装再执行一次 `QB_SETUP` 即补上该授权。
   注意：首次安装若只有一个平台管理员，他执行 `QB_SETUP` 后不能发布自己的提案，受控参数要等第二个管理员发布后才有值（Q5、Q6 之前须完成）。
 - 首次 `QB_SETUP` 写约 600 行（249 国及每项的记录），本机约 10 秒；之后的运行几乎不写。
 
