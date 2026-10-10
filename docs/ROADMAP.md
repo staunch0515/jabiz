@@ -1032,3 +1032,139 @@ finance F11 的 FIN-DI-007（Should）：把发票过账等事件以 webhook 通
 - [x] 现有全部检查照常通过。
 - 已知限制：导出、PDF 与签发的报表仍是编号；元数据生成的数据页面中的用户编号字段（如审批请求的准备人）仍显示编号；没有显示名的用户对别人显示编号
   （不给出登录名）；改名后旧页面在刷新前显示旧名（名字按会话缓存）。
+
+---
+
+## 阶段 15：后台前端改用 shadcn/ui（线 1.2）
+
+决策 D34。目标：通用后台不再依赖 Ant Design；平台前端拆出 `@jabiz/client`（无界面）与 `@jabiz/ui`（shadcn 组件与组合组件），供后台、扩展与应用自有 SPA 共用。
+现状（迁移的范围）：`frontend/src` 中 62 个文件、约 6 700 行引用 antd / ProComponents / icons；`api/*`、`auth/AuthContext`、`useIdleLock`、`oidc`、`i18n/*`、
+`lib/*`、`meta/*`（`columns.ts` 除外）已不依赖 antd。
+
+| 子阶段 | 内容 | 预估 |
+|---|---|---|
+| 15a | 基础：工作区与两个包、Tailwind v4 与主题、shadcn 基础组件、组合组件（数据表格、表单字段、日期、金额、确认、提示）、页面外壳、step-up 对话框、检查脚本 | 5–7 天 |
+| 15b | 元数据生成的页面：登录与二次验证、单点登录回调、数据视图目录与列表、表单抽屉与字段、子实体列表、文件字段、历史、流程目录与表单、行操作 | 5–7 天 |
+| 15c | 其余页面：待办、报表与存档、单据、导入、审计、访问审查、防篡改、保留与导出、账户安全；示范扩展 | 5–7 天 |
+| 15d | 删除 antd、ProComponents、icons 与 React 19 补丁；e2e 与 a11y 选择器全部改为角色 / 名称；文档（12、`guide/admin-extension.md`、功能清单） | 2–3 天 |
+
+### 15a 基础（5–7 天）
+
+**要求**
+1. **工作区**：`frontend/` 成为 pnpm 工作区（`pnpm-workspace.yaml`：`packages/*`），新增 `packages/client`（`@jabiz/client`）与 `packages/ui`（`@jabiz/ui`），
+   均以源码导出（`package.json` 的 `exports` 指向 `src/index.ts`），平台前端以 `workspace:` 依赖它们。一个 lockfile 不变。
+2. **`@jabiz/client`**：从 `src/` 迁入 `api/client.ts`、`session.ts`、`problem.ts`、`files.ts`、`auth/AuthContext.tsx`、`useIdleLock.ts`、`oidc.ts`、`i18n/*` 的初始化部分、
+   `lib/calls.ts`（`runQuery` / `runProcess`）、`meta/format.ts`、`decimal.ts`（格式化）与 `UserName`；金额格式化接受应用给出的显示单位。
+   平台前端原位置改为从包中引用；行为不变（现有测试随文件迁移并照常通过）。
+3. **`@jabiz/ui`**：
+   - Tailwind CSS v4（`@tailwindcss/vite`）；`theme.css` 定义 shadcn 语义 token（亮色与 `.dark`），对比度按 WCAG 2.2 AA 选定（沿用 `ACCESSIBLE_THEME` 的取值依据）；
+     `cn()`（`clsx` + `tailwind-merge`）；`components.json`（shadcn CLI 只在此包中运行）。
+   - shadcn 基础组件：button、input、textarea、label、checkbox、radio-group、switch、select、dialog、sheet、dropdown-menu、popover、tooltip、tabs、badge、card、alert、
+     separator、skeleton、table、pagination、command（组合框）、calendar、form（react-hook-form）、sonner、sidebar、breadcrumb、avatar、scroll-area、chart（Recharts）。
+   - 组合组件：`DataTable`（TanStack Table；远程分页 / 排序 / 筛选由调用方控制；可展开行带"展开行 / 收起行"名称的按钮；空状态文字对比度达标）、
+     `ConfirmDialog`、`notify`（sonner 封装，取代 `App.useApp().message`）、`DateTimePicker` / `DatePicker`（react-day-picker，按界面语言与区域）、
+     `DecimalInput` / `MoneyInput`（字符串十进制，复用 `meta/decimal`）、`ThemeToggle`（亮 / 暗 / 跟随系统，存于 `localStorage`，失败时退回跟随系统）、`PageHeader`、`AppShell` 积木。
+   - 文案经 i18next（命名空间 `ui`，三语）。
+4. **共存**：迁移期间 antd 页面照常工作。Tailwind 的 preflight 只作用于新组件的作用域（`@layer` 顺序 + 作用域类），15d 删除 antd 后改为全局；
+   新组件不依赖 antd 的 `ConfigProvider`，antd 页面不受 Tailwind 影响（以视觉回归截图对比登录页、列表页、表单抽屉确认）。
+5. **页面外壳**：`layout/AppLayout.tsx` 由 ProLayout 改为 `@jabiz/ui` 的侧栏外壳（菜单树、任务徽标、数据期限标签、语言与外观切换、账户菜单）；
+   `auth/StepUp.tsx` 改为 `Dialog`。`extension/registry.ts` 不再返回 ProComponents 的 `MenuDataItem`，改为平台自己的菜单类型；`ExtensionMenuItem.icon` 改为 lucide 图标组件。
+6. **`@jabiz/admin`**（D22）：在两个包之上重新导出；增加 `@jabiz/ui` 的组件（扩展只经 `@jabiz/admin` 引用，规则不变）；扩展 lint 不再允许直接引用 `antd`（15c 前示范扩展豁免）。
+7. **应用 SPA 的检查脚本** `pnpm app:check <目录>`：比对应用 `package.json` / lockfile 中 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`
+   以及 `@jabiz/ui` 运行时依赖的版本与平台一致，不一致即失败；附测试。
+8. **构建**：`BootAppPlugin` 的 `spaBuild` 输入加入 `packages/**` 与 `pnpm-workspace.yaml`；CI `frontend` 作业照旧（工作区由 `pnpm install` 一并安装）。
+
+**改动**：`frontend/package.json`、`pnpm-workspace.yaml`、`packages/{client,ui}/**`、`vite.config.ts`（Tailwind 插件、dedupe）、`tsconfig*.json`（包路径）、`src/index.css`、
+`src/App.tsx`（外观提供者、`Toaster`）、`src/layout/AppLayout.tsx`、`src/auth/StepUp.tsx`、`src/extension/registry.ts`、`src/lib/index.ts`、`scripts/extension-lint.mjs`、
+`scripts/app-check.mjs`、`backend/build-logic/.../BootAppPlugin.kt`、`e2e/support.ts`（外壳的选择器）。无后端改动、无迁移。
+
+**测试**
+- `@jabiz/ui`：每个组合组件的 Vitest（渲染、键盘操作、名称与角色）；以 `vitest-axe` 对每个组件在亮、暗两种外观下检查，任何违规即失败。
+- `DataTable`：远程分页 / 排序回调、展开行按钮的名称、空状态。`ThemeToggle`：三种取值、`localStorage` 不可用时的退回。
+- `@jabiz/client`：迁入的现有测试全部通过（刷新、step-up、闲置锁定、OIDC、格式化）；金额显示单位。
+- `app:check`：版本一致通过、任一不一致失败。
+- 外壳：菜单树（服务端菜单 + 扩展 + 固定项按权限）、任务徽标、语言与外观切换、闲置锁定（替换 `AppLayout` 的现有测试）。
+- e2e：现有全部 Playwright 用例通过；`a11y.spec.ts` 增加暗色外观下的同一组页面。
+
+**风险**：Tailwind preflight 与 antd 样式冲突（以作用域 preflight 与截图对比控制）；共存期间包体积增大（15d 后回落，记录 15a 前后的产物大小）；
+shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`）。
+
+**验收标准**
+- [ ] `frontend/` 为 pnpm 工作区，`@jabiz/client`、`@jabiz/ui` 可被平台前端与示范扩展引用；`pnpm lint`、`typecheck`、`test`、`build`、`check:api`、`ext:check` 全部通过。
+- [ ] 后台外壳与 step-up 对话框已不依赖 antd；其余页面仍为 antd 且功能不变（现有 e2e 全部通过）。
+- [ ] 组合组件在亮、暗两种外观下 axe 无违规；后台主要页面在暗色外观下 axe 无违规（新外壳部分）。
+- [ ] `pnpm app:check` 能发现版本不一致。
+- [ ] `./gradlew check` 通过（含 `:app:bootJar` 的前端构建）。
+
+### 15b – 15d
+
+详细计划在开工前给出（CLAUDE.md 第 7 节）。15b 与 15c 可并行。15d 的验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；
+12 与扩展指南改写完毕。
+
+## 阶段 16：应用所需的通用能力（由 QuizBuks 提出，线 1.2）
+
+决策 D35–D39；来源：`1.2/quizbuks` 的 `docs/quizbuks/01-requirements-analysis.md` 第 3 节（G1–G12）。
+
+| 子阶段 | 内容 | 决策 | 预估 | 依赖 |
+|---|---|---|---|---|
+| 16a | 事务邮件 | D35 | 3–4 天 | — |
+| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源 | D36 | 5–7 天 | 16a |
+| 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
+| 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
+| 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
+| 16f | OIDC 自动开户（Google、Apple） | D39 | 3–4 天 | 16b |
+| 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
+
+### 16a 事务邮件（3–4 天）
+
+现状：邮件只有待办通知（`TASK_NOTIFY`，`AFTER_COMMIT` 进程内重试）与单据发送；`NotificationSender` 只发纯文本；`sys_notification` 必须关联待办；
+没有 Markdown 渲染库；`SecUser` 没有语言字段；一次性令牌的工具 `SingleUseSecrets` 是 `security` 包内私有的。
+
+**要求**
+1. **模板** `MailTemplate`（core）：`MailTemplate.define(名称, t -> t.category(TRANSACTIONAL | NOTIFICATION).param("…")….token("verify", Duration))`；
+   名称规则同事件名。标题与正文在消息 `mail.<名>.subject` / `mail.<名>.body`（应用所选的每种语言）；正文 Markdown，可用占位符：声明的参数、令牌、内置的 `{baseUrl}`、`{unsubscribeUrl}`（仅 NOTIFICATION）。
+2. **渲染**（core，`MailRenderer`）：以 commonmark-java 把正文渲染为 HTML（转义原始 HTML、清理链接），参数在渲染后代入——HTML 部分按 HTML 转义，纯文本部分原样；标题为纯文本、去换行、截断 300。
+3. **步骤** `SendMail.of(模板, 收件人函数, 参数函数)` / `SendMail.when(…)`（runtime，平台 I/O 步骤，模式同 `PublishEvent` / `CreateTask`）：
+   收件人为用户（取其邮箱与语言）或地址加语言；在流程事务内写 `sys_mail_message`（遮蔽 `@Sensitive` 的参数），并 `PublishEvent("jabiz.mail.queued", {messageId})`。
+   用户没有邮箱时登记违规 `MAIL_NO_ADDRESS`（流程可用 `when` 跳过）。`problems()` 检查模板存在、参数名与声明一致。
+4. **投递**：平台消费者 `jabiz.mail` → 系统流程 `MAIL_SEND`：已有 `SENT` 尝试则跳过；`jabiz.mail.enabled=false` 或收件人已退订（NOTIFICATION）→ 记 `SKIPPED`；
+   否则生成令牌（阻塞步骤取随机数，只存 SHA-256，同一消息的旧令牌作废）→ 渲染 → 经 `NotificationSender.send(MailMessage)` 发送（`MailMessage` 增加 `htmlBody`，
+   `SmtpNotificationSender` 发送 multipart/alternative）→ 记 `SENT`。发送失败：在**独立事务**中记 `FAILED`（同 `OutboxDeliverer.recordFailure` 的做法）后使流程失败，
+   由 Outbox 的退避重试（D14）重发。SMTP 设连接 / 读写超时（缺省 10 秒）。
+5. **令牌的使用**：`MailTokens.consume(用途, 令牌)`（平台 I/O 步骤）：按哈希查找、检查用途、未过期、是该消息最新的令牌、未用过（`sys_mail_token_use` 主键保证只用一次），
+   返回收件用户与地址；失败统一为 422 `TOKEN_INVALID`。供 D36 的验证邮箱与找回密码使用。
+6. **语言**：`SecUser.locale`（可选，平台语言之一，用户可在账户设置中修改）；缺省为平台缺省语言。
+7. **退订**：`SecUserMailPreference`（时态，用户 × 模板 → 是否接收）；NOTIFICATION 邮件带签名的退订链接（`JwtService` 新类型 `jabiz-unsub+jwt`，用户 + 模板，无过期）；
+   `POST /api/auth/mail/unsubscribe`（匿名，令牌即凭证，幂等）；后台账户设置中可查看与修改订阅（`@jabiz/client` 提供接口，页面在 15c 或 16c 加入）。
+8. **查询**：`sys_mail_message` 为平台实体 `MailMessage`（数据视图只读，权限 `mail.read`，`processOnlyWrites()`），附最近一次尝试的结果；场景回放可在快照中看到。
+9. **示范**：`backend/app` 的一个流程（订单发货）给客户发 NOTIFICATION 邮件，带消息三语。
+10. 不迁移 `TASK_NOTIFY` 与单据发送（行为不变）；以后另议。
+
+**表与迁移**（`db/jabiz/V31__mail.sql`，并加入 `PlatformSchemaMigration.PLATFORM_TABLES`）：
+`sec_user_version` 加 `locale varchar(10)`；`sys_mail_message`（只追加；消息号、模板、类别、收件用户、地址、语言、遮蔽后的参数 `jsonb`、`process_seq_id`、时间）；
+`sys_mail_attempt`（只追加；主键（消息号, 次序），`SENT` / `FAILED` / `SKIPPED`、错误、时间）；`sys_mail_token`（只追加；主键 `token_hash char(64)`，消息号、用途、用户、地址、签发与过期时间）；
+`sys_mail_token_use`（只追加；主键 `token_hash`，使用时间、`process_seq_id`）；`sec_user_mail_preference_version`（时态，唯一（用户, 模板））。全部 `jabiz_protect_append_only`，均有主键（D27 封存）。
+
+**改动**：core `com.jabiz.mail`（`MailTemplate`、`MailCategory`、`MailRenderer`、占位符检查）；runtime `com.jabiz.runtime.mail`（`SendMail`、`MailProcesses`（`MAIL_SEND`、消费者）、
+`MailTokens`、`MailChecks`（模板与消息、启用时的发送器，合并现有 `task/MailChecks` 的内容）、`MailEntities`、`MailUnsubscribeController`）；`task/MailMessage` 与 `SmtpNotificationSender`（HTML 部分）；
+`security/SingleUseSecrets` 改为公开的工具类（移到 `com.jabiz.runtime.security.secret`）；`SecurityEntities`（`locale`、`SecUserMailPreference`）；`JwtService`（退订令牌类型）；
+`runtime/build.gradle.kts`（`org.commonmark:commonmark`）；平台消息三语（`MAIL_NO_ADDRESS`、`TOKEN_INVALID`、实体与字段名）；设计 18 §5.6（新）、10、功能清单 §7。
+
+**测试**
+- core：模板声明的校验（名称、重复参数、令牌用途）；渲染（Markdown → HTML、原始 HTML 被转义、`javascript:` 链接被清理、参数在 HTML 中转义、纯文本部分）；占位符与声明的一致性（多余 / 缺少）。
+- runtime 单元：`MailChecks`（缺消息的语言、未声明的占位符、启用而无发送器）。
+- 集成（GreenMail，`backend/app`）：`MailIT`——流程提交后投递一次、主题与正文按收件人语言、HTML 与纯文本两部分；流程回滚则无消息无邮件；
+  邮件关闭时记 `SKIPPED` 且不发送；首次发送失败记 `FAILED`、Outbox 重试后 `SENT`、不重复发送；令牌只存哈希（库中查不到原文）、重发后旧令牌无效、令牌只能用一次、过期无效、用途不符无效；
+  退订后 NOTIFICATION 记 `SKIPPED`、TRANSACTIONAL 照发；退订令牌被篡改即拒绝；`sys_mail_*` 表上没有执行过 UPDATE / DELETE。
+- 场景回放：示范流程的场景，快照中含邮件消息（`SKIPPED`，测试中邮件关闭）。
+- `PlatformSchemaMigrationTest`、启动检查、ArchUnit 照常通过；OpenAPI 快照更新（退订接口）与 `pnpm gen:api`。
+
+**风险**：投递流程在事务中调用 SMTP，慢服务器会占用连接（以超时与 `jabiz.events.delivery.batch-size` 控制，记录在 18 §5.6）；
+commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素，不做模板样式）。
+
+**验收标准**
+- [ ] 应用以 `MailTemplate` Bean 与消息声明模板，流程中 `SendMail` 发出；缺消息、占位符不符在启动时报告。
+- [ ] 邮件经 Outbox 投递：回滚不发、失败重试、已发送不重发；关闭时 `SKIPPED`。
+- [ ] 一次性令牌只在发送时生成，库中只有哈希；只能用一次、过期与重发后失效。
+- [ ] 按收件人语言渲染；NOTIFICATION 可经签名链接退订，TRANSACTIONAL 不可。
+- [ ] 示范应用有一个可运行的例子；`./gradlew check` 通过。
