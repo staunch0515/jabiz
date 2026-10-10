@@ -287,7 +287,8 @@ WHERE NOT v.is_deleted AND <范围条件> AND <查询条件>
 费率、门槛等不应由一个人修改的参数，由应用以 Bean `ControlledParams.of(键…)` 声明为受控（键可以尚不存在；格式错误由启动检查 `PARAM` 一次报告）。
 受控键的一切写入——上述四个流程、数据视图、通用实体流程、其他流程的 `ChangeSet`、撤销——一律 422 `PARAM_CONTROLLED`（检查在 `VersionAppender` 中，覆盖所有时态写入途径），
 只经受控变更（18 §3.5）：`CONTROL_CHANGE_PROPOSE` 以 `targetEntity: SysParam`、`values: {paramKey, value?, description?, valueKind?（新建时）}`、可选 `effectiveTime`（预定）提出，
-`delete: true` 加 `effectiveTime` 取消预定值；由他人以 `CONTROL_CHANGE_PUBLISH` 发布后才写入（普通的参数版本，历史与审计照常）。是否受控只在代码中，运行时不能解除。
+`delete: true` 加 `effectiveTime` 取消预定值；由他人以 `CONTROL_CHANGE_PUBLISH` 发布后才写入（普通的参数版本，历史与审计照常）。
+发布的那一次写入带平台生成的许可（绑定键与发布操作），守卫只放行它，而不看流程名。是否受控只在代码中，运行时不能解除。
 
 ## 10. 归档与个人信息
 

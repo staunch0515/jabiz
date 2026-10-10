@@ -1196,20 +1196,23 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 **要求**（决策 D40）
 1. 应用以 Bean `ControlledParams.of(键…)`（core）事先声明受控的参数键；是否受控只在代码中，数据里没有可改的标记。
 2. 受控键的一切写入（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`、数据视图、通用实体流程、业务流程的 `ChangeSet`、撤销操作）一律 422 `PARAM_CONTROLLED`（三语），
-   只有 `CONTROL_CHANGE_PUBLISH` 能写（平台在 `VersionAppender` 中检查，覆盖所有时态写入途径）。
+   只有发布已批准变更时那一次带许可（`ChangeSet` 的 `grant`）的写入能通过（平台在 `VersionAppender` 中检查，覆盖所有时态写入途径；不凭流程名）。
 3. `CONTROL_CHANGE_PROPOSE` 可以 `targetEntity: SysParam`：`values` 为 `paramKey`、`value`、可选 `description`（新建时另加 `valueKind`），`effectiveTime` 为预定时间；
-   `delete: true` 加 `effectiveTime` 取消该时间的预定值。提出与发布时都按参数的类型检查值（422 `CONTROL_CHANGE_INVALID`）；发布人不能是提出人。
+   `delete: true` 加 `effectiveTime` 取消该时间的预定值（没有预定值即 422 `NOT_SCHEDULED`）。提出与发布时都按参数的类型检查值，并做写入时同样的字段校验；
+   提案记下所基于的参数，发布时已不是它即 422 `CONTROL_TARGET_CHANGED`（新增错误码）；发布人不能是提出人。
+   受控变更的目标统一为接口 `ControlTarget`（`ApprovalControlTarget`、`ParamControlTarget`）。
 4. 启动检查 `PARAM`：声明的键格式不对即报错（全部一次报告）；尚不存在的键不是问题。
 5. 示范：`backend/app` 把 `logistics.fuel-surcharge-rate` 声明为受控；场景 `freight/monthly_close` 改为经受控变更新建与预定，并演示直接 `PARAM_SET` 被拒。
 
 **改动**：core `com.jabiz.param.ControlledParams`、`PlatformErrorCodes.PARAM_CONTROLLED` 与三语消息；runtime `param`（`ControlledParamRegistry`、`ControlledParamGuard`、`ParamChecks`、
-受控变更的参数部分 `ParamControlChanges`）、`temporal`（`TemporalWriteGuard` 接口，`VersionAppender` 调用）、`approval`（`ControlChanges`、`LoadControlTarget` 支持 `SysParam`）；
+受控变更的参数目标 `ParamControlTarget`、写入许可 `ParamWriteGrant`）、`temporal`（`TemporalWriteGuard` 接口，`VersionAppender` 调用）、`approval`（`ControlTarget` 接口、`ApprovalControlTarget`、`ControlChanges`、`LoadControlTarget`）、core `ChangeSet` 的 `grant`；
 `app` 的声明与场景；文档 09 D40、04 §9、18 §3.5、功能清单、CLAUDE.md 第 4 节"审批与职责分离"。没有迁移。
 
 **测试**
 - core：`ControlledParamsTest`（键格式、合并、问题列表）。
 - runtime 单元：`ControlledParamsChecksTest`（格式错误一次全部报告、不存在的键不报；写入守卫只放行 `CONTROL_CHANGE_PUBLISH`）。
-- 集成 `ControlledParamIT`（本地库）：直接修改被拒（四个流程、数据视图、撤销）；提出 + 发布立即生效与预定生效（历史、审计照常）；取消预定；同一人不能发布；提出时值不合类型被拒；
+- 集成 `ControlledParamIT`（本地库）：直接修改被拒（四个流程、数据视图、通用实体流程）；提出 + 发布立即生效与预定生效（历史、审计照常）；取消预定（无预定时提出即拒、发布时再查）；
+  同一人不能发布；提出时值不合类型、说明过长被拒；两个新建提案竞争时后发布者 `CONTROL_TARGET_CHANGED`；以子流程发布的业务流程自己写受控键被拒；
   不能经数据视图删除再新建、改键等方式解除受控；未受控的键不能用受控变更。
 - 场景回放：`freight/monthly_close` 与 `ScenarioAcceptanceIT` 的内联场景改用受控变更，快照更新。
 

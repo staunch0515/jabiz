@@ -165,8 +165,11 @@
 规则按业务时间生效：预定在将来生效的修改，只影响业务时间在其后的案件。
 
 **业务参数**（【D40】）：`targetEntity: SysParam`，以 `values.paramKey` 指定参数（不给 `targetId`）；`values` 可有 `value`、`description`，参数尚不存在时另给 `valueKind` 即新建；
-`effectiveTime` 须晚于当时（422 `EFFECTIVE_TIME_NOT_FUTURE`，发布时再检查一次）；`delete: true` 加 `effectiveTime` 取消该时刻的预定值。
-提出与发布时都按参数类型检查并规范化值（422 `PARAM_VALUE_INVALID`）；只能用于受控的键。发布以参数在生效时刻的版本为基础写入新版本。
+`effectiveTime` 须晚于当时（422 `EFFECTIVE_TIME_NOT_FUTURE`，发布时再检查一次）；`delete: true` 加 `effectiveTime` 取消该时刻的预定值（没有预定值即 422 `NOT_SCHEDULED`，提出与发布时都查）。
+提出与发布时都按参数类型检查并规范化值（422 `PARAM_VALUE_INVALID`），并做写入时同样的字段校验；只能用于受控的键。提案记下所基于的参数（新建则无），
+发布时参数已不是那个即 422 `CONTROL_TARGET_CHANGED`。发布以参数在生效时刻的版本为基础写入新版本，这一次写入带平台生成的许可，是受控参数唯一能通过的写入。
+
+实现：每类目标是一个 `ControlTarget` Bean（runtime `approval`：加载所基于的状态、检查提案、检查并登记发布的写入）；审批规则、限额、职责分离规则为 `ApprovalControlTarget`，参数为 `ParamControlTarget`。
 
 ### 3.6 影响预览
 

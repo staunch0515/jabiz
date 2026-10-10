@@ -120,6 +120,8 @@ public final class PlatformErrorCodes {
     public static final String CONTROL_CHANGE_INVALID = "CONTROL_CHANGE_INVALID";
     public static final String CONTROL_CHANGE_NOT_PROPOSED = "CONTROL_CHANGE_NOT_PROPOSED";
     public static final String CONTROL_SAME_PERSON = "CONTROL_SAME_PERSON";
+    /** The instance a change was proposed for is no longer the one it would change (decision D40). */
+    public static final String CONTROL_TARGET_CHANGED = "CONTROL_TARGET_CHANGED";
     /** 422 where access is given; 403 at the entry of a process. */
     public static final String SOD_CONFLICT = "SOD_CONFLICT";
     /** The second factor code (or recovery code) is wrong, or the account is locked (10 section 9). */
@@ -182,7 +184,7 @@ public final class PlatformErrorCodes {
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
-        CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, SOD_CONFLICT,
+        CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,

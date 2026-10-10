@@ -130,8 +130,7 @@ steps:
       ruleCode: FREIGHT_MONTH_CLOSED
       field: waybillId
 
-  - note: A rise to 20 % from March is scheduled, then cancelled, both with four eyes; cancelling twice finds nothing
-      scheduled.
+  - note: A rise to 20 % from March is scheduled, then cancelled, both with four eyes.
     actor: { id: rate-setter, permissions: [control.propose] }
     process: CONTROL_CHANGE_PROPOSE@latest
     input:
@@ -163,19 +162,16 @@ steps:
     process: CONTROL_CHANGE_PUBLISH@latest
     input: { changeId: "${cancelMarch}" }
   - expect: { param: logistics.fuel-surcharge-rate, asOf: 2026-03-01T00:00:00+09:00, value: 0.15 }
-  - actor: { id: rate-setter, permissions: [control.propose] }
-    process: CONTROL_CHANGE_PROPOSE@latest
-    input:
-      targetEntity: SysParam
-      reason: Rise withdrawn
-      values: { paramKey: logistics.fuel-surcharge-rate }
-      delete: true
-      effectiveTime: 2026-02-28T15:00:00Z
-    save: { cancelAgain: $.changeId }
-  - expectError:
-      actor: { id: rate-approver, permissions: [control.publish] }
-      process: CONTROL_CHANGE_PUBLISH@latest
-      input: { changeId: "${cancelAgain}" }
+  - note: Nothing is scheduled then any more, so cancelling again is refused as soon as it is proposed.
+    expectError:
+      actor: { id: rate-setter, permissions: [control.propose] }
+      process: CONTROL_CHANGE_PROPOSE@latest
+      input:
+        targetEntity: SysParam
+        reason: Rise withdrawn
+        values: { paramKey: logistics.fuel-surcharge-rate }
+        delete: true
+        effectiveTime: 2026-02-28T15:00:00Z
       status: 422
       ruleCode: NOT_SCHEDULED
   - note: Proposals are checked at once against the time and the parameter's kind.

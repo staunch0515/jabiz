@@ -20,8 +20,10 @@ public interface TemporalWriteGuard {
      * @param timeline  the versions of the instance as stored now (empty for an insertion)
      * @param versions  the versions the write would insert, the written one first
      * @param operation the operation writing them
+     * @param grant     what the platform attached to this one write to let it pass
+     *                  ({@code ChangeSet.Change#grant()}); null for ordinary writes
      * @return why the write is refused (422); empty to let it pass
      */
     List<Violation> check(EntityDefinition def, Timeline timeline, List<PlannedVersion> versions,
-        Operation operation);
+        Operation operation, Object grant);
 }

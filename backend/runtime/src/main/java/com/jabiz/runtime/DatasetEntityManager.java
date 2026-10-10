@@ -666,6 +666,21 @@ public class DatasetEntityManager {
         });
     }
 
+    /**
+     * Whether something takes effect at {@code time} for the temporal instance {@code id}: what a cancellation of the
+     * version scheduled then needs (docs/design/04 section 4.1); false when nothing is or it was cancelled already.
+     */
+    public Mono<Boolean> hasChangeAt(DatasetDefinition dataset, EntityDefinition def, java.util.UUID id,
+        Instant time) {
+        if (!def.temporal) {
+            return Mono.error(notTemporal(def));
+        }
+        StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
+        Instant at = time.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        return temporalStore.load(engine, queryCompiler.resolveTable(dataset, def), def, id)
+            .map(versions -> Timeline.of(versions).hasChangeAt(at));
+    }
+
     /** Whether values lie within the resolved scope of the dataset (always true for other entities). */
     static boolean withinScope(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> scope,
         Map<String, Object> values) {

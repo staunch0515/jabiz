@@ -2,7 +2,6 @@ package com.jabiz.runtime.param;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.param.ControlledParams;
-import com.jabiz.runtime.approval.ControlChanges;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.temporal.EntityVersion;
@@ -54,23 +53,62 @@ class ControlledParamsChecksTest {
     }
 
     @Test
-    void onlyAPublishedControlChangeWritesAControlledParameter() {
+    void onlyTheGrantedWriteOfAControlledParameterPasses() {
         ControlledParamGuard guard = new ControlledParamGuard(registry(ControlledParams.of("quiz.fee")));
         Timeline stored = Timeline.of(List.of(version("quiz.fee")));
         List<PlannedVersion> update = List.of(planned("quiz.fee"));
 
-        List<Violation> refused = guard.check(ParamEntities.SYS_PARAM, stored, update, operation("PARAM_SET"));
+        List<Violation> refused = guard.check(ParamEntities.SYS_PARAM, stored, update, operation("PARAM_SET", 7),
+            null);
         assertThat(refused).singleElement().satisfies(v -> {
             assertThat(v.ruleCode()).isEqualTo("PARAM_CONTROLLED");
             assertThat(v.params()).containsEntry("key", "quiz.fee");
         });
-        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation(ControlChanges.PUBLISH))).isEmpty();
+        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation("CONTROL_CHANGE_PUBLISH", 7),
+            new ParamWriteGrant("quiz.fee", 7))).isEmpty();
+        // The name of the operation does not matter: a write without the grant of its publication is refused.
+        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation("CONTROL_CHANGE_PUBLISH", 7),
+            null)).hasSize(1);
+        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation("CONTROL_CHANGE_PUBLISH", 7),
+            "anything else")).hasSize(1);
+        // A grant is for its key and its operation only.
+        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation("CONTROL_CHANGE_PUBLISH", 7),
+            new ParamWriteGrant("quiz.other", 7))).hasSize(1);
+        assertThat(guard.check(ParamEntities.SYS_PARAM, stored, update, operation("CONTROL_CHANGE_PUBLISH", 8),
+            new ParamWriteGrant("quiz.fee", 7))).hasSize(1);
         // A creation names the key in the written version only; the dataset API writes as DATASET_COMMIT.
         assertThat(guard.check(ParamEntities.SYS_PARAM, Timeline.of(List.of()), update,
-            operation("DATASET_COMMIT"))).hasSize(1);
+            operation("DATASET_COMMIT", 7), null)).hasSize(1);
         // Other keys and other entities pass.
         assertThat(guard.check(ParamEntities.SYS_PARAM, Timeline.of(List.of(version("quiz.other"))),
-            List.of(planned("quiz.other")), operation("PARAM_SET"))).isEmpty();
+            List.of(planned("quiz.other")), operation("PARAM_SET", 7), null)).isEmpty();
+    }
+
+    @Test
+    void kindsAreTheSameWhateverTheirForm() {
+        Map<String, Object> stored = new java.util.TreeMap<>(Map.of("type", "numeric", "precision", 5, "scale", 4));
+        Map<String, Object> reordered = new java.util.LinkedHashMap<>();
+        reordered.put("scale", 4);
+        reordered.put("precision", 5L);
+        reordered.put("type", "numeric");
+        assertThat(ParamControlTarget.sameKind(reordered, stored)).isTrue();
+        // Text is not a number: such a kind is malformed and the same as none, whatever its text reads like.
+        reordered.put("precision", "5");
+        assertThat(ParamControlTarget.sameKind(reordered, stored)).isFalse();
+        assertThat(ParamControlTarget.sameKind("{\"scale\": 4, \"type\": \"numeric\", \"precision\": 5}", stored))
+            .isTrue();
+        Map<String, Object> code = new java.util.LinkedHashMap<>();
+        code.put("allowedValues", List.of("A", "B"));
+        code.put("type", "code");
+        code.put("dictUrn", "urn:it:dict:grade");
+        assertThat(ParamControlTarget.sameKind(code, Map.of("dictUrn", "urn:it:dict:grade", "type", "code",
+            "allowedValues", List.of("A", "B"))))
+            .isTrue();
+        assertThat(ParamControlTarget.sameKind(Map.of("type", "numeric", "precision", 6, "scale", 4), stored))
+            .isFalse();
+        assertThat(ParamControlTarget.sameKind(Map.of("type", "text"), stored)).isFalse();
+        assertThat(ParamControlTarget.sameKind(Map.of("type", "nonsense"), stored)).isFalse();
+        assertThat(ParamControlTarget.sameKind(null, stored)).isFalse();
     }
 
     private static EntityVersion version(String key) {
@@ -83,7 +121,7 @@ class ControlledParamsChecksTest {
             Set.of(ParamEntities.VALUE), VersionAction.UPDATE, 1L);
     }
 
-    private static Operation operation(String process) {
-        return new Operation(7, NOW, process, 1, "someone", null, null, null);
+    private static Operation operation(String process, long seq) {
+        return new Operation(seq, NOW, process, 1, "someone", null, null, null);
     }
 }

@@ -57,6 +57,8 @@ public class VersionAppender {
 
     /**
      * @param timeline    the versions of the instance as stored now
+     * @param grant       what lets this write pass a {@link TemporalWriteGuard} ({@code EntityChange#grant()});
+     *                    null for ordinary writes
      * @param checkUnique whether the write can change the values of a unique constraint
      * @return the versions inserted, the written one first
      * @throws RebaseConflictException (as error signal) if later versions changed the same fields
@@ -64,12 +66,12 @@ public class VersionAppender {
      * @throws ValidationException     (as error signal) with {@code UNIQUE_VIOLATION}s
      */
     public Mono<List<PlannedVersion>> append(StorageEngine engine, String table, EntityDefinition def, UUID id,
-        Timeline timeline, VersionPlanner.Write write, Operation operation, boolean checkUnique) {
+        Timeline timeline, VersionPlanner.Write write, Operation operation, Object grant, boolean checkUnique) {
         return RequestContexts.current().flatMap(request -> {
             VersionPlanner.Plan plan = VersionPlanner.plan(timeline, write);
             // A write that may not happen at all is refused as such, before any conflict with later versions.
             List<Violation> refused = new ArrayList<>();
-            guards.forEach(guard -> refused.addAll(guard.check(def, timeline, plan.versions(), operation)));
+            guards.forEach(guard -> refused.addAll(guard.check(def, timeline, plan.versions(), operation, grant)));
             if (!refused.isEmpty()) {
                 return Mono.error(new BusinessRuleViolationException(List.copyOf(new LinkedHashSet<>(refused))));
             }

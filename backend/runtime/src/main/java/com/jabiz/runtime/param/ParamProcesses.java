@@ -158,8 +158,15 @@ public class ParamProcesses {
 
     /** The requested effective time, but never earlier than now: a past time is refused by the compute step. */
     private static Instant scheduledTime(ProcessContext ctx) {
-        Instant effective = ctx.get(EFFECTIVE, Instant.class);
-        return effective.isAfter(ctx.opTime()) ? effective : ctx.opTime();
+        return basedOn(ctx.get(EFFECTIVE, Instant.class), ctx.opTime());
+    }
+
+    /**
+     * The time a change effective at {@code effective} (null: now) is based on: the version in effect then
+     * (docs/design/04 section 3), never earlier than {@code now}; a time not later than now is refused separately.
+     */
+    static Instant basedOn(Instant effective, Instant now) {
+        return effective != null && effective.isAfter(now) ? effective : now;
     }
 
     private static void change(ProcessContext ctx, ChangeSet.Target target, Object raw) {
@@ -174,7 +181,7 @@ public class ParamProcesses {
     }
 
     /** The canonical text of {@code raw}, or null after rejecting it. */
-    private static String canonical(ProcessContext ctx, SemanticKind kind, Object raw, String kindName) {
+    static String canonical(ProcessContext ctx, SemanticKind kind, Object raw, String kindName) {
         try {
             return ParamKinds.canonical(kind, raw);
         } catch (IllegalArgumentException e) {
@@ -184,7 +191,7 @@ public class ParamProcesses {
         }
     }
 
-    private static Violation notFuture(Instant time) {
+    static Violation notFuture(Instant time) {
         return new Violation("effectiveTime", PlatformErrorCodes.EFFECTIVE_TIME_NOT_FUTURE,
             "The effective time " + time + " is not later than now", Map.of("time", time.toString()));
     }

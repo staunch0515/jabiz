@@ -58,6 +58,20 @@ class ChangeSetTest {
     }
 
     @Test
+    void aGrantGoesWithTheChangesOfItsTargetOnly() {
+        ChangeSet changes = changeSet();
+        Object grant = new Object();
+        Instant later = Instant.parse("2026-02-01T00:00:00Z");
+        ChangeSet.Target granted = changes.in("ds").granted(grant).effectiveAt(later);
+        granted.update("Param", "p1", 3, Map.of("value", "1"));
+        granted.cancelScheduled("Param", "p1", 4);
+        changes.update("Param", "p1", 3, Map.of("value", "2"));
+        assertThat(changes.pending()).extracting(ChangeSet.Change::grant).containsExactly(grant, grant, null);
+        assertThat(changes.pending().getFirst().effectiveTime()).isEqualTo(later);
+        assertThatThrownBy(() -> changes.in("ds").granted(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     void registeredAttributesAreCopies() {
         ChangeSet changes = changeSet();
         Map<String, Object> attributes = new HashMap<>(Map.of("name", "a"));

@@ -1066,13 +1066,17 @@ D22 第 2 条的导出中含 ProComponents 的类型（菜单项），换组件�
 1. **以代码声明受控的键**：应用以 Bean `ControlledParams.of(键…)`（core `com.jabiz.param`）事先声明；可有多个 Bean，键可以尚不存在。
    是否受控只在代码中，参数的数据里没有标记——因此运行时没有任何途径（包括持有全部权限的一个人）能解除受控，解除即改代码、经评审与部署。
 2. **受控键的一切写入只经发布的受控变更**：平台在 `VersionAppender`（所有时态写入的必经之处）中检查——`PARAM_CREATE` / `PARAM_SET` / `PARAM_SCHEDULE` /
-   `PARAM_CANCEL_SCHEDULED`、数据视图 API、通用实体流程、其他流程的 `ChangeSet`、撤销操作写入受控键的版本一律 422 `PARAM_CONTROLLED`，
-   只有操作为 `CONTROL_CHANGE_PUBLISH` 的写入放行。新建、删除、改键（键本来不可变）同样被拒，所以也不能"删掉重建"来绕过。
+   `PARAM_CANCEL_SCHEDULED`、数据视图 API、通用实体流程、其他流程的 `ChangeSet`、撤销操作写入受控键的版本一律 422 `PARAM_CONTROLLED`。
+   放行的只有发布已批准的变更时的那一次写入：它带着平台在发布时生成的许可（`ChangeSet` 的 `grant`，只有参数包能生成，绑定参数键与发布操作），
+   而不是凭流程名——同一操作中的其他写入、以子流程调用发布的业务流程自己的写入都没有许可。新建、删除、改键（键本来不可变）同样被拒，所以也不能"删掉重建"来绕过。
 3. **受控变更以参数为目标**：`CONTROL_CHANGE_PROPOSE` 的 `targetEntity: SysParam`，以 `values.paramKey` 指定参数（不用 `targetId`）；
    `values` 可有 `value`、`description`，参数尚不存在时另给 `valueKind` 即新建；`effectiveTime` 为预定时间（须晚于当时，否则 422 `EFFECTIVE_TIME_NOT_FUTURE`）；
-   `delete: true` 加 `effectiveTime` 取消该时刻的预定值。只有受控的键能这样修改（其他键照常用参数流程）。提出时即按参数的类型检查并规范化值（422 `PARAM_VALUE_INVALID`），
-   其他问题一次报告（422 `CONTROL_CHANGE_INVALID`）；`CONTROL_CHANGE_PUBLISH` 由他人发布（`CONTROL_SAME_PERSON`），按生效时刻的版本再检查一次，经普通的参数版本写入（历史、生效时间、审计照常）。
-   发布时生效时间已过的变更不再发布（重新提出）。
+   `delete: true` 加 `effectiveTime` 取消该时刻的预定值，该时刻没有预定值即 422 `NOT_SCHEDULED`。只有受控的键能这样修改（其他键照常用参数流程）。
+   提出时即按参数的类型检查并规范化值（422 `PARAM_VALUE_INVALID`），并对要写入的字段做写入时同样的实体校验（如 `description` 的长度），
+   其他问题一次报告（422 `CONTROL_CHANGE_INVALID`）——批准了的变更总能发布。提案记下它基于哪个参数（新建则无）；`CONTROL_CHANGE_PUBLISH` 由他人发布（`CONTROL_SAME_PERSON`），
+   参数已不是提案时的那个（例如另一个新建先发布了）即 422 `CONTROL_TARGET_CHANGED`，不把新建改成修改；其余按生效时刻的版本以同样的检查再查一次，
+   经普通的参数版本写入（历史、生效时间、审计照常）。发布时生效时间已过的变更不再发布（重新提出）。
+   受控变更的各类目标（审批规则、限额、职责分离规则、参数）都实现同一个接口 `ControlTarget`（加载、提案检查、发布写入），流程本身不区分目标。
 4. **启动检查 `PARAM`**：声明的键格式不对（小写字母数字的词，以 `.` `-` `_` 连接，至多 200 字符）即报错，全部一次报告；尚不存在的键不是问题。
 
 **理由**：受控与否是部署时的决定，和审批对象、职责分离规则的代码声明一样经过评审；检查放在所有时态写入的必经之处，

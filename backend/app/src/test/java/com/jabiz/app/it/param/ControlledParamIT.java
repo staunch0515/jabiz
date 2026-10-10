@@ -3,7 +3,11 @@ package com.jabiz.app.it.param;
 import com.jabiz.app.it.security.SecurityItSupport;
 import com.jabiz.context.RequestContext;
 import com.jabiz.param.ControlledParams;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.approval.ApprovalPermissions;
+import com.jabiz.runtime.approval.ControlChanges;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.param.ParamService;
 import com.jabiz.runtime.security.JwtService;
@@ -43,6 +47,11 @@ class ControlledParamIT extends SecurityItSupport {
     private static final String LIFT = "it.controlled.lift";
     private static final String LATE = "it.controlled.late";
     private static final String NEVER_CREATED = "it.controlled.never-created";
+    private static final String CANCEL = "it.controlled.cancel";
+    private static final String DESCRIBED = "it.controlled.described";
+    private static final String RACE = "it.controlled.race";
+    private static final String RELAYED = "it.controlled.relayed";
+    private static final String SMUGGLED = "it.controlled.smuggled";
 
     private static final Map<String, Object> RATE = Map.of("type", "numeric", "precision", 5, "scale", 4);
     private static final RequestContext READER = new RequestContext("it-reader", null, Locale.ENGLISH, "it-param",
@@ -53,7 +62,34 @@ class ControlledParamIT extends SecurityItSupport {
 
         @Bean
         ControlledParams itControlledParams() {
-            return ControlledParams.of(DIRECT, NOW, SCHEDULED, SAME, INVALID, LIFT, LATE, NEVER_CREATED);
+            return ControlledParams.of(DIRECT, NOW, SCHEDULED, SAME, INVALID, LIFT, LATE, NEVER_CREATED, CANCEL,
+                DESCRIBED, RACE, RELAYED, SMUGGLED);
+        }
+
+        record RelayInput(String changeId) {}
+
+        /**
+         * Publishes a change as a sub-process, as a business process could, and writes a controlled parameter
+         * itself in the same go: only the publication's own write may pass.
+         */
+        @Bean
+        ProcessDefinition<RelayInput, Map<String, Object>, ProcessContext> controlRelayProcess() {
+            @SuppressWarnings("unchecked")
+            Class<Map<String, Object>> output = (Class<Map<String, Object>>) (Class<?>) Map.class;
+            return ProcessDefinition.define("IT_CONTROL_RELAY", 1, RelayInput.class, output, ProcessContext.class,
+                pb -> pb
+                    .permissions("it.control-relay")
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put("in", input);
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> Map.of())
+                    .step("Publish", CallProcess.<ProcessContext>of(ControlChanges.PUBLISH, 1,
+                        ctx -> new ControlChanges.ChangeInput(java.util.UUID.fromString(
+                            ctx.get("in", RelayInput.class).changeId())), "published"))
+                    .compute("Smuggle", (metadata, ctx) -> ctx.changes().insert(ParamEntities.ENTITY, Map.of(
+                        "paramKey", SMUGGLED, "valueKind", RATE, "value", "0.9000"))));
         }
     }
 
@@ -138,13 +174,73 @@ class ControlledParamIT extends SecurityItSupport {
 
         control(Map.of("paramKey", SCHEDULED), switchover, true);
         assertThat(value(SCHEDULED, switchover)).isEqualByComparingTo("0.1");
-        // Nothing is scheduled then any more: the platform says so when the cancellation is published.
-        String again = (String) propose(Map.of("paramKey", SCHEDULED), switchover, true).get("changeId");
-        assertThat(ruleCode(refused("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", again))))
-            .isEqualTo("NOT_SCHEDULED");
+        // Nothing is scheduled then any more: a cancellation is refused as soon as it is proposed.
+        assertThat(ruleCode(refused("CONTROL_CHANGE_PROPOSE", proposer(), proposal(Map.of("paramKey", SCHEDULED),
+            switchover, true)))).isEqualTo("NOT_SCHEDULED");
+        assertThat(ruleCode(refused("CONTROL_CHANGE_PROPOSE", proposer(), proposal(Map.of("paramKey", SCHEDULED),
+            switchover.plusSeconds(1), true)))).isEqualTo("NOT_SCHEDULED");
 
         clock.advance(Duration.ofDays(2));
         assertThat(value(SCHEDULED, clock.instant())).isEqualByComparingTo("0.1");
+    }
+
+    @Test
+    void aCancellationIsCheckedAgainWhenPublished() {
+        create(CANCEL, "0.1");
+        Instant later = clock.instant().plus(Duration.ofDays(1));
+        control(Map.of("paramKey", CANCEL, "value", "0.2"), later, false);
+        String first = (String) propose(Map.of("paramKey", CANCEL), later, true).get("changeId");
+        String second = (String) propose(Map.of("paramKey", CANCEL), later, true).get("changeId");
+        run("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", first));
+        assertThat(ruleCode(refused("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", second))))
+            .isEqualTo("NOT_SCHEDULED");
+        assertThat(value(CANCEL, later)).isEqualByComparingTo("0.1");
+    }
+
+    @Test
+    void theDescriptionIsCheckedWhenProposedAsWhenWritten() {
+        create(DESCRIBED, "0.1");
+        assertThat(violations(refused("CONTROL_CHANGE_PROPOSE", proposer(), proposal(Map.of("paramKey", DESCRIBED,
+            "description", "x".repeat(501)), null, false)))).extracting(v -> v.get("ruleCode"), v -> v.get("field"))
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("TOO_LONG", "description"));
+        assertThat(violations(refused("CONTROL_CHANGE_PROPOSE", proposer(), proposal(Map.of("paramKey", DESCRIBED,
+            "description", Map.of("no", "text")), null, false)))).extracting(v -> v.get("field"))
+            .containsExactly("description");
+        // A creation too: the description of a new parameter is checked before anybody approves it.
+        assertThat(violations(refused("CONTROL_CHANGE_PROPOSE", proposer(), proposal(Map.of("paramKey",
+            NEVER_CREATED, "valueKind", RATE, "value", "0.1", "description", "x".repeat(501)), null, false))))
+            .extracting(v -> v.get("ruleCode")).containsExactly("TOO_LONG");
+        control(Map.of("paramKey", DESCRIBED, "description", "x".repeat(500)), null, false);
+    }
+
+    @Test
+    void aCreationThatSomebodyElseMadeFirstIsNotPublishedAsAChange() {
+        Map<String, Object> values = Map.of("paramKey", RACE, "valueKind", RATE, "value", "0.1");
+        String first = (String) propose(values, null, false).get("changeId");
+        String second = (String) propose(Map.of("paramKey", RACE, "valueKind", RATE, "value", "0.3"), null, false)
+            .get("changeId");
+        run("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", first));
+        assertThat(ruleCode(refused("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", second))))
+            .isEqualTo("CONTROL_TARGET_CHANGED");
+        assertThat(value(RACE, clock.instant())).isEqualByComparingTo("0.1");
+        assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?", RACE).getFirst()
+            .get("n")).isEqualTo(1L);
+    }
+
+    @Test
+    void onlyThePublicationsOwnWritePassesNotOthersInTheSameGo() {
+        create(RELAYED, "0.1");
+        String changeId = (String) propose(Map.of("paramKey", RELAYED, "value", "0.2"), null, false)
+            .get("changeId");
+        // The publication as a sub-process is fine by itself, but the caller's own write of a controlled key is
+        // refused, and with it everything it did.
+        assertThat(ruleCode(refused("IT_CONTROL_RELAY", as("it-relay", "*"), Map.of("changeId", changeId))))
+            .isEqualTo("PARAM_CONTROLLED");
+        assertThat(value(RELAYED, clock.instant())).isEqualByComparingTo("0.1");
+        assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?", SMUGGLED).getFirst()
+            .get("n")).isEqualTo(0L);
+        run("CONTROL_CHANGE_PUBLISH", publisher(), Map.of("changeId", changeId));
+        assertThat(value(RELAYED, clock.instant())).isEqualByComparingTo("0.2");
     }
 
     @Test
