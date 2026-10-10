@@ -276,6 +276,8 @@ const en = {
     latest: 'latest',
     deprecated: 'deprecated',
     version: 'Version',
+    traits: 'Traits',
+    description: 'Description',
   },
   list: {
     create: 'New',
@@ -653,6 +655,8 @@ const zh: Texts = {
     latest: '最新',
     deprecated: '已废弃',
     version: '版本',
+    traits: '特性',
+    description: '说明',
   },
   list: {
     create: '新建',
@@ -1027,6 +1031,8 @@ const ja: Texts = {
     latest: '最新',
     deprecated: '非推奨',
     version: 'バージョン',
+    traits: '特性',
+    description: '説明',
   },
   list: {
     create: '新規',
