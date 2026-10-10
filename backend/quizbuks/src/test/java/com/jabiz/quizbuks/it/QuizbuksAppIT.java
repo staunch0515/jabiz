@@ -1,5 +1,10 @@
 package com.jabiz.quizbuks.it;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.jabiz.ledger.LedgerDimension;
+import com.jabiz.quizbuks.wallet.QbLedger;
+import com.jabiz.runtime.ledger.LedgerDimensionRegistry;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +23,9 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
     @Autowired
     ApplicationContext context;
 
+    @Autowired
+    LedgerDimensionRegistry dimensions;
+
     private WebTestClient client;
 
     @BeforeEach
@@ -34,5 +42,13 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
     @Test
     void refusesAnonymousApiCalls() {
         client.get().uri("/api/meta/datasets").exchange().expectStatus().isUnauthorized();
+    }
+
+    /** The wallets' party is dimension 1, valued by user ids (accepted by the platform's check since phase 16h). */
+    @Test
+    void walletLinesCarryThePartyByUserId() {
+        assertThat(dimensions.all()).extracting(LedgerDimension::position, LedgerDimension::name)
+            .contains(org.assertj.core.groups.Tuple.tuple(1, QbLedger.PARTY));
+        assertThat(dimensions.idValued()).contains(QbLedger.PARTY);
     }
 }

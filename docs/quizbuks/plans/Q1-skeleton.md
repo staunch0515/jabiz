@@ -107,8 +107,5 @@
   （一人即可改参数）。需要在 `1.2/platform` 上让受控变更也能覆盖业务参数（或为参数提供四眼修改），合入后去掉该权限、改用受控变更，并更新场景。
 - 首次 `QB_SETUP` 写约 600 行（249 国及每项的记录），本机约 10 秒；之后的运行几乎不写。
 
-- **账本维度未声明（需要平台改动）**：`LedgerDimension.define(1, "party", d -> d.entity("SecUser", "userId"))` 被平台启动检查拒绝
-  （`LEDGER | LedgerDimension party | SecUser.userId is not a text or code field`）：`LedgerChecks` 只接受文本或代码字段作为维度来源，而 `userId` 是标识字段
-  （过账时的取值检查 `CheckPosting` 本身对标识字段可用）。需要在 `1.2/platform` 上让维度来源也接受标识 / 引用字段（带平台测试与 `app` 示范），合入后在本应用加回该 Bean。
-  Q6 之前（第一笔分录之前）必须解决；本阶段不影响任何功能。
+- ~~账本维度未声明（需要平台改动）~~：平台阶段 16h（PR #102）已合入，`wallet/WalletConfig` 声明维度 1 `party`（`SecUser.userId`），`QuizbuksAppIT` 检查。
 - `docker compose up` 与 PR 上的 CI 未在本环境运行（见验收标准）。
