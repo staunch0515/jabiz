@@ -81,6 +81,15 @@ public interface StorageEngine {
     <T> Mono<T> inTransaction(Mono<T> work);
 
     /**
+     * Runs the given work in a transaction of its own, even inside another one, which is suspended meanwhile: what it
+     * writes stays when the surrounding transaction rolls back (a failed attempt to send a mail, which is retried,
+     * docs/design/18-numbering-approvals-tasks.md section 5.6). It takes a second connection while the first is held.
+     */
+    default <T> Mono<T> inNewTransaction(Mono<T> work) {
+        return Mono.error(new UnsupportedOperationException(getClass().getName() + " has no independent transactions"));
+    }
+
+    /**
      * Runs the given work, within the current transaction, behind a savepoint: if the work fails, what it wrote is
      * undone and the transaction goes on (the import runs each row this way, docs/design/20-imports.md section 5).
      * The work's error is passed on. Only valid inside {@link #inTransaction}.

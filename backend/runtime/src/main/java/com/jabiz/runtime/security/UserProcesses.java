@@ -30,9 +30,10 @@ public class UserProcesses {
      * @param password optional: a user without one signs in through an identity provider only
      *                 (docs/design/10-security.md section 12)
      * @param email    where notifications go; optional
+     * @param locale   the language of the user's mail ({@code zh}, {@code ja}, {@code en}); optional
      */
     public record CreateUserInput(@NotBlank String userName, String displayName, String tenantId,
-        @Sensitive String password, Boolean enabled, String email) {
+        @Sensitive String password, Boolean enabled, String email, String locale) {
         @Override
         public String toString() {
             return "CreateUserInput[userName=" + userName + ", password=***]";
@@ -48,6 +49,9 @@ public class UserProcesses {
 
     public record UserIdInput(@NotNull String userId) {}
 
+    /** @param locale one of the platform's languages, or null for the platform's default */
+    public record LocaleInput(@NotNull String userId, String locale) {}
+
     public record UserIdOutput(String userId) {}
 
     static final String PASSWORD = "password";
@@ -56,6 +60,7 @@ public class UserProcesses {
     static final String USER = "user";
     static final String LATEST_RECORD = "latest_login_record";
     static final String NEW_USER = "new_user";
+    static final String LOCALE = "locale";
 
     private static final HashPasswordStep.Metadata HASH_PASSWORD =
         new HashPasswordStep.Metadata(PASSWORD, HASH, PASSWORD);
@@ -75,6 +80,7 @@ public class UserProcesses {
                     user.put("displayName", input.displayName());
                     user.put("tenantId", input.tenantId());
                     user.put("email", input.email());
+                    user.put("locale", input.locale());
                     user.put("enabled", input.enabled() == null || input.enabled());
                     ctx.put(NEW_USER, user);
                     ctx.put(PASSWORD, input.password());
@@ -138,6 +144,43 @@ public class UserProcesses {
                         user.get("userName"), LoginOutcome.UNLOCKED, next, ctx.opTime(), ctx.request().requestId(),
                         null, Rbac.mfaStep(latest.isEmpty() ? null : latest.getFirst())));
                 }));
+
+    /**
+     * The user's own choice of the language of their mail (docs/design/18-numbering-approvals-tasks.md section 5.6).
+     * Runs only through the account settings, as the user ({@link SecurityPermissions#ACCOUNT}, granted to no role).
+     */
+    public static final ProcessDefinition<LocaleInput, UserIdOutput, ProcessContext> SET_LOCALE =
+        ProcessDefinition.define("SEC_USER_SET_LOCALE", 1, LocaleInput.class, UserIdOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Sets the language of the user's own mail.")
+                .permissions(SecurityPermissions.ACCOUNT)
+                .internal()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(USER_ID, input.userId());
+                    ctx.put(LOCALE, input.locale() == null || input.locale().isBlank() ? null : input.locale());
+                    return ctx;
+                })
+                .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
+                .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
+                .compute("Record the language", (metadata, ctx) -> {
+                    EntityInstance user = ctx.get(USER, EntityInstance.class);
+                    if (!String.valueOf(user.id()).equals(ctx.request().actorId())) {
+                        throw new com.jabiz.runtime.PermissionDeniedException(SecurityPermissions.ACCOUNT,
+                            "A user's language is set by the user only");
+                    }
+                    Object locale = ctx.get(LOCALE);
+                    if (!java.util.Objects.equals(locale, user.get("locale"))) {
+                        Map<String, Object> changed = new LinkedHashMap<>();
+                        changed.put("locale", locale);
+                        ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
+                    }
+                }));
+
+    @Bean
+    ProcessDefinition<LocaleInput, UserIdOutput, ProcessContext> secUserSetLocaleProcess() {
+        return SET_LOCALE;
+    }
 
     @Bean
     ProcessDefinition<CreateUserInput, UserIdOutput, ProcessContext> secUserCreateProcess() {

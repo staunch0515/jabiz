@@ -5,7 +5,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.transaction.ReactiveTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 /**
  * Registers the application's default R2DBC storage engine. Datasets refer to it through
@@ -21,7 +23,9 @@ class StorageConfig {
         ReactiveTransactionManager transactionManager,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef
     ) {
-        StorageEngine engine = new R2dbcStorageEngine(databaseClient, TransactionalOperator.create(transactionManager));
+        StorageEngine engine = new R2dbcStorageEngine(databaseClient, TransactionalOperator.create(transactionManager),
+            TransactionalOperator.create(transactionManager,
+                new DefaultTransactionDefinition(TransactionDefinition.PROPAGATION_REQUIRES_NEW)));
         return new StorageEngineBinding(poolRef, engine);
     }
 }

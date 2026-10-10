@@ -9,6 +9,7 @@ import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.MfaSecretCipher;
+import com.jabiz.runtime.mail.MailUnsubscribeController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -67,6 +68,9 @@ public class SecurityConfig {
     static final ServerWebExchangeMatcher PUBLIC = new OrServerWebExchangeMatcher(
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, AuthController.LOGIN, AuthController.REFRESH,
             AuthController.LOGOUT, MfaController.CHALLENGE + "/**"),
+        // The unsubscribe link of a notification mail: its signed token is the credential
+        // (docs/design/18-numbering-approvals-tasks.md section 5.6).
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, MailUnsubscribeController.UNSUBSCRIBE),
         // Signing in through an identity provider (docs/design/10-security.md section 12).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
