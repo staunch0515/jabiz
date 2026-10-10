@@ -103,10 +103,11 @@ class OidcController {
         return Mono.defer(() -> {
             OidcProvider provider = providers.find(id)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown identity provider " + id));
-            if (entries.find(entry).isEmpty()) {
+            java.util.Optional<SignInEntries.Entry> found = entries.find(entry);
+            if (found.isEmpty()) {
                 return Mono.error(AuthController.loginFailed("Unknown sign-in entry"));
             }
-            String resolved = entries.find(entry).orElseThrow().name();
+            String resolved = found.get().name();
             return states.start(provider.id(), resolved).flatMap(started -> client.authorizationUrl(provider, started)
                     .map(url -> new StartResponse(url, started.binder())))
                 .onErrorMap(OidcClient.ProviderException.class, e -> {

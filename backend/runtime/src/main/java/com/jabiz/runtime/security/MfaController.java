@@ -172,20 +172,25 @@ class MfaController {
      * access token whose {@code mfa_at} is now. Wrong codes count towards the lock like at sign-in.
      */
     @PostMapping("/api/auth/step-up")
-    Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request) {
+    Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request, ServerHttpRequest http) {
         return RequestContexts.current().flatMap(context -> {
             UUID user = requireUser(context);
             if (request == null || blank(request.code())) {
                 return Mono.error(codeInvalid());
             }
-            // A step-up stays in the entry of the caller's session (decision D36).
+            // A step-up stays in the entry of the caller's session (decision D36), and is recorded with its source.
             return verifyCode(user.toString(), request.code(), null,
-                    new SignInSource(context.entry(), null, null))
+                    AuthController.source(clients, http, context.entry()))
                 .onErrorMap(MfaController::concurrentAttempt, e -> codeInvalid())
                 .map(result -> {
                     if (MfaContext.NOT_ENROLLED.equals(result.refusal())) {
                         throw new BusinessRuleViolationException(new Violation(null,
                             PlatformErrorCodes.MFA_NOT_ENROLLED, "No second factor is set up"));
+                    }
+                    // Refusals after a right code are told apart as at sign-in (decision D36 implementation note 2).
+                    if (result.outcome() == LoginOutcome.REFUSED
+                        || result.outcome() == LoginOutcome.EMAIL_NOT_VERIFIED) {
+                        throw AuthController.refusal(result);
                     }
                     if (result.outcome() != LoginOutcome.SUCCESS) {
                         throw codeInvalid();

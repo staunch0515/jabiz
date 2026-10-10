@@ -155,10 +155,14 @@ class SignInEntryIT extends SecurityItSupport {
         Map<String, Object> next = refresh(session, null).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody();
         assertThat(tokens.verify((String) next.get("accessToken")).entry()).isEqualTo("admin");
-        // "admin" named explicitly is the same entry.
-        refresh(next, "admin").expectStatus().isOk();
+        // "admin" named explicitly is the same entry; so is a blank one.
+        Map<String, Object> named = refresh(next, "admin").expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody();
+        refresh(named, " ").expectStatus().isOk();
+        assertThat(tokens.verify((String) signInTo(name, "").get("accessToken")).entry()).isEqualTo("admin");
+        assertThat(tokens.verify((String) signInTo(name, "  ").get("accessToken")).entry()).isEqualTo("admin");
 
-        assertThat(records(userId)).singleElement().satisfies(r -> assertThat(r).containsEntry("entry", "admin")
+        assertThat(records(userId)).hasSize(3).allSatisfy(r -> assertThat(r).containsEntry("entry", "admin")
             .containsEntry("user_agent", "it-agent/1.0").containsEntry("outcome", "SUCCESS"));
     }
 
@@ -213,6 +217,13 @@ class SignInEntryIT extends SecurityItSupport {
             .getResponseBody();
         assertThat((List<String>) next.get("roles")).containsExactly(CUSTOMER);
         assertThat(tokens.verify((String) next.get("accessToken")).entry()).isEqualTo("portal");
+
+        // The consumed token replayed, whatever entry it names: reuse, and the whole session ends.
+        assertThat(refused(refresh(session, null), 401)).isEqualTo("INVALID_REFRESH_TOKEN");
+        assertThat(query("SELECT DISTINCT r.reason FROM sec_refresh_family_revocation r JOIN sec_refresh_token t "
+            + "ON t.family_id = r.family_id JOIN sec_user_version u ON u.user_id = t.user_id WHERE u.user_name = ?",
+            name)).singleElement().satisfies(r -> assertThat(r).containsEntry("reason", "REUSE"));
+        assertThat(refused(refresh(next, "portal"), 401)).isEqualTo("INVALID_REFRESH_TOKEN");
     }
 
     @Test
@@ -275,6 +286,14 @@ class SignInEntryIT extends SecurityItSupport {
         assertThat(refused(post("/api/auth/challenge/verify", null, Map.of("challenge", again.get("challenge"),
             "code", code(secret))), 403)).isEqualTo("SIGN_IN_REFUSED");
         assertThat(ItSignInFixtures.SEEN.get(userId).factor()).isEqualTo(SignInAttempt.Factor.TOTP);
+
+        // A step-up is told the same, and its record says where it came from.
+        clock.advance(Duration.ofSeconds(30));
+        assertThat(refused(client.post().uri("/api/auth/step-up").contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearerOf(session)).header(HttpHeaders.USER_AGENT, "it-agent/step-up")
+            .bodyValue(Map.of("code", code(secret))).exchange(), 403)).isEqualTo("SIGN_IN_REFUSED");
+        assertThat(records(userId).getLast()).containsEntry("outcome", "REFUSED").containsEntry("entry", "portal")
+            .containsEntry("user_agent", "it-agent/step-up");
     }
 
     private String code(String secret) {
@@ -445,6 +464,19 @@ class SignInEntryIT extends SecurityItSupport {
     }
 
     @Test
+    void signingInByNameReadsTheUsersOnce() {
+        String name = unique("ola");
+        user(name, name + "@example.com", CUSTOMER);
+        SqlStatementLog.STATEMENTS.clear();
+
+        signInTo(name, null);
+        // One lookup by name; no second one by address (the user's reference check reads it by id).
+        assertThat(SqlStatementLog.STATEMENTS).filteredOn(sql -> sql.toLowerCase(Locale.ROOT)
+            .contains("from sec_user_version") && !sql.contains("user_id = ")).singleElement()
+            .satisfies(sql -> assertThat(sql).contains("user_name = "));
+    }
+
+    @Test
     void addressesAreUniqueRegardlessOfCase() throws Exception {
         String local = unique("Dup");
         user(local + "a", local + "@Example.com");
@@ -452,6 +484,23 @@ class SignInEntryIT extends SecurityItSupport {
             local + "b", "password", PASSWORD, "email", local.toLowerCase(Locale.ROOT) + "@example.COM"))
             .expectStatus().isBadRequest().expectBody(MAP).returnResult().getResponseBody();
         assertThat(ruleCode(clash)).isEqualTo("UNIQUE_VIOLATION");
+
+        // Case is folded by the database, as its index is: Java folds "İ" to "i̇" (two characters), PostgreSQL to
+        // "i" (C.UTF-8 and ICU alike), so a check that folded in Java would let "İna…" past an existing "ina…".
+        String plain = unique("ina") + "@example.com";
+        String dotted = "İ" + plain.substring(1);
+        user(unique("tr"), plain);
+        boolean same = Boolean.TRUE.equals(query("SELECT lower(?) = lower(?) AS same", plain, dotted).getFirst()
+            .get("same"));
+        WebTestClient.ResponseSpec second = post("/api/processes/SEC_USER_CREATE/latest", admin(), Map.of("userName",
+            unique("tr"), "password", PASSWORD, "email", dotted));
+        if (same) {
+            assertThat(ruleCode(second.expectStatus().isBadRequest().expectBody(MAP).returnResult()
+                .getResponseBody())).isEqualTo("UNIQUE_VIOLATION");
+        } else {
+            second.expectStatus().isOk();
+        }
+        assertThat(same).as("the test database folds İ like i").isTrue();
 
         // Concurrent creations of one address: exactly one succeeds.
         String race = unique("race");
@@ -511,9 +560,9 @@ class SignInEntryIT extends SecurityItSupport {
     void theTablesWithNewColumnsAreOnlyAppendedTo() {
         String name = unique("max");
         String userId = user(name, name + "@example.com", CUSTOMER);
+        verifyEmail(userId);
         SqlStatementLog.STATEMENTS.clear();
 
-        verifyEmail(userId);
         login(name, "wrong horse battery", "strict").expectStatus().isUnauthorized();
         Map<String, Object> session = signInTo(name, "strict");
         Map<String, Object> next = refresh(session, "strict").expectStatus().isOk().expectBody(MAP).returnResult()
@@ -523,7 +572,9 @@ class SignInEntryIT extends SecurityItSupport {
 
         assertThat(SqlStatementLog.STATEMENTS).isNotEmpty()
             .noneSatisfy(sql -> assertThat(sql.trim().toUpperCase(Locale.ROOT)).startsWith("UPDATE"))
-            .noneSatisfy(sql -> assertThat(sql.trim().toUpperCase(Locale.ROOT)).startsWith("DELETE"));
+            .noneSatisfy(sql -> assertThat(sql.trim().toUpperCase(Locale.ROOT)).startsWith("DELETE"))
+            // Signing in by name never looks the name up as an address.
+            .noneSatisfy(sql -> assertThat(sql).containsIgnoringCase("lower(email"));
         assertThat(query("SELECT DISTINCT entry FROM sec_refresh_token WHERE user_id = ?::uuid", userId))
             .singleElement().satisfies(r -> assertThat(r).containsEntry("entry", "strict"));
     }

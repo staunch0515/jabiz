@@ -5,7 +5,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
-import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.Rbac;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -55,22 +54,7 @@ public final class SponsorSignInProcess {
                     LoginContext.KEY_USERS))
                 // No user of that name: the name may be a verified address (decision D36 item 4). An unverified
                 // address is like an unknown name.
-                .step("Load the user by e-mail address", QueryEntities.<LoginContext>of(SecurityEntities.USER_DATASET,
-                    ctx -> ctx.user().isPresent() || !ctx.identifier().contains("@")
-                        ? EntityQuery.builder().where(new QueryPredicate.In("userId", List.of())).limit(1).build()
-                        : EntityQuery.builder().where(new QueryPredicate.EqIgnoreCase("email", ctx.identifier()))
-                            .limit(2).build(),
-                    LoginContext.KEY_USERS_BY_EMAIL))
-                .compute("Keep the user of a verified address", (metadata, ctx) -> {
-                    if (ctx.user().isPresent()) {
-                        return;
-                    }
-                    List<EntityInstance> verified = ctx.list(LoginContext.KEY_USERS_BY_EMAIL).stream()
-                        .filter(SecurityEntities::emailVerified).toList();
-                    if (verified.size() == 1) {
-                        ctx.put(LoginContext.KEY_USERS, verified);
-                    }
-                })
+                .step("Load the user by e-mail address", UserByEmailStep.class, NoMetadata.INSTANCE)
                 .step("Load the latest login record", QueryEntities.<LoginContext>of(
                     SecurityEntities.LOGIN_RECORD_DATASET, ctx -> Rbac.latestLoginRecordOf(ctx.userId()),
                     LoginContext.KEY_LATEST_RECORD))

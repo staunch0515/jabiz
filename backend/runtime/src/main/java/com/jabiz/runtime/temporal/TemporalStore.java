@@ -154,31 +154,50 @@ public class TemporalStore {
      */
     public Mono<List<Violation>> checkUnique(StorageEngine engine, String table, EntityDefinition def, UUID self,
         List<Map<String, Object>> states, Instant now) {
-        // Sorted by lock key so that concurrent writers take their locks in the same order.
-        TreeMap<Long, Candidate> candidates = new TreeMap<>();
+        List<Candidate> raw = new ArrayList<>();
         for (UniqueConstraint unique : def.uniqueConstraints) {
             for (Map<String, Object> state : states) {
                 List<Object> values = new ArrayList<>();
                 for (String field : unique.fields()) {
-                    Object value = state.get(field);
-                    // Regardless of case: the lock and the lookup both see the lower-case value (decision D36).
-                    values.add(unique.ignoreCase() && value instanceof String text
-                        ? text.toLowerCase(java.util.Locale.ROOT) : value);
+                    values.add(state.get(field));
                 }
-                if (values.contains(null)) {
-                    continue;
+                if (!values.contains(null)) {
+                    raw.add(new Candidate(unique, values));
                 }
-                candidates.putIfAbsent(lockKey(def, unique, values), new Candidate(unique, values));
             }
         }
         Set<String> reported = new HashSet<>();
-        return Flux.fromIterable(candidates.entrySet())
+        // Regardless of case (decision D36): the database folds the values, with the same lower() its index and the
+        // lookup use, so that the lock and the comparison can never disagree with it (Java folds some letters
+        // differently, "İ" for one).
+        return Flux.fromIterable(raw).concatMap(candidate -> folded(engine, candidate))
+            .collectList()
+            .flatMapMany(folded -> {
+                // Sorted by lock key so that concurrent writers take their locks in the same order.
+                TreeMap<Long, Candidate> candidates = new TreeMap<>();
+                folded.forEach(c -> candidates.putIfAbsent(lockKey(def, c.unique(), c.values()), c));
+                return Flux.fromIterable(candidates.entrySet());
+            })
             .concatMap(entry -> engine.select("SELECT pg_advisory_xact_lock(:key)",
                     Map.of("key", BoundValue.of(entry.getKey())))
                 .then(Mono.defer(() -> taken(engine, table, def, self, entry.getValue(), now)))
                 .filter(taken -> taken && reported.add(entry.getValue().unique().name()))
                 .map(taken -> violation(def, entry.getValue().unique())))
             .collectList();
+    }
+
+    /** The candidate with its text values folded by the database's {@code lower()} when its constraint ignores case. */
+    private static Mono<Candidate> folded(StorageEngine engine, Candidate candidate) {
+        if (!candidate.unique().ignoreCase()) {
+            return Mono.just(candidate);
+        }
+        return Flux.fromIterable(candidate.values())
+            .concatMap(value -> value instanceof String text
+                ? engine.select("SELECT lower(CAST(:v AS text)) AS folded", Map.of("v", BoundValue.of(text)))
+                    .next().map(row -> (Object) String.valueOf(row.get("folded")))
+                : Mono.just(value))
+            .collectList()
+            .map(values -> new Candidate(candidate.unique(), values));
     }
 
     private record Candidate(UniqueConstraint unique, List<Object> values) {}
@@ -217,14 +236,14 @@ public class TemporalStore {
     }
 
     /**
-     * The columns equal to the bound values; regardless of case as {@code col IS NOT NULL AND lower(col) = :u},
-     * the form of the partial index on {@code lower(col)} (the values are lower case already).
+     * The columns equal to the bound values; regardless of case as {@code col IS NOT NULL AND lower(col) = lower(:u)},
+     * the form of the partial index on {@code lower(col)}, both sides folded by the database.
      */
     private static String matches(List<String> columns, String alias, boolean ignoreCase) {
         List<String> parts = new ArrayList<>();
         for (int i = 0; i < columns.size(); i++) {
             String column = alias + columns.get(i);
-            parts.add(ignoreCase ? column + " IS NOT NULL AND lower(" + column + ") = :u" + i
+            parts.add(ignoreCase ? column + " IS NOT NULL AND lower(" + column + ") = lower(CAST(:u" + i + " AS text))"
                 : column + " = :u" + i);
         }
         return String.join(" AND ", parts);

@@ -154,23 +154,26 @@ public class RefreshTokenStore {
         return Mono.defer(() -> {
             String hash = hash(token);
             return engine.get().inTransaction(work.apply(hash))
-                .onErrorResume(UniqueKeyViolationException.class, reused -> find(hash)
+                .onErrorResume(e -> e instanceof UniqueKeyViolationException || e instanceof Reused, reused -> find(hash)
                     .flatMap(found -> {
                         log.warn("Refresh token of user {} presented twice; revoking its session",
                             found.grant().userId());
-                        return revokeFamily(found.grant().familyId(), REASON_REUSE);
+                        return revokeSession(found.grant().familyId(), REASON_REUSE);
                     })
                     .then(Mono.error(new InvalidRefreshTokenException("Refresh token used twice"))));
         });
     }
 
+    /** A consumed token presented again; the family is revoked once the transaction has rolled back. */
+    private static final class Reused extends RuntimeException {
+        Reused() {
+            super("Refresh token used twice", null, false, false);
+        }
+    }
+
     private Mono<Grant> use(String hash, String entry) {
         Instant now = now();
         return find(hash).flatMap(found -> {
-            // Another front end's session: not this client's to renew. Not consumed, not revoked.
-            if (!entry.equals(found.grant().entry())) {
-                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of another sign-in entry"));
-            }
             if (found.revoked()) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
             }
@@ -180,6 +183,14 @@ public class RefreshTokenStore {
             // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed.
             if (!now.isBefore(found.issuedAt().plus(idleWindow))) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
+            }
+            // Replayed: whatever entry it names, the session ends (checked before the entry, decision D12 item 1).
+            if (found.used()) {
+                return Mono.<Grant>error(new Reused());
+            }
+            // Another front end's live session: not this client's to renew. Not consumed, not revoked.
+            if (!entry.equals(found.grant().entry())) {
+                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of another sign-in entry"));
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash);
@@ -198,14 +209,14 @@ public class RefreshTokenStore {
                 WHERE t.user_id = :user AND NOT EXISTS (
                     SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
                 Map.of("user", BoundValue.of(userId)))
-            .concatMap(row -> revokeFamily(Rows.uuid(row.get("family_id")), reason))
+            .concatMap(row -> revokeSession(Rows.uuid(row.get("family_id")), reason))
             .then();
     }
 
     /** Ends the session the token belongs to. Unknown or already revoked tokens are ignored. */
     public Mono<Void> revoke(String token) {
         return Mono.defer(() -> find(hash(token))
-            .flatMap(found -> revokeFamily(found.grant().familyId(), REASON_LOGOUT)));
+            .flatMap(found -> revokeSession(found.grant().familyId(), REASON_LOGOUT)));
     }
 
     /** The next token of the grant's family, carrying its user, second factor, account link and entry. */
@@ -228,12 +239,11 @@ public class RefreshTokenStore {
         });
     }
 
-    /** Ends one session (token family), for example when a sign-in guard refuses it at a refresh. */
+    /**
+     * Ends one session (token family): on reuse, sign-out, a password change, or when a sign-in guard refuses it at a
+     * refresh. Revoked already: the first revocation stands.
+     */
     public Mono<Void> revokeSession(UUID familyId, String reason) {
-        return revokeFamily(familyId, reason);
-    }
-
-    private Mono<Void> revokeFamily(UUID familyId, String reason) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("family_id", familyId);
         row.put("revoked_at", now());
@@ -243,12 +253,14 @@ public class RefreshTokenStore {
             .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
     }
 
-    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked) {}
+    /** @param used whether the token was consumed already (presenting it again is reuse) */
+    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked, boolean used) {}
 
     private Mono<Found> find(String hash) {
         return engine.get().select("""
                 SELECT t.user_id, t.family_id, t.issued_at, t.expires_at, t.mfa_at, t.identity_id, t.entry,
-                    r.family_id IS NOT NULL AS revoked
+                    r.family_id IS NOT NULL AS revoked,
+                    EXISTS (SELECT 1 FROM sec_refresh_token_use u WHERE u.token_hash = t.token_hash) AS used
                 FROM sec_refresh_token t LEFT JOIN sec_refresh_family_revocation r ON r.family_id = t.family_id
                 WHERE t.token_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
             .next()
@@ -257,7 +269,7 @@ public class RefreshTokenStore {
                     row.get("identity_id") == null ? null : Rows.uuid(row.get("identity_id")),
                     row.get("entry") == null ? null : String.valueOf(row.get("entry"))),
                 Rows.instant(row.get("issued_at")), Rows.instant(row.get("expires_at")),
-                Boolean.TRUE.equals(row.get("revoked"))));
+                Boolean.TRUE.equals(row.get("revoked")), Boolean.TRUE.equals(row.get("used"))));
     }
 
     private Mono<byte[]> randomBytes(int length) {

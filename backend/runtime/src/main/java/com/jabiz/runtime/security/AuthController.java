@@ -140,10 +140,11 @@ class AuthController {
             if (request == null || blank(request.userName()) || blank(request.password())) {
                 return Mono.error(loginFailed("Missing user name or password"));
             }
-            if (entries.find(request.entry()).isEmpty()) {
+            java.util.Optional<SignInEntries.Entry> entry = entries.find(request.entry());
+            if (entry.isEmpty()) {
                 return Mono.error(loginFailed("Unknown sign-in entry"));
             }
-            SignInSource source = source(clients, http, request.entry());
+            SignInSource source = source(clients, http, entry.get().name());
             return processes.execute(SponsorSignInProcess.DEFINITION,
                     new SponsorSignInInput(request.userName().trim(), request.password(), source))
                 // Concurrent attempts on one account: the later one loses the race for the next login record.
@@ -195,11 +196,11 @@ class AuthController {
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> {
-            String entry = request == null ? null : request.entry();
-            if (entries.find(entry).isEmpty()) {
+            java.util.Optional<SignInEntries.Entry> entry = entries.find(request == null ? null : request.entry());
+            if (entry.isEmpty()) {
                 return Mono.error(invalidRefresh("Unknown sign-in entry"));
             }
-            return refreshTokens.rotate(request == null ? null : request.refreshToken(), entry,
+            return refreshTokens.rotate(request == null ? null : request.refreshToken(), entry.get().name(),
                     grant -> rbac.renew(grant.userId(), grant.mfaAt(), grant.identityId(), grant.entry())
                         .flatMap(renewal -> {
                             if (renewal.refused()) {

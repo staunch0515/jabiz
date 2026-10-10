@@ -53,13 +53,34 @@ class ClientAddressesTest {
     }
 
     @Test
-    void malformedOrMissingHeadersAreIgnored() {
+    void malformedHopsCountOnlyWhereTheWalkReachesThem() {
         assertThat(proxied.clientOf(request("10.0.0.1"))).isEqualTo("10.0.0.1");
-        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7, evil.example"))).isEqualTo("10.0.0.1");
+        // Junk left of the first untrusted hop is the client's own claim: never reached, never matters.
+        assertThat(proxied.clientOf(request("10.0.0.1", "junk, 198.51.100.7"))).isEqualTo("198.51.100.7");
+        assertThat(proxied.clientOf(request("10.0.0.1", "evil.example, , 198.51.100.7, 10.0.0.3")))
+            .isEqualTo("198.51.100.7");
+        // A malformed hop reached by the walk ends it: the last valid hop seen (here: the trusted 10.0.0.3).
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7, junk, 10.0.0.3"))).isEqualTo("10.0.0.3");
+        // Nothing valid seen before it: the connection.
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7, 256.1.1.1"))).isEqualTo("10.0.0.1");
         assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7,"))).isEqualTo("10.0.0.1");
-        assertThat(proxied.clientOf(request("10.0.0.1", "256.1.1.1"))).isEqualTo("10.0.0.1");
-        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7:443"))).isEqualTo("10.0.0.1");
-        assertThat(proxied.clientOf(request("10.0.0.1", "1.2.3.4, ".repeat(30) + "1.2.3.4"))).isEqualTo("10.0.0.1");
+        // A long chain the client made up is never walked past its first untrusted hop.
+        assertThat(proxied.clientOf(request("10.0.0.1", "1.2.3.4, ".repeat(30) + "198.51.100.8")))
+            .isEqualTo("198.51.100.8");
+        // At most 20 trusted hops are walked; then the last of them.
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.9, " + "10.0.0.5, ".repeat(25) + "10.0.0.6")))
+            .isEqualTo("10.0.0.5");
+    }
+
+    @Test
+    void hopsWithPortsAsProxiesWriteThem() {
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7:443"))).isEqualTo("198.51.100.7");
+        assertThat(proxied.clientOf(request("10.0.0.1", "[2001:db8::8]:443"))).isEqualTo("2001:db8:0:0:0:0:0:8");
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7:99999"))).isEqualTo("10.0.0.1");
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.7:"))).isEqualTo("10.0.0.1");
+        // Distinct clients behind a proxy that adds ports stay distinct.
+        assertThat(proxied.clientOf(request("10.0.0.1", "198.51.100.10:1234")))
+            .isNotEqualTo(proxied.clientOf(request("10.0.0.1", "198.51.100.11:1234")));
     }
 
     @Test

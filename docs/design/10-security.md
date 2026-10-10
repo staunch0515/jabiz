@@ -430,8 +430,8 @@ class PortalSignInGuard implements SignInGuard {
 
 - `SecUser.verifiedEmail` / `emailVerifiedAt`（`processOnly`，只由验证类流程写，16b-2）。**已验证 = `lower(verifiedEmail) = lower(email)`**：
   管理员改邮箱即自动失效，不需要清除标记。不新增"待验证"状态：未验证即待验证，由入口的 `require-verified-email` 决定能否登录。
-- `SecUser.email` 非空时**不区分大小写唯一**（`eb.uniqueIgnoreCase(…)`，core `UniqueConstraint.ignoreCase`）：时态唯一检查（D6）按小写值取锁与查找
-  （`col IS NOT NULL AND lower(col) = :v`，走部分索引 `sec_user_version_email_idx ON (lower(email)) WHERE email IS NOT NULL`）；普通实体的同类约束是 `lower(列)` 上的唯一索引。
+- `SecUser.email` 非空时**不区分大小写唯一**（`eb.uniqueIgnoreCase(…)`，core `UniqueConstraint.ignoreCase`）：时态唯一检查（D6）按数据库 `lower()` 折叠后的值取锁与查找
+  （先 `SELECT lower(:v)` 得到锁键所用的值，再 `col IS NOT NULL AND lower(col) = lower(:v)`；两边都由数据库折叠，与索引一致——Java 对 `İ` 等字母的折叠不同，不能用），走部分索引 `sec_user_version_email_idx ON (lower(email)) WHERE email IS NOT NULL`）；普通实体的同类约束是 `lower(列)` 上的唯一索引。
   `V32__sign_in_entries.sql` 遇到已有的不区分大小写的重复（各用户当前版本、未删除）即 `RAISE EXCEPTION` 并列出地址：**升级前须由管理员处理**。
 - 声明：流程 `pb.requiresVerifiedEmail()`（或 `ProcessDefinition.withVerifiedEmail(true)`），数据视图 `policy(p -> p.requiresVerifiedEmail())`（**只管写**，读取的限制以后另议）。
 - 检查（`VerifiedEmailPolicy`，与 `Permissions`、`MfaPolicy` 同在六个入口）：流程 API、数据视图 `commit`、实体 API 的增改删（流程或默认视图要求时）、导入（行流程要求时）、
@@ -443,11 +443,16 @@ class PortalSignInGuard implements SignInGuard {
 
 - 登录记录增加 `entry`、`clientIp`、`userAgent`（去掉控制与格式字符后截断为 256 个字符；防火墙拒绝的头不记，登录照常）。
 - `ClientAddresses`（登录记录与公开接口限流共用，15 §5）：`jabiz.security.trusted-proxies`（地址或 CIDR 列表）。连接来自可信代理时才读 `X-Forwarded-For`
-  （多个头按顺序合并），从右向左跳过可信地址，取第一个不可信地址；全链可信取最左；任一段格式错误（非 IP 字面量、带端口、超过 20 跳）则整个头忽略、取连接地址。
+  （多个头按顺序合并），从右向左跳过可信地址，取第一个不可信地址；全链可信取最左。只解析走到的段：不可信地址左边客户端自己写的内容不看（写 `junk` 抹不掉自己的地址）；
+  走到格式错误的段（非 IP 字面量）即停止，取已走过的最后一个有效段（没有则为连接地址）；至多走 20 个可信段，之后取其中最后一个。
+  段可带端口（`192.0.2.1:443`、`[2001:db8::1]:443`，端口去掉；1–65535），所以给每一跳加端口的代理不会把所有人并成一个限流桶。
   不配置可信代理时取连接地址（保持原行为）；与 `server.forward-headers-strategy` 同时配置 → 启动检查报错（转发头会被处理两次而可伪造）。地址只进登录记录，不进日志与观测标签。
 
 ### 15.6 已知限制
 
 - 升级前签发的访问令牌在有效期内按 `admin` 处理，且 `email_verified` 为假（要求已验证的操作需重新登录）。
 - 守卫在刷新时才再次生效；已签发的访问令牌在到期前仍可用。
-- 按邮箱登录时，名字不匹配才多一次按邮箱的查询，响应时间与"名字存在"略有差别（不比现有的不存在名字更多泄露）。
+- 按邮箱登录时，名字不匹配（且含 `@`）才多一次按邮箱的查询（`UserByEmailStep`；按名字登录不查），响应时间与"名字存在"略有差别（不比现有的不存在名字更多泄露）。
+- step-up 被守卫拒绝或入口要求已验证时与登录相同：403 `SIGN_IN_REFUSED` / `EMAIL_NOT_VERIFIED`；码错误、锁定仍为 422 `MFA_CODE_INVALID`。step-up 的登录记录同样带地址与 UA。
+- 刷新时先检查吊销、过期、闲置与是否已用过：已用过的令牌再次出现即视为重用并吊销整个令牌族，无论请求的入口是什么；入口不符只对未用过的有效令牌生效（不消费、不吊销）。
+  空白的 `entry`（登录、刷新、OIDC 的 `start`）与不带一样，是 `admin`。

@@ -1363,7 +1363,7 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 - [x] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
 - [x] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
 
-**完成情况（分支 `1.2/phase-16b1-sign-in-entries`）**：迁移 `V32__sign_in_entries.sql`；测试 `SignInEntryIT`（17）、`ClientAddressIT`（3）、`OidcEntryIT`（3），
+**完成情况（分支 `1.2/phase-16b1-sign-in-entries`）**：迁移 `V32__sign_in_entries.sql`；测试 `SignInEntryIT`（18）、`ClientAddressIT`（3）、`OidcEntryIT`（3），
 runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtServiceTest` / `RbacTest` / core 测试补充；`SignInIT`、`MfaIT`、`OidcIT` 未改动即通过。
 与计划的出入（都很小）：
 - 数据视图的声明写作 `policy(p -> p.requiresVerifiedEmail())`，目录字段为 `writeRequiresVerifiedEmail`（与 `writeRequiresMfa` 对应）；`VerifiedEmailPolicy` 是无状态的静态检查（只读令牌声明），六个入口无需注入新 Bean。
@@ -1372,9 +1372,12 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - OIDC 的入口以 `POST /api/auth/oidc/{id}/start?entry=…` 给出；挑战验证与 OIDC 回调的请求体中的 `entry` 一律忽略。
 - Spring Security 防火墙拒绝含控制字符的请求头值：读取 `User-Agent` / `X-Forwarded-For` 时捕获并忽略（登录照常，不记 UA），否则登录会 500。
 - 前端只改了一个 Vitest 夹具（`RowActions.test.tsx` 的流程目录项补 `requiresVerifiedEmail`，`Required<…>` 类型要求），业务代码未改。
+- 代码评审后的修正（10 §15.5–§15.6）：转发头只解析走到的段、可带端口；不区分大小写的唯一检查由数据库 `lower()` 折叠（锁键与比较一致）；
+  step-up 对守卫拒绝与未验证地址答 403（同登录）并记录地址与 UA；空白入口即 `admin`；刷新时先判重用再判入口；按名字登录不再查邮箱；
+  `MetaModelConsistencyChecker` 精确匹配 `lower(列)`；`RefreshTokenStore.revokeSession` 合并为一个方法。
 
 **已知问题**：升级前签发的访问令牌在有效期内按 `admin`、`email_verified=false` 处理；守卫在刷新时才再次生效（访问令牌到期前仍可用）；
-按邮箱登录在名字不匹配时多一次查询（响应时间略有差别）；step-up 被守卫拒绝时答 422 `MFA_CODE_INVALID`（不另区分）；已有重复邮箱的库升级时迁移中止，须先由管理员处理。
+按邮箱登录在名字不匹配时多一次查询（响应时间略有差别）；已有重复邮箱的库升级时迁移中止，须先由管理员处理。
 
 #### 16b-2 自助注册、邮箱验证、找回密码、示范（3–4 天）
 

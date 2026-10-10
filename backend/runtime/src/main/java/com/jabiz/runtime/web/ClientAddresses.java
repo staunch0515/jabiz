@@ -23,8 +23,9 @@ import java.util.regex.Pattern;
  *
  * <p>{@code X-Forwarded-For} is believed only from the proxies listed in {@code jabiz.security.trusted-proxies}
  * (addresses or CIDR blocks): when the connection comes from one of them, the header is read from right to left,
- * skipping trusted addresses, and the first untrusted one is the client (all trusted: the leftmost). A connection
- * from anywhere else is the client itself, whatever headers it sends; a malformed header is ignored. Without trusted
+ * skipping trusted addresses, and the first untrusted one is the client (all trusted: the leftmost). Hops may carry a
+ * port. Only hops the walk reaches are parsed; a malformed one reached ends it at the last valid hop seen (see
+ * {@link #walk}). A connection from anywhere else is the client itself, whatever headers it sends. Without trusted
  * proxies the connection's address is taken as before (which Spring's {@code server.forward-headers-strategy} may
  * have rewritten already); configuring both is a startup error, since the headers would be applied twice and could
  * then be forged.
@@ -37,7 +38,7 @@ public class ClientAddresses implements PlatformCheck {
     public static final String FORWARDED_FOR = "X-Forwarded-For";
     static final String UNKNOWN = "unknown";
 
-    /** At most this many hops are read from the header; a longer chain is malformed. */
+    /** At most this many trusted hops are walked; the client is then the last of them. */
     private static final int MAX_HOPS = 20;
     private static final Pattern IPV4 = Pattern.compile("\\d{1,3}(\\.\\d{1,3}){3}");
     private static final Pattern IPV6 = Pattern.compile("[0-9A-Fa-f:.]{2,45}");
@@ -110,16 +111,31 @@ public class ClientAddresses implements PlatformCheck {
             // A value the firewall refuses (control characters): malformed, so ignored.
             return text(connection);
         }
-        List<InetAddress> chain = chain(headers);
-        if (chain == null || chain.isEmpty()) {
-            return text(connection);
-        }
-        for (int i = chain.size() - 1; i >= 0; i--) {
-            if (!trusted(chain.get(i))) {
-                return text(chain.get(i));
+        return text(walk(hops(headers), connection));
+    }
+
+    /**
+     * The client among the hops (left to right, as the proxies appended them), reached through the trusted proxy
+     * {@code connection}: walking from the right, trusted hops are skipped and the first untrusted one is the client.
+     * Only what the walk reaches counts: whatever the client wrote left of its own address is never parsed. A malformed
+     * hop that is reached ends the walk, as does the {@value #MAX_HOPS}th trusted hop; the client is then the last valid
+     * hop seen (the connection if none). A chain of trusted hops only: its leftmost.
+     */
+    private InetAddress walk(List<String> hops, InetAddress connection) {
+        InetAddress last = connection;
+        int walked = 0;
+        for (int i = hops.size() - 1; i >= 0 && walked < MAX_HOPS; i--) {
+            InetAddress hop = hop(hops.get(i));
+            if (hop == null) {
+                return last;
             }
+            if (!trusted(hop)) {
+                return hop;
+            }
+            last = hop;
+            walked++;
         }
-        return text(chain.getFirst());
+        return last;
     }
 
     /** Whether any proxy is trusted. */
@@ -144,19 +160,53 @@ public class ClientAddresses implements PlatformCheck {
         return trusted.stream().anyMatch(block -> block.contains(address));
     }
 
-    /** The addresses of the header(s) from left to right; null when any part is malformed. */
-    private static List<InetAddress> chain(List<String> headers) {
-        List<InetAddress> chain = new ArrayList<>();
+    /** The hops of the header(s) from left to right, unparsed: several headers count as one list, in order. */
+    private static List<String> hops(List<String> headers) {
+        List<String> hops = new ArrayList<>();
         for (String header : headers) {
             for (String part : header.split(",", -1)) {
-                InetAddress address = literal(part.trim());
-                if (address == null || chain.size() >= MAX_HOPS) {
-                    return null;
-                }
-                chain.add(address);
+                hops.add(part.trim());
             }
         }
-        return chain;
+        return hops;
+    }
+
+    /**
+     * One hop: an address, or an address with a port as some proxies write it ({@code 192.0.2.1:443},
+     * {@code [2001:db8::1]:443}; the port is dropped). Null for anything else.
+     */
+    static InetAddress hop(String text) {
+        if (text == null) {
+            return null;
+        }
+        String value = text;
+        if (value.startsWith("[")) {
+            int close = value.indexOf(']');
+            if (close < 0 || !(close == value.length() - 1 || port(value.substring(close + 1)))) {
+                return null;
+            }
+            value = value.substring(0, close + 1);
+        } else if (value.indexOf(':') == value.lastIndexOf(':') && value.indexOf(':') > 0) {
+            // One colon: IPv4 with a port (bare IPv6 has at least two).
+            int colon = value.indexOf(':');
+            if (!port(value.substring(colon))) {
+                return null;
+            }
+            value = value.substring(0, colon);
+            if (!IPV4.matcher(value).matches()) {
+                return null;
+            }
+        }
+        return literal(value);
+    }
+
+    /** {@code :<1–65535>}. */
+    private static boolean port(String text) {
+        if (!text.matches(":\\d{1,5}")) {
+            return false;
+        }
+        int port = Integer.parseInt(text.substring(1));
+        return port >= 1 && port <= 65535;
     }
 
     /**

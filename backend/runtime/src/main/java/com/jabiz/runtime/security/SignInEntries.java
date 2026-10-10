@@ -105,15 +105,20 @@ public class SignInEntries implements PlatformCheck {
         });
     }
 
-    /** The usable entry of that name; the default entry for null. */
+    /** The usable entry of that name; the default entry for none (null or blank, as everywhere entries are named). */
     public Optional<Entry> find(String name) {
-        return Optional.ofNullable(usable.get(name == null ? RequestContext.DEFAULT_ENTRY : name));
+        return Optional.ofNullable(usable.get(key(name)));
     }
 
     /** The entry of that name, or one accepting nobody: an entry that went away refuses (default deny). */
     public Entry resolve(String name) {
-        String key = name == null ? RequestContext.DEFAULT_ENTRY : name;
+        String key = key(name);
         return find(key).orElseGet(() -> new Entry(key, Set.of(), false, Set.of(), true, "/"));
+    }
+
+    /** A requested entry's name: none (null or blank) is the administration's. */
+    private static String key(String name) {
+        return name == null || name.isBlank() ? RequestContext.DEFAULT_ENTRY : name;
     }
 
     public List<Entry> all() {

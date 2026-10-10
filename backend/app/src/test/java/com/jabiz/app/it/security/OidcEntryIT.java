@@ -104,6 +104,10 @@ class OidcEntryIT extends SecurityItSupport {
         Map<String, Object> admin = callback(started(null), subject).expectStatus().isOk().expectBody(MAP)
             .returnResult().getResponseBody();
         assertThat((List<String>) admin.get("permissions")).containsExactly("oidc.back", "oidc.customer");
+        // A blank entry is no entry.
+        Map<String, Object> blank = callback(started(""), subject).expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+        assertThat(tokens.verify((String) blank.get("accessToken")).entry()).isEqualTo("admin");
     }
 
     @Test

@@ -20,8 +20,6 @@ import java.util.Optional;
 public class LoginContext extends ProcessContext {
 
     public static final String KEY_USERS = "users";
-    /** Users whose address equals the name signed in with (decision D36 item 4), before the verified one is kept. */
-    public static final String KEY_USERS_BY_EMAIL = "users_by_email";
     public static final String KEY_LATEST_RECORD = "latest_login_record";
     public static final String KEY_ASSIGNMENTS = "role_assignments";
     public static final String KEY_ROLES = "roles";

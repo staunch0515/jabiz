@@ -203,11 +203,11 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
     }
 
     /**
-     * @param definition the index definition ({@code pg_get_indexdef}) in lower case without blanks, parentheses and
-     *                   {@code ::text} casts: {@code lower((email)::text)} reads {@code loweremail}
+     * @param name    the index's name, lower case
+     * @param lowered the columns the index has a {@code lower(column)} expression of ({@link #lowerColumns})
      */
     private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full,
-        String definition) {
+        String name, Set<String> lowered) {
         boolean startsWith(String column, boolean descending) {
             return !columns.isEmpty() && columns.getFirst().equals(column) && descending(0) == descending;
         }
@@ -218,8 +218,30 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
 
         /** Whether the index is on {@code lower(column)} of every one of the columns (decision D36). */
         boolean lowerOf(List<String> columns) {
-            return !columns.isEmpty() && columns.stream().allMatch(column -> definition.contains("lower" + column));
+            return !columns.isEmpty() && lowered.containsAll(columns);
         }
+    }
+
+    /**
+     * {@code lower(<column>)} as PostgreSQL prints it in an index definition: {@code lower(code)} for text columns,
+     * {@code lower((email)::text)} for varchar ones, the column quoted when it needs to be.
+     */
+    private static final java.util.regex.Pattern LOWER = java.util.regex.Pattern.compile(
+        "\\blower\\(\\s*(?:\\(\\s*(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*)\\s*\\)\\s*::\\s*text"
+            + "|(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*))\\s*\\)");
+
+    /** The columns of the {@code lower(column)} expressions of an index definition, lower case, in order. */
+    static Set<String> lowerColumns(String definition) {
+        Set<String> columns = new java.util.LinkedHashSet<>();
+        if (definition == null) {
+            return columns;
+        }
+        java.util.regex.Matcher matcher = LOWER.matcher(definition);
+        while (matcher.find()) {
+            String column = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            columns.add(column.replace("\"", "").toLowerCase(Locale.ROOT));
+        }
+        return columns;
     }
 
     /** Indexes of the table with their key columns in order and per-column options (bit 1: DESC). */
@@ -232,7 +254,8 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                        array_to_string(i.indoption::int2[], ',') as opts,
                        i.indisunique as is_unique,
                        (i.indpred is null and i.indexprs is null) as is_full,
-                       pg_get_indexdef(i.indexrelid) as definition
+                       pg_get_indexdef(i.indexrelid) as definition,
+                       (select c.relname from pg_class c where c.oid = i.indexrelid) as index_name
                 from pg_index i
                 where i.indrelid = to_regclass(:tableName)
                 """)
@@ -242,13 +265,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 split(row.get("opts", String.class)).stream().map(Integer::valueOf).toList(),
                 Boolean.TRUE.equals(row.get("is_unique", Boolean.class)),
                 Boolean.TRUE.equals(row.get("is_full", Boolean.class)),
-                normalizedDefinition(row.get("definition", String.class))))
+                String.valueOf(row.get("index_name", String.class)).toLowerCase(Locale.ROOT),
+                lowerColumns(row.get("definition", String.class))))
             .all();
-    }
-
-    private static String normalizedDefinition(String definition) {
-        return definition == null ? "" : definition.toLowerCase(Locale.ROOT).replace("::text", "")
-            .replaceAll("[\\s()\"]", "");
     }
 
     /** Single-column foreign keys of the table as {@code column->referenced table}. */
@@ -278,9 +297,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             // A unique index of the constraint's name on lower(column) of each field (decision D36).
             List<String> columns = unique.fields().stream()
                 .map(f -> def.physicalColumn(f).toLowerCase(Locale.ROOT)).toList();
-            String named = "createuniqueindex" + unique.name().toLowerCase(Locale.ROOT) + "on";
+            String named = unique.name().toLowerCase(Locale.ROOT);
             return fetchIndexes(def.physicalTable)
-                .filter(ix -> ix.unique() && ix.definition().startsWith(named) && ix.lowerOf(columns))
+                .filter(ix -> ix.unique() && ix.name().equals(named) && ix.lowerOf(columns))
                 .hasElements()
                 .flatMap(present -> present ? Mono.<String>empty() : Mono.just(label + " -> no unique index named "
                     + unique.name() + " on lower(" + String.join("), lower(", columns) + ") of table "
