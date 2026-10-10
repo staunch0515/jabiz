@@ -28,7 +28,7 @@ public enum MaterialKind {
         this.contentField = contentField;
     }
 
-    /** The field holding this kind's content: {@code body}, {@code url}, {@code pdf}, {@code audio} or {@code images}. */
+    /** The field holding this kind's content ({@link #CONTENT_FIELDS}). */
     public String contentField() {
         return contentField;
     }
