@@ -81,7 +81,7 @@ class ScenarioAcceptanceIT {
     /**
      * Waybill A ships on 10 January, B on 2 February, L on 31 January but is charged only in February; January is
      * closed on 3 February. The rate starts at {@code initialRate}; optionally 15 % is scheduled for 1 February
-     * (Japan time).
+     * (Japan time). The rate is a controlled parameter (decision D40): one person proposes, another publishes.
      */
     private static Scenario rates(String initialRate, boolean schedule) {
         String yaml = """
@@ -89,11 +89,19 @@ class ScenarioAcceptanceIT {
             clock: 2026-01-05T00:00:00Z
             actor: { id: billing-admin, permissions: ["*"] }
             steps:
-              - process: PARAM_CREATE@latest
+              - actor: { id: rate-setter, permissions: [control.propose] }
+                process: CONTROL_CHANGE_PROPOSE@latest
                 input:
-                  key: logistics.fuel-surcharge-rate
-                  valueKind: { type: numeric, precision: 5, scale: 4 }
-                  value: "%s"
+                  targetEntity: SysParam
+                  reason: Initial rate
+                  values:
+                    paramKey: logistics.fuel-surcharge-rate
+                    valueKind: { type: numeric, precision: 5, scale: 4 }
+                    value: "%s"
+                save: { createRate: $.changeId }
+              - actor: { id: rate-approver, permissions: [control.publish] }
+                process: CONTROL_CHANGE_PUBLISH@latest
+                input: { changeId: "${createRate}" }
             %s
               - setClock: 2026-01-10T00:00:00Z
               - process: ADD_ENTITY@latest
@@ -122,8 +130,17 @@ class ScenarioAcceptanceIT {
             snapshot:
               entities: [SysParam, WaybillTracking, FreightCharge, FreightStatement]
             """.formatted(initialRate, schedule ? """
-              - process: PARAM_SCHEDULE@latest
-                input: { key: logistics.fuel-surcharge-rate, value: "0.15", effectiveTime: 2026-01-31T15:00:00Z }
+              - actor: { id: rate-setter, permissions: [control.propose] }
+                process: CONTROL_CHANGE_PROPOSE@latest
+                input:
+                  targetEntity: SysParam
+                  reason: February rate
+                  values: { paramKey: logistics.fuel-surcharge-rate, value: "0.15" }
+                  effectiveTime: 2026-01-31T15:00:00Z
+                save: { february: $.changeId }
+              - actor: { id: rate-approver, permissions: [control.publish] }
+                process: CONTROL_CHANGE_PUBLISH@latest
+                input: { changeId: "${february}" }
             """ : "");
         return Scenario.parse(yaml, "inline:rates-" + initialRate + "-" + schedule);
     }

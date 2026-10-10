@@ -1,8 +1,5 @@
 package com.jabiz.runtime.approval;
 
-import com.jabiz.approval.ApprovalCondition;
-import com.jabiz.approval.ApprovalLevel;
-import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ChangeSet;
@@ -10,35 +7,28 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.LoadEntity;
-import com.jabiz.security.SodRule;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
-import java.util.function.Function;
 
 /**
  * Four-eyes changes of the controls themselves (docs/design/18-numbering-approvals-tasks.md section 3.5): approval
- * rules, approver limits and SoD rules change only through a {@code SysControlChange} that one person proposes and
- * another publishes.
+ * rules, approver limits, SoD rules and controlled business parameters (decision D40) change only through a
+ * {@code SysControlChange} that one person proposes and another publishes. What can be changed, and how a change is
+ * checked and written, is up to the {@link ControlTarget} of the entity.
  * <ul>
- *   <li>{@code CONTROL_CHANGE_PROPOSE}: a new instance ({@code targetId} empty), a change of some fields, or a
- *       deletion; optionally effective at a later time (scheduled). The values are checked at once: fields of the
- *       entity, declared subjects, conditions and levels that fit the subject's facts, valid SoD groups;</li>
- *   <li>{@code CONTROL_CHANGE_PUBLISH}: by anybody but the proposer ({@code CONTROL_SAME_PERSON}); the values are
- *       checked again against the target's current state and written with the proposed effective time;</li>
+ *   <li>{@code CONTROL_CHANGE_PROPOSE}: a new instance, a change of some fields, or a deletion; optionally effective
+ *       at a later time (scheduled). The target checks the values at once;</li>
+ *   <li>{@code CONTROL_CHANGE_PUBLISH}: by anybody but the proposer ({@code CONTROL_SAME_PERSON}); the target checks
+ *       the change again against the state it is based on now and writes it with the proposed effective time;</li>
  *   <li>{@code CONTROL_CHANGE_WITHDRAW}: the proposer takes a proposal back.</li>
  * </ul>
  */
@@ -52,14 +42,6 @@ public class ControlChanges {
     /** Actions of a change. */
     public static final String UPSERT = "UPSERT";
     public static final String DELETE = "DELETE";
-
-    /** The fields a change may set, per target entity. */
-    static final Map<String, Set<String>> WRITABLE = Map.of(
-        ApprovalEntities.RULE, Set.of("ruleCode", "subject", "condition", "levels", "priority", "enabled",
-            "description"),
-        ApprovalEntities.LIMIT, Set.of("userId", "subject", "maxValue"),
-        ApprovalEntities.SOD_RULE, Set.of("ruleCode", "leftPermissions", "rightPermissions", "enabled",
-            "description"));
 
     /**
      * @param targetId      the instance to change or delete; empty to create one
@@ -75,27 +57,18 @@ public class ControlChanges {
 
     public record ChangeOutput(String changeId, String status, String targetId) {}
 
+    static final String CHANGE_ID = "changeId";
     private static final String INPUT = "input";
-    private static final String CHANGE_ID = "changeId";
     private static final String CHANGE = "change";
+    private static final String REQUEST = "request";
     private static final String TARGET = "target";
     private static final String OUTPUT = "output";
 
-    /** The dataset of a target entity; null for any other entity. */
-    static String datasetOf(String entity) {
-        return switch (entity) {
-            case ApprovalEntities.RULE -> ApprovalEntities.RULE_DATASET;
-            case ApprovalEntities.LIMIT -> ApprovalEntities.LIMIT_DATASET;
-            case ApprovalEntities.SOD_RULE -> ApprovalEntities.SOD_RULE_DATASET;
-            case null, default -> null;
-        };
-    }
-
-    public static ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> propose(
-        ApprovalSubjectRegistry subjects) {
+    public static ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> propose(ControlTargets targets) {
         return ProcessDefinition.define(PROPOSE, 1, ProposeInput.class, ChangeOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Proposes a change of an approval rule, approver limit or SoD rule.")
+                .description("Proposes a change of an approval rule, approver limit, SoD rule or controlled"
+                    + " business parameter.")
                 .permissions(ApprovalPermissions.CONTROL_PROPOSE)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
@@ -105,13 +78,14 @@ public class ControlChanges {
                 .outputMapper(ctx -> ctx.get(OUTPUT, ChangeOutput.class))
                 .step("Load the target", LoadControlTarget.of(ctx -> {
                     ProposeInput input = ctx.get(INPUT, ProposeInput.class);
-                    return new LoadControlTarget.Target(input.targetEntity(), input.targetId());
-                }, TARGET))
-                .compute("Record the proposal", (metadata, ctx) -> propose(ctx, subjects)));
+                    return new ControlTarget.Request(input.targetEntity(),
+                        input.targetId() == null ? null : input.targetId().toString(),
+                        Boolean.TRUE.equals(input.delete()), input.values(), input.effectiveTime());
+                }, REQUEST, TARGET))
+                .compute("Record the proposal", (metadata, ctx) -> propose(ctx, targets)));
     }
 
-    public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> publish(
-        ApprovalSubjectRegistry subjects) {
+    public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> publish(ControlTargets targets) {
         return ProcessDefinition.define(PUBLISH, 1, ChangeInput.class, ChangeOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Publishes a change of a control that another person proposed.")
@@ -122,13 +96,9 @@ public class ControlChanges {
                 .contextFactory(ControlChanges::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, ChangeOutput.class))
                 .step("Load the change", LoadEntity.by(ApprovalEntities.CONTROL_CHANGE_DATASET, CHANGE_ID, CHANGE))
-                .step("Load the target", LoadControlTarget.of(ctx -> {
-                    EntityInstance change = ctx.get(CHANGE, EntityInstance.class);
-                    Object id = change.get("targetId");
-                    return new LoadControlTarget.Target(change.get("targetEntity"), id == null ? null
-                        : UUID.fromString(String.valueOf(id)));
-                }, TARGET))
-                .compute("Publish", (metadata, ctx) -> publish(ctx, subjects)));
+                .step("Load the target", LoadControlTarget.of(ctx -> recorded(ctx.get(CHANGE, EntityInstance.class)),
+                    REQUEST, TARGET))
+                .compute("Publish", (metadata, ctx) -> publish(ctx, targets)));
     }
 
     public static ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> withdraw() {
@@ -150,44 +120,47 @@ public class ControlChanges {
         return ctx;
     }
 
-    private static void propose(ProcessContext ctx, ApprovalSubjectRegistry subjects) {
+    /** The change as recorded; its values are read from their JSON once, here. */
+    @SuppressWarnings("unchecked")
+    private static ControlTarget.Request recorded(EntityInstance change) {
+        Object json = change.get("changeValues");
+        return new ControlTarget.Request(change.get("targetEntity"), change.get("targetId"),
+            DELETE.equals(change.get("changeAction")),
+            json == null ? Map.of() : (Map<String, Object>) ApprovalJson.read((String) json),
+            change.get("effectiveTime"));
+    }
+
+    private static Object loaded(ProcessContext ctx) {
+        return ctx.contains(TARGET) ? ctx.get(TARGET) : null;
+    }
+
+    private static void propose(ProcessContext ctx, ControlTargets targets) {
         ProposeInput input = ctx.get(INPUT, ProposeInput.class);
-        if (datasetOf(input.targetEntity()) == null) {
-            ctx.reject(invalid("targetEntity", "changes are proposed for " + String.join(", ",
-                new TreeSet<>(WRITABLE.keySet())) + ", not " + input.targetEntity()));
+        Optional<ControlTarget> target = targets.find(input.targetEntity());
+        if (target.isEmpty()) {
+            ctx.reject(invalid("targetEntity", "changes are proposed for " + String.join(", ", targets.entities())
+                + ", not " + input.targetEntity()));
             return;
         }
-        EntityInstance target = ctx.contains(TARGET) ? ctx.get(TARGET, EntityInstance.class) : null;
-        Map<String, Object> values = new LinkedHashMap<>();
-        if (Boolean.TRUE.equals(input.delete())) {
-            if (input.targetId() == null) {
-                ctx.reject(invalid("targetId", "a deletion names the instance to delete"));
-                return;
-            }
-        } else {
-            values = normalize(input.targetEntity(), input.values() == null ? Map.of() : input.values());
-            check(input.targetEntity(), values, target, subjects).forEach(problem ->
-                ctx.reject(invalid("values", problem)));
-        }
-        if (ctx.hasViolations()) {
+        ControlTarget.Proposal proposal = target.get().propose(ctx.get(REQUEST, ControlTarget.Request.class),
+            loaded(ctx), ctx);
+        if (proposal == null || ctx.hasViolations()) {
             return;
         }
         Map<String, Object> change = new LinkedHashMap<>();
         change.put("targetEntity", input.targetEntity());
-        change.put("targetId", input.targetId() == null ? null : input.targetId().toString());
+        change.put("targetId", proposal.targetId());
         change.put("changeAction", Boolean.TRUE.equals(input.delete()) ? DELETE : UPSERT);
-        change.put("changeValues", Boolean.TRUE.equals(input.delete()) ? null : ApprovalJson.write(values));
+        change.put("changeValues", proposal.values() == null ? null : ApprovalJson.write(proposal.values()));
         change.put("effectiveTime", input.effectiveTime());
         change.put("reason", input.reason().strip());
         change.put("status", ApprovalEntities.PROPOSED);
         change.put("proposedBy", ctx.request().actorId());
         Object id = ctx.changes().insert(ApprovalEntities.CONTROL_CHANGE, change);
-        ctx.put(OUTPUT, new ChangeOutput(String.valueOf(id), ApprovalEntities.PROPOSED,
-            input.targetId() == null ? null : input.targetId().toString()));
+        ctx.put(OUTPUT, new ChangeOutput(String.valueOf(id), ApprovalEntities.PROPOSED, proposal.targetId()));
     }
 
-    @SuppressWarnings("unchecked")
-    private static void publish(ProcessContext ctx, ApprovalSubjectRegistry subjects) {
+    private static void publish(ProcessContext ctx, ControlTargets targets) {
         EntityInstance change = ctx.get(CHANGE, EntityInstance.class);
         String changeId = String.valueOf(change.id());
         if (!ApprovalEntities.PROPOSED.equals(change.get("status"))) {
@@ -200,30 +173,16 @@ public class ControlChanges {
                 "The proposer of change " + changeId + " cannot publish it", Map.of("change", changeId)));
             return;
         }
-        String entity = change.get("targetEntity");
-        EntityInstance target = ctx.contains(TARGET) ? ctx.get(TARGET, EntityInstance.class) : null;
-        Instant effective = change.get("effectiveTime");
-        ChangeSet.Target writes = ctx.changes().in(datasetOf(entity));
-        if (effective != null) {
-            writes = writes.effectiveAt(effective);
+        ControlTarget.Request request = ctx.get(REQUEST, ControlTarget.Request.class);
+        ControlTarget target = targets.find(request.entity()).orElseThrow(() -> new IllegalStateException(
+            "Change " + changeId + " is for " + request.entity() + ", which no control target changes"));
+        ChangeSet.Target writes = ctx.changes().in(target.dataset(request.entity()));
+        if (request.effectiveTime() != null) {
+            writes = writes.effectiveAt(request.effectiveTime());
         }
-        Object targetId;
-        if (DELETE.equals(change.get("changeAction"))) {
-            writes.delete(entity, target.id(), target.version());
-            targetId = target.id();
-        } else {
-            Map<String, Object> values = new LinkedHashMap<>(
-                (Map<String, Object>) ApprovalJson.read(change.get("changeValues")));
-            check(entity, values, target, subjects).forEach(problem -> ctx.reject(invalid(CHANGE_ID, problem)));
-            if (ctx.hasViolations()) {
-                return;
-            }
-            if (target == null) {
-                targetId = writes.insert(entity, values);
-            } else {
-                writes.update(entity, target.id(), target.version(), values);
-                targetId = target.id();
-            }
+        Object targetId = target.publish(request, loaded(ctx), ctx, writes);
+        if (targetId == null || ctx.hasViolations()) {
+            return;
         }
         Map<String, Object> published = new LinkedHashMap<>();
         published.put("status", ApprovalEntities.PUBLISHED);
@@ -249,94 +208,20 @@ public class ControlChanges {
         ctx.put(OUTPUT, new ChangeOutput(changeId, ApprovalEntities.WITHDRAWN, change.get("targetId")));
     }
 
-    /** The values as stored: an approval rule's condition and levels as JSON text. */
-    private static Map<String, Object> normalize(String entity, Map<String, Object> values) {
-        Map<String, Object> normalized = new LinkedHashMap<>(values);
-        if (entity.equals(ApprovalEntities.RULE)) {
-            for (String json : List.of("condition", "levels")) {
-                Object value = normalized.get(json);
-                if (value != null && !(value instanceof String)) {
-                    normalized.put(json, ApprovalJson.write(value));
-                }
-            }
-        }
-        return normalized;
-    }
-
-    /**
-     * Problems of setting {@code values} on {@code target} (null: a new instance), as far as the entity's own
-     * validation does not find them when the change is written: subjects, conditions, levels and SoD groups.
-     */
-    static List<String> check(String entity, Map<String, Object> values, EntityInstance target,
-        ApprovalSubjectRegistry subjects) {
-        List<String> problems = new ArrayList<>();
-        values.keySet().stream().filter(field -> !WRITABLE.get(entity).contains(field)).sorted()
-            .forEach(field -> problems.add("field '" + field + "' cannot be set"));
-        if (values.isEmpty()) {
-            problems.add("no values");
-        }
-        Function<String, Object> merged = field -> values.containsKey(field) ? values.get(field)
-            : target == null ? null : target.get(field);
-        try {
-            switch (entity) {
-                case ApprovalEntities.RULE -> {
-                    Optional<ApprovalSubject> subject = subject(merged.apply("subject"), subjects, problems);
-                    if (subject.isPresent()) {
-                        parse(() -> ApprovalCondition.parse(ApprovalJson.read((String) merged.apply("condition")),
-                            subject.get()), problems);
-                        parse(() -> ApprovalLevel.parse(ApprovalJson.read((String) merged.apply("levels")),
-                            subject.get()), problems);
-                    }
-                }
-                case ApprovalEntities.LIMIT -> {
-                    subject(merged.apply("subject"), subjects, problems);
-                    Object max = merged.apply("maxValue");
-                    if (max != null && new BigDecimal(String.valueOf(max)).signum() < 0) {
-                        problems.add("maxValue must not be negative");
-                    }
-                }
-                case ApprovalEntities.SOD_RULE -> parse(() -> SodRule.of(String.valueOf(merged.apply("ruleCode")),
-                    (String) merged.apply("leftPermissions"), (String) merged.apply("rightPermissions")), problems);
-                default -> throw new IllegalArgumentException("not a control: " + entity);
-            }
-        } catch (ClassCastException | NumberFormatException e) {
-            problems.add("a value has the wrong type: " + e.getMessage());
-        }
-        return problems;
-    }
-
-    private static Optional<ApprovalSubject> subject(Object name, ApprovalSubjectRegistry subjects,
-        List<String> problems) {
-        Optional<ApprovalSubject> subject = name == null ? Optional.empty() : subjects.find(String.valueOf(name));
-        if (subject.isEmpty()) {
-            problems.add("approval subject '" + name + "' is not declared");
-        }
-        return subject;
-    }
-
-    private static void parse(Runnable parse, List<String> problems) {
-        try {
-            parse.run();
-        } catch (IllegalArgumentException e) {
-            problems.add(e.getMessage());
-        }
-    }
-
-    private static Violation invalid(String field, String detail) {
+    /** A problem of a change (422 {@code CONTROL_CHANGE_INVALID}), for the targets as well. */
+    public static Violation invalid(String field, String detail) {
         return new Violation(field, PlatformErrorCodes.CONTROL_CHANGE_INVALID, "Invalid change: " + detail,
             Map.of("detail", detail));
     }
 
     @Bean
-    ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> controlChangeProposeProcess(
-        ApprovalSubjectRegistry subjects) {
-        return propose(subjects);
+    ProcessDefinition<ProposeInput, ChangeOutput, ProcessContext> controlChangeProposeProcess(ControlTargets targets) {
+        return propose(targets);
     }
 
     @Bean
-    ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> controlChangePublishProcess(
-        ApprovalSubjectRegistry subjects) {
-        return publish(subjects);
+    ProcessDefinition<ChangeInput, ChangeOutput, ProcessContext> controlChangePublishProcess(ControlTargets targets) {
+        return publish(targets);
     }
 
     @Bean
