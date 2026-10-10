@@ -45,7 +45,13 @@ class PlatformCheckIT {
     void theApplicationPasses() {
         Outcome outcome = check();
 
-        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 0 warning(s)");
+        // The two warnings of the customer portal's registration (ROADMAP phase 16b-2), which the sample leaves to
+        // whoever runs it: mail is off by default, and roles are data (a fresh database has none).
+        assertThat(outcome.lines().stream().filter(line -> line.startsWith("WARNING")).toList()).containsExactly(
+            "WARNING SECURITY | jabiz.security.entries.portal | self-registration is on, but jabiz.mail.enabled is "
+                + "not: registered users cannot verify their address",
+            "WARNING SECURITY | jabiz.security.entries | role CUSTOMER does not exist (yet)");
+        assertThat(outcome.lines()).last().isEqualTo("platformCheck: 0 error(s), 2 warning(s)");
         assertThat(outcome.exitCode()).isZero();
     }
 

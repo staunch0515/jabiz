@@ -90,11 +90,14 @@ public final class CommerceEntities extends BaseEntityDefinitions {
             .apply(Rules.notBlank("ORDER_CUSTOMER_BLANK")));
         eb.field("customerName", f -> f.physicalColumn("customer_name").required(true).asText(100));
         eb.field("userId", f -> f.physicalColumn("user_id").asReference("SecUser"));
+        // A blocked customer's account cannot sign in to the portal (PortalSignInGuard) nor order there; empty: not
+        // blocked.
+        eb.field("blocked", f -> f.physicalColumn("blocked").asBool());
         eb.unique("uk_customer_code", "customerCode");
         eb.display("customerName");
         eb.listView("default", lv -> lv
-            .columns("customerCode", "customerName")
-            .filters("customerCode", "customerName")
+            .columns("customerCode", "customerName", "blocked")
+            .filters("customerCode", "customerName", "blocked")
             .sorts("customerCode", "customerName")
             .defaultSort("customerCode", true));
         eb.temporal(t -> t.allowScheduled(false));
