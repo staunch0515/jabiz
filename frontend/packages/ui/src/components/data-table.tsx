@@ -23,6 +23,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 export type { ColumnDef, ColumnFiltersState, PaginationState, SortingState }
 
+declare module '@tanstack/react-table' {
+  // Presentation of a column in a DataTable.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    /** Classes of the column's header and cells (width, alignment). */
+    className?: string
+    /** Kept at the right edge while the table scrolls sideways (the row actions). */
+    pinned?: 'right'
+  }
+}
+
+/** The classes of a column's header and cells: its own, and those keeping a pinned column at the right edge. */
+function columnClass(meta: { className?: string; pinned?: 'right' } | undefined, header = false) {
+  return cn(
+    meta?.pinned === 'right' &&
+      cn('sticky right-0 z-10 border-l shadow-[-4px_0_4px_-4px_var(--border)]', header ? 'bg-background' : 'bg-background group-hover/row:bg-muted'),
+    meta?.className,
+  )
+}
+
 export interface DataTableProps<Row> {
   columns: ColumnDef<Row, unknown>[]
   /** The rows of the current page, as the server returned them: the table neither sorts, filters nor pages. */
@@ -163,6 +183,7 @@ export function DataTable<Row>({
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
+                      className={columnClass(header.column.columnDef.meta, true)}
                       aria-sort={
                         !sortable ? undefined : direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'
                       }
@@ -220,7 +241,12 @@ export function DataTable<Row>({
                 const open = row.getIsExpanded()
                 return (
                   <Fragment key={row.id}>
-                    <TableRow data-state={open ? 'expanded' : undefined} {...rowProps?.(row.original)}>
+                    <TableRow
+                      data-slot="data-table-row"
+                      data-state={open ? 'expanded' : undefined}
+                      className="group/row"
+                      {...rowProps?.(row.original)}
+                    >
                       {renderExpanded && (
                         <TableCell className="w-10">
                           <Button
@@ -235,7 +261,9 @@ export function DataTable<Row>({
                         </TableCell>
                       )}
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                        <TableCell key={cell.id} className={columnClass(cell.column.columnDef.meta)}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
                       ))}
                     </TableRow>
                     {open && renderExpanded && (
