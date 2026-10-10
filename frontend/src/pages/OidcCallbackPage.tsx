@@ -1,4 +1,5 @@
-import { Alert, Button, Result, Spin } from 'antd'
+import { Alert, AlertDescription, Button, cn, PageState, UI_SCOPE } from '@jabiz/ui'
+import { TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router'
@@ -41,13 +42,24 @@ export default function OidcCallbackPage() {
       .catch((e: unknown) => setFailure(e instanceof ApiError ? e.display : t('app.error')))
   }, [state, code, signInWithProvider, navigate, t])
 
-  if (!error) return <Spin fullscreen tip={t('app.loading')} />
   return (
-    <Result
-      status="warning"
-      title={t('login.providerFailed')}
-      subTitle={<Alert type="error" showIcon message={error} data-testid="oidc-error" />}
-      extra={<Button type="primary" onClick={() => navigate('/login', { replace: true })}>{t('login.back')}</Button>}
-    />
+    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20')}>
+      {!error ? (
+        <PageState kind="loading" title={t('app.loading')} />
+      ) : (
+        <PageState
+          kind="warning"
+          titleAs="h1"
+          title={t('login.providerFailed')}
+          description={
+            <Alert variant="destructive" data-testid="oidc-error" className="text-left">
+              <TriangleAlert aria-hidden />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          }
+          action={<Button onClick={() => navigate('/login', { replace: true })}>{t('login.back')}</Button>}
+        />
+      )}
+    </main>
   )
 }

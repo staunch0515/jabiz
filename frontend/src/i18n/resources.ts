@@ -276,6 +276,8 @@ const en = {
     latest: 'latest',
     deprecated: 'deprecated',
     version: 'Version',
+    traits: 'Traits',
+    description: 'Description',
   },
   list: {
     create: 'New',
@@ -337,6 +339,9 @@ const en = {
     field: 'Field',
     before: 'Before',
     after: 'After',
+    crumb: 'History',
+    revertReasonRequired: 'Enter why it is reverted.',
+    changes: 'Changes in version {{no}}',
     action: {
       INSERT: 'Created',
       UPDATE: 'Changed',
@@ -355,6 +360,9 @@ const en = {
     invalidJson: 'Not valid JSON.',
     succeeded: 'The process completed.',
     addItem: 'Add',
+    removeItem: 'Remove item {{no}} of {{list}}',
+    item: 'Item {{no}}',
+    required: 'required',
   },
   file: {
     upload: 'Upload',
@@ -653,6 +661,8 @@ const zh: Texts = {
     latest: '最新',
     deprecated: '已废弃',
     version: '版本',
+    traits: '特性',
+    description: '说明',
   },
   list: {
     create: '新建',
@@ -714,6 +724,9 @@ const zh: Texts = {
     field: '字段',
     before: '修改前',
     after: '修改后',
+    crumb: '历史',
+    revertReasonRequired: '请填写撤销原因。',
+    changes: '版本 {{no}} 的修改',
     action: {
       INSERT: '新建',
       UPDATE: '修改',
@@ -732,6 +745,9 @@ const zh: Texts = {
     invalidJson: '不是有效的 JSON。',
     succeeded: '流程已完成。',
     addItem: '添加',
+    removeItem: '删除 {{list}} 的第 {{no}} 项',
+    item: '第 {{no}} 项',
+    required: '必填',
   },
   file: {
     upload: '上传',
@@ -1027,6 +1043,8 @@ const ja: Texts = {
     latest: '最新',
     deprecated: '非推奨',
     version: 'バージョン',
+    traits: '特性',
+    description: '説明',
   },
   list: {
     create: '新規',
@@ -1088,6 +1106,9 @@ const ja: Texts = {
     field: '項目',
     before: '変更前',
     after: '変更後',
+    crumb: '履歴',
+    revertReasonRequired: '取り消す理由を入力してください。',
+    changes: 'バージョン {{no}} の変更',
     action: {
       INSERT: '作成',
       UPDATE: '変更',
@@ -1106,6 +1127,9 @@ const ja: Texts = {
     invalidJson: 'JSON として正しくありません。',
     succeeded: 'プロセスが完了しました。',
     addItem: '追加',
+    removeItem: '{{list}} の {{no}} 件目を削除',
+    item: '{{no}} 件目',
+    required: '必須',
   },
   file: {
     upload: 'アップロード',

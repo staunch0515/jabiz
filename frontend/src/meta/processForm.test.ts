@@ -1,6 +1,15 @@
 import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
-import { InvalidJson, inputKindOf, inputNodes, toProcessInput, type JsonSchema } from './processForm'
+import {
+  checkInputs,
+  compiledPattern,
+  initialInputValues,
+  InvalidJson,
+  inputKindOf,
+  inputNodes,
+  toProcessInput,
+  type JsonSchema,
+} from './processForm'
 
 /** The schema the server generates for LEDGER_POST-like input (runtime ProcessInputSchemas). */
 const schema: JsonSchema = {
@@ -97,5 +106,63 @@ describe('process form', () => {
     } catch (e) {
       expect((e as InvalidJson).path).toBe('value')
     }
+  })
+
+  it('turns the text of number inputs into JSON numbers, and leaves out empty tags', () => {
+    const nodes = inputNodes(schema)
+    expect(toProcessInput(nodes, { count: '42', ratio: ' 0.5 ', tags: [], day: '2026-02-01', bookingTime: '2026-01-31T15:00:00.000Z' })).toEqual({
+      count: 42,
+      ratio: 0.5,
+      day: '2026-02-01',
+      bookingTime: '2026-01-31T15:00:00.000Z',
+    })
+    // Text that is no number goes as it is, for the server to refuse.
+    expect(toProcessInput(nodes, { count: '4x' })).toEqual({ count: '4x' })
+    expect(toProcessInput(nodes, { count: '', flag: false })).toEqual({ flag: false })
+  })
+
+  it('checks only required inputs and patterns, in objects and list items', () => {
+    const nodes = inputNodes(schema)
+    const values = initialInputValues(nodes)
+    expect(values).toMatchObject({ description: '', tags: [], flag: undefined, address: { city: '' } })
+    expect(values.entries).toEqual([{ accountCode: '', direction: '', amount: '' }])
+    expect(checkInputs(nodes, values).map((p) => [p.path, p.message, p.ruleCode])).toEqual([
+      ['description', 'description: REQUIRED', 'REQUIRED'],
+      ['entries.0.accountCode', 'accountCode: REQUIRED', 'REQUIRED'],
+      ['entries.0.direction', 'direction: REQUIRED', 'REQUIRED'],
+      ['entries.0.amount', 'amount: REQUIRED', 'REQUIRED'],
+    ])
+    expect(
+      checkInputs(nodes, {
+        description: ' ',
+        entries: [{ accountCode: '1', direction: 'DEBIT', amount: '1' }],
+      }).map((p) => p.message),
+    ).toEqual(['description: INVALID_VALUE'])
+    // No items: nothing to check in them (the server's minItems decides).
+    expect(checkInputs(nodes, { description: 'x', entries: [] })).toEqual([])
+    // A pattern this browser cannot compile is left to the server.
+    expect(checkInputs(inputNodes({ type: 'object', properties: { a: { type: 'string', pattern: '(?<' } } }), { a: 'x' })).toEqual([])
+  })
+
+  it('refuses fields holding typed text that is no value, whatever their value', () => {
+    const nodes = inputNodes(schema)
+    const values = { description: 'x', day: '', entries: [{ accountCode: '1', direction: 'DEBIT', amount: '1' }] }
+    expect(checkInputs(nodes, values, '', new Set(['day', 'entries.0.amount']))).toEqual([
+      { path: 'entries.0.amount', message: 'amount: INVALID_VALUE', ruleCode: 'INVALID_VALUE', shownByField: true },
+      { path: 'day', message: 'day: INVALID_VALUE', ruleCode: 'INVALID_VALUE', shownByField: true },
+    ])
+    expect(compiledPattern('\\d+')?.test('42')).toBe(true)
+    expect(compiledPattern('(?<')).toBeUndefined()
+    expect(compiledPattern(undefined)).toBeUndefined()
+  })
+
+  it('starts with the row key filled in, a required boolean off and required tags empty', () => {
+    const nodes = inputNodes({
+      type: 'object',
+      properties: { id: { type: 'string' }, on: { type: 'boolean' }, tags: { type: 'array', items: { type: 'string' } } },
+      required: ['on', 'tags'],
+    })
+    expect(initialInputValues(nodes, { id: 'p-1' })).toEqual({ id: 'p-1', on: false, tags: [] })
+    expect(checkInputs(nodes, { id: 'p-1', on: false, tags: [] }).map((p) => p.message)).toEqual(['tags: REQUIRED'])
   })
 })

@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import OidcCallbackPage from './OidcCallbackPage'
+import { expectAccessible } from '../test/axe'
 
 const signInWithProvider = vi.fn()
 
@@ -18,15 +18,13 @@ function LoginProbe() {
 
 function page(search: string) {
   render(
-    <App>
       <MemoryRouter initialEntries={[`/login/oidc${search}`]}>
         <Routes>
           <Route path="/login/oidc" element={<OidcCallbackPage />} />
           <Route path="/login" element={<LoginProbe />} />
           <Route path="/tasks" element={<div data-testid="tasks" />} />
         </Routes>
-      </MemoryRouter>
-    </App>,
+      </MemoryRouter>,
   )
 }
 
@@ -60,5 +58,14 @@ describe('OidcCallbackPage', () => {
     signInWithProvider.mockRejectedValue(new ApiError(401, { violations: [{ ruleCode: 'LOGIN_FAILED', message: 'No.' }] }))
     page('?state=s1&code=c1')
     await waitFor(() => expect(screen.getByTestId('oidc-error').textContent).toBe('No.'))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Signing in through the identity provider')
+    await expectAccessible()
+  })
+
+  it('says it is busy while the server checks the sign-in', async () => {
+    signInWithProvider.mockReturnValue(new Promise(() => {}))
+    page('?state=s1&code=c1')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    await expectAccessible()
   })
 })

@@ -8,6 +8,7 @@ import './i18n'
 export { cn, UI_SCOPE } from './lib/utils'
 export { UI_NAMESPACE, uiMessages } from './i18n'
 export { useIsMobile } from './hooks/use-mobile'
+export * from './form-state'
 
 // shadcn/ui
 export * from './components/ui/alert'
@@ -65,7 +66,15 @@ export { ConfirmDialog } from './components/confirm-dialog'
 export type { ConfirmDialogProps } from './components/confirm-dialog'
 export { notify } from './components/notify'
 export type { NotifyOptions } from './components/notify'
-export { DatePicker, DateTimePicker, parseDateValue, toDateValue } from './components/date-picker'
+export {
+  DatePicker,
+  DateTimePicker,
+  formatDateTimeText,
+  parseDateText,
+  parseDateTimeText,
+  parseDateValue,
+  toDateValue,
+} from './components/date-picker'
 export type { DatePickerProps, DateTimePickerProps } from './components/date-picker'
 export {
   DecimalInput,
@@ -77,4 +86,22 @@ export type { DecimalInputProps, MoneyInputProps } from './components/decimal-in
 export { PageHeader } from './components/page-header'
 export type { PageHeaderProps } from './components/page-header'
 export { AppShell, ShellNav } from './components/app-shell'
+export { Combobox } from './components/combobox'
+export type { ComboboxOption, ComboboxProps } from './components/combobox'
+export { FilterBar, filledFilters } from './components/filter-bar'
+export type { FilterBarProps, FilterField, FilterRange, FilterValue, FilterValues } from './components/filter-bar'
+export { FileUpload, fileMatchesAccept } from './components/file-upload'
+export type { FileUploadProps } from './components/file-upload'
+export { Timeline } from './components/timeline'
+export type { TimelineItem, TimelineProps, TimelineTone } from './components/timeline'
+export { DescriptionList } from './components/description-list'
+export type { DescriptionItem, DescriptionListProps } from './components/description-list'
+export { TagsInput } from './components/tags-input'
+export type { TagsInputProps } from './components/tags-input'
+export { CopyButton } from './components/copy-button'
+export type { CopyButtonProps } from './components/copy-button'
+export { PageState } from './components/page-state'
+export type { PageStateKind, PageStateProps } from './components/page-state'
+export { Spinner } from './components/spinner'
+export type { SpinnerProps } from './components/spinner'
 export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'

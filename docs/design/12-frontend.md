@@ -82,7 +82,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 |---|---|---|---|
 | `text` | 文本框（`multiline` → 多行） | 原样 | 允许 `LIKE` → 包含；否则等于 |
 | `monetary` / `numeric` | 数字框（文本模式，不取整，金额带币种后缀） | 按币种与小数位 / 精确小数 | 区间（`between` / `gte` / `lte`） |
-| `temporal` | 日期时间 | 本地时间 | 时间区间 |
+| `temporal` | 日期时间（按应用区域的格式键入，ISO `YYYY-MM-DD HH:mm:ss` 也可；或从日历选择；无效的键入不提交） | 本地时间 | 时间区间 |
 | `date` | 日期（按所选的那一天发送 `YYYY-MM-DD`，不经时区换算） | 日期（区域格式） | 日期区间（含两端） |
 | `code` | 下拉（字典的启用项按顺序，否则固定值） | 字典标签 | 等于 |
 | `bool` | 开关（新建时默认"否"） | 是 / 否 | 等于 |
@@ -146,7 +146,10 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
-- 布局 `ProLayout`：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
+- 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
+- 以 `@jabiz/ui` 构建的页面（15b-1 起：登录、单点登录回调、两个目录、流程表单、历史）用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：
+  数据 › 实体 › 历史、流程 › 流程名），路由带 `handle: { ui: 'jabiz' }`，外壳据此不再把它们固定为亮色。流程表单由 `SchemaForm`（react-hook-form）生成：
+  前端只检查必填与 `pattern`（纯函数 `checkInputs`），数字输入以 JSON 数字发送，必填的布尔值默认"否"；历史页的时间点（`asOf` / `knownAt`）写在地址中。
 - 实体上的操作（16 §3）：流程目录中 `actsOn` 指向该实体的流程，在列表行与详情中显示为按钮（`when` 只是显示提示）；打开的流程表单中主键已填且只读，
   输入只有主键时确认后直接执行。
 - 详情抽屉中的子实体列表（16 §4）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
@@ -237,7 +240,7 @@ jabizApp {
 
 | 方面 | 做法 |
 |---|---|
-| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页、数据目录、列表、新建表单、历史、流程目录、流程表单（含必填的选择）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
+| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表、新建表单、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
 | 对比度 | `App.tsx` 的 `ACCESSIBLE_THEME`：主色 `#0958d9`、错误色 `#cf1322`、说明与三级文字（及随之的图标色）`rgba(0,0,0,0.65)`、成功色 `#237804`、警告色 `#874d00`（其浅色背景与边框保持 Ant Design 的默认值，否则成功、警告标签的文字只有 2.7:1）、表格的文字空状态 `rgba(0,0,0,0.65)`（Ant Design 默认分别为 4.1、3.3、3.4、2.3、1.8、1.8:1）；预置标签（green、orange、gold、red、blue）的文字在 `index.css` 中加深一档。都 ≥ 4.5:1 |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `components/expandIcon` 的展开按钮，带"展开行 / 收起行"的名称（Ant Design 的按钮在这些 ProTable 中没有名称）；只给有 `expandedRowRender` 的表格，否则表格会被当作树。表单项中直接使用的 antd `Select` 换成 `components/AccessibleSelect`（去掉表单项给的、被放在外层元素上的 `aria-required`）；ProForm 的选择字段没有这个问题 |
 | 扩展 | 扩展的页面在同一个 `ConfigProvider` 下，主题自动适用；扩展的 e2e 以平台前端的依赖运行时可直接引用 `@axe-core/playwright`，规则集与上表相同 |
@@ -249,14 +252,16 @@ jabizApp {
 - **两个包**（源码形式，`exports` 指向 `src/index.ts`，不发布）：`@jabiz/client`（登录与令牌刷新、闲置锁定、step-up、API 客户端、
   `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit(币种, 标签)` 让应用的账本币种显示为标签，如 JPY 显示为 "Kudos"；无币种的数字与其他币种不变）、`UserName`）；
   `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
-  `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
+  `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`，15b-1 起另有 `Combobox`、`FilterBar`、`FileUpload`、`Timeline`、`DescriptionList`、`TagsInput`、
+  `CopyButton`、`PageState`、`Spinner`，日期控件可键入并可限定范围；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
   （示范扩展在 15c 前豁免）。shadcn 组件只在 `packages/ui` 中生成或修改。
 - **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
   亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
 - **共存（15a–15c）**：Tailwind 的 preflight 只作用于带 `.jabiz-ui` 的元素及其后代（`packages/ui/scripts/scoped-preflight.mjs` 生成，测试比对已安装的 Tailwind）；
   `@jabiz/ui` 的组件画出的每个元素都带此类，因此组件放在哪里（antd 页面、扩展页面）都有 preflight，而周围的页面不受影响；外壳的包裹层与内容区不带。
   暗色的 `dark:` 变体不作用于 `.light` 之内。侧栏收起时整体移出屏幕并设为 `inert`（不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。antd 的样式经 `StyleProvider layer` 放入 CSS 层 `antd`，层顺序 `theme, antd, base, components, utilities`
-  （`src/index.css`），antd 的全局规则（链接颜色等）不影响新组件；antd 页面所在的内容区固定为亮色 token（`light`），暗色外观只作用于外壳与弹出层。
+  （`src/index.css`），antd 的全局规则（链接颜色等）不影响新组件；antd 页面所在的内容区固定为亮色 token（`light`），暗色外观只作用于外壳与弹出层；
+  路由带 `handle: { ui: 'jabiz' }` 的页面（已迁移到 `@jabiz/ui`，15b、15c）不固定，随外观变化。
   15d 删除 antd 后 preflight 改为全局、去掉层 `antd` 与 `light` 固定。
 - **应用自有 SPA**（D34 第 5 条）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'` 并 `@source` 该包的 `src`；
   `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`（以及使用 `@jabiz/ui` 时其运行时依赖）的版本与平台前端一致，不一致即失败。

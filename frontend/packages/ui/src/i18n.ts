@@ -32,8 +32,29 @@ const en = {
   },
   confirm: { ok: 'OK', cancel: 'Cancel' },
   appearance: { label: 'Appearance', light: 'Light', dark: 'Dark', system: 'System' },
-  date: { placeholder: 'Pick a date', clear: 'Clear', time: 'Time', previousMonth: 'Previous month', nextMonth: 'Next month' },
+  date: {
+    placeholder: 'Pick a date',
+    clear: 'Clear',
+    time: 'Time',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
+    openCalendar: 'Open calendar',
+    invalid: 'Not a valid date ({{format}}).',
+    notAllowed: 'This date cannot be chosen.',
+  },
   notify: { dismiss: 'Dismiss', notifications: 'Notifications' },
+  combobox: { placeholder: 'Select…', search: 'Search…', empty: 'No matches', clear: 'Clear' },
+  filter: { label: 'Filters', submit: 'Query', reset: 'Reset', from: '{{label}}, from', to: '{{label}}, to' },
+  upload: {
+    choose: 'Choose a file',
+    uploading: 'Uploading…',
+    tooLarge: 'The file is larger than {{max}}.',
+    wrongType: 'Files of this type are not accepted ({{types}}).',
+    failed: 'The upload failed.',
+  },
+  copy: { copy: 'Copy', copyValue: 'Copy {{value}}', copied: 'Copied', failed: 'Could not copy' },
+  tags: { remove: 'Remove {{tag}}', placeholder: 'Type and press Enter' },
+  pageState: { notFound: 'Not found', error: 'Something went wrong', warning: 'Attention' },
 }
 
 type Messages = typeof en
@@ -67,8 +88,20 @@ const zh: Messages = {
   },
   confirm: { ok: '确定', cancel: '取消' },
   appearance: { label: '外观', light: '浅色', dark: '深色', system: '跟随系统' },
-  date: { placeholder: '选择日期', clear: '清除', time: '时间', previousMonth: '上个月', nextMonth: '下个月' },
+  date: { placeholder: '选择日期', clear: '清除', time: '时间', previousMonth: '上个月', nextMonth: '下个月', openCalendar: '打开日历', invalid: '不是有效的日期（{{format}}）。', notAllowed: '不能选择这个日期。' },
   notify: { dismiss: '关闭', notifications: '通知' },
+  combobox: { placeholder: '请选择', search: '搜索…', empty: '没有匹配项', clear: '清除' },
+  filter: { label: '筛选', submit: '查询', reset: '重置', from: '{{label}}（起）', to: '{{label}}（止）' },
+  upload: {
+    choose: '选择文件',
+    uploading: '上传中…',
+    tooLarge: '文件大于 {{max}}。',
+    wrongType: '不接受这种类型的文件（{{types}}）。',
+    failed: '上传失败。',
+  },
+  copy: { copy: '复制', copyValue: '复制 {{value}}', copied: '已复制', failed: '无法复制' },
+  tags: { remove: '移除 {{tag}}', placeholder: '输入后按 Enter' },
+  pageState: { notFound: '不存在', error: '出错了', warning: '请注意' },
 }
 
 const ja: Messages = {
@@ -100,8 +133,29 @@ const ja: Messages = {
   },
   confirm: { ok: 'OK', cancel: 'キャンセル' },
   appearance: { label: '外観', light: 'ライト', dark: 'ダーク', system: 'システムに合わせる' },
-  date: { placeholder: '日付を選択', clear: 'クリア', time: '時刻', previousMonth: '前の月', nextMonth: '次の月' },
+  date: {
+    placeholder: '日付を選択',
+    clear: 'クリア',
+    time: '時刻',
+    previousMonth: '前の月',
+    nextMonth: '次の月',
+    openCalendar: 'カレンダーを開く',
+    invalid: '有効な日付ではありません（{{format}}）。',
+    notAllowed: 'この日付は選択できません。',
+  },
   notify: { dismiss: '閉じる', notifications: '通知' },
+  combobox: { placeholder: '選択してください', search: '検索…', empty: '該当なし', clear: 'クリア' },
+  filter: { label: '絞り込み', submit: '検索', reset: 'リセット', from: '{{label}}（開始）', to: '{{label}}（終了）' },
+  upload: {
+    choose: 'ファイルを選択',
+    uploading: 'アップロード中…',
+    tooLarge: 'ファイルが {{max}} を超えています。',
+    wrongType: 'この種類のファイルは受け付けません（{{types}}）。',
+    failed: 'アップロードに失敗しました。',
+  },
+  copy: { copy: 'コピー', copyValue: '{{value}} をコピー', copied: 'コピーしました', failed: 'コピーできませんでした' },
+  tags: { remove: '{{tag}} を削除', placeholder: '入力して Enter' },
+  pageState: { notFound: '見つかりません', error: 'エラーが発生しました', warning: '注意' },
 }
 
 export const uiMessages = { zh, ja, en }

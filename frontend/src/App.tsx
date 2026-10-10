@@ -1,5 +1,5 @@
 import { StyleProvider } from '@ant-design/cssinjs'
-import { AppearanceProvider, Toaster } from '@jabiz/ui'
+import { AppearanceProvider, PageState, Toaster } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App as AntApp, ConfigProvider, type ThemeConfig } from 'antd'
 import enUS from 'antd/locale/en_US'
@@ -34,7 +34,6 @@ import RetentionPage from './pages/RetentionPage'
 import ReportCatalogPage from './pages/ReportCatalogPage'
 import ReportPage from './pages/ReportPage'
 import TasksPage from './pages/TasksPage'
-import { Spin } from 'antd'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,10 +47,16 @@ const queryClient = new QueryClient({
   },
 })
 
+/**
+ * Marks a route whose page is built with @jabiz/ui (phases 15b–15c): the shell lets it follow the appearance instead
+ * of pinning it to the light tokens Ant Design pages need. Phase 15d removes the mark with Ant Design.
+ */
+const JABIZ_UI = { ui: 'jabiz' } as const
+
 function RequireSignIn() {
   const { ready, signedIn } = useAuth()
   const location = useLocation()
-  if (!ready) return <Spin fullscreen />
+  if (!ready) return <PageState kind="loading" className="min-h-screen" />
   if (!signedIn) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return <Outlet />
 }
@@ -69,11 +74,11 @@ const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <Navigate to={homePath(extension)} replace /> },
-          { path: '/data', element: <DatasetCatalogPage /> },
+          { path: '/data', element: <DatasetCatalogPage />, handle: JABIZ_UI },
           { path: '/data/:datasetId', element: <DatasetListPage /> },
-          { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage /> },
-          { path: '/processes', element: <ProcessCatalogPage /> },
-          { path: '/processes/:name/:version', element: <ProcessFormPage /> },
+          { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage />, handle: JABIZ_UI },
+          { path: '/processes', element: <ProcessCatalogPage />, handle: JABIZ_UI },
+          { path: '/processes/:name/:version', element: <ProcessFormPage />, handle: JABIZ_UI },
           { path: '/tasks', element: <TasksPage /> },
           { path: '/imports', element: <ImportCatalogPage /> },
           { path: '/imports/run', element: <ImportPage /> },

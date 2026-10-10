@@ -1,7 +1,8 @@
-import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { Space, Tag } from 'antd'
+import { Badge, CopyButton, DataTable, UI_NAMESPACE, type ColumnDef } from '@jabiz/ui'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { useLocalPage } from '../components/useLocalPage'
+import AdminPage from '../layout/AdminPage'
 import { useDatasets } from '../meta/hooks'
 import { datasetTestId } from '../meta/references'
 import type { DatasetEntry } from '../meta/types'
@@ -14,44 +15,53 @@ import { paths } from './paths'
 export default function DatasetCatalogPage() {
   const { t } = useTranslation()
   const datasets = useDatasets()
+  const page = useLocalPage(datasets.data)
 
-  const columns: ProColumns<DatasetEntry>[] = [
+  const columns: ColumnDef<DatasetEntry, unknown>[] = [
     {
-      title: t('catalog.entity'),
-      dataIndex: 'label',
-      render: (_, d) => (
-        <Link to={paths.dataset(d.id)} data-testid={datasetTestId(d)}>
+      id: 'label',
+      header: t('catalog.entity'),
+      cell: ({ row: { original: d } }) => (
+        <Link to={paths.dataset(d.id)} data-testid={datasetTestId(d)} className="text-primary font-medium hover:underline">
           {d.label}
         </Link>
       ),
     },
-    { title: t('catalog.id'), dataIndex: 'id', copyable: true },
     {
-      title: '',
-      key: 'traits',
-      render: (_, d) => (
-        <Space size={4} wrap>
-          {d.temporal && <Tag color="blue">{t('catalog.temporal')}</Tag>}
-          {d.readOnly && <Tag>{t('catalog.readOnly')}</Tag>}
-          {d.processOnlyWrites && <Tag color="purple">{t('catalog.processOnly')}</Tag>}
-          {d.canWrite && <Tag color="green">{t('catalog.writable')}</Tag>}
-        </Space>
+      id: 'id',
+      header: t('catalog.id'),
+      cell: ({ row: { original: d } }) => (
+        <span className="inline-flex items-center gap-1">
+          <code className="text-muted-foreground font-mono text-xs">{d.id}</code>
+          <CopyButton value={d.id} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: d.id })} />
+        </span>
+      ),
+    },
+    {
+      id: 'traits',
+      header: () => <span className="sr-only">{t('catalog.traits')}</span>,
+      cell: ({ row: { original: d } }) => (
+        <span className="flex flex-wrap gap-1">
+          {d.temporal && <Badge variant="secondary">{t('catalog.temporal')}</Badge>}
+          {d.readOnly && <Badge variant="outline">{t('catalog.readOnly')}</Badge>}
+          {d.processOnlyWrites && <Badge variant="outline">{t('catalog.processOnly')}</Badge>}
+          {d.canWrite && <Badge variant="success">{t('catalog.writable')}</Badge>}
+        </span>
       ),
     },
   ]
 
   return (
-    <PageContainer title={t('catalog.datasetsTitle')}>
-      <ProTable<DatasetEntry>
-        rowKey="id"
-        search={false}
-        options={false}
-        loading={datasets.isLoading}
-        dataSource={datasets.data}
+    <AdminPage title={t('catalog.datasetsTitle')}>
+      <DataTable
+        label={t('catalog.datasetsTitle')}
         columns={columns}
-        pagination={{ pageSize: 50, hideOnSinglePage: true }}
-        locale={{ emptyText: t('catalog.empty') }}
+        getRowId={(d) => d.id}
+        loading={datasets.isLoading}
+        empty={t('catalog.empty')}
+        {...page.paging}
+        data={page.data}
       />
-    </PageContainer>
+    </AdminPage>
   )
 }
