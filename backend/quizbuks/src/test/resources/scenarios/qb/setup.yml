@@ -1,0 +1,38 @@
+# Setting up QuizBuks (docs/quizbuks/plans/Q1-skeleton.md): QB_SETUP creates the five roles with their permissions,
+# the seven ledger accounts, every ISO 3166-1 country and the business parameters with their first values. A second
+# run a day later adds nothing; a parameter an administrator changed in between keeps its value.
+name: Setting up QuizBuks
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    expectOutput:
+      rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
+      accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110"]
+      countriesAdded: 249
+      paramsCreated: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
+        qb.review.sponsor.auto, qb.review.publication.auto, qb.ai.model, qb.app.min-version]
+  - expect: { param: qb.creator-fee-rate, value: 0 }
+  - expect: { param: qb.transfer.threshold, value: 1000 }
+  - expect: { param: qb.transfer.enabled, value: false }
+
+  - note: The super administrator raises the transfer threshold.
+    advanceClock: PT1H
+  - process: PARAM_SET@latest
+    input: { key: qb.transfer.threshold, value: "3000" }
+
+  - note: Run again the next day, setup adds nothing and leaves the changed threshold alone.
+    advanceClock: P1D
+  - process: QB_SETUP@latest
+    input: {}
+    expectOutput:
+      rolesCreated: []
+      permissionsAdded: 0
+      accountsOpened: []
+      countriesAdded: 0
+      paramsCreated: []
+  - expect: { param: qb.transfer.threshold, value: 3000 }
+snapshot:
+  entities: [SecRole, SecRolePermission, LedgerAccount, SysParam, QbCountry]
+  asOf: end
