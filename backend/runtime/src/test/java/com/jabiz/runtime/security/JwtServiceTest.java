@@ -35,7 +35,46 @@ class JwtServiceTest {
         JwtService.Issued issued = service.issue(alice);
 
         assertThat(issued.expiresAt()).isEqualTo(T0.plus(Duration.ofMinutes(15)));
-        assertThat(service.verify(issued.token())).isEqualTo(alice);
+        // An actor of no entry signs in to the administration (decision D36).
+        assertThat(service.verify(issued.token())).isEqualTo(alice.inEntry("admin", false));
+    }
+
+    @Test
+    void tokensCarryTheEntryAndWhetherTheAddressIsVerified() throws Exception {
+        Actor portal = alice.inEntry("portal", true);
+        assertThat(service.verify(service.issue(portal).token())).isEqualTo(portal);
+        assertThat(service.verify(service.issue(alice.inEntry("portal", false)).token()).emailVerified()).isFalse();
+
+        // A token issued before entries existed (no entry, no email_verified claim) is the administration's.
+        Actor old = service.verify(signed(new JWTClaimsSet.Builder().issuer(JwtService.ISSUER).subject("alice")
+            .expirationTime(Date.from(T0.plusSeconds(60))).claim(JwtService.PERMISSIONS, java.util.List.of("p"))
+            .build()));
+        assertThat(old.entry()).isEqualTo("admin");
+        assertThat(old.emailVerified()).isFalse();
+
+        // Changing the entry breaks the signature.
+        String token = service.issue(alice.inEntry("portal", true)).token();
+        String[] parts = token.split("\\.");
+        String claims = new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8)
+            .replace("\"portal\"", "\"admin\"");
+        String tampered = parts[0] + "." + java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(claims.getBytes(StandardCharsets.UTF_8)) + "." + parts[2];
+        assertThatThrownBy(() -> service.verify(tampered)).isInstanceOf(JwtService.InvalidTokenException.class)
+            .hasMessageContaining("signature");
+    }
+
+    @Test
+    void challengesCarryTheirEntry() {
+        JwtService.Issued portal = service.issueChallenge("u1", JwtService.Purpose.VERIFY, 3, null, "portal",
+            Duration.ofMinutes(5));
+        assertThat(service.verifyChallenge(portal.token(), JwtService.Purpose.VERIFY))
+            .isEqualTo(new JwtService.Challenge("u1", JwtService.Purpose.VERIFY, 3, null, "portal"));
+        // A challenge without an entry leads into the administration.
+        JwtService.Issued plain = service.issueChallenge("u1", JwtService.Purpose.ENROLL, 4, Duration.ofMinutes(5));
+        assertThat(service.verifyChallenge(plain.token(), JwtService.Purpose.ENROLL).entry()).isEqualTo("admin");
+        // A challenge is no access token, whatever entry it names.
+        assertThatThrownBy(() -> service.verify(portal.token())).isInstanceOf(JwtService.InvalidTokenException.class)
+            .hasMessageContaining("type");
     }
 
     @Test

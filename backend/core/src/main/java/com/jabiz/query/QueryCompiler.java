@@ -527,6 +527,7 @@ public class QueryCompiler {
     private static String fieldOf(QueryPredicate predicate) {
         return switch (predicate) {
             case QueryPredicate.Eq p -> p.field();
+            case QueryPredicate.EqIgnoreCase p -> p.field();
             case QueryPredicate.Ne p -> p.field();
             case QueryPredicate.Gt p -> p.field();
             case QueryPredicate.Gte p -> p.field();
@@ -560,6 +561,7 @@ public class QueryCompiler {
             case QueryPredicate.Ne ne -> ne.value() == null
                 ? nullCheck(def, ne.field(), QueryOperator.IS_NOT_NULL)
                 : comparison(QueryOperator.NE, "<>", def, ne.field(), ne.value(), binder);
+            case QueryPredicate.EqIgnoreCase eq -> compileEqIgnoreCase(eq, def, binder);
             case QueryPredicate.Gt gt -> comparison(QueryOperator.GT, ">", def, gt.field(), gt.value(), binder);
             case QueryPredicate.Gte gte -> comparison(QueryOperator.GTE, ">=", def, gte.field(), gte.value(), binder);
             case QueryPredicate.Lt lt -> comparison(QueryOperator.LT, "<", def, lt.field(), lt.value(), binder);
@@ -626,6 +628,21 @@ public class QueryCompiler {
         }
         String param = binder.bind(BoundValue.of(coerced));
         return SqlIdentifiers.require(fd.physicalColumn()) + " IN (:" + param + ")";
+    }
+
+    /** {@code lower(column) = lower(:value)}: matches an index on {@code lower(column)}. Text fields only. */
+    private String compileEqIgnoreCase(QueryPredicate.EqIgnoreCase eq, EntityDefinition def, Binder binder) {
+        FieldDefinition fd = requireOperator(def, eq.field(), QueryOperator.EQ);
+        if (!(fd.kind() instanceof SemanticKind.Text)) {
+            throw new ValidationException(List.of(new Violation(fd.name(), PlatformErrorCodes.OPERATOR_NOT_ALLOWED,
+                "Comparing regardless of case needs a text field, not [" + fd.name() + "]",
+                Map.of("operator", QueryOperator.EQ.name()))));
+        }
+        if (eq.value() == null) {
+            throw invalidValue(fd, "comparison regardless of case with null is undefined");
+        }
+        return "lower(" + SqlIdentifiers.require(fd.physicalColumn()) + ") = lower(:"
+            + binder.bind(BoundValue.of(eq.value())) + ")";
     }
 
     private String compileLike(QueryPredicate.Like like, EntityDefinition def, Binder binder) {

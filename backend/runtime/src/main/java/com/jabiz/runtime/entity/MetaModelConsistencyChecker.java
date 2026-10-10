@@ -135,7 +135,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             for (UniqueConstraint unique : def.uniqueConstraints) {
                 List<String> columns = unique.fields().stream()
                     .map(field -> def.physicalColumn(field).toLowerCase(Locale.ROOT)).toList();
-                if (found.stream().noneMatch(ix -> ix.full() && ix.columns().size() >= columns.size()
+                // Regardless of case (decision D36): an expression index on lower(column), which may leave out nulls.
+                if (unique.ignoreCase() ? found.stream().noneMatch(ix -> ix.lowerOf(columns))
+                    : found.stream().noneMatch(ix -> ix.full() && ix.columns().size() >= columns.size()
                     && Set.copyOf(ix.columns().subList(0, columns.size())).equals(Set.copyOf(columns)))) {
                     problems.add(WARNING + label + " -> unique constraint " + unique.name() + " has no index starting "
                         + "with " + columns + ": checking it reads every version of the table");
@@ -200,7 +202,12 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             });
     }
 
-    private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full) {
+    /**
+     * @param name    the index's name, lower case
+     * @param lowered the columns the index has a {@code lower(column)} expression of ({@link #lowerColumns})
+     */
+    private record IndexInfo(List<String> columns, List<Integer> options, boolean unique, boolean full,
+        String name, Set<String> lowered) {
         boolean startsWith(String column, boolean descending) {
             return !columns.isEmpty() && columns.getFirst().equals(column) && descending(0) == descending;
         }
@@ -208,6 +215,33 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
         boolean descending(int position) {
             return position < options.size() && (options.get(position) & 1) != 0;
         }
+
+        /** Whether the index is on {@code lower(column)} of every one of the columns (decision D36). */
+        boolean lowerOf(List<String> columns) {
+            return !columns.isEmpty() && lowered.containsAll(columns);
+        }
+    }
+
+    /**
+     * {@code lower(<column>)} as PostgreSQL prints it in an index definition: {@code lower(code)} for text columns,
+     * {@code lower((email)::text)} for varchar ones, the column quoted when it needs to be.
+     */
+    private static final java.util.regex.Pattern LOWER = java.util.regex.Pattern.compile(
+        "\\blower\\(\\s*(?:\\(\\s*(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*)\\s*\\)\\s*::\\s*text"
+            + "|(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*))\\s*\\)");
+
+    /** The columns of the {@code lower(column)} expressions of an index definition, lower case, in order. */
+    static Set<String> lowerColumns(String definition) {
+        Set<String> columns = new java.util.LinkedHashSet<>();
+        if (definition == null) {
+            return columns;
+        }
+        java.util.regex.Matcher matcher = LOWER.matcher(definition);
+        while (matcher.find()) {
+            String column = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            columns.add(column.replace("\"", "").toLowerCase(Locale.ROOT));
+        }
+        return columns;
     }
 
     /** Indexes of the table with their key columns in order and per-column options (bit 1: DESC). */
@@ -219,7 +253,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                            order by k.ord), ',') as cols,
                        array_to_string(i.indoption::int2[], ',') as opts,
                        i.indisunique as is_unique,
-                       (i.indpred is null and i.indexprs is null) as is_full
+                       (i.indpred is null and i.indexprs is null) as is_full,
+                       pg_get_indexdef(i.indexrelid) as definition,
+                       (select c.relname from pg_class c where c.oid = i.indexrelid) as index_name
                 from pg_index i
                 where i.indrelid = to_regclass(:tableName)
                 """)
@@ -228,7 +264,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 split(row.get("cols", String.class)).stream().map(c -> c.toLowerCase(Locale.ROOT)).toList(),
                 split(row.get("opts", String.class)).stream().map(Integer::valueOf).toList(),
                 Boolean.TRUE.equals(row.get("is_unique", Boolean.class)),
-                Boolean.TRUE.equals(row.get("is_full", Boolean.class))))
+                Boolean.TRUE.equals(row.get("is_full", Boolean.class)),
+                String.valueOf(row.get("index_name", String.class)).toLowerCase(Locale.ROOT),
+                lowerColumns(row.get("definition", String.class))))
             .all();
     }
 
@@ -255,6 +293,18 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
         Set<String> expected = new HashSet<>();
         unique.fields().forEach(f -> expected.add(def.physicalColumn(f).toLowerCase(Locale.ROOT)));
         String label = "Entity " + def.name + ": unique constraint " + unique.name();
+        if (unique.ignoreCase()) {
+            // A unique index of the constraint's name on lower(column) of each field (decision D36).
+            List<String> columns = unique.fields().stream()
+                .map(f -> def.physicalColumn(f).toLowerCase(Locale.ROOT)).toList();
+            String named = unique.name().toLowerCase(Locale.ROOT);
+            return fetchIndexes(def.physicalTable)
+                .filter(ix -> ix.unique() && ix.name().equals(named) && ix.lowerOf(columns))
+                .hasElements()
+                .flatMap(present -> present ? Mono.<String>empty() : Mono.just(label + " -> no unique index named "
+                    + unique.name() + " on lower(" + String.join("), lower(", columns) + ") of table "
+                    + def.physicalTable));
+        }
         return fetchUniqueIndexColumns(def.physicalTable, unique.name().toLowerCase(Locale.ROOT))
             .flatMap(actual -> {
                 if (actual.isEmpty()) {

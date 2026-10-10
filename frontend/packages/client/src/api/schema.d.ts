@@ -1393,6 +1393,7 @@ export interface components {
             softDelete?: boolean;
             temporal?: boolean;
             writeRequiresMfa?: boolean;
+            writeRequiresVerifiedEmail?: boolean;
         };
         DictItem: {
             code?: string;
@@ -1834,6 +1835,7 @@ export interface components {
             locale?: string;
         };
         LoginRequest: {
+            entry?: string;
             password?: string;
             userName?: string;
         };
@@ -1855,6 +1857,9 @@ export interface components {
             /** Format: date-time */
             dataTo?: string;
             displayName?: string;
+            email?: string;
+            emailVerified?: boolean;
+            entry?: string;
             /** Format: int64 */
             idleTimeoutSeconds?: number;
             /** Format: date-time */
@@ -1935,6 +1940,7 @@ export interface components {
             latest?: boolean;
             name?: string;
             requiresMfa?: boolean;
+            requiresVerifiedEmail?: boolean;
             /** Format: int32 */
             version?: number;
         };
@@ -1983,6 +1989,7 @@ export interface components {
             recoveryCodes?: string[];
         };
         RefreshRequest: {
+            entry?: string;
             refreshToken?: string;
         };
         ReportEntry: {
@@ -2726,7 +2733,9 @@ export interface operations {
     };
     start: {
         parameters: {
-            query?: never;
+            query?: {
+                entry?: string;
+            };
             header?: never;
             path: {
                 id: string;

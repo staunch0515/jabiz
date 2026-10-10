@@ -1,5 +1,6 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.security.secret.SingleUseSecrets;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.storage.Rows;
@@ -44,8 +45,20 @@ public class RefreshTokenStore {
     /**
      * The user a valid token was issued to, its family, and when the sign-in of the family passed a second factor
      * (null if it did not).
+     *
+     * @param entry the sign-in entry of the family (decision D36): kept by every refresh; tokens issued before entries
+     *              existed are of the administration
      */
-    public record Grant(UUID userId, UUID familyId, Instant mfaAt, UUID identityId) {}
+    public record Grant(UUID userId, UUID familyId, Instant mfaAt, UUID identityId, String entry) {
+
+        public Grant {
+            entry = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
+        }
+
+        public Grant(UUID userId, UUID familyId, Instant mfaAt, UUID identityId) {
+            this(userId, familyId, mfaAt, identityId, null);
+        }
+    }
 
     /** The token is unknown, expired, consumed or of a revoked family. */
     public static final class InvalidRefreshTokenException extends RuntimeException {
@@ -57,6 +70,8 @@ public class RefreshTokenStore {
     static final String REASON_LOGOUT = "LOGOUT";
     static final String REASON_REUSE = "REUSE";
     public static final String REASON_PASSWORD = "PASSWORD";
+    /** A sign-in guard refused the session at a refresh (decision D36 item 6). */
+    public static final String REASON_REFUSED = "REFUSED";
 
     private static final int TOKEN_BYTES = 32;
     private static final int MAX_TOKEN_LENGTH = 128;
@@ -96,9 +111,14 @@ public class RefreshTokenStore {
      *                   null: its link must still exist at each refresh
      */
     public Mono<Issued> issue(UUID userId, Instant mfaAt, UUID identityId) {
+        return issue(userId, mfaAt, identityId, null);
+    }
+
+    /** As above, for a session of the sign-in entry {@code entry} (null: the administration). */
+    public Mono<Issued> issue(UUID userId, Instant mfaAt, UUID identityId, String entry) {
         return randomBytes(16).flatMap(bytes -> {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
-            return issue(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt, identityId);
+            return issue(new Grant(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt, identityId, entry));
         });
     }
 
@@ -113,9 +133,17 @@ public class RefreshTokenStore {
      * @throws InvalidRefreshTokenException (as the error of the Mono) when the token cannot be used
      */
     public <T> Mono<Rotated<T>> rotate(String token, Function<Grant, Mono<T>> check) {
-        return inTransaction(token, hash -> use(hash).flatMap(grant -> check.apply(grant)
-            .flatMap(value -> issue(grant.userId(), grant.familyId(), grant.mfaAt(), grant.identityId())
-                .map(next -> new Rotated<>(grant, value, next)))));
+        return rotate(token, null, check);
+    }
+
+    /**
+     * As above, for a client of the sign-in entry {@code entry} (null: the administration): a token of another entry's
+     * session is refused without being consumed (decision D36).
+     */
+    public <T> Mono<Rotated<T>> rotate(String token, String entry, Function<Grant, Mono<T>> check) {
+        String expected = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
+        return inTransaction(token, hash -> use(hash, expected).flatMap(grant -> check.apply(grant)
+            .flatMap(value -> issue(grant).map(next -> new Rotated<>(grant, value, next)))));
     }
 
     /**
@@ -126,21 +154,34 @@ public class RefreshTokenStore {
         return Mono.defer(() -> {
             String hash = hash(token);
             return engine.get().inTransaction(work.apply(hash))
-                .onErrorResume(UniqueKeyViolationException.class, reused -> find(hash)
+                .onErrorResume(e -> e instanceof UniqueKeyViolationException || e instanceof Reused, reused -> find(hash)
                     .flatMap(found -> {
                         log.warn("Refresh token of user {} presented twice; revoking its session",
                             found.grant().userId());
-                        return revokeFamily(found.grant().familyId(), REASON_REUSE);
+                        return revokeSession(found.grant().familyId(), REASON_REUSE);
                     })
                     .then(Mono.error(new InvalidRefreshTokenException("Refresh token used twice"))));
         });
     }
 
-    private Mono<Grant> use(String hash) {
+    /** A consumed token presented again; the family is revoked once the transaction has rolled back. */
+    private static final class Reused extends RuntimeException {
+        Reused() {
+            super("Refresh token used twice", null, false, false);
+        }
+    }
+
+    private Mono<Grant> use(String hash, String entry) {
         Instant now = now();
         return find(hash).flatMap(found -> {
+            // A revoked session stays a plain 401: it has ended already, there is nothing left to revoke.
             if (found.revoked()) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
+            }
+            // Replayed: whenever it comes back (also after its expiry or idle window) and whatever entry it names, the
+            // session ends (decision D12 item 1).
+            if (found.used()) {
+                return Mono.<Grant>error(new Reused());
             }
             if (!now.isBefore(found.expiresAt())) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
@@ -148,6 +189,10 @@ public class RefreshTokenStore {
             // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed.
             if (!now.isBefore(found.issuedAt().plus(idleWindow))) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
+            }
+            // Another front end's live session: not this client's to renew. Not consumed, not revoked.
+            if (!entry.equals(found.grant().entry())) {
+                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of another sign-in entry"));
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash);
@@ -166,34 +211,41 @@ public class RefreshTokenStore {
                 WHERE t.user_id = :user AND NOT EXISTS (
                     SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
                 Map.of("user", BoundValue.of(userId)))
-            .concatMap(row -> revokeFamily(Rows.uuid(row.get("family_id")), reason))
+            .concatMap(row -> revokeSession(Rows.uuid(row.get("family_id")), reason))
             .then();
     }
 
     /** Ends the session the token belongs to. Unknown or already revoked tokens are ignored. */
     public Mono<Void> revoke(String token) {
         return Mono.defer(() -> find(hash(token))
-            .flatMap(found -> revokeFamily(found.grant().familyId(), REASON_LOGOUT)));
+            .flatMap(found -> revokeSession(found.grant().familyId(), REASON_LOGOUT)));
     }
 
-    private Mono<Issued> issue(UUID userId, UUID familyId, Instant mfaAt, UUID identityId) {
+    /** The next token of the grant's family, carrying its user, second factor, account link and entry. */
+    private Mono<Issued> issue(Grant grant) {
         return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Instant now = now();
             Instant expires = now.plus(ttl);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash(token));
-            row.put("family_id", familyId);
-            row.put("user_id", userId);
+            row.put("family_id", grant.familyId());
+            row.put("user_id", grant.userId());
             row.put("issued_at", now);
             row.put("expires_at", expires);
-            row.put("mfa_at", mfaAt);
-            row.put("identity_id", identityId);
-            return engine.get().insert("sec_refresh_token", row).thenReturn(new Issued(token, familyId, expires));
+            row.put("mfa_at", grant.mfaAt());
+            row.put("identity_id", grant.identityId());
+            row.put("entry", grant.entry());
+            return engine.get().insert("sec_refresh_token", row)
+                .thenReturn(new Issued(token, grant.familyId(), expires));
         });
     }
 
-    private Mono<Void> revokeFamily(UUID familyId, String reason) {
+    /**
+     * Ends one session (token family): on reuse, sign-out, a password change, or when a sign-in guard refuses it at a
+     * refresh. Revoked already: the first revocation stands.
+     */
+    public Mono<Void> revokeSession(UUID familyId, String reason) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("family_id", familyId);
         row.put("revoked_at", now());
@@ -203,20 +255,23 @@ public class RefreshTokenStore {
             .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
     }
 
-    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked) {}
+    /** @param used whether the token was consumed already (presenting it again is reuse) */
+    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked, boolean used) {}
 
     private Mono<Found> find(String hash) {
         return engine.get().select("""
-                SELECT t.user_id, t.family_id, t.issued_at, t.expires_at, t.mfa_at, t.identity_id,
-                    r.family_id IS NOT NULL AS revoked
+                SELECT t.user_id, t.family_id, t.issued_at, t.expires_at, t.mfa_at, t.identity_id, t.entry,
+                    r.family_id IS NOT NULL AS revoked,
+                    EXISTS (SELECT 1 FROM sec_refresh_token_use u WHERE u.token_hash = t.token_hash) AS used
                 FROM sec_refresh_token t LEFT JOIN sec_refresh_family_revocation r ON r.family_id = t.family_id
                 WHERE t.token_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
             .next()
             .map(row -> new Found(new Grant(Rows.uuid(row.get("user_id")), Rows.uuid(row.get("family_id")),
                     row.get("mfa_at") == null ? null : Rows.instant(row.get("mfa_at")),
-                    row.get("identity_id") == null ? null : Rows.uuid(row.get("identity_id"))),
+                    row.get("identity_id") == null ? null : Rows.uuid(row.get("identity_id")),
+                    row.get("entry") == null ? null : String.valueOf(row.get("entry"))),
                 Rows.instant(row.get("issued_at")), Rows.instant(row.get("expires_at")),
-                Boolean.TRUE.equals(row.get("revoked"))));
+                Boolean.TRUE.equals(row.get("revoked")), Boolean.TRUE.equals(row.get("used"))));
     }
 
     private Mono<byte[]> randomBytes(int length) {

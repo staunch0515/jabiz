@@ -75,6 +75,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
 - **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
   平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 关联（管理员关联，或本人登录后 `SEC_IDENTITY_LINK_SELF`）；缺省不自动开户，提供方开启 `auto-provision` 且入口允许注册时才为已验证、未被占用的邮箱开户（决策 D39）；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
+- **登录入口与登录前检查**（见 10 §15 与决策 D36）：不同前端接受哪些角色只在 `jabiz.security.entries.<名>` 声明（缺省入口 `admin` 接受全部角色）；令牌只含该入口所接受角色的权限，
+  不在前端或业务代码里另做"这个前端不给某角色用"。应用要在登录与刷新时拒绝某些用户（封禁等）只实现 `SignInGuard`（core，同步，所需数据以 `loads()` 声明），不自己拦截登录接口。
+  需要已验证邮箱的操作只声明：流程 `requiresVerifiedEmail()`、数据视图 `policy(p -> p.requiresVerifiedEmail())`（只管写）。客户端地址只经 `ClientAddresses`（可信代理 `jabiz.security.trusted-proxies`），不自己读转发头。
 - **按权限显示明文**（见 10 §13.1 与决策 D28 第 7 条）：税号、账号等只让部分人看明文的字段用 `f.masked(权限, MaskStyle.LAST4|ALL|TAX_ID)`（文本字段；纳税人号码用 `TAX_ID`）；
   读接口、历史、审计、签发的报表中一律遮蔽，持有权限者经 `POST /api/datasets/{id}/reveal` 逐值显示（记入 `sys_reveal_record`），不另写"脱敏"或显示记录。
   模板与导出由平台在 SQL 中遮蔽并为持有权限者留记录；只有持有权限者能写入、筛选、排序。不要把遮蔽字段设为显示字段、默认排序或公开字段。

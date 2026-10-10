@@ -131,7 +131,7 @@ public record DatasetDefinition(
             if (publicRead != null) {
                 effective = new DatasetPolicy(true, policy.softDelete(), policy.softDeleteField(),
                     policy.softDeleteTimeField(), policy.maxQueryBatchSize(), policy.maxWriteBatchSize(),
-                    policy.queryTimeout(), false, false, policy.writeMfa());
+                    policy.queryTimeout(), false, false, policy.writeMfa(), policy.writeVerifiedEmail());
             }
             return new DatasetDefinition(resourceId, targetEntityType, storage, effective, scope, defaultView,
                 permissions, listView, publicRead);
@@ -165,6 +165,7 @@ public record DatasetDefinition(
         private boolean allowTimeTravel = true;
         private boolean processOnlyWrites;
         private com.jabiz.security.MfaRequirement writeMfa = com.jabiz.security.MfaRequirement.NONE;
+        private boolean writeVerifiedEmail;
 
         public PolicyBuilder readOnly(boolean ro) { this.readOnly = ro; return this; }
 
@@ -202,9 +203,18 @@ public record DatasetDefinition(
             return this;
         }
 
+        /**
+         * Writers through the dataset API and the entity API need a verified e-mail address
+         * (docs/design/10-security.md section 15; decision D36 item 3). Reading is not governed by it.
+         */
+        public PolicyBuilder requiresVerifiedEmail() {
+            this.writeVerifiedEmail = true;
+            return this;
+        }
+
         public DatasetPolicy build() {
             return new DatasetPolicy(readOnly, softDelete, softDeleteField, softDeleteTimeField,
-                queryBatch, writeBatch, timeout, allowTimeTravel, processOnlyWrites, writeMfa);
+                queryBatch, writeBatch, timeout, allowTimeTravel, processOnlyWrites, writeMfa, writeVerifiedEmail);
         }
     }
 }

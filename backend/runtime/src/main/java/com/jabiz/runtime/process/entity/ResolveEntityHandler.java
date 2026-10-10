@@ -54,6 +54,8 @@ public class ResolveEntityHandler implements StepHandler<NoMetadata, EntityChang
             // Like the permission: the entity is chosen by the input, so the process cannot declare it
             // (docs/design/10-security.md section 10).
             mfa.require(ctx.request(), dataset.policy().writeMfa(), "Writing " + type);
+            com.jabiz.runtime.security.VerifiedEmailPolicy.require(ctx.request(), dataset.policy().writeVerifiedEmail(),
+                "Writing " + type);
             DatasetEntityManager.rejectDirectWrites(dataset);
             // Sensitive fields are written by their own processes only (docs/design/10-security.md section 6).
             SensitiveDataMasker.rejectWrites(definition, ctx.attributes());

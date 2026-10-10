@@ -8,11 +8,23 @@ import com.jabiz.security.Sensitive;
  *
  * @param mfaCode a TOTP code or a recovery code; named apart from ordinary "code" properties, since the names of
  *                sensitive components are masked wherever they appear in logged JSON
+ * @param source  the entry of the session the code completes (taken from the challenge or the caller's token, never
+ *                from the request, decision D36) and where the attempt comes from
  */
-public record SponsorMfaVerifyInput(String userId, @Sensitive String mfaCode, Long challengeAttemptNo) {
+public record SponsorMfaVerifyInput(String userId, @Sensitive String mfaCode, Long challengeAttemptNo,
+    SignInSource source) {
+
+    public SponsorMfaVerifyInput {
+        source = source == null ? SignInSource.NONE : source;
+    }
+
+    public SponsorMfaVerifyInput(String userId, String mfaCode, Long challengeAttemptNo) {
+        this(userId, mfaCode, challengeAttemptNo, SignInSource.NONE);
+    }
 
     @Override
     public String toString() {
-        return "SponsorMfaVerifyInput[userId=" + userId + ", mfaCode=***, challengeAttemptNo=" + challengeAttemptNo + "]";
+        return "SponsorMfaVerifyInput[userId=" + userId + ", mfaCode=***, challengeAttemptNo=" + challengeAttemptNo
+            + ", entry=" + source.entryOrDefault() + "]";
     }
 }

@@ -1196,7 +1196,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 子阶段 | 内容 | 决策 | 预估 | 依赖 |
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
-| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 / 16b-2） | D36 | 6–8 天 | 16a |
+| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 待做） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
 | 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
@@ -1355,13 +1355,29 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 **风险**：`RequestContext` / `Actor` 构造处多（保留旧构造器）；守卫预读限为按用户编号的等值查询且有上限；已有重复邮箱时迁移中止（升级说明写明）；入口过滤改变 `mfaRequired` 的含义（有意，写入 10 §15）；升级前签发的令牌在有效期内按 `admin` 处理。
 
 **验收标准**
-- [ ] 不带 `entry` 的登录、刷新、MFA、OIDC 行为不变，后台前端不改即可用。
-- [ ] 访问令牌带 `entry` 与 `email_verified`，只含该入口接受角色的权限；刷新保持入口，不符即拒且不消费；挑战与 OIDC 的入口不能被请求改写。
-- [ ] `SignInGuard` 在三条登录路径与刷新时调用；拒绝写记录、不计失败；异常即拒绝。
-- [ ] `requiresVerifiedEmail` 在各入口返回 403 `EMAIL_NOT_VERIFIED` 并在目录中可见；入口可要求已验证才能登录。
-- [ ] 邮箱不区分大小写唯一；已有重复时迁移明确失败。
-- [ ] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
-- [ ] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
+- [x] 不带 `entry` 的登录、刷新、MFA、OIDC 行为不变，后台前端不改即可用。
+- [x] 访问令牌带 `entry` 与 `email_verified`，只含该入口接受角色的权限；刷新保持入口，不符即拒且不消费；挑战与 OIDC 的入口不能被请求改写。
+- [x] `SignInGuard` 在三条登录路径与刷新时调用；拒绝写记录、不计失败；异常即拒绝。
+- [x] `requiresVerifiedEmail` 在各入口返回 403 `EMAIL_NOT_VERIFIED` 并在目录中可见；入口可要求已验证才能登录。
+- [x] 邮箱不区分大小写唯一；已有重复时迁移明确失败。
+- [x] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
+- [x] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
+
+**完成情况（分支 `1.2/phase-16b1-sign-in-entries`）**：迁移 `V32__sign_in_entries.sql`；测试 `SignInEntryIT`（19）、`ClientAddressIT`（3）、`OidcEntryIT`（3），
+runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtServiceTest` / `RbacTest` / core 测试补充；`SignInIT`、`MfaIT`、`OidcIT` 未改动即通过。
+与计划的出入（都很小）：
+- 数据视图的声明写作 `policy(p -> p.requiresVerifiedEmail())`，目录字段为 `writeRequiresVerifiedEmail`（与 `writeRequiresMfa` 对应）；`VerifiedEmailPolicy` 是无状态的静态检查（只读令牌声明），六个入口无需注入新 Bean。
+- 守卫的测试夹具借用 `SecUserIdentity`（伪提供方 `it-blocked` / `it-guard-fails`）作为预读数据，示范应用的 `Customer.blocked` 守卫在 16b-2。
+- 不区分大小写的查找新增 core `QueryPredicate.EqIgnoreCase`（`lower(列) = lower(:值)`；模板不支持）。
+- OIDC 的入口以 `POST /api/auth/oidc/{id}/start?entry=…` 给出；挑战验证与 OIDC 回调的请求体中的 `entry` 一律忽略。
+- Spring Security 防火墙拒绝含控制字符的请求头值：读取 `User-Agent` / `X-Forwarded-For` 时捕获并忽略（登录照常，不记 UA），否则登录会 500。
+- 前端只改了一个 Vitest 夹具（`RowActions.test.tsx` 的流程目录项补 `requiresVerifiedEmail`，`Required<…>` 类型要求），业务代码未改。
+- 代码评审后的修正（10 §15.5–§15.6）：转发头只解析走到的段、可带端口；不区分大小写的唯一检查由数据库 `lower()` 折叠（锁键与比较一致）；
+  step-up 对守卫拒绝与未验证地址答 403（同登录）并记录地址与 UA；空白入口即 `admin`；刷新时已用过的令牌先于过期、闲置与入口判为重用；按名字登录不再查邮箱；
+  `MetaModelConsistencyChecker` 精确匹配 `lower(列)`；`RefreshTokenStore.revokeSession` 合并为一个方法。
+
+**已知问题**：升级前签发的访问令牌在有效期内按 `admin`、`email_verified=false` 处理；守卫在刷新时才再次生效（访问令牌到期前仍可用）；
+按邮箱登录在名字不匹配时多一次查询（响应时间略有差别）；已有重复邮箱的库升级时迁移中止，须先由管理员处理。
 
 #### 16b-2 自助注册、邮箱验证、找回密码、示范（3–4 天）
 
