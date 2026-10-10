@@ -5,7 +5,7 @@
 
 两条线并行：
 
-- **平台**（`1.2/platform`，工作分支 `1.2/phase-<N><x>-<名>`）：阶段 15（Radix Themes）与阶段 16（QuizBuks 需要的通用能力 G*）。
+- **平台**（`1.2/platform`，工作分支 `1.2/phase-<N><x>-<名>`）：阶段 15（shadcn/ui，D34）与阶段 16（QuizBuks 需要的通用能力 G*）。
   每项带平台自己的测试与示范（`backend/app`），不提 QuizBuks。登记在平台的 `docs/ROADMAP.md`。
 - **应用**（`1.2/quizbuks`，工作分支 `1.2/quizbuks-<N>-<名>`）：Q1–Q10。平台阶段合入后，把 `1.2/platform` 合并进 `1.2/quizbuks` 再继续依赖它的应用阶段。
 

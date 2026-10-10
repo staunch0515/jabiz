@@ -36,7 +36,7 @@ backend/quizbuks/            Gradle 模块（jabiz.boot-app 插件），com.jabi
   src/main/resources/queries/qb/**.sql      SQL 模板与报表
   src/main/resources/db/migration/          应用迁移（V1000+，避开平台与示范应用）
   src/test/resources/scenarios/qb/**.yml    场景回放
-quizbuks-web/                应用前端（pnpm 工作区，Radix Themes，与平台同一工具链）
+quizbuks-web/                应用前端（pnpm 工作区，`@jabiz/ui` 与 `@jabiz/client`，与平台同一工具链，D34）
   app/                       答题人 PWA（挂在 /）
   sponsor/                   商家后台（挂在 /sponsor/）
 deploy/quizbuks/             docker-compose 与部署说明
