@@ -946,10 +946,10 @@ D22 第 2 条的导出中含 ProComponents 的类型（菜单项），换组件�
    标题与正文写在消息资源 `mail.<名>.subject` / `mail.<名>.body`（应用所选的每种语言；正文为 Markdown，平台渲染为纯文本与 HTML 两部分，参数一律转义，不允许原始 HTML）。
    启动检查：消息齐全、正文中的参数与声明一致。
 2. **发送是流程中的平台步骤** `SendMail.of(模板, 收件人, 参数)`：在流程事务内写只追加的 `sys_mail_message`（模板、收件人、语言、遮蔽后的参数）
-   并经 Outbox 发布 `jabiz.mail.queued`；平台消费者 `jabiz.mail` 渲染并经 `NotificationSender` 发送，每次尝试写 `sys_notification_attempt`。
+   并经 Outbox 发布 `jabiz.mail.queued`；平台消费者 `jabiz.mail` 渲染并经 `NotificationSender` 发送，每次尝试写只追加的 `sys_mail_attempt`（实施时与待办通知的尝试表分开，18 §5.6）。
    投递、重试与只处理一次沿用 D14（持久的退避重试，不同于 `AFTER_COMMIT` 的进程内重试）。流程回滚即不发信。
-3. **一次性令牌在发送时才生成**：模板参数可声明为 `MailParam.oneTimeToken(用途, 有效期)`；消费者发送前生成随机令牌、只存其 SHA-256 与用途、有效期、收件人，
-   原文只出现在邮件中，不进数据库、日志与操作摘要。重试发送会生成新令牌并使同一消息的旧令牌失效。验证邮箱与找回密码（D36）用它。
+3. **一次性令牌在发送时才生成**：模板以 `.token(用途, 有效期)` 声明令牌（实施时的写法，原写作 `MailParam.oneTimeToken`）；消费者发送前生成随机令牌、只存其 SHA-256 与用途、有效期、收件人，
+   原文只出现在邮件中，不进数据库、日志与操作摘要。每次发送（含重试）生成新令牌，同一收件人同一用途只有最新的令牌有效。验证邮箱与找回密码（D36）用它。
 4. **语言**：收件人的语言取用户设置（`SecUser.locale`，新增，缺省为平台缺省语言），流程也可显式给出。
 5. **收件偏好**：`NOTIFICATION` 类别按用户与模板可退订（平台时态实体 `SecUserMailPreference`）；邮件附带签名的退订链接（无需登录）；
    `TRANSACTIONAL` 不能退订。
