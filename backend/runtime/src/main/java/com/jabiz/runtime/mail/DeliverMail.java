@@ -111,7 +111,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                 if (pending.unsubscribed()) {
                     return skip(ctx, metadata, pending, "UNSUBSCRIBED");
                 }
-                return send(ctx, pending)
+                return send(pending)
                     .then(attempt(pending, MailEntities.SENT, null, now()))
                     .doOnSuccess(sent -> ctx.put(metadata.outcomeKey(), MailEntities.SENT))
                     .onErrorResume(error -> recordFailure(pending, error).then(Mono.error(error)));
@@ -148,7 +148,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     }
 
     /** Draws the tokens, renders and sends; the tokens are written in the delivery's transaction. */
-    private Mono<Void> send(ProcessContext ctx, Pending pending) {
+    private Mono<Void> send(Pending pending) {
         MailTemplate template = pending.template();
         if (template == null) {
             return Mono.error(new IllegalStateException("Mail template " + pending.templateName()

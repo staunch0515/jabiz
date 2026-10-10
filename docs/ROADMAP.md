@@ -21,7 +21,7 @@
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
 | 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ☐ 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ☐ 计划中（决策 D35–D39 已确认） |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16a 已完成（分支 `1.2/phase-16a-mail`，PR 待创建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1107,7 +1107,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 
 | 子阶段 | 内容 | 决策 | 预估 | 依赖 |
 |---|---|---|---|---|
-| 16a | 事务邮件 | D35 | 3–4 天 | — |
+| 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源 | D36 | 5–7 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
@@ -1163,8 +1163,33 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素，不做模板样式）。
 
 **验收标准**
-- [ ] 应用以 `MailTemplate` Bean 与消息声明模板，流程中 `SendMail` 发出；缺消息、占位符不符在启动时报告。
-- [ ] 邮件经 Outbox 投递：回滚不发、失败重试、已发送不重发；关闭时 `SKIPPED`。
-- [ ] 一次性令牌只在发送时生成，库中只有哈希；只能用一次、过期与重发后失效。
-- [ ] 按收件人语言渲染；NOTIFICATION 可经签名链接退订，TRANSACTIONAL 不可。
-- [ ] 示范应用有一个可运行的例子；`./gradlew check` 通过。
+- [x] 应用以 `MailTemplate` Bean 与消息声明模板，流程中 `SendMail` 发出；缺消息、占位符不符在启动时报告（`MailChecks`，`MailChecksTest`）。
+- [x] 邮件经 Outbox 投递：回滚不发、失败重试、已发送不重发；关闭时 `SKIPPED`（`MailIT`、`MailDisabledIT`、场景 `commerce/order_shipped_mail`）。
+- [x] 一次性令牌只在发送时生成，库中只有哈希；只能用一次、过期与重发后失效（`MailIT`）。
+- [x] 按收件人语言渲染；NOTIFICATION 可经签名链接退订，TRANSACTIONAL 不可（`MailIT`、`JwtServiceTest`）。
+- [x] 示范应用有一个可运行的例子（`ORDER_SHIP` 的发货通知）；`./gradlew check` 通过。
+
+**实现说明与偏离**（设计见 18 §5.6）
+- 尝试记在 `sys_mail_attempt`（按本计划），而不是 D35 第 2 条所说的 `sys_notification_attempt`（后者的外键指向待办通知）；状态 `SENT` / `FAILED` / `SKIPPED`，
+  `detail` 列放错误或跳过原因（`MAIL_DISABLED`、`UNSUBSCRIBED`）。已有 `SENT` **或 `SKIPPED`** 的消息不再处理。
+- 令牌的声明是模板的 `.token(用途, 有效期)`（本计划的写法），即 D35 第 3 条的 `MailParam.oneTimeToken(用途, 有效期)`；占位符名即用途。
+- "该消息最新的令牌"扩大为"同一收件人（用户，无用户时为地址）同一用途的最新令牌"（`issue_seq`）：重试与重发（D36 的"重新发送验证邮件"是新消息）都使旧令牌失效。
+  失败的尝试中生成的令牌随投递事务回滚、从未入库。
+- 消息号与尝试号为 `varchar(36)`（同 `sys_notification`，平台实体的生成键是文本）；参数存为 JSON 文本 `text`（同 `sys_task_version.title_params`），
+  而不是 `jsonb`：实体的文本字段不能写入 `jsonb` 列，为此新增语义类型不值得。
+- "附最近一次尝试的结果"：实体不能连接其他表，因此尝试是另一个只读平台实体 `MailAttempt`（`attempt_id` 为其键，另有主键（消息, 次序）），按 `messageId` 筛选的最新一行即状态。
+- 记录 `FAILED` 用新增的 `StorageEngine.inNewTransaction`（`PROPAGATION_REQUIRES_NEW`）：失败发生在投递流程内部，而 `OutboxDeliverer.recordFailure` 在流程之外。
+- commonmark 0.30.0 加在 core（`MailRenderer` 是纯 Java，属于核心层），而不是计划中的 `runtime/build.gradle.kts`；core 仍不依赖 Spring、Reactor、R2DBC。
+- 通知（NOTIFICATION）只能发给用户：退订按用户与模板记录，发给裸地址时 `SendMail` 报错（编程错误，500）。参数名与令牌用途不含下划线（`[a-z][A-Za-z0-9]*`）。
+- 账户设置的接口：`GET` / `POST /api/auth/mail/preferences`、`POST /api/auth/account/locale`（流程 `SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`，
+  权限 `auth.mail-preference`、`auth.account` 不授予角色，只能本人运行）；`SEC_USER_CREATE` 可带 `locale`。前端页面与 `@jabiz/client` 的封装留给 15c / 16c，
+  本阶段只更新 OpenAPI 快照与生成的类型。
+- 示范：`SalesOrder` 增加可选的 `customerUserId`（应用迁移 `V15__order_customer_user.sql`，`ORDER_PLACE` 可带），`ORDER_SHIP` 在客户用户有邮箱时发
+  `commerce.order-shipped`。
+
+**已知问题**
+- 投递在事务中调用 SMTP：慢服务器会占用连接直到 `jabiz.mail.timeout`（缺省 10 秒）；记录 `FAILED` 需另一个连接（连接池耗尽时会等待）。
+- 至少一次：服务器已收下而应答失败（或提交失败）的邮件会再发一次；前一封中的令牌无效。
+- 退订链接无过期，轮换 `JABIZ_JWT_SECRET` 会使已发出的退订链接失效（用户仍可在账户设置中退订）。
+- 退订接口匿名且未单独限流（每次只校验签名并至多写一条偏好）。
+- 待办通知（`TASK_NOTIFY`）与单据发送不迁移（本计划第 10 条），仍是纯文本、进程内重试。
