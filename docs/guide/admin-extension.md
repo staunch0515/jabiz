@@ -71,6 +71,12 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
 - 写数据：只经流程（`runProcess`）或数据视图接口；失败时 `ApiError` 带服务端的全部违规（`display`、`forField`）。
 - 通用组件：`EntityFormDrawer`、`ReferenceSelect`、`FieldErrors`、`FilePreview`、`MarkdownView`、`ApprovalPanel`（批准 / 驳回一个审批请求）、`DocumentPanel`（一个对象的单据：已签发的副本、预览、签发，docs/design/22-documents.md §6）；
   我的待办用 `useMyTasks()`（18 §5.3）。
+- `@jabiz/ui` 的组合组件（阶段 15b-1 起，经 `@jabiz/admin` 一并导出）：`Combobox`（可搜索的选择，静态或远程）、`FilterBar`（列表上方的筛选：文本、选项、数值 / 时间 / 日期区间）、
+  `FileUpload`（真实的文件输入，上传前查类型与大小）、`Timeline`、`DescriptionList`、`TagsInput`、`CopyButton`、`PageState`（加载 / 不存在 / 出错 / 警告）、`Spinner`；
+  `DatePicker` / `DateTimePicker` 可以键入（`YYYY-MM-DD` / 本地时间 `YYYY-MM-DD HH:mm:ss`，失焦或 Enter 读取，无效时 `aria-invalid` 且不交给调用方），
+  `disabledDays` 限定可选的日子，`DateTimePicker` 的 `toDate` 限定最晚时刻；原来的按钮式触发改为文本框加"打开日历"按钮，`id` / `aria-*` 落在文本框上。
+  `DataTable` 的列可用 `meta: { className, pinned: 'right' }`，数据行带 `data-slot="data-table-row"`。
+  表单状态用 `useForm`、`useFieldArray`、`useWatch`、`Controller`（react-hook-form，由 `@jabiz/ui` 再导出，扩展不另加依赖）；字段规则仍只来自元数据。
 - 不要 import `frontend/src/...`（lint 会拒绝），不要自己存令牌，不要访问后端以外的地址。
 
 ## 4. 测试

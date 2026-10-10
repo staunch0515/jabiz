@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { adminToken, CARRIERS, datasetPath, insert, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, datasetPath, dialog, insert, pageRendered, signIn, test, unique } from './support'
 
 /**
  * WCAG 2.2 level A and AA, checked automatically with axe on the admin frontend's pages (ROADMAP phase 14m;
@@ -21,8 +21,8 @@ async function expectAccessible(page: Page, name: string) {
 }
 
 /**
- * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus and dialogs are
- * dark; the Ant Design pages inside keep the light tokens until they move (phases 15b, 15c).
+ * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and the
+ * pages built with @jabiz/ui are dark; the Ant Design pages keep the light tokens until they move (phases 15b–15c).
  */
 async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, appearance: 'light' | 'dark') {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
@@ -32,6 +32,8 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   })
   await signIn(page)
   await expect(page.getByTestId('dataset-Carrier')).toBeVisible()
+  // A page built with @jabiz/ui follows the appearance (phase 15b).
+  await expect(page.locator('[data-slot="app-shell-content"]')).not.toHaveClass(/(^|\s)light(\s|$)/)
   await expectAccessible(page, at('dataset catalog'))
 
   await page.goto(datasetPath(CARRIERS))
@@ -47,11 +49,28 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expect(page.getByText('Alpha Access').first()).toBeVisible()
   await expectAccessible(page, at('history'))
 
+  // The pop-ups of the history page: the calendar of a date field, the operation's sheet, the revert dialog.
+  await page.getByRole('button', { name: '打开日历' }).first().click()
+  await expect(page.getByRole('grid')).toBeVisible()
+  await expectAccessible(page, at('history date picker'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('grid')).toHaveCount(0)
+  await page.getByTestId('version-1').getByRole('button', { name: /操作详情/ }).click()
+  await expect(dialog(page, /操作详情/).getByTestId('operation-detail')).toBeVisible()
+  await expectAccessible(page, at('operation details'))
+  await page.keyboard.press('Escape')
+  await expect(dialog(page, /操作详情/)).toHaveCount(0)
+  await page.getByTestId('version-1').getByTestId('revert').click()
+  await expect(dialog(page, /撤销操作/)).toBeVisible()
+  await expectAccessible(page, at('revert dialog'))
+  await page.keyboard.press('Escape')
+  await expect(dialog(page, /撤销操作/)).toHaveCount(0)
+
   // Each page with what shows it has rendered its content (not a loading or error state).
   for (const [path, name, ready] of [
     ['/processes', 'process catalog', '[data-testid="process-PRICE_ADJUST-1"]'],
-    ['/processes/PRICE_ADJUST/1', 'process form', 'form .ant-btn-primary'],
-    ['/processes/APPROVAL_DECIDE/1', 'process form with a required choice', 'form .ant-btn-primary'],
+    ['/processes/PRICE_ADJUST/1', 'process form', '[data-testid="process-run"]'],
+    ['/processes/APPROVAL_DECIDE/1', 'process form with a required choice', '[data-testid="process-run"]'],
     ['/tasks', 'tasks', '.ant-list, .ant-empty'],
     ['/reports', 'report catalog', '.ant-list-item'],
     ['/reports/run?id=jabiz.ledger.account_balances', 'report', '[data-testid="page-title"]'],
@@ -64,9 +83,18 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
     await expect(page.locator('.ant-spin-spinning')).toHaveCount(0)
+    await pageRendered(page)
     await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
     await expectAccessible(page, at(name))
   }
+
+  // A choice of the process form, open (a combobox's list in a popover).
+  await page.goto('/processes/APPROVAL_DECIDE/1')
+  await page.locator('form').getByRole('combobox').first().click()
+  await expect(page.getByRole('option').first()).toBeVisible()
+  await expectAccessible(page, at('process form choice'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('option')).toHaveCount(0)
 
   // The shell's menus, which open in portals of their own.
   await page.getByTestId('current-user').click()
@@ -81,11 +109,23 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
 }
 
 test.describe('accessibility', () => {
-  test('the sign-in page', async ({ page }) => {
-    await page.goto('/login')
-    await expect(page.getByPlaceholder('用户名')).toBeVisible()
-    await expectAccessible(page, 'sign-in')
-  })
+  for (const appearance of ['light', 'dark'] as const) {
+    test(`the sign-in pages, ${appearance}`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('jabiz.appearance', value), appearance)
+      await page.goto('/login')
+      await expect(page.getByPlaceholder('用户名')).toBeVisible()
+      await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
+      await expectAccessible(page, `sign-in (${appearance})`)
+      // With the requirements shown after an empty submission.
+      await page.getByRole('button', { name: /登\s*录/ }).click()
+      await expect(page.getByText('请输入用户名。')).toBeVisible()
+      await expectAccessible(page, `sign-in with errors (${appearance})`)
+      // A refusal from an identity provider.
+      await page.goto('/login/oidc?error=access_denied')
+      await expect(page.getByTestId('oidc-error')).toBeVisible()
+      await expectAccessible(page, `identity provider refusal (${appearance})`)
+    })
+  }
 
   test('the pages after signing in', async ({ page, request }) => {
     await checkPagesAfterSignIn(page, request, 'light')

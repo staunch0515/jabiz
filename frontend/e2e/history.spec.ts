@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, insert, PRICES, signIn, test, unique, update } from './support'
+import { adminToken, CARRIERS, dialog, insert, PRICES, signIn, test, unique, update } from './support'
 
 function historyPath(dataset: string, id: string): string {
   return `/data/${encodeURIComponent(dataset)}/${encodeURIComponent(id)}/history`
@@ -56,12 +56,13 @@ test.describe('history', () => {
     // Operation details of version 3.
     await page.getByTestId('version-3').getByRole('button', { name: /操作详情/ }).click()
     await expect(page.getByTestId('operation-detail')).toContainText('jabiz.dataset.commit')
-    await page.locator('.ant-drawer-close').click()
+    await dialog(page, /操作详情/).getByRole('button', { name: '关闭' }).click()
+    await expect(dialog(page, /操作详情/)).toHaveCount(0)
 
     // Revert the limit change (version 3): it is restored, and the revert appears as a new version.
     await page.getByTestId('version-3').getByTestId('revert').click()
     await page.getByTestId('revert-reason').fill('e2e: undo the limit change')
-    await page.locator('#revert-confirm').click()
+    await dialog(page, /撤销操作/).getByRole('button', { name: '撤销' }).click()
     await expect(timeline.locator('[data-testid^="version-"]')).toHaveCount(6)
     await expect(page.getByTestId('version-5')).toHaveAttribute('data-action', 'REVERT')
     await expect(page.getByTestId('version-6')).toHaveAttribute('data-action', 'REBASE')
