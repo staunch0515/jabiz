@@ -5,6 +5,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.country.CountryCatalog;
 import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
 import com.jabiz.quizbuks.wallet.QbLedger;
@@ -15,9 +16,11 @@ import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.param.ParamProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.security.MfaRequirement;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,18 +28,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * {@code QB_SETUP} prepares a QuizBuks installation (docs/quizbuks/plans/Q1-skeleton.md): the roles of
  * {@link QbRoles} with their permissions, the ledger accounts of {@link QbLedger}, the countries of
- * {@link CountryData} and the business parameters of {@link QbParams}. It can run again at any time: it adds what is
- * missing (a later phase's permissions, an account or a parameter added since) and never changes or removes what
- * exists, so what administrators granted or set stays. Granting permissions is platform administration, so it asks
- * for a second factor like the platform's own security processes.
+ * {@link CountryCatalog} and the business parameters of {@link QbParams}.
+ *
+ * <p>It adds only what has never existed. Every item it makes or finds is written to {@link QbSetupRecords}, and an
+ * item with a record is never added again: a role an administrator deleted or a permission revoked stays gone, and
+ * a parameter keeps the value an administrator set. An item without a record is added unless it exists now or is
+ * scheduled to begin (roles and grants are read as they will be, too); then it is only recorded. So it can run again
+ * at any time, to add what a later phase declares. Granting permissions is platform administration, so it asks for a
+ * second factor like the platform's own security processes. Every read takes the whole result (decision D32).
  */
 public final class QbSetupProcesses {
 
     public static final String SETUP = "QB_SETUP";
+
+    /** Far enough ahead to see every scheduled role and grant (they are scheduled in business time, not centuries). */
+    static final Instant AHEAD = Instant.parse("3000-01-01T00:00:00Z");
 
     public record SetupInput() {}
 
@@ -50,8 +61,11 @@ public final class QbSetupProcesses {
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, List<String> accountsOpened,
         int countriesAdded, List<String> paramsCreated) {}
 
+    static final String RECORDS = "records";
     static final String ROLES = "roles";
     static final String GRANTS = "grants";
+    static final String ROLES_AHEAD = "rolesAhead";
+    static final String GRANTS_AHEAD = "grantsAhead";
     static final String ACCOUNTS = "accounts";
     static final String PARAMS = "params";
     static final String COUNTRIES = "countries";
@@ -59,67 +73,89 @@ public final class QbSetupProcesses {
     static final String CREATE = "create";
     static final String OUTPUT = "output";
 
-    public static final ProcessDefinition<SetupInput, SetupOutput, ProcessContext> PROCESS =
-        ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
-            .description("Creates the QuizBuks roles, ledger accounts, countries and business parameters; adds what "
-                + "is missing when run again.")
+    /** The whole result of a query: the platform refuses more than its maximum rather than cutting it short. */
+    private static EntityQuery all(QueryPredicate predicate) {
+        return EntityQuery.builder().where(predicate).limit(Integer.MAX_VALUE).build();
+    }
+
+    private static EntityQuery all() {
+        return EntityQuery.builder().limit(Integer.MAX_VALUE).build();
+    }
+
+    private static List<Object> codes(List<?> items, Function<Object, String> code) {
+        return new ArrayList<>(items.stream().map(code).toList());
+    }
+
+    public static ProcessDefinition<SetupInput, SetupOutput, ProcessContext> process(CountryCatalog catalog) {
+        return ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
+            .description("Creates the QuizBuks roles, ledger accounts, countries and business parameters that have "
+                + "never existed; never adds back what was removed.")
             .permissions(QbPermissions.SETUP)
             .requiresMfa(MfaRequirement.ADMINISTRATION)
             .contextFactory((start, input) -> new ProcessContext(start))
             .outputMapper(ctx -> ctx.get(OUTPUT, SetupOutput.class))
-            .step("Load the roles", QueryEntities.of(SecurityEntities.ROLE_DATASET, ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In("roleCode", new ArrayList<>(QbRoles.all().stream()
-                    .map(QbRoles.Role::code).toList())))
-                .limit(QbRoles.all().size() + 1)
-                .build(), ROLES))
+            .step("Load what setup has seen", QueryEntities.of(QbSetupRecords.DATASET, ctx -> all(), RECORDS))
+            .step("Load the roles", QueryEntities.of(SecurityEntities.ROLE_DATASET, ctx -> all(
+                new QueryPredicate.In("roleCode", codes(QbRoles.all(), r -> ((QbRoles.Role) r).code()))), ROLES))
             .step("Load their permissions", QueryEntities.of(SecurityEntities.ROLE_PERMISSION_DATASET,
-                ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.In("roleId", new ArrayList<>(list(ctx, ROLES).stream()
-                        .map(EntityInstance::id).toList())))
-                    .limit(1000)
-                    .build(), GRANTS))
-            .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET,
-                ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.In("accountCode", new ArrayList<>(QbLedger.ACCOUNTS.stream()
-                        .map(QbLedger.Account::code).toList())))
-                    .limit(QbLedger.ACCOUNTS.size() + 1)
-                    .build(), ACCOUNTS))
-            .step("Load the parameters", QueryEntities.of(ParamEntities.DATASET, ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In(ParamEntities.KEY, new ArrayList<>(QbParams.ALL.stream()
-                    .map(QbParams.Param::key).toList())))
-                .limit(QbParams.ALL.size() + 1)
-                .build(), PARAMS))
-            .step("Load the countries", QueryEntities.of(QbCountries.DATASET, ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In("code", new ArrayList<>(CountryData.all().stream()
-                    .map(CountryData.Country::code).toList())))
-                .limit(CountryData.all().size() + 1)
-                .build(), COUNTRIES))
-            .compute("Add what is missing", (metadata, ctx) -> setup(ctx))
+                ctx -> all(new QueryPredicate.In("roleId", new ArrayList<>(list(ctx, ROLES).stream()
+                    .map(EntityInstance::id).toList()))), GRANTS))
+            .step("Load the roles scheduled to begin", RunTemplate.at("qb.setup.roles", ctx -> Map.of(),
+                ctx -> AHEAD, ctx -> null, ROLES_AHEAD))
+            .step("Load the grants scheduled to begin", RunTemplate.at("qb.setup.grants", ctx -> Map.of(),
+                ctx -> AHEAD, ctx -> null, GRANTS_AHEAD))
+            .step("Load the ledger accounts", QueryEntities.of(LedgerEntities.ACCOUNT_DATASET, ctx -> all(
+                new QueryPredicate.In("accountCode", codes(QbLedger.ACCOUNTS, a -> ((QbLedger.Account) a).code()))),
+                ACCOUNTS))
+            .step("Load the parameters", QueryEntities.of(ParamEntities.DATASET, ctx -> all(
+                new QueryPredicate.In(ParamEntities.KEY, codes(QbParams.ALL, p -> ((QbParams.Param) p).key()))),
+                PARAMS))
+            .step("Load the countries", QueryEntities.of(QbCountries.DATASET, ctx -> all(
+                new QueryPredicate.In("code", codes(catalog.countries(), c -> ((CountryData.Country) c).code()))),
+                COUNTRIES))
+            .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
             .step("Declare the parameters", CallProcess.forEach("PARAM_CREATE", 1,
                 ctx -> listOf(ctx, CREATE), null)));
+    }
 
-    static void setup(ProcessContext ctx) {
+    static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
+        Set<String> seen = new HashSet<>();
+        list(ctx, RECORDS).forEach(record -> seen.add(record.get("itemKey")));
+        Set<String> found = new HashSet<>();
         Map<String, Object> roleIds = new HashMap<>();
         for (EntityInstance role : list(ctx, ROLES)) {
             roleIds.put(role.get("roleCode"), role.id());
+            found.add(QbSetupRecords.role(role.get("roleCode")));
         }
-        Set<String> granted = new HashSet<>();
+        Map<Object, String> roleCodes = new HashMap<>();
+        roleIds.forEach((code, id) -> roleCodes.put(String.valueOf(id), code));
         for (EntityInstance grant : list(ctx, GRANTS)) {
-            granted.add(grant.get("roleId") + " " + grant.get("permission"));
+            String code = roleCodes.get(String.valueOf((Object) grant.get("roleId")));
+            found.add(QbSetupRecords.grant(code, grant.get("permission")));
         }
+        rows(ctx, ROLES_AHEAD).forEach(row -> found.add(QbSetupRecords.role(String.valueOf(row.get("roleCode")))));
+        rows(ctx, GRANTS_AHEAD).forEach(row -> found.add(QbSetupRecords.grant(String.valueOf(row.get("roleCode")),
+            String.valueOf(row.get("permission")))));
+        list(ctx, ACCOUNTS).forEach(account -> found.add(QbSetupRecords.account(account.get("accountCode"))));
+        list(ctx, PARAMS).forEach(param -> found.add(QbSetupRecords.param(param.get(ParamEntities.KEY))));
+        list(ctx, COUNTRIES).forEach(country -> found.add(QbSetupRecords.country(country.get("code"))));
+
+        Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
         int added = 0;
         for (QbRoles.Role role : QbRoles.all()) {
-            Object roleId = roleIds.get(role.code());
-            if (roleId == null) {
-                roleId = ctx.changes().insert(SecurityEntities.ROLE, Map.of("roleCode", role.code(),
-                    "labels", role.labels(), "enabled", true, "requireMfa", role.requireMfa()));
+            if (recorder.isNew(QbSetupRecords.role(role.code()))) {
+                roleIds.put(role.code(), ctx.changes().insert(SecurityEntities.ROLE, Map.of("roleCode", role.code(),
+                    "labels", role.labels(), "enabled", true, "requireMfa", role.requireMfa())));
                 created.add(role.code());
             }
+            Object roleId = roleIds.get(role.code());
             for (String permission : role.permissions()) {
-                if (granted.add(roleId + " " + permission)) {
+                String key = QbSetupRecords.grant(role.code(), permission);
+                // A role that is gone (or only scheduled) gets nothing: its grants wait, unrecorded, for the role.
+                if ((roleId != null || recorder.known(key)) && recorder.isNew(key)) {
                     ctx.changes().insert(SecurityEntities.ROLE_PERMISSION,
                         Map.of("roleId", roleId, "permission", permission));
                     added++;
@@ -127,26 +163,24 @@ public final class QbSetupProcesses {
             }
         }
 
-        Set<String> accounts = new HashSet<>();
-        list(ctx, ACCOUNTS).forEach(account -> accounts.add(account.get("accountCode")));
-        List<LedgerProcesses.OpenAccountInput> open = QbLedger.ACCOUNTS.stream()
-            .filter(account -> !accounts.contains(account.code()))
-            .map(account -> new LedgerProcesses.OpenAccountInput(account.code(), account.name(), account.type()))
-            .toList();
+        List<LedgerProcesses.OpenAccountInput> open = new ArrayList<>();
+        for (QbLedger.Account account : QbLedger.ACCOUNTS) {
+            if (recorder.isNew(QbSetupRecords.account(account.code()))) {
+                open.add(new LedgerProcesses.OpenAccountInput(account.code(), account.name(), account.type()));
+            }
+        }
 
-        Set<String> params = new HashSet<>();
-        list(ctx, PARAMS).forEach(param -> params.add(param.get(ParamEntities.KEY)));
-        List<ParamProcesses.CreateInput> create = QbParams.ALL.stream()
-            .filter(param -> !params.contains(param.key()))
-            .map(param -> new ParamProcesses.CreateInput(param.key(), param.valueKind(), param.value(),
-                param.description()))
-            .toList();
+        List<ParamProcesses.CreateInput> create = new ArrayList<>();
+        for (QbParams.Param param : QbParams.ALL) {
+            if (recorder.isNew(QbSetupRecords.param(param.key()))) {
+                create.add(new ParamProcesses.CreateInput(param.key(), param.valueKind(), param.value(),
+                    param.description()));
+            }
+        }
 
-        Set<String> countries = new HashSet<>();
-        list(ctx, COUNTRIES).forEach(country -> countries.add(country.get("code")));
         int countriesAdded = 0;
-        for (CountryData.Country country : CountryData.all()) {
-            if (!countries.contains(country.code())) {
+        for (CountryData.Country country : catalog) {
+            if (recorder.isNew(QbSetupRecords.country(country.code()))) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("code", country.code());
                 row.put("name", country.names());
@@ -156,16 +190,43 @@ public final class QbSetupProcesses {
             }
         }
 
-        ctx.put(OPEN, open);
-        ctx.put(CREATE, create);
+        ctx.put(OPEN, List.copyOf(open));
+        ctx.put(CREATE, List.copyOf(create));
         ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
             create.stream().map(ParamProcesses.CreateInput::key).toList()));
     }
 
+    /**
+     * Decides each item once: an item with a record is old; one that exists (or is scheduled) without a record gets
+     * its record now and is old too; anything else is new and recorded, for the caller to make.
+     */
+    private record Recorder(ProcessContext ctx, Set<String> seen, Set<String> found) {
+
+        /** Whether setup has a record of the item or finds it in the data. */
+        boolean known(String key) {
+            return seen.contains(key) || found.contains(key);
+        }
+
+        boolean isNew(String key) {
+            if (seen.contains(key)) {
+                return false;
+            }
+            seen.add(key);
+            ctx.changes().insert(QbSetupRecords.RECORD, Map.of("itemKey", key));
+            return !found.contains(key);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static List<EntityInstance> list(ProcessContext ctx, String key) {
         List<EntityInstance> found = (List<EntityInstance>) ctx.get(key);
+        return found == null ? List.of() : found;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> rows(ProcessContext ctx, String key) {
+        List<Map<String, Object>> found = (List<Map<String, Object>>) ctx.get(key);
         return found == null ? List.of() : found;
     }
 

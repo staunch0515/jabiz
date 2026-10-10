@@ -3,19 +3,10 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.wallet.QbLedger;
-import com.jabiz.runtime.security.JwtService;
-import com.jabiz.runtime.test.PostgresIntegrationTest;
 import com.jabiz.runtime.test.TestTokens;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.ApplicationContext;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.util.List;
 import java.util.Map;
@@ -28,30 +19,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code QB_SETUP} creates the roles with their permissions, the ledger accounts, every country and the business
  * parameters; run again, it adds nothing and changes nothing (docs/quizbuks/plans/Q1-skeleton.md).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
-class SetupIT extends PostgresIntegrationTest {
-
-    private static final ParameterizedTypeReference<Map<String, Object>> MAP = new ParameterizedTypeReference<>() {};
-
-    @Autowired
-    ApplicationContext context;
-
-    @Autowired
-    JwtService tokens;
-
-    private WebTestClient client;
-
-    @BeforeEach
-    void client() {
-        client = WebTestClient.bindToApplicationContext(context).configureClient()
-            .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "en").build();
-    }
+class SetupIT extends QbItSupport {
 
     @Test
     void setsUpOnceAndAddsNothingWhenRunAgain() {
-        String admin = TestTokens.bearer(tokens, "installer", QbPermissions.SETUP);
-
-        Map<String, Object> first = setup(admin);
+        Map<String, Object> first = setup();
         assertThat(first.get("rolesCreated")).isEqualTo(QbRoles.all().stream().map(QbRoles.Role::code).toList());
         int granted = QbRoles.all().stream().mapToInt(role -> role.permissions().size()).sum();
         assertThat(first.get("permissionsAdded")).isEqualTo(granted);
@@ -61,12 +33,15 @@ class SetupIT extends PostgresIntegrationTest {
         assertThat(first.get("paramsCreated")).isEqualTo(QbParams.ALL.stream().map(QbParams.Param::key).toList());
 
         Map<String, Long> before = rowCounts();
+        // One record of each item setup made: it never adds the same item again.
+        assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
+            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249);
         assertRoles();
         assertAccounts();
         assertCountries();
         assertParams();
 
-        Map<String, Object> second = setup(admin);
+        Map<String, Object> second = setup();
         assertThat(second).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
             .containsEntry("paramsCreated", List.of());
@@ -74,12 +49,22 @@ class SetupIT extends PostgresIntegrationTest {
         assertCountries();
 
         assertOnlyInserted("qb_country_version");
+        assertOnlyInserted("qb_setup_record_version");
     }
 
     @Test
     void needsThePermissionAndASecondFactor() {
-        post(TestTokens.bearer(tokens, "visitor", QbPermissions.COUNTRY_READ)).expectStatus().isForbidden();
-        post(TestTokens.withoutMfa(tokens, "installer", QbPermissions.SETUP)).expectStatus().isForbidden();
+        runSetup(TestTokens.bearer(tokens, "visitor", QbPermissions.COUNTRY_READ)).expectStatus().isForbidden();
+        runSetup(TestTokens.withoutMfa(tokens, "installer", QbPermissions.SETUP)).expectStatus().isForbidden();
+    }
+
+    @Test
+    void theRegionsColumnHoldsEveryRegion() {
+        // Regions.MAX_LENGTH grows with the regions; the column must grow with it (a new migration).
+        assertThat(query("SELECT character_maximum_length AS n FROM information_schema.columns "
+            + "WHERE table_schema = current_schema() AND table_name = 'qb_country_version' AND column_name = 'regions'"))
+            .singleElement().satisfies(row -> assertThat(((Number) row.get("n")).intValue())
+                .isGreaterThanOrEqualTo(Regions.MAX_LENGTH));
     }
 
     private void assertRoles() {
@@ -129,7 +114,7 @@ class SetupIT extends PostgresIntegrationTest {
     private static Map<String, Long> rowCounts() {
         Map<String, Long> counts = new TreeMap<>();
         for (String table : List.of("sec_role_version", "sec_role_permission_version", "ledger_account_version",
-            "sys_param_version", "qb_country_version")) {
+            "sys_param_version", "qb_country_version", "qb_setup_record_version")) {
             counts.put(table, ((Number) query("SELECT count(*) AS n FROM " + table).getFirst().get("n")).longValue());
         }
         return counts;
@@ -143,17 +128,5 @@ class SetupIT extends PostgresIntegrationTest {
         assertThat(query("SELECT 1 AS guarded FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
             + "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = current_schema() "
             + "AND c.relname = ? AND NOT t.tgisinternal", table)).isNotEmpty();
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> setup(String authorization) {
-        var exchange = post(authorization).expectBody(MAP).returnResult();
-        assertThat(exchange.getStatus().value()).as("QB_SETUP answered " + exchange.getResponseBody()).isEqualTo(200);
-        return (Map<String, Object>) exchange.getResponseBody().get("output");
-    }
-
-    private WebTestClient.ResponseSpec post(String authorization) {
-        return client.post().uri("/api/processes/QB_SETUP/latest").contentType(MediaType.APPLICATION_JSON)
-            .header(HttpHeaders.AUTHORIZATION, authorization).bodyValue(Map.of()).exchange();
     }
 }
