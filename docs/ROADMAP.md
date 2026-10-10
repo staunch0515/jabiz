@@ -1204,6 +1204,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
+| 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 
 ### 16a 事务邮件（3–4 天）
 
@@ -1453,3 +1454,18 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 - [x] 受控键的直接修改在所有写入途径上被拒（422 `PARAM_CONTROLLED`），一个人无法解除受控（`ControlledParamIT`、`ControlledParamsChecksTest`）。
 - [x] 经提出与另一人发布修改受控参数，立即与预定生效、可取消预定，值按类型检查，历史与审计照常（`ControlledParamIT`）。
 - [x] 声明格式错误在启动时一次报告（`ControlledParamsTest`、`ControlledParamsChecksTest`）；示范场景 `freight/monthly_close` 通过；`./gradlew check` 通过。
+
+### 16j 应用的快照路径设置生效（0.5 天）
+
+现状：约定插件 `jabiz.boot-app` 在应用插件时就读取 `jabizApp` 的 `openApiSnapshot`、`publicQueriesSnapshot`（`backend/build.gradle.kts` 的 `tasks.withType<Test> { }`
+使 `test` 任务一创建就配置），这时应用的 `jabizApp { }` 还没有执行，设置被忽略：QuizBuks 以 `-Dopenapi.update-snapshot=true` 运行快照测试时写入的是平台的
+`frontend/openapi/openapi.json`，而应用分支不能改平台目录。
+
+**要求**
+1. 两个快照路径在 `test` 任务运行时才读取（`jvmArgumentProviders`，路径照旧是任务输入）；缺省仍为 `frontend/openapi/openapi.json` 与 `public-queries.json`。
+   插件中其他 `jabizApp` 属性（`mainClass`、`languages`、`region`、`spa`）已是延迟读取或在调用时注册，不变。
+2. `backend/build-logic` 有自己的测试（Gradle TestKit，夹具项目像 `backend` 一样预先配置 Test 任务），并随 `./gradlew check` 运行。
+
+**验收标准**
+- [x] 应用设置的两个路径到达 `test` 任务，未设置时为平台前端的快照（`BootAppPluginSnapshotPathsTest`；修复前第一条失败）。
+- [x] `backend/app` 的 `OpenApiSnapshotIT` 照旧对比 `frontend/openapi/openapi.json`；`./gradlew check` 通过（含 build-logic 的测试）。
