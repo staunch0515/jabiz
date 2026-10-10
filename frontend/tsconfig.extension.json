@@ -7,6 +7,8 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.extension.tsbuildinfo",
     "paths": {
       "@jabiz/admin": ["./src/lib/index.ts"],
+      "@jabiz/client": ["./packages/client/src/index.ts"],
+      "@jabiz/ui": ["./packages/ui/src/index.ts"],
       "react-router": ["./node_modules/react-router/dist/production/index.d.ts"],
       "*": ["./node_modules/@types/*", "./node_modules/*"]
     },

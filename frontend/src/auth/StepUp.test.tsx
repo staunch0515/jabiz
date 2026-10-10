@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sessionFetch } from '../api/client'
@@ -13,13 +12,11 @@ function json(status: number, body: unknown) {
 
 function renderProvider() {
   render(
-    <App>
-      <MemoryRouter>
-        <StepUpProvider>
-          <div />
-        </StepUpProvider>
-      </MemoryRouter>
-    </App>,
+    <MemoryRouter>
+      <StepUpProvider>
+        <div />
+      </StepUpProvider>
+    </MemoryRouter>,
   )
 }
 

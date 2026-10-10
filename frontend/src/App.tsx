@@ -1,3 +1,4 @@
+import { AppearanceProvider, Toaster } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App as AntApp, ConfigProvider, type ThemeConfig } from 'antd'
 import enUS from 'antd/locale/en_US'
@@ -134,15 +135,20 @@ const ACCESSIBLE_THEME: ThemeConfig = {
 export default function App() {
   const { i18n } = useTranslation()
   const locale = antdLocales[i18n.language as keyof typeof antdLocales] ?? zhCN
+  // The appearance and the toasts are @jabiz/ui's (decision D34); Ant Design's provider stays for the pages that
+  // still use it (until phase 15d).
   return (
-    <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
-      <AntApp>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <RouterProvider router={router} />
-          </AuthProvider>
-        </QueryClientProvider>
-      </AntApp>
-    </ConfigProvider>
+    <AppearanceProvider>
+      <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
+        <AntApp>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <RouterProvider router={router} />
+            </AuthProvider>
+          </QueryClientProvider>
+        </AntApp>
+      </ConfigProvider>
+      <Toaster />
+    </AppearanceProvider>
   )
 }

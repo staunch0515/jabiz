@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import type { RouteObject } from 'react-router'
 import type { Language } from '../i18n/resources'
 
@@ -23,7 +23,8 @@ export interface ExtensionMenuItem {
   /** Key of the extension's messages. */
   label: string
   path?: string
-  icon?: ReactNode
+  /** A lucide icon component (`import { Boxes } from 'lucide-react'`; `icon: Boxes`), not an element. */
+  icon?: LucideIcon
   /**
    * Shown only to users who hold it ("*" holds all). Hiding is navigation, not access: the server checks every call
    * the page makes.

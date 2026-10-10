@@ -1,5 +1,5 @@
-import { AppstoreOutlined } from '@ant-design/icons'
 import { defineExtension } from '@jabiz/admin'
+import { Boxes } from 'lucide-react'
 import { messages } from './messages'
 import StockOverviewPage from './StockOverviewPage'
 
@@ -15,7 +15,7 @@ export default defineExtension({
       key: 'stock',
       label: 'menu.stock',
       path: '/commerce/stock',
-      icon: <AppstoreOutlined />,
+      icon: Boxes,
       permission: 'commerce.stock.read',
     },
   ],
