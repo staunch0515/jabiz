@@ -59,14 +59,16 @@ docs/quizbuks/               本文件等
 | 角色 | 权限（应用自定义的权限码，前缀 `qb.`） |
 |---|---|
 | `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户） |
-| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write` |
-| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`approval.decide`、`task.read` |
+| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write` |
+| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`approval.decide`、`task.read` |
 | `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`ledger.read`、`report.issue`、`approval.decide`、`task.read` |
-| `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read/write`、`control.propose`、平台安全管理权限 |
+| `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
-- 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）。
+- 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）：
+  平台决策 D40，`QbParams.CONTROLLED`（抽成比例、转账门槛、人工审核额、转账开关、两个免审核开关）以 `ControlledParams` 声明，一切直接写入 422 `PARAM_CONTROLLED`。
+  `QB_SETUP` 以受控变更提出它们的首个值，由另一位管理员发布。没有角色持有 `platform.param.write`；`control.publish` 默认只有平台管理员（建议以后授予 `QB_ADMIN_FINANCE`，待确认）。
 - 二次验证：管理员角色要求二次验证（`SecRole.requireMfa`）；商家可自行开启。
 
 ## 3. 领域模型

@@ -62,6 +62,19 @@ abstract class QbItSupport extends PostgresIntegrationTest {
         return (Map<String, Object>) exchange.getResponseBody().get("output");
     }
 
+    /**
+     * Publishes, as a second administrator, the controlled parameters a run of {@code QB_SETUP} proposed (platform
+     * decision D40: the proposer cannot publish).
+     */
+    @SuppressWarnings("unchecked")
+    protected void publishProposals(Map<String, Object> setupOutput) {
+        for (Object changeId : (List<Object>) setupOutput.get("proposals")) {
+            client.post().uri("/api/processes/CONTROL_CHANGE_PUBLISH/latest").contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "publisher", "control.publish"))
+                .bodyValue(Map.of("changeId", changeId)).exchange().expectStatus().isOk();
+        }
+    }
+
     protected WebTestClient.ResponseSpec runSetup(String authorization) {
         return client.post().uri("/api/processes/QB_SETUP/latest").contentType(MediaType.APPLICATION_JSON)
             .header(HttpHeaders.AUTHORIZATION, authorization).bodyValue(Map.of()).exchange();

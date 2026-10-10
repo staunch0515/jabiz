@@ -28,9 +28,17 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions())
-            .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.write", "control.propose",
+            .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.read", "control.propose",
                 "security.user-role.write")
             .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void noRoleWritesParametersOrPublishesControlledChanges() {
+        // Parameters change through controlled changes (platform decision D40); the platform's administrator, or a
+        // role an administrator grants it to, publishes them.
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
+            .doesNotContain("platform.param.write", "control.publish"));
     }
 
     @Test

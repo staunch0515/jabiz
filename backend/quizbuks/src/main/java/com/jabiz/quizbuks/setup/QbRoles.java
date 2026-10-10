@@ -40,9 +40,15 @@ public final class QbRoles {
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.PAYOUT_REVIEW, QbPermissions.RECONCILE, "ledger.read",
         "ledger.account.read", "report.issue", "approval.decide", "task.read");
 
-    /** What the super administrator holds beyond the other two: bans, parameters, controls, users and roles. */
+    /**
+     * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
+     * users and roles. No role writes parameters directly: the controlled ones change only through controlled changes
+     * (platform decision D40), and the others are only the AI model and the oldest app version. Nobody holds
+     * {@code control.publish} by default: the platform's administrator (or a role an administrator grants it to)
+     * publishes, so one person never both proposes and publishes.
+     */
     private static final List<String> SUPER = List.of(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN,
-        "platform.param.read", "platform.param.write", "control.propose",
+        "platform.param.read", "control.propose",
         "security.user.read", "security.user.write", "security.user.create", "security.user.password",
         "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",
         "security.role.read", "security.role.write", "security.user-role.read", "security.user-role.write",

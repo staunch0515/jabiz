@@ -18,7 +18,15 @@ class SetupRemovalsIT extends QbItSupport {
 
     @Test
     void runningAgainNeverAddsBackWhatWasRemoved() {
-        setup();
+        Map<String, Object> first = setup();
+        // One proposed parameter is withdrawn, the others published.
+        @SuppressWarnings("unchecked")
+        List<Object> proposals = (List<Object>) first.get("proposals");
+        client.post().uri("/api/processes/CONTROL_CHANGE_WITHDRAW/latest")
+            .header("Authorization", com.jabiz.runtime.test.TestTokens.bearer(tokens, "installer", "control.propose"))
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("changeId", proposals.getFirst())).exchange().expectStatus().isOk();
+        publishProposals(Map.of("proposals", proposals.subList(1, proposals.size())));
         String content = roleId(QbRoles.ADMIN_CONTENT);
         String taker = roleId(QbRoles.TAKER);
 
@@ -31,23 +39,26 @@ class SetupRemovalsIT extends QbItSupport {
         Map<String, Object> role = latest("sec_role_version", "role_id", "role_id = '" + taker + "'").getFirst();
         commit(SecurityEntities.ROLE_DATASET, "DELETE", taker, ((Number) role.get("version_no")).longValue(), null,
             null);
-        // The threshold is changed; a parameter is only ever declared once.
+        // The AI model is changed; a parameter is only ever declared once.
         client.post().uri("/api/processes/PARAM_SET/latest").header("Authorization", admin())
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of("key", QbParams.TRANSFER_THRESHOLD, "value", "3000")).exchange().expectStatus().isOk();
+            .bodyValue(Map.of("key", QbParams.AI_MODEL, "value", "gpt-x")).exchange().expectStatus().isOk();
 
         Map<String, Object> again = setup();
         assertThat(again).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
-            .containsEntry("paramsCreated", List.of());
+            .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of());
+        // The withdrawn proposal is not made again: an administrator proposes the parameter if it is wanted.
+        assertThat(latest("sys_param_version", "param_id", "param_key = '" + QbParams.CREATOR_FEE_RATE + "'"))
+            .isEmpty();
 
         assertThat(latest("sec_role_version", "role_id", "role_code = 'QB_TAKER' AND NOT is_deleted")).isEmpty();
         assertThat(latest("sec_role_permission_version", "role_permission_id",
             "role_id = '" + content + "' AND permission = 'task.read' AND NOT is_deleted")).isEmpty();
         assertThat(latest("sec_role_permission_version", "role_permission_id",
             "role_id = '" + taker + "' AND NOT is_deleted")).isEmpty();
-        assertThat(latest("sys_param_version", "param_id", "param_key = 'qb.transfer.threshold'")).singleElement()
-            .satisfies(param -> assertThat(param.get("param_value")).isEqualTo("3000"));
+        assertThat(latest("sys_param_version", "param_id", "param_key = 'qb.ai.model'")).singleElement()
+            .satisfies(param -> assertThat(param.get("param_value")).isEqualTo("gpt-x"));
     }
 
     private String roleId(String code) {
