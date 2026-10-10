@@ -14,9 +14,9 @@
 - 一个文件策略只能声明一个读取权限（`FilePolicy.readPermission`）。
 - 被引用的实例不能删除（`DatasetEntityManager.ensureNotReferenced`，`STILL_REFERENCED`）。
 
-## 设计决定（开工前确认；确认后同步修改 `02-design.md` §2、§3.2、§5.2）
+## 设计决定（已确认，用户 2026-10-10；`02-design.md` §2、§3.2、§5.2 已同步）
 
-### D-Q3-1 版本是显式"保存版本"，不是每次保存都生成【待确认 Q3-1】
+### D-Q3-1 版本是显式"保存版本"，不是每次保存都生成【已确认 Q3-1】
 
 需求 M-27 原文是"每次保存生成新版本"，但 M-22 允许草稿不完整，而版本必须完整（M-31 的内容规则在生成版本时检查，见 D-Q3-5）。因此草稿的保存（`QB_QUIZ_SAVE`、`QB_QUESTION_SAVE` 等）不生成版本；版本由 `QB_QUIZ_PUBLISH_VERSION`（界面上叫"保存版本"）生成。
 
@@ -63,9 +63,9 @@
 | 上限（锁内） | 每个模版题目 ≤ 100（`QB_QUIZ_TOO_MANY_QUESTIONS`）、资料 ≤ 10（`QB_QUIZ_TOO_MANY_MATERIALS`） |
 | 文件 | 平台检查文件存在且策略相符 |
 
-**生成版本时**（`QB_QUIZ_PUBLISH_VERSION`，M-31 中属于内容的部分；一次报告全部违规，422，带 `field` 路径如 `questions[3].options` 与题号 / 选项号 / 资料号参数）：至少 1 道题（`QB_QUIZ_NO_QUESTIONS`）；题干非空（`QB_QUESTION_STEM_REQUIRED`）；选项 2–6 个（`QB_QUESTION_OPTION_COUNT`）；至少 1 个正确（`QB_QUESTION_NO_CORRECT`）；选项有文字或图片（`QB_OPTION_EMPTY`）；资料有标题（`QB_MATERIAL_TITLE_REQUIRED`）且有该类型的内容（`QB_MATERIAL_CONTENT_REQUIRED`；图片组 1–20 张，`QB_MATERIAL_NO_IMAGES`）；与最新版本哈希相同即 `QB_QUIZ_VERSION_UNCHANGED`；规范文本超过 2 MB 即 `QB_QUIZ_TOO_LARGE`。资料的 `description` 不强制【待确认 Q3-3】。存在出资方、档位等其余 M-31 规则属于发布（Q4）。完整性规则写成纯 Java 的 `QuizCompleteness.check(草稿)`。
+**生成版本时**（`QB_QUIZ_PUBLISH_VERSION`，M-31 中属于内容的部分；一次报告全部违规，422，带 `field` 路径如 `questions[3].options` 与题号 / 选项号 / 资料号参数）：至少 1 道题（`QB_QUIZ_NO_QUESTIONS`）；题干非空（`QB_QUESTION_STEM_REQUIRED`）；选项 2–6 个（`QB_QUESTION_OPTION_COUNT`）；至少 1 个正确（`QB_QUESTION_NO_CORRECT`）；选项有文字或图片（`QB_OPTION_EMPTY`）；资料有标题（`QB_MATERIAL_TITLE_REQUIRED`）且有该类型的内容（`QB_MATERIAL_CONTENT_REQUIRED`；图片组 1–20 张，`QB_MATERIAL_NO_IMAGES`）；与最新版本哈希相同即 `QB_QUIZ_VERSION_UNCHANGED`；规范文本超过 2 MB 即 `QB_QUIZ_TOO_LARGE`。资料的 `description` 不强制【已确认 Q3-3】。存在出资方、档位等其余 M-31 规则属于发布（Q4）。完整性规则写成纯 Java 的 `QuizCompleteness.check(草稿)`。
 
-### D-Q3-6 删除与文件【待确认 Q3-2】
+### D-Q3-6 删除与文件【已确认 Q3-2】
 
 **"删除"模版就是移除，不写墓碑**：`QbQuizVersion.quizId` 引用模版，而只写一次的版本不能删除，按平台规则（`STILL_REFERENCED`）模版一旦有版本就永远删不掉。因此 `QB_QUIZ_DELETE`：置 `removed = true`、清空 `cover`；给全部资料、图片、题目、选项写墓碑（先子后父）；给不再需要的 `QbVersionFile` 写墓碑。商家视图以 `removed = false` 限定，移除后商家看不到、各流程对它 404；管理员视图仍可看到；版本保留（Q4 的发布还引用它们）。
 
@@ -148,26 +148,54 @@
 
 ## 验收标准
 
-- [ ] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过；PR 上 `ci.yml` 与 `quizbuks.yml` 全绿。
-- [ ] M-20：`qb.sponsor.quizzes` 给出封面、标题、版本号、题数、状态、最后修改时间、AI 标记，可按标题搜索，只含本人未移除的模版。
-- [ ] M-21 / M-22：新建、编辑、删除（移除）模版；草稿可以不完整，总有所有者；只有所有者能改。
-- [ ] M-23：六类资料（视频只存链接），每条有标题与描述；PDF、音频、图片组经各自的文件策略，图片重新编码。
-- [ ] M-24：题干可带图，分值 ≥ 1，2–6 个选项（可带图）、至少 1 个正确（生成版本时检查）；题目与资料可调整顺序。
-- [ ] M-27：生成 v1.0、v1.1… 的只写一次快照，有历史，之后的编辑不改变已有版本。
-- [ ] M-28：从草稿或指定版本完整克隆。
-- [ ] 快照引用的文件不被清扫，不再被引用的文件被清扫。
-- [ ] 7 张时态表上没有 UPDATE / DELETE。
-- [ ] 消息三语齐全；`02-design.md`、`03-plan.md`、`backend/quizbuks/CLAUDE.md` 已更新；部署后执行 `QB_SETUP` 补上两个新权限。
+- [x] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过。PR 上 `ci.yml` 与 `quizbuks.yml` 全绿：**待 PR 验证**（本阶段按要求未开 PR）。
+- [x] M-20：`qb.sponsor.quizzes` 给出封面、标题、版本号、题数、状态、最后修改时间、AI 标记，可按标题搜索，只含本人未移除的模版。
+- [x] M-21 / M-22：新建、编辑、删除（移除）模版；草稿可以不完整，总有所有者；只有所有者能改。
+- [x] M-23：六类资料（视频只存链接），每条有标题与描述；PDF、音频、图片组经各自的文件策略，图片重新编码。
+- [x] M-24：题干可带图，分值 ≥ 1，2–6 个选项（可带图）、至少 1 个正确（生成版本时检查）；题目与资料可调整顺序。
+- [x] M-27：生成 v1.0、v1.1… 的只写一次快照，有历史，之后的编辑不改变已有版本。
+- [x] M-28：从草稿或指定版本完整克隆。
+- [x] 快照引用的文件不被清扫，不再被引用的文件被清扫。
+- [x] 7 张时态表上没有 UPDATE / DELETE。
+- [x] 消息三语齐全；`02-design.md`、`03-plan.md`、`backend/quizbuks/CLAUDE.md` 已更新；部署后执行 `QB_SETUP` 补上两个新权限。
+
+## 实施记录
+
+### 与计划的差异
+
+- **版本号字段名**：`versionNo` 是平台给每个时态实体的行版本（保留名），所以 `QbQuizVersion` 的版本号字段为 `versionNumber`（列 `quiz_version_no`）。
+  流程输入输出与模板 `qb.sponsor.quiz-versions` 的结果列仍叫 `versionNo`。
+- **按标题搜索**：`qb.sponsor.quizzes` 用 `strpos(lower(title), lower(:q)) > 0`，输入本来就按字面匹配，`%`、`_`、`\` 不必转义（效果同计划，`ContentIT` 验证）。
+- **链接规则**：平台的 `PATTERN` 只接受前后端一致的正则，`\S` 不可用；`QB_MATERIAL_URL_FORMAT` 为 `https?://[^\p{Z}\p{Cc}]+`（不含任何 Unicode 空白与控制字符）。
+- **路径**：完整性检查的 `field` 路径下标自 0 起（`questions[0].stem`），参数中的题号、选项号、资料号自 1 起。
+- **"保存版本"不改 `revision` 与 `editedAt`**：它们只记录内容的改动；版本只把 `changedSinceVersion` 置为 false。移除模版照常给 `revision + 1`。
+- **新模版的 `latestVersionNo` 为 0**（必填，比空值好比较），`versionLabel` 为空。
+- **OpenAPI 快照没有变化，未加 `OpenApiSnapshotIT`**：平台的接口文档按通用入口（`/api/processes/{name}/…`）描述流程，新流程不改变文档。
+  另发现平台缺口 4（见下）：`jabizApp.openApiSnapshot` 的设置不生效，应用的快照测试会写到平台的 `frontend/openapi/openapi.json`。
+- **随本分支一起完成的 Q1 后续**（平台 16i，决策 D40）：受控参数、`QB_SETUP` 以受控变更提出首个值、`QB_ADMIN_SUPER` 不再有 `platform.param.write`（见 `Q1-skeleton.md` 已知问题）。
+
+### 测试
+
+单元：`QuizSnapshotsTest`、`QuizCompletenessTest`（含 300 例 jqwik 与独立实现对照）、`ReorderTest`、`VersionLabelsTest`、`QbRolesTest`、`MessagesTest`。
+集成：`ContentIT`（10）、`ContentOwnerIT`（4）、`VersionSnapshotIT`、`ContentFilesIT`（2），每个测试后检查 7 张表没有 UPDATE / DELETE；场景 `qb/content.yml`，`qb/setup.yml` 快照随新授权与受控参数更新。
+
+### 已知问题
+
+- 场景不带文件（平台缺口 2），文件只在 `ContentFilesIT` 中验证。
+- `intro`、`body` 在通用后台显示为普通多行文本（平台缺口 1）。
+- 持有 `qb.content.file.read` 的人知道 `fileId` 就能读任何内容文件（平台缺口 3，Q5 前评估）。
+- 商家后台页面未做（16c 之后）。
+- PR 上的 CI 未运行（本阶段不开 PR）。
 
 ## 风险
 
-- **M-27 的理解**（待确认 Q3-1）：若坚持"每次保存即新版本"，草稿就必须完整，与 M-22 矛盾。
+- **M-27 的理解**（已确认 Q3-1：显式"保存版本"）：若坚持"每次保存即新版本"，草稿就必须完整，与 M-22 矛盾。
 - **时态写入量**：每次子项保存追加 1 行模版 + 改变的行；页面应在离开题目时保存，不要逐键保存（页面阶段的约定）。
-- **"删除"是移除**（待确认 Q3-2）：模版文字与版本快照留在库中，文件会被清扫。若需求要求彻底删除文字（个人数据），需要平台的受控清除，或让版本不引用模版。
+- **"删除"是移除**（已确认 Q3-2）：模版文字与版本快照留在库中，文件会被清扫。若需求要求彻底删除文字（个人数据），需要平台的受控清除，或让版本不引用模版。
 - **文件读取不按行授权**：持有 `qb.content.file.read` 的人知道 `fileId` 就能读该文件（UUIDv7 难以猜中）；Q5 起答题人也持有该权限，Q5 前评估平台缺口 3。
 - **快照大小**：按上限约 1 MB 以内，2 MB 为硬限制；版本插入进入审计记录（全文），随版本数增长。
 - **Q4 的衔接**：移除时保留被发布引用的版本的文件；列表状态加"已发布"；发布引用只写一次的版本（不会有 `STILL_REFERENCED` 问题）。
-- **上限与描述是否必填**（待确认 Q3-3）：题 100、选项 6、资料 10、图片 20、各长度、时限 30–7 200 秒，需求未给，为本计划的取值。
+- **上限与描述是否必填**（已确认 Q3-3）：题 100、选项 6、资料 10、图片 20、各长度、时限 30–7 200 秒，需求未给，为本计划的取值。
 
 ## 预估
 
@@ -178,3 +206,5 @@
 1. **单语言 Markdown 文本的格式标记**：文本类型没有 `format`，只有 `I18nText` 有 Markdown；后台把 `intro`、`body` 显示为普通多行文本。需要 `asMarkdown(maxLength)`（Text 增加 `format: plain|markdown`），元数据导出 `format`，后台用与 `I18nText.markdown` 相同的渲染器（不允许原始 HTML，附预览）。Q3 先按多行文本声明；Q4 若在通用后台审核内容就需要它。
 2. **场景回放没有"上传文件"步骤**：文件字段要求文件已存在，场景只能为导入保存文件。需要步骤 `upload: {policy, file}`（以场景的操作人经平台上传服务执行，图片照常重新编码，`fileId` 由场景的确定性生成器给出，文件存入该次回放的临时目录）。在此之前带文件的流程只在集成测试中验证。
 3. **（Q5 前评估）文件读取按引用行授权**：文件的读取只看策略的一个权限码；需要可选声明"能读到引用该文件的行（经某数据视图的范围）才可读文件"。Q3 不需要。
+4. **（新发现）应用的快照路径设置不生效**：`BootAppPlugin.configureTests` 在应用构建脚本的 `jabizApp { … }` 之前就以 `.get()` 读取 `openApiSnapshot` / `publicQueriesSnapshot`，
+   得到的是缺省值（平台的 `frontend/openapi/…`）。应用若写快照测试，`-Dopenapi.update-snapshot=true` 会改写平台文件。需要在平台上改为惰性传递（如 `jvmArgumentProviders` 或 `doFirst`）。

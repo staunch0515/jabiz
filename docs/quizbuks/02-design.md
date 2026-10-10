@@ -89,12 +89,12 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbQuiz` | T | `ownerId`、`title`、`intro`（Markdown）、`cover`（文件）、`timeLimitSec`、`status`（DRAFT / VERSIONED）、`aiGenerated`、`latestVersionNo`（`processOnly`） | 模版。只有拥有者可改（数据视图范围 + 流程检查） |
-| `QbMaterial` | T | `quizId`、`seq`、`kind`（ARTICLE / LINK / VIDEO_LINK / PDF / IMAGES / AUDIO）、`title`、`description`、`body`（Markdown，ARTICLE）、`url`（LINK / VIDEO_LINK）、`file`（PDF / AUDIO） | 参考资料；视频只存链接（已确认）；图片组的每张图为子实体 `QbMaterialImage`（`materialId`、`seq`、`image`） |
-| `QbQuestion` | T | `quizId`、`seq`、`stem`、`image`（可选）、`points`（≥ 1） | |
-| `QbOption` | T | `questionId`、`seq`、`text`、`image`（可选）、`correct` | 2–6 个、至少 1 个正确：服务端规则，在"保存版本"与"提交审核"时检查（草稿允许不完整，M-22） |
-| `QbQuizVersion` | W | `quizId`、`versionNo`（1、2…，显示为 v1.0、v1.1…）、`content`（jsonb：题目、选项、资料的完整快照）、`contentHash`、`questionCount`、`fullScore` | **整体快照**（分析 4.2）。发布引用版本，答题与结算只读快照 |
-| `QbVersionFile` | W | `versionId`、`file`（文件字段） | 快照引用的每个文件一行，使平台的文件引用检查与孤儿清扫看得到 jsonb 中的文件（否则模版删除后文件会被清扫） |
+| `QbQuiz` | T | `ownerId`、`title`、`intro`（Markdown）、`cover`（文件）、`timeLimitSec`、`status`（DRAFT / VERSIONED）、`removed`、`aiGenerated`、`latestVersionNo`、`versionLabel`、`revision`、`editedAt`、`changedSinceVersion`、`questionCount`、`materialCount`（以上状态与计数 `processOnly`）、`clonedFrom` | 模版。只有拥有者可改（商家数据视图以 `ownerId` 限定 + 流程经该视图读取，不是自己的即 404）。"删除"即移除：`removed = true`，商家看不到，版本保留（Q3 D-Q3-6） |
+| `QbMaterial` | T | `quizId`、`ownerId`、`seq`、`kind`（ARTICLE / LINK / VIDEO_LINK / PDF / IMAGES / AUDIO，不可改）、`title`、`description`、`body`（Markdown，ARTICLE）、`url`（LINK / VIDEO_LINK）、`pdf`、`audio` | 参考资料；视频只存链接（已确认）；只填其类型的内容字段；图片组的每张图为子实体 `QbMaterialImage`（`materialId`、`seq`、`image`、`caption`） |
+| `QbQuestion` | T | `quizId`、`ownerId`、`seq`、`stem`、`image`（可选）、`points`（1–1 000） | |
+| `QbOption` | T | `questionId`、`quizId`、`ownerId`、`seq`、`text`、`image`（可选）、`correct` | 2–6 个、至少 1 个正确：在"保存版本"时检查（`QuizCompleteness`；草稿允许不完整，M-22），提交审核时（Q4）再查 |
+| `QbQuizVersion` | W | `quizId`、`ownerId`、`versionNumber`（1、2…，`label` 为 v1.0、v1.1…）、`title`、`content`（规范 JSON 文本：题目、选项、资料的完整快照，题与选项按 1 起的序号）、`contentHash`（平台 `ContentHash`）、`questionCount`、`materialCount`、`fullScore`、`versionedAt` | **整体快照**（分析 4.2），由"保存版本"（`QB_QUIZ_PUBLISH_VERSION`）显式生成，草稿的保存不生成版本（Q3 D-Q3-1）。没有文件字段。发布引用版本，答题与结算只读快照 |
+| `QbVersionFile` | T | `quizId`、`ownerId`、`firstVersionNo`、`image` / `pdf` / `audio`（各对应一个文件策略，恰好一个非空） | 快照引用的每个文件按"模版 + 文件"一行，使平台的文件引用检查与孤儿清扫看得到 JSON 中的文件；普通时态实体（不是只写一次）：移除模版时写墓碑，被发布引用的版本的文件除外（Q4） |
 | `QbAiJob` | T | `sponsorId`、`quizId`、`kind`（COVER / QUESTIONS）、`input`（资料、题数、难度）、`status`（G7 的状态）、`model`、`promptTokens`、`completionTokens`、`result`（jsonb：候选图片文件或候选题目） | AI 生成请求；候选题目经商家校对后由 `QB_AI_ACCEPT` 写入题目（M-26 "必须人工校对"） |
 
 ### 3.3 发布与答题
@@ -194,8 +194,9 @@ LIVE / PAUSED / FUNDS_SHORT ──到结束时间或名额 / 预算用完──�
 |---|---|---|
 | `QB_PROFILE_SAVE` | `qb.me` | 注册第二步与资料修改（U-02、U-70）；国家来自字典 |
 | `QB_SPONSOR_APPLY` | `qb.sponsor.me` | 商家入驻资料 + 同意条款 → 审批（自动或人工） |
-| `QB_QUIZ_SAVE` / `QB_QUIZ_DELETE` / `QB_QUIZ_CLONE` | `qb.content.write` | 只有拥有者；已被发布引用的版本不受删除影响（快照独立） |
-| `QB_QUIZ_PUBLISH_VERSION` | `qb.content.write` | 校验完整性（M-31）→ 生成 `QbQuizVersion` 快照与 `QbVersionFile` |
+| `QB_QUIZ_SAVE` / `QB_QUIZ_DELETE` / `QB_QUIZ_CLONE` | `qb.content.write` | 只有拥有者（锁 `qb.quiz:<id>` 后经商家视图读取）；删除即移除（`removed`，子项写墓碑），版本保留；克隆可取草稿或指定版本 |
+| `QB_QUESTION_SAVE` / `_DELETE` / `_REORDER`、`QB_MATERIAL_SAVE` / `_DELETE` / `_REORDER` | `qb.content.write` | 一道题（连同选项）或一条资料（连同图片组）各自保存，只写改变的行；可带 `baseRevision`（过期即 `QB_QUIZ_CHANGED`）；上限见 `content.ContentLimits` |
+| `QB_QUIZ_PUBLISH_VERSION` | `qb.content.write` | "保存版本"：校验完整性（M-31 中属于内容的部分，一次报告全部）→ 与最新版本哈希相同即拒绝 → 生成 `QbQuizVersion` 快照（只写一次）并补登 `QbVersionFile` |
 | `QB_AI_REQUEST` / `QB_AI_ACCEPT` | `qb.ai.use` | 经 G7 异步调用 OpenAI（模型来自业务参数）；结果为候选，商家选择 / 校对后才写入 |
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导三步对应一次保存 + 一次提交；提交时校验档位、时间、商家已入驻；`RequireApproval` |
 | `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁 |
