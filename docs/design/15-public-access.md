@@ -106,7 +106,9 @@ WHERE s.{{Story.slug}} = :slug
   （比较时忽略 `W/`，RFC 9110 的弱比较）。错误响应不带公开缓存头。
 - 分页：`limit` 默认 20，上限见 §3；`count` 默认 `true`。未知的查询参数（不是 `p.*`、`filter`、`sort`、`offset`、`limit`、`count`）→ 400。
 - 限流：按客户端地址的进程内令牌桶，`jabiz.public.rate-limit.per-minute`（默认 300）→ 429 `RATE_LIMITED` + `Retry-After`。
-  客户端地址只在配置了 `server.forward-headers-strategy` 时取自转发头；桶的数量有上限（LRU，默认 100 000），防止内存被耗尽。多实例时各自限流（近似值，已知限制）。
+  客户端地址与登录记录同一来源（`ClientAddresses`，10 §15.5、决策 D36 第 7 条）：只在连接来自 `jabiz.security.trusted-proxies` 时才读 `X-Forwarded-For`
+  （从右向左跳过可信地址，取第一个不可信地址）；不配置可信代理时取连接地址（Spring 的 `server.forward-headers-strategy` 若已改写，则为改写后的地址；两者同时配置启动即失败）。
+  桶的数量有上限（LRU，默认 100 000），防止内存被耗尽。多实例时各自限流（近似值，已知限制）。
 - 公开读取不是操作：不写 `op_process`（与已认证的读取一致）。
 - 总开关 `jabiz.public.enabled`（默认 **false**；`app` 以环境变量 `JABIZ_PUBLIC_ENABLED` 打开）：关闭时 `/api/public/**` 一律 404（任何方法），
   但公开视图与模板的启动检查照常执行。

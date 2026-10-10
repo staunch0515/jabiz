@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import MfaEnrollment from './MfaEnrollment'
+import { expectAccessible } from '../test/axe'
 
 vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))
 
@@ -22,6 +23,7 @@ describe('MfaEnrollment', () => {
     fireEvent.click(screen.getByTestId('mfa-start'))
     expect((await screen.findByTestId('mfa-secret')).textContent).toContain('JBSWY3DPEE')
     expect(screen.getByTestId('mfa-qr')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Key' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByTestId('mfa-code'), { target: { value: '000000' } })
     fireEvent.click(screen.getByTestId('mfa-confirm'))
@@ -31,6 +33,10 @@ describe('MfaEnrollment', () => {
     fireEvent.click(screen.getByTestId('mfa-confirm'))
     await waitFor(() => expect(screen.getAllByTestId('mfa-recovery-code')).toHaveLength(2))
     expect(confirm).toHaveBeenLastCalledWith('123456')
+    // Each recovery code is shown alone in its element and can be copied.
+    expect(screen.getAllByTestId('mfa-recovery-code').map((c) => c.textContent)).toEqual(['AAAAA-BBBBB', 'CCCCC-DDDDD'])
+    expect(screen.getByRole('button', { name: 'Copy AAAAA-BBBBB' })).toBeInTheDocument()
+    await expectAccessible()
     fireEvent.click(screen.getByTestId('mfa-saved'))
     expect(done).toHaveBeenCalledOnce()
   })

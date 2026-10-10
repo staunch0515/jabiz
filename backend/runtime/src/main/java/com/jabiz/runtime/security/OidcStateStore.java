@@ -35,8 +35,17 @@ public class OidcStateStore {
         }
     }
 
-    /** A consumed state: which provider it was for, its nonce hash and PKCE verifier. */
-    public record Pending(String providerId, String nonceHash, String codeVerifier) {
+    /**
+     * A consumed state: which provider it was for, its nonce hash and PKCE verifier, and the sign-in entry it started
+     * in (decision D36; the callback cannot pick another one). States from before entries existed are of the
+     * administration.
+     */
+    public record Pending(String providerId, String nonceHash, String codeVerifier, String entry) {
+
+        public Pending {
+            entry = entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
+        }
+
         @Override
         public String toString() {
             return "Pending[providerId=" + providerId + ", ***]";
@@ -67,6 +76,11 @@ public class OidcStateStore {
      * the last ten minutes, whoever asks for them.
      */
     public Mono<Started> start(String providerId) {
+        return start(providerId, null);
+    }
+
+    /** As above, for a sign-in into the entry {@code entry} (null: the administration). */
+    public Mono<Started> start(String providerId, String entry) {
         return SingleUseSecrets.randomBytes(random, 128).flatMap(bytes -> {
             Base64.Encoder base64 = Base64.getUrlEncoder().withoutPadding();
             String state = base64.encodeToString(java.util.Arrays.copyOfRange(bytes, 0, 32));
@@ -82,6 +96,7 @@ public class OidcStateStore {
             row.put("code_verifier", verifier);
             row.put("created_at", now);
             row.put("expires_at", now.plus(LIFETIME));
+            row.put("entry", entry == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry);
             return engine.get().select("DELETE FROM sec_oidc_state WHERE expires_at < :now RETURNING state_hash",
                     Map.of("now", BoundValue.of(now)))
                 .then(engine.get().insert("sec_oidc_state", row))
@@ -104,7 +119,7 @@ public class OidcStateStore {
             String hash = hash(state);
             Instant now = now();
             return engine.get().inTransaction(engine.get().select("""
-                    SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at FROM sec_oidc_state
+                    SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at, entry FROM sec_oidc_state
                     WHERE state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new InvalidStateException("Unknown state")))
@@ -120,7 +135,8 @@ public class OidcStateStore {
                     use.put("used_at", now);
                     return engine.get().insert("sec_oidc_state_use", use).thenReturn(new Pending(
                         String.valueOf(row.get("provider_id")), String.valueOf(row.get("nonce_hash")),
-                        String.valueOf(row.get("code_verifier"))));
+                        String.valueOf(row.get("code_verifier")),
+                        row.get("entry") == null ? null : String.valueOf(row.get("entry"))));
                 }))
                 .onErrorMap(UniqueKeyViolationException.class, e -> new InvalidStateException("State used twice"));
         });

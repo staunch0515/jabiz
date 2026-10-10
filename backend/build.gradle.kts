@@ -6,6 +6,9 @@ plugins {
     id("jabiz.boot-app") apply false
 }
 
+// The build conventions' own tests (TestKit builds of fixture applications) run with the backend's check.
+tasks.named("check") { dependsOn(gradle.includedBuild("build-logic").task(":check")) }
+
 // Settings shared by all modules. Dependencies are declared per module: core is pure Java and must not
 // see Spring, Reactor or R2DBC on its compile classpath (docs/design/01-core-vs-runtime.md).
 subprojects {

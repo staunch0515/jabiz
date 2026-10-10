@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppearanceProvider } from '@jabiz/ui'
 import { Boxes } from 'lucide-react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 import i18n from '../i18n'
@@ -51,16 +51,23 @@ vi.mock('../extension', () => ({
 }))
 
 function renderLayout(path = '/data/carriers') {
+  // A data router, as in the application: the shell reads the routes' handles.
+  const router = createMemoryRouter(
+    [
+      {
+        element: <AppLayout />,
+        children: [
+          { path: '/migrated', handle: { ui: 'jabiz' }, element: <p>migrated page</p> },
+          { path: '*', element: <p>page</p> },
+        ],
+      },
+      { path: '/login', element: <p>sign-in page</p> },
+    ],
+    { initialEntries: [path] },
+  )
   return render(
     <AppearanceProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="*" element={<p>page</p>} />
-          </Route>
-          <Route path="/login" element={<p>sign-in page</p>} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </AppearanceProvider>,
   )
 }
@@ -112,6 +119,12 @@ describe('AppLayout (the shell, decision D34)', () => {
     expect(screen.getByText('page').closest('.light')).not.toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /Appearance/ }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Light' }))
+  })
+
+  it('lets the pages built with @jabiz/ui follow the appearance', () => {
+    renderLayout('/migrated')
+    expect(screen.getByText('migrated page').closest('.light')).toBeNull()
+    expect(screen.getByText('migrated page').closest('[data-slot="app-shell-content"]')).toHaveClass('bg-background')
   })
 
   it('shows a session limited to a period', () => {

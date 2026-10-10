@@ -47,14 +47,17 @@ class MetaModelController {
      */
     record DatasetEntry(String id, String entity, String label, boolean isDefault, boolean temporal,
         boolean allowScheduled, boolean readOnly, boolean processOnlyWrites, boolean allowTimeTravel,
-        boolean softDelete, String listView, int maxQueryBatchSize, boolean canWrite, boolean writeRequiresMfa) {}
+        boolean softDelete, String listView, int maxQueryBatchSize, boolean canWrite, boolean writeRequiresMfa,
+        boolean writeRequiresVerifiedEmail) {}
 
     /**
      * One process the caller may run, with the JSON Schema of its input. {@code requiresMfa}: running it needs a
-     * recent second factor (docs/design/10-security.md section 10).
+     * recent second factor (docs/design/10-security.md section 10); {@code requiresVerifiedEmail}: a verified e-mail
+     * address (section 15).
      */
     record ProcessEntry(String name, int version, boolean latest, boolean deprecated, String label,
-        String description, Map<String, Object> input, ActsOnEntry actsOn, boolean requiresMfa) {}
+        String description, Map<String, Object> input, ActsOnEntry actsOn, boolean requiresMfa,
+        boolean requiresVerifiedEmail) {}
 
     /**
      * The entity a process acts on and the input that takes its primary key; {@code when}, if present, only tells
@@ -132,7 +135,7 @@ class MetaModelController {
         return new DatasetEntry(dataset.resourceId(), def.name, label, dataset.isDefault(), def.temporal,
             def.temporal && def.temporalSpec.allowScheduled(), policy.readOnly(), policy.processOnlyWrites(),
             policy.allowTimeTravel(), policy.softDelete(), dataset.listView(), policy.maxQueryBatchSize(), writable,
-            mfa.applies(policy.writeMfa()));
+            mfa.applies(policy.writeMfa()), policy.writeVerifiedEmail());
     }
 
     private ProcessEntry entry(ProcessDefinition<?, ?, ?> definition, RequestContext context) {
@@ -141,7 +144,7 @@ class MetaModelController {
         return new ProcessEntry(definition.name(), definition.version(), latest, definition.deprecated(),
             label("process." + definition.name(), context).orElse(definition.name()), definition.description(),
             ProcessInputSchemas.of(definition.inputType()).schema(), actsOn(definition.actsOn()),
-            mfa.applies(definition.mfa()));
+            mfa.applies(definition.mfa()), definition.verifiedEmail());
     }
 
     private static ActsOnEntry actsOn(ActsOn actsOn) {

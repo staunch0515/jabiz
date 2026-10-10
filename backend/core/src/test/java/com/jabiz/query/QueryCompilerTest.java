@@ -150,6 +150,17 @@ class QueryCompilerTest {
     }
 
     @Test
+    void equalityRegardlessOfCaseLowersBothSides() {
+        PhysicalQueryPlan plan = compile(new QueryPredicate.EqIgnoreCase("name", "Tokyo"));
+
+        assertThat(plan.whereClause()).isEqualTo("lower(f_name) = lower(:p0)");
+        assertThat(param(plan, "p0")).isEqualTo("Tokyo");
+        assertRejected(() -> compile(new QueryPredicate.EqIgnoreCase("name", null)), "name", "INVALID_VALUE");
+        assertRejected(() -> compile(new QueryPredicate.EqIgnoreCase("price", "1")), "price", "OPERATOR_NOT_ALLOWED");
+        assertRejected(() -> compile(new QueryPredicate.EqIgnoreCase("missing", "1")), "missing", "UNKNOWN_FIELD");
+    }
+
+    @Test
     void likeIsRejectedOnNonTextKinds() {
         assertRejected(() -> compile(new QueryPredicate.Like("price", "1%")), "price", "OPERATOR_NOT_ALLOWED");
         assertRejected(() -> compile(new QueryPredicate.Like("itemId", "A%")), "itemId", "OPERATOR_NOT_ALLOWED");

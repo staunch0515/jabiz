@@ -77,6 +77,8 @@ class ProcessController {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
             requirePermissions(definition, context, development);
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
+            com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),
+                "Running process " + definition.name());
             return sod.check(context, definition.permissions())
                 .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
                     new ExecutionOptions(idempotencyKey))))

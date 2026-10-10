@@ -13,7 +13,7 @@ public class OidcContext extends LoginContext {
     private final SponsorOidcSignInInput input;
 
     public OidcContext(ProcessStart start, SponsorOidcSignInInput input) {
-        super(start, null, null);
+        super(start, null, null, input.source());
         this.input = input;
         setFactor(SecurityEntities.FACTOR_OIDC);
     }

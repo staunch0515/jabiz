@@ -167,6 +167,8 @@ class DatasetController {
             Permissions.requireDeclared(context, dataset.permissions().write(), development,
                 "Writing through dataset " + resourceId);
             mfa.require(context, dataset.policy().writeMfa(), "Writing through dataset " + resourceId);
+            com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, dataset.policy().writeVerifiedEmail(),
+                "Writing through dataset " + resourceId);
             DatasetEntityManager.rejectDirectWrites(dataset);
             EntityDefinition def = entities.getOrThrow(dataset.targetEntityType());
             boolean generatedKey = def.field(def.primaryKey).generated();

@@ -47,6 +47,8 @@ public class PlatformObservations {
     public static final String DATA_EXPORT = "jabiz.data.export";
     public static final String AUTH_OIDC = "jabiz.auth.oidc";
     public static final String PUBLIC_RATE_LIMITED = "jabiz.public.rate_limited";
+    /** A sign-in guard refused a session at a refresh, which ended it (decision D36 item 6). */
+    public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
 

@@ -1152,6 +1152,32 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 6. **流程表单**（`ProcessFormPage` + 新 `SchemaForm`）：各种输入（密码、可键入的时间与日期、十进制 / 整数 / 数字、开关、枚举、标签、对象分组、可增删的列表、JSON）；校验只保留原有的必填与 `pattern`，写成纯函数 `checkInputs`，不引入新校验库；数字输入转为 JSON 数字；预填只读；`Idempotency-Key` 打开时生成、失败不变、成功更换；step-up 重试同键（由 `@jabiz/client` 完成）；违规列表与结果的测试 id、字段标签不变。
 7. **历史**：两列布局；`Timeline`（动作标签颜色集中一处，预定与墓碑标记不变）；时间点用两个可清除的 `DateTimePicker` 并写入 URL；结果用 `DescriptionList`，与现在不同时标记；404 视为"那时不存在"；操作详情用 `Sheet`；撤销用 `Dialog`（原因必填）；按钮的出现条件与权限不变。
 
+**15b-1 状态**：☑ 已完成（分支 `1.2/phase-15b1-ui-components`，PR 待建）。
+
+**15b-1 与计划的出入**
+- react-hook-form 由 `@jabiz/ui` 再导出（`useForm`、`useFieldArray`、`useWatch`、`Controller`，`src/form-state.ts`）：平台前端与扩展不另加依赖。
+- 日期控件改为"文本框 + 打开日历的按钮"：`id` / `aria-*` / `data-testid` 落在文本框上，原来按钮上的名称移到文本框（扩展中用 `getByRole('button', …)` 找日期字段的要改）。
+  Enter 读取键入的值且不提交外围的表单（与选择器确认一致），再按一次 Enter 才提交；`FilterBar` 中同样如此。
+  日期以应用的区域格式显示与键入（D22 第 7 条；en-US 为 `MM/DD/YYYY, hh:mm:ss AM`，占位符为该格式），ISO 形式在任何区域都可键入且先读：以四位年和连字符开头即为年-月-日；
+  区域格式按该区域年月日的顺序读，年须为四位。不是日期（或不允许的日子）的键入文字留在框中、`aria-invalid`、框下说明原因，并经 `onInvalidChange` 告知调用方：
+  `FilterBar` 与 `SchemaForm`（`checkInputs` 的 `typedInvalid`）在有这样的字段时不提交；重置（`resetKey`）丢弃这些文字。
+  弹出层中的时间框清空或只输入一半时时间不变，只给出时与分时保留秒，禁用的日子不能经时间框选中。
+- `TagsInput`：输入法组字时的 Enter 不加标签；全角逗号 `，` 与顿号 `、` 也作分隔。
+- 界面设置减少动态效果（`prefers-reduced-motion: reduce`）时，`@jabiz/ui` 的弹出层没有淡入与滑动；`a11y.spec` 在 axe 检查前等有限的动画结束（菜单淡入中的混合颜色曾使暗色检查偶发失败）。
+- 流程表单：必填的布尔值默认"否"（原来未拨动的开关报 `REQUIRED`）；预填的行键为只读（`readonly`）而非禁用，`content.spec` 改为断言不可编辑；
+  必填的标签输入为空数组时报 `REQUIRED`，不必填的空标签不发送。
+- 历史页：两个时间点都清除后不再把当前状态显示为"时间点的状态"（原有的缺陷：查询键与当前状态相同）。
+- `FilterBar` 的选项字段用 `Combobox`（可清除、可搜索），不用 `Select`。
+- e2e：`a11y.spec` 的登录页检查拆为亮、暗两个用例（共 36 个用例），并加查必填提示、身份提供方的拒绝、历史页的日历 / 操作详情 / 撤销对话框、流程表单展开的选项。
+- `SchemaForm` 已就绪；旧 `SchemaInputs` 仍供报表与导入页（15c 删除）。`processForm.toProcessInput` 同时接受 Dayjs（旧表单）与文本（新表单）。
+
+**15b-1 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 2 733.4 kB / 845.4 kB、CSS 74.6 kB / 12.5 kB；之后 JS 3 001.3 kB / 924.8 kB、CSS 79.0 kB / 13.2 kB。
+增量主要是此前被摇树去掉、现在用到的 react-day-picker（含 date-fns）、cmdk、react-hook-form 与新组件；超过 3 000 kB 的提示只是警告，15d 删除 antd 后回落。
+
+**15b-1 已知问题**
+- 已迁移页面中由 15b-2 / 15c 负责的部分仍是 antd（列表页、表单抽屉、账户安全页内嵌的 `MfaEnrollment` 所在的 antd 页仍固定亮色）。
+- jsdom 不计算样式，组件测试的 axe 不查对比度；对比度由 e2e 的 a11y 检查覆盖。
+
 #### 15b-2（3.5–4.5 天）：列表页这棵子树
 
 **要求**
@@ -1196,7 +1222,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 子阶段 | 内容 | 决策 | 预估 | 依赖 |
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
-| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 / 16b-2） | D36 | 6–8 天 | 16a |
+| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 待做） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
 | 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
@@ -1204,6 +1230,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
+| 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 
 ### 16a 事务邮件（3–4 天）
 
@@ -1355,13 +1382,29 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 **风险**：`RequestContext` / `Actor` 构造处多（保留旧构造器）；守卫预读限为按用户编号的等值查询且有上限；已有重复邮箱时迁移中止（升级说明写明）；入口过滤改变 `mfaRequired` 的含义（有意，写入 10 §15）；升级前签发的令牌在有效期内按 `admin` 处理。
 
 **验收标准**
-- [ ] 不带 `entry` 的登录、刷新、MFA、OIDC 行为不变，后台前端不改即可用。
-- [ ] 访问令牌带 `entry` 与 `email_verified`，只含该入口接受角色的权限；刷新保持入口，不符即拒且不消费；挑战与 OIDC 的入口不能被请求改写。
-- [ ] `SignInGuard` 在三条登录路径与刷新时调用；拒绝写记录、不计失败；异常即拒绝。
-- [ ] `requiresVerifiedEmail` 在各入口返回 403 `EMAIL_NOT_VERIFIED` 并在目录中可见；入口可要求已验证才能登录。
-- [ ] 邮箱不区分大小写唯一；已有重复时迁移明确失败。
-- [ ] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
-- [ ] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
+- [x] 不带 `entry` 的登录、刷新、MFA、OIDC 行为不变，后台前端不改即可用。
+- [x] 访问令牌带 `entry` 与 `email_verified`，只含该入口接受角色的权限；刷新保持入口，不符即拒且不消费；挑战与 OIDC 的入口不能被请求改写。
+- [x] `SignInGuard` 在三条登录路径与刷新时调用；拒绝写记录、不计失败；异常即拒绝。
+- [x] `requiresVerifiedEmail` 在各入口返回 403 `EMAIL_NOT_VERIFIED` 并在目录中可见；入口可要求已验证才能登录。
+- [x] 邮箱不区分大小写唯一；已有重复时迁移明确失败。
+- [x] 登录记录带 `entry`、`clientIp`、`userAgent`；转发头只在来自可信代理时采用。
+- [x] 配置问题一次报全；`./gradlew :core:check :runtime:check :app:check` 通过；OpenAPI 快照与生成的类型已更新。
+
+**完成情况（分支 `1.2/phase-16b1-sign-in-entries`）**：迁移 `V32__sign_in_entries.sql`；测试 `SignInEntryIT`（19）、`ClientAddressIT`（3）、`OidcEntryIT`（3），
+runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtServiceTest` / `RbacTest` / core 测试补充；`SignInIT`、`MfaIT`、`OidcIT` 未改动即通过。
+与计划的出入（都很小）：
+- 数据视图的声明写作 `policy(p -> p.requiresVerifiedEmail())`，目录字段为 `writeRequiresVerifiedEmail`（与 `writeRequiresMfa` 对应）；`VerifiedEmailPolicy` 是无状态的静态检查（只读令牌声明），六个入口无需注入新 Bean。
+- 守卫的测试夹具借用 `SecUserIdentity`（伪提供方 `it-blocked` / `it-guard-fails`）作为预读数据，示范应用的 `Customer.blocked` 守卫在 16b-2。
+- 不区分大小写的查找新增 core `QueryPredicate.EqIgnoreCase`（`lower(列) = lower(:值)`；模板不支持）。
+- OIDC 的入口以 `POST /api/auth/oidc/{id}/start?entry=…` 给出；挑战验证与 OIDC 回调的请求体中的 `entry` 一律忽略。
+- Spring Security 防火墙拒绝含控制字符的请求头值：读取 `User-Agent` / `X-Forwarded-For` 时捕获并忽略（登录照常，不记 UA），否则登录会 500。
+- 前端只改了一个 Vitest 夹具（`RowActions.test.tsx` 的流程目录项补 `requiresVerifiedEmail`，`Required<…>` 类型要求），业务代码未改。
+- 代码评审后的修正（10 §15.5–§15.6）：转发头只解析走到的段、可带端口；不区分大小写的唯一检查由数据库 `lower()` 折叠（锁键与比较一致）；
+  step-up 对守卫拒绝与未验证地址答 403（同登录）并记录地址与 UA；空白入口即 `admin`；刷新时已用过的令牌先于过期、闲置与入口判为重用；按名字登录不再查邮箱；
+  `MetaModelConsistencyChecker` 精确匹配 `lower(列)`；`RefreshTokenStore.revokeSession` 合并为一个方法。
+
+**已知问题**：升级前签发的访问令牌在有效期内按 `admin`、`email_verified=false` 处理；守卫在刷新时才再次生效（访问令牌到期前仍可用）；
+按邮箱登录在名字不匹配时多一次查询（响应时间略有差别）；已有重复邮箱的库升级时迁移中止，须先由管理员处理。
 
 #### 16b-2 自助注册、邮箱验证、找回密码、示范（3–4 天）
 
@@ -1453,3 +1496,18 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 - [x] 受控键的直接修改在所有写入途径上被拒（422 `PARAM_CONTROLLED`），一个人无法解除受控（`ControlledParamIT`、`ControlledParamsChecksTest`）。
 - [x] 经提出与另一人发布修改受控参数，立即与预定生效、可取消预定，值按类型检查，历史与审计照常（`ControlledParamIT`）。
 - [x] 声明格式错误在启动时一次报告（`ControlledParamsTest`、`ControlledParamsChecksTest`）；示范场景 `freight/monthly_close` 通过；`./gradlew check` 通过。
+
+### 16j 应用的快照路径设置生效（0.5 天）
+
+现状：约定插件 `jabiz.boot-app` 在应用插件时就读取 `jabizApp` 的 `openApiSnapshot`、`publicQueriesSnapshot`（`backend/build.gradle.kts` 的 `tasks.withType<Test> { }`
+使 `test` 任务一创建就配置），这时应用的 `jabizApp { }` 还没有执行，设置被忽略：QuizBuks 以 `-Dopenapi.update-snapshot=true` 运行快照测试时写入的是平台的
+`frontend/openapi/openapi.json`，而应用分支不能改平台目录。
+
+**要求**
+1. 两个快照路径在 `test` 任务运行时才读取（`jvmArgumentProviders`，路径照旧是任务输入）；缺省仍为 `frontend/openapi/openapi.json` 与 `public-queries.json`。
+   插件中其他 `jabizApp` 属性（`mainClass`、`languages`、`region`、`spa`）已是延迟读取或在调用时注册，不变。
+2. `backend/build-logic` 有自己的测试（Gradle TestKit，夹具项目像 `backend` 一样预先配置 Test 任务），并随 `./gradlew check` 运行。
+
+**验收标准**
+- [x] 应用设置的两个路径到达 `test` 任务，未设置时为平台前端的快照（`BootAppPluginSnapshotPathsTest`；修复前第一条失败）。
+- [x] `backend/app` 的 `OpenApiSnapshotIT` 照旧对比 `frontend/openapi/openapi.json`；`./gradlew check` 通过（含 build-logic 的测试）。

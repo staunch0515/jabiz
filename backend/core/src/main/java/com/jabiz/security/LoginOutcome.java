@@ -19,7 +19,19 @@ public enum LoginOutcome {
     /** Correct password, but a role requires a second factor the user has not set up: enrolment comes next. */
     MFA_ENROLLMENT_REQUIRED,
     /** Wrong second factor; counts towards the lock like a wrong password. */
-    MFA_FAILED;
+    MFA_FAILED,
+    /**
+     * Correct credentials, but an application's {@link SignInGuard} refused the sign-in (decision D36 item 6); not a
+     * failure: the counter is neither raised nor cleared.
+     */
+    REFUSED,
+    /**
+     * Correct credentials, but the sign-in entry requires a verified e-mail address the user has not verified
+     * (decision D36 item 3); not a failure.
+     */
+    EMAIL_NOT_VERIFIED,
+    /** Not an attempt: the user set a new password through a reset link, which clears the counter and the lock. */
+    PASSWORD_RESET;
 
     /** Codes of the login outcome dictionary. */
     public static String[] codes() {
