@@ -10,6 +10,7 @@ import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.approval.ControlChanges;
 import com.jabiz.runtime.ledger.LedgerEntities;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.param.ParamEntities;
@@ -39,7 +40,9 @@ import java.util.function.Function;
  * item with a record is never added again: a role an administrator deleted or a permission revoked stays gone, and
  * a parameter keeps the value an administrator set. An item without a record is added unless it exists now or is
  * scheduled to begin (roles and grants are read as they will be, too); then it is only recorded. So it can run again
- * at any time, to add what a later phase declares. Granting permissions is platform administration, so it asks for a
+ * at any time, to add what a later phase declares. A controlled parameter ({@link QbParams#CONTROLLED}, platform
+ * decision D40) cannot be created directly: setup proposes it as a controlled change, which another administrator
+ * publishes (or withdraws; setup does not propose it again). Granting permissions is platform administration, so it asks for a
  * second factor like the platform's own security processes. Every read takes the whole result (decision D32).
  */
 public final class QbSetupProcesses {
@@ -57,9 +60,12 @@ public final class QbSetupProcesses {
      * @param accountsOpened   codes of the ledger accounts opened
      * @param countriesAdded   countries that did not exist
      * @param paramsCreated    keys of the business parameters declared
+     * @param paramsProposed   keys of the controlled parameters proposed, for another administrator to publish
+     * @param proposals        the controlled changes proposed ({@code CONTROL_CHANGE_PUBLISH} takes their ids), in
+     *                         the order of {@code paramsProposed}
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, List<String> accountsOpened,
-        int countriesAdded, List<String> paramsCreated) {}
+        int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> proposals) {}
 
     static final String RECORDS = "records";
     static final String ROLES = "roles";
@@ -71,6 +77,8 @@ public final class QbSetupProcesses {
     static final String COUNTRIES = "countries";
     static final String OPEN = "open";
     static final String CREATE = "create";
+    static final String PROPOSE = "propose";
+    static final String PROPOSED = "proposed";
     static final String OUTPUT = "output";
 
     /** The whole result of a query: the platform refuses more than its maximum rather than cutting it short. */
@@ -93,7 +101,7 @@ public final class QbSetupProcesses {
             .permissions(QbPermissions.SETUP)
             .requiresMfa(MfaRequirement.ADMINISTRATION)
             .contextFactory((start, input) -> new ProcessContext(start))
-            .outputMapper(ctx -> ctx.get(OUTPUT, SetupOutput.class))
+            .outputMapper(QbSetupProcesses::output)
             .step("Load what setup has seen", QueryEntities.of(QbSetupRecords.DATASET, ctx -> all(), RECORDS))
             .step("Load the roles", QueryEntities.of(SecurityEntities.ROLE_DATASET, ctx -> all(
                 new QueryPredicate.In("roleCode", codes(QbRoles.all(), r -> ((QbRoles.Role) r).code()))), ROLES))
@@ -117,7 +125,17 @@ public final class QbSetupProcesses {
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
             .step("Declare the parameters", CallProcess.forEach("PARAM_CREATE", 1,
-                ctx -> listOf(ctx, CREATE), null)));
+                ctx -> listOf(ctx, CREATE), null))
+            .step("Propose the controlled parameters", CallProcess.forEach(ControlChanges.PROPOSE, 1,
+                ctx -> listOf(ctx, PROPOSE), PROPOSED)));
+    }
+
+    private static SetupOutput output(ProcessContext ctx) {
+        SetupOutput made = ctx.get(OUTPUT, SetupOutput.class);
+        List<String> proposals = listOf(ctx, PROPOSED).stream()
+            .map(change -> ((ControlChanges.ChangeOutput) change).changeId()).toList();
+        return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.accountsOpened(),
+            made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), proposals);
     }
 
     static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
@@ -171,8 +189,22 @@ public final class QbSetupProcesses {
         }
 
         List<ParamProcesses.CreateInput> create = new ArrayList<>();
+        List<ControlChanges.ProposeInput> propose = new ArrayList<>();
+        List<String> proposed = new ArrayList<>();
         for (QbParams.Param param : QbParams.ALL) {
-            if (recorder.isNew(QbSetupRecords.param(param.key()))) {
+            if (!recorder.isNew(QbSetupRecords.param(param.key()))) {
+                continue;
+            }
+            if (QbParams.CONTROLLED.contains(param.key())) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put(ParamEntities.KEY, param.key());
+                values.put(ParamEntities.KIND, param.valueKind());
+                values.put(ParamEntities.VALUE, param.value());
+                values.put(ParamEntities.DESCRIPTION, param.description());
+                propose.add(new ControlChanges.ProposeInput(ParamEntities.ENTITY, null, false, values, null,
+                    "First value of the QuizBuks parameter, proposed by " + SETUP));
+                proposed.add(param.key());
+            } else {
                 create.add(new ParamProcesses.CreateInput(param.key(), param.valueKind(), param.value(),
                     param.description()));
             }
@@ -192,9 +224,10 @@ public final class QbSetupProcesses {
 
         ctx.put(OPEN, List.copyOf(open));
         ctx.put(CREATE, List.copyOf(create));
+        ctx.put(PROPOSE, List.copyOf(propose));
         ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
-            create.stream().map(ParamProcesses.CreateInput::key).toList()));
+            create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.of()));
     }
 
     /**

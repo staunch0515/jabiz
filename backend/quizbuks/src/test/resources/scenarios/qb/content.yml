@@ -1,0 +1,132 @@
+# The content workshop (docs/quizbuks/plans/Q3-content.md): sponsor A writes a quiz with two materials and three
+# questions, reorders them, saves v1.0, changes a question and saves v1.1; saving again without a change is refused.
+# A copies v1.0 into a new quiz; sponsor B cannot touch A's quiz; A removes the original, and only the copy is listed.
+# No files: a scenario cannot upload one yet (platform gap 2 of the plan); ContentFilesIT covers them.
+name: Writing a quiz
+clock: 2026-10-01T00:00:00Z
+actor: { id: sponsor-a, permissions: [qb.content.write] }
+steps:
+  - process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, intro: "Ten minutes on **capitals**.", timeLimitSec: 300 }
+    expectOutput: { revision: 1 }
+    save: { quiz: $.quizId }
+
+  - note: Two materials, an article and a video link.
+    advanceClock: PT5M
+  - process: QB_MATERIAL_SAVE@latest
+    input: { quizId: "${quiz}", kind: ARTICLE, title: Reading, description: Read this first, body: "Paris is…" }
+    expectOutput: { revision: 2 }
+    save: { article: $.itemId }
+  - process: QB_MATERIAL_SAVE@latest
+    input: { quizId: "${quiz}", kind: VIDEO_LINK, title: A short film, url: "https://video.example/capitals" }
+    save: { film: $.itemId }
+  - expectError:
+      process: QB_MATERIAL_SAVE@latest
+      input: { quizId: "${quiz}", kind: LINK, title: Not a link, url: "https://example.com", body: text }
+      status: 422
+      ruleCode: QB_MATERIAL_FIELD_NOT_ALLOWED
+
+  - note: Three questions; the third is incomplete, which a draft may be.
+    advanceClock: PT5M
+  - process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      stem: Capital of France?
+      points: 2
+      options: [{ text: Paris, correct: true }, { text: Lyon, correct: false }, { text: Nice, correct: false }]
+    save: { q1: $.itemId }
+  - process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      stem: Capital of Japan?
+      options: [{ text: Osaka }, { text: Tokyo, correct: true }]
+    save: { q2: $.itemId }
+  - process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of Peru? }
+    save: { q3: $.itemId }
+    expectOutput: { revision: 6 }
+
+  - note: The quiz is not complete yet; every problem is reported at once.
+    expectError:
+      process: QB_QUIZ_PUBLISH_VERSION@latest
+      input: { quizId: "${quiz}" }
+      status: 422
+      ruleCode: QB_QUESTION_OPTION_COUNT
+      field: "questions[2].options"
+
+  - process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      questionId: "${q3}"
+      stem: Capital of Peru?
+      options: [{ text: Lima, correct: true }, { text: Cusco }]
+      baseRevision: 6
+  - process: QB_QUESTION_REORDER@latest
+    input: { quizId: "${quiz}", questionIds: ["${q2}", "${q1}", "${q3}"] }
+  - process: QB_MATERIAL_REORDER@latest
+    input: { quizId: "${quiz}", materialIds: ["${film}", "${article}"] }
+  - expectError:
+      process: QB_QUESTION_REORDER@latest
+      input: { quizId: "${quiz}", questionIds: ["${q2}", "${q1}"] }
+      status: 422
+      ruleCode: QB_ORDER_MISMATCH
+
+  - note: Version v1.0.
+    advanceClock: PT10M
+  - process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    expectOutput: { versionNo: 1, label: v1.0, questionCount: 3, materialCount: 2, fullScore: 4 }
+  - expect: { entity: QbQuiz, id: "${quiz}", fields: { status: VERSIONED, versionLabel: v1.0, changedSinceVersion: false } }
+
+  - note: A question changes; v1.1. Saving again without a change is refused.
+    advanceClock: P1D
+  - process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      questionId: "${q1}"
+      stem: Capital of France?
+      points: 3
+      options: [{ text: Paris, correct: true }, { text: Marseille }]
+  - process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    expectOutput: { versionNo: 2, label: v1.1, fullScore: 5 }
+  - expectError:
+      process: QB_QUIZ_PUBLISH_VERSION@latest
+      input: { quizId: "${quiz}" }
+      status: 422
+      ruleCode: QB_QUIZ_VERSION_UNCHANGED
+  - expect:
+      query: qb.sponsor.quiz-versions
+      params: { quizId: "${quiz}" }
+      rows: 2
+      values: [{ label: v1.1, fullScore: 5 }, { label: v1.0, fullScore: 4 }]
+
+  - note: A copy of v1.0, as it was.
+    advanceClock: PT1H
+  - process: QB_QUIZ_CLONE@latest
+    input: { quizId: "${quiz}", versionNo: 1, title: World capitals (v1.0) }
+    save: { copy: $.quizId }
+  - expect: { entity: QbQuiz, id: "${copy}", fields: { status: DRAFT, questionCount: 3, materialCount: 2 } }
+
+  - note: Sponsor B sees nothing of A's quiz.
+    expectError:
+      actor: { id: sponsor-b, permissions: [qb.content.write] }
+      process: QB_QUIZ_DELETE@latest
+      input: { quizId: "${quiz}" }
+      status: 404
+
+  - note: A removes the original; its versions stay, and only the copy is listed.
+    advanceClock: PT1H
+  - process: QB_QUIZ_DELETE@latest
+    input: { quizId: "${quiz}" }
+  - expect:
+      query: qb.sponsor.quizzes
+      rows: 1
+      values: [{ title: World capitals (v1.0), questionCount: 3, status: DRAFT }]
+  - expect:
+      query: qb.sponsor.quizzes
+      params: { q: CAPITALS (v1 }
+      rows: 1
+snapshot:
+  entities: [QbQuiz, QbMaterial, QbQuestion, QbOption, QbQuizVersion, QbVersionFile]
+  asOf: end

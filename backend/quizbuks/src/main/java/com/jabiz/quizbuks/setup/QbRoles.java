@@ -33,20 +33,32 @@ public final class QbRoles {
     }
 
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
-        QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
+        QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
         "approval.decide", "task.read");
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.PAYOUT_REVIEW, QbPermissions.RECONCILE, "ledger.read",
         "ledger.account.read", "report.issue", "approval.decide", "task.read");
 
-    /** What the super administrator holds beyond the other two: bans, parameters, controls, users and roles. */
+    /**
+     * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
+     * users and roles. No role writes parameters directly: the controlled ones change only through controlled changes
+     * (platform decision D40), and the others are only the AI model and the oldest app version. The super
+     * administrator proposes controlled changes but does not publish them: see {@link #PUBLISH}.
+     */
     private static final List<String> SUPER = List.of(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN,
-        "platform.param.read", "platform.param.write", "control.propose",
+        "platform.param.read", "control.propose",
         "security.user.read", "security.user.write", "security.user.create", "security.user.password",
         "security.user.unlock", "security.user.mfa-reset", "security.user.identity.write",
         "security.role.read", "security.role.write", "security.user-role.read", "security.user-role.write",
         "security.menu.read", "security.menu.write", "security.login-record.read", "security.access-review.read");
+
+    /**
+     * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance
+     * administrator alone, so the super administrator who proposes them is never also the one who publishes. Kept
+     * apart from {@link #FINANCE} because the super administrator's role is built from that list.
+     */
+    private static final List<String> PUBLISH = List.of("control.publish");
 
     private static final Map<String, Role> ROLES = new LinkedHashMap<>();
 
@@ -54,11 +66,11 @@ public final class QbRoles {
         add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
-            QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.AI_USE,
-            QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP, QbPermissions.SPONSOR_FINANCE_READ,
-            QbPermissions.BROADCAST_WRITE));
+            QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
+            QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
+            QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
-        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE);
+        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,
             SUPER);
     }

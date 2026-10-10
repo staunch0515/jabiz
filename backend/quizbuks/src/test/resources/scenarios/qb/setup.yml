@@ -1,6 +1,7 @@
 # Setting up QuizBuks (docs/quizbuks/plans/Q1-skeleton.md): QB_SETUP creates the five roles with their permissions,
-# the seven ledger accounts, every ISO 3166-1 country and the business parameters with their first values. A second
-# run a day later adds nothing; a parameter an administrator changed in between keeps its value.
+# the seven ledger accounts, every ISO 3166-1 country and the business parameters with their first values. The
+# controlled parameters (platform decision D40) are proposed by setup and published by a second administrator. A
+# second run a day later adds nothing; a parameter changed in between (with four eyes) keeps its value.
 name: Setting up QuizBuks
 clock: 2026-10-01T00:00:00Z
 actor: { id: installer, permissions: ["*"] }
@@ -11,16 +12,51 @@ steps:
       rolesCreated: [QB_TAKER, QB_SPONSOR, QB_ADMIN_CONTENT, QB_ADMIN_FINANCE, QB_ADMIN_SUPER]
       accountsOpened: ["1110", "1120", "2110", "2120", "2130", "4110", "5110"]
       countriesAdded: 249
-      paramsCreated: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
-        qb.review.sponsor.auto, qb.review.publication.auto, qb.ai.model, qb.app.min-version]
+      paramsCreated: [qb.ai.model, qb.app.min-version]
+      paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
+        qb.review.sponsor.auto, qb.review.publication.auto]
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]" }
+  - note: A second administrator publishes the six proposals.
+    process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }
 
-  - note: The super administrator raises the transfer threshold.
+  - note: Nobody changes the threshold alone.
     advanceClock: PT1H
-  - process: PARAM_SET@latest
-    input: { key: qb.transfer.threshold, value: "3000" }
+  - expectError:
+      process: PARAM_SET@latest
+      input: { key: qb.transfer.threshold, value: "3000" }
+      status: 422
+      ruleCode: PARAM_CONTROLLED
+  - note: The super administrator proposes a higher threshold, the second administrator publishes it.
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input:
+      targetEntity: SysParam
+      values: { paramKey: qb.transfer.threshold, value: "3000" }
+      reason: Fewer, larger transfers
+    save: { raise: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${raise}" }
 
   - note: Run again the next day, setup adds nothing and leaves the changed threshold alone.
     advanceClock: P1D
@@ -32,7 +68,8 @@ steps:
       accountsOpened: []
       countriesAdded: 0
       paramsCreated: []
+      paramsProposed: []
   - expect: { param: qb.transfer.threshold, value: 3000 }
 snapshot:
-  entities: [SecRole, SecRolePermission, LedgerAccount, SysParam, QbCountry]
+  entities: [SecRole, SecRolePermission, LedgerAccount, SysParam, SysControlChange, QbCountry]
   asOf: end

@@ -102,9 +102,14 @@
 
 ## 已知问题
 
-- **业务参数的修改不是四眼（需要平台改动）**：设计 §2 要求抽成比例、转账门槛等参数经 `CONTROL_CHANGE_*` 四眼修改，但平台的受控变更
-  （`ControlChanges.WRITABLE`）只覆盖审批规则、审批限额与职责分离规则，不含 `SysParam`。因此 `QB_ADMIN_SUPER` 暂保留 `platform.param.write`
-  （一人即可改参数）。需要在 `1.2/platform` 上让受控变更也能覆盖业务参数（或为参数提供四眼修改），合入后去掉该权限、改用受控变更，并更新场景。
+- ~~业务参数的修改不是四眼（需要平台改动）~~：平台阶段 16i（决策 D40）已合入，随 Q3 分支一起完成：
+  `setup.SetupConfig` 以 `ControlledParams` 声明 `QbParams.CONTROLLED`（抽成比例、转账门槛、人工审核额、转账开关，以及两个"免审核"开关——打开即去掉人工审核，本身就是控制）；
+  `qb.ai.model`、`qb.app.min-version` 不受控。受控键不能直接建立（`PARAM_CONTROLLED`），所以 `QB_SETUP` 以子流程 `CONTROL_CHANGE_PROPOSE` 提出它们的首个值
+  （输出 `paramsProposed` / `proposals`），由另一位管理员 `CONTROL_CHANGE_PUBLISH` 发布；撤回的提案不再提出（`QbSetupRecord`）。
+  `QB_ADMIN_SUPER` 不再有 `platform.param.write`（保留 `platform.param.read`、`control.propose`）。`QB_SETUP` 只增不减，所以**已有安装中的这项授权要由管理员收回一次**
+  （角色权限页面删除 `QB_ADMIN_SUPER` 的 `platform.param.write`）；之后 `QB_SETUP` 不会加回。
+  `control.publish` 只授予 `QB_ADMIN_FINANCE`（2026-10-10 确认，Q3 的 PR 中实施）：超级管理员提议、财务管理员发布；已有安装再执行一次 `QB_SETUP` 即补上该授权。
+  注意：首次安装若只有一个平台管理员，他执行 `QB_SETUP` 后不能发布自己的提案，受控参数要等第二个管理员发布后才有值（Q5、Q6 之前须完成）。
 - 首次 `QB_SETUP` 写约 600 行（249 国及每项的记录），本机约 10 秒；之后的运行几乎不写。
 
 - ~~账本维度未声明（需要平台改动）~~：平台阶段 16h（PR #102）已合入，`wallet/WalletConfig` 声明维度 1 `party`（`SecUser.userId`），`QuizbuksAppIT` 检查。

@@ -37,10 +37,18 @@
 - **语言**：消息资源 `messages_{en,zh,ja}.properties` 三语齐全（`jabizApp { languages("en", "zh", "ja") }`，启动检查）；实体与字段 `entity.<实体>[.<字段>]`、流程 `process.<名>`、参数 `param.<键>`。
   产品显示名只写在 `app.name`。
 - **初始数据只经 `QB_SETUP`**：角色、账本科目、国家、业务参数由它建立；它可重复执行，只补**从未存在过**的（`QbSetupRecord` 记下它建过或见过的每一项），不改已有的，也不加回管理员删除的角色、收回的权限。新阶段的新权限、科目、参数加到
-  `QbRoles` / `QbLedger` / `QbParams`，部署后再执行一次 `QB_SETUP`。
+  `QbRoles` / `QbLedger` / `QbParams`，部署后再执行一次 `QB_SETUP`。从代码中去掉的授权不会被收回：由管理员在已有安装中收回一次。
+- **受控参数**（平台决策 D40）：金额与免审核开关列在 `QbParams.CONTROLLED`（`ControlledParams` Bean），只经受控变更修改；`QB_SETUP` 提出它们的首个值，由另一位管理员发布。
+  不把 `platform.param.write` 授予任何角色。
 - **账本**只经流程的子流程 `LEDGER_POST` / `LEDGER_REVERSE` 写入；`ledger.post`、`ledger.reverse`、`ledger.account.write` 不授予任何角色。
 - **国家数据**在 `quizbuks/countries.txt`（`code|en|zh|ja|regions`，无引号）；文件问题由启动检查（类别 `QUIZBUKS`）一次报告。
 - **地区**：国家的 `regions` 是按 `country.Regions.ALL` 顺序、以逗号连接的地区代码，总含 `GLOBAL`（平台没有多值字段）；规则 `QB_COUNTRY_REGIONS_FORMAT` 只接受这一种写法。
+- **内容（模版、题目、资料、版本）**（`content`，`docs/quizbuks/plans/Q3-content.md`）：写入只经 `QB_QUIZ_*` / `QB_QUESTION_*` / `QB_MATERIAL_*` 流程
+  （默认数据视图 `processOnlyWrites`，商家视图只读）。写一个模版的流程先取锁 `HoldLock.exclusive("qb.quiz:" + quizId)` 再读取，经商家视图 `LoadEntity`（不是自己的或已移除即 404），
+  子项经默认视图整体读取；每次内容改动给模版 `revision + 1`。上限与长度只写在 `content.ContentLimits`；错误码在 `content.ContentCodes`。
+  版本由"保存版本"显式生成，快照是 `QuizSnapshots` 的规范 JSON（哈希用平台 `ContentHash`），快照引用的文件另登记 `QbVersionFile`。业务流程不调用 `FILE_DELETE`：不再引用的文件由平台清扫。
+  新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
+  版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）。
 
 ## 5. 测试与命令（在 `backend/` 下）

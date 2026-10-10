@@ -30,7 +30,16 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("accountsOpened"))
             .isEqualTo(QbLedger.ACCOUNTS.stream().map(QbLedger.Account::code).toList());
         assertThat(first.get("countriesAdded")).isEqualTo(249);
-        assertThat(first.get("paramsCreated")).isEqualTo(QbParams.ALL.stream().map(QbParams.Param::key).toList());
+        List<String> keys = QbParams.ALL.stream().map(QbParams.Param::key).toList();
+        assertThat(first.get("paramsCreated"))
+            .isEqualTo(keys.stream().filter(key -> !QbParams.CONTROLLED.contains(key)).toList());
+        // Controlled parameters cannot be created directly (decision D40): they are proposed, and another
+        // administrator publishes them.
+        assertThat(first.get("paramsProposed")).isEqualTo(QbParams.CONTROLLED);
+        assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size());
+        assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
+            QbParams.TRANSFER_THRESHOLD).getFirst()).containsEntry("n", 0L);
+        publishProposals(first);
 
         Map<String, Long> before = rowCounts();
         // One record of each item setup made: it never adds the same item again.
@@ -44,7 +53,8 @@ class SetupIT extends QbItSupport {
         Map<String, Object> second = setup();
         assertThat(second).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
-            .containsEntry("paramsCreated", List.of());
+            .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
+            .containsEntry("proposals", List.of());
         assertThat(rowCounts()).isEqualTo(before);
         assertCountries();
 
@@ -56,6 +66,25 @@ class SetupIT extends QbItSupport {
     void needsThePermissionAndASecondFactor() {
         runSetup(TestTokens.bearer(tokens, "visitor", QbPermissions.COUNTRY_READ)).expectStatus().isForbidden();
         runSetup(TestTokens.withoutMfa(tokens, "installer", QbPermissions.SETUP)).expectStatus().isForbidden();
+    }
+
+    @Test
+    void controlledParametersChangeOnlyWithFourEyes() {
+        publishProposals(setup());
+        for (String key : QbParams.CONTROLLED) {
+            // A valid value of the parameter's kind: refused for being controlled, not for its value.
+            String value = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
+                .valueKind().get("type").equals("bool") ? "true" : "1";
+            Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
+                .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+            assertThat(refused.toString()).as(key).contains("PARAM_CONTROLLED");
+        }
+        // The others are changed as before.
+        client.post().uri("/api/processes/PARAM_SET/latest")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).header("Authorization", admin())
+            .bodyValue(Map.of("key", QbParams.AI_MODEL, "value", "gpt-x")).exchange().expectStatus().isOk();
     }
 
     @Test
