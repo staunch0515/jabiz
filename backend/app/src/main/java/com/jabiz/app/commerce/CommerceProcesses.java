@@ -7,12 +7,17 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.mail.MailCategory;
+import com.jabiz.mail.MailRecipient;
+import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.publicread.FileAccess;
+import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -35,6 +40,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.jabiz.app.commerce.CommerceEntities.CANCELLED;
+import static com.jabiz.app.commerce.CommerceEntities.CUSTOMER_DATASET;
 import static com.jabiz.app.commerce.CommerceEntities.MAX_ORDER_LINES;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER_DATASET;
@@ -70,6 +76,13 @@ public final class CommerceProcesses {
     public static final String ORDER_PLACE = "ORDER_PLACE";
     public static final String ORDER_CANCEL = "ORDER_CANCEL";
     public static final String ORDER_SHIP = "ORDER_SHIP";
+
+    /**
+     * The shipment notice (docs/design/18-numbering-approvals-tasks.md section 5.6): a notification, which the customer
+     * may turn off; texts in the messages {@code mail.commerce.order-shipped.subject} and {@code .body}.
+     */
+    public static final MailTemplate ORDER_SHIPPED_MAIL = MailTemplate.define("commerce.order-shipped", t -> t
+        .category(MailCategory.NOTIFICATION).param("orderNo", "totalAmount"));
     public static final String PRODUCT_REPRICE = "PRODUCT_REPRICE";
     public static final String PRODUCT_WITHDRAW = "PRODUCT_WITHDRAW";
 
@@ -133,6 +146,8 @@ public final class CommerceProcesses {
     static final String PRODUCTS = "products";
     static final String STOCK = "stock";
     static final String ORDER_KEY = "order";
+    static final String CUSTOMER = "customer";
+    static final String CUSTOMER_MASTER = "customerMaster";
     static final String LINES = "lines";
     static final String OUTPUT = "output";
     static final String PRICED = "priced";
@@ -251,7 +266,36 @@ public final class CommerceProcesses {
                 .compute("Take the goods out", (metadata, ctx) -> ship(ctx))
                 // Same transaction: the sale is booked exactly when the goods leave (docs/design/11 section 1.2).
                 .step("Post the sale", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POSTING_INPUT),
-                    LedgerProcesses.POST, 1, ctx -> ctx.get(POSTING_INPUT), POSTING)));
+                    LedgerProcesses.POST, 1, ctx -> ctx.get(POSTING_INPUT), POSTING))
+                // A customer whose master names an account with an address hears of it; the mail leaves after the
+                // commit, so a shipment that fails sends nothing (docs/design/18-numbering-approvals-tasks.md 5.6).
+                .step("Find the customer", QueryEntities.of(CUSTOMER_DATASET, ctx -> byCode("customerCode",
+                    ctx.get(ORDER_KEY, EntityInstance.class).get("customerCode")), CUSTOMER_MASTER))
+                .step("Find the customer's account", QueryEntities.of(SecurityEntities.USER_DATASET,
+                    CommerceProcesses::customerQuery, CUSTOMER))
+                .step("Tell the customer", SendMail.<ProcessContext>when(CommerceProcesses::customerHasAddress,
+                    ORDER_SHIPPED_MAIL, ctx -> MailRecipient.user(customer(ctx).id()), Map.of(
+                        "orderNo", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("orderNo"),
+                        "totalAmount", ctx -> ctx.get(ORDER_KEY, EntityInstance.class).get("totalAmount")))));
+
+    /** The account of the order's customer among the users: none when the customer has none (or no master). */
+    private static EntityQuery customerQuery(ProcessContext ctx) {
+        List<EntityInstance> master = list(ctx, CUSTOMER_MASTER);
+        Object customer = master.isEmpty() ? null : master.getFirst().get("userId");
+        return EntityQuery.builder()
+            .where(new QueryPredicate.In("userId", customer == null ? List.of() : List.of(customer)))
+            .limit(1).build();
+    }
+
+    private static EntityInstance customer(ProcessContext ctx) {
+        return list(ctx, CUSTOMER).getFirst();
+    }
+
+    /** Only a shipment that went through, to a customer user with an address. */
+    private static boolean customerHasAddress(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.contains(CUSTOMER) && !list(ctx, CUSTOMER).isEmpty()
+            && customer(ctx).get("email") != null;
+    }
 
     // ---- queries built from the context -------------------------------------------------------------------------
 

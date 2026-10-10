@@ -11,8 +11,8 @@ public interface NotificationSender {
     void send(String to, String subject, String body) throws Exception;
 
     /**
-     * A message that may carry attachments. A sender that cannot attach files refuses such a message rather than send
-     * it without them.
+     * A message that may carry attachments and an HTML part. A sender that cannot attach files refuses such a message
+     * rather than send it without them; one that cannot send HTML sends the plain text, which has the same content.
      *
      * @throws Exception when the message was not accepted; the attempt is recorded and retried
      */

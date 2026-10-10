@@ -54,7 +54,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * retried, a sent one is not sent again; an altered copy is never sent; deliveries are only inserted.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {"jabiz.mail.enabled=true",
-    "jabiz.mail.from=documents@example.com", "spring.mail.host=localhost", "spring.mail.port=3026"})
+    "jabiz.mail.from=documents@example.com", "jabiz.mail.base-url=https://jabiz.example.com",
+    "spring.mail.host=localhost", "spring.mail.port=3026"})
 class DocumentSendIT extends PostgresIntegrationTest {
 
     @RegisterExtension

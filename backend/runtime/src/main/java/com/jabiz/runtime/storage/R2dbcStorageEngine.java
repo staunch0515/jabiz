@@ -43,10 +43,21 @@ public final class R2dbcStorageEngine implements StorageEngine {
 
     private final DatabaseClient db;
     private final TransactionalOperator tx;
+    private final TransactionalOperator newTx;
 
+    /** An engine without {@link #inNewTransaction}. */
     public R2dbcStorageEngine(DatabaseClient db, TransactionalOperator tx) {
+        this(db, tx, null);
+    }
+
+    /**
+     * @param newTx operator of the same transaction manager that always starts a transaction of its own
+     *              ({@code PROPAGATION_REQUIRES_NEW}), for {@link #inNewTransaction}; null: not supported
+     */
+    public R2dbcStorageEngine(DatabaseClient db, TransactionalOperator tx, TransactionalOperator newTx) {
         this.db = Objects.requireNonNull(db);
         this.tx = Objects.requireNonNull(tx);
+        this.newTx = newTx;
     }
 
     @Override
@@ -188,6 +199,14 @@ public final class R2dbcStorageEngine implements StorageEngine {
     @Override
     public <T> Mono<T> inTransaction(Mono<T> work) {
         return tx.transactional(work);
+    }
+
+    @Override
+    public <T> Mono<T> inNewTransaction(Mono<T> work) {
+        if (newTx == null) {
+            return Mono.error(new UnsupportedOperationException("This engine has no independent transactions"));
+        }
+        return newTx.transactional(work);
     }
 
     @Override

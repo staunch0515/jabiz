@@ -3,8 +3,8 @@ plugins {
     jacoco
 }
 
-// jabiz-core: pure Java. No main dependencies at all, so Spring, Reactor and R2DBC cannot even be
-// referenced here; ArchitectureTest in app states the same rules explicitly.
+// jabiz-core: pure Java. Its only main dependency is commonmark (pure Java, itself without dependencies), so Spring,
+// Reactor and R2DBC cannot even be referenced here; ArchitectureTest in app states the same rules explicitly.
 base {
     archivesName.set("jabiz-core")
 }
@@ -100,9 +100,15 @@ val coverageGatedClasses = listOf(
     // Phase 14j
     "com.jabiz.document.*",
     "com.jabiz.query.template.TemplateSchemas",
+    // Phase 16a
+    "com.jabiz.mail.*",
 )
 
 dependencies {
+    // Mail bodies are Markdown, rendered to HTML and plain text (docs/design/18-numbering-approvals-tasks.md section
+    // 5.6, decision D35). Implementation only: the renderer's API speaks Strings.
+    implementation("org.commonmark:commonmark:0.30.0")
+
     // Property tests of the temporal invariants (docs/design/07-quality.md section 6).
     testImplementation("net.jqwik:jqwik:1.9.3")
     // Reads the validation cases shared with the frontend (spec/validation-cases.json, decision D15).
