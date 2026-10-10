@@ -1184,12 +1184,17 @@ commonmark 的 HTML 输出在各邮件客户端中的样式（只用基本元素
 - 账户设置的接口：`GET` / `POST /api/auth/mail/preferences`、`POST /api/auth/account/locale`（流程 `SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`，
   权限 `auth.mail-preference`、`auth.account` 不授予角色，只能本人运行）；`SEC_USER_CREATE` 可带 `locale`。前端页面与 `@jabiz/client` 的封装留给 15c / 16c，
   本阶段只更新 OpenAPI 快照与生成的类型。
-- 示范：`SalesOrder` 增加可选的 `customerUserId`（应用迁移 `V15__order_customer_user.sql`，`ORDER_PLACE` 可带），`ORDER_SHIP` 在客户用户有邮箱时发
-  `commerce.order-shipped`。
+- 示范：新增客户主数据 `Customer`（管理员维护，可选 `userId`；应用迁移 `V15__customers.sql`），`ORDER_SHIP` 给其中有账号且有邮箱的客户发
+  `commerce.order-shipped`；收件人不来自下单输入。
+- 评审后的修正：参数原样保存并以此渲染（秘密参数在启动检查或以 `MAIL_PARAM_SECRET` 拒绝，超过 16 KiB 以 `MAIL_PARAMS_TOO_LARGE` 拒绝）；令牌在发送前、
+  `SENT` 在发送后各自独立提交，之后的失败不会重发；SMTP 超时在发送器 Bean 创建时设置；通用后台增加退订页 `/mail/unsubscribe`（`MailUnsubscribePage`）；
+  `MailAttempt` 的数据视图改为只读，投递日志不进审计（21 §1）；主题按码点截断；控制器共用 `ActingUser`。
 
 **已知问题**
-- 投递在事务中调用 SMTP：慢服务器会占用连接直到 `jabiz.mail.timeout`（缺省 10 秒）；记录 `FAILED` 需另一个连接（连接池耗尽时会等待）。
-- 至少一次：服务器已收下而应答失败（或提交失败）的邮件会再发一次；前一封中的令牌无效。
+- 投递在事务中调用 SMTP：慢服务器会占用连接直到 `jabiz.mail.timeout`（缺省 10 秒）；`OutboxDeliverer` 依次处理各消费者，慢的邮件服务器会推迟其他消费者的投递
+  （本阶段不改投递器）。令牌、`SENT`、`FAILED` 的独立事务各需另一个连接（连接池耗尽时会等待）。
+- 至少一次：服务器收下了邮件却报告失败时会再发一次，前一封中的令牌已被取代；投递在 `SENT` 之后失败（提交失败）则不会重发。
+- 发送失败且重试用尽时，这次未发出的令牌已入库，收件人此前邮件中的同用途令牌因此失效（需重新发送）。
 - 退订链接无过期，轮换 `JABIZ_JWT_SECRET` 会使已发出的退订链接失效（用户仍可在账户设置中退订）。
 - 退订接口匿名且未单独限流（每次只校验签名并至多写一条偏好）。
 - 待办通知（`TASK_NOTIFY`）与单据发送不迁移（本计划第 10 条），仍是纯文本、进程内重试。

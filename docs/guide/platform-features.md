@@ -197,7 +197,7 @@
 - 职责分离：规则（互斥的两组权限）；授予角色或权限造成冲突即拒绝；流程入口对已存在冲突的操作人兜底拒绝；冲突报告接口。
 - 待办 `SysTask`：指派给用户或权限（持有者皆可见、先做先关）、标题文案键 + 参数、关联实体、链接、截止、来源键；步骤 `CreateTask` / `CloseTasks`；审批请求自动产生逐层待办（标题为"审批 <对象显示名> <人认得的单据标识>（第 n 级）"）；"我的待办"接口与页面、页头计数；`ApprovalPanel` 组件。
 - 邮件通知：新待办自动邮件（指派用户，或明确持有该权限的启用用户）；通知与尝试只追加、失败重试；`jabiz.mail.enabled` 缺省关闭。
-- 事务邮件（18 §5.6，D35）：模板 `MailTemplate`（`TRANSACTIONAL` 不可退订 / `NOTIFICATION` 可退订），标题与 Markdown 正文写在三语消息中；流程步骤 `SendMail`在事务内登记、经 Outbox 投递（回滚不发、持久的退避重试、已发不重发），按收件人语言（`SecUser.locale`）渲染为纯文本与 HTML（值一律转义）；一次性令牌在发送时生成、库中只存哈希，以步骤 `MailTokens.consume` 只能使用一次、会过期、后发的邮件使旧令牌失效；NOTIFICATION 带签名的退订链接，用户可在账户设置中开关；消息与每次尝试可在数据视图 `MailMessage` / `MailAttempt` 中查询；邮件关闭时照常登记、记 `SKIPPED`。
+- 事务邮件（18 §5.6，D35）：模板 `MailTemplate`（`TRANSACTIONAL` 不可退订 / `NOTIFICATION` 可退订），标题与 Markdown 正文写在三语消息中；流程步骤 `SendMail`在事务内登记、经 Outbox 投递（回滚不发、持久的退避重试、已发不重发），按收件人语言（`SecUser.locale`）渲染为纯文本与 HTML（值一律转义）；一次性令牌在发送时生成、库中只存哈希，以步骤 `MailTokens.consume` 只能使用一次、会过期、后发的邮件使旧令牌失效；NOTIFICATION 带签名的退订链接，用户可在账户设置中开关（退订页 `/mail/unsubscribe` 无需登录）；参数原样保存、不能是秘密；消息与每次尝试可在数据视图 `MailMessage` / `MailAttempt` 中查询；邮件关闭时照常登记、记 `SKIPPED`。
 
 **写需求时应给出**
 
