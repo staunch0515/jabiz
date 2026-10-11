@@ -1265,7 +1265,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
-| 16k | 定时任务逐项独立事务（`JobDefinition.forEach`、`HoldLock` 的最长等待、`BUSY`）；D42 | D42 | 2.5–3 天 | — |
+| 16k | 定时任务逐项独立事务（`JobDefinition.forEach`、`HoldLock` 的最长等待、`BUSY`）；D42（☑ 已完成，PR 待建） | D42 | 2.5–3 天 | — |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
@@ -1939,6 +1939,8 @@ Q21 平台提供共用的 ArchUnit 规则，应用的 `ArchitectureTest` 引用�
 补充 D14 第 5、6 条（任务只调用流程、同一计划时刻只执行一次），需新增决策 **D42**（见"待确认 K-1"），不取代任何决策。
 分支 `1.2/phase-16k-job-items`，从 `1.2/platform` 拉出。
 
+**16k 状态**：☑ 已完成（分支 `1.2/phase-16k-job-items`，PR 待建）。完成说明见本节末尾。
+
 **现状（`origin/1.2/platform`，`abf6f7e`）**
 - **声明**：core `JobDefinition<I>(name, cron, zone, process, input: Instant -> I, lockAtMostFor)`，只有 `cron(…)` 一种工厂；名称同时是 ShedLock 锁名。
 - **执行**：`JobRunner.run(job, scheduledTime)`（阻塞）在 ShedLock（`jabiz_shedlock`，`lockAtMostFor` 缺省 10 分钟，`jabiz.jobs.lock-at-least-for` 缺省 30 s，真实时间）下以系统身份
@@ -2121,17 +2123,17 @@ SELECT jabiz_protect_append_only('sys_job_item_failure');
 
 **验收标准**
 
-- [ ] `JobDefinition.forEach(…)` 声明的任务每项以系统身份、各自一个事务执行；一项失败只回滚该项，其余提交，运行记为 `PARTIAL` 并有各结果计数。
-- [ ] 每项幂等键 `job:<名称>:<计划时刻毫秒>:<项键>`：同一计划时刻重跑或两个实例在锁过期后各跑一次，同一项只产生一次效果。
-- [ ] 失败逐项记入只追加的 `sys_job_item_failure`，按连续次数指数退避，成功后记 `RECOVERED`；持续失败的项不使其他项饿死。
-- [ ] `HoldLock` 支持逐步的最长等待；任务项在 `itemLockWait` 内取不到锁即 `BUSY`、跳过到下一次运行，不算失败；请求中超时为 409。
-- [ ] 测试复现 Q5 的锁形状，逐项任务下无死锁、在线请求不等整批。
-- [ ] `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 生效；ShedLock 下同一时刻只有一个实例运行。
-- [ ] 观测 `jabiz.job.item` 只带 `job` 与 `result`；`GET /api/jobs` 显示计数与连续失败中的项，OpenAPI 快照与生成的类型已更新。
-- [ ] 场景 `runJob` 可断言 `items`；场景回放缺省 `lock-at-least-for=0s`，同一任务连续运行不再 `LOCKED`。
-- [ ] `WithdrawApproval.when` 可用并有测试。
-- [ ] 启动检查 `JOB` 覆盖要求 8；单流程任务（`FreightBilling`）行为与快照不变。
-- [ ] 示范 `commerce.unpaid-order-expire` 与场景；文档（D42、06、07、11、13、CLAUDE.md、ROADMAP）已更新；`./gradlew check` 通过。
+- [x] `JobDefinition.forEach(…)` 声明的任务每项以系统身份、各自一个事务执行；一项失败只回滚该项，其余提交，运行记为 `PARTIAL` 并有各结果计数。
+- [x] 每项幂等键 `job:<名称>:<计划时刻毫秒>:<项键>`：同一计划时刻重跑或两个实例在锁过期后各跑一次，同一项只产生一次效果。
+- [x] 失败逐项记入只追加的 `sys_job_item_failure`，按连续次数指数退避，成功后记 `RECOVERED`；持续失败的项不使其他项饿死。
+- [x] `HoldLock` 支持逐步的最长等待；任务项在 `itemLockWait` 内取不到锁即 `BUSY`、跳过到下一次运行，不算失败；请求中超时为 409。
+- [x] 测试复现 Q5 的锁形状，逐项任务下无死锁、在线请求不等整批。
+- [x] `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 生效；ShedLock 下同一时刻只有一个实例运行。
+- [x] 观测 `jabiz.job.item` 只带 `job` 与 `result`；`GET /api/jobs` 显示计数与连续失败中的项，OpenAPI 快照与生成的类型已核对（响应为映射，快照不变）。
+- [x] 场景 `runJob` 可断言 `items`；场景回放缺省 `lock-at-least-for=0s`，同一任务连续运行不再 `LOCKED`。
+- [x] `WithdrawApproval.when` 可用并有测试。
+- [x] 启动检查 `JOB` 覆盖要求 8；单流程任务（`FreightBilling`）行为与快照不变。
+- [x] 示范 `commerce.unpaid-order-expire` 与场景；文档（D42、06、07、11、13、CLAUDE.md、ROADMAP）已更新；`./gradlew check` 通过。
 
 **预估**
 
@@ -2161,6 +2163,38 @@ SELECT jabiz_protect_append_only('sys_job_item_failure');
 | K-10 | 一次运行的结果 | 无失败项 `SUCCEEDED`、有失败项 `PARTIAL`（新增值）、选取失败 `FAILED`；`REPLAYED` 只属于单流程任务 |
 
 **确认**（2026-10-11）：计划与待确认点 K-1 – K-10 全部按缺省处理（新增决策 D42）。
+
+**16k 完成说明**
+- 第一步的确认：`sys_job_run` 加列被封存接受——封存按块记下各表的列清单（`sys_integrity_seal_table.columns`）并按它校验，加列后旧块照常通过
+  （`IntegrityIT.aColumnAddedLaterLeavesTheSealsIntactButTheirColumnListsCannotBeChanged` 已覆盖；`JobItemsIT.itemRecordsAreAppendOnly` 另以带新列的运行与
+  `sys_job_item_failure` 封存并校验）。设计不需改变。
+- 实现：core `JobDefinition`（不可变类，种类 `SINGLE` / `PER_ITEM`，`forEach` 与 `maxItems`、`parallelism`、`itemLockWait`、`itemRetry`、`maxRunTime`，声明时检查范围与
+  `maxRunTime < lockAtMostFor`；`itemIdempotencyKey`；`ItemRetry.delayAfter`）、`JobItems`；runtime `JobRunner`（`runSingle` / `runItems`，`execute` 返回 `JobRun`（结果与 `ItemCounts`），
+  `Outcome.PARTIAL`，`ItemOutcome`，`stop()`）、`JobItemFailures`、`JobChecks`（要求 8）、`JobController`（`kind`、运行的 `items`、`failingItems`）、`JobScheduler.stop` 先停止开始新项；
+  `ExecutionOptions.lockWait` / `withLockWait`（经 Reactor 上下文 `ExecutionOptions.LockWait` 传给 `HoldLock`，子流程同样适用）；`HoldLock` 的 `waitAtMost` 重载；
+  `WithdrawApproval.when`；`PlatformObservations.JOB_ITEM`；场景 `runJob.items` 与缺省 `lock-at-least-for=0s`（缺口 7）。平台迁移 `V36__job_items.sql`（V35 留给 16e-2）。
+- 示范：`app` 的 `OrderExpiry`（任务 `commerce.unpaid-order-expire`、内部流程 `ORDER_EXPIRE`、模板 `commerce.job.unpaid-orders`、`app.commerce.unpaid-order-ttl`）；
+  `ORDER_RECORD_PAYMENT` 找到订单后取订单锁并重新读取；消息三语；场景 `commerce/unpaid_order_expiry.yml`。选取不需要新索引（`sales_order_version` 已有 `ordered_time` 索引），没有应用迁移。
+- 测试：core `JobDefinitionTest`；runtime `JobChecksTest`、`HoldLockTimeoutTest`、`ScenarioParserTest`；app `JobItemsIT`（12 个：一项失败、重跑与恢复、退避不饿死、退避封顶、`BUSY`、
+  Q5 锁形状无死锁与 `CallProcess.forEach` 的死锁对照、`parallelism = 4` 的 200 项与两个实例、运行中锁过期的两个实例并行、`maxRunTime`、选取失败、只追加与封存）、
+  `JobIT`（单流程不变、接口的 `kind`、计数与连续失败中的项）、`HoldLockIT`（步骤与执行选项的等待，取较小）、`ApprovalIT`（`WithdrawApproval.when`）；
+  `freight/monthly_close`、`commerce/order_payment` 快照不变。OpenAPI 快照不变（`/api/jobs` 的响应是映射），`pnpm gen:api` 不需要；通用后台没有任务页。
+- 与计划不同之处：
+  - `sys_job_item_failure` 增加 `entry_no`（`GENERATED ALWAYS AS IDENTITY`）定序，索引为 `(job_name, item_key, entry_no DESC)`：`recorded_time` 来自注入的时钟，
+    固定时钟下 `FAILED` 与 `RECOVERED` 可能同一时刻。连续次数取该项最近一行的 `attempt`（与"最近 `RECOVERED` 之后的 `FAILED` 行数"相同，不必再数）。
+  - 项键无效或重复的项计为 `FAILED`、写 error 日志，但不写失败行（没有可作为键的值）。
+  - 选取以遮蔽方式运行模板（`AdvancedQueryExecutor.all(..., masked = true)`）：只读事务中不能写显示记录，选取也不需要明文。
+  - `ExecutionOptions` 的方法名为 `withLockWait(Duration)`（访问器 `lockWait()`），与 `withBeforeSteps` 一致。
+  - `maxRunTime` 用真实时间（与锁同为基础设施时间）；`JobRunner` 增加带模板注册表与模板执行器的构造器，旧构造器只能运行单流程任务。
+  - BlockHound：并行的重放首次反序列化同一输出类型时争用 Jackson 的 `DeserializerCache` 锁（`ProcessExecutor.replay` 原有，逐项任务的并行重放首次暴露），
+    已在 `JabizBlockHoundIntegration` 中按原因放行。
+  - `GET /api/jobs` 的"连续失败中的项"另带 `lastFailureTime`。
+- 未完成与已知问题：
+  - D41 的执行（人调用 `internal()` 流程即 403 `PROCESS_INTERNAL`）在 16l 中实现；本阶段只有启动检查 `JOB` 要求每项流程声明 `internal()`，
+    要求 8 的"人直接调用该内部流程 403"的测试待 16l 合并后补上（16l 的测试覆盖）。
+  - 项的观测 `jabiz.job.item` 不嵌在运行的 `jabiz.job.run` 之下（运行是阻塞式观测，项在 Reactor 中执行）；每项流程的 `jabiz.process` 嵌在项之下。
+  - 退避的查询对该任务的全部失败行做 `DISTINCT ON`；失败行只追加、长期增长，量大时可加按时间的条件（Q10 压测时评估）。
+  - Q4/Q5 场景中缺口 7 的绕行、`qb.publication-tick` 的改写在 Q5b 中做。
 
 
 ### 16h 账本维度接受身份与引用字段（0.5 天）

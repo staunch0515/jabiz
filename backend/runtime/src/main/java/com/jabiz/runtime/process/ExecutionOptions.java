@@ -3,6 +3,7 @@ package com.jabiz.runtime.process;
 import com.jabiz.runtime.operation.Operation;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -18,8 +19,13 @@ import java.util.regex.Pattern;
  * @param dryRun         whether to roll the transaction back once the process has completed, returning its output:
  *                       everything it would do is done and checked, nothing stays, and no after-commit step runs (an
  *                       import's preview, docs/design/20-imports.md section 5). Not with an idempotency key.
+ * @param lockWait       the longest a {@code HoldLock} step of the process or its sub-processes waits for its lock,
+ *                       below {@code jabiz.process.lock-timeout} (a job's items, decision D42); null for the global
+ *                       timeout. It bounds {@code HoldLock} only: the platform's own locks and row locks keep the
+ *                       global timeout (docs/design/06-process.md section 4.1).
  */
-public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun) {
+public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun,
+    Duration lockWait) {
 
     public static final ExecutionOptions NONE = new ExecutionOptions(null);
 
@@ -34,6 +40,13 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
         if (dryRun && idempotencyKey != null) {
             throw new IllegalArgumentException("A dry run keeps no result to replay; it takes no idempotency key");
         }
+        if (lockWait != null && (lockWait.isNegative() || lockWait.isZero())) {
+            throw new IllegalArgumentException("lockWait must be positive");
+        }
+    }
+
+    public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun) {
+        this(idempotencyKey, beforeSteps, dryRun, null);
     }
 
     public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps) {
@@ -49,6 +62,17 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
     }
 
     public ExecutionOptions withBeforeSteps(Function<Operation, Mono<Void>> work) {
-        return new ExecutionOptions(idempotencyKey, work, dryRun);
+        return new ExecutionOptions(idempotencyKey, work, dryRun, lockWait);
     }
+
+    /** These options with {@code HoldLock} steps waiting at most {@code wait} for their locks. */
+    public ExecutionOptions withLockWait(Duration wait) {
+        return new ExecutionOptions(idempotencyKey, beforeSteps, dryRun, Objects.requireNonNull(wait, "wait"));
+    }
+
+    /**
+     * The longest wait of {@code HoldLock} steps, in the Reactor context of a running process and its sub-processes
+     * (from {@link #lockWait()}).
+     */
+    public record LockWait(Duration atMost) {}
 }

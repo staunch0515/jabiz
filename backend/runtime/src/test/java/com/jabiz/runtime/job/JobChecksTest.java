@@ -9,10 +9,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.core.ResolvableType;
 
+import com.jabiz.entity.SemanticKind;
+import com.jabiz.job.JobItems;
+import com.jabiz.query.custom.AdvancedQueryDefinition;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,16 +32,85 @@ class JobChecksTest {
     static final ProcessDefinition<In, In, ProcessContext> UNREGISTERED = ProcessDefinition.single("OTHER", 1,
         In.class, In.class, (in, ctx) -> in);
 
+    static final ProcessDefinition<In, In, ProcessContext> ITEM = ProcessDefinition.single("ITEM", 1,
+        In.class, In.class, (in, ctx) -> in).asInternal();
+    static final ProcessDefinition<In, In, ProcessContext> NOT_INTERNAL = ProcessDefinition.single("ITEM_OPEN", 1,
+        In.class, In.class, (in, ctx) -> in);
+
+    static final AdvancedQueryDefinition SELECTION = AdvancedQueryDefinition.define("it.job.due", q -> q
+        .fromEntities("Ticket")
+        .parameter("now", new SemanticKind.Bool(), true)
+        .parameterWithDefault("limitDays", new SemanticKind.Bool(), true)
+        .returns("item_id", new SemanticKind.Text(36, false))
+        .list(l -> l.sorts("item_id").defaultSort("item_id", true).key("item_id"))
+        .permissions("it.read")
+        .sqlTemplate("SELECT 1"));
+
+    static final AdvancedQueryDefinition UNSORTED = AdvancedQueryDefinition.define("it.job.unsorted", q -> q
+        .fromEntities("Ticket")
+        .returns("item_id", new SemanticKind.Text(36, false))
+        .publicAccess()
+        .sqlTemplate("SELECT 1"));
+
+    private static final Map<String, AdvancedQueryDefinition> TEMPLATES = Map.of(SELECTION.queryId(), SELECTION,
+        UNSORTED.queryId(), UNSORTED);
+
     private static List<CheckProblem> check(JobDefinition<?>... jobs) {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
         beans.addBean("tick", REGISTERED);
+        beans.addBean("item", ITEM);
+        beans.addBean("itemOpen", NOT_INTERNAL);
         for (int i = 0; i < jobs.length; i++) {
             beans.addBean("job" + i, jobs[i]);
         }
         ProcessRegistry processes = new ProcessRegistry(
             beans.getBeanProvider(ResolvableType.forClass(ProcessDefinition.class)));
         JobRegistry registry = new JobRegistry(beans.getBeanProvider(ResolvableType.forClass(JobDefinition.class)));
-        return new JobChecks(registry, processes).check();
+        return new JobChecks(registry, processes, id -> Optional.ofNullable(TEMPLATES.get(id)),
+            Duration.ofSeconds(30), 10).check();
+    }
+
+    private static JobDefinition<In> perItem(String name, JobItems items, ProcessDefinition<In, In, ProcessContext> p) {
+        return JobDefinition.forEach(name, "0 * * * * *", ZoneOffset.UTC, items, p, (at, row) -> new In(at));
+    }
+
+    @Test
+    void wellDeclaredPerItemJobsPass() {
+        assertThat(check(perItem("expire", JobItems.template("it.job.due", at -> Map.of("now", at), "item_id"),
+            ITEM))).isEmpty();
+        // Column names compare as the template's do, ignoring case.
+        assertThat(check(perItem("expire", JobItems.template("it.job.due", at -> Map.of("now", at), "ITEM_ID"),
+            ITEM).parallelism(5))).isEmpty();
+    }
+
+    @Test
+    void everyProblemOfAPerItemJobIsReported() {
+        List<CheckProblem> problems = check(
+            perItem("missing", JobItems.template("it.job.none", "item_id"), ITEM),
+            perItem("open", JobItems.template("it.job.due", at -> Map.of("now", at, "extra", 1), "other"),
+                NOT_INTERNAL).itemLockWait(Duration.ofMinutes(1)).parallelism(6),
+            perItem("unsorted", JobItems.template("it.job.unsorted", "item_id"), ITEM),
+            perItem("noparams", JobItems.template("it.job.due", "item_id"), ITEM),
+            perItem("throws", JobItems.template("it.job.due", at -> {
+                throw new IllegalStateException("no");
+            }, "item_id"), ITEM));
+
+        assertThat(problems).extracting(CheckProblem::format).containsExactly(
+            "JOB | job missing | selects with SQL template it.job.none, which does not exist",
+            "JOB | job open | runs item process ITEM_OPEN, which is not internal(): item processes take their input"
+                + " from the selection (decision D41)",
+            "JOB | job open | itemLockWait PT1M is longer than jabiz.process.lock-timeout PT30S",
+            "WARNING JOB | job open | parallelism 6 is more than half the connection pool (10): requests may wait for"
+                + " connections",
+            "JOB | job open | selection template it.job.due has no result column other for the item key",
+            "JOB | job open | selection template it.job.due has no parameter extra",
+            "JOB | job unsorted | selection template it.job.unsorted is public; a job's selection is not",
+            "JOB | job unsorted | selection template it.job.unsorted declares no list.defaultSort",
+            "JOB | job unsorted | selection template it.job.unsorted declares no list.key",
+            "JOB | job noparams | selection template it.job.due needs parameter now, which the job does not give",
+            "JOB | job throws | the parameters of selection template it.job.due could not be computed:"
+                + " java.lang.IllegalStateException: no");
+        assertThat(problems.get(3).severity()).isEqualTo(CheckProblem.Severity.WARNING);
     }
 
     @Test

@@ -7,12 +7,15 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
+import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -167,6 +170,42 @@ class HoldLockIT extends PostgresIntegrationTest {
         release.countDown();
         holder.get(10, TimeUnit.SECONDS);
         assertThat(after.get(10, TimeUnit.SECONDS)).isNotNull();
+    }
+
+    /** Waits for a held lock until it gives up; returns how long that took. */
+    private Duration timeToGiveUp(java.util.function.Supplier<CompletableFuture<LockOutput>> late) {
+        long started = System.nanoTime();
+        ExecutionException error = catchThrowableOfType(ExecutionException.class, () -> late.get().get(15,
+            TimeUnit.SECONDS));
+        assertThat(error).hasCauseInstanceOf(ConcurrentUpdateException.class);
+        return Duration.ofNanos(System.nanoTime() - started);
+    }
+
+    @Test
+    void aStepsOwnWaitAndTheExecutionsWaitAreShorterThanTheTimeout() throws Exception {
+        String name = unique("period");
+        String held = unique("held");
+        CountDownLatch release = close(held);
+        CompletableFuture<LockOutput> holder = start(name, false, held, false);
+        awaitArrived(held, 1);
+
+        // The step's own wait (300 ms), well below the global 4 s.
+        assertThat(timeToGiveUp(() -> start(ItLockFixtures.LOCKED_BRIEFLY, name, false, unique("brief"), false)))
+            .isLessThan(Duration.ofSeconds(3));
+        // The execution's wait (a job's item), for a step that declares none.
+        assertThat(timeToGiveUp(() -> asTestRequest(executor.run(ItLockFixtures.LOCKED,
+            new LockInput(name, false, unique("item"), false), ExecutionOptions.NONE.withLockWait(
+                Duration.ofMillis(300)))).map(ProcessResult::output).toFuture())).isLessThan(Duration.ofSeconds(3));
+        // Both: the shorter one (the step's 300 ms rather than the execution's 3.5 s).
+        assertThat(timeToGiveUp(() -> asTestRequest(executor.run(ItLockFixtures.LOCKED_BRIEFLY,
+            new LockInput(name, false, unique("both"), false), ExecutionOptions.NONE.withLockWait(
+                Duration.ofMillis(3500)))).map(ProcessResult::output).toFuture())).isLessThan(Duration.ofSeconds(3));
+
+        release.countDown();
+        holder.get(10, TimeUnit.SECONDS);
+        // Free again: the brief wait takes it at once.
+        assertThat(start(ItLockFixtures.LOCKED_BRIEFLY, name, false, unique("free"), false).get(10, TimeUnit.SECONDS))
+            .isNotNull();
     }
 
     @Test

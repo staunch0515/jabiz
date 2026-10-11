@@ -2,6 +2,8 @@ package com.jabiz.runtime.job;
 
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
+import com.jabiz.runtime.query.AdvancedQueryExecutor;
+import com.jabiz.runtime.query.SqlTemplateRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import io.r2dbc.spi.ConnectionFactory;
 import net.javacrumbs.shedlock.core.LockProvider;
@@ -38,8 +40,10 @@ public class JobConfig {
         EntityIdGenerator ids, Clock clock,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         @Value("${jabiz.jobs.instance-id:}") String instanceId,
-        @Value("${jabiz.jobs.lock-at-least-for:30s}") Duration lockAtLeastFor, PlatformObservations observations) {
+        @Value("${jabiz.jobs.lock-at-least-for:30s}") Duration lockAtLeastFor, PlatformObservations observations,
+        SqlTemplateRegistry templates, AdvancedQueryExecutor queries) {
         String instance = instanceId.isBlank() ? ManagementFactory.getRuntimeMXBean().getName() : instanceId;
-        return new JobRunner(locks, executor, storages, ids, clock, poolRef, instance, lockAtLeastFor, observations);
+        return new JobRunner(locks, executor, storages, ids, clock, poolRef, instance, lockAtLeastFor, observations,
+            templates, queries);
     }
 }

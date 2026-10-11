@@ -63,6 +63,8 @@ public class JobScheduler {
 
     @jakarta.annotation.PreDestroy
     public synchronized void stop() {
+        // Runs in progress start no new item (per-item jobs); the shutdown below waits for them to end.
+        runner.stop();
         if (scheduler != null) {
             scheduler.shutdown();
             scheduler = null;

@@ -16,5 +16,10 @@ public final class JabizBlockHoundIntegration implements BlockHoundIntegration {
         // which reads /dev/urandom once per new connection. It happens only while a pooled connection is
         // being opened and never waits on entropy, so it cannot stall an event loop in practice.
         builder.allowBlockingCallsInside("com.ongres.scram.common.ScramFunctions", "nonce");
+        // Jackson builds the deserializer of a type once, under a lock that only concurrent first uses of that type
+        // contend for (replays of a per-item job's outputs run side by side, phase 16k). The holder only builds the
+        // deserializer, without I/O, so the wait is short and happens once per type.
+        builder.allowBlockingCallsInside("tools.jackson.databind.deser.DeserializerCache",
+            "_createAndCacheValueDeserializer");
     }
 }

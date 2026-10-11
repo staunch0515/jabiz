@@ -14,6 +14,7 @@ import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.inbound.InboundEvents;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
 import com.jabiz.runtime.inbound.ReceivedEvent;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.task.TaskSpec;
@@ -110,6 +111,10 @@ class CommercePayments {
                 .step("Load the payment", LoadInboundEvent.of(PROVIDER, SUCCEEDED,
                     ctx -> ctx.get(INPUT, PaymentInput.class).inboundEventId(), PAYMENT))
                 .step("Find the order", QueryEntities.of(ORDER_DATASET, CommercePayments::orderQuery, ORDERS))
+                // The expiry of unpaid orders (OrderExpiry) takes the same lock: a payment and the expiry do not
+                // interleave. Read again under the lock, since the order may have changed while waiting for it.
+                .step("Lock the order", HoldLock.<ProcessContext>exclusive(CommercePayments::orderLock))
+                .step("Read the order again", QueryEntities.of(ORDER_DATASET, CommercePayments::orderQuery, ORDERS))
                 .compute("Record the payment", (metadata, ctx) -> record(ctx, acceptTestMode))
                 .step("Ask for a check", CreateTask.when(ctx -> "CHECK".equals(ctx.get(OUTCOME)),
                     CommercePayments::checkTask)));
@@ -165,6 +170,13 @@ class CommercePayments {
         return EntityQuery.builder()
             .where(new QueryPredicate.In("orderNo", orderNo == null ? List.of() : List.of(orderNo)))
             .limit(1).build();
+    }
+
+    /** The lock of the order found, or none. */
+    @SuppressWarnings("unchecked")
+    static String orderLock(ProcessContext ctx) {
+        List<EntityInstance> orders = (List<EntityInstance>) ctx.get(ORDERS);
+        return orders == null || orders.isEmpty() ? null : OrderExpiry.lockName(orders.getFirst().id());
     }
 
     @SuppressWarnings("unchecked")

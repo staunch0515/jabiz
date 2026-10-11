@@ -255,9 +255,70 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
      重复的执行重放第一次的结果（`REPLAYED`）。
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
-- `GET /api/jobs`（权限 `job.read`）：任务、cron、时区、流程、下一次计划时刻、最近 10 次执行。
-- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean。
-- 场景回放：步骤 `runJob: {job, at, outcome}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`）与 `deliverEvents: true`（07 §3.1）。
+- `GET /api/jobs`（权限 `job.read`）：任务、种类（`SINGLE` / `PER_ITEM`）、cron、时区、流程、下一次计划时刻、最近 10 次执行
+  （逐项任务的执行带各结果的项数）；逐项任务另有"连续失败中的项"（项键、连续次数、最近错误（至多 200 字符）、最近失败时刻、下次可重试时刻，至多 50 条）。
+- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；逐项任务另见 §4.1。
+- 场景回放：步骤 `runJob: {job, at, outcome, items}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`；`items` 见 §4.1）与 `deliverEvents: true`（07 §3.1）。
+  场景回放缺省 `jabiz.jobs.lock-at-least-for=0s`，同一任务在一个场景中连续运行不会因自己的锁而 `LOCKED`。
+
+### 4.1 逐项任务（16k，决策 D42）
+
+一批多项的工作（到期自动取消、自动提交、上下架）**不写成根流程 + `CallProcess.forEach`**：子流程与根流程同一事务（06 §5），一项失败整批回滚，
+锁持有到整批提交，与在线请求按不同顺序取锁即可能死锁。改用逐项任务：
+
+```java
+JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of("Asia/Tokyo"),
+        JobItems.template("commerce.job.unpaid-orders",                 // 选取模板（须有 list.defaultSort 与 list.key）
+            scheduledTime -> Map.of("cutoff", scheduledTime.minus(ttl)), // 模板参数（同步、无 I/O）
+            "orderId"),                                                 // 项键所在的结果列
+        ORDER_EXPIRE,                                                   // 每项流程（internal()）
+        (scheduledTime, row) -> new ExpireInput(Rows.uuid(row.get("orderId"))))
+    .maxItems(500)                        // 每次至多处理的项数，缺省 500，上限 10 000
+    .parallelism(1)                       // 实例内同时执行的项数，缺省 1，上限 8
+    .itemLockWait(Duration.ofSeconds(2))  // 每项中 HoldLock 的最长等待，缺省 2 s，不超过 jabiz.process.lock-timeout
+    .itemRetry(Duration.ofMinutes(1), Duration.ofHours(1))  // 连续失败的退避：起点、上限
+    .maxRunTime(Duration.ofMinutes(5))    // 之后不再开始新项，缺省 lockAtMostFor 的一半，必须小于 lockAtMostFor
+    .lockAtMostFor(Duration.ofMinutes(10));
+```
+
+- **选取**：以系统身份在只读短事务中运行 SQL 模板（不产生操作记录；遮蔽字段一律遮蔽，选取不留显示记录），按模板的 `defaultSort` + `key` 排序，
+  `LIMIT` = `maxItems` + 退避中的项数（至多 1 000）+ 1；滤掉退避中的项后取前 `maxItems` 项，多出的记为 `items_more`。选取失败 → 运行 `FAILED`，不处理任何项。
+  项键为空、不符合 `[A-Za-z0-9._:-]{1,36}` 或同一次选取中重复 → 该项记为 `FAILED`（`JOB_ITEM_KEY_INVALID`，error 日志；没有可记的键，不写失败行），其余照常。
+  业务参数由每项流程自己读（`LoadParams`）。
+- **逐项执行**：每项以系统身份作为**根流程**、各自一个事务与 `op_process`；幂等键 `job:<名称>:<计划时刻 epoch 毫秒>:<项键>`（至多 119 字符），
+  请求标识 `job-<名称>-<毫秒>-<项键>`；执行选项 `lockWait = itemLockWait`（只约束 `HoldLock`，06 §4.1）。并发至多 `parallelism`（每项占一个连接；超过连接池一半时启动检查告警）。
+- **每项的结果**（只影响该项）：
+
+  | 结果 | 条件 | 记录 |
+  |---|---|---|
+  | `SUCCEEDED` | 提交 | 计数；该项此前有未恢复的失败时追加一行 `RECOVERED` |
+  | `REPLAYED` | 同一计划时刻已处理过（幂等键重放） | 计数 |
+  | `BUSY` | `ConcurrentUpdateException`：锁等待超过 `itemLockWait`（`55P03`）、死锁（`40P01`）、版本冲突 | 计数，不算失败、不退避；仍然到期的项由下次运行重新选取 |
+  | `FAILED` | 其他异常（422、404、500 …），事务已回滚，不留任何效果 | 追加 `sys_job_item_failure`（`FAILED`，`attempt` = 连续次数）；warn 日志，连续第 5 次起 error |
+  | `DEFERRED` | 退避中（选取后滤掉），或超过 `maxRunTime`、停机后未开始 | 计数 |
+
+- **运行结果**：`sys_job_run` 一行，带 `items_selected`（各结果之和）、`items_succeeded` / `replayed` / `busy` / `failed` / `deferred` 与 `items_more`；
+  没有 `FAILED` 项 → `SUCCEEDED`，有 → `PARTIAL`，选取失败 → `FAILED`（`REPLAYED` 只属于单流程任务）。`JobRunner.execute(job, 时刻)` 返回结果与计数，`run` 只返回结果。
+- **失败与退避**（逐项、持久化，同 Outbox）：不在一次运行中重试。连续失败次数 = 该项最近一次 `RECOVERED` 之后的 `FAILED` 行数（即最近一行的 `attempt`，按 `entry_no` 排序）；
+  第 1 次失败后下一次运行即可重试，第 n 次（n ≥ 2）后等 `min(起点 × 2^(n−2), 上限)`。从不放弃：封顶后按上限重试并写 error 日志。
+  退避中的项另外放宽选取上限，"毒项"不会占满 `maxItems` 使后面的项饿死。
+- **集群**：一次运行（选取 + 全部项）在该任务的 ShedLock 下，同一时刻只有一个实例运行；项不在实例间分发。`maxRunTime` < `lockAtMostFor`，到时不再开始新项，
+  进行中的项照常结束。即使锁过期、另一实例开始同一计划时刻，幂等键保证同一项在同一计划时刻至多执行一次（并发时一方等待唯一约束后重放）。
+  运行超过 cron 间隔时下一时刻 `LOCKED`；逐项任务按状态选取，下一次运行自然接上。停机（`JobScheduler` 的 `@PreDestroy`）时不再开始新项。
+  `maxRunTime` 与锁时间一样是真实时间（基础设施时间）；退避与失败记录的时刻来自注入的 `Clock`。
+- **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
+  每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
+- **D41**：每项流程必须是 `internal()`（启动检查 `JOB` 报错）：其输入来自系统的选取，人不应能直接调用。单流程任务不受此限。
+- **启动检查 `JOB`**（一次报全）：选取模板存在、不是公开模板、声明 `list.defaultSort` 与 `list.key`、必填参数都由参数函数给出且没有未声明的参数；
+  项键列是模板的结果列；每项流程已注册且 `internal()`；`itemLockWait` 不超过 `jabiz.process.lock-timeout`；`parallelism` 超过 R2DBC 连接池（`spring.r2dbc.pool.max-size`）一半时告警。
+  `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 等范围在声明时即检查。
+- **表**：`sys_job_item_failure`（只追加，平台迁移 `V36`）：`failure_id`、`entry_no`（自增，定序）、`job_name`、`item_key`、`kind`（`FAILED` / `RECOVERED`）、`run_id`、
+  `scheduled_time`、`attempt`、`error`（至多 2 000 字符）、`process_seq_id`（`RECOVERED` 行的成功操作）、`recorded_time`。`sys_job_run` 加列不执行 UPDATE，封存按各块记下的列清单校验（21 §2）。
+- **观测**：每项 `jabiz.job.item`（标签只有 `job` 与 `result`），每项流程的 `jabiz.process` 嵌在其下；运行 `jabiz.job.run` 的结果增加 `PARTIAL`；选取记为 `jabiz.query.template`（13）。
+- **场景**：`runJob: {job, at, outcome, items: {succeeded, replayed, busy, failed, deferred}}`，`outcome` 缺省 `SUCCEEDED`（可写 `PARTIAL`），`items` 只比较写出的键。
+- **示范**：`commerce.unpaid-order-expire`（每天 03:10 东京时间，模板 `commerce.job.unpaid-orders`：`PLACED`、未付款、下单早于 `计划时刻 − app.commerce.unpaid-order-ttl`（缺省 14 天））
+  的每项流程 `ORDER_EXPIRE {orderId}`：取订单锁 `commerce.order:<id>`、重新读取，仍未付款才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
+  "刚付款"与"过期取消"不交错。场景 `scenarios/commerce/unpaid_order_expiry.yml`。
 
 ## 5. 示范（`app` 的 `FreightBilling`）
 
@@ -283,3 +344,16 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 | 事务回滚时不产生事件；投递失败会重试，消费端不会重复处理 | `OutboxIT`：流程回滚、数据视图提交失败均无事件；消费者前两次失败后按退避重试成功且只留一次效果；重复投递与 4 路并发投递都只处理一次 |
 
 另有 `LedgerIT`（过账、余额、冲正、只能经流程写入、撤销被拒、数据库兜底、只追加）、`AuditIT`、`JobChecksTest`、场景回放。
+
+逐项任务（16k，§4.1）：
+
+| 验收标准 | 测试 |
+|---|---|
+| 每项以系统身份、各自一个事务执行；一项失败只回滚该项，运行 `PARTIAL` 并有计数 | `JobItemsIT.oneFailingItemAffectsNoOther`：5 项中第 3 项 422 → 4 项提交、1 行失败、失败项无 `op_process` 与写入 |
+| 同一计划时刻重跑、两个实例在锁过期后各跑一次，同一项只产生一次效果 | `rerunsOfAScheduledTimeReplayAndFailingItemsRecover`；`itemsRunInParallelOnceEachAndTwoInstancesRunATimeOnce`（`parallelism = 4`、200 项、两个实例一个 `LOCKED`，锁释放后另一实例全部 `REPLAYED`）；`concurrentInstancesAfterAnExpiredLockRunEachItemOnce`（运行中锁过期，两个实例并行跑同一时刻） |
+| 失败按连续次数退避、成功后 `RECOVERED`、持续失败的项不使其他项饿死 | `aFailingItemBacksOffWithoutStarvingTheOthers`（1、2、4 分钟，`maxItems = 2` 时其他项照常）；`retriesAreCappedAndNeverGivenUp` |
+| 任务项取不到锁即 `BUSY`、不算失败；请求中超时 409 | `anItemWhoseLockIsHeldIsBusyAndRunsNextTime`；`HoldLockIT.aStepsOwnWaitAndTheExecutionsWaitAreShorterThanTheTimeout`；`HoldLockTimeoutTest` |
+| Q5 的锁形状下无死锁、在线请求不等整批 | `itemsDoNotDeadlockWithRequests`；对照 `theOldBatchInOneTransactionDeadlocksWithRequests`（`CallProcess.forEach` 同一事务，数据库报死锁） |
+| `maxRunTime` | `afterMaxRunTimeNoItemStarts` |
+| 只追加、封存 | `itemRecordsAreAppendOnly`（无 UPDATE / DELETE、触发器拒绝、封存与校验通过） |
+| 接口、启动检查、场景 | `JobIT.aPerItemJobIsListedWithItsCountsAndFailingItems`；`JobChecksTest`；`ScenarioParserTest`；场景 `commerce/unpaid_order_expiry.yml` |

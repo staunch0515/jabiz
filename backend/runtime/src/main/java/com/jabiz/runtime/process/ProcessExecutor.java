@@ -164,6 +164,10 @@ public class ProcessExecutor {
                 .flatMap(started -> options.beforeSteps().apply(started)
                     .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)));
         });
+        if (options.lockWait() != null) {
+            ExecutionOptions.LockWait wait = new ExecutionOptions.LockWait(options.lockWait());
+            transaction = transaction.contextWrite(context -> context.put(ExecutionOptions.LockWait.class, wait));
+        }
         if (options.dryRun()) {
             // Rolled back by failing the transaction on purpose once everything has run; after-commit steps never run.
             // Blocking steps, sub-processes' included, see the dry run: external calls are refused in it (D38).

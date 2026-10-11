@@ -78,6 +78,23 @@ public final class ItLockFixtures {
                 }, "child"))
                 .step("Wait at the gate", Gate.class, NoMetadata.INSTANCE));
 
+    /** As {@link #LOCKED} (exclusive), but the step waits at most {@link #BRIEF_WAIT} for the lock. */
+    public static final java.time.Duration BRIEF_WAIT = java.time.Duration.ofMillis(300);
+
+    public static final ProcessDefinition<LockInput, LockOutput, ProcessContext> LOCKED_BRIEFLY =
+        ProcessDefinition.define("IT_LOCKED_BRIEFLY", 1, LockInput.class, LockOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> new LockOutput(ctx.get("input", LockInput.class).gate()))
+                .step("Take the lock briefly", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get("input", LockInput.class).name(), BRIEF_WAIT))
+                .step("Wait at the gate", Gate.class, NoMetadata.INSTANCE));
+
     /** Counts the process in and waits until its gate is open (a blocking step may wait). */
     @Component
     public static class Gate implements BlockingStep<NoMetadata, ProcessContext> {
@@ -105,6 +122,11 @@ public final class ItLockFixtures {
         @Bean
         ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockedParent() {
             return PARENT;
+        }
+
+        @Bean
+        ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockedBriefly() {
+            return LOCKED_BRIEFLY;
         }
     }
 }

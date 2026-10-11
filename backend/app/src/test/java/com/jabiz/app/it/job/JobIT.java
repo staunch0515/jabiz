@@ -1,6 +1,7 @@
 package com.jabiz.app.it.job;
 
 import com.jabiz.app.it.fixture.ItEventFixtures;
+import com.jabiz.app.it.fixture.ItJobItemFixtures;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.job.JobConfig;
@@ -45,7 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * application processes would; they share the database. Every test uses its own job name, since the cluster lock is
  * kept for {@code lockAtLeastFor} after a run.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+    properties = "jabiz.jobs.lock-at-least-for=0s")
 class JobIT extends PostgresIntegrationTest {
 
     @Autowired
@@ -152,7 +154,42 @@ class JobIT extends PostgresIntegrationTest {
             .jsonPath("$[?(@.name == 'it.tick')].cron").isEqualTo("0 0 * * * *")
             .jsonPath("$[?(@.name == 'it.tick')].processName").isEqualTo("IT_TICK")
             .jsonPath("$[?(@.name == 'it.tick')].nextTime").isEqualTo("2026-01-31T10:00:00Z")
-            .jsonPath("$[?(@.name == 'it.tick')].recentRuns[0].scheduledTime").isEqualTo("2026-01-31T08:00:00Z");
+            .jsonPath("$[?(@.name == 'it.tick')].recentRuns[0].scheduledTime").isEqualTo("2026-01-31T08:00:00Z")
+            .jsonPath("$[?(@.name == 'it.tick')].kind").isEqualTo("SINGLE")
+            .jsonPath("$[?(@.name == 'it.tick')].failingItems").doesNotExist();
+    }
+
+    /** A per-item job lists its runs' item counts and its failing items (decision D42). */
+    @Test
+    void aPerItemJobIsListedWithItsCountsAndFailingItems() {
+        JobRunner declared = context.getBean(JobRunner.class);
+        JobDefinition<?> items = context.getBeansOfType(JobDefinition.class).values().stream()
+            .filter(job -> job.name().equals(ItJobItemFixtures.BEAN_JOB)).findFirst().orElseThrow();
+        String failing = UUID.randomUUID().toString();
+        execute("INSERT INTO it_job_item (f_id, f_batch, f_seq, f_fail) VALUES (?, ?, 0, true)", failing,
+            ItJobItemFixtures.BEAN_BATCH);
+        execute("INSERT INTO it_job_item (f_id, f_batch, f_seq) VALUES (?, ?, 1)", UUID.randomUUID().toString(),
+            ItJobItemFixtures.BEAN_BATCH);
+        Instant scheduled = START.minus(Duration.ofHours(2));
+        clock.set(START);
+        assertThat(declared.run(items, scheduled)).isEqualTo(JobRunner.Outcome.PARTIAL);
+        assertThat(declared.run(items, scheduled.plusSeconds(60))).isEqualTo(JobRunner.Outcome.PARTIAL);
+
+        WebTestClient client = WebTestClient.bindToApplicationContext(context).build();
+        client.get().uri("/api/jobs").header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "it-admin",
+                "job.read")).exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$[?(@.name == 'it.items')].kind").isEqualTo("PER_ITEM")
+            .jsonPath("$[?(@.name == 'it.items')].processName").isEqualTo("IT_JOB_ITEM")
+            .jsonPath("$[?(@.name == 'it.items')].recentRuns[0].outcome").isEqualTo("PARTIAL")
+            .jsonPath("$[?(@.name == 'it.items')].recentRuns[1].items.selected").isEqualTo(2)
+            .jsonPath("$[?(@.name == 'it.items')].recentRuns[1].items.succeeded").isEqualTo(1)
+            .jsonPath("$[?(@.name == 'it.items')].recentRuns[1].items.failed").isEqualTo(1)
+            .jsonPath("$[?(@.name == 'it.items')].recentRuns[1].items.more").isEqualTo(false)
+            .jsonPath("$[?(@.name == 'it.items')].failingItems[0].itemKey").isEqualTo(failing)
+            .jsonPath("$[?(@.name == 'it.items')].failingItems[0].failures").isEqualTo(2)
+            .jsonPath("$[?(@.name == 'it.items')].failingItems[0].retryAt").isEqualTo("2026-01-31T09:01:00Z");
     }
 
     @Test
