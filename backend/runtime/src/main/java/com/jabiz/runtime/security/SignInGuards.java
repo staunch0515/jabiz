@@ -2,7 +2,10 @@ package com.jabiz.runtime.security;
 
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.FieldDefinition;
+import com.jabiz.entity.ValidationException;
 import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.EntityInstance;
@@ -35,8 +38,9 @@ import java.util.Set;
  * then asks every guard. All must allow; a guard that throws, or data that cannot be read, refuses (fail closed).
  * Used by the sign-in processes ({@link SignInGuardStep}) and by the refresh ({@link RbacService}).
  *
- * <p>The startup check reports loads naming a dataset or field that does not exist, and load names used twice with
- * different meanings.
+ * <p>The user id is given to the query as text and converted to the type of the load's field like every other compared
+ * value (a uuid reference to the user, or text). The startup check reports loads naming a dataset or field that does
+ * not exist or a field that cannot hold a user id, and load names used twice with different meanings.
  */
 @Component
 public class SignInGuards implements PlatformCheck {
@@ -46,17 +50,22 @@ public class SignInGuards implements PlatformCheck {
     /** Refusal reason when the guards could not decide. */
     static final String UNDECIDED = "guard failed";
 
+    /** A user id, as the startup check tries it against the loads' fields. */
+    private static final String SAMPLE_USER_ID = "00000000-0000-7000-8000-000000000000";
+
     private final List<SignInGuard> guards;
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final EntityDefinitionRegistry definitions;
+    private final QueryCompiler compiler;
 
     public SignInGuards(ObjectProvider<SignInGuard> guards, DatasetEntityManager entities, DatasetRegistry datasets,
-        EntityDefinitionRegistry definitions) {
+        EntityDefinitionRegistry definitions, QueryCompiler compiler) {
         this.guards = guards.orderedStream().toList();
         this.entities = entities;
         this.datasets = datasets;
         this.definitions = definitions;
+        this.compiler = compiler;
     }
 
     /** Whether any application declares a guard. */
@@ -116,14 +125,10 @@ public class SignInGuards implements PlatformCheck {
         DatasetDefinition dataset = datasets.findById(load.dataset())
             .orElseThrow(() -> new IllegalStateException("Unknown dataset " + load.dataset()));
         EntityDefinition def = definitions.getOrThrow(dataset.targetEntityType());
-        Object id = userId;
-        try {
-            id = java.util.UUID.fromString(userId);
-        } catch (IllegalArgumentException e) {
-            // Not a platform user id: compared as text.
-        }
+        // The id as text: the query compiler converts it to the type of the field (a uuid reference to the user, or
+        // text), as for every other comparison.
         // One past the limit, so that more rows than allowed are noticed instead of cut off.
-        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq(load.userField(), id))
+        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq(load.userField(), userId))
             .limit(SignInGuard.MAX_ROWS + 1).build();
         return entities.queryAll(dataset, def, query).map(EntityInstance::attributes).collectList()
             .flatMap(rows -> rows.size() > SignInGuard.MAX_ROWS
@@ -158,11 +163,29 @@ public class SignInGuards implements PlatformCheck {
                     continue;
                 }
                 definitions.find(dataset.get().targetEntityType())
-                    .filter(def -> def.findField(load.userField()).isEmpty())
-                    .ifPresent(def -> problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load "
-                        + load.name() + ": entity " + def.name + " has no field " + load.userField())));
+                    .flatMap(def -> userFieldProblem(def, load))
+                    .ifPresent(problem -> problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load "
+                        + load.name() + ": " + problem)));
             }
         }
         return problems;
+    }
+
+    /**
+     * Why the load's field cannot hold a user id, if it cannot: it does not exist, or a user id (a UUID, as text) does
+     * not convert to its type, so that reading the load would fail and refuse everybody.
+     */
+    private Optional<String> userFieldProblem(EntityDefinition def, SignInLoad load) {
+        Optional<FieldDefinition> field = def.findField(load.userField());
+        if (field.isEmpty()) {
+            return Optional.of("entity " + def.name + " has no field " + load.userField());
+        }
+        try {
+            compiler.fieldValue(def, field.get(), SAMPLE_USER_ID);
+            return Optional.empty();
+        } catch (ValidationException e) {
+            return Optional.of("field " + def.name + "." + load.userField() + " ("
+                + field.get().kind().getClass().getSimpleName() + ") cannot hold a user id, which is a UUID");
+        }
     }
 }
