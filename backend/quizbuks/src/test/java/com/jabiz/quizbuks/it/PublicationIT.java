@@ -346,13 +346,17 @@ class PublicationIT extends PublicationItSupport {
     void forgedOrForeignApprovalResultsChangeNothing() {
         String id = draft(sponsorA(), version(sponsorA(), "Forged"), "Forged");
         String requestId = (String) submit(sponsorA(), id).get("approvalRequestId");
-        // Even an administrator holding every permission cannot reject without a rejected request.
-        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "qb.publication", "entityId", id,
+        // An administrator holding every permission does not run it at all (internal(), platform D41).
+        refusedAsInternal("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "qb.publication",
+            "entityId", id, "status", "REJECTED", "requestId", requestId, "preparerId", "sponsor-a",
+            "reason", "Forged"));
+        // Even run as the system, a forged event cannot reject without a rejected request.
+        runAsSystem("QB_PUBLICATION_APPROVAL_RESULT", body("subject", "qb.publication", "entityId", id,
             "status", "REJECTED", "requestId", requestId, "preparerId", "sponsor-a", "reason", "Forged"));
-        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "qb.publication", "entityId", id,
+        runAsSystem("QB_PUBLICATION_APPROVAL_RESULT", body("subject", "qb.publication", "entityId", id,
             "status", "REJECTED", "requestId", UUID.randomUUID().toString(), "reason", "Forged"));
         // An event of another subject is not about publications, whatever its entity.
-        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "commerce.certification", "entityId", id,
+        runAsSystem("QB_PUBLICATION_APPROVAL_RESULT", body("subject", "commerce.certification", "entityId", id,
             "status", "APPROVED", "requestId", requestId, "preparerId", "sponsor-a"));
         assertThat(row(id)).containsEntry("status", PublicationStatus.PENDING_REVIEW)
             .containsEntry("reject_reason", null);

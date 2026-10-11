@@ -1,7 +1,14 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.context.RequestContext;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.ProcessInputs;
+import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.test.TestTokens;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -10,6 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +54,33 @@ abstract class ContentItSupport extends QbItSupport {
         var result = call(process, token, body).expectBody(MAP).returnResult();
         assertThat(result.getStatus().value()).as(process + " answered " + result.getResponseBody()).isEqualTo(200);
         return (Map<String, Object>) result.getResponseBody().get("output");
+    }
+
+    @Autowired
+    ProcessRegistry processes;
+
+    @Autowired
+    ProcessInputs inputs;
+
+    @Autowired
+    ProcessExecutor executor;
+
+    /**
+     * Runs an {@code internal()} process as the system, as an event or a job would (platform decision D41: no caller
+     * reaches it through the API), with an input of the caller's making: what a forged event would carry.
+     */
+    @SuppressWarnings("unchecked")
+    void runAsSystem(String process, Map<String, ?> body) {
+        var definition = (ProcessDefinition<Object, Object, ProcessContext>) processes.findLatest(process)
+            .orElseThrow();
+        Object input = inputs.convert(definition.inputType(), (Map<String, Object>) body);
+        asRequest(RequestContext.system(Locale.ENGLISH, "qb-it"), executor.execute(definition, input)).block();
+    }
+
+    /** Runs a process that must be refused with 403 {@code PROCESS_INTERNAL}, whoever the caller. */
+    void refusedAsInternal(String process, String token, Map<String, ?> body) {
+        assertThat(String.valueOf(refused(process, token, body, 403).get("violations"))).as(process)
+            .contains("PROCESS_INTERNAL");
     }
 
     /** Runs a process that must be refused with {@code status}; returns the problem. */
