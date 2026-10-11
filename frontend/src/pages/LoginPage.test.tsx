@@ -157,4 +157,10 @@ describe('LoginPage', () => {
     expect(verify).not.toHaveBeenCalled()
     await expectAccessible()
   })
+
+  it('leads to resetting a forgotten password', () => {
+    page()
+    const link = screen.getByRole('link', { name: 'Forgot your password?' })
+    expect(link.getAttribute('href')).toBe('/auth/password-reset')
+  })
 })

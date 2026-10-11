@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, datasetPath, insert, signIn, test, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, insert, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -29,9 +29,9 @@ test('an order confirmation is issued from its row, saved as issued and verified
   await page.goto(datasetPath(ORDERS))
   await page.getByLabel('订单号').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row')).toHaveCount(1)
+  await expect(dataRows(page)).toHaveCount(1)
   await page.getByTestId('row-action-ORDER_CONFIRMATION_ISSUE').first().click()
-  await page.locator('.ant-popconfirm').getByRole('button', { name: /确\s*定|OK/ }).click()
+  await confirm(page)
   await expect(page.getByText('流程已完成。')).toBeVisible()
 
   await page.getByRole('link', { name: '单据' }).first().click()

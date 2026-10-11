@@ -55,6 +55,13 @@ describe('extensionProblems', () => {
     ])
   })
 
+  it('keeps the landing pages of mailed links to the platform', () => {
+    expect(extensionProblems({ routes: [{ path: '/auth/join' }, { path: '/mail/unsubscribe' }] })).toEqual([
+      'route "/auth/join" is a path of the platform',
+      'route "/mail/unsubscribe" is a path of the platform',
+    ])
+  })
+
   it('does not mistake a longer name for a platform path', () => {
     expect(extensionProblems({ routes: [{ path: '/database' }, { path: '/processes-report' }] })).toEqual([])
   })

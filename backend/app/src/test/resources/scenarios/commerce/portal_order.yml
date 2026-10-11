@@ -1,0 +1,49 @@
+# Ordering in the customer portal (ROADMAP phase 16b-2): PORTAL_ORDER_PLACE places the order for the customer whose
+# account is the caller, through ORDER_PLACE, so pricing and stock are the same. A caller linked to no customer and a
+# blocked customer are refused. (The verified address it requires is checked at the entry points; a replayed actor
+# counts as verified, docs/design/10-security.md section 15.4.)
+name: Ordering in the customer portal
+clock: 2026-05-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input: { entityType: Warehouse, attributes: { warehouseCode: OSK, warehouseName: Osaka, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: TEA-1, productName: Green tea, unitPrice: 500, active: true } }
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: OSK, sku: TEA-1, quantity: 10 }
+
+  - note: Hana has an account, and the customer master links her customer to it.
+    process: SEC_USER_CREATE@latest
+    input: { userName: hana, displayName: Hana, email: hana@example.com }
+    save: { hana: $.userId }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Customer, attributes: { customerCode: CUST-HANA, customerName: Hana, userId: "${hana}" } }
+    save: { customer: $.id }
+
+  - note: Hana orders as herself; the order is her customer's.
+    process: PORTAL_ORDER_PLACE@latest
+    actor: { id: "${hana}", permissions: [commerce.portal.order] }
+    input: { warehouseCode: OSK, lines: [{ sku: TEA-1, quantity: 2 }] }
+    expectOutput: { totalAmount: 1000 }
+  - note: Somebody linked to no customer cannot order.
+    expectError:
+      process: PORTAL_ORDER_PLACE@latest
+      actor: { id: walk-in, permissions: [commerce.portal.order] }
+      input: { warehouseCode: OSK, lines: [{ sku: TEA-1, quantity: 1 }] }
+      status: 422
+      ruleCode: COMMERCE_PORTAL_NO_CUSTOMER
+
+  - advanceClock: PT1H
+  - note: The customer is blocked; Hana's orders are refused (and so is her next sign-in to the portal).
+    process: UPDATE_ENTITY@latest
+    input: { entityType: Customer, id: "${customer}", version: 1, attributes: { blocked: true } }
+  - expectError:
+      process: PORTAL_ORDER_PLACE@latest
+      actor: { id: "${hana}", permissions: [commerce.portal.order] }
+      input: { warehouseCode: OSK, lines: [{ sku: TEA-1, quantity: 1 }] }
+      status: 422
+      ruleCode: COMMERCE_CUSTOMER_BLOCKED
+snapshot:
+  entities: [Customer, SalesOrder, SalesOrderLine, StockLevel]
+  asOf: end

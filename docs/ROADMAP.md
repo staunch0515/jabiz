@@ -20,7 +20,7 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b–15d 计划中 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
 | 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
@@ -1199,16 +1199,53 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 **风险**：弹出层层级（按子树拆分；15b-2 合入前 step-up 对话框弹在 antd 抽屉上仍会被盖住，15a 已如此）；修改 15a 的日期控件（区域、夏令时、秒与毫秒）；ProTable 的隐含行为容易漏掉（逐条写进列表页测试）；嵌套 `Sheet` 的焦点与 Escape（e2e 覆盖）；迁移期间两套实现并存（转换只有一份，旧的由 15c 删除，记入已知问题）；15b 与 15c 都改 `@jabiz/ui` 的导出与文案（组合组件先在 15b-1 合入）；产物大小在 15d 前继续增加（记录前后大小）。
 
 **验收标准**
-- [ ] 22 个文件及新增的 `SchemaForm`、`AdminPage`、`cells`、`dataColumns` 不引用 antd 系包；`meta/columns.ts` 只剩给 15c 的旧部分并注明。
-- [ ] `@jabiz/ui` 新增 9 个组合组件，日期控件可键入并可限定范围；每个组件有 Vitest，亮、暗 axe 无违规。
-- [ ] "要保持的行为"逐条有 Vitest 覆盖并通过；`validation.cases.test` 不变且通过；不引入第二套校验库，没有新依赖。
-- [ ] 已迁移的页面在暗色外观下为暗色，未迁移的页面与扩展页仍为亮色；列表、历史、流程表单有面包屑。
-- [ ] e2e 35 个用例全部通过；涉及本阶段页面的地方不再使用 `.ant-*`。
-- [ ] `a11y.spec.ts`：本阶段页面在亮、暗外观下无违规，弹出层也检查过。
-- [ ] `@jabiz/admin` 导出的 `EntityFormDrawer`、`ReferenceSelect`、`FilePreview`、`FieldErrors` 不再依赖 antd，契约变化已写入扩展指南；`pnpm ext:check` 通过。
+- [x] 22 个文件及新增的 `SchemaForm`、`AdminPage`、`cells`、`dataColumns` 不引用 antd 系包；`meta/columns.ts` 只剩给 15c 的旧部分并注明。
+- [x] `@jabiz/ui` 新增 9 个组合组件，日期控件可键入并可限定范围；每个组件有 Vitest，亮、暗 axe 无违规。
+- [x] "要保持的行为"逐条有 Vitest 覆盖并通过；`validation.cases.test` 不变且通过；不引入第二套校验库，没有新依赖。
+- [x] 已迁移的页面在暗色外观下为暗色，未迁移的页面与扩展页仍为亮色；列表、历史、流程表单有面包屑。
+- [x] e2e 35 个用例全部通过；涉及本阶段页面的地方不再使用 `.ant-*`。
+- [x] `a11y.spec.ts`：本阶段页面在亮、暗外观下无违规，弹出层也检查过。
+- [x] `@jabiz/admin` 导出的 `EntityFormDrawer`、`ReferenceSelect`、`FilePreview`、`FieldErrors` 不再依赖 antd，契约变化已写入扩展指南；`pnpm ext:check` 通过。
 - [ ] 前端全部检查与 `./gradlew check` 通过；ROADMAP 记下产物大小与出入；12 已更新。
 
 要保持的行为（逐条测试）：远程分页 / 排序 / 筛选只限白名单；回看写在 URL、回看时只读；遮蔽值每次请求服务端；多语言页签的必填、出错、回退与预览；文件按策略上传、预览释放、下载、移除为 `null`；引用显示名按页批量取；`processOnly` 只读不发送；生效时间与原因；只发送改动的字段；违规回填带规则码；step-up 后同键重试；二次验证绑定与恢复码；单点登录的授权码只送一次。
+
+**15b-2 状态**：☑ 已完成（分支 `1.2/phase-15b2-list-pages`，PR 待建）。验收标准的勾选包括 15b-1 已满足的部分（9 个组合组件、登录与目录等页面）；
+`./gradlew check` 未在本地完整运行（只运行了 `:app:bootJar`，含前端构建；本阶段没有后端改动），留给 CI。
+
+**15b-2 与计划的出入**
+- `MoneyInput` 的 `scale` 改为可选：表单中的金额"不传小数位、不截断不取整"，多出的小数位由规则报 `MONETARY_SCALE`，而原来的 `scale` 必填且会拒绝多键入的小数位。
+- `DataTable` 的表头单元格加 `scope="col"`：没有它时 Playwright 把带排序按钮的 `th` 算作普通单元格，`getByRole('columnheader')` 找不到。
+  列需要 `accessorFn` 才能排序（TanStack Table 只排序取值列），`dataColumns` 为每列给出；每列先升序（`sortDescFirst: false`），与原来 ProTable 相同。
+- 时间点（`asOf` / `knownAt`）的两个 `DateTimePicker` 放在筛选栏上方（原来在表格工具栏），各有标签；页面标题由 `AdminPage` 的 `<h1 data-testid="page-title">` 给出。
+- `FilePreview`：图片本身可点击放大，旁边另有"放大预览"按钮供键盘使用（图片放在按钮里时，按钮的内容不作为图片暴露，e2e 按 `img` 角色找不到）；放大图取最宽的变体，没有足够宽的变体时取（重新编码过的）原件。
+- 子实体列表放在表单的 `<form>` 之外（同一个 `Sheet` 内），表单的提交事件另外 `stopPropagation`：React 的事件会穿过门户从子实体的 `Sheet` 冒泡到父表单。
+- `MaskedValue` 若在请求明文期间值已改变，回来的明文仍会显示一次（评审第 7 条只处理已显示的明文）。
+- 多语言文本的各语言输入框以"字段名（语言）"命名，字段标签命名整个 `group`；页签上出错的语言带 `data-invalid`。
+- 路由表以 `appRoutes` 从 `App.tsx` 导出，供 `App.test.tsx` 检查哪些路由标为 `@jabiz/ui` 页面。
+- e2e 辅助函数（`support.ts`）新增 `confirm`（确认对话框的"确定"）、`sortBy`（表头的排序按钮）、`entityForm`（`data-testid="entity-form"` 的表单 `Sheet`）；
+  15b-1 已有的 `dataRows`、`option`、`rangeEnd`、`dialog`、`pageRendered` 照用。`a11y.spec` 为引用的选择先插入一个供应商（全新数据库中没有可选项）；登录后的两个检查标为 `test.slow()`（约 30 个页面与弹出层，在负载下超过默认的 1 分钟）。
+
+**15b-2 评审后的修正**（各有测试，缺陷先写失败的测试）
+1. 表单 `Sheet` 每次打开、或打开时换了另一条数据，都是新的表单（内层组件按"打开次数"取 key）：调用方保持挂载并切换行时，不会把上一条的值或空值当作改动发送；"取消"、Escape、关闭按钮走同一个关闭处理（保存中不关闭）。
+2. 新的查询未返回前，`DataTable` 的旧行 `inert` 并 `aria-busy`（新属性 `stale`，列表与子实体列表取 `isPlaceholderData`）；e2e 中查询后先等到唯一的目标行（`searchedRow`）再点击。
+3. 整数输入不再是 `type=number`（半截的 `12e` 被当作空、滚轮会改值）：文本框 `inputMode="numeric"`，只能键入数字与前导负号，只有负号时经 `onTypedInvalid` 阻止提交。
+4. 嵌套 `Sheet`：Vitest 打开子实体、只关闭子实体（Escape）、焦点回到"编辑 / 查看"按钮、保存只提交子实体一次；e2e（`content.spec`）同样打开、Escape、保存子实体。
+   为此列表与子实体列表在关闭表单后仍保持其挂载（关闭时也有滑出动画），表单记下打开它的按钮并在关闭时把焦点还给它。
+5. 删除或行操作使触发按钮随行消失时，焦点移到表格（`DataTable` 的 `tableRef`，表格 `tabIndex=-1`）：`ConfirmDialog` 新增 `returnFocus`，确认后等列表重新读取再关闭；组合框与日期框的"清除"按钮消失后焦点留在该字段。
+6. 删除了最后一页的最后一行时回到实际存在的最后一页。
+7. `MaskedValue` 在数据、字段或遮蔽值改变时丢弃已显示的明文。
+8. 文件上传中不能保存（保存按钮禁用并 `aria-busy`）；服务端对文件字段的违规使文件输入 `aria-invalid`（`FileUpload` 新增 `aria-invalid`）。
+9. `useDictionaries`、`useReferenceLabels` 的结果在数据不变时是同一个对象（`useQueries` 的 `combine` + `useMemo`）。`DataTable` 把单元格函数当作组件渲染，
+   列定义每次渲染都重建时，任何一次渲染都会重新挂载所有单元格（失去焦点、已显示的明文、预览）；列表页去掉了 `eslint-disable`。
+
+**15b-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 001.6 kB / 924.9 kB、CSS 79.4 kB / 13.3 kB；之后 JS 3 023.4 kB / 930.5 kB、CSS 79.8 kB / 13.4 kB
+（antd 与 ProComponents 仍由 15c 的页面使用，摇树去不掉；15d 删除后回落）。
+
+**15b-2 已知问题**
+- 旧的 `meta/columns.ts`（ProTable 列）与 `SchemaInputs` 仍供报表与导入页使用，15c 迁完后删除；单元格的转换只有一份（`meta/cells.ts`）。
+- 子实体列表的引用列不按显示名显示（与迁移前相同：子列表不取引用的显示名）。
+- e2e 中待办、报表、导入、审计、封存、保留、安全设置与单据页仍用 `.ant-*` 选择器（15c / 15d）。
 
 ### 15c – 15d
 
@@ -1222,11 +1259,11 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 子阶段 | 内容 | 决策 | 预估 | 依赖 |
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
-| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 待做） | D36 | 6–8 天 | 16a |
+| 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
 | 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
-| 16f | OIDC 自动开户（Google、Apple） | D39 | 3–4 天 | 16b |
+| 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
@@ -1436,12 +1473,51 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 **风险**：匿名注册每次计算 BCrypt，可被用来耗 CPU（靠限流与线程池上限；限流按实例，同 15 的已知限制）；邮件关闭时注册的用户无法验证（启动告警）；找回密码的申请两种情况仍有极小的耗时差（多写一条邮件消息），记为已知限制；与 15b 改同一批前端文件，合并顺序需协调。
 
 **验收标准**
-- [ ] 允许注册的入口可以注册；新旧邮箱响应完全相同；已有账号只有点击邮件链接后才追加角色，未验证的已有账号须同时设新密码。
-- [ ] 验证令牌只能用一次，过期、被取代、用途不符、邮箱已改都无效；验证后令牌带 `email_verified`。
-- [ ] 找回密码不泄露邮箱是否存在；确认后吊销全部令牌族、写登录记录、解除锁定。
-- [ ] 注册、重发、找回按地址与邮箱限流，伪造转发头不能绕过。
-- [ ] 示范 `portal` 的注册、验证、登录与下单可运行，被封禁的客户被拒。
-- [ ] 通用后台有验证、加入、找回密码页面与"忘记密码"链接；`./gradlew check` 与前端检查通过；D36、10、07、功能清单已更新。
+- [x] 允许注册的入口可以注册；新旧邮箱响应完全相同；已有账号只有点击邮件链接后才追加角色，未验证的已有账号须同时设新密码。
+- [x] 验证令牌只能用一次，过期、被取代、用途不符、邮箱已改都无效；验证后令牌带 `email_verified`。
+- [x] 找回密码不泄露邮箱是否存在；确认后吊销全部令牌族、写登录记录、解除锁定。
+- [x] 注册、重发、找回按地址与邮箱限流，伪造转发头不能绕过。
+- [x] 示范 `portal` 的注册、验证、登录与下单可运行，被封禁的客户被拒。
+- [x] 通用后台有验证、加入、找回密码页面与"忘记密码"链接；`./gradlew check` 与前端检查通过；D36、10、07、功能清单已更新。
+
+**完成情况（分支 `1.2/phase-16b2-self-registration`）**：平台迁移 `V33__registered_email.sql`（评审后新增，只加列），示范应用 `V16__customer_blocked.sql`；
+测试 `SignUpIT`（17）、`PasswordResetIT`（9）、`PortalIT`（4），runtime `SignUpRateLimitsTest`（4）、`SignUpProcessesTest`（3）、`SignInEntriesTest`、`MailChecksTest`、
+`ScenarioParserTest` 补充，core `MailTemplateTest` 补充；场景 `security/sign_up.yml`、`commerce/portal_order.yml`；前端 `AuthPages.test.tsx`（13）、
+`LoginPage.test.tsx` 与 `registry.test.ts` 各补一条。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
+
+**评审后的修订**（安全评审 S1–S3、加固与代码评审 R1–R10，10 §15.7 与 D36 实现说明已同步）：
+- S1 账号接管：找回密码与"你已有账号"只发给**可信的邮箱**（已验证，或可预占的账号的）；管理员设置或修改的邮箱从不可信（`registeredEmail` 只由注册写入），
+  由本人登录后验证。重置不删除、不绕过二次验证（下次登录照常要求）。预占保护只用于**可预占的账号**（自助注册、从未验证、仍在注册邮箱）；加入其他账号只追加角色，密码不变。
+  与评审意见的出入：加入其他账号时"你已有账号"本身就只发给可信的邮箱（否则改了别人邮箱的人可借加入链接把邮箱标为已验证、再找回密码）；可预占的账号经重置被接管时仍删除二次验证（同加入，评审 c）。
+- S2 验证链接：可预占的账号验证时要当前密码或新密码（新密码即接管，吊销原因 `CLAIM`，新错误码 `PASSWORD_INCORRECT`）；匿名的重发只发给可预占的账号。
+  验证页不再打开即提交：点击后先以试运行 `POST /api/auth/verify-email/check` 从令牌问清是否需要密码。
+- S3 后台入口：示范配置 `jabiz.security.entries.admin.accepted-roles=${JABIZ_ADMIN_ROLES:ADMIN}`；任何入口允许注册时 `admin` 接受 `*` 或注册角色为启动错误。
+  测试配置让后台接受全部角色并关闭门户的注册（各 IT 以自己的角色登录后台），注册相关的 IT 与场景自己打开注册并限定后台角色；CI 的 e2e 以 `JABIZ_ADMIN_ROLES=*`、
+  `JABIZ_PORTAL_SELF_REGISTRATION=false` 运行。场景新增 `properties`（回放上下文的配置）。
+- 加固：令牌用途改为 `jabiz.verify` / `jabiz.join` / `jabiz.reset`（core 允许令牌用途与占位符带一段命名空间），应用的模板使用 `jabiz.` 前缀为启动错误；
+  落地页读出令牌后用 `history.replaceState` 去掉它，打开期间 `<meta name="referrer" content="no-referrer">`。
+- R1 OpenAPI 标明 202 / 204；R2 并发注册只吞邮箱的唯一冲突并重试一次（后到者的用户收到"你已有账号"），有并发 IT；R3 `SIGN_UP_DISABLED` 一律 422，被拒的加入不消费令牌（IT）；
+  R4 找回密码的二次验证用例；R5 加入与重置先检查链接再计算哈希；R6 加入页只把密码的问题放在密码栏下；R7 验证页失败后可重试；
+  R8 客户端地址都取自同一计数器，限流在测试中使用可推进的时间（`FixedTimeLimits`），哈希的断言按提交的密码而非全局计数；R9 `EmailRequest.entry` 的说明；
+  R10 `DictionaryRegistryIT` 的缓存竞争以种子港口字典上的通知作栅栏（单独提交）。
+
+与计划的出入（都很小）：
+- 流程是七个：找回密码的申请与确认各一个，验证另有试运行的 `check`，匿名与已登录的重发共用 `SPONSOR_EMAIL_VERIFY_SEND`。
+- 平台有一个新迁移（V33，只加列），计划为"平台无新迁移"。
+- 链接在用户已禁用时也无效（同地址已改）；加入时入口须仍允许注册，注册角色须存在且启用，否则 422 `SIGN_UP_DISABLED`（对任何邮箱相同）。
+- 注册、重发、找回先检查请求的全部值再限流与运行流程；202 带 `Content-Length: 0`（openapi-fetch 据此不解析正文）。限流每类请求分开计数，使用链接也按地址限流。
+- `HashPasswordStep` 与 `RevokeSessionsStep` 的元数据加可选条件 `when`；新的阻塞步骤 `CurrentPasswordStep`；`TokenBucketLimiter` 与 `SignUpRateLimits` 带时钟的构造器公开（测试）。
+- 场景回放：步骤操作人的 `id` 可引用变量，操作人可声明 `mfa: true`，场景可带 `properties`，07 §3.1 已写明。
+- `Customer.blocked` 可为空（空即未封禁）；另建 `user_id` 部分索引供守卫预读。
+- `SignInEntryIT`、`OidcEntryIT` 用名为 `portal` 的测试入口，补了属性覆盖其注册设置；`PlatformCheckIT` 断言预期的一条警告（`CUSTOMER` 角色在空库中不存在）。示范的 `app-path` 为 `/`。
+- 登录页的外框抽到 `components/SignInFrame.tsx`；`/auth`、`/mail` 加入扩展不能占用的平台路径。
+
+**已知问题**：限流在内存中、按实例计数；找回密码与重发的两种情况仍有极小的耗时差（多写一条邮件消息），注册的新邮箱一方多写用户与角色分配；
+邮件关闭时注册的用户无法验证（启动告警）；被接管的预占者在此之前签发的访问令牌在有效期内仍可用（同 10 §2）；用户名即小写邮箱，未验证的用户也能以它登录到不要求验证的入口；
+**升级**：之前创建的账号（管理员设置的邮箱）在本人登录并验证邮箱之前不能找回密码、匿名重发也不发信，忘记密码时由管理员重设；
+示范的 `CUSTOMER` 角色是数据，需由管理员或演示脚本创建（未创建时注册为 422 `SIGN_UP_DISABLED`，启动告警）；`V33` 与其他并行阶段的平台迁移编号须在合并时协调。
+安全复审记下、暂不修改的（10 §15.6）：持有 `security.user.write` 的人可把受害人邮箱改成自己的，受害人若随后登录要求验证，攻击者即得到已验证的邮箱并可找回密码（二次验证保留；计划发送前向本人显示目标地址）；管理员改邮箱时 `verifiedEmail` 不清除，改回以前验证过的地址即重新算作已验证；16f 的自助关联外部身份实现时，接管须同时删除 `SecUserIdentity` 关联（已写入 16f）；`CurrentPasswordStep` 的错误密码只按客户端地址限流。
+复审后另修：`admin` 入口自己允许注册为启动错误（`SignInEntriesTest`）。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 

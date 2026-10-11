@@ -34,6 +34,13 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     public static final Pattern NAME = Pattern.compile("[A-Za-z0-9._:-]{1,100}");
     /** Names of parameters and token purposes: an identifier without underscores, which Markdown might take up. */
     public static final Pattern PARAM = Pattern.compile("[a-z][A-Za-z0-9]{0,39}");
+    /**
+     * Purposes of tokens (also their placeholders): as parameters, optionally with a namespace such as the platform's
+     * {@value #PLATFORM_PREFIX} ({@code jabiz.verify}), so that a token of one template is never taken for another's.
+     */
+    public static final Pattern TOKEN_PURPOSE = Pattern.compile("(?:[a-z][a-z0-9]{0,19}\\.)?[a-z][A-Za-z0-9]{0,39}");
+    /** Template names and token purposes of the platform's own mail; applications do not use it. */
+    public static final String PLATFORM_PREFIX = "jabiz.";
     /** The address of the application ({@code jabiz.mail.base-url}). */
     public static final String BASE_URL = "baseUrl";
     /** The signed link that turns this template off for the recipient (notifications only). */
@@ -48,13 +55,13 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         tokens = Collections.unmodifiableMap(new LinkedHashMap<>(tokens));
         Set<String> seen = new LinkedHashSet<>();
         for (String param : params) {
-            requireName(name, "parameter", param);
+            requireName(name, "parameter", param, PARAM);
             if (!seen.add(param)) {
                 throw new IllegalArgumentException("Mail template " + name + " declares " + param + " twice");
             }
         }
         for (Map.Entry<String, Duration> token : tokens.entrySet()) {
-            requireName(name, "token purpose", token.getKey());
+            requireName(name, "token purpose", token.getKey(), TOKEN_PURPOSE);
             if (!seen.add(token.getKey())) {
                 throw new IllegalArgumentException("Mail template " + name + " declares " + token.getKey()
                     + " twice");
@@ -67,10 +74,10 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         }
     }
 
-    private static void requireName(String template, String what, String value) {
-        if (value == null || !PARAM.matcher(value).matches()) {
+    private static void requireName(String template, String what, String value, Pattern pattern) {
+        if (value == null || !pattern.matcher(value).matches()) {
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template
-                + " must match " + PARAM.pattern());
+                + " must match " + pattern.pattern());
         }
         if (BASE_URL.equals(value) || UNSUBSCRIBE_URL.equals(value)) {
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template

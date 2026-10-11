@@ -1,5 +1,6 @@
-import { PaperClipOutlined } from '@ant-design/icons'
-import { Button, Image, Typography } from 'antd'
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Spinner, UI_SCOPE } from '@jabiz/ui'
+import { Maximize2, Paperclip } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { previewVariant } from '../api/files'
 import { downloadFile, useFileUrl } from './fileContent'
@@ -12,26 +13,78 @@ interface Props {
   width: number
 }
 
-/** An image as a thumbnail, anything else as a download button. */
+/** The width an enlarged image is loaded for. */
+const ENLARGED_WIDTH = 1024
+
+/** The enlarged image, loaded while the dialog is open and released when it closes. */
+function Enlarged({ fileId, field }: { fileId: string; field: FileFieldMeta }) {
+  const { t } = useTranslation()
+  const { url, failed } = useFileUrl(fileId, previewVariant(field.variants, ENLARGED_WIDTH))
+  if (failed) return <p className="text-muted-foreground text-sm">{t('file.previewFailed')}</p>
+  if (!url) return <Spinner label={t('app.loading')} showLabel />
+  return <img src={url} alt={t('file.preview')} className="max-h-[75vh] w-full object-contain" />
+}
+
+/**
+ * An image as a thumbnail that opens larger in a dialog, anything else as a download button. The content is fetched
+ * with the session and shown through an object URL that is released when the preview goes (14 section 5).
+ */
 export default function FilePreview({ fileId, field, width }: Props) {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
   const isImage = field.image === true
   const { url, failed } = useFileUrl(isImage ? fileId : undefined, isImage ? previewVariant(field.variants, width) : undefined)
   if (!isImage) {
     return (
       <Button
-        size="small"
-        icon={<PaperClipOutlined />}
+        variant="outline"
+        size="sm"
         onClick={(event) => {
           event.stopPropagation()
           void downloadFile(fileId)
         }}
       >
+        <Paperclip aria-hidden />
         {t('file.download')}
       </Button>
     )
   }
-  if (failed) return <Typography.Text type="secondary">{t('file.previewFailed')}</Typography.Text>
-  if (!url) return <Typography.Text type="secondary">{t('app.loading')}</Typography.Text>
-  return <Image src={url} width={width} alt={t('file.preview')} />
+  if (failed) return <span className={`${UI_SCOPE} text-muted-foreground text-sm`}>{t('file.previewFailed')}</span>
+  if (!url) return <span className={`${UI_SCOPE} text-muted-foreground text-sm`}>{t('app.loading')}</span>
+  return (
+    <>
+      {/* The image is not inside the button: a button's content is not exposed as an image. */}
+      <span className={`${UI_SCOPE} inline-flex items-end gap-1`}>
+        <img
+          src={url}
+          width={width}
+          alt={t('file.preview')}
+          className="cursor-zoom-in rounded-sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            setOpen(true)
+          }}
+        />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t('file.enlarge')}
+          onClick={(event) => {
+            event.stopPropagation()
+            setOpen(true)
+          }}
+        >
+          <Maximize2 aria-hidden />
+        </Button>
+      </span>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-3xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{t('file.preview')}</DialogTitle>
+          </DialogHeader>
+          {open && <Enlarged fileId={fileId} field={field} />}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }

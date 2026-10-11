@@ -49,6 +49,11 @@ public final class ScenarioContexts {
     }
 
     public static Started start(Class<?> application) {
+        return start(application, Map.of());
+    }
+
+    /** As above, with configuration of the scenario's own ({@code properties}), which wins over the application's. */
+    public static Started start(Class<?> application, Map<String, String> extra) {
         PostgresTestDatabase db = PostgresTestDatabase.get();
         String schema = "sc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         Map<String, Object> properties = new LinkedHashMap<>();
@@ -65,6 +70,7 @@ public final class ScenarioContexts {
         properties.put("spring.main.banner-mode", "off");
         // Replays upload nothing; the application only needs a storage directory to start with its file policies.
         properties.put("jabiz.files.local.root", EMPTY_FILES_ROOT.toString());
+        properties.putAll(extra);
         try {
             ConfigurableApplicationContext context = new SpringApplicationBuilder(application)
                 .web(WebApplicationType.NONE)

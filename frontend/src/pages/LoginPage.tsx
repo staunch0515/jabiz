@@ -1,114 +1,22 @@
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  cn,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Separator,
-  Spinner,
-  UI_SCOPE,
-  useForm,
-} from '@jabiz/ui'
+import { Alert, AlertDescription, Button, Separator, useForm } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { CircleCheck, Info, KeyRound, LockKeyhole, TriangleAlert, User, type LucideIcon } from 'lucide-react'
-import { useId, useState, type ComponentProps, type ReactNode } from 'react'
+import { CircleCheck, Info, KeyRound, LockKeyhole, TriangleAlert, User } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { lastUserName, useAuth, type SignInStep } from '../auth/AuthContext'
 import { startProviderSignIn } from '../auth/oidc'
 import MfaEnrollment from '../components/MfaEnrollment'
+import { SignInField, SignInFrame, SubmitButton } from '../components/SignInFrame'
 import { extension } from '../extension'
 import { homePath } from '../extension/registry'
-import { changeLanguage, languages, type Language } from '../i18n'
-import { LANGUAGE_NAMES } from '../i18n/languages'
 
 type Step =
   | { kind: 'password'; notice?: 'enrolled' }
   | { kind: 'code'; challenge: string }
   | { kind: 'enroll'; challenge: string }
-
-/** A text field of the sign-in form: an icon, the placeholder as its name, and its error under it. */
-function SignInField({
-  icon: Icon,
-  error,
-  ...input
-}: { icon: LucideIcon; error?: string } & ComponentProps<'input'>) {
-  const errorId = useId()
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="relative">
-        <Icon aria-hidden className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          {...input}
-          aria-label={input.placeholder}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          className="h-10 pl-9"
-        />
-      </div>
-      {error && (
-        <p id={errorId} className="text-destructive text-sm">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** The frame of every step: the application's name, the step's title and the language choice. */
-function SignInFrame({ subtitle, children, testId }: { subtitle: string; children: ReactNode; testId?: string }) {
-  const { t, i18n } = useTranslation()
-  return (
-    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20')}>
-      <Card className="w-full max-w-sm" data-testid={testId}>
-        <CardHeader className="text-center">
-          <CardTitle>
-            <h1 className="text-2xl font-semibold tracking-tight">{t('app.title')}</h1>
-          </CardTitle>
-          <CardDescription>{subtitle}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">{children}</CardContent>
-      </Card>
-      {languages.length > 1 && (
-        <div className="mt-4">
-          <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
-            <SelectTrigger size="sm" aria-label={t('app.language')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languages.map((lang) => (
-                <SelectItem key={lang} value={lang} lang={lang}>
-                  {LANGUAGE_NAMES[lang]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </main>
-  )
-}
-
-function SubmitButton({ busy, children }: { busy: boolean; children: ReactNode }) {
-  return (
-    <Button type="submit" size="lg" className="w-full" disabled={busy} aria-busy={busy || undefined}>
-      {busy && <Spinner className="text-current" />}
-      {children}
-    </Button>
-  )
-}
 
 /** The second step: a code from the authenticator, or a recovery code. */
 function CodeStep({ onVerify, onBack, error }: { onVerify(code: string): Promise<void>; onBack(): void; error: string | null }) {
@@ -288,6 +196,11 @@ export default function LoginPage() {
         />
         <SubmitButton busy={form.formState.isSubmitting}>{t('login.submit')}</SubmitButton>
       </form>
+      <Button variant="link" asChild className="self-center">
+        <Link to="/auth/password-reset" data-testid="forgot-password">
+          {t('login.forgotPassword')}
+        </Link>
+      </Button>
       {(providers.data ?? []).length > 0 && (
         <>
           <div className="text-muted-foreground flex items-center gap-3 text-sm">

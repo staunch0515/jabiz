@@ -137,6 +137,24 @@ class ScenarioParserTest {
     }
 
     @Test
+    void anActorMayHavePassedASecondFactorAndNameASavedUser() {
+        Scenario scenario = Scenario.parse("""
+            name: X
+            properties: { jabiz.some.flag: true }
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin, permissions: ["*"], mfa: true }
+            steps:
+              - process: P@latest
+                actor: { id: "${hana}", permissions: [p] }
+            """, "x.yml");
+        assertThat(scenario.actor().mfa()).isTrue();
+        assertThat(scenario.properties()).containsExactly(java.util.Map.entry("jabiz.some.flag", "true"));
+        assertThat(((Scenario.ProcessStep) scenario.steps().getFirst()).actor())
+            .isEqualTo(new Scenario.Actor("${hana}", null, Set.of(), Set.of("p")));
+        assertThat(((Scenario.ProcessStep) scenario.steps().getFirst()).actor().mfa()).isFalse();
+    }
+
+    @Test
     void unknownKeysAndMalformedStepsAreErrors() {
         String header = "name: X\nclock: 2026-01-01T00:00:00Z\nactor: { id: a }\n";
         assertThatThrownBy(() -> Scenario.parse(header + "steps:\n  - expect: { query: q, rowz: 1 }\n", "x.yml"))

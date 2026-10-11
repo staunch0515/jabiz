@@ -75,6 +75,9 @@ public class SecurityEntities {
         // the processes that prove the mail box only. The address is verified while it equals the current one
         // regardless of case, so changing the address ends its verification.
         eb.field("verifiedEmail", f -> f.physicalColumn("verified_email").asText(320).processOnly());
+        // The address the user registered themselves with (section 15.7), written by self-registration only: while it
+        // is still the current address and none was ever verified, the account counts as possibly pre-claimed.
+        eb.field("registeredEmail", f -> f.physicalColumn("registered_email").asText(320).processOnly());
         eb.field("emailVerifiedAt", f -> f.physicalColumn("email_verified_at").asTemporal(TemporalRole.EVENT_TIME)
             .processOnly());
         eb.unique("uk_sec_user_name", "userName");

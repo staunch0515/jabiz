@@ -52,7 +52,7 @@ export default defineExtension({
 })
 ```
 
-- 路由是绝对路径，不能用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；写错时应用启动即报告全部问题。
+- 路由是绝对路径，不能用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/auth…`（验证邮箱、加入、找回密码的落地页）等平台路径；写错时应用启动即报告全部问题。
 - `permission` 只决定菜单项是否显示；页面的每个请求都由服务端检查。
 - 文案在命名空间 `app`：页面里 `const { t } = useTranslation(EXTENSION_NAMESPACE)`。
 
@@ -71,6 +71,12 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
 - 写数据：只经流程（`runProcess`）或数据视图接口；失败时 `ApiError` 带服务端的全部违规（`display`、`forField`）。
 - 通用组件：`EntityFormDrawer`、`ReferenceSelect`、`FieldErrors`、`FilePreview`、`MarkdownView`、`ApprovalPanel`（批准 / 驳回一个审批请求）、`DocumentPanel`（一个对象的单据：已签发的副本、预览、签发，docs/design/22-documents.md §6）；
   我的待办用 `useMyTasks()`（18 §5.3）。
+  阶段 15b-2 起这四个通用组件不再依赖 antd：`EntityFormDrawer` 的 props 不变，是右侧的 Radix 模态 `Sheet`（不再需要外面包 antd 的 `App`；
+  保存成功经 `notify` 提示，需要应用根部的 `Toaster`，平台外壳已有），表单值由 react-hook-form 保存，校验仍只走元数据的规则；
+  `ReferenceSelect` 是远程 `Combobox`（`role="combobox"`，选项 `role="option"`），新增 `id`、`aria-label` / `aria-labelledby` / `aria-describedby` /
+  `aria-invalid` / `aria-required` 与 `placeholder`（以 `<Label htmlFor={id}>` 命名）；`FieldErrors` 新增可选的 `id`（输入框以 `aria-describedby` 指向它），
+  每条违规仍带 `data-rule-code`，不再借用 antd 的类名；`FilePreview` 的图片点击（或旁边"放大预览"按钮）在 `Dialog` 中放大，非图片为下载按钮。
+  e2e 中原来按 antd 类名找的，改为 `getByTestId('entity-form')`（表单）、`getByRole('option')`（引用的选项）、`getByRole('alertdialog')`（确认）。
 - `@jabiz/ui` 的组合组件（阶段 15b-1 起，经 `@jabiz/admin` 一并导出）：`Combobox`（可搜索的选择，静态或远程）、`FilterBar`（列表上方的筛选：文本、选项、数值 / 时间 / 日期区间）、
   `FileUpload`（真实的文件输入，上传前查类型与大小）、`Timeline`、`DescriptionList`、`TagsInput`、`CopyButton`、`PageState`（加载 / 不存在 / 出错 / 警告）、`Spinner`；
   `DatePicker` / `DateTimePicker` 可以键入（应用区域的格式，ISO `YYYY-MM-DD` / 本地时间 `YYYY-MM-DD HH:mm:ss` 也可；失焦或 Enter 读取；无效时 `aria-invalid`、框下说明，

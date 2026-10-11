@@ -174,8 +174,16 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
     /** Dictionary items are temporal: a scheduled label takes effect with the clock, without an eviction. */
     @Test
     void scheduledChangesOfDatabaseDictionariesTakeEffectOnTime() {
+        // A fence: the notification of the insert below arrives whenever it does, and would evict the entry loaded
+        // after it. Notifications arrive in order, so once a later one for a probe dictionary has evicted the probe,
+        // the insert's has been handled too. The probe is the seeded ports, cached here: no test writes them, so no
+        // notification of theirs is pending.
+        assertThat(enabled(PORTS)).isNotEmpty();
+        assertThat(dictionaries.isCached(PORTS)).isTrue();
         execute("INSERT INTO sys_dict_item (dict_urn, item_code, labels) VALUES (?, 'KG', '{\"en\": \"Kilogram\"}')",
             units);
+        query("SELECT pg_notify(?, ?)::text AS sent", DictionaryRegistry.CHANNEL, PORTS);
+        awaitTrue(() -> !dictionaries.isCached(PORTS));
         assertThat(items(units, Locale.ENGLISH)).extracting(DictItem::label).containsExactly("Kilogram");
         Map<String, Object> item = query("SELECT dict_item_id, version_no FROM sys_dict_item_version WHERE dict_urn = ?",
             units).getFirst();

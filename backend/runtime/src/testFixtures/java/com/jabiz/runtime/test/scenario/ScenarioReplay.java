@@ -66,7 +66,7 @@ public final class ScenarioReplay {
 
     /** Replays the scenario in a fresh context and returns what it produced. */
     public static ScenarioRunner.Result replay(Class<?> application, Scenario scenario) {
-        try (ScenarioContexts.Started started = ScenarioContexts.start(application)) {
+        try (ScenarioContexts.Started started = ScenarioContexts.start(application, scenario.properties())) {
             return new ScenarioRunner(started.context()).run(scenario);
         }
     }

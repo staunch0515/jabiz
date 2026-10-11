@@ -75,8 +75,12 @@ export function DecimalInput({
 }
 
 export interface MoneyInputProps extends DecimalInputProps {
-  /** Digits after the point of the currency (SemanticKind.Monetary's scale): typing more is refused. */
-  scale: number
+  /**
+   * Digits after the point of the currency (SemanticKind.Monetary's scale): typing more is refused. Absent: any
+   * number of digits may be typed and none are added, for a form that reports a wrong scale as the rule's violation
+   * (MONETARY_SCALE) rather than refusing the keys.
+   */
+  scale?: number
   /** ISO 4217 code shown at the end of the field; or {@link unit}. */
   currency?: string
   /** A unit that is no currency ("Kudos", decision D34 item 4). */

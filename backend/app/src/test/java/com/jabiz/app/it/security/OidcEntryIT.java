@@ -22,7 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * asked on this path too.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-    properties = "jabiz.security.entries.portal.accepted-roles=IT_OIDC_CUSTOMER")
+    properties = {"jabiz.security.entries.portal.accepted-roles=IT_OIDC_CUSTOMER",
+        // The application registers customers at its portal; this test uses the name for an entry of its own.
+        "jabiz.security.entries.portal.self-registration=false", "jabiz.security.entries.portal.registration-roles=",
+        "jabiz.security.entries.portal.require-verified-email=false"})
 class OidcEntryIT extends SecurityItSupport {
 
     static final TestOidcProvider IDP = new TestOidcProvider();

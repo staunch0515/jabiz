@@ -27,6 +27,12 @@ public final class SecurityPermissions {
      */
     public static final String SIGN_IN = "auth.sign-in";
     /**
+     * Declared by the processes of self-registration, address verification and password reset (decision D36), which
+     * run only through {@code /api/auth/register}, {@code /api/auth/join}, {@code /api/auth/verify-email/**},
+     * {@code /api/auth/account/verify-email} and {@code /api/auth/password-reset/**}; granted to no role.
+     */
+    public static final String SIGN_UP = "auth.sign-up";
+    /**
      * Linking provider accounts to users (the SecUserIdentity dataset): a link lets its subject sign in as the user, so
      * it is a credential of its own, apart from {@link #USER_WRITE} (docs/design/10-security.md section 12).
      */

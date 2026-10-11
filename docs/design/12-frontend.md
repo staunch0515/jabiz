@@ -21,7 +21,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   packages/ui/              `@jabiz/ui`（第 12 节）：shadcn 组件、组合组件、theme.css；README.md 记录对上游的修改与升级方法
   src/api/ auth/ meta/…     迁入两个包的模块在原位置只重新导出（供原有页面与测试的 mock 使用，15b–15d 逐步去掉）
   src/meta/                 适配层（纯函数）：kinds、listQuery、columns、entityForm、validation、decimal、processForm、history
-  src/components/ pages/    通用页面：目录、列表、表单抽屉、历史、流程
+  src/components/ pages/    通用页面：目录、列表、表单（右侧的 Sheet）、历史、流程
   src/extension/            应用扩展的约定与加载（第 9 节）
   src/lib/index.ts          `@jabiz/admin`：扩展可用的全部内容（第 9 节）
   scripts/                  扩展的解析与检查（ext.mjs、extension.ts、extension-lint.mjs）；应用 SPA 的版本检查（app-check.mjs）
@@ -143,16 +143,25 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
 | `/login/oidc` | 身份提供方的回调（10 §12）：不需要已登录；显示身份提供方或服务端的拒绝 |
+| `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；点击后才先问 `check`、再提交（可预占的账号要当前密码或新密码），成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答），其他失败可重试 |
+| `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
+| `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
 | `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
-- 以 `@jabiz/ui` 构建的页面（15b-1 起：登录、单点登录回调、两个目录、流程表单、历史）用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：
-  数据 › 实体 › 历史、流程 › 流程名），路由带 `handle: { ui: 'jabiz' }`，外壳据此不再把它们固定为亮色。流程表单由 `SchemaForm`（react-hook-form）生成：
+- 以 `@jabiz/ui` 构建的页面（15b-1 起：登录、单点登录回调、两个目录、流程表单、历史；15b-2 起：列表及其表单）用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：
+  数据 › 实体（› 历史）、流程 › 流程名），路由带 `handle: { ui: 'jabiz' }`，外壳据此不再把它们固定为亮色。
+  列表（`DatasetListPage`）：`DataTable` 远程分页（每页 10 / 20 / 50 / 100，缺省 20）、排序（列表视图的默认排序；只有白名单内、且遮蔽字段只对持有权限者可排序；
+  每列先升序、再降序、再取消）与 `FilterBar`（白名单字段，按语义类型给文本、选项、数值 / 时间 / 日期区间；不含敏感字段，遮蔽字段只给持有权限者），
+  新的查询或排序回到第 1 页；请求由 TanStack Query 发出，翻页时保留上一页；操作列固定在右侧。列与筛选由 `meta/dataColumns.tsx` 生成，单元格（`meta/cells.ts`
+  的 `renderCell`：引用显示名、多语言回退、文件缩略图、遮蔽值"显示"）与旧的 ProTable 列（`meta/columns.ts`，报表页用到 15c）共用。
+  表单（`EntityFormDrawer`）是右侧的模态 `Sheet`，值由 react-hook-form 保存（`toFormValue` 给出文本：时间为存储的 ISO 时刻、日期为 `YYYY-MM-DD`），
+  校验仍只走 `meta/validation.ts`；字段的问题以 `aria-describedby` 关联到输入框。子实体在父实体的 `Sheet` 之上再开一个 `Sheet`。流程表单由 `SchemaForm`（react-hook-form）生成：
   前端只检查必填与 `pattern`（纯函数 `checkInputs`），数字输入以 JSON 数字发送，必填的布尔值默认"否"；历史页的时间点（`asOf` / `knownAt`）写在地址中。
 - 实体上的操作（16 §3）：流程目录中 `actsOn` 指向该实体的流程，在列表行与详情中显示为按钮（`when` 只是显示提示）；打开的流程表单中主键已填且只读，
   输入只有主键时确认后直接执行。
-- 详情抽屉中的子实体列表（16 §4）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
+- 详情（表单 `Sheet`）中的子实体列表（16 §4，每页 5 条）：由 `Reference` 与子实体默认视图的列表视图 `filters` 推导，新建时引用字段预填。
 - `processOnly` 字段在表单中只读，新建与修改都不发送（16 §5）。
 - 没有写权限时，行上的"查看"以只读方式打开详情（显示实体上的操作与子实体列表）。
 - 按权限显示操作：新建 / 编辑 / 删除看 `canWrite`，历史看 `temporal && allowTimeTravel`，操作详情与撤销看当前操作人的权限。
@@ -169,7 +178,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 
 ## 8. 测试
 
-- Vitest：适配层每个模块（`decimal`、`validation`、`kinds`、`listQuery`、`entityForm`、`processForm`、`history`、`problem`、`i18nText`）、
+- Vitest：适配层每个模块（`decimal`、`validation`、`kinds`、`listQuery`、`dataColumns`、`entityForm`、`processForm`、`history`、`problem`、`i18nText`）、
   共享校验用例、历史时间线组件；多语言控件、Markdown 预览（不渲染原始 HTML）、引用下拉、行操作按钮的显示条件（16 §8）。
 - Playwright（`e2e/`，对运行中的 jar，`E2E_BASE_URL` 默认 `http://localhost:8080`，管理员 `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`，
   可用 `E2E_CHROMIUM` 指定已安装的 Chromium）：登录与失败、动态菜单与三种语言、只读用户看不到写操作；`Carrier` 列表（筛选、排序、区间）；
@@ -179,7 +188,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 - 二次验证（阶段 14g-1）：`src/api/stepUp.test.ts`（403 `MFA_REQUIRED` 时询问并以新令牌重发、其他 403 与取消原样返回）、`src/auth/StepUp.test.tsx`、
   `src/auth/useIdleLock.test.tsx`、`src/components/MfaEnrollment.test.tsx`、`src/pages/LoginPage.test.tsx`（含提供方按钮与单点登录后的第二步）、
   `src/pages/OidcCallbackPage.test.tsx`、`src/auth/oidc.test.ts`（阶段 14g-2）；端到端 `e2e/mfa.spec.ts`
-  （安全设置中绑定、改价时按要求输入验证码、用恢复码登录；CI 以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 运行，共用的管理员没有二次验证）。
+  （安全设置中绑定、改价时按要求输入验证码、用恢复码登录；CI 以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 运行，共用的管理员没有二次验证；并以 `JABIZ_ADMIN_ROLES=*`、`JABIZ_PORTAL_SELF_REGISTRATION=false` 运行，测试以自己的角色登录后台）。
 - 按权限显示明文、数据期限、访问审查（阶段 14g-3）：`src/meta/columns.test.ts`（遮蔽字段的筛选与排序只对持有权限者开放、"显示"按钮）、
   `src/meta/entityForm.test.ts`（没有权限时只读）、`src/components/MaskedValue.test.tsx`、`src/pages/AccessReviewPage.test.tsx`、`src/pages/AuditPage.test.tsx`（明文显示页签）。
 - 语言与区域（第 10 节）：`src/i18n/languages.test.ts`、`src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
@@ -201,7 +210,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | 项 | 规定 |
 |---|---|
 | 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 `@jabiz/ui`；共存期间也是一份 antd） |
-| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；不能是 index 路由（用 `home`） |
+| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/auth…`、`/mail…` 等平台路径（`PLATFORM_PATHS`）；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
@@ -240,7 +249,7 @@ jabizApp {
 
 | 方面 | 做法 |
 |---|---|
-| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表、新建表单、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
+| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
 | 对比度 | `App.tsx` 的 `ACCESSIBLE_THEME`：主色 `#0958d9`、错误色 `#cf1322`、说明与三级文字（及随之的图标色）`rgba(0,0,0,0.65)`、成功色 `#237804`、警告色 `#874d00`（其浅色背景与边框保持 Ant Design 的默认值，否则成功、警告标签的文字只有 2.7:1）、表格的文字空状态 `rgba(0,0,0,0.65)`（Ant Design 默认分别为 4.1、3.3、3.4、2.3、1.8、1.8:1）；预置标签（green、orange、gold、red、blue）的文字在 `index.css` 中加深一档。都 ≥ 4.5:1 |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `components/expandIcon` 的展开按钮，带"展开行 / 收起行"的名称（Ant Design 的按钮在这些 ProTable 中没有名称）；只给有 `expandedRowRender` 的表格，否则表格会被当作树。表单项中直接使用的 antd `Select` 换成 `components/AccessibleSelect`（去掉表单项给的、被放在外层元素上的 `aria-required`）；ProForm 的选择字段没有这个问题 |
 | 扩展 | 扩展的页面在同一个 `ConfigProvider` 下，主题自动适用；扩展的 e2e 以平台前端的依赖运行时可直接引用 `@axe-core/playwright`，规则集与上表相同 |

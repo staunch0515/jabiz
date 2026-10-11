@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * Checks a new password against the password rules and replaces it in the context by its BCrypt hash (blocking:
@@ -22,11 +23,17 @@ public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata,
      * @param field       field name reported with violations
      * @param optional    whether a missing password is allowed (the hash is then null: a user who signs in through
      *                    an identity provider only, docs/design/10-security.md section 12)
+     * @param when        whether to hash at all (null: always); otherwise the password is removed and the hash is null
      */
-    public record Metadata(String passwordKey, String hashKey, String field, boolean optional) {
+    public record Metadata(String passwordKey, String hashKey, String field, boolean optional,
+        Predicate<ProcessContext> when) {
 
         public Metadata(String passwordKey, String hashKey, String field) {
             this(passwordKey, hashKey, field, false);
+        }
+
+        public Metadata(String passwordKey, String hashKey, String field, boolean optional) {
+            this(passwordKey, hashKey, field, optional, null);
         }
 
         public Metadata {
@@ -46,7 +53,8 @@ public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata,
     public void run(Metadata metadata, ProcessContext ctx) {
         String password = ctx.get(metadata.passwordKey(), String.class);
         ctx.put(metadata.passwordKey(), null);
-        if (metadata.optional() && (password == null || password.isEmpty())) {
+        if ((metadata.when() != null && !metadata.when().test(ctx))
+            || (metadata.optional() && (password == null || password.isEmpty()))) {
             ctx.put(metadata.hashKey(), null);
             return;
         }

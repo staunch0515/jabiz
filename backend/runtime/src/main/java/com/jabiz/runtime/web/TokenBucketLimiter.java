@@ -27,7 +27,8 @@ public final class TokenBucketLimiter {
         this(capacity, period, maxKeys, System::nanoTime);
     }
 
-    TokenBucketLimiter(int capacity, Duration period, int maxKeys, LongSupplier nanoTime) {
+    /** As above, timed by {@code nanoTime} (tests). */
+    public TokenBucketLimiter(int capacity, Duration period, int maxKeys, LongSupplier nanoTime) {
         if (capacity <= 0 || maxKeys <= 0 || period.isNegative() || period.isZero()) {
             throw new IllegalArgumentException("capacity, period and maxKeys must be positive");
         }
