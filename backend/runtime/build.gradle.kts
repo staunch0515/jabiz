@@ -68,4 +68,6 @@ dependencies {
     testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
     // Tests of what the platform's observations are tagged with (TestObservationRegistry).
     testImplementation("io.micrometer:micrometer-observation-test")
+    // TracingUnderBlockHoundTest drives the span exporter directly (version from the Spring Boot BOM).
+    testImplementation("io.opentelemetry:opentelemetry-sdk-trace")
 }
