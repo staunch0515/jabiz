@@ -41,7 +41,7 @@ abstract class PublicationItSupport extends ContentItSupport {
 
     @Autowired
     @Qualifier("qbPublicationTickJob")
-    JobDefinition<PublicationLifecycle.TickInput> tick;
+    JobDefinition<PublicationLifecycle.PublicationRef> tick;
 
     static final String SPONSOR_A = "sponsor-a";
     static final String SPONSOR_B = "sponsor-b";
@@ -188,8 +188,13 @@ abstract class PublicationItSupport extends ContentItSupport {
 
     /** Runs the minute's job as the scheduler would at the clock's time. */
     JobRunner.Outcome runTick() {
+        return tickRun().outcome();
+    }
+
+    /** Runs the minute's job at the clock's time; its outcome and, per item, what became of them. */
+    JobRunner.JobRun tickRun() {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
-        return jobs.run(tick, clock.instant());
+        return jobs.execute(tick, clock.instant());
     }
 
     /** The publication's current row. */

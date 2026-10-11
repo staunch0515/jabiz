@@ -57,7 +57,7 @@ public final class QbPermissions {
     public static final String PUBLICATION_WRITE = "qb.publication.write";
     /**
      * The processes only the platform runs, as the system: moving publications on as time passes
-     * ({@code QB_PUBLICATION_TICK}, {@code QB_PUBLICATION_ADVANCE}, run by the job) and applying a review's result
+     * ({@code QB_PUBLICATION_ADVANCE}, run for each item of the minute's job) and applying a review's result
      * ({@code QB_PUBLICATION_APPROVAL_RESULT}, run for the approval events). They are {@code internal()}: only the
      * system runs them (platform decision D41), whatever a caller's permissions. Granted to no role besides.
      */

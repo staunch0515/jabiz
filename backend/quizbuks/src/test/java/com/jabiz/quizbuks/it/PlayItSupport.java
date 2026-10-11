@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.play.AttemptFinishing;
 import com.jabiz.quizbuks.play.PublicationStats;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
@@ -43,6 +44,10 @@ abstract class PlayItSupport extends AccountItSupport {
     @Autowired
     @Qualifier("qbPublicationStatsJob")
     JobDefinition<PublicationStats.RefreshInput> statsJob;
+
+    @Autowired
+    @Qualifier("qbAttemptExpireJob")
+    JobDefinition<AttemptFinishing.ExpireInput> expireJob;
 
     @BeforeEach
     void players() {
@@ -272,6 +277,12 @@ abstract class PlayItSupport extends AccountItSupport {
     JobRunner.Outcome runStats(Instant at) {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         return jobRunner.run(statsJob, at);
+    }
+
+    /** Runs the expiry job at {@code at} as the scheduler would; its outcome and item counts. */
+    JobRunner.JobRun runExpire(Instant at) {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        return jobRunner.execute(expireJob, at);
     }
 
     /** A feed query as a taker of the country: its items. */

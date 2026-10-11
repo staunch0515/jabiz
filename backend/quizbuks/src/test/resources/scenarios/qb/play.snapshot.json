@@ -1,6 +1,6 @@
 {
   "scenario" : "Answering",
-  "asOf" : "2026-10-01T02:08:00Z",
+  "asOf" : "2026-10-01T02:14:00Z",
   "entities" : {
     "QbAttempt" : [ {
       "attemptId" : "#uuid:1",
@@ -50,6 +50,30 @@
       "rewardPaidAt" : "2026-10-01T02:08:00Z",
       "ledgerTransactionId" : "#uuid:10",
       "version" : 3
+    }, {
+      "attemptId" : "#uuid:11",
+      "userId" : "#uuid:12",
+      "publicationId" : "#uuid:3",
+      "sponsorId" : "#uuid:4",
+      "versionId" : "#uuid:5",
+      "startedAt" : "2026-10-01T02:08:00Z",
+      "deadline" : "2026-10-01T02:13:00Z",
+      "status" : "EXPIRED",
+      "currentIndex" : "1",
+      "optionOrder" : "[[1,2],[1,2]]",
+      "answers" : "[[1],[]]",
+      "result" : "[{\"correct\":[1],\"earned\":2,\"no\":1,\"points\":2,\"selected\":[1]},{\"correct\":[1],\"earned\":0,\"no\":2,\"points\":3,\"selected\":[]}]",
+      "submittedAt" : "2026-10-01T02:14:00Z",
+      "score" : "2",
+      "fullScore" : "5",
+      "passed" : false,
+      "tierId" : "#uuid:13",
+      "reward" : "0",
+      "fee" : null,
+      "rewardStatus" : "NONE",
+      "rewardPaidAt" : null,
+      "ledgerTransactionId" : null,
+      "version" : 3
     } ],
     "QbPublicationCard" : [ {
       "publicationId" : "#uuid:3",
@@ -72,17 +96,18 @@
       "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-8000-0000000002ea\",\"toScore\":2},{\"fromScore\":3,\"reward\":\"10\",\"tierId\":\"01a0f4f9-b280-7000-8000-0000000002eb\",\"toScore\":4},{\"fromScore\":5,\"reward\":\"100\",\"tierId\":\"01a0f4f9-b280-7000-8000-0000000002ec\",\"toScore\":5}]",
       "sponsorCountry" : null,
       "wentOnAt" : "2026-10-01T01:00:00Z",
+      "endedAt" : null,
       "version" : 3
     } ],
     "QbPublicationCounter" : [ {
       "publicationId" : "#uuid:3",
-      "starts" : "2",
-      "completions" : "2",
+      "starts" : "3",
+      "completions" : "3",
       "passes" : "2",
       "winners" : "2",
       "reserved" : "0",
       "spent" : "200",
-      "version" : 5
+      "version" : 7
     } ],
     "QbPublicationStats" : [ {
       "publicationId" : "#uuid:3",
@@ -94,14 +119,14 @@
       "version" : 1
     } ],
     "QbPublicationView" : [ {
-      "viewId" : "#uuid:11",
+      "viewId" : "#uuid:14",
       "userId" : "#uuid:2",
       "publicationId" : "#uuid:3",
       "firstViewedAt" : "2026-10-01T01:05:00Z",
       "version" : 1
     } ],
     "QbWallet" : [ {
-      "walletId" : "#uuid:12",
+      "walletId" : "#uuid:15",
       "ownerId" : "#uuid:4",
       "kind" : "SPONSOR",
       "balance" : "100",
@@ -111,7 +136,7 @@
       "version" : 5
     } ],
     "LedgerTransaction" : [ {
-      "transactionId" : "#uuid:13",
+      "transactionId" : "#uuid:16",
       "bookingTime" : "2026-10-01T01:00:00Z",
       "description" : "Development credit",
       "reference" : null,
@@ -135,7 +160,7 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "transactionId" : "#uuid:14",
+      "transactionId" : "#uuid:17",
       "bookingTime" : "2026-10-01T02:08:00Z",
       "description" : "Development credit",
       "reference" : null,
@@ -160,9 +185,9 @@
       "processSeqId" : "#op:4"
     } ],
     "LedgerEntry" : [ {
-      "entryId" : "#uuid:15",
-      "transactionId" : "#uuid:13",
-      "accountId" : "#uuid:16",
+      "entryId" : "#uuid:18",
+      "transactionId" : "#uuid:16",
+      "accountId" : "#uuid:19",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -179,9 +204,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "entryId" : "#uuid:17",
-      "transactionId" : "#uuid:13",
-      "accountId" : "#uuid:18",
+      "entryId" : "#uuid:20",
+      "transactionId" : "#uuid:16",
+      "accountId" : "#uuid:21",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",
@@ -198,9 +223,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "entryId" : "#uuid:19",
+      "entryId" : "#uuid:22",
       "transactionId" : "#uuid:7",
-      "accountId" : "#uuid:18",
+      "accountId" : "#uuid:21",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -217,9 +242,9 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "entryId" : "#uuid:20",
+      "entryId" : "#uuid:23",
       "transactionId" : "#uuid:7",
-      "accountId" : "#uuid:21",
+      "accountId" : "#uuid:24",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",
@@ -236,9 +261,9 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "entryId" : "#uuid:22",
-      "transactionId" : "#uuid:14",
-      "accountId" : "#uuid:16",
+      "entryId" : "#uuid:25",
+      "transactionId" : "#uuid:17",
+      "accountId" : "#uuid:19",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "200.0000",
@@ -255,9 +280,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "entryId" : "#uuid:23",
-      "transactionId" : "#uuid:14",
-      "accountId" : "#uuid:18",
+      "entryId" : "#uuid:26",
+      "transactionId" : "#uuid:17",
+      "accountId" : "#uuid:21",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "200.0000",
@@ -274,9 +299,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "entryId" : "#uuid:24",
+      "entryId" : "#uuid:27",
       "transactionId" : "#uuid:10",
-      "accountId" : "#uuid:18",
+      "accountId" : "#uuid:21",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -293,9 +318,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "entryId" : "#uuid:25",
+      "entryId" : "#uuid:28",
       "transactionId" : "#uuid:10",
-      "accountId" : "#uuid:21",
+      "accountId" : "#uuid:24",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",
