@@ -1,0 +1,71 @@
+{
+  "scenario" : "Self-registration",
+  "asOf" : "2026-05-01T01:00:00Z",
+  "entities" : {
+    "SecUser" : [ {
+      "userId" : "#uuid:1",
+      "userName" : "mei@example.com",
+      "displayName" : "Mei",
+      "tenantId" : null,
+      "enabled" : true,
+      "email" : "Mei@example.com",
+      "locale" : "ja",
+      "verifiedEmail" : null,
+      "registeredEmail" : "Mei@example.com",
+      "emailVerifiedAt" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "SecUserRole" : [ {
+      "userRoleId" : "#uuid:2",
+      "userId" : "#uuid:1",
+      "roleId" : "#uuid:3",
+      "dataFrom" : null,
+      "dataTo" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "MailMessage" : [ {
+      "messageId" : "#uuid:4",
+      "template" : "jabiz.auth.verify-email",
+      "category" : "TRANSACTIONAL",
+      "userId" : "#uuid:1",
+      "address" : "Mei@example.com",
+      "locale" : "ja",
+      "params" : "{\"entry\":\"portal\"}",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1",
+      "version" : 1
+    }, {
+      "messageId" : "#uuid:5",
+      "template" : "jabiz.auth.account-exists",
+      "category" : "TRANSACTIONAL",
+      "userId" : "#uuid:1",
+      "address" : "Mei@example.com",
+      "locale" : "ja",
+      "params" : "{\"entry\":\"portal\"}",
+      "createdTime" : "2026-05-01T01:00:00Z",
+      "processSeqId" : "#op:2",
+      "version" : 1
+    } ],
+    "MailAttempt" : [ {
+      "attemptId" : "#uuid:6",
+      "messageId" : "#uuid:4",
+      "attemptNo" : "1",
+      "outcome" : "SKIPPED",
+      "detail" : "MAIL_DISABLED",
+      "attemptedTime" : "2026-05-01T01:00:00Z"
+    }, {
+      "attemptId" : "#uuid:7",
+      "messageId" : "#uuid:5",
+      "attemptNo" : "1",
+      "outcome" : "SKIPPED",
+      "detail" : "MAIL_DISABLED",
+      "attemptedTime" : "2026-05-01T01:00:00Z"
+    } ]
+  }
+}

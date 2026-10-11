@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
  */
 public final class MailPlaceholders {
 
-    /** As {@code MessageTemplate}: {@code {name}}. */
-    static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*)}");
+    /** As {@code MessageTemplate}: {@code {name}}; token placeholders may carry a namespace ({@code {jabiz.verify}}). */
+    static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)}");
 
     private MailPlaceholders() {}
 

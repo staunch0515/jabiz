@@ -89,6 +89,18 @@ class MailChecksTest {
     }
 
     @Test
+    void applicationsStayOutOfThePlatformsNamespace() {
+        MailTemplate named = MailTemplate.define("jabiz.shop.news", t -> t.category(MailCategory.TRANSACTIONAL));
+        MailTemplate drawing = MailTemplate.define("t.reset", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token("jabiz.reset", Duration.ofHours(1)));
+        assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), named, drawing).check())
+            .extracting(CheckProblem::message)
+            .contains("is named in the platform's namespace jabiz., which applications do not use",
+                "draws tokens of purpose jabiz.reset, in the platform's namespace jabiz., which applications do not "
+                    + "use");
+    }
+
+    @Test
     void reportsATemplateDeclaredTwice() {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())
             .extracting(CheckProblem::message).containsExactly("is declared more than once");

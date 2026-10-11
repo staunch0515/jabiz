@@ -150,7 +150,7 @@ public final class ScenarioRunner {
                 Object output;
                 try {
                     output = runProcess(scenario, step, p.process(), ScenarioValues.resolveMap(p.input(), variables),
-                        p.actor());
+                        actor(p.actor(), variables));
                 } catch (AssertionError e) {
                     throw e;
                 } catch (Throwable e) {
@@ -213,7 +213,7 @@ public final class ScenarioRunner {
         Object output;
         try {
             output = runProcess(scenario, step, step.process(), ScenarioValues.resolveMap(step.input(), variables),
-                step.actor());
+                actor(step.actor(), variables));
         } catch (AssertionError e) {
             // The scenario itself is wrong (an unknown process, say): not a failure of the process.
             throw e;
@@ -286,6 +286,18 @@ public final class ScenarioRunner {
                 }
             }
         }
+    }
+
+    /**
+     * A step's actor whose id may name a saved variable ({@code id: "${customer}"}), for a step run as a user that an
+     * earlier step created; null stays null (the scenario's actor).
+     */
+    private static Scenario.Actor actor(Scenario.Actor actor, Map<String, Object> variables) {
+        if (actor == null || !actor.id().contains("${")) {
+            return actor;
+        }
+        return new Scenario.Actor(String.valueOf(ScenarioValues.resolve(actor.id(), variables)), actor.tenant(),
+            actor.roles(), actor.permissions(), actor.dataPeriod(), actor.mfa());
     }
 
     private Object runProcess(Scenario scenario, Scenario.Step step, String process, Map<String, Object> input,
@@ -392,7 +404,8 @@ public final class ScenarioRunner {
     private <T> T as(Scenario.Actor actor, Mono<T> pipeline) {
         RequestContext request = new RequestContext(actor.id(), actor.tenant(), Locale.ENGLISH, "scenario",
             // Not an entry point: a replayed actor's address counts as verified (docs/design/10-security.md section 15).
-            actor.roles(), actor.permissions(), null, actor.dataPeriod(), null, true);
+            actor.roles(), actor.permissions(), actor.mfa() ? clock.instant() : null, actor.dataPeriod(), null,
+            true);
         try {
             return pipeline.contextWrite(view -> RequestContexts.put(view, request)).block();
         } catch (RuntimeException e) {

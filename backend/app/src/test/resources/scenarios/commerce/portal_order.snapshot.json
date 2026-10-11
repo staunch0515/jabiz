@@ -1,0 +1,56 @@
+{
+  "scenario" : "Ordering in the customer portal",
+  "asOf" : "2026-05-01T01:00:00Z",
+  "entities" : {
+    "Customer" : [ {
+      "customerId" : "#uuid:1",
+      "customerCode" : "CUST-HANA",
+      "customerName" : "Hana",
+      "userId" : "#uuid:2",
+      "blocked" : true,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-05-01T01:00:00Z",
+      "createdTime" : "2026-05-01T01:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "SalesOrder" : [ {
+      "orderId" : "#uuid:3",
+      "orderNo" : "SO-2026-000001",
+      "customerCode" : "CUST-HANA",
+      "warehouseId" : "#uuid:4",
+      "orderedTime" : "2026-05-01T00:00:00Z",
+      "status" : "PLACED",
+      "totalAmount" : "1000",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "SalesOrderLine" : [ {
+      "orderLineId" : "#uuid:5",
+      "orderId" : "#uuid:3",
+      "lineNo" : "1",
+      "productId" : "#uuid:6",
+      "quantity" : "2",
+      "unitPrice" : "500",
+      "lineAmount" : "1000",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "StockLevel" : [ {
+      "stockLevelId" : "#uuid:7",
+      "warehouseId" : "#uuid:4",
+      "productId" : "#uuid:6",
+      "onHand" : "10",
+      "reserved" : "2",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ]
+  }
+}

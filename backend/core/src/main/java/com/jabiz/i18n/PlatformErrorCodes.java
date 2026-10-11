@@ -110,6 +110,11 @@ public final class PlatformErrorCodes {
     public static final String MAIL_NO_ADDRESS = "MAIL_NO_ADDRESS";
     /** A one-time token of a mail is unknown, expired, used, superseded or of another purpose (18 section 5.6). */
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
+    /**
+     * 422: the current password given to verify the address of an account that may have been registered by somebody
+     * else is wrong (docs/design/10-security.md section 15.7).
+     */
+    public static final String PASSWORD_INCORRECT = "PASSWORD_INCORRECT";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -159,6 +164,11 @@ public final class PlatformErrorCodes {
     public static final String EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
     /** An application's sign-in guard refused the sign-in after the credentials were found right (D36 item 6). */
     public static final String SIGN_IN_REFUSED = "SIGN_IN_REFUSED";
+    /**
+     * 422: the sign-in entry does not exist or does not let people register themselves, or its registration roles do
+     * not exist (decision D36 item 2). Which entries allow registration is no secret.
+     */
+    public static final String SIGN_UP_DISABLED = "SIGN_UP_DISABLED";
 
     // Files (docs/design/14-files.md): 400 unless noted
     public static final String FILE_TYPE_NOT_ALLOWED = "FILE_TYPE_NOT_ALLOWED";
@@ -197,14 +207,14 @@ public final class PlatformErrorCodes {
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, SIGN_IN_REFUSED,
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         RATE_LIMITED);
 

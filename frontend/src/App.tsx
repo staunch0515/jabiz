@@ -34,6 +34,9 @@ import RetentionPage from './pages/RetentionPage'
 import ReportCatalogPage from './pages/ReportCatalogPage'
 import ReportPage from './pages/ReportPage'
 import TasksPage from './pages/TasksPage'
+import JoinPage from './pages/auth/JoinPage'
+import PasswordResetPage from './pages/auth/PasswordResetPage'
+import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +72,10 @@ export const appRoutes: RouteObject[] = [
   { path: '/login/oidc', element: <OidcCallbackPage /> },
   // The unsubscribe link of notification mail: its token is the credential (18 section 5.6).
   { path: '/mail/unsubscribe', element: <MailUnsubscribePage /> },
+  // The links of the account mail: verifying an address, joining an entry, resetting a password (10 section 15).
+  { path: '/auth/verify-email', element: <VerifyEmailPage /> },
+  { path: '/auth/join', element: <JoinPage /> },
+  { path: '/auth/password-reset', element: <PasswordResetPage /> },
   {
     element: <RequireSignIn />,
     children: [

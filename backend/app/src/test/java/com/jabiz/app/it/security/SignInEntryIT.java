@@ -45,6 +45,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
     "it.sql-log.enabled=true", "it.sign-in.import=true",
     "jabiz.security.entries.portal.accepted-roles=IT_CUSTOMER,IT_STAFF",
     "jabiz.security.entries.portal.app-path=/portal/",
+    // The application registers customers at its portal; these tests use the name for an entry of their own.
+    "jabiz.security.entries.portal.self-registration=false", "jabiz.security.entries.portal.registration-roles=",
+    "jabiz.security.entries.portal.require-verified-email=false",
     "jabiz.security.entries.strict.accepted-roles=IT_CUSTOMER",
     "jabiz.security.entries.strict.require-verified-email=true"})
 class SignInEntryIT extends SecurityItSupport {

@@ -27,6 +27,22 @@ jabiz:
     # the dev profile. Lifetimes, lock rules and password rules have defaults (see SecurityConfig).
     jwt:
       secret: ${JABIZ_JWT_SECRET:}
+    # Sign-in entries (docs/design/10-security.md section 15; decision D36). The administration (admin) accepts the
+    # back-office roles only (comma-separated JABIZ_ADMIN_ROLES; ADMIN is the first administrator's): never CUSTOMER,
+    # which anybody can get by registering (the startup check refuses "*" or a registration role here while
+    # registration is on). The customer portal accepts the CUSTOMER role only, lets customers register themselves (they
+    # get CUSTOMER) and requires a verified address; its pages are the administration's until the portal has its own
+    # (phase 16c). Registration needs the role to exist and mail to be on (jabiz.mail.*), or nobody can verify their
+    # address; JABIZ_PORTAL_SELF_REGISTRATION=false turns it off (the end-to-end tests, whose roles are their own).
+    entries:
+      admin:
+        accepted-roles: ${JABIZ_ADMIN_ROLES:ADMIN}
+      portal:
+        accepted-roles: CUSTOMER
+        self-registration: ${JABIZ_PORTAL_SELF_REGISTRATION:true}
+        registration-roles: CUSTOMER
+        require-verified-email: true
+        app-path: /
     # The first administrator, created at startup when both are set and no user exists yet.
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}

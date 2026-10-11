@@ -83,6 +83,40 @@ class SignInEntriesTest {
     }
 
     @Test
+    void registeredUsersMustNotReachTheAdministration() {
+        // Unconfigured, the administration accepts every role: an error while anyone may register.
+        SignInEntries open = new SignInEntries(Map.of(
+            "portal", config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), true, "/")), true, null);
+        assertThat(open.check()).filteredOn(CheckProblem::isError).singleElement().satisfies(p -> {
+            assertThat(p.location()).isEqualTo("jabiz.security.entries.admin.accepted-roles");
+            assertThat(p.message()).contains("accepts every role while entry portal lets people register");
+        });
+
+        // Configured, it must not accept a role a registration grants.
+        SignInEntries overlapping = new SignInEntries(Map.of(
+            "portal", config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), true, "/"),
+            "admin", config(List.of("ADMIN", "CUSTOMER"), null, null, null, null)), true, null);
+        assertThat(overlapping.check()).filteredOn(CheckProblem::isError).singleElement().satisfies(p ->
+            assertThat(p.message()).isEqualTo("the administration accepts CUSTOMER, which entry portal grants to "
+                + "whoever registers"));
+
+        // The administration never lets people register itself: they would register straight into it.
+        SignInEntries selfRegistering = new SignInEntries(Map.of(
+            "admin", config(List.of("ADMIN"), true, List.of("ADMIN"), null, null)), true, null);
+        assertThat(selfRegistering.check()).filteredOn(CheckProblem::isError).singleElement().satisfies(p -> {
+            assertThat(p.location()).isEqualTo("jabiz.security.entries.admin.self-registration");
+            assertThat(p.message()).isEqualTo("the administration entry cannot allow self-registration");
+        });
+
+        // Without registration, or with the administration's own roles only, there is nothing to report.
+        assertThat(new SignInEntries(Map.of("portal", config(List.of("CUSTOMER"), false, null, true, "/")), true,
+            null).check()).isEmpty();
+        assertThat(new SignInEntries(Map.of(
+            "portal", config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), true, "/"),
+            "admin", config(List.of("ADMIN"), null, null, null, null)), true, null).check()).isEmpty();
+    }
+
+    @Test
     void roleCodesThatCannotBeReadAreAWarning() {
         SignInEntries entries = new SignInEntries(Map.of("portal", config(List.of("C"), null, null, null, null)),
             false, () -> {
