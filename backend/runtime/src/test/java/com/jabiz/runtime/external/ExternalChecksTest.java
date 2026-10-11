@@ -39,9 +39,13 @@ class ExternalChecksTest {
         ExternalService noHosts = ExternalService.define("Bad_Name", s -> s.baseUrl("https://x.example.com"));
         MockEnvironment environment = new MockEnvironment()
             .withProperty("jabiz.external-services.ghost.base-url", "https://ghost.example.com");
-        assertThat(problems(environment, demo(), demo(), plainHttp, elsewhere, credentials, noHosts)).containsExactly(
-            "EXTERNAL | demo-ai | secret apiKey: environment variable JABIZ_DEMO_AI_KEY is not set",
+        ExternalService badTwin = ExternalService.define("demo-ai", s -> s.baseUrl("http://twin.example.com")
+            .allowedHosts("twin.example.com"));
+        assertThat(problems(environment, demo(), badTwin, plainHttp, elsewhere, credentials, noHosts)).containsExactly(
+            "EXTERNAL | demo-ai | secret apiKey: the environment variable JABIZ_DEMO_AI_KEY is not set (set it, or run "
+                + "with the dev profile)",
             "EXTERNAL | demo-ai | declared twice",
+            "EXTERNAL | demo-ai | baseUrl: not https (http only to this machine): http://twin.example.com",
             "EXTERNAL | plain | requestTimeout: must be positive and at most PT2M",
             "EXTERNAL | plain | baseUrl: not https (http only to this machine): http://plain.example.com",
             "EXTERNAL | elsewhere | allowedHosts: 'bad host' is not a host name",
@@ -60,12 +64,41 @@ class ExternalChecksTest {
         MockEnvironment dev = new MockEnvironment();
         dev.setActiveProfiles("dev");
         assertThat(problems(dev, demo())).containsExactly(
-            "WARNING EXTERNAL | demo-ai | secret apiKey: environment variable JABIZ_DEMO_AI_KEY is not set; calls "
-                + "that need it fail");
+            "WARNING EXTERNAL | demo-ai | secret apiKey: the environment variable JABIZ_DEMO_AI_KEY is not set; calls "
+                + "that use the secret will fail");
         assertThat(problems(new MockEnvironment().withProperty("jabiz.external.missing-secrets", "warning"), demo()))
             .hasSize(1).allMatch(problem -> problem.startsWith("WARNING "));
         assertThat(problems(new MockEnvironment().withProperty("JABIZ_DEMO_AI_KEY", "  "), demo()))
-            .containsExactly("EXTERNAL | demo-ai | secret apiKey: environment variable JABIZ_DEMO_AI_KEY is not set");
+            .containsExactly("EXTERNAL | demo-ai | secret apiKey: the environment variable JABIZ_DEMO_AI_KEY is not "
+                + "set (set it, or run with the dev profile)");
+    }
+
+    /** The static check runs without the deployment's environment, so it does not look at secrets at all. */
+    @Test
+    void theStaticCheckIgnoresSecrets() {
+        assertThat(problems(new MockEnvironment().withProperty("jabiz.external.missing-secrets", "ignore"), demo()))
+            .isEmpty();
+        MockEnvironment dev = new MockEnvironment().withProperty("jabiz.external.missing-secrets", "IGNORE");
+        dev.setActiveProfiles("dev");
+        assertThat(problems(dev, demo())).isEmpty();
+        assertThat(problems(new MockEnvironment().withProperty("jabiz.external.missing-secrets", "sometimes")
+            .withProperty("JABIZ_DEMO_AI_KEY", "k"), demo()))
+            .containsExactly("EXTERNAL | jabiz.external.missing-secrets | must be error, warning or ignore");
+    }
+
+    /** Settings that cannot be converted are problems of the check, reported with the others, not a failed start. */
+    @Test
+    void settingsThatAreNotAddressesAreReportedWithTheRest() {
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.external-services.demo-ai.base-url", "http://bad host:x/?key=s3cr3t")
+            .withProperty("jabiz.external-services.other.base-url", "relative/path");
+        List<String> problems = problems(environment, demo(), ExternalService.define("other", s -> s
+            .baseUrl("https://other.example.com").allowedHosts("other.example.com")));
+        assertThat(problems).contains(
+            "EXTERNAL | jabiz.external-services.demo-ai.base-url | not an absolute address; the declared one is kept",
+            "EXTERNAL | jabiz.external-services.other.base-url | not an absolute address; the declared one is kept")
+            .anyMatch(problem -> problem.contains("JABIZ_DEMO_AI_KEY"))
+            .noneMatch(problem -> problem.contains("s3cr3t"));
     }
 
     @Test

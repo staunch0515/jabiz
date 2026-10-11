@@ -4,8 +4,8 @@ import com.jabiz.external.ExternalCallException;
 import com.jabiz.external.ExternalHttp;
 import com.jabiz.external.ExternalService;
 import com.jabiz.runtime.observability.PlatformObservations;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
+import com.jabiz.runtime.test.StubHttpServer;
+import com.jabiz.runtime.test.StubHttpServer.Answer;
 import io.micrometer.common.KeyValue;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
@@ -17,18 +17,13 @@ import org.springframework.mock.env.MockEnvironment;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,60 +37,28 @@ class JdkExternalHttpTest {
 
     private static final String SECRET = "sk-test-0123456789-secret";
 
-    /** One request the stub received. */
-    record Received(String method, String path, Map<String, String> headers, String body) {}
-
-    private HttpServer server;
-    private final List<Received> received = new CopyOnWriteArrayList<>();
+    private StubHttpServer server;
     private final List<Map<String, String>> observed = new CopyOnWriteArrayList<>();
     private ExternalServicesImpl services;
     private int port;
 
     @BeforeEach
-    void start() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
-        server.createContext("/", exchange -> {
-            Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            exchange.getRequestHeaders().forEach((name, values) -> headers.put(name, values.getFirst()));
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            String path = exchange.getRequestURI().getPath();
-            received.add(new Received(exchange.getRequestMethod(), path, headers, body));
-            switch (path) {
-                case "/v1/echo" -> answer(exchange, 200, "{\"echo\":" + body.length() + "}");
-                case "/v1/redirect" -> {
-                    exchange.getResponseHeaders().add("Location", "/v1/target");
-                    answer(exchange, 302, "");
-                }
-                case "/v1/large" -> answer(exchange, 200, "x".repeat(2048));
-                case "/v1/chunked" -> {
-                    exchange.sendResponseHeaders(200, 0);
-                    try (OutputStream out = exchange.getResponseBody()) {
-                        for (int i = 0; i < 64; i++) {
-                            out.write("y".repeat(64).getBytes(StandardCharsets.UTF_8));
-                            out.flush();
-                        }
-                    }
-                }
-                case "/v1/slow" -> {
-                    try {
-                        Thread.sleep(3000);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    answer(exchange, 200, "late");
-                }
-                case "/v1/fail" -> answer(exchange, 503, "down");
-                default -> answer(exchange, 404, "");
-            }
+    void start() {
+        server = StubHttpServer.start(request -> switch (request.path()) {
+            case "/v1/echo" -> Answer.json(200, "{\"echo\":" + request.body().length() + "}");
+            case "/v1/redirect" -> Answer.of(302, "").header("Location", "/v1/target");
+            case "/v1/large" -> Answer.of(200, "x".repeat(2048));
+            case "/v1/chunked" -> Answer.of(200, "y".repeat(4096)).chunked();
+            case "/v1/slow" -> Answer.of(200, "late").after(Duration.ofSeconds(3));
+            case "/v1/fail" -> Answer.of(503, "down");
+            default -> Answer.of(404, "");
         });
-        server.start();
-        port = server.getAddress().getPort();
-        services = services(ExternalService.define("stub", s -> s.baseUrl("http://127.0.0.1:" + port + "/v1/")
+        port = server.port();
+        services = services(ExternalService.define("stub", s -> s.baseUrl(server.url("/v1/"))
             .allowedHosts("127.0.0.1").secret("apiKey", "STUB_KEY").requestTimeout(Duration.ofSeconds(1))
             .idempotencyHeader("Idempotency-Key").maxResponseSize(1024)),
-            ExternalService.define("dry", s -> s.baseUrl("http://127.0.0.1:" + port + "/v1/")
-                .allowedHosts("127.0.0.1").allowInDryRun()));
+            ExternalService.define("dry", s -> s.baseUrl(server.url("/v1/")).allowedHosts("127.0.0.1")
+                .allowInDryRun()));
     }
 
     private ExternalServicesImpl services(ExternalService... declared) {
@@ -123,23 +86,20 @@ class JdkExternalHttpTest {
     @AfterEach
     void stop() {
         services.close();
-        server.stop(0);
-    }
-
-    private static void answer(HttpExchange exchange, int status, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
-        }
+        server.close();
     }
 
     private static <T> T inStep(boolean dryRun, Callable<T> work) throws Exception {
-        return new ExternalCallScope(42L, "Call the stub", dryRun).call(work);
+        return ExternalCallScope.run(ExternalCallScope.of(42L, "Call the stub", dryRun), work);
     }
 
     private ExternalHttp.Response send(String service, ExternalHttp.Request request) throws Exception {
         return inStep(false, () -> services.http(service).send(request));
+    }
+
+    private static ExternalCallException.Kind kindOf(Throwable failure) {
+        assertThat(failure).isInstanceOf(ExternalCallException.class);
+        return ((ExternalCallException) failure).kind();
     }
 
     @Test
@@ -149,7 +109,7 @@ class JdkExternalHttpTest {
                 .json("{\"text\":\"hi\"}").idempotencyKey(services.idempotencyKey("moderate"))));
         assertThat(response.status()).isEqualTo(200);
         assertThat(response.text()).isEqualTo("{\"echo\":13}");
-        Received request = received.getFirst();
+        StubHttpServer.Received request = server.requests().getFirst();
         assertThat(request.method()).isEqualTo("POST");
         assertThat(request.path()).isEqualTo("/v1/echo");
         assertThat(request.headers()).containsEntry("Authorization", "Bearer " + SECRET)
@@ -159,24 +119,37 @@ class JdkExternalHttpTest {
     }
 
     @Test
-    void absoluteAddressesOnAnAllowedHostAreAccepted() throws Exception {
-        assertThat(send("stub", ExternalHttp.Request.get("http://127.0.0.1:" + port + "/v1/fail")).status())
-            .isEqualTo(503);
+    void absoluteAddressesOnTheBaseSchemeAndPortAreAccepted() throws Exception {
+        assertThat(send("stub", ExternalHttp.Request.get(server.url("/v1/fail"))).status()).isEqualTo(503);
         assertThat(observed).extracting(tags -> tags.get("outcome")).containsExactly("5xx");
     }
 
     @Test
-    void otherHostsAndAddressesWithCredentialsAreRefusedBeforeAnythingIsSent() {
+    void otherHostsPortsSchemesAndAddressesWithCredentialsAreRefusedBeforeAnythingIsSent() throws Exception {
+        int otherPort;
+        try (var socket = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            otherPort = socket.getLocalPort();
+        }
         for (String target : List.of("http://localhost:" + port + "/v1/echo", "//evil.example.com/v1/echo",
             "https://evil.example.com/steal?key=" + SECRET, "http://user:" + SECRET + "@127.0.0.1:" + port + "/v1/echo",
-            "ftp://127.0.0.1/x")) {
+            "ftp://127.0.0.1/x", "http://127.0.0.1:" + otherPort + "/v1/echo", "https://127.0.0.1:" + port + "/v1/echo",
+            "http://127.0.0.1/v1/echo")) {
             Throwable refused = catchThrowable(() -> send("stub", ExternalHttp.Request.get(target)));
-            assertThat(refused).as(target).isInstanceOf(ExternalCallException.class)
-                .hasMessageNotContaining(SECRET).hasMessageStartingWith("External service stub: ");
-            assertThat(((ExternalCallException) refused).kind()).isEqualTo(ExternalCallException.Kind.REFUSED);
+            assertThat(refused).as(target).hasMessageNotContaining(SECRET)
+                .hasMessageStartingWith("External service stub: ");
+            assertThat(kindOf(refused)).as(target).isEqualTo(ExternalCallException.Kind.REFUSED);
         }
-        assertThat(received).isEmpty();
+        assertThat(server.requests()).isEmpty();
         assertThat(observed).extracting(tags -> tags.get("outcome")).containsOnly("refused");
+    }
+
+    /** What the JDK client itself refuses is a refused call (502), not a defect; its message is not passed on. */
+    @Test
+    void requestsTheClientRefusesAreRefusedCalls() {
+        Throwable refused = catchThrowable(() -> send("stub", ExternalHttp.Request.of("CONNECT", "echo")));
+        assertThat(kindOf(refused)).isEqualTo(ExternalCallException.Kind.REFUSED);
+        assertThat(refused).hasNoCause().hasMessageContaining("method CONNECT");
+        assertThat(server.requests()).isEmpty();
     }
 
     @Test
@@ -184,16 +157,15 @@ class JdkExternalHttpTest {
         ExternalHttp.Response response = send("stub", ExternalHttp.Request.get("redirect"));
         assertThat(response.status()).isEqualTo(302);
         assertThat(response.header("location")).contains("/v1/target");
-        assertThat(received).extracting(Received::path).containsExactly("/v1/redirect");
+        assertThat(server.requests()).extracting(StubHttpServer.Received::path).containsExactly("/v1/redirect");
         assertThat(observed).extracting(tags -> tags.get("outcome")).containsExactly("3xx");
     }
 
     @Test
     void answersLargerThanTheLimitFail() {
         for (String path : List.of("large", "chunked")) {
-            assertThatThrownBy(() -> send("stub", ExternalHttp.Request.get(path))).as(path)
-                .isInstanceOfSatisfying(ExternalCallException.class,
-                    e -> assertThat(e.kind()).isEqualTo(ExternalCallException.Kind.TOO_LARGE));
+            assertThat(kindOf(catchThrowable(() -> send("stub", ExternalHttp.Request.get(path))))).as(path)
+                .isEqualTo(ExternalCallException.Kind.TOO_LARGE);
         }
         assertThat(observed).extracting(tags -> tags.get("outcome")).containsExactly("error", "error");
     }
@@ -201,11 +173,10 @@ class JdkExternalHttpTest {
     @Test
     void slowAnswersTimeOut() {
         long started = System.nanoTime();
-        assertThatThrownBy(() -> send("stub", ExternalHttp.Request.get("slow?token=" + SECRET)
-            .header("Authorization", "Bearer " + SECRET).timeout(Duration.ofMillis(200))))
-            .isInstanceOfSatisfying(ExternalCallException.class,
-                e -> assertThat(e.kind()).isEqualTo(ExternalCallException.Kind.TIMEOUT))
-            .hasMessageNotContaining(SECRET).hasNoCause();
+        Throwable timedOut = catchThrowable(() -> send("stub", ExternalHttp.Request.get("slow?token=" + SECRET)
+            .header("Authorization", "Bearer " + SECRET).timeout(Duration.ofMillis(200))));
+        assertThat(kindOf(timedOut)).isEqualTo(ExternalCallException.Kind.TIMEOUT);
+        assertThat(timedOut).hasMessageNotContaining(SECRET).hasNoCause();
         assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(2));
         assertThat(observed).extracting(tags -> tags.get("outcome")).containsExactly("timeout");
         // A request may not wait longer than its service allows.
@@ -215,17 +186,16 @@ class JdkExternalHttpTest {
 
     @Test
     void aClosedPortIsUnavailable() throws Exception {
-        ExternalServicesImpl closed;
+        int unused;
         try (var socket = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            int unused = socket.getLocalPort();
-            socket.close();
-            closed = services(ExternalService.define("gone", s -> s.baseUrl("http://127.0.0.1:" + unused)
-                .allowedHosts("127.0.0.1")));
+            unused = socket.getLocalPort();
         }
+        ExternalServicesImpl closed = services(ExternalService.define("gone", s -> s
+            .baseUrl("http://127.0.0.1:" + unused).allowedHosts("127.0.0.1")));
         try {
-            assertThatThrownBy(() -> inStep(false, () -> closed.http("gone").send(ExternalHttp.Request.get("/x"))))
-                .isInstanceOfSatisfying(ExternalCallException.class,
-                    e -> assertThat(e.kind()).isEqualTo(ExternalCallException.Kind.UNAVAILABLE));
+            assertThat(kindOf(catchThrowable(() -> inStep(false,
+                () -> closed.http("gone").send(ExternalHttp.Request.get("/x"))))))
+                .isEqualTo(ExternalCallException.Kind.UNAVAILABLE);
         } finally {
             closed.close();
         }
@@ -241,19 +211,36 @@ class JdkExternalHttpTest {
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("blocking step");
         assertThatThrownBy(() -> services.secret("stub", "apiKey")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> services.idempotencyKey("x")).isInstanceOf(IllegalStateException.class);
-        assertThat(received).isEmpty();
+        assertThat(server.requests()).isEmpty();
+    }
+
+    /** Only the platform's executors open scopes: nothing else can pass for a blocking step or a real run. */
+    @Test
+    void scopesCannotBeOpenedByAnyoneElse() {
+        assertThatThrownBy(() -> ExternalCallScope.open(1L, "forged", false, () -> "x"))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining(JdkExternalHttpTest.class.getName());
+        assertThat(ExternalCallScope.current()).isEmpty();
+    }
+
+    @Test
+    void theScopeIsClosedWhenTheStepFails() {
+        assertThatThrownBy(() -> inStep(true, () -> {
+            assertThat(ExternalCallScope.current()).isPresent();
+            throw new IllegalStateException("the step failed");
+        })).hasMessage("the step failed");
+        assertThat(ExternalCallScope.current()).isEmpty();
     }
 
     @Test
     void dryRunsMakeNoCallsUnlessTheServiceAllowsThem() throws Exception {
-        assertThatThrownBy(() -> inStep(true, () -> services.http("stub").send(ExternalHttp.Request.get("echo"))))
-            .isInstanceOfSatisfying(ExternalCallException.class,
-                e -> assertThat(e.kind()).isEqualTo(ExternalCallException.Kind.REFUSED))
-            .hasMessageContaining("dry run");
-        assertThat(received).isEmpty();
+        Throwable refused = catchThrowable(() -> inStep(true,
+            () -> services.http("stub").send(ExternalHttp.Request.get("echo"))));
+        assertThat(kindOf(refused)).isEqualTo(ExternalCallException.Kind.REFUSED);
+        assertThat(refused).hasMessageContaining("dry run");
+        assertThat(server.requests()).isEmpty();
         assertThat(inStep(true, () -> services.http("dry").send(ExternalHttp.Request.get("echo"))).status())
             .isEqualTo(200);
-        assertThat(received).hasSize(1);
+        assertThat(server.requests()).hasSize(1);
     }
 
     @Test

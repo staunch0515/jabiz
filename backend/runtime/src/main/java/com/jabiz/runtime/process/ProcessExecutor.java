@@ -315,12 +315,12 @@ public class ProcessExecutor {
             case ComputeStep<M, C> compute -> Mono.fromRunnable(() -> compute.compute(metadata, ctx));
             // The step may call external services on its virtual thread, and only there (decision D38).
             case BlockingStep<M, C> blocking -> Mono.deferContextual(view -> {
-                    ExternalCallScope scope = new ExternalCallScope(ctx.processSeqId(), step.stepName(),
-                        view.hasKey(DryRun.class));
-                    return Mono.fromCallable(() -> scope.call(() -> {
-                        blocking.run(metadata, ctx);
-                        return Boolean.TRUE;
-                    }));
+                    boolean dryRun = view.hasKey(DryRun.class);
+                    return Mono.fromCallable(() -> ExternalCallScope.open(ctx.processSeqId(), step.stepName(),
+                        dryRun, () -> {
+                            blocking.run(metadata, ctx);
+                            return Boolean.TRUE;
+                        }));
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 // Leave the virtual thread: the steps after this one are held to the non-blocking rules again.

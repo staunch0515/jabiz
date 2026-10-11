@@ -41,8 +41,8 @@ public final class PlatformCheckLauncher {
             throw new UncheckedIOException(e);
         }
         args.add("--jabiz.files.local.root=" + files);
-        // The deployment's environment is not here: external services' secrets missing are reported as warnings.
-        args.add("--jabiz.external.missing-secrets=warning");
+        // The deployment's environment is not here: whether external services' secrets are set is not checked.
+        args.add("--jabiz.external.missing-secrets=ignore");
         args.addAll(extraArgs);
         try {
             return PlatformCheckMain.run(application, args, out);

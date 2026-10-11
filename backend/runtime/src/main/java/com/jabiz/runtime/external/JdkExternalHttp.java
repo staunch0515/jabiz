@@ -108,20 +108,31 @@ final class JdkExternalHttp implements ExternalHttp, AutoCloseable {
             throw new IllegalArgumentException("A request to external service " + service.name()
                 + " may wait at most " + service.requestTimeout() + ", not " + timeout);
         }
-        HttpRequest.Builder builder = HttpRequest.newBuilder(target).timeout(timeout);
-        request.headers().forEach(builder::header);
+        HttpRequest.Builder builder;
+        try {
+            builder = HttpRequest.newBuilder(target).timeout(timeout);
+        } catch (IllegalArgumentException e) {
+            throw refused("the target is not an address the client accepts");
+        }
+        // The JDK's own refusals repeat the value (a credential, perhaps): they become refusals naming the header.
+        request.headers().forEach((name, value) -> withHeader(name, () -> builder.header(name, value)));
         if (request.idempotencyKey() != null) {
             if (service.idempotencyHeader() == null) {
                 throw refused("the service declares no idempotency header");
             }
-            builder.setHeader(service.idempotencyHeader(), request.idempotencyKey());
+            withHeader(service.idempotencyHeader(),
+                () -> builder.setHeader(service.idempotencyHeader(), request.idempotencyKey()));
         }
         if (request.headers().keySet().stream().noneMatch("User-Agent"::equalsIgnoreCase)) {
             builder.header("User-Agent", "jabiz-external");
         }
         byte[] body = request.body();
-        builder.method(request.method(), body.length == 0 ? HttpRequest.BodyPublishers.noBody()
-            : HttpRequest.BodyPublishers.ofByteArray(body));
+        try {
+            builder.method(request.method(), body.length == 0 ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofByteArray(body));
+        } catch (IllegalArgumentException e) {
+            throw refused("method " + request.method() + " is not accepted");
+        }
         CompletableFuture<HttpResponse<byte[]>> future = client.sendAsync(builder.build(),
             info -> new LimitedBody(service.maxResponseSize(),
                 info.headers().firstValueAsLong("Content-Length").orElse(-1)));
@@ -141,6 +152,14 @@ final class JdkExternalHttp implements ExternalHttp, AutoCloseable {
             throw new ExternalCallException(service.name(), ExternalCallException.Kind.UNAVAILABLE, "cancelled");
         } catch (ExecutionException e) {
             throw failed(e.getCause(), timeout);
+        }
+    }
+
+    private void withHeader(String name, Runnable set) {
+        try {
+            set.run();
+        } catch (IllegalArgumentException e) {
+            throw refused("header " + name + " is not accepted");
         }
     }
 
@@ -170,7 +189,23 @@ final class JdkExternalHttp implements ExternalHttp, AutoCloseable {
         } catch (URISyntaxException e) {
             throw refused("the target is not an address");
         }
-        return uri.isAbsolute() ? uri : service.baseUrl().resolve(uri);
+        if (!uri.isAbsolute()) {
+            return service.baseUrl().resolve(uri);
+        }
+        // An absolute target stays on the base address's scheme and port: the hosts are allowed, their other ports
+        // (an administration interface, a plain-text one) are not.
+        URI base = service.baseUrl();
+        if (!base.getScheme().equalsIgnoreCase(String.valueOf(uri.getScheme())) || port(uri) != port(base)) {
+            throw refused("an absolute target must use the scheme and port of the base address");
+        }
+        return uri;
+    }
+
+    private static int port(URI uri) {
+        if (uri.getPort() >= 0) {
+            return uri.getPort();
+        }
+        return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : "http".equalsIgnoreCase(uri.getScheme()) ? 80 : -1;
     }
 
     private ExternalCallException refused(String why) {
