@@ -121,6 +121,12 @@ class ApprovalIT extends ApprovalItSupport {
         assertThat(changed.get("requestId")).isNotEqualTo(requestId);
         assertThat(status(requestId)).isEqualTo(ApprovalEntities.SUPERSEDED);
 
+        // A cancellation whose condition does not hold (memo "keep") leaves the request pending (WithdrawApproval.when).
+        Map<String, Object> keep = new HashMap<>(Map.of("paymentId", paymentId, "channel", channel, "amount", 1,
+            "memo", ItApprovalFixtures.KEEP_PENDING));
+        run("IT_PAY_CANCEL", preparer(), keep);
+        assertThat(status((String) changed.get("requestId"))).isEqualTo(ApprovalEntities.PENDING);
+
         // Cancelling the payment withdraws the pending request.
         Map<String, Object> cancel = new HashMap<>(Map.of("paymentId", paymentId, "channel", channel, "amount", 1));
         run("IT_PAY_CANCEL", preparer(), cancel);

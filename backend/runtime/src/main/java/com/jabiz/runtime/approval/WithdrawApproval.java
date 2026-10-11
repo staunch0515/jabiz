@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Withdraws the pending approval request of a case, for example when the document is cancelled
@@ -25,15 +26,30 @@ import java.util.function.Function;
 public class WithdrawApproval<C extends ProcessContext> implements StepHandler<WithdrawApproval.Metadata<C>, C>,
     CheckedStep<WithdrawApproval.Metadata<C>> {
 
-    public record Metadata<C>(String subject, Function<C, ?> entityId) {
+    /** @param when whether to withdraw at all, decided when the step is reached (null: always) */
+    public record Metadata<C>(String subject, Function<C, ?> entityId, Predicate<C> when) {
         public Metadata {
             Objects.requireNonNull(subject, "subject must not be null");
             Objects.requireNonNull(entityId, "entityId must not be null");
+        }
+
+        public Metadata(String subject, Function<C, ?> entityId) {
+            this(subject, entityId, null);
         }
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String subject, Function<C, ?> entityId) {
         return StepSpec.of(WithdrawApproval.class, new Metadata<>(subject, entityId));
+    }
+
+    /**
+     * As {@link #of} when {@code condition(ctx)} holds; otherwise the step does nothing (written like
+     * {@code CallProcess.when} and {@code RequireApproval.when}).
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> when(Predicate<C> condition, String subject,
+        Function<C, ?> entityId) {
+        return StepSpec.of(WithdrawApproval.class, new Metadata<>(subject, entityId,
+            Objects.requireNonNull(condition, "condition must not be null")));
     }
 
     private final ApprovalSubjectRegistry subjects;
@@ -49,6 +65,9 @@ public class WithdrawApproval<C extends ProcessContext> implements StepHandler<W
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
+            if (metadata.when() != null && !metadata.when().test(ctx)) {
+                return Mono.empty();
+            }
             String entityId = String.valueOf(Objects.requireNonNull(metadata.entityId().apply(ctx),
                 "entityId must not be null"));
             return store.lockCase(metadata.subject(), entityId)

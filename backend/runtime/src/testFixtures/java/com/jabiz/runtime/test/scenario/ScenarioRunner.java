@@ -207,10 +207,22 @@ public final class ScenarioRunner {
             case Scenario.RunJob j -> {
                 JobDefinition<?> job = jobs.find(j.job())
                     .orElseThrow(() -> failure(scenario, step, "unknown job " + j.job(), null));
-                JobRunner.Outcome outcome = jobRunner.run(job, j.at() == null ? clock.instant() : j.at());
-                if (!outcome.name().equals(j.outcome())) {
-                    throw failure(scenario, step, "job " + j.job() + " ended " + outcome + ", not " + j.outcome(),
-                        null);
+                JobRunner.JobRun run = jobRunner.execute(job, j.at() == null ? clock.instant() : j.at());
+                if (!run.outcome().name().equals(j.outcome())) {
+                    throw failure(scenario, step, "job " + j.job() + " ended " + run.outcome() + ", not "
+                        + j.outcome(), null);
+                }
+                if (j.items() != null) {
+                    Map<String, Integer> counts = run.items() == null ? Map.of() : Map.of(
+                        "succeeded", run.items().succeeded(), "replayed", run.items().replayed(),
+                        "busy", run.items().busy(), "failed", run.items().failed(),
+                        "deferred", run.items().deferred());
+                    j.items().forEach((name, expected) -> {
+                        if (!expected.equals(counts.get(name))) {
+                            throw failure(scenario, step, "job " + j.job() + " had " + counts.get(name) + " "
+                                + name + " item(s), not " + expected + " (" + run.items() + ")", null);
+                        }
+                    });
                 }
             }
             case Scenario.DeliverEvents d -> {

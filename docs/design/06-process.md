@@ -41,8 +41,8 @@
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
 | `AssignNumber.of(序列, [ctx -> 范围,] targetKey)` / `AssignNumber.when(条件, 序列, ctx -> 范围 或 null, targetKey)` | 该序列在该范围内的下一个号码（文本）；在流程事务内取号，回滚即归还，无缺号、无重复（18 §2、D23） |
 | `RequireApproval.of(审批对象, ctx -> ApprovalCase, targetKey)` / `RequireApproval.when(条件, …)` | 该单据是否需要审批：`ApprovalOutcome`（`NOT_REQUIRED` / `PENDING` / `APPROVED`）；需要时建请求，批准绑定内容哈希（18 §3.3、D23） |
-| `WithdrawApproval.of(审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3） |
-| `HoldLock.shared(ctx -> 名称)` / `HoldLock.exclusive(ctx -> 名称)` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取 |
+| `WithdrawApproval.of(审批对象, ctx -> 单据标识)` / `WithdrawApproval.when(ctx -> 条件, 审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3）；`when` 的条件不成立时什么也不做（阶段 16k） |
+| `HoldLock.shared(ctx -> 名称[, 最长等待])` / `HoldLock.exclusive(ctx -> 名称[, 最长等待])` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取；`最长等待`（`Duration`，阶段 16k）短于全局时限时以它为准 |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
@@ -162,6 +162,14 @@ public class ProcessContext {
 - 在读取受保护的状态**之前**取锁；一个流程取多个锁时各处按同一顺序，否则可能互相等待。
 - 等待最长 `jabiz.process.lock-timeout`（缺省 30 秒，只对取锁这一条语句生效）；超时或数据库判定死锁时流程失败，回滚，返回 409（可重试）。
   平台把这两种数据库错误（`55P03`、`40P01`）一律译为 `ConcurrentUpdateException`。持有者应短：不要在持锁的流程里做长时间的外部调用。
+- **整个事务的等待上限**（阶段 16k）：每个流程事务开始时以 `SET LOCAL lock_timeout`（`set_config(…, true)`）设为 `jabiz.process.lock-timeout`；
+  逐项任务的项改用执行选项 `ExecutionOptions.lockWait`（= `itemLockWait`，较短时）。因此行锁、平台自己的锁（审批、账本科目层级、编号等）、
+  并发重复请求等待同一幂等键，都不会无限等待；超时同样是 409（`LockNotAvailableException`）。
+  风险：以前没有上限的等待（例如长事务持有的行锁）现在在 30 秒后以 409 结束——这是想要的结果（请求可重试，不占住连接）；
+  任务项的整个事务以 `itemLockWait`（缺省 2 秒）为限，取不到即 `BUSY`、下次运行再处理。
+- **逐步的最长等待**（阶段 16k，D42）：`HoldLock` 取锁语句的 `lock_timeout` = min(步骤声明的等待, 执行选项的等待, `jabiz.process.lock-timeout`)，
+  至少 1 毫秒；只对这一条语句生效，之后恢复为事务的设置。执行选项由平台设置（逐项任务），经 Reactor 上下文传给子流程，不对业务开放。超时仍是 409：
+  请求中即"快速失败"，任务项中即 `BUSY`（跳过到下一次运行，11 §4.1）。
 - 只用于事务内的步骤：提交后步骤没有事务，锁取得即释放。试运行同样取锁，在回滚时释放；导入的单元在保存点中回滚时，其中取的锁随之释放。
 
 ## 5. 流程组合
@@ -172,6 +180,8 @@ public class ProcessContext {
 - 撤销父操作时，按相反顺序一并撤销子操作（见 04 第 6 节）。
 - 禁止递归调用同一流程（启动时检查调用图有无环）。
 - 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出放入父流程上下文（`outputKey`）。
+- `CallProcess.forEach` 的各次调用同样在**同一事务**中：一项失败整批回滚，各项取的锁持有到整批提交。需要逐项提交的批量工作
+  （一项失败不影响其他项、不与在线请求形成锁环）用逐项任务 `JobDefinition.forEach`（11 §4.1、D42），不用 `CallProcess.forEach`。
 
 ## 6. 版本化
 

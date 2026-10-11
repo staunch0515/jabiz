@@ -70,6 +70,9 @@ public final class ScenarioContexts {
         properties.put("spring.main.banner-mode", "off");
         // Replays upload nothing; the application only needs a storage directory to start with its file policies.
         properties.put("jabiz.files.local.root", EMPTY_FILES_ROOT.toString());
+        // A replay runs one instance on a fixed clock: a job run twice in a scenario must not find its own lock
+        // still held for the real 30 seconds (ROADMAP 16k, gap 7). A scenario's properties may still set it.
+        properties.put("jabiz.jobs.lock-at-least-for", "0s");
         properties.putAll(extra);
         try {
             ConfigurableApplicationContext context = new SpringApplicationBuilder(application)

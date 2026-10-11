@@ -1,0 +1,52 @@
+# Unpaid orders expire (ROADMAP phase 16k, decision D42): the per-item job commerce.unpaid-order-expire selects the
+# placed orders still unpaid 14 days after they were placed and runs ORDER_EXPIRE for each, one transaction per order;
+# ORDER_EXPIRE reads the order again under its lock and cancels it (ORDER_CANCEL) only when it is still placed and
+# unpaid. A paid order and an order placed later are left alone. The job runs twice a few seconds apart without
+# properties of its own: replays no longer find its cluster lock held (gap 7), and the second run finds nothing due.
+name: Unpaid orders expire
+clock: 2026-06-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input: { entityType: Warehouse, attributes: { warehouseCode: SDJ, warehouseName: Sendai, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: BOWL-1, productName: Rice bowl, unitPrice: 1200, active: true } }
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: SDJ, sku: BOWL-1, quantity: 20 }
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-EXP-1, customerCode: CUST-EXP, warehouseCode: SDJ, lines: [{ sku: BOWL-1, quantity: 2 }] }
+    save: { unpaid: $.orderId }
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-EXP-2, customerCode: CUST-EXP, warehouseCode: SDJ, lines: [{ sku: BOWL-1, quantity: 1 }] }
+    save: { paid: $.orderId }
+  - note: Order 2 is paid the next day.
+    advanceClock: P1D
+  - inbound:
+      provider: demo-pay
+      body:
+        id: evt_exp_2
+        object: event
+        type: payment_intent.succeeded
+        livemode: false
+        data: { object: { id: pi_exp_2, object: payment_intent, amount_received: 1200, currency: jpy,
+                          metadata: { orderNo: SO-EXP-2 } } }
+  - deliverEvents: true
+  - expect: { entity: SalesOrder, id: "${paid}", fields: { paymentRef: pi_exp_2 } }
+  - note: A third order is placed ten days later; it is not due yet when the job runs.
+    advanceClock: P10D
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-EXP-3, customerCode: CUST-EXP, warehouseCode: SDJ, lines: [{ sku: BOWL-1, quantity: 3 }] }
+    save: { recent: $.orderId }
+
+  - note: 14 days after the first orders were placed (and a few hours more), the job runs at its time.
+    setClock: 2026-06-15T18:10:00Z
+  - runJob: { job: commerce.unpaid-order-expire, at: 2026-06-15T18:10:00Z, items: { succeeded: 1, failed: 0, busy: 0 } }
+  - expect: { entity: SalesOrder, id: "${unpaid}", fields: { status: CANCELLED } }
+  - expect: { entity: SalesOrder, id: "${paid}", fields: { status: PLACED } }
+  - expect: { entity: SalesOrder, id: "${recent}", fields: { status: PLACED } }
+  - note: Run again a few seconds later; nothing is due any more.
+    advanceClock: PT5S
+  - runJob: { job: commerce.unpaid-order-expire, items: { succeeded: 0, replayed: 0, deferred: 0 } }
+snapshot:
+  entities: [SalesOrder, StockLevel]
+  asOf: end

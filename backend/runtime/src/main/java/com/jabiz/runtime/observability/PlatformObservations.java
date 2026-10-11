@@ -39,6 +39,8 @@ public class PlatformObservations {
     public static final String EXPORT = "jabiz.query.export";
     public static final String DELIVERY = "jabiz.outbox.delivery";
     public static final String JOB = "jabiz.job.run";
+    /** One item of a per-item job (decision D42): tags {@code job} and {@code result} only, never the item's key. */
+    public static final String JOB_ITEM = "jabiz.job.item";
     public static final String FILE_UPLOAD = "jabiz.file.upload";
     public static final String FILE_SERVE = "jabiz.file.serve";
     public static final String FILE_SWEEP = "jabiz.file.sweep";
