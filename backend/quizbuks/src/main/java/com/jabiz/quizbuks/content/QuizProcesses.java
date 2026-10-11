@@ -212,17 +212,17 @@ public final class QuizProcesses {
     /**
      * {@code QB_QUIZ_RELEASE_FILES}: tombstones up to {@link ContentLimits#RELEASE_CHUNK} version files of a quiz the
      * caller owns and has removed, so that a quiz with any number of version files is removed in commits each within
-     * the dataset's write limit. Run by {@code QB_QUIZ_DELETE}, one call per chunk (a subprocess: its permission is
-     * not checked). Its permission is one no role holds, so no sponsor calls it directly; and whoever calls it, it
-     * keeps the files the quiz's submitted publications still need, as the removal does (Q2 review S1). Once platform
-     * decision D41 (16l) is in, it is declared sub-process only.
+     * the dataset's write limit. Run by {@code QB_QUIZ_DELETE}, one call per chunk, as the sponsor removing the quiz.
+     * It runs only as a sub-process (platform decision D41: started on its own, 403 {@code PROCESS_INTERNAL}), and its
+     * permission is one no role holds besides; whoever runs it, it keeps the files the quiz's submitted publications
+     * still need, as the removal does (Q2 review S1).
      */
     public static ProcessDefinition<ReleaseInput, ReleaseOutput, ProcessContext> releaseFiles() {
         return ProcessDefinition.define(RELEASE_FILES, 1, ReleaseInput.class, ReleaseOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Releases the files of the versions of a removed quiz.")
                 .permissions(QbPermissions.CONTENT_SYSTEM)
-                .internal()
+                .subProcessOnly()
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, ReleaseOutput.class))
                 .step("Load the removed quiz", QueryEntities.<ProcessContext>of(QbContent.defaultDataset(QbContent.QUIZ),

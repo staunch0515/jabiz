@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks;
 
+import com.jabiz.runtime.test.PlatformArchRules;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -20,5 +21,11 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAnyPackage("reactor..", "org.reactivestreams..", "io.r2dbc..",
                 "org.springframework.r2dbc..")
             .check(CLASSES);
+    }
+
+    /** QuizBuks starts no process and passes for nobody: the platform does, by the declarations (decision D41). */
+    @Test
+    void quizbuksStaysOutOfTheProcessMachinery() {
+        PlatformArchRules.noProcessMachinery("com.jabiz.quizbuks..").check(CLASSES);
     }
 }

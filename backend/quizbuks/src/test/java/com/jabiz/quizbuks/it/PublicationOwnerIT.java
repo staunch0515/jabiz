@@ -88,16 +88,18 @@ class PublicationOwnerIT extends PublicationItSupport {
         String visitor = TestTokens.bearer(tokens, "visitor", QbPermissions.CONTENT_WRITE);
         call("QB_PUBLICATION_SAVE", visitor, body("name", "No")).expectStatus().isForbidden();
         call("QB_PUBLICATION_SUBMIT", visitor, body("publicationId", id)).expectStatus().isForbidden();
-        // The system's processes: not even a sponsor runs them.
-        call("QB_PUBLICATION_TICK", sponsorA(), body("scheduledTime", clock.instant().toString()))
-            .expectStatus().isForbidden();
-        call("QB_PUBLICATION_ADVANCE", sponsorA(), body("publicationId", id)).expectStatus().isForbidden();
-        call("QB_PUBLICATION_APPROVAL_RESULT", sponsorA(), body("subject", "qb.publication", "entityId", id,
-            "status", "APPROVED")).expectStatus().isForbidden();
+        // The system's processes (internal(), platform D41): not even a sponsor runs them.
+        refusedAsInternal("QB_PUBLICATION_TICK", sponsorA(), body("scheduledTime", clock.instant().toString()));
+        refusedAsInternal("QB_PUBLICATION_ADVANCE", sponsorA(), body("publicationId", id));
+        refusedAsInternal("QB_PUBLICATION_APPROVAL_RESULT", sponsorA(), body("subject", "qb.publication",
+            "entityId", id, "status", "APPROVED"));
         // Nor a content administrator, who reviews: a review result comes only from the approval events.
-        call("QB_PUBLICATION_APPROVAL_RESULT", reviewer(), body("subject", "qb.publication", "entityId", id,
-            "status", "REJECTED", "requestId", UUID.randomUUID().toString())).expectStatus().isForbidden();
-        call("QB_PUBLICATION_ADVANCE", reviewer(), body("publicationId", id)).expectStatus().isForbidden();
+        refusedAsInternal("QB_PUBLICATION_APPROVAL_RESULT", reviewer(), body("subject", "qb.publication",
+            "entityId", id, "status", "REJECTED", "requestId", UUID.randomUUID().toString()));
+        refusedAsInternal("QB_PUBLICATION_ADVANCE", reviewer(), body("publicationId", id));
+        // Nor anyone holding every permission.
+        refusedAsInternal("QB_PUBLICATION_TICK", admin(), body("scheduledTime", clock.instant().toString()));
+        assertThat(status(id)).isEqualTo(PublicationStatus.DRAFT);
         // The administrators read; writing a publication is not theirs.
         call("QB_PUBLICATION_SAVE", reviewer(), body("name", "No")).expectStatus().isForbidden();
     }
