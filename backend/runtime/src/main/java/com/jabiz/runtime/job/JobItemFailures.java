@@ -59,15 +59,23 @@ final class JobItemFailures {
 
     private JobItemFailures() {}
 
-    /** Failing items still waiting for their backoff at {@code now}, at most {@value #MAX_IN_BACKOFF}. */
-    static Mono<Map<String, Failing>> inBackoff(StorageEngine engine, JobDefinition<?> job, Instant now) {
+    /**
+     * Failing items still waiting for their backoff at {@code now}, at most {@code limit}. No backoff is longer than
+     * the job's longest delay, so only the rows of that last stretch are read (index on job and time).
+     */
+    static Mono<Map<String, Failing>> inBackoff(StorageEngine engine, JobDefinition<?> job, Instant now, int limit) {
+        if (limit == 0) {
+            return Mono.just(Map.of());
+        }
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("job", BoundValue.of(job.name()));
         params.put("now", BoundValue.of(now));
+        params.put("since", BoundValue.of(now.minus(job.itemRetry().max())));
         params.put("first", BoundValue.of(seconds(job.itemRetry().first())));
         params.put("cap", BoundValue.of(seconds(job.itemRetry().max())));
-        params.put("limit", BoundValue.of((long) MAX_IN_BACKOFF));
-        return collect(engine.select(LATEST.formatted("",
+        params.put("limit", BoundValue.of((long) limit));
+        // The latest row of an item within the stretch is its latest row at all: later rows are later still.
+        return collect(engine.select(LATEST.formatted("AND recorded_time > :since",
             "AND recorded_time + make_interval(secs => " + DELAY + ") > :now ORDER BY recorded_time LIMIT :limit"),
             params));
     }
@@ -83,12 +91,16 @@ final class JobItemFailures {
         return collect(engine.select(LATEST.formatted("AND item_key = ANY(:keys)", ""), params));
     }
 
-    /** The failing items of the job, those failing most often first, at most {@code limit}. */
-    static Mono<List<Failing>> failing(StorageEngine engine, JobDefinition<?> job, int limit) {
+    /**
+     * The failing items of the job that failed after {@code since} (older ones have left the selection, most
+     * likely), those failing most often first, at most {@code limit}.
+     */
+    static Mono<List<Failing>> failing(StorageEngine engine, JobDefinition<?> job, int limit, Instant since) {
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("job", BoundValue.of(job.name()));
+        params.put("since", BoundValue.of(since));
         params.put("limit", BoundValue.of((long) limit));
-        return collect(engine.select(LATEST.formatted("",
+        return collect(engine.select(LATEST.formatted("AND recorded_time > :since",
             "ORDER BY attempt DESC, recorded_time DESC, item_key LIMIT :limit"), params))
             .map(found -> List.copyOf(found.values()));
     }

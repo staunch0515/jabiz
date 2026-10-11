@@ -41,9 +41,10 @@ public class JobConfig {
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         @Value("${jabiz.jobs.instance-id:}") String instanceId,
         @Value("${jabiz.jobs.lock-at-least-for:30s}") Duration lockAtLeastFor, PlatformObservations observations,
-        SqlTemplateRegistry templates, AdvancedQueryExecutor queries) {
+        SqlTemplateRegistry templates, AdvancedQueryExecutor queries,
+        @Value("${jabiz.jobs.max-in-backoff:1000}") int maxInBackoff) {
         String instance = instanceId.isBlank() ? ManagementFactory.getRuntimeMXBean().getName() : instanceId;
         return new JobRunner(locks, executor, storages, ids, clock, poolRef, instance, lockAtLeastFor, observations,
-            templates, queries);
+            templates, queries, maxInBackoff);
     }
 }

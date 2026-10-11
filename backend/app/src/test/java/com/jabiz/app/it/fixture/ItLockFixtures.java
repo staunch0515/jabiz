@@ -6,10 +6,13 @@ import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -95,6 +98,43 @@ public final class ItLockFixtures {
                     ctx -> ctx.get("input", LockInput.class).name(), BRIEF_WAIT))
                 .step("Wait at the gate", Gate.class, NoMetadata.INSTANCE));
 
+    /**
+     * Takes a lock nobody holds with a brief wait of its own, then reports the transaction's {@code lock_timeout}:
+     * the step's wait applies to its own statement only (06 section 4.1).
+     */
+    public static final ProcessDefinition<LockInput, LockOutput, ProcessContext> LOCK_TIMEOUT_PROBE =
+        ProcessDefinition.define("IT_LOCK_TIMEOUT", 1, LockInput.class, LockOutput.class, ProcessContext.class,
+            pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> new LockOutput((String) ctx.get(ReadLockTimeout.KEY)))
+                .step("Take a free lock briefly", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get("input", LockInput.class).name(), BRIEF_WAIT))
+                .step("Read the lock timeout", ReadLockTimeout.class, NoMetadata.INSTANCE));
+
+    /** Puts the transaction's {@code lock_timeout} into the context (a platform-style step, for the test only). */
+    @Component
+    public static class ReadLockTimeout implements StepHandler<NoMetadata, ProcessContext> {
+        static final String KEY = "lockTimeout";
+        private final StorageAdapterRegistry storages;
+
+        public ReadLockTimeout(StorageAdapterRegistry storages) {
+            this.storages = storages;
+        }
+
+        @Override
+        public Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
+            return storages.getEngine("default").select("SELECT current_setting('lock_timeout') AS t", Map.of())
+                .single()
+                .doOnNext(row -> ctx.put(KEY, row.get("t")))
+                .then();
+        }
+    }
+
     /** Counts the process in and waits until its gate is open (a blocking step may wait). */
     @Component
     public static class Gate implements BlockingStep<NoMetadata, ProcessContext> {
@@ -127,6 +167,11 @@ public final class ItLockFixtures {
         @Bean
         ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockedBriefly() {
             return LOCKED_BRIEFLY;
+        }
+
+        @Bean
+        ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockTimeoutProbe() {
+            return LOCK_TIMEOUT_PROBE;
         }
     }
 }

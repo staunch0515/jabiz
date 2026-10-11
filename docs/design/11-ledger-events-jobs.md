@@ -282,20 +282,24 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 ```
 
 - **选取**：以系统身份在只读短事务中运行 SQL 模板（不产生操作记录；遮蔽字段一律遮蔽，选取不留显示记录），按模板的 `defaultSort` + `key` 排序，
-  `LIMIT` = `maxItems` + 退避中的项数（至多 1 000）+ 1；滤掉退避中的项后取前 `maxItems` 项，多出的记为 `items_more`。选取失败 → 运行 `FAILED`，不处理任何项。
-  项键为空、不符合 `[A-Za-z0-9._:-]{1,36}` 或同一次选取中重复 → 该项记为 `FAILED`（`JOB_ITEM_KEY_INVALID`，error 日志；没有可记的键，不写失败行），其余照常。
+  `LIMIT` = `maxItems` + 退避中的项数（至多 `jabiz.jobs.max-in-backoff`，缺省 1 000；只读最近"最长退避"时段内的失败行）+ 1；
+  再按**每个选中项自己的**失败记录（不受上述上限影响）滤掉退避中的项，取前 `maxItems` 项；还有更多（或选取已满）记为 `items_more`。
+  退避中的项超过上限时，后面的项可能要等到它们退避期满才被选中（不会被提前重试）。选取失败 → 运行 `FAILED`，不处理任何项。
+  项键为空、不符合 `[A-Za-z0-9._:-]{1,36}` 或同一次选取中重复 → 该项记为 `FAILED`（`JOB_ITEM_KEY_INVALID`，error 日志；没有可记的键，不写失败行），其余照常；
+  全部项都无效时运行为 `PARTIAL`。**项键必须是代理键**（实体主键、UUID 之类不变、不含个人信息的标识）：它进入幂等键、失败表、日志与 `GET /api/jobs`，
+  不能用邮箱、姓名、单据号等业务值；选取以遮蔽方式读取遮蔽字段，项键列来自遮蔽字段即启动检查错误，模板中出现遮蔽字段为告警。
   业务参数由每项流程自己读（`LoadParams`）。
 - **逐项执行**：每项以系统身份作为**根流程**、各自一个事务与 `op_process`；幂等键 `job:<名称>:<计划时刻 epoch 毫秒>:<项键>`（至多 119 字符），
-  请求标识 `job-<名称>-<毫秒>-<项键>`；执行选项 `lockWait = itemLockWait`（只约束 `HoldLock`，06 §4.1）。并发至多 `parallelism`（每项占一个连接；超过连接池一半时启动检查告警）。
+  请求标识 `job-<名称>-<毫秒>-<项键>`；执行选项 `lockWait = itemLockWait`：项的整个事务（行锁、平台的锁、幂等键）与 `HoldLock` 都以它为等待上限（06 §4.1）。并发至多 `parallelism`（每项占一个连接；超过连接池一半时启动检查告警）。
 - **每项的结果**（只影响该项）：
 
   | 结果 | 条件 | 记录 |
   |---|---|---|
   | `SUCCEEDED` | 提交 | 计数；该项此前有未恢复的失败时追加一行 `RECOVERED` |
   | `REPLAYED` | 同一计划时刻已处理过（幂等键重放） | 计数 |
-  | `BUSY` | `ConcurrentUpdateException`：锁等待超过 `itemLockWait`（`55P03`）、死锁（`40P01`）、版本冲突 | 计数，不算失败、不退避；仍然到期的项由下次运行重新选取 |
-  | `FAILED` | 其他异常（422、404、500 …），事务已回滚，不留任何效果 | 追加 `sys_job_item_failure`（`FAILED`，`attempt` = 连续次数）；warn 日志，连续第 5 次起 error |
-  | `DEFERRED` | 退避中（选取后滤掉），或超过 `maxRunTime`、停机后未开始 | 计数 |
+  | `BUSY` | 只有"忙"的冲突（`ConcurrentUpdateException.busy()`）：锁等待超时（`55P03`）与死锁（`40P01`）译为 `LockNotAvailableException`，版本过期为 `ConcurrentUpdateException.stale` | 计数，不算失败、不退避；info 日志，同一项连续 5 次起 warn（实例内计数）；仍然到期的项由下次运行重新选取 |
+  | `FAILED` | 其他异常（422、404、500 …），包括不是"忙"的冲突（实体已存在、撤销与变基冲突等）；事务已回滚，不留任何效果 | 追加 `sys_job_item_failure`（`FAILED`，`attempt` = 连续次数）；warn 日志，连续第 5 次起 error |
+  | `DEFERRED` | 退避中（选取后滤掉），或超过 `maxRunTime`、停机后未开始；停机开始后才出错的项 | 计数 |
 
 - **运行结果**：`sys_job_run` 一行，带 `items_selected`（各结果之和）、`items_succeeded` / `replayed` / `busy` / `failed` / `deferred` 与 `items_more`；
   没有 `FAILED` 项 → `SUCCEEDED`，有 → `PARTIAL`，选取失败 → `FAILED`（`REPLAYED` 只属于单流程任务）。`JobRunner.execute(job, 时刻)` 返回结果与计数，`run` 只返回结果。
@@ -304,7 +308,8 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   退避中的项另外放宽选取上限，"毒项"不会占满 `maxItems` 使后面的项饿死。
 - **集群**：一次运行（选取 + 全部项）在该任务的 ShedLock 下，同一时刻只有一个实例运行；项不在实例间分发。`maxRunTime` < `lockAtMostFor`，到时不再开始新项，
   进行中的项照常结束。即使锁过期、另一实例开始同一计划时刻，幂等键保证同一项在同一计划时刻至多执行一次（并发时一方等待唯一约束后重放）。
-  运行超过 cron 间隔时下一时刻 `LOCKED`；逐项任务按状态选取，下一次运行自然接上。停机（`JobScheduler` 的 `@PreDestroy`）时不再开始新项。
+  运行超过 cron 间隔时下一时刻 `LOCKED`；逐项任务按状态选取，下一次运行自然接上。停机（`JobScheduler` 的 `@PreDestroy`）时不再开始新项，
+  等待进行中的项至多 `jabiz.jobs.scheduler.shutdown-grace`（缺省 30 秒）后中断其余；停机开始后出错的项记为 `DEFERRED`，不写失败行。
   `maxRunTime` 与锁时间一样是真实时间（基础设施时间）；退避与失败记录的时刻来自注入的 `Clock`。
 - **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
   每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
@@ -312,12 +317,13 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **启动检查 `JOB`**（一次报全）：选取模板存在、不是公开模板、声明 `list.defaultSort` 与 `list.key`、必填参数都由参数函数给出且没有未声明的参数；
   项键列是模板的结果列；每项流程已注册且 `internal()`；`itemLockWait` 不超过 `jabiz.process.lock-timeout`；`parallelism` 超过 R2DBC 连接池（`spring.r2dbc.pool.max-size`）一半时告警。
   `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 等范围在声明时即检查。
-- **表**：`sys_job_item_failure`（只追加，平台迁移 `V36`）：`failure_id`、`entry_no`（自增，定序）、`job_name`、`item_key`、`kind`（`FAILED` / `RECOVERED`）、`run_id`、
+- **"连续失败中的项"**（`GET /api/jobs`）只列最近 7 天内失败过的项（更早的多半已不再被选中）。
+- **表**：`sys_job_item_failure`（只追加，平台迁移 `V36`，索引 `(job_name, item_key, entry_no DESC)` 与 `(job_name, recorded_time)`）：`failure_id`、`entry_no`（自增，定序）、`job_name`、`item_key`、`kind`（`FAILED` / `RECOVERED`）、`run_id`、
   `scheduled_time`、`attempt`、`error`（至多 2 000 字符）、`process_seq_id`（`RECOVERED` 行的成功操作）、`recorded_time`。`sys_job_run` 加列不执行 UPDATE，封存按各块记下的列清单校验（21 §2）。
 - **观测**：每项 `jabiz.job.item`（标签只有 `job` 与 `result`），每项流程的 `jabiz.process` 嵌在其下；运行 `jabiz.job.run` 的结果增加 `PARTIAL`；选取记为 `jabiz.query.template`（13）。
 - **场景**：`runJob: {job, at, outcome, items: {succeeded, replayed, busy, failed, deferred}}`，`outcome` 缺省 `SUCCEEDED`（可写 `PARTIAL`），`items` 只比较写出的键。
 - **示范**：`commerce.unpaid-order-expire`（每天 03:10 东京时间，模板 `commerce.job.unpaid-orders`：`PLACED`、未付款、下单早于 `计划时刻 − app.commerce.unpaid-order-ttl`（缺省 14 天））
-  的每项流程 `ORDER_EXPIRE {orderId}`：取订单锁 `commerce.order:<id>`、重新读取，仍未付款才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
+  的每项流程 `ORDER_EXPIRE {orderId}`：拒绝系统以外的调用者（D41 的执行合并前的防护）、取订单锁 `commerce.order:<id>`、重新读取，仍未付款且已超过期限才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
   "刚付款"与"过期取消"不交错。场景 `scenarios/commerce/unpaid_order_expiry.yml`。
 
 ## 5. 示范（`app` 的 `FreightBilling`）

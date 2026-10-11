@@ -33,4 +33,6 @@ CREATE TABLE sys_job_item_failure (
     recorded_time  timestamptz  NOT NULL    -- from the injected clock
 );
 CREATE INDEX sys_job_item_failure_key_idx ON sys_job_item_failure (job_name, item_key, entry_no DESC);
+-- The items in backoff are read from the last stretch of a job's rows only (at most its longest retry delay).
+CREATE INDEX sys_job_item_failure_time_idx ON sys_job_item_failure (job_name, recorded_time);
 SELECT jabiz_protect_append_only('sys_job_item_failure');

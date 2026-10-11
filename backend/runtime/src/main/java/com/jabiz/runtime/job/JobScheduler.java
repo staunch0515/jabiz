@@ -11,6 +11,7 @@ import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 
@@ -33,11 +34,14 @@ public class JobScheduler {
     private final Clock clock;
     private final boolean enabled;
     private final int poolSize;
+    private final Duration shutdownGrace;
     private volatile ThreadPoolTaskScheduler scheduler;
 
     public JobScheduler(JobRegistry jobs, JobRunner runner, Clock clock,
         @Value("${jabiz.jobs.scheduler.enabled:true}") boolean enabled,
-        @Value("${jabiz.jobs.scheduler.pool-size:2}") int poolSize) {
+        @Value("${jabiz.jobs.scheduler.pool-size:2}") int poolSize,
+        @Value("${jabiz.jobs.scheduler.shutdown-grace:30s}") Duration shutdownGrace) {
+        this.shutdownGrace = shutdownGrace;
         this.jobs = jobs;
         this.runner = runner;
         this.clock = clock;
@@ -55,6 +59,7 @@ public class JobScheduler {
         tasks.setThreadNamePrefix("jabiz-job-");
         tasks.setClock(clock);
         tasks.setWaitForTasksToCompleteOnShutdown(true);
+        tasks.setAwaitTerminationMillis(shutdownGrace.toMillis());
         tasks.initialize();
         scheduler = tasks;
         jobs.all().forEach(job -> scheduleNext(job, clock.instant()));
@@ -63,7 +68,8 @@ public class JobScheduler {
 
     @jakarta.annotation.PreDestroy
     public synchronized void stop() {
-        // Runs in progress start no new item (per-item jobs); the shutdown below waits for them to end.
+        // Runs in progress start no new item (per-item jobs); the shutdown below waits up to
+        // jabiz.jobs.scheduler.shutdown-grace for the items under way to end, then interrupts what is left.
         runner.stop();
         if (scheduler != null) {
             scheduler.shutdown();

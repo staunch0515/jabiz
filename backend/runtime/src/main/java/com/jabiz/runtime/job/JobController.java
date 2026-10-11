@@ -29,6 +29,8 @@ class JobController {
     static final String READ = "job.read";
     static final int RECENT_RUNS = 10;
     static final int FAILING_ITEMS = 50;
+    /** Items whose last failure is older are left out: they no longer fail (or are no longer selected). */
+    static final java.time.Duration FAILING_SINCE = java.time.Duration.ofDays(7);
     static final int MAX_SHOWN_ERROR = 200;
 
     private final JobRegistry jobs;
@@ -109,7 +111,8 @@ class JobController {
         if (job.kind() != JobDefinition.Kind.PER_ITEM) {
             return Mono.just(List.of());
         }
-        return JobItemFailures.failing(storages.getEngine(poolRef), job, FAILING_ITEMS)
+        return JobItemFailures.failing(storages.getEngine(poolRef), job, FAILING_ITEMS,
+                clock.instant().minus(FAILING_SINCE))
             .map(failing -> failing.stream().map(item -> {
                 Map<String, Object> json = new LinkedHashMap<>();
                 json.put("itemKey", item.itemKey());

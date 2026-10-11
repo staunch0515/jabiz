@@ -7,7 +7,7 @@ import com.jabiz.app.it.fixture.ItJobItemFixtures.OnlineInput;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.context.RequestContext;
 import com.jabiz.job.JobDefinition;
-import com.jabiz.runtime.ConcurrentUpdateException;
+import com.jabiz.runtime.LockNotAvailableException;
 import com.jabiz.runtime.integrity.IntegrityProcesses;
 import com.jabiz.runtime.job.JobConfig;
 import com.jabiz.runtime.job.JobRunner;
@@ -269,7 +269,7 @@ class JobItemsIT extends PostgresIntegrationTest {
         CompletableFuture<JobRun> run = background(() -> runner.execute(job, at(6)));
         awaitArrived(first);
         CompletableFuture<OnlineInput> request = online(pubB, wallet, null);
-        awaitWaiting(1);
+        awaitWaiting(wallet, 1);
 
         open(first);
         // The request gets the wallet as soon as item 1 commits, while the job is still running.
@@ -300,7 +300,7 @@ class JobItemsIT extends PostgresIntegrationTest {
             executor.execute(ItJobItemFixtures.BATCH, new BatchInput(keys))).toFuture();
         awaitArrived(first);
         CompletableFuture<OnlineInput> request = online(pubB, wallet, null);
-        awaitWaiting(1);
+        awaitWaiting(wallet, 1);
         open(first);
 
         // Item 1's locks stay with the batch until it commits: it wants B, the request wants S. One of them dies.
@@ -312,8 +312,8 @@ class JobItemsIT extends PostgresIntegrationTest {
                 errors.add(e.getCause());
             }
         }
-        assertThat(errors).singleElement().isInstanceOf(ConcurrentUpdateException.class)
-            .satisfies(error -> assertThat(causes(error)).containsIgnoringCase("deadlock"));
+        assertThat(errors).singleElement().isInstanceOfSatisfying(LockNotAvailableException.class,
+            error -> assertThat(error.deadlock()).isTrue());
         if (whole.isCompletedExceptionally()) {
             // The whole batch rolled back, item 1 included.
             assertThat(runs(keys)).containsExactly(0, 0);
@@ -349,50 +349,203 @@ class JobItemsIT extends PostgresIntegrationTest {
         assertThat(jobRuns(job)).hasSize(2);
     }
 
-    /** A lock that expires while its run goes on: a second instance runs the same time beside it. */
+    /**
+     * A lock that expires while its run goes on: a second instance runs the same time beside it. The first instance's
+     * item 3 is held at a gate until the second waits for its idempotency key, so the runs really overlap.
+     */
     @Test
     void concurrentInstancesAfterAnExpiredLockRunEachItemOnce() throws Exception {
         String batch = batch();
         List<String> keys = items(batch, 30);
-        execute("UPDATE it_job_item SET f_sleep_ms = 50, f_stay_due = true WHERE f_batch = ?", batch);
-        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch).parallelism(2);
+        String held = gate();
+        execute("UPDATE it_job_item SET f_stay_due = true WHERE f_batch = ?", batch);
+        execute("UPDATE it_job_item SET f_gate = ? WHERE f_id = ?", held, keys.get(3));
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch).parallelism(2)
+            .itemLockWait(Duration.ofSeconds(8));
         Instant at = at(8);
 
         CompletableFuture<JobRun> first = background(() -> instance("instance-a", Duration.ZERO).execute(job, at));
-        for (int i = 0; i < 400 && runs(keys).stream().mapToInt(Integer::intValue).sum() < 4; i++) {
+        awaitArrived(held);
+        expireLock(job);
+        CompletableFuture<JobRun> second = background(() -> instance("instance-b", Duration.ZERO).execute(job, at));
+        // The second instance reaches item 3 and waits for the first one's uncommitted operation of it.
+        for (int i = 0; i < 400 && waitingForTransactions() < 1; i++) {
             Thread.sleep(25);
         }
-        expireLock(job);
-        JobRun second = instance("instance-b", Duration.ZERO).execute(job, at);
+        assertThat(waitingForTransactions()).as("a session waiting for the other instance's item").isPositive();
+        open(held);
         JobRun firstRun = first.get(60, TimeUnit.SECONDS);
+        JobRun secondRun = second.get(60, TimeUnit.SECONDS);
 
-        assertThat(List.of(firstRun.outcome(), second.outcome())).containsOnly(Outcome.SUCCEEDED);
+        assertThat(List.of(firstRun.outcome(), secondRun.outcome())).containsOnly(Outcome.SUCCEEDED);
         assertThat(runs(keys)).containsOnly(1);
-        assertThat(firstRun.items().succeeded() + second.items().succeeded()).isEqualTo(30);
-        assertThat(second.items().replayed()).isPositive();
+        assertThat(firstRun.items().succeeded() + secondRun.items().succeeded()).isEqualTo(30);
+        assertThat(secondRun.items().replayed()).isPositive();
         assertThat(query("SELECT count(*) AS n FROM op_process WHERE idempotency_key LIKE ?",
             "job:" + job.name() + ":%").getFirst().get("n")).isEqualTo(30L);
     }
 
     // ================= 7. maxRunTime =================
 
+    /** The first item is held past maxRunTime: once it ends, no other item starts. */
     @Test
-    void afterMaxRunTimeNoItemStarts() {
+    void afterMaxRunTimeNoItemStarts() throws Exception {
         String batch = batch();
         List<String> keys = items(batch, 7);
-        execute("UPDATE it_job_item SET f_sleep_ms = 400 WHERE f_batch = ?", batch);
+        String held = gate();
+        execute("UPDATE it_job_item SET f_gate = ? WHERE f_id = ?", held, keys.getFirst());
         JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch).maxItems(6)
-            .maxRunTime(Duration.ofSeconds(1));
+            .maxRunTime(Duration.ofSeconds(2));
 
-        JobRun run = runner.execute(job, at(9));
+        CompletableFuture<JobRun> running = background(() -> runner.execute(job, at(9)));
+        awaitArrived(held);
+        Thread.sleep(Duration.ofSeconds(2).toMillis());
+        open(held);
+        JobRun run = running.get(30, TimeUnit.SECONDS);
 
-        ItemCounts items = run.items();
-        assertThat(items.selected()).isEqualTo(6);
-        assertThat(items.more()).isTrue();
-        assertThat(items.succeeded()).isBetween(1, 5);
-        assertThat(items.deferred()).isEqualTo(6 - items.succeeded());
+        assertThat(run.items()).isEqualTo(new ItemCounts(6, 1, 0, 0, 0, 5, true));
         assertThat(run.outcome()).isEqualTo(Outcome.SUCCEEDED);
-        assertThat(runs(keys).stream().mapToInt(Integer::intValue).sum()).isEqualTo(items.succeeded());
+        assertThat(runs(keys)).containsExactly(1, 0, 0, 0, 0, 0, 0);
+    }
+
+    // ================= review: busy only for lock failures and stale versions =================
+
+    /**
+     * 40P01 for one item: the item holds A and pauses, a request takes B and waits for A, then the item wants B. The
+     * request waited first, past the deadlock check (1 s), so the database finds the cycle on the item's wait and
+     * chooses it: the item is busy, not failed, and runs next time; the request goes through.
+     */
+    @Test
+    void anItemChosenAsADeadlockVictimIsBusy() throws Exception {
+        String batch = batch();
+        List<String> keys = items(batch, 1);
+        String suffix = UUID.randomUUID().toString();
+        String a = "dl-a-" + suffix;
+        String b = "dl-b-" + suffix;
+        String pause = gate();
+        execute("UPDATE it_job_item SET f_lock1 = ?, f_pause = ?, f_lock2 = ? WHERE f_id = ?", a, pause, b,
+            keys.getFirst());
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch).itemLockWait(Duration.ofSeconds(8));
+
+        CompletableFuture<JobRun> run = background(() -> runner.execute(job, at(12)));
+        awaitArrived(pause);
+        CompletableFuture<OnlineInput> request = online(b, a, null);
+        awaitWaiting(a, 1);
+        Thread.sleep(1500);
+        open(pause);
+
+        JobRun done = run.get(30, TimeUnit.SECONDS);
+        assertThat(done.outcome()).isEqualTo(Outcome.SUCCEEDED);
+        assertThat(done.items()).isEqualTo(new ItemCounts(1, 0, 0, 1, 0, 0, false));
+        assertThat(request.get(10, TimeUnit.SECONDS)).isNotNull();
+        assertThat(failures(job)).isEmpty();
+        assertThat(runs(keys)).containsExactly(0);
+        execute("UPDATE it_job_item SET f_pause = NULL WHERE f_id = ?", keys.getFirst());
+        assertThat(runner.execute(job, at(12).plusSeconds(60)).items().succeeded()).isEqualTo(1);
+    }
+
+    /** Someone changed the item between its reading and its writing: a stale version is busy. */
+    @Test
+    void aStaleVersionIsBusy() throws Exception {
+        String batch = batch();
+        List<String> keys = items(batch, 1);
+        String held = gate();
+        execute("UPDATE it_job_item SET f_gate = ? WHERE f_id = ?", held, keys.getFirst());
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch);
+
+        CompletableFuture<JobRun> run = background(() -> runner.execute(job, at(13)));
+        awaitArrived(held);
+        execute("UPDATE it_job_item SET f_version = f_version + 1, f_gate = NULL WHERE f_id = ?", keys.getFirst());
+        open(held);
+
+        assertThat(run.get(30, TimeUnit.SECONDS).items()).isEqualTo(new ItemCounts(1, 0, 0, 1, 0, 0, false));
+        assertThat(failures(job)).isEmpty();
+        assertThat(runner.execute(job, at(13).plusSeconds(60)).items().succeeded()).isEqualTo(1);
+    }
+
+    /** A conflict that waiting does not resolve (the row exists already) is a failure, not busy. */
+    @Test
+    void aRowThatExistsAlreadyIsAFailure() {
+        String batch = batch();
+        List<String> keys = items(batch, 2);
+        String existing = "it-exists-" + UUID.randomUUID();
+        execute("INSERT INTO it_event_log (f_id, f_source, f_consumer) VALUES (?, 'test', 'test')", existing);
+        execute("UPDATE it_job_item SET f_insert = ? WHERE f_id = ?", existing, keys.getFirst());
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch);
+
+        JobRun run = runner.execute(job, at(14));
+
+        assertThat(run.outcome()).isEqualTo(Outcome.PARTIAL);
+        assertThat(run.items()).isEqualTo(new ItemCounts(2, 1, 0, 0, 1, 0, false));
+        assertThat(failures(job)).singleElement().satisfies(row ->
+            assertThat((String) row.get("error")).contains("ConcurrentUpdateException", "conflicts with existing"));
+    }
+
+    // ================= review: keys, backoff cap, stopping =================
+
+    /** No selected item has a usable key: each is a failed item, the run is partial (no failure rows to key). */
+    @Test
+    void itemsWithoutUsableKeysFail() {
+        String batch = batch();
+        execute("INSERT INTO it_job_item (f_id, f_batch, f_seq) VALUES (?, ?, 0)", "bad key " + batch.substring(0, 8),
+            batch);
+        execute("INSERT INTO it_job_item (f_id, f_batch, f_seq) VALUES (?, ?, 1)",
+            "also bad/" + batch.substring(0, 8), batch);
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch);
+
+        JobRun run = runner.execute(job, at(15));
+
+        assertThat(run.outcome()).isEqualTo(Outcome.PARTIAL);
+        assertThat(run.items()).isEqualTo(new ItemCounts(2, 0, 0, 0, 2, 0, false));
+        assertThat(failures(job)).isEmpty();
+    }
+
+    /**
+     * More items in backoff than widen the selection (the cap lowered to 3 here; 1000 by default): each selected
+     * item's own backoff still holds, none of them is retried early.
+     */
+    @Test
+    void itemsInBackoffBeyondTheCapAreNotRetriedEarly() {
+        String batch = batch();
+        List<String> keys = items(batch, 8);
+        for (String key : keys.subList(0, 6)) {
+            execute("UPDATE it_job_item SET f_fail = true WHERE f_id = ?", key);
+        }
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch).maxItems(20);
+        Instant base = at(16);
+        clock.set(base);
+        JobRunner capped = new JobRunner(new R2dbcLockProvider(pool(), JobConfig.LOCK_TABLE), executor, storages, ids,
+            clock, "default", "instance-capped", Duration.ZERO, PlatformObservations.NOOP, templates, queries, 3);
+        // Twice in a row: all six wait a minute now.
+        assertThat(capped.execute(job, base).items()).isEqualTo(new ItemCounts(8, 2, 0, 0, 6, 0, false));
+        assertThat(capped.execute(job, base.plusSeconds(60)).items())
+            .isEqualTo(new ItemCounts(6, 0, 0, 0, 6, 0, false));
+
+        // Six in backoff, three of them known to widen the selection of two: all six are left out all the same.
+        JobRun third = capped.execute(job.maxItems(2), base.plusSeconds(120));
+        assertThat(third.items().deferred()).isEqualTo(6);
+        assertThat(third.items().failed()).isZero();
+        assertThat(failures(job)).hasSize(12);
+    }
+
+    /** Once the application stops, an item cut short is deferred, not failed, and no new item starts. */
+    @Test
+    void stoppingDefersWhatIsLeft() throws Exception {
+        String batch = batch();
+        List<String> keys = items(batch, 3);
+        String held = gate();
+        execute("UPDATE it_job_item SET f_gate = ?, f_fail = true WHERE f_id = ?", held, keys.getFirst());
+        JobDefinition<ItemInput> job = ItJobItemFixtures.job(name(), batch);
+        JobRunner stopping = instance("instance-stopping", Duration.ZERO);
+
+        CompletableFuture<JobRun> run = background(() -> stopping.execute(job, at(17)));
+        awaitArrived(held);
+        stopping.stop();
+        open(held);
+
+        assertThat(run.get(30, TimeUnit.SECONDS).items()).isEqualTo(new ItemCounts(3, 0, 0, 0, 0, 3, false));
+        assertThat(failures(job)).isEmpty();
+        assertThat(runs(keys)).containsExactly(0, 0, 0);
     }
 
     // ================= 8, 9: system actor, invalid selections, append-only =================
@@ -450,17 +603,9 @@ class JobItemsIT extends PostgresIntegrationTest {
 
     // ================= helpers =================
 
-    private static String causes(Throwable error) {
-        StringBuilder text = new StringBuilder();
-        for (Throwable t = error; t != null; t = t.getCause()) {
-            text.append(t).append('\n');
-        }
-        return text.toString();
-    }
-
     /** As if the run's cluster lock had expired. */
     private static void expireLock(JobDefinition<?> job) {
-        execute("UPDATE " + JobConfig.LOCK_TABLE + " SET lock_until = now() - interval '1 second' WHERE name = ?",
+        execute("UPDATE " + JobConfig.LOCK_TABLE + " SET lock_until = now() - interval '1 hour' WHERE name = ?",
             job.name());
     }
 
@@ -540,20 +685,34 @@ class JobItemsIT extends PostgresIntegrationTest {
     }
 
     /** Waits until {@code count} sessions wait for an advisory lock. */
-    private static void awaitWaiting(int count) throws InterruptedException {
-        for (int i = 0; i < 400 && waiting() < count; i++) {
+    private static void awaitWaiting(String name, int count) throws InterruptedException {
+        for (int i = 0; i < 400 && waiting(name) < count; i++) {
             Thread.sleep(25);
         }
-        assertThat(waiting()).as("sessions waiting for a lock").isEqualTo(count);
+        assertThat(waiting(name)).as("sessions waiting for a lock").isEqualTo(count);
     }
 
-    private static int waiting() {
-        return ((Number) query("SELECT count(*) AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted")
+    /** Sessions waiting for another transaction to end (an idempotency key taken but not committed yet). */
+    private static int waitingForTransactions() {
+        return ((Number) query("SELECT count(*) AS n FROM pg_locks WHERE locktype = 'transactionid' AND NOT granted")
+            .getFirst().get("n")).intValue();
+    }
+
+    private static int waiting(String name) {
+        return ((Number) query("SELECT count(*) AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+            // Only this lock: test classes in other forks share the database server and its pg_locks.
+            + " AND ((classid::bigint << 32) | objid::bigint) = hashtextextended(?, 0)", "jabiz.app-lock:" + name)
             .getFirst().get("n")).intValue();
     }
 
     /** One application instance's runner: its own pool and lock provider over the shared schema. */
     private JobRunner instance(String instanceId, Duration lockAtLeastFor) {
+        return new JobRunner(new R2dbcLockProvider(pool(), JobConfig.LOCK_TABLE), executor, storages, ids, clock,
+            "default", instanceId, lockAtLeastFor, PlatformObservations.NOOP, templates, queries, 1000);
+    }
+
+    /** A connection pool of its own over the shared schema, for an instance's cluster locks. */
+    private ConnectionPool pool() {
         ConnectionFactoryOptions options = ConnectionFactoryOptions.parse(DB.r2dbcUrl() + "?schema=" + schema())
             .mutate()
             .option(ConnectionFactoryOptions.USER, DB.username())
@@ -562,8 +721,7 @@ class JobItemsIT extends PostgresIntegrationTest {
         ConnectionPool pool = new ConnectionPool(ConnectionPoolConfiguration.builder(ConnectionFactories.get(options))
             .maxSize(4).build());
         pools.add(pool);
-        return new JobRunner(new R2dbcLockProvider(pool, JobConfig.LOCK_TABLE), executor, storages, ids, clock,
-            "default", instanceId, lockAtLeastFor, PlatformObservations.NOOP, templates, queries);
+        return pool;
     }
 
     @SafeVarargs

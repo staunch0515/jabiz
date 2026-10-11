@@ -1,12 +1,17 @@
 package com.jabiz.runtime.job;
 
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.FieldDefinition;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
+import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.QueryParameter;
+import com.jabiz.query.template.SqlText;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +35,8 @@ import java.util.function.Function;
  * template that exists, is not public, declares {@code list.defaultSort} and {@code list.key}, gets every required
  * parameter and no unknown one, and has the key column; an item process declared {@code internal()} (D41: its input
  * comes from the selection, not from a person); an {@code itemLockWait} within {@code jabiz.process.lock-timeout}; and,
- * as a warning, a {@code parallelism} of at most half the connection pool.
+ * as a warning, a {@code parallelism} of at most half the connection pool. The selection reads masked fields masked:
+ * an item key from one is an error, any other masked field the template names a warning.
  */
 @Component
 public class JobChecks implements PlatformCheck {
@@ -40,21 +46,24 @@ public class JobChecks implements PlatformCheck {
     private final JobRegistry jobs;
     private final ProcessRegistry processes;
     private final Function<String, Optional<AdvancedQueryDefinition>> templates;
+    private final Function<String, Optional<EntityDefinition>> entities;
     private final Duration lockTimeout;
     private final int poolSize;
 
     @Autowired
     public JobChecks(JobRegistry jobs, ProcessRegistry processes, SqlTemplateRegistry templates,
-        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout,
+        EntityDefinitionRegistry entities, @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout,
         @Value("${spring.r2dbc.pool.max-size:10}") int poolSize) {
-        this(jobs, processes, templates::find, lockTimeout, poolSize);
+        this(jobs, processes, templates::find, entities::find, lockTimeout, poolSize);
     }
 
     JobChecks(JobRegistry jobs, ProcessRegistry processes,
-        Function<String, Optional<AdvancedQueryDefinition>> templates, Duration lockTimeout, int poolSize) {
+        Function<String, Optional<AdvancedQueryDefinition>> templates,
+        Function<String, Optional<EntityDefinition>> entities, Duration lockTimeout, int poolSize) {
         this.jobs = jobs;
         this.processes = processes;
         this.templates = templates;
+        this.entities = entities;
         this.lockTimeout = lockTimeout;
         this.poolSize = poolSize;
     }
@@ -82,6 +91,7 @@ public class JobChecks implements PlatformCheck {
 
     private List<CheckProblem> perItemProblems(JobDefinition<?> job, String where) {
         List<CheckProblem> problems = new ArrayList<>();
+        // internal() means "the system only" (D41): an entry-only or sub-process-only process is not internal().
         if (!job.process().internal()) {
             problems.add(CheckProblem.error(CATEGORY, where, "runs item process " + job.process().name()
                 + ", which is not internal(): item processes take their input from the selection (decision D41)"));
@@ -112,12 +122,31 @@ public class JobChecks implements PlatformCheck {
         if (template.list().key().isEmpty()) {
             problems.add(CheckProblem.error(CATEGORY, where, selection + " declares no list.key"));
         }
-        if (template.result(items.keyColumn()).isEmpty()) {
+        Optional<ProjectedField> key = template.result(items.keyColumn());
+        if (key.isEmpty()) {
             problems.add(CheckProblem.error(CATEGORY, where, selection + " has no result column "
                 + items.keyColumn() + " for the item key"));
+        } else if (masked(key.get().sourceEntity(), key.get().sourceField())) {
+            problems.add(CheckProblem.error(CATEGORY, where, selection + " takes the item key from masked field "
+                + key.get().sourceEntity() + "." + key.get().sourceField() + "; the selection reads it masked"));
         }
+        // The selection runs with every masked field masked: a column computed from one is "***" there.
+        SqlText.placeholders(SqlText.mask(template.sqlTemplate())).stream()
+            .filter(placeholder -> placeholder.field() != null && masked(placeholder.entity(), placeholder.field()))
+            .map(placeholder -> placeholder.entity() + "." + placeholder.field())
+            .distinct()
+            .forEach(field -> problems.add(CheckProblem.warning(CATEGORY, where, selection + " names masked field "
+                + field + ", which the selection reads masked")));
         problems.addAll(parameterProblems(job, where, selection, template));
         return problems;
+    }
+
+    private boolean masked(String entity, String field) {
+        if (entity == null || field == null) {
+            return false;
+        }
+        return entities.apply(entity).map(def -> def.fields.get(field)).map(FieldDefinition::isMasked)
+            .orElse(false);
     }
 
     /** The parameters a run gives (from any scheduled time: the function is free of I/O) must fit the template. */

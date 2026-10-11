@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.core.ResolvableType;
 
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.entity.MaskStyle;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.job.JobItems;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
@@ -52,8 +54,31 @@ class JobChecksTest {
         .publicAccess()
         .sqlTemplate("SELECT 1"));
 
+    static final EntityDefinition TICKET = EntityDefinition.define("Ticket", eb -> {
+        eb.physicalTable("ticket");
+        eb.primaryKey("id");
+        eb.field("id", f -> f.physicalColumn("id").required(true).asSemanticIdentity("urn:ticket"));
+        eb.field("taxId", f -> f.physicalColumn("tax_id").asText(20).masked("ticket.tax", MaskStyle.TAX_ID));
+    });
+
+    /** Keyed by a masked field (an error), and naming it besides (a warning). */
+    static final AdvancedQueryDefinition MASKED_KEY = AdvancedQueryDefinition.define("it.job.masked", q -> q
+        .fromEntities("Ticket")
+        .returnsFrom("item_id", "Ticket", "taxId")
+        .list(l -> l.sorts("item_id").defaultSort("item_id", true).key("item_id"))
+        .permissions("it.read")
+        .sqlTemplate("SELECT t.{{Ticket.taxId}} AS item_id FROM {{Ticket}} t"));
+
+    /** Keyed by the identity, but filtering on a masked field (a warning). */
+    static final AdvancedQueryDefinition MASKED_FILTER = AdvancedQueryDefinition.define("it.job.filtered", q -> q
+        .fromEntities("Ticket")
+        .returnsFrom("item_id", "Ticket", "id")
+        .list(l -> l.sorts("item_id").defaultSort("item_id", true).key("item_id"))
+        .permissions("it.read")
+        .sqlTemplate("SELECT t.{{Ticket.id}} AS item_id FROM {{Ticket}} t WHERE t.{{Ticket.taxId}} IS NULL"));
+
     private static final Map<String, AdvancedQueryDefinition> TEMPLATES = Map.of(SELECTION.queryId(), SELECTION,
-        UNSORTED.queryId(), UNSORTED);
+        UNSORTED.queryId(), UNSORTED, MASKED_KEY.queryId(), MASKED_KEY, MASKED_FILTER.queryId(), MASKED_FILTER);
 
     private static List<CheckProblem> check(JobDefinition<?>... jobs) {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
@@ -67,7 +92,7 @@ class JobChecksTest {
             beans.getBeanProvider(ResolvableType.forClass(ProcessDefinition.class)));
         JobRegistry registry = new JobRegistry(beans.getBeanProvider(ResolvableType.forClass(JobDefinition.class)));
         return new JobChecks(registry, processes, id -> Optional.ofNullable(TEMPLATES.get(id)),
-            Duration.ofSeconds(30), 10).check();
+            name -> Optional.ofNullable(name.equals("Ticket") ? TICKET : null), Duration.ofSeconds(30), 10).check();
     }
 
     private static JobDefinition<In> perItem(String name, JobItems items, ProcessDefinition<In, In, ProcessContext> p) {
@@ -111,6 +136,19 @@ class JobChecksTest {
             "JOB | job throws | the parameters of selection template it.job.due could not be computed:"
                 + " java.lang.IllegalStateException: no");
         assertThat(problems.get(3).severity()).isEqualTo(CheckProblem.Severity.WARNING);
+    }
+
+    @Test
+    void theSelectionReadsMaskedFieldsMasked() {
+        assertThat(check(perItem("masked", JobItems.template("it.job.masked", "item_id"), ITEM),
+            perItem("filtered", JobItems.template("it.job.filtered", "item_id"), ITEM)))
+            .extracting(CheckProblem::format).containsExactly(
+                "JOB | job masked | selection template it.job.masked takes the item key from masked field"
+                    + " Ticket.taxId; the selection reads it masked",
+                "WARNING JOB | job masked | selection template it.job.masked names masked field Ticket.taxId, which"
+                    + " the selection reads masked",
+                "WARNING JOB | job filtered | selection template it.job.filtered names masked field Ticket.taxId,"
+                    + " which the selection reads masked");
     }
 
     @Test

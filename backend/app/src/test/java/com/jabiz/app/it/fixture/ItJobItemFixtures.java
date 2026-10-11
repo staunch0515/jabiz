@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Fixtures of the per-item job tests (ROADMAP phase 16k; decision D42). Each {@code ItJobItem} row says how its item
  * process {@value #ITEM_PROCESS} behaves: the locks it takes (in order), how long it works, the gate it waits at while
- * holding them, and whether it fails (422). A committed run counts itself in {@code runs} and leaves the item no longer
+ * holding them, whether it fails (422), and the id of an {@code ItEventLog} row it inserts. A committed run counts itself in {@code runs} and leaves the item no longer
  * due, unless it stays due. The selection template is {@code it.job_items} (one batch, in {@code seq} order).
  *
  * <p>{@value #ONLINE_PROCESS} stands for a request of a person taking two locks in order, and {@value #BATCH_PROCESS}
@@ -74,7 +74,9 @@ public final class ItJobItemFixtures extends BaseEntityDefinitions {
         eb.field("sleepMs", f -> f.physicalColumn("f_sleep_ms").asNumeric(9, 0));
         eb.field("gate", f -> f.physicalColumn("f_gate").asText(100));
         eb.field("lock1", f -> f.physicalColumn("f_lock1").asText(100));
+        eb.field("pause", f -> f.physicalColumn("f_pause").asText(100));
         eb.field("lock2", f -> f.physicalColumn("f_lock2").asText(100));
+        eb.field("insert", f -> f.physicalColumn("f_insert").asText(200));
         eb.field("runs", f -> f.physicalColumn("f_runs").asNumeric(9, 0));
         eb.field("rowVersion", rowVersion("f_version"));
     });
@@ -108,6 +110,7 @@ public final class ItJobItemFixtures extends BaseEntityDefinitions {
                 item(ctx).<BigDecimal>get("runs").intValue() + 1))
             .step("Load the item", LoadEntity.by(DATASET, ID, LOADED))
             .step("Take the first lock", HoldLock.<ProcessContext>exclusive(ctx -> item(ctx).get("lock1")))
+            .step("Pause between the locks", PauseGate.class, NoMetadata.INSTANCE)
             .step("Take the second lock", HoldLock.<ProcessContext>exclusive(ctx -> item(ctx).get("lock2")))
             .step("Work", Work.class, NoMetadata.INSTANCE)
             .compute("Count the run", (metadata, ctx) -> {
@@ -115,6 +118,12 @@ public final class ItJobItemFixtures extends BaseEntityDefinitions {
                 if (Boolean.TRUE.equals(item.get("fail"))) {
                     ctx.reject(new Violation(null, "IT_ITEM_FAILED", "item " + item.get("itemId") + " fails"));
                     return;
+                }
+                String insert = item.get("insert");
+                if (insert != null) {
+                    // A row of that id may exist already: a conflict that waiting does not resolve.
+                    ctx.changes().insert("ItEventLog", Map.of("logId", insert, "source", "job",
+                        "consumer", ITEM_PROCESS));
                 }
                 ctx.changes().update(ENTITY, item.id(), item.version(), Map.of(
                     "runs", item.<BigDecimal>get("runs").add(BigDecimal.ONE),
@@ -169,6 +178,15 @@ public final class ItJobItemFixtures extends BaseEntityDefinitions {
             if (sleep != null && sleep.signum() > 0) {
                 Thread.sleep(sleep.longValue());
             }
+        }
+    }
+
+    /** Waits at the item's pause gate, holding its first lock only. */
+    @Component
+    public static class PauseGate implements BlockingStep<NoMetadata, ProcessContext> {
+        @Override
+        public void run(NoMetadata metadata, ProcessContext ctx) throws InterruptedException {
+            await(item(ctx).get("pause"));
         }
     }
 

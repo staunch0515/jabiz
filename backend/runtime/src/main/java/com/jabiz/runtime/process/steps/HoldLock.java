@@ -25,7 +25,7 @@ import java.util.function.Function;
  *
  * <p>A process waits at most the shortest of {@code jabiz.process.lock-timeout} (30 seconds by default), the step's
  * own {@code waitAtMost} and the execution's {@link ExecutionOptions#lockWait()} (a job's items, decision D42); a
- * deadlock or a wait that long fails it with {@link com.jabiz.runtime.ConcurrentUpdateException} (409; a busy item of
+ * deadlock or a wait that long fails it with {@link com.jabiz.runtime.LockNotAvailableException} (409; a busy item of
  * a job). The bound applies to the lock statement only: the transaction's own {@code lock_timeout} is put back after
  * it. In-transaction steps only: after the commit there is no transaction to hold it.
  */

@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runs one scheduled time of a job (docs/design/11-ledger-events-jobs.md section 4; decisions D14 and D42) under the
@@ -57,7 +58,7 @@ import java.util.UUID;
  *       with a transaction of its own, {@code parallelism} at a time, with the key
  *       {@code job:<name>:<scheduled time in ms>:<item key>} and the item's {@code HoldLock} waits bounded by
  *       {@code itemLockWait}. An item that commits {@code SUCCEEDED}, one that ran before at this time
- *       {@code REPLAYED}, one that met a held lock, a deadlock or a version conflict is {@code BUSY} (left to the next
+ *       {@code REPLAYED}, one that met a held lock, a deadlock or a stale version is {@code BUSY} (left to the next
  *       run, not a failure), one that fails otherwise {@code FAILED} (rolled back, recorded in
  *       {@code sys_job_item_failure} and backed off); an item not started is {@code DEFERRED}. No item's result
  *       affects another's. After {@code maxRunTime}, or once the application stops, no new item starts.</li>
@@ -75,6 +76,9 @@ public class JobRunner {
     /** From this many failures in a row on, a failing item is logged as an error, not a warning. */
     static final int ERROR_FROM_FAILURES = 5;
     static final String KEY_INVALID = "JOB_ITEM_KEY_INVALID";
+    /** From this many BUSY outcomes in a row on, a busy item is logged as a warning. */
+    static final int WARN_AFTER_BUSY = 5;
+    private static final int MAX_BUSY_STREAKS = 10_000;
 
     /** Result of asking for a run. */
     public enum Outcome {
@@ -126,19 +130,31 @@ public class JobRunner {
     private final PlatformObservations observations;
     private final SqlTemplateRegistry templates;
     private final AdvancedQueryExecutor queries;
+    private final int maxInBackoff;
     private volatile boolean stopping;
+    /** Consecutive BUSY outcomes per job and item, on this instance, to warn about items that are always busy. */
+    private final Map<String, Integer> busyStreaks = new ConcurrentHashMap<>();
 
     /** A runner of single-process jobs only (per-item jobs need the templates). */
     public JobRunner(LockProvider lockProvider, ProcessExecutor executor, StorageAdapterRegistry storages,
         EntityIdGenerator ids, Clock clock, String poolRef, String instanceId, Duration lockAtLeastFor,
         PlatformObservations observations) {
         this(lockProvider, executor, storages, ids, clock, poolRef, instanceId, lockAtLeastFor, observations, null,
-            null);
+            null, JobItemFailures.MAX_IN_BACKOFF);
     }
 
+    /**
+     * @param maxInBackoff how many items waiting for their backoff widen a selection at most
+     *                     ({@code jabiz.jobs.max-in-backoff}, 1000)
+     */
     public JobRunner(LockProvider lockProvider, ProcessExecutor executor, StorageAdapterRegistry storages,
         EntityIdGenerator ids, Clock clock, String poolRef, String instanceId, Duration lockAtLeastFor,
-        PlatformObservations observations, SqlTemplateRegistry templates, AdvancedQueryExecutor queries) {
+        PlatformObservations observations, SqlTemplateRegistry templates, AdvancedQueryExecutor queries,
+        int maxInBackoff) {
+        if (maxInBackoff < 0) {
+            throw new IllegalArgumentException("maxInBackoff must not be negative");
+        }
+        this.maxInBackoff = maxInBackoff;
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.locks = new DefaultLockingTaskExecutor(Objects.requireNonNull(lockProvider, "lockProvider"));
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
@@ -229,8 +245,9 @@ public class JobRunner {
      *
      * @param key     its key; null when its key column was empty or invalid
      * @param invalid why its key is not usable, or null
+     * @param failing its failures in a row, or null when it is not failing
      */
-    private record Item(String key, Map<String, Object> row, String invalid) {}
+    private record Item(String key, Map<String, Object> row, String invalid, JobItemFailures.Failing failing) {}
 
     /** The items of a run: those to execute in order, those in backoff, and whether more were left out. */
     private record Selection(List<Item> work, int inBackoff, boolean more) {}
@@ -249,11 +266,8 @@ public class JobRunner {
             if (selection.inBackoff() > 0) {
                 tally.put(ItemOutcome.DEFERRED, selection.inBackoff());
             }
-            Map<String, JobItemFailures.Failing> failing = JobItemFailures.failing(engine(), job,
-                selection.work().stream().map(Item::key).filter(Objects::nonNull).toList()).block();
             List<ItemOutcome> outcomes = Flux.fromIterable(selection.work())
-                .flatMap(item -> runItem(job, scheduledTime, runId, item,
-                    failing == null ? null : failing.get(item.key()), deadline), job.parallelism())
+                .flatMap(item -> runItem(job, scheduledTime, runId, item, deadline), job.parallelism())
                 .collectList()
                 .block();
             Objects.requireNonNull(outcomes, "no item outcomes").forEach(item -> tally.merge(item, 1, Integer::sum));
@@ -285,62 +299,72 @@ public class JobRunner {
             new IllegalStateException("Job " + job.name() + ": template " + items.templateId() + " has no column "
                 + items.keyColumn()));
         StorageEngine engine = engine();
+        Instant now = clock.instant();
         Map<String, JobItemFailures.Failing> backoff = Objects.requireNonNull(
-            JobItemFailures.inBackoff(engine, job, clock.instant()).block());
+            JobItemFailures.inBackoff(engine, job, now, maxInBackoff).block());
         Map<String, Object> params = items.parameters().apply(scheduledTime);
         int limit = job.maxItems() + backoff.size() + 1;
         RequestContext system = RequestContext.system(Locale.ENGLISH,
             "job-" + job.name() + "-" + scheduledTime.toEpochMilli());
         // Masked: whatever the system may read, the selection reveals nothing and so records nothing (read-only).
-        List<SemanticRow> rows = engine.inTransaction(
+        List<SemanticRow> rows = Objects.requireNonNull(engine.inTransaction(
                 engine.select("SET TRANSACTION READ ONLY", Map.of()).then()
                     .then(queries.all(template, params == null ? Map.of() : params, AdvancedQueryExecutor.At.NOW,
                         null, List.of(), limit, true)))
             .map(AdvancedQueryExecutor.Page::items)
             .contextWrite(view -> RequestContexts.put(view, system))
-            .block();
-        List<Item> work = new ArrayList<>();
-        int inBackoff = 0;
-        int others = 0;
+            .block(), "no rows");
+        List<Item> candidates = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (SemanticRow row : Objects.requireNonNull(rows, "no rows")) {
+        for (SemanticRow row : rows) {
             Map<String, Object> values = new LinkedHashMap<>();
             row.getAllColumns().forEach((name, value) -> values.put(name, value.value()));
             Object raw = values.get(keyColumn);
             String key = raw == null ? null : String.valueOf(raw);
-            Item item;
             if (key == null || !JobItems.ITEM_KEY.matcher(key).matches()) {
-                item = new Item(null, values, key == null ? "is empty" : "is not 1 to 36 of [A-Za-z0-9._:-]");
+                candidates.add(new Item(null, values, key == null ? "is empty" : "is not 1 to 36 of [A-Za-z0-9._:-]",
+                    null));
             } else if (!seen.add(key)) {
-                item = new Item(null, values, key + " was selected twice");
-            } else if (backoff.containsKey(key)) {
-                inBackoff++;
-                continue;
+                candidates.add(new Item(null, values, key + " was selected twice", null));
             } else {
-                item = new Item(key, values, null);
-            }
-            if (++others <= job.maxItems()) {
-                work.add(item);
+                candidates.add(new Item(key, values, null, null));
             }
         }
-        return new Selection(List.copyOf(work), inBackoff, others > job.maxItems());
+        // Every selected key's own backoff decides, not only the capped list that widened the selection.
+        Map<String, JobItemFailures.Failing> failing = Objects.requireNonNull(JobItemFailures.failing(engine, job,
+            candidates.stream().map(Item::key).filter(Objects::nonNull).toList()).block());
+        List<Item> work = new ArrayList<>();
+        int inBackoff = 0;
+        int others = 0;
+        for (Item candidate : candidates) {
+            JobItemFailures.Failing failures = candidate.key() == null ? null : failing.get(candidate.key());
+            if (failures != null && failures.retryAt(job.itemRetry()).isAfter(now)) {
+                inBackoff++;
+                continue;
+            }
+            if (++others <= job.maxItems()) {
+                work.add(new Item(candidate.key(), candidate.row(), candidate.invalid(), failures));
+            }
+        }
+        // A full selection may have left items out, whatever became of the rows it brought.
+        return new Selection(List.copyOf(work), inBackoff, others > job.maxItems() || rows.size() >= limit);
     }
 
     private <I> Mono<ItemOutcome> runItem(JobDefinition<I> job, Instant scheduledTime, UUID runId, Item item,
-        JobItemFailures.Failing failing, long deadline) {
+        long deadline) {
         return Mono.defer(() -> {
             if (stopping || System.nanoTime() - deadline > 0) {
                 return Mono.just(ItemOutcome.DEFERRED);
             }
             return observations.mono(PlatformObservations.JOB_ITEM, "job item " + job.name(),
-                KeyValues.of("job", job.name()), executeItem(job, scheduledTime, runId, item, failing)
+                KeyValues.of("job", job.name()), executeItem(job, scheduledTime, runId, item)
                     .flatMap(outcome -> PlatformObservations.tag(PlatformObservations.RESULT, outcome.name())
                         .thenReturn(outcome)));
         });
     }
 
-    private <I> Mono<ItemOutcome> executeItem(JobDefinition<I> job, Instant scheduledTime, UUID runId, Item item,
-        JobItemFailures.Failing failing) {
+    private <I> Mono<ItemOutcome> executeItem(JobDefinition<I> job, Instant scheduledTime, UUID runId, Item item) {
+        JobItemFailures.Failing failing = item.failing();
         if (item.invalid() != null) {
             log.error("Job {} at {}: an item's key {} ({}); the item is skipped", job.name(), scheduledTime,
                 item.invalid(), KEY_INVALID);
@@ -361,6 +385,7 @@ public class JobRunner {
         return Mono.defer(() -> executor.run(job.process(), input, options))
             .contextWrite(view -> RequestContexts.put(view, system))
             .flatMap(result -> {
+                busyStreaks.remove(streakKey(job, key));
                 if (result.replayed()) {
                     return Mono.just(ItemOutcome.REPLAYED);
                 }
@@ -374,14 +399,41 @@ public class JobRunner {
                     .thenReturn(ItemOutcome.SUCCEEDED);
             })
             .onErrorResume(error -> {
-                // A held lock, a deadlock or a version conflict: busy, not failed; the next run selects it again.
-                if (error instanceof ConcurrentUpdateException) {
-                    log.debug("Job {} at {}: item {} is busy ({})", job.name(), scheduledTime, key,
-                        error.getMessage());
+                // A held lock, a deadlock or a stale version: busy, not failed; the next run selects it again.
+                // Other conflicts (an entity that already exists...) will not go away by waiting: failed.
+                if (error instanceof ConcurrentUpdateException conflict && conflict.busy()) {
+                    busy(job, scheduledTime, key, error);
                     return Mono.just(ItemOutcome.BUSY);
+                }
+                busyStreaks.remove(streakKey(job, key));
+                if (stopping) {
+                    // Stopping: the item was cut short with the application, not by its own fault.
+                    log.info("Job {} at {}: item {} ended as the application stops ({})", job.name(), scheduledTime,
+                        key, error.toString());
+                    return Mono.just(ItemOutcome.DEFERRED);
                 }
                 return failed(job, scheduledTime, runId, key, failures, error);
             });
+    }
+
+    private static String streakKey(JobDefinition<?> job, String key) {
+        return job.name() + ' ' + key;
+    }
+
+    /** Logs a busy item: at info, and as a warning once it has been busy {@value #WARN_AFTER_BUSY} runs in a row. */
+    private void busy(JobDefinition<?> job, Instant scheduledTime, String key, Throwable error) {
+        if (busyStreaks.size() > MAX_BUSY_STREAKS) {
+            // Items that left the selection keep no entry for ever; losing the counts only delays a warning.
+            busyStreaks.clear();
+        }
+        int streak = busyStreaks.merge(streakKey(job, key), 1, Integer::sum);
+        if (streak >= WARN_AFTER_BUSY) {
+            log.warn("Job {} at {}: item {} has been busy {} runs in a row ({})", job.name(), scheduledTime, key,
+                streak, error.getMessage());
+        } else {
+            log.info("Job {} at {}: item {} is busy, left to the next run ({})", job.name(), scheduledTime, key,
+                error.getMessage());
+        }
     }
 
     private Mono<ItemOutcome> failed(JobDefinition<?> job, Instant scheduledTime, UUID runId, String key,

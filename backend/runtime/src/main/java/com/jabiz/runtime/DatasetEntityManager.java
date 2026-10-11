@@ -412,7 +412,7 @@ public class DatasetEntityManager {
         ValidationContext validation
     ) {
         if (current.version() != instance.version()) {
-            return Mono.error(new ConcurrentUpdateException(String.format(
+            return Mono.error(ConcurrentUpdateException.stale(String.format(
                 "Optimistic lock conflict on %s [ID: %s]: expected version [%d], stored version [%d]",
                 def.name, instance.id(), instance.version(), current.version())));
         }
@@ -515,7 +515,7 @@ public class DatasetEntityManager {
                 .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
                 .flatMap(current -> {
                     if (current.version() != instance.version()) {
-                        return Mono.<Void>error(new ConcurrentUpdateException(String.format(
+                        return Mono.<Void>error(ConcurrentUpdateException.stale(String.format(
                             "Optimistic lock conflict on deleting %s [ID: %s]: expected version [%d], stored version [%d]",
                             def.name, instance.id(), instance.version(), current.version())));
                     }
@@ -1213,7 +1213,7 @@ public class DatasetEntityManager {
     }
 
     private static ConcurrentUpdateException conflict(EntityDefinition def, Object id) {
-        return new ConcurrentUpdateException(
+        return ConcurrentUpdateException.stale(
             "Optimistic lock conflict on " + def.name + " [ID: " + id + "]");
     }
 }

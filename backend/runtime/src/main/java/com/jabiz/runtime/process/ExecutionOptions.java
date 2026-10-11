@@ -19,10 +19,10 @@ import java.util.regex.Pattern;
  * @param dryRun         whether to roll the transaction back once the process has completed, returning its output:
  *                       everything it would do is done and checked, nothing stays, and no after-commit step runs (an
  *                       import's preview, docs/design/20-imports.md section 5). Not with an idempotency key.
- * @param lockWait       the longest a {@code HoldLock} step of the process or its sub-processes waits for its lock,
- *                       below {@code jabiz.process.lock-timeout} (a job's items, decision D42); null for the global
- *                       timeout. It bounds {@code HoldLock} only: the platform's own locks and row locks keep the
- *                       global timeout (docs/design/06-process.md section 4.1).
+ * @param lockWait       the longest the transaction waits for any lock - row locks, the platform's own, an idempotency
+ *                       key, {@code HoldLock} steps of the process and its sub-processes - when shorter than
+ *                       {@code jabiz.process.lock-timeout} (a job's items, decision D42); null for the global timeout
+ *                       (docs/design/06-process.md section 4.1)
  */
 public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun,
     Duration lockWait) {

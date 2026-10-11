@@ -10,7 +10,9 @@ CREATE TABLE it_job_item (
     f_sleep_ms  numeric(9, 0) NOT NULL DEFAULT 0,
     f_gate      varchar(100),
     f_lock1     varchar(100),
+    f_pause     varchar(100),
     f_lock2     varchar(100),
+    f_insert    varchar(200),
     f_runs      numeric(9, 0) NOT NULL DEFAULT 0,
     f_version   bigint        NOT NULL DEFAULT 1
 );
