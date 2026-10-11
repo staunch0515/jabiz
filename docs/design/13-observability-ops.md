@@ -24,7 +24,8 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.query.template` | `AdvancedQueryExecutor.page` / `all`（模板 API、`RunTemplate` 与导出） | `template` |
 | `jabiz.query.export` | `ReportExporter.export`（19 §4；其中的模板执行即 `jabiz.query.template`） | `template` `format` |
 | `jabiz.outbox.delivery` | `OutboxDeliverer.deliver` | `consumer` `event` `result`（`CONSUMED` / `DUPLICATE` / `FAILED`） |
-| `jabiz.job.run` | `JobRunner.run`（调度线程，阻塞式观测） | `job` `result`（`SUCCEEDED` / `REPLAYED` / `FAILED` / `LOCKED`） |
+| `jabiz.job.run` | `JobRunner.run` / `execute`（调度线程，阻塞式观测） | `job` `result`（`SUCCEEDED` / `REPLAYED` / `FAILED` / `PARTIAL` / `LOCKED`） |
+| `jabiz.job.item` | 逐项任务的一项（11 §4.1；每项流程的 `jabiz.process` 嵌在其下，选取即 `jabiz.query.template`） | `job` `result`（`SUCCEEDED` / `REPLAYED` / `BUSY` / `FAILED`）；不放项键、主键或输入 |
 | `jabiz.file.upload` | `FileUploadService.upload`（14 §1） | `policy` |
 | `jabiz.file.serve` | 读取文件内容（14 §5、15 §4） | `channel`（`admin` / `public`） |
 | `jabiz.public.query` | 公开模板接口（15 §5；其中的模板执行即 `jabiz.query.template`，嵌套在内） | `template` `result`（`ok` / `not_modified`） |

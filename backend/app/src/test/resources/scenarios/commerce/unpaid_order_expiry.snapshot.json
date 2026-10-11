@@ -1,0 +1,66 @@
+{
+  "scenario" : "Unpaid orders expire",
+  "asOf" : "2026-06-15T18:10:05Z",
+  "entities" : {
+    "SalesOrder" : [ {
+      "orderId" : "#uuid:1",
+      "orderNo" : "SO-EXP-1",
+      "customerCode" : "CUST-EXP",
+      "warehouseId" : "#uuid:2",
+      "orderedTime" : "2026-06-01T00:00:00Z",
+      "status" : "CANCELLED",
+      "totalAmount" : "2400",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "paidTime" : null,
+      "paymentRef" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-06-15T18:10:00Z",
+      "createdTime" : "2026-06-15T18:10:00Z",
+      "processSeqId" : "#op:3"
+    }, {
+      "orderId" : "#uuid:3",
+      "orderNo" : "SO-EXP-2",
+      "customerCode" : "CUST-EXP",
+      "warehouseId" : "#uuid:2",
+      "orderedTime" : "2026-06-01T00:00:00Z",
+      "status" : "PLACED",
+      "totalAmount" : "1200",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "paidTime" : "2026-06-02T00:00:00Z",
+      "paymentRef" : "pi_exp_2",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-06-02T00:00:00Z",
+      "createdTime" : "2026-06-02T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "orderId" : "#uuid:4",
+      "orderNo" : "SO-EXP-3",
+      "customerCode" : "CUST-EXP",
+      "warehouseId" : "#uuid:2",
+      "orderedTime" : "2026-06-12T00:00:00Z",
+      "status" : "PLACED",
+      "totalAmount" : "3600",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "paidTime" : null,
+      "paymentRef" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-12T00:00:00Z",
+      "createdTime" : "2026-06-12T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "StockLevel" : [ {
+      "stockLevelId" : "#uuid:5",
+      "warehouseId" : "#uuid:2",
+      "productId" : "#uuid:6",
+      "onHand" : "20",
+      "reserved" : "4",
+      "versionNo" : 5,
+      "effectStartTime" : "2026-06-15T18:10:00Z",
+      "createdTime" : "2026-06-15T18:10:00Z",
+      "processSeqId" : "#op:3"
+    } ]
+  }
+}

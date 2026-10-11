@@ -99,9 +99,26 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
 
     /**
      * Runs a scheduled job for {@code at} (default: now) as the scheduler would, and checks the outcome
-     * ({@code SUCCEEDED} by default; docs/design/11-ledger-events-jobs.md section 4).
+     * ({@code SUCCEEDED} by default, {@code PARTIAL} for a per-item job with failed items;
+     * docs/design/11-ledger-events-jobs.md section 4).
+     *
+     * @param items the expected item counts of a per-item job's run, by {@code succeeded}, {@code replayed},
+     *              {@code busy}, {@code failed} and {@code deferred}; only those given are compared. Null for none.
      */
-    public record RunJob(int number, String job, Instant at, String outcome) implements Step {}
+    public record RunJob(int number, String job, Instant at, String outcome, Map<String, Integer> items)
+        implements Step {
+
+        /** The item counts a step may name. */
+        public static final Set<String> ITEM_COUNTS = Set.of("succeeded", "replayed", "busy", "failed", "deferred");
+
+        public RunJob {
+            items = items == null ? null : Map.copyOf(items);
+        }
+
+        public RunJob(int number, String job, Instant at, String outcome) {
+            this(number, job, at, outcome, null);
+        }
+    }
 
     /** Delivers the pending outbox events to their consumers until nothing is due. */
     public record DeliverEvents(int number) implements Step {}
@@ -313,11 +330,24 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
             return new RunJob(number, name, null, "SUCCEEDED");
         }
         Map<String, Object> job = map(body, where);
-        onlyKeys(job, where, Set.of("job", "at", "outcome"));
+        onlyKeys(job, where, Set.of("job", "at", "outcome", "items"));
         Object at = job.get("at");
         String outcome = text(job, "outcome", false);
+        Map<String, Integer> items = null;
+        if (job.get("items") != null) {
+            Map<String, Object> counts = map(job.get("items"), where + ".items");
+            onlyKeys(counts, where + ".items", RunJob.ITEM_COUNTS);
+            items = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, Object> count : counts.entrySet()) {
+                if (!(count.getValue() instanceof Integer n) || n < 0) {
+                    throw new IllegalArgumentException(where + ".items." + count.getKey()
+                        + " must be a whole number of at least 0");
+                }
+                items.put(count.getKey(), n);
+            }
+        }
         return new RunJob(number, text(job, "job", true), at == null ? null : instant(at, where + ".at"),
-            outcome == null ? "SUCCEEDED" : outcome);
+            outcome == null ? "SUCCEEDED" : outcome, items);
     }
 
     private static InboundStep inbound(int number, Map<String, Object> inbound, String where) {

@@ -37,6 +37,9 @@ public final class ItApprovalFixtures {
 
     private static final String APPROVAL = "approval";
 
+    /** A cancellation with this memo keeps the request pending ({@code WithdrawApproval.when}). */
+    public static final String KEEP_PENDING = "keep";
+
     public static final ProcessDefinition<PayInput, PayOutput, ProcessContext> PAY =
         ProcessDefinition.define("IT_PAY", 1, PayInput.class, PayOutput.class, ProcessContext.class, pb -> pb
             .permissions(PREPARE)
@@ -69,7 +72,8 @@ public final class ItApprovalFixtures {
                 return ctx;
             })
             .outputMapper(ctx -> new PayOutput("WITHDRAWN", null))
-            .step("Withdraw the approval", WithdrawApproval.of(SUBJECT,
+            .step("Withdraw the approval", WithdrawApproval.when(
+                ctx -> !KEEP_PENDING.equals(ctx.get("input", PayInput.class).memo()), SUBJECT,
                 ctx -> ctx.get("input", PayInput.class).paymentId())));
 
     /** Needs {@link #SOD_PREPARE} and does nothing: the SoD check at the entry decides. */
