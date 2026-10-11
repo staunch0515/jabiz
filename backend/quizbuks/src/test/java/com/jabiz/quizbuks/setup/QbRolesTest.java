@@ -53,7 +53,7 @@ class QbRolesTest {
     void takersAndSponsorsHoldOnlyTheirOwnPermissions() {
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).containsExactlyInAnyOrder(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
-            QbPermissions.SPONSOR_AVATAR_READ);
+            QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ);
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb."))
             .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP);
     }
@@ -70,7 +70,8 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
             .contains(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ)
             .doesNotContain(QbPermissions.CONTENT_WRITE);
-        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.CONTENT_FILE_READ);
+        // Takers read the covers, pictures and materials of the quizzes they answer (Q5, D-Q5-6).
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).contains(QbPermissions.CONTENT_FILE_READ);
         assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions())
             .doesNotContain(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ);
     }
@@ -121,6 +122,16 @@ class QbRolesTest {
             .doesNotContainAnyElementsOf(List.of("ledger.post", "ledger.reverse", "ledger.account.write", "*")));
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .contains(QbPermissions.COUNTRY_READ));
+    }
+
+    @Test
+    void onlyThePlatformRunsTheAnsweringSystemProcessesAndNobodyCreditsWallets() {
+        // Q5 (docs/quizbuks/plans/Q5-answering.md, requirement 1).
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
+            .doesNotContain(QbPermissions.PLAY_SYSTEM, QbPermissions.WALLET_DEV_CREDIT));
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).contains(QbPermissions.PLAY, QbPermissions.ME);
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions()).contains(QbPermissions.ADMIN_FINANCE_READ);
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.ADMIN_USERS_READ);
     }
 
     @Test

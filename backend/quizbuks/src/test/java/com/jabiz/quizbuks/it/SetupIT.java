@@ -127,6 +127,13 @@ class SetupIT extends QbItSupport {
             List<Object> permissions = query("SELECT permission FROM sec_role_permission_version WHERE role_id = ?",
                 role.get("role_id")).stream().map(row -> row.get("permission")).toList();
             assertThat(permissions).as(declared.code()).containsExactlyInAnyOrderElementsOf(declared.permissions());
+            // Q5: takers read the quizzes' files; the answering system processes and the development credit are
+            // nobody's.
+            if (QbRoles.TAKER.equals(declared.code())) {
+                assertThat(permissions).contains(QbPermissions.CONTENT_FILE_READ, QbPermissions.PLAY);
+            }
+            assertThat(permissions).as(declared.code()).doesNotContain(QbPermissions.PLAY_SYSTEM,
+                QbPermissions.WALLET_DEV_CREDIT);
         }
     }
 

@@ -43,4 +43,15 @@ class RegionsTest {
         assertThat(Set.of("GLOBAL,JP,ASIA", "GLOBAL,EUROPE,ASIA"))
             .allSatisfy(written -> assertThat(Regions.TARGETS.matcher(written).matches()).isTrue());
     }
+
+    @Test
+    void aTakerSeesAPublicationAimedAtAnyOfTheirRegions() {
+        assertThat(Regions.overlaps("GLOBAL,JP,ASIA", "JP")).isTrue();
+        assertThat(Regions.overlaps("GLOBAL,JP,ASIA", "CN,ASIA")).isTrue();
+        assertThat(Regions.overlaps("GLOBAL,US,NORTH_AMERICA", "JP,ASIA")).isFalse();
+        assertThat(Regions.overlaps("GLOBAL,US,NORTH_AMERICA", "GLOBAL")).isTrue();
+        assertThat(Regions.overlaps("GLOBAL", "JP")).isFalse();
+        assertThat(Regions.overlaps(null, "GLOBAL")).isFalse();
+        assertThat(Regions.overlaps("GLOBAL", null)).isFalse();
+    }
 }

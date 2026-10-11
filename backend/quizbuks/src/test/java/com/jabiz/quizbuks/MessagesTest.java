@@ -2,6 +2,7 @@ package com.jabiz.quizbuks;
 
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.identity.AccountCodes;
+import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,15 @@ class MessagesTest {
                 "mail.qb.sponsor.rejected.subject", "mail.qb.sponsor.rejected.body", "query.qb.me.sign-ins",
                 "query.qb.admin.users", "query.qb.admin.sponsors", "entity.QbProfile", "entity.QbSponsor",
                 "entity.QbUserBan", "param.qb.review.sponsor.auto");
+        assertThat(en.stringPropertyNames()).containsAll(PlayCodes.ALL)
+            .contains("process.QB_VIEW", "process.QB_ATTEMPT_START", "process.QB_ATTEMPT_SAVE",
+                "process.QB_ATTEMPT_SUBMIT", "process.QB_ATTEMPT_EXPIRE", "process.QB_PENDING_SETTLE",
+                "process.QB_PENDING_PAY", "process.QB_PUBLICATION_FUNDS_RESTORED", "process.QB_PUBLICATION_FUNDED",
+                "process.QB_PUBLICATION_STATS_REFRESH", "process.QB_WALLET_DEV_CREDIT", "entity.QbAttempt",
+                "entity.QbPublicationCard", "entity.QbPublicationView", "entity.QbPublicationStats",
+                "entity.QbWallet", "query.qb.app.feed", "query.qb.app.publication",
+                "query.qb.app.publication-tiers", "query.qb.app.history", "query.qb.admin.attempts",
+                "query.qb.admin.wallets", "query.qb.system.publication-stats");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

@@ -1,0 +1,219 @@
+# Answering (docs/quizbuks/plans/Q5-answering.md): QB_SETUP and its proposals, the review switch on (a second
+# administrator publishes the change). Sponsor A (a platform user: the ledger's party) is onboarded, publishes a quiz
+# of two questions (full score 5) with three tiers (0, 10 and 100 Kudos), and the development credit gives A enough
+# for one top reward. U1 and U2 (Japan) start; U1 saves, continues and submits full marks: paid. U2's full marks
+# cannot be paid: pending, the publication underfunded, U3 cannot start. Another credit pays U2 (the event puts the
+# publication back on). The statistics job counts the completions; the feed, the detail, the history and the wallet
+# are read. (The expiry job of Q5b is not in this phase.)
+name: Answering
+# The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - note: Publications go on without a review (the controlled switch, four eyes).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.review.publication.auto, value: "true" },
+      reason: Review switch }
+    save: { auto: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${auto}" }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Ken, email: u2@example.com }
+    save: { u2: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u3, displayName: Mio, email: u3@example.com }
+    save: { u3: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ken, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Mio, countryCode: JP, preferredCurrency: JPY }
+
+  - note: Sponsor A is onboarded (Q2); a content administrator approves.
+    actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: A's quiz (two questions, 2 and 3 points) and a publication with three tiers, on at once.
+    advanceClock: PT1H
+  - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of France?, points: 2,
+      options: [{ text: Paris, correct: true }, { text: Lyon }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of Japan?, points: 3,
+      options: [{ text: Tokyo, correct: true }, { text: Osaka }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { version: $.versionId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Capitals week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 4, reward: 10 }
+        - { fromScore: 5, toScore: 5, reward: 100 }
+    expectOutput: { problems: [] }
+    save: { pub: $.publicationId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+  - note: "The development credit stands in for a top-up (Q6): enough for one top reward."
+    process: QB_WALLET_DEV_CREDIT@latest
+    input: { sponsorId: "${a}", amount: 100 }
+    expectOutput: { balance: 100 }
+
+  - note: U1 and U2 start; U1 saves an answer, continues and submits full marks.
+    advanceClock: PT5M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_VIEW@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { firstView: true }
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: IN_PROGRESS, resumed: false, timeLimitSec: 300, currentIndex: 0 }
+    save: { t1: $.attemptId }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t2: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SAVE@latest
+    input: { attemptId: "${t1}", currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
+    expectOutput: { currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { attemptId: "${t1}", resumed: true, currentIndex: 1 }
+  - advanceClock: PT1M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t1}", answers: [{ questionNo: 2, selected: [1] }] }
+    expectOutput:
+      status: SUBMITTED
+      score: 5
+      passed: true
+      reward: 100
+      rewardStatus: PAID
+      questions: [{ no: 1, selected: [1], correct: [1], earned: 2 }, { no: 2, selected: [1], correct: [1], earned: 3 }]
+
+  - note: U2's full marks cannot be paid; the publication is underfunded and takes no new attempt.
+    advanceClock: PT1M
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t2}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
+    expectOutput: { score: 5, reward: 100, rewardStatus: PENDING }
+  - expect: { entity: QbPublication, id: "${pub}", fields: { status: FUNDS_SHORT } }
+  - expectError:
+      actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+      process: QB_ATTEMPT_START@latest
+      input: { publicationId: "${pub}" }
+      status: 422
+      ruleCode: QB_PUBLICATION_NOT_OPEN
+  - expectError:
+      actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+      process: QB_ATTEMPT_START@latest
+      input: { publicationId: "${pub}" }
+      status: 422
+      ruleCode: QB_ATTEMPT_ALREADY_TAKEN
+
+  - note: Another credit pays U2; once nothing is pending, the publication is back on.
+    advanceClock: PT1H
+  - process: QB_WALLET_DEV_CREDIT@latest
+    input: { sponsorId: "${a}", amount: 200 }
+    expectOutput: { balance: 200 }
+  - deliverEvents: true
+  - expect: { entity: QbPublication, id: "${pub}", fields: { status: LIVE } }
+  - expect: { entity: QbAttempt, id: "${t2}", fields: { rewardStatus: PAID, fee: 0 } }
+
+  - note: The completion counts, the pages a taker reads and the wallet.
+    runJob: { job: qb.publication-stats, at: 2026-10-01T02:10:00Z }
+  - expect:
+      query: qb.app.feed
+      params: { at: 2026-10-01T02:15:00Z, country: JP }
+      rows: 1
+      values: [{ name: Capitals week, quizTitle: World capitals, maxReward: 100, completions: 2,
+        sponsorCompany: Capitals Inc, questionCount: 2 }]
+  - expect:
+      query: qb.app.publication
+      params: { publicationId: "${pub}", at: 2026-10-01T02:15:00Z, country: JP }
+      rows: 1
+      values: [{ name: Capitals week, completions: 2, last1h: 0, last24h: 2, canStart: true }]
+  - expect:
+      query: qb.app.publication-tiers
+      params: { publicationId: "${pub}", at: 2026-10-01T02:15:00Z, country: JP }
+      rows: 3
+  - expect:
+      query: qb.admin.wallets
+      rows: 1
+      values: [{ company: Capitals Inc, balance: 100, pendingCount: 0, pendingAmount: 0 }]
+snapshot:
+  entities: [QbAttempt, QbPublicationCard, QbPublicationCounter, QbPublicationStats, QbPublicationView, QbWallet,
+    LedgerTransaction, LedgerEntry]
+  asOf: end
