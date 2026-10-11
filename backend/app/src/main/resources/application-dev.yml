@@ -6,3 +6,11 @@ jabiz:
   files:
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:build/jabiz-files}
+  # The payment provider of the orders sample (decision D37; CommercePayments), for local development only:
+  # tools/demo/inbound-demo.sh signs with the same secret. Never configured in application.yml.
+  inbound-webhooks:
+    providers:
+      demo-pay:
+        scheme: stripe
+        secrets: ["${JABIZ_DEMO_PAY_WEBHOOK_SECRET:whsec_development_only_demo_pay_secret_0000}"]
+        event-types: [payment_intent.succeeded]

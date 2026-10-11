@@ -187,6 +187,9 @@ public final class CommerceEntities extends BaseEntityDefinitions {
         eb.field("shippedTime", f -> f.physicalColumn("shipped_time").asTemporal(TemporalRole.EVENT_TIME));
         // Links the order to the logistics sample: the waybill it travels on.
         eb.field("waybillId", f -> f.physicalColumn("waybill_id").asReference("WaybillTracking"));
+        // Set by ORDER_RECORD_PAYMENT from the payment provider's webhook (CommercePayments), never by hand.
+        eb.field("paidTime", f -> f.physicalColumn("paid_time").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("paymentRef", f -> f.physicalColumn("payment_ref").processOnly().asText(255));
         eb.stateTransitions("status", st -> {
             st.from(PLACED).to(SHIPPED, CANCELLED);
         });
