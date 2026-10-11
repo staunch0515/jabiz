@@ -1015,12 +1015,18 @@ D22 第 2 条的导出中含 ProComponents 的类型（菜单项），换组件�
 OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明写作 `policy(p -> p.requiresVerifiedEmail())`，目录字段为 `writeRequiresVerifiedEmail`；
 防火墙拒绝的请求头（控制字符）不记入登录记录、也不使登录失败。
 
-16b-2 的实现细节（不改变上述约定，详见 10 §15.7）：六个 `internal` 流程（`SPONSOR_SIGN_UP`、`SPONSOR_SIGN_UP_JOIN`、`SPONSOR_EMAIL_VERIFY`、
-`SPONSOR_EMAIL_VERIFY_SEND`（匿名与已登录的重发共用）、`SPONSOR_PASSWORD_RESET_REQUEST`、`SPONSOR_PASSWORD_RESET_CONFIRM`），权限 `auth.sign-up` 不授予任何角色；
-注册、重发与找回先检查请求的全部值、再按地址与邮箱限流，因此值错误对任何邮箱相同，回答是 202、`Content-Length: 0`、空正文；
-加入的入口取自那封邮件的参数（`MailMessageParams`）；链接在用户被禁用或邮箱（不分大小写）已不是发信地址时无效（422 `TOKEN_INVALID`）；
-加入或重置一个**未验证**的账号时，除吊销全部令牌族外还删除其二次验证（预占者可能已绑定，留着会挡住真正的主人）；
-注册角色不存在或已停用时注册与加入为 422 `SIGN_UP_DISABLED`（对任何邮箱相同）；落地页的"加入"与"重置"在点击后才提交（邮件扫描器打开链接不改变任何东西）。
+16b-2 的实现细节（不改变上述约定，详见 10 §15.7）：七个 `internal` 流程（`SPONSOR_SIGN_UP`、`SPONSOR_SIGN_UP_JOIN`、`SPONSOR_EMAIL_VERIFY`、
+`SPONSOR_EMAIL_VERIFY_CHECK`（试运行）、`SPONSOR_EMAIL_VERIFY_SEND`（匿名与已登录的重发共用）、`SPONSOR_PASSWORD_RESET_REQUEST`、`SPONSOR_PASSWORD_RESET_CONFIRM`），
+权限 `auth.sign-up` 不授予任何角色；注册、重发与找回先检查请求的全部值、再按地址与邮箱限流，因此值错误对任何邮箱相同，回答是 202、`Content-Length: 0`、空正文；
+`SIGN_UP_DISABLED` 一律 422。**细则 6 的落实**（评审后修订）：
+- 账号预占的保护（设新密码、删除二次验证、吊销全部令牌族）只用于**可预占的账号**：自助注册（`SecUser.registeredEmail`，`processOnly`，只由注册写入）、从未验证
+  （`emailVerifiedAt` 为空）、当前邮箱仍是注册时的邮箱。加入其他账号只追加角色并写验证字段，密码不变。
+- 找回密码只发给**可信的邮箱**（已验证，或属于可预占的账号）；管理员设置或修改的邮箱从不可信，由本人登录后验证一次（升级前的账号因此在验证之前不能找回密码）。
+  重置不删除、也不绕过二次验证（下次登录照常要求），只有可预占的账号被接管时例外。"你已有账号"的邮件同样只发给可信的邮箱。
+- 验证可预占的账号需要当前密码（注册人保留账号）或新密码（邮箱的主人接管账号）；落地页先以试运行 `check` 从令牌问清是否需要密码，点击后才提交。
+- 平台令牌的用途在命名空间 `jabiz.` 中（`jabiz.verify`、`jabiz.join`、`jabiz.reset`），应用的模板不能使用这个前缀（启动检查）。
+- 任何入口允许注册时，`admin` 入口接受 `*` 或某个注册角色为启动错误。
+链接在用户被禁用或邮箱（不分大小写）已不是发信地址时无效（422 `TOKEN_INVALID`），在计算密码哈希之前检查；加入的入口取自那封邮件的参数（`MailMessageParams`）。
 
 ## D37 入站 Webhook
 

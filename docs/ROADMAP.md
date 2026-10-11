@@ -1443,27 +1443,42 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - [x] 示范 `portal` 的注册、验证、登录与下单可运行，被封禁的客户被拒。
 - [x] 通用后台有验证、加入、找回密码页面与"忘记密码"链接；`./gradlew check` 与前端检查通过；D36、10、07、功能清单已更新。
 
-**完成情况（分支 `1.2/phase-16b2-self-registration`）**：平台无新迁移，示范应用 `V16__customer_blocked.sql`；测试 `SignUpIT`（11）、`PasswordResetIT`（6）、`PortalIT`（4），
-runtime `SignUpRateLimitsTest`（4）、`SignUpProcessesTest`（3）、`ScenarioParserTest` 补充；场景 `security/sign_up.yml`、`commerce/portal_order.yml`；
-前端 `AuthPages.test.tsx`（10）、`LoginPage.test.tsx` 与 `registry.test.ts` 各补一条。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
+**完成情况（分支 `1.2/phase-16b2-self-registration`）**：平台迁移 `V33__registered_email.sql`（评审后新增，只加列），示范应用 `V16__customer_blocked.sql`；
+测试 `SignUpIT`（17）、`PasswordResetIT`（9）、`PortalIT`（4），runtime `SignUpRateLimitsTest`（4）、`SignUpProcessesTest`（3）、`SignInEntriesTest`、`MailChecksTest`、
+`ScenarioParserTest` 补充，core `MailTemplateTest` 补充；场景 `security/sign_up.yml`、`commerce/portal_order.yml`；前端 `AuthPages.test.tsx`（13）、
+`LoginPage.test.tsx` 与 `registry.test.ts` 各补一条。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
+
+**评审后的修订**（安全评审 S1–S3、加固与代码评审 R1–R10，10 §15.7 与 D36 实现说明已同步）：
+- S1 账号接管：找回密码与"你已有账号"只发给**可信的邮箱**（已验证，或可预占的账号的）；管理员设置或修改的邮箱从不可信（`registeredEmail` 只由注册写入），
+  由本人登录后验证。重置不删除、不绕过二次验证（下次登录照常要求）。预占保护只用于**可预占的账号**（自助注册、从未验证、仍在注册邮箱）；加入其他账号只追加角色，密码不变。
+  与评审意见的出入：加入其他账号时"你已有账号"本身就只发给可信的邮箱（否则改了别人邮箱的人可借加入链接把邮箱标为已验证、再找回密码）；可预占的账号经重置被接管时仍删除二次验证（同加入，评审 c）。
+- S2 验证链接：可预占的账号验证时要当前密码或新密码（新密码即接管，吊销原因 `CLAIM`，新错误码 `PASSWORD_INCORRECT`）；匿名的重发只发给可预占的账号。
+  验证页不再打开即提交：点击后先以试运行 `POST /api/auth/verify-email/check` 从令牌问清是否需要密码。
+- S3 后台入口：示范配置 `jabiz.security.entries.admin.accepted-roles=${JABIZ_ADMIN_ROLES:ADMIN}`；任何入口允许注册时 `admin` 接受 `*` 或注册角色为启动错误。
+  测试配置让后台接受全部角色并关闭门户的注册（各 IT 以自己的角色登录后台），注册相关的 IT 与场景自己打开注册并限定后台角色；CI 的 e2e 以 `JABIZ_ADMIN_ROLES=*`、
+  `JABIZ_PORTAL_SELF_REGISTRATION=false` 运行。场景新增 `properties`（回放上下文的配置）。
+- 加固：令牌用途改为 `jabiz.verify` / `jabiz.join` / `jabiz.reset`（core 允许令牌用途与占位符带一段命名空间），应用的模板使用 `jabiz.` 前缀为启动错误；
+  落地页读出令牌后用 `history.replaceState` 去掉它，打开期间 `<meta name="referrer" content="no-referrer">`。
+- R1 OpenAPI 标明 202 / 204；R2 并发注册只吞邮箱的唯一冲突并重试一次（后到者的用户收到"你已有账号"），有并发 IT；R3 `SIGN_UP_DISABLED` 一律 422，被拒的加入不消费令牌（IT）；
+  R4 找回密码的二次验证用例；R5 加入与重置先检查链接再计算哈希；R6 加入页只把密码的问题放在密码栏下；R7 验证页失败后可重试；
+  R8 客户端地址都取自同一计数器，限流在测试中使用可推进的时间（`FixedTimeLimits`），哈希的断言按提交的密码而非全局计数；R9 `EmailRequest.entry` 的说明；
+  R10 `DictionaryRegistryIT` 的缓存竞争以种子港口字典上的通知作栅栏（单独提交）。
+
 与计划的出入（都很小）：
-- 流程是六个而不是五个：找回密码的申请与确认各一个（`SPONSOR_PASSWORD_RESET_REQUEST` / `_CONFIRM`），匿名与已登录的重发共用 `SPONSOR_EMAIL_VERIFY_SEND`。
-- 加入或重置一个**未验证**的账号时，除吊销令牌族外还删除其二次验证（预占者可能已在不要求验证的入口登录并绑定，留着会把真正的主人挡在外面）；吊销原因 `JOIN` / `PASSWORD_RESET`。
+- 流程是七个：找回密码的申请与确认各一个，验证另有试运行的 `check`，匿名与已登录的重发共用 `SPONSOR_EMAIL_VERIFY_SEND`。
+- 平台有一个新迁移（V33，只加列），计划为"平台无新迁移"。
 - 链接在用户已禁用时也无效（同地址已改）；加入时入口须仍允许注册，注册角色须存在且启用，否则 422 `SIGN_UP_DISABLED`（对任何邮箱相同）。
-- 注册、重发、找回先检查请求的全部值（邮箱、密码规则、显示名、语言、入口）再限流与运行流程，使值错误对任何邮箱相同；202 带 `Content-Length: 0`
-  （openapi-fetch 据此不解析正文）；并发注册同一新邮箱时后到的唯一冲突也答 202。限流每类请求分开计数，使用链接（加入、验证、确认）也按地址限流。
-- `HashPasswordStep` 与 `RevokeSessionsStep` 的元数据加可选条件 `when`（找回密码对查不到用户的令牌不计算 BCrypt）；`TokenBucketLimiter` 带时钟的构造器改为公开（测试）。
-- 场景回放：步骤操作人的 `id` 可引用变量（以先前建立的用户运行 `PORTAL_ORDER_PLACE`），操作人可声明 `mfa: true`（创建角色需要管理级二次验证），07 §3.1 已写明。
-- `Customer.blocked` 可为空（空即未封禁）：通用实体流程与已有夹具插入客户时不带它，列 `NOT NULL DEFAULT` 会被显式的空值拒绝；另建 `user_id` 部分索引供守卫预读。
-- 示范的 `portal` 入口写在应用配置中：`SignInEntryIT`、`OidcEntryIT` 用同名的测试入口，补了三项属性覆盖其注册设置；`PlatformCheckIT` 现在逐条断言两条预期的警告
-  （邮件未开启、`CUSTOMER` 角色在空库中不存在）。示范的 `app-path` 为 `/`（门户自己的页面在 16c）。
-- 落地页的"加入"与"重置"在点击后才提交（邮件扫描器打开链接不改变任何东西），验证页打开即提交（同退订页）；`/auth`、`/mail` 加入扩展不能占用的平台路径。
-  登录页的外框抽到 `components/SignInFrame.tsx` 供新页面共用。
+- 注册、重发、找回先检查请求的全部值再限流与运行流程；202 带 `Content-Length: 0`（openapi-fetch 据此不解析正文）。限流每类请求分开计数，使用链接也按地址限流。
+- `HashPasswordStep` 与 `RevokeSessionsStep` 的元数据加可选条件 `when`；新的阻塞步骤 `CurrentPasswordStep`；`TokenBucketLimiter` 与 `SignUpRateLimits` 带时钟的构造器公开（测试）。
+- 场景回放：步骤操作人的 `id` 可引用变量，操作人可声明 `mfa: true`，场景可带 `properties`，07 §3.1 已写明。
+- `Customer.blocked` 可为空（空即未封禁）；另建 `user_id` 部分索引供守卫预读。
+- `SignInEntryIT`、`OidcEntryIT` 用名为 `portal` 的测试入口，补了属性覆盖其注册设置；`PlatformCheckIT` 断言预期的一条警告（`CUSTOMER` 角色在空库中不存在）。示范的 `app-path` 为 `/`。
+- 登录页的外框抽到 `components/SignInFrame.tsx`；`/auth`、`/mail` 加入扩展不能占用的平台路径。
 
 **已知问题**：限流在内存中、按实例计数；找回密码与重发的两种情况仍有极小的耗时差（多写一条邮件消息），注册的新邮箱一方多写用户与角色分配；
-邮件关闭时注册的用户无法验证（启动告警）；预占者在加入或重置之前签发的访问令牌在有效期内仍可用（同 10 §2）；用户名即小写邮箱，未验证的用户也能以它登录到不要求验证的入口（同管理员开户的用户）；
-示范未配置 `admin` 入口，它缺省接受全部角色，注册的客户也能登录后台（只有门户下单的权限，且该流程要求已验证的邮箱；10 §15.7 建议允许注册的应用显式配置 `admin`）；
-示范的 `CUSTOMER` 角色是数据，需由管理员或演示脚本创建（未创建时注册为 422 `SIGN_UP_DISABLED`，启动告警）。
+邮件关闭时注册的用户无法验证（启动告警）；被接管的预占者在此之前签发的访问令牌在有效期内仍可用（同 10 §2）；用户名即小写邮箱，未验证的用户也能以它登录到不要求验证的入口；
+**升级**：之前创建的账号（管理员设置的邮箱）在本人登录并验证邮箱之前不能找回密码、匿名重发也不发信，忘记密码时由管理员重设；
+示范的 `CUSTOMER` 角色是数据，需由管理员或演示脚本创建（未创建时注册为 422 `SIGN_UP_DISABLED`，启动告警）；`V33` 与其他并行阶段的平台迁移编号须在合并时协调。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 

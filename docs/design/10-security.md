@@ -459,7 +459,8 @@ class PortalSignInGuard implements SignInGuard {
 - 匿名注册每次计算 BCrypt，可被用来消耗 CPU：靠按地址与邮箱的限流和阻塞线程池的上限；限流按实例（多实例时各自计数）。
 - 找回密码与重发的申请，两种情况仍有极小的耗时差（多写一条邮件消息与 Outbox 事件）；注册的新邮箱一方多写用户与角色分配。
 - 邮件关闭时注册的用户收不到验证邮件，无法验证（启动告警）。
-- 加入与找回密码只删除未验证账号上的二次验证与会话；预占者在此之前签发的访问令牌在有效期内仍可用（同 §2）。
+- 接管可预占的账号时删除其二次验证、吊销其会话；预占者在此之前签发的访问令牌在有效期内仍可用（同 §2）。
+- 管理员设置的邮箱在本人验证之前不能找回密码（升级前的账号都如此）；忘记密码又没验证过邮箱的用户由管理员重设密码。
 
 ### 15.7 自助注册、邮箱验证与找回密码（16b-2）
 
@@ -467,37 +468,58 @@ class PortalSignInGuard implements SignInGuard {
 
 | 接口 | 流程 | 回答 |
 |---|---|---|
-| `POST /api/auth/register {entry, email, password, displayName?, locale?}`（匿名） | `SPONSOR_SIGN_UP` | 202（无正文），对任何邮箱相同；入口不存在或不允许注册 403 `SIGN_UP_DISABLED` |
-| `POST /api/auth/join {token, password?}`（匿名） | `SPONSOR_SIGN_UP_JOIN` | 204；链接无效 422 `TOKEN_INVALID`；邮箱未验证而没给新密码 422 `REQUIRED`（`field: password`） |
-| `POST /api/auth/verify-email {token}`（匿名） | `SPONSOR_EMAIL_VERIFY` | 204；链接无效 422 `TOKEN_INVALID` |
-| `POST /api/auth/verify-email/resend {email, entry}`（匿名） | `SPONSOR_EMAIL_VERIFY_SEND` | 202，对任何邮箱相同；只给启用且未验证的用户发信 |
-| `POST /api/auth/account/verify-email`（已登录） | 同上（本人、会话的入口） | 202 |
-| `POST /api/auth/password-reset/request {email, entry?}`（匿名） | `SPONSOR_PASSWORD_RESET_REQUEST` | 202，对任何邮箱相同；只给启用的用户发信 |
+| `POST /api/auth/register {entry, email, password, displayName?, locale?}`（匿名） | `SPONSOR_SIGN_UP` | 202（无正文），对任何邮箱相同；入口不存在或不允许注册 422 `SIGN_UP_DISABLED` |
+| `POST /api/auth/join {token, password?}`（匿名） | `SPONSOR_SIGN_UP_JOIN` | 204；链接无效 422 `TOKEN_INVALID`；可预占的账号没给新密码 422 `REQUIRED`（`field: password`） |
+| `POST /api/auth/verify-email/check {token}`（匿名） | `SPONSOR_EMAIL_VERIFY_CHECK`（试运行，不使用令牌） | `{passwordRequired}`；链接无效 422 `TOKEN_INVALID` |
+| `POST /api/auth/verify-email {token, password?, newPassword?}`（匿名） | `SPONSOR_EMAIL_VERIFY` | 204；链接无效 422 `TOKEN_INVALID`；可预占的账号缺密码 422 `REQUIRED`、密码错 422 `PASSWORD_INCORRECT`（`field: password`） |
+| `POST /api/auth/verify-email/resend {email, entry}`（匿名） | `SPONSOR_EMAIL_VERIFY_SEND` | 202，对任何邮箱相同；只给启用、可预占的账号发信 |
+| `POST /api/auth/account/verify-email`（已登录） | 同上（本人、会话的入口） | 202；给启用、邮箱未验证的本人发信 |
+| `POST /api/auth/password-reset/request {email, entry?}`（匿名） | `SPONSOR_PASSWORD_RESET_REQUEST` | 202，对任何邮箱相同；只给启用、邮箱可信的用户发信 |
 | `POST /api/auth/password-reset/confirm {token, password}`（匿名） | `SPONSOR_PASSWORD_RESET_CONFIRM` | 204，不自动登录；链接无效 422 `TOKEN_INVALID` |
 | `GET /api/auth/entries/{name}`（匿名） | — | `{name, selfRegistration, requireVerifiedEmail, appPath}`；未知 404 |
 
-- **邮件**（D35，`TRANSACTIONAL`，三语消息 `mail.jabiz.auth.<名>.subject|body`，唯一的参数是入口）：`jabiz.auth.verify-email`（令牌 `verify`，
-  `jabiz.security.sign-up.verify-ttl` 缺省 24 小时）、`jabiz.auth.account-exists`（令牌 `join`，`jabiz.security.sign-up.join-ttl` 缺省 24 小时）、
-  `jabiz.auth.password-reset`（令牌 `reset`，`jabiz.security.password-reset.ttl` 缺省 1 小时）。链接 `{baseUrl}/auth/<页>?entry=<入口>&token=<令牌>`，
-  由通用后台的落地页处理（12 §6），完成后到入口的 `app-path`。令牌只存 SHA-256，同一用户同一用途只有最新的有效（重发即作废旧的），用一次即失效。
+`SIGN_UP_DISABLED` 一律是 422（入口的配置不是秘密）：入口不存在或不允许注册，或注册角色不存在、已停用；被拒的加入不消费令牌。
+
+**两类账号**（决定哪些邮件可以发、链接能做什么；不另设状态）：
+
+- **可预占的账号**：自助注册而来（`registeredEmail`，`processOnly`，只由注册写入）、**从未**验证过（`emailVerifiedAt` 为空）、当前邮箱（不分大小写）仍是注册时的邮箱。
+  注册它的人未必拥有这个邮箱，所以证明邮箱所有权（加入、验证、重置）的人可以**接管**它：设新密码、删除二次验证、吊销全部令牌族（`claim`）。
+- **可信的邮箱**：已验证，或属于可预占的账号。只有这类邮箱收得到找回密码与"你已有账号"的邮件，这两种链接也只对它有效。
+  **管理员设置或修改的邮箱从不可信**（持有 `security.user.write` 的人改了别人的邮箱，不能借找回密码接管账号）：其用户登录后用 `POST /api/auth/account/verify-email` 验证一次。
+  因此 16b-2 之前创建的账号在验证邮箱之前不能找回密码（升级说明）。
+
+- **邮件**（D35，`TRANSACTIONAL`，三语消息 `mail.jabiz.auth.<名>.subject|body`，唯一的参数是入口）：`jabiz.auth.verify-email`（令牌 `jabiz.verify`，
+  `jabiz.security.sign-up.verify-ttl` 缺省 24 小时）、`jabiz.auth.account-exists`（令牌 `jabiz.join`，`jabiz.security.sign-up.join-ttl` 缺省 24 小时）、
+  `jabiz.auth.password-reset`（令牌 `jabiz.reset`，`jabiz.security.password-reset.ttl` 缺省 1 小时）。令牌用途在平台的命名空间 `jabiz.` 中，
+  应用的模板不能使用这个前缀（名字或令牌用途，启动检查 `MAIL` 报错），因此应用的邮件令牌不会被这些流程接受。
+  链接 `{baseUrl}/auth/<页>?entry=<入口>&token=<令牌>`，由通用后台的落地页处理（12 §6），完成后到入口的 `app-path`；落地页读出令牌后即用 `history.replaceState`
+  从地址栏去掉它，打开期间 `<meta name="referrer" content="no-referrer">`，并且只在点击后才提交（邮件扫描器打开链接不改变任何东西）。
+  令牌只存 SHA-256，同一用户同一用途只有最新的有效（重发即作废旧的），用一次即失效。
 - **不可枚举**：注册、重发、找回密码先检查请求的每个值（邮箱格式与长度、密码规则、显示名、语言、入口），再计数限流，最后运行流程；
   因此值错误对任何邮箱都一样（400），回答是 202 与相同的响应头（`Content-Length: 0`）、空正文。注册的两种情况**都计算 BCrypt**（`HashPasswordStep`）；
-  已被使用的邮箱不建用户、不用提交的密码，改给其用户发"你已有账号"（禁用的不发）。并发注册同一新邮箱时后到的唯一冲突也答 202。
-- **注册**：用户名取邮箱小写（至多 100 字符），已被占用时截短并加 `-` 与 6 位随机字母数字；邮箱按提交的保存；授予入口的注册角色（角色须存在且启用，否则 422 `SIGN_UP_DISABLED`，
-  对任何邮箱相同）；验证邮件发到提交的地址、用提交的语言（没有则用请求的语言）。未验证的用户能否登录由入口的 `require-verified-email` 决定（细则 7）；
+  已被使用的邮箱不建用户、不用提交的密码，邮箱可信时给其用户发"你已有账号"（禁用的、邮箱不可信的不发）。并发注册同一新邮箱时，后到的那个遇到邮箱的唯一冲突，
+  再运行一次（这次按已被使用处理，其用户收到"你已有账号"），同样答 202。验证链接的 `check` 只从令牌本身回答，不涉及其他邮箱。
+- **注册**：用户名取邮箱小写（至多 100 字符），已被占用时截短并加 `-` 与 6 位随机字母数字；邮箱按提交的保存，同时写 `registeredEmail`；授予入口的注册角色；
+  验证邮件发到提交的地址、用提交的语言（没有则用请求的语言）。未验证的用户能否登录由入口的 `require-verified-email` 决定（细则 7）；
   按邮箱登录只认已验证的邮箱（§15.2），用户名即小写邮箱，按它登录照常。
-- **链接的有效性**：令牌须是该用途的、未过期、最新、未用过（`MailTokens`）；其用户须仍存在且启用、当前邮箱（不分大小写）仍是发信时的地址。
-  任何一项不符都是同一个 422 `TOKEN_INVALID`。三处证明了邮箱所有权，都写 `verifiedEmail` 与 `emailVerifiedAt`（细则 5）：验证、加入、重置。
-- **加入**（细则 6，账号预占）：入口取自那封邮件的参数（`MailMessageParams`），须仍允许注册；追加尚未持有的注册角色。账号的邮箱**未验证**时必须同时设新密码：
-  写新密码、吊销全部令牌族（原因 `JOIN`）、删除邮箱被证明之前绑定的二次验证（可能是预占者绑定的，留着会把真正的主人挡在外面）；已验证的账号只追加角色、不改密码。
-  注册请求中的密码从不用于已有账号。
+- **链接的有效性**：令牌须是该用途的、未过期、最新、未用过（`MailTokens`）；其用户须仍存在且启用、当前邮箱（不分大小写）仍是发信时的地址；
+  加入与重置的链接还须邮箱可信。在计算任何密码哈希之前检查；任何一项不符都是同一个 422 `TOKEN_INVALID`。
+  三处证明了邮箱所有权，都写 `verifiedEmail` 与 `emailVerifiedAt`（细则 5）：验证、加入、重置。
+- **加入**（细则 6）：入口取自那封邮件的参数（`MailMessageParams`），须仍允许注册；追加尚未持有的注册角色、写验证字段。**可预占的账号**还必须同时设新密码并被接管
+  （吊销原因 `JOIN`）；其他账号（已验证的）只追加角色，密码不变。注册请求中的密码从不用于已有账号。
+- **验证**：可预占的账号需要其**当前密码**（注册人自己，保留账号）或**新密码**（邮箱的主人，接管账号，吊销原因 `CLAIM`）；其他账号（已登录的本人要求的验证）只凭链接。
+  落地页先用 `check` 问清是否需要密码。
 - **找回密码**：设置新密码（只用 OIDC 的用户也可）、写验证字段、吊销全部令牌族（原因 `PASSWORD_RESET`）、写登录记录 `PASSWORD_RESET`
-  （清零失败计数并解锁，带入口、地址与 UA）；未验证的账号同样删除二次验证（同加入）。不自动登录。密码不合规则（400）时令牌不消费。
+  （清零失败计数并解锁，带入口、地址与 UA）。**二次验证保留**：重置证明的是邮箱，不是认证器，下次登录照常要求第二步；只有可预占的账号被接管时才删除。
+  不自动登录。密码不合规则（400）时令牌不消费。
 - **限流**（`SignUpRateLimits`，按实例在内存中，同 15 §6）：每个客户端地址（`ClientAddresses`，转发头只在来自可信代理时采用）每类请求每小时 20 次
   （注册、重发、找回、使用链接各自计数）；每个邮箱（小写）每类请求每小时 3 次，对存在与不存在的邮箱一样计数；已登录的重发按用户计。超限 429 `RATE_LIMITED`，带 `Retry-After`。
   配置：`jabiz.security.sign-up.rate-limit.per-address|per-email|period`。
-- **后台入口**：未配置的 `admin` 接受全部角色（细则 9），因此注册得到的角色也能登录后台（只有这些角色的权限）。允许注册的应用应显式配置
-  `jabiz.security.entries.admin.accepted-roles`，只列后台的角色。
-- **启动检查**：允许注册而 `jabiz.mail.enabled` 未开启、注册角色（当前版本中）不存在为警告（§15.1）；开启邮件而缺少 `jabiz.mail.base-url` 为错误（`MAIL`，D35）。
-- 示范（`backend/app`）：入口 `portal`（接受并授予 `CUSTOMER`，允许注册，要求已验证）；`PortalSignInGuard` 拒绝被封禁（`Customer.blocked`）的客户；
-  流程 `PORTAL_ORDER_PLACE`（`requiresVerifiedEmail()`，客户取自调用者的账号而非输入，子流程 `ORDER_PLACE`）。
+- **后台入口**：注册得到的角色不能登录后台。任何入口允许注册时，`admin` 入口接受 `*`（未配置即如此，细则 9），或接受某个注册角色，启动检查 `SECURITY` 报**错误**；
+  允许注册的应用须显式配置 `jabiz.security.entries.admin.accepted-roles`，只列后台的角色。
+- **启动检查**：上述后台入口的错误；允许注册而 `jabiz.mail.enabled` 未开启、注册角色（当前版本中）不存在为警告（§15.1）；开启邮件而缺少 `jabiz.mail.base-url` 为错误（`MAIL`，D35）；
+  应用的邮件模板使用 `jabiz.` 前缀为错误（`MAIL`）。
+- **升级**：迁移 `V33__registered_email.sql` 只加列；之前的账号没有 `registeredEmail`，不会被当作可预占的账号；其邮箱在验证之前不收找回密码与"你已有账号"的邮件，
+  匿名的重发也不发（由本人登录后在 `/api/auth/account/verify-email` 验证）。
+- 示范（`backend/app`）：入口 `admin`（`JABIZ_ADMIN_ROLES`，缺省 `ADMIN`）与 `portal`（接受并授予 `CUSTOMER`，允许注册（`JABIZ_PORTAL_SELF_REGISTRATION`，缺省开），要求已验证）；
+  `PortalSignInGuard` 拒绝被封禁（`Customer.blocked`）的客户；流程 `PORTAL_ORDER_PLACE`（`requiresVerifiedEmail()`，客户取自调用者的账号而非输入，子流程 `ORDER_PLACE`）。
