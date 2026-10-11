@@ -591,7 +591,7 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 | 14（新，视压测） | **`LEDGER_POST` 的单笔成本**：维度与来源经默认视图逐行核对、审计、变更事件、子操作记录 | 否 | Q5 记录基线；Q10 不达标时请平台评估更省的路径（例如同一事务内缓存维度核对结果、可选不发布交易的变更事件） |
 | 15（新，视压测） | **命名锁的等待占用数据库连接** | 否 | Q10 以连接池与限流应对。必要时请平台在 `HoldLock` 前于进程内按名称排队，或给出等待者上限 |
 | 16（新，视压测） | **高频普通表写入的审计量**（进度保存） | 否 | 照常审计。若 Q10 显示审计与封存成为瓶颈，请平台提供按字段或按流程降低审计粒度的声明（须新决策，因为 D27 要求全部写入经审计） |
-| 17（新，小） | **测试中 BlockHound 随机把 span 导出的交接当作阻塞**（`BatchSpanProcessor$Worker.addSpan` 的 `Unsafe#park`，见"CI 的随机 500"） | 否 | 应用测试中的 `QbBlockHoundIntegration` 容许它。建议平台在 `JabizBlockHoundIntegration` 中加入同一条容许（附回归测试），平台的 `app` 测试同样可能随机失败 |
+| 17（新，小） | **测试中 BlockHound 随机把 span 导出的交接当作阻塞**（`BatchSpanProcessor$Worker.addSpan` 的 `Unsafe#park`，见"CI 的随机 500"） | 否 | ✅ 已由平台 #125 解决（`JabizBlockHoundIntegration` 加入同一条容许并附回归测试），应用中的副本已删除 |
 
 不需要平台新能力的点：
 - 账本过账、冲正、维度（16h 已支持身份字段）、来源单据；
@@ -728,5 +728,5 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 - **修正**：测试中的 `QbBlockHoundIntegration`（`ServiceLoader` 加载，与平台的 `JabizBlockHoundIntegration` 并存）容许 `BatchSpanProcessor$Worker.addSpan`
   内的等待。回归测试 `TracingUnderBlockHoundTest` 让唤醒队列的锁被测试占住，事件循环必然等待：没有容许时稳定得到同样的 `Unsafe#park` 错误，有容许时通过；
   另一个测试确认 BlockHound 对同一线程池仍然生效。它经反射使用 OpenTelemetry 1.55 的内部字段（`worker`、`signal`、`spansNeeded`），升级时可能需要调整。
-- 这一容许属于平台（见下表缺口 17），平台加入后删去应用中的这份。
+- 这一容许属于平台（见下表缺口 17），平台已在 #125 加入，应用中的这份已删除（同步平台的 PR）。
 
