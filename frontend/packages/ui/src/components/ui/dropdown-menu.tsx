@@ -4,8 +4,24 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
 
 import { cn, UI_SCOPE } from '../../lib/utils'
 
-/** Whether the menu is open now, for its content to know when it is closing (see {@link DropdownMenuContent}). */
-const OpenContext = React.createContext<React.RefObject<boolean> | null>(null)
+/**
+ * What a menu's content needs to know of its root (see {@link DropdownMenuContent}): whether the menu is open now,
+ * and its trigger.
+ */
+interface MenuState {
+  isOpen: () => boolean
+  isTrigger: (target: EventTarget | null) => boolean
+  setTrigger: (element: HTMLElement | null) => void
+}
+const MenuStateContext = React.createContext<MenuState | null>(null)
+
+/** Gives an element to each of the refs (a caller's ref and our own), as a ref callback would. */
+function assignRefs<T>(element: T, ...refs: (React.Ref<T> | ((element: T) => void) | undefined)[]) {
+  for (const ref of refs) {
+    if (typeof ref === 'function') ref(element)
+    else if (ref) ref.current = element
+  }
+}
 
 // Not modal by default: a modal menu hides the rest of the page with aria-hidden while it stays focusable, which
 // axe reports (aria-hidden-focus). The menu still takes focus, closes on Escape, Tab and outside clicks.
@@ -18,6 +34,14 @@ function DropdownMenu({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   // Set as the change happens (not after a render), since what reads it runs in a deferred task.
   const openRef = React.useRef(open ?? defaultOpen ?? false)
+  const triggerRef = React.useRef<HTMLElement | null>(null)
+  const [state] = React.useState<MenuState>(() => ({
+    isOpen: () => openRef.current,
+    isTrigger: (target) => target instanceof Node && !!triggerRef.current?.contains(target),
+    setTrigger: (element) => {
+      triggerRef.current = element
+    },
+  }))
   React.useLayoutEffect(() => {
     if (open !== undefined) openRef.current = open
   }, [open])
@@ -29,7 +53,7 @@ function DropdownMenu({
     [onOpenChange],
   )
   return (
-    <OpenContext.Provider value={openRef}>
+    <MenuStateContext.Provider value={state}>
       <DropdownMenuPrimitive.Root
         data-slot="dropdown-menu"
         modal={modal}
@@ -38,7 +62,7 @@ function DropdownMenu({
         onOpenChange={handleOpenChange}
         {...props}
       />
-    </OpenContext.Provider>
+    </MenuStateContext.Provider>
   )
 }
 
@@ -46,37 +70,54 @@ function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMe
   return <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
-function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
-  return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+function DropdownMenuTrigger({ ref, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+  const setTrigger = React.useContext(MenuStateContext)?.setTrigger
+  return (
+    <DropdownMenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      ref={(element: HTMLButtonElement | null) => assignRefs(element, ref, setTrigger)}
+      {...props}
+    />
+  )
 }
 
 /*
- * A closed menu gives focus back to its trigger a task after it has left the DOM (Radix's FocusScope), late when the
- * page is busy (as right after switching the language, when every query is fetched again). If the menu has been
- * opened again meanwhile, the new one already holds focus, and being non-modal it takes that late focus on the
- * trigger as focus moving out and closes at once. So the restore is skipped while the menu is open again.
+ * Opening a menu again just after it closed, which happens when the page is busy (as right after switching the
+ * language, when every query is fetched again), met two of Radix's habits that each closed it straight away:
+ *
+ * - A closed menu gives focus back to its trigger a task after it has left the DOM (Radix's FocusScope), late when
+ *   the page is busy. If the menu has been opened again meanwhile, the new one already holds focus, and being
+ *   non-modal it takes that late focus on the trigger as focus moving out. So the restore is skipped while the menu
+ *   is open again.
+ * - While a closed menu animates out, its content still dismisses the menu on a press outside it, and a press on the
+ *   trigger is one: the trigger opened the menu and the closing content closed it in the same event, so the press did
+ *   nothing. The trigger opens and closes the menu itself, so a press on it is not taken as one outside (as Radix's
+ *   Popover does).
  */
 function DropdownMenuContent({
   className,
   sideOffset = 4,
   onCloseAutoFocus,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
-  const openRef = React.useContext(OpenContext)
-  const handleCloseAutoFocus = React.useCallback(
-    (event: Event) => {
-      onCloseAutoFocus?.(event)
-      // Prevented, Radix neither focuses the trigger nor falls back to the element focused before.
-      if (openRef?.current) event.preventDefault()
-    },
-    [onCloseAutoFocus, openRef],
-  )
+  const state = React.useContext(MenuStateContext)
+  const handleCloseAutoFocus = (event: Event) => {
+    onCloseAutoFocus?.(event)
+    // Prevented, Radix neither focuses the trigger nor falls back to the element focused before.
+    if (state?.isOpen()) event.preventDefault()
+  }
+  const handlePointerDownOutside = (event: Parameters<NonNullable<typeof onPointerDownOutside>>[0]) => {
+    onPointerDownOutside?.(event)
+    if (state?.isTrigger(event.detail.originalEvent.target)) event.preventDefault()
+  }
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         onCloseAutoFocus={handleCloseAutoFocus}
+        onPointerDownOutside={handlePointerDownOutside}
         className={cn(UI_SCOPE,  UI_SCOPE,
           'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
           className,
