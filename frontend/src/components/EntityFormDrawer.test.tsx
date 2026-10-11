@@ -1,6 +1,6 @@
 import { notify } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +12,12 @@ import { carrier, countries } from '../test/fixtures'
 import EntityFormDrawer from './EntityFormDrawer'
 
 const permissions = vi.hoisted(() => ({ value: new Set<string>() }))
-const catalog = vi.hoisted(() => ({ processes: [] as unknown[] }))
+const catalog = vi.hoisted(() => ({
+  processes: [] as unknown[],
+  datasets: [] as unknown[],
+  metas: {} as Record<string, unknown>,
+  dictionaries: {},
+}))
 const server = vi.hoisted(() => ({ post: vi.fn<(path: string, options: unknown) => unknown>() }))
 
 vi.mock('../api/client', () => ({
@@ -25,13 +30,14 @@ vi.mock('../api/client', () => ({
 }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: (p: string) => permissions.value.has(p) }) }))
 vi.mock('../meta/hooks', () => ({
-  useDatasets: () => ({ data: [] }),
+  useDatasets: () => ({ data: catalog.datasets }),
   useProcesses: () => ({ data: catalog.processes }),
-  useDictionaries: () => ({}),
+  // Stable, as the real hook's result is.
+  useDictionaries: () => catalog.dictionaries,
 }))
 vi.mock('../meta/references', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../meta/references')>()),
-  useEntityMetas: () => ({}),
+  useEntityMetas: () => catalog.metas,
 }))
 
 const dataset: DatasetEntry = {
@@ -59,6 +65,19 @@ const entity: EntityMeta = {
     { ...base, name: 'status', label: 'Status', type: 'text', multiline: false, processOnly: true } as FieldMeta,
     { ...base, name: 'bankAccount', label: 'Account', type: 'text', multiline: false, processOnly: false, masked: { permission: 'carrier.bank', style: 'LAST4' } } as FieldMeta,
     { ...base, name: 'since', label: 'Since', type: 'temporal', role: 'EVENT_TIME', processOnly: false } as FieldMeta,
+    {
+      ...base,
+      name: 'logo',
+      label: 'Logo',
+      type: 'custom',
+      kindId: 'jabiz.file',
+      policy: 'carrier.logo',
+      accept: ['image/png', '.png'],
+      maxBytes: 4096,
+      image: true,
+      variants: [],
+      processOnly: false,
+    } as unknown as FieldMeta,
   ],
 }
 
@@ -79,11 +98,14 @@ const stored: EntityInstance = {
   },
 }
 
-function form(props: Partial<Parameters<typeof EntityFormDrawer>[0]> = {}) {
+type DrawerProps = Partial<Parameters<typeof EntityFormDrawer>[0]>
+
+function form(props: DrawerProps = {}) {
   const onSaved = vi.fn()
   const onOpenChange = vi.fn()
-  render(
-    <QueryClientProvider client={new QueryClient()}>
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const drawer = (more: DrawerProps) => (
+    <QueryClientProvider client={client}>
       <MemoryRouter>
         <EntityFormDrawer
           dataset={dataset}
@@ -93,11 +115,19 @@ function form(props: Partial<Parameters<typeof EntityFormDrawer>[0]> = {}) {
           onOpenChange={onOpenChange}
           onSaved={onSaved}
           {...props}
+          {...more}
         />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
-  return { onSaved, onOpenChange, sheet: screen.getByRole('dialog') }
+  const { rerender } = render(drawer({}))
+  return {
+    onSaved,
+    onOpenChange,
+    sheet: screen.getByRole('dialog'),
+    /** Renders the same (still mounted) drawer with other props, as a caller that keeps it does. */
+    update: (more: DrawerProps) => rerender(drawer(more)),
+  }
 }
 
 /** The body of the one commit sent. */
@@ -116,6 +146,8 @@ describe('EntityFormDrawer', () => {
     await act(() => i18n.changeLanguage('en'))
     permissions.value = new Set()
     catalog.processes = []
+    catalog.datasets = []
+    catalog.metas = {}
     server.post.mockReset()
     server.post.mockResolvedValue([{ id: 'c-1', version: 5 }])
     vi.restoreAllMocks()
@@ -315,6 +347,165 @@ describe('EntityFormDrawer', () => {
     ]
     const { sheet } = form({ instance: stored, readOnly: true, historical: true })
     expect(within(sheet).queryByTestId('detail-actions')).toBeNull()
+  })
+
+  it('starts afresh when reopened or switched to another entry while it stays mounted', async () => {
+    const other: EntityInstance = {
+      id: 'c-2',
+      version: 7,
+      attributes: { ...stored.attributes, carrierId: 'c-2', carrierCode: 'XYZ', note: 'second', bankAccount: null },
+    }
+    const { update } = form({ instance: stored })
+    // Edited, then closed without saving; and a problem left behind.
+    await userEvent.type(screen.getByLabelText(/^note/), ' edited')
+    await userEvent.clear(screen.getByLabelText(/^Credit limit/))
+    expect(screen.getByLabelText(/^Credit limit/)).toHaveAttribute('aria-invalid', 'true')
+    update({ instance: stored, open: false })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    update({ instance: other, open: true })
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByLabelText(/^note/)).toHaveValue('second')
+    expect(within(sheet).getByLabelText(/^Code/)).toHaveValue('XYZ')
+    expect(within(sheet).getByLabelText(/^Credit limit/)).not.toHaveAttribute('aria-invalid')
+
+    // Switched to another entry while open: that entry's values.
+    update({ instance: stored, open: true })
+    expect(within(screen.getByRole('dialog')).getByLabelText(/^note/)).toHaveValue('first')
+    update({ instance: other, open: true })
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('switch', { name: /^Active/ }))
+    await save()
+    expect(sent().changes).toEqual([
+      { action: 'UPDATE', id: 'c-2', version: 7, attributes: { active: false }, effectiveTime: undefined },
+    ])
+  })
+
+  it('closes with Cancel and forgets what was typed', async () => {
+    const { onOpenChange, update } = form({ instance: stored })
+    await userEvent.type(screen.getByLabelText(/^note/), ' edited')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onOpenChange).toHaveBeenLastCalledWith(false)
+    update({ instance: stored, open: false })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    update({ instance: stored, open: true })
+    expect(within(await screen.findByRole('dialog')).getByLabelText(/^note/)).toHaveValue('first')
+  })
+
+  it('takes an integer as typed text, refusing what is no digit, and is not sent while incomplete', async () => {
+    const counted = {
+      ...entity,
+      fields: [...entity.fields, { ...base, name: 'seats', label: 'Seats', type: 'version', processOnly: false } as FieldMeta],
+    }
+    const { sheet } = form({ instance: stored, entity: counted })
+    const seats = within(sheet).getByLabelText(/^Seats/)
+    // Not a number field: the mouse wheel does not change it, half-typed text is not dropped.
+    expect(seats).not.toHaveAttribute('type', 'number')
+    expect(seats).toHaveAttribute('inputmode', 'numeric')
+    await userEvent.type(seats, '12e.5')
+    expect(seats).toHaveValue('125')
+    await userEvent.clear(seats)
+    await userEvent.type(seats, '-')
+    await save()
+    expect(server.post).not.toHaveBeenCalled()
+    expect(seats).toHaveAttribute('aria-invalid', 'true')
+    await userEvent.type(seats, '3')
+    await save()
+    expect(sent().changes[0].attributes).toEqual({ seats: '-3' })
+  })
+
+  it('is not saved while a file is still uploading, and marks a refused file', async () => {
+    let finish: (response: Response) => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { finish = resolve })))
+    try {
+      const { sheet } = form({ instance: stored })
+      const input = sheet.querySelector<HTMLInputElement>('input[type=file]')!
+      fireEvent.change(input, { target: { files: [new File(['png'], 'logo.png', { type: 'image/png' })] } })
+      const saveButton = within(sheet).getByRole('button', { name: /Save/ })
+      await waitFor(() => expect(saveButton).toBeDisabled())
+      fireEvent.submit(sheet.querySelector('form')!)
+      expect(server.post).not.toHaveBeenCalled()
+      await act(async () =>
+        finish(Response.json({ fileId: '0190b8a0-0000-7000-8000-000000000001', policy: 'carrier.logo', contentType: 'image/png', sizeBytes: 3, variants: [] }, { status: 201 })),
+      )
+      await waitFor(() => expect(saveButton).toBeEnabled())
+      server.post.mockResolvedValue(
+        new ApiError(400, { violations: [{ field: 'logo', ruleCode: 'FILE_NOT_FOUND', message: 'No such file.' }] }),
+      )
+      await save()
+      expect(sent().changes[0].attributes).toEqual({ logo: '0190b8a0-0000-7000-8000-000000000001' })
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      expect(document.getElementById(input.getAttribute('aria-describedby')!.split(' ')[0])).toHaveTextContent('No such file.')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  describe('with children', () => {
+    const certification = {
+      entity: 'Certification',
+      label: 'Certification',
+      primaryKey: 'certificationId',
+      temporal: false,
+      allowScheduled: false,
+      publishesChanges: false,
+      fields: [
+        { ...base, name: 'certificationId', label: 'ID', type: 'semanticIdentity', urn: 'u', generated: true, processOnly: false } as FieldMeta,
+        { ...base, name: 'title', label: 'Title', type: 'text', multiline: false, processOnly: false } as FieldMeta,
+        { ...base, operators: ['EQ'], name: 'carrierId', label: 'Carrier', type: 'reference', targetEntity: 'Carrier', processOnly: false } as unknown as FieldMeta,
+      ],
+      references: [],
+      listViews: [{ name: 'default', columns: ['title', 'carrierId'], filters: ['carrierId'], sorts: [] }],
+      dictionaries: [],
+      unique: [],
+      messages: {},
+    } as unknown as EntityMeta
+    const children = { ...dataset, id: 'urn:cert', entity: 'Certification', label: 'Certifications' } as DatasetEntry
+
+    beforeEach(() => {
+      catalog.datasets = [children]
+      catalog.metas = { Certification: certification }
+      server.post.mockImplementation(async (path) =>
+        path === '/api/datasets/{resourceId}/query'
+          ? { items: [{ id: 'x1', version: 3, attributes: { title: 'Organic', carrierId: 'c-1' } }], total: 1 }
+          : [{ id: 'x1', version: 4 }],
+      )
+    })
+
+    const commits = () => server.post.mock.calls.filter(([path]) => path === '/api/datasets/{resourceId}/commit')
+
+    it('opens a child over the parent; Escape closes only the child, focus returns to its button', async () => {
+      const { sheet } = form({ instance: stored })
+      const open = await within(sheet).findByTestId('child-open')
+      await userEvent.click(open)
+      const child = await screen.findByRole('dialog', { name: 'Edit Certification' })
+      expect(within(child).getByLabelText(/^Title/)).toHaveValue('Organic')
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Certification' })).toBeNull())
+      expect(screen.getByRole('dialog', { name: 'Edit Carrier' })).toBeInTheDocument()
+      await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByTestId('child-open')))
+    })
+
+    it('saves a child with one commit of the child and none of the parent, the parent staying open', async () => {
+      const { sheet, onSaved } = form({ instance: stored })
+      await userEvent.click(await within(sheet).findByTestId('child-open'))
+      const child = await screen.findByRole('dialog', { name: 'Edit Certification' })
+      await userEvent.type(within(child).getByLabelText(/^Title/), ' Tea')
+      await userEvent.click(within(child).getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Certification' })).toBeNull())
+      expect(commits()).toEqual([
+        [
+          '/api/datasets/{resourceId}/commit',
+          {
+            params: { path: { resourceId: 'urn:cert' } },
+            body: {
+              reason: undefined,
+              changes: [{ action: 'UPDATE', id: 'x1', version: 3, attributes: { title: 'Organic Tea' }, effectiveTime: undefined }],
+            },
+          },
+        ],
+      ])
+      expect(onSaved).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog', { name: 'Edit Carrier' })).toBeInTheDocument()
+    })
   })
 
   it('closes with Escape and with Cancel', async () => {

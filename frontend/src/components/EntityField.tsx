@@ -36,6 +36,8 @@ interface Props {
   defaultLocale?: string
   /** A date field holds (true) or no longer holds (false) typed text that is no date: the form is not sent then. */
   onTypedInvalid?(invalid: boolean): void
+  /** A file field starts (true) or ends (false) uploading: the form is not sent meanwhile. */
+  onUploadingChange?(uploading: boolean): void
 }
 
 /**
@@ -54,6 +56,7 @@ export default function EntityField({
   referenceDatasetId,
   defaultLocale,
   onTypedInvalid,
+  onUploadingChange,
 }: Props) {
   const id = useId()
   const label = fieldLabel(field, t)
@@ -109,7 +112,23 @@ export default function EntityField({
           )
         break
       case 'integer':
-        input = <Input {...common} type="number" step={1} value={text} onChange={(e) => onChange(e.target.value)} />
+        // Text, not a number field: a number field drops half-typed text ("12e" reads as empty) and the mouse wheel
+        // changes it. Only digits and a leading minus can be typed; a lone minus keeps the form from being sent.
+        input = (
+          <Input
+            {...common}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={text}
+            onChange={(e) => {
+              const typed = e.target.value.replace(/\s/g, '')
+              if (!/^-?\d*$/.test(typed)) return
+              onChange(typed)
+              onTypedInvalid?.(typed !== '' && !/^-?\d+$/.test(typed))
+            }}
+          />
+        )
         break
       case 'datetime':
         input = (
@@ -165,11 +184,13 @@ export default function EntityField({
           <FileInput
             id={id}
             aria-describedby={common['aria-describedby']}
+            aria-invalid={invalid}
             field={field}
             disabled={disabled}
             t={t}
             value={text || null}
             onChange={(next) => onChange(next)}
+            onUploadingChange={onUploadingChange}
           />
         ) : null
         break

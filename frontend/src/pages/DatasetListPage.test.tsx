@@ -17,6 +17,13 @@ const state = vi.hoisted(() => ({
   entity: undefined as unknown,
   processes: [] as unknown[],
   total: 0,
+  deleted: new Set<string>(),
+}))
+// Stable, as the real hooks' results are (the columns are built from them).
+const stable = vi.hoisted(() => ({
+  auth: { can: (p: string) => permissions.value.has(p) },
+  metas: {},
+  labels: { supplierId: { s1: 'Kanto Tea' } },
 }))
 const server = vi.hoisted(() => ({ post: vi.fn<(path: string, options: unknown) => unknown>() }))
 
@@ -28,7 +35,7 @@ vi.mock('../api/client', () => ({
     return result
   },
 }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: (p: string) => permissions.value.has(p) }) }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => stable.auth }))
 vi.mock('../meta/hooks', () => ({
   useDataset: (id: string) => ({ isLoading: false, data: id === DATASET ? state.dataset : undefined }),
   useEntityMeta: (name: string | undefined) => ({ isLoading: false, data: name ? state.entity : undefined }),
@@ -38,9 +45,9 @@ vi.mock('../meta/hooks', () => ({
 }))
 vi.mock('../meta/references', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../meta/references')>()),
-  useEntityMetas: () => ({}),
+  useEntityMetas: () => stable.metas,
   // References by their display text, fetched by page (useReferenceLabels is tested with the hooks).
-  useReferenceLabels: () => ({ supplierId: { s1: 'Kanto Tea' } }),
+  useReferenceLabels: () => stable.labels,
 }))
 
 const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, rules: [] }
@@ -130,13 +137,16 @@ describe('DatasetListPage', () => {
     state.entity = entity
     state.processes = []
     state.total = 45
+    state.deleted = new Set()
     server.post.mockReset()
     server.post.mockImplementation(async (path, options) => {
       if (path === '/api/datasets/{resourceId}/query') {
         const body = (options as { body: { offset: number; limit: number } }).body
-        const count = Math.max(0, Math.min(body.limit, state.total - body.offset))
-        return { items: Array.from({ length: count }, (_, i) => item(body.offset + i + 1)), total: state.total }
+        const all = Array.from({ length: state.total }, (_, i) => item(i + 1)).filter((x) => !state.deleted.has(x.id))
+        return { items: all.slice(body.offset, body.offset + body.limit), total: all.length }
       }
+      const change = (options as { body: { changes: { action: string; id: string }[] } }).body.changes[0]
+      if (change.action === 'DELETE') state.deleted.add(change.id)
       return [{ id: 'c-1', version: 2 }]
     })
   })
@@ -260,6 +270,52 @@ describe('DatasetListPage', () => {
       }),
     )
     await waitFor(() => expect(queries().length).toBe(before + 1))
+  })
+
+  it('returns to the last page there is when a deletion emptied the page shown, focus on the table', async () => {
+    state.total = 21
+    await page()
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(rows()).toHaveLength(1))
+    expect(rows()[0]).toHaveTextContent('C21')
+    await userEvent.click(within(rows()[0]).getByTestId('row-delete'))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'OK' }))
+    await waitFor(() => expect(lastQuery()).toMatchObject({ offset: 0, limit: 20 }))
+    await waitFor(() => expect(rows()).toHaveLength(20))
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
+    // The deleted row's button went with it: focus is on the table, not lost to the page.
+    await waitFor(() => expect(document.activeElement).toBe(table()))
+  })
+
+  it('keeps focus on the delete button of a row that is still there after cancelling', async () => {
+    await page()
+    const button = within(rows()[0]).getByTestId('row-delete')
+    await userEvent.click(button)
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(document.activeElement).toBe(button))
+  })
+
+  it('keeps the rows of the previous page out of use while the next one loads', async () => {
+    await page()
+    let answer: (value: unknown) => void = () => {}
+    server.post.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    const body = table().querySelector('tbody')!
+    await waitFor(() => expect(body).toHaveAttribute('inert'))
+    expect(table()).toHaveAttribute('aria-busy', 'true')
+    await act(async () => answer({ items: [item(21)], total: 21 }))
+    await waitFor(() => expect(body).not.toHaveAttribute('inert'))
+    expect(rows()[0]).toHaveTextContent('C21')
+  })
+
+  it('returns focus to the row button that opened the form when it closes', async () => {
+    await page()
+    const edit = within(rows()[0]).getByTestId('row-edit')
+    await userEvent.click(edit)
+    await screen.findByRole('dialog', { name: 'Edit Carrier' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(edit))
   })
 
   it('offers what the user may do: edit, delete, history, audit, actions', async () => {

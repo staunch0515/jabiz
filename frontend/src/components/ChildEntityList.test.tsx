@@ -10,6 +10,7 @@ import type { DatasetEntry, EntityMeta, FieldMeta } from '../meta/types'
 import { expectAccessible } from '../test/axe'
 import ChildEntityList from './ChildEntityList'
 
+const NO_DICTIONARIES = vi.hoisted(() => ({}))
 const server = vi.hoisted(() => ({ post: vi.fn<(path: string, options: unknown) => unknown>() }))
 
 vi.mock('../api/client', () => ({
@@ -24,7 +25,8 @@ vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: () => false }) })
 vi.mock('../meta/hooks', () => ({
   useDatasets: () => ({ data: [] }),
   useProcesses: () => ({ data: [] }),
-  useDictionaries: () => ({}),
+  // Stable, as the real hook's result is.
+  useDictionaries: () => NO_DICTIONARIES,
 }))
 vi.mock('../meta/references', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../meta/references')>()),

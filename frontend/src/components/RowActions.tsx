@@ -13,8 +13,13 @@ interface Props {
   actions: ProcessEntry[]
   id: unknown
   attributes: Record<string, unknown>
-  /** Called after a process ran from here, so the row and its details are read again. */
-  onDone(): void
+  /**
+   * Called after a process ran from here, so the row and its details are read again; the confirmation stays until a
+   * returned promise settles, so focus can move on when the row (with this button) is gone.
+   */
+  onDone(): void | Promise<unknown>
+  /** Where focus goes after a confirmed action whose button went away with the change (the table). */
+  returnFocus?: () => HTMLElement | null | undefined
 }
 
 const LINK = 'h-auto px-1'
@@ -24,7 +29,7 @@ const LINK = 'h-auto px-1'
  * after a confirmation, each time with a new idempotency key; any other opens its form with the key filled in and
  * read-only.
  */
-export default function RowActions({ actions, id, attributes, onDone }: Props) {
+export default function RowActions({ actions, id, attributes, onDone, returnFocus }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [running, setRunning] = useState<string | null>(null)
@@ -42,7 +47,7 @@ export default function RowActions({ actions, id, attributes, onDone }: Props) {
         }),
       )
       notify.success(t('process.succeeded'))
-      onDone()
+      await onDone()
     } catch (e) {
       notify.error(e instanceof ApiError ? e.display : String(e))
     } finally {
@@ -60,6 +65,7 @@ export default function RowActions({ actions, id, attributes, onDone }: Props) {
               key={process.name}
               title={t('list.actionConfirm', { action: process.label })}
               onConfirm={() => run(process)}
+              returnFocus={returnFocus}
               trigger={
                 <Button
                   variant="link"

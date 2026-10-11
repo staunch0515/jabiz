@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, commit, confirm, dataRows, datasetPath, entityForm, insert, option, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, commit, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, test, unique } from './support'
 
 /**
  * Acceptance criteria 1 and 2 of ROADMAP phase 10: the generated form creates and edits a Carrier, and for the same
@@ -24,7 +24,7 @@ test.describe('the generated form', () => {
 
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = dataRows(page).first()
+    const row = await searchedRow(page, code)
     await expect(row).toContainText('Echo Express')
     await expect(row).toContainText('德国')
 
@@ -56,7 +56,7 @@ test.describe('the generated form', () => {
     await page.goto(datasetPath(CARRIERS))
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = dataRows(page).first()
+    const row = await searchedRow(page, code)
     await row.getByTestId('row-edit').click()
     const drawer = entityForm(page)
     await drawer.getByLabel('名称').fill('Sierra Shipping 2031')

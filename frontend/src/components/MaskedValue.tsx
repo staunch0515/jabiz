@@ -21,6 +21,13 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
   const { t } = useTranslation()
   const [plain, setPlain] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Another value (changed and read again) or another entry: the plain text shown was another's.
+  const showing = `${datasetId}\n${String(id)}\n${field}\n${masked}`
+  const [shownFor, setShownFor] = useState(showing)
+  if (shownFor !== showing) {
+    setShownFor(showing)
+    setPlain(null)
+  }
 
   if (plain !== null) {
     return (

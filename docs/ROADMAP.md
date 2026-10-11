@@ -1220,18 +1220,31 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 - 时间点（`asOf` / `knownAt`）的两个 `DateTimePicker` 放在筛选栏上方（原来在表格工具栏），各有标签；页面标题由 `AdminPage` 的 `<h1 data-testid="page-title">` 给出。
 - `FilePreview`：图片本身可点击放大，旁边另有"放大预览"按钮供键盘使用（图片放在按钮里时，按钮的内容不作为图片暴露，e2e 按 `img` 角色找不到）；放大图取最宽的变体，没有足够宽的变体时取（重新编码过的）原件。
 - 子实体列表放在表单的 `<form>` 之外（同一个 `Sheet` 内），表单的提交事件另外 `stopPropagation`：React 的事件会穿过门户从子实体的 `Sheet` 冒泡到父表单。
+- `MaskedValue` 若在请求明文期间值已改变，回来的明文仍会显示一次（评审第 7 条只处理已显示的明文）。
 - 多语言文本的各语言输入框以"字段名（语言）"命名，字段标签命名整个 `group`；页签上出错的语言带 `data-invalid`。
 - 路由表以 `appRoutes` 从 `App.tsx` 导出，供 `App.test.tsx` 检查哪些路由标为 `@jabiz/ui` 页面。
 - e2e 辅助函数（`support.ts`）新增 `confirm`（确认对话框的"确定"）、`sortBy`（表头的排序按钮）、`entityForm`（`data-testid="entity-form"` 的表单 `Sheet`）；
   15b-1 已有的 `dataRows`、`option`、`rangeEnd`、`dialog`、`pageRendered` 照用。`a11y.spec` 为引用的选择先插入一个供应商（全新数据库中没有可选项）；登录后的两个检查标为 `test.slow()`（约 30 个页面与弹出层，在负载下超过默认的 1 分钟）。
 
-**15b-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 001.6 kB / 924.9 kB、CSS 79.4 kB / 13.3 kB；之后 JS 3 021.1 kB / 929.6 kB、CSS 79.8 kB / 13.4 kB
+**15b-2 评审后的修正**（各有测试，缺陷先写失败的测试）
+1. 表单 `Sheet` 每次打开、或打开时换了另一条数据，都是新的表单（内层组件按"打开次数"取 key）：调用方保持挂载并切换行时，不会把上一条的值或空值当作改动发送；"取消"、Escape、关闭按钮走同一个关闭处理（保存中不关闭）。
+2. 新的查询未返回前，`DataTable` 的旧行 `inert` 并 `aria-busy`（新属性 `stale`，列表与子实体列表取 `isPlaceholderData`）；e2e 中查询后先等到唯一的目标行（`searchedRow`）再点击。
+3. 整数输入不再是 `type=number`（半截的 `12e` 被当作空、滚轮会改值）：文本框 `inputMode="numeric"`，只能键入数字与前导负号，只有负号时经 `onTypedInvalid` 阻止提交。
+4. 嵌套 `Sheet`：Vitest 打开子实体、只关闭子实体（Escape）、焦点回到"编辑 / 查看"按钮、保存只提交子实体一次；e2e（`content.spec`）同样打开、Escape、保存子实体。
+   为此列表与子实体列表在关闭表单后仍保持其挂载（关闭时也有滑出动画），表单记下打开它的按钮并在关闭时把焦点还给它。
+5. 删除或行操作使触发按钮随行消失时，焦点移到表格（`DataTable` 的 `tableRef`，表格 `tabIndex=-1`）：`ConfirmDialog` 新增 `returnFocus`，确认后等列表重新读取再关闭；组合框与日期框的"清除"按钮消失后焦点留在该字段。
+6. 删除了最后一页的最后一行时回到实际存在的最后一页。
+7. `MaskedValue` 在数据、字段或遮蔽值改变时丢弃已显示的明文。
+8. 文件上传中不能保存（保存按钮禁用并 `aria-busy`）；服务端对文件字段的违规使文件输入 `aria-invalid`（`FileUpload` 新增 `aria-invalid`）。
+9. `useDictionaries`、`useReferenceLabels` 的结果在数据不变时是同一个对象（`useQueries` 的 `combine` + `useMemo`）。`DataTable` 把单元格函数当作组件渲染，
+   列定义每次渲染都重建时，任何一次渲染都会重新挂载所有单元格（失去焦点、已显示的明文、预览）；列表页去掉了 `eslint-disable`。
+
+**15b-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 001.6 kB / 924.9 kB、CSS 79.4 kB / 13.3 kB；之后 JS 3 023.4 kB / 930.5 kB、CSS 79.8 kB / 13.4 kB
 （antd 与 ProComponents 仍由 15c 的页面使用，摇树去不掉；15d 删除后回落）。
 
 **15b-2 已知问题**
 - 旧的 `meta/columns.ts`（ProTable 列）与 `SchemaInputs` 仍供报表与导入页使用，15c 迁完后删除；单元格的转换只有一份（`meta/cells.ts`）。
 - 子实体列表的引用列不按显示名显示（与迁移前相同：子列表不取引用的显示名）。
-- 表单 `Sheet` 关闭时随父组件卸载，没有滑出动画（打开时有）。
 - e2e 中待办、报表、导入、审计、封存、保留、安全设置与单据页仍用 `.ant-*` 选择器（15c / 15d）。
 
 ### 15c – 15d

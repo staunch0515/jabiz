@@ -14,6 +14,10 @@ interface InputProps {
   /** The id of the file input, which the field's label points at. */
   id?: string
   'aria-describedby'?: string
+  /** The field has a problem shown with it (a server's violation). */
+  'aria-invalid'?: boolean
+  /** Uploading starts (true) and ends (false): a form is not sent meanwhile. */
+  onUploadingChange?: (uploading: boolean) => void
 }
 
 /**
@@ -22,7 +26,17 @@ interface InputProps {
  * picker's filter and the size check only save a round trip: the server recognises the type by content and enforces
  * the limit.
  */
-export function FileInput({ field, disabled, t, value, onChange, id, 'aria-describedby': describedBy }: InputProps) {
+export function FileInput({
+  field,
+  disabled,
+  t,
+  value,
+  onChange,
+  id,
+  'aria-describedby': describedBy,
+  'aria-invalid': invalid,
+  onUploadingChange,
+}: InputProps) {
   const types = (field.accept ?? []).filter((a) => a.startsWith('.')).join(', ')
   const hint =
     field.maxBytes !== undefined
@@ -41,13 +55,17 @@ export function FileInput({ field, disabled, t, value, onChange, id, 'aria-descr
           disabled={disabled}
           label={value ? t('file.replace') : t('file.upload')}
           hint={hint}
+          aria-invalid={invalid}
           onUpload={async (file) => {
+            onUploadingChange?.(true)
             try {
               const uploaded = await uploadFile(field.policy, file, file.name)
               onChange?.(uploaded.fileId ?? null)
             } catch (e) {
               // The upload field shows the message; the server's own words, not the error's type.
               throw new Error(e instanceof ApiError ? e.display : String(e), { cause: e })
+            } finally {
+              onUploadingChange?.(false)
             }
           }}
         />

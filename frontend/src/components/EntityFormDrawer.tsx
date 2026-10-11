@@ -67,7 +67,37 @@ const REASON = '__reason'
  * changed (update). Whatever the server still refuses (400/422 violations) is shown at the same place, a conflict
  * (409) above the fields.
  */
-export default function EntityFormDrawer({
+export default function EntityFormDrawer(props: Props) {
+  const { open, instance, onOpenChange } = props
+  // A new opening, or another entry while open, starts a new form: nothing typed for one entry may be sent for
+  // another (a caller may keep the drawer mounted and switch rows). Reset while rendering, React's pattern for state
+  // derived from props.
+  // What had focus when the sheet was opened (a row's button), read as the opening renders: by the time the sheet
+  // mounts, focus may already have left it. Focus returns there when the sheet closes.
+  const [shown, setShown] = useState(() => ({
+    open,
+    id: instance?.id,
+    opener: open ? document.activeElement : null,
+  }))
+  const [session, setSession] = useState(0)
+  if (shown.open !== open || shown.id !== instance?.id) {
+    setShown({ open, id: instance?.id, opener: open && !shown.open ? document.activeElement : shown.opener })
+    if (open) setSession(session + 1)
+  }
+  // While a save is under way the sheet stays open (Escape, the close button and Cancel alike).
+  const busy = useRef(false)
+  const close = () => {
+    if (!busy.current) onOpenChange(false)
+  }
+  return (
+    <Sheet open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+      <EntityForm key={session} {...props} busyRef={busy} close={close} opener={shown.opener} />
+    </Sheet>
+  )
+}
+
+/** The sheet's content: one form for one opening of one entry. */
+function EntityForm({
   dataset,
   entity,
   dictionaries,
@@ -75,16 +105,30 @@ export default function EntityFormDrawer({
   preset,
   readOnly = false,
   historical = false,
-  open,
-  onOpenChange,
   onSaved,
-}: Props) {
+  busyRef,
+  close,
+  opener,
+}: Props & { busyRef: { current: boolean }; close(): void; opener: Element | null }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const formId = useId()
   const [errors, setErrors] = useState<Errors>({})
   const [general, setGeneral] = useState<string[]>([])
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusyState] = useState(false)
+  const setBusy = (value: boolean) => {
+    busyRef.current = value
+    setBusyState(value)
+  }
+  // File fields still uploading: saving now would send the old file (or none).
+  const [uploading, setUploading] = useState<ReadonlySet<string>>(new Set())
+  const setUploadingField = (name: string, isUploading: boolean) =>
+    setUploading((previous) => {
+      const next = new Set(previous)
+      if (isUploading) next.add(name)
+      else next.delete(name)
+      return next
+    })
   // Date fields holding typed text that is no date: the form is not sent while there are any (the field says why).
   const typedInvalid = useRef(new Set<string>())
   const mode = instance ? 'edit' : 'create'
@@ -218,7 +262,7 @@ export default function EntityFormDrawer({
     event.preventDefault()
     // Not the forms of a sheet opened from this one (a child's), whose events reach here through React's tree.
     event.stopPropagation()
-    if (readOnly || busy) return
+    if (readOnly || busy || uploading.size > 0) return
     if (typedInvalid.current.size > 0) {
       event.currentTarget.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
       return
@@ -233,21 +277,17 @@ export default function EntityFormDrawer({
   const reasonId = `${formId}-reason`
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (busy) return
-        if (!next) {
-          setErrors({})
-          setGeneral([])
-        }
-        onOpenChange(next)
-      }}
-    >
       <SheetContent
         aria-describedby={undefined}
         data-testid="entity-form"
         className={cn('w-full gap-0', children.length > 0 ? 'sm:max-w-3xl' : 'sm:max-w-xl')}
+        onCloseAutoFocus={(event) => {
+          // Radix returns focus to a trigger only; the drawer is opened from a row's button, which gets it back.
+          if (opener instanceof HTMLElement && opener.isConnected) {
+            event.preventDefault()
+            opener.focus()
+          }
+        }}
       >
         <SheetHeader className="border-b pr-12">
           <SheetTitle>{title}</SheetTitle>
@@ -286,6 +326,7 @@ export default function EntityFormDrawer({
                       if (invalid) typedInvalid.current.add(formField.field.name)
                       else typedInvalid.current.delete(formField.field.name)
                     }}
+                    onUploadingChange={(isUploading) => setUploadingField(formField.field.name, isUploading)}
                     referenceDatasetId={referenceSourceOf(formField.field, datasets, metas)?.id}
                     defaultLocale={entity.defaultLocale}
                   />
@@ -333,16 +374,20 @@ export default function EntityFormDrawer({
         </div>
         {!readOnly && (
           <SheetFooter className="flex-row justify-end border-t">
-            <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            <Button variant="outline" disabled={busy} onClick={close}>
               {t('form.cancel')}
             </Button>
-            <Button type="submit" form={formId} disabled={busy} aria-busy={busy || undefined}>
-              {busy && <Spinner className="text-current" />}
+            <Button
+              type="submit"
+              form={formId}
+              disabled={busy || uploading.size > 0}
+              aria-busy={busy || uploading.size > 0 || undefined}
+            >
+              {(busy || uploading.size > 0) && <Spinner className="text-current" />}
               {t('form.submit')}
             </Button>
           </SheetFooter>
         )}
       </SheetContent>
-    </Sheet>
   )
 }

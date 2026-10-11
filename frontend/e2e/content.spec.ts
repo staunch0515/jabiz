@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, signIn, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, entityForm, insert, option, searchedRow, signIn, unique } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -65,8 +65,25 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await page.goto(datasetPath(SUPPLIERS))
   await page.getByLabel('代码').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  await dataRows(page).first().getByTestId('row-edit').click()
+  await (await searchedRow(page, code)).getByTestId('row-edit').click()
   const children = page.getByTestId('child-list-SupplierCertification')
   await expect(children).toContainText(`有机认证 ${code}`)
   await expect(children).toContainText('已驳回')
+
+  // A child opens in a sheet of its own over the supplier's and is saved from there: Escape closes only the child,
+  // saving changes only the child, and the supplier's sheet stays open with the list read again.
+  const supplierForm = page.getByRole('dialog', { name: '编辑供应商', exact: true })
+  await children.getByTestId('child-open').first().click()
+  const child = page.getByRole('dialog', { name: '编辑供应商资质', exact: true })
+  await expect(child).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(child).toHaveCount(0)
+  await expect(supplierForm).toBeVisible()
+  await expect(children.getByTestId('child-open').first()).toBeFocused()
+  await children.getByTestId('child-open').first().click()
+  await child.getByTestId('i18n-title-zh').fill(`有机认证 ${code}（更新）`)
+  await child.getByRole('button', { name: /保\s*存/ }).click()
+  await expect(child).toHaveCount(0)
+  await expect(supplierForm).toBeVisible()
+  await expect(children).toContainText(`有机认证 ${code}（更新）`)
 })

@@ -116,6 +116,17 @@ export function dataRows(scope: Page | Locator): Locator {
   return scope.locator('[data-slot="data-table-row"]')
 }
 
+/**
+ * The one data row showing `text` once a search has been answered. Waiting for exactly that row (rather than taking
+ * the first row) keeps a test from acting on a row of the previous answer, shown (inert) while the next loads.
+ */
+export async function searchedRow(page: Page, text: string): Promise<Locator> {
+  await expect(dataRows(page)).toHaveCount(1)
+  const row = dataRows(page).filter({ hasText: text })
+  await expect(row).toHaveCount(1)
+  return row
+}
+
 /** An option of an open combobox or select. */
 export function option(page: Page, name: string | RegExp): Locator {
   return page.getByRole('option', { name })

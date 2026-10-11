@@ -50,6 +50,21 @@ describe('MaskedValue', () => {
     expect(post).toHaveBeenCalledTimes(2)
   })
 
+  it('forgets the shown value when the masked value (or the entry) changes', async () => {
+    post.mockResolvedValue({ value: 'DE44500105175407324931' })
+    const { rerender } = render(<MaskedValue datasetId="urn:d" id="c1" field="bankAccount" masked="****4931" />)
+    fireEvent.click(screen.getByTestId('reveal-bankAccount'))
+    await screen.findByText('DE44500105175407324931')
+    // The value was changed (read again): the old plain text must not stand for the new one.
+    rerender(<MaskedValue datasetId="urn:d" id="c1" field="bankAccount" masked="****1234" />)
+    expect(screen.queryByText('DE44500105175407324931')).toBeNull()
+    expect(screen.getByText('****1234')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('reveal-bankAccount'))
+    await screen.findByText('DE44500105175407324931')
+    rerender(<MaskedValue datasetId="urn:d" id="c2" field="bankAccount" masked="****1234" />)
+    expect(screen.queryByText('DE44500105175407324931')).toBeNull()
+  })
+
   it('keeps the masked form when the server refuses', async () => {
     const error = vi.spyOn(notify, 'error')
     post.mockRejectedValue(new Error('403'))

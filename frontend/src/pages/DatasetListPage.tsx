@@ -16,7 +16,7 @@ import {
 } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { History, Info, Plus, ScrollText } from 'lucide-react'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
@@ -75,7 +75,9 @@ function DatasetList({
   const { can } = useAuth()
   const datasetId = dataset.id
   const [searchParams, setSearchParams] = useSearchParams()
-  const [editing, setEditing] = useState<EntityInstance | null | undefined>(undefined)
+  // The entry in the form sheet; the sheet stays mounted when closed, so it slides out and focus returns to the row.
+  const [editing, setEditing] = useState<{ instance?: EntityInstance; open: boolean } | undefined>(undefined)
+  const closeForm = () => setEditing((current) => current && { ...current, open: false })
   const datasets = useDatasets()
   const processes = useProcesses()
   const asOfId = useId()
@@ -119,6 +121,19 @@ function DatasetList({
   useEffect(() => {
     if (query.error) notify.error(query.error instanceof ApiError ? query.error.display : String(query.error))
   }, [query.error])
+  // A page beyond the last (its rows deleted, from here or elsewhere) shows the last page there is.
+  const total = query.data?.total
+  if (
+    total !== undefined &&
+    !query.isPlaceholderData &&
+    pagination.pageIndex > 0 &&
+    pagination.pageIndex * pagination.pageSize >= total
+  ) {
+    setPagination({ ...pagination, pageIndex: Math.max(0, Math.ceil(total / pagination.pageSize) - 1) })
+  }
+  // Where focus goes when what had it went with its row (a deleted entry's buttons).
+  const tableRef = useRef<HTMLTableElement>(null)
+  const focusTable = useCallback(() => tableRef.current, [])
 
   const rows = query.data?.rows
   const targets = useEntityMetas(entity.fields.flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])))
@@ -132,20 +147,24 @@ function DatasetList({
   // Every entity, plain or temporal, has an audit trail (docs/design/21-audit-retention.md section 1.4).
   const showAudit = can('audit.read')
 
-  const remove = async (row: Row) => {
-    try {
-      await unwrap(
-        api.POST('/api/datasets/{resourceId}/commit', {
-          params: { path: { resourceId: datasetId } },
-          body: { changes: [{ action: 'DELETE', id: row.__instance.id, version: row.__instance.version }] },
-        }),
-      )
-      notify.success(t('list.deleted'))
-      void refetch()
-    } catch (e) {
-      notify.error(e instanceof ApiError ? e.display : String(e))
-    }
-  }
+  // Read again before the confirmation closes, so focus moves on from a row that is gone.
+  const remove = useCallback(
+    async (row: Row) => {
+      try {
+        await unwrap(
+          api.POST('/api/datasets/{resourceId}/commit', {
+            params: { path: { resourceId: datasetId } },
+            body: { changes: [{ action: 'DELETE', id: row.__instance.id, version: row.__instance.version }] },
+          }),
+        )
+        notify.success(t('list.deleted'))
+        await refetch()
+      } catch (e) {
+        notify.error(e instanceof ApiError ? e.display : String(e))
+      }
+    },
+    [datasetId, t, refetch],
+  )
 
   const columns = useMemo<ColumnDef<Row, unknown>[]>(
     () => [
@@ -166,19 +185,26 @@ function DatasetList({
               variant="link"
               size="sm"
               className={LINK}
-              onClick={() => setEditing(row.__instance)}
+              onClick={() => setEditing({ instance: row.__instance, open: true })}
               data-testid={canChange ? 'row-edit' : 'row-view'}
             >
               {t(canChange ? 'list.edit' : 'list.view')}
             </Button>
             {!timeTravel && (
-              <RowActions actions={actions} id={row.__instance.id} attributes={row} onDone={() => void refetch()} />
+              <RowActions
+                actions={actions}
+                id={row.__instance.id}
+                attributes={row}
+                onDone={() => refetch()}
+                returnFocus={focusTable}
+              />
             )}
             {canChange && (
               <ConfirmDialog
                 title={t('list.deleteConfirm')}
                 destructive
                 onConfirm={() => remove(row)}
+                returnFocus={focusTable}
                 trigger={
                   <Button variant="link" size="sm" className={`${LINK} text-destructive`} data-testid="row-delete">
                     {t('list.delete')}
@@ -206,8 +232,7 @@ function DatasetList({
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- remove reads only the dataset id and refetch
-    [entity, view, dictionaries, t, i18n.language, labels, can, timeTravel, datasetId, canChange, actions, showHistory, showAudit, refetch],
+    [entity, view, dictionaries, t, i18n.language, labels, can, timeTravel, datasetId, canChange, actions, showHistory, showAudit, refetch, remove, focusTable],
   )
   const filterBarFields = useMemo(() => filterFields(entity, view, dictionaries, t, can), [entity, view, dictionaries, t, can])
 
@@ -225,7 +250,7 @@ function DatasetList({
       breadcrumb={[{ label: t('nav.datasets'), to: '/data' }, { label: entity.label }]}
       actions={
         canWrite && (
-          <Button onClick={() => setEditing(null)} data-testid="create">
+          <Button onClick={() => setEditing({ open: true })} data-testid="create">
             <Plus aria-hidden />
             {t('list.create')}
           </Button>
@@ -267,6 +292,8 @@ function DatasetList({
         data={rows ?? []}
         getRowId={(row) => row.__key}
         loading={query.isFetching}
+        stale={query.isPlaceholderData}
+        tableRef={tableRef}
         pagination={pagination}
         onPaginationChange={setPagination}
         rowCount={query.data?.total}
@@ -281,15 +308,15 @@ function DatasetList({
           dataset={dataset}
           entity={entity}
           dictionaries={dictionaries}
-          instance={editing ?? undefined}
-          readOnly={editing ? !canChange : !canWrite}
+          instance={editing.instance}
+          readOnly={editing.instance ? !canChange : !canWrite}
           historical={timeTravel}
-          open
+          open={editing.open}
           onOpenChange={(open) => {
-            if (!open) setEditing(undefined)
+            if (!open) closeForm()
           }}
           onSaved={() => {
-            setEditing(undefined)
+            closeForm()
             void refetch()
           }}
         />

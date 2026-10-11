@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { adminToken, dataRows, datasetPath, entityForm, insert, signIn, test, unique } from './support'
+import { adminToken, datasetPath, entityForm, insert, searchedRow, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 
@@ -36,7 +36,7 @@ test('a product photo is uploaded from the generated form and shown in the list'
   await page.goto(datasetPath(PRODUCTS))
   await page.getByLabel('SKU').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  const row = dataRows(page).first()
+  const row = await searchedRow(page, code)
   await expect(row).toContainText(`Product ${code}`)
   await row.getByTestId('row-edit').click()
 
@@ -65,7 +65,7 @@ test('a file the policy does not accept is refused with the server message', asy
   await page.goto(datasetPath(PRODUCTS))
   await page.getByLabel('SKU').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  await dataRows(page).first().getByTestId('row-edit').click()
+  await (await searchedRow(page, code)).getByTestId('row-edit').click()
   const drawer = entityForm(page)
   // Named like a photo, but markup: the server recognises the content.
   await drawer.locator('input[type=file]').setInputFiles({
