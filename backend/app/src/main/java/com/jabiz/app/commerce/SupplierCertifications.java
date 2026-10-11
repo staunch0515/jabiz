@@ -167,6 +167,7 @@ public class SupplierCertifications {
             CertificationOutput.class, ProcessContext.class, pb -> pb
                 .description("Moves a certification on after its approval request is decided.")
                 .permissions("commerce.certification.review")
+                .internal()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put("input", input);

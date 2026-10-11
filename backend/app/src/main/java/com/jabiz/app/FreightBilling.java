@@ -236,6 +236,7 @@ public final class FreightBilling extends BaseEntityDefinitions {
             ProcessContext.class, pb -> pb
                 .description("Posts the freight revenue of a closed month to the ledger.")
                 .permissions("logistics.freight.post")
+                .internal()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put("input", input);

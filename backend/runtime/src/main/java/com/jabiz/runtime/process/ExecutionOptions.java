@@ -18,8 +18,12 @@ import java.util.regex.Pattern;
  * @param dryRun         whether to roll the transaction back once the process has completed, returning its output:
  *                       everything it would do is done and checked, nothing stays, and no after-commit step runs (an
  *                       import's preview, docs/design/20-imports.md section 5). Not with an idempotency key.
+ * @param entry          the {@code entryOnly()} process the caller is the platform's own entry point for (decision
+ *                       D41): only with it does such a process run, as the real caller. Null for none; the process API
+ *                       never passes one.
  */
-public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun) {
+public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun,
+    String entry) {
 
     public static final ExecutionOptions NONE = new ExecutionOptions(null);
 
@@ -36,6 +40,10 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
         }
     }
 
+    public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun) {
+        this(idempotencyKey, beforeSteps, dryRun, null);
+    }
+
     public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps) {
         this(idempotencyKey, beforeSteps, false);
     }
@@ -49,6 +57,19 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
     }
 
     public ExecutionOptions withBeforeSteps(Function<Operation, Mono<Void>> work) {
-        return new ExecutionOptions(idempotencyKey, work, dryRun);
+        return new ExecutionOptions(idempotencyKey, work, dryRun, entry);
+    }
+
+    /**
+     * These options, from the platform's own entry point for {@code process} (decision D41): an {@code entryOnly()}
+     * process runs only so. Only platform entry points (signing in, the entity API, uploads, imports...) pass it.
+     */
+    public ExecutionOptions atEntryOf(com.jabiz.process.ProcessDefinition<?, ?, ?> process) {
+        return new ExecutionOptions(idempotencyKey, beforeSteps, dryRun, process.name());
+    }
+
+    /** Whether these options come from the platform's own entry point for {@code process}. */
+    public boolean isEntryOf(com.jabiz.process.ProcessDefinition<?, ?, ?> process) {
+        return process.name().equals(entry);
     }
 }

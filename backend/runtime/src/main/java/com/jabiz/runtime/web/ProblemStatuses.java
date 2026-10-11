@@ -17,6 +17,7 @@ import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.inbound.InboundRejectedException;
+import com.jabiz.runtime.process.ProcessInternalException;
 import com.jabiz.runtime.security.EmailNotVerifiedException;
 import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.security.SignInRefusedException;
@@ -74,6 +75,8 @@ public final class ProblemStatuses {
                 e.getMessage()));
             case EmailNotVerifiedException e -> List.of(new Violation(null, PlatformErrorCodes.EMAIL_NOT_VERIFIED,
                 e.getMessage()));
+            case ProcessInternalException e -> List.of(new Violation(null, PlatformErrorCodes.PROCESS_INTERNAL,
+                e.getMessage(), Map.of("process", e.process())));
             case SignInRefusedException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_IN_REFUSED,
                 e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,

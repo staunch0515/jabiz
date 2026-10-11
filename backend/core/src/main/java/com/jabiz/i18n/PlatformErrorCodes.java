@@ -167,6 +167,11 @@ public final class PlatformErrorCodes {
      * section 15).
      */
     public static final String EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
+    /**
+     * The process runs as the system only, through its platform entry point only, or as a sub-process only (decision
+     * D41), whatever the caller's permissions.
+     */
+    public static final String PROCESS_INTERNAL = "PROCESS_INTERNAL";
     /** An application's sign-in guard refused the sign-in after the credentials were found right (D36 item 6). */
     public static final String SIGN_IN_REFUSED = "SIGN_IN_REFUSED";
     /**
@@ -225,7 +230,7 @@ public final class PlatformErrorCodes {
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
-        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
+        SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         INBOUND_REJECTED, RATE_LIMITED);
 

@@ -35,7 +35,7 @@ class AccountController {
                 return Mono.error(new PermissionDeniedException(SecurityPermissions.ACCOUNT,
                     "Only users of the platform have account settings"));
             }
-            return processes.execute(UserProcesses.SET_LOCALE,
+            return processes.executeAtEntry(UserProcesses.SET_LOCALE,
                 new UserProcesses.LocaleInput(user.get().toString(), request == null ? null : request.locale()));
         });
     }

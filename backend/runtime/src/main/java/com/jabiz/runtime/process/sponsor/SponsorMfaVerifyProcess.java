@@ -30,7 +30,7 @@ public final class SponsorMfaVerifyProcess {
             pb -> pb
                 .description("Second factor: checks a TOTP or recovery code, the roles, and records the attempt.")
                 .permissions(SecurityPermissions.SIGN_IN)
-                .internal()
+                .entryOnly()
                 .contextFactory(MfaContext::new)
                 .outputMapper(LoginContext::output)
 

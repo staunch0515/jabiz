@@ -2,6 +2,7 @@ package com.jabiz.runtime.process;
 
 import com.jabiz.process.BlockingStep;
 import com.jabiz.process.ComputeStep;
+import com.jabiz.process.ProcessAccess;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.StepDefinition;
 import com.jabiz.runtime.check.CheckProblem;
@@ -29,8 +30,12 @@ import java.util.Set;
  *   <li>every step is a {@link StepHandler}, {@link ComputeStep} or {@link BlockingStep}, and every step class that
  *       is not declared in place has exactly one bean;</li>
  *   <li>references of platform steps resolve (datasets, templates, called processes, the event publisher);</li>
- *   <li>the call graph is acyclic; calls of deprecated versions are warned about;</li>
+ *   <li>the call graph is acyclic; calls of deprecated versions are warned about; calls of {@code entryOnly()}
+ *       processes are errors, and so are calls of {@code internal()} ones from processes that are not
+ *       {@code internal()} themselves (decision D41);</li>
  *   <li>every process declares permissions (a warning in the {@code dev} profile);</li>
+ *   <li>a process not listed in the catalog ({@code internal()}, {@code entryOnly()}, {@code subProcessOnly()})
+ *       declares no {@code actsOn}: it cannot be offered as an action (decision D41);</li>
  *   <li>the input form schema of every listed process describes all its input (a warning otherwise).</li>
  * </ul>
  */
@@ -65,7 +70,12 @@ public class ProcessChecks implements PlatformCheck {
             for (StepDefinition<?, ?> step : definition.steps()) {
                 checkStep(definition, step, problems, calls.get(process));
             }
-            if (!definition.internal()) {
+            if (!definition.listed() && definition.actsOn() != null) {
+                problems.add(CheckProblem.error(CATEGORY, process, "is " + definition.access()
+                    + " (decision D41) and cannot act on " + definition.actsOn().entity()
+                    + ": it is never offered as an action; remove actsOn"));
+            }
+            if (definition.listed()) {
                 // Clients build the process form from this schema; what it cannot describe is entered as raw JSON.
                 for (String unsupported : ProcessInputSchemas.of(definition.inputType()).problems()) {
                     problems.add(CheckProblem.warning(CATEGORY, process,
@@ -107,6 +117,18 @@ public class ProcessChecks implements PlatformCheck {
         if (step.metadata() instanceof CallProcess.Metadata<?> call) {
             CallProcess.resolve(registry, call).ifPresent(target -> {
                 calls.add(key(target));
+                if (target.access() == ProcessAccess.ENTRY_ONLY) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
+                        + ", which only its platform entry point runs (entryOnly, decision D41)"));
+                }
+                // Only a process the system runs may call a hand-off point. Whether an open process's root runs as the
+                // system is not known here; only internal() callers are taken to.
+                if (target.access() == ProcessAccess.INTERNAL && definition.access() != ProcessAccess.INTERNAL) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
+                        + ", which is internal() and runs as the system only, from a process that is "
+                        + definition.access() + ": declare the callee subProcessOnly() or the caller internal() "
+                        + "(decision D41)"));
+                }
                 if (target.deprecated()) {
                     problems.add(CheckProblem.warning(CATEGORY, location, "calls deprecated process " + key(target)));
                 }

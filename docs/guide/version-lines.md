@@ -66,6 +66,14 @@ git push -u origin 1.1/finance
 
 此后应用只在 `1.1/finance` 上开发；`1.0/finance` 冻结，只接受线 1.0 平台修复的合并（如果仍有部署在用）。
 
+### 合并平台时需要应用适配的线内改动
+
+线内的平台改动原则上兼容；少数加严的启动检查会让应用原有的声明在合并后启动失败，合并时按下表适配（应用分支上改，平台不改应用目录）。
+
+| 平台阶段 | 应用要做的 |
+|---|---|
+| 1.2 / 16l（D41，谁能启动流程） | 重新归类应用中的 `internal()` 流程：事件消费、定时任务、回调保留 `internal()`；只被用户运行的业务流程以 `CallProcess` 调用的改为 `subProcessOnly()`（不是 `internal()` 的流程调用 `internal()` 流程即启动错误 `PROCESS`）；事件消费与任务的流程若是普通流程，改为 `internal()`，或在也要手工运行时声明 `manualToo()`（否则 `EVENT` / `JOB` 警告）；导入的目标流程不能是 `internal()` / `entryOnly()`（`IMPORT` 错误）；业务代码不再引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（`PlatformArchRules.noProcessMachinery`）。已知：`1.2/quizbuks` 的 `QB_QUIZ_RELEASE_FILES`（`internal()`，由用户运行的 `QB_QUIZ_DELETE` 调用）改为 `subProcessOnly()`。 |
+
 ## 6. 修复旧线并向前合并
 
 修复做在最旧的受影响线上，再逐条向前合并，最后合并到各线的应用：

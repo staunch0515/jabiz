@@ -63,6 +63,20 @@ class JwtServiceTest {
             .hasMessageContaining("signature");
     }
 
+    /** The system and the anonymous visitor are no one a token may name (decision D41), even signed rightly. */
+    @Test
+    void tokensOfTheReservedSubjectsAreRefused() throws Exception {
+        for (String reserved : java.util.List.of("system", "anonymous")) {
+            String token = signed(new JWTClaimsSet.Builder().issuer(JwtService.ISSUER).subject(reserved)
+                .expirationTime(Date.from(T0.plusSeconds(60))).claim(JwtService.PERMISSIONS, java.util.List.of("*"))
+                .build());
+            assertThatThrownBy(() -> service.verify(token)).as(reserved)
+                .isInstanceOf(JwtService.InvalidTokenException.class).hasMessageContaining("reserved");
+            assertThatThrownBy(() -> service.verify(service.issue(new Actor(reserved, null, Set.of(), Set.of("*")))
+                .token())).as(reserved).isInstanceOf(JwtService.InvalidTokenException.class);
+        }
+    }
+
     @Test
     void challengesCarryTheirEntry() {
         JwtService.Issued portal = service.issueChallenge("u1", JwtService.Purpose.VERIFY, 3, null, "portal",
