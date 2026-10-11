@@ -21,8 +21,6 @@ dependencies {
     testImplementation("net.jqwik:jqwik:1.9.3")
     // Registration and mail against a local SMTP server (Q2), as the platform's own tests.
     testImplementation("com.icegreen:greenmail-junit5:2.1.3")
-    // TracingUnderBlockHoundTest drives the span exporter the runtime uses (version from the Spring Boot BOM).
-    testImplementation("io.opentelemetry:opentelemetry-sdk-trace")
 }
 
 // The throughput baseline (docs/quizbuks/plans/Q5-answering.md, D-Q5-10) is tagged "perf": not part of check, run on
