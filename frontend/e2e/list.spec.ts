@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, datasetPath, insert, signIn, test, unique } from './support'
+import { adminToken, CARRIERS, dataRows, datasetPath, insert, rangeEnd, signIn, sortBy, test, unique } from './support'
 
 /**
  * Acceptance criterion 1 of ROADMAP phase 10: Carrier was added as an entity definition and a dataset only; its list
@@ -33,7 +33,7 @@ test('the list page of a new entity is generated from its metadata', async ({ pa
   // Search by code (the list view whitelists it; text allows LIKE).
   await page.getByLabel('代码').first().fill(prefix)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  const rows = page.locator('.ant-table-tbody tr.ant-table-row')
+  const rows = dataRows(page)
   await expect(rows).toHaveCount(3)
   // Default sort of the list view: code ascending. Dictionary codes show their labels, amounts their currency.
   await expect(rows.nth(0)).toContainText(`${prefix}A`)
@@ -41,17 +41,16 @@ test('the list page of a new entity is generated from its metadata', async ({ pa
   await expect(rows.nth(0)).toContainText('3,000')
 
   // Sorting by credit limit (whitelisted).
-  await page.getByRole('columnheader', { name: '信用额度' }).click()
+  await sortBy(page, '信用额度')
   await expect(rows.nth(0)).toContainText(`${prefix}B`)
-  await page.getByRole('columnheader', { name: '信用额度' }).click()
+  await sortBy(page, '信用额度')
   await expect(rows.nth(0)).toContainText(`${prefix}A`)
 
   // A range search on the amount.
   await page.goto(datasetPath(CARRIERS))
   await page.getByLabel('代码').first().fill(prefix)
-  const range = page.locator('.ant-form-item', { hasText: '信用额度' }).getByRole('spinbutton')
-  await range.nth(0).fill('1500')
-  await range.nth(1).fill('2500')
+  await rangeEnd(page, '信用额度', 'from').fill('1500')
+  await rangeEnd(page, '信用额度', 'to').fill('2500')
   await page.getByRole('button', { name: /查\s*询/ }).click()
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`${prefix}C`)

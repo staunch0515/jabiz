@@ -208,4 +208,33 @@ describe('DataTable', () => {
     render(<DataTable label="Carriers" columns={columns} data={[]} loading />)
     expect(screen.getByRole('table', { name: 'Carriers' })).toHaveAttribute('aria-busy', 'true')
   })
+
+  it('keeps the rows of the previous request out of use while the next loads', async () => {
+    const onClick = vi.fn()
+    const withButton: ColumnDef<Carrier, unknown>[] = [
+      ...columns,
+      { id: 'open', header: 'Open', cell: ({ row }) => <button onClick={onClick}>Open {row.original.code}</button> },
+    ]
+    const { rerender } = render(<DataTable label="Carriers" columns={withButton} data={rows} stale />)
+    const table = screen.getByRole('table', { name: 'Carriers' })
+    expect(table).toHaveAttribute('aria-busy', 'true')
+    const body = table.querySelector('tbody')!
+    expect(body).toHaveAttribute('inert')
+    // Browsers keep inert content out of focus, clicks and the accessibility tree (jsdom only keeps the attribute).
+    expect(body).toHaveAttribute('data-stale', 'true')
+    rerender(<DataTable label="Carriers" columns={withButton} data={rows} />)
+    expect(table.querySelector('tbody')).not.toHaveAttribute('inert')
+    expect(table).not.toHaveAttribute('aria-busy')
+    await userEvent.click(screen.getByRole('button', { name: 'Open A1' }))
+    expect(onClick).toHaveBeenCalled()
+  })
+
+  it('can take focus from a script, without being a tab stop', () => {
+    let table: HTMLTableElement | null = null
+    render(<DataTable label="Carriers" columns={columns} data={rows} tableRef={(element) => { table = element }} />)
+    expect(table).toBe(screen.getByRole('table', { name: 'Carriers' }))
+    table!.focus()
+    expect(document.activeElement).toBe(table)
+    expect(table).toHaveAttribute('tabindex', '-1')
+  })
 })

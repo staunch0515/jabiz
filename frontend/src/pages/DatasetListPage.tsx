@@ -1,8 +1,22 @@
-import { AuditOutlined, HistoryOutlined, PlusOutlined } from '@ant-design/icons'
-import { PageContainer, ProTable, type ActionType, type ProColumns } from '@ant-design/pro-components'
-import { Alert, App, Button, DatePicker, Popconfirm, Result, Space, Spin } from 'antd'
-import dayjs, { type Dayjs } from 'dayjs'
-import { useMemo, useRef, useState } from 'react'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  DateTimePicker,
+  FilterBar,
+  Label,
+  notify,
+  PageState,
+  type ColumnDef,
+  type FilterValues,
+  type PaginationState,
+  type SortingState,
+} from '@jabiz/ui'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { History, Info, Plus, ScrollText } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
@@ -10,224 +24,303 @@ import { ApiError } from '../api/problem'
 import { useAuth } from '../auth/AuthContext'
 import EntityFormDrawer from '../components/EntityFormDrawer'
 import RowActions from '../components/RowActions'
+import AdminPage from '../layout/AdminPage'
 import { actionsFor } from '../meta/actions'
-import { buildColumns, toRow, type Row } from '../meta/columns'
+import { toRow, type Row } from '../meta/cells'
+import { dataColumns, defaultSorting, filterFields } from '../meta/dataColumns'
+import { formatDateTime } from '../meta/format'
 import { useDataset, useDatasets, useDictionaries, useEntityMeta, useProcesses } from '../meta/hooks'
 import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
 import { useEntityMetas, useReferenceLabels } from '../meta/references'
-import type { EntityInstance } from '../meta/types'
+import type { DatasetEntry, DictItem, EntityInstance, EntityMeta } from '../meta/types'
 import { paths } from './paths'
 
+const LINK = 'h-auto px-1'
+const DEFAULT_PAGE_SIZE = 20
+
 /**
- * The generated list page of any dataset (docs/design/12-frontend.md section 5): columns, search and sorting from
+ * The generated list page of any dataset (docs/design/12-frontend.md section 5): columns, filters and sorting from
  * the list view, create / edit / delete through the dataset API when the user may write, the processes acting on the
  * entity as row actions, references shown by their labels, and — for temporal entities — the data at another point
- * in time and the history of each entry.
+ * in time (in the address, read-only) and the history of each entry.
  */
 export default function DatasetListPage() {
-  const { t, i18n } = useTranslation()
-  const { message } = App.useApp()
-  const { can } = useAuth()
+  const { t } = useTranslation()
   const { datasetId = '' } = useParams()
   const dataset = useDataset(datasetId)
   const entity = useEntityMeta(dataset.data?.entity)
   const dictionaries = useDictionaries(entity.data)
+
+  if (dataset.isLoading || (dataset.data && entity.isLoading)) return <PageState kind="loading" />
+  if (!dataset.data) return <PageState kind="notFound" titleAs="h1" title={datasetId} />
+  if (entity.error || !entity.data) {
+    return (
+      <PageState kind="error" titleAs="h1" title={entity.error instanceof ApiError ? entity.error.display : t('app.error')} />
+    )
+  }
+  // Another dataset starts afresh: its own page, sorting and filters.
+  return <DatasetList key={datasetId} dataset={dataset.data} entity={entity.data} dictionaries={dictionaries} />
+}
+
+function DatasetList({
+  dataset,
+  entity,
+  dictionaries,
+}: {
+  dataset: DatasetEntry
+  entity: EntityMeta
+  dictionaries: Record<string, DictItem[]>
+}) {
+  const { t, i18n } = useTranslation()
+  const { can } = useAuth()
+  const datasetId = dataset.id
   const [searchParams, setSearchParams] = useSearchParams()
-  const actionRef = useRef<ActionType>(undefined)
-  const [editing, setEditing] = useState<EntityInstance | null | undefined>(undefined)
-  const [rows, setRows] = useState<Row[]>([])
+  // The entry in the form sheet; the sheet stays mounted when closed, so it slides out and focus returns to the row.
+  const [editing, setEditing] = useState<{ instance?: EntityInstance; open: boolean } | undefined>(undefined)
+  const closeForm = () => setEditing((current) => current && { ...current, open: false })
   const datasets = useDatasets()
   const processes = useProcesses()
-  const targets = useEntityMetas(
-    (entity.data?.fields ?? []).flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])),
-  )
-  const labels = useReferenceLabels(entity.data, rows, datasets.data ?? [], targets)
-  const actions = useMemo(
-    () => (entity.data ? actionsFor(entity.data.entity, processes.data ?? []) : []),
-    [entity.data, processes.data],
-  )
+  const asOfId = useId()
+  const knownAtId = useId()
 
   const asOf = searchParams.get('asOf')
   const knownAt = searchParams.get('knownAt')
   const timeTravel = !!(asOf || knownAt)
 
-  const view = entity.data ? listViewOf(entity.data, dataset.data?.listView) : undefined
-  const canWrite = !!dataset.data?.canWrite && !timeTravel
+  const view = listViewOf(entity, dataset.listView)
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE })
+  const [sorting, setSorting] = useState<SortingState>(() => defaultSorting(entity, view, can))
+  const [filters, setFilters] = useState<FilterValues>({})
+  // Another point in time starts at the first page again.
+  const [shownTime, setShownTime] = useState(`${asOf}|${knownAt}`)
+  if (shownTime !== `${asOf}|${knownAt}`) {
+    setShownTime(`${asOf}|${knownAt}`)
+    setPagination({ ...pagination, pageIndex: 0 })
+  }
+
+  const body = {
+    filters: buildFilters(entity, view, filters),
+    sorts: buildSorts(view, sorting),
+    offset: pagination.pageIndex * pagination.pageSize,
+    limit: pagination.pageSize,
+    asOf: asOf ?? undefined,
+    knownAt: knownAt ?? undefined,
+  }
+  const query = useQuery({
+    queryKey: ['dataset-query', datasetId, body],
+    // The previous page stays while the next loads, as the table keeps its height and focus.
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const result = await unwrap(
+        api.POST('/api/datasets/{resourceId}/query', { params: { path: { resourceId: datasetId } }, body }),
+      )
+      return { rows: (result.items ?? []).map(toRow), total: result.total ?? 0 }
+    },
+  })
+  const { refetch } = query
+  useEffect(() => {
+    if (query.error) notify.error(query.error instanceof ApiError ? query.error.display : String(query.error))
+  }, [query.error])
+  // A page beyond the last (its rows deleted, from here or elsewhere) shows the last page there is.
+  const total = query.data?.total
+  if (
+    total !== undefined &&
+    !query.isPlaceholderData &&
+    pagination.pageIndex > 0 &&
+    pagination.pageIndex * pagination.pageSize >= total
+  ) {
+    setPagination({ ...pagination, pageIndex: Math.max(0, Math.ceil(total / pagination.pageSize) - 1) })
+  }
+  // Where focus goes when what had it went with its row (a deleted entry's buttons).
+  const tableRef = useRef<HTMLTableElement>(null)
+  const focusTable = useCallback(() => tableRef.current, [])
+
+  const rows = query.data?.rows
+  const targets = useEntityMetas(entity.fields.flatMap((f) => (f.type === 'reference' ? [f.targetEntity] : [])))
+  const labels = useReferenceLabels(entity, rows ?? [], datasets.data ?? [], targets)
+  const actions = useMemo(() => actionsFor(entity.entity, processes.data ?? []), [entity.entity, processes.data])
+
+  const canWrite = !!dataset.canWrite && !timeTravel
   // A write-once entity is only inserted (docs/design/04-temporal-append-only.md section 5.4).
-  const canChange = canWrite && !entity.data?.writeOnce
-  const showHistory = !!dataset.data?.temporal && !!dataset.data?.allowTimeTravel
+  const canChange = canWrite && !entity.writeOnce
+  const showHistory = !!dataset.temporal && !!dataset.allowTimeTravel
   // Every entity, plain or temporal, has an audit trail (docs/design/21-audit-retention.md section 1.4).
   const showAudit = can('audit.read')
 
-  const columns = useMemo<ProColumns<Row>[]>(() => {
-    if (!entity.data) return []
-    const generated = buildColumns(entity.data, view, dictionaries, t, i18n.language, {
-      labels,
-      defaultLocale: entity.data.defaultLocale,
-      can,
-      datasetId: timeTravel ? undefined : datasetId,
-    })
-    return [
-      ...generated,
+  // Read again before the confirmation closes, so focus moves on from a row that is gone.
+  const remove = useCallback(
+    async (row: Row) => {
+      try {
+        await unwrap(
+          api.POST('/api/datasets/{resourceId}/commit', {
+            params: { path: { resourceId: datasetId } },
+            body: { changes: [{ action: 'DELETE', id: row.__instance.id, version: row.__instance.version }] },
+          }),
+        )
+        notify.success(t('list.deleted'))
+        await refetch()
+      } catch (e) {
+        notify.error(e instanceof ApiError ? e.display : String(e))
+      }
+    },
+    [datasetId, t, refetch],
+  )
+
+  const columns = useMemo<ColumnDef<Row, unknown>[]>(
+    () => [
+      ...dataColumns(entity, view, dictionaries, t, i18n.language, {
+        labels,
+        defaultLocale: entity.defaultLocale,
+        can,
+        // At another point in time there is no current value to show in plain.
+        datasetId: timeTravel ? undefined : datasetId,
+      }),
       {
-        title: t('list.actions'),
-        key: '__actions',
-        valueType: 'option',
-        fixed: 'right',
-        render: (_, row) => (
-          <Space size="small">
-            <a onClick={() => setEditing(row.__instance)} data-testid={canChange ? 'row-edit' : 'row-view'}>
+        id: '__actions',
+        header: t('list.actions'),
+        meta: { pinned: 'right' },
+        cell: ({ row: { original: row } }) => (
+          <span className="flex flex-wrap items-center gap-1">
+            <Button
+              variant="link"
+              size="sm"
+              className={LINK}
+              onClick={() => setEditing({ instance: row.__instance, open: true })}
+              data-testid={canChange ? 'row-edit' : 'row-view'}
+            >
               {t(canChange ? 'list.edit' : 'list.view')}
-            </a>
+            </Button>
             {!timeTravel && (
               <RowActions
                 actions={actions}
                 id={row.__instance.id}
                 attributes={row}
-                onDone={() => actionRef.current?.reload()}
+                onDone={() => refetch()}
+                returnFocus={focusTable}
               />
             )}
             {canChange && (
-              <Popconfirm
+              <ConfirmDialog
                 title={t('list.deleteConfirm')}
-                onConfirm={async () => {
-                  try {
-                    await unwrap(
-                      api.POST('/api/datasets/{resourceId}/commit', {
-                        params: { path: { resourceId: datasetId } },
-                        body: {
-                          changes: [{ action: 'DELETE', id: row.__instance.id, version: row.__instance.version }],
-                        },
-                      }),
-                    )
-                    message.success(t('list.deleted'))
-                    actionRef.current?.reload()
-                  } catch (e) {
-                    message.error(e instanceof ApiError ? e.display : String(e))
-                  }
-                }}
-              >
-                <a data-testid="row-delete">{t('list.delete')}</a>
-              </Popconfirm>
+                destructive
+                onConfirm={() => remove(row)}
+                returnFocus={focusTable}
+                trigger={
+                  <Button variant="link" size="sm" className={`${LINK} text-destructive`} data-testid="row-delete">
+                    {t('list.delete')}
+                  </Button>
+                }
+              />
             )}
             {showHistory && (
-              <Link to={paths.history(datasetId, String(row.__instance.id))} data-testid="row-history">
-                <HistoryOutlined /> {t('list.history')}
-              </Link>
+              <Button variant="link" size="sm" className={LINK} asChild>
+                <Link to={paths.history(datasetId, String(row.__instance.id))} data-testid="row-history">
+                  <History aria-hidden />
+                  {t('list.history')}
+                </Link>
+              </Button>
             )}
-            {showAudit && entity.data && (
-              <Link to={paths.audit(entity.data.entity, String(row.__instance.id))} data-testid="row-audit">
-                <AuditOutlined /> {t('audit.open')}
-              </Link>
+            {showAudit && (
+              <Button variant="link" size="sm" className={LINK} asChild>
+                <Link to={paths.audit(entity.entity, String(row.__instance.id))} data-testid="row-audit">
+                  <ScrollText aria-hidden />
+                  {t('audit.open')}
+                </Link>
+              </Button>
             )}
-          </Space>
+          </span>
         ),
       },
-    ]
-  }, [entity.data, view, dictionaries, t, i18n.language, canChange, showHistory, showAudit, datasetId, message, labels, actions, timeTravel, can])
+    ],
+    [entity, view, dictionaries, t, i18n.language, labels, can, timeTravel, datasetId, canChange, actions, showHistory, showAudit, refetch, remove, focusTable],
+  )
+  const filterBarFields = useMemo(() => filterFields(entity, view, dictionaries, t, can), [entity, view, dictionaries, t, can])
 
-  if (dataset.isLoading || (dataset.data && entity.isLoading)) return <Spin style={{ margin: 48 }} />
-  if (!dataset.data) return <Result status="404" title={datasetId} />
-  if (entity.error || !entity.data) {
-    return <Result status="error" title={entity.error instanceof ApiError ? entity.error.display : t('app.error')} />
-  }
-
-  const setTime = (key: 'asOf' | 'knownAt', value: Dayjs | null) => {
+  const setTime = (key: 'asOf' | 'knownAt', value: string | null) => {
     const next = new URLSearchParams(searchParams)
-    if (value) next.set(key, value.toISOString())
+    if (value) next.set(key, value)
     else next.delete(key)
     setSearchParams(next, { replace: true })
   }
 
   return (
-    <PageContainer title={<span data-testid="page-title">{entity.data.label}</span>} subTitle={dataset.data.id}>
+    <AdminPage
+      title={entity.label}
+      description={<code className="font-mono text-xs">{dataset.id}</code>}
+      breadcrumb={[{ label: t('nav.datasets'), to: '/data' }, { label: entity.label }]}
+      actions={
+        canWrite && (
+          <Button onClick={() => setEditing({ open: true })} data-testid="create">
+            <Plus aria-hidden />
+            {t('list.create')}
+          </Button>
+        )
+      }
+    >
+      {showHistory && (
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={asOfId}>{t('list.asOf')}</Label>
+            <DateTimePicker id={asOfId} value={asOf} onChange={(value) => setTime('asOf', value)} clearable data-testid="as-of" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={knownAtId}>{t('list.knownAt')}</Label>
+            <DateTimePicker id={knownAtId} value={knownAt} onChange={(value) => setTime('knownAt', value)} clearable />
+          </div>
+        </div>
+      )}
       {timeTravel && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-          message={t('list.timeTravelHint', { time: dayjs(asOf ?? knownAt).format('YYYY-MM-DD HH:mm:ss') })}
+        <Alert data-testid="time-travel">
+          <Info aria-hidden />
+          <AlertDescription>{t('list.timeTravelHint', { time: formatDateTime(asOf ?? knownAt) })}</AlertDescription>
+        </Alert>
+      )}
+      {filterBarFields.length > 0 && (
+        <FilterBar
+          fields={filterBarFields}
+          values={filters}
+          onSubmit={(values) => {
+            // A new search starts at the first page.
+            setFilters(values)
+            setPagination({ ...pagination, pageIndex: 0 })
+          }}
         />
       )}
-      <ProTable<Row>
-        rowKey="__key"
-        actionRef={actionRef}
+      <DataTable
+        label={entity.label}
         columns={columns}
-        params={{ asOf, knownAt, datasetId }}
-        onLoad={(loaded) => setRows(loaded)}
-        dateFormatter={(value) => value.toISOString()}
-        scroll={{ x: 'max-content' }}
-        pagination={{ defaultPageSize: 20, showSizeChanger: true }}
-        search={view?.filters?.length ? { labelWidth: 'auto', defaultCollapsed: false } : false}
-        request={async (params, sort) => {
-          const { current = 1, pageSize = 20, ...values } = params
-          const body = {
-            filters: buildFilters(entity.data!, view, values),
-            sorts: buildSorts(view, sort as Record<string, string>),
-            offset: (current - 1) * pageSize,
-            limit: pageSize,
-            asOf: asOf ?? undefined,
-            knownAt: knownAt ?? undefined,
-          }
-          try {
-            const result = await unwrap(
-              api.POST('/api/datasets/{resourceId}/query', { params: { path: { resourceId: datasetId } }, body }),
-            )
-            return { data: (result.items ?? []).map(toRow), total: result.total ?? 0, success: true }
-          } catch (e) {
-            message.error(e instanceof ApiError ? e.display : String(e))
-            return { data: [], total: 0, success: false }
-          }
+        data={rows ?? []}
+        getRowId={(row) => row.__key}
+        loading={query.isFetching}
+        stale={query.isPlaceholderData}
+        tableRef={tableRef}
+        pagination={pagination}
+        onPaginationChange={setPagination}
+        rowCount={query.data?.total}
+        sorting={sorting}
+        onSortingChange={(next) => {
+          setSorting(next)
+          setPagination({ ...pagination, pageIndex: 0 })
         }}
-        toolBarRender={() => [
-          ...(showHistory
-            ? [
-                <DatePicker
-                  key="asOf"
-                  showTime
-                  allowClear
-                  placeholder={t('list.asOf')}
-                  value={asOf ? dayjs(asOf) : null}
-                  onChange={(value) => setTime('asOf', value)}
-                  data-testid="as-of"
-                />,
-                <DatePicker
-                  key="knownAt"
-                  showTime
-                  allowClear
-                  placeholder={t('list.knownAt')}
-                  value={knownAt ? dayjs(knownAt) : null}
-                  onChange={(value) => setTime('knownAt', value)}
-                />,
-              ]
-            : []),
-          ...(canWrite
-            ? [
-                <Button key="create" type="primary" icon={<PlusOutlined />} onClick={() => setEditing(null)} data-testid="create">
-                  {t('list.create')}
-                </Button>,
-              ]
-            : []),
-        ]}
       />
       {editing !== undefined && (
         <EntityFormDrawer
-          dataset={dataset.data}
-          entity={entity.data}
+          dataset={dataset}
+          entity={entity}
           dictionaries={dictionaries}
-          instance={editing ?? undefined}
-          readOnly={editing ? !canChange : !canWrite}
+          instance={editing.instance}
+          readOnly={editing.instance ? !canChange : !canWrite}
           historical={timeTravel}
-          open
+          open={editing.open}
           onOpenChange={(open) => {
-            if (!open) setEditing(undefined)
+            if (!open) closeForm()
           }}
           onSaved={() => {
-            setEditing(undefined)
-            actionRef.current?.reload()
+            closeForm()
+            void refetch()
           }}
         />
       )}
-    </PageContainer>
+    </AdminPage>
   )
 }

@@ -1,5 +1,5 @@
-import { EyeOutlined } from '@ant-design/icons'
-import { App, Button, Space, Typography } from 'antd'
+import { Button, CopyButton, notify, Spinner, UI_NAMESPACE, UI_SCOPE } from '@jabiz/ui'
+import { Eye } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, unwrap } from '../api/client'
@@ -19,15 +19,22 @@ interface Props {
  */
 export default function MaskedValue({ datasetId, id, field, masked }: Props) {
   const { t } = useTranslation()
-  const { message } = App.useApp()
   const [plain, setPlain] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Another value (changed and read again) or another entry: the plain text shown was another's.
+  const showing = `${datasetId}\n${String(id)}\n${field}\n${masked}`
+  const [shownFor, setShownFor] = useState(showing)
+  if (shownFor !== showing) {
+    setShownFor(showing)
+    setPlain(null)
+  }
 
   if (plain !== null) {
     return (
-      <Typography.Text copyable data-testid={`revealed-${field}`}>
-        {plain}
-      </Typography.Text>
+      <span className={`${UI_SCOPE} inline-flex items-center gap-1`}>
+        <span data-testid={`revealed-${field}`}>{plain}</span>
+        <CopyButton value={plain} label={t('copy.copy', { ns: UI_NAMESPACE })} />
+      </span>
     )
   }
   const reveal = async () => {
@@ -41,25 +48,29 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
       )
       setPlain(answer.value === null || answer.value === undefined ? '' : String(answer.value))
     } catch (e) {
-      message.error(e instanceof ApiError ? e.display : String(e))
+      notify.error(e instanceof ApiError ? e.display : String(e))
     } finally {
       setLoading(false)
     }
   }
   return (
-    <Space size={4}>
+    <span className={`${UI_SCOPE} inline-flex items-center gap-1`}>
       <span>{masked}</span>
       <Button
-        size="small"
-        type="link"
-        icon={<EyeOutlined />}
-        loading={loading}
-        onClick={() => void reveal()}
-        aria-label={t('masked.reveal')}
+        variant="link"
+        size="sm"
+        className="h-auto px-1"
+        disabled={loading}
+        aria-busy={loading || undefined}
+        onClick={(event) => {
+          event.stopPropagation()
+          void reveal()
+        }}
         data-testid={`reveal-${field}`}
       >
+        {loading ? <Spinner className="text-current" /> : <Eye aria-hidden />}
         {t('masked.reveal')}
       </Button>
-    </Space>
+    </span>
   )
 }

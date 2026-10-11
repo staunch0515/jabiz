@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { i18n } from '@jabiz/client'
@@ -54,5 +55,34 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole('button', { name: 'キャンセル' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'OK' }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('returns focus to its trigger, or elsewhere when the action removed the trigger', async () => {
+    function Row() {
+      const [gone, setGone] = useState(false)
+      return (
+        <>
+          <h1 tabIndex={-1}>Carriers</h1>
+          {!gone && (
+            <ConfirmDialog
+              title="Delete this entry?"
+              onConfirm={() => setGone(true)}
+              returnFocus={() => screen.getByRole('heading')}
+              trigger={<Button>Delete</Button>}
+            />
+          )}
+          <ConfirmDialog title="Keep this entry?" onConfirm={() => {}} trigger={<Button>Keep</Button>} />
+        </>
+      )
+    }
+    render(<Row />)
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }))
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' })))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading')))
   })
 })

@@ -1,4 +1,4 @@
-import { useId, useState, type ComponentProps } from 'react'
+import { useId, useRef, useState, type ComponentProps } from 'react'
 import { CheckIcon, ChevronsUpDownIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -78,6 +78,7 @@ export function Combobox({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const listId = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const chosen = value == null ? undefined : options.find((option) => option.value === value)
   const shown = chosen?.label ?? (value == null || value === '' ? undefined : (selectedLabel ?? value))
 
@@ -95,6 +96,7 @@ export function Combobox({
         <PopoverTrigger asChild>
           <Button
             {...trigger}
+            ref={triggerRef}
             variant="outline"
             role="combobox"
             aria-haspopup="listbox"
@@ -169,7 +171,11 @@ export function Combobox({
           size="icon-sm"
           className="absolute right-8 size-7"
           aria-label={t('combobox.clear')}
-          onClick={() => onChange(null)}
+          onClick={() => {
+            onChange(null)
+            // The button goes with the value: focus stays in the field instead of falling to the page.
+            triggerRef.current?.focus()
+          }}
         >
           <XIcon aria-hidden />
         </Button>

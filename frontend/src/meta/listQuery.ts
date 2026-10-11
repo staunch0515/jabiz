@@ -95,7 +95,12 @@ export function buildFilters(
       case 'decimal-range':
       case 'time-range':
       case 'date-range': {
-        const [from, to] = Array.isArray(value) ? value : [value, undefined]
+        // A range: the FilterBar's {from, to}, or [from, to].
+        const [from, to] = Array.isArray(value)
+          ? value
+          : typeof value === 'object' && !dayjs.isDayjs(value)
+            ? [(value as { from?: unknown }).from, (value as { to?: unknown }).to]
+            : [value, undefined]
         const kind = searchKindOf(field)
         const convert = kind === 'time-range' ? instant : kind === 'date-range' ? day : (v: unknown) => (blank(v) ? undefined : String(v))
         const lower = convert(from)
@@ -112,10 +117,25 @@ export function buildFilters(
   return filters
 }
 
-/** Sorts of the dataset query from the table's sorter; only whitelisted fields, otherwise the view's default. */
-export function buildSorts(view: ListViewMeta | undefined, sorter: Record<string, string | null | undefined>): Sort[] {
+/** A table's sorting: TanStack Table's `SortingState` (by column id, descending or not). */
+export type SortingEntries = { id: string; desc: boolean }[]
+
+/**
+ * Sorts of the dataset query from the table's sorting; only whitelisted fields (the server refuses others with
+ * SORT_NOT_ALLOWED), otherwise none and the server applies the view's default. Takes a DataTable's sorting state
+ * or, for the pages still on ProTable (until phase 15c), its sorter.
+ */
+export function buildSorts(view: ListViewMeta | undefined, sorting: SortingEntries): Sort[]
+export function buildSorts(view: ListViewMeta | undefined, sorter: Record<string, string | null | undefined>): Sort[]
+export function buildSorts(
+  view: ListViewMeta | undefined,
+  sorting: SortingEntries | Record<string, string | null | undefined>,
+): Sort[] {
   const allowed = new Set(view?.sorts ?? [])
-  return Object.entries(sorter)
+  if (Array.isArray(sorting)) {
+    return sorting.filter((s) => allowed.has(s.id)).map((s) => ({ field: s.id, asc: !s.desc }))
+  }
+  return Object.entries(sorting)
     .filter(([field, order]) => allowed.has(field) && (order === 'ascend' || order === 'descend'))
     .map(([field, order]) => ({ field, asc: order === 'ascend' }))
 }
