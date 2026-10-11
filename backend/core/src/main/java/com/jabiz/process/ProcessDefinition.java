@@ -32,8 +32,9 @@ import java.util.function.Function;
  * @param <C> context type shared by all steps
  * @param permissions permission codes the caller needs, all of them (docs/design/06-process.md section 8)
  * @param deprecated  whether a newer version should be used instead; references to it are reported at startup
- * @param internal    run by the platform or through a dedicated entry point only (for example signing in): left out
- *                    of the process catalog clients build forms from; its permissions still apply wherever it runs
+ * @param access      who may start the process (decision D41): anyone holding its permissions, the system only, the
+ *                    platform's own entry point only, or only as a sub-process; all but {@link ProcessAccess#OPEN} are
+ *                    left out of the process catalog. Its permissions still apply wherever it runs
  * @param actsOn      the entity the process acts on, offered as an action on its rows; null if none
  * @param mfa         whether callers need a recent second factor (docs/design/10-security.md section 10)
  * @param verifiedEmail whether callers need a verified e-mail address (docs/design/10-security.md section 15;
@@ -51,7 +52,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     List<StepDefinition<?, C>> steps,
     Set<String> permissions,
     boolean deprecated,
-    boolean internal,
+    ProcessAccess access,
     ActsOn actsOn,
     MfaRequirement mfa,
     boolean verifiedEmail
@@ -60,10 +61,10 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** A definition whose callers need no verified e-mail address. */
     public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
         Class<C> contextType, ContextFactory<I, C> contextFactory, Function<C, O> outputMapper,
-        List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, boolean internal, ActsOn actsOn,
-        MfaRequirement mfa) {
+        List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, ProcessAccess access,
+        ActsOn actsOn, MfaRequirement mfa) {
         this(name, version, description, inputType, outputType, contextType, contextFactory, outputMapper, steps,
-            permissions, deprecated, internal, actsOn, mfa, false);
+            permissions, deprecated, access, actsOn, mfa, false);
     }
 
     /** Context key under which {@link #single} processes keep their input and output. */
@@ -91,6 +92,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
         }
         steps = List.copyOf(steps);
         mfa = mfa == null ? MfaRequirement.NONE : mfa;
+        access = access == null ? ProcessAccess.OPEN : access;
         permissions = permissions == null ? Set.of() : Set.copyOf(permissions);
         for (String permission : permissions) {
             if (permission.isBlank()) {
@@ -144,7 +146,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** This definition requiring the given permissions instead of the declared ones. */
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, internal,
+            contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, access,
             actsOn, mfa, verifiedEmail);
     }
 
@@ -159,25 +161,40 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
      */
     public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal,
+            contextFactory, outputMapper, steps, permissions, deprecated, access,
             ActsOn.of(entity, input, condition), mfa, verifiedEmail);
     }
 
-    /** This definition marked as internal: not listed in the process catalog (decision D15). */
+    /** This definition run as the system only (decision D41; {@link ProcessAccess#INTERNAL}). */
     public ProcessDefinition<I, O, C> asInternal() {
+        return withAccess(ProcessAccess.INTERNAL);
+    }
+
+    /** This definition started only as the given kind allows (decision D41). */
+    public ProcessDefinition<I, O, C> withAccess(ProcessAccess kind) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, true, actsOn, mfa, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, kind, actsOn, mfa, verifiedEmail);
+    }
+
+    /** Whether the process runs as the system only ({@link ProcessAccess#INTERNAL}, decision D41). */
+    public boolean internal() {
+        return access == ProcessAccess.INTERNAL;
+    }
+
+    /** Whether the process is listed in the process catalog and may be offered as an action (decision D41). */
+    public boolean listed() {
+        return access.listed();
     }
 
     /** This definition requiring a recent second factor of its callers as given. */
     public ProcessDefinition<I, O, C> withMfa(MfaRequirement requirement) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, requirement, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, requirement, verifiedEmail);
     }
 
     /** This definition requiring (or not) a verified e-mail address of its callers (decision D36 item 3). */
     public ProcessDefinition<I, O, C> withVerifiedEmail(boolean required) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa, required);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, required);
     }
 }

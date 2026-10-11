@@ -34,6 +34,8 @@ import java.util.Map;
  * Bean Validation (400 with all violations); the caller needs every permission the process declares (403). The
  * response carries the output and the operation's {@code processSeqId}. An actor who holds both groups of a
  * segregation-of-duties rule cannot run a process that needs either ({@link SodGuard}, 403 {@code SOD_CONFLICT}).
+ * Processes declared {@code internal()}, {@code entryOnly()} or {@code subProcessOnly()} are refused with 403
+ * {@code PROCESS_INTERNAL} unless the system runs an {@code internal()} one (decision D41).
  *
  * <p>With an {@code Idempotency-Key} header, a repeated request of the same actor returns the first result without
  * running again, flagged by the response header {@code Idempotency-Replayed: true} (decision D4).
@@ -75,6 +77,8 @@ class ProcessController {
     ) {
         return RequestContexts.current().flatMap(context -> {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
+            // Before anything about the input is said: who may start the process at all (decision D41).
+            ProcessExecutor.requireStartable(definition, context, ExecutionOptions.NONE);
             requirePermissions(definition, context, development);
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
             com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),

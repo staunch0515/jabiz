@@ -98,7 +98,7 @@ public class ImportMappings {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, MappingOutput.class, ProcessContext.class, pb -> pb
             .description("Saves a mapping of an import under a name, replacing the one of that name.")
             .permissions(ImportPermissions.MAPPING_WRITE)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
@@ -147,7 +147,7 @@ public class ImportMappings {
             pb -> pb
                 .description("Removes a saved mapping of an import.")
                 .permissions(ImportPermissions.MAPPING_WRITE)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

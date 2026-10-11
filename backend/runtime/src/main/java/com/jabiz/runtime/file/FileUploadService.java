@@ -208,7 +208,9 @@ public class FileUploadService {
         FileProcesses.RegisterInput input = new FileProcesses.RegisterInput(fileId, policy.name(),
             prepared.type().contentType(), digest.size(), digest.sha256(), prepared.width(), prepared.height(),
             new ArrayList<>(prepared.variants().keySet()), originalName);
-        return executor.run(FileProcesses.REGISTER_PROCESS, input, ExecutionOptions.NONE)
+        // The upload API is FILE_REGISTER's entry point: it runs as the uploader (decision D41).
+        return executor.run(FileProcesses.REGISTER_PROCESS, input,
+                ExecutionOptions.NONE.atEntryOf(FileProcesses.REGISTER_PROCESS))
             .map(ProcessResult::output);
     }
 

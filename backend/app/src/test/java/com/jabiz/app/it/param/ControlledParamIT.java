@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -117,14 +119,17 @@ class ControlledParamIT extends SecurityItSupport {
         assertThat(ruleCode(refused("PARAM_CREATE", writer, Map.of("key", NEVER_CREATED, "valueKind", RATE,
             "value", "0.1")))).isEqualTo("PARAM_CONTROLLED");
 
-        // The dataset API and the generic entity processes take the same way to the versions.
+        // The dataset API and the entity API (the generic entity processes' entry) take the same way to the versions.
         Map<String, Object> update = new HashMap<>(Map.of("action", "UPDATE", "id", paramId, "version", 1,
             "attributes", Map.of("value", "0.2000")));
         assertThat(ruleCode(post("/api/datasets/" + ParamEntities.DATASET + "/commit", writer,
             Map.of("changes", List.of(update))).expectStatus().isEqualTo(422).expectBody(MAP).returnResult()
             .getResponseBody())).isEqualTo("PARAM_CONTROLLED");
-        assertThat(ruleCode(refused("UPDATE_ENTITY", writer, Map.of("entityType", ParamEntities.ENTITY,
-            "id", paramId, "version", 1, "attributes", Map.of("value", "0.2000"))))).isEqualTo("PARAM_CONTROLLED");
+        assertThat(ruleCode(client.patch().uri("/api/entities/" + ParamEntities.ENTITY + "/" + paramId)
+            .header(HttpHeaders.AUTHORIZATION, writer).contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("version", 1, "attributes", Map.of("value", "0.2000"))).exchange()
+            .expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody()))
+            .isEqualTo("PARAM_CONTROLLED");
 
         assertThat(value(DIRECT, clock.instant())).isEqualByComparingTo("0.1");
         assertThat(value(DIRECT, later)).isEqualByComparingTo("0.3");
@@ -295,8 +300,9 @@ class ControlledParamIT extends SecurityItSupport {
         assertThat(ruleCode(post("/api/datasets/" + ParamEntities.DATASET + "/commit", writer,
             Map.of("changes", List.of(delete))).expectStatus().isEqualTo(422).expectBody(MAP).returnResult()
             .getResponseBody())).isEqualTo("PARAM_CONTROLLED");
-        assertThat(ruleCode(refused("DELETE_ENTITY", writer, Map.of("entityType", ParamEntities.ENTITY,
-            "id", paramId, "version", 1)))).isEqualTo("PARAM_CONTROLLED");
+        assertThat(ruleCode(client.delete().uri("/api/entities/" + ParamEntities.ENTITY + "/" + paramId + "?version=1")
+            .header(HttpHeaders.AUTHORIZATION, writer).exchange().expectStatus().isEqualTo(422).expectBody(MAP)
+            .returnResult().getResponseBody())).isEqualTo("PARAM_CONTROLLED");
         // The key cannot be renamed away, and whether it is controlled is no field anybody can write.
         post("/api/datasets/" + ParamEntities.DATASET + "/commit", writer, Map.of("changes", List.of(
             new HashMap<>(Map.of("action", "UPDATE", "id", paramId, "version", 1,

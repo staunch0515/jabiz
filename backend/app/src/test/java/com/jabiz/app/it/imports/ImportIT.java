@@ -379,7 +379,7 @@ class ImportIT extends PostgresIntegrationTest {
         client.put().uri("/api/imports/commerce.stock/mappings/x").header(HttpHeaders.AUTHORIZATION, complete)
             .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("mapping", Map.of())).exchange()
             .expectStatus().isForbidden();
-        // Asked to run directly, the internal mapping processes check the import's own permissions too.
+        // The mapping processes are entryOnly() (decision D41): never run through the process API, whoever asks.
         post("/api/processes/IMPORT_MAPPING_SAVE/latest", bearer("import.mapping.write"), Map.of("importId",
             "commerce.stock", "name", "x", "mapping", Map.of())).expectStatus().isForbidden();
         post("/api/processes/IMPORT_MAPPING_SAVE/latest", bearer("import.mapping.write", "commerce.stock.import",
@@ -387,12 +387,14 @@ class ImportIT extends PostgresIntegrationTest {
             "mapping", Map.of())).expectStatus().isForbidden();
         post("/api/processes/IMPORT_MAPPING_REMOVE/latest", bearer("import.mapping.write"), Map.of("importId",
             "commerce.stock", "name", "x")).expectStatus().isForbidden();
-        post("/api/processes/IMPORT_MAPPING_SAVE/latest", admin(), Map.of("importId", "nothing.here", "name", "x",
-            "mapping", Map.of())).expectStatus().isNotFound();
+        post("/api/processes/IMPORT_MAPPING_SAVE/latest", admin(), Map.of("importId", "commerce.stock", "name", "x",
+            "mapping", Map.of())).expectStatus().isForbidden();
         post("/api/imports/nothing.here/preview", admin(), Map.of("fileId", fileId)).expectStatus().isNotFound();
         post("/api/imports/commerce.stock/preview", admin(), Map.of("fileId", UUID.randomUUID().toString()))
             .expectStatus().isNotFound();
-        // Asked to run directly, the internal process checks the import's permissions itself.
+        // So is IMPORT_RUN, which also checks the import's permissions itself when its entry runs it.
+        post("/api/processes/IMPORT_RUN/latest", admin(), Map.of("importId", "commerce.stock",
+            "fileId", fileId)).expectStatus().isForbidden();
         post("/api/processes/IMPORT_RUN/latest", bearer("import.run"), Map.of("importId", "commerce.stock",
             "fileId", fileId)).expectStatus().isForbidden();
 

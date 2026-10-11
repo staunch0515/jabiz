@@ -35,7 +35,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 |---|---|---|
 | `GET /api/meta/entities/{name}` | 实体导出（02 §8）+ 按请求语言的 `label`（实体与字段）与 `messages`（本实体前端可能报出的错误码 → 文案模板） | 已认证 |
 | `GET /api/meta/datasets` | 调用方**可读**的数据视图：`id`、`entity`、`label`、`isDefault`、`temporal`、`allowScheduled`、`readOnly`、`processOnlyWrites`、`allowTimeTravel`、`softDelete`、`listView`、`maxQueryBatchSize`、`canWrite` | 已认证，按视图读权限过滤 |
-| `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema）、`actsOn`（`{entity, input, when?}`，16 §3） | 已认证，按流程权限过滤 |
+| `GET /api/meta/processes` | 调用方**可执行**、且不是 `internal()` / `entryOnly()` / `subProcessOnly()` 的流程：`name`、`version`、`latest`、`deprecated`、`label`、`description`、`input`（输入的 JSON Schema）、`actsOn`（`{entity, input, when?}`，16 §3） | 已认证，按流程权限过滤 |
 | `GET /api/meta/imports` | 调用方可运行的导入（20 §6）：字段、版式、参数 Schema、控制合计、能否保存映射 | 已认证，按导入、行流程、文件策略的权限过滤 |
 | `GET /api/auth/menus`、`/api/auth/me` | 动态菜单、当前操作人（10 §3） | 已认证 |
 | `GET /api/dictionaries/{urn}` | 字典项（按语言） | 已认证 |
@@ -43,8 +43,8 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 - 标签：消息资源键 `entity.<实体>`、`entity.<实体>.<字段>`、`dataset.<视图 id>`、`process.<流程名>`，缺失时回退为名字；
   系统字段（`effectStartTime` 等）由前端自己的文案命名。
 - `canWrite` = 具备写权限 ∧ 非只读 ∧ 非 `processOnlyWrites` ∧ 实体可写（有版本字段）。未声明的权限只在 `dev` 下算数（默认拒绝，10 §5）。
-- `ProcessDefinition.internal()`：只经专用入口或由平台执行的流程（`SPONSOR_SIGN_IN`、`SEC_BOOTSTRAP_ADMIN`、`ADD/UPDATE/DELETE_ENTITY`）
-  不进目录；它们的权限检查不变。
+- `internal()`（只由系统身份运行，如 `SEC_BOOTSTRAP_ADMIN`）、`entryOnly()`（只经平台自己的入口，如 `SPONSOR_SIGN_IN`、`ADD/UPDATE/DELETE_ENTITY`）、
+  `subProcessOnly()`（只作子流程，如 `FILE_ARCHIVE`）的流程不进目录、不作行操作，经流程接口调用即 403 `PROCESS_INTERNAL`（06 §8，D41）；权限照常检查。
 - 流程输入 Schema（runtime `ProcessInputSchemas`，反射 record）：`String`/`UUID`/`Instant`/`LocalDate`/`BigDecimal`（`format: decimal`，以文本发送）/
   整数/布尔/枚举/列表/嵌套 record/`Map`/`Object`；Bean Validation 的 `@NotNull`/`@NotBlank`/`@NotEmpty` → `required`，`@Size`/`@Min`/`@Max`/
   `@Positive(OrZero)`/`@Email`/`@Pattern`（只收可移植的正则）→ 对应关键字；`@Sensitive` → `writeOnly` + `format: password`。

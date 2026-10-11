@@ -36,6 +36,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
    业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`；不能重叠的流程以 `HoldLock.shared/exclusive` 取命名锁，见 06 §4.1）
    做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
+   不经流程接口的流程按用途声明（06 §8、决策 D41）：事件消费、定时任务、回调用 `internal()`（只由系统身份运行），平台入口自己运行的用 `entryOnly()`，只作子流程的用 `subProcessOnly()`；不在步骤里自己检查执行者。
 4. 业务模块（`app` 及以后的业务模块）**禁止引用 `reactor.*`**。以上规则由 ArchUnit 测试强制执行。
 5. 请求路径上禁止阻塞调用；测试环境启用 BlockHound 检测。
 

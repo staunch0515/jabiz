@@ -34,7 +34,8 @@ import java.util.Objects;
  * (provider, external event id), and the receiver answers it as a duplicate.
  *
  * <p>Only the platform's receiver runs it, as the system: anyone else, an administrator holding every permission
- * included, is refused, so that no caller can make the platform record an event no provider signed.
+ * included, is refused, so that no caller can make the platform record an event no provider signed. The process is
+ * {@code internal()}, which refuses them at the start (decision D41); this step's own check stays as a second line.
  */
 @Component
 class RecordInboundEvent implements StepHandler<RecordInboundEvent.Metadata, ProcessContext>,

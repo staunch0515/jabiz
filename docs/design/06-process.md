@@ -212,9 +212,19 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
 - 同一流程执行器也被定时任务、事件消费者和场景测试调用（传输方式无关，11 §2.3、§4）。
 - 流程目录 `GET /api/meta/processes` 列出调用方可执行的流程及其输入的 JSON Schema（`ProcessInputSchemas`），前端据此生成表单（12 §2）。
-  只经专用入口或由平台执行的流程声明 `pb.internal()`（`SPONSOR_SIGN_IN`、`SEC_BOOTSTRAP_ADMIN`、通用实体流程），不进目录，权限检查不变【D15】。
-- `ExecutionOptions`（平台内部）：`idempotencyKey`，以及 `beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
-  （事件投递用它写消费标记，与消费效果同一事务）【D14】。
+- **谁能启动流程**【D41】：不经流程接口的流程按用途三选一声明，都不进目录、不能作为行操作（声明 `actsOn` 即启动失败），权限照常声明。
+  执行器在启动根流程与子流程时统一检查（`ProcessExecutor.requireStartable` / 子流程同理；流程接口在转换输入之前先查），不符即 403 `PROCESS_INTERNAL`（三语），不论权限：
+
+  | 声明 | 作为根流程 | 作为子流程（`CallProcess`） | 平台中的例子 |
+  |---|---|---|---|
+  | `pb.internal()` | 只有系统身份 | 只在系统身份的根流程下 | `MAIL_SEND`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`；应用的事件消费、定时任务、回调流程（示范 `ORDER_RECORD_PAYMENT`） |
+  | `pb.entryOnly()` | 只经平台自己的入口，以真实调用者运行（入口传执行选项 `ExecutionOptions.atEntryOf(流程)` / `ProcessExecutor.executeAtEntry`） | 一律拒绝（调用它在启动检查中报错） | 登录与二次验证（`SPONSOR_SIGN_IN`、`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN`）、通用实体流程（`ADD/UPDATE/DELETE_ENTITY`，实体接口）、`FILE_REGISTER`（上传）、`IMPORT_RUN` 与导入映射（`IMPORT_MAPPING_SAVE/REMOVE`）、自助注册与找回密码（`SPONSOR_SIGN_UP*`、`SPONSOR_EMAIL_VERIFY*`、`SPONSOR_PASSWORD_RESET_*`）、`SEC_MFA_ENROLL_*`、`SEC_USER_SET_LOCALE`、`SEC_MAIL_PREFERENCE_SET` |
+  | `pb.subProcessOnly()` | 一律拒绝（系统身份也不行） | 任何根流程下都可以，权限由根流程的声明保证 | `FILE_ARCHIVE`（14 §10） |
+
+  操作记录与审计中的操作人总是根流程的操作人：`entryOnly()` 流程保留真实的调用者，子流程沿用根流程的身份。
+  新的平台流程按用途选择其一；应用的事件、定时任务、回调接续点用 `internal()`。
+- `ExecutionOptions`（平台内部）：`idempotencyKey`，`beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
+  （事件投递用它写消费标记，与消费效果同一事务）【D14】，`dryRun`（导入预览，20 §5），以及 `entry`——平台入口声明自己是哪个 `entryOnly()` 流程的入口（`atEntryOf`）【D41】；流程接口从不传它。
 
 ## 9. 启动自检
 
@@ -222,7 +232,8 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`，事件类型名合法（11 §2.2）。
 - 调用已废弃（`pb.deprecated()`）的版本给出警告。
 - 权限已声明（`dev` 下为警告）。
-- 非内部流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
+- 不进目录的流程（`internal()`、`entryOnly()`、`subProcessOnly()`）不能声明 `actsOn`；`CallProcess` 不能调用 `entryOnly()` 流程【D41】。
+- 进目录的流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接

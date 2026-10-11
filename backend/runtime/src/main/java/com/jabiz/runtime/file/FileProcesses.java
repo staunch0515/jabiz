@@ -87,7 +87,7 @@ public class FileProcesses {
         return ProcessDefinition.define(REGISTER, 1, RegisterInput.class, FileInfo.class, ProcessContext.class, pb -> pb
             .description("Records a file whose content has been stored.")
             .permissions(FilePermissions.WRITE)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put("input", input);

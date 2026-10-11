@@ -21,7 +21,7 @@
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
 | 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；决策 D35–D39 已确认 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1269,6 +1269,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
+| 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
 
 ### 16a 事务邮件（3–4 天）
 
@@ -2229,3 +2230,48 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 **验收标准**
 - [x] 应用设置的两个路径到达 `test` 任务，未设置时为平台前端的快照（`BootAppPluginSnapshotPathsTest`；修复前第一条失败）。
 - [x] `backend/app` 的 `OpenApiSnapshotIT` 照旧对比 `frontend/openapi/openapi.json`；`./gradlew check` 通过（含 build-logic 的测试）。
+
+### 16l 内部流程只允许系统身份（D41，0.5 天）
+
+现状：`ProcessDefinitionBuilder.internal()` 只把流程从目录中隐去，权限照常检查：持有全部权限的初始管理员仍能经 `/api/processes/{码}` 直接调用
+入站事件的消费流程、发信流程等接续点，16b-2、16d、Q4 的评审各自以不授予任何角色的权限或在步骤中拒绝非系统身份补救。
+同一个 `internal()` 还被平台自己的入口（登录、通用实体接口、上传、导入、自助注册、账户设置）以真实调用者运行的流程和以子流程调用的 `FILE_ARCHIVE` 使用。
+
+分支 `1.2/phase-16l-internal-processes`，从 `1.2/platform` 拉出。
+
+**要求**（决策 D41，修订后的三种声明）
+1. core：`ProcessAccess`（`OPEN` / `INTERNAL` / `ENTRY_ONLY` / `SUB_PROCESS_ONLY`）代替 `ProcessDefinition` 的布尔 `internal`；构建器 `internal()`、`entryOnly()`、`subProcessOnly()`，
+   `ProcessDefinition.withAccess` / `asInternal`、`listed()`。三种都不进目录、不作行操作。
+2. runtime：执行器在启动根流程（`requireStartable`）与子流程（`requireCallable`）时检查，不符即 403 `PROCESS_INTERNAL`（`ProcessInternalException`，三语，`ProblemStatuses` 中映射）；
+   流程接口在转换输入前先查。`ExecutionOptions.entry`（`atEntryOf(流程)`）与 `ProcessExecutor.executeAtEntry` 由平台入口使用。
+3. 平台流程按用途改声明：`entryOnly()`——`SPONSOR_SIGN_IN`、`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN`、`ADD/UPDATE/DELETE_ENTITY`、`FILE_REGISTER`、`IMPORT_RUN`、
+   `IMPORT_MAPPING_SAVE/REMOVE`、七个自助注册与找回密码流程、`SEC_MFA_ENROLL_BEGIN/CONFIRM`、`SEC_USER_SET_LOCALE`、`SEC_MAIL_PREFERENCE_SET`；
+   `subProcessOnly()`——`FILE_ARCHIVE`；`internal()` 不变——`MAIL_SEND`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`、示范 `ORDER_RECORD_PAYMENT`。
+   各自的入口（`AuthController`、`MfaController`、`OidcController`、`EntityController`、`FileUploadService`、`ImportService`、`SignUpController`、`AccountController`、`MailUnsubscribeController`）声明自己是入口。
+   已有的补救（`RecordInboundEvent`、`CommercePayments` 的系统身份检查、不授予角色的权限）保留。
+4. 启动检查 `PROCESS`：不进目录的流程声明 `actsOn` 即报错；`CallProcess` 调用 `entryOnly()` 流程即报错。
+5. 场景回放：调用 `internal()` 流程的步骤以 `actor: {id: system}` 运行；`subProcessOnly()` 流程不能作为步骤；`entryOnly()` 流程的 `process` 步骤代表其平台入口，
+   `import` 步骤以入口运行文件登记与导入。场景格式不变（07 §3）。
+
+**改动**：core `process`（`ProcessAccess`、`ProcessDefinition`、构建器）、`PlatformErrorCodes.PROCESS_INTERNAL` 与三语消息；runtime `process`（`ProcessExecutor`、`ExecutionOptions`、
+`ProcessInternalException`、`ProcessChecks`）、`web`（`ProcessController`、`MetaModelController`、`ProblemStatuses`）与上列入口、testFixtures `ScenarioRunner`；
+示范场景 `commerce/order_payment` 加三个步骤；测试夹具的消费与任务流程（`IT_LOG_EVENT`、`IT_TICK`）改为 `internal()`；文档 06 §8–§9、07 §3、11、12、CLAUDE.md 第 3 节、功能清单。
+没有迁移，OpenAPI 不变。
+
+**测试**
+- core：`ProcessDefinitionBuilderTest`（三种声明与复制后保留）。
+- runtime 单元：`ProcessChecksTest`（三种声明带 `actsOn` 报错；调用 `entryOnly()` 报错、调用 `subProcessOnly()` 不报）。
+- 集成 `ProcessAccessIT`：持有全部权限的管理员经流程接口调用 `internal()` / `entryOnly()` / `subProcessOnly()` 流程一律 403 `PROCESS_INTERNAL`，它们也不在目录中；
+  实体接口以真实调用者运行 `ADD_ENTITY`（`op_process` 与审计）；`entryOnly()` 只认自己的入口选项；非系统根流程调用 `internal()` 子流程 403 且什么都不留，系统身份可以；
+  `subProcessOnly()` 系统身份也不能单独运行。`GeneratedFileIT`：`FILE_ARCHIVE` 直接调用 403，在 `ORDER_PICK_LIST` 与测试的中继流程下照常。
+  `OutboxIT`、`JobIT`、`InboundWebhookIT`、`MailIT`：消费者与定时任务以系统身份照常运行 `internal()` 流程。
+- 场景回放：`commerce/order_payment`（管理员调用 `ORDER_RECORD_PAYMENT` 403、系统身份调用 `FILE_ARCHIVE` 403、系统身份通过检查），其余场景中的 `ADD_ENTITY`、自助注册等步骤照常。
+
+**验收标准**
+- [x] 持有全部权限的管理员经流程接口调用 `internal()` 或 `entryOnly()` 流程得到 403 `PROCESS_INTERNAL`（`ProcessAccessIT`）。
+- [x] 平台入口以真实的操作人运行 `entryOnly()` 流程，操作记录与审计照常（`ProcessAccessIT`，以及登录、注册、二次验证、上传、导入的已有集成测试）。
+- [x] `FILE_ARCHIVE` 作为根流程被拒，在 `ORDER_PICK_LIST` 下照常（`GeneratedFileIT`）；非系统根流程调用 `internal()` 子流程 403（`ProcessAccessIT`）。
+- [x] 事件消费者、定时任务、入站接收照常（`OutboxIT`、`JobIT`、`InboundWebhookIT`）；`actsOn` 的启动错误（`ProcessChecksTest`）；场景回放通过；`./gradlew check` 通过。
+
+**完成说明**：真实用户原先调用的 `internal()` 流程即上面改为 `entryOnly()` 的二十一个（全部只经平台入口），以及经 `ORDER_PICK_LIST` 调用的 `FILE_ARCHIVE`；
+它们的入口与行为不变。管理员经流程接口直接调用它们的途径（之前仅以权限拦截）现在一律 403。

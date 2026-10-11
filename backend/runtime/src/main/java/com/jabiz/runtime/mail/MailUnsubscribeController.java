@@ -102,7 +102,7 @@ public class MailUnsubscribeController {
             if (templates.find(link.template()).filter(MailTemplate::unsubscribable).isEmpty()) {
                 return Mono.error(tokenInvalid());
             }
-            return ActingUser.as(link.userId(), processes.execute(preferenceSet,
+            return ActingUser.as(link.userId(), processes.executeAtEntry(preferenceSet,
                 new MailProcesses.PreferenceInput(link.userId(), link.template(), false))).then();
         });
     }
@@ -134,7 +134,7 @@ public class MailUnsubscribeController {
             MailProcesses.PreferenceInput input = new MailProcesses.PreferenceInput(requireUser(context).toString(),
                 request == null ? null : request.template(), request == null ? null : request.subscribed());
             inputs.validate(input);
-            return processes.execute(preferenceSet, input);
+            return processes.executeAtEntry(preferenceSet, input);
         });
     }
 

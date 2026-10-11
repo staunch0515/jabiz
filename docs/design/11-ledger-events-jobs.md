@@ -200,7 +200,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   ```java
   EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
       event -> new Input(InboundEvents.ref(event).inboundEventId()));
-  // 流程中（消费流程只由投递以系统身份运行：`internal()` 只是不进目录，流程自己拒绝其他执行者）：
+  // 流程声明 internal()：只由投递以系统身份运行，其他执行者（含持有全部权限的管理员）在启动时即 403 PROCESS_INTERNAL（06 §8，D41）：
   .step("Load the payment", LoadInboundEvent.of("pay", "payment_intent.succeeded",
       ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
   ```
