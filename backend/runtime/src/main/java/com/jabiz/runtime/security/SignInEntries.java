@@ -158,13 +158,18 @@ public class SignInEntries implements PlatformCheck {
     /**
      * Registered users must not reach the administration (docs/design/10-security.md section 15.7): while any entry
      * lets people register, the administration's entry may neither accept every role (as unconfigured, it does) nor
-     * any role a registration grants.
+     * any role a registration grants; and it never lets people register itself.
      */
     private List<CheckProblem> administrationProblems() {
         List<CheckProblem> problems = new ArrayList<>();
         Config adminConfig = configured.get(RequestContext.DEFAULT_ENTRY);
         Entry admin = adminConfig == null ? DEFAULT : entry(RequestContext.DEFAULT_ENTRY, adminConfig);
         String location = PROPERTY + "." + RequestContext.DEFAULT_ENTRY + ".accepted-roles";
+        if (admin.selfRegistration()) {
+            // Whoever registers there (or names no entry) would get into the administration itself.
+            problems.add(CheckProblem.error(SessionChecks.CATEGORY, PROPERTY + "." + RequestContext.DEFAULT_ENTRY
+                + ".self-registration", "the administration entry cannot allow self-registration"));
+        }
         configured.forEach((name, config) -> {
             Entry entry = entry(name, config);
             if (!entry.selfRegistration() || RequestContext.DEFAULT_ENTRY.equals(name)) {

@@ -100,6 +100,14 @@ class SignInEntriesTest {
             assertThat(p.message()).isEqualTo("the administration accepts CUSTOMER, which entry portal grants to "
                 + "whoever registers"));
 
+        // The administration never lets people register itself: they would register straight into it.
+        SignInEntries selfRegistering = new SignInEntries(Map.of(
+            "admin", config(List.of("ADMIN"), true, List.of("ADMIN"), null, null)), true, null);
+        assertThat(selfRegistering.check()).filteredOn(CheckProblem::isError).singleElement().satisfies(p -> {
+            assertThat(p.location()).isEqualTo("jabiz.security.entries.admin.self-registration");
+            assertThat(p.message()).isEqualTo("the administration entry cannot allow self-registration");
+        });
+
         // Without registration, or with the administration's own roles only, there is nothing to report.
         assertThat(new SignInEntries(Map.of("portal", config(List.of("CUSTOMER"), false, null, true, "/")), true,
             null).check()).isEmpty();
