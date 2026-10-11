@@ -6,6 +6,7 @@ import com.jabiz.document.DocumentLayout;
 import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.external.ExternalService;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -167,6 +168,18 @@ class CommerceConfig {
     ProcessDefinition<CommerceProcesses.WithdrawInput, CommerceProcesses.WithdrawOutput, ProcessContext>
         productWithdrawProcess() {
         return CommerceProcesses.WITHDRAW_PROCESS;
+    }
+
+    /** The demo AI service the moderation of product names calls (decision D38). */
+    @Bean
+    ExternalService demoAi() {
+        return ModerateText.DEMO_AI;
+    }
+
+    @Bean
+    ProcessDefinition<ProductRenaming.RenameInput, ProductRenaming.RenameOutput, ProcessContext>
+        productRenameProcess() {
+        return ProductRenaming.RENAME_PROCESS;
     }
 
     @Bean

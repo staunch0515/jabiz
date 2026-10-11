@@ -80,7 +80,11 @@ public class SecurityConfig {
         // Signing in through an identity provider (docs/design/10-security.md section 12).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
-            OidcController.BASE + "/callback"));
+            OidcController.BASE + "/callback"),
+        // Inbound webhooks (decision D37): the provider's signature is the credential; credentials sent along are
+        // not even looked at, so a stray Authorization header cannot turn a delivery into a 401.
+        // InboundWebhookWebFilter has refused unknown providers, other methods and callers over the limit already.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/inbound/*"));
 
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never

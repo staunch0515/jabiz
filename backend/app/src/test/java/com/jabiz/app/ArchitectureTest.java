@@ -1,6 +1,8 @@
 package com.jabiz.app;
 
+import com.jabiz.app.archfixture.DirectNetworkCalls;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.test.PlatformArchRules;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -15,8 +17,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static org.assertj.core.api.Assertions.assertThat;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 
 /**
@@ -109,5 +113,44 @@ class ArchitectureTest {
             .orShould().callMethod(Clock.class, "systemUTC")
             .orShould().callMethod(Clock.class, "systemDefaultZone")
             .check(CLASSES);
+    }
+
+    /**
+     * Business code reaches other systems only through the declared external services of a blocking step (decision
+     * D38): the platform's shared rule, which application branches use the same way.
+     */
+    @Test
+    void businessCodeUsesNoNetworkClient() {
+        PlatformArchRules.noDirectNetworkAccess(BUSINESS).check(CLASSES);
+    }
+
+    /** The rule is not vacuous: each way around the external services fails it. */
+    @Test
+    void theNetworkRuleCatchesEveryDirectClient() {
+        ArchRule rule = PlatformArchRules.noDirectNetworkAccess(BUSINESS);
+        for (Class<?> offender : List.of(DirectNetworkCalls.JdkClient.class, DirectNetworkCalls.RawSocket.class,
+            DirectNetworkCalls.UrlStream.class, DirectNetworkCalls.UrlConnection.class,
+            DirectNetworkCalls.UrlContent.class, DirectNetworkCalls.SpringClients.class,
+            DirectNetworkCalls.SpringRequestFactory.class, DirectNetworkCalls.SpringUrlResource.class,
+            DirectNetworkCalls.Netty.class, DirectNetworkCalls.DomFromAddress.class,
+            DirectNetworkCalls.SaxFromAddress.class, DirectNetworkCalls.ReaderFromAddress.class)) {
+            assertThat(rule.evaluate(new ClassFileImporter().importClasses(offender)).hasViolation())
+                .as(offender.getSimpleName()).isTrue();
+        }
+        for (Class<?> fine : List.of(ArchitectureTest.class, DirectNetworkCalls.DomFromText.class)) {
+            assertThat(rule.evaluate(new ClassFileImporter().importClasses(fine)).hasViolation())
+                .as(fine.getSimpleName()).isFalse();
+        }
+    }
+
+    /** Business code uses ExternalServices only, never the platform's machinery behind it (decision D38). */
+    @Test
+    void businessCodeStaysOutOfThePlatformsExternalCallMachinery() {
+        PlatformArchRules.noPlatformInternals(BUSINESS).check(CLASSES);
+        ArchRule rule = PlatformArchRules.noPlatformInternals(BUSINESS);
+        assertThat(rule.evaluate(new ClassFileImporter().importClasses(DirectNetworkCalls.ForgedScope.class))
+            .hasViolation()).isTrue();
+        assertThat(rule.evaluate(new ClassFileImporter().importClasses(ArchitectureTest.class)).hasViolation())
+            .isFalse();
     }
 }

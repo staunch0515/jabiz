@@ -26,8 +26,8 @@
 - 写入位置：`DatasetEntityManager` 的插入、更新、删除（普通实体）与 `VersionAppender`（时态实体，所有时态写入都经过它）。
   数据视图 API、通用实体流程、业务流程的 `SaveChanges`、平台流程（账本、审批、导入……）都经过这两处，因此不需要各自记录。
 - 投递记录与操作日志不是实体数据，不进审计：`op_*`、`sys_outbox_*`、`sys_event_consumption`、待办通知与单据发送的尝试
-  （`sys_notification_attempt`、`sys_document_delivery_attempt`）、事务邮件的尝试与令牌（`sys_mail_attempt`、`sys_mail_token`、`sys_mail_token_use`，18 §5.6）
-  由平台直接插入；它们只追加并被封存（第 2 节），可追溯性来自封存而不是审计记录。其中以平台实体展示的（`MailAttempt`）只有只读数据视图，
+  （`sys_notification_attempt`、`sys_document_delivery_attempt`）、事务邮件的尝试与令牌（`sys_mail_attempt`、`sys_mail_token`、`sys_mail_token_use`，18 §5.6）、
+  收到的入站 Webhook（`sys_inbound_event` 与正文 `sys_inbound_event_body`，11 §2.5，正文另有 SHA-256）由平台直接插入；它们只追加并被封存（第 2 节），可追溯性来自封存而不是审计记录。其中以平台实体展示的（`MailAttempt`、`InboundEvent`）只有只读数据视图，
   不能经任何写入路径修改。邮件消息本身（`MailMessage`）经变更集写入，照常审计。
 - "前"：普通实体取更新或删除前读到的当前行（CAS 本来就要读）；时态实体取基础版本的状态（同一次写入中先写的版本优先），基础版本是墓碑时为空。
 
@@ -152,6 +152,8 @@
 - 到期日 = 起算日 + 保留期；到期日当天起可以删除（按注入的 `Clock` 的 UTC 日期）。每个实体至多一个策略。
 - 启动检查 `RETENTION`：策略完整、实体已声明、起算字段是时间或日期字段、每个实体只有一个。
 - 示范：`app` 的运费明细（`FreightCharge`）保留 7 年，自发货所在会计年度末起算。
+- 平台实体也可以声明：收到的入站 Webhook（`InboundEvent`，原样正文可能含个人信息，11 §2.5）以 `from("receivedTime")` 进入到期报告
+  （`app` 的示范保留 7 年）；表只追加，到期后的物理删除或匿名化另议（决策 D37 实现说明）。
 
 ### 3.2 删除拦截
 

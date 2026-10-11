@@ -92,6 +92,11 @@ public final class PlatformErrorCodes {
      * {@code timeoutMs}): stopped by the database, answered 503 (phase 14q).
      */
     public static final String QUERY_TIMEOUT = "QUERY_TIMEOUT";
+    /**
+     * A call to an external service failed: refused, timed out, too large an answer, no connection, or an answer the
+     * step could not use (decision D38); answered 502.
+     */
+    public static final String EXTERNAL_CALL_FAILED = "EXTERNAL_CALL_FAILED";
     /** A report run can supersede an earlier run of the same template only (19 section 5). */
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */
@@ -186,6 +191,12 @@ public final class PlatformErrorCodes {
     /** 422: the report an access review refers to is not the access report issued at the end of its period. */
     public static final String ACCESS_REVIEW_REPORT = "ACCESS_REVIEW_REPORT";
 
+    /**
+     * 400: an inbound webhook request was not accepted (decision D37); the same whatever the reason, which is only
+     * logged.
+     */
+    public static final String INBOUND_REJECTED = "INBOUND_REJECTED";
+
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
 
@@ -216,7 +227,7 @@ public final class PlatformErrorCodes {
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
-        RATE_LIMITED);
+        INBOUND_REJECTED, RATE_LIMITED);
 
     private PlatformErrorCodes() {}
 }

@@ -1,5 +1,6 @@
 package com.jabiz.runtime.webhook;
 
+import com.jabiz.runtime.web.OutboundAddresses;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.net.URI;
@@ -32,10 +33,7 @@ public record WebhookProperties(List<String> allowedHosts, Duration timeout, Lis
      * Only the scheme, host and port of an address, for messages and logs: receivers' paths often carry a token.
      */
     public static String origin(URI url) {
-        if (url == null || url.getHost() == null) {
-            return url == null ? "null" : "(not an absolute address)";
-        }
-        return url.getScheme() + "://" + url.getHost() + (url.getPort() < 0 ? "" : ":" + url.getPort());
+        return OutboundAddresses.origin(url);
     }
 
     public Optional<Subscription> find(String name) {

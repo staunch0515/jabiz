@@ -213,6 +213,11 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 后台表单自动得到上传控件与预览；删除文件的业务流程先清空引用、`SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`
 （例子：`CommerceFiles` 的 `SUPPLIER_CONTRACT_REMOVE`）。
 
+要**调用其他系统**时（06 §2.3，D38）：声明一个外部服务（`ExternalService` Bean：基础地址、主机白名单、密钥的环境变量、超时），
+在阻塞步骤中注入 `ExternalServices`，经 `services.http("服务").send(ExternalHttp.Request.post("/v1/…").json(…))` 调用，
+密钥用 `services.secret(...)`，有副作用的调用放提交后步骤或带 `services.idempotencyKey(...)`。不要自己用 `HttpClient` 等网络客户端（ArchUnit 检查）；
+测试与开发以 `jabiz.external-services.<名>.base-url | allowed-hosts` 指向本地桩服务。例子：`ModerateText` 与 `PRODUCT_RENAME`、测试 `ExternalServiceIT`。
+
 跨天、跨月的业务写成**场景回放**（07 §3）：`src/test/resources/scenarios/**/*.yml`，可控时钟 + 快照对比。
 例子：`scenarios/commerce/order_lifecycle.yml`（预定调价在月初生效、取消释放库存、发货过账）。
 

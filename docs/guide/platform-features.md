@@ -127,6 +127,9 @@
 - 输入 / 输出为 record，Bean Validation 自动校验，前端据此生成表单；秘密组件标 `@Sensitive` 自动遮蔽。
 - 版本化（同名多版本共存、`latest`、废弃告警）；单步流程简写；流程目录接口；`actsOn` 把流程显示为实体行上的操作。
 - 提交后步骤（`AFTER_COMMIT`）：外部调用在事务提交后执行，进程内重试并记录每次尝试。
+- 外部服务（06 §2.3）：调用其他系统的 HTTP 接口只在阻塞步骤中、只经声明的外部服务（地址、主机白名单、来自环境变量的密钥、超时、响应上限）；平台对每次请求检查主机、
+  不跟随重定向、试运行中缺省不调用（导入预览中即为该行的问题）、记录观测，失败为 502；提供方的幂等键由平台按流程生成；业务代码直接使用网络客户端时架构测试失败；
+  测试用的桩服务（`StubHttpServer`）由平台提供。
 - 试运行（`DRY_RUN`）：执行完整流程后整体回滚（导入预览即此）；保存点（平台内部，导入按单元回滚）。
 - 每个流程声明权限码（未声明即拒绝）与可选的二次验证要求；流程 API 另做职责分离兜底。
 - 通用实体流程（新增 / 修改 / 删除任一实体）由平台提供，供后台通用表单使用。
@@ -135,7 +138,8 @@
 
 1. 操作名、输入、输出、谁有权执行（权限码）、是否要求二次验证。
 2. 读哪些数据、算什么、改哪些数据、违反哪些规则时拒绝（错误码与文案）。
-3. 是否由其他操作组合而成（子流程）；是否要调用外部系统（放在提交后，或改为发布事件）。
+3. 是否由其他操作组合而成（子流程）；是否要调用外部系统：哪个服务（地址、认证方式、密钥由谁保管）、超时、调用有无副作用（有则放在提交后或带提供方的幂等键，或改为发布事件）、
+   导入预览等试运行中是否也要调用（只读的调用才可以）。
 4. 是否作为某实体行上的操作显示、在什么状态下显示。
 5. 是否需要防重复提交（通常由前端的幂等键自动覆盖，无需另写）。
 6. 需要的编号、审批、待办、事件（见 7、9）。
@@ -242,14 +246,17 @@
 - 定时任务 `JobDefinition`：cron + 时区 + 调用的流程；多实例集群锁；同一计划时刻至多执行一次（幂等键）；执行记录只追加；任务列表接口；停机期间错过的时刻不补跑。
 - 平台事件：实体变更、审批请求 / 批准 / 驳回、待办创建、报表签发、单据签发、导入提交。平台任务：文件清扫、封存、校验。
 - Webhook（把事件送给其他系统）：订阅写在配置（名称、事件类型、地址、来自环境变量的密钥），每个订阅是一个独立的 Outbox 消费者；平台以签名的 POST（HMAC-SHA256，时间戳 + 正文）投递，2xx 即送达，否则记录尝试并按退避重试、不跟随重定向；目标主机白名单、仅 https；启动检查配置；业务代码不自己发 HTTP 请求。
+- 入站 Webhook（接收其他系统的回调，11 §2.5）：`POST /api/inbound/{提供方}`，提供方写在配置（签名方案 `stripe` 或 `hmac-sha256`、来自环境变量的密钥（可同时配新旧两个）、接受的事件类型、时间容差、正文上限 1 MB、按地址限流）；平台验签（常量时间、拒绝过旧与过于靠后的时间戳）、原样存档在只追加的 `sys_inbound_event`（读取需要 `inbound.read`）、按外部事件号去重，经 Outbox 以 `jabiz.inbound.<提供方>.<类型>` 交给应用的事件订阅（流程中以 `LoadInboundEvent` 读正文）；请求中不执行业务流程，被拒的请求一律 400 且不存储。
 
 **写需求时应给出**
 
 1. 哪些业务事件要通知其他模块；消费后执行什么流程；重复投递下的幂等由平台保证，需求只需说明消费动作。
 2. 定时业务（月结、对账、提醒）：cron、时区、调用的流程、输入（通常由计划时刻推导）、错过是否需要人工补跑。
 3. 要推送给外部系统的事件：接收方、地址、密钥的管理方式、载荷中可以包含哪些字段（有订阅的事件不放遮蔽字段的值）；接收方按事件 ID 去重并验证签名。
+4. 要接收的外部回调：提供方与其签名方式（Stripe 格式或 D33 格式；其他方式需先在平台增加方案）、接受哪些事件类型、每种事件执行什么流程，
+   以及业务上不成立时（找不到单据、金额不符）由谁处理（登记待办而不是让流程失败）；原样正文的保留期。
 
-**平台不做**：外部消息系统（Kafka 等）；事件顺序保证；经界面增减 Webhook 订阅（只能改配置并重启）；入站 Webhook（接收外部系统的回调需另立需求）。
+**平台不做**：外部消息系统（Kafka 等）；事件顺序保证；经界面增减 Webhook 订阅与入站提供方（只能改配置并重启）；Stripe 与 D33 以外的入站签名方式（需要时在平台增加方案）；入站事件的重新投递工具、物理删除与匿名化；来源 IP 白名单。
 
 ## 10. 导入（20）
 
@@ -435,7 +442,7 @@
 
 ## 19. 示范应用中可直接参考的做法（`backend/app`）
 
-需求可以引用这些现成示范作为"像 X 那样"的参照：物流运单与报关（SQL 模板、空间守卫）、运费月结（业务参数、定时任务、事件、过账、到期日）、承运商（纯声明的后台页面、遮蔽的银行账号）、供应商与合同文件（教程对象、文件字段与删除流程）、供应商认证（多语言内容、状态机、行操作、审批与事件继续）、商品 / 仓库 / 库存 / 订单（只经流程写入、预定调价、并发防超卖、订单号、过账带来源与维度、公开商品目录、订单确认书签发与发送、拣货单生成文件）、入库记录（只写一次）、库存概览扩展页、四种导入（库存 CSV、价格 XLSX、价目表 XML、期初余额按组）。
+需求可以引用这些现成示范作为"像 X 那样"的参照：物流运单与报关（SQL 模板、空间守卫）、运费月结（业务参数、定时任务、事件、过账、到期日）、承运商（纯声明的后台页面、遮蔽的银行账号）、供应商与合同文件（教程对象、文件字段与删除流程）、供应商认证（多语言内容、状态机、行操作、审批与事件继续）、商品 / 仓库 / 库存 / 订单（只经流程写入、预定调价、改名流程经外部审核服务检查（`ModerateText`；通用表单不经过）、并发防超卖、订单号、过账带来源与维度、公开商品目录、订单确认书签发与发送、拣货单生成文件）、入库记录（只写一次）、库存概览扩展页、四种导入（库存 CSV、价格 XLSX、价目表 XML、期初余额按组）。
 
 ## 20. 平台明确不做或尚未开放的能力（需单独提需求）
 
@@ -447,7 +454,7 @@
 | 安全 | SAML、单点登出、密码复杂度 / 过期 / 历史、IP 白名单、图形验证码、手机号注册、代理审批 |
 | 文件 | WebP / HEIC、视频、病毒扫描、S3 等对象存储实现、多实例共享存储 |
 | 报表与单据 | 图表 / 透视、报表与版式设计器、电子签章、非 PDF 单据、打印机对接 |
-| 通知 | 短信、即时通讯、移动推送；群发营销邮件、邮件模板设计器、打开 / 点击追踪（事务邮件已支持，见第 7 节）；入站 Webhook；经界面管理的 Webhook 订阅 |
+| 通知 | 短信、即时通讯、移动推送；群发营销邮件、邮件模板设计器、打开 / 点击追踪（事务邮件已支持，见第 7 节）；经界面管理的 Webhook 订阅与入站提供方 |
 | 前端 | 拖拽式低代码、移动端原生、离线、仪表盘组件 |
 | 其他 | 三种之外的界面语言、按用户时区显示、全文检索、CDN |
 | 已知限制 | 公开文件与限流的缓存按实例（多实例近似）；访问令牌到期前权限变更不生效；数据期限按分配取外包而不按权限分别计算；准备人持审批权限时会看到自己请求的待办；流程事务内的读取没有数据库侧时限；导出、PDF、签发的报表与元数据生成的数据页中的用户编号字段仍显示编号；Webhook 投递与事务邮件的发送占用消费流程的事务连接直到超时，新订阅会收到历史事件；通知邮件只能发给用户（退订按用户） |
@@ -477,15 +484,16 @@
 | 文件 | `file.read`、`file.write`、`file.delete`、`file.generated.read`、`file.generated.archive`（不授予角色）；各文件策略自己的上传 / 读取权限 |
 | 报表与单据 | `report.issue`、`report.archive.read`、`document.issue`、`document.archive.read`、`document.send`、`document.send.any` |
 | 合规 | `integrity.seal`、`integrity.verify`、`integrity.read`、`legal.hold.read/.write`、`retention.read`、`data.export` |
-| 系统身份专用 | `webhook.deliver`（只由平台投递执行，管理员也不能经接口调用） |
+| 入站 Webhook | `inbound.read`（收到的事件与原样正文）；`inbound.write`（只读数据视图声明的写权限，无人写入） |
+| 系统身份专用 | `webhook.deliver`（只由平台投递执行，管理员也不能经接口调用）、`inbound.receive`（只由入站接口执行） |
 | 应用自定义 | 数据视图、模板、流程、导入、文件策略、审批层级声明的任意字符串 |
 
 ## 附录 B 平台内置的流程、事件与任务
 
-- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
+- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；入站 Webhook（`INBOUND_RECEIVE`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
 - 事件：`jabiz.entity-changed.<实体>`、`jabiz.approval.requested` / `approved` / `rejected`、`jabiz.task.created`、`jabiz.mail.queued`、`jabiz.report.issued`、`jabiz.document.issued`、`jabiz.import.committed`。
 - 定时任务：`FILE_SWEEP`（每日）、`jabiz.integrity-seal`（每 5 分钟）、`jabiz.integrity-verify`（每日）。
 
 ## 附录 C 需求中常涉及的应用级配置
 
-本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥）。
+本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、入站 Webhook 提供方（`jabiz.inbound-webhooks.providers.*`）、外部服务的地址与主机（`jabiz.external-services.<名>.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥、外部服务声明的密钥）。

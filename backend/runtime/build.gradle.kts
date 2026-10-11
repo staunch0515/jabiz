@@ -62,6 +62,10 @@ dependencies {
     // Report export tests read the files back.
     testFixturesApi("org.dhatim:fastexcel-reader:0.20.2")
     testFixturesApi("org.apache.pdfbox:pdfbox:3.0.5")
+    // Architecture rules shared with the applications' ArchitectureTest (PlatformArchRules, decision D38).
+    testFixturesApi("com.tngtech.archunit:archunit:1.5.0")
     // Scenario replay (docs/design/07-quality.md section 3): scenario files are YAML.
     testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
+    // Tests of what the platform's observations are tagged with (TestObservationRegistry).
+    testImplementation("io.micrometer:micrometer-observation-test")
 }

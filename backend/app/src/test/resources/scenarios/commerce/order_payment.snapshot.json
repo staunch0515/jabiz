@@ -1,0 +1,81 @@
+{
+  "scenario" : "Payments of orders by inbound webhook",
+  "asOf" : "2026-05-01T01:01:00Z",
+  "entities" : {
+    "SalesOrder" : [ {
+      "orderId" : "#uuid:1",
+      "orderNo" : "SO-PAY-1",
+      "customerCode" : "CUST-PAY",
+      "warehouseId" : "#uuid:2",
+      "orderedTime" : "2026-05-01T00:00:00Z",
+      "status" : "PLACED",
+      "totalAmount" : "1600",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "paidTime" : "2026-05-01T01:00:00Z",
+      "paymentRef" : "pi_pay_1",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-05-01T01:01:00Z",
+      "createdTime" : "2026-05-01T01:01:00Z",
+      "processSeqId" : "#op:4"
+    }, {
+      "orderId" : "#uuid:3",
+      "orderNo" : "SO-PAY-2",
+      "customerCode" : "CUST-PAY",
+      "warehouseId" : "#uuid:2",
+      "orderedTime" : "2026-05-01T00:00:00Z",
+      "status" : "PLACED",
+      "totalAmount" : "800",
+      "shippedTime" : null,
+      "waybillId" : null,
+      "paidTime" : null,
+      "paymentRef" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "InboundEvent" : [ {
+      "inboundEventId" : "#uuid:4",
+      "provider" : "demo-pay",
+      "externalEventId" : "evt_pay_1",
+      "eventType" : "payment_intent.succeeded",
+      "livemode" : false,
+      "signedTime" : "2026-05-01T01:00:00Z",
+      "receivedTime" : "2026-05-01T01:00:00Z",
+      "contentType" : "application/json",
+      "bodySha256" : "fbc21864a7fc9ccc031c141a0ed601dba570d8c70ec811b38182f262806b9896",
+      "processSeqId" : "#op:2"
+    }, {
+      "inboundEventId" : "#uuid:5",
+      "provider" : "demo-pay",
+      "externalEventId" : "evt_pay_2",
+      "eventType" : "payment_intent.succeeded",
+      "livemode" : false,
+      "signedTime" : "2026-05-01T01:00:00Z",
+      "receivedTime" : "2026-05-01T01:00:00Z",
+      "contentType" : "application/json",
+      "bodySha256" : "5be843bc939f028c232c4266bed1137a641321b073dc509727f3aeb738458d61",
+      "processSeqId" : "#op:3"
+    } ],
+    "SysTask" : [ {
+      "taskId" : "#uuid:6",
+      "taskType" : "commerce.payment-check",
+      "titleKey" : "task.commerce.payment-check",
+      "titleParams" : "{\"amount\":\"500\",\"currency\":\"jpy\",\"orderNo\":\"SO-PAY-2\",\"payment\":\"pi_pay_2\",\"reason\":\"AMOUNT_MISMATCH\"}",
+      "assigneeUserId" : null,
+      "assigneePermission" : "commerce.order.place",
+      "subjectEntity" : "SalesOrder",
+      "subjectId" : "#uuid:3",
+      "link" : null,
+      "status" : "OPEN",
+      "dueTime" : null,
+      "sourceKey" : "payment:demo-pay:evt_pay_2",
+      "closedBy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T01:01:00Z",
+      "createdTime" : "2026-05-01T01:01:00Z",
+      "processSeqId" : "#op:5"
+    } ]
+  }
+}
