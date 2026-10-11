@@ -10,6 +10,7 @@ import com.jabiz.inbound.StripeSignature;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.event.OutboxDeliverer;
+import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.inbound.InboundEvents;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
 import com.jabiz.runtime.inbound.ReceivedEvent;
@@ -38,6 +39,7 @@ import java.io.UncheckedIOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -92,12 +94,18 @@ class InboundWebhookIT extends SecurityItSupport {
         registry.add("jabiz.webhooks.subscriptions[0].url", () -> "http://localhost:" + PORT + "/api/inbound/it-peer");
     }
 
+    /** A port free just now; binding is tried again a few times, since the system may refuse one at random. */
     static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+        IOException last = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try (ServerSocket socket = new ServerSocket(0)) {
+                socket.setReuseAddress(true);
+                return socket.getLocalPort();
+            } catch (IOException e) {
+                last = e;
+            }
         }
+        throw new UncheckedIOException(last);
     }
 
     /** A consumer of the peer's events that fails as often as asked before it handles one. */
@@ -119,8 +127,8 @@ class InboundWebhookIT extends SecurityItSupport {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get("input", PeerInput.class))
-                .step("Load the event", LoadInboundEvent.of(ctx -> ctx.get("input", PeerInput.class).inboundEventId(),
-                    "event"))
+                .step("Load the event", LoadInboundEvent.of("it-peer", "jabiz.task.created",
+                    ctx -> ctx.get("input", PeerInput.class).inboundEventId(), "event"))
                 .compute("Handle it", (metadata, ctx) -> {
                     if (FAILURES_LEFT.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
                         throw new IllegalStateException("the first attempt fails");
@@ -142,6 +150,9 @@ class InboundWebhookIT extends SecurityItSupport {
 
     @Autowired
     OutboxDeliverer deliverer;
+
+    @Autowired
+    com.jabiz.runtime.process.ProcessExecutor executor;
 
     @BeforeEach
     void catalog() {
@@ -207,8 +218,10 @@ class InboundWebhookIT extends SecurityItSupport {
         return orderNo;
     }
 
+    /** The stored event with its body, which is kept in a table of its own. */
     static List<Map<String, Object>> stored(String eventId) {
-        return query("SELECT * FROM sys_inbound_event WHERE external_event_id = ?", eventId);
+        return query("SELECT e.*, b.body FROM sys_inbound_event e LEFT JOIN sys_inbound_event_body b"
+            + " ON b.inbound_event_id = e.inbound_event_id WHERE e.external_event_id = ?", eventId);
     }
 
     static List<Map<String, Object>> outbox(String eventId) {
@@ -228,6 +241,17 @@ class InboundWebhookIT extends SecurityItSupport {
 
     static String sha256(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+    }
+
+    /** Delivers until nothing is due (bounded: failures wait for their backoff, which is 0 s here, up to the limit). */
+    void drain() {
+        for (int round = 0; round < 50; round++) {
+            Integer delivered = deliverer.deliverPending().block();
+            if (delivered == null || delivered == 0) {
+                return;
+            }
+        }
+        throw new AssertionError("events kept coming");
     }
 
     // ---- tests ----------------------------------------------------------------------------------------------------
@@ -303,6 +327,17 @@ class InboundWebhookIT extends SecurityItSupport {
     }
 
     @Test
+    void theDuplicateKeyIsTheConstraintTheReceiverKnows() {
+        assertThat(query("SELECT conname FROM pg_constraint WHERE conrelid = 'sys_inbound_event'::regclass"
+            + " AND contype = 'u'")).extracting(row -> row.get("conname"))
+            .containsExactly(InboundEntities.EXTERNAL_KEY);
+        // Neither the list nor any read of the events carries the body.
+        assertThat(query("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema()"
+            + " AND table_name = 'sys_inbound_event'")).extracting(row -> row.get("column_name"))
+            .doesNotContain("body");
+    }
+
+    @Test
     void concurrentDeliveriesOfOneEventStoreOneRow() throws Exception {
         String eventId = unique("evt");
         byte[] body = payment(eventId, "SO-NONE", 1, "pi_race").getBytes(StandardCharsets.UTF_8);
@@ -372,7 +407,7 @@ class InboundWebhookIT extends SecurityItSupport {
     }
 
     @Test
-    void bodiesOverOneMegabyteAreRefusedUnread() {
+    void bodiesOverOneMegabyteAreRefusedUnread(CapturedOutput output) {
         long inbound = count("SELECT count(*) AS n FROM sys_inbound_event");
         String eventId = unique("evt");
         String padding = "x".repeat(1024 * 1024);
@@ -386,7 +421,27 @@ class InboundWebhookIT extends SecurityItSupport {
         rejected(client.post().uri(PATH).contentType(MediaType.APPLICATION_JSON)
             .header(StripeSignature.HEADER, signature(SECRET, large))
             .body(chunks, DataBuffer.class).exchange());
-        assertThat(count("SELECT count(*) AS n FROM sys_inbound_event")).isEqualTo(inbound);
+        // The same over the network, where Netty reads the body: declared too large, and chunked.
+        WebTestClient network = network();
+        rejected(network.post().uri(PATH).contentType(MediaType.APPLICATION_JSON)
+            .header(StripeSignature.HEADER, signature(SECRET, large)).bodyValue(large).exchange());
+        Flux<DataBuffer> overNetwork = Flux.range(0, large.length / 8192 + 1).map(i -> DefaultDataBufferFactory
+            .sharedInstance.wrap(java.util.Arrays.copyOfRange(large, i * 8192, Math.min(large.length, (i + 1) * 8192))));
+        rejected(network.post().uri(PATH).contentType(MediaType.APPLICATION_JSON)
+            .header(StripeSignature.HEADER, signature(SECRET, large))
+            .body(overNetwork, DataBuffer.class).exchange());
+        // And a body just within the limit is read and accepted.
+        String fitsId = unique("evt");
+        String fitting = payment(fitsId, "SO-NONE", 1, "pi_fits");
+        byte[] fits = fitting.replace("\"currency\"", "\"pad\":\"" + "y".repeat(1024 * 1024 - fitting.length() - 9)
+            + "\",\"currency\"").getBytes(StandardCharsets.UTF_8);
+        assertThat(fits.length).isEqualTo(1024 * 1024);
+        network.post().uri(PATH).contentType(MediaType.APPLICATION_JSON)
+            .header(StripeSignature.HEADER, signature(SECRET, fits)).bodyValue(fits).exchange()
+            .expectStatus().isOk();
+        assertThat(stored(fitsId)).hasSize(1);
+        leaksReported(output);
+        assertThat(count("SELECT count(*) AS n FROM sys_inbound_event")).isEqualTo(inbound + 1); // the one that fits
     }
 
     @Test
@@ -418,17 +473,60 @@ class InboundWebhookIT extends SecurityItSupport {
     }
 
     @Test
-    void eachClientIsLimitedPerProviderAndForwardedHeadersDoNotHelp() {
+    void eachClientIsLimitedPerProviderAndForwardedHeadersDoNotHelp(CapturedOutput output) {
+        // Over the network: the connection comes from 127.0.0.1, which is no trusted proxy, so the forwarded
+        // addresses it claims are ignored and every request counts against it.
+        WebTestClient network = network();
         byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
         for (int i = 0; i < 3; i++) {
-            send("/api/inbound/it-limited", body, Map.of("X-Forwarded-For", "203.0.113." + i))
+            network.post().uri("/api/inbound/it-limited").contentType(MediaType.APPLICATION_JSON)
+                .header("X-Forwarded-For", "203.0.113." + i).bodyValue(body).exchange()
                 .expectStatus().isBadRequest();
         }
-        send("/api/inbound/it-limited", body, Map.of("X-Forwarded-For", "198.51.100.7"))
+        network.post().uri("/api/inbound/it-limited").contentType(MediaType.APPLICATION_JSON)
+            .header("X-Forwarded-For", "198.51.100.7").bodyValue(body).exchange()
             .expectStatus().isEqualTo(429).expectHeader().exists(HttpHeaders.RETRY_AFTER)
             .expectBody().jsonPath("$.violations[0].ruleCode").isEqualTo("RATE_LIMITED");
         // Another provider has a limit of its own.
-        send("/api/inbound/demo-pay", body, Map.of()).expectStatus().isBadRequest();
+        network.post().uri("/api/inbound/demo-pay").contentType(MediaType.APPLICATION_JSON).bodyValue(body)
+            .exchange().expectStatus().isBadRequest();
+        leaksReported(output);
+    }
+
+    /** A client of the running server, over the network (not bound to the application context). */
+    WebTestClient network() {
+        return WebTestClient.bindToServer().baseUrl("http://localhost:" + PORT)
+            .responseTimeout(Duration.ofSeconds(30)).build();
+    }
+
+    /**
+     * Netty reports a buffer that was never released when the garbage collector finds it; with paranoid leak detection
+     * on for this class, every buffer is tracked. Collects and allocates a little more so that reports come out, then
+     * looks for reports of buffers the server read (requests): those of the test's own HTTP client do not count.
+     */
+    static void leaksReported(CapturedOutput output) {
+        for (int i = 0; i < 3; i++) {
+            System.gc();
+            io.netty.buffer.ByteBufAllocator.DEFAULT.buffer(1024).release();
+        }
+        String[] reports = output.getAll().split("LEAK: ");
+        for (int i = 1; i < reports.length; i++) {
+            String trace = reports[i].split("\n20\\d\\d-")[0];
+            assertThat(trace).doesNotContain("HttpServerCodec", "HttpRequestDecoder", "reactor.netty.http.server");
+        }
+    }
+
+    static io.netty.util.ResourceLeakDetector.Level leakLevel;
+
+    @org.junit.jupiter.api.BeforeAll
+    static void paranoidLeakDetection() {
+        leakLevel = io.netty.util.ResourceLeakDetector.getLevel();
+        io.netty.util.ResourceLeakDetector.setLevel(io.netty.util.ResourceLeakDetector.Level.PARANOID);
+    }
+
+    @org.junit.jupiter.api.AfterAll
+    static void restoreLeakDetection() {
+        io.netty.util.ResourceLeakDetector.setLevel(leakLevel);
     }
 
     @Test
@@ -486,10 +584,8 @@ class InboundWebhookIT extends SecurityItSupport {
     @Test
     void thePlatformsOwnWebhookIsReceivedByItsInboundEndpointAndRetriedUntilHandled() {
         // Earlier events (other tests') first, so that the one failure falls on this test's event.
-        deliverer.deliverPending().block();
-        deliverer.deliverPending().block();
+        drain();
         PeerConsumer.FAILURES_LEFT.set(1);
-        int handledBefore = PeerConsumer.HANDLED.size();
         String key = unique("PEER");
         Map<String, Object> input = new LinkedHashMap<>(Map.of("key", key, "item", key));
         input.put("permission", ItTaskFixtures.PERMISSION);
@@ -506,11 +602,8 @@ class InboundWebhookIT extends SecurityItSupport {
         assertThat(received).singleElement().satisfies(row -> assertThat(row)
             .containsEntry("event_type", "jabiz.task.created"));
         // Its consumer failed the first time; the outbox tries again and it is handled once.
-        for (int i = 0; i < 5; i++) {
-            deliverer.deliverPending().block();
-        }
-        assertThat(PeerConsumer.HANDLED.subList(handledBefore, PeerConsumer.HANDLED.size()))
-            .containsExactly(outboundId);
+        drain();
+        assertThat(PeerConsumer.HANDLED).filteredOn(outboundId::equals).hasSize(1);
         assertThat(query("SELECT a.attempt FROM sys_outbox_attempt a JOIN sys_outbox_event e ON e.event_id = a.event_id"
             + " WHERE a.consumer = 'it.peer-received' AND e.payload->>'externalEventId' = ?", outboundId)).hasSize(1);
         assertThat(query("SELECT 1 FROM sys_event_consumption c JOIN sys_outbox_event e ON e.event_id = c.event_id"
@@ -527,6 +620,36 @@ class InboundWebhookIT extends SecurityItSupport {
     }
 
     @Test
+    void onlyTheDeliveryRecordsPaymentsAndLoadingNeedsInboundRead() {
+        String eventId = unique("evt");
+        accepted(payment(eventId, "SO-NONE", 1, "pi_forged"));
+        String id = (String) stored(eventId).getFirst().get("inbound_event_id");
+        // internal() keeps a process out of the catalog; the process itself refuses anyone but the delivery.
+        post("/api/processes/ORDER_RECORD_PAYMENT/latest", admin(), Map.of("inboundEventId", id))
+            .expectStatus().isForbidden();
+        // A step loading an event: 403 without inbound.read, 404 for an unknown id.
+        post("/api/processes/IT_PEER_EVENT/latest", bearer("it.peer"), Map.of("inboundEventId", id))
+            .expectStatus().isForbidden();
+        post("/api/processes/IT_PEER_EVENT/latest", bearer("it.peer", "inbound.read"),
+            Map.of("inboundEventId", "no-such-event")).expectStatus().isNotFound();
+        // A consumer of the peer's events does not load a payment of demo-pay.
+        assertThatThrownBy(() -> asRequest(com.jabiz.context.RequestContext.system(java.util.Locale.ENGLISH, "it"),
+            executor.run(PeerConsumer.PROCESS, new PeerConsumer.PeerInput(id),
+                com.jabiz.runtime.process.ExecutionOptions.NONE)).block())
+            .hasMessageContaining("is not a jabiz.task.created event of it-peer");
+    }
+
+    @Test
+    void receivedEventsAreInTheRetentionReport() {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> policies = (List<Map<String, Object>>) get("/api/retention",
+            bearer("retention.read")).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
+            .get("policies");
+        assertThat(policies).filteredOn(policy -> "InboundEvent".equals(policy.get("entity"))).singleElement()
+            .satisfies(policy -> assertThat(policy).containsEntry("keep", "P7Y"));
+    }
+
+    @Test
     void theInboundTableIsNeverUpdatedOrDeleted() {
         SqlStatementLog.STATEMENTS.clear();
         String eventId = unique("evt");
@@ -535,10 +658,12 @@ class InboundWebhookIT extends SecurityItSupport {
         deliverer.deliverPending().block();
         assertThat(SqlStatementLog.STATEMENTS).anyMatch(sql -> sql.contains("sys_inbound_event"));
         assertThat(SqlStatementLog.STATEMENTS).noneMatch(sql -> sql.matches(
-            "(?is).*(UPDATE|DELETE\\s+FROM|TRUNCATE)\\s+sys_inbound_event\\b.*"));
-        assertThatThrownBy(() -> execute("UPDATE sys_inbound_event SET body = '{}' WHERE external_event_id = ?",
+            "(?is).*(UPDATE|DELETE\\s+FROM|TRUNCATE)\\s+sys_inbound_event(_body)?\\b.*"));
+        assertThatThrownBy(() -> execute("UPDATE sys_inbound_event SET event_type = 'x' WHERE external_event_id = ?",
             eventId)).hasMessageContaining("append-only");
         assertThatThrownBy(() -> execute("DELETE FROM sys_inbound_event WHERE external_event_id = ?", eventId))
+            .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> execute("UPDATE sys_inbound_event_body SET body = '{}'"))
             .hasMessageContaining("append-only");
     }
 
@@ -553,10 +678,14 @@ class InboundWebhookIT extends SecurityItSupport {
         assertThat(order(orderNo)).containsEntry("payment_ref", null);
         for (String eventId : List.of(wrongAmount, unknownOrder)) {
             String id = (String) stored(eventId).getFirst().get("inbound_event_id");
-            assertThat(query("SELECT task_type, assignee_permission FROM sys_task_version WHERE source_key = ?",
-                "payment:" + id)).singleElement().satisfies(task -> assertThat(task)
-                    .containsEntry("task_type", "commerce.payment-check")
-                    .containsEntry("assignee_permission", "commerce.order.place"));
+            assertThat(query("SELECT task_type, assignee_permission, subject_entity, title_params FROM sys_task_version"
+                + " WHERE source_key = ?", "payment:demo-pay:" + eventId)).singleElement().satisfies(task -> {
+                    assertThat(task).containsEntry("task_type", "commerce.payment-check")
+                        .containsEntry("assignee_permission", "commerce.order.place")
+                        .containsEntry("subject_entity", eventId.equals(wrongAmount) ? "SalesOrder" : "InboundEvent");
+                    assertThat((String) task.get("title_params")).contains("\"currency\":\"jpy\"")
+                        .contains(eventId.equals(wrongAmount) ? "AMOUNT_MISMATCH" : "NO_ORDER");
+                });
             assertThat(query("SELECT 1 FROM sys_outbox_attempt a JOIN sys_outbox_event e ON e.event_id = a.event_id"
                 + " WHERE a.consumer = 'commerce.payment-received' AND e.payload->>'inboundEventId' = ?", id))
                 .isEmpty();

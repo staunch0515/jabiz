@@ -1,5 +1,6 @@
 package com.jabiz.app.commerce;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.process.ProcessContext;
@@ -8,6 +9,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.retention.RetentionPolicy;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.inbound.InboundEvents;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
@@ -16,32 +18,46 @@ import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.task.TaskSpec;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Period;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import static com.jabiz.app.commerce.CommerceEntities.CANCELLED;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER;
 import static com.jabiz.app.commerce.CommerceEntities.ORDER_DATASET;
 
 /**
- * Payments of orders reported by a payment provider (ROADMAP phase 16d; decision D37), the sample of inbound webhooks.
- * The provider {@value #PROVIDER} (configured for development and tests only, scheme {@code stripe}) sends
- * {@code payment_intent.succeeded} with the order's number in the payment's metadata. The platform verifies, stores and
- * publishes it; the consumer {@value #CONSUMER} runs {@value #RECORD_PAYMENT} once for each, as the system:
+ * Payments of orders reported by a payment provider (ROADMAP phase 16d; decision D37), the sample of inbound webhooks
+ * and the pattern applications copy. The provider {@value #PROVIDER} (configured for development and tests only,
+ * scheme {@code stripe}) sends {@code payment_intent.succeeded} with the order's number in the payment's metadata. The
+ * platform verifies, stores and publishes it; the consumer {@value #CONSUMER} runs {@value #RECORD_PAYMENT} once for
+ * each, as the system (anyone else is refused: {@code internal()} only keeps a process out of the catalog).
+ *
+ * <p>A verified signature says who sent the event, not that it fits: the process trusts nothing in it. It loads only an
+ * event of its own provider and type, and records the payment only when everything fits:
  * <ul>
- *   <li>the order of that number, not cancelled and not paid yet, whose total is the amount received, gets
- *       {@code paidTime} (when the payment was received) and {@code paymentRef} (the provider's id of the payment);</li>
- *   <li>the same payment reported again changes nothing;</li>
- *   <li>anything else (no such order, another amount, a cancelled order, an order paid by another payment) becomes a
- *       task for whoever may write orders ({@value #CHECK_PERMISSION}), rather than a failure: a failing consumer would
- *       be retried for nothing.</li>
+ *   <li>the payment's id and the order number have the expected shape;</li>
+ *   <li>the event is from live mode ({@code livemode: true}), or test mode is accepted
+ *       ({@code commerce.payments.accept-test-mode}, true for the sample, which only sees test payments);</li>
+ *   <li>the currency is {@value #CURRENCY}, and {@code amount_received} is the order's total. Stripe states amounts in
+ *       the currency's minor unit; the yen has none, so here the amount is in yen (another currency would be scaled
+ *       by its minor unit before comparing);</li>
+ *   <li>the order exists, is not cancelled and is not paid by another payment.</li>
  * </ul>
+ * The order then gets {@code paidTime} (when the payment was received) and {@code paymentRef}; the same payment again
+ * changes nothing. Anything else becomes a task for whoever may write orders ({@value #CHECK_PERMISSION}) that names
+ * the reason, the amount and the currency, rather than a failure: a failing consumer would be retried for nothing.
  * Received events are kept seven years from their receipt, like other accounting evidence.
  */
 @Configuration
@@ -53,23 +69,33 @@ class CommercePayments {
     static final String RECORD_PAYMENT = "ORDER_RECORD_PAYMENT";
     static final String CHECK_PERMISSION = "commerce.order.place";
     static final String CHECK_TASK = "commerce.payment-check";
+    static final String CURRENCY = "jpy";
+
+    /** Stripe's ids (letters, digits, underscores; hyphens allowed), at most the column's 255. */
+    static final Pattern PAYMENT_REF = Pattern.compile("[A-Za-z0-9_-]{1,255}");
+    /** As the order number's own rule (CommerceEntities). */
+    static final Pattern ORDER_NO = Pattern.compile("[A-Z0-9][A-Z0-9-]{1,29}");
+    private static final int MAX_SHOWN = 40;
+    private static final int MAX_SOURCE = 200;
 
     /** @param inboundEventId the received event ({@code InboundEvent}) */
     record PaymentInput(@NotBlank String inboundEventId) {}
 
     /**
      * @param outcome {@code RECORDED}, {@code ALREADY_RECORDED} or {@code CHECK} (a task was opened)
+     * @param reason  why a check, or null
      */
-    record PaymentOutput(String orderNo, String paymentRef, String outcome) {}
+    record PaymentOutput(String orderNo, String paymentRef, String outcome, String reason) {}
 
-    private static final String INPUT = "input";
-    private static final String PAYMENT = "payment";
-    private static final String ORDERS = "orders";
-    private static final String OUTCOME = "outcome";
+    static final String INPUT = "input";
+    static final String PAYMENT = "payment";
+    static final String ORDERS = "orders";
+    static final String OUTCOME = "outcome";
+    static final String REASON = "reason";
 
-    static final ProcessDefinition<PaymentInput, PaymentOutput, ProcessContext> RECORD_PROCESS =
-        ProcessDefinition.define(RECORD_PAYMENT, 1, PaymentInput.class, PaymentOutput.class, ProcessContext.class,
-            pb -> pb
+    static ProcessDefinition<PaymentInput, PaymentOutput, ProcessContext> recordProcess(boolean acceptTestMode) {
+        return ProcessDefinition.define(RECORD_PAYMENT, 1, PaymentInput.class, PaymentOutput.class,
+            ProcessContext.class, pb -> pb
                 .description("Records a payment the payment provider reported on its order.")
                 .permissions("commerce.order.pay")
                 .internal()
@@ -78,22 +104,27 @@ class CommercePayments {
                     ctx.put(INPUT, input);
                     return ctx;
                 })
-                .outputMapper(ctx -> new PaymentOutput(orderNo(ctx), paymentRef(ctx), (String) ctx.get(OUTCOME)))
-                .step("Load the payment", LoadInboundEvent.of(ctx -> ctx.get(INPUT, PaymentInput.class)
-                    .inboundEventId(), PAYMENT))
+                .outputMapper(ctx -> new PaymentOutput(shown(text(ctx, "data.object.metadata.orderNo")),
+                    shown(text(ctx, "data.object.id")), (String) ctx.get(OUTCOME), (String) ctx.get(REASON)))
+                .compute("Refuse other callers", (metadata, ctx) -> requireSystem(ctx))
+                .step("Load the payment", LoadInboundEvent.of(PROVIDER, SUCCEEDED,
+                    ctx -> ctx.get(INPUT, PaymentInput.class).inboundEventId(), PAYMENT))
                 .step("Find the order", QueryEntities.of(ORDER_DATASET, CommercePayments::orderQuery, ORDERS))
-                .compute("Record the payment", (metadata, ctx) -> record(ctx))
+                .compute("Record the payment", (metadata, ctx) -> record(ctx, acceptTestMode))
                 .step("Ask for a check", CreateTask.when(ctx -> "CHECK".equals(ctx.get(OUTCOME)),
                     CommercePayments::checkTask)));
-
-    @Bean
-    ProcessDefinition<PaymentInput, PaymentOutput, ProcessContext> orderRecordPaymentProcess() {
-        return RECORD_PROCESS;
     }
 
     @Bean
-    EventSubscription<PaymentInput> paymentReceivedSubscription() {
-        return EventSubscription.of(CONSUMER, InboundEvents.type(PROVIDER, SUCCEEDED), RECORD_PROCESS,
+    ProcessDefinition<PaymentInput, PaymentOutput, ProcessContext> orderRecordPaymentProcess(
+        @Value("${commerce.payments.accept-test-mode:true}") boolean acceptTestMode) {
+        return recordProcess(acceptTestMode);
+    }
+
+    @Bean
+    EventSubscription<PaymentInput> paymentReceivedSubscription(
+        ProcessDefinition<PaymentInput, PaymentOutput, ProcessContext> orderRecordPaymentProcess) {
+        return EventSubscription.of(CONSUMER, InboundEvents.type(PROVIDER, SUCCEEDED), orderRecordPaymentProcess,
             CommercePayments::input);
     }
 
@@ -107,25 +138,29 @@ class CommercePayments {
         return new PaymentInput(InboundEvents.ref(event).inboundEventId());
     }
 
+    /** Only the event delivery records payments: the process API, even for an administrator, does not. */
+    static void requireSystem(ProcessContext ctx) {
+        if (!RequestContext.SYSTEM_ACTOR.equals(ctx.request().actorId())) {
+            throw new PermissionDeniedException("commerce.order.pay",
+                "Payments are recorded from the payment provider's events only");
+        }
+    }
+
     private static ReceivedEvent payment(ProcessContext ctx) {
         return ctx.get(PAYMENT, ReceivedEvent.class);
     }
 
+    /** The text at the path of the payment's body; null when absent or not text. */
+    private static String text(ProcessContext ctx, String path) {
+        return ctx.contains(PAYMENT) && payment(ctx).at(path) instanceof String text ? text : null;
+    }
+
     private static String orderNo(ProcessContext ctx) {
-        Object value = payment(ctx).at("data.object.metadata.orderNo");
-        return value instanceof String text && !text.isBlank() ? text : null;
+        String value = text(ctx, "data.object.metadata.orderNo");
+        return value != null && ORDER_NO.matcher(value).matches() ? value : null;
     }
 
-    private static String paymentRef(ProcessContext ctx) {
-        Object value = payment(ctx).at("data.object.id");
-        return value instanceof String text && !text.isBlank() ? text : null;
-    }
-
-    private static BigDecimal amount(ProcessContext ctx) {
-        return payment(ctx).at("data.object.amount_received") instanceof BigDecimal amount ? amount : null;
-    }
-
-    private static EntityQuery orderQuery(ProcessContext ctx) {
+    static EntityQuery orderQuery(ProcessContext ctx) {
         String orderNo = orderNo(ctx);
         return EntityQuery.builder()
             .where(new QueryPredicate.In("orderNo", orderNo == null ? List.of() : List.of(orderNo)))
@@ -133,38 +168,90 @@ class CommercePayments {
     }
 
     @SuppressWarnings("unchecked")
-    private static void record(ProcessContext ctx) {
+    static void record(ProcessContext ctx, boolean acceptTestMode) {
+        ReceivedEvent payment = payment(ctx);
         List<EntityInstance> orders = (List<EntityInstance>) ctx.get(ORDERS);
         EntityInstance order = orders == null || orders.isEmpty() ? null : orders.getFirst();
-        String ref = paymentRef(ctx);
-        BigDecimal amount = amount(ctx);
-        if (order == null || ref == null || amount == null || CANCELLED.equals(order.get("status"))) {
-            ctx.put(OUTCOME, "CHECK");
+        String ref = text(ctx, "data.object.id");
+        String orderNo = text(ctx, "data.object.metadata.orderNo");
+        Object amount = payment.at("data.object.amount_received");
+        String reason;
+        if (ref == null || !PAYMENT_REF.matcher(ref).matches()) {
+            reason = "INVALID_PAYMENT_REF";
+        } else if (orderNo == null || !ORDER_NO.matcher(orderNo).matches()) {
+            reason = "INVALID_ORDER_NO";
+        } else if (payment.livemode() == null || (!payment.livemode() && !acceptTestMode)) {
+            reason = "TEST_MODE";
+        } else if (!CURRENCY.equals(text(ctx, "data.object.currency"))) {
+            reason = "CURRENCY";
+        } else if (!(amount instanceof BigDecimal)) {
+            reason = "NO_AMOUNT";
+        } else if (order == null) {
+            reason = "NO_ORDER";
+        } else if (CANCELLED.equals(order.get("status"))) {
+            reason = "CANCELLED";
+        } else if (order.get("paymentRef") != null) {
+            if (ref.equals(order.get("paymentRef"))) {
+                ctx.put(OUTCOME, "ALREADY_RECORDED");
+                return;
+            }
+            reason = "PAID_OTHER";
+        } else if (((BigDecimal) amount).compareTo(order.<BigDecimal>get("totalAmount")) != 0) {
+            reason = "AMOUNT_MISMATCH";
+        } else {
+            Map<String, Object> paid = new LinkedHashMap<>();
+            paid.put("paidTime", payment.receivedTime());
+            paid.put("paymentRef", ref);
+            ctx.changes().update(ORDER, order.id(), order.version(), paid);
+            ctx.put(OUTCOME, "RECORDED");
             return;
         }
-        Object recorded = order.get("paymentRef");
-        if (recorded != null) {
-            ctx.put(OUTCOME, ref.equals(recorded) ? "ALREADY_RECORDED" : "CHECK");
-            return;
-        }
-        if (amount.compareTo(order.<BigDecimal>get("totalAmount")) != 0) {
-            ctx.put(OUTCOME, "CHECK");
-            return;
-        }
-        Map<String, Object> paid = new LinkedHashMap<>();
-        paid.put("paidTime", payment(ctx).receivedTime());
-        paid.put("paymentRef", ref);
-        ctx.changes().update(ORDER, order.id(), order.version(), paid);
-        ctx.put(OUTCOME, "RECORDED");
+        ctx.put(OUTCOME, "CHECK");
+        ctx.put(REASON, reason);
     }
 
-    private static TaskSpec checkTask(ProcessContext ctx) {
+    @SuppressWarnings("unchecked")
+    static TaskSpec checkTask(ProcessContext ctx) {
         ReceivedEvent payment = payment(ctx);
+        Object amount = payment.at("data.object.amount_received");
         Map<String, String> params = new LinkedHashMap<>();
-        params.put("orderNo", String.valueOf(orderNo(ctx)));
-        params.put("payment", String.valueOf(paymentRef(ctx)));
-        return TaskSpec.forPermission(CHECK_TASK, "task.commerce.payment-check", params, CHECK_PERMISSION)
-            .about(InboundEntities.EVENT, payment.inboundEventId())
-            .source("payment:" + payment.inboundEventId());
+        params.put("orderNo", shown(text(ctx, "data.object.metadata.orderNo")));
+        params.put("payment", shown(text(ctx, "data.object.id")));
+        params.put("amount", amount instanceof BigDecimal decimal ? shown(decimal.toPlainString()) : "-");
+        params.put("currency", shown(text(ctx, "data.object.currency")));
+        params.put("reason", String.valueOf(ctx.get(REASON)));
+        List<EntityInstance> orders = (List<EntityInstance>) ctx.get(ORDERS);
+        TaskSpec task = TaskSpec.forPermission(CHECK_TASK, "task.commerce.payment-check", params, CHECK_PERMISSION)
+            .source(source(payment));
+        return orders == null || orders.isEmpty() ? task.about(InboundEntities.EVENT, payment.inboundEventId())
+            : task.about(ORDER, orders.getFirst().id());
+    }
+
+    /** {@code payment:<provider>:<external id>}, stable across replays; a long id by its SHA-256. */
+    private static String source(ReceivedEvent payment) {
+        String key = "payment:" + payment.provider() + ":" + payment.externalEventId();
+        if (key.length() <= MAX_SOURCE) {
+            return key;
+        }
+        try {
+            return "payment:" + payment.provider() + ":sha256:" + HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(payment.externalEventId().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** A value of the sender as a title may show it: printable, at most 40 characters; "-" for none. */
+    static String shown(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        StringBuilder kept = new StringBuilder();
+        value.codePoints().filter(c -> !Character.isISOControl(c)).forEach(kept::appendCodePoint);
+        String text = kept.toString().strip();
+        if (text.isEmpty()) {
+            return "-";
+        }
+        return text.length() <= MAX_SHOWN ? text : text.substring(0, MAX_SHOWN) + "…";
     }
 }
