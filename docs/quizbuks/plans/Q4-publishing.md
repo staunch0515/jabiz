@@ -120,11 +120,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   | `QB_QUIZ_DELETE`（Q3） | 只取模版锁（独占） |
 
   提交与移除模版因此不会交错。
-- **`QbPublication.quizId`**：冗余存放（草稿换版本时随之改变，有索引）。
+- **`QbPublication.quizId`**：冗余存放（草稿换版本时随之改变）。它是可变字段，时态表上按它查找用不到索引（只有不可变字段的条件能下推），所以移除模版时经普通表 `qb_publication_schedule`（按 `quiz_id` 建索引，见 D-Q4-7 的修订）找出已提交的发布。
 - **移除模版**时，`QuizProcesses.filesStillNeeded(ctx)` 改为：读该模版下状态不是 `DRAFT` 的发布（在模版锁内），解析它们所引用版本的快照（`QuizSnapshots`），取出其中的文件。
   这些文件的 `QbVersionFile` 保留，其余照旧分块释放。
 - **模版已移除的发布**：提交草稿时如果模版已移除，422 `QB_PUBLICATION_QUIZ_REMOVED`（文件可能已释放）；保存时同样检查。
-- **已知的小泄漏**：已提交过、又被驳回的发布，其版本文件在模版移除时也被保留。可以接受。
+- 退回草稿的发布不再有日程行（修订后），所以其版本文件在模版移除时照常释放；草稿本就不可再提交。
 
 ### D-Q4-6 向导三步与一次报告全部问题
 
@@ -148,6 +148,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - `SCHEDULED` 且 `startAt ≤ now`；
   - `SCHEDULED` / `LIVE` / `PAUSED` / `FUNDS_SHORT` 且 `endAt ≤ now`。
   按 `publicationId` 排序，每次至多 200 条（`PublishingLimits.TICK_BATCH`），剩下的下一分钟处理。
+  **（评审后修订）**：状态与时间都是可变字段，时态表上的这个查询每分钟扫描全部历史，`(status, start_at)` 等索引用不上。改为普通表 `qb_publication_schedule(publication_id, quiz_id, version_id, next_due_at)`，由各流程在发布锁内随状态维护（`PublicationRules.nextDue`：`SCHEDULED` 取开始时间，`LIVE` / `PAUSED` / `FUNDS_SHORT` / `PENDING_REVIEW` 取结束时间，`ENDED` 为空；回到 `DRAFT` 即删除该行），定时任务按 `next_due_at <= now` 取（有索引），每次至多 50 条。仍在待审核而已过结束时间的发布也由此处理：撤回审批、回到草稿，`rejectCode = QB_PUBLICATION_EXPIRED_IN_REVIEW`。
   对每条调用子流程 `QB_PUBLICATION_ADVANCE`：取发布锁，重新读取，按 `PublicationRules.next(status, startAt, endAt, now)` 迁移；如果状态已被别人改变（例如刚暂停），就不动。
 - **事务**：一批在同一事务中执行（平台缺口 6），锁按主键顺序获取，不会与其他流程互相等待。
 - **其余时间判断**：需求要求的"到开始时间自动进行中""到期结束"由此实现；暂停之外的可见性以时间字段为准（D-Q4-1）。
@@ -209,7 +210,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 **迁移** `db/migration/V4__quizbuks_publishing.sql`：
 - 沿用 V3 的建表函数写法：`UNIQUE(主键, version_no)`、当前版本索引、`process_seq_id` 索引、外键、`jabiz_protect_append_only`，用后删除函数。
 - 另建索引：
-  - `qb_publication_version` 的 `sponsor_id`、`quiz_id`、`version_id`、`(status, start_at)`、`(status, end_at)`（定时任务与首页）；
+  - `qb_publication_version` 的 `sponsor_id`、`copied_from`（不可变字段；评审后去掉了用不上的 `quiz_id`、`version_id`、`(status, start_at)`、`(status, end_at)`）；
+  - 普通表 `qb_publication_schedule`：`next_due_at`（部分索引）与 `quiz_id`（D-Q4-7 的修订）；
   - `qb_reward_tier_version (publication_id)`。
 - `qb_publication_counter` 按平台普通实体的表结构（参照 `backend/app` 中的普通实体迁移）。
 
@@ -231,9 +233,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_WITHDRAW` | 同上 | `publicationId` | `actsOn`（`PENDING_REVIEW`）；`WithdrawApproval` → `DRAFT` | 迁移 422 |
 | `QB_PUBLICATION_PAUSE` | 同上 | `publicationId` | `actsOn`（`SCHEDULED`、`LIVE`）；发布锁 → `PAUSED`、`pausedAt`。之后的开始答题在同一把锁内看到 `PAUSED`，立即不可进入（M-35） | 迁移 422 |
 | `QB_PUBLICATION_RESUME` | 同上 | `publicationId` | `actsOn`（`PAUSED`）；按 D-Q4-1 回到 `SCHEDULED`、`LIVE` 或进入 `ENDED` | 迁移 422 |
-| `QB_PUBLICATION_APPROVAL_RESULT` | `qb.review.publication`，`internal()` | 审批事件 | D-Q4-4 | — |
-| `QB_PUBLICATION_TICK` | `qb.publication.tick`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7 | — |
-| `QB_PUBLICATION_ADVANCE` | 同上，`internal()` | `publicationId` | 发布锁内按时间迁移，写 `endedAt`、`endReason = EXPIRED` | — |
+| `QB_PUBLICATION_APPROVAL_RESULT` | `qb.publication.system`（不授予任何角色），`internal()` | 审批事件 | D-Q4-4 | — |
+| `QB_PUBLICATION_TICK` | `qb.publication.system`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7 | — |
+| `QB_PUBLICATION_ADVANCE` | 同上，`internal()` | `publicationId` | 发布锁内按时间迁移，写 `endedAt`、`endReason = EXPIRED`；待审核而已过结束时间的撤回审批、回到草稿 | — |
 
 **纯 Java 部件**（无 I/O，单元测试）：
 - `PublishingLimits`（档位数、最长投放期、批量大小）；
@@ -266,7 +268,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - `PublicationRulesTest`：迁移表穷举；时间边界 `startAt` / `endAt` 前后 1 毫秒；
   - `PublicationApprovalsTest`：键顺序不影响哈希，任一策略变化即改变哈希；
   - `RegionsTest`：`TARGETS`；
-  - `QbRolesTest`：新授权；`qb.publication.tick` 不授予任何角色；
+  - `QbRolesTest`：新授权；`qb.publication.system` 不授予任何角色；
   - `MessagesTest`。
 - **`PublicationIT`**（M-30 – M-34、M-36、P-09）：
   - 只有名称的草稿可以保存，`problems` 列全；
@@ -287,7 +289,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - 暂停中到期 → `ENDED`；
   - 暂停、恢复（开始前恢复 → `SCHEDULED`，结束后恢复 → `ENDED`）；非法迁移 422；
   - 暂停与定时任务并发，以发布锁串行，结果一致；
-  - 超过 200 条到期时分两次处理；
+  - 超过一批（50 条）到期时分两次处理；
   - `acceptsNewAttempts` 在暂停、到期后（状态未改）均为 false。
 - **`PublicationOwnerIT`**：
   - B 对 A 的发布：视图、模板中看不到，每个流程 404；B 用 A 的 `versionId` 保存 → 404；
@@ -333,41 +335,58 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ## 实施记录（2026-10-11）
 
-状态：后端完成（分支 `1.2/quizbuks-4-publishing`，未开 PR）。页面按计划延后。
+状态：后端完成（分支 `1.2/quizbuks-4-publishing`，未开 PR），已按评审修订（见下"评审后的修改"）。页面按计划延后。
 
 ### 与计划的差异
 
 - **错误码**：字段规则另有代码（`QB_PUBLICATION_NAME_BLANK`、`_TIME_LIMIT_RANGE`、`_SCORE_RANGE`、`_BUDGET_RANGE`、`_MAX_WINNERS_RANGE`、`QB_TIER_REWARD_RANGE`，400）；
-  提交时缺项一律 `QB_PUBLICATION_FIELD_REQUIRED`（参数 `field`），不逐项设码；保存时给出不属于本发布的 `tierId` 为 422 `QB_TIER_NOT_IN_PUBLICATION`；
-  没有档位只报 `QB_TIER_NO_REWARD`（不再报覆盖问题）；地区代码不认识时流程 422 `QB_PUBLICATION_REGIONS_FORMAT`（存储文本不合格式由字段规则 400）。全部在 `PublishingCodes`。
+  提交时缺项一律 `QB_PUBLICATION_FIELD_REQUIRED`（参数 `field`，文案不显示字段名：页面按 `entity.QbPublication.<field>` 显示）；保存时给出不属于本发布的 `tierId` 为 422 `QB_TIER_NOT_IN_PUBLICATION`；
+  没有档位只报 `QB_TIER_NO_REWARD`；地区代码不认识时流程 422 `QB_PUBLICATION_REGIONS_FORMAT`（存储文本不合格式由字段规则 400）；
+  获奖人数 × 最高奖励超过金额上限且没有预算上限时 `QB_PUBLICATION_SPEND_RANGE`。全部在 `PublishingCodes`。
 - **以快照重查内容**的违规路径加前缀 `version.`（如 `version.questions[0].options`），与发布自己的字段区分。
 - **档位按键比较**：同 Q3 的选项，给出的列表是完整列表，带 `tierId` 的是原档位、不带的是新档位（保存输出给出 `tierIds`）。不带键重存同样的档位会删旧插新（`revision + 1`）。
-- **`revision` 与 `editedAt`**：发布行的每一次写入（含状态变化）都加 1、记时间，不只是策略的修改。撤回时清空 `approvalRequestId`，恢复时清空 `pausedAt`。
-- **迁移由流程自己先查起点**：平台只拒绝声明之外的迁移，看不到"迁到原状态"（如暂停已暂停的）或"声明了但不是本操作的"（如对进行中的发布恢复而已过结束 → 结束）。
-  撤回、暂停、恢复先查起点（`PENDING_REVIEW`；`SCHEDULED`、`LIVE`；`PAUSED`），不符即以平台的 422 `ILLEGAL_TRANSITION` 拒绝；写入时也再查一次声明。
-- **提交先读一次发布再取锁**：模版锁在前，而只有发布知道其模版；先读出 `quizId`，取模版锁（共享）与发布锁，再读一次，期间模版变了即 409（只有持发布锁的保存会改它）。
-- **系统身份的流程**（`APPROVAL_RESULT`、`TICK`、`ADVANCE`）经默认视图读取（商家视图按操作人限定，系统读不到）。`TICK` 输出 `due`（本次找到并推进的条数）。
-- **保存输出的 `problems`** 带按调用者语言的文案（`field`、`code`、`message`、`params`）；复制的缺省名称为消息 `qb.publication.copy-name`（三语，过长时截短源名称）。
-- **`qb.sponsor.quizzes`** 增加 `publicationCount`、`published`（可筛选）。`content.yml` 的快照不含模板结果，因此没有变化；`setup.yml` 增加发布第 7 个提案（规则）的步骤并更新快照。
-- **测试结构**：`ContentFilesIT` 改为继承 `PublicationItSupport`（商家令牌多了 `qb.publication.write`）；另有 `PublicationReviewSettingsIT`（需要未发布提案的新装系统）
-  与 `PublicationTickBatchIT`（数全部发布）各成一类。平台测试基类在每个测试前把时钟拨回起点，发布的集成测试因此先把时钟拨到本类已有操作之后（否则定时任务写的版本早于已有版本，变基冲突；清扫任务的计划时刻重复而被重放）。
-- **场景**需要 `properties: jabiz.jobs.lock-at-least-for: 0s`：同一任务在几秒内运行两次，否则第二次因集群锁 `LOCKED`（平台缺口 7）。
+- **`revision` 与 `editedAt`**：发布行的每一次写入（含状态变化）都加 1、记时间。回到草稿（驳回、审核中到期、撤回）一律清空 `approvalRequestId`；恢复时清空 `pausedAt`。
+- **迁移由流程自己先查起点**：平台只拒绝声明之外的迁移，看不到"迁到原状态"或"声明了但不是本操作的"迁移。撤回、暂停、恢复先查起点，不符即以平台的 422 `ILLEGAL_TRANSITION` 拒绝；写入时也再查一次声明。
+- **提交先读一次发布再取锁**：模版锁在前，而只有发布知道其模版；先读出 `quizId`，取模版锁（共享）与发布锁，再读一次，期间模版变了即 409。
+- **系统流程**（`APPROVAL_RESULT`、`TICK`、`ADVANCE`）经默认视图读取，权限 `qb.publication.system`（不授予任何角色；计划写的是 `qb.publication.tick` 与 `qb.review.publication`）。
+- **保存输出的 `problems`** 带按调用者语言的文案；复制的缺省名称为消息 `qb.publication.copy-name`（三语，过长时按字符（码点）截短源名称）。
+- **`qb.sponsor.quizzes`** 增加 `publicationCount`、`published`（可筛选）。`content.yml` 的快照不含模板结果，没有变化；`setup.yml` 增加发布第 7 个提案（规则）的步骤并更新快照。
+- **日程表**（评审 R2、R3）：普通表 `qb_publication_schedule`，见 D-Q4-7 的修订；`V4` 尚未合入，直接修改了 `V4`（没有另加 `V5`）。
+- **数据视图的写权限**（评审 S3）：发布与内容（Q3）的默认数据视图的写权限都改为不授予任何角色的 `qb.content.view.write`（流程的写入不看它）。
+- **测试结构**：`ContentFilesIT` 改为继承 `PublicationItSupport`；`PublicationReviewSettingsIT`（新装系统）、`PublicationTickBatchIT`（数全部发布）、`PublicationTickFailureIT`（植入坏的日程行）各成一类。
+- **场景**需要 `properties: jabiz.jobs.lock-at-least-for: 0s`（平台缺口 7）。
 - `deploy/quizbuks/README.md` 写明：规则与参数的提案发布之前，提交发布一律被拒。
+
+### 评审后的修改（2026-10-11）
+
+- **S1 / R1 审批结果只认自己的请求**：`QB_PUBLICATION_APPROVAL_RESULT` 的权限改为不授予任何角色的 `qb.publication.system`（内容管理员直接调用 403）。
+  输入加 `requestId`（取自事件），只有等于发布的 `approvalRequestId` 才处理；批准还要 `RequireApproval` 得到的就是这个请求；驳回不信事件，读存储的请求：须为 `REJECTED`、
+  同一审批对象与发布、内容哈希等于发布当前的内容。持有 `*` 的管理员仍能调用，但伪造的结果不起作用（测试 `forgedOrForeignApprovalResultsChangeNothing`）。
+  撤回后不变内容再提交，旧请求迟到的驳回事件被忽略，新请求照常批准（`aStaleRejectionIsIgnoredAndTheNewRequestStillCounts`）。
+- **S2 金额上限**：奖励与预算上限至多 10^12 Kudos（`PublishingLimits.MAX_MONEY`，字段规则 400）；预计最大支出存储时不超过它，超过时提交被拒（`QB_PUBLICATION_SPEND_RANGE`），不再 500。
+- **S3**：见上"数据视图的写权限"。
+- **R2 日程表**：定时任务与移除模版改经 `qb_publication_schedule`（`next_due_at` 部分索引、`quiz_id` 索引）；时态表上去掉了用不上的 `quiz_id`、`version_id`、`(status, start_at)`、`(status, end_at)` 索引。
+  回到草稿即删除日程行，因此"已提交又被驳回的发布在模版移除时保留文件"的小泄漏也不再有。
+- **R3 审核中到期**：日程对待审核的发布取结束时间；到期时 `QB_PUBLICATION_ADVANCE` 撤回审批（待办随之取消）、回到草稿，`rejectCode = QB_PUBLICATION_EXPIRED_IN_REVIEW`。
+- **R4 嵌套档位**：`TierCoverage` 按"到目前为止最高的结束分"判断缺口与重叠、按最高结束分判断是否到满分；jqwik 另以逐分计数的独立实现对照报告的代码集合（1 000 例）。
+- **R5 `copiedFrom`**：改为源主键的文本（不可变、有索引），不再是引用：被复制过的草稿可以删除。
+- **R6 批量**：每批 50 条。平台的 `HoldLock` 只有全局等待时限（`jabiz.process.lock-timeout`，缺省 30 秒），没有逐项的短等待；见已知问题。
+- **R7**：复制名称按码点截短（带表情的测试）；`QB_PUBLICATION_FIELD_REQUIRED` 文案不再显示字段名。
+- **R8**：补上旧事件、其他审批对象、一批中一项失败、待审核到期的测试。时态表不被 UPDATE / DELETE 由触发器保证；测试中 `pg_stat_user_tables` 的计数只作确认，可能滞后。
 
 ### 测试
 
-单元：`TierCoverageTest`（含 500 例 jqwik 与逐分计数的独立实现对照）、`PublicationReadinessTest`、`PublicationRulesTest`（迁移表穷举、边界前后 1 毫秒、规则产生的迁移都已声明）、
-`PublicationApprovalsTest`、`RegionsTest`、`QbRolesTest`、`MessagesTest`。
-集成：`PublicationIT`（10）、`PublicationLifecycleIT`（6，含暂停与定时任务并发）、`PublicationOwnerIT`（5）、`PublicationReviewSettingsIT`（1）、`PublicationTickBatchIT`（1，201 条分两次）、
-`ContentFilesIT` 新增 2（移除模版后已提交发布的文件保留、草稿的被清扫且不可再提交；提交与移除并发）、`SetupIT` / `SetupRemovalsIT` 扩展（规则只提出一次，停用后不加回）。
-每个发布集成测试后检查 9 张时态表没有 UPDATE / DELETE。场景 `qb/publishing.yml`（新快照）。
+单元：`TierCoverageTest`（含 500 例覆盖判断与 1 000 例代码集合的 jqwik 对照）、`PublicationReadinessTest`、`PublicationRulesTest`、`PublicationApprovalsTest`、`CopyNameTest`、`RegionsTest`、`QbRolesTest`、`MessagesTest`。
+集成：`PublicationIT`（15）、`PublicationLifecycleIT`（6，含暂停与定时任务并发）、`PublicationOwnerIT`（5）、`PublicationReviewSettingsIT`（1）、`PublicationTickBatchIT`（1，51 条分两次）、
+`PublicationTickFailureIT`（1）、`ContentFilesIT` 新增 2、`SetupIT` / `SetupRemovalsIT` 扩展。场景 `qb/publishing.yml`（快照含日程表）。
 
 ### 已知问题
 
-- 被复制过的草稿不能删除：副本的 `copiedFrom` 引用它，平台 422 `STILL_REFERENCED`。可接受（删除副本后即可删除）；若要改，`copiedFrom` 改为不作引用的文本。
-- 定时任务的一批在同一事务中（平台缺口 6）：一条失败整批回滚、下一分钟重试。
+- **一批的事务**（平台缺口 6）：一批中一项失败，整批回滚、下一分钟重试；一项持续失败（或其发布锁被长时间占用，等满 30 秒的锁时限）会挡住同批其他发布（饥饿）。
+  以批量 50 缓解。**Q5 须注意**：开始答题、提交、自动提交都取发布锁，持锁要短；`QB_ATTEMPT_EXPIRE` 有同样的批量问题，Q5 前评估平台缺口 6。
 - 状态在结束时间后至多一分钟仍为 `LIVE`；判断一律以 `PublicationRules` 为准。
 - `SponsorChecks` 在 Q2 之前恒为通过。
+- 持有 `*` 的管理员（平台的首个管理员）仍能直接调用系统流程；结果已由请求校验约束，但调用本身只留操作记录。
 - 页面未做；PR 上的 CI 未运行。
 
 ## 风险
@@ -403,6 +422,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 7. **（新，小）场景中同一定时任务在几秒内运行两次会得到 `LOCKED`**：`runJob` 不重置集群锁，`jabiz.jobs.lock-at-least-for`（缺省 30 秒，真实时间）使第二次被挡。
    Q4 的场景以 `properties: jabiz.jobs.lock-at-least-for: 0s` 绕行。建议场景回放默认把它设为 0（或 `runJob` 前释放该任务的锁）。
+8. **（新）`internal()` 仍照常检查权限，容易误用**：它只让流程不进目录。只该由平台（事件、定时任务）执行的流程若沿用业务权限（如审批人的权限），
+   持有者可直接调用并伪造结果。应用以不授予任何角色的权限绕行（`qb.publication.system`），持有 `*` 的管理员仍可调用。建议平台提供"只允许系统身份执行"的声明（如 `pb.systemOnly()`）。
+9. **（新，测试）平台测试基类每个测试前把时钟拨回起点，而 schema 按类共享**：同一类中后一个测试的写入可能早于前一个测试留下的版本（时态写入变基冲突），
+   以同一计划时刻运行的任务被重放。应用测试以"拨到本类已有操作之后"绕行（`PublicationItSupport.install`）。建议平台只在类开始时设时钟，或提供按类的时钟。
+10. **（小）`WithdrawApproval` 没有条件形式**（`when`）：`QB_PUBLICATION_ADVANCE` 以一个不存在的单据标识绕行。`HoldLock` 也没有逐步的等待时限（R6）。
 
 不需要平台新能力的点：
 - 受控参数（D40）与受控变更已支持 `SysApprovalRule`；

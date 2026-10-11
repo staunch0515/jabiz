@@ -101,8 +101,9 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbPublication` | T | `sponsorId`、`quizId`（随版本冗余存放，有索引）、`versionId`、`versionLabel`、`name`、`regions`（多值，`Regions.TARGETS`：非空子集，不强制含 GLOBAL）、`startAt`、`endAt`、`timeLimitSec`、`fullScore`（取自版本）、`passScore`、`budgetCap`（可选）、`maxWinners`（可选）、`maxReward`（档位最高额）、`maxSpend`（预计最大支出）、`tierCount`、`status`（见 5.1）、`rejectReason`、`rejectCode`（如 `QB_PUBLICATION_EXPIRED_IN_REVIEW`）、`approvalRequestId`、`submittedAt`、`approvedAt`、`pausedAt`、`endedAt`、`endReason`（`EXPIRED` / `QUOTA` / `BUDGET`）、`revision`、`editedAt`（以上派生值与状态 `processOnly`）、`copiedFrom` | 一次投放（Q4，`plans/Q4-publishing.md`）。只有草稿可改，提交即冻结内容与全部策略；审核用平台审批（`ApprovalSubject` `qb.publication`） |
+| `QbPublication` | T | `sponsorId`、`quizId`（随版本冗余存放）、`versionId`、`versionLabel`、`name`、`regions`（多值，`Regions.TARGETS`：非空子集，不强制含 GLOBAL）、`startAt`、`endAt`、`timeLimitSec`、`fullScore`（取自版本）、`passScore`、`budgetCap`（可选）、`maxWinners`（可选）、`maxReward`（档位最高额）、`maxSpend`（预计最大支出）、`tierCount`、`status`（见 5.1）、`rejectReason`、`rejectCode`（如 `QB_PUBLICATION_EXPIRED_IN_REVIEW`）、`approvalRequestId`、`submittedAt`、`approvedAt`、`pausedAt`、`endedAt`、`endReason`（`EXPIRED` / `QUOTA` / `BUDGET`）、`revision`、`editedAt`（以上派生值与状态 `processOnly`）、`copiedFrom`（源的主键，不作引用） | 一次投放（Q4，`plans/Q4-publishing.md`）。只有草稿可改，提交即冻结内容与全部策略；审核用平台审批（`ApprovalSubject` `qb.publication`） |
 | `QbRewardTier` | T | `publicationId`、`sponsorId`、`seq`、`fromScore`、`toScore`、`reward` | 每个发布至多 20 档；区间不重叠、覆盖 0 到满分、至少一档奖励大于 0（提交时 `TierCoverage` 检查）；可从 0 分起 |
+| `QbPublicationSchedule` | P | `publicationId`（主键）、`quizId`、`versionId`、`nextDueAt` | 已提交且未退回草稿的发布：定时任务按 `nextDueAt` 取到期的，移除模版时按 `quizId` 找出要保留文件的版本（都是普通索引；时态表上按可变字段查找要扫全部历史） |
 | `QbPublicationCounter` | P | `publicationId`（主键）、`starts`、`completions`、`passes`、`winners`、`reserved`、`spent` | 高频计数与预算占用，上架时插入全 0 的一行（Q4），只在发布锁内更新（4.3，Q5）；不进时态（否则每次答题都给发布追加一个版本） |
 | `QbAttempt` | P → 结束后封存 | `userId`、`publicationId`（二者唯一，6 一人一次）、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`optionOrder`（jsonb，打乱后的顺序【缺省 Q8】）、`currentIndex`、`submittedAt`、`score`、`passed`、`tierId`、`reward`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt` | 答题会话。进行中可改（保存进度，U-41），提交后不再变（流程拒绝，审计照常） |
 | `QbAttemptAnswer` | P | `attemptId`、`questionNo`、`selected`（选项号数组）、`correct` | 逐题答案；`correct` 在提交时才写 |
@@ -190,7 +191,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - **状态只表达人与钱的开关**（审核、暂停、预算不足、结束），开始与结束由时间字段本身表达。"现在接受新的答题吗"只由
   `PublicationRules.acceptsNewAttempts(status, startAt, endAt, now)` 判断：`LIVE` 且 `startAt ≤ now < endAt`。Q5 的开始答题（在发布锁内）与首页模板用同一条件；
   因此定时任务晚一分钟不影响正确性。`PAUSED`、`FUNDS_SHORT`、`ENDED` 拒绝新的开始，已开始的会话照常作答与提交（需求 5.3-2、M-33）。
-- **定时上下架**（`QB_PUBLICATION_TICK`，每分钟）：按状态与时间找出全部到期的发布（停机期间错过的时刻由下一次运行补上），每次至多 200 条，逐条在发布锁内按
+- **定时上下架**（`QB_PUBLICATION_TICK`，每分钟）：按 `QbPublicationSchedule.nextDueAt` 找出全部到期的发布（停机期间错过的时刻由下一次运行补上），每次至多 50 条，逐条在发布锁内按
   `PublicationRules.next` 迁移：`SCHEDULED` 到开始时间 → `LIVE`；`SCHEDULED / LIVE / PAUSED / FUNDS_SHORT` 到结束时间 → `ENDED`（`endReason = EXPIRED`）。
 - **暂停**：可从 `SCHEDULED`、`LIVE` 暂停；恢复按时间回到 `SCHEDULED`（未到开始）、`LIVE`（进行中）或 `ENDED`（已过结束）。`FUNDS_SHORT` 的暂停与恢复由 Q5/Q6 定。
 - **预算不足**：发布的预算上限或名额用完即 `ENDED`（`BUDGET` / `QUOTA`，Q5）；商家钱包余额不足即 `FUNDS_SHORT`，充值后补发完该商家全部待支付奖励时回到 `LIVE`（若未到期，Q5/Q6）。
@@ -213,7 +214,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_DELETE` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导第一、二步保存草稿（可不完整），输出提交时会报告的全部问题与预计最大支出（第三步）；删除只限草稿；复制任意状态的本人发布为新草稿，可换版本或时间（Q4） |
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
 | `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态 |
-| `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件） | 批准且内容未变 → 上架；驳回 → 草稿附理由 |
+| `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件；`qb.publication.system`，不授予任何角色） | 只认发布自己的请求（`approvalRequestId`）：批准且内容未变 → 上架；驳回（以存储的请求为准）→ 草稿附理由 |
 | `QB_VIEW` | `qb.play` | 记第一次浏览（重复忽略） |
 | `QB_ATTEMPT_START` | `qb.play` | 发布锁内：发布 `LIVE`、用户可见（地区、时间）、用户 `ACTIVE` 且已激活、未参加过、名额与预算（`spent + reserved + maxReward ≤ budgetCap`）→ 建会话（`deadline = now + timeLimit`）、`reserved += maxReward`、`starts += 1`。返回题目（**不含正确答案**）与打乱后的选项顺序 |
 | `QB_ATTEMPT_SAVE` | `qb.play` | 保存当前题号与已选答案；超过 `deadline` 拒绝 |
@@ -229,7 +230,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_USER_BAN` / `QB_USER_UNBAN` | `qb.admin.users.ban` | 封禁：不能登录（G1 登录前检查）、不进转账 |
 | `QB_BROADCAST_SAVE` / `QB_BROADCAST_DISPATCH`（任务） | `qb.broadcast.write` / 系统 | 定时发送：到时置 SENT；商家通知只能关联自己的进行中发布 |
 | `QB_MESSAGE_MARK` | `qb.me` | 已读 / 点击 |
-| `QB_PUBLICATION_TICK`（任务）/ `QB_PUBLICATION_ADVANCE` | 系统（`qb.publication.tick`，不授予任何角色） | 每分钟：按状态与时间找出到期的发布（至多 200 条），逐条在发布锁内 SCHEDULED → LIVE、到期 → ENDED |
+| `QB_PUBLICATION_TICK`（任务）/ `QB_PUBLICATION_ADVANCE` | 系统（`qb.publication.system`，不授予任何角色） | 每分钟：按日程表找出到期的发布（至多 50 条），逐条在发布锁内 SCHEDULED → LIVE、到期 → ENDED、待审核而到期 → DRAFT |
 | `QB_FX_FETCH`（任务） | 系统 | 每日取 ECB 参考汇率（`BlockingStep`），手动覆盖优先 |
 | `QB_RECONCILE`（任务） | 系统 | 每日余额核对（4.2）、与 Stripe 余额交易报告核对（以后，F-05） |
 
