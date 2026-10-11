@@ -55,6 +55,42 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
 
 与 golden 的"业务只修改数据、最后由框架统一保存"是同一思想。
 
+### 2.3 外部调用【D38，阶段 16e-1】
+
+业务调用其他系统**只在 `BlockingStep` 中、只经声明的外部服务**进行（短调用；耗时数十秒的调用用异步外部作业，16e-2）。
+
+- **声明**（core `com.jabiz.external.ExternalService`，Bean）：
+  ```java
+  ExternalService.define("demo-ai", s -> s.baseUrl("https://ai.example.com/v1").allowedHosts("ai.example.com")
+      .secret("apiKey", "JABIZ_DEMO_AI_KEY").connectTimeout(ofSeconds(5)).requestTimeout(ofSeconds(10))
+      .idempotencyHeader("Idempotency-Key").maxResponseSize(64 * 1024).allowInDryRun())
+  ```
+  名字 `[a-z][a-z0-9-]{0,39}`；主机只写名字（小写，不带协议、端口）；环境变量名 `[A-Z][A-Z0-9_]*`；连接超时缺省 5 s、至多 30 s，
+  请求超时缺省 30 s、至多 2 min（阻塞步骤占着流程的事务，更长的用作业）；响应上限缺省 1 MiB、至多 16 MiB。
+  `jabiz.external-services.<名>.base-url | allowed-hosts` 按环境覆盖地址与主机（测试、开发指向本地桩服务），其他属性只在代码中。
+- **调用**：注入 `ExternalServices`，`http(服务)` 得到同步的 `ExternalHttp`，`send(Request)` 返回 `Response`（状态、请求头、字节或文本）。
+  `Request.post("/v1/moderate").header(…).json(…).timeout(…).idempotencyKey(…)`：目标是相对路径（按 RFC 3986 对基础地址解析）或白名单内的绝对地址；
+  超时不超过服务的请求超时。`secret(服务, 名)` 取启动时读入的密钥；`idempotencyKey(后缀)` 为 `jabiz-<processSeqId>-<后缀>`，同一流程的提交后步骤各次重试不变，
+  交给提供方去重。
+- **平台对每次请求的检查**（runtime `JdkExternalHttp`，每个服务一个 JDK `HttpClient`）：
+  1. 在非阻塞线程上调用即 `IllegalStateException`；不在阻塞步骤中（没有 `ExternalCallScope`）同样拒绝。`ProcessExecutor` 执行 `BlockingStep` 时在其虚拟线程上设置
+     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完即清除。
+  2. 试运行中拒绝，除非服务声明 `allowInDryRun()`（只读、幂等的调用）。
+  3. 解析后的地址按 `OutboundAddresses`（与 Webhook 共用）检查：https（http 只限本机）、不带用户信息、主机在该服务的白名单中。`//其他主机/…` 这类相对目标解析后同样被拒。
+  4. 不跟随重定向（3xx 原样返回）；整个交换（含读完响应）不超过超时，响应超过上限即失败；不自动重试。
+  5. 失败抛 `ExternalCallException`（种类 `REFUSED` / `TIMEOUT` / `TOO_LARGE` / `UNAVAILABLE` / `BAD_RESPONSE`，后者供步骤判断不可用的回答），
+     API 为 502 `EXTERNAL_CALL_FAILED`（参数为服务名与种类）。消息只含服务名、种类与地址的协议、主机、端口，不含路径、查询、请求头与正文，也不附带 JDK 的异常。
+- **密钥**：启动时经 `Environment` 读取，只在内存中，不进日志、`toString`、异常与流程上下文。缺失时启动检查报错；`dev` 与静态校验
+  （`jabiz.external.missing-secrets=warning`）中为告警，用到时才失败。
+- **启动检查 `EXTERNAL`**：名字合法且唯一、白名单非空且为主机名、基础地址可发送且主机在白名单中、超时与上限在范围内、请求头名合法、环境变量已设置、
+  配置中没有未声明的服务，一次报全。
+- **副作用**：与 §4 相同——有副作用的调用放 `AFTER_COMMIT`，或带提供方的幂等键（`idempotencyKey`）；只读的调用可在事务内。
+- **ArchUnit**：平台在 runtime 的测试夹具中提供 `PlatformArchRules.noDirectNetworkAccess(业务包)`：业务包不得使用 `java.net.http..`、`javax.net..`、
+  Spring 的 HTTP 客户端、套接字与套接字通道、`URLConnection`，不得调用 `URL#openConnection` / `openStream`；示范 `app` 与各应用的 `ArchitectureTest` 引用它。
+- 观测：`jabiz.external.call`（标签只有 `service` 与 `outcome`：`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`）。
+- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`；
+  手工演示的桩服务 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）。
+
 ## 3. 上下文与变更集
 
 `ProcessContext` 扩展：
@@ -97,7 +133,7 @@ public class ProcessContext {
 - **有外部副作用的 `BlockingStep` 必须使用 `AFTER_COMMIT`，或者该外部调用本身是幂等的**（避免事务回滚后外部状态已改变）。
   优先使用 `PublishEvent`（Outbox）代替在流程内直接调用外部系统。
 - **试运行**（`ExecutionOptions.DRY_RUN`，决策 D26）：流程照常执行完，然后整个事务（含 `op_process`、变更、Outbox、单据号计数）回滚，返回输出；
-  不执行提交后步骤，不接受 `Idempotency-Key`。导入的预览即如此（20 §5）。
+  不执行提交后步骤，不接受 `Idempotency-Key`。导入的预览即如此（20 §5）。阻塞步骤（含子流程的）知道是试运行，其中的外部调用缺省被拒（§2.3）。
 - **保存点**（`StorageEngine.inSavepoint`，决策 D26）：平台步骤可在事务内把一段工作放在保存点之后，失败时只撤销这一段、事务继续；
   只供平台自己的步骤使用（导入按单元执行子流程，20 §5），不对业务开放。
 

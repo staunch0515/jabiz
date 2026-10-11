@@ -1072,6 +1072,15 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 **放弃的方案**：①长调用直接放在 `BlockingStep` 中（占用事务与连接数十秒）；②用 Outbox 消费者执行长调用（消费者流程同样在事务中）；
 ③引入外部队列或任务框架（CLAUDE.md 不引入 Kafka、Redis）。
 
+**实现说明**（阶段 16e-1 实现第 1、2 条；第 3–5 条为 16e-2；详见 06 §2.3）：
+1. 外部服务以 core `ExternalService` Bean 声明（名称、基础地址、主机白名单、密钥的环境变量、连接与请求超时、幂等键请求头、响应上限、`allowInDryRun`）；
+   地址与主机可按环境覆盖（`jabiz.external-services.<名>.*`）。客户端只有平台的 JDK HTTP（`ExternalServices#http`，Q9）：官方 SDK 自带的出站不受主机白名单约束，本阶段不开放。
+   重试不在声明中：`ExternalHttp` 不自动重试（Q22），需要重试的调用放提交后步骤，按其 `RetryPolicy`。
+2. 每次请求都检查：阻塞步骤的虚拟线程（`ExternalCallScope`，非阻塞线程即拒绝）、试运行（缺省拒绝，Q15）、地址（`OutboundAddresses`，与 Webhook 共用）；
+   不跟随重定向，超时含读完响应，响应有上限。失败为 502 `EXTERNAL_CALL_FAILED`，消息不含路径、查询、请求头与正文。
+3. 密钥缺失：启动检查 `EXTERNAL` 报错；`dev` 与 `platformCheck`（`jabiz.external.missing-secrets=warning`，部署环境不在那里）为告警。
+4. 业务包不得直接使用网络客户端：平台的共用 ArchUnit 规则 `PlatformArchRules.noDirectNetworkAccess`（runtime 测试夹具，应用经 `testFixtures(project(":runtime"))` 得到，Q21）。
+
 ## D39 OIDC 自动开户
 
 **背景**：D28 第 6 条规定外部账号只能由管理员关联、不自动开户（理由：否则外部身份提供方即可决定谁能进入系统）。

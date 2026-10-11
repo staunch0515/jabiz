@@ -1262,7 +1262,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3.5–4 天 | — |
-| 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2） | D38 | 4.5–6 天 | — |
+| 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
@@ -1681,6 +1681,8 @@ Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `Sal
 
 #### 16e-1 外部服务声明、阻塞步骤中的调用（1.5–2 天）
 
+**16e-1 状态**：☑ 已完成（分支 `1.2/phase-16e1-external-services`，PR 待建）。完成说明见本节末尾。
+
 **要求**
 1. **声明**（core `com.jabiz.external.ExternalService`，Bean）：
    ```java
@@ -1704,6 +1706,25 @@ Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `Sal
 5. **启动检查 `EXTERNAL`**：名字唯一且合法、白名单非空、基础地址的主机在白名单中且为 https（http 只限本机）、超时为正且有上限、环境变量缺失。一次报全。
 6. **ArchUnit**（`app` 的 `ArchitectureTest`）：业务包不得依赖 `java.net.http..`、`java.net.Socket`、`java.net.URLConnection` / `HttpURLConnection`、`URL#openConnection|openStream`、`javax.net..`、`org.springframework.web.reactive.function.client..`、`org.springframework.web.client..`。使用官方 SDK 的方式见 Q9；应用分支怎样得到这条规则见 Q21。
 7. 文档：06 新增 §2.x"外部调用"（D38 第 1、2 条，`AFTER_COMMIT` 或幂等键）；CLAUDE.md 第 4 节已写明，不改。
+
+**16e-1 完成说明**
+- 实现：core `com.jabiz.external`（`ExternalService`、`ExternalHttp`（`Request` / `Response`）、`ExternalServices`、`ExternalCallException`，覆盖率门禁已加入）；
+  runtime `com.jabiz.runtime.external`（`ExternalServiceRegistry`、`ExternalChecks`（类别 `EXTERNAL`）、`JdkExternalHttp`、`ExternalServicesImpl`、`ExternalCallScope`）；
+  `web/OutboundAddresses`（`WebhookChecks.refusal` 抽出，两处共用）；`ProcessExecutor.dispatch` 设置 `ExternalCallScope`，试运行经 Reactor 上下文传给子流程的阻塞步骤；
+  `PlatformObservations.EXTERNAL_CALL`；共用 ArchUnit 规则 `PlatformArchRules.noDirectNetworkAccess`（runtime 测试夹具，Q21）。06 §2.3、07、11 §2.4、13、D38 实现说明、功能清单与教程已更新。
+- 示范：`demo-ai`（`ModerateText.DEMO_AI`，`allowInDryRun`）；新流程 `PRODUCT_RENAME`（`actsOn Product`，权限 `commerce.product.write`）以阻塞步骤 `ModerateText`
+  审核新名称，被判为不当即 422 `COMMERCE_TEXT_INAPPROPRIATE`。没有迁移。手工演示的桩服务 `tools/demo/ai-stub/AiStub.java`（Q20，16e-2 再加 `/v1/generate`）。
+- 测试：core `ExternalServiceTest`、`ExternalHttpTest`；runtime `OutboundAddressesTest`、`ExternalChecksTest`、`JdkExternalHttpTest`（本地 `HttpServer`）；
+  app `ExternalServiceIT`（`StubAiServer`）与 `ArchitectureTest` 的正例与反例（`archfixture.DirectNetworkCalls`）。
+- 与计划不同之处：
+  - 失败为 core 的 `ExternalCallException`，API 502 `EXTERNAL_CALL_FAILED`（三语；参数为服务名与种类），步骤也可用它报告不可用的回答（`BAD_RESPONSE`）。
+  - 在阻塞步骤之外（没有 `ExternalCallScope`）调用同样拒绝，不只是非阻塞线程；`secret` 与 `idempotencyKey` 也只在阻塞步骤中可用。16e-2 的作业处理器将设置自己的范围。
+  - D38 第 1 条的"重试策略"不在服务声明中：按 Q22 不自动重试，需要重试的调用放提交后步骤。
+  - 密钥缺失在 `platformCheck` 中为告警（`PlatformCheckLauncher` 传 `jabiz.external.missing-secrets=warning`：静态校验没有部署的环境）。
+    因此非 `dev` 启动示范应用还需要 `JABIZ_DEMO_AI_KEY`（任意值）：CI 的 e2e 作业随机生成，`docker/app-entrypoint.sh` 缺省生成占位值，CLAUDE.md 第 6 节与快速上手已注明。
+  - 示范流程是新的 `PRODUCT_RENAME`（计划只写了 `ModerateText`；16e-2 的商品文案流程另加）。
+- 已知限制：主机白名单按名字比较，不解析 IP（DNS 指向内网地址不在检查之内，同 Webhook）；超时依靠 JDK 客户端取消请求，卡住的连接最迟随客户端关闭释放；
+  JDK 客户端沿用 JVM 的代理设置（`https.proxyHost` 等）；官方 SDK 不在本阶段（Q9）。
 
 #### 16e-2 异步外部作业（3–4 天）
 
@@ -1825,7 +1846,7 @@ Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `Sal
 - **合并顺序**：迁移编号与 16b-1、16d 的合并顺序；`ProcessExecutor` 的改动（`ExternalCallScope`）会经过每个阻塞步骤。
 
 **验收标准**
-- [ ] 外部服务以 `ExternalService` Bean 声明；阻塞步骤只经 `ExternalServices` 发出请求，只发往白名单主机，有超时、观测、试运行保护；业务代码直接使用网络客户端时 ArchUnit 失败；配置问题一次报全（`EXTERNAL`）。
+- [x] 外部服务以 `ExternalService` Bean 声明；阻塞步骤只经 `ExternalServices` 发出请求，只发往白名单主机，有超时、观测、试运行保护；业务代码直接使用网络客户端时 ArchUnit 失败；配置问题一次报全（`EXTERNAL`）。（16e-1：`ExternalServiceTest`、`ExternalChecksTest`、`JdkExternalHttpTest`、`ExternalServiceIT`、`ArchitectureTest`）
 - [ ] `StartExternalJob` 在流程中登记作业并立即返回作业号；回滚则没有作业。
 - [ ] 作业在事务之外执行，多实例只领取一次，按类型限制并发，超时与退避重试按类型声明，各次尝试的幂等键相同（`ExternalJobIT`）。
 - [ ] 完成后以系统身份调用完成流程（输入为作业号、结果、用量）只一次；失败用尽后调用失败流程；请求人可以收到通知。
