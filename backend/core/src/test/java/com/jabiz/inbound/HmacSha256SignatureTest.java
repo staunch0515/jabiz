@@ -87,5 +87,14 @@ class HmacSha256SignatureTest {
         assertThat(headers.values("X-JABIZ-TIMESTAMP")).containsExactly("1");
         assertThat(headers.values("missing")).isEmpty();
         assertThat(InboundHeaders.of(null).values("x")).isEmpty();
+        assertThat(headers.values(null)).isEmpty();
+        // The same header under two spellings is one header with every value.
+        Map<String, List<String>> twice = new java.util.LinkedHashMap<>();
+        twice.put("X-Jabiz-Timestamp", List.of("1"));
+        twice.put("x-jabiz-timestamp", List.of("2"));
+        twice.put("X-Empty", null);
+        InboundHeaders merged = InboundHeaders.of(twice);
+        assertThat(merged.values("x-jabiz-TIMESTAMP")).containsExactly("1", "2");
+        assertThat(merged.values("x-empty")).isEmpty();
     }
 }

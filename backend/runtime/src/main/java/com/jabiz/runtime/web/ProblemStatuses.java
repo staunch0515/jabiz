@@ -15,6 +15,7 @@ import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
+import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.security.EmailNotVerifiedException;
 import com.jabiz.runtime.security.MfaRequiredException;
 import com.jabiz.runtime.security.SignInRefusedException;
@@ -49,6 +50,7 @@ public final class ProblemStatuses {
             case IdempotencyConflictException e -> 409;
             case BusinessRuleViolationException e -> 422;
             case PayloadTooLargeException e -> 413;
+            case InboundRejectedException e -> 400;
             case RateLimitedException e -> 429;
             // Too much asked of the database just now: not the caller's mistake, and not a defect.
             case QueryTimeoutException e -> 503;
@@ -78,6 +80,7 @@ public final class ProblemStatuses {
             case AuthenticationFailedException e -> List.of(new Violation(null, e.code(), e.getMessage()));
             case ImportConflictException e -> List.of(new Violation(null, e.code(), e.getMessage(), e.params()));
             case PayloadTooLargeException e -> e.violations();
+            case InboundRejectedException e -> e.violations();
             case RateLimitedException e -> e.violations();
             case QueryTimeoutException e -> List.of(new Violation(null, PlatformErrorCodes.QUERY_TIMEOUT,
                 "The query did not finish within its time limit", Map.of()));
