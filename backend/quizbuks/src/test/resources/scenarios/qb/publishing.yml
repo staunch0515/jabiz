@@ -154,7 +154,7 @@ steps:
 
   - note: The minute's job puts it live at its start.
     setClock: 2026-10-03T00:00:00Z
-  - runJob: { job: qb.publication-tick }
+  - runJob: { job: qb.publication-tick, items: { succeeded: 1 } }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: LIVE } }
 
   - note: A pauses and resumes it.
@@ -171,7 +171,7 @@ steps:
 
   - note: The job ends it at its end.
     setClock: 2026-10-10T00:00:00Z
-  - runJob: { job: qb.publication-tick }
+  - runJob: { job: qb.publication-tick, items: { succeeded: 1 } }
   - expect: { entity: QbPublication, id: "${pub}", fields: { status: ENDED, endReason: EXPIRED } }
 
   - note: A runs it again with new times; sponsor B cannot touch A's publication.

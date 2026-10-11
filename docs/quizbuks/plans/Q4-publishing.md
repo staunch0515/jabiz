@@ -143,6 +143,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ### D-Q4-7 定时上下架
 
+> **Q5b 起已替换**（2026-10-11，见 `Q5-answering.md` 的 Q5b 实施记录）：`qb.publication-tick` 改为平台 16k 的逐项任务（决策 D42）
+> `JobDefinition.forEach`，模板 `qb.system.publications-due`（`next_due_at <= 计划时刻`）选出到期的发布，每项以 `QB_PUBLICATION_ADVANCE` 在自己的事务中迁移，
+> 每次至多 2 000 项（`PublishingLimits.TICK_BATCH`）；`QB_PUBLICATION_TICK` 已删去。下面保留 Q4 当时的设计（任务、批量 200 / 50、一批一个事务）作为历史。
+
 - **任务**：`JobDefinition.cron("qb.publication-tick", "0 * * * * *", UTC, QB_PUBLICATION_TICK, t -> new TickInput(t))`。
 - **`QB_PUBLICATION_TICK`**（内部流程，系统身份）用当前操作时间找出全部到期的发布，因此停机后也能补上：
   - `SCHEDULED` 且 `startAt ≤ now`；
@@ -234,7 +238,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_PAUSE` | 同上 | `publicationId` | `actsOn`（`SCHEDULED`、`LIVE`）；发布锁 → `PAUSED`、`pausedAt`。之后的开始答题在同一把锁内看到 `PAUSED`，立即不可进入（M-35） | 迁移 422 |
 | `QB_PUBLICATION_RESUME` | 同上 | `publicationId` | `actsOn`（`PAUSED`）；按 D-Q4-1 回到 `SCHEDULED`、`LIVE` 或进入 `ENDED` | 迁移 422 |
 | `QB_PUBLICATION_APPROVAL_RESULT` | `qb.publication.system`（不授予任何角色），`internal()` | 审批事件 | D-Q4-4 | — |
-| `QB_PUBLICATION_TICK` | `qb.publication.system`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7 | — |
+| ~~`QB_PUBLICATION_TICK`~~ | `qb.publication.system`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7。**Q5b 删去**：由逐项任务 `qb.publication-tick`（模板 `qb.system.publications-due`，每项 `QB_PUBLICATION_ADVANCE`，批量 2 000）代替 | — |
 | `QB_PUBLICATION_ADVANCE` | 同上，`internal()` | `publicationId` | 发布锁内按时间迁移，写 `endedAt`、`endReason = EXPIRED`；待审核而已过结束时间的撤回审批、回到草稿 | — |
 
 **纯 Java 部件**（无 I/O，单元测试）：
@@ -382,8 +386,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ### 已知问题
 
-- **一批的事务**（平台缺口 6）：一批中一项失败，整批回滚、下一分钟重试；一项持续失败（或其发布锁被长时间占用，等满 30 秒的锁时限）会挡住同批其他发布（饥饿）。
-  以批量 50 缓解。**Q5 须注意**：开始答题、提交、自动提交都取发布锁，持锁要短；`QB_ATTEMPT_EXPIRE` 有同样的批量问题，Q5 前评估平台缺口 6。
+- ~~**一批的事务**（平台缺口 6）~~ **已解决（Q5b，2026-10-11）**：`qb.publication-tick` 改为平台 16k 的逐项任务（决策 D42），每个发布 `QB_PUBLICATION_ADVANCE` 一个事务，一项失败只记它自己并退避重试，锁被占用的项下一分钟再做（`BUSY`），批量 2 000；`QB_PUBLICATION_TICK` 已删去（`PublicationTickFailureIT`、`PublicationTickBatchIT` 改写，见 `Q5-answering.md` 的 Q5b 实施记录）。
 - 状态在结束时间后至多一分钟仍为 `LIVE`；判断一律以 `PublicationRules` 为准。
 - `SponsorChecks` 在 Q2 之前恒为通过。
 - 持有 `*` 的管理员（平台的首个管理员）仍能直接调用系统流程；结果已由请求校验约束，但调用本身只留操作记录。
@@ -392,7 +395,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 ## 风险
 
 - **审批规则未发布的窗口**：新装系统在财务管理员发布规则之前，`autoApprove = false` 的提交一律被拒（`QB_REVIEW_NOT_CONFIGURED`）。这是有意为之；需要写进部署说明（`deploy/quizbuks/README.md`）。
-- **定时任务的整批事务**：一批中有一条失败，整批回滚并在下一分钟重试；持续失败的那一条会挡住同批的其他发布。用批量上限、锁内重新检查、启动检查缓解，最终靠平台缺口 6。
+- ~~**定时任务的整批事务**~~：已由 Q5b 的逐项任务解决（见已知问题）。
 - **状态与时间不一致的一分钟**：`LIVE` 在 `endAt` 之后最多再显示一分钟。凡是做判断的地方都以时间为准，不影响正确性；商家后台显示状态时，应同时按时间显示（页面阶段的约定）。
 - **"预算不足"的解释**【待确认 Q4-8】：如果需求方的意思是"发布预算用完即预算不足，充值后恢复"，Q5 的迁移需要调整。
 - **审核人看内容**：通用后台把版本 `content` 显示为 JSON 文本，可读性差。在审核扩展页做好之前，审核效率低（平台缺口 1 与页面阶段）。

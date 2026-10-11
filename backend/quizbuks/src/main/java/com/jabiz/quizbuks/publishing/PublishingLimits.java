@@ -16,10 +16,10 @@ public final class PublishingLimits {
     /** Longest time a publication runs, from its start to its end. */
     public static final Duration MAX_RUNNING = Duration.ofDays(366);
     /**
-     * Publications one run of the minute's tick moves on; the rest wait for the next minute. Small, because the batch
-     * is one transaction (platform gap 6): one item that keeps failing holds up the others.
+     * Publications one run of the minute's tick moves on, each in a transaction of its own (Q5b, platform decision
+     * D42); the rest wait for the next minute. {@code quizbuks.publication-tick.max-items} may lower it (tests).
      */
-    public static final int TICK_BATCH = 50;
+    public static final int TICK_BATCH = 2_000;
 
     public static final int NAME_LENGTH = 100;
     public static final int REJECT_REASON_LENGTH = 500;

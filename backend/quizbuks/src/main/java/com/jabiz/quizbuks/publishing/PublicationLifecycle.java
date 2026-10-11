@@ -18,7 +18,6 @@ import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalOutcome;
 import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.approval.WithdrawApproval;
-import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
@@ -26,7 +25,6 @@ import com.jabiz.runtime.process.steps.QueryEntities;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,8 +64,8 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
  *       the time says;</li>
  *   <li>{@code QB_PUBLICATION_APPROVAL_RESULT}: run for the approval events: an approval of the content under review
  *       puts the publication on, a rejection sends it back with the reviewer's reason;</li>
- *   <li>{@code QB_PUBLICATION_TICK} / {@code QB_PUBLICATION_ADVANCE}: every minute, the publications whose start or
- *       end has come move on, those missed while the system was down included.</li>
+ *   <li>{@code QB_PUBLICATION_ADVANCE}, run for each item of the minute's job {@value #TICK_JOB}: the publications
+ *       whose start or end has come move on, those missed while the system was down included.</li>
  * </ul>
  * Locks, always in this order (D-Q4-5): the quiz's ({@code qb.quiz:<quizId>}, shared, by submission only), then the
  * publication's ({@code qb.pub:<publicationId>}); Q5 takes the wallet's after them.
@@ -79,11 +77,16 @@ public final class PublicationLifecycle {
     public static final String PAUSE = "QB_PUBLICATION_PAUSE";
     public static final String RESUME = "QB_PUBLICATION_RESUME";
     public static final String APPROVAL_RESULT = "QB_PUBLICATION_APPROVAL_RESULT";
-    public static final String TICK = "QB_PUBLICATION_TICK";
     public static final String ADVANCE = "QB_PUBLICATION_ADVANCE";
 
-    /** The minute's job that moves publications on. */
+    /**
+     * The minute's per-item job that moves publications on: {@code QB_PUBLICATION_ADVANCE} for each publication
+     * {@link #DUE_TEMPLATE} selects, in a transaction of its own (Q5b; platform decision D42).
+     */
     public static final String TICK_JOB = "qb.publication-tick";
+
+    /** The publications whose start or end has come by a time, from the schedule ({@code nextDueAt}). */
+    public static final String DUE_TEMPLATE = "qb.system.publications-due";
 
     public record PublicationRef(@NotNull UUID publicationId) {}
 
@@ -95,14 +98,8 @@ public final class PublicationLifecycle {
     public record ApprovalResultInput(@NotBlank String subject, @NotBlank String entityId, @NotBlank String status,
         String requestId, String preparerId, String contentHash, String reason) {}
 
-    public record TickInput(@NotNull Instant scheduledTime) {}
-
-    /** @param due the publications found due (at most {@link PublishingLimits#TICK_BATCH}); each was moved on */
-    public record TickOutput(int due) {}
-
     static final String FIRST = "first";
     static final String PARAMS = "params";
-    static final String DUE = "due";
     static final String REQUEST = "request";
 
     // ---- submit ----------------------------------------------------------------------------------------------------
@@ -399,34 +396,7 @@ public final class PublicationLifecycle {
             && hash.equals(String.valueOf((Object) request.get("contentHash")).strip());
     }
 
-    // ---- tick ------------------------------------------------------------------------------------------------------
-
-    /**
-     * {@code QB_PUBLICATION_TICK}: every publication due at the operation time, by key, at most
-     * {@link PublishingLimits#TICK_BATCH}, from the schedule ({@code nextDueAt}, kept with the state): scheduled ones
-     * whose start has come, running ones and ones still in review whose end has come. It looks at the due time, not at
-     * the minute, so the minutes missed while the system was down are made up by the next run. Each is moved on by
-     * {@code QB_PUBLICATION_ADVANCE} under its own lock, all in one transaction (platform gap 6).
-     */
-    public static ProcessDefinition<TickInput, TickOutput, ProcessContext> tick() {
-        return ProcessDefinition.define(TICK, 1, TickInput.class, TickOutput.class, ProcessContext.class, pb -> pb
-            .description("Moves publications on whose start or end has come.")
-            .permissions(QbPermissions.PUBLICATION_SYSTEM)
-            .internal()
-            .contextFactory((start, input) -> {
-                ProcessContext ctx = new ProcessContext(start);
-                ctx.put(INPUT, input);
-                return ctx;
-            })
-            .outputMapper(ctx -> new TickOutput(list(ctx, DUE).size()))
-            .step("Find the publications due", QueryEntities.<ProcessContext>of(
-                QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.Lte("nextDueAt", ctx.opTime()))
-                    .orderBy("nextDueAt", true).orderBy("publicationId", true)
-                    .limit(PublishingLimits.TICK_BATCH).build(), DUE))
-            .step("Move each on", CallProcess.<ProcessContext>forEach(ADVANCE, 1, ctx -> list(ctx, DUE).stream()
-                .map(row -> new PublicationRef(uuid(row.id()))).toList(), null)));
-    }
+    // ---- advance (the items of the minute's job) -------------------------------------------------------------------
 
     /**
      * {@code QB_PUBLICATION_ADVANCE}: under the publication's lock, moves it as its times say

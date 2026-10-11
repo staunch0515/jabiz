@@ -7,6 +7,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -16,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.ZoneOffset;
+import java.util.Map;
 
 /**
  * Registers answering (docs/quizbuks/plans/Q5-answering.md): the three entities, their datasets, the two
@@ -179,6 +181,30 @@ public class PlayConfig {
     EventSubscription<QbWallets.SponsorRef> qbPendingSettleSubscription() {
         return EventSubscription.of(PendingSettlement.SUBSCRIPTION, PendingSettlement.MORE_EVENT, SETTLE,
             PendingSettlement::input);
+    }
+
+    /**
+     * Every minute (Q5b, D-Q5-9): every attempt whose deadline and grace ran out before the scheduled time is finished
+     * with its saved answers by {@code QB_ATTEMPT_EXPIRE}, one transaction per attempt (platform decision D42), at most
+     * {@link PlayLimits#EXPIRE_BATCH} by deadline per run. The selection only proposes: the process locks the
+     * publication, reads the attempt again and does nothing to one submitted meanwhile. An attempt whose publication
+     * is locked longer than the item's lock wait is left to the next minute (busy); minutes missed while the system
+     * was down are made up by the next run, which selects by deadline, not by minute.
+     *
+     * @param maxItems attempts one run finishes ({@code quizbuks.attempt-expire.max-items}, default
+     *                 {@link PlayLimits#EXPIRE_BATCH}; lowered in tests)
+     */
+    @Bean
+    JobDefinition<AttemptFinishing.ExpireInput> qbAttemptExpireJob(
+        ProcessDefinition<AttemptFinishing.ExpireInput, AttemptFinishing.ExpireOutput, ProcessContext>
+            qbAttemptExpire,
+        @Value("${quizbuks.attempt-expire.max-items:" + PlayLimits.EXPIRE_BATCH + "}") int maxItems) {
+        return JobDefinition.forEach(AttemptFinishing.EXPIRE_JOB, "0 * * * * *", ZoneOffset.UTC,
+                JobItems.template(AttemptFinishing.DUE_TEMPLATE,
+                    scheduledTime -> Map.of("cutoff", scheduledTime.minus(PlayLimits.SUBMIT_GRACE)), "attemptId"),
+                qbAttemptExpire,
+                (scheduledTime, row) -> new AttemptFinishing.ExpireInput(String.valueOf(row.get("attemptId"))))
+            .maxItems(maxItems);
     }
 
     /** Every ten minutes (U-22, requirement 6.1); a missed run is made up by the next, which counts from scratch. */

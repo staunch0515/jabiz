@@ -59,6 +59,15 @@ public final class AttemptFinishing {
     public static final String SUBMIT = "QB_ATTEMPT_SUBMIT";
     public static final String EXPIRE = "QB_ATTEMPT_EXPIRE";
 
+    /**
+     * The minute's per-item job (Q5b, D-Q5-9; platform decision D42) that runs {@link #EXPIRE} for every attempt
+     * selected by {@link #DUE_TEMPLATE}, each in a transaction of its own.
+     */
+    public static final String EXPIRE_JOB = "qb.attempt-expire";
+
+    /** The attempts in progress whose deadline and grace ran out before a cutoff, earliest deadline first. */
+    public static final String DUE_TEMPLATE = "qb.system.attempts-due";
+
     /** Events for the takers' messages (Q7): a reward paid, a reward pending. */
     public static final String SETTLED_EVENT = "qb.reward.settled";
     public static final String PENDING_EVENT = "qb.reward.pending";

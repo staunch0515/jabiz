@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Who may start the QuizBuks processes (platform decision D41): the system's hand-off points (approval results, the
- * publication tick and its per-publication step) run as the system only, the release of a removed quiz's files only
+ * items of the jobs) run as the system only, the release of a removed quiz's files only
  * as a sub-process of its removal. No caller starts them through the process API, whatever their permissions.
  */
 class ProcessAccessIT extends QbItSupport {
@@ -33,10 +33,9 @@ class ProcessAccessIT extends QbItSupport {
     private static final Map<String, ProcessAccess> CLOSED = Map.ofEntries(
         Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
-        Map.entry("QB_PUBLICATION_TICK", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),
-        // Answering (Q5): the expiry of an attempt (its job comes in Q5b), the settlement of pending rewards (an
+        // Answering (Q5): the expiry of an attempt (the items of a job), the settlement of pending rewards (an
         // event; Q6's top-up confirmation as the system), underfunded publications back on (an event), the
         // statistics (a job).
         Map.entry("QB_ATTEMPT_EXPIRE", ProcessAccess.INTERNAL),

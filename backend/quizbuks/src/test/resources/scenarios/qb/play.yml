@@ -4,7 +4,7 @@
 # for one top reward. U1 and U2 (Japan) start; U1 saves, continues and submits full marks: paid. U2's full marks
 # cannot be paid: pending, the publication underfunded, U3 cannot start. Another credit pays U2 (by event: the
 # settlement runs as the system; another event puts the publication back on). The statistics job counts the completions; the feed, the detail, the history and the wallet
-# are read. (The expiry job of Q5b is not in this phase.)
+# are read. Last, U3 starts, saves one answer and leaves: the expiry job (Q5b) finishes the attempt with it.
 name: Answering
 # The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
 properties:
@@ -213,6 +213,21 @@ steps:
       query: qb.admin.wallets
       rows: 1
       values: [{ company: Capitals Inc, balance: 100, pendingCount: 0, pendingAmount: 0 }]
+
+  - note: U3 starts, saves the first answer (2 points, the tier without reward) and never submits.
+    actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t3: $.attemptId }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SAVE@latest
+    input: { attemptId: "${t3}", currentIndex: 1, answers: [{ questionNo: 1, selected: [1] }] }
+  - note: Past the time limit and its grace, the minute's job finishes it with the saved answer.
+    advanceClock: PT6M
+  - runJob: { job: qb.attempt-expire, items: { succeeded: 1 } }
+  - expect: { entity: QbAttempt, id: "${t3}", fields: { status: EXPIRED, score: 2, rewardStatus: NONE } }
+  - note: Nothing is due any more.
+    runJob: { job: qb.attempt-expire, items: { succeeded: 0 } }
 snapshot:
   entities: [QbAttempt, QbPublicationCard, QbPublicationCounter, QbPublicationStats, QbPublicationView, QbWallet,
     LedgerTransaction, LedgerEntry]

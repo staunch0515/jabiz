@@ -202,7 +202,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - **状态只表达人与钱的开关**（审核、暂停、预算不足、结束），开始与结束由时间字段本身表达。"现在接受新的答题吗"只由
   `PublicationRules.acceptsNewAttempts(status, startAt, endAt, now)` 判断：`LIVE` 且 `startAt ≤ now < endAt`。Q5 的开始答题（在发布锁内）与首页模板用同一条件；
   因此定时任务晚一分钟不影响正确性。`PAUSED`、`FUNDS_SHORT`、`ENDED` 拒绝新的开始，已开始的会话照常作答与提交（需求 5.3-2、M-33）。
-- **定时上下架**（`QB_PUBLICATION_TICK`，每分钟）：按 `QbPublicationSchedule.nextDueAt` 找出全部到期的发布（停机期间错过的时刻由下一次运行补上），每次至多 50 条，逐条在发布锁内按
+- **定时上下架**（逐项任务 `qb.publication-tick`，每分钟，平台决策 D42）：模板 `qb.system.publications-due` 按 `QbPublicationSchedule.nextDueAt` 找出全部到期的发布（停机期间错过的时刻由下一次运行补上），每次至多 2 000 条，每条以 `QB_PUBLICATION_ADVANCE` 在自己的事务中、在发布锁内按
   `PublicationRules.next` 迁移：`SCHEDULED` 到开始时间 → `LIVE`；`SCHEDULED / LIVE / PAUSED / FUNDS_SHORT` 到结束时间 → `ENDED`（`endReason = EXPIRED`）。
 - **暂停**：可从 `SCHEDULED`、`LIVE`、`FUNDS_SHORT`（Q5）暂停；恢复按时间回到 `SCHEDULED`（未到开始）、`LIVE`（进行中）或 `ENDED`（已过结束）。
 - **预算不足**：发布的预算上限或名额用完即 `ENDED`（`BUDGET` / `QUOTA`，Q5；进行中的会话预占名额与最高奖励，因此不会超额）；商家钱包付不起一笔奖励即 `FUNDS_SHORT`（Q5）。
@@ -234,7 +234,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查）→ 建会话（`deadline = now + 时限`，选项按会话打乱）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
 | `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（不取锁）；超过 `deadline` 拒绝；非法题号或选项一次报告全部 |
 | `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
-| `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。选取它们的任务 `qb.attempt-expire` 在 Q5b（平台 16k 之后） |
+| `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |
 | `QB_TOPUP_START` | `qb.topup` | 建 `QbTopUp` 与 Stripe Checkout Session（`BlockingStep`，Stripe 幂等键 = 充值编号），返回支付页地址 |
 | `QB_TOPUP_CONFIRM` | 系统（G9） | Stripe `checkout.session.completed`：钱包锁 → 记分录、`PAID` → 子流程 `QB_PENDING_SETTLE` |
 | `QB_PENDING_SETTLE` / `QB_PENDING_PAY` | 系统（`qb.play.system`） | 只取钱包锁：按提交顺序取至多 50 条待支付，逐条（`QB_PENDING_PAY`，按结算时的抽成）补发，遇到付不起的即停止（不跳过）；还能付下一条时发布事件在新事务中续接；清空后发布 `qb.sponsor.funds-restored` |
@@ -248,7 +248,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_USER_BAN` / `QB_USER_UNBAN` | `qb.admin.users.ban` | 封禁（`QbUserBan`）：三个入口都不能登录（`QbSignInGuard`），下一次刷新令牌即失效；有价值的动作在流程中再查（提交发布已接上；答题、转账随 Q5、Q6）；不能封禁自己与管理员 |
 | `QB_BROADCAST_SAVE` / `QB_BROADCAST_DISPATCH`（任务） | `qb.broadcast.write` / 系统 | 定时发送：到时置 SENT；商家通知只能关联自己的进行中发布 |
 | `QB_MESSAGE_MARK` | `qb.me` | 已读 / 点击 |
-| `QB_PUBLICATION_TICK`（任务）/ `QB_PUBLICATION_ADVANCE` | 系统（`qb.publication.system`，不授予任何角色） | 每分钟：按日程表找出到期的发布（至多 50 条），逐条在发布锁内 SCHEDULED → LIVE、到期 → ENDED、待审核而到期 → DRAFT |
+| `QB_PUBLICATION_ADVANCE`（逐项任务 `qb.publication-tick` 的每项） | 系统（`qb.publication.system`，不授予任何角色，`internal()`） | 每分钟：模板 `qb.system.publications-due` 按日程表选出到期的发布（至多 2 000 条），每条一个事务，在发布锁内 SCHEDULED → LIVE、到期 → ENDED、待审核而到期 → DRAFT；一条失败只影响它自己（退避重试），锁被占用则下一分钟再做 |
 | `QB_FX_FETCH`（任务） | 系统 | 每日取 ECB 参考汇率（`BlockingStep`），手动覆盖优先 |
 | `QB_RECONCILE`（任务） | 系统 | 每日余额核对（4.2）、与 Stripe 余额交易报告核对（以后，F-05） |
 

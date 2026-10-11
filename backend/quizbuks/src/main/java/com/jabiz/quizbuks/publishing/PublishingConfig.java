@@ -8,6 +8,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -18,6 +19,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.ZoneOffset;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Registers publishing (docs/quizbuks/plans/Q4-publishing.md): the four entities, their datasets, the two
@@ -225,27 +228,35 @@ public class PublishingConfig {
     }
 
     @Bean
-    ProcessDefinition<PublicationLifecycle.TickInput, PublicationLifecycle.TickOutput, ProcessContext>
-        qbPublicationTick() {
-        return TICK;
-    }
-
-    @Bean
     ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext> qbPublicationAdvance() {
-        return PublicationLifecycle.advance();
+        return ADVANCE;
     }
 
     private static final ProcessDefinition<PublicationLifecycle.ApprovalResultInput, PublicationOutput,
         ProcessContext> APPROVAL_RESULT = PublicationLifecycle.approvalResult();
 
-    private static final ProcessDefinition<PublicationLifecycle.TickInput, PublicationLifecycle.TickOutput,
-        ProcessContext> TICK = PublicationLifecycle.tick();
+    private static final ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext>
+        ADVANCE = PublicationLifecycle.advance();
 
-    /** Every minute (D-Q4-7); a run finds everything due, so the minutes missed while down are made up. */
+    /**
+     * Every minute (D-Q4-7): every publication due by the scheduled time ({@code qb.system.publications-due}, from
+     * the schedule) is moved on by {@code QB_PUBLICATION_ADVANCE}, each in a transaction of its own (Q5b; platform
+     * decision D42), at most {@code maxItems} by due time per run. A run finds everything due, so the minutes missed
+     * while down are made up; an item that fails is left alone and tried again with back-off, one whose lock is held
+     * waits for the next minute (busy). Neither holds up the others.
+     *
+     * @param maxItems publications one run moves on ({@code quizbuks.publication-tick.max-items}, default
+     *                 {@link PublishingLimits#TICK_BATCH})
+     */
     @Bean
-    JobDefinition<PublicationLifecycle.TickInput> qbPublicationTickJob() {
-        return JobDefinition.cron(PublicationLifecycle.TICK_JOB, "0 * * * * *", ZoneOffset.UTC, TICK,
-            PublicationLifecycle.TickInput::new);
+    JobDefinition<PublicationLifecycle.PublicationRef> qbPublicationTickJob(
+        @Value("${quizbuks.publication-tick.max-items:" + PublishingLimits.TICK_BATCH + "}") int maxItems) {
+        return JobDefinition.forEach(PublicationLifecycle.TICK_JOB, "0 * * * * *", ZoneOffset.UTC,
+                JobItems.template(PublicationLifecycle.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "publicationId"),
+                ADVANCE, (scheduledTime, row) -> new PublicationLifecycle.PublicationRef(
+                    UUID.fromString(String.valueOf(row.get("publicationId")))))
+            .maxItems(maxItems);
     }
 
     @Bean
