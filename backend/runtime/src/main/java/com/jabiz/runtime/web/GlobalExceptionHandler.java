@@ -16,6 +16,7 @@ import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
+import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.RebaseConflictException;
 import com.jabiz.runtime.RevertConflictException;
 import com.jabiz.runtime.storage.AppendOnlyViolationException;
@@ -177,6 +178,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PayloadTooLargeException.class)
     ProblemDetail handlePayloadTooLarge(PayloadTooLargeException ex, ServerWebExchange exchange) {
         return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /**
+     * An inbound webhook request that is not accepted (decision D37): the same answer whatever the reason, which the
+     * receiver has logged; never cached.
+     */
+    @ExceptionHandler(InboundRejectedException.class)
+    ResponseEntity<ProblemDetail> handleInboundRejected(InboundRejectedException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.CACHE_CONTROL, "no-store")
+            .body(withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange));
     }
 
     /** Too many requests of one caller: says when to try again. */

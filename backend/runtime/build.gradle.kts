@@ -66,4 +66,6 @@ dependencies {
     testFixturesApi("com.tngtech.archunit:archunit:1.5.0")
     // Scenario replay (docs/design/07-quality.md section 3): scenario files are YAML.
     testFixturesImplementation("tools.jackson.dataformat:jackson-dataformat-yaml")
+    // Tests of what the platform's observations are tagged with (TestObservationRegistry).
+    testImplementation("io.micrometer:micrometer-observation-test")
 }

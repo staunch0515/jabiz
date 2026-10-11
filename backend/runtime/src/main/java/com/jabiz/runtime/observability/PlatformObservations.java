@@ -53,6 +53,13 @@ public class PlatformObservations {
     public static final String WEBHOOK = "jabiz.webhook.delivery";
     /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */
     public static final String EXTERNAL_CALL = "jabiz.external.call";
+    /**
+     * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
+     * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
+     * ({@code none}, the rejection's, or {@code error}) only.
+     */
+    public static final String INBOUND = "jabiz.inbound.receive";
+    public static final String INBOUND_RATE_LIMITED = "jabiz.inbound.rate_limited";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";

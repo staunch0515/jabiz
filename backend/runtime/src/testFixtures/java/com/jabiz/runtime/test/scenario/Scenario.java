@@ -106,6 +106,15 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     /** Delivers the pending outbox events to their consumers until nothing is due. */
     public record DeliverEvents(int number) implements Step {}
 
+    /**
+     * An inbound webhook request (docs/design/11-ledger-events-jobs.md section 2.5): {@code body} (a mapping, sent as
+     * JSON, or a text sent as it is) signed with the provider's first configured secret at {@code at} (default: now)
+     * and received as the endpoint receives it; the outcome must be {@code outcome} ({@code ACCEPTED} by default,
+     * {@code DUPLICATE}, {@code IGNORED}, or {@code REJECTED}). The processes it leads to run at the next
+     * {@code deliverEvents}.
+     */
+    public record InboundStep(int number, String provider, Object body, Instant at, String outcome) implements Step {}
+
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
@@ -220,7 +229,7 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         }
         if (keys.size() != 1) {
             throw new IllegalArgumentException(where + " must have exactly one of process, import, advanceClock, setClock, "
-                + "runJob, deliverEvents, expect, expectError (besides note); found " + keys.keySet());
+                + "runJob, deliverEvents, inbound, expect, expectError (besides note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();
         Object body = keys.get(kind);
@@ -228,6 +237,7 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
             case "advanceClock" -> new AdvanceClock(number, String.valueOf(body));
             case "setClock" -> new SetClock(number, instant(body, where + ".setClock"));
             case "runJob" -> runJob(number, body, where + ".runJob");
+            case "inbound" -> inbound(number, map(body, where + ".inbound"), where + ".inbound");
             case "deliverEvents" -> {
                 if (!Boolean.TRUE.equals(body)) {
                     throw new IllegalArgumentException(where + ".deliverEvents must be true");
@@ -282,6 +292,17 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         String outcome = text(job, "outcome", false);
         return new RunJob(number, text(job, "job", true), at == null ? null : instant(at, where + ".at"),
             outcome == null ? "SUCCEEDED" : outcome);
+    }
+
+    private static InboundStep inbound(int number, Map<String, Object> inbound, String where) {
+        onlyKeys(inbound, where, Set.of("provider", "body", "at", "outcome"));
+        Object at = inbound.get("at");
+        String outcome = text(inbound, "outcome", false);
+        if (outcome != null && !Set.of("ACCEPTED", "DUPLICATE", "IGNORED", "REJECTED").contains(outcome)) {
+            throw new IllegalArgumentException(where + ".outcome must be ACCEPTED, DUPLICATE, IGNORED or REJECTED");
+        }
+        return new InboundStep(number, text(inbound, "provider", true), required(inbound, "body", where),
+            at == null ? null : instant(at, where + ".at"), outcome == null ? "ACCEPTED" : outcome);
     }
 
     private static ExpectError expectError(int number, Map<String, Object> error, String where) {

@@ -1,0 +1,76 @@
+# Payments reported by the payment provider (ROADMAP phase 16d, decision D37): the provider demo-pay POSTs a signed
+# payment_intent.succeeded for an order; the platform verifies and stores it and publishes a reference, and the
+# consumer runs ORDER_RECORD_PAYMENT from the outbox, which records the payment on its order. The same event arriving
+# again changes nothing, types the provider is not listed for are not kept, a request signed too long ago is refused,
+# and a payment that does not fit its order becomes a task rather than a failure.
+name: Payments of orders by inbound webhook
+clock: 2026-05-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input: { entityType: Warehouse, attributes: { warehouseCode: FUK, warehouseName: Fukuoka, active: true } }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: CUP-1, productName: Tea cup, unitPrice: 800, active: true } }
+  - process: STOCK_RECEIVE@latest
+    input: { warehouseCode: FUK, sku: CUP-1, quantity: 10 }
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-PAY-1, customerCode: CUST-PAY, warehouseCode: FUK, lines: [{ sku: CUP-1, quantity: 2 }] }
+    expectOutput: { totalAmount: 1600 }
+    save: { paid: $.orderId }
+  - process: ORDER_PLACE@latest
+    input: { orderNo: SO-PAY-2, customerCode: CUST-PAY, warehouseCode: FUK, lines: [{ sku: CUP-1, quantity: 1 }] }
+    save: { short: $.orderId }
+
+  - advanceClock: PT1H
+  - note: The customer paid order 1 in full. Nothing happens to the order in the request itself.
+    inbound:
+      provider: demo-pay
+      body:
+        id: evt_pay_1
+        object: event
+        type: payment_intent.succeeded
+        livemode: false
+        data: { object: { id: pi_pay_1, object: payment_intent, amount_received: 1600, currency: jpy,
+                          metadata: { orderNo: SO-PAY-1 } } }
+  - expect: { entity: SalesOrder, id: "${paid}", fields: { paymentRef: null, paidTime: null } }
+  - note: The provider delivers the same event again before it heard back; it is answered and not kept twice.
+    inbound:
+      provider: demo-pay
+      outcome: DUPLICATE
+      body:
+        id: evt_pay_1
+        object: event
+        type: payment_intent.succeeded
+        livemode: false
+        data: { object: { id: pi_pay_1, object: payment_intent, amount_received: 1600, currency: jpy,
+                          metadata: { orderNo: SO-PAY-1 } } }
+  - note: A type the provider is not listed for is answered and not kept.
+    inbound:
+      provider: demo-pay
+      outcome: IGNORED
+      body: { id: evt_created_1, object: event, type: payment_intent.created, data: { object: { id: pi_pay_2 } } }
+  - note: A request signed more than five minutes ago is refused.
+    inbound:
+      provider: demo-pay
+      outcome: REJECTED
+      at: 2026-05-01T00:54:59Z
+      body: { id: evt_late_1, object: event, type: payment_intent.succeeded, data: { object: { id: pi_late } } }
+  - note: Order 2 was paid short; the payment is not recorded, someone who may write orders is asked to check it.
+    inbound:
+      provider: demo-pay
+      body:
+        id: evt_pay_2
+        object: event
+        type: payment_intent.succeeded
+        livemode: false
+        data: { object: { id: pi_pay_2, object: payment_intent, amount_received: 500, currency: jpy,
+                          metadata: { orderNo: SO-PAY-2 } } }
+
+  - advanceClock: PT1M
+  - note: The outbox runs ORDER_RECORD_PAYMENT once for each kept event.
+    deliverEvents: true
+  - expect: { entity: SalesOrder, id: "${paid}", fields: { paymentRef: pi_pay_1, paidTime: "2026-05-01T01:00:00Z" } }
+  - expect: { entity: SalesOrder, id: "${short}", fields: { paymentRef: null, paidTime: null } }
+snapshot:
+  entities: [SalesOrder, InboundEvent, SysTask]
+  asOf: end

@@ -104,6 +104,8 @@ val coverageGatedClasses = listOf(
     "com.jabiz.mail.*",
     // Phase 16e
     "com.jabiz.external.*",
+    // Phase 16d
+    "com.jabiz.inbound.*",
 )
 
 dependencies {
