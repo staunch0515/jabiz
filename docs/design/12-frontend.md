@@ -143,6 +143,9 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
 | `/login/oidc` | 身份提供方的回调（10 §12）：不需要已登录；显示身份提供方或服务端的拒绝 |
+| `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；打开即提交令牌一次，成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答） |
+| `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
+| `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接 |
 | `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
@@ -201,7 +204,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | 项 | 规定 |
 |---|---|
 | 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 `@jabiz/ui`；共存期间也是一份 antd） |
-| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`；不能是 index 路由（用 `home`） |
+| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/auth…`、`/mail…` 等平台路径（`PLATFORM_PATHS`）；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
