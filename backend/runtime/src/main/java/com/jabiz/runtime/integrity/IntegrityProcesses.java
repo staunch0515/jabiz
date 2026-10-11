@@ -82,13 +82,15 @@ public class IntegrityProcesses {
     /** Every five minutes by default ({@code jabiz.integrity.seal.cron}, UTC). */
     @Bean
     JobDefinition<SealInput> integritySealJob(IntegritySettings settings) {
-        return JobDefinition.cron(SEAL_JOB, settings.sealCron(), ZoneOffset.UTC, SEAL_PROCESS, SealInput::new);
+        // Administrators also seal and verify by hand (21 section 2): the processes stay open (decision D41).
+        return JobDefinition.cron(SEAL_JOB, settings.sealCron(), ZoneOffset.UTC, SEAL_PROCESS, SealInput::new)
+            .manualToo();
     }
 
     /** Daily by default ({@code jabiz.integrity.verify.cron}, UTC). */
     @Bean
     JobDefinition<VerifyInput> integrityVerifyJob(IntegritySettings settings) {
         return JobDefinition.cron(VERIFY_JOB, settings.verifyCron(), ZoneOffset.UTC, VERIFY_PROCESS,
-            time -> new VerifyInput(null, time));
+            time -> new VerifyInput(null, time)).manualToo();
     }
 }

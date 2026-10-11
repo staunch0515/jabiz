@@ -2275,3 +2275,19 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 
 **完成说明**：真实用户原先调用的 `internal()` 流程即上面改为 `entryOnly()` 的二十一个（全部只经平台入口），以及经 `ORDER_PICK_LIST` 调用的 `FILE_ARCHIVE`；
 它们的入口与行为不变。管理员经流程接口直接调用它们的途径（之前仅以权限拦截）现在一律 403。
+
+**评审后的补充（同一分支）**
+- 启动检查 `PROCESS`：不是 `internal()` 的流程（普通、`entryOnly()`、`subProcessOnly()`）以 `CallProcess` 调用 `internal()` 流程即错误（静态不知道普通流程的根是否以系统身份运行，只认 `internal()` 的调用方）。
+  执行器的子流程检查保留（`ProcessAccessRulesTest`）。
+- `EVENT` / `JOB`：消费者与任务的流程为 `entryOnly()` / `subProcessOnly()` 即错误，为普通流程即警告；也要手工运行的以 `EventSubscription…manualToo()` / `JobDefinition…manualToo()` 声明
+  （`INTEGRITY_SEAL`、`INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 与示范的 `FREIGHT_MONTH_CLOSE`）。`TASK_NOTIFY`、示范 `CERTIFICATION_APPROVAL_RESULT`、`FREIGHT_POST_REVENUE` 改为 `internal()`。
+- `IMPORT`：目标流程为 `internal()` / `entryOnly()` 即错误（20 §6）。
+- `PlatformArchRules.noProcessMachinery`：业务包不引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（示范 `ArchitectureTest` 带反例）。
+- 保留的操作人 `system`、`anonymous`：开发请求头（`DevHeaderActorResolver`）与访问令牌（`JwtService`）都拒绝；流程接口对不进目录的流程一律拒绝，不看操作人。
+- 流程接口的回答：仍为 403 `PROCESS_INTERNAL`（不改 404：流程存在，目录已隐去它），消息不再说"只由平台执行"，而按种类说明如何运行。
+- 补回覆盖：经入口 `PUT /api/imports/nothing.here/mappings/x` 为 404；通用实体流程自己检查数据视图写权限（`ProcessAccessIT`）。
+- 文档：09 D41 第 3 条更正事实（执行器不检查权限，自己检查权限的步骤须明确放行系统身份）；09 索引补 D42 行；07 §3、20 §6–§7、11、06 §8–§9、CLAUDE.md 第 3 节、`docs/guide/version-lines.md`。
+
+**升级说明**（应用合并 16l 时）：重新归类应用的 `internal()` 流程——事件消费、定时任务、回调保留 `internal()`；被用户运行的流程以子流程调用的改为 `subProcessOnly()`；
+事件与任务的普通流程改为 `internal()` 或声明 `manualToo()`；业务代码去掉对上述流程机制的引用（见 `docs/guide/version-lines.md`）。
+已知：`1.2/quizbuks` 的 `QB_QUIZ_RELEASE_FILES`（`internal()`，由用户运行的 `QB_QUIZ_DELETE` 调用）须改为 `subProcessOnly()`，在合并到应用分支时修改。

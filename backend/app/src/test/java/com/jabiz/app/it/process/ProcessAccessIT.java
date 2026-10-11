@@ -60,11 +60,15 @@ class ProcessAccessIT extends PostgresIntegrationTest {
                 .withPermissions("it.d41").asInternal();
         }
 
-        /** An ordinary process that passes its note on to the hand-off point. */
+        /**
+         * A consumer passing its note on to the hand-off point: only internal() processes may call internal() ones
+         * (startup check), and the executor refuses the call under any root but the system's.
+         */
         @Bean
         ProcessDefinition<Note, Note, ProcessContext> itRelayProcess() {
             return ProcessDefinition.define("IT_D41_RELAY", 1, Note.class, Note.class, ProcessContext.class, pb -> pb
                 .permissions("it.d41")
+                .internal()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put("in", input);
@@ -122,13 +126,20 @@ class ProcessAccessIT extends PostgresIntegrationTest {
             assertThat(String.valueOf(problem.get("violations"))).as(process).contains("PROCESS_INTERNAL")
                 .contains(process);
         }
-        // Not in the catalog either; the ordinary process is.
+        // One code for all; the text says how the process runs instead.
+        assertThat(String.valueOf(run("MAIL_SEND", Map.of(), admin()).expectBody(MAP).returnResult()
+            .getResponseBody().get("detail"))).contains("the platform runs it as the system");
+        assertThat(String.valueOf(run("ADD_ENTITY", Map.of(), admin()).expectBody(MAP).returnResult()
+            .getResponseBody().get("detail"))).contains("through its own endpoint");
+        assertThat(String.valueOf(run(GeneratedFileProcesses.ARCHIVE, Map.of(), admin()).expectBody(MAP)
+            .returnResult().getResponseBody().get("detail"))).contains("only as part of another process");
+        // Not in the catalog either; an ordinary process is.
         List<Map<String, Object>> catalog = client.get().uri("/api/meta/processes")
             .header(HttpHeaders.AUTHORIZATION, admin()).exchange().expectStatus().isOk().expectBody(LIST)
             .returnResult().getResponseBody();
         assertThat(catalog).extracting(entry -> entry.get("name"))
-            .contains("IT_D41_RELAY")
-            .doesNotContain("IT_D41_HAND_OFF", "IT_D41_ENTRY", "ADD_ENTITY", "MAIL_SEND", "SPONSOR_SIGN_IN",
+            .contains("STOCK_RECEIVE")
+            .doesNotContain("IT_D41_HAND_OFF", "IT_D41_RELAY", "IT_D41_ENTRY", "ADD_ENTITY", "MAIL_SEND", "SPONSOR_SIGN_IN",
                 GeneratedFileProcesses.ARCHIVE);
         // Every declared process that is not listed is one of the three kinds.
         assertThat(registry.all()).filteredOn(definition -> !definition.listed())
@@ -151,6 +162,31 @@ class ProcessAccessIT extends PostgresIntegrationTest {
             .singleElement().satisfies(row -> assertThat(row).containsEntry("actor_id", "it-d41-writer"));
     }
 
+    /**
+     * The entity API checks the dataset's write permission before it runs the generic process; the process checks it
+     * again itself, whichever entry runs it, since the entity is chosen by the input.
+     */
+    @Test
+    void theGenericEntityProcessChecksTheDatasetsWritePermissionItself() {
+        ProcessDefinition<com.jabiz.runtime.process.entity.AddEntityInput, ?, ?> add = process("ADD_ENTITY");
+        RequestContext withoutDataset = new RequestContext("it-d41-writer", null, Locale.ENGLISH, "it", Set.of(),
+            Set.of("entity.write"));
+        String id = "att-" + UUID.randomUUID();
+        var input = new com.jabiz.runtime.process.entity.AddEntityInput("ItAttachment",
+            Map.of("attachmentId", id, "title", "kept"));
+
+        assertThatThrownBy(() -> asRequest(withoutDataset, executor.run(add, input,
+            ExecutionOptions.NONE.atEntryOf(add))).block())
+            .isInstanceOf(PermissionDeniedException.class).isNotInstanceOf(ProcessInternalException.class)
+            .hasMessageContaining("ItAttachment");
+        assertThat(query("SELECT 1 FROM it_attachment WHERE f_id = ?", id)).isEmpty();
+
+        RequestContext withDataset = new RequestContext("it-d41-writer", null, Locale.ENGLISH, "it", Set.of(),
+            Set.of("entity.write", "it.write"));
+        asRequest(withDataset, executor.run(add, input, ExecutionOptions.NONE.atEntryOf(add))).block();
+        assertThat(query("SELECT 1 FROM it_attachment WHERE f_id = ?", id)).hasSize(1);
+    }
+
     @Test
     void anEntryOnlyProcessRunsOnlyWithItsOwnEntryAndAsTheCaller() {
         ProcessDefinition<Note, Note, ProcessContext> entry = process("IT_D41_ENTRY");
@@ -160,7 +196,7 @@ class ProcessAccessIT extends PostgresIntegrationTest {
             .isInstanceOf(ProcessInternalException.class);
         // The entry option of another process does not open this one; the system needs the entry as well.
         assertThatThrownBy(() -> asRequest(user, executor.run(entry, new Note("b"),
-            ExecutionOptions.NONE.atEntryOf(process("IT_D41_RELAY")))).block())
+            ExecutionOptions.NONE.atEntryOf(process("STOCK_RECEIVE")))).block())
             .isInstanceOf(ProcessInternalException.class);
         assertThatThrownBy(() -> asRequest(system(), executor.execute(entry, new Note("c"))).block())
             .isInstanceOf(ProcessInternalException.class);
@@ -176,13 +212,13 @@ class ProcessAccessIT extends PostgresIntegrationTest {
     void anInternalSubProcessRunsOnlyUnderAProcessTheSystemRuns() {
         int before = query("SELECT process_seq_id FROM op_process WHERE process_name = 'IT_D41_RELAY'").size();
 
-        // An administrator holding every permission cannot reach the hand-off point through an ordinary process.
+        // An administrator holding every permission cannot reach the hand-off point through the process that calls it.
         Map<String, Object> problem = run("IT_D41_RELAY", Map.of("text", "forged"), admin()).expectStatus()
             .isForbidden().expectBody(MAP).returnResult().getResponseBody();
-        assertThat(String.valueOf(problem.get("violations"))).contains("PROCESS_INTERNAL").contains("IT_D41_HAND_OFF");
+        assertThat(String.valueOf(problem.get("violations"))).contains("PROCESS_INTERNAL").contains("IT_D41_RELAY");
         assertThat(query("SELECT process_seq_id FROM op_process WHERE process_name = 'IT_D41_RELAY'")).hasSize(before);
 
-        // The system runs the hand-off point directly and through the ordinary process.
+        // The system runs the hand-off point directly and through the process that calls it.
         assertThat(asRequest(system(), executor.execute(process("IT_D41_HAND_OFF"), new Note("direct"))).block())
             .isEqualTo(new Note("direct"));
         assertThat(asRequest(system(), executor.execute(process("IT_D41_RELAY"), new Note("relayed"))).block())

@@ -158,8 +158,8 @@ public class ProcessExecutor {
             case SUB_PROCESS_ONLY -> false;
         };
         if (!allowed) {
-            throw refused(definition, "Process " + definition.name() + " is " + definition.access()
-                + " and cannot be started here (decision D41)");
+            throw refused(definition, "Process " + definition.name() + " cannot be started here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
         }
     }
 
@@ -175,8 +175,8 @@ public class ProcessExecutor {
             case ENTRY_ONLY -> false;
         };
         if (!allowed) {
-            throw refused(definition, "Process " + definition.name() + " is " + definition.access()
-                + " and cannot be called as a sub-process here (decision D41)");
+            throw refused(definition, "Process " + definition.name() + " cannot be called as a sub-process here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
         }
     }
 

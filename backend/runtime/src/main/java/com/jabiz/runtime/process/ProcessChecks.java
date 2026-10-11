@@ -31,7 +31,8 @@ import java.util.Set;
  *       is not declared in place has exactly one bean;</li>
  *   <li>references of platform steps resolve (datasets, templates, called processes, the event publisher);</li>
  *   <li>the call graph is acyclic; calls of deprecated versions are warned about; calls of {@code entryOnly()}
- *       processes are errors (decision D41);</li>
+ *       processes are errors, and so are calls of {@code internal()} ones from processes that are not
+ *       {@code internal()} themselves (decision D41);</li>
  *   <li>every process declares permissions (a warning in the {@code dev} profile);</li>
  *   <li>a process not listed in the catalog ({@code internal()}, {@code entryOnly()}, {@code subProcessOnly()})
  *       declares no {@code actsOn}: it cannot be offered as an action (decision D41);</li>
@@ -119,6 +120,14 @@ public class ProcessChecks implements PlatformCheck {
                 if (target.access() == ProcessAccess.ENTRY_ONLY) {
                     problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
                         + ", which only its platform entry point runs (entryOnly, decision D41)"));
+                }
+                // Only a process the system runs may call a hand-off point. Whether an open process's root runs as the
+                // system is not known here; only internal() callers are taken to.
+                if (target.access() == ProcessAccess.INTERNAL && definition.access() != ProcessAccess.INTERNAL) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "calls " + key(target)
+                        + ", which is internal() and runs as the system only, from a process that is "
+                        + definition.access() + ": declare the callee subProcessOnly() or the caller internal() "
+                        + "(decision D41)"));
                 }
                 if (target.deprecated()) {
                     problems.add(CheckProblem.warning(CATEGORY, location, "calls deprecated process " + key(target)));

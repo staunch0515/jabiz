@@ -207,4 +207,29 @@ class ProcessChecksTest {
             .containsExactly(tuple("CALLER@1 step 'Call entry'",
                 "calls AT_ENTRY@1, which only its platform entry point runs (entryOnly, decision D41)"));
     }
+
+    @Test
+    void onlyInternalProcessesCallInternalOnes() {
+        ProcessDefinition<String, Out, ProcessContext> handOff = process("HAND_OFF", 1, pb -> pb
+            .permissions("h.run").internal().step("Mark", MarkStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<String, Out, ProcessContext> consumer = process("CONSUMER", 1, pb -> pb
+            .permissions("c.run").internal().step("Call", CallProcess.of("HAND_OFF", 1, ctx -> "x", null)));
+        ProcessDefinition<String, Out, ProcessContext> open = process("OPEN", 1, pb -> pb
+            .permissions("o.run").step("Call", CallProcess.of("HAND_OFF", 1, ctx -> "x", null)));
+        ProcessDefinition<String, Out, ProcessContext> entry = process("AT_ENTRY", 1, pb -> pb
+            .permissions("e.run").entryOnly().step("Call", CallProcess.of("HAND_OFF", 1, ctx -> "x", null)));
+        ProcessDefinition<String, Out, ProcessContext> under = process("UNDER", 1, pb -> pb
+            .permissions("u.run").subProcessOnly()
+            .step("Call", CallProcess.of("HAND_OFF", 1, ctx -> "x", null)));
+
+        assertThat(check(false, handOff, consumer, open, entry, under))
+            .extracting(CheckProblem::severity, CheckProblem::location)
+            .containsExactly(
+                tuple(CheckProblem.Severity.ERROR, "OPEN@1 step 'Call'"),
+                tuple(CheckProblem.Severity.ERROR, "AT_ENTRY@1 step 'Call'"),
+                tuple(CheckProblem.Severity.ERROR, "UNDER@1 step 'Call'"));
+        assertThat(check(false, handOff, open)).singleElement().extracting(CheckProblem::message)
+            .isEqualTo("calls HAND_OFF@1, which is internal() and runs as the system only, from a process that is "
+                + "OPEN: declare the callee subProcessOnly() or the caller internal() (decision D41)");
+    }
 }

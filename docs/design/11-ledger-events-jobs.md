@@ -140,7 +140,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
-- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean。
+- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean；流程应为 `internal()`（D41，06 §8）：`entryOnly()` / `subProcessOnly()` 为错误，普通流程为警告，
+  除非订阅声明 `manualToo()`（该流程也供人经流程接口运行）。
 
 ### 2.4 Webhook：把事件送给其他系统【D33】
 
@@ -256,7 +257,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
 - `GET /api/jobs`（权限 `job.read`）：任务、cron、时区、流程、下一次计划时刻、最近 10 次执行。
-- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean。
+- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；流程的声明同事件消费者（`internal()`，或普通流程加 `JobDefinition…manualToo()`，D41）。
+  平台的 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 也可手工运行，任务声明 `manualToo()`。
 - 场景回放：步骤 `runJob: {job, at, outcome}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`）与 `deliverEvents: true`（07 §3.1）。
 
 ## 5. 示范（`app` 的 `FreightBilling`）

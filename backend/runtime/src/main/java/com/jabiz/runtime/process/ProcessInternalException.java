@@ -27,4 +27,17 @@ public class ProcessInternalException extends PermissionDeniedException {
     public ProcessAccess access() {
         return access;
     }
+
+    /**
+     * How a process of this kind is run, for the caller: the process API answers every process outside the catalog
+     * with the same 403 and code, and this says which way it runs instead.
+     */
+    public static String howItRuns(ProcessAccess access) {
+        return switch (access) {
+            case OPEN -> "it can be run through the process API";
+            case INTERNAL -> "the platform runs it as the system, on events, schedules or callbacks";
+            case ENTRY_ONLY -> "it runs through its own endpoint, as the caller";
+            case SUB_PROCESS_ONLY -> "it runs only as part of another process";
+        };
+    }
 }

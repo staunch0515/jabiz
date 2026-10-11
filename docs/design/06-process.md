@@ -217,10 +217,12 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 
   | 声明 | 作为根流程 | 作为子流程（`CallProcess`） | 平台中的例子 |
   |---|---|---|---|
-  | `pb.internal()` | 只有系统身份 | 只在系统身份的根流程下 | `MAIL_SEND`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`；应用的事件消费、定时任务、回调流程（示范 `ORDER_RECORD_PAYMENT`） |
+  | `pb.internal()` | 只有系统身份（流程接口一律拒绝） | 只在系统身份的根流程下（调用方须也是 `internal()`，启动检查） | `MAIL_SEND`、`TASK_NOTIFY`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`；应用的事件消费、定时任务、回调流程（示范 `ORDER_RECORD_PAYMENT`、`CERTIFICATION_APPROVAL_RESULT`、`FREIGHT_POST_REVENUE`） |
   | `pb.entryOnly()` | 只经平台自己的入口，以真实调用者运行（入口传执行选项 `ExecutionOptions.atEntryOf(流程)` / `ProcessExecutor.executeAtEntry`） | 一律拒绝（调用它在启动检查中报错） | 登录与二次验证（`SPONSOR_SIGN_IN`、`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN`）、通用实体流程（`ADD/UPDATE/DELETE_ENTITY`，实体接口）、`FILE_REGISTER`（上传）、`IMPORT_RUN` 与导入映射（`IMPORT_MAPPING_SAVE/REMOVE`）、自助注册与找回密码（`SPONSOR_SIGN_UP*`、`SPONSOR_EMAIL_VERIFY*`、`SPONSOR_PASSWORD_RESET_*`）、`SEC_MFA_ENROLL_*`、`SEC_USER_SET_LOCALE`、`SEC_MAIL_PREFERENCE_SET` |
   | `pb.subProcessOnly()` | 一律拒绝（系统身份也不行） | 任何根流程下都可以，权限由根流程的声明保证 | `FILE_ARCHIVE`（14 §10） |
 
+  流程接口对三种流程一律 403 `PROCESS_INTERNAL`（不是 404：流程存在，只是不由这里运行；目录已隐去它们），消息说明它如何运行（由平台在事件、计划、回调中运行 / 经它自己的接口 / 只作另一流程的一部分）。
+  名字 `system`、`anonymous` 保留：开发请求头与访问令牌都不能以它们为操作人。业务代码不引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（`PlatformArchRules.noProcessMachinery`）。
   操作记录与审计中的操作人总是根流程的操作人：`entryOnly()` 流程保留真实的调用者，子流程沿用根流程的身份。
   新的平台流程按用途选择其一；应用的事件、定时任务、回调接续点用 `internal()`。
 - `ExecutionOptions`（平台内部）：`idempotencyKey`，`beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
@@ -232,7 +234,9 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`，事件类型名合法（11 §2.2）。
 - 调用已废弃（`pb.deprecated()`）的版本给出警告。
 - 权限已声明（`dev` 下为警告）。
-- 不进目录的流程（`internal()`、`entryOnly()`、`subProcessOnly()`）不能声明 `actsOn`；`CallProcess` 不能调用 `entryOnly()` 流程【D41】。
+- 不进目录的流程（`internal()`、`entryOnly()`、`subProcessOnly()`）不能声明 `actsOn`；`CallProcess` 不能调用 `entryOnly()` 流程；
+  不是 `internal()` 的流程（普通、`entryOnly()`、`subProcessOnly()`）不能调用 `internal()` 流程——静态不知道普通流程的根是否以系统身份运行，只认 `internal()` 的调用方【D41】。
+  事件消费者与定时任务的流程、导入的目标流程的声明分别由 `EVENT` / `JOB`（11）与 `IMPORT`（20 §6）检查。
 - 进目录的流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 

@@ -8,6 +8,7 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
+import com.jabiz.runtime.process.ProcessInternalException;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.EntityInstance;
@@ -34,8 +35,9 @@ import java.util.Map;
  * Bean Validation (400 with all violations); the caller needs every permission the process declares (403). The
  * response carries the output and the operation's {@code processSeqId}. An actor who holds both groups of a
  * segregation-of-duties rule cannot run a process that needs either ({@link SodGuard}, 403 {@code SOD_CONFLICT}).
- * Processes declared {@code internal()}, {@code entryOnly()} or {@code subProcessOnly()} are refused with 403
- * {@code PROCESS_INTERNAL} unless the system runs an {@code internal()} one (decision D41).
+ * Processes outside the catalog - declared {@code internal()}, {@code entryOnly()} or {@code subProcessOnly()} - are
+ * refused with 403 {@code PROCESS_INTERNAL} whoever asks, before the input is read; the message says how the process
+ * runs instead (decision D41). 403 rather than 404: the process exists, and the catalog already hides it.
  *
  * <p>With an {@code Idempotency-Key} header, a repeated request of the same actor returns the first result without
  * running again, flagged by the response header {@code Idempotency-Replayed: true} (decision D4).
@@ -77,8 +79,13 @@ class ProcessController {
     ) {
         return RequestContexts.current().flatMap(context -> {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
-            // Before anything about the input is said: who may start the process at all (decision D41).
-            ProcessExecutor.requireStartable(definition, context, ExecutionOptions.NONE);
+            // Before anything about the input is said: only processes of the catalog run here, whoever asks - the
+            // system too, which never calls over HTTP (decision D41).
+            if (!definition.listed()) {
+                throw new ProcessInternalException(definition.name(), definition.access(), "Process "
+                    + definition.name() + " is not run through the process API: "
+                    + ProcessInternalException.howItRuns(definition.access()));
+            }
             requirePermissions(definition, context, development);
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
             com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),

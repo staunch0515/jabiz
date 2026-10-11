@@ -75,8 +75,9 @@ import java.util.Map;
  * D11): entry-point permission checks do not apply, checks inside processes do. Who may start a process does
  * (decision D41): a step running an {@code internal()} process declares the system as its actor ({@code actor: {id:
  * system}}); a {@code subProcessOnly()} process is refused as the process API refuses it; a step of an
- * {@code entryOnly()} process stands for its platform entry point (the entity API, signing up) and runs it as the
- * step's actor, as the {@code import} step runs file registration and the import through theirs. Inputs are converted exactly as the
+ * {@code entryOnly()} process runs as the step's actor as if from its platform entry point (the entity API, signing
+ * up); the entry's own checks do not apply, the process's do. The {@code import} step goes through the import
+ * service, its entry checks included. Inputs are converted exactly as the
  * process API converts request bodies, and failures are judged by the status and violations the API would answer
  * with ({@link ProblemStatuses}). All business time comes from the {@link MutableClock}.
  *

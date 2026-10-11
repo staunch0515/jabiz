@@ -389,6 +389,10 @@ class ImportIT extends PostgresIntegrationTest {
             "commerce.stock", "name", "x")).expectStatus().isForbidden();
         post("/api/processes/IMPORT_MAPPING_SAVE/latest", admin(), Map.of("importId", "commerce.stock", "name", "x",
             "mapping", Map.of())).expectStatus().isForbidden();
+        // Through its entry, the mapping process answers an unknown import with 404.
+        client.put().uri("/api/imports/nothing.here/mappings/x").header(HttpHeaders.AUTHORIZATION, admin())
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("mapping", Map.of())).exchange()
+            .expectStatus().isNotFound();
         post("/api/imports/nothing.here/preview", admin(), Map.of("fileId", fileId)).expectStatus().isNotFound();
         post("/api/imports/commerce.stock/preview", admin(), Map.of("fileId", UUID.randomUUID().toString()))
             .expectStatus().isNotFound();
