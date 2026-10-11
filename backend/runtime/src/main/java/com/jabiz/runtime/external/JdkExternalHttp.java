@@ -32,9 +32,9 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * {@link ExternalHttp} of one service over the JDK's {@link HttpClient} (decision D38). Every request is checked
- * before it is sent: the calling thread may block and runs a blocking step ({@link ExternalCallScope}), a dry run
- * only calls a service that allows it, and the resolved address passes {@link OutboundAddresses} with the service's
- * own hosts. Redirects are never followed. The whole exchange, body included, is bounded by the timeout, and the body
+ * before it is sent: the calling thread may block and runs a blocking step or an external job's handler
+ * ({@link ExternalCallScope}), a dry run only calls a service that allows it, a handler only the services of its job
+ * type, and the resolved address passes {@link OutboundAddresses} with the service's own hosts. Redirects are never followed. The whole exchange, body included, is bounded by the timeout, and the body
  * by the service's size limit. Each call is observed as {@value PlatformObservations#EXTERNAL_CALL} with the service
  * and the outcome ({@code 2xx} {@code 3xx} {@code 4xx} {@code 5xx} {@code timeout} {@code refused} {@code error}).
  *
@@ -96,6 +96,9 @@ final class JdkExternalHttp implements ExternalHttp, AutoCloseable {
     private Response exchange(ExternalCallScope scope, Request request) {
         if (scope.dryRun() && !service.allowInDryRun()) {
             throw refused("not called in a dry run (the service does not declare allowInDryRun)");
+        }
+        if (!scope.allows(service.name())) {
+            throw refused("not among the services of the running external job's type");
         }
         URI target = resolve(request.target());
         String refusal = OutboundAddresses.refusal(target, service.allowedHosts(),

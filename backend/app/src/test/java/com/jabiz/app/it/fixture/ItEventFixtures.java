@@ -106,6 +106,8 @@ public final class ItEventFixtures extends BaseEntityDefinitions {
     public static final ProcessDefinition<LogInput, LogInput, ProcessContext> LOG_EVENT =
         ProcessDefinition.define("IT_LOG_EVENT", 1, LogInput.class, LogInput.class, ProcessContext.class, pb -> pb
             .permissions(PERMISSION)
+            // A hand-off point: run by the event delivery or the job runner as the system only (decision D41).
+            .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put("input", input);
@@ -123,6 +125,8 @@ public final class ItEventFixtures extends BaseEntityDefinitions {
     public static final ProcessDefinition<TickInput, TickInput, ProcessContext> TICK =
         ProcessDefinition.define("IT_TICK", 1, TickInput.class, TickInput.class, ProcessContext.class, pb -> pb
             .permissions(PERMISSION)
+            // A hand-off point: run by the event delivery or the job runner as the system only (decision D41).
+            .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put("input", input);

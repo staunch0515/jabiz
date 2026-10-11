@@ -6,7 +6,13 @@ import java.util.Objects;
  * A step implementation together with its metadata, as returned by the factories of platform steps (for example
  * {@code LoadEntity.by(...)}), so that a generic step can be added without spelling out its type parameters.
  */
-public record StepSpec<M, C extends ProcessContext>(Class<? extends StepImplementation<M, C>> handlerClass, M metadata) {
+public record StepSpec<M, C extends ProcessContext>(Class<? extends StepImplementation<M, C>> handlerClass, M metadata)
+    implements StepSource<M, C> {
+
+    @Override
+    public StepSpec<M, C> toStepSpec() {
+        return this;
+    }
 
     public StepSpec {
         Objects.requireNonNull(handlerClass, "handlerClass must not be null");

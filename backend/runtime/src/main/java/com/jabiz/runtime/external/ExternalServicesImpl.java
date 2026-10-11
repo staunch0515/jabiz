@@ -40,6 +40,10 @@ public class ExternalServicesImpl implements ExternalServices, AutoCloseable {
     public String secret(String service, String name) {
         ExternalCallScope scope = scope("secret");
         ExternalService declared = declared(service);
+        if (!scope.allows(service)) {
+            throw new IllegalArgumentException("External service " + service + " is not among the services of "
+                + scope.stepName());
+        }
         String variable = declared.secrets().get(name);
         if (variable == null) {
             throw new IllegalArgumentException("External service " + service + " declares no secret " + name);
@@ -56,7 +60,9 @@ public class ExternalServicesImpl implements ExternalServices, AutoCloseable {
             throw new IllegalArgumentException("Idempotency key suffixes are 1 to 100 characters of letters, digits, "
                 + "'.', '_', ':' and '-'");
         }
-        return "jabiz-" + scope.processSeqId() + "-" + suffix;
+        // Within a job's handler the key is the job's own: the same for every attempt.
+        return scope.jobId().map(job -> "jabiz-job-" + job + "-" + suffix)
+            .orElseGet(() -> "jabiz-" + scope.processSeqId() + "-" + suffix);
     }
 
     private static ExternalCallScope scope(String what) {

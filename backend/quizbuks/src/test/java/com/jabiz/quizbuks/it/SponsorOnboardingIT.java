@@ -136,7 +136,7 @@ class SponsorOnboardingIT extends AccountItSupport {
             .contains(String.valueOf(first.get("approvalRequestId"))));
 
         // The old request's rejection, arriving late, changes nothing.
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId",
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId",
             first.get("onboardingId"), "status", "REJECTED", "requestId", first.get("approvalRequestId"),
             "preparerId", sara, "reason", "Old"));
         assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.PENDING)
@@ -297,27 +297,31 @@ class SponsorOnboardingIT extends AccountItSupport {
             application("Sara", "Acme"));
         Object onboarding = applied.get("onboardingId");
         Object requestId = applied.get("approvalRequestId");
-        // Holding "*", the platform's first administrator can call the process; what it claims is checked.
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
+        // Holding "*", the platform's first administrator cannot call the process (internal(), platform D41).
+        refusedAsInternal("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT,
+            "entityId", onboarding, "status", "APPROVED", "requestId", requestId, "preparerId", sara));
+        // Run as the system, as the events run it, what a forged event claims is checked.
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
             "status", "APPROVED", "requestId", requestId, "preparerId", sara));
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
             "status", "REJECTED", "requestId", requestId, "preparerId", sara, "reason", "Forged"));
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
             "status", "APPROVED", "requestId", "00000000-0000-7000-8000-000000000000", "preparerId", sara));
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", "qb.publication", "entityId", onboarding,
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", "qb.publication", "entityId", onboarding,
             "status", "APPROVED", "requestId", requestId, "preparerId", sara));
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId",
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId",
             "not-a-key", "status", "APPROVED", "requestId", requestId));
         assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.PENDING)
             .containsEntry("reject_reason", null).containsEntry("revision", java.math.BigDecimal.ONE);
         assertThat(mailTo(sara)).isEmpty();
-        // A content administrator holds the review permission but not the system's.
-        refused("QB_SPONSOR_APPROVAL_RESULT", tokenOf("content-admin", QbRoles.ADMIN_CONTENT), body("subject",
-            SponsorApprovals.SUBJECT, "entityId", onboarding, "status", "APPROVED", "requestId", requestId), 403);
+        // Nor a content administrator, who holds the review permission.
+        refusedAsInternal("QB_SPONSOR_APPROVAL_RESULT", tokenOf("content-admin", QbRoles.ADMIN_CONTENT),
+            body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding, "status", "APPROVED", "requestId",
+                requestId));
         // Once really rejected, a forged reason does not stand: the reviewer's decision gives it.
         run("APPROVAL_DECIDE", sponsorReviewer(), body("requestId", requestId, "decision", "REJECT", "reason",
             "Real reason"));
-        run("QB_SPONSOR_APPROVAL_RESULT", admin(), body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
+        runAsSystem("QB_SPONSOR_APPROVAL_RESULT", body("subject", SponsorApprovals.SUBJECT, "entityId", onboarding,
             "status", "REJECTED", "requestId", requestId, "preparerId", sara, "reason", "Forged reason"));
         assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.REJECTED)
             .containsEntry("reject_reason", "Real reason");

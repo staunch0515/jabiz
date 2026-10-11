@@ -1,18 +1,24 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.test.FileSamples;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
 
 import java.nio.charset.StandardCharsets;
@@ -29,6 +35,28 @@ import static org.awaitility.Awaitility.await;
  * images re-encoded; the platform's sweep keeps the files of drafts and versions and clears the rest.
  */
 class ContentFilesIT extends PublicationItSupport {
+
+    /** A test-only process that releases files directly: what another caller of the sub-process could ask for. */
+    static final String RELEASE_RELAY = "IT_QB_RELEASE_RELAY";
+
+    @TestConfiguration
+    static class Processes {
+
+        @Bean
+        ProcessDefinition<QuizProcesses.ReleaseInput, QuizProcesses.ReleaseOutput, ProcessContext> itReleaseRelay() {
+            return ProcessDefinition.define(RELEASE_RELAY, 1, QuizProcesses.ReleaseInput.class,
+                QuizProcesses.ReleaseOutput.class, ProcessContext.class, pb -> pb
+                    .permissions(QbPermissions.CONTENT_WRITE)
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put("in", input);
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> ctx.get("out", QuizProcesses.ReleaseOutput.class))
+                    .step("Release", CallProcess.<ProcessContext>of(QuizProcesses.RELEASE_FILES, 1,
+                        ctx -> ctx.get("in"), "out")));
+        }
+    }
 
     @Autowired
     @Qualifier("fileSweepJob")
@@ -238,7 +266,8 @@ class ContentFilesIT extends PublicationItSupport {
 
     @Test
     void releasingDirectlyStillKeepsTheFilesOfSubmittedPublications() {
-        // Review S1: the release checks again what the removal checked, whoever calls it.
+        // Review S1: the release checks again what the removal checked, whatever process calls it. It is never
+        // started on its own (subProcessOnly(), platform D41), so a test-only process calls it here.
         List<String> quizzes = new java.util.ArrayList<>();
         String published = image();
         String submitted = (String) run("QB_PUBLICATION_SAVE", sponsorA(), publication(versionWithPicture(
@@ -250,8 +279,9 @@ class ContentFilesIT extends PublicationItSupport {
             + "' AND NOT is_deleted").stream().map(row -> row.get("version_file_id").toString()).map(Object.class::cast)
             .toList();
         assertThat(kept).isNotEmpty();
-        Map<String, Object> released = run("QB_QUIZ_RELEASE_FILES", com.jabiz.runtime.test.TestTokens.bearer(tokens,
-            "sponsor-a", com.jabiz.quizbuks.QbPermissions.CONTENT_SYSTEM), body("quizId", quizId,
+        refusedAsInternal(QuizProcesses.RELEASE_FILES, TestTokens.bearer(tokens, "sponsor-a",
+            QbPermissions.CONTENT_SYSTEM), body("quizId", quizId, "versionFileIds", kept));
+        Map<String, Object> released = run(RELEASE_RELAY, sponsorA(), body("quizId", quizId,
             "versionFileIds", kept));
         assertThat(released).containsEntry("released", 0);
         assertThat(latest("qb_version_file_version", "version_file_id", "quiz_id = '" + quizId

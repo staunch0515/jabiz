@@ -30,8 +30,8 @@ public final class QbPermissions {
     public static final String SPONSOR_AVATAR_READ = "qb.sponsor.avatar.read";
     /**
      * The process only the platform runs, as the system: applying an onboarding review
-     * ({@code QB_SPONSOR_APPROVAL_RESULT}, run for the approval events). Granted to no role, as
-     * {@link #PUBLICATION_SYSTEM} (platform decision D41 makes it system-only once implemented).
+     * ({@code QB_SPONSOR_APPROVAL_RESULT}, run for the approval events; {@code internal()}, platform decision D41).
+     * Granted to no role, as {@link #PUBLICATION_SYSTEM}.
      */
     public static final String SPONSOR_SYSTEM = "qb.sponsor.system";
     /** Edit quizzes, materials, questions and versions. */
@@ -45,10 +45,10 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_VIEW_WRITE = "qb.content.view.write";
     /**
-     * The content process only the platform runs: releasing the version files of a removed quiz
-     * ({@code QB_QUIZ_RELEASE_FILES}, the subprocess of {@code QB_QUIZ_DELETE}). Granted to no role, so no sponsor
-     * calls it directly (subprocesses are not checked for permissions); platform decision D41 (16l) makes it
-     * sub-process only.
+     * The content process run only as a sub-process: releasing the version files of a removed quiz
+     * ({@code QB_QUIZ_RELEASE_FILES}, the subprocess of {@code QB_QUIZ_DELETE}; {@code subProcessOnly()}, platform
+     * decision D41, so no sponsor starts it directly). Granted to no role (subprocesses are not checked for
+     * permissions).
      */
     public static final String CONTENT_SYSTEM = "qb.content.system";
     /** Ask the AI for questions and covers. */
@@ -58,9 +58,8 @@ public final class QbPermissions {
     /**
      * The processes only the platform runs, as the system: moving publications on as time passes
      * ({@code QB_PUBLICATION_TICK}, {@code QB_PUBLICATION_ADVANCE}, run by the job) and applying a review's result
-     * ({@code QB_PUBLICATION_APPROVAL_RESULT}, run for the approval events). Granted to no role: {@code internal()}
-     * only hides a process from the catalog, its permission is still checked, so a role holding a permission it
-     * shares (such as {@code qb.review.publication}) could call it directly.
+     * ({@code QB_PUBLICATION_APPROVAL_RESULT}, run for the approval events). They are {@code internal()}: only the
+     * system runs them (platform decision D41), whatever a caller's permissions. Granted to no role besides.
      */
     public static final String PUBLICATION_SYSTEM = "qb.publication.system";
     /**

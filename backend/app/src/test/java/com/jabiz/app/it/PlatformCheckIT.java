@@ -108,6 +108,19 @@ class PlatformCheckIT {
                 + " to public templates (access: public) only");
     }
 
+    /** ROADMAP 16b fix: values that cannot be bound as the type of their field are found at startup. */
+    @Test
+    void valuesThatDoNotFitTheirFieldAreReported() {
+        Outcome outcome = check("--spring.profiles.active=broken-binding");
+
+        assertThat(outcome.exitCode()).isNotZero();
+        assertThat(outcome.lines())
+            .anySatisfy(line -> assertThat(line).startsWith("DATASET | Dataset urn:jabiz:dataset:it:broken:fixed-uuid"
+                + " | fixed scope value of userRef does not fit the field: ").contains("'nobody' is not a UUID"))
+            .anySatisfy(line -> assertThat(line).contains("load byVersion: field ItAccountMark.rowVersion (Version)"
+                + " cannot hold a user id, which is a UUID"));
+    }
+
     /** ROADMAP phase 14j-1: every problem of document layouts, in one run. */
     @Test
     void brokenDocumentLayoutsAreAllReported() {

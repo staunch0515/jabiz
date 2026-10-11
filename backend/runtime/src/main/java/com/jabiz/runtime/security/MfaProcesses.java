@@ -85,7 +85,7 @@ public class MfaProcesses {
             pb -> pb
                 .description("Starts setting up a second factor: a new TOTP secret, to be confirmed with a code.")
                 .permissions(SecurityPermissions.MFA_ENROLL)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());
@@ -105,7 +105,7 @@ public class MfaProcesses {
             ProcessContext.class, pb -> pb
                 .description("Completes setting up a second factor with a code; returns the recovery codes.")
                 .permissions(SecurityPermissions.MFA_ENROLL)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());

@@ -145,7 +145,7 @@ class AuthController {
                 return Mono.error(loginFailed("Unknown sign-in entry"));
             }
             SignInSource source = source(clients, http, entry.get().name());
-            return processes.execute(SponsorSignInProcess.DEFINITION,
+            return processes.executeAtEntry(SponsorSignInProcess.DEFINITION,
                     new SponsorSignInInput(request.userName().trim(), request.password(), source))
                 // Concurrent attempts on one account: the later one loses the race for the next login record.
                 .onErrorMap(e -> e instanceof ValidationException v && v.violations().stream()

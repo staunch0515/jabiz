@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -188,6 +189,27 @@ class ProcessDefinitionBuilderTest {
         assertThat(internal.withPermissions("b.run").internal()).isTrue();
         assertThat(plain.asInternal().internal()).isTrue();
         assertThat(plain.asInternal().permissions()).containsExactly("a.run");
+    }
+
+    @Test
+    void theThreeUnlistedKindsAreDeclaredApart() {
+        ProcessDefinition<In, Out, ProcessContext> plain = define(pb -> complete(pb)
+            .permissions("a.run").step("S", NoopStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<In, Out, ProcessContext> entry = define(pb -> complete(pb)
+            .permissions("a.run").entryOnly().step("S", NoopStep.class, NoMetadata.INSTANCE));
+        ProcessDefinition<In, Out, ProcessContext> child = define(pb -> complete(pb)
+            .permissions("a.run").subProcessOnly().step("S", NoopStep.class, NoMetadata.INSTANCE));
+
+        assertThat(plain.access()).isEqualTo(ProcessAccess.OPEN);
+        assertThat(plain.listed()).isTrue();
+        assertThat(entry.access()).isEqualTo(ProcessAccess.ENTRY_ONLY);
+        assertThat(child.access()).isEqualTo(ProcessAccess.SUB_PROCESS_ONLY);
+        assertThat(List.of(entry, child, plain.asInternal())).noneMatch(ProcessDefinition::listed);
+        assertThat(List.of(entry, child)).noneMatch(ProcessDefinition::internal);
+        assertThat(entry.withPermissions("b.run").access()).isEqualTo(ProcessAccess.ENTRY_ONLY);
+        assertThat(entry.withMfa(com.jabiz.security.MfaRequirement.ALWAYS).access())
+            .isEqualTo(ProcessAccess.ENTRY_ONLY);
+        assertThat(plain.withAccess(ProcessAccess.SUB_PROCESS_ONLY).access()).isEqualTo(ProcessAccess.SUB_PROCESS_ONLY);
     }
 
     @Test

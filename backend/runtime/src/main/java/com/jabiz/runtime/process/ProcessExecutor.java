@@ -12,6 +12,7 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.process.StepDefinition;
 import com.jabiz.process.StepImplementation;
 import com.jabiz.process.StepPhase;
+import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.context.RequestContexts;
@@ -28,6 +29,7 @@ import com.jabiz.runtime.storage.UniqueKeyViolationException;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
@@ -35,12 +37,16 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
+import tools.jackson.databind.ObjectReader;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runs processes (docs/design/06-process.md). One top-level execution is one operation and one transaction:
@@ -56,14 +62,17 @@ import java.util.Objects;
  * </ol>
  * Any failure before the commit rolls everything back, the operation records included. Domain exceptions propagate
  * unchanged. The caller's {@link RequestContext} must be in the Reactor context; permissions are checked by the
- * entry point (the process API), not here, so that jobs and tests call the same executor (decision D11).
+ * entry point (the process API), not here, so that jobs and tests call the same executor (decision D11). Who may start
+ * a process at all is checked here, for every caller (decision D41, {@link #requireStartable}): an
+ * {@code internal()} process runs as the system only, an {@code entryOnly()} one only from its platform entry point,
+ * a {@code subProcessOnly()} one only as a sub-process.
  *
  * <p>Steps run as their kind requires: platform {@link StepHandler}s return their own publisher,
  * {@link ComputeStep}s run synchronously on the current thread, {@link BlockingStep}s on a virtual thread of
  * {@code boundedElastic}, after which execution returns to a non-blocking thread.
  */
 @Component
-public class ProcessExecutor {
+public class ProcessExecutor implements SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessExecutor.class);
 
@@ -81,11 +90,16 @@ public class ProcessExecutor {
     private final SensitiveDataMasker masker;
     private final String poolRef;
     private final PlatformObservations observations;
+    private final Duration lockTimeout;
+    /** Readers of the registered processes' outputs, for replays, built at startup (see below). */
+    private final Map<Class<?>, ObjectReader> outputReaders = new ConcurrentHashMap<>();
 
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations,
+        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout) {
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
+        this.lockTimeout = Objects.requireNonNull(lockTimeout, "lockTimeout must not be null");
         this.masker = masker;
         this.beans = beans;
         this.sequence = sequence;
@@ -96,9 +110,34 @@ public class ProcessExecutor {
         this.poolRef = Objects.requireNonNull(poolRef, "poolRef must not be null");
     }
 
+    /**
+     * Builds the reader of every registered process's output once, at startup: Jackson builds a type's deserializer
+     * under a lock, and replays running side by side (a job's items) would otherwise wait for it on an event loop.
+     */
+    @Override
+    public void afterSingletonsInstantiated() {
+        beans.getBeanProvider(ProcessRegistry.class).ifAvailable(registry -> registry.all().forEach(definition ->
+            outputReaders.computeIfAbsent(definition.outputType(), json::readerFor)));
+    }
+
+    private ObjectReader outputReader(Class<?> type) {
+        ObjectReader reader = outputReaders.get(type);
+        // A process that is no bean (tests) builds its reader on first use.
+        return reader != null ? reader : outputReaders.computeIfAbsent(type, json::readerFor);
+    }
+
     /** Executes the process and returns its output. */
     public <I, O, C extends ProcessContext> Mono<O> execute(ProcessDefinition<I, O, C> definition, I input) {
         return run(definition, input, ExecutionOptions.NONE).map(ProcessResult::output);
+    }
+
+    /**
+     * Executes the process from the platform's own entry point for it, as the caller, and returns its output: how an
+     * {@code entryOnly()} process runs (decision D41). Only platform entry points (signing in, the entity API,
+     * uploads, imports, account settings...) call it.
+     */
+    public <I, O, C extends ProcessContext> Mono<O> executeAtEntry(ProcessDefinition<I, O, C> definition, I input) {
+        return run(definition, input, ExecutionOptions.NONE.atEntryOf(definition)).map(ProcessResult::output);
     }
 
     /**
@@ -114,6 +153,7 @@ public class ProcessExecutor {
         Objects.requireNonNull(options, "options must not be null");
         return observations.mono(PlatformObservations.PROCESS, "process " + definition.name(), tags(definition),
             RequestContexts.current().flatMap(request -> {
+                requireStartable(definition, request, options);
                 String key = options.idempotencyKey();
                 if (key == null) {
                     return executeRoot(definition, input, request, null, options);
@@ -128,6 +168,60 @@ public class ProcessExecutor {
                     .onErrorResume(ProcessExecutor::isIdempotencyRace,
                         race -> replay.switchIfEmpty(Mono.error(race)))));
             }));
+    }
+
+    /**
+     * The {@code lock_timeout} of a process transaction: the global timeout, or the execution's wait when shorter; at
+     * least 1 ms, since 0 means no limit.
+     */
+    static String lockTimeoutSetting(Duration global, Duration execution) {
+        Duration wait = execution != null && execution.compareTo(global) < 0 ? execution : global;
+        return Math.max(1, wait.toMillis()) + "ms";
+    }
+
+    /**
+     * Refuses to start {@code definition} as a top-level process unless its declaration allows it (decision D41):
+     * an {@code internal()} process as the system only, an {@code entryOnly()} one only from its platform entry point
+     * ({@link ExecutionOptions#atEntryOf}), a {@code subProcessOnly()} one never. 403 {@code PROCESS_INTERNAL},
+     * whatever the actor's permissions. The process API calls it before converting the input, too.
+     */
+    public static void requireStartable(ProcessDefinition<?, ?, ?> definition, RequestContext request,
+        ExecutionOptions options) {
+        boolean allowed = switch (definition.access()) {
+            case OPEN -> true;
+            case INTERNAL -> isSystem(request);
+            case ENTRY_ONLY -> options.isEntryOf(definition);
+            case SUB_PROCESS_ONLY -> false;
+        };
+        if (!allowed) {
+            throw refused(definition, "Process " + definition.name() + " cannot be started here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
+        }
+    }
+
+    /**
+     * Refuses to call {@code definition} as a sub-process unless its declaration allows it (decision D41): an
+     * {@code internal()} process only under a top-level process run as the system (a sub-process runs as the actor of
+     * the top-level one), an {@code entryOnly()} one never.
+     */
+    static void requireCallable(ProcessDefinition<?, ?, ?> definition, RequestContext request) {
+        boolean allowed = switch (definition.access()) {
+            case OPEN, SUB_PROCESS_ONLY -> true;
+            case INTERNAL -> isSystem(request);
+            case ENTRY_ONLY -> false;
+        };
+        if (!allowed) {
+            throw refused(definition, "Process " + definition.name() + " cannot be called as a sub-process here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
+        }
+    }
+
+    private static boolean isSystem(RequestContext request) {
+        return RequestContext.SYSTEM_ACTOR.equals(request.actorId());
+    }
+
+    private static ProcessInternalException refused(ProcessDefinition<?, ?, ?> definition, String message) {
+        return new ProcessInternalException(definition.name(), definition.access(), message);
     }
 
     private static KeyValues tags(ProcessDefinition<?, ?, ?> definition) {
@@ -146,7 +240,7 @@ public class ProcessExecutor {
                 throw new IdempotencyConflictException("Idempotency key " + key + " was used for process "
                     + found.processName() + ", not " + definition.name());
             }
-            O output = json.readValue(found.output(), definition.outputType());
+            O output = outputReader(definition.outputType()).readValue(found.output());
             return new ProcessResult<>(found.processSeqId(), output, true);
         });
     }
@@ -157,13 +251,21 @@ public class ProcessExecutor {
     ) {
         StorageEngine engine = engine();
         List<PendingStep<?>> afterCommit = Collections.synchronizedList(new ArrayList<>());
-        Mono<ProcessResult<O>> transaction = sequence.next().flatMap(seq -> {
+        // Every lock the transaction waits for - row locks, the platform's own, an idempotency key taken by a
+        // concurrent duplicate - waits at most this long (06 section 4.1): the global timeout, or a job item's wait.
+        Mono<Void> boundLockWaits = engine.select("SELECT set_config('lock_timeout', :timeout, true) AS t",
+            Map.of("timeout", BoundValue.of(lockTimeoutSetting(lockTimeout, options.lockWait())))).then();
+        Mono<ProcessResult<O>> transaction = boundLockWaits.then(sequence.next()).flatMap(seq -> {
             OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq, null,
                 null, null, idempotencyKey, null, masker.summary(input));
             return operations.begin(engine, operation, request)
                 .flatMap(started -> options.beforeSteps().apply(started)
                     .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)));
         });
+        if (options.lockWait() != null) {
+            ExecutionOptions.LockWait wait = new ExecutionOptions.LockWait(options.lockWait());
+            transaction = transaction.contextWrite(context -> context.put(ExecutionOptions.LockWait.class, wait));
+        }
         if (options.dryRun()) {
             // Rolled back by failing the transaction on purpose once everything has run; after-commit steps never run.
             // Blocking steps, sub-processes' included, see the dry run: external calls are refused in it (D38).
@@ -195,12 +297,13 @@ public class ProcessExecutor {
                     return Mono.error(new IllegalStateException("Process " + definition.name()
                         + " can only be called as a sub-process from a step of a running process"));
                 }
-                return RequestContexts.current().flatMap(request -> sequence.next().flatMap(seq -> {
-                    OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
-                        parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
-                    return operations.begin(engine(), operation, request)
-                        .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
-                })).map(ProcessResult::output);
+                return RequestContexts.current().doOnNext(request -> requireCallable(definition, request))
+                    .flatMap(request -> sequence.next().flatMap(seq -> {
+                        OperationRequest operation = new OperationRequest(definition.name(), definition.version(),
+                            seq, parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
+                        return operations.begin(engine(), operation, request).flatMap(started ->
+                            runProcess(definition, input, started, request, frame.afterCommit(), false));
+                    })).map(ProcessResult::output);
             }));
     }
 

@@ -154,7 +154,7 @@ public class UserProcesses {
             ProcessContext.class, pb -> pb
                 .description("Sets the language of the user's own mail.")
                 .permissions(SecurityPermissions.ACCOUNT)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(USER_ID, input.userId());

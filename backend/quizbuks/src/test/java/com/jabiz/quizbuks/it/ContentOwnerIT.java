@@ -192,15 +192,16 @@ class ContentOwnerIT extends ContentItSupport {
     }
 
     @Test
-    void releasingFilesIsTheSystemsOnly() {
-        // Only QB_QUIZ_DELETE runs it, as its subprocess; no sponsor calls it directly (review S1).
+    void releasingFilesRunsOnlyAsASubProcess() {
+        // Only QB_QUIZ_DELETE runs it, as its subprocess; no sponsor starts it directly (review S1, platform D41).
         Quiz a = quizOfA();
         Map<String, Object> release = body("quizId", a.quizId(), "versionFileIds", List.of());
-        refused("QB_QUIZ_RELEASE_FILES", sponsorA(), release, 403);
-        refused("QB_QUIZ_RELEASE_FILES", sponsorB(), release, 403);
-        // Even with the system's permission, the quiz must be the caller's own and removed.
-        refused("QB_QUIZ_RELEASE_FILES", com.jabiz.runtime.test.TestTokens.bearer(tokens, "sponsor-a",
-            com.jabiz.quizbuks.QbPermissions.CONTENT_SYSTEM), release, 404);
+        refusedAsInternal("QB_QUIZ_RELEASE_FILES", sponsorA(), release);
+        refusedAsInternal("QB_QUIZ_RELEASE_FILES", sponsorB(), release);
+        // Not even with its permission, which no role holds, nor holding every permission.
+        refusedAsInternal("QB_QUIZ_RELEASE_FILES", com.jabiz.runtime.test.TestTokens.bearer(tokens, "sponsor-a",
+            com.jabiz.quizbuks.QbPermissions.CONTENT_SYSTEM), release);
+        refusedAsInternal("QB_QUIZ_RELEASE_FILES", admin(), release);
     }
 
     private static Object quizIdOrIdOf(Map<String, Object> row) {

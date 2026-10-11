@@ -272,8 +272,8 @@ class MfaIT extends SecurityItSupport {
     @Test
     void theGenericEntityProcessesAskForASecondFactorToo() {
         String noMfa = TestTokens.withoutMfa(tokens, "it-admin", "*");
-        assertThat(ruleCode(post("/api/processes/ADD_ENTITY/latest", noMfa, Map.of("entityType", SecurityEntities.ROLE,
-            "attributes", Map.of("roleCode", unique("R"), "labels", Map.of("en", "R"), "enabled", true)))
+        assertThat(ruleCode(post("/api/entities/" + SecurityEntities.ROLE, noMfa,
+            Map.of("roleCode", unique("R"), "labels", Map.of("en", "R"), "enabled", true))
             .expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody())).isEqualTo("MFA_REQUIRED");
     }
 

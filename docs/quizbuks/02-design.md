@@ -66,7 +66,7 @@ docs/quizbuks/               本文件等
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
 - 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
-  平台 D41 实现（16l）后，`internal()` 的流程只允许系统身份运行，这些系统权限随之只起声明作用。
+  平台 D41（16l）已合入：`QB_SPONSOR_APPROVAL_RESULT` 与 Q4 的系统流程声明 `internal()`（只允许系统身份运行），`QB_QUIZ_RELEASE_FILES` 声明 `subProcessOnly()`；这些系统权限随之只起声明作用。
 - 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
 - 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）：

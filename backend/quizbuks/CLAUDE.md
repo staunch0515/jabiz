@@ -53,7 +53,7 @@
   写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ `qb.pub:<publicationId>`（独占）→ Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
-  到期上下架只由定时任务 `qb.publication-tick` 做（按普通表 `qb_publication_schedule` 的 `next_due_at` 查出全部到期的，可补跑；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）的权限 `qb.publication.system` 不授予任何角色（`internal()` 只是不进目录，权限照常检查）；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
+  到期上下架只由定时任务 `qb.publication-tick` 做（按普通表 `qb_publication_schedule` 的 `next_due_at` 查出全部到期的，可补跑；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
   上限在 `PublishingLimits`，错误码在 `PublishingCodes`。**审批规则只经 `QB_SETUP` 以受控变更提出**（`setup.QbApprovalRules`，与 `QbParams` 并列），由另一位管理员发布；
   "无规则即放行"由应用挡住（`QB_REVIEW_NOT_CONFIGURED`）。移除模版时，已提交过的发布所用版本的文件保留（`QuizProcesses.filesStillNeeded`）。
   上架时随计数行插入**卡片** `QbPublicationCard`（普通表：除状态外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
@@ -76,7 +76,9 @@
   入驻的审批对象 `qb.sponsor`、规则 `qb.sponsor.review` 同发布：**审批规则只经 `QB_SETUP` 以受控变更提出**，"无规则即放行"由应用挡住（`setup.ReviewCodes`）。审批绑定的内容只在入驻行上（名字 `contactName`、公司、简介、头像、同意条款的时间），
   资料的名字另由本人修改、后写者为准，不影响审批；批准须为入驻自己的、绑定当前内容的请求，驳回只须是入驻自己的、已驳回的请求，理由取自审批人的决定。
   **商家头像被替换或去掉时由流程释放旧文件**（先清引用并 `SaveChanges.now`，再子流程 `FILE_DELETE`），这是"业务流程不调用 `FILE_DELETE`"的唯一例外：头像只有本人的一行引用，等不到清扫。
-  **只能由子流程运行的流程**（如 `QB_QUIZ_RELEASE_FILES`）的权限不授予任何角色（`qb.content.system`），流程内照样再查自己的前提；平台 16l（D41）合入后改声明为只允许子流程运行。
+  **只能由子流程运行的流程**（如 `QB_QUIZ_RELEASE_FILES`）声明 `subProcessOnly()`（D41），权限不授予任何角色（`qb.content.system`），流程内照样再查自己的前提。
+  **谁能启动流程**（D41）：QuizBuks 的事件消费者、定时任务、回调接续点与审批结果（发布与入驻）一律 `internal()`，只作子流程的用 `subProcessOnly()`，由人发起的照常开放；
+  事件与定时任务只运行 `internal()` 流程（启动检查），不用 `.manualToo()`，除非该开放流程确实也由人手工运行。测试中以系统身份运行内部流程用 `ContentItSupport.runAsSystem`，场景中用 `actor: {id: system}`。
   事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；商家后台的地址是参数 `link`（`quizbuks.links.sponsor`），写在正文里而不是 Markdown 链接中（平台对链接中的参数做百分号编码）。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）。
 

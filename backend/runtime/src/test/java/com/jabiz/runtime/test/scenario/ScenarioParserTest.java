@@ -84,12 +84,28 @@ class ScenarioParserTest {
               - runJob: month-close
               - runJob: { job: month-close, at: 2026-02-01T00:05:00+09:00, outcome: REPLAYED }
               - deliverEvents: true
+              - runJob: { job: expire, outcome: PARTIAL, items: { succeeded: 2, failed: 1 } }
             """, "scenarios/jobs.yml");
 
         assertThat(scenario.steps()).containsExactly(
             new Scenario.RunJob(1, "month-close", null, "SUCCEEDED"),
             new Scenario.RunJob(2, "month-close", Instant.parse("2026-01-31T15:05:00Z"), "REPLAYED"),
-            new Scenario.DeliverEvents(3));
+            new Scenario.DeliverEvents(3),
+            new Scenario.RunJob(4, "expire", null, "PARTIAL", Map.of("succeeded", 2, "failed", 1)));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - runJob: { job: x, items: { done: 1 } }
+            """, "scenarios/bad.yml")).hasMessageContaining("done");
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - runJob: { job: x, items: { failed: -1 } }
+            """, "scenarios/bad.yml")).hasMessageContaining("at least 0");
         assertThatThrownBy(() -> Scenario.parse("""
             name: Bad
             clock: 2026-01-31T09:00:00Z

@@ -4,7 +4,7 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import com.jabiz.query.SqlIdentifiers;
-import com.jabiz.runtime.ConcurrentUpdateException;
+import com.jabiz.runtime.LockNotAvailableException;
 import io.r2dbc.postgresql.api.PostgresqlException;
 import io.r2dbc.postgresql.codec.Json;
 import io.r2dbc.spi.ColumnMetadata;
@@ -283,7 +283,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
     /**
      * Unique index violations become {@link UniqueKeyViolationException} carrying the index name; refusals of the
      * append-only guard become {@link AppendOnlyViolationException}; a deadlock or a lock not obtained in time becomes
-     * {@link ConcurrentUpdateException} (409: the request may be retried).
+     * {@link LockNotAvailableException} (409: the request may be retried; a busy item of a job).
      */
     private static Throwable translate(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
@@ -296,8 +296,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
                     return new AppendOnlyViolationException(pg.getErrorDetails().getMessage(), error);
                 }
                 if (LOCK_FAILURES.contains(code)) {
-                    return new ConcurrentUpdateException("Another operation holds what this one needs; try again",
-                        error);
+                    return new LockNotAvailableException(code, error);
                 }
             }
         }

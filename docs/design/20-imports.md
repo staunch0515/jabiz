@@ -125,10 +125,12 @@
   `IMPORT_EXTRA_CELLS`、`IMPORT_VALUE_INVALID`、`IMPORT_DUPLICATE_REF`、`IMPORT_EMPTY`、`IMPORT_WRONG_FILE`、`IMPORT_ROW_FAILED`、`IMPORT_REJECTED`；
   行流程的违规保留其自身的错误码。
 - 观测：`jabiz.import.run`，标签只有导入名与模式（`preview` / `commit`）。
+- 谁能启动（06 §8，D41）：`IMPORT_RUN` 与 `IMPORT_MAPPING_SAVE/REMOVE` 是 `entryOnly()`，只经上面的接口运行。各行以导入人的身份作为 `IMPORT_RUN` 的子流程运行，
+  所以目标流程必须是普通流程（手工录入所用的同一个流程）或 `subProcessOnly()`；`internal()` 与 `entryOnly()` 的目标在启动检查 `IMPORT` 中报错。
 
 ## 7. 启动检查（`IMPORT`、`MESSAGES`）
 
-导入 id 唯一；文件策略存在、只允许导入类型、允许版式所读的类型（CSV/定宽需要 `TEXT`，XLSX 需要 `XLSX`，XML 需要 `XML`）；目标流程与版本已注册；
+导入 id 唯一；文件策略存在、只允许导入类型、允许版式所读的类型（CSV/定宽需要 `TEXT`，XLSX 需要 `XLSX`，XML 需要 `XML`）；目标流程与版本已注册，且是普通流程或 `subProcessOnly()`（§6）；
 参数表单能描述参数类型（否则警告）；导入与每个字段在应用的每种语言下都有文本。
 
 ## 8. 测试

@@ -182,7 +182,7 @@ public class SignUpProcesses {
         return ProcessDefinition.define(SIGN_UP, 1, SignUpInput.class, Done.class, AccountContext.class, pb -> pb
             .description("Self-registration: a new user with the entry's roles, or a mail to the address's user.")
             .permissions(SecurityPermissions.SIGN_UP)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 AccountContext ctx = new AccountContext(start, input.entry(), input.email(), input.displayName(),
                     input.locale(), null, null, null);
@@ -215,7 +215,7 @@ public class SignUpProcesses {
         return ProcessDefinition.define(JOIN, 1, JoinInput.class, Done.class, AccountContext.class, pb -> pb
             .description("Adds an entry's registration roles to the user whose address a mailed link proves.")
             .permissions(SecurityPermissions.SIGN_UP)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 AccountContext ctx = new AccountContext(start, null, null, null, null, null, input.token(), null);
                 ctx.put(PASSWORD, input.password());
@@ -248,7 +248,7 @@ public class SignUpProcesses {
             pb -> pb
                 .description("Tells whether verifying with a link needs a password; run as a dry run only.")
                 .permissions(SecurityPermissions.SIGN_UP)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null,
                     input.token(), null))
                 .outputMapper(ctx -> new VerifyCheck(preClaimable(linked(ctx))))
@@ -263,7 +263,7 @@ public class SignUpProcesses {
         return ProcessDefinition.define(VERIFY, 1, VerifyInput.class, Done.class, AccountContext.class, pb -> pb
             .description("Proves a user's e-mail address with the link of a verification mail.")
             .permissions(SecurityPermissions.SIGN_UP)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 AccountContext ctx = new AccountContext(start, null, null, null, null, null, input.token(), null);
                 ctx.put(PASSWORD, input.newPassword());
@@ -294,7 +294,7 @@ public class SignUpProcesses {
             pb -> pb
                 .description("Sends a new verification mail to a user whose address is not verified.")
                 .permissions(SecurityPermissions.SIGN_UP)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> new AccountContext(start, input.entry(), input.email(), null, null,
                     input.userId(), null, null))
                 .outputMapper(DONE)
@@ -311,7 +311,7 @@ public class SignUpProcesses {
             pb -> pb
                 .description("Sends a password reset link to the enabled user of a trusted address.")
                 .permissions(SecurityPermissions.SIGN_UP)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> new AccountContext(start, input.entry(), input.email(), null, null,
                     null, null, null))
                 .outputMapper(DONE)
@@ -327,7 +327,7 @@ public class SignUpProcesses {
             pb -> pb
                 .description("Sets a new password with the link of a password reset mail and ends every session.")
                 .permissions(SecurityPermissions.SIGN_UP)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     AccountContext ctx = new AccountContext(start, null, null, null, null, null, input.token(),
                         input.source());

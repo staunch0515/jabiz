@@ -17,8 +17,8 @@ import java.util.Set;
 /**
  * Who may run an import (docs/design/20-imports.md section 6): the import's own permission, the permissions of the
  * process its rows go to - rows are handed to it as sub-processes, which check nothing themselves - and the read
- * permission of its file policy. Checked by the endpoints and again by {@code IMPORT_RUN} itself, which an internal
- * process can still be asked to run directly.
+ * permission of its file policy. Checked by the endpoints and again by {@code IMPORT_RUN} itself, as a second line:
+ * {@code IMPORT_RUN} is {@code entryOnly()} (decision D41), so only those endpoints run it.
  */
 @Component
 class ImportAccess {

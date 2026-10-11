@@ -109,6 +109,7 @@ public class SensitiveDataMasker {
         if (value == null) {
             return null;
         }
+        value = externalJobSummary(value);
         String text = json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().stringNode(MASK),
             name -> isSensitive(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT))));
         if (text.length() <= MAX_SUMMARY_LENGTH) {
@@ -118,6 +119,40 @@ public class SensitiveDataMasker {
         truncated.put("truncated", true);
         truncated.put("length", text.length());
         return json.writeValueAsString(truncated);
+    }
+
+    /**
+     * The inputs of external jobs' completion and failure processes (decision D38) are recorded without what the other
+     * system answered: the result, which may be personal, by its size in bytes, and the handler's message, which may
+     * repeat what it was given, by its length.
+     */
+    private Object externalJobSummary(Object value) {
+        if (value instanceof com.jabiz.external.ExternalJobCompletion c) {
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("jobId", c.jobId());
+            summary.put("jobType", c.jobType());
+            summary.put("requestedBy", c.requestedBy());
+            summary.put("reference", c.reference());
+            summary.put("resultBytes", c.result() == null ? 0 : json.writeValueAsBytes(c.result()).length);
+            summary.put("usage", c.usage());
+            summary.put("attempts", c.attempts());
+            summary.put("finishedTime", c.finishedTime());
+            return summary;
+        }
+        if (value instanceof com.jabiz.external.ExternalJobFailure f) {
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("jobId", f.jobId());
+            summary.put("jobType", f.jobType());
+            summary.put("requestedBy", f.requestedBy());
+            summary.put("reference", f.reference());
+            summary.put("usage", f.usage());
+            summary.put("attempts", f.attempts());
+            summary.put("finishedTime", f.finishedTime());
+            summary.put("errorCode", f.errorCode());
+            summary.put("errorMessageLength", f.errorMessage() == null ? 0 : f.errorMessage().length());
+            return summary;
+        }
+        return value;
     }
 
     /**

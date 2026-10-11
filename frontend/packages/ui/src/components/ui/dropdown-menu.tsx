@@ -4,10 +4,42 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
 
 import { cn, UI_SCOPE } from '../../lib/utils'
 
+/** Whether the menu is open now, for its content to know when it is closing (see {@link DropdownMenuContent}). */
+const OpenContext = React.createContext<React.RefObject<boolean> | null>(null)
+
 // Not modal by default: a modal menu hides the rest of the page with aria-hidden while it stays focusable, which
 // axe reports (aria-hidden-focus). The menu still takes focus, closes on Escape, Tab and outside clicks.
-function DropdownMenu({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" modal={modal} {...props} />
+function DropdownMenu({
+  modal = false,
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  // Set as the change happens (not after a render), since what reads it runs in a deferred task.
+  const openRef = React.useRef(open ?? defaultOpen ?? false)
+  React.useLayoutEffect(() => {
+    if (open !== undefined) openRef.current = open
+  }, [open])
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      openRef.current = next
+      onOpenChange?.(next)
+    },
+    [onOpenChange],
+  )
+  return (
+    <OpenContext.Provider value={openRef}>
+      <DropdownMenuPrimitive.Root
+        data-slot="dropdown-menu"
+        modal={modal}
+        open={open}
+        defaultOpen={defaultOpen}
+        onOpenChange={handleOpenChange}
+        {...props}
+      />
+    </OpenContext.Provider>
+  )
 }
 
 function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
@@ -18,16 +50,33 @@ function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownM
   return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+/*
+ * A closed menu gives focus back to its trigger a task after it has left the DOM (Radix's FocusScope), late when the
+ * page is busy (as right after switching the language, when every query is fetched again). If the menu has been
+ * opened again meanwhile, the new one already holds focus, and being non-modal it takes that late focus on the
+ * trigger as focus moving out and closes at once. So the restore is skipped while the menu is open again.
+ */
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  const openRef = React.useContext(OpenContext)
+  const handleCloseAutoFocus = React.useCallback(
+    (event: Event) => {
+      onCloseAutoFocus?.(event)
+      // Prevented, Radix neither focuses the trigger nor falls back to the element focused before.
+      if (openRef?.current) event.preventDefault()
+    },
+    [onCloseAutoFocus, openRef],
+  )
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
+        onCloseAutoFocus={handleCloseAutoFocus}
         className={cn(UI_SCOPE,  UI_SCOPE,
           'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
           className,
