@@ -69,26 +69,82 @@ describe('account pages', () => {
   })
 
   describe('VerifyEmailPage', () => {
-    it('posts the token of the link once and leads to the entry', async () => {
-      const posts = server({ '/api/auth/verify-email': { status: 204 } })
-      const { container } = page('/auth/verify-email?entry=portal&token=tok-1')
+    it('sends nothing until asked, keeps the token out of the address bar and sends no referrer', async () => {
+      window.history.replaceState(null, '', '/auth/verify-email?entry=portal&token=tok-1')
+      const posts = server({
+        '/api/auth/verify-email/check': { status: 200, body: { passwordRequired: false } },
+        '/api/auth/verify-email': { status: 204 },
+      })
+      const { container, unmount } = page('/auth/verify-email?entry=portal&token=tok-1')
+      expect(window.location.search).toBe('?entry=portal')
+      expect(document.querySelector('meta[name="referrer"]')?.getAttribute('content')).toBe('no-referrer')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(posts).toHaveLength(0)
+
+      fireEvent.click(screen.getByTestId('verify-start'))
       await waitFor(() => expect(screen.getByTestId('verify-state').textContent).toContain('is verified'))
-      expect(posts).toEqual([{ path: '/api/auth/verify-email', body: { token: 'tok-1' } }])
+      expect(posts).toEqual([
+        { path: '/api/auth/verify-email/check', body: { token: 'tok-1' } },
+        { path: '/api/auth/verify-email', body: { token: 'tok-1' } },
+      ])
       await waitFor(() => expect(screen.getByTestId('auth-continue').getAttribute('href')).toBe('/portal/'))
       await expectAccessible(container)
+      unmount()
+      expect(document.querySelector('meta[name="referrer"]')).toBeNull()
+      window.history.replaceState(null, '', '/')
+    })
+
+    it('asks an account nobody verified for its password, or a new one that takes it over', async () => {
+      const posts = server({
+        '/api/auth/verify-email/check': { status: 200, body: { passwordRequired: true } },
+        '/api/auth/verify-email': [problem(422, 'PASSWORD_INCORRECT', 'password'), { status: 204 }],
+      })
+      const { container } = page('/auth/verify-email?entry=portal&token=t2')
+      fireEvent.click(screen.getByTestId('verify-start'))
+      expect(await screen.findByTestId('verify-password-hint')).toBeTruthy()
+      await expectAccessible(container)
+
+      type('Password', 'wrong one')
+      fireEvent.click(screen.getByRole('button', { name: 'Verify my address' }))
+      expect(await screen.findByText('PASSWORD_INCORRECT message')).toBeTruthy()
+
+      fireEvent.click(screen.getByTestId('verify-mode'))
+      type('New password', 'correct horse battery')
+      type('Repeat the new password', 'correct horse battery')
+      fireEvent.click(screen.getByRole('button', { name: 'Verify my address' }))
+      await waitFor(() => expect(screen.getByTestId('verify-state').textContent).toContain('is verified'))
+      expect(posts.slice(1)).toEqual([
+        { path: '/api/auth/verify-email', body: { token: 't2', password: 'wrong one' } },
+        { path: '/api/auth/verify-email', body: { token: 't2', newPassword: 'correct horse battery' } },
+      ])
     })
 
     it('offers a new link for a link that is no good, answered alike for every address', async () => {
       const posts = server({
-        '/api/auth/verify-email': problem(422, 'TOKEN_INVALID'),
+        '/api/auth/verify-email/check': problem(422, 'TOKEN_INVALID'),
         '/api/auth/verify-email/resend': { status: 202 },
       })
       page('/auth/verify-email?entry=portal&token=old')
+      fireEvent.click(screen.getByTestId('verify-start'))
       await waitFor(() => expect(screen.getByTestId('verify-state').textContent).toContain('invalid'))
       type('E-mail address', ' ann@example.com ')
       fireEvent.click(screen.getByRole('button', { name: 'Send a new link' }))
       await waitFor(() => expect(screen.getByTestId('resend-state').textContent).toContain('If the address'))
       expect(posts[1]).toEqual({ path: '/api/auth/verify-email/resend', body: { email: 'ann@example.com', entry: 'portal' } })
+    })
+
+    it('lets the person try again after a failure that is not the link', async () => {
+      const posts = server({
+        '/api/auth/verify-email/check': [{ status: 503, body: { status: 503 } },
+          { status: 200, body: { passwordRequired: false } }],
+        '/api/auth/verify-email': { status: 204 },
+      })
+      page('/auth/verify-email?entry=portal&token=t3')
+      fireEvent.click(screen.getByTestId('verify-start'))
+      fireEvent.click(await screen.findByTestId('verify-retry'))
+      fireEvent.click(screen.getByTestId('verify-start'))
+      await waitFor(() => expect(screen.getByTestId('verify-state').textContent).toContain('is verified'))
+      expect(posts).toHaveLength(3)
     })
 
     it('sends nothing without a token and keeps to entries of a proper name', async () => {
@@ -137,6 +193,14 @@ describe('account pages', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
       await waitFor(() => expect(screen.getByTestId('join-state').textContent).toContain('Done'))
       expect(posts[2].body).toEqual({ token: 'j2', password: 'correct horse battery' })
+    })
+
+    it('shows a refusal that is not about the password above the form', async () => {
+      server({ '/api/auth/join': problem(422, 'SIGN_UP_DISABLED') })
+      page('/auth/join?token=j3')
+      fireEvent.click(screen.getByTestId('join-continue'))
+      await waitFor(() => expect(screen.getByTestId('join-error').textContent).toContain('SIGN_UP_DISABLED message'))
+      expect(screen.getByTestId('join-continue')).toBeTruthy()
     })
 
     it('says when the link is no good', async () => {

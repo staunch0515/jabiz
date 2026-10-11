@@ -3,39 +3,42 @@ import { Info } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../../api/client'
-import { ApiError } from '../../api/problem'
 import { SignInFrame, SubmitButton } from '../../components/SignInFrame'
-import { failure, invalidLink, useLink } from './link'
+import { failure, invalidLink, passwordProblems, passwordRequired, useLink } from './link'
 import { ContinueTo, Outcome } from './Outcome'
 import { NewPasswordFields, type NewPassword } from './NewPasswordFields'
 
 type State = 'ready' | 'password' | 'done' | 'invalid'
 
 /**
- * Where the link of the "you already have an account" mail leads (docs/design/10-security.md section 15; decision D36
- * item 2 and implementation note 6): continuing adds the entry's roles to the account. Nothing happens before the
- * person clicks, so that a mail scanner opening the link changes nothing. An account whose address was never verified
- * must get a new password at the same time (the server answers 422 {@code REQUIRED} for {@code password}): whoever
- * registered the address before may know the old one.
+ * Where the link of the "you already have an account" mail leads (docs/design/10-security.md section 15.7; decision
+ * D36 item 2 and implementation note 6): continuing adds the entry's roles to the account. Nothing happens before the
+ * person clicks, so that a mail scanner opening the link changes nothing. An account somebody may have registered
+ * with this address before must get a new password at the same time (the server answers 422 {@code REQUIRED} for
+ * {@code password}). Only problems of the password go under its field; any other goes to the alert above the form.
  */
 export default function JoinPage() {
   const { t } = useTranslation()
   const { token, appPath } = useLink()
   const [state, setState] = useState<State>(token ? 'ready' : 'invalid')
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const form = useForm<NewPassword>({ defaultValues: { password: '', confirm: '' } })
 
   const join = async (password?: string) => {
     setError(null)
+    setFieldError(null)
     try {
       await unwrap(api.POST('/api/auth/join', { body: password === undefined ? { token: token! } : { token: token!, password } }))
       setState('done')
     } catch (e) {
       if (invalidLink(e)) {
         setState('invalid')
-      } else if (e instanceof ApiError && e.status === 422 && e.forField('password').some((v) => v.ruleCode === 'REQUIRED')) {
+      } else if (password === undefined && passwordRequired(e)) {
         setState('password')
+      } else if (passwordProblems(e).length > 0) {
+        setFieldError(passwordProblems(e).join(' '))
       } else {
         setError(failure(e, t('auth.failed')))
       }
@@ -44,14 +47,14 @@ export default function JoinPage() {
 
   return (
     <SignInFrame subtitle={t('auth.joinTitle')} testId="join">
+      {error && (
+        <Outcome ok={false} testId="join-error">
+          {error}
+        </Outcome>
+      )}
       {state === 'ready' && (
         <>
           <p className="text-sm">{t('auth.joinHint')}</p>
-          {error && (
-            <Outcome ok={false} testId="join-error">
-              {error}
-            </Outcome>
-          )}
           <Button
             size="lg"
             className="w-full"
@@ -73,7 +76,7 @@ export default function JoinPage() {
             <Info aria-hidden />
             <AlertDescription data-testid="join-password-hint">{t('auth.joinPasswordHint')}</AlertDescription>
           </Alert>
-          <NewPasswordFields form={form} serverError={error} />
+          <NewPasswordFields form={form} serverError={fieldError} />
           <SubmitButton busy={form.formState.isSubmitting}>{t('auth.continue')}</SubmitButton>
         </form>
       )}

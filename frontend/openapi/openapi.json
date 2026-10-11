@@ -2513,6 +2513,28 @@
         },
         "type" : "object"
       },
+      "VerifyCheck" : {
+        "properties" : {
+          "passwordRequired" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "VerifyRequest" : {
+        "properties" : {
+          "newPassword" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "WhenEntry" : {
         "properties" : {
           "field" : {
@@ -2854,8 +2876,8 @@
       "post" : {
         "operationId" : "resendOwn",
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "202" : {
+            "description" : "Accepted"
           }
         },
         "tags" : [ "sign-up-controller" ]
@@ -2981,8 +3003,8 @@
           }
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "sign-up-controller" ]
@@ -3294,8 +3316,8 @@
           }
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "sign-up-controller" ]
@@ -3314,8 +3336,8 @@
           }
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "202" : {
+            "description" : "Accepted"
           }
         },
         "tags" : [ "sign-up-controller" ]
@@ -3361,8 +3383,8 @@
           }
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "202" : {
+            "description" : "Accepted"
           }
         },
         "tags" : [ "sign-up-controller" ]
@@ -3402,6 +3424,26 @@
           "content" : {
             "application/json" : {
               "schema" : {
+                "$ref" : "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/auth/verify-email/check" : {
+      "post" : {
+        "operationId" : "verifyCheck",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
                 "$ref" : "#/components/schemas/TokenRequest"
               }
             }
@@ -3409,6 +3451,13 @@
         },
         "responses" : {
           "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerifyCheck"
+                }
+              }
+            },
             "description" : "OK"
           }
         },
@@ -3428,8 +3477,8 @@
           }
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "202" : {
+            "description" : "Accepted"
           }
         },
         "tags" : [ "sign-up-controller" ]

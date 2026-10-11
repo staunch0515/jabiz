@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { api, unwrap } from '../../api/client'
 import { SignInField, SignInFrame, SubmitButton } from '../../components/SignInFrame'
-import { failure, invalidLink, useLink } from './link'
+import { failure, invalidLink, passwordProblems, useLink } from './link'
 import { ContinueTo, Outcome } from './Outcome'
 import { NewPasswordFields, type NewPassword } from './NewPasswordFields'
 
@@ -69,6 +69,7 @@ function Confirm({ token }: { token: string }) {
   const { entry, appPath } = useLink()
   const [state, setState] = useState<'form' | 'done' | 'invalid'>('form')
   const [error, setError] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const form = useForm<NewPassword>({ defaultValues: { password: '', confirm: '' } })
   return (
     <SignInFrame subtitle={t('auth.resetTitle')} testId="password-reset">
@@ -78,16 +79,23 @@ function Confirm({ token }: { token: string }) {
           className="flex flex-col gap-4"
           onSubmit={form.handleSubmit(async ({ password }) => {
             setError(null)
+            setFieldError(null)
             try {
               await unwrap(api.POST('/api/auth/password-reset/confirm', { body: { token, password } }))
               setState('done')
             } catch (e) {
               if (invalidLink(e)) setState('invalid')
+              else if (passwordProblems(e).length > 0) setFieldError(passwordProblems(e).join(' '))
               else setError(failure(e, t('auth.failed')))
             }
           })}
         >
-          <NewPasswordFields form={form} serverError={error} />
+          {error && (
+            <Outcome ok={false} testId="reset-error">
+              {error}
+            </Outcome>
+          )}
+          <NewPasswordFields form={form} serverError={fieldError} />
           <SubmitButton busy={form.formState.isSubmitting}>{t('auth.setPassword')}</SubmitButton>
         </form>
       )}
