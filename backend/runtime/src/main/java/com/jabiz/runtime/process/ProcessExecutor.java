@@ -15,6 +15,7 @@ import com.jabiz.process.StepPhase;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.external.ExternalCallScope;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.operation.OperationRecorder;
@@ -165,8 +166,10 @@ public class ProcessExecutor {
         });
         if (options.dryRun()) {
             // Rolled back by failing the transaction on purpose once everything has run; after-commit steps never run.
+            // Blocking steps, sub-processes' included, see the dry run: external calls are refused in it (D38).
             return engine.inTransaction(transaction.flatMap(result -> Mono.<ProcessResult<O>>error(
-                    new DryRunComplete(result))))
+                    new DryRunComplete(result)))
+                    .contextWrite(context -> context.put(DryRun.class, DryRun.INSTANCE)))
                 .onErrorResume(DryRunComplete.class, done -> Mono.just(cast(done.result)));
         }
         return engine.inTransaction(transaction)
@@ -219,6 +222,9 @@ public class ProcessExecutor {
                 .contextWrite(context -> context.put(Frame.class, new Frame(local)));
         });
     }
+
+    /** In the Reactor context of a dry run's steps. */
+    private enum DryRun { INSTANCE }
 
     /** Carries a dry run's result out of the transaction it rolls back. */
     private static final class DryRunComplete extends RuntimeException {
@@ -291,7 +297,7 @@ public class ProcessExecutor {
     private <M, C extends ProcessContext> Mono<Void> runStep(
         ProcessDefinition<?, ?, C> definition, StepDefinition<M, C> step, C ctx
     ) {
-        return Mono.defer(() -> dispatch(implementation(step), step.metadata(), ctx))
+        return Mono.defer(() -> dispatch(implementation(step), step, ctx))
             .doOnError(error -> log.warn("Process {} v{} (seq {}) failed at step '{}': {}",
                 definition.name(), definition.version(), ctx.processSeqId(), step.stepName(), error.toString()));
     }
@@ -302,13 +308,19 @@ public class ProcessExecutor {
     }
 
     private static <M, C extends ProcessContext> Mono<Void> dispatch(StepImplementation<M, C> implementation,
-        M metadata, C ctx) {
+        StepDefinition<M, C> step, C ctx) {
+        M metadata = step.metadata();
         return switch (implementation) {
             case StepHandler<M, C> handler -> handler.execute(metadata, ctx);
             case ComputeStep<M, C> compute -> Mono.fromRunnable(() -> compute.compute(metadata, ctx));
-            case BlockingStep<M, C> blocking -> Mono.fromCallable(() -> {
-                    blocking.run(metadata, ctx);
-                    return Boolean.TRUE;
+            // The step may call external services on its virtual thread, and only there (decision D38).
+            case BlockingStep<M, C> blocking -> Mono.deferContextual(view -> {
+                    ExternalCallScope scope = new ExternalCallScope(ctx.processSeqId(), step.stepName(),
+                        view.hasKey(DryRun.class));
+                    return Mono.fromCallable(() -> scope.call(() -> {
+                        blocking.run(metadata, ctx);
+                        return Boolean.TRUE;
+                    }));
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 // Leave the virtual thread: the steps after this one are held to the non-blocking rules again.
