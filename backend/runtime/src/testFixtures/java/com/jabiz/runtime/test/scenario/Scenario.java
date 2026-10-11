@@ -132,6 +132,23 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
      */
     public record InboundStep(int number, String provider, Object body, Instant at, String outcome) implements Step {}
 
+    /**
+     * Runs the due external jobs' handlers until nothing is due (docs/design/11-ledger-events-jobs.md section 4a);
+     * retries wait for their backoff, so the clock has to move for them. Their completion processes run at the next
+     * {@code deliverEvents}.
+     */
+    public record RunExternalJobs(int number) implements Step {}
+
+    /**
+     * Writes the result of the oldest open external job of {@code jobType} (with {@code reference}, if given) without
+     * running its handler, through the same record as a real attempt, so that scenarios do not depend on the other
+     * system: {@code status} {@code SUCCEEDED} (default) with {@code result}, or {@code FAILED} with
+     * {@code errorCode} and {@code errorMessage}; {@code usage} by metric. The completion process runs at the next
+     * {@code deliverEvents}.
+     */
+    public record CompleteExternalJob(int number, String jobType, String reference, Object result,
+        Map<String, Object> usage, String status, String errorCode, String errorMessage) implements Step {}
+
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
@@ -246,7 +263,8 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         }
         if (keys.size() != 1) {
             throw new IllegalArgumentException(where + " must have exactly one of process, import, advanceClock, setClock, "
-                + "runJob, deliverEvents, inbound, expect, expectError (besides note); found " + keys.keySet());
+                + "runJob, deliverEvents, inbound, runExternalJobs, completeExternalJob, expect, expectError (besides "
+                + "note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();
         Object body = keys.get(kind);
@@ -261,6 +279,14 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
                 }
                 yield new DeliverEvents(number);
             }
+            case "runExternalJobs" -> {
+                if (!Boolean.TRUE.equals(body)) {
+                    throw new IllegalArgumentException(where + ".runExternalJobs must be true");
+                }
+                yield new RunExternalJobs(number);
+            }
+            case "completeExternalJob" -> completeExternalJob(number, map(body, where + ".completeExternalJob"),
+                where + ".completeExternalJob");
             case "expect" -> new Expect(number, expectation(map(body, where + ".expect"), where + ".expect"));
             case "expectError" -> expectError(number, map(body, where + ".expectError"), where + ".expectError");
             default -> throw new IllegalArgumentException(where + ": unknown step '" + kind + "'");
@@ -333,6 +359,20 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         }
         return new InboundStep(number, text(inbound, "provider", true), required(inbound, "body", where),
             at == null ? null : instant(at, where + ".at"), outcome == null ? "ACCEPTED" : outcome);
+    }
+
+    private static CompleteExternalJob completeExternalJob(int number, Map<String, Object> job, String where) {
+        onlyKeys(job, where, Set.of("jobType", "reference", "result", "usage", "status", "errorCode", "errorMessage"));
+        String status = text(job, "status", false);
+        if (status != null && !Set.of("SUCCEEDED", "FAILED").contains(status)) {
+            throw new IllegalArgumentException(where + ".status must be SUCCEEDED or FAILED");
+        }
+        if (!"FAILED".equals(status) && job.get("result") == null) {
+            throw new IllegalArgumentException(where + " needs 'result' (or status: FAILED)");
+        }
+        return new CompleteExternalJob(number, text(job, "jobType", true), text(job, "reference", false),
+            job.get("result"), job.get("usage") == null ? Map.of() : map(job.get("usage"), where + ".usage"),
+            status == null ? "SUCCEEDED" : status, text(job, "errorCode", false), text(job, "errorMessage", false));
     }
 
     private static ExpectError expectError(int number, Map<String, Object> error, String where) {

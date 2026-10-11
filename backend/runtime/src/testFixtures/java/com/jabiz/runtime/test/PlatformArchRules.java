@@ -86,7 +86,30 @@ public final class PlatformArchRules {
             .because("external services are used through com.jabiz.external.ExternalServices only (decision D38)");
     }
 
-    /** The platform's own ways of starting processes and of acting as someone, which only the platform uses. */
+    /** Database access: JDBC, R2DBC, Spring's data access, and the platform's storage, queries and entity manager. */
+    static final List<String> DATABASE_PACKAGES = List.of("java.sql..", "javax.sql..", "io.r2dbc..",
+        "org.springframework.r2dbc..", "org.springframework.jdbc..", "org.springframework.data..",
+        "com.jabiz.runtime.storage..", "com.jabiz.runtime.query..");
+
+    /**
+     * External job handlers and blocking steps of the business packages do not touch the database (decision D38): a
+     * handler runs with no transaction at all, a blocking step beside its process's transaction, and both on a
+     * virtual thread where only external calls belong. Data reaches them through their input or context, and their
+     * results go back through a process.
+     */
+    public static ArchRule handlersStayOutOfTheDatabase(String... businessPackages) {
+        DescribedPredicate<JavaClass> handlers = JavaClass.Predicates.resideInAnyPackage(businessPackages)
+            .and(JavaClass.Predicates.assignableTo("com.jabiz.external.ExternalJobHandler")
+                .or(JavaClass.Predicates.assignableTo("com.jabiz.process.BlockingStep")))
+            .as("external job handlers and blocking steps of " + String.join(", ", businessPackages));
+        return noClasses().that(handlers)
+            .should().dependOnClassesThat().resideInAnyPackage(DATABASE_PACKAGES.toArray(String[]::new))
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.DatasetEntityManager")
+            .because("handlers and blocking steps make external calls only; data goes in and out through processes "
+                + "(decision D38)");
+    }
+
+        /** The platform's own ways of starting processes and of acting as someone, which only the platform uses. */
     static final List<String> PROCESS_MACHINERY = List.of("com.jabiz.runtime.process.ProcessExecutor",
         "com.jabiz.runtime.process.ExecutionOptions", "com.jabiz.runtime.security.ActingUser");
 

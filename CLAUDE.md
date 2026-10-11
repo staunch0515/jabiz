@@ -173,8 +173,9 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
-- 事件与定时任务：测试配置关闭后台投递与调度（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`），
-  测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)`，场景中用 `deliverEvents: true` / `runJob` 步骤
+- 事件、定时任务与外部作业：测试配置关闭后台投递、调度与外部作业执行器（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`、
+  `jabiz.external-jobs.executor.enabled=false`），测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)` /
+  `ExternalJobExecutor.runPending()`，场景中用 `deliverEvents: true` / `runJob` / `runExternalJobs: true` / `completeExternalJob`（不调用外部服务）步骤
 - 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）

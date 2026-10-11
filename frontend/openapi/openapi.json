@@ -664,6 +664,52 @@
         },
         "type" : "object"
       },
+      "ExternalJobStatus" : {
+        "properties" : {
+          "attempts" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "createdTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "finishedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "jobId" : {
+            "type" : "string"
+          },
+          "jobType" : {
+            "type" : "string"
+          },
+          "reference" : {
+            "type" : "string"
+          },
+          "requestedBy" : {
+            "type" : "string"
+          },
+          "startedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "usage" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
       "FileInfo" : {
         "properties" : {
           "contentType" : {
@@ -4180,6 +4226,65 @@
           }
         },
         "tags" : [ "export-controller" ]
+      }
+    },
+    "/api/external-jobs/{jobId}" : {
+      "get" : {
+        "operationId" : "externalJobStatus",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "jobId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExternalJobStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "external-job-controller" ]
+      }
+    },
+    "/api/external-jobs/{jobId}/cancel" : {
+      "post" : {
+        "operationId" : "cancelExternalJob",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "jobId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExternalJobStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "external-job-controller" ]
       }
     },
     "/api/files" : {

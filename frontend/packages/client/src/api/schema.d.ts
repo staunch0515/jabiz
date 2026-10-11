@@ -772,6 +772,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/external-jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["externalJobStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/external-jobs/{jobId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelExternalJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files": {
         parameters: {
             query?: never;
@@ -1717,6 +1749,25 @@ export interface components {
             reportsFrom?: string;
             /** Format: date-time */
             reportsTo?: string;
+        };
+        ExternalJobStatus: {
+            /** Format: int32 */
+            attempts?: number;
+            /** Format: date-time */
+            createdTime?: string;
+            errorCode?: string;
+            /** Format: date-time */
+            finishedTime?: string;
+            jobId?: string;
+            jobType?: string;
+            reference?: string;
+            requestedBy?: string;
+            /** Format: date-time */
+            startedTime?: string;
+            status?: string;
+            usage?: {
+                [key: string]: number;
+            };
         };
         FileInfo: {
             contentType?: string;
@@ -3666,6 +3717,52 @@ export interface operations {
                 };
                 content: {
                     "application/zip": components["schemas"]["DataBuffer"][];
+                };
+            };
+        };
+    };
+    externalJobStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalJobStatus"];
+                };
+            };
+        };
+    };
+    cancelExternalJob: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalJobStatus"];
                 };
             };
         };

@@ -10,14 +10,21 @@ import java.util.regex.Pattern;
 
 /**
  * A local stand-in for the demo AI service {@code demo-ai} (decision D38): the platform's {@link StubHttpServer} whose
- * {@code POST /v1/moderate} flags texts containing {@value #FLAGGED_WORD}. Any path can be scripted instead.
+ * {@code POST /v1/moderate} flags texts containing {@value #FLAGGED_WORD} and whose {@code POST /v1/generate} writes
+ * {@value #GENERATED_PREFIX} and the product's name, reporting fixed token usage. Any path can be scripted instead.
  */
 public final class StubAiServer implements AutoCloseable {
 
     /** The word {@code /v1/moderate} flags. */
     public static final String FLAGGED_WORD = "badword";
 
+    /** How {@code /v1/generate} starts its text, followed by the product's name. */
+    public static final String GENERATED_PREFIX = "Discover ";
+    public static final long PROMPT_TOKENS = 12;
+    public static final long COMPLETION_TOKENS = 34;
+
     private static final Pattern TEXT = Pattern.compile("\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+    private static final Pattern PRODUCT_NAME = Pattern.compile("\"productName\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
 
     private final StubHttpServer server;
 
@@ -51,6 +58,16 @@ public final class StubAiServer implements AutoCloseable {
         server.script(path, StubHttpServer.Answer.json(status, body).after(delay));
     }
 
+    /** The most requests answered at the same time since the stub started or was reset. */
+    public int maxConcurrent() {
+        return server.maxConcurrent();
+    }
+
+    /** The next request to {@code path} gets this answer, with the given headers. */
+    public void script(StubHttpServer.Answer answer, String path) {
+        server.script(path, answer);
+    }
+
     public void reset() {
         server.reset();
     }
@@ -64,6 +81,12 @@ public final class StubAiServer implements AutoCloseable {
         }
         if (request.path().equals("/v1/moderate")) {
             return StubHttpServer.Answer.json(200, "{\"flagged\":false,\"categories\":[]}");
+        }
+        if (request.path().equals("/v1/generate") && request.method().equals("POST")) {
+            Matcher name = PRODUCT_NAME.matcher(request.body());
+            return StubHttpServer.Answer.json(200, "{\"text\":\"" + GENERATED_PREFIX
+                + (name.find() ? name.group(1) : "the product") + ".\",\"usage\":{\"promptTokens\":"
+                + PROMPT_TOKENS + ",\"completionTokens\":" + COMPLETION_TOKENS + "}}");
         }
         return StubHttpServer.Answer.json(404, "{\"error\":\"not found\"}");
     }

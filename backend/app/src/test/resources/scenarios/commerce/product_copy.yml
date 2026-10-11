@@ -1,0 +1,78 @@
+# Marketing copy written by the demo AI service as an asynchronous external job (ROADMAP phase 16e-2, decision D38):
+# PRODUCT_COPY_REQUEST starts a job and answers at once; the platform runs the handler outside any transaction and,
+# with the text, runs PRODUCT_COPY_APPLY as the system, which saves the copy and tells the requester. Here the job's
+# results are written with completeExternalJob, so the scenario does not depend on the service (Q17). A job that fails
+# for good leads to PRODUCT_COPY_FAILED instead, and a cancelled one to nothing. Nobody can run the callbacks.
+name: Marketing copy by an external job
+clock: 2026-06-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"] }
+steps:
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: MUG-1, productName: Stoneware mug, unitPrice: 1200, active: true } }
+    save: { mug: $.id }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: BOWL-1, productName: Rice bowl, unitPrice: 900, active: true } }
+    save: { bowl: $.id }
+  - process: ADD_ENTITY@latest
+    input: { entityType: Product, attributes: { sku: PLATE-1, productName: Side plate, unitPrice: 700, active: true } }
+    save: { plate: $.id }
+
+  - note: The request answers with the job's id at once; nothing waits for the service.
+    process: PRODUCT_COPY_REQUEST@latest
+    input: { productId: "${mug}", language: en }
+    expectOutput: { productId: "${mug}" }
+    save: { mugJob: $.jobId }
+  - process: PRODUCT_COPY_REQUEST@latest
+    input: { productId: "${bowl}", language: ja }
+  - process: PRODUCT_COPY_REQUEST@latest
+    input: { productId: "${plate}" }
+    save: { plateJob: $.jobId }
+  - expect: { entity: Product, id: "${mug}", fields: { marketingCopy: null } }
+
+  - advanceClock: PT2M
+  - note: The service wrote the mug's copy; it is saved when the outbox delivers the finished job.
+    completeExternalJob:
+      jobType: commerce.product-copy
+      reference: "${mug}"
+      result: { text: "A stoneware mug that keeps your tea warm." }
+      usage: { promptTokens: 20, completionTokens: 40 }
+  - expect: { entity: Product, id: "${mug}", fields: { marketingCopy: null } }
+  - note: The service refused the bowl's request; its requester is told.
+    completeExternalJob:
+      jobType: commerce.product-copy
+      reference: "${bowl}"
+      status: FAILED
+      errorCode: GENERATION_REFUSED
+      errorMessage: The AI service refused the request (400)
+      usage: { promptTokens: 7 }
+  - note: The plate's job is cancelled before it ran.
+    process: EXTERNAL_JOB_CANCEL@latest
+    input: { jobId: "${plateJob}" }
+    expectOutput: { status: CANCELLED }
+  - deliverEvents: true
+  - expect: { entity: Product, id: "${mug}", fields: { marketingCopy: "A stoneware mug that keeps your tea warm." } }
+  - expect: { entity: Product, id: "${bowl}", fields: { marketingCopy: null } }
+  - expect: { entity: Product, id: "${plate}", fields: { marketingCopy: null } }
+  - expect:
+      query: jabiz.external_job_usage
+      params: { jobType: commerce.product-copy }
+      rows: 2
+      values:
+        - { metric: completionTokens, month: "2026-06", attempts: 1, quantity: 40 }
+        - { metric: promptTokens, month: "2026-06", attempts: 2, quantity: 27 }
+
+  - note: Only the platform hands results to the callbacks, an administrator included.
+    expectError:
+      process: PRODUCT_COPY_APPLY@latest
+      input: { jobId: "${mugJob}", jobType: commerce.product-copy, requestedBy: shop-admin, reference: "${mug}",
+               result: { text: forged }, attempts: 1 }
+      status: 403
+  - note: A finished job cannot be cancelled.
+    expectError:
+      process: EXTERNAL_JOB_CANCEL@latest
+      input: { jobId: "${mugJob}" }
+      status: 422
+      ruleCode: EXTERNAL_JOB_FINISHED
+snapshot:
+  entities: [Product, ExternalJob, ExternalJobAttempt, ExternalJobUsage, SysTask]
+  asOf: end

@@ -67,6 +67,8 @@ public final class CommerceEntities extends BaseEntityDefinitions {
         eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
         // A photo, re-encoded without metadata and in several widths (docs/design/14-files.md).
         eb.field("imageFileId", f -> f.physicalColumn("image_file_id").kind(FileKind.of(CommerceFiles.IMAGE)));
+        // Written by the AI service through PRODUCT_COPY_APPLY only (an external job, decision D38).
+        eb.field("marketingCopy", f -> f.physicalColumn("marketing_copy").processOnly().asText(2000, true));
         eb.unique("uk_product_sku", "sku");
         eb.listView("default", lv -> lv
             .columns("imageFileId", "sku", "productName", "unitPrice", "active", "effectStartTime")

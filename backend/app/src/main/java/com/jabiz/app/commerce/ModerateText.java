@@ -30,15 +30,18 @@ public class ModerateText implements BlockingStep<ModerateText.Metadata, Process
 
     public static final String SERVICE = "demo-ai";
     public static final String INAPPROPRIATE = "COMMERCE_TEXT_INAPPROPRIATE";
+    /** The moderation holds its process's transaction while it waits: shorter than what the service allows. */
+    static final Duration MODERATION_TIMEOUT = Duration.ofSeconds(10);
 
     /**
      * The demo AI service. Its address here is an example: each environment sets its own
-     * ({@code jabiz.external-services.demo-ai.*}); development and the tests point at a local stub.
+     * ({@code jabiz.external-services.demo-ai.*}); development and the tests point at a local stub. Its request timeout
+     * is the generation's of the external job {@link ProductCopyHandler}; the moderation asks for less.
      */
     public static final ExternalService DEMO_AI = ExternalService.define(SERVICE, s -> s
         .baseUrl("https://ai.example.com/v1").allowedHosts("ai.example.com")
         .secret("apiKey", "JABIZ_DEMO_AI_KEY")
-        .connectTimeout(Duration.ofSeconds(5)).requestTimeout(Duration.ofSeconds(10))
+        .connectTimeout(Duration.ofSeconds(5)).requestTimeout(Duration.ofSeconds(60))
         .idempotencyHeader("Idempotency-Key").maxResponseSize(64 * 1024)
         .allowInDryRun());
 
@@ -74,6 +77,7 @@ public class ModerateText implements BlockingStep<ModerateText.Metadata, Process
         ExternalHttp.Response response = services.http(SERVICE).send(ExternalHttp.Request.post("/v1/moderate")
             .header("Authorization", "Bearer " + services.secret(SERVICE, "apiKey"))
             .json(json.writeValueAsString(Map.of("text", text)))
+            .timeout(MODERATION_TIMEOUT)
             .idempotencyKey(services.idempotencyKey("moderate")));
         if (!response.isSuccess()) {
             throw ExternalCallException.badResponse(SERVICE, response.status());
