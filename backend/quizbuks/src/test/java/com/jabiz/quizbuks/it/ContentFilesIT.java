@@ -4,6 +4,7 @@ import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.publishing.PublishingCodes;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.job.JobRunner;
 import com.jabiz.runtime.test.FileSamples;
@@ -27,10 +28,7 @@ import static org.awaitility.Awaitility.await;
  * The files of quiz content (M-23, M-24; docs/quizbuks/plans/Q3-content.md, D-Q3-6): each kind through its policy,
  * images re-encoded; the platform's sweep keeps the files of drafts and versions and clears the rest.
  */
-class ContentFilesIT extends ContentItSupport {
-
-    @Autowired
-    JobRunner jobs;
+class ContentFilesIT extends PublicationItSupport {
 
     @Autowired
     @Qualifier("fileSweepJob")
@@ -38,7 +36,7 @@ class ContentFilesIT extends ContentItSupport {
 
     @AfterEach
     void onlyInserted() {
-        assertOnlyInserted();
+        assertNothingUpdated();
     }
 
     /** The storage half of a sweep runs after its commit; wait for it, as the platform's own sweep tests do. */
@@ -188,6 +186,87 @@ class ContentFilesIT extends ContentItSupport {
         }
         for (String cleared : List.of(unused, removedPdf)) {
             assertThat(exists(cleared)).as("cleared " + cleared).isFalse();
+        }
+    }
+
+    /** A quiz whose one question shows {@code picture}, saved as a version; returns the version. */
+    private String versionWithPicture(String title, String picture, List<String> quizIds) {
+        String quizId = newQuiz(sponsorA(), title);
+        quizIds.add(quizId);
+        run("QB_QUIZ_SAVE", sponsorA(), body("quizId", quizId, "title", title, "timeLimitSec", 300));
+        run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Which?", "points", 5, "image", picture,
+            "options", List.of(body("text", "a", "correct", true), body("text", "b"))));
+        return (String) run("QB_QUIZ_PUBLISH_VERSION", sponsorA(), body("quizId", quizId)).get("versionId");
+    }
+
+    private Map<String, Object> publication(String versionId, String name) {
+        Map<String, Object> policy = complete(versionId, name, clock.instant().plus(Duration.ofDays(5)),
+            clock.instant().plus(Duration.ofDays(9)));
+        policy.put("tiers", List.of(body("fromScore", 0, "toScore", 4, "reward", 0),
+            body("fromScore", 5, "toScore", 5, "reward", 10)));
+        return policy;
+    }
+
+    private void sweep() {
+        clock.advance(Duration.ofDays(2));
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        assertThat(jobs.run(sweep, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+    }
+
+    @Test
+    void removingAQuizKeepsTheFilesOfItsSubmittedPublications() {
+        List<String> quizzes = new java.util.ArrayList<>();
+        String published = image();
+        String submitted = (String) run("QB_PUBLICATION_SAVE", sponsorA(), publication(versionWithPicture(
+            "Published", published, quizzes), "Published")).get("publicationId");
+        assertThat(submit(sponsorA(), submitted)).containsEntry("status", "PENDING_REVIEW");
+        String drafted = image();
+        String draft = (String) run("QB_PUBLICATION_SAVE", sponsorA(), publication(versionWithPicture(
+            "Only drafted", drafted, quizzes), "Only drafted")).get("publicationId");
+
+        quizzes.forEach(quizId -> run("QB_QUIZ_DELETE", sponsorA(), body("quizId", quizId)));
+        sweep();
+        // The version a submitted publication uses keeps its files (5.3-1); a draft's does not.
+        assertThat(exists(published)).isTrue();
+        assertThat(exists(drafted)).isFalse();
+        // A draft of a removed quiz can be neither saved nor submitted: its files may be gone.
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", draft), 422)))
+            .containsExactly(PublishingCodes.QUIZ_REMOVED);
+        assertThat(codes(refused("QB_PUBLICATION_SAVE", sponsorA(), body("publicationId", draft, "name", "Again"),
+            422))).containsExactly(PublishingCodes.QUIZ_REMOVED);
+    }
+
+    @Test
+    void aSubmissionAndARemovalAtOnceNeverLoseAPublishedFile() throws Exception {
+        for (int round = 0; round < 3; round++) {
+            List<String> quizzes = new java.util.ArrayList<>();
+            String picture = image();
+            String id = (String) run("QB_PUBLICATION_SAVE", sponsorA(), publication(versionWithPicture(
+                "Race " + round, picture, quizzes), "Race " + round)).get("publicationId");
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+            int submitted;
+            try {
+                var submit = java.util.concurrent.CompletableFuture.supplyAsync(() -> call("QB_PUBLICATION_SUBMIT",
+                    sponsorA(), body("publicationId", id)).expectBody(MAP).returnResult(), pool);
+                var remove = java.util.concurrent.CompletableFuture.supplyAsync(() -> call("QB_QUIZ_DELETE",
+                    sponsorA(), body("quizId", quizzes.getFirst())).expectBody(MAP).returnResult(), pool);
+                assertThat(remove.get().getStatus().value()).isEqualTo(200);
+                submitted = submit.get().getStatus().value();
+                if (submitted != 200) {
+                    assertThat(codes(submit.get().getResponseBody())).containsExactly(PublishingCodes.QUIZ_REMOVED);
+                }
+            } finally {
+                pool.shutdown();
+            }
+            sweep();
+            // Either the submission came first and the file stays, or it was refused.
+            if (submitted == 200) {
+                assertThat(status(id)).isEqualTo("PENDING_REVIEW");
+                assertThat(exists(picture)).isTrue();
+            } else {
+                assertThat(status(id)).isEqualTo("DRAFT");
+                assertThat(exists(picture)).isFalse();
+            }
         }
     }
 
