@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { api, unwrap } from '../api/client'
-import { useLanguage } from './hooks'
+import { dataOf, useLanguage } from './hooks'
 import { listViewOf } from './listQuery'
 import type { DatasetEntry, EntityMeta, FieldMeta } from './types'
 
@@ -123,7 +124,7 @@ export function useLabels(datasetId: string | undefined, ids: string[]) {
 
 /**
  * Labels of the reference columns of the loaded rows, by field then key: one labels request per reference field whose
- * target can be labelled.
+ * target can be labelled. The same object until a label request answers anew (tables build their columns from it).
  */
 export function useReferenceLabels(
   entity: EntityMeta | undefined,
@@ -132,7 +133,8 @@ export function useReferenceLabels(
   metas: Record<string, EntityMeta | undefined>,
 ): Record<string, Record<string, unknown>> {
   const fields = (entity?.fields ?? []).filter((f) => referenceSourceOf(f, datasets, metas))
-  const results = useQueries({
+  const data = useQueries({
+    combine: dataOf<Record<string, unknown>>,
     queries: fields.map((field) => {
       const source = referenceSourceOf(field, datasets, metas)!
       const keys = [
@@ -154,9 +156,12 @@ export function useReferenceLabels(
       }
     }),
   })
-  const byField: Record<string, Record<string, unknown>> = {}
-  fields.forEach((field, i) => {
-    byField[field.name] = results[i]?.data ?? {}
-  })
-  return byField
+  const key = fields.map((field) => field.name).join('\n')
+  return useMemo(() => {
+    const byField: Record<string, Record<string, unknown>> = {}
+    key.split('\n').forEach((name, i) => {
+      if (name) byField[name] = data[i] ?? {}
+    })
+    return byField
+  }, [key, data])
 }

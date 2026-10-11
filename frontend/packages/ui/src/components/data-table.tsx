@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react'
 import {
   flexRender,
   getCoreRowModel,
@@ -51,6 +51,16 @@ export interface DataTableProps<Row> {
   label: string
   getRowId?: (row: Row, index: number) => string
   loading?: boolean
+  /**
+   * The rows shown are those of the previous request while the next loads (another page, order or filter): they
+   * cannot be used (`inert`) and the table is busy, so nothing is done on a row that is about to go.
+   */
+  stale?: boolean
+  /**
+   * The <table>, which can take focus from a script (`tabIndex={-1}`, not a tab stop): where focus goes when what had
+   * it disappeared with its row (a deleted entry's button).
+   */
+  tableRef?: Ref<HTMLTableElement>
   /** Shown when there are no rows; the "no data" text when absent. */
   empty?: ReactNode
   /** The current page; the pager shows when it and {@link onPaginationChange} are given. */
@@ -118,6 +128,8 @@ export function DataTable<Row>({
   label,
   getRowId,
   loading = false,
+  stale = false,
+  tableRef,
   empty,
   pagination,
   onPaginationChange,
@@ -196,16 +208,18 @@ export function DataTable<Row>({
           {...(scrolls ? { role: 'region', 'aria-label': label, tabIndex: 0 } : {})}
         >
           <table
+            ref={tableRef}
+            tabIndex={-1}
             data-slot="table"
-            className={cn(UI_SCOPE, 'w-full caption-bottom text-sm')}
+            className={cn(UI_SCOPE, 'w-full caption-bottom text-sm outline-none')}
             aria-label={label}
-            aria-busy={loading || undefined}
+            aria-busy={loading || stale || undefined}
           >
             <TableHeader>
               {table.getHeaderGroups().map((group) => (
                 <TableRow key={group.id}>
                   {renderExpanded && (
-                    <TableHead className="w-10">
+                    <TableHead scope="col" className="w-10">
                       <span className="sr-only">{t('dataTable.expandRow')}</span>
                     </TableHead>
                   )}
@@ -217,6 +231,9 @@ export function DataTable<Row>({
                       : flexRender(header.column.columnDef.header, header.getContext())
                     return (
                       <TableHead
+                        // A column header for every role computation: without the scope, Playwright's took these
+                        // header cells (holding sort buttons) for plain cells.
+                        scope="col"
                         key={header.id}
                         colSpan={header.colSpan}
                         className={columnClass(header.column.columnDef.meta, true)}
@@ -256,7 +273,11 @@ export function DataTable<Row>({
                 </TableRow>
               ))}
             </TableHeader>
-            <TableBody>
+            <TableBody
+              inert={stale || undefined}
+              data-stale={stale || undefined}
+              className={cn(stale && 'opacity-60')}
+            >
               {loading && data.length === 0 ? (
                 Array.from({ length: 3 }, (_, i) => (
                   <TableRow key={`loading-${i}`}>

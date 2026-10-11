@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, insert, signIn, test, unique } from './support'
+import { adminToken, dataRows, insert, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -30,8 +30,8 @@ test('the commerce sample has generated pages and an order is placed from its ge
   }
   await page.getByLabel('SKU').first().fill(code)
   await page.getByRole('button', { name: /查\s*询/ }).click()
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row')).toHaveCount(1)
-  await expect(page.locator('.ant-table-tbody tr.ant-table-row').first()).toContainText('250')
+  await expect(dataRows(page)).toHaveCount(1)
+  await expect(dataRows(page).first()).toContainText('250')
 
   await page.goto('/processes')
   await page.getByTestId('process-ORDER_PLACE-1').click()

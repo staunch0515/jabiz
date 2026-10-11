@@ -1,4 +1,5 @@
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import type { components } from '@jabiz/client'
@@ -84,23 +85,39 @@ export function useProcesses() {
 }
 
 /** The dictionaries behind the code fields of an entity, by URN (labels in the UI language). */
+/**
+ * The data of several queries, one array that stays the same object while no query's data changes (TanStack Query
+ * keeps a `combine` result while its input is unchanged, if the function itself is the same).
+ */
+export function dataOf<T>(results: UseQueryResult<T>[]): (T | undefined)[] {
+  return results.map((result) => result.data)
+}
+
+/**
+ * The items of the entity's dictionaries, by URN. The same object until a dictionary changes: tables build their
+ * columns from it, and new columns would mount every cell anew.
+ */
 export function useDictionaries(entity: EntityMeta | undefined): Record<string, DictItem[]> {
   const lang = useLanguage()
   const urns = entity?.dictionaries ?? []
-  const results = useQueries({
+  const data = useQueries({
     queries: urns.map((urn) => ({
       queryKey: ['dictionary', urn, lang],
       queryFn: () =>
         unwrap(api.GET('/api/dictionaries/{urn}', { params: { path: { urn } } })) as Promise<DictItem[]>,
       staleTime: 5 * 60_000,
     })),
+    combine: dataOf<DictItem[]>,
   })
-  const byUrn: Record<string, DictItem[]> = {}
-  urns.forEach((urn, i) => {
-    const items = results[i]?.data
-    if (items) byUrn[urn] = items
-  })
-  return byUrn
+  const key = urns.join('\n')
+  return useMemo(() => {
+    const byUrn: Record<string, DictItem[]> = {}
+    key.split('\n').forEach((urn, i) => {
+      const items = data[i]
+      if (urn && items) byUrn[urn] = items
+    })
+    return byUrn
+  }, [key, data])
 }
 
 /** SQL templates the signed-in user may run, reports among them (GET /api/meta/queries, 19 section 3.2). */

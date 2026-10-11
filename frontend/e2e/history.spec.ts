@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, dialog, insert, PRICES, signIn, test, unique, update } from './support'
+import { adminToken, CARRIERS, dialog, insert, PRICES, searchedRow, signIn, test, unique, update } from './support'
 
 function historyPath(dataset: string, id: string): string {
   return `/data/${encodeURIComponent(dataset)}/${encodeURIComponent(id)}/history`
@@ -71,7 +71,7 @@ test.describe('history', () => {
     await page.goto(`/data/${encodeURIComponent(CARRIERS)}`)
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = page.locator('.ant-table-tbody tr.ant-table-row').first()
+    const row = await searchedRow(page, code)
     await expect(row).toContainText('Hotel Two')
     await expect(row).toContainText('1,000')
   })
@@ -93,7 +93,7 @@ test.describe('history', () => {
     await page.goto(`/data/${encodeURIComponent(CARRIERS)}?asOf=${encodeURIComponent(asOf)}`)
     await page.getByLabel('代码').first().fill(code)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    const row = page.locator('.ant-table-tbody tr.ant-table-row').first()
+    const row = await searchedRow(page, code)
     await expect(row).toContainText('Tango Before')
     // Only the current data can be edited.
     await expect(page.getByTestId('create')).toHaveCount(0)
@@ -110,7 +110,7 @@ test.describe('history', () => {
     await page.goto(`/data/${encodeURIComponent(PRICES)}`)
     await page.getByLabel('SKU').first().fill(sku)
     await page.getByRole('button', { name: /查\s*询/ }).click()
-    await page.locator('.ant-table-tbody tr.ant-table-row').first().getByTestId('row-history').click()
+    await (await searchedRow(page, sku)).getByTestId('row-history').click()
     await expect(page.getByTestId('history-timeline').locator('[data-testid^="version-"]')).toHaveCount(2)
     await page.getByTestId('version-1').getByTestId('view-at').click()
     await expect(page.getByTestId('point-in-time').locator('[data-field="amount"]')).toContainText('100')

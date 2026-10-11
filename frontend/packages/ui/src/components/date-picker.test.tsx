@@ -343,3 +343,27 @@ describe('in a region (en-US)', () => {
     expect(onChange).toHaveBeenLastCalledWith(new Date(2026, 1, 1, 15, 4, 0).toISOString())
   })
 })
+
+describe('clearing a date', () => {
+  beforeEach(async () => {
+    await act(() => i18n.changeLanguage('en'))
+  })
+
+  it('keeps focus in the field when the clear button goes with the value', async () => {
+    function Field({ time }: { time: boolean }) {
+      const [value, setValue] = useState<string | null>(time ? '2026-01-31T05:05:09Z' : '2026-01-31')
+      return time ? (
+        <DateTimePicker aria-label="When" value={value} onChange={setValue} clearable />
+      ) : (
+        <DatePicker aria-label="When" value={value} onChange={setValue} clearable />
+      )
+    }
+    for (const time of [false, true]) {
+      const { unmount } = render(<Field time={time} />)
+      await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
+      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'When' }))
+      unmount()
+    }
+  })
+})
