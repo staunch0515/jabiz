@@ -1112,10 +1112,12 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
    完成与失败流程）；处理器 `ExternalJobHandler` 同步、在执行器的虚拟线程上运行，只能调用类型声明的服务（作业的 `ExternalCallScope`），不访问数据库
    （共用 ArchUnit 规则 `handlersStayOutOfTheDatabase`，阻塞步骤同样适用）。
 2. 平台步骤 `StartExternalJob`（`com.jabiz.runtime.process.steps`：业务包不得依赖 `com.jabiz.runtime.external`）在流程事务内登记作业；
-   输入不得含秘密（422 `EXTERNAL_JOB_INPUT_SECRET`）、不超过 64 KiB（`EXTERNAL_JOB_INPUT_TOO_LARGE`）。
+   输入不得含 `@Sensitive` 组件的值（422 `EXTERNAL_JOB_INPUT_SECRET`）、不超过 64 KiB（`EXTERNAL_JOB_INPUT_TOO_LARGE`）；
+   每个类型限制同一请求人未结束的作业数，可要求同一引用只有一个（422 `EXTERNAL_JOB_LIMIT`，在 advisory 锁下计数）。
 3. 执行器在每个类型的短事务中领取（类型的 advisory 锁计并发、`FOR UPDATE SKIP LOCKED`、带租约的 (作业, 尝试号) 主键），在任何事务之外执行，
    在独立事务中记录尝试、用量与唯一的最终结果；租约过期补记 `LEASE_EXPIRED`，迟到的实例丢弃结果。全部表只追加，竞争的插入都是
-   `ON CONFLICT DO NOTHING`。退避与租约取 `Clock`。
+   `ON CONFLICT DO NOTHING`。退避与租约取 `Clock`。查询限于每个类型的水位线以上，定期全量扫描；不能再尝试的作业与已删除类型的作业
+   也得到最终结果；执行器是 `SmartLifecycle`，停止时等正在执行的尝试记录完（有上限）。
 4. 完成：最终结果与 Outbox 事件 `jabiz.external-job.finished` 同一事务；平台的消费者以系统身份运行 `EXTERNAL_JOB_COMPLETE`，以子流程调用完成流程
    （`ExternalJobCompletion`，结果按声明的类型反序列化）或失败流程（`ExternalJobFailure`），各只一次；取消的作业不调用（Q13）。
    **`internal()` 目前只是不进目录（D41 待定）**：完成与失败流程，以及 `EXTERNAL_JOB_COMPLETE` 本身，在步骤中拒绝系统以外的操作人

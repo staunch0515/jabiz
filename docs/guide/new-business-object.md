@@ -222,7 +222,8 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 1. 输入与结果写成 record（输入中不放密钥：作业会保存它），处理器实现 `ExternalJobHandler<输入, 结果>`（`@Component`），经 `ctx.http(服务)` 调用，
    带 `ctx.idempotencyKey()`，用 `ctx.recordUsage(…)` 或 `ExternalJobResult.of(值).usage(…)` 记用量；不会因再试而改变的失败抛 `ExternalJobException.permanent(码, 消息)`。
 2. 声明 `ExternalJobType.define("应用.作业", 输入.class, 结果.class, t -> t.handler(…).services("服务").timeout(…).retry(次数, 初始, 最长)
-   .maxConcurrency(…).onCompleted("完成流程").onFailed("失败流程"))` Bean。
+   .maxConcurrency(…).onCompleted("完成流程").onFailed("失败流程"))` Bean；限制同一请求人未结束的作业数（`maxOpenPerRequester`，缺省 10）、
+   同一对象只有一个未结束的作业（`oneOpenPerReference()`）。作业的超时须长于所用服务的请求超时。
 3. 请求流程中 `.step("…", StartExternalJob.of("应用.作业", ctx -> 输入).reference(ctx -> 对象编号).outputKey("jobId"))`，把作业号返回给调用方。
 4. 完成流程以 `ExternalJobCompletion` 为输入、失败流程以 `ExternalJobFailure` 为输入，都声明 `internal()`，**第一个步骤拒绝系统以外的操作人**
    （D41 决定之前 `internal()` 只是不进目录），再写结果、以 `CreateTask` / `SendMail` 告诉 `requestedBy`。
