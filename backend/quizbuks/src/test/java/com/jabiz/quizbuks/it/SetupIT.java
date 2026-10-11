@@ -93,8 +93,10 @@ class SetupIT extends QbItSupport {
         publishProposals(setup());
         for (String key : QbParams.CONTROLLED) {
             // A valid value of the parameter's kind: refused for being controlled, not for its value.
-            String value = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
-                .valueKind().get("type").equals("bool") ? "true" : "1";
+            Object type = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
+                .valueKind().get("type");
+            // The commission rate is a fraction below 1.
+            String value = "bool".equals(type) ? "true" : "numeric".equals(type) ? "0.1" : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
@@ -127,6 +129,13 @@ class SetupIT extends QbItSupport {
             List<Object> permissions = query("SELECT permission FROM sec_role_permission_version WHERE role_id = ?",
                 role.get("role_id")).stream().map(row -> row.get("permission")).toList();
             assertThat(permissions).as(declared.code()).containsExactlyInAnyOrderElementsOf(declared.permissions());
+            // Q5: takers read the quizzes' files; the answering system processes and the development credit are
+            // nobody's.
+            if (QbRoles.TAKER.equals(declared.code())) {
+                assertThat(permissions).contains(QbPermissions.CONTENT_FILE_READ, QbPermissions.PLAY);
+            }
+            assertThat(permissions).as(declared.code()).doesNotContain(QbPermissions.PLAY_SYSTEM,
+                QbPermissions.WALLET_DEV_CREDIT);
         }
     }
 

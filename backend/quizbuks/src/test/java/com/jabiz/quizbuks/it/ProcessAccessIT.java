@@ -30,12 +30,22 @@ class ProcessAccessIT extends QbItSupport {
         new ParameterizedTypeReference<>() {};
 
     /** The QuizBuks processes not open to callers, by kind; every other QuizBuks process is open. */
-    private static final Map<String, ProcessAccess> CLOSED = Map.of(
-        "QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL,
-        "QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL,
-        "QB_PUBLICATION_TICK", ProcessAccess.INTERNAL,
-        "QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL,
-        "QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY);
+    private static final Map<String, ProcessAccess> CLOSED = Map.ofEntries(
+        Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_TICK", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
+        Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),
+        // Answering (Q5): the expiry of an attempt (its job comes in Q5b), the settlement of pending rewards (an
+        // event; Q6's top-up confirmation as the system), underfunded publications back on (an event), the
+        // statistics (a job).
+        Map.entry("QB_ATTEMPT_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_PENDING_SETTLE", ProcessAccess.INTERNAL),
+        Map.entry("QB_PENDING_PAY", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_FUNDS_RESTORED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_FUNDED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_STATS_REFRESH", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_STATS_CHUNK", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

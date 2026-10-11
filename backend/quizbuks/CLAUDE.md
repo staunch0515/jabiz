@@ -50,12 +50,23 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
-  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ `qb.pub:<publicationId>`（独占）→ Q5 的 `qb.wallet:<所有者>`；
+  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ `qb.pub:<publicationId>`（独占）→ Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
   到期上下架只由定时任务 `qb.publication-tick` 做（按普通表 `qb_publication_schedule` 的 `next_due_at` 查出全部到期的，可补跑；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
   上限在 `PublishingLimits`，错误码在 `PublishingCodes`。**审批规则只经 `QB_SETUP` 以受控变更提出**（`setup.QbApprovalRules`，与 `QbParams` 并列），由另一位管理员发布；
   "无规则即放行"由应用挡住（`QB_REVIEW_NOT_CONFIGURED`）。移除模版时，已提交过的发布所用版本的文件保留（`QuizProcesses.filesStillNeeded`）。
+  上架时随计数行插入**卡片** `QbPublicationCard`（普通表：除状态外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
+  答题人的首页、详情、档位与答题流程只读卡片，不读时态的发布与档位。答题只经 `publishing.PublicationMoves` 改变发布（结束、预算不足）。
+- **答题**（`play`，`docs/quizbuks/plans/Q5-answering.md`）：会话 `QbAttempt`、首次浏览、完成人数都是普通表，只经 `QB_VIEW` / `QB_ATTEMPT_*` /
+  `QB_PENDING_*` / `QB_PUBLICATION_STATS_REFRESH` 写入（默认数据视图 `processOnlyWrites`，答题人视图只读、限本人）。**一人一次**由 `(user_id, publication_id)` 唯一约束兜底，
+  开始在发布锁内再读本人会话。**锁的顺序**：`qb.pub:<发布>` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；持钱包锁的流程（补发、开发入账）从不再取发布锁，
+  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）只取发布锁、不取钱包锁。**晚取锁**：版本、参数在锁外读，锁内只重读会话、计数、发布与钱包再写入；继续答题与保存进度不取锁。
+  **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
+  **钱包余额只在钱包锁内改**（`wallet.QbWallets.change`），与同一事务中的 `LEDGER_POST` 一起；判断可支付一律经 `QbWallets.pays`（无待支付且余额足够）：待支付不入账、按提交顺序补发、不插队；
+  `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
+  上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
+  `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查拒绝它与 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
 - **账户**（`identity`，`docs/quizbuks/plans/Q2-accounts.md`）：三个登录入口 `admin` / `app` / `sponsor` 写在 `application.yml`（平台 10 §15）；`app` 允许未验证的用户登录浏览，`sponsor` 要求已验证。
   **QuizBuks 的一切写入流程声明 `requiresVerifiedEmail()`**（未验证即"待激活"；预占他人邮箱的人因此留不下应用数据），以后的阶段照此。
   资料、入驻、封禁各是一人一行的时态实体（主键是生成的 UUID，`userId` 不可变、唯一；资料与入驻的 `userId` 是操作人编号的文本，封禁的是平台用户的引用），只经 `QB_PROFILE_*` / `QB_SPONSOR_*` / `QB_USER_*BAN` 写入；

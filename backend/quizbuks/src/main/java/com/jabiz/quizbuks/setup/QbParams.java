@@ -50,8 +50,10 @@ public final class QbParams {
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
 
     public static final List<Param> ALL = List.of(
-        new Param(CREATOR_FEE_RATE, Map.of("type", "numeric", "precision", 5, "scale", 4), "0",
-            "Commission of the platform on each reward, as a fraction (0.1 = 10%)"),
+        // numeric(4, 4): below 1 (a taker always keeps part of a reward), refused at the proposal otherwise. Parameters
+        // have no lower bound: a negative rate is refused when a reward is paid (play.RewardSplit).
+        new Param(CREATOR_FEE_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0",
+            "Commission of the platform on each reward, as a fraction from 0 to below 1 (0.1 = 10%)"),
         new Param(TRANSFER_THRESHOLD, KUDOS, "1000",
             "A user's rewards are transferred once they reach this many Kudos"),
         new Param(TRANSFER_REVIEW_ABOVE, KUDOS, "50000", "Transfers above this many Kudos wait for review"),

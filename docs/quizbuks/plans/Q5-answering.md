@@ -519,21 +519,22 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 
 ## 验收标准
 
-- [ ] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过；PR 上的 CI 通过。
-- [ ] U-10 / U-11：首页只给出可参与的发布（进行中、在时间内、地区有交集、名额与预算未满、商家有余额），卡片字段齐全，查询只读普通表。
-- [ ] U-12 – U-14：按标题搜索；按发布人国家与名称、金额区间、最少完成人数、发布日期筛选；按金额、完成人数、时间排序。
-- [ ] U-20 – U-22：详情有简介、满分、题数、合格分、时限、档位、发布人、资料、四个窗口与累计的完成人数（窗口每 10 分钟更新）。
-- [ ] U-23 / 5.3-6：开始即建会话并计时；一人一次（唯一约束兜底）；已参加过的不能再开始。
-- [ ] U-30 – U-32 / 5.3-5：返回全部题目（打乱的选项、无正确答案）；时限以服务器时间为准，超时提交被拒；到时由任务按已保存答案自动提交（Q5b）。
-- [ ] U-33：完成后返回得分、合格分、是否合格、逐题我的答案与正确答案；进行中的会话从任何途径都得不到正确答案。
-- [ ] U-34 / 5.3-7：按得分所在档位一次性发放（不及格也可能有奖励）；扣款与入账是同一笔交易、同一事务；余额不足时提示并记为待支付。
-- [ ] U-40 – U-42：历史分为已完成与未完成，显示状态与奖励（含待支付）；可继续答题（剩余时间）；可按关键字、日期、金额、状态筛选。
-- [ ] 5.3-8：钱包余额不为负；待支付不入账；有余额后按提交顺序补发；补发完后发布恢复为进行中。
-- [ ] 5.3-9：每笔奖励的分录关联会话（来源单据），带当事人与发布维度；金额为正。
-- [ ] 5.3-2（Q5 的部分）：名额或预算用完即结束（`QUOTA` / `BUDGET`）；`FUNDS_SHORT` 的进入与恢复；已开始的会话在暂停、预算不足、结束后照常完成。
-- [ ] 5.3-13：抽成按受控参数计提（当前为 0，不出行）。
-- [ ] 6.1：重复提交不重复发奖（幂等键与会话状态）；吞吐基线已记录，对照 Q10 目标。
-- [ ] 普通表只经流程写入；时态与账本表没有 UPDATE / DELETE；消息三语齐全；文档已更新；部署后执行 `QB_SETUP`。
+- [x] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过（Q5a；PR 上的 CI 待 PR）。
+- [x] U-10 / U-11：首页只给出可参与的发布（进行中、在时间内、地区有交集、名额与预算未满、商家有余额），卡片字段齐全，查询只读普通表。
+- [x] U-12 – U-14：按标题搜索；按发布人国家与名称、金额区间、最少完成人数、发布日期筛选；按金额、完成人数、时间排序。
+- [x] U-20 – U-22：详情有简介、满分、题数、合格分、时限、档位、发布人、资料、四个窗口与累计的完成人数（窗口每 10 分钟更新）。
+- [x] U-23 / 5.3-6：开始即建会话并计时；一人一次（唯一约束兜底）；已参加过的不能再开始。
+- [x] U-30 – U-32 / 5.3-5：返回全部题目（打乱的选项、无正确答案）；时限以服务器时间为准，超时提交被拒（Q5a；`QB_ATTEMPT_EXPIRE` 已有）。
+- [ ] 到时由任务按已保存答案自动提交（Q5b：任务 `qb.attempt-expire`、`QB_ATTEMPT_EXPIRE_DUE`、`qb.system.attempts-due`，等平台 16k）。
+- [x] U-33：完成后返回得分、合格分、是否合格、逐题我的答案与正确答案；进行中的会话从任何途径都得不到正确答案。
+- [x] U-34 / 5.3-7：按得分所在档位一次性发放（不及格也可能有奖励）；扣款与入账是同一笔交易、同一事务；余额不足时提示并记为待支付。
+- [x] U-40 – U-42：历史分为已完成与未完成，显示状态与奖励（含待支付）；可继续答题（剩余时间）；可按关键字、日期、金额、状态筛选。
+- [x] 5.3-8：钱包余额不为负；待支付不入账；有余额后按提交顺序补发；补发完后发布恢复为进行中。
+- [x] 5.3-9：每笔奖励的分录关联会话（来源单据），带当事人与发布维度；金额为正。
+- [x] 5.3-2（Q5 的部分）：名额或预算用完即结束（`QUOTA` / `BUDGET`）；`FUNDS_SHORT` 的进入与恢复；已开始的会话在暂停、预算不足、结束后照常完成。
+- [x] 5.3-13：抽成按受控参数计提（当前为 0，不出行）。
+- [x] 6.1：重复提交不重复发奖（幂等键与会话状态）；吞吐基线已记录，对照 Q10 目标。
+- [x] 普通表只经流程写入；时态与账本表没有 UPDATE / DELETE；消息三语齐全；文档已更新；部署后执行 `QB_SETUP`。
 
 ## 风险
 
@@ -590,6 +591,7 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 | 14（新，视压测） | **`LEDGER_POST` 的单笔成本**：维度与来源经默认视图逐行核对、审计、变更事件、子操作记录 | 否 | Q5 记录基线；Q10 不达标时请平台评估更省的路径（例如同一事务内缓存维度核对结果、可选不发布交易的变更事件） |
 | 15（新，视压测） | **命名锁的等待占用数据库连接** | 否 | Q10 以连接池与限流应对。必要时请平台在 `HoldLock` 前于进程内按名称排队，或给出等待者上限 |
 | 16（新，视压测） | **高频普通表写入的审计量**（进度保存） | 否 | 照常审计。若 Q10 显示审计与封存成为瓶颈，请平台提供按字段或按流程降低审计粒度的声明（须新决策，因为 D27 要求全部写入经审计） |
+| 17（新，小） | **测试中 BlockHound 随机把 span 导出的交接当作阻塞**（`BatchSpanProcessor$Worker.addSpan` 的 `Unsafe#park`，见"CI 的随机 500"） | 否 | 应用测试中的 `QbBlockHoundIntegration` 容许它。建议平台在 `JabizBlockHoundIntegration` 中加入同一条容许（附回归测试），平台的 `app` 测试同样可能随机失败 |
 
 不需要平台新能力的点：
 - 账本过账、冲正、维度（16h 已支持身份字段）、来源单据；
@@ -635,4 +637,96 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 
 ## 确认
 
+2026-10-11（需求方）：**同一版本用于多个发布**——版本是模板，发布定义范围；用户可以参加任何满足条件的发布，不论是否参加过同一版本的其他发布。
+保持现状：一人一次只按发布（`(user_id, publication_id)` 唯一）。
+
 2026-10-11：计划与待确认问题 Q5-1 – Q5-17 全部按缺省处理：先做 Q2 后端，再做 Q5a；Q5b（自动提交任务）在平台 16k（定时任务逐项独立事务）合入后做。
+
+## 实施记录（Q5a，2026-10-11）
+
+分支 `1.2/quizbuks-5a-play`（从 `1.2/quizbuks` 拉出，Q2 已合入）。Q5a 是本计划除自动提交任务（`qb.attempt-expire`、`QB_ATTEMPT_EXPIRE_DUE`、模板 `qb.system.attempts-due`）
+与 Q4 定时任务改写以外的全部内容；`QB_ATTEMPT_EXPIRE` 本身已实现（与提交共用步骤），选取它的任务在 Q5b。
+
+**与计划的出入**（都不改需求）：
+- 迁移是 `V6__quizbuks_play.sql`（`V5` 已被 Q2 的账户占用）。生成主键的普通表（会话、浏览、钱包）主键为 `varchar(36)`（平台为普通实体生成文本键，同 `sys_mail_message`），
+  不引用 `entity_registry`；以发布为主键的卡片、统计表照计数行引用它。
+- 多两个内部流程：`QB_PENDING_PAY`（补发一笔：再取同一把钱包锁，确认仍是队首且余额够付才过账，单独调用也安全）与 `QB_PUBLICATION_FUNDED`
+  （`QB_PUBLICATION_FUNDS_RESTORED` 逐个以子流程调用，每个持自己的发布锁）。补发清空队列时（不只是本次清空时）发布 `qb.sponsor.funds-restored`，
+  以免直接补发留下的 `FUNDS_SHORT` 无人恢复；消费者找不到 `FUNDS_SHORT` 的发布即什么也不做。
+- **首页、详情、档位的"用户国家"由调用方传参数 `country`**（与 `at` 同理：只是展示，开始答题在服务端按资料再判断）。原计划连接本人资料（答题人视图），但数据视图的范围条件在
+  `DISTINCT ON` 之外（平台 04 §5.1），100 万用户时每次打开首页都要读全部资料版本。模板仍连接国家与入驻两个时态表（数量很小，有界）。
+- **卡片多存** `budgetCap`、`maxWinners`（首页的名额与预算条件）、`tiers`（档位的规范 JSON，`publishing.CardTiers`：档位在提交时冻结；档位模板与评分只读卡片）、
+  `sponsorCountry`（上架时商家资料中的国家：入驻没有国家，U-13 的"发布人国家"只能取资料）。
+- 选项打乱以"用户 | 发布"为种子（一人一次，等价于会话编号；会话编号在插入时才生成）。`currentIndex` 从 0 起。
+- `TakerChecks` 未建：Q2 已合入，答题流程照 Q2 的约定用 `CallerChecks.refuseBanned`。
+- 开发入账的输出 `balance` 是入账后、补发前的余额。
+- 维度名没有消息：平台没有维度显示名的消息键（`party` 同样没有）。
+- 单元测试 `TierPickTest`、`RewardSplitTest` 合为 `RewardRulesTest`（另含 `CardTiers`）；`DevCreditCheckTest` 覆盖启动检查与锁名。
+- `FeedIT` 的"首页不读时态表全部版本"不用 `EXPLAIN` 渲染后的 SQL（应用模块拿不到平台测试夹具中的语句日志），改为比较 `pg_stat_user_tables` 的扫描计数：
+  首页查询之后卡片表被扫描，而发布、档位、版本、资料、会话表一次也没有。
+- 并发测试先顺序地开始并提交一次（`PlayItSupport.warmUp`）：新应用中第一次并发使用某个输入类型时 Jackson 在锁内建反序列化器，BlockHound 把等待报告为阻塞（500）。
+  只是测试中的现象（生产没有 BlockHound，后来者等待即可），不是平台缺口。
+
+**测试**（`backend/` 下，本地 PostgreSQL：`JABIZ_TEST_DB_URL=jdbc:postgresql://localhost:5432/jabiz_test`）：
+- 单元：`ScoringTest`（含 jqwik 与独立实现对照）、`RewardRulesTest`（档位、抽成取整，jqwik）、`OptionShuffleTest`（jqwik）、`AnswersTest`、`AttemptRulesTest`（含 `PublicationRules.endsBy`）、
+  `RegionsTest`（`overlaps`）、`QbRolesTest`、`MessagesTest`、`DevCreditCheckTest`。
+- 集成：`PlayIT`、`AnswerSecrecyIT`、`SettlementIT`、`PendingIT`、`QuotaBudgetIT`、`PlayConcurrencyIT`、`FeedIT`、`PlayOwnerIT`；`SetupIT` 扩展（答题人的新授权、系统权限无人持有）。
+- 场景回放 `scenarios/qb/play.yml`（U3 的超时自动提交属 Q5b，未列入）；`setup`、`accounts`、`publishing` 的快照因新授权使确定性编号顺延而更新（内容不变）。
+- `./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`）通过。
+
+**吞吐基线**（`PlayThroughputIT`，`@Tag("perf")`，`./gradlew :quizbuks:perfTest`）：64 个并发客户端对同一发布开始并提交，全部从同一商家钱包结算。
+本地（同一台机器上的 PostgreSQL 16，进程内调用，BlockHound 开启，INFO 日志）：**约 7.6 次完成 / 秒；开始 p50 1 387 ms、p95 2 417 ms；提交 p50 4 593 ms、p95 5 739 ms**。
+远低于 Q10 的目标（单发布 50 次 / 秒、提交 p95 < 1 秒）：发布锁与钱包锁内每次提交约 30 条语句（其中 `LEDGER_POST` 的维度与来源核对、审计、变更事件占一半左右），
+在这台机器上约 120 ms。Q10 在生产规格上重测，按 D-Q5-10 的退路（降低过账成本 → 按发布预留预算 → 分批过账）决定。
+
+**已知问题**：
+- 平台的参数没有下限规则：负的抽成比例能被提出与发布，只在付款时被拒（422 `QB_FEE_RATE_INVALID`，见下）。
+- 过了时限而未提交的会话在 Q5b 的任务之前一直占着名额与最高奖励的预算（只有 `QB_ATTEMPT_EXPIRE` 被调用时才释放）。
+- 同一用户并发两次 `QB_VIEW` 时第二次可能因唯一约束失败（只影响浏览记录）。
+
+### 评审后的修正（2026-10-11）
+
+- **统计任务分块**：`QB_PUBLICATION_STATS_REFRESH` 按编号取出要统计的发布（至多 `PlayLimits.STATS_BATCH`），按 `quizbuks.stats.chunk-size`
+  （缺省 500，至多 `STATS_CHUNK_MAX` = 1000 = 统计数据视图的 `maxWriteBatchSize`）切块，每块一个子流程 `QB_PUBLICATION_STATS_CHUNK`（模板
+  `qb.system.publication-stats` 改为按 `ids` 统计），不再因一次写入超过批量而每次 422。要统计的发布：进行中、暂停、预算不足，以及**实际结束**（`QbPublicationCard.endedAt`，
+  卡片随状态写入；名额或预算提前结束的也按结束时间）31 天内的。
+- **统计时间**：新普通表 `qb_stats_run`（`QbStatsRun`，每个任务一行）每次运行记下运行时间；详情的 `statsAt` 取它，不再取"计数最后变化的时间"。行仍只在计数变化时写。
+- **`QB_VIEW` 与详情一致**：只要求卡片存在且（进行中、在时间内、地区有交集，或本人有会话）；名额、预算、商家余额只决定能否开始。详情与档位模板同样按此显示，
+  `canStart` 另加名额、预算、商家余额、本人尚无会话、**不是本人的发布**。
+- **本人的发布**：新的只读实体 `QbPublicationOwner`（迁移中的视图 `qb_publication_owner`，卡片的编号与商家），数据视图 `urn:jabiz:dataset:me:QbPublicationOwner`
+  限本人；首页排除本人的发布，详情的 `canStart` 为假。模板不必让调用方传自己的编号。
+- **`QB_ATTEMPT_EXPIRE` 的输出**取锁内重读的会话（与提交竞争时不再报旧的 `IN_PROGRESS`）。
+- **开发入账的启动检查**也拒绝受限的正式密钥（`rk_live_`）。
+- **抽成比例的范围**：参数改为 `numeric(4,4)`（新安装：1 及以上在提出时即 422 `PARAM_VALUE_INVALID`）；付款时（提交、补发）比例不在 0 到 1（不含）之间即 422
+  `QB_FEE_RATE_INVALID`，什么也不写。已有安装的参数种类仍是 `numeric(5,4)`（`QB_SETUP` 不改已有参数）：由付款时的检查兜底。平台缺口：参数没有上下限规则。
+- 新测试：`StatsChunkIT`（块大小 2，6 个发布全部统计；提前结束的发布一个月后不再统计；无变化的运行也记下时间）、`FeedIT` 的本人发布与名额已满的详情、
+  `PlayOwnerIT` 的暂停后有会话者仍可浏览、`SettlementIT` 的抽成比例（提出 1 被拒、负比例付款被拒）、单元测试的 `validRate` 与 `rk_live_`。
+  `QB_ATTEMPT_EXPIRE` 与提交的竞争没有确定性的测试（输出取锁内的会话，逻辑见代码）。`./gradlew :quizbuks:check --max-workers=2` 通过（263 个测试）；
+  `setup` 的快照因参数种类与说明改变而更新。
+
+### 合并平台 16l / 16k 后的调整（D41，2026-10-11）
+
+- 合并 `origin/1.2/quizbuks`（平台同步 #122：16l、16k、16e-2 与 QuizBuks 的 D41 适配），没有冲突。
+- **谁能启动**：`QB_ATTEMPT_EXPIRE`、`QB_PENDING_SETTLE`、`QB_PENDING_PAY`、`QB_PUBLICATION_FUNDS_RESTORED`、`QB_PUBLICATION_FUNDED`、
+  `QB_PUBLICATION_STATS_REFRESH`、`QB_PUBLICATION_STATS_CHUNK` 为 `internal()`（只以系统身份运行：事件、任务，或其下的子流程），`ProcessAccessIT` 的清单已加入。
+  `QB_WALLET_DEV_CREDIT` 由持有 `qb.wallet.dev-credit` 的人运行，是开放流程（之前误标 `internal()`）。
+- **开发入账不再以子流程调用 `QB_PENDING_SETTLE`**：在人发起的流程下调用 `internal()` 子流程会被拒（D41）。开发入账改为在同一事务中发布事件
+  `qb.sponsor.settle-pending`（原 `qb.pending-settle.more` 改名：既是"钱进来了"，也是"还有可付的"），由订阅 `qb.pending-settle` 以系统身份运行补发。
+  补发因此在入账提交之后、另一个事务中进行（测试的 `credit` 随即投递事件）。Q6 的 `QB_TOPUP_CONFIRM` 由入站 Webhook 的消费者以系统身份运行，
+  可以照原计划以子流程调用 `QB_PENDING_SETTLE`，也可以发布同一事件；两条路都成立。
+- 测试以 `PlayItSupport.systemRun`（同 `runAsSystem`，返回输出）运行 `QB_ATTEMPT_EXPIRE`；`PendingIT` 改为断言一次入账引出两次补发运行（每批一个事务）。
+  场景无需以 `actor: system` 运行内部流程（补发经 `deliverEvents`，统计经 `runJob`），快照未变。`./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 错误）通过。
+
+### CI 的随机 500（PR #123，2026-10-11）
+
+- **现象**：CI 上 `SetupScheduledIT` 的 `QB_SETUP` 得到 500，响应是 Spring 的缺省错误体（平台的 `GlobalExceptionHandler` 处理一切 `Exception`，
+  所以抛出的是 `Error`）。本地单独与全量运行都通过；全量运行中另有一次 `SignInAuditIT` 同样失败，`PlayIT` 的事件投递也出现过一次（重试后成功）。
+- **原因**：以临时的 BlockHound 回调打印栈（未提交）得到：事件循环线程结束一个被采样的 span 时，OpenTelemetry 的 `BatchSpanProcessor$Worker.addSpan`
+  在批次已满时经容量为 1 的 `ArrayBlockingQueue`（`signal`）唤醒导出线程；导出线程等待下一批时也取这把锁。两者恰好相遇时事件循环 `Unsafe#park`，
+  BlockHound 抛出 `BlockingOperationError`，请求以 500 结束。与 QuizBuks 的代码无关，任何请求都可能遇到，取决于时机（CI 的机器更慢更易遇到）。
+  这只是线程间的交接，不是 I/O，生产中（没有 BlockHound）不出错。
+- **修正**：测试中的 `QbBlockHoundIntegration`（`ServiceLoader` 加载，与平台的 `JabizBlockHoundIntegration` 并存）容许 `BatchSpanProcessor$Worker.addSpan`
+  内的等待。回归测试 `TracingUnderBlockHoundTest` 让唤醒队列的锁被测试占住，事件循环必然等待：没有容许时稳定得到同样的 `Unsafe#park` 错误，有容许时通过；
+  另一个测试确认 BlockHound 对同一线程池仍然生效。它经反射使用 OpenTelemetry 1.55 的内部字段（`worker`、`signal`、`spansNeeded`），升级时可能需要调整。
+- 这一容许属于平台（见下表缺口 17），平台加入后删去应用中的这份。
+

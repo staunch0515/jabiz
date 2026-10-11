@@ -66,7 +66,7 @@ public final class QbRoles {
     static {
         add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
-            QbPermissions.SPONSOR_AVATAR_READ));
+            QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,

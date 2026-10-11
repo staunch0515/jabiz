@@ -5,6 +5,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.Rules;
 import com.jabiz.entity.TemporalRole;
 import com.jabiz.entity.Violation;
+import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.country.Regions;
 
@@ -36,6 +37,10 @@ public final class QbPublications {
     public static final String TIER = "QbRewardTier";
     public static final String COUNTER = "QbPublicationCounter";
     public static final String SCHEDULE = "QbPublicationSchedule";
+    public static final String CARD = "QbPublicationCard";
+    public static final String OWNER = "QbPublicationOwner";
+    /** The cards of the caller's own publications: the takers' templates leave them out of what can be started. */
+    public static final String MY_OWNER_DATASET = "urn:jabiz:dataset:me:" + OWNER;
 
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-status";
     public static final String END_REASON_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-end-reason";
@@ -209,6 +214,81 @@ public final class QbPublications {
             .filters("publicationId", "quizId", "nextDueAt")
             .sorts("nextDueAt", "publicationId")
             .defaultSort("nextDueAt", true));
+    });
+
+    /**
+     * The card of a publication that went on (docs/quizbuks/plans/Q5-answering.md, D-Q5-6): what the takers' feed,
+     * the detail page and the answering processes need of it, in an ordinary row. Every field is frozen at submission
+     * except the state, which the publication's processes keep in step under its lock ({@link PublicationEditing}).
+     * The feed filters on state, times and regions; on the temporal publications every such condition would read every
+     * version. Inserted with the counters when the publication goes on; never deleted (the takers' history joins it).
+     */
+    public static final EntityDefinition CARD_ENTITY = EntityDefinition.define(CARD, eb -> {
+        eb.physicalTable("qb_publication_card");
+        eb.primaryKey("publicationId");
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        eb.field("status", f -> f.physicalColumn("status").required(true)
+            .asCode(STATUS_DICTIONARY, PublicationStatus.ALL.toArray(String[]::new)));
+        eb.field("regions", f -> f.physicalColumn("regions").immutable(true).required(true)
+            .asText(Regions.MAX_LENGTH));
+        eb.field("startAt", f -> f.physicalColumn("start_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("endAt", f -> f.physicalColumn("end_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("name", f -> f.physicalColumn("name").immutable(true).required(true)
+            .asText(PublishingLimits.NAME_LENGTH));
+        eb.field("quizTitle", f -> f.physicalColumn("quiz_title").immutable(true).required(true)
+            .asText(ContentLimits.TITLE_LENGTH));
+        // The cover's file key as text: the version's files keep the file, the card only names it.
+        eb.field("cover", f -> f.physicalColumn("cover").immutable(true).asText(36));
+        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
+            .asReference(QbContent.VERSION));
+        eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)
+            .asMonetary("JPY", 0));
+        eb.field("fullScore", f -> f.physicalColumn("full_score").immutable(true).required(true).asNumeric(7, 0));
+        eb.field("passScore", f -> f.physicalColumn("pass_score").immutable(true).required(true).asNumeric(6, 0));
+        eb.field("timeLimitSec", f -> f.physicalColumn("time_limit_sec").immutable(true).required(true)
+            .asNumeric(5, 0));
+        eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
+            .asNumeric(4, 0));
+        eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
+        eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));
+        // CardTiers' JSON: the tiers are frozen at submission too.
+        eb.field("tiers", f -> f.physicalColumn("tiers").immutable(true).required(true)
+            .asText(PublishingLimits.CARD_TIERS_LENGTH));
+        // The country of the sponsor's profile when the publication went on, for the feed's filter (U-13).
+        eb.field("sponsorCountry", f -> f.physicalColumn("sponsor_country").immutable(true).asText(2));
+        eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a
+        // publication for a month after this.
+        eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("name", "quizTitle", "sponsorId", "status", "regions", "startAt", "endAt", "maxReward")
+            .filters("sponsorId", "status", "startAt", "endAt", "endedAt")
+            .sorts("startAt", "endAt", "wentOnAt", "publicationId")
+            .defaultSort("wentOnAt", false));
+    });
+
+    /**
+     * Who published a publication that went on: a read-only view of the cards' keys and sponsors
+     * ({@code qb_publication_owner}). Read only through {@link #MY_OWNER_DATASET}, limited to the caller, so that a
+     * template knows which publications are the caller's own without a parameter the caller could choose.
+     */
+    public static final EntityDefinition OWNER_ENTITY = EntityDefinition.define(OWNER, eb -> {
+        eb.physicalTable("qb_publication_owner");
+        eb.primaryKey("publicationId");
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        eb.listView("default", lv -> lv
+            .columns("publicationId", "sponsorId")
+            .filters("publicationId")
+            .sorts("publicationId")
+            .defaultSort("publicationId", true));
     });
 
     /**

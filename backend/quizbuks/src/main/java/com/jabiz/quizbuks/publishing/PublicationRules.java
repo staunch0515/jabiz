@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.publishing;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import static com.jabiz.quizbuks.publishing.PublicationStatus.DRAFT;
@@ -63,6 +64,25 @@ public final class PublicationRules {
             return ENDED;
         }
         return now.isBefore(startAt) ? SCHEDULED : LIVE;
+    }
+
+    /**
+     * Why a publication ends after an attempt completed (Q5, D-Q5-3), or null when it goes on: {@code QUOTA} once its
+     * winners reach the maximum; {@code BUDGET} once what is left of its budget cannot pay the highest reward, so that
+     * no attempt could start any more. Attempts in progress reserved their share of both, so they still complete.
+     *
+     * @param budgetCap  the publication's budget; null without one
+     * @param maxWinners its maximum number of winners; null without one
+     */
+    public static String endsBy(BigDecimal budgetCap, Integer maxWinners, BigDecimal maxReward, long winners,
+        BigDecimal spent) {
+        if (maxWinners != null && winners >= maxWinners) {
+            return PublicationStatus.QUOTA;
+        }
+        if (budgetCap != null && budgetCap.subtract(spent).compareTo(maxReward) < 0) {
+            return PublicationStatus.BUDGET;
+        }
+        return null;
     }
 
     private PublicationRules() {}

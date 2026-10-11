@@ -1,11 +1,12 @@
 /*---
 id: qb.sponsor.publications
 description: The sponsor's own publications (M-34) with their quiz, state, regions and counts; searched by name
-entities: [QbPublication, QbQuizVersion, QbPublicationCounter]
+entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbWallet]
 datasets:
   QbPublication: urn:jabiz:dataset:sponsor:QbPublication
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
+  QbWallet: urn:jabiz:dataset:default:QbWallet
 params:
   q: { kind: { type: text, maxLength: 100 }, description: Only publications whose name contains this text }
 results:
@@ -16,9 +17,14 @@ results:
   status:        { from: QbPublication.status }
   regions:       { from: QbPublication.regions }
   starts:        { from: QbPublicationCounter.starts }
+  completions:       { from: QbPublicationCounter.completions }
+  passes:            { from: QbPublicationCounter.passes }
   winners:       { from: QbPublicationCounter.winners }
   maxWinners:    { from: QbPublication.maxWinners }
   spent:         { from: QbPublicationCounter.spent }
+  fundsShort:        { kind: { type: bool } }
+  pendingCount:      { from: QbWallet.pendingCount }
+  pendingAmount:     { from: QbWallet.pendingAmount }
   budgetCap:     { from: QbPublication.budgetCap }
   maxSpend:      { from: QbPublication.maxSpend }
   startAt:       { from: QbPublication.startAt }
@@ -27,7 +33,7 @@ results:
   rejectCode:    { from: QbPublication.rejectCode }
   editedAt:      { from: QbPublication.editedAt }
 list:
-  filters: [status, startAt]
+  filters: [status, startAt, fundsShort]
   sorts:   [editedAt, startAt, name]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
@@ -43,9 +49,16 @@ SELECT
     p.{{QbPublication.status}}              AS status,
     p.{{QbPublication.regions}}             AS regions,
     coalesce(c.{{QbPublicationCounter.starts}}, 0)  AS starts,
+    coalesce(c.{{QbPublicationCounter.completions}}, 0) AS completions,
+    coalesce(c.{{QbPublicationCounter.passes}}, 0) AS passes,
     coalesce(c.{{QbPublicationCounter.winners}}, 0) AS winners,
     p.{{QbPublication.maxWinners}}          AS maxWinners,
     coalesce(c.{{QbPublicationCounter.spent}}, 0)   AS spent,
+    (p.{{QbPublication.status}} = 'FUNDS_SHORT'
+     OR (p.{{QbPublication.status}} = 'LIVE' AND (coalesce(w.{{QbWallet.pendingCount}}, 0) > 0
+         OR coalesce(w.{{QbWallet.balance}}, 0) < p.{{QbPublication.maxReward}}))) AS fundsShort,
+    coalesce(w.{{QbWallet.pendingCount}}, 0)  AS pendingCount,
+    coalesce(w.{{QbWallet.pendingAmount}}, 0) AS pendingAmount,
     p.{{QbPublication.budgetCap}}           AS budgetCap,
     p.{{QbPublication.maxSpend}}            AS maxSpend,
     p.{{QbPublication.startAt}}             AS startAt,
@@ -56,4 +69,5 @@ SELECT
 FROM {{QbPublication}} p
 LEFT JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = p.{{QbPublication.versionId}}
 LEFT JOIN {{QbPublicationCounter}} c ON c.{{QbPublicationCounter.publicationId}} = p.{{QbPublication.publicationId}}
+LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = p.{{QbPublication.sponsorId}} AND w.{{QbWallet.kind}} = 'SPONSOR'
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)

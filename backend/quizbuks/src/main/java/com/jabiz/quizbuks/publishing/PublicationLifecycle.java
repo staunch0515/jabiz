@@ -49,6 +49,7 @@ import static com.jabiz.quizbuks.publishing.PublicationEditing.list;
 import static com.jabiz.quizbuks.publishing.PublicationEditing.uuid;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.DRAFT;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.ENDED;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.FUNDS_SHORT;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.LIVE;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.PAUSED;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.PENDING_REVIEW;
@@ -123,6 +124,7 @@ public final class PublicationLifecycle {
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadSponsor)
+                .steps(b -> PublicationEditing.loadSponsorProfile(b, PublicationEditing::publication))
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.REVIEW_PUBLICATION_AUTO))
                 .steps(PublicationEditing::loadTiers)
@@ -225,17 +227,21 @@ public final class PublicationLifecycle {
     public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> pause() {
         return ProcessDefinition.define(PAUSE, 1, PublicationRef.class, PublicationOutput.class,
             ProcessContext.class, pb -> pb
-                .description("Pauses a scheduled or live publication: it takes no new attempts until resumed.")
+                .description("Pauses a scheduled, live or underfunded publication: it takes no new attempts until "
+                    + "resumed.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
-                .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", SCHEDULED, LIVE))
+                .actsOn(QbPublications.PUBLICATION, "publicationId",
+                    a -> a.whenField("status", SCHEDULED, LIVE, FUNDS_SHORT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
                 .steps(PublicationEditing::lockAndLoad)
                 .compute("Pause", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
-                    if (PublicationEditing.in(ctx, publication, PAUSED, SCHEDULED, LIVE)) {
+                    // An underfunded one too (Q5, D-Q5-5): resuming it goes by the time, and the next reward its
+                    // sponsor cannot pay makes it underfunded again.
+                    if (PublicationEditing.in(ctx, publication, PAUSED, SCHEDULED, LIVE, FUNDS_SHORT)) {
                         Map<String, Object> values = new LinkedHashMap<>();
                         values.put("status", PAUSED);
                         values.put("pausedAt", ctx.opTime());
@@ -310,6 +316,7 @@ public final class PublicationLifecycle {
                     return found == null ? null : found.get("versionId");
                 }, false))
                 .steps(PublicationEditing::loadSchedule)
+                .steps(b -> PublicationEditing.loadSponsorProfile(b, ctx -> first(ctx, FOUND)))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
                         ownRequest(ctx) ? PublicationEditing.ids(input(ctx).requestId()) : new ArrayList<>()))

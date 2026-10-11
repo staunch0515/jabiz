@@ -1,0 +1,119 @@
+package com.jabiz.quizbuks.play;
+
+import com.jabiz.quizbuks.content.QuizSnapshot;
+import net.jqwik.api.Arbitraries;
+import net.jqwik.api.Arbitrary;
+import net.jqwik.api.Combinators;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Property;
+import net.jqwik.api.Provide;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ScoringTest {
+
+    static QuizSnapshot.Option option(int no, boolean correct) {
+        return new QuizSnapshot.Option(no, "o" + no, null, correct);
+    }
+
+    /** Question 1 (2 points): option 1 alone; question 2 (3 points): options 1 and 3 (multiple choice). */
+    static QuizSnapshot quiz() {
+        return new QuizSnapshot("Q", null, null, 300, false, List.of(), List.of(
+            new QuizSnapshot.Question(1, "a", null, 2, List.of(option(1, true), option(2, false))),
+            new QuizSnapshot.Question(2, "b", null, 3, List.of(option(1, true), option(2, false), option(3, true)))));
+    }
+
+    @Test
+    void aQuestionEarnsItsPointsOnlyWhenTheChoiceIsExactlyTheCorrectOptions() {
+        assertThat(Scoring.score(quiz(), List.of(List.of(1), List.of(1, 3))).score()).isEqualTo(5);
+        assertThat(Scoring.score(quiz(), List.of(List.of(1), List.of(1))).score()).isEqualTo(2);
+        assertThat(Scoring.score(quiz(), List.of(List.of(1, 2), List.of(1, 2, 3))).score()).isZero();
+        assertThat(Scoring.score(quiz(), List.of(List.of(2), List.of(3, 1))).score()).isEqualTo(3);
+    }
+
+    @Test
+    void unansweredQuestionsEarnNothing() {
+        Scoring.Result result = Scoring.score(quiz(), List.of());
+        assertThat(result.score()).isZero();
+        assertThat(result.fullScore()).isEqualTo(5);
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::selected).containsOnly(List.of());
+        assertThat(Scoring.score(quiz(), List.of(List.of(), List.of())).score()).isZero();
+    }
+
+    @Test
+    void anOptionChosenTwiceCountsOnce() {
+        assertThat(Scoring.score(quiz(), List.of(List.of(1, 1), List.of(3, 1, 3))).score()).isEqualTo(5);
+    }
+
+    @Test
+    void theResultNamesTheCorrectOptionsAndIsCanonicalJson() {
+        Scoring.Result result = Scoring.score(quiz(), List.of(List.of(2), List.of(1, 3)));
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::correct)
+            .containsExactly(List.of(1), List.of(1, 3));
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::earned).containsExactly(0, 3);
+        assertThat(Scoring.toJson(result)).isEqualTo("[{\"correct\":[1],\"earned\":0,\"no\":1,\"points\":2,"
+            + "\"selected\":[2]},{\"correct\":[1,3],\"earned\":3,\"no\":2,\"points\":3,\"selected\":[1,3]}]");
+    }
+
+    /** The same rule written another way: for each question, every option chosen iff it is correct. */
+    static int reference(QuizSnapshot quiz, List<List<Integer>> answers) {
+        int score = 0;
+        for (int i = 0; i < quiz.questions().size(); i++) {
+            QuizSnapshot.Question question = quiz.questions().get(i);
+            Set<Integer> chosen = new HashSet<>(i < answers.size() ? answers.get(i) : List.of());
+            boolean right = !chosen.isEmpty();
+            for (QuizSnapshot.Option option : question.options()) {
+                right &= option.correct() == chosen.contains(option.no());
+            }
+            right &= chosen.stream().allMatch(no -> question.options().stream().anyMatch(o -> o.no() == no));
+            score += right ? question.points() : 0;
+        }
+        return score;
+    }
+
+    @Property(tries = 300)
+    void agreesWithAnIndependentReading(@ForAll("quizzes") QuizSnapshot quiz, @ForAll("choices") List<List<Integer>> answers) {
+        Scoring.Result result = Scoring.score(quiz, answers);
+        assertThat(result.score()).isEqualTo(reference(quiz, answers));
+        assertThat(result.score()).isBetween(0, result.fullScore());
+        assertThat(result.fullScore()).isEqualTo(quiz.fullScore());
+    }
+
+    @Provide
+    Arbitrary<QuizSnapshot> quizzes() {
+        Arbitrary<QuizSnapshot.Question> question = Combinators.combine(Arbitraries.integers().between(1, 10),
+                Arbitraries.integers().between(2, 6), Arbitraries.integers().between(1, 63))
+            .as((points, count, mask) -> {
+                List<QuizSnapshot.Option> options = new ArrayList<>();
+                boolean any = false;
+                for (int no = 1; no <= count; no++) {
+                    boolean correct = (mask & (1 << (no - 1))) != 0;
+                    any |= correct;
+                    options.add(option(no, correct));
+                }
+                if (!any) {
+                    options.set(0, option(1, true));
+                }
+                return new QuizSnapshot.Question(0, "q", null, points, options);
+            });
+        return question.list().ofMinSize(1).ofMaxSize(6).map(questions -> {
+            List<QuizSnapshot.Question> numbered = new ArrayList<>();
+            for (int i = 0; i < questions.size(); i++) {
+                QuizSnapshot.Question q = questions.get(i);
+                numbered.add(new QuizSnapshot.Question(i + 1, q.stem(), null, q.points(), q.options()));
+            }
+            return new QuizSnapshot("Q", null, null, 60, false, List.of(), numbered);
+        });
+    }
+
+    @Provide
+    Arbitrary<List<List<Integer>>> choices() {
+        return Arbitraries.integers().between(1, 6).list().ofMaxSize(4).list().ofMaxSize(7);
+    }
+}

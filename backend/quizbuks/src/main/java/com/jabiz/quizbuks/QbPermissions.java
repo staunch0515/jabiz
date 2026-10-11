@@ -62,6 +62,19 @@ public final class QbPermissions {
      * system runs them (platform decision D41), whatever a caller's permissions. Granted to no role besides.
      */
     public static final String PUBLICATION_SYSTEM = "qb.publication.system";
+    /**
+     * The answering processes only the platform runs, as the system (Q5): finishing an attempt whose time ran out
+     * ({@code QB_ATTEMPT_EXPIRE}), paying pending rewards ({@code QB_PENDING_SETTLE}, {@code QB_PENDING_PAY}) and
+     * refreshing the completion counts ({@code QB_PUBLICATION_STATS_REFRESH}). Granted to no role, as
+     * {@link #PUBLICATION_SYSTEM}: each of them reads its state again and is idempotent, so a call by a holder of
+     * {@code *} changes nothing a run by the platform would not.
+     */
+    public static final String PLAY_SYSTEM = "qb.play.system";
+    /**
+     * Credit a sponsor's wallet without a payment, for development and tests before top-ups exist (Q5, D-Q5-8). The
+     * process is registered only with {@code quizbuks.wallet.dev-credit.enabled=true}; granted to no role.
+     */
+    public static final String WALLET_DEV_CREDIT = "qb.wallet.dev-credit";
     /** Top up the sponsor wallet. */
     public static final String TOPUP = "qb.topup";
     /** A sponsor's own transactions and reports. */

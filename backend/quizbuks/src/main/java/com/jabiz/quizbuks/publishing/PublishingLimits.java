@@ -23,6 +23,11 @@ public final class PublishingLimits {
 
     public static final int NAME_LENGTH = 100;
     public static final int REJECT_REASON_LENGTH = 500;
+    /**
+     * Longest JSON of a card's tiers ({@link CardTiers}): some 100 characters a tier at most (a key, two scores of six
+     * digits and a reward of thirteen) for {@link #MAX_TIERS} tiers, with room to spare.
+     */
+    public static final int CARD_TIERS_LENGTH = 4_000;
 
     /** Time limit of an attempt in seconds, as a quiz's. */
     public static final int MIN_TIME_LIMIT_SEC = ContentLimits.MIN_TIME_LIMIT_SEC;

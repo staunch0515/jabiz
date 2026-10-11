@@ -11,6 +11,7 @@ import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -94,6 +95,55 @@ public class PublishingConfig {
     @Bean
     DatasetDefinition qbPublicationScheduleDataset() {
         return defaultDataset(QbPublications.SCHEDULE, 100);
+    }
+
+    @Bean
+    EntityDefinition qbPublicationCardEntity() {
+        return QbPublications.CARD_ENTITY;
+    }
+
+    /** Read by administrators; the takers read cards through the templates only (Q5). */
+    @Bean
+    DatasetDefinition qbPublicationCardDataset() {
+        return defaultDataset(QbPublications.CARD, PublicationFunds.BATCH);
+    }
+
+    @Bean
+    EntityDefinition qbPublicationOwnerEntity() {
+        return QbPublications.OWNER_ENTITY;
+    }
+
+    /** The caller's own publications, read only (a view over the cards); its write permission is no role's. */
+    @Bean
+    DatasetDefinition qbMyPublicationOwnerDataset() {
+        return DatasetDefinition.define(QbPublications.MY_OWNER_DATASET, d -> d
+            .targetEntityType(QbPublications.OWNER)
+            .asDefault()
+            .permissions(QbPermissions.PLAY, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    @Bean
+    ProcessDefinition<QbWallets.SponsorRef, PublicationFunds.RestoredOutput, ProcessContext>
+        qbPublicationFundsRestored() {
+        return FUNDS_RESTORED;
+    }
+
+    @Bean
+    ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext> qbPublicationFunded() {
+        return PublicationFunds.funded();
+    }
+
+    private static final ProcessDefinition<QbWallets.SponsorRef, PublicationFunds.RestoredOutput, ProcessContext>
+        FUNDS_RESTORED = PublicationFunds.fundsRestored();
+
+    /** A sponsor's pending rewards are all paid: their underfunded publications go back on (Q5, D-Q5-5). */
+    @Bean
+    EventSubscription<QbWallets.SponsorRef> qbFundsRestoredSubscription() {
+        return EventSubscription.of(PublicationFunds.SUBSCRIPTION, QbWallets.FUNDS_RESTORED_EVENT, FUNDS_RESTORED,
+            PublicationFunds::input);
     }
 
     @Bean
