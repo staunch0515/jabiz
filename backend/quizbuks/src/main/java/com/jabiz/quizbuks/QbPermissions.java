@@ -21,6 +21,19 @@ public final class QbPermissions {
 
     /** A sponsor's own sponsor profile and onboarding. */
     public static final String SPONSOR_ME = "qb.sponsor.me";
+    /** Read one's own account: profile and sign-in records (takers and sponsors; Q2). */
+    public static final String ACCOUNT_READ = "qb.account.read";
+    /**
+     * Read sponsors' avatars: the sponsor, the takers (the publisher of a quiz, Q5) and the administrators. A file
+     * policy names one read permission, so the three groups share this one.
+     */
+    public static final String SPONSOR_AVATAR_READ = "qb.sponsor.avatar.read";
+    /**
+     * The process only the platform runs, as the system: applying an onboarding review
+     * ({@code QB_SPONSOR_APPROVAL_RESULT}, run for the approval events). Granted to no role, as
+     * {@link #PUBLICATION_SYSTEM} (platform decision D41 makes it system-only once implemented).
+     */
+    public static final String SPONSOR_SYSTEM = "qb.sponsor.system";
     /** Edit quizzes, materials, questions and versions. */
     public static final String CONTENT_WRITE = "qb.content.write";
     /** Read the files of quiz content: covers, question and option images, material images, PDFs and audio. */

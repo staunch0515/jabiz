@@ -52,7 +52,8 @@ class QbRolesTest {
     @Test
     void takersAndSponsorsHoldOnlyTheirOwnPermissions() {
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).containsExactlyInAnyOrder(QbPermissions.COUNTRY_READ,
-            QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD);
+            QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
+            QbPermissions.SPONSOR_AVATAR_READ);
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb."))
             .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP);
     }
@@ -89,6 +90,29 @@ class QbRolesTest {
         // Only the platform runs the system's publication processes (the job, the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain(QbPermissions.PUBLICATION_SYSTEM));
+    }
+
+    @Test
+    void accountsAreTheirOwnersAndOnlyAdministratorsReadOrBanOthers() {
+        // Q2 (docs/quizbuks/plans/Q2-accounts.md, requirement 2).
+        for (String own : List.of(QbRoles.TAKER, QbRoles.SPONSOR)) {
+            assertThat(QbRoles.of(own).permissions()).as(own).contains(QbPermissions.ACCOUNT_READ,
+                QbPermissions.SPONSOR_AVATAR_READ).doesNotContain(QbPermissions.ADMIN_USERS_READ,
+                QbPermissions.ADMIN_USERS_BAN, QbPermissions.REVIEW_SPONSOR, "security.user.read",
+                "security.login-record.read");
+        }
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).contains(QbPermissions.ME)
+            .doesNotContain(QbPermissions.SPONSOR_ME);
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.SPONSOR_ME)
+            .doesNotContain(QbPermissions.ME);
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.REVIEW_SPONSOR,
+            QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_AVATAR_READ, "approval.decide")
+            .doesNotContain(QbPermissions.ADMIN_USERS_BAN);
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_USERS_BAN,
+            QbPermissions.REVIEW_SPONSOR);
+        // Only the platform applies an onboarding review (the approval events).
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
+            .doesNotContain(QbPermissions.SPONSOR_SYSTEM));
     }
 
     @Test

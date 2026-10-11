@@ -29,10 +29,42 @@ jabiz:
     # Base64, at least 32 bytes. Startup fails without it; without it, enrolled users cannot pass their second factor.
     mfa:
       key: ${JABIZ_MFA_KEY:}
+    # Sign-in entries (docs/design/10-security.md section 15; decision D36; docs/quizbuks/plans/Q2-accounts.md, D-Q2-1).
+    # The administration accepts the administrators' roles only (QB_ADMIN_ROLES, comma-separated; ADMIN is the first
+    # administrator's): never QB_TAKER or QB_SPONSOR, which anybody can get by registering (the startup check refuses
+    # "*" or a registration role here while registration is on). The app (/) takes takers, who may sign in before
+    # verifying their address (to browse; every QuizBuks write needs it verified). The sponsor console (/sponsor/)
+    # takes sponsors with a verified address only. Registration needs QB_SETUP to have run (the roles) and mail to be
+    # on (jabiz.mail.*), or nobody can verify their address.
+    entries:
+      admin:
+        accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
+        app-path: /admin/
+      app:
+        accepted-roles: QB_TAKER
+        self-registration: ${QB_APP_SELF_REGISTRATION:true}
+        registration-roles: QB_TAKER
+        require-verified-email: false
+        app-path: /
+      sponsor:
+        accepted-roles: QB_SPONSOR
+        self-registration: ${QB_SPONSOR_SELF_REGISTRATION:true}
+        registration-roles: QB_SPONSOR
+        require-verified-email: true
+        app-path: /sponsor/
+    # Behind a reverse proxy, its addresses (or CIDR ranges), so that sign-in records keep the client's address.
+    trusted-proxies: ${JABIZ_TRUSTED_PROXIES:}
     # The first administrator, created at startup when both are set and no user exists yet.
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
+  # Mail (decision D35): verification, password reset, welcome and onboarding mail. Off unless switched on; the
+  # server is spring.mail.* (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD). The
+  # base address is the administration's (its pages handle the platform's links until the app has its own).
+  mail:
+    enabled: ${JABIZ_MAIL_ENABLED:false}
+    from: ${JABIZ_MAIL_FROM:}
+    base-url: ${JABIZ_MAIL_BASE_URL:}
   files:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:
@@ -56,3 +88,9 @@ management:
     web:
       exposure:
         include: health,info
+
+# QuizBuks's own settings. The sponsor console's address in mail; /sponsor/ on the host of jabiz.mail.base-url when
+# not set (docs/quizbuks/plans/Q2-accounts.md, D-Q2-7).
+quizbuks:
+  links:
+    sponsor: ${QB_SPONSOR_LINK:}

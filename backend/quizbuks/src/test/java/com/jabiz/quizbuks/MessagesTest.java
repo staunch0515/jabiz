@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks;
 
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.identity.AccountCodes;
+import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +39,15 @@ class MessagesTest {
                 .containsExactlyInAnyOrderElementsOf(en.stringPropertyNames());
         }
         assertThat(en.stringPropertyNames()).containsAll(ContentCodes.ALL).containsAll(PublishingCodes.ALL)
-            .contains("approval.subject.qb.publication", "qb.publication.copy-name");
+            .contains("approval.subject.qb.publication", "qb.publication.copy-name")
+            .containsAll(AccountCodes.ALL).containsAll(ReviewCodes.ALL)
+            .contains("approval.subject.qb.sponsor", "task.qb.sponsor.resubmit", "process.QB_PROFILE_SAVE",
+                "process.QB_SPONSOR_APPLY", "process.QB_SPONSOR_PROFILE_SAVE", "process.QB_SPONSOR_APPROVAL_RESULT",
+                "process.QB_USER_BAN", "process.QB_USER_UNBAN", "mail.qb.welcome.subject", "mail.qb.welcome.body",
+                "mail.qb.sponsor.approved.subject", "mail.qb.sponsor.approved.body",
+                "mail.qb.sponsor.rejected.subject", "mail.qb.sponsor.rejected.body", "query.qb.me.sign-ins",
+                "query.qb.admin.users", "query.qb.admin.sponsors", "entity.QbProfile", "entity.QbSponsor",
+                "entity.QbUserBan", "param.qb.review.sponsor.auto");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

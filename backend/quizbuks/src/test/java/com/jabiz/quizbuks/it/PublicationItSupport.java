@@ -24,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Publishing integration tests (docs/quizbuks/plans/Q4-publishing.md): two sponsors who also publish, a content
  * administrator who reviews, a super administrator who proposes controlled changes and a finance administrator who
- * publishes them. Each class installs QuizBuks once ({@code QB_SETUP}, every proposal published) unless it says not to.
+ * publishes them. Each class installs QuizBuks once ({@code QB_SETUP}, every proposal published) unless it says not to;
+ * installing onboards both sponsors (Q2, D-Q2-6: only an approved sponsor submits), approved by a content
+ * administrator.
  */
 abstract class PublicationItSupport extends ContentItSupport {
 
@@ -41,16 +43,47 @@ abstract class PublicationItSupport extends ContentItSupport {
     @Qualifier("qbPublicationTickJob")
     JobDefinition<PublicationLifecycle.TickInput> tick;
 
+    static final String SPONSOR_A = "sponsor-a";
+    static final String SPONSOR_B = "sponsor-b";
+
     @Override
     String sponsorA() {
-        return TestTokens.bearer(tokens, "sponsor-a", QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
-            QbPermissions.PUBLICATION_WRITE);
+        return sponsor(SPONSOR_A);
     }
 
     @Override
     String sponsorB() {
-        return TestTokens.bearer(tokens, "sponsor-b", QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
-            QbPermissions.PUBLICATION_WRITE);
+        return sponsor(SPONSOR_B);
+    }
+
+    /** A sponsor's token, as the role QB_SPONSOR has it (the parts the tests use). */
+    String sponsor(String actorId) {
+        return TestTokens.bearer(tokens, actorId, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
+            QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_ME, QbPermissions.ACCOUNT_READ);
+    }
+
+    /** A content administrator reviewing sponsor onboarding, as {@code QB_ADMIN_CONTENT} does. */
+    String sponsorReviewer() {
+        return TestTokens.bearer(tokens, "sponsor-reviewer", QbPermissions.REVIEW_SPONSOR,
+            QbPermissions.ADMIN_USERS_READ, "approval.decide", "task.read");
+    }
+
+    /** Applies as the sponsor; returns the output. */
+    Map<String, Object> apply(String token, String company) {
+        return run("QB_SPONSOR_APPLY", token, body("displayName", "Owner of " + company, "company", company,
+            "acceptTerms", true));
+    }
+
+    /** Onboards a sponsor: applies, a content administrator approves, the result is applied. */
+    void onboard(String actorId) {
+        Map<String, Object> applied = apply(sponsor(actorId), "Company of " + actorId);
+        if (!"APPROVED".equals(applied.get("reviewStatus"))) {
+            run("APPROVAL_DECIDE", sponsorReviewer(), body("requestId", applied.get("approvalRequestId"),
+                "decision", "APPROVE"));
+            deliverEvents();
+        }
+        assertThat(latest("qb_sponsor_version", "onboarding_id", "user_id = '" + actorId + "'"))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("review_status", "APPROVED"));
     }
 
     /** A content administrator: reads every publication and reviews them, as {@code QB_ADMIN_CONTENT} does. */
@@ -89,6 +122,8 @@ abstract class PublicationItSupport extends ContentItSupport {
         }
         if (installs() && query("SELECT 1 FROM qb_setup_record_version LIMIT 1").isEmpty()) {
             publishProposals(setup());
+            onboard(SPONSOR_A);
+            onboard(SPONSOR_B);
         }
     }
 
