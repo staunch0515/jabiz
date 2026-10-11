@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from 'react'
 import { appRegion } from '@jabiz/client'
 import { CalendarIcon, XIcon } from 'lucide-react'
 import { dateMatchModifiers, type Locale, type Matcher } from 'react-day-picker'
@@ -147,6 +147,13 @@ interface TypedFieldProps extends InputAttributes {
   onInvalidChange?: (invalid: boolean) => void
   /** Changing it drops what was typed (a form's reset). */
   resetKey?: string | number
+}
+
+/** Empties the field; the clear button goes with the value, so focus moves to the field's text box. */
+function clearAndKeepFocus(event: MouseEvent<HTMLButtonElement>, onChange: (value: null) => void) {
+  const input = event.currentTarget.parentElement?.querySelector('input')
+  onChange(null)
+  input?.focus()
 }
 
 export interface DatePickerProps extends TypedFieldProps {
@@ -299,7 +306,7 @@ export function DatePicker({
         </PopoverContent>
       </Popover>
       {clearable && selected && !locked && (
-        <Button variant="ghost" size="icon-sm" aria-label={t('date.clear')} onClick={() => onChange(null)}>
+        <Button variant="ghost" size="icon-sm" aria-label={t('date.clear')} onClick={(event) => clearAndKeepFocus(event, onChange)}>
           <XIcon aria-hidden />
         </Button>
       )}
@@ -443,7 +450,7 @@ export function DateTimePicker({
         </PopoverContent>
       </Popover>
       {clearable && current && !locked && (
-        <Button variant="ghost" size="icon-sm" aria-label={t('date.clear')} onClick={() => onChange(null)}>
+        <Button variant="ghost" size="icon-sm" aria-label={t('date.clear')} onClick={(event) => clearAndKeepFocus(event, onChange)}>
           <XIcon aria-hidden />
         </Button>
       )}

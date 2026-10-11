@@ -53,6 +53,8 @@ describe('Combobox', () => {
     expect(screen.getByRole('combobox', { name: 'Country' })).toHaveAttribute('aria-invalid', 'true')
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onChange).toHaveBeenCalledWith(null)
+    // The clear button goes with the value: focus stays in the field rather than falling to the page.
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Country' }))
     await userEvent.click(screen.getByRole('combobox', { name: 'Country' }))
     await userEvent.keyboard('zzz')
     expect(screen.getByText('No matches')).toBeInTheDocument()

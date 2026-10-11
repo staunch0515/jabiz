@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
@@ -32,6 +32,11 @@ export interface ConfirmDialogProps {
   trigger?: ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * Where focus goes when the dialog closes and what opened it is gone (the button of a row the action deleted):
+   * otherwise focus would fall to the page's body. Focus returns to the opener while it is there.
+   */
+  returnFocus?: () => HTMLElement | null | undefined
 }
 
 /**
@@ -48,12 +53,16 @@ export function ConfirmDialog({
   trigger,
   open: openProp,
   onOpenChange,
+  returnFocus,
 }: ConfirmDialogProps) {
   const { t } = useTranslation(UI_NAMESPACE)
   const [ownOpen, setOwnOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const open = openProp ?? ownOpen
+  // What had focus when the dialog opened (its trigger): focus returns there, or elsewhere when it is gone.
+  const opener = useRef<Element | null>(null)
   const setOpen = (next: boolean) => {
+    if (next) opener.current = document.activeElement
     if (busy) return
     setOwnOpen(next)
     onOpenChange?.(next)
@@ -77,7 +86,21 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={setOpen}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       {/* Without a description the question alone names the dialog; Radix wants that said explicitly. */}
-      <AlertDialogContent {...(description ? {} : { 'aria-describedby': undefined })}>
+      <AlertDialogContent
+        {...(description ? {} : { 'aria-describedby': undefined })}
+        onOpenAutoFocus={() => {
+          opener.current ??= document.activeElement
+        }}
+        onCloseAutoFocus={(event) => {
+          const from = opener.current
+          opener.current = null
+          if (from?.isConnected || !returnFocus) return
+          const target = returnFocus()
+          if (!target) return
+          event.preventDefault()
+          target.focus()
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}

@@ -27,6 +27,8 @@ export interface FileUploadProps {
   id?: string
   className?: string
   'aria-describedby'?: string
+  /** The field has a problem the caller shows (a server's violation); the field's own refusals set it too. */
+  'aria-invalid'?: boolean
   'data-testid'?: string
 }
 
@@ -64,6 +66,7 @@ export function FileUpload({
   id,
   className,
   'aria-describedby': describedBy,
+  'aria-invalid': invalid,
   'data-testid': testId,
 }: FileUploadProps) {
   const { t } = useTranslation(UI_NAMESPACE)
@@ -110,7 +113,7 @@ export function FileUpload({
           accept={accept}
           disabled={disabled || busy}
           aria-busy={busy || undefined}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={error || invalid ? true : undefined}
           aria-describedby={describedByIds || undefined}
           data-testid={testId}
           className="peer sr-only"
