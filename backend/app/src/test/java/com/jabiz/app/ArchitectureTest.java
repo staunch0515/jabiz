@@ -1,6 +1,7 @@
 package com.jabiz.app;
 
 import com.jabiz.app.archfixture.DirectNetworkCalls;
+import com.jabiz.app.commerce.ProductCopyHandler;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.test.PlatformArchRules;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -141,6 +142,23 @@ class ArchitectureTest {
             assertThat(rule.evaluate(new ClassFileImporter().importClasses(fine)).hasViolation())
                 .as(fine.getSimpleName()).isFalse();
         }
+    }
+
+    /**
+     * External job handlers and blocking steps make external calls only: they read and write no data themselves
+     * (decision D38). The rule is not vacuous: a handler with the platform's storage and a step with JDBC fail it.
+     */
+    @Test
+    void handlersAndBlockingStepsStayOutOfTheDatabase() {
+        PlatformArchRules.handlersStayOutOfTheDatabase(BUSINESS).check(CLASSES);
+        ArchRule rule = PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.app..");
+        for (Class<?> offender : List.of(DirectNetworkCalls.HandlerWithDatabase.class,
+            DirectNetworkCalls.StepWithJdbc.class)) {
+            assertThat(rule.evaluate(new ClassFileImporter().importClasses(offender)).hasViolation())
+                .as(offender.getSimpleName()).isTrue();
+        }
+        assertThat(rule.evaluate(new ClassFileImporter().importClasses(ProductCopyHandler.class)).hasViolation())
+            .isFalse();
     }
 
     /** Business code uses ExternalServices only, never the platform's machinery behind it (decision D38). */

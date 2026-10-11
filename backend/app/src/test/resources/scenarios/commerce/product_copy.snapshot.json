@@ -1,0 +1,145 @@
+{
+  "scenario" : "Marketing copy by an external job",
+  "asOf" : "2026-06-01T00:02:00Z",
+  "entities" : {
+    "Product" : [ {
+      "productId" : "#uuid:1",
+      "sku" : "MUG-1",
+      "productName" : "Stoneware mug",
+      "unitPrice" : "1200",
+      "active" : true,
+      "imageFileId" : null,
+      "marketingCopy" : "A stoneware mug that keeps your tea warm.",
+      "versionNo" : 2,
+      "effectStartTime" : "2026-06-01T00:02:00Z",
+      "createdTime" : "2026-06-01T00:02:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "productId" : "#uuid:2",
+      "sku" : "BOWL-1",
+      "productName" : "Rice bowl",
+      "unitPrice" : "900",
+      "active" : true,
+      "imageFileId" : null,
+      "marketingCopy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:00:00Z",
+      "createdTime" : "2026-06-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "productId" : "#uuid:3",
+      "sku" : "PLATE-1",
+      "productName" : "Side plate",
+      "unitPrice" : "700",
+      "active" : true,
+      "imageFileId" : null,
+      "marketingCopy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:00:00Z",
+      "createdTime" : "2026-06-01T00:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "ExternalJob" : [ {
+      "jobId" : "#uuid:4",
+      "jobSeq" : "1",
+      "jobType" : "commerce.product-copy",
+      "reference" : "#uuid:1",
+      "requestedBy" : "shop-admin",
+      "processSeqId" : "#op:3",
+      "createdTime" : "2026-06-01T00:00:00Z"
+    }, {
+      "jobId" : "#uuid:5",
+      "jobSeq" : "2",
+      "jobType" : "commerce.product-copy",
+      "reference" : "#uuid:2",
+      "requestedBy" : "shop-admin",
+      "processSeqId" : "#op:4",
+      "createdTime" : "2026-06-01T00:00:00Z"
+    }, {
+      "jobId" : "#uuid:6",
+      "jobSeq" : "3",
+      "jobType" : "commerce.product-copy",
+      "reference" : "#uuid:3",
+      "requestedBy" : "shop-admin",
+      "processSeqId" : "#op:5",
+      "createdTime" : "2026-06-01T00:00:00Z"
+    } ],
+    "ExternalJobAttempt" : [ {
+      "attemptId" : "#uuid:7",
+      "jobId" : "#uuid:4",
+      "attemptNo" : "1",
+      "outcome" : "SUCCEEDED",
+      "retryable" : false,
+      "errorCode" : null,
+      "errorDetail" : null,
+      "durationMs" : "0",
+      "finishedTime" : "2026-06-01T00:02:00Z"
+    }, {
+      "attemptId" : "#uuid:8",
+      "jobId" : "#uuid:5",
+      "attemptNo" : "1",
+      "outcome" : "FAILED",
+      "retryable" : false,
+      "errorCode" : "GENERATION_REFUSED",
+      "errorDetail" : "The AI service refused the request (400)",
+      "durationMs" : "0",
+      "finishedTime" : "2026-06-01T00:02:00Z"
+    } ],
+    "ExternalJobUsage" : [ {
+      "usageId" : "#uuid:9",
+      "jobId" : "#uuid:4",
+      "attemptNo" : "1",
+      "metric" : "promptTokens",
+      "quantity" : "20"
+    }, {
+      "usageId" : "#uuid:10",
+      "jobId" : "#uuid:4",
+      "attemptNo" : "1",
+      "metric" : "completionTokens",
+      "quantity" : "40"
+    }, {
+      "usageId" : "#uuid:11",
+      "jobId" : "#uuid:5",
+      "attemptNo" : "1",
+      "metric" : "promptTokens",
+      "quantity" : "7"
+    } ],
+    "SysTask" : [ {
+      "taskId" : "#uuid:12",
+      "taskType" : "commerce.product-copy",
+      "titleKey" : "task.commerce.product-copy.ready",
+      "titleParams" : "{\"sku\":\"MUG-1\"}",
+      "assigneeUserId" : "shop-admin",
+      "assigneePermission" : null,
+      "subjectEntity" : "Product",
+      "subjectId" : "#uuid:1",
+      "link" : null,
+      "status" : "OPEN",
+      "dueTime" : null,
+      "sourceKey" : "product-copy:019e807a-ec00-7000-8000-000000000004",
+      "closedBy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:02:00Z",
+      "createdTime" : "2026-06-01T00:02:00Z",
+      "processSeqId" : "#op:6"
+    }, {
+      "taskId" : "#uuid:13",
+      "taskType" : "commerce.product-copy",
+      "titleKey" : "task.commerce.product-copy.failed",
+      "titleParams" : "{\"error\":\"GENERATION_REFUSED\",\"sku\":\"BOWL-1\"}",
+      "assigneeUserId" : "shop-admin",
+      "assigneePermission" : null,
+      "subjectEntity" : "Product",
+      "subjectId" : "#uuid:2",
+      "link" : null,
+      "status" : "OPEN",
+      "dueTime" : null,
+      "sourceKey" : "product-copy:019e807a-ec00-7000-8000-000000000005",
+      "closedBy" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-06-01T00:02:00Z",
+      "createdTime" : "2026-06-01T00:02:00Z",
+      "processSeqId" : "#op:7"
+    } ]
+  }
+}

@@ -120,6 +120,35 @@ public final class DirectNetworkCalls {
         }
     }
 
+    /** An external job handler that reads the database itself instead of being given what it needs. */
+    public static final class HandlerWithDatabase
+        implements com.jabiz.external.ExternalJobHandler<String, String> {
+        private final com.jabiz.runtime.storage.StorageAdapterRegistry storages;
+
+        HandlerWithDatabase(com.jabiz.runtime.storage.StorageAdapterRegistry storages) {
+            this.storages = storages;
+        }
+
+        @Override
+        public com.jabiz.external.ExternalJobResult<String> run(String input,
+            com.jabiz.external.ExternalJobContext ctx) {
+            return com.jabiz.external.ExternalJobResult.of(String.valueOf(storages));
+        }
+    }
+
+    /** A blocking step that opens a JDBC connection. */
+    public static final class StepWithJdbc
+        implements com.jabiz.process.BlockingStep<com.jabiz.process.NoMetadata, com.jabiz.process.ProcessContext> {
+        @Override
+        public void run(com.jabiz.process.NoMetadata metadata, com.jabiz.process.ProcessContext ctx) {
+            try (java.sql.Connection connection = java.sql.DriverManager.getConnection("jdbc:postgresql:x")) {
+                ctx.put("closed", connection.isClosed());
+            } catch (java.sql.SQLException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
     /** Reaches into the platform's machinery to fake a blocking step. */
     public static final class ForgedScope {
         Object forge() throws Exception {
