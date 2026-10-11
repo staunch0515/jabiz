@@ -27,6 +27,7 @@
 | 安全配置 | 访问令牌的签名密钥、二次验证的加密密钥已配置且足够长（缺失时 Bean 创建失败即拒绝启动，`dev` 除外；见 10 §2、§9）；访问令牌有效期不长于闲置时长；OIDC 提供方配置完整、`https`；登录入口的名字、角色、注册角色与 `app-path`（允许注册而邮件未开启、角色码不存在为警告）、可信代理的地址格式以及与 `server.forward-headers-strategy` 同时配置、`SignInGuard` 预读的数据视图与字段（类别 `SECURITY`，10 §11、§12、§15） |
 | 单页应用 | `jabiz.web.spa[i]` 的前缀合法、不重复、不在 `/api` `/actuator` 下；`index` 是 `.html` 的绝对路径；CSP 非空且为单行（17 §3.2） |
 | 文件 | 策略名不重复、上限不超过请求上限；文件字段的策略已声明、实体有数据视图；有策略时存储目录已配置且可写（14 §4） |
+| 外部服务 | 名字合法且唯一、主机白名单、基础地址（https，http 只限本机，主机在白名单中）、超时与响应上限、密钥的环境变量已设置（`dev` 中为告警，`platformCheck` 不检查）、配置中没有未声明的服务（类别 `EXTERNAL`，06 §2.3） |
 
 ## 2. `platformCheck`（CI 静态校验）
 
@@ -36,7 +37,7 @@
   调用 `PlatformCheckRunner.runAll()`，结束后删除 schema。`check` 依赖它。
 - 输出格式：每行一个问题，`类别 | 定位（文件:行号、实体.字段、数据视图）| 描述`，警告行以 `WARNING` 开头；最后一行为汇总；
   存在错误时退出码非 0。上下文本身无法启动时输出一行 `CONTEXT | - | 原因`。
-  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS` `EVENT` `JOB` `WEB` `FILE`（`CHECK` 为检查本身失败）。
+  类别：`METAMODEL` `SEMANTIC_KIND` `DICTIONARY` `MESSAGES` `RELATIONSHIP` `DATASET` `SQL_TEMPLATE` `PROCESS` `EVENT` `JOB` `WEB` `FILE` `EXTERNAL`（`CHECK` 为检查本身失败）。
 - CI 中必须运行（`./gradlew check` 包含它）；PR 不允许在 `platformCheck` 失败时合并。
 - 元模型导出 JSON Schema（`/api/meta/schema/*` 与构建产物），SQL 模板头部按 JSON Schema 校验。
 
@@ -113,6 +114,10 @@ snapshot:
 - 公开的业务扩展接口（`ComputeStep`、`BlockingStep`、`RulePredicate`、`TransitionGuard`、`DictionaryProvider`、`CustomKindSupport`）的方法不返回 `Mono` / `Flux`。
 - 禁止在 `jabiz-core` 和业务模块中调用 `Instant.now()`、`LocalDateTime.now()`、`System.currentTimeMillis()`。
 - 禁止使用 `double` / `float` 类型的字段表示金额（检查 `Monetary` 字段对应的 record 组件类型）。
+- 业务模块不直接使用网络客户端（JDK、Spring、Netty 的 HTTP 客户端、`javax.net..`、套接字、`URLConnection`、`UrlResource`、
+  `URL#openConnection|openStream|getContent`、XML 解析器的 `parse(String uri)`），只经声明的外部服务调用其他系统，也不依赖平台的
+  `com.jabiz.runtime.external`（D38）。规则由平台提供：runtime 测试夹具的 `PlatformArchRules.noDirectNetworkAccess` 与 `noPlatformInternals`，
+  示范 `app` 与各应用分支的 `ArchitectureTest` 引用它们（带反例测试）。规则是护栏，不是沙箱（反射等看不见）。
 
 ## 5. BlockHound
 

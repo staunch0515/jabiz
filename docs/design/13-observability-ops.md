@@ -29,6 +29,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.file.serve` | 读取文件内容（14 §5、15 §4） | `channel`（`admin` / `public`） |
 | `jabiz.public.query` | 公开模板接口（15 §5；其中的模板执行即 `jabiz.query.template`，嵌套在内） | `template` `result`（`ok` / `not_modified`） |
 | `jabiz.public.rate_limited` | 公开接口的限流拒绝（15 §5；只计数，不记客户端地址） | 无 |
+| `jabiz.external.call` | `JdkExternalHttp.send`（阻塞步骤的外部调用，06 §2.3；阻塞式观测） | `service` `outcome`（`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`），没有 `status` |
 | `jabiz.inbound.receive` | 入站 Webhook 的一次请求（11 §2.5；未知提供方不观测，嵌套其中的 `INBOUND_RECEIVE` 即 `jabiz.process`） | `provider` `result`（`ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`）`reason`（`none`、拒绝原因如 `no_match`、`too_old`、`too_large`，或意外错误的 `error`） |
 | `jabiz.inbound.rate_limited` | 入站 Webhook 的限流拒绝（只计数，不记客户端地址） | 无 |
 | `jabiz.file.sweep` | 清扫的存储部分（`FILE_PURGE_ORPHANS` 提交后，14 §6；删除数量记入日志） | `result` |

@@ -92,6 +92,11 @@ public final class PlatformErrorCodes {
      * {@code timeoutMs}): stopped by the database, answered 503 (phase 14q).
      */
     public static final String QUERY_TIMEOUT = "QUERY_TIMEOUT";
+    /**
+     * A call to an external service failed: refused, timed out, too large an answer, no connection, or an answer the
+     * step could not use (decision D38); answered 502.
+     */
+    public static final String EXTERNAL_CALL_FAILED = "EXTERNAL_CALL_FAILED";
     /** A report run can supersede an earlier run of the same template only (19 section 5). */
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */

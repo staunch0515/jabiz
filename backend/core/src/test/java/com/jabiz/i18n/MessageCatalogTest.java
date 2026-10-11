@@ -35,6 +35,26 @@ class MessageCatalogTest {
             .isEqualTo("こんにちは、Kenさん");
     }
 
+    /** A parameter naming one of a fixed set is shown in the language; unknown values stay as they are. */
+    @Test
+    void parameterValuesWithTextsOfTheirOwnAreLocalized() {
+        Violation timeout = new Violation(null, PlatformErrorCodes.EXTERNAL_CALL_FAILED, "x",
+            Map.of("service", "demo-ai", "kind", "TIMEOUT"));
+        assertThat(catalog.message(timeout, Locale.ENGLISH))
+            .isEqualTo("The external service demo-ai could not be used (no answer in time); try again later.");
+        assertThat(catalog.message(timeout, Locale.JAPANESE)).contains("demo-ai", "時間内に応答がありません")
+            .doesNotContain("TIMEOUT");
+        assertThat(catalog.message(timeout, Locale.SIMPLIFIED_CHINESE)).contains("未在时限内响应");
+        assertThat(catalog.message(new Violation(null, PlatformErrorCodes.EXTERNAL_CALL_FAILED, "x",
+            Map.of("service", "demo-ai", "kind", "SOMETHING_NEW")), Locale.ENGLISH)).contains("(SOMETHING_NEW)");
+        for (String kind : List.of("REFUSED", "TIMEOUT", "TOO_LARGE", "UNAVAILABLE", "BAD_RESPONSE")) {
+            for (Locale locale : SUPPORTED) {
+                assertThat(catalog.find(PlatformErrorCodes.EXTERNAL_CALL_FAILED + ".kind." + kind, locale))
+                    .as(kind + " " + locale).isPresent();
+            }
+        }
+    }
+
     @Test
     void bundlesAreSearchedInOrder() {
         assertThat(catalog.find("REQUIRED", Locale.ENGLISH)).contains("Field \"{field}\" is required.");

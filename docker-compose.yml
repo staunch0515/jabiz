@@ -49,8 +49,22 @@ services:
       MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "true"
       MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://lgtm:4318/v1/metrics
       MANAGEMENT_OTLP_METRICS_EXPORT_STEP: 10s
+      # The demo AI service (decision D38) is the local stub below, which shares this container's network: plain
+      # http is allowed to this machine only. Point both at a real provider (https) to use one.
+      JABIZ_DEMO_AI_URL: ${JABIZ_DEMO_AI_URL:-http://localhost:8091/v1}
+      JABIZ_DEMO_AI_HOSTS: ${JABIZ_DEMO_AI_HOSTS:-localhost}
     # Uploaded files live in their own volume (docs/design/14-files.md section 6); the image sets JABIZ_FILES_LOCAL_ROOT.
     volumes: [jabiz-secrets:/var/lib/jabiz/secrets, jabiz-files:/var/lib/jabiz/files]
+
+  # A stand-in for the demo AI service (tools/demo/ai-stub), run from source by the JDK. It shares the app container's
+  # network, so the app reaches it at http://localhost:8091 and nothing else can; no provider is called.
+  ai-stub:
+    image: eclipse-temurin:21-jdk
+    network_mode: "service:app"
+    depends_on: [app]
+    volumes: ["./tools/demo/ai-stub:/stub:ro"]
+    command: ["java", "/stub/AiStub.java", "8091"]
+    restart: unless-stopped
 
   # Grafana, Prometheus, Tempo, Loki and an OpenTelemetry collector in one container, for development only.
   lgtm:

@@ -1,6 +1,7 @@
 package com.jabiz.runtime.imports;
 
 import com.jabiz.imports.ImportCodes;
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.imports.ImportDefinition;
 import com.jabiz.imports.ImportFileException;
 import com.jabiz.imports.ImportFormat;
@@ -168,8 +169,10 @@ public class RunImport implements StepHandler<NoMetadata, ProcessContext> {
             .concatMap(unit -> engine.inSavepoint(executor.keepingAfterCommitOnSuccess(execute(target, unit.input())))
                 .thenReturn(Boolean.TRUE)
                 .onErrorResume(error -> {
-                    if (ProblemStatuses.status(error) >= 500) {
-                        return Mono.error(error);  // a defect, not a problem of the row: the import fails
+                    // A defect, not a problem of the row, fails the import. Another system that refuses or fails
+                    // the row's call (502, decision D38) is a problem of the row, like a rule it breaks.
+                    if (ProblemStatuses.status(error) >= 500 && !(error instanceof ExternalCallException)) {
+                        return Mono.error(error);
                     }
                     unit.rows().forEach(row -> failedRows.add(row.number()));
                     issues.addAll(issuesOf(unit, error));

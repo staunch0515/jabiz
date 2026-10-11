@@ -3,6 +3,7 @@ package com.jabiz.runtime.webhook;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.web.OutboundAddresses;
 import com.jabiz.webhook.WebhookSignature;
 import org.springframework.stereotype.Component;
 
@@ -10,19 +11,17 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
  * Startup self-check of webhooks (decision D33), every problem at once: each subscription has a valid unique name and
  * event type, a secret of at least {@value WebhookSignature#MIN_SECRET_LENGTH} characters, and an https address (http
- * only to this machine) on a host of {@code jabiz.webhooks.allowed-hosts}.
+ * only to this machine) on a host of {@code jabiz.webhooks.allowed-hosts} ({@link OutboundAddresses}).
  */
 @Component
 public class WebhookChecks implements PlatformCheck {
 
     public static final String CATEGORY = "WEBHOOK";
-    static final Set<String> LOOPBACK = Set.of("localhost", "127.0.0.1", "[::1]", "::1");
 
     private final WebhookProperties properties;
 
@@ -58,22 +57,8 @@ public class WebhookChecks implements PlatformCheck {
         return problems;
     }
 
-    /** Why the platform will not send to {@code url}, or null. */
+    /** Why the platform will not send to {@code url}, or null ({@link OutboundAddresses}). */
     String refusal(URI url) {
-        if (url == null || url.getHost() == null) {
-            return "missing or not an absolute address";
-        }
-        String host = url.getHost().toLowerCase(Locale.ROOT);
-        String scheme = url.getScheme() == null ? "" : url.getScheme().toLowerCase(Locale.ROOT);
-        if (!scheme.equals("https") && !(scheme.equals("http") && LOOPBACK.contains(host))) {
-            return "not https (http only to this machine): " + WebhookProperties.origin(url);
-        }
-        if (url.getUserInfo() != null) {
-            return "carries credentials";
-        }
-        if (!properties.allowedHosts().contains(host)) {
-            return "host " + host + " is not in jabiz.webhooks.allowed-hosts";
-        }
-        return null;
+        return OutboundAddresses.refusal(url, properties.allowedHosts(), "jabiz.webhooks.allowed-hosts");
     }
 }

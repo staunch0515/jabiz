@@ -1,5 +1,6 @@
 package com.jabiz.runtime.web;
 
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.ScopeUnavailableException;
 import com.jabiz.entity.ValidationException;
@@ -90,6 +91,16 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(QueryTimeoutException.class)
     ProblemDetail handleQueryTimeout(QueryTimeoutException ex, ServerWebExchange exchange) {
+        return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+    }
+
+    /**
+     * An external service did not answer usably (decision D38): 502, logged as a warning with the service and the
+     * kind only; the message carries no address path, header or body.
+     */
+    @ExceptionHandler(ExternalCallException.class)
+    ProblemDetail handleExternalCall(ExternalCallException ex, ServerWebExchange exchange) {
+        log.warn("External call failed: {}", ex.getMessage());
         return withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
     }
 

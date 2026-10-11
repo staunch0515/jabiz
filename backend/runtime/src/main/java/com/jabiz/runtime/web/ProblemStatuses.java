@@ -1,5 +1,6 @@
 package com.jabiz.runtime.web;
 
+import com.jabiz.external.ExternalCallException;
 import com.jabiz.dataset.ScopeUnavailableException;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
@@ -54,6 +55,8 @@ public final class ProblemStatuses {
             case RateLimitedException e -> 429;
             // Too much asked of the database just now: not the caller's mistake, and not a defect.
             case QueryTimeoutException e -> 503;
+            // Another system did not answer usably (decision D38).
+            case ExternalCallException e -> 502;
             default -> 500;
         };
     }
@@ -82,6 +85,8 @@ public final class ProblemStatuses {
             case PayloadTooLargeException e -> e.violations();
             case InboundRejectedException e -> e.violations();
             case RateLimitedException e -> e.violations();
+            case ExternalCallException e -> List.of(new Violation(null, PlatformErrorCodes.EXTERNAL_CALL_FAILED,
+                e.getMessage(), Map.of("service", e.service(), "kind", e.kind().name())));
             case QueryTimeoutException e -> List.of(new Violation(null, PlatformErrorCodes.QUERY_TIMEOUT,
                 "The query did not finish within its time limit", Map.of()));
             default -> List.of();

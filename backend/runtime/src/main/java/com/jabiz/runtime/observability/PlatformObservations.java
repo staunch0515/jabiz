@@ -51,6 +51,8 @@ public class PlatformObservations {
     public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
+    /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */
+    public static final String EXTERNAL_CALL = "jabiz.external.call";
     /**
      * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
      * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
@@ -129,6 +131,32 @@ public class PlatformObservations {
         } catch (RuntimeException e) {
             observation.lowCardinalityKeyValue(RESULT, NO_STATUS);
             tagFailure(observation, e);
+            throw e;
+        } finally {
+            observation.stop();
+        }
+    }
+
+    /**
+     * Observes blocking work on the calling thread whose outcome is its own (an external call: {@code 2xx},
+     * {@code timeout} ...), not the HTTP status of a domain exception: the observation carries {@code tags} and
+     * {@value #OUTCOME} only.
+     *
+     * @param outcome the outcome of a value
+     * @param failure the outcome of an exception, which is rethrown
+     */
+    public <T> T outcomeOf(String name, String contextualName, KeyValues tags, Supplier<T> work,
+        Function<? super T, String> outcome, Function<RuntimeException, String> failure) {
+        Observation observation = Observation.createNotStarted(name, registry)
+            .contextualName(contextualName)
+            .lowCardinalityKeyValues(tags)
+            .start();
+        try (Observation.Scope ignored = observation.openScope()) {
+            T value = work.get();
+            observation.lowCardinalityKeyValue(OUTCOME, outcome.apply(value));
+            return value;
+        } catch (RuntimeException e) {
+            observation.lowCardinalityKeyValue(OUTCOME, failure.apply(e));
             throw e;
         } finally {
             observation.stop();

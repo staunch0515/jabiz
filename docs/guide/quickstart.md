@@ -27,7 +27,9 @@ docker compose logs app | grep "Sign in"   # 首次启动生成的管理员密�
 - 停止：`docker compose down`（保留数据）；`docker compose down -v`（连同数据库、生成的密钥一起删除）。
 - pgAdmin：`docker compose --profile tools up -d`，<http://localhost:5050>。
 
-服务一览：`db`（PostgreSQL 16，主机端口 5436）、`app`（8080）、`lgtm`（Grafana 3000）。详见 `docs/design/13-observability-ops.md`。
+- 外部服务的示范（D38）：商品行上的"改名"经桩服务 `ai-stub` 审核（名称含 `badword` 即被拒），桩服务与 `app` 共用网络，不调用任何真实提供方。
+
+服务一览：`db`（PostgreSQL 16，主机端口 5436）、`app`（8080）、`ai-stub`（示范 AI 服务的桩，只对 `app` 可见）、`lgtm`（Grafana 3000）。详见 `docs/design/13-observability-ops.md`。
 
 ### 登录后能做什么
 
@@ -44,7 +46,7 @@ cd backend && ./gradlew :app:bootRun --args='--spring.profiles.active=dev'   # 8
 cd frontend && pnpm install && pnpm dev          # 5173，/api 代理到 8080
 ```
 
-- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、封存密钥 `JABIZ_INTEGRITY_KEY`（同样生成，务必备份，见 design 21 §2.4）、二次验证密钥 `JABIZ_MFA_KEY`（同样生成，务必备份，见 design 10 §9）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
+- 非 `dev` 启动需要 `JABIZ_JWT_SECRET`（`openssl rand -base64 48`）、封存密钥 `JABIZ_INTEGRITY_KEY`（同样生成，务必备份，见 design 21 §2.4）、二次验证密钥 `JABIZ_MFA_KEY`（同样生成，务必备份，见 design 10 §9）、示范外部服务 `demo-ai` 的密钥 `JABIZ_DEMO_AI_KEY`（D38；示范不调用真实提供方，任意值即可）、首个管理员 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`
   与上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（`dev` 下默认 `backend/app/build/jabiz-files`；compose 用专用卷）。
 - 公开只读访问（15）默认关闭；`JABIZ_PUBLIC_ENABLED=true` 打开后，匿名即可读取示范的公开商品目录：
   `curl 'http://localhost:8080/api/public/queries/commerce.public.catalog?sort=unitPrice:asc'`（商品照片经 `/api/public/files/{id}`）。
