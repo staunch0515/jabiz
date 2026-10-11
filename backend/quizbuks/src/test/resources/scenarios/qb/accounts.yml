@@ -1,0 +1,146 @@
+# Accounts (docs/quizbuks/plans/Q2-accounts.md): QB_SETUP proposes the review switches and rules, a second
+# administrator publishes them. A taker registers at the app and a sponsor at the sponsor console (the platform's
+# registration: unverified users with the entry's role and a verification mail; mail is off in tests, so the messages
+# are recorded and SKIPPED). A replay cannot follow a mailed link nor learn a registered user's id (platform gap 12),
+# so the people who then act are users an administrator created; a replayed actor counts as verified. The taker
+# completes their profile (welcome mail); the sponsor applies, is sent back with a reason and a task, applies again
+# and is approved (approval mail). The super administrator bans the taker and lifts the ban; nobody bans themselves.
+name: Accounts
+# The tests' configuration takes no registrations; this replay does, as the application's configuration has it.
+properties:
+  jabiz.security.entries.app.self-registration: "true"
+  jabiz.security.entries.sponsor.self-registration: "true"
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"], mfa: true }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    expectOutput:
+      rulesProposed: [qb.publication.review, qb.sponsor.review]
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]" }
+  - note: A second administrator publishes the parameters and the two review rules.
+    process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+
+  - note: Registration at the app and at the sponsor console; the administration takes none.
+    advanceClock: PT1H
+  - process: SPONSOR_SIGN_UP@latest
+    input: { entry: app, email: Taro@example.com, password: correct horse battery, displayName: Taro, locale: ja }
+  - process: SPONSOR_SIGN_UP@latest
+    input: { entry: sponsor, email: shop@example.com, password: correct horse battery, displayName: Shop }
+  - expectError:
+      process: SPONSOR_SIGN_UP@latest
+      input: { entry: admin, email: someone@example.com, password: correct horse battery }
+      status: 422
+      ruleCode: SIGN_UP_DISABLED
+  - deliverEvents: true
+
+  - note: The people who act next, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: tom, displayName: Tom, email: tom@example.com }
+    save: { tom: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: sara, displayName: Sara, email: sara@example.com }
+    save: { sara: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: boss, displayName: Boss, email: boss@example.com }
+    save: { boss: $.userId }
+
+  - note: The taker completes their profile (registration's second step) and is welcomed.
+    advanceClock: PT1H
+  - actor: { id: "${tom}", permissions: [qb.me, qb.account.read] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Tom, countryCode: JP, city: Osaka, preferredCurrency: USD }
+    expectOutput: { revision: 1, created: true }
+  - actor: { id: "${tom}", permissions: [qb.me, qb.account.read] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Tom, countryCode: JP, city: Kyoto, preferredCurrency: USD, baseRevision: 1 }
+    expectOutput: { revision: 2, created: false }
+
+  - note: The sponsor applies; a content administrator sends it back with a reason.
+    advanceClock: PT1H
+  - actor: { id: "${sara}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Sara, company: Acme, intro: "We make **quizzes**.", acceptTerms: true }
+    expectOutput: { reviewStatus: PENDING, approval: PENDING, revision: 1 }
+    save: { first: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${first}", decision: REJECT, reason: Tell us more about your company. }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.sponsors
+      rows: 1
+      values: [{ company: Acme, displayName: Sara, email: sara@example.com, reviewStatus: REJECTED,
+        rejectReason: Tell us more about your company. }]
+
+  - note: The sponsor changes it and applies again (their task is done); approved this time.
+    advanceClock: PT1H
+  - actor: { id: "${sara}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Sara, company: Acme Quizzes, intro: "Quizzes about capitals since 2020.",
+      acceptTerms: true }
+    expectOutput: { reviewStatus: PENDING }
+    save: { second: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${second}", decision: APPROVE }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.users
+      params: { q: sara }
+      rows: 1
+      values: [{ userName: sara, displayName: Sara, sponsorStatus: APPROVED, company: Acme Quizzes,
+        banned: false }]
+
+  - note: The super administrator bans the taker, then lifts the ban.
+    advanceClock: PT1H
+  - actor: { id: "${boss}", permissions: [qb.admin.users.ban, qb.admin.users.read] }
+    process: QB_USER_BAN@latest
+    input: { userId: "${tom}", reason: Shared answers in a forum. }
+    expectOutput: { banned: true, revision: 1 }
+  - expect:
+      query: qb.admin.users
+      params: { q: tom }
+      rows: 1
+      values: [{ userName: tom, displayName: Tom, countryCode: JP, city: Kyoto, banned: true }]
+  - advanceClock: P1D
+  - actor: { id: "${boss}", permissions: [qb.admin.users.ban, qb.admin.users.read] }
+    process: QB_USER_UNBAN@latest
+    input: { userId: "${tom}", note: Appeal accepted. }
+    expectOutput: { banned: false, revision: 2 }
+
+  - note: Nobody bans themselves. (That a sponsor cannot ban at all is the entry's permission check, which a replay
+      does not run, docs/design/07-quality.md section 3.1; BanIT covers it.)
+    expectError:
+      actor: { id: "${boss}", permissions: [qb.admin.users.ban] }
+      process: QB_USER_BAN@latest
+      input: { userId: "${boss}", reason: Testing }
+      status: 422
+      ruleCode: QB_BAN_SELF
+snapshot:
+  entities: [SecUser, SecUserRole, MailMessage, QbProfile, QbSponsor, QbUserBan, SysApprovalRequest, SysTask]
+  asOf: end
