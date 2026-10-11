@@ -3,9 +3,11 @@ package com.jabiz.quizbuks.content;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -104,6 +106,8 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Creates a draft quiz or changes its title, introduction, cover or time limit.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -185,6 +189,8 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Removes a quiz with its questions and materials; its versions stay.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -195,15 +201,7 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
                 // Under the quiz's lock: a submission holds it too (shared), so none slips in meanwhile.
-                // The schedule holds every publication submitted and not back to its draft, by quiz (a plain index).
-                .step("Load the publications submitted", QueryEntities.<ProcessContext>of(
-                    QbContent.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
-                        .limit(Integer.MAX_VALUE).build(), PUBLICATIONS))
-                .step("Load their versions", QueryEntities.<ProcessContext>of(
-                    QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("versionId", publishedVersionIds(ctx)))
-                        .limit(Integer.MAX_VALUE).build(), PUBLISHED_VERSIONS))
+                .steps(QuizProcesses::loadSubmitted)
                 .compute("Remove the quiz", (metadata, ctx) -> remove(ctx))
                 // The release reads the quiz as removed.
                 .step("Save", SaveChanges.now())
@@ -214,14 +212,16 @@ public final class QuizProcesses {
     /**
      * {@code QB_QUIZ_RELEASE_FILES}: tombstones up to {@link ContentLimits#RELEASE_CHUNK} version files of a quiz the
      * caller owns and has removed, so that a quiz with any number of version files is removed in commits each within
-     * the dataset's write limit. Run by {@code QB_QUIZ_DELETE}, one call per chunk; called directly it can only
-     * release files of the caller's own removed quizzes, which nothing needs any more.
+     * the dataset's write limit. Run by {@code QB_QUIZ_DELETE}, one call per chunk (a subprocess: its permission is
+     * not checked). Its permission is one no role holds, so no sponsor calls it directly; and whoever calls it, it
+     * keeps the files the quiz's submitted publications still need, as the removal does (Q2 review S1). Once platform
+     * decision D41 (16l) is in, it is declared sub-process only.
      */
     public static ProcessDefinition<ReleaseInput, ReleaseOutput, ProcessContext> releaseFiles() {
         return ProcessDefinition.define(RELEASE_FILES, 1, ReleaseInput.class, ReleaseOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Releases the files of the versions of a removed quiz.")
-                .permissions(QbPermissions.CONTENT_WRITE)
+                .permissions(QbPermissions.CONTENT_SYSTEM)
                 .internal()
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, ReleaseOutput.class))
@@ -237,14 +237,30 @@ public final class QuizProcesses {
                             new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
                             new QueryPredicate.In("versionFileId", ids)))).limit(Integer.MAX_VALUE).build();
                     }, VERSION_FILES))
+                .steps(QuizProcesses::loadSubmitted)
                 .compute("Release them", (metadata, ctx) -> {
                     if (list(ctx, FOUND).isEmpty()) {
                         throw new EntityNotFoundException(QbContent.QUIZ + " " + ctx.get(QUIZ_ID) + " not found");
                     }
-                    list(ctx, VERSION_FILES).forEach(file -> ctx.changes().delete(QbContent.VERSION_FILE, file.id(),
-                        file.version()));
-                    ctx.put(OUTPUT, new ReleaseOutput(list(ctx, VERSION_FILES).size()));
+                    Set<UUID> needed = filesStillNeeded(ctx);
+                    List<EntityInstance> released = list(ctx, VERSION_FILES).stream()
+                        .filter(file -> !needed.contains(fileOf(file))).toList();
+                    released.forEach(file -> ctx.changes().delete(QbContent.VERSION_FILE, file.id(), file.version()));
+                    ctx.put(OUTPUT, new ReleaseOutput(released.size()));
                 }));
+    }
+
+    /** Loads the quiz's submitted publications (their schedule rows) and the versions they use. */
+    private static <I, O> void loadSubmitted(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        // The schedule holds every publication submitted and not back to its draft, by quiz (a plain index).
+        pb.step("Load the publications submitted", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
+                    .limit(Integer.MAX_VALUE).build(), PUBLICATIONS))
+            .step("Load their versions", QueryEntities.<ProcessContext>of(
+                QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("versionId", publishedVersionIds(ctx)))
+                    .limit(Integer.MAX_VALUE).build(), PUBLISHED_VERSIONS));
     }
 
     static void remove(ProcessContext ctx) {
@@ -318,6 +334,8 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Copies a quiz, as its draft is or as one of its versions was, into a new draft.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, CloneOutput.class))
@@ -413,6 +431,8 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Saves the draft as the next version of the quiz, once it is complete.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, VersionOutput.class))

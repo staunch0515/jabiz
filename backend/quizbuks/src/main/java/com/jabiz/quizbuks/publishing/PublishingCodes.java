@@ -1,5 +1,8 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.quizbuks.identity.AccountCodes;
+import com.jabiz.quizbuks.setup.ReviewCodes;
+
 import java.util.List;
 
 /**
@@ -25,8 +28,10 @@ public final class PublishingCodes {
     public static final String CHANGED = "QB_PUBLICATION_CHANGED";
     public static final String QUIZ_REMOVED = "QB_PUBLICATION_QUIZ_REMOVED";
     public static final String TIER_NOT_IN_PUBLICATION = "QB_TIER_NOT_IN_PUBLICATION";
-    public static final String REVIEW_NOT_CONFIGURED = "QB_REVIEW_NOT_CONFIGURED";
-    public static final String SPONSOR_NOT_APPROVED = "QB_SPONSOR_NOT_APPROVED";
+    /** Shared with sponsor onboarding: {@link ReviewCodes}. */
+    public static final String REVIEW_NOT_CONFIGURED = ReviewCodes.REVIEW_NOT_CONFIGURED;
+    /** An account code ({@link AccountCodes}): submitting checks the onboarding ({@link SponsorChecks}). */
+    public static final String SPONSOR_NOT_APPROVED = AccountCodes.SPONSOR_NOT_APPROVED;
     /** Not a refusal: why a publication went back to its draft when its end passed while it was reviewed. */
     public static final String EXPIRED_IN_REVIEW = "QB_PUBLICATION_EXPIRED_IN_REVIEW";
 
@@ -45,10 +50,10 @@ public final class PublishingCodes {
     public static final String TIER_NOT_TO_FULL = "QB_TIER_NOT_TO_FULL";
     public static final String TIER_NO_REWARD = "QB_TIER_NO_REWARD";
 
-    /** Every code above. */
+    /** Every code above that is publishing's own (not the shared review and account codes). */
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, TIME_LIMIT_RANGE, SCORE_RANGE,
         BUDGET_RANGE, MAX_WINNERS_RANGE, TIER_REWARD_RANGE, TIME_ORDER, NOT_DRAFT, CHANGED, QUIZ_REMOVED,
-        TIER_NOT_IN_PUBLICATION, REVIEW_NOT_CONFIGURED, SPONSOR_NOT_APPROVED, EXPIRED_IN_REVIEW, NO_VERSION,
+        TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
         TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD);
 

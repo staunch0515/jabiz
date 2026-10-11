@@ -1,5 +1,6 @@
-# Publishing a quiz (docs/quizbuks/plans/Q4-publishing.md): QB_SETUP proposes the review switch and the review rule,
-# which a second administrator publishes. Sponsor A makes a quiz with version v1.0, saves a publication with three
+# Publishing a quiz (docs/quizbuks/plans/Q4-publishing.md): QB_SETUP proposes the review switches and the review
+# rules, which a second administrator publishes. Sponsor A is onboarded first (Q2: only an approved sponsor
+# publishes): A applies, a content administrator approves. Sponsor A makes a quiz with version v1.0, saves a publication with three
 # reward tiers and submits it; the reviewer sends it back with a reason, A lowers the rewards and submits again, the
 # reviewer approves. The minute's job puts it live at its start; A pauses and resumes it; the job ends it at its end.
 # A copies it with new times; sponsor B cannot touch A's publication. No files: a scenario cannot upload one yet
@@ -14,9 +15,9 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rulesProposed: [qb.publication.review]
+      rulesProposed: [qb.publication.review, qb.sponsor.review]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
-      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]" }
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -39,6 +40,20 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+
+  - note: Sponsor A is onboarded (Q2); a content administrator approves.
+    actor: { id: sponsor-a, permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    expectOutput: { reviewStatus: PENDING, approval: PENDING }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
 
   - note: Sponsor A writes a quiz of two questions (full score 5) and saves it as v1.0.
     advanceClock: PT1H
@@ -171,5 +186,5 @@ steps:
       input: { publicationId: "${pub}" }
       status: 404
 snapshot:
-  entities: [QbPublication, QbRewardTier, QbPublicationCounter, QbPublicationSchedule, SysApprovalRequest]
+  entities: [QbPublication, QbRewardTier, QbPublicationCounter, QbPublicationSchedule, SysApprovalRequest, QbSponsor]
   asOf: end

@@ -19,4 +19,6 @@ dependencies {
     testImplementation(testFixtures(project(":runtime")))
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testImplementation("net.jqwik:jqwik:1.9.3")
+    // Registration and mail against a local SMTP server (Q2), as the platform's own tests.
+    testImplementation("com.icegreen:greenmail-junit5:2.1.3")
 }

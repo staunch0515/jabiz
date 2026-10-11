@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.setup;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 
 import java.util.Collections;
@@ -35,7 +36,16 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.REVIEW_PUBLICATION)), 100,
         "Publications are reviewed unless qb.review.publication.auto is on");
 
-    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW);
+    /**
+     * Sponsor onboarding is reviewed by a content administrator unless the controlled parameter
+     * {@code qb.review.sponsor.auto} says it need not be (Q2, D-Q2-3).
+     */
+    public static final Rule SPONSOR_REVIEW = new Rule(SponsorApprovals.RULE, SponsorApprovals.SUBJECT,
+        entries("fact", "autoApprove", "op", "eq", "value", false),
+        List.of(entries("permission", QbPermissions.REVIEW_SPONSOR)), 100,
+        "Sponsor onboarding is reviewed unless qb.review.sponsor.auto is on");
+
+    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

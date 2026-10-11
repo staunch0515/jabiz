@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.setup.QbApprovalRules;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -38,8 +39,9 @@ class SetupIT extends QbItSupport {
         // Controlled parameters cannot be created directly (decision D40): they are proposed, and another
         // administrator publishes them.
         assertThat(first.get("paramsProposed")).isEqualTo(QbParams.CONTROLLED);
-        // Approval rules change only through controlled changes as well (Q4): the publication review is proposed.
-        assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE));
+        // Approval rules change only through controlled changes as well: the publication review (Q4) and the
+        // sponsor onboarding review (Q2) are proposed.
+        assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size());
         assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
@@ -50,10 +52,19 @@ class SetupIT extends QbItSupport {
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
             + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size());
-        assertThat(query("SELECT rule_code, subject, enabled, priority, condition FROM sys_approval_rule_version"))
-            .singleElement().satisfies(rule -> assertThat(rule).containsEntry("rule_code", PublicationApprovals.RULE)
-                .containsEntry("subject", PublicationApprovals.SUBJECT).containsEntry("enabled", true)
-                .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove")));
+        assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
+            + "FROM sys_approval_rule_version ORDER BY rule_code"))
+            .satisfiesExactly(
+                rule -> assertThat(rule).containsEntry("rule_code", PublicationApprovals.RULE)
+                    .containsEntry("subject", PublicationApprovals.SUBJECT).containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.REVIEW_PUBLICATION)),
+                rule -> assertThat(rule).containsEntry("rule_code", SponsorApprovals.RULE)
+                    .containsEntry("subject", SponsorApprovals.SUBJECT).containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.REVIEW_SPONSOR)));
         assertRoles();
         assertAccounts();
         assertCountries();

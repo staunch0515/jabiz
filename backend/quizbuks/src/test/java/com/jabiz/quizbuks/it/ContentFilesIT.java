@@ -237,6 +237,30 @@ class ContentFilesIT extends PublicationItSupport {
     }
 
     @Test
+    void releasingDirectlyStillKeepsTheFilesOfSubmittedPublications() {
+        // Review S1: the release checks again what the removal checked, whoever calls it.
+        List<String> quizzes = new java.util.ArrayList<>();
+        String published = image();
+        String submitted = (String) run("QB_PUBLICATION_SAVE", sponsorA(), publication(versionWithPicture(
+            "Kept", published, quizzes), "Kept")).get("publicationId");
+        assertThat(submit(sponsorA(), submitted)).containsEntry("status", "PENDING_REVIEW");
+        String quizId = quizzes.getFirst();
+        run("QB_QUIZ_DELETE", sponsorA(), body("quizId", quizId));
+        List<Object> kept = latest("qb_version_file_version", "version_file_id", "quiz_id = '" + quizId
+            + "' AND NOT is_deleted").stream().map(row -> row.get("version_file_id").toString()).map(Object.class::cast)
+            .toList();
+        assertThat(kept).isNotEmpty();
+        Map<String, Object> released = run("QB_QUIZ_RELEASE_FILES", com.jabiz.runtime.test.TestTokens.bearer(tokens,
+            "sponsor-a", com.jabiz.quizbuks.QbPermissions.CONTENT_SYSTEM), body("quizId", quizId,
+            "versionFileIds", kept));
+        assertThat(released).containsEntry("released", 0);
+        assertThat(latest("qb_version_file_version", "version_file_id", "quiz_id = '" + quizId
+            + "' AND NOT is_deleted")).hasSize(kept.size());
+        sweep();
+        assertThat(exists(published)).isTrue();
+    }
+
+    @Test
     void aSubmissionAndARemovalAtOnceNeverLoseAPublishedFile() throws Exception {
         for (int round = 0; round < 3; round++) {
             List<String> quizzes = new java.util.ArrayList<>();

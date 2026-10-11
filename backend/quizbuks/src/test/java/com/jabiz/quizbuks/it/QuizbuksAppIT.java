@@ -51,4 +51,25 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
             .contains(org.assertj.core.groups.Tuple.tuple(1, QbLedger.PARTY));
         assertThat(dimensions.idValued()).contains(QbLedger.PARTY);
     }
+
+    /**
+     * The three sign-in entries are served (D-Q2-1): the app takes takers without a verified address, the sponsor
+     * console only with one; the tests' configuration turns registration off. A startup check error (SECURITY among
+     * them) would have kept the application from starting.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void servesTheThreeSignInEntries() {
+        java.util.Map<String, Object> app = client.get().uri("/api/auth/entries/app").exchange().expectStatus().isOk()
+            .expectBody(java.util.Map.class).returnResult().getResponseBody();
+        assertThat(app).containsEntry("requireVerifiedEmail", false).containsEntry("selfRegistration", false)
+            .containsEntry("appPath", "/");
+        java.util.Map<String, Object> sponsor = client.get().uri("/api/auth/entries/sponsor").exchange().expectStatus()
+            .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
+        assertThat(sponsor).containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/sponsor/");
+        java.util.Map<String, Object> admin = client.get().uri("/api/auth/entries/admin").exchange().expectStatus()
+            .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
+        assertThat(admin).containsEntry("selfRegistration", false).containsEntry("appPath", "/admin/");
+        client.get().uri("/api/auth/entries/portal").exchange().expectStatus().isNotFound();
+    }
 }

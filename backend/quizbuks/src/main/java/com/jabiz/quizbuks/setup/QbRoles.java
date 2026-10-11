@@ -35,11 +35,11 @@ public final class QbRoles {
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.ADMIN_PUBLICATION_READ,
         QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
-        "approval.decide", "task.read");
+        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read");
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
-        QbPermissions.RECONCILE, "ledger.read", "ledger.account.read", "report.issue", "approval.decide", "task.read");
+        QbPermissions.RECONCILE, QbPermissions.SPONSOR_AVATAR_READ, "ledger.read", "ledger.account.read", "report.issue", "approval.decide", "task.read");
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
@@ -65,11 +65,13 @@ public final class QbRoles {
 
     static {
         add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
-            QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD));
+            QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
+            QbPermissions.SPONSOR_AVATAR_READ));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
-            QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE));
+            QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,
+            QbPermissions.SPONSOR_AVATAR_READ));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,

@@ -4,6 +4,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -61,6 +62,8 @@ public final class QuestionProcesses {
             ProcessContext.class, pb -> pb
                 .description("Adds a question to a quiz or changes one, with its options.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
@@ -175,6 +178,8 @@ public final class QuestionProcesses {
             ProcessContext.class, pb -> pb
                 .description("Deletes a question of a quiz with its options.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbContent.QUESTION, "questionId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -208,6 +213,8 @@ public final class QuestionProcesses {
             ProcessContext.class, pb -> pb
                 .description("Puts the questions of a quiz in a new order.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
