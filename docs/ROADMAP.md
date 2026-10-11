@@ -21,7 +21,7 @@
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
 | 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；决策 D35–D39 已确认 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16d 已完成（PR 待创建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1261,7 +1261,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
-| 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3.5–4 天 | — |
+| 16d | 入站 Webhook（先实现 Stripe 签名）（☑ 已完成，PR 待创建） | D37 | 3.5–4 天 | — |
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
@@ -1651,13 +1651,13 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - 与 16b-1（`ClientAddresses`、V32）的合并顺序。
 
 **验收标准**
-- [ ] `stripe` 与 `hmac-sha256` 的验签是 core 中的纯函数：多个 `v1`、换密钥、时间容差，常量时间比较（`StripeSignatureTest`、属性测试）。
-- [ ] 验签失败、超出容差、超过 1 MB 一律 400 且不存储；白名单外 200 不存储；重复（含并发）200 且只有一行（`InboundWebhookIT`）。
-- [ ] 接受的事件原样存档在只追加的 `sys_inbound_event`，经 Outbox 以 `jabiz.inbound.<提供方>.<类型>` 交给流程，只处理一次、失败重试；请求中不执行业务流程。
-- [ ] 正文只有持有 `inbound.read` 才能读，不进操作摘要、日志和 Outbox 载荷；应用可声明保留策略。
-- [ ] `/api/inbound/**` 匿名但按地址限流；配置问题在启动时一次报全（`INBOUND`）。
-- [ ] 示范 `demo-pay` → `ORDER_RECORD_PAYMENT` 可运行，场景 `commerce/order_payment` 通过；没有任何对 Stripe 的网络调用。
-- [ ] 11 §2.5、10、15、21、07、D37 实现说明、功能清单已更新；`./gradlew check`、OpenAPI 快照与生成的类型已更新。
+- [x] `stripe` 与 `hmac-sha256` 的验签是 core 中的纯函数：多个 `v1`、换密钥、时间容差，常量时间比较（`StripeSignatureTest`、属性测试）。
+- [x] 验签失败、超出容差、超过 1 MB 一律 400 且不存储；白名单外 200 不存储；重复（含并发）200 且只有一行（`InboundWebhookIT`）。
+- [x] 接受的事件原样存档在只追加的 `sys_inbound_event`，经 Outbox 以 `jabiz.inbound.<提供方>.<类型>` 交给流程，只处理一次、失败重试；请求中不执行业务流程。
+- [x] 正文只有持有 `inbound.read` 才能读，不进操作摘要、日志和 Outbox 载荷；应用可声明保留策略。
+- [x] `/api/inbound/**` 匿名但按地址限流；配置问题在启动时一次报全（`INBOUND`）。
+- [x] 示范 `demo-pay` → `ORDER_RECORD_PAYMENT` 可运行，场景 `commerce/order_payment` 通过；没有任何对 Stripe 的网络调用。
+- [x] 11 §2.5、10、15、21、07、D37 实现说明、功能清单已更新；`./gradlew check`、OpenAPI 快照与生成的类型已更新。
 
 **不在本阶段**：Stripe 以外的提供方方案（如 Slack、GitHub 的签名方式，需要时加 core 方案即可）、重新投递的工具、入站事件的物理删除或匿名化、来源 IP 白名单（Q4）。
 
@@ -1665,6 +1665,34 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 Q1 事件载荷只带引用，正文以 `LoadInboundEvent` 读取；Q2 正文按严格 UTF-8 存 `text` 并存 SHA-256；Q3 各种 400 用同一个 `INBOUND_REJECTED`，未知提供方 404；
 Q4 限流按提供方设置，缺省每地址每分钟 120，不做来源 IP 白名单；Q5 原样正文只追加保存，应用可声明保留策略进入到期报告，物理删除另议；
 Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `SalesOrder` 上记 `paidTime` / `paymentRef`，提供方配置只在 dev 与测试配置中；Q8 不做重新处理的工具。
+
+**完成情况（分支 `1.2/phase-16d-inbound-webhooks`）**：平台迁移 `V34__inbound_webhooks.sql`，示范应用 `V17__order_payment.sql`；
+测试 core `StripeSignatureTest`（9，openssl 计算的固定向量）、`HmacSha256SignatureTest`（5）、属性测试 `InboundSignatureProperties`（2 × 300 次）；
+runtime `InboundEventExtractorTest`（5）、`InboundWebhookChecksTest`（3）、`InboundWebhookPropertiesTest`（2）、`ScenarioParserTest` 补一条；
+app `InboundWebhookIT`（15，真实 PostgreSQL，服务监听真实端口）；场景 `commerce/order_payment.yml`。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
+验收标准逐条对应：验签与属性测试见 core；400 / 不存储（含响应正文逐字节相同，`sys_inbound_event`、Outbox、`op_process` 均无新行）、1 MB（带长度与分块）、
+白名单外、重复与 4 路并发见 `InboundWebhookIT`；只处理一次与失败重试见其出站→入站用例（消费者第一次失败）；`input_summary` 中正文为 `***`、Outbox 载荷只有引用、
+日志中没有正文（`OutputCaptureExtension`）、表上没有 UPDATE / DELETE（SQL 记录与触发器）；`inbound.read` 与保留策略（示范声明 7 年）；限流 429 与伪造的 `X-Forwarded-For`；
+启动检查 `INBOUND`；示范与场景不访问网络。
+
+与计划的出入：
+- **事件号与类型只取已签名的正文**：`hmac-sha256` 取 D33 正文的 `eventId` / `eventType`，而不是计划中的请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type`；
+  这两个头不在 D33 的签名范围内（只签时间戳与正文），若取自请求头，截获者可在容差内重放同一正文并换掉事件号（绕过去重）或类型（换处理流程）。头仍可出现，但必须与正文一致，否则 400。
+- **正文不是 `InboundEvent` 的字段**：数据视图的列表接口返回实体的全部字段（不只列表列），为使"列表不含正文"成立，`InboundEvent` 只有 `bodySha256`，
+  正文以新接口 `GET /api/inbound-events/{id}/body`（`inbound.read`，`no-store`）逐个读取。数据视图为只读（`readOnly`，同 `MailAttempt`），不是计划写的 `processOnlyWrites`。
+- **流程只有一个步骤**：`RecordInboundEvent` 插入行后直接经 `EventPublisher` 发布，因为 `PublishEvent` 的事件类型在定义时固定，而这里的类型取决于提供方与外部类型。
+- 输入组件名为 `rawBody` 而不是 `body`：`@Sensitive` 的组件名在所有 JSON 中遮蔽，`body` 会误伤其他流程与事件中同名的属性。
+- `InboundEvents.ref(event)`（计划写作 `input`）返回 `InboundEventRef`；`LoadInboundEvent` 给出 `ReceivedEvent`（`at("a.b.c")` 取路径值）；步骤只允许系统身份或持有 `inbound.read` 的执行者。
+- 观测 `jabiz.inbound.receive` 的标签为 `provider`、`result`（`accepted` / `duplicate` / `ignored` / `rejected`）、`reason`，外加所有平台观测共有的 `outcome` / `status`
+  （`outcome` 已被平台占用，故结果放在 `result`）；另有 `jabiz.inbound.rate_limited`。
+- 示范的复核待办交给 `commerce.order.place`（订单数据视图的写权限；示范中没有 `commerce.order.write`）；`ORDER_RECORD_PAYMENT` 声明不授予任何人的 `commerce.order.pay`，只由消费者以系统身份运行。
+- 接收前先查已有的行（重复投递不占操作与序号），并发的重复仍以唯一键 `sys_inbound_event_external_key` 识别。`Stripe-Signature` 重复或多于 16 项即拒绝；`livemode` 不是布尔即拒绝；
+  JSON 不允许重复键与尾随内容；`Content-Type` 只保留前 100 个可见 ASCII 字符。
+- 场景步骤多一个可选的 `outcome`（缺省 `ACCEPTED`，可写 `DUPLICATE` / `IGNORED` / `REJECTED`）。
+
+**已知问题**：限流在内存中、按实例计数，所有经 `WebTestClient` 绑定上下文的测试请求共用地址 `unknown`；每个请求最多 1 MB 在内存中，HMAC 在事件循环上计算；
+原样正文只追加、不能删除，到期只进报告（物理删除另议）；消费者重试用尽后没有重新投递的工具；通用后台没有显示正文的页面（只有接口）；
+既有场景的 `SalesOrder` 快照未重写（新字段为空，比较时不受影响）；`V34` / `V17` 须与并行的 16e（V35 / V18）按合并顺序协调。
 
 
 ### 16e 外部服务声明与异步外部作业（4.5–6 天，分 16e-1 / 16e-2 两个 PR）
