@@ -65,7 +65,7 @@ docs/quizbuks/               本文件等
 | `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
-- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
+- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
   平台 D41 实现（16l）后，`internal()` 的流程只允许系统身份运行，这些系统权限随之只起声明作用。
 - 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
@@ -83,8 +83,8 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（注册时间）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
-| `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt` | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
+| `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（资料第一次保存的时间；管理员页面的"注册时间"即此，商家入驻建立的只有名字的资料也算）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
+| `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`contactName`（商家的名字，随入驻审核）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt` | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
 | `QbUserBan` | T | 主键 `banId`；`userId`（引用平台用户，不可变、唯一）；`processOnly`：`banned`、`reason`、`bannedAt` / `bannedBy`、`liftedAt` / `liftedBy` / `liftNote`、`revision` | 封禁（Q2 D-Q2-4）：与资料分开，没有资料的人也能封禁；历史即封禁与解封的记录 |
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | T | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（`f.masked(qb.admin.finance.read, LAST4)`）、`payoutsEnabled`（`processOnly`，由 Stripe 通知更新） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号 |

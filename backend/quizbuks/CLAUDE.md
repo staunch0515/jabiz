@@ -60,8 +60,12 @@
   **QuizBuks 的一切写入流程声明 `requiresVerifiedEmail()`**（未验证即"待激活"；预占他人邮箱的人因此留不下应用数据），以后的阶段照此。
   资料、入驻、封禁各是一人一行的时态实体（主键是生成的 UUID，`userId` 不可变、唯一；资料与入驻的 `userId` 是操作人编号的文本，封禁的是平台用户的引用），只经 `QB_PROFILE_*` / `QB_SPONSOR_*` / `QB_USER_*BAN` 写入；
   写一个用户账户的流程先取 `HoldLock.exclusive("qb.account:" + userId)` 再读取（锁的顺序：账户锁在模版锁、发布锁、钱包锁之前；目前不同时持有）。本人流程的用户取自操作人，不取自输入。
-  **封禁在有价值的动作中再查**（已签发的访问令牌到期前仍可用）：读 `QbUserBan`（`identity.BanRules`），422 `QB_USER_BANNED`；提交发布经 `publishing.SponsorChecks`（同时要求入驻已通过），Q5 的答题、Q6 的转账照此。
-  入驻的审批对象 `qb.sponsor`、规则 `qb.sponsor.review` 同发布：**审批规则只经 `QB_SETUP` 以受控变更提出**，"无规则即放行"由应用挡住（`setup.ReviewCodes`），审批结果只认入驻自己的、绑定当前内容的请求，驳回理由取自审批人的决定。
+  **封禁在每个写入中再查**（已签发的访问令牌到期前仍可用）：一切由人发起的 QuizBuks 写入流程在最前面加 `.steps(CallerChecks::refuseBanned)`（读 `QbUserBan`，422 `QB_USER_BANNED`，立即拒绝）；
+  提交发布另经 `publishing.SponsorChecks`（同时要求入驻已通过，一次报告全部问题）。Q5 的答题、Q6 的转账照此。封禁与解封的管理员同样要求已验证的邮箱；"管理员"即后台入口接受的角色（`jabiz.security.entries.admin.accepted-roles`），不能被封禁。
+  入驻的审批对象 `qb.sponsor`、规则 `qb.sponsor.review` 同发布：**审批规则只经 `QB_SETUP` 以受控变更提出**，"无规则即放行"由应用挡住（`setup.ReviewCodes`）。审批绑定的内容只在入驻行上（名字 `contactName`、公司、简介、头像、同意条款的时间），
+  资料的名字另由本人修改、后写者为准，不影响审批；批准须为入驻自己的、绑定当前内容的请求，驳回只须是入驻自己的、已驳回的请求，理由取自审批人的决定。
+  **商家头像被替换或去掉时由流程释放旧文件**（先清引用并 `SaveChanges.now`，再子流程 `FILE_DELETE`），这是"业务流程不调用 `FILE_DELETE`"的唯一例外：头像只有本人的一行引用，等不到清扫。
+  **只能由子流程运行的流程**（如 `QB_QUIZ_RELEASE_FILES`）的权限不授予任何角色（`qb.content.system`），流程内照样再查自己的前提；平台 16l（D41）合入后改声明为只允许子流程运行。
   事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；商家后台的地址是参数 `link`（`quizbuks.links.sponsor`），写在正文里而不是 Markdown 链接中（平台对链接中的参数做百分号编码）。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）。
 

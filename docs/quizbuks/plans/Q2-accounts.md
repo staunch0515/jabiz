@@ -353,8 +353,9 @@
 | 15 | **（实施中发现，缺陷）登录前检查的预读把用户编号按 UUID 绑定**：`SignInGuards.rows` 只要用户编号是 UUID 就以 `UUID` 对象查询，不看预读字段的类型；预读字段是文本时校验失败（`INVALID_VALUE`），守卫按"读取失败即拒绝"拒绝**所有人**在所有入口的登录 | 封禁守卫 | 不阻塞（`QbUserBan.userId` 改为引用 `SecUser`，列 `uuid`） | 按字段的语义类型转换（`FieldValueCoercer`），或文本字段按文本比较；平台补测试（文本字段的预读） |
 | 16 | **（实施中发现）SQL 模板的数据视图范围值按原样绑定**：`fromContext` 给出的文本（`actorId`）与 `uuid` 列（引用字段）比较时数据库报错（500 `operator does not exist: uuid = character varying`） | 本人登录记录 `qb.me.sign-ins` | 不阻塞（该数据视图的范围函数给出 `UUID`，非 UUID 的操作人没有范围值，平台 403 `SCOPE_UNAVAILABLE`） | 渲染模板时按范围字段的语义类型转换范围值（数据视图 API 已如此） |
 | 17 | **（实施中发现）状态机的初始状态必须有出路**：终态不能同时是初始状态，"第一次申请即自动通过"只能先写 `PENDING` 再写 `APPROVED` 两个版本 | 入驻的自动通过 | 不阻塞（同一操作内两个版本） | 可选：允许声明"可直接进入的终态" |
-| 18 | **（实施中发现）每个流程只能声明一个 `actsOn`** | 封禁 / 解封只挂在平台用户（`SecUser`）上，不挂在 `QbProfile` 上 | 不阻塞 | 可选：`actsOn` 可重复 |
+| 18 | **（实施中发现）`actsOn` 只能以实体的主键对应输入**：`QbProfile` 的主键是生成的 `profileId`，而封禁的输入是用户编号（`QbProfile` 的不可变唯一字段 `userId`），所以封禁 / 解封不能作为资料的行操作，只挂在平台用户（`SecUser`）上 | 不阻塞 | 可选：`actsOn(实体, 输入, 按非主键的唯一字段)` |
 | 19 | **（实施中发现）文件策略只能声明一个读取权限，且没有 WebP** | 商家头像的读取（本人、答题人、管理员）共用新权限 `qb.sponsor.avatar.read`；头像只收 JPEG / PNG | 不阻塞 | 可选：读取权限可为多个之一；WebP 解码与重新编码 |
+| 21 | **（评审中发现）数据视图范围中对不可变字段的条件没有下推到时态子查询**：`qb.me.sign-ins` 的 `{{SecLoginRecord}}` 先对全部登录记录取当前版本，再按本人过滤并排序（D29 只下推查询条件，不下推范围条件） | 本人登录记录随全体登录记录增长而变慢 | 不阻塞（受查询时限保护；登录记录只追加、每人一行一次，应用侧没有便宜的缓解） | 范围条件中只涉及不可变字段的部分同样写进子查询（平台方处理中） |
 | 20 | **（实施中发现）邮件链接中的参数一律百分号编码**：应用不能把整个地址作为参数放进 Markdown 链接（防止参数改写链接，平台有意为之），只有平台的 `{baseUrl}` 原样插入 | 商家邮件中的商家后台地址只能写在正文文字里（邮件客户端通常自动识别为链接） | 不阻塞 | 并入缺口 6：入口的 `{entryUrl}` 占位符 |
 
 缺口 12 的补充：场景回放也取不到自助注册的用户编号（`SPONSOR_SIGN_UP` 不输出），所以 `accounts.yml` 中注册的人与之后操作的人不是同一批（后者由管理员建立）。
@@ -407,7 +408,7 @@
   `QbUserBan` 的是平台用户的引用（列 `uuid`），因为登录前检查的预读把用户编号按 UUID 绑定（平台缺口 15）。封禁本来就只对平台用户。
 - **第一次申请即自动通过**写两个版本（`PENDING`，随即 `APPROVED`）：平台不允许终态同时是初始状态（缺口 17）。新入驻的键在流程开始时由平台分配（`ProcessStart.ids()`），
   审批在写入之前就能以它为案例编号，所以其余情况每次申请只写一个版本。
-- **审批结果更严**：除"只认入驻自己的请求"外，存储的请求还须绑定入驻**当前**的内容（名字取自资料）；驳回理由取自审批人的决定记录（`ApprovalDecision`），
+- **审批结果更严**：除"只认入驻自己的请求"外，存储的请求还须绑定入驻**当前**的内容（评审后改为只取入驻行，名字为 `contactName`，见下"评审后的修改"）；驳回理由取自审批人的决定记录（`ApprovalDecision`），
   不取自事件。伪造的理由因此不起作用（`SponsorOnboardingIT.forgedOrForeignResultsChangeNothing`）。
 - **欢迎邮件**在资料第一次有国家时发（而不是资料第一次建立时）：商家入驻会先建只有名字的资料，同一人之后在 App 补资料仍算注册第二步。
 - **头像**：只收 JPEG / PNG（平台没有 WebP），读取权限为新的 `qb.sponsor.avatar.read`，授予答题人、商家与三个管理员角色（文件策略只能有一个读取权限，缺口 19）。
@@ -430,10 +431,39 @@
 场景：`qb/accounts.yml`（新）、`qb/setup.yml`、`qb/publishing.yml`（快照已更新：新授权 7 条、第二条规则、商家 A 的入驻）。
 每个账户测试类结束时断言三张时态表没有 UPDATE / DELETE（`pg_stat_user_tables`，且触发器拒绝 UPDATE）。
 
+### 评审后的修改（2026-10-11）
+
+- **S1 `QB_QUIZ_RELEASE_FILES`（Q3）**：权限改为不授予任何角色的 `qb.content.system`（商家直接调用 403），流程内再查 `filesStillNeeded`（已提交的发布所用版本的文件不释放，
+  无论谁调用）。只由 `QB_QUIZ_DELETE` 作为子流程运行（子流程不检查权限）。**平台 16l（D41）合入后改为 `subProcessOnly()`**。测试：`ContentOwnerIT.releasingFilesIsTheSystemsOnly`、
+  `ContentFilesIT.releasingDirectlyStillKeepsTheFilesOfSubmittedPublications`。
+- **S2 封禁在每个写入中再查**：`identity.CallerChecks.refuseBanned`（读调用者的 `QbUserBan`，立即 422 `QB_USER_BANNED`）加在 `QB_PROFILE_SAVE`、`QB_SPONSOR_APPLY`、`QB_SPONSOR_PROFILE_SAVE`
+  与 Q3、Q4 的全部商家流程（内容的保存 / 删除 / 排序 / 克隆 / 保存版本，发布的保存 / 删除 / 复制 / 撤回 / 暂停 / 恢复）；提交发布仍经 `SponsorChecks` 一次报告全部问题。
+  测试：`BanIT.aBannedUsersTokenStillInHandWritesNothing`。
+- **S3 头像替换**：替换或去掉头像时，先清引用并 `SaveChanges.now`，再子流程 `FILE_DELETE` 释放旧文件（`SponsorOnboardingIT.aReplacedAvatarIsReleased`）。
+  Q5 计划已注明：答题人可见的只能是入驻已通过的商家的头像编号。
+- **S4 管理员**即后台入口接受的角色（`jabiz.security.entries.admin.accepted-roles`，在 `AccountsConfig` 读取；未配置即 `*`，此时持有任何角色的人都不能封禁）。测试：`BanAdminRolesIT`。
+- **评审 1 名字绑定**：`QbSponsor.contactName`（入驻申请与商家资料写入），审批内容只取入驻行；资料的名字仍由入驻流程一并写入，供 App 显示，**后写者为准**（不检查资料的 `revision`），
+  不再影响审批。驳回只须是入驻自己的、已驳回的请求（不要求内容绑定）；批准仍要求绑定。测试：`SponsorOnboardingIT.aProfileRenamedDuringTheReviewDoesNotUnbindIt`。
+- **评审 3**：邮件标题不再写产品名（`Welcome, {name}` 等）。
+- **评审 4**：`QB_USER_BAN` / `QB_USER_UNBAN` 声明 `requiresVerifiedEmail()`。
+- **评审 6**：第一次同意条款的时间保留（条款版本随 Q7）；同样的内容再申请得到同一个待审核请求（`theSameApplicationAgainIsTheSameRequest`）。
+- **评审 7**：`registeredAt`（`QbProfile.createdAt`）即资料第一次保存的时间，商家入驻建立的只有名字的资料也算（文档说明，未另加字段）。
+- **评审 8**：三个入口都拒绝被封禁的人（`AccountSignUpIT.aBanClosesAllThreeEntries`，需要已验证的邮箱，所以在有邮件服务器的类中；封禁之后才授予的管理员角色也挡在后台之外）；
+  只有名字的商家资料之后补上国家即发欢迎邮件（`ProfileIT.aSponsorsNameOnlyProfileCompletedLaterIsWelcomed`）；驳回后再申请、人工批准（REJECTED → PENDING → APPROVED）由
+  `SponsorOnboardingIT.aRejectedApplicationGetsTheReasonAndATaskToSubmitAgain` 覆盖。
+- **评审 9**：平台缺口 18 改写为"`actsOn` 只能以主键对应输入"。
+- **评审 10**：再申请与批准都清空 `rejectedAt`、`rejectReason`。
+- **评审 2**：`qb.me.sign-ins` 排序本人的全部登录记录之前先取全体登录记录的当前版本，记为平台缺口 21；应用侧没有便宜的缓解，留作已知问题。
+
 ### 已知问题
 
-- **封禁的 15 分钟**：已签发的访问令牌到期前仍可用（平台缺口 3）；提交发布已在流程中再查，答题（Q5）、转账（Q6）须照此。
-- **待审核时改名字**：同时是答题人的商家在 App 中改了资料名字，入驻请求绑定的内容就不再相同，审批结果不再生效（入驻仍为待审核），须再次申请。只影响同一人兼有两个角色且在审核期间改名的情形。
+- **封禁的 15 分钟**：已签发的访问令牌到期前仍可用（平台缺口 3）。QuizBuks 的写入都已在流程中再查封禁（S2）；读取（浏览、看自己的数据）在令牌到期前照常。
+- **资料的名字后写者为准**：入驻流程与 App 的资料保存都写资料的名字，不比较 `revision`；审批与商家后台以入驻行的 `contactName` 为准。
+- **`qb.me.sign-ins` 的扫描**（平台缺口 21）：随全体登录记录增长变慢，受查询时限保护。
+- **Q5、Q6 须遵守**（评审 S5）：
+  - AI（Q8）、充值（Q6）、商家通知（Q7）等商家流程须检查 `QbSponsor.reviewStatus = APPROVED`（目前只有提交发布检查）；
+  - `qb.content.file.read` 让任何商家按编号读取任何内容文件（编号不可猜，但不是授权边界；需要时请平台提供"按引用授权读取文件"）；
+  - 管理员模板（`qb.admin.users`、`qb.admin.sponsors`）向三个管理员角色显示邮箱，按计划如此；是否只给超级管理员是待定的产品问题。
 - **U-71（本人改密码）** 依赖平台缺口 1，现以找回密码代替。
 - **邮件关闭即无法激活**（平台启动告警）；商家后台地址未知时邮件中没有链接（应用启动告警）。
 - 持有 `*` 的平台首个管理员仍能直接调用 `QB_SPONSOR_APPROVAL_RESULT`（只留操作记录，结果受请求与内容约束）；平台 16l（D41）合入后只允许系统身份。
