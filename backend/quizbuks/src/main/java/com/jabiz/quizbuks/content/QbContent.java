@@ -38,6 +38,14 @@ public final class QbContent {
     /** Only {@code http} and {@code https} links, without white space: no {@code javascript:} or data links. */
     public static final String URL_PATTERN = "https?://[^\\p{Z}\\p{Cc}]+";
 
+    /**
+     * The name of a quiz's lock ({@code HoldLock}): every process that writes the quiz takes it exclusively before
+     * reading anything of the quiz; submitting a publication takes it shared (Q4, D-Q4-5). Null without a quiz.
+     */
+    public static String lockName(Object quizId) {
+        return quizId == null ? null : "qb.quiz:" + quizId;
+    }
+
     /** The default (administrators' read-only) dataset of an entity. */
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;

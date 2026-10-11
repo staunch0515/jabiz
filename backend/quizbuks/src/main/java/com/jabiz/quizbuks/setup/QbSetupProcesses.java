@@ -10,6 +10,7 @@ import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ControlChanges;
 import com.jabiz.runtime.ledger.LedgerEntities;
 import com.jabiz.runtime.ledger.LedgerProcesses;
@@ -34,7 +35,8 @@ import java.util.function.Function;
 /**
  * {@code QB_SETUP} prepares a QuizBuks installation (docs/quizbuks/plans/Q1-skeleton.md): the roles of
  * {@link QbRoles} with their permissions, the ledger accounts of {@link QbLedger}, the countries of
- * {@link CountryCatalog} and the business parameters of {@link QbParams}.
+ * {@link CountryCatalog}, the business parameters of {@link QbParams} and the approval rules of
+ * {@link QbApprovalRules} (Q4).
  *
  * <p>It adds only what has never existed. Every item it makes or finds is written to {@link QbSetupRecords}, and an
  * item with a record is never added again: a role an administrator deleted or a permission revoked stays gone, and
@@ -42,7 +44,9 @@ import java.util.function.Function;
  * scheduled to begin (roles and grants are read as they will be, too); then it is only recorded. So it can run again
  * at any time, to add what a later phase declares. A controlled parameter ({@link QbParams#CONTROLLED}, platform
  * decision D40) cannot be created directly: setup proposes it as a controlled change, which another administrator
- * publishes (or withdraws; setup does not propose it again). Granting permissions is platform administration, so it asks for a
+ * publishes (or withdraws; setup does not propose it again). Approval rules change only through controlled changes
+ * too, so setup proposes them the same way; an administrator may later change, disable or delete one, and setup does
+ * not propose it again. Granting permissions is platform administration, so it asks for a
  * second factor like the platform's own security processes. Every read takes the whole result (decision D32).
  */
 public final class QbSetupProcesses {
@@ -61,11 +65,13 @@ public final class QbSetupProcesses {
      * @param countriesAdded   countries that did not exist
      * @param paramsCreated    keys of the business parameters declared
      * @param paramsProposed   keys of the controlled parameters proposed, for another administrator to publish
+     * @param rulesProposed    codes of the approval rules proposed, for another administrator to publish
      * @param proposals        the controlled changes proposed ({@code CONTROL_CHANGE_PUBLISH} takes their ids), in
-     *                         the order of {@code paramsProposed}
+     *                         the order of {@code paramsProposed}, then of {@code rulesProposed}
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, List<String> accountsOpened,
-        int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> proposals) {}
+        int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> rulesProposed,
+        List<String> proposals) {}
 
     static final String RECORDS = "records";
     static final String ROLES = "roles";
@@ -75,6 +81,7 @@ public final class QbSetupProcesses {
     static final String ACCOUNTS = "accounts";
     static final String PARAMS = "params";
     static final String COUNTRIES = "countries";
+    static final String RULES = "rules";
     static final String OPEN = "open";
     static final String CREATE = "create";
     static final String PROPOSE = "propose";
@@ -96,7 +103,8 @@ public final class QbSetupProcesses {
 
     public static ProcessDefinition<SetupInput, SetupOutput, ProcessContext> process(CountryCatalog catalog) {
         return ProcessDefinition.define(SETUP, 1, SetupInput.class, SetupOutput.class, ProcessContext.class, pb -> pb
-            .description("Creates the QuizBuks roles, ledger accounts, countries and business parameters that have "
+            .description("Creates the QuizBuks roles, ledger accounts, countries, business parameters and approval "
+                + "rules that have "
                 + "never existed; never adds back what was removed.")
             .permissions(QbPermissions.SETUP)
             .requiresMfa(MfaRequirement.ADMINISTRATION)
@@ -121,6 +129,9 @@ public final class QbSetupProcesses {
             .step("Load the countries", QueryEntities.of(QbCountries.DATASET, ctx -> all(
                 new QueryPredicate.In("code", codes(catalog.countries(), c -> ((CountryData.Country) c).code()))),
                 COUNTRIES))
+            .step("Load the approval rules", QueryEntities.of(ApprovalEntities.RULE_DATASET, ctx -> all(
+                new QueryPredicate.In("ruleCode", codes(QbApprovalRules.ALL, r -> ((QbApprovalRules.Rule) r).code()))),
+                RULES))
             .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
@@ -135,7 +146,7 @@ public final class QbSetupProcesses {
         List<String> proposals = listOf(ctx, PROPOSED).stream()
             .map(change -> ((ControlChanges.ChangeOutput) change).changeId()).toList();
         return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.accountsOpened(),
-            made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), proposals);
+            made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), made.rulesProposed(), proposals);
     }
 
     static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
@@ -159,6 +170,7 @@ public final class QbSetupProcesses {
         list(ctx, ACCOUNTS).forEach(account -> found.add(QbSetupRecords.account(account.get("accountCode"))));
         list(ctx, PARAMS).forEach(param -> found.add(QbSetupRecords.param(param.get(ParamEntities.KEY))));
         list(ctx, COUNTRIES).forEach(country -> found.add(QbSetupRecords.country(country.get("code"))));
+        list(ctx, RULES).forEach(rule -> found.add(QbSetupRecords.approvalRule(rule.get("ruleCode"))));
 
         Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
@@ -222,12 +234,30 @@ public final class QbSetupProcesses {
             }
         }
 
+        List<String> rules = new ArrayList<>();
+        for (QbApprovalRules.Rule rule : QbApprovalRules.ALL) {
+            if (recorder.isNew(QbSetupRecords.approvalRule(rule.code()))) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("ruleCode", rule.code());
+                values.put("subject", rule.subject());
+                values.put("condition", rule.condition());
+                values.put("levels", rule.levels());
+                values.put("priority", rule.priority());
+                values.put("enabled", true);
+                values.put("description", rule.description());
+                propose.add(new ControlChanges.ProposeInput(ApprovalEntities.RULE, null, false, values, null,
+                    "QuizBuks approval rule, proposed by " + SETUP));
+                rules.add(rule.code());
+            }
+        }
+
         ctx.put(OPEN, List.copyOf(open));
         ctx.put(CREATE, List.copyOf(create));
         ctx.put(PROPOSE, List.copyOf(propose));
         ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
-            create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.of()));
+            create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.copyOf(rules),
+            List.of()));
     }
 
     /**

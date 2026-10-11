@@ -45,7 +45,7 @@ final class QuizEditing {
     static final String OUTPUT = "output";
 
     static String lockName(Object quizId) {
-        return quizId == null ? null : "qb.quiz:" + quizId;
+        return QbContent.lockName(quizId);
     }
 
     /** Every row of an entity in the quiz (the platform refuses more than its maximum rather than cut it short). */

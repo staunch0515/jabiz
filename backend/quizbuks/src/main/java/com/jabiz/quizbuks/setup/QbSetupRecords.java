@@ -55,6 +55,10 @@ public class QbSetupRecords {
         return "country:" + code;
     }
 
+    static String approvalRule(String code) {
+        return "approval-rule:" + code;
+    }
+
     @Bean
     EntityDefinition qbSetupRecordEntity() {
         return RECORD_ENTITY;
