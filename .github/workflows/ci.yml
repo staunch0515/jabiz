@@ -149,6 +149,10 @@ jobs:
           # The shared administrator of the end-to-end tests has no second factor; step-up is tested with a
           # process that always requires one (e2e/mfa.spec.ts).
           export JABIZ_SECURITY_MFA_ADMINISTRATION=false
+          # The end-to-end tests sign in to the administration with roles of their own, so it accepts every role;
+          # the sample's portal therefore takes no registrations (decision D36: the startup check refuses both).
+          export JABIZ_ADMIN_ROLES='*'
+          export JABIZ_PORTAL_SELF_REGISTRATION=false
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true -jar app/build/libs/app-0.0.1-SNAPSHOT.jar \
             > ../app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done
