@@ -119,7 +119,8 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     }
 
     /** Appends an in-transaction platform step, as returned by the step's factory (for example {@code LoadEntity.by}). */
-    public <M> ProcessDefinitionBuilder<I, O, C> step(String stepName, StepSpec<M, C> spec) {
+    public <M> ProcessDefinitionBuilder<I, O, C> step(String stepName, StepSource<M, C> source) {
+        StepSpec<M, C> spec = source.toStepSpec();
         return add(new StepDefinition<>(stepName, spec.handlerClass(), spec.metadata()));
     }
 
@@ -136,7 +137,8 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return add(new StepDefinition<>(stepName, handlerClass, metadata, StepPhase.AFTER_COMMIT, retryPolicy, null));
     }
 
-    public <M> ProcessDefinitionBuilder<I, O, C> afterCommit(String stepName, StepSpec<M, C> spec) {
+    public <M> ProcessDefinitionBuilder<I, O, C> afterCommit(String stepName, StepSource<M, C> source) {
+        StepSpec<M, C> spec = source.toStepSpec();
         return afterCommit(stepName, spec.handlerClass(), spec.metadata(), RetryPolicy.DEFAULT);
     }
 
