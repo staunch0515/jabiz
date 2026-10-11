@@ -1096,7 +1096,7 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 **放弃的方案**：①长调用直接放在 `BlockingStep` 中（占用事务与连接数十秒）；②用 Outbox 消费者执行长调用（消费者流程同样在事务中）；
 ③引入外部队列或任务框架（CLAUDE.md 不引入 Kafka、Redis）。
 
-**实现说明**（阶段 16e-1 实现第 1、2 条；第 3–5 条为 16e-2；详见 06 §2.3）：
+**实现说明**（阶段 16e-1 实现第 1、2 条；第 3–5 条见下面 16e-2 的实现说明；详见 06 §2.3）：
 1. 外部服务以 core `ExternalService` Bean 声明（名称、基础地址、主机白名单、密钥的环境变量、连接与请求超时、幂等键请求头、响应上限、`allowInDryRun`）；
    地址与主机可按环境覆盖（`jabiz.external-services.<名>.*`）。客户端只有平台的 JDK HTTP（`ExternalServices#http`，Q9）：官方 SDK 自带的出站不受主机白名单约束，本阶段不开放。
    重试不在声明中：`ExternalHttp` 不自动重试（Q22），需要重试的调用放提交后步骤，按其 `RetryPolicy`。
@@ -1106,6 +1106,23 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 4. 业务包不得直接使用网络客户端，也不得依赖平台的 `com.jabiz.runtime.external`（只有平台的执行器能打开调用范围）：平台的共用 ArchUnit 规则
    `PlatformArchRules.noDirectNetworkAccess` / `noPlatformInternals`（runtime 测试夹具，应用经 `testFixtures(project(":runtime"))` 得到，Q21）；规则是护栏，不是沙箱。
 5. 导入的行调用外部服务失败是该行的问题，不是导入的缺陷（20 §5）。
+
+**实现说明**（阶段 16e-2 实现第 3–5 条；详见 11 §4a）：
+1. 作业类型以 core `ExternalJobType` Bean 声明（输入与结果的 record、处理器 Bean、可调用的服务、超时、重试次数与退避、全部实例合计的并发、
+   完成与失败流程）；处理器 `ExternalJobHandler` 同步、在执行器的虚拟线程上运行，只能调用类型声明的服务（作业的 `ExternalCallScope`），不访问数据库
+   （共用 ArchUnit 规则 `handlersStayOutOfTheDatabase`，阻塞步骤同样适用）。
+2. 平台步骤 `StartExternalJob`（`com.jabiz.runtime.process.steps`：业务包不得依赖 `com.jabiz.runtime.external`）在流程事务内登记作业；
+   输入不得含秘密（422 `EXTERNAL_JOB_INPUT_SECRET`）、不超过 64 KiB（`EXTERNAL_JOB_INPUT_TOO_LARGE`）。
+3. 执行器在每个类型的短事务中领取（类型的 advisory 锁计并发、`FOR UPDATE SKIP LOCKED`、带租约的 (作业, 尝试号) 主键），在任何事务之外执行，
+   在独立事务中记录尝试、用量与唯一的最终结果；租约过期补记 `LEASE_EXPIRED`，迟到的实例丢弃结果。全部表只追加，竞争的插入都是
+   `ON CONFLICT DO NOTHING`。退避与租约取 `Clock`。
+4. 完成：最终结果与 Outbox 事件 `jabiz.external-job.finished` 同一事务；平台的消费者以系统身份运行 `EXTERNAL_JOB_COMPLETE`，以子流程调用完成流程
+   （`ExternalJobCompletion`，结果按声明的类型反序列化）或失败流程（`ExternalJobFailure`），各只一次；取消的作业不调用（Q13）。
+   **`internal()` 目前只是不进目录（D41 待定）**：完成与失败流程，以及 `EXTERNAL_JOB_COMPLETE` 本身，在步骤中拒绝系统以外的操作人
+   （同 16d 的 `RecordInboundEvent`），D41 决定后改为平台统一的做法。
+5. 用量按尝试记录（失败的尝试也记录；迟到被丢弃的不记录），报表模板 `jabiz.external_job_usage` 按类型、用量名、月份汇总；观测 `jabiz.external.job`、
+   计数器 `jabiz.external.usage`。取消与状态：`POST /api/external-jobs/{id}/cancel`（`EXTERNAL_JOB_CANCEL`）、`GET /api/external-jobs/{id}`，
+   请求人本人或持有 `external-job.cancel` / `external-job.read` 的人，其他人 404；状态不含输入与结果（Q14）。
 
 ## D39 OIDC 自动开户
 

@@ -55,9 +55,11 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
 
 与 golden 的"业务只修改数据、最后由框架统一保存"是同一思想。
 
-### 2.3 外部调用【D38，阶段 16e-1】
+### 2.3 外部调用【D38，阶段 16e-1 / 16e-2】
 
-业务调用其他系统**只在 `BlockingStep` 中、只经声明的外部服务**进行（短调用；耗时数十秒的调用用异步外部作业，16e-2）。
+业务调用其他系统**只在 `BlockingStep` 中、只经声明的外部服务**进行（短调用）；耗时数十秒的调用用**异步外部作业**（11 §4a）：流程以平台步骤
+`StartExternalJob` 登记作业后立即返回，平台在任何事务之外执行作业类型的处理器（`ExternalJobHandler`），结果经完成流程写入。
+处理器与阻塞步骤同样只经声明的外部服务调用（只限其作业类型声明的服务），不访问数据库。
 
 - **声明**（core `com.jabiz.external.ExternalService`，Bean）：
   ```java
@@ -76,7 +78,9 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   交给提供方去重。
 - **平台对每次请求的检查**（runtime `JdkExternalHttp`，每个服务一个 JDK `HttpClient`）：
   1. 在非阻塞线程上调用即 `IllegalStateException`；不在阻塞步骤中（没有 `ExternalCallScope`）同样拒绝。`ProcessExecutor` 执行 `BlockingStep` 时在其虚拟线程上设置
-     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完（含失败）即清除。只有平台的执行器能打开范围（`ExternalCallScope.open` 检查调用方），
+     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完（含失败）即清除；`ExternalJobExecutor` 执行作业的处理器时设置作业的范围
+     （作业号、作业类型，只允许该类型声明的服务，其他服务的调用与密钥一律拒绝；`idempotencyKey(后缀)` 为 `jabiz-job-<作业号>-<后缀>`）。
+     只有平台的执行器能打开范围（`ExternalCallScope.open` / `openJob` 检查调用方），
      业务代码不能伪造"在阻塞步骤中"或"不是试运行"；共用的 ArchUnit 规则另禁止业务包依赖 `com.jabiz.runtime.external`。
   2. 试运行中拒绝，除非服务声明 `allowInDryRun()`（只读、幂等的调用）。
   3. 解析后的地址按 `OutboundAddresses`（与 Webhook 共用）检查：https（http 只限本机）、不带用户信息、主机在该服务的白名单中。`//其他主机/…` 这类相对目标解析后同样被拒。
@@ -97,9 +101,12 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   `noDirectNetworkAccess(业务包)`——业务包不得使用 `java.net.http..`、`javax.net..`、Spring 的 HTTP 客户端与请求工厂（`web.client`、
   `web.reactive.function.client`、`http.client`）、Netty（含 Reactor Netty）、套接字与套接字通道、`URLConnection`、Spring 的 `UrlResource`，
   不得调用 `URL#openConnection` / `openStream` / `getContent`，不得以 XML 解析器的 `parse(String uri)` 从地址读取文档；
-  `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
+  `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`（作业的步骤 `StartExternalJob` 因此在 `com.jabiz.runtime.process.steps`）；
+  `handlersStayOutOfTheDatabase(业务包)`——业务包中的 `ExternalJobHandler` 与 `BlockingStep` 不得依赖 JDBC、R2DBC、Spring 的数据访问、
+  平台的 `storage` / `query` 包与 `DatasetEntityManager`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
 - 观测：`jabiz.external.call`（标签只有 `service` 与 `outcome`：`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`）。
-- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`。
+- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`，请求自己的超时 10 s；服务的请求超时 60 s 是给生成文案的作业的）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`；
+  长调用的示范是异步外部作业 `commerce.product-copy`（11 §4a）。
   只有这个流程审核：通用表单与数据视图 API 写入（含新建）的商品名不经审核——示范的是外部调用，不是受审核的字段（需要时字段设为 `processOnly()`，
   新建也走审核的流程）。桩服务 `tools/demo/ai-stub/AiStub.java`：手工演示 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）；
   Docker Compose 中是服务 `ai-stub`，与 `app` 共用网络（`http://localhost:8091/v1`）。
