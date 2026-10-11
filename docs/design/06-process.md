@@ -69,27 +69,41 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   请求超时缺省 30 s、至多 2 min（阻塞步骤占着流程的事务，更长的用作业）；响应上限缺省 1 MiB、至多 16 MiB。
   `jabiz.external-services.<名>.base-url | allowed-hosts` 按环境覆盖地址与主机（测试、开发指向本地桩服务），其他属性只在代码中。
 - **调用**：注入 `ExternalServices`，`http(服务)` 得到同步的 `ExternalHttp`，`send(Request)` 返回 `Response`（状态、请求头、字节或文本）。
-  `Request.post("/v1/moderate").header(…).json(…).timeout(…).idempotencyKey(…)`：目标是相对路径（按 RFC 3986 对基础地址解析）或白名单内的绝对地址；
-  超时不超过服务的请求超时。`secret(服务, 名)` 取启动时读入的密钥；`idempotencyKey(后缀)` 为 `jabiz-<processSeqId>-<后缀>`，同一流程的提交后步骤各次重试不变，
+  `Request.post("/v1/moderate").header(…).json(…).timeout(…).idempotencyKey(…)`：目标是相对路径（按 RFC 3986 对基础地址解析），
+  或白名单内主机上、与基础地址**协议和端口相同**的绝对地址；超时不超过服务的请求超时。请求头名不区分大小写（后写的替换先写的）；
+  值只能是可见 ASCII、空格与制表符（与 JDK 客户端的规则相同，中文等须由调用方编码），由客户端自己设置的头（`Host`、`Connection`、`Content-Length`、
+  `Expect`、`Upgrade`、`Transfer-Encoding`、`TE`、`Trailer`、`Keep-Alive`、`Proxy-*`）不能设置；违反时 `IllegalArgumentException`，消息不重复值。`secret(服务, 名)` 取启动时读入的密钥；`idempotencyKey(后缀)` 为 `jabiz-<processSeqId>-<后缀>`，同一流程的提交后步骤各次重试不变，
   交给提供方去重。
 - **平台对每次请求的检查**（runtime `JdkExternalHttp`，每个服务一个 JDK `HttpClient`）：
   1. 在非阻塞线程上调用即 `IllegalStateException`；不在阻塞步骤中（没有 `ExternalCallScope`）同样拒绝。`ProcessExecutor` 执行 `BlockingStep` 时在其虚拟线程上设置
-     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完即清除。
+     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完（含失败）即清除。只有平台的执行器能打开范围（`ExternalCallScope.open` 检查调用方），
+     业务代码不能伪造"在阻塞步骤中"或"不是试运行"；共用的 ArchUnit 规则另禁止业务包依赖 `com.jabiz.runtime.external`。
   2. 试运行中拒绝，除非服务声明 `allowInDryRun()`（只读、幂等的调用）。
   3. 解析后的地址按 `OutboundAddresses`（与 Webhook 共用）检查：https（http 只限本机）、不带用户信息、主机在该服务的白名单中。`//其他主机/…` 这类相对目标解析后同样被拒。
-  4. 不跟随重定向（3xx 原样返回）；整个交换（含读完响应）不超过超时，响应超过上限即失败；不自动重试。
+  4. 不跟随重定向（3xx 原样返回）；整个交换（含读完响应）不超过超时，响应超过上限即失败；不自动重试。JDK 客户端自己拒绝的请求（方法、请求头）
+     同样是被拒的调用（502），不带 JDK 的消息。
   5. 失败抛 `ExternalCallException`（种类 `REFUSED` / `TIMEOUT` / `TOO_LARGE` / `UNAVAILABLE` / `BAD_RESPONSE`，后者供步骤判断不可用的回答），
-     API 为 502 `EXTERNAL_CALL_FAILED`（参数为服务名与种类）。消息只含服务名、种类与地址的协议、主机、端口，不含路径、查询、请求头与正文，也不附带 JDK 的异常。
-- **密钥**：启动时经 `Environment` 读取，只在内存中，不进日志、`toString`、异常与流程上下文。缺失时启动检查报错；`dev` 与静态校验
-  （`jabiz.external.missing-secrets=warning`）中为告警，用到时才失败。
-- **启动检查 `EXTERNAL`**：名字合法且唯一、白名单非空且为主机名、基础地址可发送且主机在白名单中、超时与上限在范围内、请求头名合法、环境变量已设置、
+     API 为 502 `EXTERNAL_CALL_FAILED`（参数为服务名与种类；种类的文字在消息 `EXTERNAL_CALL_FAILED.kind.<种类>`，三语——`MessageCatalog` 的通用规则：
+     参数值有消息 `<代码>.<参数>.<值>` 时显示其文字）。消息只含服务名、种类与地址的协议、主机、端口，不含路径、查询、请求头与正文，也不附带 JDK 的异常；
+     `Request`、`Response`、`ExternalService` 的 `toString` 也不含请求头的值、正文、查询与第一段之后的路径。
+  6. 导入（20）的预览是试运行：行的流程调用外部服务失败或被拒，是该行的问题 `EXTERNAL_CALL_FAILED`，不使整个导入失败。
+- **密钥**：启动时经 `Environment` 读取，只在内存中，不进日志、`toString`、异常与流程上下文。`jabiz.external.missing-secrets` 决定缺失时怎样：
+  `error`（缺省，启动检查报错）、`warning`（`dev` 的缺省，用到时才失败）、`ignore`（`platformCheck`：静态校验没有部署的环境，不检查密钥）。
+- **启动检查 `EXTERNAL`**：名字合法且唯一（重复的声明也报告它自己的问题）、白名单非空且为主机名、基础地址可发送且主机在白名单中、超时与上限在范围内、
+  幂等键请求头名合法且不是客户端自己设置的头、环境变量已设置、配置能读取（`base-url` 以文本读入后再转换，不是地址时报告并保留声明的地址）、
   配置中没有未声明的服务，一次报全。
 - **副作用**：与 §4 相同——有副作用的调用放 `AFTER_COMMIT`，或带提供方的幂等键（`idempotencyKey`）；只读的调用可在事务内。
-- **ArchUnit**：平台在 runtime 的测试夹具中提供 `PlatformArchRules.noDirectNetworkAccess(业务包)`：业务包不得使用 `java.net.http..`、`javax.net..`、
-  Spring 的 HTTP 客户端、套接字与套接字通道、`URLConnection`，不得调用 `URL#openConnection` / `openStream`；示范 `app` 与各应用的 `ArchitectureTest` 引用它。
+- **ArchUnit**：平台在 runtime 的测试夹具中提供 `PlatformArchRules`，示范 `app` 与各应用的 `ArchitectureTest` 引用它：
+  `noDirectNetworkAccess(业务包)`——业务包不得使用 `java.net.http..`、`javax.net..`、Spring 的 HTTP 客户端与请求工厂（`web.client`、
+  `web.reactive.function.client`、`http.client`）、Netty（含 Reactor Netty）、套接字与套接字通道、`URLConnection`、Spring 的 `UrlResource`，
+  不得调用 `URL#openConnection` / `openStream` / `getContent`，不得以 XML 解析器的 `parse(String uri)` 从地址读取文档；
+  `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
 - 观测：`jabiz.external.call`（标签只有 `service` 与 `outcome`：`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`）。
-- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`；
-  手工演示的桩服务 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）。
+- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`。
+  只有这个流程审核：通用表单与数据视图 API 写入（含新建）的商品名不经审核——示范的是外部调用，不是受审核的字段（需要时字段设为 `processOnly()`，
+  新建也走审核的流程）。桩服务 `tools/demo/ai-stub/AiStub.java`：手工演示 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）；
+  Docker Compose 中是服务 `ai-stub`，与 `app` 共用网络（`http://localhost:8091/v1`）。
+- 测试：runtime 测试夹具 `StubHttpServer`（JDK `HttpServer`，按路径编排应答——状态、请求头、延迟、分块——并记录请求），应用分支可直接复用。
 
 ## 3. 上下文与变更集
 

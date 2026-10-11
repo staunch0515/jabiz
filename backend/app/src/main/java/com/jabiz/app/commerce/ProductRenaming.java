@@ -18,6 +18,10 @@ import static com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET;
  * {@code PRODUCT_RENAME}: a product's new name is checked by the demo moderation service ({@link ModerateText}, a
  * short external call of a blocking step, decision D38) before it is saved. A flagged name is refused with 422; a
  * service that does not answer usably fails the process with 502, and nothing changes either way.
+ *
+ * <p>Only this process moderates: the demo shows an external call, not a moderated field. Product names written
+ * through the generic form or the dataset API (creation included) are not checked; an application that needs every
+ * name moderated makes the field {@code processOnly()} and creates products through a moderated process too.
  */
 public final class ProductRenaming {
 

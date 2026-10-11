@@ -1078,8 +1078,10 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
    重试不在声明中：`ExternalHttp` 不自动重试（Q22），需要重试的调用放提交后步骤，按其 `RetryPolicy`。
 2. 每次请求都检查：阻塞步骤的虚拟线程（`ExternalCallScope`，非阻塞线程即拒绝）、试运行（缺省拒绝，Q15）、地址（`OutboundAddresses`，与 Webhook 共用）；
    不跟随重定向，超时含读完响应，响应有上限。失败为 502 `EXTERNAL_CALL_FAILED`，消息不含路径、查询、请求头与正文。
-3. 密钥缺失：启动检查 `EXTERNAL` 报错；`dev` 与 `platformCheck`（`jabiz.external.missing-secrets=warning`，部署环境不在那里）为告警。
-4. 业务包不得直接使用网络客户端：平台的共用 ArchUnit 规则 `PlatformArchRules.noDirectNetworkAccess`（runtime 测试夹具，应用经 `testFixtures(project(":runtime"))` 得到，Q21）。
+3. 密钥缺失：启动检查 `EXTERNAL` 报错；`dev` 中为告警；`platformCheck` 不检查（`jabiz.external.missing-secrets=ignore`，部署环境不在那里）。
+4. 业务包不得直接使用网络客户端，也不得依赖平台的 `com.jabiz.runtime.external`（只有平台的执行器能打开调用范围）：平台的共用 ArchUnit 规则
+   `PlatformArchRules.noDirectNetworkAccess` / `noPlatformInternals`（runtime 测试夹具，应用经 `testFixtures(project(":runtime"))` 得到，Q21）；规则是护栏，不是沙箱。
+5. 导入的行调用外部服务失败是该行的问题，不是导入的缺陷（20 §5）。
 
 ## D39 OIDC 自动开户
 

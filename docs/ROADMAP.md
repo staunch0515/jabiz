@@ -1720,11 +1720,30 @@ Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `Sal
   - 失败为 core 的 `ExternalCallException`，API 502 `EXTERNAL_CALL_FAILED`（三语；参数为服务名与种类），步骤也可用它报告不可用的回答（`BAD_RESPONSE`）。
   - 在阻塞步骤之外（没有 `ExternalCallScope`）调用同样拒绝，不只是非阻塞线程；`secret` 与 `idempotencyKey` 也只在阻塞步骤中可用。16e-2 的作业处理器将设置自己的范围。
   - D38 第 1 条的"重试策略"不在服务声明中：按 Q22 不自动重试，需要重试的调用放提交后步骤。
-  - 密钥缺失在 `platformCheck` 中为告警（`PlatformCheckLauncher` 传 `jabiz.external.missing-secrets=warning`：静态校验没有部署的环境）。
+  - `platformCheck` 不检查密钥（`PlatformCheckLauncher` 传 `jabiz.external.missing-secrets=ignore`：静态校验没有部署的环境）；`dev` 中为告警。
     因此非 `dev` 启动示范应用还需要 `JABIZ_DEMO_AI_KEY`（任意值）：CI 的 e2e 作业随机生成，`docker/app-entrypoint.sh` 缺省生成占位值，CLAUDE.md 第 6 节与快速上手已注明。
   - 示范流程是新的 `PRODUCT_RENAME`（计划只写了 `ModerateText`；16e-2 的商品文案流程另加）。
+- 评审后的修改（代码评审与安全评审）：
+  - 请求头：值只允许可见 ASCII、空格与制表符，客户端自己设置的头（`Host`、`Content-Length`、`Transfer-Encoding`、`Proxy-*` 等）不能设置，名字不区分大小写；
+    JDK 客户端自己的拒绝变为被拒的调用（502），不带含值的 JDK 消息。绝对地址须与基础地址的协议、端口相同。`Response.text()` 遇非法字符集名按 UTF-8。
+    `Request` / `ExternalService` 的 `toString` 不含查询与第一段之后的路径。
+  - `ExternalCallScope` 不能伪造：只有 `ProcessExecutor` 能打开（`open` 检查调用方），新的共用规则 `PlatformArchRules.noPlatformInternals` 禁止业务包依赖
+    `com.jabiz.runtime.external`；`noDirectNetworkAccess` 增加 Spring 的 `http.client`、Netty / Reactor Netty、`UrlResource`、`URL#getContent`、
+    XML 解析器的 `parse(String uri)`（护栏，不是沙箱）。
+  - 导入：行的外部调用失败是该行的问题 `EXTERNAL_CALL_FAILED`，预览（试运行）与提交都不再失败为 500。
+  - `EXTERNAL` 一次报全：重复的声明报告自己的问题；`jabiz.external-services` 以文本读入，转换失败是 `EXTERNAL` 的问题而不是启动失败；`missing-secrets` 增加 `ignore`，消息改写。
+  - 失败种类的文字三语（消息 `EXTERNAL_CALL_FAILED.kind.<种类>`；`MessageCatalog` 的通用规则：参数值有 `<代码>.<参数>.<值>` 的消息即显示其文字。
+    评审建议的键名为 `external.kind.*`，改用这一通用规则，以便导入问题的参数仍是原值）。
+  - 测试桩：通用的 `StubHttpServer` 移到 runtime 测试夹具（应用分支可复用），`app` 的 `StubAiServer` 只保留审核的缺省应答。
+  - Docker Compose 增加服务 `ai-stub`（`eclipse-temurin:21-jdk` 直接运行 `tools/demo/ai-stub`，与 `app` 共用网络，`app` 以 `http://localhost:8091/v1` 调用）；
+    入口脚本在提供了真实密钥而地址仍是示例地址时拒绝启动。CLAUDE.md 第 6 节本地开发一行补上 `JABIZ_DEMO_AI_KEY`。
+  - 示范的说法改为"只有改名流程审核"：通用表单与数据视图 API 写入的商品名不经审核（未改为 `processOnly()`）。
+  - 测试补充：在计算步骤中调用得到的具体 `IllegalStateException`、试运行传到子流程、步骤失败后范围已清除、经整个流程的超时（502）。
 - 已知限制：主机白名单按名字比较，不解析 IP（DNS 指向内网地址不在检查之内，同 Webhook）；超时依靠 JDK 客户端取消请求，卡住的连接最迟随客户端关闭释放；
-  JDK 客户端沿用 JVM 的代理设置（`https.proxyHost` 等）；官方 SDK 不在本阶段（Q9）。
+  JDK 客户端沿用 JVM 的代理设置（`https.proxyHost` 等）；官方 SDK 不在本阶段（Q9）。请求头的值只能是 ASCII，非 ASCII 的值须由调用方编码。
+  示范门户允许自助注册而邮件未开启，`platformCheck` 有一条 `SECURITY` 告警（开启邮件需要 SMTP 配置，演示与 CI 没有，故保留）。
+  本环境没有 Docker 守护进程：Compose 的改动只经 `docker compose config` 校验，`ai-stub` 只在本机以 `java tools/demo/ai-stub/AiStub.java` 验证过；
+  CI 的 compose 作业只启动 `app`，不受影响。
 
 #### 16e-2 异步外部作业（3–4 天）
 

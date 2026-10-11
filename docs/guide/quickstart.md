@@ -27,7 +27,9 @@ docker compose logs app | grep "Sign in"   # 首次启动生成的管理员密�
 - 停止：`docker compose down`（保留数据）；`docker compose down -v`（连同数据库、生成的密钥一起删除）。
 - pgAdmin：`docker compose --profile tools up -d`，<http://localhost:5050>。
 
-服务一览：`db`（PostgreSQL 16，主机端口 5436）、`app`（8080）、`lgtm`（Grafana 3000）。详见 `docs/design/13-observability-ops.md`。
+- 外部服务的示范（D38）：商品行上的"改名"经桩服务 `ai-stub` 审核（名称含 `badword` 即被拒），桩服务与 `app` 共用网络，不调用任何真实提供方。
+
+服务一览：`db`（PostgreSQL 16，主机端口 5436）、`app`（8080）、`ai-stub`（示范 AI 服务的桩，只对 `app` 可见）、`lgtm`（Grafana 3000）。详见 `docs/design/13-observability-ops.md`。
 
 ### 登录后能做什么
 

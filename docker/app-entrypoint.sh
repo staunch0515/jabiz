@@ -43,13 +43,22 @@ if [ -z "${JABIZ_MFA_KEY:-}" ]; then
 fi
 
 # The demo's external AI service (decision D38) needs a key; the demonstration calls no real provider, so a random
-# placeholder does. A deployment that uses a provider passes its real key.
+# placeholder does. A deployment that uses a provider passes its real key, and its address with it: a real key sent
+# to the example address would go nowhere useful, so that is refused.
 if [ -z "${JABIZ_DEMO_AI_KEY:-}" ]; then
     if generate "$SECRETS/demo-ai-key" 24 "/+="; then
         echo "jabiz: generated a placeholder key for the demo AI service in the jabiz-secrets volume"
     fi
     JABIZ_DEMO_AI_KEY=$(cat "$SECRETS/demo-ai-key")
     export JABIZ_DEMO_AI_KEY
+else
+    case "${JABIZ_DEMO_AI_URL:-https://ai.example.com/v1}" in
+        *://ai.example.com*)
+            echo "jabiz: JABIZ_DEMO_AI_KEY is set but JABIZ_DEMO_AI_URL is still the example address;" \
+                "set the provider's address (and JABIZ_DEMO_AI_HOSTS) or leave the key unset" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 export JABIZ_BOOTSTRAP_ADMIN_USER="${JABIZ_BOOTSTRAP_ADMIN_USER:-admin}"

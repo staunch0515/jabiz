@@ -167,7 +167,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 本地开发：仓库根目录 `docker compose up -d db`（数据库，端口 5436）→ `backend/` 下 `./gradlew :app:bootRun`（后端 8080，
   启动时 Flyway 先迁移平台脚本 `db/jabiz`、再迁移业务脚本 `db/migration`）→ `frontend/` 下 `pnpm install && pnpm dev`（5173，`/api` 代理到 8080）。
   开发用操作人请求头：`--args='--spring.profiles.active=dev'`（见 01 §5）。非 dev 启动需要 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY` 与 `JABIZ_MFA_KEY`（都是 Base64，≥32 字节，
-  如 `openssl rand -base64 48`）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）；
+  如 `openssl rand -base64 48`），示范应用另需外部服务 `demo-ai` 的密钥 `JABIZ_DEMO_AI_KEY`（任意值；D38）；首个管理员用 `JABIZ_BOOTSTRAP_ADMIN_USER` / `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` 创建（见 10 §7）；
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
