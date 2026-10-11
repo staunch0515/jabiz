@@ -39,10 +39,15 @@ import java.util.regex.Pattern;
  * @param maxConcurrency attempts of this type running at the same time, across all instances
  * @param onCompleted    the process run with the result
  * @param onFailed       the process run when the job failed for good
+ * @param maxOpenPerRequester jobs of this type one requester may have open (neither finished nor cancelled) at a
+ *                       time; starting one more is refused with 422 {@code EXTERNAL_JOB_LIMIT}
+ * @param oneOpenPerReference whether a reference may have only one open job of this type at a time (the same
+ *                       refusal); every start then needs a reference
  */
 public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> resultType,
     Class<? extends ExternalJobHandler<I, R>> handler, Set<String> services, Duration timeout, int maxAttempts,
-    Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed) {
+    Duration initialBackoff, Duration maxBackoff, int maxConcurrency, String onCompleted, String onFailed,
+    int maxOpenPerRequester, boolean oneOpenPerReference) {
 
     static final String NAME_PATTERN = "[a-z][a-z0-9._-]{0,99}";
     public static final Pattern NAME = Pattern.compile(NAME_PATTERN);
@@ -56,6 +61,9 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
     public static final Duration DEFAULT_MAX_BACKOFF = Duration.ofMinutes(10);
     public static final int DEFAULT_MAX_CONCURRENCY = 4;
     public static final int MAX_CONCURRENCY = 1000;
+    /** A requester's open jobs of one type; what one person can start before the first ones finish. */
+    public static final int DEFAULT_MAX_OPEN_PER_REQUESTER = 10;
+    public static final int MAX_OPEN_PER_REQUESTER = 10_000;
 
     private static final int MAX_TYPE_DEPTH = 8;
 
@@ -109,6 +117,10 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         }
         if (resultType == null || !resultType.isRecord()) {
             problems.add("resultType: must be a record");
+        } else {
+            sensitiveComponents(resultType, "", new HashSet<>(), 0).forEach(path ->
+                problems.add("resultType: component " + path + " is @Sensitive; a job's result is stored and handed "
+                    + "to a process, it cannot carry secrets"));
         }
         if (handler == null) {
             problems.add("handler: missing");
@@ -129,6 +141,9 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         }
         if (maxConcurrency < 1 || maxConcurrency > MAX_CONCURRENCY) {
             problems.add("maxConcurrency: must be between 1 and " + MAX_CONCURRENCY);
+        }
+        if (maxOpenPerRequester < 1 || maxOpenPerRequester > MAX_OPEN_PER_REQUESTER) {
+            problems.add("maxOpenPerRequester: must be between 1 and " + MAX_OPEN_PER_REQUESTER);
         }
         if (onCompleted == null || onCompleted.isBlank()) {
             problems.add("onCompleted: name the process that receives the result");
@@ -174,10 +189,12 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
     public String toString() {
         return "ExternalJobType[name=" + name + ", handler=" + (handler == null ? null : handler.getSimpleName())
             + ", services=" + services + ", timeout=" + timeout + ", maxAttempts=" + maxAttempts + ", maxConcurrency="
-            + maxConcurrency + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed + "]";
+            + maxConcurrency + ", maxOpenPerRequester=" + maxOpenPerRequester + ", oneOpenPerReference="
+            + oneOpenPerReference + ", onCompleted=" + onCompleted + ", onFailed=" + onFailed + "]";
     }
 
     public static final class Builder<I, R> {
+        static final int DEFAULT_MAX_OPEN = DEFAULT_MAX_OPEN_PER_REQUESTER;
         private final String name;
         private final Class<I> inputType;
         private final Class<R> resultType;
@@ -188,6 +205,8 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
         private Duration initialBackoff;
         private Duration maxBackoff;
         private int maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+        private int maxOpenPerRequester = DEFAULT_MAX_OPEN_PER_REQUESTER;
+        private boolean oneOpenPerReference;
         private String onCompleted;
         private String onFailed;
 
@@ -230,6 +249,21 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
             return this;
         }
 
+        /** Jobs of this type one requester may have open at a time (default {@value #DEFAULT_MAX_OPEN}). */
+        public Builder<I, R> maxOpenPerRequester(int limit) {
+            this.maxOpenPerRequester = limit;
+            return this;
+        }
+
+        /**
+         * Only one open job of this type per reference (a product's copy is written once at a time); every start
+         * needs a reference.
+         */
+        public Builder<I, R> oneOpenPerReference() {
+            this.oneOpenPerReference = true;
+            return this;
+        }
+
         /** The {@code internal()} process run with an {@link ExternalJobCompletion} once the job has its result. */
         public Builder<I, R> onCompleted(String process) {
             this.onCompleted = process;
@@ -244,7 +278,8 @@ public record ExternalJobType<I, R>(String name, Class<I> inputType, Class<R> re
 
         public ExternalJobType<I, R> build() {
             return new ExternalJobType<>(name, inputType, resultType, handler, services, timeout, maxAttempts,
-                initialBackoff, maxBackoff, maxConcurrency, onCompleted, onFailed);
+                initialBackoff, maxBackoff, maxConcurrency, onCompleted, onFailed, maxOpenPerRequester,
+                oneOpenPerReference);
         }
     }
 }

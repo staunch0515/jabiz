@@ -69,6 +69,8 @@ class ExternalJobResultTest {
         ExternalJobFailure failure = new ExternalJobFailure("j1", "t", "u1", null, Map.of("tokens", 3L), 3, at,
             "TIMEOUT", "no result in time");
         assertThat(failure.usage()).containsEntry("tokens", 3L);
+        assertThat(failure.toString()).contains("TIMEOUT", "j1").doesNotContain("no result in time")
+            .contains("17 characters");
         assertThat(new ExternalJobFailure("j1", "t", "u1", null, null, 1, at, "X", "y").usage()).isEmpty();
     }
 }

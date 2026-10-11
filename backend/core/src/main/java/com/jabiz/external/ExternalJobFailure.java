@@ -23,4 +23,12 @@ public record ExternalJobFailure(String jobId, String jobType, String requestedB
     public ExternalJobFailure {
         usage = usage == null ? Map.of() : Map.copyOf(usage);
     }
+
+    /** The job and the code only: the message is the handler's, and may repeat what it was given. */
+    @Override
+    public String toString() {
+        return "ExternalJobFailure[jobId=" + jobId + ", jobType=" + jobType + ", attempts=" + attempts + ", errorCode="
+            + errorCode + ", errorMessage=" + (errorMessage == null ? "null" : "*** (" + errorMessage.length()
+            + " characters)") + "]";
+    }
 }

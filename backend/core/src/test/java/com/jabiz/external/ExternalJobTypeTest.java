@@ -65,6 +65,8 @@ class ExternalJobTypeTest {
         assertThat(type.initialBackoff()).isEqualTo(ExternalJobType.DEFAULT_INITIAL_BACKOFF);
         assertThat(type.maxBackoff()).isEqualTo(ExternalJobType.DEFAULT_MAX_BACKOFF);
         assertThat(type.maxConcurrency()).isEqualTo(ExternalJobType.DEFAULT_MAX_CONCURRENCY);
+        assertThat(type.maxOpenPerRequester()).isEqualTo(ExternalJobType.DEFAULT_MAX_OPEN_PER_REQUESTER);
+        assertThat(type.oneOpenPerReference()).isFalse();
         assertThat(type.services()).isEmpty();
         assertThat(type.problems()).isEmpty();
     }
@@ -73,7 +75,7 @@ class ExternalJobTypeTest {
     @SuppressWarnings({"unchecked", "rawtypes"})
     void everyProblemIsReportedAtOnce() {
         ExternalJobType type = new ExternalJobType("Bad Name", String.class, Integer.class, null,
-            java.util.Set.of("Not A Service"), Duration.ZERO, 0, ofSeconds(10), ofSeconds(5), 0, " ", null);
+            java.util.Set.of("Not A Service"), Duration.ZERO, 0, ofSeconds(10), ofSeconds(5), 0, " ", null, 0, false);
         assertThat(type.problems()).containsExactlyInAnyOrder(
             "name: 'Bad Name' must match [a-z][a-z0-9._-]{0,99}",
             "inputType: must be a record",
@@ -84,6 +86,7 @@ class ExternalJobTypeTest {
             "retry: attempts must be between 1 and 100",
             "retry: backoffs must be positive, the maximum at least the initial one",
             "maxConcurrency: must be between 1 and 1000",
+            "maxOpenPerRequester: must be between 1 and 10000",
             "onCompleted: name the process that receives the result",
             "onFailed: name the process that hears of a failure");
         ExternalJobType tooLong = ExternalJobType.define("x", CopyInput.class, CopyResult.class, t -> t
@@ -105,6 +108,28 @@ class ExternalJobTypeTest {
         assertThat(problems).hasSize(2).allSatisfy(problem -> assertThat(problem).contains("apiKey"))
             .anySatisfy(problem -> assertThat(problem).contains("parts.apiKey"))
             .anySatisfy(problem -> assertThat(problem).contains("byName.apiKey"));
+    }
+
+    record SecretResult(String text, @Sensitive String token) {}
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void resultsMayNotCarrySecretsAndStartsCanBeLimited() {
+        ExternalJobType secret = ExternalJobType.define("x", CopyInput.class, SecretResult.class, t -> t
+            .handler((Class) CopyHandler.class).onCompleted("A").onFailed("B"));
+        assertThat((List<String>) secret.problems()).singleElement().asString()
+            .startsWith("resultType: component token is @Sensitive");
+        ExternalJobType<CopyInput, CopyResult> limited = ExternalJobType.define("x", CopyInput.class,
+            CopyResult.class, t -> t.handler(CopyHandler.class).maxOpenPerRequester(2).oneOpenPerReference()
+                .onCompleted("A").onFailed("B"));
+        assertThat(limited.maxOpenPerRequester()).isEqualTo(2);
+        assertThat(limited.oneOpenPerReference()).isTrue();
+        assertThat(limited.problems()).isEmpty();
+        assertThat(limited.toString()).contains("maxOpenPerRequester=2", "oneOpenPerReference=true");
+        ExternalJobType<CopyInput, CopyResult> tooMany = ExternalJobType.define("x", CopyInput.class,
+            CopyResult.class, t -> t.handler(CopyHandler.class).maxOpenPerRequester(10_001)
+                .onCompleted("A").onFailed("B"));
+        assertThat(tooMany.problems()).containsExactly("maxOpenPerRequester: must be between 1 and 10000");
     }
 
     @Test
