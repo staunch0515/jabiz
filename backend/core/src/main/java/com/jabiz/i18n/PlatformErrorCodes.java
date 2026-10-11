@@ -97,6 +97,12 @@ public final class PlatformErrorCodes {
      * step could not use (decision D38); answered 502.
      */
     public static final String EXTERNAL_CALL_FAILED = "EXTERNAL_CALL_FAILED";
+    /** 422: an external job's input holds a secret, which would be stored with the job (decision D38). */
+    public static final String EXTERNAL_JOB_INPUT_SECRET = "EXTERNAL_JOB_INPUT_SECRET";
+    /** 422: an external job's input is larger than the platform stores (64 KiB of JSON; decision D38). */
+    public static final String EXTERNAL_JOB_INPUT_TOO_LARGE = "EXTERNAL_JOB_INPUT_TOO_LARGE";
+    /** 422: the external job to cancel has finished, or was cancelled already (decision D38 item 5). */
+    public static final String EXTERNAL_JOB_FINISHED = "EXTERNAL_JOB_FINISHED";
     /** A report run can supersede an earlier run of the same template only (19 section 5). */
     public static final String REPORT_SUPERSEDE_MISMATCH = "REPORT_SUPERSEDE_MISMATCH";
     /** The run to supersede has been superseded already (19 section 5). */
@@ -217,6 +223,7 @@ public final class PlatformErrorCodes {
         LEDGER_SOURCE_NOT_FOUND, LEDGER_PARENT_NOT_SUMMARY, LEDGER_ACCOUNT_CYCLE, LEDGER_SUMMARY_HAS_ENTRIES,
         LEDGER_ACCOUNT_HAS_CHILDREN, LEDGER_CURRENCY_INVALID, LEDGER_RATE_INVALID, LEDGER_FX_AMOUNT_MISMATCH,
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
+        EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
