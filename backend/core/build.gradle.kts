@@ -102,6 +102,8 @@ val coverageGatedClasses = listOf(
     "com.jabiz.query.template.TemplateSchemas",
     // Phase 16a
     "com.jabiz.mail.*",
+    // Phase 16d
+    "com.jabiz.inbound.*",
 )
 
 dependencies {

@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -43,5 +44,21 @@ public final class WebhookSignature {
         }
         return MessageDigest.isEqual(sign(secret, timestamp, body).getBytes(StandardCharsets.US_ASCII),
             signature.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    /**
+     * Whether {@code signature} is the one of this timestamp and body under any of {@code secrets} (a receiver
+     * rotating its secret accepts the old and the new one for a while). Every secret is compared, each in constant
+     * time.
+     */
+    public static boolean matchesAny(List<String> secrets, long timestamp, byte[] body, String signature) {
+        if (signature == null || secrets == null) {
+            return false;
+        }
+        boolean matched = false;
+        for (String secret : secrets) {
+            matched |= matches(secret, timestamp, body, signature);
+        }
+        return matched;
     }
 }
