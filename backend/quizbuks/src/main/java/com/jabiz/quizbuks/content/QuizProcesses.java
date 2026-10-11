@@ -6,6 +6,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.CallProcess;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -92,6 +94,8 @@ public final class QuizProcesses {
 
     static final String FOUND = "found";
     static final String RELEASE = "release";
+    static final String PUBLICATIONS = "publications";
+    static final String PUBLISHED_VERSIONS = "publishedVersions";
 
     // ---- save ------------------------------------------------------------------------------------------------------
 
@@ -190,6 +194,16 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
+                // Under the quiz's lock: a submission holds it too (shared), so none slips in meanwhile.
+                // The schedule holds every publication submitted and not back to its draft, by quiz (a plain index).
+                .step("Load the publications submitted", QueryEntities.<ProcessContext>of(
+                    QbContent.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
+                        .limit(Integer.MAX_VALUE).build(), PUBLICATIONS))
+                .step("Load their versions", QueryEntities.<ProcessContext>of(
+                    QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("versionId", publishedVersionIds(ctx)))
+                        .limit(Integer.MAX_VALUE).build(), PUBLISHED_VERSIONS))
                 .compute("Remove the quiz", (metadata, ctx) -> remove(ctx))
                 // The release reads the quiz as removed.
                 .step("Save", SaveChanges.now())
@@ -263,12 +277,28 @@ public final class QuizProcesses {
         QuizEditing.touch(ctx, quiz, values, null, List.of());
     }
 
+    /** The versions the quiz's submitted publications use, each once. */
+    private static List<Object> publishedVersionIds(ProcessContext ctx) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        for (EntityInstance publication : list(ctx, PUBLICATIONS)) {
+            UUID versionId = uuid(publication.get("versionId"));
+            if (versionId != null) {
+                ids.add(versionId);
+            }
+        }
+        return new ArrayList<>(ids);
+    }
+
     /**
-     * The files a removed quiz must keep: those of the versions publications still refer to. There are no
-     * publications before Q4, so none; Q4 returns the files of the snapshots of the versions its publications use.
+     * The files a removed quiz must keep (Q4, D-Q4-5): those in the snapshots of the versions its submitted
+     * publications use (in any state but a draft, as their schedule rows say; a draft of a removed quiz cannot be
+     * submitted any more, and a publication sent back to its draft loses its row).
      */
     static Set<UUID> filesStillNeeded(ProcessContext ctx) {
-        return Set.of();
+        Set<UUID> needed = new HashSet<>();
+        list(ctx, PUBLISHED_VERSIONS).forEach(version -> needed.addAll(QuizSnapshots.files(
+            QuizSnapshots.fromJson(version.get("content"))).keySet()));
+        return needed;
     }
 
     /** The file of a {@code QbVersionFile}, whichever of its fields holds it. */

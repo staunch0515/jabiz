@@ -1,0 +1,483 @@
+package com.jabiz.quizbuks.publishing;
+
+import com.jabiz.entity.Violation;
+import com.jabiz.event.DomainEvent;
+import com.jabiz.param.ParamValues;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.ConcurrentUpdateException;
+import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.approval.ApprovalCase;
+import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.approval.ApprovalOutcome;
+import com.jabiz.runtime.approval.RequireApproval;
+import com.jabiz.runtime.approval.WithdrawApproval;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.LoadParams;
+import com.jabiz.runtime.process.steps.QueryEntities;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+import static com.jabiz.quizbuks.publishing.PublicationEditing.APPROVAL;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.CASE;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.FOUND;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.INPUT;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.OUTPUT;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.PUBLICATION;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.PUB_ID;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.TIERS;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.VERSIONS;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.first;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.instant;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.list;
+import static com.jabiz.quizbuks.publishing.PublicationEditing.uuid;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.DRAFT;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.ENDED;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.LIVE;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.PAUSED;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.PENDING_REVIEW;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
+
+/**
+ * A publication's way from submission to its end (M-30, M-31, M-35, P-09, 5.3-2; docs/quizbuks/plans/
+ * Q4-publishing.md, D-Q4-1, D-Q4-4, D-Q4-7):
+ * <ul>
+ *   <li>{@code QB_PUBLICATION_SUBMIT}: checks the draft (every problem at once), then asks for a review; goes on at
+ *       once when the review is skipped by the controlled parameter or the same content was approved before;</li>
+ *   <li>{@code QB_PUBLICATION_WITHDRAW}: takes a publication out of review, back to its draft;</li>
+ *   <li>{@code QB_PUBLICATION_PAUSE} / {@code QB_PUBLICATION_RESUME}: stops new attempts at once; resumes to where
+ *       the time says;</li>
+ *   <li>{@code QB_PUBLICATION_APPROVAL_RESULT}: run for the approval events: an approval of the content under review
+ *       puts the publication on, a rejection sends it back with the reviewer's reason;</li>
+ *   <li>{@code QB_PUBLICATION_TICK} / {@code QB_PUBLICATION_ADVANCE}: every minute, the publications whose start or
+ *       end has come move on, those missed while the system was down included.</li>
+ * </ul>
+ * Locks, always in this order (D-Q4-5): the quiz's ({@code qb.quiz:<quizId>}, shared, by submission only), then the
+ * publication's ({@code qb.pub:<publicationId>}); Q5 takes the wallet's after them.
+ */
+public final class PublicationLifecycle {
+
+    public static final String SUBMIT = "QB_PUBLICATION_SUBMIT";
+    public static final String WITHDRAW = "QB_PUBLICATION_WITHDRAW";
+    public static final String PAUSE = "QB_PUBLICATION_PAUSE";
+    public static final String RESUME = "QB_PUBLICATION_RESUME";
+    public static final String APPROVAL_RESULT = "QB_PUBLICATION_APPROVAL_RESULT";
+    public static final String TICK = "QB_PUBLICATION_TICK";
+    public static final String ADVANCE = "QB_PUBLICATION_ADVANCE";
+
+    /** The minute's job that moves publications on. */
+    public static final String TICK_JOB = "qb.publication-tick";
+
+    public record PublicationRef(@NotNull UUID publicationId) {}
+
+    /**
+     * Input of {@code QB_PUBLICATION_APPROVAL_RESULT}, from an approval event of any subject.
+     *
+     * @param requestId the request decided: only the publication's own request (its {@code approvalRequestId}) counts
+     */
+    public record ApprovalResultInput(@NotBlank String subject, @NotBlank String entityId, @NotBlank String status,
+        String requestId, String preparerId, String contentHash, String reason) {}
+
+    public record TickInput(@NotNull Instant scheduledTime) {}
+
+    /** @param due the publications found due (at most {@link PublishingLimits#TICK_BATCH}); each was moved on */
+    public record TickOutput(int due) {}
+
+    static final String FIRST = "first";
+    static final String PARAMS = "params";
+    static final String DUE = "due";
+    static final String REQUEST = "request";
+
+    // ---- submit ----------------------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> submit() {
+        return ProcessDefinition.define(SUBMIT, 1, PublicationProcesses.PublicationRef.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Submits a draft publication for review; it goes on at once when no review is needed.")
+                .permissions(QbPermissions.PUBLICATION_WRITE)
+                .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", DRAFT))
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                // The quiz's lock comes first (D-Q4-5), and only the publication tells which quiz: read it, lock
+                // both, read it again. Only a save under the publication's lock changes its quiz.
+                .step("Find the publication's quiz", LoadEntity.by(
+                    QbPublications.sponsorDataset(QbPublications.PUBLICATION), PUB_ID, FIRST))
+                .step("Lock the quiz", HoldLock.<ProcessContext>shared(
+                    ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
+                .steps(PublicationEditing::lockAndLoad)
+                .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.REVIEW_PUBLICATION_AUTO))
+                .steps(PublicationEditing::loadTiers)
+                .steps(b -> PublicationEditing.loadVersion(b,
+                    ctx -> PublicationEditing.publication(ctx).get("versionId"), true))
+                .compute("Check the publication", (metadata, ctx) -> check(ctx))
+                .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
+                    PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
+                .compute("Submit", (metadata, ctx) -> submitted(ctx)));
+    }
+
+    private static boolean autoApprove(ProcessContext ctx) {
+        return Boolean.TRUE.equals(ctx.get(PARAMS, ParamValues.class).get(QbParams.REVIEW_PUBLICATION_AUTO,
+            Boolean.class));
+    }
+
+    static void check(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        if (!Objects.equals(String.valueOf((Object) ctx.get(FIRST, EntityInstance.class).get("quizId")),
+            String.valueOf((Object) publication.get("quizId")))) {
+            throw new ConcurrentUpdateException(QbPublications.PUBLICATION + " " + publication.id()
+                + " changed its quiz meanwhile");
+        }
+        PublicationProcesses.PublicationRef input = ctx.get(INPUT, PublicationProcesses.PublicationRef.class);
+        if (!PublicationEditing.draft(ctx, publication)
+            || !PublicationEditing.current(ctx, publication, input.baseRevision())) {
+            return;
+        }
+        Object versionId = publication.get("versionId");
+        EntityInstance version = versionId == null ? null : PublicationEditing.requireVersion(ctx, versionId);
+        if (ctx.hasViolations()) {
+            return;
+        }
+        PublicationReadiness.check(PublicationEditing.draftOf(publication),
+            PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime())
+            .forEach(ctx::reject);
+        SponsorChecks.requireApproved(ctx);
+        if (!ctx.hasViolations()) {
+            ctx.put(CASE, PublicationEditing.approvalCase(publication, list(ctx, TIERS), version, autoApprove(ctx)));
+        }
+    }
+
+    static void submitted(ProcessContext ctx) {
+        if (!ctx.contains(APPROVAL)) {
+            return;
+        }
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("submittedAt", ctx.opTime());
+        switch (approval.status()) {
+            case PENDING -> {
+                values.put("status", PENDING_REVIEW);
+                values.put("approvalRequestId", approval.requestId());
+                values.put("rejectReason", null);
+                values.put("rejectCode", null);
+            }
+            case NOT_REQUIRED -> {
+                // No rule asked for a review. Unless the switch says so, that means the rule is missing or off:
+                // refuse rather than let it through unreviewed (platform gap 5 of the plan).
+                if (!autoApprove(ctx)) {
+                    ctx.reject(new Violation(null, PublishingCodes.REVIEW_NOT_CONFIGURED, "Publications need a "
+                        + "review, but no review rule is in effect", Map.of("rule", PublicationApprovals.RULE)));
+                    return;
+                }
+                values.putAll(PublicationEditing.goingOn(ctx, publication, null));
+            }
+            case APPROVED -> values.putAll(PublicationEditing.goingOn(ctx, publication, approval.requestId()));
+            default -> throw new IllegalStateException("Unknown approval outcome " + approval.status());
+        }
+        PublicationEditing.write(ctx, publication, values);
+    }
+
+    // ---- withdraw, pause, resume -----------------------------------------------------------------------------------
+
+    public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> withdraw() {
+        return ProcessDefinition.define(WITHDRAW, 1, PublicationRef.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Takes a publication out of review, back to its draft.")
+                .permissions(QbPermissions.PUBLICATION_WRITE)
+                .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PENDING_REVIEW))
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(PublicationEditing::lockAndLoad)
+                .step("Withdraw the review", WithdrawApproval.<ProcessContext>of(PublicationApprovals.SUBJECT,
+                    ctx -> PublicationEditing.publication(ctx).id()))
+                .compute("Back to the draft", (metadata, ctx) -> {
+                    EntityInstance publication = PublicationEditing.publication(ctx);
+                    if (PublicationEditing.in(ctx, publication, DRAFT, PENDING_REVIEW)) {
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("status", DRAFT);
+                        values.put("approvalRequestId", null);
+                        PublicationEditing.write(ctx, publication, values);
+                    }
+                }));
+    }
+
+    public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> pause() {
+        return ProcessDefinition.define(PAUSE, 1, PublicationRef.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Pauses a scheduled or live publication: it takes no new attempts until resumed.")
+                .permissions(QbPermissions.PUBLICATION_WRITE)
+                .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", SCHEDULED, LIVE))
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(PublicationEditing::lockAndLoad)
+                .compute("Pause", (metadata, ctx) -> {
+                    EntityInstance publication = PublicationEditing.publication(ctx);
+                    if (PublicationEditing.in(ctx, publication, PAUSED, SCHEDULED, LIVE)) {
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("status", PAUSED);
+                        values.put("pausedAt", ctx.opTime());
+                        PublicationEditing.write(ctx, publication, values);
+                    }
+                }));
+    }
+
+    public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> resume() {
+        return ProcessDefinition.define(RESUME, 1, PublicationRef.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Resumes a paused publication: scheduled before its start, live within its time, "
+                    + "ended after its end.")
+                .permissions(QbPermissions.PUBLICATION_WRITE)
+                .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PAUSED))
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(PublicationEditing::lockAndLoad)
+                .compute("Resume", (metadata, ctx) -> {
+                    EntityInstance publication = PublicationEditing.publication(ctx);
+                    String to = PublicationRules.resumeTo(instant(publication.get("startAt")),
+                        instant(publication.get("endAt")), ctx.opTime());
+                    if (PublicationEditing.in(ctx, publication, to, PAUSED)) {
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("status", to);
+                        values.put("pausedAt", null);
+                        ended(ctx, values, to);
+                        PublicationEditing.write(ctx, publication, values);
+                    }
+                }));
+    }
+
+    /** A publication that ends with its time: when, and why. */
+    private static void ended(ProcessContext ctx, Map<String, Object> values, String to) {
+        if (ENDED.equals(to)) {
+            values.put("endedAt", ctx.opTime());
+            values.put("endReason", PublicationStatus.EXPIRED);
+        }
+    }
+
+    // ---- approval result -------------------------------------------------------------------------------------------
+
+    /**
+     * Continues after a review is decided (subscribed to both approval events, run as the system; the permission is
+     * granted to no role). Only the publication's own request counts: the event must name the request the publication
+     * waits for. An approval goes through only when {@link RequireApproval} finds that same request approved for the
+     * publication's content; a rejection only when the stored request is rejected, for that content. Anything else
+     * (another subject, a stale event, a forged call) changes nothing.
+     */
+    public static ProcessDefinition<ApprovalResultInput, PublicationOutput, ProcessContext> approvalResult() {
+        return ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Moves a publication on after its review is decided.")
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
+                .internal()
+                .contextFactory((start, input) -> PublicationEditing.start(start, input,
+                    PublicationApprovals.SUBJECT.equals(input.subject()) ? uuidOrNull(input.entityId()) : null))
+                .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, PublicationOutput.class)
+                    : new PublicationOutput(ctx.get(PUB_ID, UUID.class), null, 0, null, null))
+                // Events of other subjects lock and find nothing.
+                .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
+                    ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
+                .step("Find the publication", QueryEntities.<ProcessContext>of(
+                    QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
+                        .limit(1).build(), FOUND))
+                .steps(PublicationEditing::loadTiers)
+                .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
+                    EntityInstance found = first(ctx, FOUND);
+                    return found == null ? null : found.get("versionId");
+                }, false))
+                .steps(PublicationEditing::loadSchedule)
+                .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
+                        ownRequest(ctx) ? PublicationEditing.ids(input(ctx).requestId()) : new ArrayList<>()))
+                        .limit(1).build(), REQUEST))
+                .step("Check the approval", RequireApproval.<ProcessContext>when(
+                    ctx -> ownRequest(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
+                    PublicationApprovals.SUBJECT, ctx -> PublicationEditing.approvalCase(first(ctx, FOUND),
+                        list(ctx, TIERS), first(ctx, VERSIONS), false).preparedBy(input(ctx).preparerId()),
+                    APPROVAL))
+                .compute("Move on", (metadata, ctx) -> approvalResult(ctx)));
+    }
+
+    /** Whether the event is about the request the publication, still under review, waits for. */
+    private static boolean ownRequest(ProcessContext ctx) {
+        return underReview(ctx) && input(ctx).requestId() != null
+            && input(ctx).requestId().equals(first(ctx, FOUND).get("approvalRequestId"));
+    }
+
+    private static UUID uuidOrNull(String id) {
+        try {
+            return UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static ApprovalResultInput input(ProcessContext ctx) {
+        return ctx.get(INPUT, ApprovalResultInput.class);
+    }
+
+    private static boolean underReview(ProcessContext ctx) {
+        EntityInstance found = first(ctx, FOUND);
+        return found != null && PENDING_REVIEW.equals(found.get("status"));
+    }
+
+    static void approvalResult(ProcessContext ctx) {
+        if (!ownRequest(ctx)) {
+            return;
+        }
+        EntityInstance publication = first(ctx, FOUND);
+        ApprovalResultInput input = input(ctx);
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (ApprovalEntities.APPROVED.equals(input.status())) {
+            ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
+            if (approval.status() != ApprovalOutcome.Status.APPROVED
+                || !input.requestId().equals(approval.requestId())) {
+                PublicationEditing.unchanged(ctx, publication);
+                return;
+            }
+            if (ctx.opTime().isBefore(instant(publication.get("endAt")))) {
+                values.putAll(PublicationEditing.goingOn(ctx, publication, approval.requestId()));
+            } else {
+                // Its time ran out while it was reviewed (question Q4-5): back to the draft, with the reason.
+                values.put("status", DRAFT);
+                values.put("rejectCode", PublishingCodes.EXPIRED_IN_REVIEW);
+                values.put("rejectReason", null);
+            }
+        } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, publication)) {
+            values.put("status", DRAFT);
+            values.put("rejectReason", input.reason());
+            values.put("rejectCode", null);
+        } else {
+            PublicationEditing.unchanged(ctx, publication);
+            return;
+        }
+        PublicationEditing.write(ctx, publication, values);
+    }
+
+    /** Whether the stored request (not the event) says that the publication's present content was rejected. */
+    private static boolean rejected(ProcessContext ctx, EntityInstance publication) {
+        EntityInstance request = first(ctx, REQUEST);
+        if (request == null) {
+            return false;
+        }
+        String hash = PublicationApprovals.hash(PublicationEditing.approvalCase(publication, list(ctx, TIERS),
+            first(ctx, VERSIONS), false).content());
+        return ApprovalEntities.REJECTED.equals(request.get("status"))
+            && PublicationApprovals.SUBJECT.equals(request.get("subject"))
+            && String.valueOf(publication.id()).equals(request.get("entityId"))
+            && hash.equals(String.valueOf((Object) request.get("contentHash")).strip());
+    }
+
+    // ---- tick ------------------------------------------------------------------------------------------------------
+
+    /**
+     * {@code QB_PUBLICATION_TICK}: every publication due at the operation time, by key, at most
+     * {@link PublishingLimits#TICK_BATCH}, from the schedule ({@code nextDueAt}, kept with the state): scheduled ones
+     * whose start has come, running ones and ones still in review whose end has come. It looks at the due time, not at
+     * the minute, so the minutes missed while the system was down are made up by the next run. Each is moved on by
+     * {@code QB_PUBLICATION_ADVANCE} under its own lock, all in one transaction (platform gap 6).
+     */
+    public static ProcessDefinition<TickInput, TickOutput, ProcessContext> tick() {
+        return ProcessDefinition.define(TICK, 1, TickInput.class, TickOutput.class, ProcessContext.class, pb -> pb
+            .description("Moves publications on whose start or end has come.")
+            .permissions(QbPermissions.PUBLICATION_SYSTEM)
+            .internal()
+            .contextFactory((start, input) -> {
+                ProcessContext ctx = new ProcessContext(start);
+                ctx.put(INPUT, input);
+                return ctx;
+            })
+            .outputMapper(ctx -> new TickOutput(list(ctx, DUE).size()))
+            .step("Find the publications due", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Lte("nextDueAt", ctx.opTime()))
+                    .orderBy("nextDueAt", true).orderBy("publicationId", true)
+                    .limit(PublishingLimits.TICK_BATCH).build(), DUE))
+            .step("Move each on", CallProcess.<ProcessContext>forEach(ADVANCE, 1, ctx -> list(ctx, DUE).stream()
+                .map(row -> new PublicationRef(uuid(row.id()))).toList(), null)));
+    }
+
+    /**
+     * {@code QB_PUBLICATION_ADVANCE}: under the publication's lock, moves it as its times say
+     * ({@link PublicationRules#next}); one changed meanwhile (paused, say) moves as its new state says, or not at all.
+     */
+    public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> advance() {
+        return ProcessDefinition.define(ADVANCE, 1, PublicationRef.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Moves one publication on as its start and end times say.")
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
+                .internal()
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
+                    ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
+                .step("Load the publication", LoadEntity.by(
+                    QbPublications.defaultDataset(QbPublications.PUBLICATION), PUB_ID, PUBLICATION))
+                .steps(PublicationEditing::loadSchedule)
+                // Only a publication still in review has a pending request: one past its end loses it.
+                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>of(
+                    PublicationApprovals.SUBJECT, ctx -> expiredInReview(ctx)
+                        ? PublicationEditing.publication(ctx).id() : NO_REQUEST))
+                .compute("Move on", (metadata, ctx) -> advance(ctx)));
+    }
+
+    /** An entity id no publication has (WithdrawApproval has no condition): the withdrawal then finds nothing. */
+    private static final String NO_REQUEST = "none";
+
+    private static boolean expiredInReview(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        return PENDING_REVIEW.equals(publication.get("status")) && DRAFT.equals(PublicationRules.next(
+            PENDING_REVIEW, instant(publication.get("startAt")), instant(publication.get("endAt")), ctx.opTime()));
+    }
+
+    static void advance(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        String status = publication.get("status");
+        String to = PublicationRules.next(status, instant(publication.get("startAt")),
+            instant(publication.get("endAt")), ctx.opTime());
+        if (to.equals(status)) {
+            // A due time that no longer fits the state is put right, so the tick does not find it again.
+            PublicationEditing.schedule(ctx, publication, status);
+            PublicationEditing.unchanged(ctx, publication);
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", to);
+        if (DRAFT.equals(to)) {
+            // Still in review at its end (R3): nothing left to approve.
+            values.put("rejectCode", PublishingCodes.EXPIRED_IN_REVIEW);
+            values.put("rejectReason", null);
+        }
+        ended(ctx, values, to);
+        PublicationEditing.write(ctx, publication, values);
+    }
+
+    /** The input of {@code QB_PUBLICATION_APPROVAL_RESULT} from an approval event. */
+    static ApprovalResultInput resultInput(DomainEvent event) {
+        Map<String, Object> payload = event.payload();
+        return new ApprovalResultInput(text(payload, "subject"), text(payload, "entityId"), text(payload, "status"),
+            text(payload, "requestId"), text(payload, "preparerId"), text(payload, "contentHash"), text(payload, "reason"));
+    }
+
+    private static String text(Map<String, Object> payload, String key) {
+        Object value = payload.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private PublicationLifecycle() {}
+}

@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublicationApprovals;
+import com.jabiz.quizbuks.setup.QbApprovalRules;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.country.Regions;
@@ -36,7 +38,10 @@ class SetupIT extends QbItSupport {
         // Controlled parameters cannot be created directly (decision D40): they are proposed, and another
         // administrator publishes them.
         assertThat(first.get("paramsProposed")).isEqualTo(QbParams.CONTROLLED);
-        assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size());
+        // Approval rules change only through controlled changes as well (Q4): the publication review is proposed.
+        assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE));
+        assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size());
+        assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
             QbParams.TRANSFER_THRESHOLD).getFirst()).containsEntry("n", 0L);
         publishProposals(first);
@@ -44,7 +49,11 @@ class SetupIT extends QbItSupport {
         Map<String, Long> before = rowCounts();
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
-            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249);
+            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size());
+        assertThat(query("SELECT rule_code, subject, enabled, priority, condition FROM sys_approval_rule_version"))
+            .singleElement().satisfies(rule -> assertThat(rule).containsEntry("rule_code", PublicationApprovals.RULE)
+                .containsEntry("subject", PublicationApprovals.SUBJECT).containsEntry("enabled", true)
+                .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove")));
         assertRoles();
         assertAccounts();
         assertCountries();
@@ -54,7 +63,7 @@ class SetupIT extends QbItSupport {
         assertThat(second).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
             .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
-            .containsEntry("proposals", List.of());
+            .containsEntry("rulesProposed", List.of()).containsEntry("proposals", List.of());
         assertThat(rowCounts()).isEqualTo(before);
         assertCountries();
 
@@ -143,7 +152,8 @@ class SetupIT extends QbItSupport {
     private static Map<String, Long> rowCounts() {
         Map<String, Long> counts = new TreeMap<>();
         for (String table : List.of("sec_role_version", "sec_role_permission_version", "ledger_account_version",
-            "sys_param_version", "qb_country_version", "qb_setup_record_version")) {
+            "sys_param_version", "qb_country_version", "qb_setup_record_version", "sys_approval_rule_version",
+            "sys_control_change_version")) {
             counts.put(table, ((Number) query("SELECT count(*) AS n FROM " + table).getFirst().get("n")).longValue());
         }
         return counts;

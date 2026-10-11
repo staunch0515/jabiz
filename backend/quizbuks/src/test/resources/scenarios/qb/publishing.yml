@@ -1,0 +1,175 @@
+# Publishing a quiz (docs/quizbuks/plans/Q4-publishing.md): QB_SETUP proposes the review switch and the review rule,
+# which a second administrator publishes. Sponsor A makes a quiz with version v1.0, saves a publication with three
+# reward tiers and submits it; the reviewer sends it back with a reason, A lowers the rewards and submits again, the
+# reviewer approves. The minute's job puts it live at its start; A pauses and resumes it; the job ends it at its end.
+# A copies it with new times; sponsor B cannot touch A's publication. No files: a scenario cannot upload one yet
+# (platform gap 2 of the Q3 plan); ContentFilesIT covers them.
+name: Publishing a quiz
+# The job runs twice within the replay's few seconds: the cluster lock must not outlast a run.
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    expectOutput:
+      rulesProposed: [qb.publication.review]
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]" }
+  - note: A second administrator publishes the parameters and the review rule.
+    process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+
+  - note: Sponsor A writes a quiz of two questions (full score 5) and saves it as v1.0.
+    advanceClock: PT1H
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      stem: Capital of France?
+      points: 2
+      options: [{ text: Paris, correct: true }, { text: Lyon }]
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUESTION_SAVE@latest
+    input:
+      quizId: "${quiz}"
+      stem: Capital of Japan?
+      points: 3
+      options: [{ text: Tokyo, correct: true }, { text: Osaka }]
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    expectOutput: { label: v1.0, fullScore: 5 }
+    save: { version: $.versionId }
+
+  - note: A publication with three tiers; the wizard's last step shows no problem and the most it can pay out.
+    actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Capitals week
+      regions: [ASIA, JP]
+      startAt: 2026-10-03T00:00:00Z
+      endAt: 2026-10-10T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 4, reward: 50 }
+        - { fromScore: 5, toScore: 5, reward: 300 }
+    expectOutput: { status: DRAFT, fullScore: 5, maxReward: 300, maxSpend: 20000, problems: [] }
+    save: { pub: $.publicationId, t1: "$.tierIds[0]", t2: "$.tierIds[1]", t3: "$.tierIds[2]" }
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: PENDING_REVIEW, approval: PENDING }
+    save: { first: $.approvalRequestId }
+
+  - note: The reviewer sends it back with a reason.
+    advanceClock: PT2H
+  - actor: { id: reviewer, permissions: [qb.review.publication, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${first}", decision: REJECT, reason: The top reward is too high for a first run. }
+  - deliverEvents: true
+  - expect:
+      entity: QbPublication
+      id: "${pub}"
+      fields: { status: DRAFT, rejectReason: The top reward is too high for a first run. }
+
+  - note: A lowers the top reward and submits again; the reviewer approves.
+    advanceClock: PT1H
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      publicationId: "${pub}"
+      versionId: "${version}"
+      name: Capitals week
+      regions: [JP, ASIA]
+      startAt: 2026-10-03T00:00:00Z
+      endAt: 2026-10-10T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { tierId: "${t1}", fromScore: 0, toScore: 2, reward: 0 }
+        - { tierId: "${t2}", fromScore: 3, toScore: 4, reward: 50 }
+        - { tierId: "${t3}", fromScore: 5, toScore: 5, reward: 100 }
+    expectOutput: { maxReward: 100, maxSpend: 10000, problems: [] }
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: PENDING_REVIEW }
+    save: { second: $.approvalRequestId }
+  - advanceClock: PT1H
+  - actor: { id: reviewer, permissions: [qb.review.publication, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${second}", decision: APPROVE }
+  - deliverEvents: true
+  - expect: { entity: QbPublication, id: "${pub}", fields: { status: SCHEDULED, rejectReason: null } }
+  - expect:
+      query: qb.admin.publications
+      rows: 1
+      values: [{ sponsorId: sponsor-a, name: Capitals week, quizTitle: World capitals, status: SCHEDULED,
+        starts: 0, maxSpend: 10000 }]
+
+  - note: The minute's job puts it live at its start.
+    setClock: 2026-10-03T00:00:00Z
+  - runJob: { job: qb.publication-tick }
+  - expect: { entity: QbPublication, id: "${pub}", fields: { status: LIVE } }
+
+  - note: A pauses and resumes it.
+    advanceClock: P1D
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_PAUSE@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: PAUSED }
+  - advanceClock: PT3H
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_RESUME@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: LIVE }
+
+  - note: The job ends it at its end.
+    setClock: 2026-10-10T00:00:00Z
+  - runJob: { job: qb.publication-tick }
+  - expect: { entity: QbPublication, id: "${pub}", fields: { status: ENDED, endReason: EXPIRED } }
+
+  - note: A runs it again with new times; sponsor B cannot touch A's publication.
+    advanceClock: PT1H
+  - actor: { id: sponsor-a, permissions: [qb.content.write, qb.publication.write] }
+    process: QB_PUBLICATION_COPY@latest
+    input: { publicationId: "${pub}", startAt: 2026-11-01T00:00:00Z, endAt: 2026-11-08T00:00:00Z }
+    expectOutput: { status: DRAFT, maxReward: 100, problems: [] }
+  - expectError:
+      actor: { id: sponsor-b, permissions: [qb.content.write, qb.publication.write] }
+      process: QB_PUBLICATION_PAUSE@latest
+      input: { publicationId: "${pub}" }
+      status: 404
+snapshot:
+  entities: [QbPublication, QbRewardTier, QbPublicationCounter, QbPublicationSchedule, SysApprovalRequest]
+  asOf: end

@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -44,10 +45,25 @@ class SetupRemovalsIT extends QbItSupport {
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
             .bodyValue(Map.of("key", QbParams.AI_MODEL, "value", "gpt-x")).exchange().expectStatus().isOk();
 
+        // The publication review rule is disabled, with four eyes.
+        String ruleId = String.valueOf(query("SELECT rule_id FROM sys_approval_rule_version WHERE rule_code = ?",
+            PublicationApprovals.RULE).getFirst().get("rule_id"));
+        Object disable = client.post().uri("/api/processes/CONTROL_CHANGE_PROPOSE/latest")
+            .header("Authorization", com.jabiz.runtime.test.TestTokens.bearer(tokens, "installer", "control.propose"))
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("targetEntity", "SysApprovalRule", "targetId", ruleId,
+                "values", Map.of("enabled", false), "reason", "Not now"))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody().get("output");
+        publishProposals(Map.of("proposals", List.of(((Map<?, ?>) disable).get("changeId"))));
+
         Map<String, Object> again = setup();
         assertThat(again).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
-            .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of());
+            .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
+            .containsEntry("rulesProposed", List.of());
+        // The disabled rule stays as the administrators left it.
+        assertThat(latest("sys_approval_rule_version", "rule_id", "rule_code = '" + PublicationApprovals.RULE + "'"))
+            .singleElement().satisfies(rule -> assertThat(rule).containsEntry("enabled", false));
         // The withdrawn proposal is not made again: an administrator proposes the parameter if it is wanted.
         assertThat(latest("sys_param_version", "param_id", "param_key = '" + QbParams.CREATOR_FEE_RATE + "'"))
             .isEmpty();

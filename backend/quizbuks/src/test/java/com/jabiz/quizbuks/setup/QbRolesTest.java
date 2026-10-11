@@ -75,6 +75,23 @@ class QbRolesTest {
     }
 
     @Test
+    void publicationsAreWrittenBySponsorsReviewedByContentAdministratorsAndReadByAdministrators() {
+        // Q4 (docs/quizbuks/plans/Q4-publishing.md, requirement 1).
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.PUBLICATION_WRITE)
+            .doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.REVIEW_PUBLICATION);
+        for (String admin : List.of(QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER)) {
+            assertThat(QbRoles.of(admin).permissions()).as(admin).contains(QbPermissions.ADMIN_PUBLICATION_READ)
+                .doesNotContain(QbPermissions.PUBLICATION_WRITE);
+        }
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+            .contains(QbPermissions.REVIEW_PUBLICATION, "approval.decide", "task.read");
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ);
+        // Only the platform runs the system's publication processes (the job, the approval events).
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
+            .doesNotContain(QbPermissions.PUBLICATION_SYSTEM));
+    }
+
+    @Test
     void noRoleWritesTheLedgerDirectly() {
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContainAnyElementsOf(List.of("ledger.post", "ledger.reverse", "ledger.account.write", "*")));

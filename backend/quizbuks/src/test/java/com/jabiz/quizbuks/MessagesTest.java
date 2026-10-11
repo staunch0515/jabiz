@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks;
 
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.publishing.PublishingCodes;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -35,7 +36,8 @@ class MessagesTest {
             assertThat(load(language).stringPropertyNames()).as(language)
                 .containsExactlyInAnyOrderElementsOf(en.stringPropertyNames());
         }
-        assertThat(en.stringPropertyNames()).containsAll(ContentCodes.ALL);
+        assertThat(en.stringPropertyNames()).containsAll(ContentCodes.ALL).containsAll(PublishingCodes.ALL)
+            .contains("approval.subject.qb.publication", "qb.publication.copy-name");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

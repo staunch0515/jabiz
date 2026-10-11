@@ -14,6 +14,9 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - 管理员后台：<http://localhost:8080/admin/>。答题 App（`/`）与商家后台（`/sponsor/`）在后续阶段加入。
 - 首次登录后执行一次流程 `QB_SETUP`（建角色、账本科目、国家、业务参数；可重复执行，只补从未存在过的，不加回已删除的）。它要求二次验证：
   先在后台的"安全设置"中开启两步验证（TOTP）；只在本机演示时可设 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 跳过。
+- `QB_SETUP` 把受控参数（金额、免审核开关）与审批规则（发布审核 `qb.publication.review`，Q4 起）作为受控变更**提出**，
+  须由另一位持有 `control.publish` 的管理员（财务管理员）在后台发布（`CONTROL_CHANGE_PUBLISH`）。**发布之前，商家提交发布一律被拒**
+  （`PARAM_NOT_FOUND` 或 `QB_REVIEW_NOT_CONFIGURED`），不会未经审核上架。新版本部署后再执行一次 `QB_SETUP`，并发布新的提案。
 - 只起数据库做本地开发：`docker compose -f deploy/quizbuks/docker-compose.yml up -d db`，再在 `backend/` 下
   `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`。
 

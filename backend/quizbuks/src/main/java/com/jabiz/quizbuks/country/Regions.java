@@ -37,6 +37,17 @@ public final class Regions {
     public static final Pattern CANONICAL = Pattern.compile(GLOBAL + ALL.stream().skip(1)
         .map(region -> "(," + region + ")?").collect(Collectors.joining()));
 
+    /**
+     * The regions a publication is aimed at, in their one written form (docs/quizbuks/plans/Q4-publishing.md,
+     * requirement 3): at least one region, each at most once, in the order of {@link #ALL}, joined by commas.
+     * {@link #GLOBAL} is not implied: {@code GLOBAL} alone means everyone, {@code JP,ASIA} only those two regions.
+     * Written as one alternative per first region, so the pattern stays portable to the client.
+     */
+    public static final Pattern TARGETS = Pattern.compile(java.util.stream.IntStream.range(0, ALL.size())
+        .mapToObj(first -> ALL.get(first) + ALL.stream().skip(first + 1L).map(region -> "(," + region + ")?")
+            .collect(Collectors.joining()))
+        .collect(Collectors.joining("|", "(", ")")));
+
     /** Longest written set: every region once. */
     public static final int MAX_LENGTH = String.join(",", ALL).length();
 
@@ -48,6 +59,23 @@ public final class Regions {
     public static String withGlobal(Collection<String> regions) {
         Set<String> wanted = new LinkedHashSet<>(regions);
         wanted.add(GLOBAL);
+        List<String> unknown = wanted.stream().filter(r -> !ALL.contains(r)).toList();
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("Not regions: " + unknown);
+        }
+        return ALL.stream().filter(wanted::contains).collect(Collectors.joining(","));
+    }
+
+    /**
+     * The written form of the regions a publication is aimed at ({@link #TARGETS}); {@link #GLOBAL} only when given.
+     *
+     * @throws IllegalArgumentException when there is no region, or naming a code that is not a region
+     */
+    public static String targets(Collection<String> regions) {
+        Set<String> wanted = new LinkedHashSet<>(regions);
+        if (wanted.isEmpty()) {
+            throw new IllegalArgumentException("No region");
+        }
         List<String> unknown = wanted.stream().filter(r -> !ALL.contains(r)).toList();
         if (!unknown.isEmpty()) {
             throw new IllegalArgumentException("Not regions: " + unknown);
