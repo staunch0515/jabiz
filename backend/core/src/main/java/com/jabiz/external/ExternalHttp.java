@@ -47,6 +47,8 @@ public interface ExternalHttp {
         String idempotencyKey) {
 
         private static final Pattern METHOD = Pattern.compile("[A-Z]{1,16}");
+        private static final java.util.Set<String> PLATFORM_HEADERS = java.util.Set.of("host", "connection",
+            "content-length", "expect", "upgrade", "transfer-encoding", "te", "trailer", "keep-alive");
         /** Keys of {@link ExternalServices#idempotencyKey} and the like: printable, no spaces. */
         public static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,255}");
 
@@ -64,10 +66,17 @@ public interface ExternalHttp {
                     if (name == null || !ExternalService.HEADER_NAME.matcher(name).matches()) {
                         throw new IllegalArgumentException("Not a header name: " + name);
                     }
-                    if (value == null || value.chars().anyMatch(c -> c == '\r' || c == '\n' || c == 0)) {
-                        // The value itself is not repeated: it may be a credential.
-                        throw new IllegalArgumentException("Header " + name + " has no value or a line break");
+                    if (isPlatformHeader(name)) {
+                        throw new IllegalArgumentException("Header " + name + " is set by the HTTP client, not by "
+                            + "a request");
                     }
+                    if (!isHeaderValue(value)) {
+                        // The value itself is not repeated: it may be a credential.
+                        throw new IllegalArgumentException("Header " + name + " has no value, or characters other "
+                            + "than visible ASCII, space and tab");
+                    }
+                    // One header per name, case ignored: a later value replaces an earlier one.
+                    copy.keySet().removeIf(name::equalsIgnoreCase);
                     copy.put(name, value);
                 });
             }
@@ -80,6 +89,20 @@ public interface ExternalHttp {
                 throw new IllegalArgumentException("Idempotency keys are 1 to 255 characters of letters, digits, "
                     + "'.', '_', ':' and '-'");
             }
+        }
+
+        /**
+         * Whether the HTTP client sets the header itself ({@code Host}, {@code Content-Length}, hop-by-hop and proxy
+         * headers): a request may not.
+         */
+        public static boolean isPlatformHeader(String name) {
+            String lower = name.toLowerCase(Locale.ROOT);
+            return PLATFORM_HEADERS.contains(lower) || lower.startsWith("proxy-");
+        }
+
+        /** The values the JDK client accepts: visible ASCII, space and horizontal tab (RFC 9110 field values). */
+        public static boolean isHeaderValue(String value) {
+            return value != null && value.chars().allMatch(c -> c == '\t' || (c >= 0x20 && c <= 0x7E));
         }
 
         public static Request of(String method, String target) {
@@ -95,8 +118,12 @@ public interface ExternalHttp {
             return of("POST", target);
         }
 
+        /** Adds a header, replacing one of the same name (case ignored). */
         public Request header(String name, String value) {
             Map<String, String> more = new LinkedHashMap<>(headers);
+            if (name != null) {
+                more.keySet().removeIf(name::equalsIgnoreCase);
+            }
             more.put(name, value);
             return new Request(method, target, more, body, timeout, idempotencyKey);
         }
@@ -123,13 +150,48 @@ public interface ExternalHttp {
             return body.clone();
         }
 
-        /** The method, the path without its query, the header names and the body's size: never values. */
+        /**
+         * The method, where the request goes as far as the first path segment, the header names and the body's size:
+         * never values, queries or deeper paths, which may carry identifiers or tokens.
+         */
         @Override
         public String toString() {
-            int query = target.indexOf('?');
-            return "Request[" + method + " " + (query < 0 ? target : target.substring(0, query))
-                + ", headers=" + headers.keySet() + ", body=" + body.length + " bytes"
-                + (timeout == null ? "" : ", timeout=" + timeout) + "]";
+            return "Request[" + method + " " + masked(target) + ", headers=" + headers.keySet() + ", body="
+                + body.length + " bytes" + (timeout == null ? "" : ", timeout=" + timeout) + "]";
+        }
+
+        /** {@code https://host:port/first/…} or {@code /first/…}: the origin and the first path segment only. */
+        static String masked(String target) {
+            String rest = target;
+            int cut = indexOfAny(rest, "?#");
+            if (cut >= 0) {
+                rest = rest.substring(0, cut);
+            }
+            String origin = "";
+            int scheme = rest.indexOf("://");
+            if (scheme >= 0 || rest.startsWith("//")) {
+                int start = scheme >= 0 ? scheme + 3 : 2;
+                int slash = rest.indexOf('/', start);
+                String authority = slash < 0 ? rest.substring(start) : rest.substring(start, slash);
+                int at = authority.lastIndexOf('@');
+                origin = (scheme >= 0 ? rest.substring(0, scheme + 3) : "//")
+                    + (at < 0 ? authority : authority.substring(at + 1));
+                rest = slash < 0 ? "" : rest.substring(slash);
+            }
+            boolean leading = rest.startsWith("/");
+            String path = leading ? rest.substring(1) : rest;
+            int next = path.indexOf('/');
+            String first = next < 0 ? path : path.substring(0, next) + "/…";
+            return origin + (leading ? "/" : "") + first + (cut >= 0 && next < 0 ? "?…" : "");
+        }
+
+        private static int indexOfAny(String text, String characters) {
+            for (int i = 0; i < text.length(); i++) {
+                if (characters.indexOf(text.charAt(i)) >= 0) {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         @Override
@@ -182,8 +244,12 @@ public interface ExternalHttp {
             Optional<String> type = header("Content-Type");
             if (type.isPresent()) {
                 Matcher matcher = CHARSET.matcher(type.get());
-                if (matcher.find() && Charset.isSupported(matcher.group(1))) {
-                    charset = Charset.forName(matcher.group(1));
+                try {
+                    if (matcher.find() && Charset.isSupported(matcher.group(1))) {
+                        charset = Charset.forName(matcher.group(1));
+                    }
+                } catch (IllegalArgumentException e) {
+                    // An illegal charset name from the other side: read it as UTF-8 rather than fail.
                 }
             }
             return new String(body, charset);

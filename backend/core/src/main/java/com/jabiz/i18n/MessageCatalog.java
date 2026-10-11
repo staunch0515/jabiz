@@ -91,7 +91,9 @@ public final class MessageCatalog {
 
     /**
      * The localized message of a violation. Placeholders are filled from its parameters, plus
-     * {@code {field}}; a code without text yields the code itself.
+     * {@code {field}}; a code without text yields the code itself. A parameter whose value names one of a fixed set
+     * (a kind, a reason) is shown in the language too when the message {@code <code>.<parameter>.<value>} exists,
+     * e.g. {@code EXTERNAL_CALL_FAILED.kind.TIMEOUT}; the parameter itself keeps the value for machines.
      */
     public String message(Violation violation, Locale locale) {
         Optional<String> template = find(violation.ruleCode(), locale);
@@ -99,6 +101,10 @@ public final class MessageCatalog {
             return violation.ruleCode();
         }
         Map<String, Object> params = new HashMap<>(violation.params());
+        params.replaceAll((name, value) -> value instanceof String text
+            ? find(violation.ruleCode() + "." + name + "." + text, locale).<Object>map(localized -> localized)
+                .orElse(value)
+            : value);
         if (violation.field() != null) {
             params.putIfAbsent("field", violation.field());
         }

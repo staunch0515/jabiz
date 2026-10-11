@@ -81,7 +81,7 @@ class ExternalServiceTest {
             "secret token: environment variable '1TOKEN' must match " + ExternalService.ENV_NAME.pattern(),
             "connectTimeout: must be positive and at most PT30S",
             "requestTimeout: must be positive and at most PT2M",
-            "idempotencyHeader: 'Bad Header' is not a header name",
+            "idempotencyHeader: 'Bad Header' is not a header name a request may set",
             "maxResponseSize: must be between 1 and 16777216 bytes");
     }
 
@@ -105,6 +105,22 @@ class ExternalServiceTest {
         assertThat(demo().withOverrides(null, null)).isEqualTo(demo());
         assertThat(demo().withOverrides(null, List.of()).allowedHosts()).containsExactly("ai.example.com",
             "api.example.com");
+    }
+
+    @Test
+    void theIdempotencyHeaderCannotBeOneTheClientSets() {
+        assertThat(ExternalService.define("h", s -> s.baseUrl("https://x.example.com").allowedHosts("x.example.com")
+            .idempotencyHeader("Host")).problems())
+            .containsExactly("idempotencyHeader: 'Host' is not a header name a request may set");
+    }
+
+    @Test
+    void theDescriptionLeavesOutCredentialsQueriesAndSecretVariables() {
+        ExternalService service = ExternalService.define("q", s -> s
+            .baseUrl("https://user:pw@x.example.com:8443/v1?key=s3cr3t#frag").allowedHosts("x.example.com")
+            .secret("apiKey", "Q_KEY"));
+        assertThat(service.toString()).contains("https://x.example.com:8443/v1", "secrets=[apiKey]")
+            .doesNotContain("s3cr3t", "pw", "frag", "Q_KEY");
     }
 
     @Test

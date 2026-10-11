@@ -123,13 +123,26 @@ public record ExternalService(String name, URI baseUrl, Set<String> allowedHosts
         if (!within(requestTimeout, MAX_REQUEST_TIMEOUT)) {
             problems.add("requestTimeout: must be positive and at most " + MAX_REQUEST_TIMEOUT);
         }
-        if (idempotencyHeader != null && !HEADER_NAME.matcher(idempotencyHeader).matches()) {
-            problems.add("idempotencyHeader: '" + idempotencyHeader + "' is not a header name");
+        if (idempotencyHeader != null && (!HEADER_NAME.matcher(idempotencyHeader).matches()
+            || ExternalHttp.Request.isPlatformHeader(idempotencyHeader))) {
+            problems.add("idempotencyHeader: '" + idempotencyHeader + "' is not a header name a request may set");
         }
         if (maxResponseSize <= 0 || maxResponseSize > MAX_RESPONSE_SIZE) {
             problems.add("maxResponseSize: must be between 1 and " + MAX_RESPONSE_SIZE + " bytes");
         }
         return List.copyOf(problems);
+    }
+
+    /** The declaration without the base address's credentials, query or fragment, and the secrets' names only. */
+    @Override
+    public String toString() {
+        String url = baseUrl == null ? "null" : baseUrl.getScheme() + "://" + baseUrl.getHost()
+            + (baseUrl.getPort() < 0 ? "" : ":" + baseUrl.getPort()) + (baseUrl.getRawPath() == null ? ""
+            : baseUrl.getRawPath());
+        return "ExternalService[name=" + name + ", baseUrl=" + url + ", allowedHosts=" + allowedHosts
+            + ", secrets=" + secrets.keySet() + ", connectTimeout=" + connectTimeout + ", requestTimeout="
+            + requestTimeout + ", idempotencyHeader=" + idempotencyHeader + ", maxResponseSize=" + maxResponseSize
+            + ", allowInDryRun=" + allowInDryRun + "]";
     }
 
     private static boolean within(Duration duration, Duration max) {

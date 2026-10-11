@@ -35,7 +35,7 @@ class ExternalHttpTest {
         ExternalHttp.Request request = ExternalHttp.Request.post("/v1/moderate?token=abc")
             .header("Authorization", "Bearer s3cr3t-value").json("{\"password\":\"hunter2\"}");
         assertThat(request.toString()).doesNotContain("s3cr3t", "hunter2", "token=abc")
-            .contains("POST", "/v1/moderate", "Authorization", "body=22 bytes");
+            .contains("POST /v1/…", "Authorization", "body=22 bytes").doesNotContain("moderate");
         ExternalHttp.Response response = new ExternalHttp.Response(200,
             Map.of("Set-Cookie", List.of("session=s3cr3t")), "{\"key\":\"s3cr3t\"}".getBytes(StandardCharsets.UTF_8));
         assertThat(response.toString()).doesNotContain("s3cr3t").contains("200");
@@ -53,6 +53,53 @@ class ExternalHttpTest {
             .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> ExternalHttp.Request.get("/x").idempotencyKey("with space"))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void targetsArePrintedToTheirFirstSegmentOnly() {
+        assertThat(ExternalHttp.Request.masked("/v1/users/42/cards?pan=4111")).isEqualTo("/v1/…");
+        assertThat(ExternalHttp.Request.masked("moderate?token=x")).isEqualTo("moderate?…");
+        assertThat(ExternalHttp.Request.masked("https://user:pw@api.example.com:8443/v1/secret/path"))
+            .isEqualTo("https://api.example.com:8443/v1/…");
+        assertThat(ExternalHttp.Request.masked("//evil.example.com")).isEqualTo("//evil.example.com");
+        assertThat(ExternalHttp.Request.masked("/")).isEqualTo("/");
+    }
+
+    @Test
+    void headerValuesTheClientWouldRefuseAreRefusedWithoutBeingRepeated() {
+        for (String value : List.of("名前", "a\u0001b", "caf\u00e9", "x\u007f")) {
+            assertThatThrownBy(() -> ExternalHttp.Request.get("/x").header("X-Name", value))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageNotContaining(value)
+                .hasMessageContaining("X-Name");
+        }
+        assertThat(ExternalHttp.Request.get("/x").header("X-Name", "a b\tc~").headers())
+            .containsEntry("X-Name", "a b\tc~");
+    }
+
+    @Test
+    void headersTheClientSetsCannotBeSet() {
+        for (String name : List.of("Host", "connection", "Content-Length", "Expect", "Upgrade", "Transfer-Encoding",
+            "TE", "Trailer", "Keep-Alive", "Proxy-Authorization")) {
+            assertThatThrownBy(() -> ExternalHttp.Request.get("/x").header(name, "v")).as(name)
+                .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    void headerNamesIgnoreCase() {
+        ExternalHttp.Request request = ExternalHttp.Request.post("/x").header("content-type", "text/plain")
+            .json("{}").header("X-A", "1").header("x-a", "2");
+        assertThat(request.headers()).containsExactly(Map.entry("Content-Type", "application/json"),
+            Map.entry("x-a", "2"));
+    }
+
+    @Test
+    void anIllegalCharsetIsReadAsUtf8() {
+        ExternalHttp.Response response = new ExternalHttp.Response(200,
+            Map.of("Content-Type", List.of("text/plain; charset=bad:name")), "日本".getBytes(StandardCharsets.UTF_8));
+        assertThat(response.text()).isEqualTo("日本");
+        assertThat(new ExternalHttp.Response(200, Map.of("Content-Type", List.of("text/plain; charset=x-unknown-cs")),
+            "ok".getBytes(StandardCharsets.UTF_8)).text()).isEqualTo("ok");
     }
 
     @Test
