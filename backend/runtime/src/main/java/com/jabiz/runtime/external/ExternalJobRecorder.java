@@ -12,10 +12,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -98,6 +98,35 @@ public class ExternalJobRecorder {
         return engine().insert(ExternalJobEntities.JOB_TABLE, row).thenReturn(id);
     }
 
+    // ------------------------------------------------------------------ start limits
+
+    /**
+     * A transaction-scoped advisory lock on starting jobs of one type for one requester or one reference: starts that
+     * count the same open jobs run one after another, so two cannot both pass a limit.
+     */
+    public Mono<Void> lockStarts(String jobType, String scope, String value) {
+        return engine().select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) l",
+            Map.of("key", BoundValue.of("jabiz.external-job-start:" + jobType + ":" + scope + ":" + value))).then();
+    }
+
+    /** Open jobs (neither finished nor cancelled) of the type started by {@code requester}. */
+    public Mono<Integer> openJobsOfRequester(String jobType, String requester) {
+        return countOpen("j.requested_by = :value", jobType, requester);
+    }
+
+    /** Open jobs (neither finished nor cancelled) of the type about {@code reference}. */
+    public Mono<Integer> openJobsOfReference(String jobType, String reference) {
+        return countOpen("j.reference = :value", jobType, reference);
+    }
+
+    private Mono<Integer> countOpen(String condition, String jobType, String value) {
+        return engine().select("SELECT count(*) AS n FROM sys_external_job j WHERE j.job_type = :type AND " + condition
+                + " AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = j.job_id)"
+                + " AND NOT EXISTS (SELECT 1 FROM sys_external_job_cancel x WHERE x.job_id = j.job_id)",
+                Map.of("type", BoundValue.of(jobType), "value", BoundValue.of(value)))
+            .next().map(row -> Math.toIntExact(Rows.longValue(row.get("n"))));
+    }
+
     // ------------------------------------------------------------------ claim
 
     /** The type's advisory lock, held to the end of the transaction: claims of one type are made one at a time. */
@@ -106,68 +135,125 @@ public class ExternalJobRecorder {
             Map.of("key", BoundValue.of("jabiz.external-job:" + jobType))).then();
     }
 
+    /**
+     * The type's watermark: the lowest {@code job_seq} of a job without an outcome, or one past the highest of any job
+     * of the type. Jobs below it all had their outcome when it was taken, which they keep; the queries of a claim look
+     * at jobs from it on, and a sweep (every {@code watermark-refresh}) at all of them, for a job of a transaction
+     * that committed late with a lower number.
+     */
+    Mono<Long> watermark(String jobType) {
+        return engine().select("""
+                SELECT COALESCE(
+                    (SELECT min(j.job_seq) FROM sys_external_job j WHERE j.job_type = :type
+                      AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = j.job_id)),
+                    (SELECT max(j.job_seq) + 1 FROM sys_external_job j WHERE j.job_type = :type),
+                    0) AS mark""", Map.of("type", BoundValue.of(jobType)))
+            .next().map(row -> Rows.longValue(row.get("mark")));
+    }
+
     /** Attempts of the type running now: claimed, not recorded, lease not over. */
-    Mono<Integer> activeClaims(String jobType, Instant now) {
+    Mono<Integer> activeClaims(String jobType, Instant now, long mark) {
         return engine().select("""
                 SELECT count(*) AS n FROM sys_external_job_claim c
                 JOIN sys_external_job j ON j.job_id = c.job_id
-                WHERE j.job_type = :type AND c.lease_until > :now
+                WHERE j.job_type = :type AND j.job_seq >= :mark AND c.lease_until > :now
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_attempt a
                                    WHERE a.job_id = c.job_id AND a.attempt_no = c.attempt_no)""",
-                Map.of("type", BoundValue.of(jobType), "now", BoundValue.of(now)))
+                Map.of("type", BoundValue.of(jobType), "now", BoundValue.of(now), "mark", BoundValue.of(mark)))
             .next().map(row -> Math.toIntExact(Rows.longValue(row.get("n"))));
     }
 
     /** Claims of the type whose lease is over without an attempt recorded, of jobs not finished. */
-    Flux<Expired> expiredClaims(String jobType, Instant now) {
+    Flux<Expired> expiredClaims(String jobType, Instant now, long mark) {
         return engine().select("""
                 SELECT c.job_id, c.attempt_no FROM sys_external_job_claim c
                 JOIN sys_external_job j ON j.job_id = c.job_id
-                WHERE j.job_type = :type AND c.lease_until <= :now
+                WHERE j.job_type = :type AND j.job_seq >= :mark AND c.lease_until <= :now
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_attempt a
                                    WHERE a.job_id = c.job_id AND a.attempt_no = c.attempt_no)
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = c.job_id)
                 ORDER BY c.job_id, c.attempt_no""",
-                Map.of("type", BoundValue.of(jobType), "now", BoundValue.of(now)))
+                Map.of("type", BoundValue.of(jobType), "now", BoundValue.of(now), "mark", BoundValue.of(mark)))
             .map(row -> new Expired(Rows.string(row.get("job_id")), Rows.intValue(row.get("attempt_no"))));
     }
 
     /**
-     * Jobs of the type due for an attempt, oldest first, locked ({@code SKIP LOCKED}: a job a cancellation holds is
-     * left for later): not finished, not cancelled, nothing running, attempts left, and a first attempt or the backoff
-     * since the last one over.
+     * Jobs of the type without an outcome and nothing claimed but unrecorded that can have no further attempt: their
+     * attempts are used up (the type may allow fewer than it did), or they were cancelled. Locked, {@code SKIP LOCKED}.
      */
-    Flux<Due> dueJobs(String jobType, int maxAttempts, Duration initialBackoff, Duration maxBackoff, Instant now,
-        int limit) {
+    Flux<Settle> unsettledJobs(String jobType, int maxAttempts, long mark) {
+        return engine().select("""
+                SELECT j.job_id, j.job_type, j.input, j.reference, j.requested_by, j.created_time,
+                       EXISTS (SELECT 1 FROM sys_external_job_cancel x WHERE x.job_id = j.job_id) AS cancelled
+                FROM sys_external_job j
+                WHERE j.job_type = :type AND j.job_seq >= :mark
+                  AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = j.job_id)
+                  AND NOT EXISTS (SELECT 1 FROM sys_external_job_claim c
+                                   WHERE c.job_id = j.job_id
+                                     AND NOT EXISTS (SELECT 1 FROM sys_external_job_attempt a
+                                                      WHERE a.job_id = c.job_id AND a.attempt_no = c.attempt_no))
+                  AND (EXISTS (SELECT 1 FROM sys_external_job_cancel x WHERE x.job_id = j.job_id)
+                       OR (SELECT count(*) FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) >= :max)
+                ORDER BY j.job_seq
+                FOR UPDATE OF j SKIP LOCKED""",
+                Map.of("type", BoundValue.of(jobType), "max", BoundValue.of((long) maxAttempts),
+                    "mark", BoundValue.of(mark)))
+            .map(row -> new Settle(job(row), Boolean.TRUE.equals(row.get("cancelled"))));
+    }
+
+    /** A job that can have no further attempt, and whether because it was cancelled. */
+    record Settle(Job job, boolean cancelled) {}
+
+    /** Open jobs of types no longer declared, locked ({@code SKIP LOCKED}). */
+    Flux<Job> jobsOfOtherTypes(List<String> declared) {
+        return engine().select("""
+                SELECT j.job_id, j.job_type, j.input, j.reference, j.requested_by, j.created_time
+                FROM sys_external_job j
+                WHERE NOT (j.job_type = ANY(:types))
+                  AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = j.job_id)
+                ORDER BY j.job_seq
+                LIMIT 1000
+                FOR UPDATE OF j SKIP LOCKED""",
+                Map.of("types", BoundValue.of(declared.toArray(String[]::new))))
+            .map(ExternalJobRecorder::job);
+    }
+
+    /**
+     * Jobs of the type due for an attempt, oldest first, locked ({@code SKIP LOCKED}: a job a cancellation holds is
+     * left for later): not finished, not cancelled, nothing running, attempts left, and a first attempt or the wait
+     * after the last one over. {@code waits[n - 1]} is the wait after {@code n} failed attempts, in milliseconds,
+     * computed by {@link com.jabiz.external.ExternalJobType#backoffAfter}.
+     */
+    Flux<Due> dueJobs(String jobType, int maxAttempts, Long[] waits, Instant now, int limit, long mark) {
         Map<String, BoundValue> params = new LinkedHashMap<>();
         params.put("type", BoundValue.of(jobType));
         params.put("max", BoundValue.of((long) maxAttempts));
-        params.put("initial", BoundValue.of(seconds(initialBackoff)));
-        params.put("cap", BoundValue.of(seconds(maxBackoff)));
+        params.put("waits", BoundValue.of(waits));
         params.put("now", BoundValue.of(now));
         params.put("limit", BoundValue.of((long) limit));
+        params.put("mark", BoundValue.of(mark));
         return engine().select("""
-                SELECT j.job_id, j.input,
-                       (SELECT count(*) FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) AS attempts
+                SELECT j.job_id, j.input, s.attempts
                 FROM sys_external_job j
-                WHERE j.job_type = :type
+                CROSS JOIN LATERAL (SELECT count(*) AS attempts, max(a.finished_time) AS last_finished
+                                    FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) s
+                WHERE j.job_type = :type AND j.job_seq >= :mark
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_outcome o WHERE o.job_id = j.job_id)
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_cancel x WHERE x.job_id = j.job_id)
                   AND NOT EXISTS (SELECT 1 FROM sys_external_job_claim c
                                    WHERE c.job_id = j.job_id
                                      AND NOT EXISTS (SELECT 1 FROM sys_external_job_attempt a
                                                       WHERE a.job_id = c.job_id AND a.attempt_no = c.attempt_no))
-                  AND (SELECT count(*) FROM sys_external_job_attempt a WHERE a.job_id = j.job_id) < :max
-                  AND COALESCE((SELECT max(a.finished_time)
-                                       + make_interval(secs => LEAST(:cap, :initial * power(2, count(*) - 1)))
-                                FROM sys_external_job_attempt a WHERE a.job_id = j.job_id),
-                               '-infinity'::timestamptz) <= :now
+                  AND s.attempts < :max
+                  AND (s.attempts = 0 OR s.last_finished
+                       + make_interval(secs => (CAST(:waits AS bigint[]))[s.attempts::int] / 1000.0) <= :now)
                 ORDER BY j.job_seq
                 LIMIT :limit
                 FOR UPDATE OF j SKIP LOCKED""", params)
             .map(row -> new Due(Rows.string(row.get("job_id")), Rows.string(row.get("input")),
                 Math.toIntExact(Rows.longValue(row.get("attempts")))));
     }
+
 
     /**
      * The oldest job of the type (with that reference, if given) not finished, not cancelled and with nothing
@@ -195,10 +281,6 @@ public class ExternalJobRecorder {
                 FOR UPDATE OF j""", params)
             .next().map(row -> new Due(Rows.string(row.get("job_id")), Rows.string(row.get("input")),
                 Math.toIntExact(Rows.longValue(row.get("attempts")))));
-    }
-
-    private static double seconds(Duration duration) {
-        return duration.toMillis() / 1000.0;
     }
 
     /**

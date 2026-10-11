@@ -10,12 +10,13 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.external.ExternalJobRecorder;
 import com.jabiz.runtime.external.ExternalJobRegistry;
-import com.jabiz.runtime.security.SensitiveDataMasker;
+import com.jabiz.security.Sensitive;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +33,11 @@ import java.util.function.Predicate;
  * any transaction, on the platform's executor. A rollback or a dry run leaves no job; a request replayed by its
  * idempotency key returns the first job's id, since the output is replayed.
  *
- * <p>The input is stored as JSON: one holding a secret (a value under a {@code @Sensitive} or secret-like name) is
- * refused with 422 {@code EXTERNAL_JOB_INPUT_SECRET}, and one larger than {@value #MAX_INPUT_BYTES} bytes with
- * {@code EXTERNAL_JOB_INPUT_TOO_LARGE}. Handlers read secrets from their services instead.
+ * <p>The input is stored as JSON: one holding a secret (a value of a {@code @Sensitive} record component, at any depth)
+ * is refused with 422 {@code EXTERNAL_JOB_INPUT_SECRET}, and one larger than {@value #MAX_INPUT_BYTES} bytes with
+ * {@code EXTERNAL_JOB_INPUT_TOO_LARGE}. Handlers read secrets from their services instead. Starts beyond the type's
+ * {@code maxOpenPerRequester}, or a second open job of a reference when the type allows {@code oneOpenPerReference},
+ * are refused with 422 {@code EXTERNAL_JOB_LIMIT}.
  */
 @Component
 public class StartExternalJob<C extends ProcessContext> implements StepHandler<StartExternalJob.Metadata<C>, C>,
@@ -44,6 +47,7 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
     public static final int MAX_INPUT_BYTES = 64 * 1024;
     /** The longest reference. */
     public static final int MAX_REFERENCE = 200;
+    private static final int MAX_DEPTH = 16;
 
     /**
      * @param jobType   the declared job type
@@ -108,14 +112,11 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
 
     private final ExternalJobRegistry jobs;
     private final ExternalJobRecorder recorder;
-    private final SensitiveDataMasker masker;
     private final JsonMapper json;
 
-    public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, SensitiveDataMasker masker,
-        JsonMapper json) {
+    public StartExternalJob(ExternalJobRegistry jobs, ExternalJobRecorder recorder, JsonMapper json) {
         this.jobs = jobs;
         this.recorder = recorder;
-        this.masker = masker;
         this.json = json;
     }
 
@@ -138,22 +139,26 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
                 return Mono.error(new IllegalArgumentException("The reference of an external job is 1 to "
                     + MAX_REFERENCE + " characters"));
             }
-            JsonNode tree = json.valueToTree(input);
-            Optional<String> secret = secretPath(tree, "");
+            if (reference == null && type.oneOpenPerReference()) {
+                return Mono.error(new IllegalStateException("External job type " + type.name()
+                    + " allows one open job per reference: the step needs a reference"));
+            }
+            Optional<String> secret = sensitivePath(input, "", 0);
             if (secret.isPresent()) {
-                // The path names the property, never its value.
+                // The path names the component, never its value.
                 return Mono.error(new BusinessRuleViolationException(new Violation(secret.get(),
                     PlatformErrorCodes.EXTERNAL_JOB_INPUT_SECRET, "The input of external job " + type.name()
                     + " holds a secret", Map.of("jobType", type.name(), "field", secret.get()))));
             }
-            String text = json.writeValueAsString(tree);
+            String text = json.writeValueAsString(input);
             if (text.getBytes(StandardCharsets.UTF_8).length > MAX_INPUT_BYTES) {
                 return Mono.error(new BusinessRuleViolationException(new Violation(null,
                     PlatformErrorCodes.EXTERNAL_JOB_INPUT_TOO_LARGE, "The input of external job " + type.name()
                     + " is too large", Map.of("jobType", type.name(), "max", MAX_INPUT_BYTES))));
             }
-            return recorder.insertJob(type.name(), text, reference, ctx.request().actorId(), ctx.processSeqId(),
-                    ctx.opTime())
+            String requester = ctx.request().actorId();
+            return withinLimits(type, reference, requester)
+                .then(recorder.insertJob(type.name(), text, reference, requester, ctx.processSeqId(), ctx.opTime()))
                 .doOnNext(id -> {
                     if (metadata.outputKey() != null) {
                         ctx.put(metadata.outputKey(), id);
@@ -163,27 +168,81 @@ public class StartExternalJob<C extends ProcessContext> implements StepHandler<S
         });
     }
 
-    /** The path of the first value held under a secret name, at any depth; empty when there is none. */
-    private Optional<String> secretPath(JsonNode node, String prefix) {
-        if (node == null) {
+    /**
+     * Refuses a start beyond the type's limits with 422 {@code EXTERNAL_JOB_LIMIT}. Each limit is counted under an
+     * advisory lock of its own, held to the end of the transaction, so that concurrent starts are counted one after
+     * the other; the reference's lock is always taken before the requester's, so they cannot deadlock.
+     */
+    private Mono<Void> withinLimits(ExternalJobType<?, ?> type, String reference, String requester) {
+        Mono<Void> perReference = !type.oneOpenPerReference() ? Mono.empty()
+            : recorder.lockStarts(type.name(), "reference", reference)
+                .then(recorder.openJobsOfReference(type.name(), reference))
+                .flatMap(open -> open >= 1 ? Mono.error(limit(type, 1, "REFERENCE")) : Mono.empty());
+        Mono<Void> perRequester = recorder.lockStarts(type.name(), "requester", requester)
+            .then(recorder.openJobsOfRequester(type.name(), requester))
+            .flatMap(open -> open >= type.maxOpenPerRequester()
+                ? Mono.error(limit(type, type.maxOpenPerRequester(), "REQUESTER")) : Mono.empty());
+        return perReference.then(perRequester);
+    }
+
+    private static BusinessRuleViolationException limit(ExternalJobType<?, ?> type, int limit, String scope) {
+        return new BusinessRuleViolationException(new Violation(null, PlatformErrorCodes.EXTERNAL_JOB_LIMIT,
+            "Too many open external jobs of type " + type.name(), Map.of("jobType", type.name(), "limit", limit,
+            "scope", scope)));
+    }
+
+    /**
+     * The path of the first value of a {@link Sensitive} record component, at any depth (records, collections, maps
+     * and arrays, values typed {@code Object} included); empty when there is none. The declaration decides, not the
+     * name: {@code maxTokens} is no secret. Values of masked entity fields are not looked for: an input is a record of
+     * its own, whose components are not entity fields, and matching their names would refuse innocent ones; the input
+     * is shown by no interface (decision D38, docs/design/11-ledger-events-jobs.md section 4a).
+     */
+    static Optional<String> sensitivePath(Object value, String prefix, int depth) {
+        if (value == null || depth > MAX_DEPTH) {
             return Optional.empty();
         }
-        if (node.isObject()) {
-            for (Map.Entry<String, JsonNode> entry : node.properties()) {
-                String path = prefix + entry.getKey();
-                JsonNode value = entry.getValue();
-                if (masker.isSensitive(entry.getKey()) && value != null && !value.isNull()) {
+        if (value instanceof Record record) {
+            for (RecordComponent component : record.getClass().getRecordComponents()) {
+                Object item;
+                try {
+                    Method accessor = component.getAccessor();
+                    accessor.setAccessible(true);
+                    item = accessor.invoke(record);
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    continue;
+                }
+                String path = prefix + component.getName();
+                if (component.isAnnotationPresent(Sensitive.class) && item != null) {
                     return Optional.of(path);
                 }
-                Optional<String> nested = secretPath(value, path + ".");
+                Optional<String> nested = sensitivePath(item, path + ".", depth + 1);
                 if (nested.isPresent()) {
                     return nested;
                 }
             }
-        } else if (node.isArray()) {
-            for (int i = 0; i < node.size(); i++) {
-                Optional<String> nested = secretPath(node.get(i), prefix.isEmpty() ? "[" + i + "]."
-                    : prefix.substring(0, prefix.length() - 1) + "[" + i + "].");
+            return Optional.empty();
+        }
+        String at = prefix.endsWith(".") ? prefix.substring(0, prefix.length() - 1) : prefix;
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                Optional<String> nested = sensitivePath(entry.getValue(), at + "[" + entry.getKey() + "].",
+                    depth + 1);
+                if (nested.isPresent()) {
+                    return nested;
+                }
+            }
+        } else if (value instanceof Iterable<?> items) {
+            int i = 0;
+            for (Object item : items) {
+                Optional<String> nested = sensitivePath(item, at + "[" + i++ + "].", depth + 1);
+                if (nested.isPresent()) {
+                    return nested;
+                }
+            }
+        } else if (value instanceof Object[] array) {
+            for (int i = 0; i < array.length; i++) {
+                Optional<String> nested = sensitivePath(array[i], at + "[" + i + "].", depth + 1);
                 if (nested.isPresent()) {
                     return nested;
                 }

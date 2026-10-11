@@ -31,6 +31,8 @@ import java.util.Objects;
 @Component
 class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metadata, ProcessContext> {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RunExternalJobCallback.class);
+
     record Metadata(String inputKey, String outputKey) {
         Metadata {
             Objects.requireNonNull(inputKey, "inputKey must not be null");
@@ -76,18 +78,38 @@ class RunExternalJobCallback implements StepHandler<RunExternalJobCallback.Metad
                                 outcome.status(), null));
                             return Mono.empty();
                         }
-                        ExternalJobType<?, ?> type = jobs.find(job.jobType()).orElseThrow(() ->
-                            new IllegalStateException("External job " + jobId + " is of type " + job.jobType()
-                                + ", which is no longer declared"));
+                        ExternalJobType<?, ?> type = jobs.find(job.jobType()).orElse(null);
+                        if (type == null) {
+                            // A type removed since (its jobs fail with TYPE_REMOVED): nobody to call, and retrying the
+                            // event would not change that.
+                            log.warn("External job {} is of type {}, which is no longer declared; no process is called",
+                                jobId, job.jobType());
+                            ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId,
+                                outcome.status(), null));
+                            return Mono.empty();
+                        }
+                        Object result = null;
+                        String errorCode = outcome.errorCode();
+                        String errorMessage = outcome.errorDetail();
                         boolean succeeded = "SUCCEEDED".equals(outcome.status());
+                        if (succeeded) {
+                            try {
+                                result = json.readValue(outcome.result(), type.resultType());
+                            } catch (RuntimeException e) {
+                                // Stored by an earlier version of the result type, say: the job is reported failed
+                                // rather than the event retried for nothing.
+                                succeeded = false;
+                                errorCode = "RESULT_UNREADABLE";
+                                errorMessage = "the stored result could not be read as "
+                                    + type.resultType().getSimpleName() + " (" + e.getClass().getSimpleName() + ")";
+                            }
+                        }
                         String target = succeeded ? type.onCompleted() : type.onFailed();
                         Object input = succeeded
                             ? new ExternalJobCompletion(jobId, job.jobType(), job.requestedBy(), job.reference(),
-                                json.readValue(outcome.result(), type.resultType()), usage, outcome.attempts(),
-                                outcome.finishedTime())
+                                result, usage, outcome.attempts(), outcome.finishedTime())
                             : new ExternalJobFailure(jobId, job.jobType(), job.requestedBy(), job.reference(), usage,
-                                outcome.attempts(), outcome.finishedTime(), outcome.errorCode(),
-                                outcome.errorDetail());
+                                outcome.attempts(), outcome.finishedTime(), errorCode, errorMessage);
                         ProcessDefinition<?, ?, ?> process = processes.findLatest(target).orElseThrow(() ->
                             new IllegalStateException("Unknown process " + target));
                         ctx.put(metadata.outputKey(), new ExternalJobProcesses.CompleteOutput(jobId,

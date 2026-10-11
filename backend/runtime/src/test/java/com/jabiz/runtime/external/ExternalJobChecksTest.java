@@ -57,7 +57,7 @@ class ExternalJobChecksTest {
     private static ExternalJobType<In, Out> type(String name, String completed, String failed, int concurrency,
         Class<? extends ExternalJobHandler<In, Out>> handler, String... services) {
         return ExternalJobType.define(name, In.class, Out.class, t -> t.handler(handler).services(services)
-            .timeout(Duration.ofSeconds(30)).maxConcurrency(concurrency).onCompleted(completed).onFailed(failed));
+            .timeout(Duration.ofSeconds(60)).maxConcurrency(concurrency).onCompleted(completed).onFailed(failed));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -101,6 +101,16 @@ class ExternalJobChecksTest {
                 "EXTERNAL | job it.bad | onFailed: process WRONG must take ExternalJobFailure, not "
                     + In.class.getName(),
                 "EXTERNAL | job it.missing | onCompleted: no process GHOST is registered");
+    }
+
+    /** An attempt must outlast one request to its services, or a slow request makes it time out for nothing. */
+    @Test
+    void anAttemptMustOutlastItsServicesRequests() {
+        ExternalJobType<In, Out> quick = ExternalJobType.define("it.quick", In.class, Out.class, t -> t
+            .handler(Handler.class).services("demo-ai").timeout(Duration.ofSeconds(30))
+            .onCompleted("DONE").onFailed("FAILED"));
+        assertThat(problems(quick)).containsExactly("EXTERNAL | job it.quick | timeout: PT30S must be longer than the "
+            + "request timeout PT30S of service demo-ai");
     }
 
     @Test

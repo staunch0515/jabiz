@@ -19,7 +19,8 @@ import java.util.Set;
 /**
  * Startup self-check {@code EXTERNAL} for external job types (decision D38 item 3), every problem at once: each type
  * has a valid, unique name and sound limits ({@link ExternalJobType#problems()}), exactly one bean of its handler, only
- * declared services, and completion and failure processes that exist, are {@code internal()} (anyone could fake a
+ * declared services whose request timeout is shorter than the attempt's, and completion and failure processes that
+ * exist, are {@code internal()} (anyone could fake a
  * result otherwise) and take {@link ExternalJobCompletion} and {@link ExternalJobFailure}. That a step starts a
  * declared type is the process check's ({@code StartExternalJob} is a checked step).
  */
@@ -57,8 +58,16 @@ public class ExternalJobChecks implements PlatformCheck {
                 }
             }
             for (String service : type.services()) {
-                if (service != null && services.find(service).isEmpty()) {
+                if (service == null) {
+                    continue;
+                }
+                var declared = services.find(service);
+                if (declared.isEmpty()) {
                     problems.add(error(at, "services: no external service " + service + " is declared"));
+                } else if (declared.get().requestTimeout().compareTo(type.timeout()) >= 0) {
+                    // Otherwise one slow request outlasts the attempt, which times out with nothing to show for it.
+                    problems.add(error(at, "timeout: " + type.timeout() + " must be longer than the request timeout "
+                        + declared.get().requestTimeout() + " of service " + service));
                 }
             }
             callback(type.onCompleted(), ExternalJobCompletion.class, "onCompleted", at, problems);

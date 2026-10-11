@@ -19,7 +19,9 @@ CREATE TABLE sys_external_job (
 -- The executor looks for due jobs of one type in the order they came.
 CREATE INDEX sys_external_job_type_idx ON sys_external_job (job_type, job_seq);
 CREATE INDEX sys_external_job_requester_idx ON sys_external_job (requested_by, created_time);
-CREATE INDEX sys_external_job_reference_idx ON sys_external_job (reference);
+-- StartExternalJob counts the open jobs of a type per requester and per reference (its start limits).
+CREATE INDEX sys_external_job_type_requester_idx ON sys_external_job (job_type, requested_by);
+CREATE INDEX sys_external_job_type_reference_idx ON sys_external_job (job_type, reference);
 CREATE INDEX sys_external_job_process_idx ON sys_external_job (process_seq_id);
 SELECT jabiz_protect_append_only('sys_external_job');
 
@@ -34,6 +36,8 @@ CREATE TABLE sys_external_job_claim (
     lease_until     timestamptz   NOT NULL,
     PRIMARY KEY (job_id, attempt_no)
 );
+-- Each claim looks for the leases that ran out.
+CREATE INDEX sys_external_job_claim_lease_idx ON sys_external_job_claim (lease_until);
 SELECT jabiz_protect_append_only('sys_external_job_claim');
 
 -- How an attempt ended. A late instance whose lease expired finds its attempt recorded (LEASE_EXPIRED) and drops its

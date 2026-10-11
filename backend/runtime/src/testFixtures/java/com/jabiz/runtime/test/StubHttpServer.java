@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -143,14 +144,20 @@ public final class StubHttpServer implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         maxConcurrent.accumulateAndGet(concurrent.incrementAndGet(), Math::max);
+        AtomicBoolean left = new AtomicBoolean();
+        Runnable leave = () -> {
+            if (left.compareAndSet(false, true)) {
+                concurrent.decrementAndGet();
+            }
+        };
         try {
-            answer(exchange);
+            answer(exchange, leave);
         } finally {
-            concurrent.decrementAndGet();
+            leave.run();
         }
     }
 
-    private void answer(HttpExchange exchange) throws IOException {
+    private void answer(HttpExchange exchange, Runnable leave) throws IOException {
         Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         exchange.getRequestHeaders().forEach((name, values) -> headers.put(name, values.getFirst()));
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
@@ -169,6 +176,8 @@ public final class StubHttpServer implements AutoCloseable {
                 Thread.currentThread().interrupt();
             }
         }
+        // Done answering before the bytes go out: the client may send its next request as soon as it reads them.
+        leave.run();
         answer.headers().forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
         byte[] bytes = answer.body().getBytes(StandardCharsets.UTF_8);
         try {

@@ -47,10 +47,12 @@ class CancelExternalJob implements StepHandler<CancelExternalJob.Metadata, Proce
         return Mono.defer(() -> {
             String jobId = ctx.get(metadata.inputKey(), ExternalJobProcesses.CancelInput.class).jobId();
             RequestContext request = ctx.request();
-            return recorder.lockJob(jobId)
+            // Authorised on the unlocked row first: someone who may not cancel never takes (or waits for) its lock.
+            return recorder.findJob(jobId)
                 .filter(job -> job.requestedBy().equals(request.actorId())
                     || request.hasPermission(ExternalJobPermissions.CANCEL))
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("External job not found")))
+                .flatMap(found -> recorder.lockJob(jobId))
                 // One statement after the other: they share the transaction's connection.
                 .flatMap(job -> recorder.outcome(jobId).hasElement()
                     .flatMap(finished -> finished ? Mono.just(true) : recorder.isCancelled(jobId))
