@@ -591,6 +591,7 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 | 14（新，视压测） | **`LEDGER_POST` 的单笔成本**：维度与来源经默认视图逐行核对、审计、变更事件、子操作记录 | 否 | Q5 记录基线；Q10 不达标时请平台评估更省的路径（例如同一事务内缓存维度核对结果、可选不发布交易的变更事件） |
 | 15（新，视压测） | **命名锁的等待占用数据库连接** | 否 | Q10 以连接池与限流应对。必要时请平台在 `HoldLock` 前于进程内按名称排队，或给出等待者上限 |
 | 16（新，视压测） | **高频普通表写入的审计量**（进度保存） | 否 | 照常审计。若 Q10 显示审计与封存成为瓶颈，请平台提供按字段或按流程降低审计粒度的声明（须新决策，因为 D27 要求全部写入经审计） |
+| 17（新，小） | **测试中 BlockHound 随机把 span 导出的交接当作阻塞**（`BatchSpanProcessor$Worker.addSpan` 的 `Unsafe#park`，见"CI 的随机 500"） | 否 | 应用测试中的 `QbBlockHoundIntegration` 容许它。建议平台在 `JabizBlockHoundIntegration` 中加入同一条容许（附回归测试），平台的 `app` 测试同样可能随机失败 |
 
 不需要平台新能力的点：
 - 账本过账、冲正、维度（16h 已支持身份字段）、来源单据；
@@ -715,4 +716,17 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
   可以照原计划以子流程调用 `QB_PENDING_SETTLE`，也可以发布同一事件；两条路都成立。
 - 测试以 `PlayItSupport.systemRun`（同 `runAsSystem`，返回输出）运行 `QB_ATTEMPT_EXPIRE`；`PendingIT` 改为断言一次入账引出两次补发运行（每批一个事务）。
   场景无需以 `actor: system` 运行内部流程（补发经 `deliverEvents`，统计经 `runJob`），快照未变。`./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 错误）通过。
+
+### CI 的随机 500（PR #123，2026-10-11）
+
+- **现象**：CI 上 `SetupScheduledIT` 的 `QB_SETUP` 得到 500，响应是 Spring 的缺省错误体（平台的 `GlobalExceptionHandler` 处理一切 `Exception`，
+  所以抛出的是 `Error`）。本地单独与全量运行都通过；全量运行中另有一次 `SignInAuditIT` 同样失败，`PlayIT` 的事件投递也出现过一次（重试后成功）。
+- **原因**：以临时的 BlockHound 回调打印栈（未提交）得到：事件循环线程结束一个被采样的 span 时，OpenTelemetry 的 `BatchSpanProcessor$Worker.addSpan`
+  在批次已满时经容量为 1 的 `ArrayBlockingQueue`（`signal`）唤醒导出线程；导出线程等待下一批时也取这把锁。两者恰好相遇时事件循环 `Unsafe#park`，
+  BlockHound 抛出 `BlockingOperationError`，请求以 500 结束。与 QuizBuks 的代码无关，任何请求都可能遇到，取决于时机（CI 的机器更慢更易遇到）。
+  这只是线程间的交接，不是 I/O，生产中（没有 BlockHound）不出错。
+- **修正**：测试中的 `QbBlockHoundIntegration`（`ServiceLoader` 加载，与平台的 `JabizBlockHoundIntegration` 并存）容许 `BatchSpanProcessor$Worker.addSpan`
+  内的等待。回归测试 `TracingUnderBlockHoundTest` 让唤醒队列的锁被测试占住，事件循环必然等待：没有容许时稳定得到同样的 `Unsafe#park` 错误，有容许时通过；
+  另一个测试确认 BlockHound 对同一线程池仍然生效。它经反射使用 OpenTelemetry 1.55 的内部字段（`worker`、`signal`、`spansNeeded`），升级时可能需要调整。
+- 这一容许属于平台（见下表缺口 17），平台加入后删去应用中的这份。
 
