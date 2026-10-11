@@ -42,6 +42,16 @@ if [ -z "${JABIZ_MFA_KEY:-}" ]; then
     export JABIZ_MFA_KEY
 fi
 
+# The demo's external AI service (decision D38) needs a key; the demonstration calls no real provider, so a random
+# placeholder does. A deployment that uses a provider passes its real key.
+if [ -z "${JABIZ_DEMO_AI_KEY:-}" ]; then
+    if generate "$SECRETS/demo-ai-key" 24 "/+="; then
+        echo "jabiz: generated a placeholder key for the demo AI service in the jabiz-secrets volume"
+    fi
+    JABIZ_DEMO_AI_KEY=$(cat "$SECRETS/demo-ai-key")
+    export JABIZ_DEMO_AI_KEY
+fi
+
 export JABIZ_BOOTSTRAP_ADMIN_USER="${JABIZ_BOOTSTRAP_ADMIN_USER:-admin}"
 if [ -z "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
     if generate "$SECRETS/admin-password" 18 "/+="; then

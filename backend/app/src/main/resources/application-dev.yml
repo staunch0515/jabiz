@@ -6,3 +6,9 @@ jabiz:
   files:
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:build/jabiz-files}
+  # The demo AI service of development is a local stub: java tools/demo/ai-stub/AiStub.java (port 8091). Its key, any
+  # value, comes from JABIZ_DEMO_AI_KEY; without it the startup warns and the moderation of product names fails.
+  external-services:
+    demo-ai:
+      base-url: http://localhost:8091/v1
+      allowed-hosts: localhost
