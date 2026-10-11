@@ -107,6 +107,35 @@ class ScenarioParserTest {
     }
 
     @Test
+    void readsInboundWebhookSteps() {
+        Scenario scenario = Scenario.parse("""
+            name: Payments
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - inbound: { provider: pay, body: { id: evt_1, type: t } }
+              - inbound: { provider: pay, body: "{}", at: 2026-01-31T08:00:00Z, outcome: REJECTED }
+            """, "scenarios/inbound.yml");
+        assertThat(scenario.steps()).containsExactly(
+            new Scenario.InboundStep(1, "pay", java.util.Map.of("id", "evt_1", "type", "t"), null, "ACCEPTED"),
+            new Scenario.InboundStep(2, "pay", "{}", Instant.parse("2026-01-31T08:00:00Z"), "REJECTED"));
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - inbound: { provider: pay, body: {}, outcome: LOST }
+            """, "scenarios/bad.yml")).hasMessageContaining("outcome must be");
+        assertThatThrownBy(() -> Scenario.parse("""
+            name: Bad
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin }
+            steps:
+              - inbound: { provider: pay }
+            """, "scenarios/bad.yml")).hasMessageContaining("needs 'body'");
+    }
+
+    @Test
     void readsEveryKindOfStep() {
         Scenario scenario = Scenario.parse(FULL, "scenarios/sample.yml");
         assertThat(scenario.name()).isEqualTo("Sample");

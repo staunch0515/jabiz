@@ -1049,6 +1049,30 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 **放弃的方案**：①应用自写接收接口（每个应用重复验签与去重，且要开放认证例外）；②在接收请求中同步执行业务流程（耗时与失败直接变成提供方的重试风暴）；
 ③只存解析后的字段（无法事后核对提供方实际发来的内容）。
 
+**实现说明**（阶段 16d，2026-10-11；详见 11 §2.5）
+1. 接收是平台内部流程 `INBOUND_RECEIVE`（`internal()`，权限 `inbound.receive`，其步骤只在系统身份下执行，管理员经流程接口调用得到 403）。
+   控制器在流程之外完成验签与提取，然后以系统身份执行它；它的一个步骤 `RecordInboundEvent` 直接插入行（不经变更集、不进审计，同 `MailAttempt`）并发布事件。
+   原样正文在单独的只追加表 `sys_inbound_event_body`（同一事务写入），读事件的列表、导出与报告都不带正文。
+   流程输入的正文组件 `rawBody` 标 `@Sensitive`（不用 `body` 这种通用名字：`@Sensitive` 的组件名在整个 JSON 中遮蔽）。
+2. 事件载荷只带引用 `{inboundEventId, provider, externalEventId, eventType, receivedTime}`；消费者流程以平台步骤 `LoadInboundEvent.of(提供方, 类型, …)`
+   读取正文（解析为 `Map`，数值为 `BigDecimal`），事件不属于声明的提供方与类型即失败；消费流程只由投递以系统身份运行，并逐项核对内容（签名不等于内容可信）。
+   数值的十进制指数绝对值超过 1000 的正文在接收时即拒绝。
+3. 事件类型 `jabiz.inbound.<提供方>.<外部类型>`，启动检查（`INBOUND`）对白名单中的每个类型拼出全名检查规则与 100 字符上限，
+   并比较订阅：订阅了未列出的类型为错误，列出却无人订阅为警告。
+4. 事件号与类型只取已签名的正文：`stripe` 为顶层 `id`、`type`（并记 `livemode`）；`hmac-sha256` 为 D33 正文的 `eventId`、`eventType`，
+   其请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type` 不在 D33 的签名范围内，若出现必须与正文一致（否则可在容差内重放同一正文而换掉事件号或类型）。
+5. `stripe`：签名内容 `t + "." + 原样正文`，任一 `v1` 与任一密钥匹配即通过，`v0` 与未知方案忽略，`t` 缺失、重复或不是数字即拒绝；
+   时间容差同时拒绝过旧与过于靠后的时间戳（缺省 5 分钟，上限 1 小时）；先验签后看时间；常量时间比较。
+6. 各种 400（签名、时间、大小、UTF-8、JSON、事件号）用同一个 `INBOUND_REJECTED`，原因只进日志与观测标签 `reason`；未知提供方 404，非 POST 405，超限 429。
+   接受、重复、白名单外都在提交后答 200 `{"received":true}`。
+7. 大小：先看 `Content-Length`，再以 `DataBufferUtils.join(body, max)` 读取（分块超限即中止）；缺省且最大 1 MB，提供方只能调低；正文须为严格 UTF-8，
+   以 `text` 原样保存并存 `body_sha256`。
+8. 去重：`UNIQUE (provider, external_event_id)`；先查已有的行，并发的重复在唯一键上等待后失败并整体回滚，答 200。
+9. 限流：`InboundWebhookWebFilter`（与 `PublicAccessWebFilter` 同样的位置和写法），每个提供方一个令牌桶，键为 `ClientAddresses.clientOf`，缺省每地址每分钟 120，
+   不受 `jabiz.public.enabled` 影响；不做来源 IP 白名单。在未配置为可信代理的代理之后，所有发送方共用一个桶。
+10. 读取：平台实体 `InboundEvent` 的只读数据视图（`inbound.read`）不含正文；正文以 `GET /api/inbound-events/{id}/body`（`inbound.read`）逐个读取。
+    应用可声明 `RetentionPolicy.of("InboundEvent")…from("receivedTime")`；物理删除、匿名化与重新投递的工具不在本阶段。
+
 ## D38 外部调用与异步外部作业
 
 **背景**：06 §2 允许 `BlockingStep` 调用外部 SDK（有副作用的放 `AFTER_COMMIT` 或保证幂等）；D33 第 5 条"出站调用只由平台的这一步骤进行"只针对 Webhook 投递，

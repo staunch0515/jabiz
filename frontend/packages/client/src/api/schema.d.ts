@@ -980,6 +980,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inbound-events/{inboundEventId}/body": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["body"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inbound/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/integrity/checks": {
         parameters: {
             query?: never;
@@ -1905,6 +1937,15 @@ export interface components {
             /** Format: int32 */
             number?: number;
             problem?: string;
+        };
+        InboundEventBody: {
+            body?: string;
+            bodySha256?: string;
+            contentType?: string;
+            inboundEventId?: string;
+        };
+        InboundReceipt: {
+            received?: boolean;
         };
         IntegrityCheckDetail: {
             check?: components["schemas"]["IntegrityCheckSummary"];
@@ -3966,6 +4007,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportReportResponse"];
+                };
+            };
+        };
+    };
+    body: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inboundEventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEventBody"];
+                };
+            };
+        };
+    };
+    receive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundReceipt"];
                 };
             };
         };

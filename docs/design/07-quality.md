@@ -80,7 +80,7 @@ snapshot:
   用于准备人与审批人不同的四眼步骤，18 §3；`expectError` 同样可带 `actor`；步骤的 `actor.id` 可引用变量，如 `"${hana}"`，以先前步骤建立的用户身份运行，阶段 16b-2）；
   操作人可声明 `mfa: true`（每步视为刚通过二次验证，写平台管理数据时需要，10 §10）；场景可带 `properties`（回放所用应用上下文的额外配置，优先于应用自己的，如打开某个入口的注册）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
   `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
-  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
+  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`inbound: {provider, body, at?, outcome?}`（入站 Webhook：`body` 为映射时按 JSON 发送、为文本时原样发送，以提供方配置的第一个密钥在 `at`（缺省为当前时钟）签名后交给与接口相同的 `InboundReceiver`，结果须为 `outcome`：缺省 `ACCEPTED`，或 `DUPLICATE` / `IGNORED` / `REJECTED`；消费者在之后的 `deliverEvents` 中运行，11 §2.5）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
   `expectError: {process, input, status, ruleCode, field}`；
   `import: 导入 id`（20，阶段 14e-2）带 `file: {name, content}`（按导入的文件策略存入，内容为 UTF-8 文本）、`mapping`、`params`、`commit`（缺省预览）、
   `notes`、`expect`（与导入报告按含义比较，被拒的提交也是报告）、`save`、`actor`；导入入口的权限照常检查。未知键即报错（拼错的期望不会静默通过）。

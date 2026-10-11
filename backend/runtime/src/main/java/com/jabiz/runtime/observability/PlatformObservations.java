@@ -51,6 +51,13 @@ public class PlatformObservations {
     public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
+    /**
+     * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
+     * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
+     * ({@code none}, the rejection's, or {@code error}) only.
+     */
+    public static final String INBOUND = "jabiz.inbound.receive";
+    public static final String INBOUND_RATE_LIMITED = "jabiz.inbound.rate_limited";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";

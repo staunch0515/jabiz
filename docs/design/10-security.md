@@ -16,7 +16,9 @@
 - Spring Security（WebFlux）只负责"是谁"和"`/api/**` 必须已认证"；"能做什么"由各入口按元数据声明检查（D11 第 2 条的位置不变）。
 - 无状态：不建会话、不存安全上下文、不保存请求；不用 Cookie，因此关闭 CSRF。保留 Spring Security 默认的安全响应头。
 - 公开路径：`POST /api/auth/login`、`/api/auth/refresh`、`/api/auth/logout`、`/api/auth/challenge/**`（第 9 节）、`/api/auth/oidc/**`（第 12 节）、
-  `POST /api/auth/mail/unsubscribe`（通知邮件的退订链接，签名令牌即凭证，18 §5.6），以及 `/api` 以外的静态资源与 `/actuator/health`。
+  `POST /api/auth/mail/unsubscribe`（通知邮件的退订链接，签名令牌即凭证，18 §5.6），
+  `POST /api/inbound/{提供方}`（入站 Webhook，提供方的签名即凭证，验签前已由 `InboundWebhookWebFilter` 限定提供方、方法与按地址的频率，11 §2.5、决策 D37），
+  以及 `/api` 以外的静态资源与 `/actuator/health`。
   认证过滤器不处理这三个会话接口：客户端随手带上的过期访问令牌不会妨碍刷新与登录。
 - 401、403 与控制器的错误一样是 `ProblemDetail`，带按 `Accept-Language` 本地化的 `violations`（`UNAUTHENTICATED`、`PERMISSION_DENIED`），
   401 带 `WWW-Authenticate: Bearer`。

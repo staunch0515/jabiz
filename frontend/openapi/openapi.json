@@ -1223,6 +1223,31 @@
         },
         "type" : "object"
       },
+      "InboundEventBody" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "bodySha256" : {
+            "type" : "string"
+          },
+          "contentType" : {
+            "type" : "string"
+          },
+          "inboundEventId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "InboundReceipt" : {
+        "properties" : {
+          "received" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "IntegrityCheckDetail" : {
         "properties" : {
           "check" : {
@@ -4652,6 +4677,58 @@
           }
         },
         "tags" : [ "import-controller" ]
+      }
+    },
+    "/api/inbound-events/{inboundEventId}/body" : {
+      "get" : {
+        "operationId" : "body",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "inboundEventId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InboundEventBody"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "inbound-event-controller" ]
+      }
+    },
+    "/api/inbound/{provider}" : {
+      "post" : {
+        "operationId" : "receive",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "provider",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InboundReceipt"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "inbound-webhook-controller" ]
       }
     },
     "/api/integrity/checks" : {
