@@ -93,6 +93,7 @@ public final class PublicationProcesses {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, SaveOutput.class, ProcessContext.class, pb -> pb
             .description("Creates a draft publication or changes its version, policy or reward tiers.")
             .permissions(QbPermissions.PUBLICATION_WRITE)
+            .requiresVerifiedEmail()
             .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PublicationStatus.DRAFT))
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
@@ -104,6 +105,7 @@ public final class PublicationProcesses {
                     .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
                     .limit(1).build(), FOUND))
             .steps(PublicationEditing::loadTiers)
+            .steps(PublicationEditing::loadSponsor)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, SaveInput.class).versionId();
                 EntityInstance found = first(ctx, FOUND);
@@ -283,8 +285,10 @@ public final class PublicationProcesses {
         Instant editedAt, Map<String, Object> values, List<TierPlan> tiers, EntityInstance version,
         List<UUID> tierIds) {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
-        List<Violation> problems = PublicationReadiness.check(PublicationEditing.draftOf(values), ranges,
-            PublicationEditing.snapshot(version), ctx.opTime());
+        List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
+            ranges, PublicationEditing.snapshot(version), ctx.opTime()));
+        // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6).
+        problems.addAll(PublicationEditing.sponsorProblems(ctx));
         return new SaveOutput(publicationId, PublicationStatus.DRAFT, revision, editedAt,
             PublicationEditing.integer(values.get("fullScore")), (BigDecimal) values.get("maxReward"),
             (BigDecimal) values.get("maxSpend"), tierIds, PublicationEditing.problems(problems, messages, ctx));
@@ -297,6 +301,7 @@ public final class PublicationProcesses {
             ProcessContext.class, pb -> pb
                 .description("Deletes a draft publication with its reward tiers.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbPublications.PUBLICATION, "publicationId",
                     a -> a.whenField("status", PublicationStatus.DRAFT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
@@ -325,12 +330,14 @@ public final class PublicationProcesses {
             .description("Copies a publication's policy and reward tiers into a new draft, with another version or "
                 + "other times if given.")
             .permissions(QbPermissions.PUBLICATION_WRITE)
+            .requiresVerifiedEmail()
             .actsOn(QbPublications.PUBLICATION, "publicationId")
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
             .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
                 PUB_ID, PUBLICATION))
             .steps(PublicationEditing::loadTiers)
+            .steps(PublicationEditing::loadSponsor)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, CopyInput.class).versionId();
                 return given != null ? given : PublicationEditing.publication(ctx).get("versionId");

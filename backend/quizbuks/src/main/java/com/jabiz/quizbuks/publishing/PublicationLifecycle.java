@@ -110,6 +110,7 @@ public final class PublicationLifecycle {
             ProcessContext.class, pb -> pb
                 .description("Submits a draft publication for review; it goes on at once when no review is needed.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", DRAFT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -120,6 +121,7 @@ public final class PublicationLifecycle {
                 .step("Lock the quiz", HoldLock.<ProcessContext>shared(
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockAndLoad)
+                .steps(PublicationEditing::loadSponsor)
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.REVIEW_PUBLICATION_AUTO))
                 .steps(PublicationEditing::loadTiers)
@@ -156,7 +158,7 @@ public final class PublicationLifecycle {
         PublicationReadiness.check(PublicationEditing.draftOf(publication),
             PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime())
             .forEach(ctx::reject);
-        SponsorChecks.requireApproved(ctx);
+        PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         if (!ctx.hasViolations()) {
             ctx.put(CASE, PublicationEditing.approvalCase(publication, list(ctx, TIERS), version, autoApprove(ctx)));
         }
@@ -200,6 +202,7 @@ public final class PublicationLifecycle {
             ProcessContext.class, pb -> pb
                 .description("Takes a publication out of review, back to its draft.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PENDING_REVIEW))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -222,6 +225,7 @@ public final class PublicationLifecycle {
             ProcessContext.class, pb -> pb
                 .description("Pauses a scheduled or live publication: it takes no new attempts until resumed.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", SCHEDULED, LIVE))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -243,6 +247,7 @@ public final class PublicationLifecycle {
                 .description("Resumes a paused publication: scheduled before its start, live within its time, "
                     + "ended after its end.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PAUSED))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))

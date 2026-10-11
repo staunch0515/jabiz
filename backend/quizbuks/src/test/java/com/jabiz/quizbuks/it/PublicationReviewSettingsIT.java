@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
@@ -35,20 +36,25 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         Map<String, Object> installed = setup();
         @SuppressWarnings("unchecked")
         List<Object> proposals = (List<Object>) installed.get("proposals");
-        assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE));
+        assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE,
+            SponsorApprovals.RULE));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");
+        int count = proposals.size();
 
         // Nothing published yet: the switch has no value, which refuses.
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))
             .containsExactly("PARAM_NOT_FOUND");
 
-        // The parameters published but not the rule: no review would be asked for, which is refused too.
-        publishProposals(Map.of("proposals", proposals.subList(0, proposals.size() - 1)));
+        // The parameters and the sponsors' rule published (the sponsor is onboarded), not the publications' rule: no
+        // review would be asked for, which is refused too.
+        publishProposals(Map.of("proposals", proposals.subList(0, count - 2)));
+        publishProposals(Map.of("proposals", proposals.subList(count - 1, count)));
+        onboard(SPONSOR_A);
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))
             .containsExactly(PublishingCodes.REVIEW_NOT_CONFIGURED);
 
         // With the rule, a review is asked for.
-        publishProposals(Map.of("proposals", proposals.subList(proposals.size() - 1, proposals.size())));
+        publishProposals(Map.of("proposals", proposals.subList(count - 2, count - 1)));
         assertThat(submit(sponsorA(), id)).containsEntry("status", PublicationStatus.PENDING_REVIEW);
         run("QB_PUBLICATION_WITHDRAW", sponsorA(), body("publicationId", id));
 

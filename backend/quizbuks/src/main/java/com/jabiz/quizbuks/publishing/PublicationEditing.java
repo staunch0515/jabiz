@@ -11,6 +11,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.content.QuizSnapshots;
+import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalCase;
@@ -49,6 +50,8 @@ final class PublicationEditing {
     static final String SCHEDULE = "schedule";
     static final String APPROVAL = "approval";
     static final String OUTPUT = "output";
+    static final String SPONSOR_ROWS = "sponsorRows";
+    static final String BAN_ROWS = "banRows";
 
     static String lockName(Object publicationId) {
         return publicationId == null ? null : "qb.pub:" + publicationId;
@@ -74,6 +77,42 @@ final class PublicationEditing {
         pb.step("Load the schedule", QueryEntities.<ProcessContext>of(
             QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
                 .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), SCHEDULE));
+    }
+
+    /**
+     * Loads the caller's onboarding and ban (D-Q2-6), for {@link #sponsorProblems}. Read only, without the account's
+     * lock: an approval is never taken back, and a ban that comes meanwhile is caught by the next action.
+     */
+    static <I, O> void loadSponsor(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the sponsor's onboarding", QueryEntities.<ProcessContext>of(
+                QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_ROWS))
+            // A ban refers to a platform user (a UUID); any other caller id has none.
+            .step("Load the sponsor's ban", QueryEntities.<ProcessContext>of(
+                QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("userId", userIds(ctx.request().actorId()))).limit(1).build(),
+                BAN_ROWS));
+    }
+
+    private static List<Object> userIds(String actorId) {
+        List<Object> ids = new ArrayList<>();
+        try {
+            UUID id = UUID.fromString(actorId);
+            if (id.toString().equalsIgnoreCase(actorId)) {
+                ids.add(id);
+            }
+        } catch (IllegalArgumentException e) {
+            // Not a platform user.
+        }
+        return ids;
+    }
+
+    /** Why the caller may not publish as a sponsor ({@link SponsorChecks}); none when they may. */
+    static List<Violation> sponsorProblems(ProcessContext ctx) {
+        EntityInstance sponsor = first(ctx, SPONSOR_ROWS);
+        EntityInstance ban = first(ctx, BAN_ROWS);
+        return SponsorChecks.check(sponsor == null ? null : sponsor.attributes(), ban == null ? null
+            : ban.attributes());
     }
 
     /** Loads the tiers of the publication named by {@link #PUB_ID} (none without one). */

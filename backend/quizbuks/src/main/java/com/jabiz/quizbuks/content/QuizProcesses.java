@@ -104,6 +104,7 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Creates a draft quiz or changes its title, introduction, cover or time limit.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -185,6 +186,7 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Removes a quiz with its questions and materials; its versions stay.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -318,6 +320,7 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Copies a quiz, as its draft is or as one of its versions was, into a new draft.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, CloneOutput.class))
@@ -413,6 +416,7 @@ public final class QuizProcesses {
             pb -> pb
                 .description("Saves the draft as the next version of the quiz, once it is complete.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbContent.QUIZ, "quizId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, VersionOutput.class))

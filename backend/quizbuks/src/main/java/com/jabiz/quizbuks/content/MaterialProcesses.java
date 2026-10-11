@@ -62,6 +62,7 @@ public final class MaterialProcesses {
             ProcessContext.class, pb -> pb
                 .description("Adds a reference material to a quiz or changes one, with its images.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
@@ -199,6 +200,7 @@ public final class MaterialProcesses {
             ProcessContext.class, pb -> pb
                 .description("Deletes a reference material of a quiz with its images.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .actsOn(QbContent.MATERIAL, "materialId")
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
@@ -232,6 +234,7 @@ public final class MaterialProcesses {
             ProcessContext.class, pb -> pb
                 .description("Puts the reference materials of a quiz in a new order.")
                 .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
                 .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
