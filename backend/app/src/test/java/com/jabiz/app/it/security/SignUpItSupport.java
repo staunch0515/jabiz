@@ -9,17 +9,25 @@ import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
+import com.jabiz.runtime.security.SignUpRateLimits;
+import com.jabiz.security.Base32;
+import com.jabiz.security.Totp;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.server.WebFilter;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,14 +36,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Self-registration, verification and password reset against a local SMTP server (docs/design/10-security.md section
  * 15; decision D36; ROADMAP phase 16b-2). The application's {@code portal} entry registers customers with the role
- * {@value #CUSTOMER}, created here once per test class (each class has its own schema). The mock server has no
- * connections: a test filter sets the client's address from a header, and every test starts from an address of its
- * own, so that the rate limit of one client does not carry over between tests.
+ * {@value #CUSTOMER}, created here once per test class (each class has its own schema); the administration accepts
+ * {@value #BACK_OFFICE} only ({@link #ENTRY_PROPERTIES}), and {@value #LOOSE} accepts customers without a verified
+ * address (where somebody who registered an address of somebody else can sign in). The mock server has no
+ * connections: a test filter sets the client's address from a header, and every client address is drawn from one
+ * counter, so that the rate limit of one client never carries over. The rate limits run on a time of the tests' own
+ * ({@link FixedTimeLimits}), which does not move by itself.
  */
 abstract class SignUpItSupport extends SecurityItSupport {
 
+    /** Turns registration on, with the administration limited to the back office; for {@code @SpringBootTest}. */
+    static final String ENTRY_PROPERTIES_REGISTRATION = "jabiz.security.entries.portal.self-registration=true";
+    static final String ENTRY_PROPERTIES_ADMIN = "jabiz.security.entries.admin.accepted-roles=IT_BACK_OFFICE";
+    static final String ENTRY_PROPERTIES_LOOSE = "jabiz.security.entries.loose.accepted-roles=CUSTOMER";
+    /** All three, for reading. */
+    static final String[] ENTRY_PROPERTIES = {ENTRY_PROPERTIES_REGISTRATION, ENTRY_PROPERTIES_ADMIN,
+        ENTRY_PROPERTIES_LOOSE};
+
     static final String CUSTOMER = "CUSTOMER";
+    static final String BACK_OFFICE = "IT_BACK_OFFICE";
     static final String PORTAL = "portal";
+    static final String LOOSE = "loose";
     static final String PASSWORD = "correct horse battery";
     static final String CONNECTION = "X-It-Connection";
 
@@ -48,6 +69,22 @@ abstract class SignUpItSupport extends SecurityItSupport {
 
     private static final AtomicInteger ADDRESSES = new AtomicInteger();
 
+    /**
+     * The sign-up rate limits on a time of the tests' own: buckets fill only when a test advances {@link #NANOS}, never
+     * because a slow test took long.
+     */
+    @TestConfiguration
+    static class FixedTimeLimits {
+
+        static final AtomicLong NANOS = new AtomicLong();
+
+        @Bean
+        @Primary
+        SignUpRateLimits fixedTimeSignUpRateLimits() {
+            return new SignUpRateLimits(20, 3, Duration.ofHours(1), NANOS::get);
+        }
+    }
+
     @Autowired
     OutboxDeliverer deliverer;
 
@@ -56,11 +93,16 @@ abstract class SignUpItSupport extends SecurityItSupport {
 
     abstract GreenMailExtension mail();
 
+    /** A client address no other request of this run had. */
+    static String nextClient() {
+        int n = ADDRESSES.incrementAndGet();
+        return "198.51." + (n / 250) + "." + (1 + n % 250);
+    }
+
     @BeforeEach
     @Override
     protected void client() {
-        int n = ADDRESSES.incrementAndGet();
-        clientAddress = "198.51." + (n / 250) + "." + (1 + n % 250);
+        clientAddress = nextClient();
         WebFilter connection = (exchange, chain) -> {
             String address = exchange.getRequest().getHeaders().getFirst(CONNECTION);
             String chosen = address != null ? address : clientAddress;
@@ -74,6 +116,7 @@ abstract class SignUpItSupport extends SecurityItSupport {
     void customerRole() {
         if (query("SELECT 1 FROM sec_role_version WHERE role_code = ?", CUSTOMER).isEmpty()) {
             createRole(CUSTOMER, PortalOrders.PERMISSION);
+            createRole(BACK_OFFICE, "*");
         }
     }
 
@@ -160,7 +203,8 @@ abstract class SignUpItSupport extends SecurityItSupport {
     /** The user of an address (current version), or null. */
     static Map<String, Object> userOf(String email) {
         List<Map<String, Object>> rows = query("""
-            SELECT DISTINCT ON (user_id) user_id::text AS user_id, user_name, email, verified_email, email_verified_at,
+            SELECT DISTINCT ON (user_id) user_id::text AS user_id, user_name, email, registered_email, verified_email,
+                   email_verified_at,
                    password_hash, enabled, is_deleted
             FROM sec_user_version WHERE lower(email) = lower(?) ORDER BY user_id, version_no DESC""", email);
         assertThat(rows).hasSizeLessThanOrEqualTo(1);
@@ -199,6 +243,39 @@ abstract class SignUpItSupport extends SecurityItSupport {
     static String roleId(String code) {
         return String.valueOf(query("SELECT role_id::text AS id FROM sec_role_version WHERE role_code = ?", code)
             .getFirst().get("id"));
+    }
+
+    /** Sets up a second factor in the session; returns its secret. */
+    String enrollMfa(String bearer) {
+        String secret = (String) post("/api/auth/mfa/enroll", bearer, Map.of()).expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody().get("secret");
+        post("/api/auth/mfa/enroll/confirm", bearer, Map.of("code", totp(secret))).expectStatus().isOk();
+        return secret;
+    }
+
+    String totp(String secret) {
+        return Totp.code(Base32.decode(secret), Totp.step(clock.instant()));
+    }
+
+    /** Whether the user has a second factor (current version). */
+    static boolean hasMfa(String userId) {
+        return !query("""
+            SELECT 1 FROM (SELECT DISTINCT ON (user_mfa_id) is_deleted FROM sec_user_mfa_version
+                WHERE user_id = ?::uuid ORDER BY user_mfa_id, version_no DESC) m WHERE NOT m.is_deleted""", userId)
+            .isEmpty();
+    }
+
+    /** Changes a user's attributes as an administrator (holder of {@code security.user.write}). */
+    void updateUser(String userId, Map<String, Object> attributes) {
+        Map<String, Object> user = get("/api/datasets/" + userDataset() + "/entities/" + userId, admin())
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        post("/api/datasets/" + userDataset() + "/commit", admin(), Map.of("changes", List.of(Map.of(
+            "action", "UPDATE", "id", userId, "version", user.get("version"), "attributes", attributes))))
+            .expectStatus().isOk();
+    }
+
+    Map<String, Object> session(String name, String password, String entry) {
+        return loginTo(name, password, entry).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
     }
 
     static String userDataset() {

@@ -4,6 +4,11 @@
 # user hears by mail that the account exists. Mail is off in tests, so the messages are recorded and SKIPPED, and no
 # token is drawn (tokens exist only in mail that is sent).
 name: Self-registration
+# The tests' configuration takes no registrations (their roles sign in to the administration); this replay does, with
+# the administration limited to its own role, as the application's configuration has it.
+properties:
+  jabiz.security.entries.portal.self-registration: "true"
+  jabiz.security.entries.admin.accepted-roles: ADMIN
 clock: 2026-05-01T00:00:00Z
 actor: { id: shop-admin, permissions: ["*"], mfa: true }
 steps:

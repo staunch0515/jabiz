@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com", "jabiz.mail.base-url=https://app.example.com",
-    "spring.mail.host=localhost", "spring.mail.port=3030"})
+    "spring.mail.host=localhost", "spring.mail.port=3030", SignUpItSupport.ENTRY_PROPERTIES_REGISTRATION,
+    SignUpItSupport.ENTRY_PROPERTIES_ADMIN, SignUpItSupport.ENTRY_PROPERTIES_LOOSE})
+@Import(SignUpItSupport.FixedTimeLimits.class)
 class PortalIT extends SignUpItSupport {
 
     @RegisterExtension
@@ -51,7 +54,8 @@ class PortalIT extends SignUpItSupport {
     private String registered(String email) {
         register(PORTAL, email, PASSWORD).expectStatus().isAccepted();
         deliver();
-        anonymous("/api/auth/verify-email", Map.of("token", token(VERIFY_LINK, email))).expectStatus().isNoContent();
+        anonymous("/api/auth/verify-email", Map.of("token", token(VERIFY_LINK, email), "password", PASSWORD))
+            .expectStatus().isNoContent();
         return String.valueOf(userOf(email).get("user_id"));
     }
 
@@ -69,8 +73,7 @@ class PortalIT extends SignUpItSupport {
     }
 
     private Map<String, Object> session(String email) {
-        return loginTo(email, PASSWORD, PORTAL).expectStatus().isOk().expectBody(MAP).returnResult()
-            .getResponseBody();
+        return session(email, PASSWORD, PORTAL);
     }
 
     private static Map<String, Object> order(int quantity) {
@@ -103,15 +106,14 @@ class PortalIT extends SignUpItSupport {
 
     @Test
     void anUnverifiedSessionCannotOrder() {
-        // Signed in where no verified address is required (the administration accepts every role).
+        // Signed in where no verified address is required.
         String email = address("uno");
         register(PORTAL, email, PASSWORD).expectStatus().isAccepted();
         String userId = String.valueOf(userOf(email).get("user_id"));
         customerOf(userId, unique("U").toUpperCase());
         assertThat(refusal(loginTo(email, PASSWORD, PORTAL), 403)).isEqualTo("EMAIL_NOT_VERIFIED");
-        Map<String, Object> admin = loginTo(email, PASSWORD, null).expectStatus().isOk().expectBody(MAP)
-            .returnResult().getResponseBody();
-        assertThat(refusal(post(ORDER, bearerOf(admin), order(1)), 403)).isEqualTo("EMAIL_NOT_VERIFIED");
+        Map<String, Object> loose = session(email, PASSWORD, LOOSE);
+        assertThat(refusal(post(ORDER, bearerOf(loose), order(1)), 403)).isEqualTo("EMAIL_NOT_VERIFIED");
     }
 
     @Test
@@ -138,7 +140,7 @@ class PortalIT extends SignUpItSupport {
             "entry", PORTAL)), 401)).isEqualTo("INVALID_REFRESH_TOKEN");
         // Its access token is still good until it expires; ordering is refused all the same.
         assertThat(refusal(post(ORDER, bearerOf(session), order(1)), 422)).isEqualTo(PortalOrders.CUSTOMER_BLOCKED);
-        // The guard is the portal's: the administration does not ask it.
-        loginTo(email, PASSWORD, null).expectStatus().isOk();
+        // The guard is the portal's: other entries do not ask it.
+        loginTo(email, PASSWORD, LOOSE).expectStatus().isOk();
     }
 }
