@@ -1261,8 +1261,8 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
 | 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
-| 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3–4 天 | — |
-| 16e | 外部服务声明与异步外部作业 | D38 | 3–4 天 | — |
+| 16d | 入站 Webhook（先实现 Stripe 签名） | D37 | 3.5–4 天 | — |
+| 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
 | 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
@@ -1520,6 +1520,326 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 复审后另修：`admin` 入口自己允许注册为启动错误（`SignInEntriesTest`）。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
+
+### 16d 入站 Webhook（3.5–4 天）
+
+决策 D37；无硬依赖。限流用的客户端地址取自 16b-1 的 `ClientAddresses`（已合入）。
+
+**现状（`1.2/platform`）**
+- **Outbox**：`Outbox.append(engine, 类型, entityType, entityId, payloadJson)` 在调用方的事务中写 `sys_outbox_event`（`process_seq_id` 可空）。`OutboxDeliverer` 对每个 `EventSubscription` 以系统身份运行流程，`beforeSteps` 写消费标记，退避重试（D14）。事件名为 `[A-Za-z0-9._:-]{1,100}`。
+- **出站 Webhook（D33，11 §2.4）**：
+  - `WebhookProperties`：配置、密钥以占位符取自环境变量、`toString` 遮蔽。
+  - `WebhookChecks`：类别 `WEBHOOK`，一次报全。
+  - core `WebhookSignature`：只有 `sign` / `matches`，没有时间容差和请求头解析。
+  - `WebhookIT`：以 JDK `HttpServer` 作本地接收方。
+- **匿名入口**：`SecurityConfig.PUBLIC`（登录、刷新、退订、OIDC）和 `PUBLIC_READ`。`PublicAccessWebFilter`（`HIGHEST_PRECEDENCE + 10`）在安全链之前为 `/api/public/**` 做开关、限方法和 `TokenBucketLimiter` 限流。16b-1 新增 `ClientAddresses`（`clientOf(ServerHttpRequest)`，可信代理）和迁移 V32。
+- **正文读取**：没有读原始字节的接口；`FileUploadService` 有"按上限读、超限中止"的写法；`PayloadTooLargeException` 映射为 413。
+- **平台只追加表的先例（16a）**：`sys_mail_message`（`varchar(36)` 主键，`process_seq_id` 外键指向 `op_process`，`jabiz_protect_append_only`，列入 `PlatformSchemaMigration.PLATFORM_TABLES`）。`MailAttempt` 是平台直接插入、不进审计的日志，以只读数据视图展示。
+- **保留**（21 §3）：只能以实体的 `RetentionPolicy` 声明，并出现在到期报告中；只追加表不能删除。
+- **功能清单**：`docs/guide/platform-features.md` 第 252、447 行写着"不做入站 Webhook"。
+
+**实施细则（D37 未写明之处，写入 D37 的实现说明）**
+1. **接收是平台内部流程** `INBOUND_RECEIVE`（`internal()`，权限 `inbound.receive`，只有系统身份能运行，同 `SendWebhook` 的检查）。控制器在流程之外完成验签与提取，然后以 `RequestContext.system` 执行流程。流程有两个步骤：`RecordInboundEvent`（直接插入，不经 `ChangeSet`，不进审计，同 `MailAttempt`）和 `PublishEvent`。这样操作记录、Outbox 的操作号和观测与其他平台写入一致。输入 record 的 `body` 组件标 `@Sensitive`，不进 `input_summary`。
+2. **事件载荷只带引用**：`{inboundEventId, provider, externalEventId, eventType, receivedTime}`，不含正文。消费者流程用平台步骤 `LoadInboundEvent.of(ctx -> 编号, 键)` 读取，并解析为 `Map`（数值用 `BigDecimal`）。理由：正文不复制进 `sys_outbox_event`（那里不受 `inbound.read` 保护，还可能被出站订阅转发）；而 `EventSubscription` 的输入函数不能做 I/O。（待确认 Q1）
+3. **事件类型**是 `jabiz.inbound.<提供方>.<外部类型>`。启动检查对白名单中的每个类型拼出全名，检查规则和 100 字符的上限。
+4. **提取**：
+   - `stripe`：取正文 JSON 顶层的 `id`、`type`，并记下 `livemode`。
+   - `hmac-sha256`：取请求头 `X-Jabiz-Event-Id`、`X-Jabiz-Event-Type`，与 D33 的出站格式对称，jabiz 实例之间可以互连。
+   - 提取在验签之后进行。事件号最长 255 字符，不合格即拒绝。
+5. **签名**：
+   - `stripe`：签名内容是 `t + "." + 原样正文`。头中可以有多个 `v1`，其中任一个与任一配置的密钥匹配即通过；`v0` 和未知方案忽略；`t` 缺失、重复或不是数字即拒绝。
+   - 容差：`|Clock 时间 − t| ≤ tolerance`（缺省 5 分钟，上限 1 小时，同时拒绝过旧和过于靠后的时间戳，Q6）。
+   - 密钥换用：`secrets` 列表（每个至少 32 字符）。
+6. **响应**：
+   - 签名错、过期、超过大小、不是 UTF-8 或 JSON、缺少事件号：一律 400，用同一个 problem `INBOUND_REJECTED`（Q3）。具体原因只进日志与观测标签 `reason`，不存储。
+   - 未知提供方 404；非 POST 405；超限 429，带 `Retry-After`。
+   - 接受、重复、白名单外：都在提交后答 200 `{"received":true}`。
+7. **大小**：先看 `Content-Length`，超过即 400、不读正文；再以 `DataBufferUtils.join(body, max)` 读取（分块传输超限时中止）。`max-body-size` 缺省且最大为 1 MB，提供方只能调低。正文必须是严格合法的 UTF-8，以 `text` 原样保存，另存 `body_sha256`（Q2）。
+8. **去重**：`UNIQUE (provider, external_event_id)`。并发的重复在唯一键上等待，之后以 `UniqueKeyViolationException`（按约束名识别）失败并整体回滚，答 200。白名单外的类型答 200、不存储，观测 `outcome=ignored`。
+9. **限流**：`InboundWebhookWebFilter` 与 `PublicAccessWebFilter` 同样的位置和写法，每个提供方一个 `TokenBucketLimiter`，键为 `ClientAddresses.clientOf`。缺省每地址每分钟 120（Q4），不受 `jabiz.public.enabled` 影响。
+10. **读取与保留**：平台实体 `InboundEvent` 有只读数据视图 `urn:jabiz:dataset:platform:InboundEvent`（读取权限 `inbound.read`，`processOnlyWrites`），列表不含正文，详情含正文。应用可以声明 `RetentionPolicy.of("InboundEvent")…from("receivedTime")`，进入到期报告；物理删除不在本阶段（Q5）。正文不进日志、操作摘要和观测。
+
+**表与迁移**（`db/jabiz/V34__inbound_webhooks.sql`；与 16e 按合并顺序编号；加入 `PlatformSchemaMigration.PLATFORM_TABLES`）
+
+`sys_inbound_event`，只追加：
+
+| 列 | 定义 |
+|---|---|
+| `inbound_event_id` | `varchar(36)` 主键 |
+| `provider` | `varchar(40)` |
+| `external_event_id` | `varchar(255)` |
+| `event_type` | `varchar(100)` |
+| `livemode` | `boolean`，可空 |
+| `signed_time` | `timestamptz` |
+| `received_time` | `timestamptz` |
+| `content_type` | `varchar(100)` |
+| `body` | `text`，非空 |
+| `body_sha256` | `char(64)` |
+| `process_seq_id` | 外键指向 `op_process` |
+
+- 约束：`UNIQUE (provider, external_event_id)`。
+- 索引：`(provider, event_type, received_time)`、`(process_seq_id)`。
+- 执行 `SELECT jabiz_protect_append_only('sys_inbound_event')`。
+- 被拒的请求不建表，只记日志与指标（D37 第 2 条）。
+
+**改动**
+- **core `com.jabiz.inbound`**（纯 Java，没有 JSON 库）：
+  - `InboundSignatureScheme`：`verify(请求头, 正文字节, 密钥列表, 时刻, 容差) → InboundVerification`。
+  - `InboundVerification`：通过，或原因 `MISSING_HEADER` / `MALFORMED` / `NO_MATCH` / `TOO_OLD` / `TOO_NEW`。
+  - `StripeSignature`、`HmacSha256Signature`、`InboundSchemes.of(名)`。
+  - `WebhookSignature` 增加 `matchesAny`。
+  - `core/build.gradle.kts` 的覆盖率门禁加入 `com.jabiz.inbound.*`。
+- **runtime `com.jabiz.runtime.inbound`**：
+  - `InboundWebhookProperties`：`@ConfigurationProperties("jabiz.inbound-webhooks")`，`providers.<名>` 下有 `scheme`、`secrets`、`event-types`、`tolerance`、`max-body-size`、`rate-limit.per-minute|max-clients`；`toString` 遮蔽密钥。
+  - `InboundWebhookChecks`：类别 `INBOUND`，一次报全。检查名字 `[a-z][a-z0-9-]{0,39}`、未知方案、缺少或过短的密钥、白名单为空、拼出的类型非法、容差和大小越界。
+  - `InboundWebhookWebFilter`、`InboundWebhookController`（WebFlux，读原始正文）。
+  - `InboundReceiver`：控制器与场景回放共用的接收逻辑。
+  - `InboundEventExtractor`（Jackson）、`InboundProcesses`（`INBOUND_RECEIVE` 和 Bean）、`RecordInboundEvent`。
+  - `LoadInboundEvent`：公开的平台步骤。
+  - `InboundEvents`：事件名、`InboundEventRef` 和 `input(DomainEvent)`。
+  - `InboundEntities`、`InboundPermissions`（`inbound.read`、`inbound.write`、`inbound.receive`）、`InboundRejectedException`。
+- **runtime 其他**：
+  - `SecurityConfig.PUBLIC` 加 `POST /api/inbound/*`，它同时不经认证转换器，带过期令牌也不会得到 401。
+  - `PlatformObservations.INBOUND = "jabiz.inbound.receive"`，标签只有 `provider`、`outcome`、`reason`。
+  - `PlatformErrorCodes.INBOUND_REJECTED` 与三语消息；`ProblemStatuses` 映射为 400。
+  - 平台权限目录（同 `mail.read` 的登记处）。
+- **场景回放**：步骤 `inbound: {provider, body, at?}`，用配置的密钥签名后调用 `InboundReceiver`，然后接 `deliverEvents: true`。
+- **app**：
+  - `application-dev.yml` 与测试配置中的提供方 `demo-pay`（`scheme: stripe`，`secrets: [${JABIZ_DEMO_PAY_WEBHOOK_SECRET:…dev}]`）；`application.yml` 中不放。
+  - `commerce.CommercePayments`：订阅 `commerce.payment-received`，事件 `jabiz.inbound.demo-pay.payment_intent.succeeded`。
+  - 流程 `ORDER_RECORD_PAYMENT`：`LoadInboundEvent` → 计算出 `data.object.metadata.orderNo`、`amount_received`、`id` → `LoadEntity` 订单 → 写 `paidTime`、`paymentRef`（`processOnly`）。金额不符或找不到订单时，`CreateTask` 交给持有 `commerce.order.write` 的人，而不是拒绝（拒绝会让消费者无限重试）。
+  - 应用迁移 `V17__order_payment.sql`（按合并顺序编号），三语消息。
+  - 可选的手工演示脚本 `tools/demo/inbound-demo.sh`：用 openssl 签名后 curl。
+- **文档**：
+  - 11 新增 §2.5 入站 Webhook；10 的匿名接口清单；15 §6 限流同样适用；13 观测；21 §1（入站事件不进审计，同 `MailAttempt`）。
+  - 07 场景步骤 `inbound`；D37 的实现说明；`platform-features.md` 删去"不做"并新增一节；CLAUDE.md 第 4 节的引用不变。
+  - OpenAPI 快照与 `pnpm gen:api`。
+
+**测试**
+- **core 单元**：
+  - `StripeSignatureTest`：固定向量，在注释中给出 openssl 计算方式；多个 `v1` 和换密钥；忽略 `v0`；空白与顺序；缺 `t`、重复 `t`、`t` 非数字；容差边界（正好等于、超过 1 秒、未来）；错密钥；改一个字节。
+  - `HmacSha256SignatureTest`：与 `WebhookSignature.sign` 往返。
+  - jqwik：任意正文和密钥，签名后验证通过；任意单字节变化后验证失败。
+- **runtime 单元**：
+  - `InboundWebhookChecksTest`：所有问题一次报出。
+  - `InboundEventExtractorTest`：缺 `id` 或 `type`、正文不是对象、`id` 过长、通用格式的请求头。
+  - `InboundWebhookPropertiesTest`：`toString` 中没有密钥。
+- **集成 `InboundWebhookIT`**（`backend/app`，真实 PostgreSQL，`WebTestClient`）：
+  - 正确签名 → 200；存档正文的 SHA-256 与发送的字节相同；Outbox 事件类型正确，载荷中没有正文；`deliverPending` 后示范流程只执行一次，订单已付款。
+  - 同一事件号再次到达（正文相同或不同）→ 200，仍只有一行、一个事件；4 路并发的重复 → 一行。
+  - 签名错、正文被改、密钥错、超出容差（过旧、过新）、缺头、不是 UTF-8、不是 JSON → 400 且响应正文相同；`sys_inbound_event`、Outbox、`op_process` 中都没有新行。
+  - 大于 1 MB 的正文，带 `Content-Length` 和分块两种 → 400，不存储。
+  - 白名单外的类型 → 200，不存储、无事件。
+  - 未知提供方 404；GET 405；带垃圾 `Authorization` 头照常处理（不是 401）。
+  - 超限 → 429 带 `Retry-After`；伪造的 XFF 不能绕过（16b-1 合入后）。
+  - 第二个密钥（换用中）签名的请求被接受。
+  - 消费者第一次失败 → Outbox 退避重试，效果只产生一次。
+  - 管理员经 `/api/processes/INBOUND_RECEIVE` 调用被拒。
+  - 没有 `inbound.read` 读数据视图 403；列表不含正文，详情含正文。
+  - `op_process.input_summary` 中没有正文。
+  - 通用 `hmac-sha256` 提供方：平台自己的出站 Webhook 投到本机的入站接口被接受，验证 D33 与 D37 格式对称。
+  - `sys_inbound_event` 上没有执行过 UPDATE / DELETE。
+- 场景 `commerce/order_payment.yml`。`PlatformSchemaMigrationTest`、启动检查、`ArchitectureTest` 照常通过；BlockHound 开启（HMAC 只占 CPU，在事件循环上执行可以接受）。
+
+**风险**
+- 每个请求最多 1 MB 留在内存中，由限流、`Content-Length` 预检和 Netty 的连接数限制。
+- Stripe 的投递来自少数地址，按地址限流可能挡住突发；被挡的事件由 Stripe 重试（最长 3 天）。缺省值可按提供方配置。
+- 测试与场景使用固定的 `Clock`，签名时间必须取同一个时钟。
+- 原样正文含个人信息，按 D5 只追加、不能删除（Q5）。
+- 消费者重试用尽后由运维处理，没有重新投递的工具（Q8）。
+- 依赖唯一键冲突时约束名能被正确识别。
+- 与 16b-1（`ClientAddresses`、V32）的合并顺序。
+
+**验收标准**
+- [ ] `stripe` 与 `hmac-sha256` 的验签是 core 中的纯函数：多个 `v1`、换密钥、时间容差，常量时间比较（`StripeSignatureTest`、属性测试）。
+- [ ] 验签失败、超出容差、超过 1 MB 一律 400 且不存储；白名单外 200 不存储；重复（含并发）200 且只有一行（`InboundWebhookIT`）。
+- [ ] 接受的事件原样存档在只追加的 `sys_inbound_event`，经 Outbox 以 `jabiz.inbound.<提供方>.<类型>` 交给流程，只处理一次、失败重试；请求中不执行业务流程。
+- [ ] 正文只有持有 `inbound.read` 才能读，不进操作摘要、日志和 Outbox 载荷；应用可声明保留策略。
+- [ ] `/api/inbound/**` 匿名但按地址限流；配置问题在启动时一次报全（`INBOUND`）。
+- [ ] 示范 `demo-pay` → `ORDER_RECORD_PAYMENT` 可运行，场景 `commerce/order_payment` 通过；没有任何对 Stripe 的网络调用。
+- [ ] 11 §2.5、10、15、21、07、D37 实现说明、功能清单已更新；`./gradlew check`、OpenAPI 快照与生成的类型已更新。
+
+**不在本阶段**：Stripe 以外的提供方方案（如 Slack、GitHub 的签名方式，需要时加 core 方案即可）、重新投递的工具、入站事件的物理删除或匿名化、来源 IP 白名单（Q4）。
+
+**确认**（2026-10-11）：计划与其中的待确认点（Q1–Q8）全部按计划中的缺省处理。即：
+Q1 事件载荷只带引用，正文以 `LoadInboundEvent` 读取；Q2 正文按严格 UTF-8 存 `text` 并存 SHA-256；Q3 各种 400 用同一个 `INBOUND_REJECTED`，未知提供方 404；
+Q4 限流按提供方设置，缺省每地址每分钟 120，不做来源 IP 白名单；Q5 原样正文只追加保存，应用可声明保留策略进入到期报告，物理删除另议；
+Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `SalesOrder` 上记 `paidTime` / `paymentRef`，提供方配置只在 dev 与测试配置中；Q8 不做重新处理的工具。
+
+
+### 16e 外部服务声明与异步外部作业（4.5–6 天，分 16e-1 / 16e-2 两个 PR）
+
+决策 D38。比阶段表的 3–4 天多 1.5–2 天：领取、租约、取消的并发正确性，用量记录，以及完成流程的回调都需要单独测试。
+
+**现状（`1.2/platform`）**
+- **`BlockingStep`**（core）：由 `ProcessExecutor.dispatch` 在 `boundedElastic`（虚拟线程）上执行，约定不访问数据库；对出站调用没有任何限制或观测。平台唯一的出站 HTTP 是 `SendWebhook`（JDK `HttpClient` 异步、`Redirect.NEVER`，`WebhookChecks.refusal` 只允许 https、http 只限本机、主机须在白名单中）。
+- **`AFTER_COMMIT`**：进程内按 `RetryPolicy` 重试，记录在 `op_process_after_commit`，不做持久化重试（06 §4）。
+- **定时任务与事件**：`JobDefinition` 只有 cron，`JobRunner` 用 ShedLock；Outbox 消费者在事务中运行流程（D38 已放弃用它做长调用）。
+- **可复用的部件**：`FindOrphanFiles` 中的 `FOR UPDATE SKIP LOCKED`、`StorageEngine.inTransaction / inNewTransaction`、`ProcessExecutor.executeChild`、`Outbox.append`、`PlatformObservations`、16a 的 `CheckedStep` 与只读平台实体的写法。
+- **`ArchitectureTest`（app）**：只禁止业务代码使用 Reactor 和 `StepHandler`、读系统时钟，对网络没有规则。
+- 没有任何用量记录。
+
+#### 16e-1 外部服务声明、阻塞步骤中的调用（1.5–2 天）
+
+**要求**
+1. **声明**（core `com.jabiz.external.ExternalService`，Bean）：
+   ```java
+   ExternalService.define("demo-ai", s -> s.baseUrl("https://ai.example.com/v1").allowedHosts("ai.example.com")
+       .secret("apiKey", "JABIZ_DEMO_AI_KEY").connectTimeout(ofSeconds(5)).requestTimeout(ofSeconds(30))
+       .idempotencyHeader("Idempotency-Key").maxResponseSize(4 * 1024 * 1024))
+   ```
+   - 名字 `[a-z][a-z0-9-]{0,39}`；环境变量名 `[A-Z][A-Z0-9_]*`。
+   - 配置 `jabiz.external-services.<名>.base-url | allowed-hosts` 可以按环境覆盖，测试和开发指向本地桩服务（Q10）。
+2. **调用**（core 接口，runtime 实现）：
+   - `ExternalServices#http(服务)` 返回同步的 `ExternalHttp`；`Request` 有方法、相对路径或白名单内的绝对地址、请求头、正文、不超过服务上限的超时、幂等键；`Response` 有状态、请求头、字节或文本。`ExternalServices#secret(服务, 名)` 取密钥。
+   - runtime 的 `JdkExternalHttp`：
+     - 每个服务一个 JDK `HttpClient`（`Redirect.NEVER`，3xx 原样返回）。
+     - 每次请求都检查主机（同 `WebhookChecks.refusal` 的规则，抽出为共用的 `OutboundAddresses`）。
+     - 超时、响应大小上限，观测 `jabiz.external.call`（标签只有 `service` 与 `outcome`：2xx/4xx/5xx/timeout/refused）。
+     - 在非阻塞线程上调用即抛 `IllegalStateException`（只能在 `BlockingStep` 或作业处理器中调用）。
+3. **调用范围**：`ProcessExecutor.dispatch` 在执行 `BlockingStep` 时，在该虚拟线程上设置 `ExternalCallScope`（ThreadLocal，执行完即清除），内容为 `processSeqId`、步骤名、是否试运行。
+   - 试运行中缺省拒绝外部调用，服务声明 `.allowInDryRun()`（只读、幂等的调用）才放行（Q15）。
+   - `ExternalServices.idempotencyKey(后缀)` 返回 `jabiz-<processSeqId>-<后缀>`：`AFTER_COMMIT` 重试时不变，可交给提供方去重。
+4. **密钥**：启动时经 `Environment` 读取，只保存在内存中，不进日志、`toString` 和异常消息。缺失时报错；`dev` 下是告警，调用时才失败。
+5. **启动检查 `EXTERNAL`**：名字唯一且合法、白名单非空、基础地址的主机在白名单中且为 https（http 只限本机）、超时为正且有上限、环境变量缺失。一次报全。
+6. **ArchUnit**（`app` 的 `ArchitectureTest`）：业务包不得依赖 `java.net.http..`、`java.net.Socket`、`java.net.URLConnection` / `HttpURLConnection`、`URL#openConnection|openStream`、`javax.net..`、`org.springframework.web.reactive.function.client..`、`org.springframework.web.client..`。使用官方 SDK 的方式见 Q9；应用分支怎样得到这条规则见 Q21。
+7. 文档：06 新增 §2.x"外部调用"（D38 第 1、2 条，`AFTER_COMMIT` 或幂等键）；CLAUDE.md 第 4 节已写明，不改。
+
+#### 16e-2 异步外部作业（3–4 天）
+
+**要求**
+1. **作业类型**（core `ExternalJobType`，Bean）：
+   ```java
+   ExternalJobType.define("commerce.product-copy", ProductCopyInput.class, ProductCopyResult.class, t -> t
+       .handler(ProductCopyHandler.class).services("demo-ai").timeout(ofSeconds(90))
+       .retry(3, ofSeconds(10), ofMinutes(10)).maxConcurrency(2)
+       .onCompleted("PRODUCT_COPY_APPLY").onFailed("PRODUCT_COPY_FAILED"))
+   ```
+   - 处理器 `ExternalJobHandler<I, R>`（core，同步）：`ExternalJobResult<R> run(I input, ExternalJobContext ctx)`。
+   - `ExternalJobContext`：`jobId`、`attempt`、`idempotencyKey()`（固定为 `jabiz-job-<jobId>`，各次尝试相同）、`deadline`、`http(服务)` 与 `secret(…)`（只限声明的服务）。处理器不访问数据库，与阻塞步骤同样的约束。
+   - `ExternalJobResult.of(值).usage("promptTokens", 812)`：用量名为 `[a-zA-Z][A-Za-z0-9._-]{0,63}`，数量为非负整数。
+   - `ExternalJobException.permanent(码, 消息)` 不重试；其他异常和超时按可重试处理。
+2. **登记**：步骤 `StartExternalJob.of(类型, ctx -> 输入).reference(ctx -> …).outputKey("jobId")` / `.when(…)`（runtime，平台 I/O 步骤）在流程事务内插入 `sys_external_job`（请求人为根操作的操作人，带 `process_seq_id`），作业号写入上下文。
+   - 输入含 `@Sensitive` 值 → 违规 `EXTERNAL_JOB_INPUT_SECRET`；JSON 超过 64 KiB → `EXTERNAL_JOB_INPUT_TOO_LARGE`。
+   - 回滚或试运行即没有作业。流程带 `Idempotency-Key` 时，重放返回同一个作业号。
+3. **执行器** `ExternalJobExecutor`：
+   - 配置：`jabiz.external-jobs.executor.enabled`（测试关闭）、`poll-interval` 1 s、每实例的 `max-in-flight` 8。测试调用 `runPending()`。
+   - **领取**（短事务）：
+     - 对每个类型先 `pg_advisory_xact_lock(hashtext('jabiz.external-job:'||类型))`，统计有效领取数（有领取行、无尝试结果、租约未到期），得到剩余名额（Q11）。
+     - 选出到期的作业：没有最终结果、没有取消、没有有效领取、首次执行或上次可重试且已过退避（`initial × 2^(n−1)`，不超过上限，时间取 `Clock`）。`FOR UPDATE OF j SKIP LOCKED LIMIT 名额`。
+     - 插入 `sys_external_job_claim (job_id, attempt_no)`，租约到期 = 超时 + 30 秒。真正的保证是主键：竞争失败者在插入时冲突后跳过。
+     - 租约过期而没有结果的领取，由下一次领取补记一次尝试 `LEASE_EXPIRED`（可重试）。
+   - **执行**：处理器在 `boundedElastic` 上运行，带 `Mono.timeout`（尽力中断），**没有任何数据库事务或连接被占用**。
+   - **记录**（独立事务）：
+     - 插入 `sys_external_job_attempt`（`SUCCEEDED` / `FAILED` / `TIMED_OUT`、是否可重试、错误码、遮蔽后的说明、耗时）和 `sys_external_job_usage`（失败的尝试也记录已消耗的用量）。
+     - 成功、不可重试或重试用尽、或执行中已被取消时，插入 `sys_external_job_outcome`（主键 `job_id`，只有一个最终结果）：状态，结果 JSON 不超过 256 KiB（超过即 `FAILED`，码 `RESULT_TOO_LARGE`），并 `Outbox.append("jabiz.external-job.finished", {jobId, jobType, status})`。
+     - 迟到的僵尸实例在主键冲突后丢弃自己的结果。
+4. **完成**：平台订阅 `jabiz.external-jobs` 接收 `jabiz.external-job.finished`，运行内部流程 `EXTERNAL_JOB_COMPLETE`（系统身份）。其步骤 `RunExternalJobCallback` 读取作业和结果，以 `executeChild` 调用声明的流程：
+   - 成功：输入 `ExternalJobCompletion(jobId, jobType, requestedBy, reference, result（按声明的类型反序列化）, usage, attempts, finishedTime)`。
+   - 失败：输入 `ExternalJobFailure(…, errorCode, errorMessage)`。
+   - `CANCELLED` 不回调（Q13）。只调用一次、失败重试都沿用 D14。
+   - 完成与失败流程必须是 `internal()`（否则任何人都能伪造结果），由它们以 `CreateTask` / `SendMail` 通知请求人。
+5. **取消**：`POST /api/external-jobs/{id}/cancel` → `EXTERNAL_JOB_CANCEL`。请求人本人，或持有 `external-job.cancel` 的人；他人 404。先对作业行 `FOR UPDATE`，与领取串行。
+   - 插入 `sys_external_job_cancel`；没有有效领取则同时写最终结果 `CANCELLED`。
+   - 执行中被取消的，执行器完成后写 `CANCELLED` 并丢弃结果。
+   - 已结束的作业 → 422 `EXTERNAL_JOB_FINISHED`。
+6. **查看**：`GET /api/external-jobs/{id}`（请求人本人或 `external-job.read`）返回状态（`QUEUED` / `RUNNING` / `WAITING_RETRY` / `SUCCEEDED` / `FAILED` / `CANCELLED`）、尝试次数、时间、用量合计、`reference`，不含输入与结果（Q14）。
+   - 只读平台实体 `ExternalJob`、`ExternalJobAttempt`、`ExternalJobUsage` 的数据视图（`external-job.read`）供后台查看。
+   - 报表模板 `jabiz.external_job_usage`：按类型、用量名、月份汇总。平台不计费。
+7. **观测**：`jabiz.external.job`（标签 `job_type`、`outcome`）；计数器 `jabiz.external.usage`（标签 `job_type`、`metric`），加上数量。
+8. **启动检查 `EXTERNAL`（扩充）**：
+   - 类型名唯一且合法；处理器恰好一个 Bean；服务已声明。
+   - 完成与失败流程存在、是 `internal()`、输入类型正确。
+   - 超时、重试、并发为正；输入与结果是 record，输入中没有 `@Sensitive` 组件。
+   - `StartExternalJob` 引用的类型已声明（`CheckedStep`）。
+9. **场景回放**：
+   - `runExternalJobs: true`：执行到没有到期的作业为止。
+   - `completeExternalJob: {jobType, reference?, result, usage, status?}`：不调用处理器，经同一记录路径写入结果，使应用的场景不依赖外部服务（Q17）。
+
+**表与迁移**（`db/jabiz/V35__external_jobs.sql`，与 16d 按合并顺序编号；全部只追加并执行 `jabiz_protect_append_only`，都有主键（D27 封存），加入 `PLATFORM_TABLES`）
+
+- `sys_external_job`：
+  - 列：`job_id uuid` 主键、`job_seq bigint GENERATED ALWAYS AS IDENTITY UNIQUE`、`job_type varchar(100)`、`input text`、`reference varchar(200)`、`requested_by text`、`process_seq_id`（外键指向 `op_process`）、`created_time`。
+  - 索引：`(job_type, job_seq)`、`(requested_by, created_time)`、`(reference)`。
+- `sys_external_job_claim`：`(job_id, attempt_no)` 主键，`instance_id varchar(100)`、`claimed_time`、`lease_until`。
+- `sys_external_job_attempt`：`(job_id, attempt_no)` 主键，外键指向领取表；`outcome`（CHECK：`SUCCEEDED` / `FAILED` / `TIMED_OUT` / `LEASE_EXPIRED`）、`retryable`、`error_code varchar(100)`、`error_detail varchar(2000)`、`duration_ms`、`finished_time`。
+- `sys_external_job_usage`：`(job_id, attempt_no, metric)` 主键，`quantity bigint`。
+- `sys_external_job_cancel`：`job_id` 主键，`cancelled_by`、`cancelled_time`、`process_seq_id`。
+- `sys_external_job_outcome`：`job_id` 主键，`status`（CHECK：`SUCCEEDED` / `FAILED` / `CANCELLED`）、`result text`、`error_code`、`error_detail`、`attempts`、`finished_time`。
+
+`SELECT … FOR UPDATE` 只加行锁，不触发只追加表的 UPDATE 触发器。
+
+**改动**
+- **core**：
+  - `com.jabiz.external`：`ExternalService`、`ExternalHttp`（`Request` / `Response`）、`ExternalServices`、`ExternalJobType`、`ExternalJobHandler`、`ExternalJobContext`、`ExternalJobResult`、`ExternalJobException`、`ExternalJobCompletion`、`ExternalJobFailure`。
+  - 错误码 `EXTERNAL_JOB_INPUT_SECRET`、`EXTERNAL_JOB_INPUT_TOO_LARGE`、`EXTERNAL_JOB_FINISHED` 与三语消息；覆盖率门禁加入 `com.jabiz.external.*`。
+- **runtime `com.jabiz.runtime.external`**：
+  - `ExternalServiceRegistry`（`PlatformCheck`）、`ExternalServicesImpl`、`JdkExternalHttp`、`ExternalCallScope`、`ExternalChecks`、`ExternalProperties`。
+  - `StartExternalJob`、`ExternalJobExecutor`、`ExternalJobRecorder`、`ExternalJobProcesses`（`EXTERNAL_JOB_COMPLETE`、`EXTERNAL_JOB_CANCEL`、订阅）、`RunExternalJobCallback`。
+  - `ExternalJobController`、`ExternalJobEntities`、`ExternalJobPermissions`（`external-job.read` / `cancel` / `write` / `complete`）。
+- **runtime 其他**：
+  - `ProcessExecutor.dispatch` 设置 `ExternalCallScope`。
+  - `webhook/WebhookChecks.refusal` 抽出为 `web/OutboundAddresses`，两处共用。
+  - `PlatformObservations`（`EXTERNAL_CALL`、`EXTERNAL_JOB`）、`PlatformSchemaMigration`、场景回放的两个新步骤。
+- **app**：
+  - 服务 `demo-ai`：`application.yml` 中是 https 的示例主机；`application-dev.yml` 与测试配置覆盖为本机桩服务。
+  - 阻塞步骤 `ModerateText`：调用 `/v1/moderate`，声明 `allowInDryRun`，被判为不当即违规。
+  - 流程：`PRODUCT_COPY_REQUEST`（`actsOn Product`，权限 `commerce.product.write`）、`PRODUCT_COPY_APPLY`（internal，写 `Product.marketingCopy`（`processOnly`）并给请求人 `CreateTask`）、`PRODUCT_COPY_FAILED`（internal，给请求人 `CreateTask`）。
+  - `ProductCopyHandler`：POST `/v1/generate`，响应为 `{text, usage:{promptTokens, completionTokens}}`，不绑定任何提供方。
+  - 应用迁移 `V18__product_marketing_copy.sql`（按合并顺序编号）；三语消息。
+  - 测试夹具 `StubAiServer`（JDK `HttpServer`）：可编排成功、5xx、慢响应、4xx，并记录 `Idempotency-Key`。
+  - 手工演示用 `tools/demo/ai-stub`（Q20）。
+  - `ArchitectureTest` 的新规则，加一个反例测试。
+- **文档**：06 §2.x；11 新增 §4a 异步外部作业；13；07（`runExternalJobs`、`completeExternalJob`）；D38 的实现说明；`platform-features.md`；扩展指南（怎样加外部服务与作业类型）；OpenAPI 快照与 `pnpm gen:api`。
+
+**测试**
+- **core 单元**：`ExternalServiceTest`（名字、主机、环境变量名、超时）、`ExternalJobTypeTest`、`ExternalJobResultTest`（用量名、负数）；退避计算的 jqwik 属性测试（单调、不超过上限）。
+- **runtime 单元**：
+  - `ExternalChecksTest`：一次报全。缺少环境变量（dev 下为告警）、主机不在白名单、http 指向非本机、完成流程不是 internal、输入类型不符、未声明的服务、并发为 0。
+  - `JdkExternalHttpTest`（本地 `HttpServer`）：拒绝白名单外的主机和带用户信息的地址；3xx 不跟随；响应超过上限即失败；超时；在非阻塞线程上调用即拒绝；试运行中拒绝（除非 `allowInDryRun`）；密钥不出现在 `toString` 和异常中。
+- **集成 `ExternalServiceIT`**：阻塞步骤中的审核调用被不当时，流程 422；调用未声明的主机失败；观测已记录。
+- **集成 `ExternalJobIT`**（真实 PostgreSQL 和 `StubAiServer`）：
+  - 请求立即返回作业号，桩服务尚未被调用；流程因后续违规回滚时没有作业。
+  - `runPending` 后处理器只调用一次，带 `Idempotency-Key: jabiz-job-<id>`；结果为 `SUCCEEDED`，有用量行和事件；`deliverPending` 后完成流程以系统身份运行一次，商品被更新，请求人收到待办；再次执行和再次投递都没有效果。
+  - 5xx 两次后成功：退避按时钟生效；三次尝试的幂等键相同；三次尝试的用量都有记录。
+  - 处理器抛 `permanent` → 不重试，失败流程收到错误码；重试用尽 → `FAILED`，失败流程只调用一次。
+  - 慢响应超过超时 → `TIMED_OUT` 后重试。
+  - 两个执行器、`maxConcurrency=1`、5 个作业 → 任何时刻桩服务至多一个并发请求，每个作业只处理一次。
+  - 两个执行器争同一作业 → 只有一个领取。
+  - 租约过期（模拟崩溃）→ 补记 `LEASE_EXPIRED` 后重新领取。
+  - 僵尸实例迟到 → 仍只有一个最终结果，完成流程只调用一次。
+  - 取消：排队中的 → `CANCELLED`、不执行、不回调；执行中的 → 结果丢弃、`CANCELLED`；他人取消 404；已结束 422。
+  - 状态接口：请求人可见，他人 404，持有 `external-job.read` 的可见。
+  - 完成流程不能经 `/api/processes` 调用；输入含 `@Sensitive` 值或过大被拒。
+  - 处理器运行期间，应用没有处于 "idle in transaction" 的连接（查 `pg_stat_activity`）。
+  - `sys_external_job_*` 上没有执行过 UPDATE / DELETE。
+- 场景 `commerce/product_copy.yml`（`completeExternalJob`）。`ArchitectureTest` 的正例与反例；BlockHound 开启；`PlatformSchemaMigrationTest`；OpenAPI 快照。
+
+**风险**
+- **超时无法强行停止卡住的处理器或 SDK**：中断只是尽力而为，靠请求超时与租约兜底。
+- **至少一次**：执行完成后、记录之前崩溃，会以同一个幂等键再调用一次。不支持幂等键的提供方（如生成类接口）可能计费两次；用量按尝试记录，可以统计。
+- **轮询开销**：每个类型每次轮询一次查询（`NOT EXISTS` 加索引）。作业很多时以后可以加水位线。
+- **时间**：advisory 锁的哈希冲突只会让两个类型串行领取，无害。退避与租约都取 `Clock`（同 `OutboxDeliverer`，便于测试），多实例的时钟偏差靠租约余量吸收。
+- **SDK 的出站不受主机白名单约束**（Q9）；二进制结果不支持（Q16）。
+- **完成流程持续 422**：Outbox 重试用尽后由运维处理。
+- **合并顺序**：迁移编号与 16b-1、16d 的合并顺序；`ProcessExecutor` 的改动（`ExternalCallScope`）会经过每个阻塞步骤。
+
+**验收标准**
+- [ ] 外部服务以 `ExternalService` Bean 声明；阻塞步骤只经 `ExternalServices` 发出请求，只发往白名单主机，有超时、观测、试运行保护；业务代码直接使用网络客户端时 ArchUnit 失败；配置问题一次报全（`EXTERNAL`）。
+- [ ] `StartExternalJob` 在流程中登记作业并立即返回作业号；回滚则没有作业。
+- [ ] 作业在事务之外执行，多实例只领取一次，按类型限制并发，超时与退避重试按类型声明，各次尝试的幂等键相同（`ExternalJobIT`）。
+- [ ] 完成后以系统身份调用完成流程（输入为作业号、结果、用量）只一次；失败用尽后调用失败流程；请求人可以收到通知。
+- [ ] 用量按尝试记录，可以汇总；请求人可以取消作业、查看状态。
+- [ ] 示范 `demo-ai`（本地桩服务）的商品文案作业和审核短调用可运行，场景通过；`./gradlew check` 通过；06、11、13、07、D38 实现说明、功能清单已更新。
+
+**不在本阶段**：工作流编排、流式结果、作业之间的依赖（D38 第 6 条）；二进制结果；计费；SDK 的主机强制（Q9）。
+
+**确认**（2026-10-11）：计划与其中的待确认点（Q9–Q22）全部按计划中的缺省处理，分 16e-1 / 16e-2 两个 PR。即：
+Q9 只允许经 JDK HTTP 的 `ExternalHttp`（官方 SDK 不在本阶段，主机白名单管住全部出站）；Q10 服务在代码中声明，`jabiz.external-services.<名>.*` 可按环境覆盖地址与主机；
+Q11 按作业类型的并发上限为全局（advisory 锁）；Q12 完成与失败流程的输入为平台的 `ExternalJobCompletion` / `ExternalJobFailure`，结果按声明的类型反序列化，流程必须是 `internal()`；
+Q13 取消后不调用回调；Q14 状态接口不返回输入与结果；Q15 试运行中缺省拒绝外部调用，`allowInDryRun()` 才放行；Q16 结果只支持不超过 256 KiB 的 JSON（二进制结果如 AI 封面图到 Q8 再定，例如处理器存为文件、结果只放编号）；
+Q17 场景用 `completeExternalJob` 模拟结果；Q18 不做 `dedupKey`；Q19 分两个 PR；Q20 手工演示的桩服务放在 `tools/demo/ai-stub`；
+Q21 平台提供共用的 ArchUnit 规则，应用的 `ArchitectureTest` 引用它；Q22 `ExternalHttp` 在步骤内不自动重试。
 
 ### 16h 账本维度接受身份与引用字段（0.5 天）
 
