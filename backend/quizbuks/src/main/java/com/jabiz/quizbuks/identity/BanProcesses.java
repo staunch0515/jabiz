@@ -6,7 +6,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -19,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.jabiz.quizbuks.identity.AccountEditing.BANS;
 import static com.jabiz.quizbuks.identity.AccountEditing.INPUT;
@@ -48,17 +48,22 @@ public final class BanProcesses {
 
     public record BanOutput(String userId, boolean banned, long revision) {}
 
-    /** Whether a role is an administrator's: the platform's first administrator, or one of QuizBuks's. */
-    static boolean administrative(String roleCode) {
-        return "ADMIN".equals(roleCode) || QbRoles.ADMIN_CONTENT.equals(roleCode)
-            || QbRoles.ADMIN_FINANCE.equals(roleCode) || QbRoles.ADMIN_SUPER.equals(roleCode)
-            || (roleCode != null && roleCode.startsWith("QB_ADMIN_"));
+    /**
+     * Whether a role is an administrator's: one the administration's entry accepts
+     * ({@code jabiz.security.entries.admin.accepted-roles}; {@code *}, the platform's default when the entry is not
+     * configured, makes every role an administrator's, so nobody holding a role is banned).
+     */
+    static boolean administrative(Set<String> adminRoles, String roleCode) {
+        return adminRoles.contains("*") || (roleCode != null && adminRoles.contains(roleCode));
     }
 
-    public static ProcessDefinition<BanInput, BanOutput, ProcessContext> ban() {
+    /** @param adminRoles the roles the administration's entry accepts */
+    public static ProcessDefinition<BanInput, BanOutput, ProcessContext> ban(Set<String> adminRoles) {
+        Set<String> admins = Set.copyOf(adminRoles);
         return ProcessDefinition.define(BAN, 1, BanInput.class, BanOutput.class, ProcessContext.class, pb -> {
             pb.description("Bans a user: they cannot sign in until unbanned, and cannot publish or withdraw meanwhile.")
                 .permissions(QbPermissions.ADMIN_USERS_BAN)
+                .requiresVerifiedEmail()
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));
@@ -74,18 +79,18 @@ public final class BanProcesses {
                     .build();
             }, ROLES));
             loadBan(pb);
-            pb.compute("Ban", (metadata, ctx) -> ban(ctx));
+            pb.compute("Ban", (metadata, ctx) -> ban(ctx, admins));
         });
     }
 
-    static void ban(ProcessContext ctx) {
+    static void ban(ProcessContext ctx, Set<String> adminRoles) {
         BanInput input = ctx.get(INPUT, BanInput.class);
         String userId = requireUser(ctx);
         if (userId.equals(ctx.request().actorId())) {
             ctx.reject(new Violation("userId", AccountCodes.BAN_SELF, "You cannot ban yourself", Map.of()));
             return;
         }
-        if (list(ctx, ROLES).stream().anyMatch(role -> administrative(role.get("roleCode")))) {
+        if (list(ctx, ROLES).stream().anyMatch(role -> administrative(adminRoles, role.get("roleCode")))) {
             ctx.reject(new Violation("userId", AccountCodes.BAN_ADMIN, "Administrators are disabled, not banned",
                 Map.of()));
             return;
@@ -111,6 +116,7 @@ public final class BanProcesses {
         return ProcessDefinition.define(UNBAN, 1, UnbanInput.class, BanOutput.class, ProcessContext.class, pb -> {
             pb.description("Lifts a user's ban: they can sign in again.")
                 .permissions(QbPermissions.ADMIN_USERS_BAN)
+                .requiresVerifiedEmail()
                 .actsOn(SecurityEntities.USER, "userId")
                 .contextFactory((start, input) -> AccountEditing.start(start, input, AccountEditing.canonical(input.userId())))
                 .outputMapper(ctx -> ctx.get(OUTPUT, BanOutput.class));

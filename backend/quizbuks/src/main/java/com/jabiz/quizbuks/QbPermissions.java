@@ -44,6 +44,13 @@ public final class QbPermissions {
      * datasets stay unwritable through their API even if their policy were relaxed.
      */
     public static final String SPONSOR_VIEW_WRITE = "qb.content.view.write";
+    /**
+     * The content process only the platform runs: releasing the version files of a removed quiz
+     * ({@code QB_QUIZ_RELEASE_FILES}, the subprocess of {@code QB_QUIZ_DELETE}). Granted to no role, so no sponsor
+     * calls it directly (subprocesses are not checked for permissions); platform decision D41 (16l) makes it
+     * sub-process only.
+     */
+    public static final String CONTENT_SYSTEM = "qb.content.system";
     /** Ask the AI for questions and covers. */
     public static final String AI_USE = "qb.ai.use";
     /** Create, submit, withdraw, pause, resume and copy one's own publications, and read them. */

@@ -112,7 +112,7 @@ class QbRolesTest {
             QbPermissions.REVIEW_SPONSOR);
         // Only the platform applies an onboarding review (the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
-            .doesNotContain(QbPermissions.SPONSOR_SYSTEM));
+            .doesNotContain(QbPermissions.SPONSOR_SYSTEM, QbPermissions.CONTENT_SYSTEM));
     }
 
     @Test

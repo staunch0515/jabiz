@@ -82,8 +82,9 @@ class SponsorChecksIT extends AccountItSupport {
         run("QB_USER_BAN", tokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", sara, "reason", "Fraud"));
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", token, body("publicationId", draft.get("publicationId")),
             422))).containsExactly(AccountCodes.USER_BANNED);
-        assertThat(problemCodes(run("QB_PUBLICATION_COPY", token, body("publicationId",
-            draft.get("publicationId"))))).containsExactly(AccountCodes.USER_BANNED);
+        // Any other write is refused at once (review S2).
+        assertThat(codes(refused("QB_PUBLICATION_COPY", token, body("publicationId", draft.get("publicationId")),
+            422))).containsExactly(AccountCodes.USER_BANNED);
 
         // Lifted: submitting goes through.
         run("QB_USER_UNBAN", tokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", sara));

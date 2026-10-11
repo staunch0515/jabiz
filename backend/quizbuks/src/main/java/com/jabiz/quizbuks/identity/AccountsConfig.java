@@ -17,8 +17,13 @@ import com.jabiz.runtime.security.SecurityEntities;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.core.env.Environment;
 
+import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Registers accounts (docs/quizbuks/plans/Q2-accounts.md): the three entities and their datasets, the two
@@ -195,9 +200,14 @@ public class AccountsConfig {
         return SponsorProcesses.approvalResult(links);
     }
 
+    /** Administrators are not banned: they are the roles the administration's entry accepts (review S4). */
     @Bean
-    ProcessDefinition<BanProcesses.BanInput, BanProcesses.BanOutput, ProcessContext> qbUserBan() {
-        return BanProcesses.ban();
+    ProcessDefinition<BanProcesses.BanInput, BanProcesses.BanOutput, ProcessContext> qbUserBan(
+        Environment environment) {
+        List<String> admins = Binder.get(environment).bind("jabiz.security.entries.admin.accepted-roles",
+            Bindable.listOf(String.class)).orElse(List.of("*"));
+        return BanProcesses.ban(admins.stream().map(String::strip).filter(code -> !code.isEmpty())
+            .collect(Collectors.toSet()));
     }
 
     @Bean

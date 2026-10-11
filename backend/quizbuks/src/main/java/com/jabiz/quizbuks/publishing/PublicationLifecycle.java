@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.ConcurrentUpdateException;
@@ -203,6 +204,7 @@ public final class PublicationLifecycle {
                 .description("Takes a publication out of review, back to its draft.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
                 .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PENDING_REVIEW))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -226,6 +228,7 @@ public final class PublicationLifecycle {
                 .description("Pauses a scheduled or live publication: it takes no new attempts until resumed.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
                 .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", SCHEDULED, LIVE))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -248,6 +251,7 @@ public final class PublicationLifecycle {
                     + "ended after its end.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
                 .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PAUSED))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))

@@ -91,6 +91,46 @@ class BanIT extends AccountItSupport {
             .getResponseBody()).contains("Cheating", "Appeal accepted");
     }
 
+    /**
+     * Review S2: a token issued before the ban still works until it expires, so every QuizBuks write by the user
+     * checks the ban itself: accounts, content and publications.
+     */
+    @Test
+    void aBannedUsersTokenStillInHandWritesNothing() {
+        String admin = superAdmin();
+        String tom = userWithRole(unique("tom"), QbRoles.TAKER);
+        String taker = tokenOf(tom, QbRoles.TAKER);
+        run("QB_PROFILE_SAVE", taker, body("displayName", "Tom", "countryCode", "JP", "preferredCurrency", "JPY"));
+        String sara = userWithRole(unique("sara"), QbRoles.SPONSOR);
+        String sponsor = sponsor(sara);
+        onboard(sara);
+        String quizId = newQuiz(sponsor, "Before the ban");
+        String publicationId = draft(sponsor, version(sponsor, "Banned"), "Banned soon");
+
+        run("QB_USER_BAN", tokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", tom, "reason", "Spam"));
+        run("QB_USER_BAN", tokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", sara, "reason", "Fraud"));
+
+        assertThat(codes(refused("QB_PROFILE_SAVE", taker, body("displayName", "Tom", "countryCode", "FR",
+            "preferredCurrency", "EUR"), 422))).containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_SPONSOR_PROFILE_SAVE", sponsor, body("displayName", "Sara", "company", "X"),
+            422))).containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_QUIZ_SAVE", sponsor, body("quizId", quizId, "title", "Changed"), 422)))
+            .containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_QUIZ_SAVE", sponsor, body("title", "New"), 422)))
+            .containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_PUBLICATION_SAVE", sponsor, body("publicationId", publicationId, "name",
+            "Changed"), 422))).containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_PUBLICATION_DELETE", sponsor, body("publicationId", publicationId), 422)))
+            .containsExactly(AccountCodes.USER_BANNED);
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsor, body("publicationId", publicationId), 422)))
+            .containsExactly(AccountCodes.USER_BANNED);
+        assertThat(profileOf(tom)).containsEntry("country_code", "JP");
+
+        // Lifted: the same tokens write again.
+        run("QB_USER_UNBAN", tokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", sara));
+        run("QB_QUIZ_SAVE", sponsor, body("quizId", quizId, "title", "Changed"));
+    }
+
     @Test
     void nobodyBansThemselvesOrAnAdministrator() {
         String admin = superAdmin();
@@ -119,6 +159,11 @@ class BanIT extends AccountItSupport {
         run("QB_USER_UNBAN", token, body("userId", tom));
         assertThat(codes(refused("QB_USER_UNBAN", token, body("userId", tom), 422)))
             .containsExactly(AccountCodes.BAN_STATE);
+        // Like every QuizBuks write, banning needs a verified address (review 4).
+        assertThat(refused("QB_USER_BAN", unverifiedTokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", tom,
+            "reason", "x"), 403).toString()).contains("EMAIL_NOT_VERIFIED");
+        assertThat(refused("QB_USER_UNBAN", unverifiedTokenOf(admin, QbRoles.ADMIN_SUPER), body("userId", tom), 403)
+            .toString()).contains("EMAIL_NOT_VERIFIED");
         // A reason is needed; users that do not exist are not found.
         refused("QB_USER_BAN", token, body("userId", tom), 400);
         refused("QB_USER_BAN", token, body("userId", UUID.randomUUID().toString(), "reason", "Ghost"), 404);

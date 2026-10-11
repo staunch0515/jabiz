@@ -61,6 +61,7 @@ public final class ProfileProcesses {
                 .contextFactory((start, input) -> AccountEditing.start(start, input, start.request().actorId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, ProfileOutput.class));
             AccountEditing.lock(pb);
+            CallerChecks.refuseBanned(pb);
             AccountEditing.loadOfUser(pb, "Load the profile", QbAccounts.PROFILE, PROFILES);
             pb.step("Load the country", QueryEntities.<ProcessContext>of(QbCountries.DATASET, ctx -> {
                 List<Object> codes = new ArrayList<>();

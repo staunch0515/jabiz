@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -94,6 +95,7 @@ public final class PublicationProcesses {
             .description("Creates a draft publication or changes its version, policy or reward tiers.")
             .permissions(QbPermissions.PUBLICATION_WRITE)
             .requiresVerifiedEmail()
+            .steps(CallerChecks::refuseBanned)
             .actsOn(QbPublications.PUBLICATION, "publicationId", a -> a.whenField("status", PublicationStatus.DRAFT))
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
@@ -302,6 +304,7 @@ public final class PublicationProcesses {
                 .description("Deletes a draft publication with its reward tiers.")
                 .permissions(QbPermissions.PUBLICATION_WRITE)
                 .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
                 .actsOn(QbPublications.PUBLICATION, "publicationId",
                     a -> a.whenField("status", PublicationStatus.DRAFT))
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
@@ -331,6 +334,7 @@ public final class PublicationProcesses {
                 + "other times if given.")
             .permissions(QbPermissions.PUBLICATION_WRITE)
             .requiresVerifiedEmail()
+            .steps(CallerChecks::refuseBanned)
             .actsOn(QbPublications.PUBLICATION, "publicationId")
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))

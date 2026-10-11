@@ -50,4 +50,13 @@ class QbAccountsTest {
         assertThat(AccountLinksCheck.problems(true, new AccountLinks("https://q.example.com/sponsor/"))).isEmpty();
         assertThat(AccountLinksCheck.problems(false, new AccountLinks(""))).isEmpty();
     }
+
+    @Test
+    void administratorsAreTheAdministrationsRoles() {
+        assertThat(BanProcesses.administrative(java.util.Set.of("ADMIN", "QB_ADMIN_SUPER"), "QB_ADMIN_SUPER")).isTrue();
+        assertThat(BanProcesses.administrative(java.util.Set.of("ADMIN", "QB_ADMIN_SUPER"), "QB_TAKER")).isFalse();
+        assertThat(BanProcesses.administrative(java.util.Set.of("ADMIN"), null)).isFalse();
+        // An administration accepting every role (not configured) protects every role.
+        assertThat(BanProcesses.administrative(java.util.Set.of("*"), "QB_TAKER")).isTrue();
+    }
 }
