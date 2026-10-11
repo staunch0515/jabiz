@@ -138,9 +138,25 @@ abstract class PlayItSupport extends AccountItSupport {
             QbPermissions.WALLET_DEV_CREDIT);
     }
 
-    /** Credits a sponsor's wallet (the development credit: a top-up without payment) and pays what is pending. */
+    /**
+     * Credits a sponsor's wallet (the development credit: a top-up without payment); the settlement of what is
+     * pending follows by event, delivered here as the platform would.
+     */
     Map<String, Object> credit(String sponsorId, long amount) {
-        return run("QB_WALLET_DEV_CREDIT", system(), body("sponsorId", sponsorId, "amount", amount));
+        Map<String, Object> output = run("QB_WALLET_DEV_CREDIT", system(), body("sponsorId", sponsorId, "amount",
+            amount));
+        deliverEvents();
+        return output;
+    }
+
+    /** Runs an {@code internal()} process as the system (D41), as its job or event would; returns its output. */
+    @SuppressWarnings("unchecked")
+    Object systemRun(String process, Map<String, ?> body) {
+        var definition = (com.jabiz.process.ProcessDefinition<Object, Object, com.jabiz.process.ProcessContext>)
+            processes.findLatest(process).orElseThrow();
+        Object input = inputs.convert(definition.inputType(), (Map<String, Object>) body);
+        return asRequest(com.jabiz.context.RequestContext.system(java.util.Locale.ENGLISH, "qb-it"),
+            executor.execute(definition, input)).block();
     }
 
     /** Three tiers over a full score of 5: nothing below 3, 10 Kudos for 3–4, 100 for 5. */

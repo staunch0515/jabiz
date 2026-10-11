@@ -636,6 +636,9 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 
 ## 确认
 
+2026-10-11（需求方）：**同一版本用于多个发布**——版本是模板，发布定义范围；用户可以参加任何满足条件的发布，不论是否参加过同一版本的其他发布。
+保持现状：一人一次只按发布（`(user_id, publication_id)` 唯一）。
+
 2026-10-11：计划与待确认问题 Q5-1 – Q5-17 全部按缺省处理：先做 Q2 后端，再做 Q5a；Q5b（自动提交任务）在平台 16k（定时任务逐项独立事务）合入后做。
 
 ## 实施记录（Q5a，2026-10-11）
@@ -676,7 +679,6 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 在这台机器上约 120 ms。Q10 在生产规格上重测，按 D-Q5-10 的退路（降低过账成本 → 按发布预留预算 → 分批过账）决定。
 
 **已知问题**：
-- 同一版本被多个发布使用时，完成其中一个的答题人知道另一个的答案（一人一次只按发布）。是否限制为"一人一版本"待需求方确认。
 - 平台的参数没有下限规则：负的抽成比例能被提出与发布，只在付款时被拒（422 `QB_FEE_RATE_INVALID`，见下）。
 - 过了时限而未提交的会话在 Q5b 的任务之前一直占着名额与最高奖励的预算（只有 `QB_ATTEMPT_EXPIRE` 被调用时才释放）。
 - 同一用户并发两次 `QB_VIEW` 时第二次可能因唯一约束失败（只影响浏览记录）。
@@ -700,3 +702,17 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
   `PlayOwnerIT` 的暂停后有会话者仍可浏览、`SettlementIT` 的抽成比例（提出 1 被拒、负比例付款被拒）、单元测试的 `validRate` 与 `rk_live_`。
   `QB_ATTEMPT_EXPIRE` 与提交的竞争没有确定性的测试（输出取锁内的会话，逻辑见代码）。`./gradlew :quizbuks:check --max-workers=2` 通过（263 个测试）；
   `setup` 的快照因参数种类与说明改变而更新。
+
+### 合并平台 16l / 16k 后的调整（D41，2026-10-11）
+
+- 合并 `origin/1.2/quizbuks`（平台同步 #122：16l、16k、16e-2 与 QuizBuks 的 D41 适配），没有冲突。
+- **谁能启动**：`QB_ATTEMPT_EXPIRE`、`QB_PENDING_SETTLE`、`QB_PENDING_PAY`、`QB_PUBLICATION_FUNDS_RESTORED`、`QB_PUBLICATION_FUNDED`、
+  `QB_PUBLICATION_STATS_REFRESH`、`QB_PUBLICATION_STATS_CHUNK` 为 `internal()`（只以系统身份运行：事件、任务，或其下的子流程），`ProcessAccessIT` 的清单已加入。
+  `QB_WALLET_DEV_CREDIT` 由持有 `qb.wallet.dev-credit` 的人运行，是开放流程（之前误标 `internal()`）。
+- **开发入账不再以子流程调用 `QB_PENDING_SETTLE`**：在人发起的流程下调用 `internal()` 子流程会被拒（D41）。开发入账改为在同一事务中发布事件
+  `qb.sponsor.settle-pending`（原 `qb.pending-settle.more` 改名：既是"钱进来了"，也是"还有可付的"），由订阅 `qb.pending-settle` 以系统身份运行补发。
+  补发因此在入账提交之后、另一个事务中进行（测试的 `credit` 随即投递事件）。Q6 的 `QB_TOPUP_CONFIRM` 由入站 Webhook 的消费者以系统身份运行，
+  可以照原计划以子流程调用 `QB_PENDING_SETTLE`，也可以发布同一事件；两条路都成立。
+- 测试以 `PlayItSupport.systemRun`（同 `runAsSystem`，返回输出）运行 `QB_ATTEMPT_EXPIRE`；`PendingIT` 改为断言一次入账引出两次补发运行（每批一个事务）。
+  场景无需以 `actor: system` 运行内部流程（补发经 `deliverEvents`，统计经 `runJob`），快照未变。`./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 错误）通过。
+

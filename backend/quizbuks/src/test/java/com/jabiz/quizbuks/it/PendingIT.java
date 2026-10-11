@@ -38,6 +38,11 @@ class PendingIT extends PlayItSupport {
         return submit(takerOf(attemptId), attemptId, answers(first, second));
     }
 
+    static long settlementRuns() {
+        return (Long) query("SELECT count(*) AS n FROM op_process WHERE process_name = 'QB_PENDING_SETTLE'")
+            .getFirst().get("n");
+    }
+
     static Map<String, Object> global() {
         return Map.of("regions", List.of("GLOBAL"));
     }
@@ -109,11 +114,10 @@ class PendingIT extends PlayItSupport {
         }
         assertThat(wallet(sponsor)).containsEntry("pending_count", BigDecimal.valueOf(pendingCount));
 
-        // One credit for all: the first batch in its own transaction, the last one by the event.
+        // One credit for all: a batch per settlement run, each in its own transaction, the next started by an event.
+        long runs = settlementRuns();
         credit(sponsor, 100L * pendingCount);
-        assertThat(query("SELECT count(*) AS n FROM qb_attempt WHERE sponsor_id = ? AND reward_status = 'PENDING'",
-            sponsor).getFirst()).containsEntry("n", 1L);
-        deliverEvents();
+        assertThat(settlementRuns() - runs).isEqualTo(2);
         assertThat(query("SELECT count(*) AS n FROM qb_attempt WHERE sponsor_id = ? AND reward_status = 'PAID'",
             sponsor).getFirst()).containsEntry("n", (long) pendingCount + 1);
         assertThat(query("SELECT count(*) AS n, count(DISTINCT t.source_id) AS attempts "

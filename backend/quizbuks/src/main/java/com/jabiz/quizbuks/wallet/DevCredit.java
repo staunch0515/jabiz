@@ -8,8 +8,8 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
-import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -24,8 +24,10 @@ import java.util.Map;
 /**
  * {@code QB_WALLET_DEV_CREDIT} (docs/quizbuks/plans/Q5-answering.md, D-Q5-8): before top-ups exist (Q6), credits a
  * sponsor's wallet as if a top-up had arrived, for development and tests: under the wallet's lock, posts debit 1110
- * (Stripe balance) / credit 2110 (the sponsor), raises the cached balance, and pays the sponsor's pending rewards
- * ({@code QB_PENDING_SETTLE}, which takes the same lock again in the same transaction). Registered only when
+ * (Stripe balance) / credit 2110 (the sponsor), raises the cached balance, and asks for the sponsor's pending rewards
+ * to be paid: the event {@link QbWallets#SETTLE_EVENT}, whose consumer runs {@code QB_PENDING_SETTLE} as the system
+ * after this commits (platform decision D41: that process runs only as the system, and this one is run by a person).
+ * Q6's top-up confirmation runs as the system and may call it as a sub-process instead. Registered only when
  * {@code quizbuks.wallet.dev-credit.enabled=true}, which only the development profile and the tests set; its
  * permission is granted to no role, and a startup check refuses it together with a live Stripe key.
  */
@@ -53,7 +55,6 @@ public final class DevCredit {
             .description("Development only: credits a sponsor's wallet as if a top-up had arrived, then pays their "
                 + "pending rewards.")
             .permissions(QbPermissions.WALLET_DEV_CREDIT)
-            .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
@@ -76,10 +77,8 @@ public final class DevCredit {
                     BigDecimal.ZERO);
                 ctx.put(BALANCE, QbWallets.balance(wallet).add(input(ctx).amount()));
             })
-            // The settlement reads the wallet from the database.
-            .step("Store the balance", SaveChanges.now())
-            .step("Pay pending rewards", CallProcess.<ProcessContext>of(QbWallets.PENDING_SETTLE, 1,
-                ctx -> new QbWallets.SponsorRef(input(ctx).sponsorId()), null)));
+            .step("Ask for pending rewards to be paid", PublishEvent.<ProcessContext>of(QbWallets.SETTLE_EVENT,
+                ctx -> Map.of("sponsorId", input(ctx).sponsorId()))));
     }
 
     private static Input input(ProcessContext ctx) {

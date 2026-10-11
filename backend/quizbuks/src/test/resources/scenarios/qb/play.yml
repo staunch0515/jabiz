@@ -2,8 +2,8 @@
 # administrator publishes the change). Sponsor A (a platform user: the ledger's party) is onboarded, publishes a quiz
 # of two questions (full score 5) with three tiers (0, 10 and 100 Kudos), and the development credit gives A enough
 # for one top reward. U1 and U2 (Japan) start; U1 saves, continues and submits full marks: paid. U2's full marks
-# cannot be paid: pending, the publication underfunded, U3 cannot start. Another credit pays U2 (the event puts the
-# publication back on). The statistics job counts the completions; the feed, the detail, the history and the wallet
+# cannot be paid: pending, the publication underfunded, U3 cannot start. Another credit pays U2 (by event: the
+# settlement runs as the system; another event puts the publication back on). The statistics job counts the completions; the feed, the detail, the history and the wallet
 # are read. (The expiry job of Q5b is not in this phase.)
 name: Answering
 # The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
@@ -183,7 +183,7 @@ steps:
       status: 422
       ruleCode: QB_ATTEMPT_ALREADY_TAKEN
 
-  - note: Another credit pays U2; once nothing is pending, the publication is back on.
+  - note: Another credit; its event pays U2 (as the system) and, nothing pending, the publication is back on.
     advanceClock: PT1H
   - process: QB_WALLET_DEV_CREDIT@latest
     input: { sponsorId: "${a}", amount: 200 }

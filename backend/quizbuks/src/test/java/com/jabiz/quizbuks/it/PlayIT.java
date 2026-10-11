@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.play.AttemptFinishing;
 import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.play.PlayLimits;
 import com.jabiz.quizbuks.setup.QbRoles;
@@ -119,13 +120,15 @@ class PlayIT extends PlayItSupport {
         // Continuing it is refused too; the system finishes it with what was saved.
         assertThat(codes(refused("QB_ATTEMPT_START", taker(late), body("publicationId", publicationId), 422)))
             .containsExactly(PlayCodes.EXPIRED);
-        Map<String, Object> expired = run("QB_ATTEMPT_EXPIRE", system(), body("attemptId", lateAttempt));
-        assertThat(expired).containsEntry("status", "EXPIRED").containsEntry("finished", true);
+        assertThat(systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", lateAttempt)))
+            .isEqualTo(new AttemptFinishing.ExpireOutput(lateAttempt, "EXPIRED", true));
         assertThat(attempt(lateAttempt)).containsEntry("status", "EXPIRED").containsEntry("score",
             new java.math.BigDecimal("2"));
         // Once more changes nothing.
-        assertThat(run("QB_ATTEMPT_EXPIRE", system(), body("attemptId", lateAttempt)))
-            .containsEntry("status", "EXPIRED").containsEntry("finished", false);
+        assertThat(systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", lateAttempt)))
+            .isEqualTo(new AttemptFinishing.ExpireOutput(lateAttempt, "EXPIRED", false));
+        // Not even an administrator starts it through the process API (D41).
+        refusedAsInternal("QB_ATTEMPT_EXPIRE", admin(), body("attemptId", lateAttempt));
         assertBooksBalance();
     }
 
@@ -134,10 +137,10 @@ class PlayIT extends PlayItSupport {
         String publicationId = livePublication(sponsorA(), "Not due");
         credit(sponsorA(), 1_000);
         String attemptId = (String) start(taker(u1()), publicationId).get("attemptId");
-        assertThat(run("QB_ATTEMPT_EXPIRE", system(), body("attemptId", attemptId)))
-            .containsEntry("status", "IN_PROGRESS").containsEntry("finished", false);
-        assertThat(run("QB_ATTEMPT_EXPIRE", system(), body("attemptId", "no-such-attempt")))
-            .containsEntry("status", null).containsEntry("finished", false);
+        assertThat(systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", attemptId)))
+            .isEqualTo(new AttemptFinishing.ExpireOutput(attemptId, "IN_PROGRESS", false));
+        assertThat(systemRun("QB_ATTEMPT_EXPIRE", body("attemptId", "no-such-attempt")))
+            .isEqualTo(new AttemptFinishing.ExpireOutput("no-such-attempt", null, false));
     }
 
     @Test

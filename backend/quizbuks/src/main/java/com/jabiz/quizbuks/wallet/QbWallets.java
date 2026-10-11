@@ -32,6 +32,13 @@ public final class QbWallets {
 
     /** The process that pays a sponsor's pending rewards, in their order (in the {@code play} module). */
     public static final String PENDING_SETTLE = "QB_PENDING_SETTLE";
+    /**
+     * Event: pay a sponsor's pending rewards, as far as the balance goes, in a transaction of its own (the consumer
+     * {@code qb.pending-settle} runs {@link #PENDING_SETTLE} as the system). Published by money coming in (the
+     * development credit) and by a settlement run that left more it could pay.
+     */
+    public static final String SETTLE_EVENT = "qb.sponsor.settle-pending";
+
     /** Event: a sponsor's wallet has no pending reward left (after some were pending). */
     public static final String FUNDS_RESTORED_EVENT = "qb.sponsor.funds-restored";
 

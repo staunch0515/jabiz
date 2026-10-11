@@ -35,7 +35,7 @@ import static com.jabiz.quizbuks.play.PlaySteps.list;
  * <ul>
  *   <li>{@code QB_PENDING_SETTLE}: reads the first {@link PlayLimits#SETTLE_BATCH} pending rewards and pays as many as
  *       the balance covers, one {@code QB_PENDING_PAY} each, stopping at the first it cannot pay (never skipping it).
- *       When the next one could be paid too, it publishes {@code qb.pending-settle.more} so that the next batch runs
+ *       When the next one could be paid too, it publishes {@code qb.sponsor.settle-pending} so that the next batch runs
  *       in a transaction of its own; once none is left, {@code qb.sponsor.funds-restored} (the underfunded
  *       publications go back on, without the wallet's lock);</li>
  *   <li>{@code QB_PENDING_PAY}: pays one reward, if it is still the first pending and the balance covers it: the
@@ -50,9 +50,9 @@ public final class PendingSettlement {
     public static final String SETTLE = QbWallets.PENDING_SETTLE;
     public static final String PAY = "QB_PENDING_PAY";
 
-    /** The consumer of {@code qb.pending-settle.more}: the next batch. */
+    /** The consumer of {@code qb.sponsor.settle-pending}: the next batch. */
     public static final String SUBSCRIPTION = "qb.pending-settle";
-    public static final String MORE_EVENT = "qb.pending-settle.more";
+    public static final String MORE_EVENT = QbWallets.SETTLE_EVENT;
 
     /**
      * @param paid    the rewards paid by this run
@@ -160,7 +160,7 @@ public final class PendingSettlement {
         return ctx.get(INPUT, QbWallets.SponsorRef.class).sponsorId();
     }
 
-    /** The input of {@code QB_PENDING_SETTLE} from {@code qb.pending-settle.more}. */
+    /** The input of {@code QB_PENDING_SETTLE} from {@code qb.sponsor.settle-pending}. */
     static QbWallets.SponsorRef input(DomainEvent event) {
         Object sponsorId = event.payload().get("sponsorId");
         return new QbWallets.SponsorRef(sponsorId == null ? null : String.valueOf(sponsorId));
