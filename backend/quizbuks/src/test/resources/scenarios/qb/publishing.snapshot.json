@@ -169,7 +169,7 @@
       "preparerId" : "sponsor-a",
       "ruleId" : "#uuid:14",
       "ruleVersionNo" : "1",
-      "contentHash" : "f0c5f6b2c9588581034116c13e7f94c0efcc0711915bcabc550f9a264016be48",
+      "contentHash" : "137bca596cf866de987c0f713ad4023297a2a16da9dbad449c4796781ddcc925",
       "levels" : "[{\"permission\":\"qb.review.sponsor\"}]",
       "currentLevel" : "1",
       "facts" : "{\"autoApprove\":false}",
@@ -216,6 +216,7 @@
     "QbSponsor" : [ {
       "onboardingId" : "#uuid:13",
       "userId" : "sponsor-a",
+      "contactName" : "Alice",
       "company" : "Capitals Inc",
       "intro" : null,
       "avatar" : null,

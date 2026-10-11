@@ -1,15 +1,14 @@
 /*---
 id: qb.admin.sponsors
 description: Sponsor onboarding (P-09) with the sponsor's name and address, newest application first
-entities: [QbSponsor, QbProfile, SecUser]
+entities: [QbSponsor, SecUser]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
-  QbProfile: urn:jabiz:dataset:default:QbProfile
 results:
   onboardingId:      { from: QbSponsor.onboardingId }
   userId:            { from: QbSponsor.userId }
   company:           { from: QbSponsor.company }
-  displayName:       { from: QbProfile.displayName }
+  contactName:       { from: QbSponsor.contactName }
   email:             { from: SecUser.email }
   reviewStatus:      { from: QbSponsor.reviewStatus }
   submittedAt:       { from: QbSponsor.submittedAt }
@@ -28,7 +27,7 @@ SELECT
     s.{{QbSponsor.onboardingId}}      AS onboardingId,
     s.{{QbSponsor.userId}}            AS userId,
     s.{{QbSponsor.company}}           AS company,
-    p.{{QbProfile.displayName}}       AS displayName,
+    s.{{QbSponsor.contactName}}       AS contactName,
     u.{{SecUser.email}}               AS email,
     s.{{QbSponsor.reviewStatus}}      AS reviewStatus,
     s.{{QbSponsor.submittedAt}}       AS submittedAt,
@@ -36,5 +35,4 @@ SELECT
     s.{{QbSponsor.rejectReason}}      AS rejectReason,
     s.{{QbSponsor.approvalRequestId}} AS approvalRequestId
 FROM {{QbSponsor}} s
-LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = s.{{QbSponsor.userId}}
 LEFT JOIN {{SecUser}} u ON CAST(u.{{SecUser.userId}} AS text) = s.{{QbSponsor.userId}}

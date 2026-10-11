@@ -88,7 +88,7 @@ class SponsorOnboardingIT extends AccountItSupport {
         assertThat(items("qb.admin.sponsors", tokenOf("reader", QbRoles.ADMIN_CONTENT), Map.of("filters",
             List.of(Map.of("field", "reviewStatus", "op", "eq", "value", "APPROVED")))))
             .anySatisfy(row -> assertThat(row).containsEntry("userId", sara).containsEntry("company", "Acme")
-                .containsEntry("displayName", "Sara").containsEntry("email", query(
+                .containsEntry("contactName", "Sara").containsEntry("email", query(
                     "SELECT email FROM sec_user_version WHERE user_id = ?::uuid", sara).getFirst().get("email")));
     }
 
@@ -116,7 +116,9 @@ class SponsorOnboardingIT extends AccountItSupport {
         assertThat(again).containsEntry("reviewStatus", SponsorStatus.PENDING);
         assertThat(again.get("approvalRequestId")).isNotEqualTo(first);
         assertThat(openTasksOf(sara)).isEmpty();
-        assertThat(onboardingOf(sara)).containsEntry("reject_reason", null).containsEntry("company", "Acme Quizzes");
+        // Review 10: the earlier rejection's reason and time are cleared.
+        assertThat(onboardingOf(sara)).containsEntry("reject_reason", null).containsEntry("rejected_at", null)
+            .containsEntry("company", "Acme Quizzes");
         decideSponsor(again.get("approvalRequestId"), "APPROVE", null);
         assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.APPROVED);
     }
@@ -142,6 +144,66 @@ class SponsorOnboardingIT extends AccountItSupport {
         decideSponsor(second.get("approvalRequestId"), "APPROVE", null);
         assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.APPROVED)
             .containsEntry("company", "Acme Ltd");
+    }
+
+    /**
+     * Review 1: the name the reviewer approves is the onboarding's own ({@code contactName}); a person who is also a
+     * taker and renames their profile in the app meanwhile does not unbind the request.
+     */
+    @Test
+    void aProfileRenamedDuringTheReviewDoesNotUnbindIt() {
+        String sara = newSponsor("sara");
+        assignRole(sara, QbRoles.TAKER);
+        Map<String, Object> applied = run("QB_SPONSOR_APPLY", tokenOf(sara, QbRoles.SPONSOR),
+            application("Sara", "Acme"));
+        run("QB_PROFILE_SAVE", tokenOf(sara, QbRoles.TAKER), body("displayName", "Sara Lee", "countryCode", "JP",
+            "preferredCurrency", "JPY"));
+        decideSponsor(applied.get("approvalRequestId"), "APPROVE", null);
+        assertThat(onboardingOf(sara)).containsEntry("review_status", SponsorStatus.APPROVED)
+            .containsEntry("contact_name", "Sara");
+        assertThat(profileOf(sara)).containsEntry("display_name", "Sara Lee");
+    }
+
+    /** Review 6: the terms accepted once stay accepted, so the same application again is the same request. */
+    @Test
+    void theSameApplicationAgainIsTheSameRequest() {
+        String sara = newSponsor("sara");
+        String token = tokenOf(sara, QbRoles.SPONSOR);
+        Map<String, Object> first = run("QB_SPONSOR_APPLY", token, application("Sara", "Acme"));
+        Object accepted = onboardingOf(sara).get("terms_accepted_at");
+        clock.set(clock.instant().plusSeconds(600));
+        Map<String, Object> again = run("QB_SPONSOR_APPLY", token, application("Sara", "Acme"));
+        assertThat(again.get("approvalRequestId")).isEqualTo(first.get("approvalRequestId"));
+        assertThat(onboardingOf(sara).get("terms_accepted_at")).isEqualTo(accepted);
+        assertThat(request(first.get("approvalRequestId"))).containsEntry("status", "PENDING");
+    }
+
+    /** S3: a replaced avatar is released, once nothing refers to it. */
+    @Test
+    void aReplacedAvatarIsReleased() {
+        String sara = newSponsor("sara");
+        String token = tokenOf(sara, QbRoles.SPONSOR);
+        String first = (String) upload(QbAccounts.AVATAR_POLICY, FileSamples.jpeg(60, 60), "a.jpg", "image/jpeg",
+            token).expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+        Map<String, Object> withFirst = application("Sara", "Acme");
+        withFirst.put("avatar", first);
+        Map<String, Object> applied = run("QB_SPONSOR_APPLY", token, withFirst);
+        decideSponsor(applied.get("approvalRequestId"), "APPROVE", null);
+        String second = (String) upload(QbAccounts.AVATAR_POLICY, FileSamples.jpeg(60, 60), "b.jpg", "image/jpeg",
+            token).expectStatus().isCreated().expectBody(MAP).returnResult().getResponseBody().get("fileId");
+        run("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara", "company", "Acme", "avatar", second));
+        assertThat(fileExists(first)).isFalse();
+        assertThat(fileExists(second)).isTrue();
+        // Saved again with the same avatar, nothing is released.
+        run("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara", "company", "Acme Ltd", "avatar", second));
+        assertThat(fileExists(second)).isTrue();
+        // Removed: released too.
+        run("QB_SPONSOR_PROFILE_SAVE", token, body("displayName", "Sara", "company", "Acme Ltd"));
+        assertThat(fileExists(second)).isFalse();
+    }
+
+    private static boolean fileExists(String fileId) {
+        return !query("SELECT 1 FROM sys_file WHERE file_id = ?::uuid", fileId).isEmpty();
     }
 
     @Test

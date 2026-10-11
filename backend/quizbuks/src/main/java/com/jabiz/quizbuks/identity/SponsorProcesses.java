@@ -21,6 +21,9 @@ import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.SaveChanges;
+import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.task.CloseTasks;
 import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.task.TaskSpec;
@@ -74,6 +77,7 @@ public final class SponsorProcesses {
     static final String REQUEST = "request";
     static final String DECISIONS = "decisions";
     static final String KEY = "onboardingId";
+    static final String OLD_AVATAR = "oldAvatar";
 
     /**
      * @param displayName  the sponsor's name (their profile's)
@@ -119,6 +123,7 @@ public final class SponsorProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, SponsorOutput.class));
             AccountEditing.lock(pb);
+            CallerChecks.refuseBanned(pb);
             AccountEditing.loadOfUser(pb, "Load the onboarding", QbAccounts.SPONSOR, SPONSORS);
             AccountEditing.loadOfUser(pb, "Load the profile", QbAccounts.PROFILE, PROFILES);
             AccountEditing.loadFile(pb, ctx -> ctx.get(INPUT, ApplyInput.class).avatar());
@@ -131,6 +136,7 @@ public final class SponsorProcesses {
             pb.compute("Apply", (metadata, ctx) -> applied(ctx));
             pb.step("Close the request to submit again", CloseTasks.<ProcessContext>done(
                 ctx -> QbAccounts.taskSource(AccountEditing.userId(ctx))));
+            releaseOldAvatar(pb);
             approvedMail(pb, links);
         });
     }
@@ -159,15 +165,21 @@ public final class SponsorProcesses {
             return;
         }
         Object id = sponsor == null ? ctx.get(NEW_ID) : sponsor.id();
-        Instant terms = ctx.opTime();
+        // Accepted once, the terms stay accepted (until terms are versioned, Q7): the same application again is the
+        // same content, so it finds the same request (pending) rather than replacing it.
+        Instant accepted = sponsor == null ? null : AccountEditing.instant(sponsor.get("termsAcceptedAt"));
+        Instant terms = accepted != null ? accepted : ctx.opTime();
         Map<String, Object> values = new LinkedHashMap<>();
+        values.put("contactName", input.displayName());
         values.put("company", input.company());
         values.put("intro", blankToNull(input.intro()));
         values.put("avatar", input.avatar());
         values.put("termsAcceptedAt", terms);
         values.put("submittedAt", ctx.opTime());
         values.put("rejectReason", null);
+        values.put("rejectedAt", null);
         ctx.put(VALUES, values);
+        oldAvatar(ctx, sponsor, input.avatar());
         ctx.put(CASE, ApprovalCase.of(id, SponsorApprovals.facts(autoApprove(ctx)), SponsorApprovals.content(
             input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms))
             .reference(reference(input.company())));
@@ -199,15 +211,37 @@ public final class SponsorProcesses {
             case APPROVED -> approve(ctx, values, approval.requestId());
             default -> throw new IllegalStateException("Unknown approval outcome " + approval.status());
         }
+        // The profile shows the name too; the last writer wins there (the onboarding keeps the approved one).
         String userId = AccountEditing.userId(ctx);
         AccountEditing.writeName(ctx, first(ctx, PROFILES), userId, input.displayName());
         write(ctx, first(ctx, SPONSORS), values, approval.status().name());
+    }
+
+    /** Notes the avatar the onboarding had, when this write replaces or removes it. */
+    private static void oldAvatar(ProcessContext ctx, EntityInstance sponsor, UUID given) {
+        Object stored = sponsor == null ? null : sponsor.get("avatar");
+        if (stored != null && !AccountEditing.same(stored, given)) {
+            ctx.put(OLD_AVATAR, AccountEditing.uuid(stored));
+        }
+    }
+
+    /**
+     * Releases a replaced avatar (review S3; root CLAUDE.md, files): the reference is cleared and saved first, then the
+     * platform deletes the file, which it refuses while anything still refers to it.
+     */
+    private static <I, O> void releaseOldAvatar(com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Save", SaveChanges.now())
+            .step("Release the old avatar", CallProcess.<ProcessContext>when(
+                ctx -> !ctx.hasViolations() && ctx.contains(OLD_AVATAR), FileProcesses.DELETE, 1,
+                ctx -> new FileProcesses.DeleteInput(ctx.get(OLD_AVATAR, UUID.class)), null));
     }
 
     private static void approve(ProcessContext ctx, Map<String, Object> values, String requestId) {
         values.put("reviewStatus", SponsorStatus.APPROVED);
         values.put("approvalRequestId", requestId);
         values.put("approvedAt", ctx.opTime());
+        values.put("rejectReason", null);
+        values.put("rejectedAt", null);
         ctx.put(APPROVED_NOW, true);
     }
 
@@ -280,10 +314,12 @@ public final class SponsorProcesses {
                     .contextFactory((start, input) -> AccountEditing.start(start, input, start.request().actorId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, SponsorOutput.class));
                 AccountEditing.lock(pb);
+                CallerChecks.refuseBanned(pb);
                 AccountEditing.loadOfUser(pb, "Load the onboarding", QbAccounts.SPONSOR, SPONSORS);
                 AccountEditing.loadOfUser(pb, "Load the profile", QbAccounts.PROFILE, PROFILES);
                 AccountEditing.loadFile(pb, ctx -> ctx.get(INPUT, ProfileInput.class).avatar());
                 pb.compute("Save the sponsor profile", (metadata, ctx) -> saveProfile(ctx));
+                releaseOldAvatar(pb);
             });
     }
 
@@ -306,9 +342,11 @@ public final class SponsorProcesses {
         }
         AccountEditing.writeName(ctx, first(ctx, PROFILES), userId, input.displayName());
         Map<String, Object> values = new LinkedHashMap<>();
+        values.put("contactName", input.displayName());
         values.put("company", input.company());
         values.put("intro", blankToNull(input.intro()));
         values.put("avatar", input.avatar());
+        oldAvatar(ctx, sponsor, input.avatar());
         Map<String, Object> changed = AccountEditing.differences(sponsor, values);
         if (changed.isEmpty()) {
             ctx.put(OUTPUT, new SponsorOutput(userId, AccountEditing.uuid(sponsor.id()), sponsor.get("reviewStatus"),
@@ -353,15 +391,13 @@ public final class SponsorProcesses {
                 }));
                 pb.step("Load the onboarding", QueryEntities.<ProcessContext>of(
                     QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> byKey(ctx.get(KEY)), FOUND));
-                pb.step("Load the profile", QueryEntities.<ProcessContext>of(
-                    QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> AccountEditing.ofUser(owner(ctx)), PROFILES));
                 pb.step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
                         ownRequest(ctx) ? AccountEditing.uuids(input(ctx).requestId()) : new ArrayList<>()))
                         .limit(1).build(), REQUEST));
                 pb.step("Load the decisions", QueryEntities.<ProcessContext>of(ApprovalEntities.DECISION_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
-                        boundRequest(ctx) ? AccountEditing.uuids(input(ctx).requestId()) : new ArrayList<>()))
+                        storedRequest(ctx) ? AccountEditing.uuids(input(ctx).requestId()) : new ArrayList<>()))
                         .limit(Integer.MAX_VALUE).build(), DECISIONS));
                 pb.step("Check the approval", RequireApproval.<ProcessContext>when(
                     ctx -> boundRequest(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
@@ -403,28 +439,30 @@ public final class SponsorProcesses {
             && input(ctx).requestId() != null && input(ctx).requestId().equals(found.get("approvalRequestId"));
     }
 
-    /**
-     * Whether the stored request (not the event) is the onboarding's own: of this subject and onboarding, bound to its
-     * present content. A name changed in the profile meanwhile unbinds it: the sponsor then applies again.
-     */
-    private static boolean boundRequest(ProcessContext ctx) {
+    /** Whether the stored request (not the event) is the onboarding's own: of this subject and onboarding. */
+    private static boolean storedRequest(ProcessContext ctx) {
         EntityInstance request = first(ctx, REQUEST);
         if (!ownRequest(ctx) || request == null) {
             return false;
         }
-        EntityInstance sponsor = first(ctx, FOUND);
-        String hash = SponsorApprovals.hash(storedCase(ctx).content());
         return SponsorApprovals.SUBJECT.equals(request.get("subject"))
-            && String.valueOf(sponsor.id()).equals(request.get("entityId"))
-            && hash.equals(String.valueOf((Object) request.get("contentHash")).strip());
+            && String.valueOf(first(ctx, FOUND).id()).equals(request.get("entityId"));
+    }
+
+    /**
+     * Whether the stored request is the onboarding's own and bound to its present content, which only applying again
+     * changes while it is pending (the content is the onboarding's alone, review 1). An approval needs it.
+     */
+    private static boolean boundRequest(ProcessContext ctx) {
+        return storedRequest(ctx) && SponsorApprovals.hash(storedCase(ctx).content())
+            .equals(String.valueOf((Object) first(ctx, REQUEST).get("contentHash")).strip());
     }
 
     /** The case of the onboarding as stored: its present content. */
     private static ApprovalCase storedCase(ProcessContext ctx) {
         EntityInstance sponsor = first(ctx, FOUND);
-        EntityInstance profile = first(ctx, PROFILES);
         return ApprovalCase.of(sponsor.id(), SponsorApprovals.facts(false), SponsorApprovals.content(
-            profile == null ? null : profile.get("displayName"), sponsor.get("company"), sponsor.get("intro"),
+            sponsor.get("contactName"), sponsor.get("company"), sponsor.get("intro"),
             AccountEditing.uuid(sponsor.get("avatar")), AccountEditing.instant(sponsor.get("termsAcceptedAt"))))
             .reference(reference(sponsor.get("company")));
     }
@@ -439,13 +477,13 @@ public final class SponsorProcesses {
 
     static void approvalResult(ProcessContext ctx) {
         EntityInstance sponsor = first(ctx, FOUND);
-        if (!boundRequest(ctx)) {
+        if (!storedRequest(ctx)) {
             unchanged(ctx, sponsor);
             return;
         }
         ApprovalResultInput input = input(ctx);
         Map<String, Object> values = new LinkedHashMap<>();
-        if (ApprovalEntities.APPROVED.equals(input.status())) {
+        if (ApprovalEntities.APPROVED.equals(input.status()) && boundRequest(ctx)) {
             ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
             if (approval == null || approval.status() != ApprovalOutcome.Status.APPROVED
                 || !input.requestId().equals(approval.requestId())) {
@@ -453,7 +491,6 @@ public final class SponsorProcesses {
                 return;
             }
             approve(ctx, values, approval.requestId());
-            values.put("rejectReason", null);
         } else if (ApprovalEntities.REJECTED.equals(input.status())
             && ApprovalEntities.REJECTED.equals(first(ctx, REQUEST).get("status"))) {
             values.put("reviewStatus", SponsorStatus.REJECTED);

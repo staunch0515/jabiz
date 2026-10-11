@@ -66,6 +66,24 @@ class ProfileIT extends AccountItSupport {
             .hasSize(2);
     }
 
+    /**
+     * Review 8: a sponsor's onboarding leaves a profile with a name only; when the same person later completes it in
+     * the app (a country), that is their registration's second step, and they are welcomed.
+     */
+    @Test
+    void aSponsorsNameOnlyProfileCompletedLaterIsWelcomed() {
+        String sara = userWithRole(unique("sara"), QbRoles.SPONSOR);
+        assignRole(sara, QbRoles.TAKER);
+        run("QB_SPONSOR_APPLY", tokenOf(sara, QbRoles.SPONSOR), body("displayName", "Sara", "company", "Acme",
+            "acceptTerms", true));
+        assertThat(profileOf(sara)).containsEntry("display_name", "Sara").containsEntry("country_code", null);
+        assertThat(templatesTo(sara)).isEmpty();
+        Map<String, Object> completed = run("QB_PROFILE_SAVE", tokenOf(sara, QbRoles.TAKER),
+            profile("Sara", "JP", null, "JPY"));
+        assertThat(completed).containsEntry("created", true).containsEntry("revision", 2);
+        assertThat(templatesTo(sara)).containsExactly("qb.welcome");
+    }
+
     @Test
     void theCountryMustBeKnownAndTheCurrencyOneOfTheList() {
         String taker = userWithRole(unique("ann"), QbRoles.TAKER);

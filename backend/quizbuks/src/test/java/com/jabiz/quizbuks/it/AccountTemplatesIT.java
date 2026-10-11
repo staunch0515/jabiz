@@ -118,7 +118,7 @@ class AccountTemplatesIT extends AccountItSupport {
             List.of(filter("reviewStatus", "eq", "PENDING"))));
         assertThat(pending).extracting(row -> row.get("userId")).containsSubsequence(second, first);
         assertThat(pending.stream().filter(row -> second.equals(row.get("userId"))).findFirst().orElseThrow())
-            .containsEntry("company", "Second " + tag).containsEntry("displayName", "Second")
+            .containsEntry("company", "Second " + tag).containsEntry("contactName", "Second")
             .containsEntry("approvalRequestId", request)
             .containsEntry("email", "second-" + tag.toLowerCase() + "@example.com");
         // Approved sponsors A and B are in the queue's history too.

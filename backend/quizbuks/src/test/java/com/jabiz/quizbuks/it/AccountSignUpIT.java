@@ -201,7 +201,7 @@ class AccountSignUpIT extends AccountItSupport {
         assertThat(run("QB_PROFILE_SAVE", bearerOf(renewed), body("displayName", "Tom", "countryCode", "JP",
             "preferredCurrency", "JPY"))).containsEntry("created", true);
         deliverEvents();
-        assertThat(received(email)).extracting(AccountSignUpIT::subject).contains("Welcome to QuizBuks, Tom");
+        assertThat(received(email)).extracting(AccountSignUpIT::subject).contains("Welcome, Tom");
         assertThat(received(email).getLast()).satisfies(mail -> assertThat(text(mail))
             .contains("https://quizbuks.example.com/admin/mail/unsubscribe"));
         // By the verified address as well as by the user name.
@@ -263,6 +263,37 @@ class AccountSignUpIT extends AccountItSupport {
         assertThat(query("SELECT outcome, entry FROM sec_login_record_version WHERE user_id = ?::uuid "
             + "ORDER BY attempt_no DESC LIMIT 1", userId)).singleElement().satisfies(row -> assertThat(row)
             .containsEntry("outcome", "NO_ROLE").containsEntry("entry", "admin"));
+    }
+
+    /**
+     * Review 8: a ban closes all three entries. A verified person who is taker and sponsor is refused at both; the
+     * administration takes no banned user either, even one given an administrator's role after the ban.
+     */
+    @Test
+    void aBanClosesAllThreeEntries() {
+        String email = address("all");
+        register("app", email);
+        verify(email);
+        register("sponsor", email);
+        anonymous("/api/auth/join", Map.of("token", token(JOIN_LINK, email))).expectStatus().isNoContent();
+        String userId = userIdOf(email);
+        sessionAt(email, "app");
+        sessionAt(email, "sponsor");
+        String boss = userWithRole(unique("boss"), QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", tokenOf(boss, QbRoles.ADMIN_SUPER), body("userId", userId, "reason", "Fraud"));
+        // The platform's first administrator's role (no second factor), given after the ban.
+        if (query("SELECT 1 FROM sec_role_version WHERE role_code = 'ADMIN'").isEmpty()) {
+            commit(com.jabiz.runtime.security.SecurityEntities.ROLE_DATASET, "INSERT", null, null, Map.of("roleCode",
+                "ADMIN", "labels", Map.of("en", "Administrator"), "enabled", true), null);
+        }
+        assignRole(userId, "ADMIN");
+
+        for (String entry : List.of("app", "sponsor", "admin")) {
+            assertThat(code(signIn(email, entry), 403)).as(entry).isEqualTo("SIGN_IN_REFUSED");
+        }
+        assertThat(query("SELECT entry FROM sec_login_record_version WHERE user_id = ?::uuid AND outcome = "
+            + "'REFUSED' ORDER BY attempt_no", userId)).extracting(row -> row.get("entry"))
+            .containsExactly("app", "sponsor", "admin");
     }
 
     @Test

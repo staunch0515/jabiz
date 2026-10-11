@@ -99,6 +99,10 @@ public final class QbAccounts {
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:sponsor"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true)
             .asText(AccountLimits.USER_ID_LENGTH));
+        // The sponsor's name as applied for and approved (M-01, M-03). The profile carries a name too (the taker's,
+        // shown in the app); this one is the onboarding's own, so renaming the profile never unbinds a review.
+        eb.field("contactName", f -> f.physicalColumn("contact_name").required(true)
+            .asText(AccountLimits.DISPLAY_NAME_LENGTH).apply(Rules.notBlank(AccountCodes.NAME_BLANK)));
         eb.field("company", f -> f.physicalColumn("company").required(true).asText(AccountLimits.COMPANY_LENGTH)
             .apply(Rules.notBlank(AccountCodes.COMPANY_BLANK)));
         // Markdown in one language, rendered by the frontends only, without raw HTML.
@@ -132,7 +136,8 @@ public final class QbAccounts {
         eb.display("company");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("userId", "company", "reviewStatus", "submittedAt", "approvedAt", "rejectReason", "editedAt")
+            .columns("userId", "contactName", "company", "reviewStatus", "submittedAt", "approvedAt", "rejectReason",
+                "editedAt")
             .filters("userId", "company", "reviewStatus", "submittedAt", "approvedAt")
             .sorts("submittedAt", "approvedAt", "company", "editedAt")
             .defaultSort("submittedAt", false));

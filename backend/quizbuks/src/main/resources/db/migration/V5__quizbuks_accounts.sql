@@ -39,6 +39,7 @@ SELECT quizbuks_create_temporal_table('qb_profile_version', 'profile_id', '
 
 SELECT quizbuks_create_temporal_table('qb_sponsor_version', 'onboarding_id', '
     user_id             varchar(128)  NOT NULL,
+    contact_name        varchar(100)  NOT NULL,
     company             varchar(100)  NOT NULL,
     intro               varchar(2000),
     avatar              uuid,
