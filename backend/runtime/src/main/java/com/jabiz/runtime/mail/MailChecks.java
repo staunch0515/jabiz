@@ -77,6 +77,18 @@ public class MailChecks implements PlatformCheck {
                 problems.add(CheckProblem.error(CATEGORY, location, "is declared more than once"));
                 continue;
             }
+            // The platform's namespace: a token of purpose jabiz.reset drawn by any other template would be taken by
+            // the platform's processes (docs/design/10-security.md section 15.7).
+            if (!com.jabiz.runtime.security.AuthMailTemplates.NAMES.contains(template.name())) {
+                if (template.name().startsWith(MailTemplate.PLATFORM_PREFIX)) {
+                    problems.add(CheckProblem.error(CATEGORY, location, "is named in the platform's namespace "
+                        + MailTemplate.PLATFORM_PREFIX + ", which applications do not use"));
+                }
+                template.tokens().keySet().stream().filter(purpose -> purpose.startsWith(MailTemplate.PLATFORM_PREFIX))
+                    .forEach(purpose -> problems.add(CheckProblem.error(CATEGORY, location, "draws tokens of purpose "
+                        + purpose + ", in the platform's namespace " + MailTemplate.PLATFORM_PREFIX
+                        + ", which applications do not use")));
+            }
             for (String param : template.params()) {
                 if (hidden.test(param)) {
                     problems.add(CheckProblem.error(CATEGORY, location, "parameter " + param + " is named like a "

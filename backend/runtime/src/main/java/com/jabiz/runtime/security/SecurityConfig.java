@@ -74,7 +74,7 @@ public class SecurityConfig {
         // Self-registration, the links of its mail and password reset (decision D36): rate limited, and telling
         // nothing about which addresses have accounts. Asking for one's own verification mail needs a session.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, SignUpController.REGISTER, SignUpController.JOIN,
-            SignUpController.VERIFY, SignUpController.VERIFY_RESEND, SignUpController.RESET_REQUEST,
+            SignUpController.VERIFY, SignUpController.VERIFY_CHECK, SignUpController.VERIFY_RESEND, SignUpController.RESET_REQUEST,
             SignUpController.RESET_CONFIRM),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SignUpController.ENTRIES + "/*"),
         // Signing in through an identity provider (docs/design/10-security.md section 12).

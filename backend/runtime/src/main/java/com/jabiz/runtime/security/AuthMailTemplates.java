@@ -28,10 +28,16 @@ public class AuthMailTemplates {
     public static final String ACCOUNT_EXISTS = "jabiz.auth.account-exists";
     public static final String PASSWORD_RESET = "jabiz.auth.password-reset";
 
-    /** Purposes of the tokens, which are also their placeholders. */
-    public static final String VERIFY = "verify";
-    public static final String JOIN = "join";
-    public static final String RESET = "reset";
+    /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
+    public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET);
+
+    /**
+     * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application
+     * template can draw a token these processes accept.
+     */
+    public static final String VERIFY = "jabiz.verify";
+    public static final String JOIN = "jabiz.join";
+    public static final String RESET = "jabiz.reset";
 
     /** The only parameter: the sign-in entry whose pages the link finishes at. */
     public static final String ENTRY = "entry";

@@ -81,6 +81,24 @@ class MailTemplateTest {
     }
 
     @Test
+    void tokenPurposesMayHaveANamespaceThatTheirPlaceholdersKeep() {
+        MailTemplate template = MailTemplate.define("jabiz.auth.reset", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token("jabiz.reset", Duration.ofHours(1)));
+        assertThat(template.placeholders()).contains("jabiz.reset");
+        assertThat(MailPlaceholders.of("[x]({baseUrl}/r?token={jabiz.reset})")).containsExactly("baseUrl",
+            "jabiz.reset");
+        assertThat(MailPlaceholders.problems(template, "s", "{baseUrl}?t={jabiz.reset}")).isEmpty();
+        assertThat(MailRenderer.render("s", "[x]({baseUrl}/r?token={jabiz.reset})", java.util.Map.of("baseUrl",
+            "https://a.example", "jabiz.reset", "tok"), template.urlSafePlaceholders()).text())
+            .contains("https://a.example/r?token=tok");
+        // Parameters have no namespace, and a namespace is one segment.
+        assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("jabiz.entry"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token("a.b.c", Duration.ofHours(1)))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void recipientsAreUsersOrPlausibleAddresses() {
         assertThat(MailRecipient.user(42)).isEqualTo(new MailRecipient("42", null, null));
         assertThat(MailRecipient.user("u", "a@example.com", Locale.JAPANESE).locale()).isEqualTo(Locale.JAPANESE);

@@ -3,6 +3,7 @@ package com.jabiz.runtime.security;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailRecipient;
+import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.StepImplementation;
 import com.jabiz.query.EntityQuery;
@@ -33,27 +34,40 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Self-registration, address verification and password reset (docs/design/10-security.md section 15; decision D36
+ * Self-registration, address verification and password reset (docs/design/10-security.md section 15.7; decision D36
  * items 2, 3 and 5 and its implementation notes 4 to 7 and 12). Like signing in, each is a process that writes what it
  * did; they run only through {@code SignUpController} (their permission is granted to no role), anonymously except
  * the signed-in user's request for a new verification mail.
+ *
+ * <p>Two kinds of account matter (section 15.7):
+ * <ul>
+ *   <li><em>pre-claimable</em>: registered by itself ({@code registeredEmail}), never verified ({@code emailVerifiedAt}
+ *       empty) and still at the address it registered with. Whoever registered it may not own the mailbox, so proving
+ *       the mailbox (joining, verifying, resetting) takes it over: a new password, its second factor and sessions gone
+ *       ({@link #claim}). Verifying keeps it only with the registrant's current password.</li>
+ *   <li><em>trusted</em> address: verified, or that of a pre-claimable account. Only these get a password reset link
+ *       or a "you already have an account" mail, and only their links work. An address an administrator set is never
+ *       trusted until its user verifies it, signed in.</li>
+ * </ul>
  * <ul>
  *   <li>{@value #SIGN_UP}: an address nobody has gets a new user (named after the address), the entry's registration
  *       roles and a verification mail; an address that belongs to a user gets no user, never the submitted password,
- *       and its user (when enabled) gets the "you already have an account" mail instead. The password is hashed
+ *       and its user (enabled, trusted address) gets the "you already have an account" mail. The password is hashed
  *       either way, so the two cannot be told apart by time either.</li>
- *   <li>{@value #JOIN}: the link of that mail adds the entry's registration roles to the user; an address that was not
- *       verified must be given a new password at the same time, which ends every session and removes a second factor
- *       set up before the address was proven (account pre-claim protection).</li>
- *   <li>{@value #VERIFY}: the link of a verification mail proves the address; {@value #VERIFY_SEND} sends a new one
- *       (to unverified users only), which supersedes the earlier link.</li>
- *   <li>{@value #RESET_REQUEST} sends a password reset link to an enabled user; {@value #RESET_CONFIRM} sets the
- *       password with it, proves the address, ends every session and records {@link LoginOutcome#PASSWORD_RESET}
- *       (which lifts a lock).</li>
+ *   <li>{@value #JOIN}: the link of that mail adds the entry's registration roles; a pre-claimable account also needs
+ *       a new password and is taken over.</li>
+ *   <li>{@value #VERIFY_CHECK} (a dry run) tells from a verification link alone whether verifying needs a password;
+ *       {@value #VERIFY} proves the address; {@value #VERIFY_SEND} sends a new link (anonymously only to pre-claimable
+ *       accounts, signed in to any unverified one), which supersedes the earlier link.</li>
+ *   <li>{@value #RESET_REQUEST} sends a password reset link to an enabled user with a trusted address;
+ *       {@value #RESET_CONFIRM} sets the password, proves the address, ends every session and records
+ *       {@link LoginOutcome#PASSWORD_RESET} (which lifts a lock). A second factor stays, and is asked at the next
+ *       sign-in, except on a pre-claimable account.</li>
  * </ul>
  * Every link is a one-time token of its purpose ({@link MailTokens}); it is void once the user's address differs from
- * the one it was sent to, or the user is disabled, and every refusal of a link is the same {@code TOKEN_INVALID}.
- * Proving the address writes {@code verifiedEmail} and {@code emailVerifiedAt}, the only writers of both.
+ * the one it was sent to, or the user is disabled, and every refusal of a link is the same {@code TOKEN_INVALID}. The
+ * link is checked before any password is hashed. Proving the address writes {@code verifiedEmail} and
+ * {@code emailVerifiedAt}, the only writers of both.
  */
 @Configuration
 public class SignUpProcesses {
@@ -63,6 +77,7 @@ public class SignUpProcesses {
     public static final String SIGN_UP = "SPONSOR_SIGN_UP";
     public static final String JOIN = "SPONSOR_SIGN_UP_JOIN";
     public static final String VERIFY = "SPONSOR_EMAIL_VERIFY";
+    public static final String VERIFY_CHECK = "SPONSOR_EMAIL_VERIFY_CHECK";
     public static final String VERIFY_SEND = "SPONSOR_EMAIL_VERIFY_SEND";
     public static final String RESET_REQUEST = "SPONSOR_PASSWORD_RESET_REQUEST";
     public static final String RESET_CONFIRM = "SPONSOR_PASSWORD_RESET_CONFIRM";
@@ -75,6 +90,8 @@ public class SignUpProcesses {
 
     // Context keys.
     static final String PASSWORD = "password";
+    static final String CURRENT_PASSWORD = "current_password";
+    static final String PASSWORD_MATCHES = "password_matches";
     static final String HASH = "password_hash";
     static final String USERS = "users";
     static final String NAMES = "names";
@@ -87,7 +104,7 @@ public class SignUpProcesses {
     static final String MAIL_PARAMS = "mail_params";
     static final String NEW_USER = "new_user";
     static final String EXISTING_USER = "existing_user";
-    static final String USER = "user";
+    static final String LINKED = "linked";
     static final String END_SESSIONS = "end_sessions";
 
     /**
@@ -104,7 +121,7 @@ public class SignUpProcesses {
         }
     }
 
-    /** @param password a new password; required when the user's address was not verified */
+    /** @param password a new password; required for a pre-claimable account */
     public record JoinInput(@Sensitive String token, @Sensitive String password) {
         @Override
         public String toString() {
@@ -112,12 +129,23 @@ public class SignUpProcesses {
         }
     }
 
-    public record VerifyInput(@Sensitive String token) {
+    /**
+     * @param password    the account's current password (a pre-claimable account kept by its registrant), or null
+     * @param newPassword a new password (a pre-claimable account taken over), or null
+     */
+    public record VerifyInput(@Sensitive String token, @Sensitive String password, @Sensitive String newPassword) {
+        public VerifyInput(String token) {
+            this(token, null, null);
+        }
+
         @Override
         public String toString() {
             return "VerifyInput[***]";
         }
     }
+
+    /** What a verification link needs, told from the link alone. */
+    public record VerifyCheck(boolean passwordRequired) {}
 
     /**
      * @param entry  whose pages the link finishes at
@@ -200,18 +228,35 @@ public class SignUpProcesses {
                 ctx -> ctx.consumed() == null ? null : ctx.consumed().messageId(), MAIL_PARAMS))
             .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                 SignUpProcesses::linkUser, USERS))
+            .compute("Check the link", (metadata, ctx) -> checkLink(ctx, true))
             .step("Load the role assignments", QueryEntities.<AccountContext>of(SecurityEntities.USER_ROLE_DATASET,
-                ctx -> Rbac.assignmentsOf(ctx.user() == null ? null : ctx.user().id()), ASSIGNMENTS))
+                ctx -> Rbac.assignmentsOf(linkedId(ctx)), ASSIGNMENTS))
             .step("Find the registration roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
                 ctx -> rolesNamed(entries.resolve(ctx.entryName()).registrationRoles()), ROLES))
             .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
                 SignUpProcesses::secondFactorOf, MFA))
-            // Only an address not proven before needs the new password (and only then is it hashed).
+            // Only a pre-claimable account takes a new password (and only then is it hashed).
             .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD, HASH,
-                PASSWORD, true, ctx -> unproven(((AccountContext) ctx).user())))
+                PASSWORD, true, ctx -> preClaimable(linked(ctx))))
             .compute("Join", (metadata, ctx) -> join(ctx, entries))
             .step("End the sessions", on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(END_SESSIONS,
                 RefreshTokenStore.REASON_JOIN, ctx -> ctx.get(END_SESSIONS) != null && !ctx.hasViolations())));
+    }
+
+    static ProcessDefinition<VerifyInput, VerifyCheck, AccountContext> verifyCheck() {
+        return ProcessDefinition.define(VERIFY_CHECK, 1, VerifyInput.class, VerifyCheck.class, AccountContext.class,
+            pb -> pb
+                .description("Tells whether verifying with a link needs a password; run as a dry run only.")
+                .permissions(SecurityPermissions.SIGN_UP)
+                .internal()
+                .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null,
+                    input.token(), null))
+                .outputMapper(ctx -> new VerifyCheck(preClaimable(linked(ctx))))
+                .step("Use the link", MailTokens.<AccountContext>consume(AuthMailTemplates.VERIFY,
+                    AccountContext::token, CONSUMED))
+                .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
+                    SignUpProcesses::linkUser, USERS))
+                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, false)));
     }
 
     static ProcessDefinition<VerifyInput, Done, AccountContext> verify() {
@@ -219,19 +264,29 @@ public class SignUpProcesses {
             .description("Proves a user's e-mail address with the link of a verification mail.")
             .permissions(SecurityPermissions.SIGN_UP)
             .internal()
-            .contextFactory((start, input) -> new AccountContext(start, null, null, null, null, null, input.token(),
-                null))
+            .contextFactory((start, input) -> {
+                AccountContext ctx = new AccountContext(start, null, null, null, null, null, input.token(), null);
+                ctx.put(PASSWORD, input.newPassword());
+                ctx.put(CURRENT_PASSWORD, input.password());
+                return ctx;
+            })
             .outputMapper(DONE)
             .step("Use the link", MailTokens.<AccountContext>consume(AuthMailTemplates.VERIFY, AccountContext::token,
                 CONSUMED))
             .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                 SignUpProcesses::linkUser, USERS))
-            .compute("Record the proof", (metadata, ctx) -> {
-                EntityInstance user = linkedUser(ctx);
-                if (user != null) {
-                    ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), proof(ctx, user));
-                }
-            }));
+            .compute("Check the link", (metadata, ctx) -> checkLink(ctx, false))
+            .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
+                SignUpProcesses::secondFactorOf, MFA))
+            // A pre-claimable account: a new password takes it over, or the current one keeps it.
+            .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD, HASH,
+                "newPassword", true, ctx -> preClaimable(linked(ctx))))
+            .step("Check the current password", on(CurrentPasswordStep.class), new CurrentPasswordStep.Metadata(
+                CURRENT_PASSWORD, ctx -> linked(ctx).get("passwordHash"), PASSWORD_MATCHES,
+                ctx -> preClaimable(linked(ctx)) && ctx.get(HASH) == null && ctx.get(CURRENT_PASSWORD) != null))
+            .compute("Record the proof", (metadata, ctx) -> verify(ctx))
+            .step("End the sessions", on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(END_SESSIONS,
+                RefreshTokenStore.REASON_CLAIM, ctx -> ctx.get(END_SESSIONS) != null && !ctx.hasViolations())));
     }
 
     static ProcessDefinition<VerifySendInput, Done, AccountContext> verifySend(AuthMailTemplates.Templates mail) {
@@ -245,10 +300,8 @@ public class SignUpProcesses {
                 .outputMapper(DONE)
                 .step("Find the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     ctx -> ctx.userId() != null ? byId(ctx.userId()) : LoadUserByEmail.query(ctx.email()), USERS))
-                .step("Send the verification", SendMail.<AccountContext>when(ctx -> {
-                        EntityInstance user = ctx.user();
-                        return user != null && Rbac.enabled(user) && user.get("email") != null && unproven(user);
-                    }, mail.verifyEmail(), ctx -> MailRecipient.user(ctx.user().id()),
+                .step("Send the verification", SendMail.<AccountContext>when(SignUpProcesses::verificationDue,
+                    mail.verifyEmail(), ctx -> MailRecipient.user(ctx.user().id()),
                     Map.of(AuthMailTemplates.ENTRY, AccountContext::entryName))));
     }
 
@@ -256,7 +309,7 @@ public class SignUpProcesses {
         AuthMailTemplates.Templates mail) {
         return ProcessDefinition.define(RESET_REQUEST, 1, ResetRequestInput.class, Done.class, AccountContext.class,
             pb -> pb
-                .description("Sends a password reset link to the enabled user of an address.")
+                .description("Sends a password reset link to the enabled user of a trusted address.")
                 .permissions(SecurityPermissions.SIGN_UP)
                 .internal()
                 .contextFactory((start, input) -> new AccountContext(start, input.entry(), input.email(), null, null,
@@ -264,8 +317,8 @@ public class SignUpProcesses {
                 .outputMapper(DONE)
                 .step("Find the address", LoadUserByEmail.<AccountContext>into(AccountContext::email, USERS))
                 .step("Send the link", SendMail.<AccountContext>when(
-                    ctx -> ctx.user() != null && Rbac.enabled(ctx.user()), mail.passwordReset(),
-                    ctx -> MailRecipient.user(ctx.user().id()),
+                    ctx -> ctx.user() != null && Rbac.enabled(ctx.user()) && trusted(ctx.user()),
+                    mail.passwordReset(), ctx -> MailRecipient.user(ctx.user().id()),
                     Map.of(AuthMailTemplates.ENTRY, AccountContext::entryName))));
     }
 
@@ -288,18 +341,47 @@ public class SignUpProcesses {
                     ctx -> ctx.consumed() == null ? null : ctx.consumed().messageId(), MAIL_PARAMS))
                 .step("Load the user", QueryEntities.<AccountContext>of(SecurityEntities.USER_DATASET,
                     SignUpProcesses::linkUser, USERS))
+                .compute("Check the link", (metadata, ctx) -> checkLink(ctx, true))
                 .step("Load the latest login record", QueryEntities.<AccountContext>of(
-                    SecurityEntities.LOGIN_RECORD_DATASET,
-                    ctx -> Rbac.latestLoginRecordOf(ctx.user() == null ? null : ctx.user().id()), LATEST_RECORD))
+                    SecurityEntities.LOGIN_RECORD_DATASET, ctx -> Rbac.latestLoginRecordOf(linkedId(ctx)),
+                    LATEST_RECORD))
                 .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
                     SignUpProcesses::secondFactorOf, MFA))
-                // Not for a link that found nobody: no hashing work for made-up tokens.
+                // Not for a link that is no good: no hashing work for made-up tokens.
                 .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD,
-                    HASH, PASSWORD, false, ctx -> ((AccountContext) ctx).user() != null))
+                    HASH, PASSWORD, false, ctx -> linked(ctx) != null))
                 .compute("Set the password", (metadata, ctx) -> resetPassword(ctx, policy))
                 .step("End the sessions", on(RevokeSessionsStep.class), new RevokeSessionsStep.Metadata(END_SESSIONS,
                     RefreshTokenStore.REASON_PASSWORD_RESET,
                     ctx -> ctx.get(END_SESSIONS) != null && !ctx.hasViolations())));
+    }
+
+    // ---- the kinds of account ------------------------------------------------------------------------------------
+
+    /**
+     * Registered by itself, never verified, and still at the address it registered with (regardless of case): whoever
+     * registered it may not own the mailbox, so proving the mailbox takes the account over.
+     */
+    static boolean preClaimable(EntityInstance user) {
+        return user != null && user.get("emailVerifiedAt") == null
+            && EmailVerification.verified(user.get("email"), user.get("registeredEmail"));
+    }
+
+    /** An address a mailed link may stand for: verified, or that of a pre-claimable account. */
+    static boolean trusted(EntityInstance user) {
+        return SecurityEntities.emailVerified(user) || preClaimable(user);
+    }
+
+    /**
+     * Whether to send a new verification: anonymously only to a pre-claimable account (an address an administrator
+     * set is verified by its user, signed in); to a signed-in user whose address is not verified.
+     */
+    private static boolean verificationDue(AccountContext ctx) {
+        EntityInstance user = ctx.user();
+        if (user == null || !Rbac.enabled(user) || user.get("email") == null || SecurityEntities.emailVerified(user)) {
+            return false;
+        }
+        return ctx.userId() != null || preClaimable(user);
     }
 
     // ---- computations ---------------------------------------------------------------------------------------------
@@ -319,7 +401,8 @@ public class SignUpProcesses {
         List<EntityInstance> found = ctx.list(USERS);
         if (!found.isEmpty()) {
             EntityInstance existing = ctx.user();
-            if (existing != null && Rbac.enabled(existing)) {
+            // An address an administrator set and nobody verified gets nothing: its link could prove nothing.
+            if (existing != null && Rbac.enabled(existing) && trusted(existing)) {
                 ctx.put(EXISTING_USER, existing);
             }
             return;
@@ -330,6 +413,7 @@ public class SignUpProcesses {
         user.put("displayName", ctx.displayName() == null || ctx.displayName().isBlank() ? null
             : ctx.displayName().strip());
         user.put("email", ctx.email());
+        user.put("registeredEmail", ctx.email());
         user.put("locale", ctx.locale());
         user.put("enabled", true);
         user.put("passwordHash", ctx.get(HASH, String.class));
@@ -340,9 +424,9 @@ public class SignUpProcesses {
         ctx.put(NEW_USER, userId);
     }
 
-    /** Adds the entry's registration roles; an address not proven before also takes the new password. */
+    /** Adds the entry's registration roles; a pre-claimable account also takes the new password and is taken over. */
     static void join(AccountContext ctx, SignInEntries entries) {
-        EntityInstance user = linkedUser(ctx);
+        EntityInstance user = linked(ctx);
         if (user == null) {
             return;
         }
@@ -356,12 +440,12 @@ public class SignUpProcesses {
         if (roles == null) {
             return;
         }
-        boolean unproven = unproven(user);
+        boolean preClaimable = preClaimable(user);
         String hash = ctx.get(HASH, String.class);
-        if (unproven && hash == null) {
+        if (preClaimable && hash == null) {
             // Whoever registered the address first may know the password: it cannot stay (implementation note 6).
             ctx.reject(new Violation(PASSWORD, PlatformErrorCodes.REQUIRED,
-                "A new password is required to join with an unverified address", Map.of("field", PASSWORD)));
+                "A new password is required to join with an address nobody has verified", Map.of("field", PASSWORD)));
             return;
         }
         Set<String> held = new HashSet<>();
@@ -372,46 +456,73 @@ public class SignUpProcesses {
             }
         }
         Map<String, Object> changed = proof(ctx, user);
-        if (unproven) {
+        if (preClaimable) {
             changed.put("passwordHash", hash);
-            claim(ctx, user);
+            claim(ctx);
         }
         ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
     }
 
-    /** Sets the password, proves the address and records the reset, which lifts a lock. */
+    /**
+     * Proves the address. A pre-claimable account needs a new password (taken over) or its current one (kept by its
+     * registrant); any other account (an address its signed-in user asked to verify) needs nothing more.
+     */
+    static void verify(AccountContext ctx) {
+        EntityInstance user = linked(ctx);
+        if (user == null) {
+            return;
+        }
+        Map<String, Object> changed = proof(ctx, user);
+        if (preClaimable(user)) {
+            String hash = ctx.get(HASH, String.class);
+            if (hash != null) {
+                changed.put("passwordHash", hash);
+                claim(ctx);
+            } else if (!Boolean.TRUE.equals(ctx.get(PASSWORD_MATCHES))) {
+                ctx.reject(ctx.get(PASSWORD_MATCHES) == null
+                    ? new Violation(PASSWORD, PlatformErrorCodes.REQUIRED, "Verifying this address needs the "
+                        + "account's password or a new one", Map.of("field", PASSWORD))
+                    : new Violation(PASSWORD, PlatformErrorCodes.PASSWORD_INCORRECT, "The password is not correct",
+                        Map.of("field", PASSWORD)));
+                return;
+            }
+        }
+        ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
+    }
+
+    /** Sets the password, proves the address, ends the sessions and records the reset, which lifts a lock. */
     static void resetPassword(AccountContext ctx, LoginAttemptPolicy policy) {
-        EntityInstance user = linkedUser(ctx);
+        EntityInstance user = linked(ctx);
         String hash = ctx.get(HASH, String.class);
         if (user == null || hash == null) {
             return;
         }
         Map<String, Object> changed = proof(ctx, user);
         changed.put("passwordHash", hash);
-        if (unproven(user)) {
-            claim(ctx, user);
+        if (preClaimable(user)) {
+            claim(ctx);
         }
-        // Sessions opened with the old password must not live on (decision D36 item 5).
+        // Sessions opened with the old password must not live on (decision D36 item 5). A second factor stays: the
+        // reset proves the mailbox, not the authenticator, which the next sign-in still asks for.
         ctx.put(END_SESSIONS, user);
         ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), changed);
         List<EntityInstance> latest = ctx.list(LATEST_RECORD);
         EntityInstance previous = latest.isEmpty() ? null : latest.getFirst();
         LoginAttemptPolicy.State next = policy.next(Rbac.state(previous), LoginOutcome.PASSWORD_RESET, ctx.opTime());
-        String entry = ctx.entryName();
         ctx.changes().insert(SecurityEntities.LOGIN_RECORD, SponsorSignInProcess.record(user.id(),
             user.get("userName"), LoginOutcome.PASSWORD_RESET, next, ctx.opTime(), ctx.request().requestId(), null,
-            Rbac.mfaStep(previous), ctx.source().withEntry(entry)));
+            Rbac.mfaStep(previous), ctx.source().withEntry(ctx.entryName())));
     }
 
     /**
-     * The user of an address that was not proven until now: whoever registered it may have set up a second factor
-     * and may hold sessions. Both go with the new password (account pre-claim protection).
+     * Takes over a pre-claimable account: whoever registered it may have set up a second factor and may hold sessions.
+     * Both go with the new password (account pre-claim protection).
      */
-    private static void claim(AccountContext ctx, EntityInstance user) {
+    private static void claim(AccountContext ctx) {
         for (EntityInstance mfa : ctx.list(MFA)) {
             ctx.changes().delete(SecurityEntities.USER_MFA, mfa.id(), mfa.version());
         }
-        ctx.put(END_SESSIONS, user);
+        ctx.put(END_SESSIONS, linked(ctx));
     }
 
     /** The verification fields proving the user's current address. */
@@ -423,26 +534,38 @@ public class SignUpProcesses {
     }
 
     /**
-     * The user a used link stands for: enabled and still at the address the mail went to (regardless of case).
-     * Otherwise the link is void: {@code TOKEN_INVALID}, as for any other invalid link (once).
+     * Checks the user a used link stands for, before anything else is done with it: enabled and still at the address
+     * the mail went to (regardless of case), and for {@code trustedOnly} links at a trusted address. Otherwise the link
+     * is void: {@code TOKEN_INVALID}, as for any other invalid link (once). The user goes under {@value #LINKED}.
      */
-    static EntityInstance linkedUser(AccountContext ctx) {
+    static void checkLink(AccountContext ctx, boolean trustedOnly) {
         MailTokens.Consumed consumed = ctx.consumed();
         if (consumed == null) {
             // The token step rejected the link already.
-            return null;
+            return;
         }
         EntityInstance user = ctx.user();
         if (user == null || !Rbac.enabled(user) || consumed.userId() == null
             || !consumed.userId().equals(String.valueOf(user.id()))
-            || !EmailVerification.verified(user.get("email"), consumed.address())) {
+            || !EmailVerification.verified(user.get("email"), consumed.address())
+            || (trustedOnly && !trusted(user))) {
             if (!ctx.hasViolations()) {
                 ctx.reject(new Violation(null, PlatformErrorCodes.TOKEN_INVALID, "Invalid token (user or address "
                     + "changed)"));
             }
-            return null;
+            return;
         }
-        return user;
+        ctx.put(LINKED, user);
+    }
+
+    /** The user a good link stands for; null otherwise. */
+    static EntityInstance linked(ProcessContext ctx) {
+        return ctx.get(LINKED) instanceof EntityInstance user ? user : null;
+    }
+
+    private static Object linkedId(ProcessContext ctx) {
+        EntityInstance user = linked(ctx);
+        return user == null ? null : user.id();
     }
 
     /** The entry's registration roles by code, enabled and existing; null (and a violation) when one is missing. */
@@ -458,10 +581,6 @@ public class SignUpProcesses {
         }
         byCode.keySet().retainAll(entry.registrationRoles());
         return byCode;
-    }
-
-    private static boolean unproven(EntityInstance user) {
-        return user != null && !SecurityEntities.emailVerified(user);
     }
 
     private static EntityQuery linkUser(AccountContext ctx) {
@@ -481,8 +600,8 @@ public class SignUpProcesses {
     }
 
     private static EntityQuery secondFactorOf(AccountContext ctx) {
-        EntityInstance user = ctx.user();
-        return Rbac.all(new QueryPredicate.In("userId", user == null ? List.of() : List.of(user.id())), "userId");
+        Object user = linkedId(ctx);
+        return Rbac.all(new QueryPredicate.In("userId", user == null ? List.of() : List.of(user)), "userId");
     }
 
     private static EntityQuery rolesNamed(Set<String> codes) {
@@ -526,6 +645,11 @@ public class SignUpProcesses {
     @Bean
     ProcessDefinition<VerifyInput, Done, AccountContext> sponsorEmailVerifyProcess() {
         return verify();
+    }
+
+    @Bean
+    ProcessDefinition<VerifyInput, VerifyCheck, AccountContext> sponsorEmailVerifyCheckProcess() {
+        return verifyCheck();
     }
 
     @Bean

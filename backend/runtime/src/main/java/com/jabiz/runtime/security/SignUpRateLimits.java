@@ -42,7 +42,8 @@ public class SignUpRateLimits {
         this(perAddress, perEmail, period, System::nanoTime);
     }
 
-    SignUpRateLimits(int perAddress, int perEmail, Duration period, LongSupplier nanoTime) {
+    /** As above, timed by {@code nanoTime} (tests). */
+    public SignUpRateLimits(int perAddress, int perEmail, Duration period, LongSupplier nanoTime) {
         if (perAddress <= 0 || perEmail <= 0) {
             throw new IllegalArgumentException("Sign-up rate limits must be positive");
         }

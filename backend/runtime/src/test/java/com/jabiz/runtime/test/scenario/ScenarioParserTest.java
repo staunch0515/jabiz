@@ -140,6 +140,7 @@ class ScenarioParserTest {
     void anActorMayHavePassedASecondFactorAndNameASavedUser() {
         Scenario scenario = Scenario.parse("""
             name: X
+            properties: { jabiz.some.flag: true }
             clock: 2026-01-31T09:00:00Z
             actor: { id: admin, permissions: ["*"], mfa: true }
             steps:
@@ -147,6 +148,7 @@ class ScenarioParserTest {
                 actor: { id: "${hana}", permissions: [p] }
             """, "x.yml");
         assertThat(scenario.actor().mfa()).isTrue();
+        assertThat(scenario.properties()).containsExactly(java.util.Map.entry("jabiz.some.flag", "true"));
         assertThat(((Scenario.ProcessStep) scenario.steps().getFirst()).actor())
             .isEqualTo(new Scenario.Actor("${hana}", null, Set.of(), Set.of("p")));
         assertThat(((Scenario.ProcessStep) scenario.steps().getFirst()).actor().mfa()).isFalse();

@@ -20,16 +20,23 @@ import java.util.Set;
  *
  * @param source   where the scenario came from (classpath resource), for messages and the snapshot file
  * @param clock    the business time the replay starts at
- * @param snapshot entities of the snapshot and the time it is taken at; null for no snapshot
+ * @param snapshot   entities of the snapshot and the time it is taken at; null for no snapshot
+ * @param properties configuration of the replay's application context beyond the application's own (for example a
+ *                   sign-in entry that lets people register); empty for none
  */
 public record Scenario(String name, String source, Instant clock, Actor actor, List<Step> steps,
-    SnapshotSpec snapshot) {
+    SnapshotSpec snapshot, Map<String, String> properties) {
 
     public Scenario {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(actor, "actor");
         steps = List.copyOf(steps);
+        properties = properties == null ? Map.of() : Map.copyOf(properties);
+    }
+
+    public Scenario(String name, String source, Instant clock, Actor actor, List<Step> steps, SnapshotSpec snapshot) {
+        this(name, source, clock, actor, steps, snapshot, Map.of());
     }
 
     /**
@@ -139,17 +146,27 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
             throw new IllegalArgumentException(source + ": empty scenario");
         }
         try {
-            onlyKeys(root, "scenario", Set.of("name", "description", "clock", "actor", "steps", "snapshot"));
+            onlyKeys(root, "scenario", Set.of("name", "description", "clock", "actor", "steps", "snapshot",
+                "properties"));
             List<Step> steps = new ArrayList<>();
             List<?> rawSteps = list(root.get("steps"), "steps");
             for (int i = 0; i < rawSteps.size(); i++) {
                 steps.add(step(i + 1, map(rawSteps.get(i), "step " + (i + 1))));
             }
             return new Scenario(text(root, "name", true), source, instant(root.get("clock"), "clock"),
-                actor(map(root.get("actor"), "actor")), steps, snapshot(root.get("snapshot")));
+                actor(map(root.get("actor"), "actor")), steps, snapshot(root.get("snapshot")),
+                properties(root.get("properties")));
         } catch (IllegalArgumentException | ClassCastException e) {
             throw new IllegalArgumentException(source + ": " + e.getMessage(), e);
         }
+    }
+
+    private static Map<String, String> properties(Object raw) {
+        Map<String, String> properties = new LinkedHashMap<>();
+        if (raw != null) {
+            map(raw, "properties").forEach((key, value) -> properties.put(key, String.valueOf(value)));
+        }
+        return properties;
     }
 
     private static Actor actor(Map<String, Object> actor) {

@@ -9,15 +9,19 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.resource.ResourceNotFoundException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.web.ClientAddresses;
 import com.jabiz.security.Sensitive;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -43,6 +47,7 @@ class SignUpController {
     static final String REGISTER = "/api/auth/register";
     static final String JOIN = "/api/auth/join";
     static final String VERIFY = "/api/auth/verify-email";
+    static final String VERIFY_CHECK = "/api/auth/verify-email/check";
     static final String VERIFY_RESEND = "/api/auth/verify-email/resend";
     static final String ACCOUNT_VERIFY = "/api/auth/account/verify-email";
     static final String RESET_REQUEST = "/api/auth/password-reset/request";
@@ -67,7 +72,10 @@ class SignUpController {
         }
     }
 
-    /** @param password required when the account's address was not verified (422 {@code REQUIRED} without) */
+    /**
+     * @param password a new password: required for an account that registered itself and was never verified (422
+     *                 {@code REQUIRED} for {@code password} without), ignored otherwise
+     */
     record JoinRequest(@Sensitive String token, @Sensitive String password) {
         @Override
         public String toString() {
@@ -82,7 +90,24 @@ class SignUpController {
         }
     }
 
-    /** @param entry whose pages the mailed link leads to; none: the administration's */
+    /**
+     * @param password    the account's current password, or null
+     * @param newPassword a new password, or null; one of the two is needed for an account that registered itself and
+     *                    was never verified ({@code passwordRequired} of {@value #VERIFY_CHECK}), and ignored otherwise
+     */
+    record VerifyRequest(@Sensitive String token, @Sensitive String password, @Sensitive String newPassword) {
+        @Override
+        public String toString() {
+            return "VerifyRequest[***]";
+        }
+    }
+
+    /**
+     * @param email the address the request is about
+     * @param entry the sign-in entry whose pages the mailed link leads to (its name, as {@code GET} {@value #ENTRIES}
+     *              knows it); none: the administration's ({@code admin}). An unknown entry is 400, whatever the
+     *              address.
+     */
     record EmailRequest(String email, String entry) {}
 
     record ResetConfirmRequest(@Sensitive String token, @Sensitive String password) {
@@ -103,6 +128,8 @@ class SignUpController {
     private final ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp;
     private final ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join;
     private final ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify;
+    private final ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.VerifyCheck, AccountContext>
+        verifyCheck;
     private final ProcessDefinition<SignUpProcesses.VerifySendInput, SignUpProcesses.Done, AccountContext> verifySend;
     private final ProcessDefinition<SignUpProcesses.ResetRequestInput, SignUpProcesses.Done, AccountContext>
         resetRequest;
@@ -114,6 +141,7 @@ class SignUpController {
         ProcessDefinition<SignUpProcesses.SignUpInput, SignUpProcesses.Done, AccountContext> signUp,
         ProcessDefinition<SignUpProcesses.JoinInput, SignUpProcesses.Done, AccountContext> join,
         ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.Done, AccountContext> verify,
+        ProcessDefinition<SignUpProcesses.VerifyInput, SignUpProcesses.VerifyCheck, AccountContext> verifyCheck,
         ProcessDefinition<SignUpProcesses.VerifySendInput, SignUpProcesses.Done, AccountContext> verifySend,
         ProcessDefinition<SignUpProcesses.ResetRequestInput, SignUpProcesses.Done, AccountContext> resetRequest,
         ProcessDefinition<SignUpProcesses.ResetConfirmInput, SignUpProcesses.Done, AccountContext> resetConfirm) {
@@ -125,13 +153,15 @@ class SignUpController {
         this.signUp = signUp;
         this.join = join;
         this.verify = verify;
+        this.verifyCheck = verifyCheck;
         this.verifySend = verifySend;
         this.resetRequest = resetRequest;
         this.resetConfirm = resetConfirm;
     }
 
-    /** 202 whether or not the address is in use; 403 {@code SIGN_UP_DISABLED} for an entry without registration. */
+    /** 202 whether or not the address is in use; 422 {@code SIGN_UP_DISABLED} for an entry without registration. */
     @PostMapping(REGISTER)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     Mono<ResponseEntity<Void>> register(@RequestBody(required = false) RegisterRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
@@ -156,17 +186,18 @@ class SignUpController {
             }
             String email = body.email().strip();
             limits.email(SignUpRateLimits.Kind.REGISTER, email);
-            return processes.execute(signUp, new SignUpProcesses.SignUpInput(entries.find(body.entry()).orElseThrow()
-                    .name(), email, body.password(), displayName, locale))
-                // A concurrent registration of the same address got there first: it is in use now, as answered.
-                .onErrorResume(e -> e instanceof ValidationException v && v.violations().stream()
-                    .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode())),
-                    e -> Mono.just(SignUpProcesses.Done.DONE))
+            SignUpProcesses.SignUpInput input = new SignUpProcesses.SignUpInput(entries.find(body.entry())
+                .orElseThrow().name(), email, body.password(), displayName, locale);
+            return processes.execute(signUp, input)
+                // A concurrent registration of the same address got there first: once more, now as an address in
+                // use, so that its user gets the mail an address in use gets.
+                .onErrorResume(SignUpController::addressTaken, e -> processes.execute(signUp, input))
                 .thenReturn(accepted());
         });
     }
 
     @PostMapping(JOIN)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     Mono<ResponseEntity<Void>> join(@RequestBody(required = false) JoinRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
@@ -176,17 +207,45 @@ class SignUpController {
         });
     }
 
+    /**
+     * Proves the address with the link of a verification mail: 204. An account that registered itself and was never
+     * verified also needs its current password or a new one (422 {@code REQUIRED} or {@code PASSWORD_INCORRECT} for
+     * {@code password}); a new one takes it over from whoever registered it.
+     */
     @PostMapping(VERIFY)
-    Mono<ResponseEntity<Void>> verify(@RequestBody(required = false) TokenRequest request, ServerHttpRequest http) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    Mono<ResponseEntity<Void>> verify(@RequestBody(required = false) VerifyRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            return processes.execute(verify, new SignUpProcesses.VerifyInput(request == null ? null : request.token()))
+            VerifyRequest body = request == null ? new VerifyRequest(null, null, null) : request;
+            return processes.execute(verify, new SignUpProcesses.VerifyInput(body.token(), body.password(),
+                    body.newPassword()))
                 .thenReturn(ResponseEntity.noContent().<Void>build());
         });
     }
 
-    /** 202 whatever the address; only an enabled user whose address is not verified gets a mail. */
+    /**
+     * What verifying with a link needs, without using it (a dry run): whether a password is required. Told from the
+     * link alone (422 {@code TOKEN_INVALID} for any link that is no good), so it tells nothing about other addresses;
+     * the page asks before anything changes, and a mail scanner opening the link changes nothing.
+     */
+    @PostMapping(VERIFY_CHECK)
+    Mono<SignUpProcesses.VerifyCheck> verifyCheck(@RequestBody(required = false) TokenRequest request,
+        ServerHttpRequest http) {
+        return Mono.defer(() -> {
+            limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
+            return processes.run(verifyCheck, new SignUpProcesses.VerifyInput(request == null ? null
+                    : request.token()), ExecutionOptions.DRY_RUN)
+                .map(ProcessResult::output);
+        });
+    }
+
+    /**
+     * 202 whatever the address; only an enabled user that registered itself and was never verified gets a mail (an
+     * address an administrator set is verified by its user, signed in: {@value #ACCOUNT_VERIFY}).
+     */
     @PostMapping(VERIFY_RESEND)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     Mono<ResponseEntity<Void>> resend(@RequestBody(required = false) EmailRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.VERIFY_RESEND, clients.clientOf(http));
@@ -199,6 +258,7 @@ class SignUpController {
 
     /** The signed-in user's own request for a new verification mail, for the entry of the session; 202. */
     @PostMapping(ACCOUNT_VERIFY)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     Mono<ResponseEntity<Void>> resendOwn() {
         return RequestContexts.current().flatMap(context -> {
             UUID user = ActingUser.userId(context).orElseThrow(() -> new PermissionDeniedException(
@@ -210,8 +270,12 @@ class SignUpController {
         });
     }
 
-    /** 202 whatever the address; only an enabled user gets a mail. */
+    /**
+     * 202 whatever the address; only an enabled user with a trusted address (verified, or registered by itself and never
+     * verified) gets a mail.
+     */
     @PostMapping(RESET_REQUEST)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     Mono<ResponseEntity<Void>> resetRequest(@RequestBody(required = false) EmailRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
@@ -225,6 +289,7 @@ class SignUpController {
 
     /** 204; the user signs in with the new password afterwards (no session is opened here). */
     @PostMapping(RESET_CONFIRM)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     Mono<ResponseEntity<Void>> resetConfirm(@RequestBody(required = false) ResetConfirmRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
@@ -262,6 +327,12 @@ class SignUpController {
     /** 202 without a body, saying so ({@code Content-Length: 0}): the same for every address. */
     private static ResponseEntity<Void> accepted() {
         return ResponseEntity.accepted().contentLength(0).build();
+    }
+
+    /** The unique violation on the address of a registration that came second. */
+    private static boolean addressTaken(Throwable error) {
+        return error instanceof ValidationException v && v.violations().stream().anyMatch(violation ->
+            PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode()) && "email".equals(violation.field()));
     }
 
     private static List<Violation> emailProblems(String email) {
