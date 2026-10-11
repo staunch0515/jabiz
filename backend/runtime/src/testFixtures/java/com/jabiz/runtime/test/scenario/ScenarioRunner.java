@@ -28,6 +28,7 @@ import com.jabiz.runtime.imports.ImportReport;
 import com.jabiz.runtime.imports.ImportService;
 import com.jabiz.inbound.InboundHeaders;
 import com.jabiz.inbound.InboundSchemes;
+import com.jabiz.runtime.external.ExternalJobExecutor;
 import com.jabiz.runtime.inbound.InboundReceiver;
 import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.inbound.InboundWebhookProperties;
@@ -107,6 +108,7 @@ public final class ScenarioRunner {
     private final JsonMapper json;
     private final InboundWebhookProperties inboundProviders;
     private final InboundReceiver inboundReceiver;
+    private final ExternalJobExecutor externalJobs;
 
     public ScenarioRunner(ApplicationContext context) {
         this.processes = context.getBean(ProcessRegistry.class);
@@ -130,6 +132,7 @@ public final class ScenarioRunner {
         this.json = context.getBean(JsonMapper.class);
         this.inboundProviders = context.getBean(InboundWebhookProperties.class);
         this.inboundReceiver = context.getBean(InboundReceiver.class);
+        this.externalJobs = context.getBean(ExternalJobExecutor.class);
     }
 
     public Result run(Scenario scenario) {
@@ -214,6 +217,24 @@ public final class ScenarioRunner {
                 }
             }
             case Scenario.InboundStep i -> inbound(scenario, i, variables);
+            case Scenario.RunExternalJobs r -> {
+                // Until nothing is due; failed attempts wait for their backoff, so this ends.
+                for (int round = 0; round < 100 && externalJobs.runPending().block() > 0; round++) {
+                    // run again: a handler may finish before another job of its type is due
+                }
+            }
+            case Scenario.CompleteExternalJob c -> {
+                Map<String, Long> usage = new LinkedHashMap<>();
+                c.usage().forEach((metric, quantity) -> usage.put(metric, ((Number) quantity).longValue()));
+                Object result = ScenarioValues.resolve(c.result(), variables);
+                String reference = c.reference() == null ? null
+                    : String.valueOf(ScenarioValues.resolve(c.reference(), variables));
+                if (externalJobs.completeWithoutHandler(c.jobType(), reference, c.status(), result, usage,
+                    c.errorCode(), c.errorMessage()).block() == null) {
+                    throw failure(scenario, step, "no open external job of type " + c.jobType()
+                        + (reference == null ? "" : " with reference " + reference), null);
+                }
+            }
             case Scenario.Expect e -> expect(scenario, step, e.expectation(), variables);
             case Scenario.ExpectError e -> expectError(scenario, e, variables);
         }

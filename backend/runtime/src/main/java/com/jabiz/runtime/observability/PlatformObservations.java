@@ -54,6 +54,17 @@ public class PlatformObservations {
     /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */
     public static final String EXTERNAL_CALL = "jabiz.external.call";
     /**
+     * One attempt of an external job (decision D38), from its handler's start to its record; tagged with
+     * {@code job_type} and its {@code outcome} ({@code SUCCEEDED}, {@code WAITING_RETRY}, {@code FAILED},
+     * {@code CANCELLED}, {@code DISCARDED}, {@code error}) only.
+     */
+    public static final String EXTERNAL_JOB = "jabiz.external.job";
+    /**
+     * A counter of what external jobs consumed (decision D38 item 4), increased by each recorded attempt's quantity;
+     * tagged with {@code job_type} and {@code metric} only.
+     */
+    public static final String EXTERNAL_USAGE = "jabiz.external.usage";
+    /**
      * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
      * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
      * ({@code none}, the rejection's, or {@code error}) only.
@@ -161,6 +172,43 @@ public class PlatformObservations {
         } finally {
             observation.stop();
         }
+    }
+
+    /**
+     * Observes {@code source} from subscription to its end, as {@link #outcomeOf} does blocking work: the observation
+     * carries {@code tags} and {@value #OUTCOME} only, the outcome of the value or of the error (an attempt of an
+     * external job: {@code SUCCEEDED}, {@code TIMED_OUT} ...), or {@code cancelled}.
+     */
+    public <T> Mono<T> monoOutcome(String name, String contextualName, KeyValues tags, Mono<T> source,
+        Function<? super T, String> outcome, Function<Throwable, String> failure) {
+        if (registry.isNoop()) {
+            return source;
+        }
+        return Mono.deferContextual(view -> {
+            Observation observation = start(name, contextualName, tags, view);
+            AtomicBoolean ended = new AtomicBoolean();
+            return source
+                .contextWrite(context -> context.put(ObservationThreadLocalAccessor.KEY, observation))
+                .doOnSuccess(value -> {
+                    if (ended.compareAndSet(false, true)) {
+                        observation.lowCardinalityKeyValue(OUTCOME, value == null ? "none" : outcome.apply(value));
+                        observation.stop();
+                    }
+                })
+                .doOnError(error -> {
+                    if (ended.compareAndSet(false, true)) {
+                        observation.lowCardinalityKeyValue(OUTCOME, failure.apply(error));
+                        observation.error(error);
+                        observation.stop();
+                    }
+                })
+                .doOnCancel(() -> {
+                    if (ended.compareAndSet(false, true)) {
+                        observation.lowCardinalityKeyValue(OUTCOME, "cancelled");
+                        observation.stop();
+                    }
+                });
+        });
     }
 
     /** Records that something happened (a counter without tags), such as a request refused by a rate limit. */

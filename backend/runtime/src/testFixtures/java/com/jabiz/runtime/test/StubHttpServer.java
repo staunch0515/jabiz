@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 /**
@@ -80,6 +81,8 @@ public final class StubHttpServer implements AutoCloseable {
     private final List<Received> received = new CopyOnWriteArrayList<>();
     private final Map<String, Queue<Answer>> scripts = new ConcurrentHashMap<>();
     private final Function<Received, Answer> fallback;
+    private final AtomicInteger concurrent = new AtomicInteger();
+    private final AtomicInteger maxConcurrent = new AtomicInteger();
 
     private StubHttpServer(Function<Received, Answer> fallback) {
         this.fallback = fallback;
@@ -126,13 +129,28 @@ public final class StubHttpServer implements AutoCloseable {
         scripts.computeIfAbsent(path, p -> new ConcurrentLinkedQueue<>()).add(answer);
     }
 
-    /** Forgets the requests and the unused scripts. */
+    /** Forgets the requests, the unused scripts and the highest concurrency seen. */
     public void reset() {
         received.clear();
         scripts.clear();
+        maxConcurrent.set(0);
+    }
+
+    /** The most requests the stub was answering at the same time since it started or was reset. */
+    public int maxConcurrent() {
+        return maxConcurrent.get();
     }
 
     private void handle(HttpExchange exchange) throws IOException {
+        maxConcurrent.accumulateAndGet(concurrent.incrementAndGet(), Math::max);
+        try {
+            answer(exchange);
+        } finally {
+            concurrent.decrementAndGet();
+        }
+    }
+
+    private void answer(HttpExchange exchange) throws IOException {
         Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         exchange.getRequestHeaders().forEach((name, values) -> headers.put(name, values.getFirst()));
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
