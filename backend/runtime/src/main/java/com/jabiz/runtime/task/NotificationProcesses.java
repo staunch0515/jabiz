@@ -57,6 +57,7 @@ public class NotificationProcesses {
         return ProcessDefinition.define(NOTIFY, 1, NotifyInput.class, NotifyOutput.class, ProcessContext.class, pb -> pb
             .description("Notifies the assignees of a new task by e-mail.")
             .permissions(TaskPermissions.NOTIFY)
+            .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(TASK_ID, input.taskId());

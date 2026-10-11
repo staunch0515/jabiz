@@ -150,6 +150,8 @@ public final class ItJobItemFixtures extends BaseEntityDefinitions {
         ProcessDefinition.define(BATCH_PROCESS, 1, BatchInput.class, BatchInput.class, ProcessContext.class,
             pb -> pb
                 .permissions(PERMISSION)
+                // The old way of a job: a root process run by the system (D41).
+                .internal()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put("input", input);

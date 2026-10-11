@@ -140,7 +140,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
-- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean。
+- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean；流程应为 `internal()`（D41，06 §8）：`entryOnly()` / `subProcessOnly()` 为错误，普通流程为警告，
+  除非订阅声明 `manualToo()`（该流程也供人经流程接口运行）。
 
 ### 2.4 Webhook：把事件送给其他系统【D33】
 
@@ -200,7 +201,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   ```java
   EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
       event -> new Input(InboundEvents.ref(event).inboundEventId()));
-  // 流程中（消费流程只由投递以系统身份运行：`internal()` 只是不进目录，流程自己拒绝其他执行者）：
+  // 流程声明 internal()：只由投递以系统身份运行，其他执行者（含持有全部权限的管理员）在启动时即 403 PROCESS_INTERNAL（06 §8，D41）：
   .step("Load the payment", LoadInboundEvent.of("pay", "payment_intent.succeeded",
       ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
   ```
@@ -257,7 +258,9 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
 - `GET /api/jobs`（权限 `job.read`）：任务、种类（`SINGLE` / `PER_ITEM`）、cron、时区、流程、下一次计划时刻、最近 10 次执行
   （逐项任务的执行带各结果的项数）；逐项任务另有"连续失败中的项"（项键、连续次数、最近错误（至多 200 字符）、最近失败时刻、下次可重试时刻，至多 50 条）。
-- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；逐项任务另见 §4.1。
+- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；流程的声明同事件消费者（`internal()`，或普通流程加 `JobDefinition…manualToo()`，D41）；
+  逐项任务另见 §4.1（每项流程只能是 `internal()`，没有 `manualToo()`）。
+  平台的 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 也可手工运行，任务声明 `manualToo()`。
 - 场景回放：步骤 `runJob: {job, at, outcome, items}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`；`items` 见 §4.1）与 `deliverEvents: true`（07 §3.1）。
   场景回放缺省 `jabiz.jobs.lock-at-least-for=0s`，同一任务在一个场景中连续运行不会因自己的锁而 `LOCKED`。
 
@@ -313,7 +316,9 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   `maxRunTime` 与锁时间一样是真实时间（基础设施时间）；退避与失败记录的时刻来自注入的 `Clock`。
 - **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
   每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
-- **D41**：每项流程必须是 `internal()`（启动检查 `JOB` 报错）：其输入来自系统的选取，人不应能直接调用。单流程任务不受此限。
+- **D41**：每项流程必须是 `internal()`（启动检查 `JOB`：`entryOnly()`、`subProcessOnly()` 与普通流程一律报错，逐项任务没有 `manualToo()`）：
+  其输入来自系统的选取，人不应能直接调用；执行时 `ProcessExecutor.requireStartable` 只允许系统身份启动它（403 `PROCESS_INTERNAL`）。
+  单流程任务按 §4 的规则（`internal()`，或普通流程加 `manualToo()`）。
 - **启动检查 `JOB`**（一次报全）：选取模板存在、不是公开模板、声明 `list.defaultSort` 与 `list.key`、必填参数都由参数函数给出且没有未声明的参数；
   项键列是模板的结果列；每项流程已注册且 `internal()`；`itemLockWait` 不超过 `jabiz.process.lock-timeout`；`parallelism` 超过 R2DBC 连接池（`spring.r2dbc.pool.max-size`）一半时告警。
   `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 等范围在声明时即检查。
@@ -323,7 +328,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **观测**：每项 `jabiz.job.item`（标签只有 `job` 与 `result`），每项流程的 `jabiz.process` 嵌在其下；运行 `jabiz.job.run` 的结果增加 `PARTIAL`；选取记为 `jabiz.query.template`（13）。
 - **场景**：`runJob: {job, at, outcome, items: {succeeded, replayed, busy, failed, deferred}}`，`outcome` 缺省 `SUCCEEDED`（可写 `PARTIAL`），`items` 只比较写出的键。
 - **示范**：`commerce.unpaid-order-expire`（每天 03:10 东京时间，模板 `commerce.job.unpaid-orders`：`PLACED`、未付款、下单早于 `计划时刻 − app.commerce.unpaid-order-ttl`（缺省 14 天））
-  的每项流程 `ORDER_EXPIRE {orderId}`：拒绝系统以外的调用者（D41 的执行合并前的防护）、取订单锁 `commerce.order:<id>`、重新读取，仍未付款且已超过期限才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
+  的每项流程 `ORDER_EXPIRE {orderId}`：以 `internal()` 只由系统启动（D41：其他执行者 403 `PROCESS_INTERNAL`）、取订单锁 `commerce.order:<id>`、重新读取，仍未付款且已超过期限才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
   "刚付款"与"过期取消"不交错。场景 `scenarios/commerce/unpaid_order_expiry.yml`。
 
 ## 5. 示范（`app` 的 `FreightBilling`）

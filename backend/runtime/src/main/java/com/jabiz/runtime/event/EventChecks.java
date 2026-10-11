@@ -14,7 +14,8 @@ import java.util.Set;
 
 /**
  * Startup check of event subscriptions (category {@code EVENT}): consumer names are unique (a consumption is
- * identified by consumer and event), and every consumer runs a registered process.
+ * identified by consumer and event), and every consumer runs a registered process, {@code internal()} as a rule
+ * ({@link JobChecks#accessProblems}, decision D41).
  */
 @Component
 public class EventChecks implements PlatformCheck {
@@ -39,6 +40,8 @@ public class EventChecks implements PlatformCheck {
                 problems.add(CheckProblem.error(CATEGORY, where, "is declared more than once"));
             }
             problems.addAll(JobChecks.processProblems(processes, CATEGORY, where, subscription.process()));
+            problems.addAll(JobChecks.accessProblems(CATEGORY, where, subscription.process(),
+                subscription.alsoRunByHand()));
         }
         return problems;
     }

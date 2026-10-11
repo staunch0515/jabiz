@@ -154,4 +154,15 @@ class JobDefinitionTest {
         assertThat(retry.delayAfter(70)).isEqualTo(Duration.ofHours(1));
         assertThat(retry.delayAfter(Integer.MAX_VALUE)).isEqualTo(Duration.ofHours(1));
     }
+
+    @Test
+    void onlyASingleProcessJobMayAlsoBeRunByHand() {
+        JobDefinition<In> single = JobDefinition.cron("tick", "0 * * * * *", ZoneOffset.UTC, PROCESS, In::new);
+        assertThat(single.alsoRunByHand()).isFalse();
+        JobDefinition<In> manual = single.manualToo().lockAtMostFor(Duration.ofMinutes(2));
+        assertThat(manual.alsoRunByHand()).isTrue();
+        assertThat(manual.lockAtMostFor()).isEqualTo(Duration.ofMinutes(2));
+        assertThat(perItem().alsoRunByHand()).isFalse();
+        assertThatThrownBy(() -> perItem().manualToo()).hasMessageContaining("internal()");
+    }
 }

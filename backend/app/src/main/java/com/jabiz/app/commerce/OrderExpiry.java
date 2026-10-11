@@ -76,7 +76,7 @@ class OrderExpiry {
                 return ctx;
             })
             .outputMapper(ctx -> new ExpireOutput((String) ctx.get(ORDER_ID), ctx.contains(CANCEL)))
-            // internal() keeps it out of the catalog only, until D41 (16l) refuses anyone but the system itself.
+            // internal(): only the system starts it (D41); the step refuses others too, as in CommercePayments.
             .compute("Refuse other callers", (metadata, ctx) -> requireSystem(ctx))
             // Before reading: a payment being recorded right now finishes first, and is then seen below.
             .step("Lock the order", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(ORDER_ID))))

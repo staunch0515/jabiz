@@ -186,7 +186,9 @@ public class DatasetEntityManager {
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             List<EntityChange> ordered = List.copyOf(changes);
             ValidationContext validation = new ValidationContext(clock, request);
-            Map<String, Object> scope = dataset.scope().resolve(request);
+            // Converted to the fields' types once, so inserts fill in and checks compare what reads bind.
+            Map<String, Object> scope = queryCompiler.scopeValues(dataset,
+                entityRegistry.getOrThrow(dataset.targetEntityType()), dataset.scope().resolve(request));
 
             Mono<List<EntityInstance>> apply = Flux.fromIterable(ordered)
                 .concatMap(change -> applyChange(engine, dataset, scope, change, validation))
@@ -653,7 +655,7 @@ public class DatasetEntityManager {
             java.util.UUID uuid = (java.util.UUID) key;
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             String table = queryCompiler.resolveTable(dataset, def);
-            Map<String, Object> scope = dataset.scope().resolve(request);
+            Map<String, Object> scope = queryCompiler.scopeValues(dataset, def, dataset.scope().resolve(request));
             return temporalStore.history(engine, table, def, uuid).flatMap(entries -> {
                 Timeline timeline = Timeline.of(entries.stream().map(TemporalStore.HistoryEntry::version).toList());
                 Optional<EntityVersion> latest = timeline.at(clock.instant())

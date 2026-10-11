@@ -96,11 +96,12 @@ public final class JobDefinition<I> {
     private final Duration itemLockWait;
     private final ItemRetry itemRetry;
     private final Duration maxRunTime;
+    private final boolean alsoRunByHand;
 
     private JobDefinition(Kind kind, String name, String cron, ZoneId zone, ProcessDefinition<I, ?, ?> process,
         Function<Instant, I> input, JobItems items, BiFunction<Instant, Map<String, Object>, I> itemInput,
         Duration lockAtMostFor, int maxItems, int parallelism, Duration itemLockWait, ItemRetry itemRetry,
-        Duration maxRunTime) {
+        Duration maxRunTime, boolean alsoRunByHand) {
         if (name == null || !NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("Job name '" + name + "' must match " + NAME.pattern());
         }
@@ -157,6 +158,7 @@ public final class JobDefinition<I> {
         this.itemLockWait = itemLockWait;
         this.itemRetry = itemRetry;
         this.maxRunTime = maxRunTime;
+        this.alsoRunByHand = alsoRunByHand;
     }
 
     /**
@@ -171,7 +173,7 @@ public final class JobDefinition<I> {
     public static <I> JobDefinition<I> cron(String name, String cron, ZoneId zone, ProcessDefinition<I, ?, ?> process,
         Function<Instant, I> input) {
         return new JobDefinition<>(Kind.SINGLE, name, cron, zone, process, input, null, null,
-            DEFAULT_LOCK_AT_MOST_FOR, 0, 0, null, null, null);
+            DEFAULT_LOCK_AT_MOST_FOR, 0, 0, null, null, null, false);
     }
 
     /**
@@ -187,7 +189,7 @@ public final class JobDefinition<I> {
         ProcessDefinition<I, ?, ?> process, BiFunction<Instant, Map<String, Object>, I> input) {
         return new JobDefinition<>(Kind.PER_ITEM, name, cron, zone, process, null, items, input,
             DEFAULT_LOCK_AT_MOST_FOR, DEFAULT_MAX_ITEMS, DEFAULT_PARALLELISM, DEFAULT_ITEM_LOCK_WAIT,
-            DEFAULT_ITEM_RETRY, null);
+            DEFAULT_ITEM_RETRY, null, false);
     }
 
     /**
@@ -201,7 +203,29 @@ public final class JobDefinition<I> {
     private JobDefinition<I> with(Duration lockAtMostFor, int maxItems, int parallelism, Duration itemLockWait,
         ItemRetry itemRetry, Duration maxRunTime) {
         return new JobDefinition<>(kind, name, cron, zone, process, input, items, itemInput, lockAtMostFor, maxItems,
-            parallelism, itemLockWait, itemRetry, maxRunTime);
+            parallelism, itemLockWait, itemRetry, maxRunTime, alsoRunByHand);
+    }
+
+    /**
+     * This job, whose process is also run by hand through the process API, so it stays an open process rather than
+     * {@code internal()} (decision D41); the startup check then does not warn about it. Single-process jobs only: an
+     * item process takes its input from the selection and is always {@code internal()} (decision D42).
+     */
+    public JobDefinition<I> manualToo() {
+        if (kind == Kind.PER_ITEM) {
+            throw new IllegalStateException("Job " + name + ": the item process of a per-item job is internal(), "
+                + "never run by hand");
+        }
+        return new JobDefinition<>(kind, name, cron, zone, process, input, items, itemInput, lockAtMostFor, maxItems,
+            parallelism, itemLockWait, itemRetry, maxRunTime, true);
+    }
+
+    /**
+     * Whether the process is also meant to be run by hand, through the process API: then it is not {@code internal()}
+     * on purpose, and the startup check does not warn about it (decision D41; single-process jobs only).
+     */
+    public boolean alsoRunByHand() {
+        return alsoRunByHand;
     }
 
     private void requirePerItem(String setting) {

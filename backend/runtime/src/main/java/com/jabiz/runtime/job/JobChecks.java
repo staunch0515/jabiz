@@ -4,6 +4,7 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.job.JobItems;
+import com.jabiz.process.ProcessAccess;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
@@ -31,12 +32,15 @@ import java.util.function.Function;
 
 /**
  * Startup check of scheduled jobs (category {@code JOB}): names are unique, cron expressions parse, and the process a
- * job runs is the registered process of that name and version. Per-item jobs (decision D42) also need: a selection
- * template that exists, is not public, declares {@code list.defaultSort} and {@code list.key}, gets every required
- * parameter and no unknown one, and has the key column; an item process declared {@code internal()} (D41: its input
- * comes from the selection, not from a person); an {@code itemLockWait} within {@code jabiz.process.lock-timeout}; and,
- * as a warning, a {@code parallelism} of at most half the connection pool. The selection reads masked fields masked:
- * an item key from one is an error, any other masked field the template names a warning.
+ * job runs is the registered process of that name and version. A single-process job's process is {@code internal()}
+ * (decision D41): an {@code entryOnly()} or {@code subProcessOnly()} one cannot run as the system's root process and is
+ * an error; an open one is a warning unless the job declares {@code manualToo()}. Per-item jobs (decision D42) also
+ * need: a selection template that exists, is not public, declares {@code list.defaultSort} and {@code list.key}, gets
+ * every required parameter and no unknown one, and has the key column; an item process declared {@code internal()},
+ * any other access being an error (its input comes from the selection, not from a person; {@code manualToo()} does
+ * not apply); an {@code itemLockWait} within {@code jabiz.process.lock-timeout}; and, as a warning, a
+ * {@code parallelism} of at most half the connection pool. The selection reads masked fields masked: an item key from
+ * one is an error, any other masked field the template names a warning.
  */
 @Component
 public class JobChecks implements PlatformCheck {
@@ -84,6 +88,8 @@ public class JobChecks implements PlatformCheck {
             problems.addAll(processProblems(processes, CATEGORY, where, job.process()));
             if (job.kind() == JobDefinition.Kind.PER_ITEM) {
                 problems.addAll(perItemProblems(job, where));
+            } else {
+                problems.addAll(accessProblems(CATEGORY, where, job.process(), job.alsoRunByHand()));
             }
         }
         return problems;
@@ -91,10 +97,11 @@ public class JobChecks implements PlatformCheck {
 
     private List<CheckProblem> perItemProblems(JobDefinition<?> job, String where) {
         List<CheckProblem> problems = new ArrayList<>();
-        // internal() means "the system only" (D41): an entry-only or sub-process-only process is not internal().
-        if (!job.process().internal()) {
+        // Stricter than a single-process job: an open item process is an error too, there is no manualToo().
+        if (job.process().access() != ProcessAccess.INTERNAL) {
             problems.add(CheckProblem.error(CATEGORY, where, "runs item process " + job.process().name()
-                + ", which is not internal(): item processes take their input from the selection (decision D41)"));
+                + ", which is " + job.process().access() + ", not internal(): item processes take their input from "
+                + "the selection (decision D41)"));
         }
         if (job.itemLockWait().compareTo(lockTimeout) > 0) {
             problems.add(CheckProblem.error(CATEGORY, where, "itemLockWait " + job.itemLockWait()
@@ -172,6 +179,23 @@ public class JobChecks implements PlatformCheck {
         keys.stream().filter(key -> !declared.contains(key)).sorted().forEach(key -> problems.add(
             CheckProblem.error(CATEGORY, where, selection + " has no parameter " + key)));
         return problems;
+    }
+
+    /**
+     * What a process run by the system on its own (a job, an event consumer) must be (decision D41): {@code internal()}
+     * as a rule; open only when it is also run by hand ({@code manualToo}, else a warning); never {@code entryOnly()}
+     * or {@code subProcessOnly()}, which the system cannot start.
+     */
+    public static List<CheckProblem> accessProblems(String category, String where, ProcessDefinition<?, ?, ?> process,
+        boolean manualToo) {
+        String target = "runs process " + process.name() + " v" + process.version();
+        return switch (process.access()) {
+            case INTERNAL -> List.of();
+            case OPEN -> manualToo ? List.of() : List.of(CheckProblem.warning(category, where, target
+                + ", which is open: declare it internal() (decision D41), or manualToo() if it is also run by hand"));
+            case ENTRY_ONLY, SUB_PROCESS_ONLY -> List.of(CheckProblem.error(category, where, target + ", which is "
+                + process.access() + " and cannot be started by the system: declare it internal() (decision D41)"));
+        };
     }
 
     /** The process must be the one registered under its name and version, or it would bypass the process checks. */

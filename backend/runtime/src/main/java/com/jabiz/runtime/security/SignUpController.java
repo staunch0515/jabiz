@@ -188,10 +188,10 @@ class SignUpController {
             limits.email(SignUpRateLimits.Kind.REGISTER, email);
             SignUpProcesses.SignUpInput input = new SignUpProcesses.SignUpInput(entries.find(body.entry())
                 .orElseThrow().name(), email, body.password(), displayName, locale);
-            return processes.execute(signUp, input)
+            return processes.executeAtEntry(signUp, input)
                 // A concurrent registration of the same address got there first: once more, now as an address in
                 // use, so that its user gets the mail an address in use gets.
-                .onErrorResume(SignUpController::addressTaken, e -> processes.execute(signUp, input))
+                .onErrorResume(SignUpController::addressTaken, e -> processes.executeAtEntry(signUp, input))
                 .thenReturn(accepted());
         });
     }
@@ -201,7 +201,7 @@ class SignUpController {
     Mono<ResponseEntity<Void>> join(@RequestBody(required = false) JoinRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            return processes.execute(join, new SignUpProcesses.JoinInput(request == null ? null : request.token(),
+            return processes.executeAtEntry(join, new SignUpProcesses.JoinInput(request == null ? null : request.token(),
                     request == null ? null : request.password()))
                 .thenReturn(ResponseEntity.noContent().<Void>build());
         });
@@ -218,7 +218,7 @@ class SignUpController {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
             VerifyRequest body = request == null ? new VerifyRequest(null, null, null) : request;
-            return processes.execute(verify, new SignUpProcesses.VerifyInput(body.token(), body.password(),
+            return processes.executeAtEntry(verify, new SignUpProcesses.VerifyInput(body.token(), body.password(),
                     body.newPassword()))
                 .thenReturn(ResponseEntity.noContent().<Void>build());
         });
@@ -235,7 +235,7 @@ class SignUpController {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
             return processes.run(verifyCheck, new SignUpProcesses.VerifyInput(request == null ? null
-                    : request.token()), ExecutionOptions.DRY_RUN)
+                    : request.token()), ExecutionOptions.DRY_RUN.atEntryOf(verifyCheck))
                 .map(ProcessResult::output);
         });
     }
@@ -251,7 +251,7 @@ class SignUpController {
             limits.client(SignUpRateLimits.Kind.VERIFY_RESEND, clients.clientOf(http));
             String[] valid = emailAndEntry(request);
             limits.email(SignUpRateLimits.Kind.VERIFY_RESEND, valid[0]);
-            return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(valid[1], valid[0], null))
+            return processes.executeAtEntry(verifySend, new SignUpProcesses.VerifySendInput(valid[1], valid[0], null))
                 .thenReturn(accepted());
         });
     }
@@ -264,7 +264,7 @@ class SignUpController {
             UUID user = ActingUser.userId(context).orElseThrow(() -> new PermissionDeniedException(
                 SecurityPermissions.ACCOUNT, "Only users of the platform have an address to verify"));
             limits.user(SignUpRateLimits.Kind.VERIFY_RESEND, user.toString());
-            return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(context.entry(), null,
+            return processes.executeAtEntry(verifySend, new SignUpProcesses.VerifySendInput(context.entry(), null,
                     user.toString()))
                 .thenReturn(accepted());
         });
@@ -282,7 +282,7 @@ class SignUpController {
             limits.client(SignUpRateLimits.Kind.PASSWORD_RESET, clients.clientOf(http));
             String[] valid = emailAndEntry(request);
             limits.email(SignUpRateLimits.Kind.PASSWORD_RESET, valid[0]);
-            return processes.execute(resetRequest, new SignUpProcesses.ResetRequestInput(valid[1], valid[0]))
+            return processes.executeAtEntry(resetRequest, new SignUpProcesses.ResetRequestInput(valid[1], valid[0]))
                 .thenReturn(accepted());
         });
     }
@@ -294,7 +294,7 @@ class SignUpController {
         ServerHttpRequest http) {
         return Mono.defer(() -> {
             limits.client(SignUpRateLimits.Kind.LINK, clients.clientOf(http));
-            return processes.execute(resetConfirm, new SignUpProcesses.ResetConfirmInput(
+            return processes.executeAtEntry(resetConfirm, new SignUpProcesses.ResetConfirmInput(
                     request == null ? null : request.token(), request == null ? null : request.password(),
                     AuthController.source(clients, http, null)))
                 .thenReturn(ResponseEntity.noContent().<Void>build());

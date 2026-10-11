@@ -73,7 +73,7 @@ public class GeneratedFileProcesses {
         return ProcessDefinition.define(ARCHIVE, 1, ArchiveInput.class, ArchiveOutput.class, ProcessContext.class, pb -> pb
             .description("Keeps a file the server made exactly as made, with its hash.")
             .permissions(FilePermissions.GENERATED_ARCHIVE)
-            .internal()
+            .subProcessOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);

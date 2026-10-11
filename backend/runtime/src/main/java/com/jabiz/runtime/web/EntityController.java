@@ -126,7 +126,7 @@ class EntityController {
     @ResponseStatus(HttpStatus.CREATED)
     Mono<EntityInstance> add(@PathVariable String entityType, @RequestBody Map<String, Object> attributes) {
         return write(entityType, AddProcessDefinition.DEFINITION)
-            .then(Mono.defer(() -> processes.execute(
+            .then(Mono.defer(() -> processes.executeAtEntry(
                 AddProcessDefinition.DEFINITION, new AddEntityInput(entityType, attributes))))
             .map(masker::hide);
     }
@@ -136,7 +136,7 @@ class EntityController {
         @PathVariable String entityType, @PathVariable String id, @RequestBody UpdateRequest request
     ) {
         return write(entityType, UpdateProcessDefinition.DEFINITION)
-            .then(Mono.defer(() -> processes.execute(
+            .then(Mono.defer(() -> processes.executeAtEntry(
                 UpdateProcessDefinition.DEFINITION,
                 new UpdateEntityInput(entityType, id, request.version(), request.attributes()))))
             .map(masker::hide);
@@ -148,7 +148,7 @@ class EntityController {
         @PathVariable String entityType, @PathVariable String id, @RequestParam(required = false) Long version
     ) {
         return write(entityType, DeleteProcessDefinition.DEFINITION)
-            .then(Mono.defer(() -> processes.execute(
+            .then(Mono.defer(() -> processes.executeAtEntry(
                 DeleteProcessDefinition.DEFINITION, new DeleteEntityInput(entityType, id, version))))
             .then();
     }

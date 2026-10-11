@@ -87,7 +87,7 @@ public class FileProcesses {
         return ProcessDefinition.define(REGISTER, 1, RegisterInput.class, FileInfo.class, ProcessContext.class, pb -> pb
             .description("Records a file whose content has been stored.")
             .permissions(FilePermissions.WRITE)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put("input", input);
@@ -179,7 +179,8 @@ public class FileProcesses {
     /** The sweep (docs/design/14-files.md section 6): daily by default ({@code jabiz.files.sweep-cron}, UTC). */
     @Bean
     JobDefinition<PurgeInput> fileSweepJob(FileProperties properties) {
+        // Also run by hand by whoever may delete files; the process stays open (decision D41).
         return JobDefinition.cron(SWEEP_JOB, properties.sweepCron(), ZoneOffset.UTC, PURGE_ORPHANS_PROCESS,
-            PurgeInput::new);
+            PurgeInput::new).manualToo();
     }
 }

@@ -43,7 +43,8 @@ import static com.jabiz.app.commerce.CommerceEntities.ORDER_DATASET;
  * and the pattern applications copy. The provider {@value #PROVIDER} (configured for development and tests only,
  * scheme {@code stripe}) sends {@code payment_intent.succeeded} with the order's number in the payment's metadata. The
  * platform verifies, stores and publishes it; the consumer {@value #CONSUMER} runs {@value #RECORD_PAYMENT} once for
- * each, as the system (anyone else is refused: {@code internal()} only keeps a process out of the catalog).
+ * each, as the system: {@code internal()} refuses anyone else at the start (decision D41); the process's own check of
+ * the actor predates that and stays as a second line.
  *
  * <p>A verified signature says who sent the event, not that it fits: the process trusts nothing in it. It loads only an
  * event of its own provider and type, and records the payment only when everything fits:

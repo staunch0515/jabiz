@@ -1,5 +1,6 @@
 package com.jabiz.runtime.process;
 
+import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.operation.Operation;
 import reactor.core.publisher.Mono;
 
@@ -19,13 +20,16 @@ import java.util.regex.Pattern;
  * @param dryRun         whether to roll the transaction back once the process has completed, returning its output:
  *                       everything it would do is done and checked, nothing stays, and no after-commit step runs (an
  *                       import's preview, docs/design/20-imports.md section 5). Not with an idempotency key.
+ * @param entry          the {@code entryOnly()} process the caller is the platform's own entry point for (decision
+ *                       D41): only with it does such a process run, as the real caller. Null for none; the process API
+ *                       never passes one.
  * @param lockWait       the longest the transaction waits for any lock - row locks, the platform's own, an idempotency
  *                       key, {@code HoldLock} steps of the process and its sub-processes - when shorter than
  *                       {@code jabiz.process.lock-timeout} (a job's items, decision D42); null for the global timeout
  *                       (docs/design/06-process.md section 4.1)
  */
 public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun,
-    Duration lockWait) {
+    String entry, Duration lockWait) {
 
     public static final ExecutionOptions NONE = new ExecutionOptions(null);
 
@@ -45,8 +49,13 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
         }
     }
 
+    public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun,
+        String entry) {
+        this(idempotencyKey, beforeSteps, dryRun, entry, null);
+    }
+
     public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps, boolean dryRun) {
-        this(idempotencyKey, beforeSteps, dryRun, null);
+        this(idempotencyKey, beforeSteps, dryRun, null, null);
     }
 
     public ExecutionOptions(String idempotencyKey, Function<Operation, Mono<Void>> beforeSteps) {
@@ -62,12 +71,26 @@ public record ExecutionOptions(String idempotencyKey, Function<Operation, Mono<V
     }
 
     public ExecutionOptions withBeforeSteps(Function<Operation, Mono<Void>> work) {
-        return new ExecutionOptions(idempotencyKey, work, dryRun, lockWait);
+        return new ExecutionOptions(idempotencyKey, work, dryRun, entry, lockWait);
     }
 
-    /** These options with {@code HoldLock} steps waiting at most {@code wait} for their locks. */
+    /**
+     * These options, from the platform's own entry point for {@code process} (decision D41): an {@code entryOnly()}
+     * process runs only so. Only platform entry points (signing in, the entity API, uploads, imports...) pass it.
+     */
+    public ExecutionOptions atEntryOf(ProcessDefinition<?, ?, ?> process) {
+        return new ExecutionOptions(idempotencyKey, beforeSteps, dryRun, process.name(), lockWait);
+    }
+
+    /** Whether these options come from the platform's own entry point for {@code process}. */
+    public boolean isEntryOf(ProcessDefinition<?, ?, ?> process) {
+        return process.name().equals(entry);
+    }
+
+    /** These options with the transaction's lock waits, {@code HoldLock} steps' included, bounded by {@code wait}. */
     public ExecutionOptions withLockWait(Duration wait) {
-        return new ExecutionOptions(idempotencyKey, beforeSteps, dryRun, Objects.requireNonNull(wait, "wait"));
+        return new ExecutionOptions(idempotencyKey, beforeSteps, dryRun, entry,
+            Objects.requireNonNull(wait, "wait"));
     }
 
     /**

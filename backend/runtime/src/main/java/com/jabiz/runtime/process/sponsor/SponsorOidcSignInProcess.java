@@ -29,7 +29,7 @@ public final class SponsorOidcSignInProcess {
             pb -> pb
                 .description("Sign-in through an identity provider: the linked user, the roles, and the attempt.")
                 .permissions(SecurityPermissions.SIGN_IN)
-                .internal()
+                .entryOnly()
                 .contextFactory(OidcContext::new)
                 .outputMapper(LoginContext::output)
 
