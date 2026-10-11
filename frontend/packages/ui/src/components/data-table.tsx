@@ -205,7 +205,7 @@ export function DataTable<Row>({
               {table.getHeaderGroups().map((group) => (
                 <TableRow key={group.id}>
                   {renderExpanded && (
-                    <TableHead className="w-10">
+                    <TableHead scope="col" className="w-10">
                       <span className="sr-only">{t('dataTable.expandRow')}</span>
                     </TableHead>
                   )}
@@ -217,6 +217,9 @@ export function DataTable<Row>({
                       : flexRender(header.column.columnDef.header, header.getContext())
                     return (
                       <TableHead
+                        // A column header for every role computation: without the scope, Playwright's took these
+                        // header cells (holding sort buttons) for plain cells.
+                        scope="col"
                         key={header.id}
                         colSpan={header.colSpan}
                         className={columnClass(header.column.columnDef.meta, true)}

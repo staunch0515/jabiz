@@ -220,7 +220,7 @@ function DatasetList({
 
   return (
     <AdminPage
-      title={<span data-testid="page-title">{entity.label}</span>}
+      title={entity.label}
       description={<code className="font-mono text-xs">{dataset.id}</code>}
       breadcrumb={[{ label: t('nav.datasets'), to: '/data' }, { label: entity.label }]}
       actions={

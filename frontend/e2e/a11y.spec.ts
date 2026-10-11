@@ -192,11 +192,14 @@ test.describe('accessibility', () => {
   }
 
   test('the pages after signing in', async ({ page, request }) => {
+    // About thirty pages and pop-ups, each checked by axe: more than the default minute on a loaded machine.
+    test.slow()
     await checkPagesAfterSignIn(page, request, 'light')
     await expect(page.locator('html')).not.toHaveClass(/dark/)
   })
 
   test('the pages after signing in, in the dark appearance', async ({ page, request }) => {
+    test.slow()
     await page.addInitScript(() => window.localStorage.setItem('jabiz.appearance', 'dark'))
     await checkPagesAfterSignIn(page, request, 'dark')
     await expect(page.locator('html')).toHaveClass(/dark/)

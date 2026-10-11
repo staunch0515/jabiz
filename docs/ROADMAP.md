@@ -20,7 +20,7 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b–15d 计划中 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
 | 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
@@ -1199,16 +1199,40 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 **风险**：弹出层层级（按子树拆分；15b-2 合入前 step-up 对话框弹在 antd 抽屉上仍会被盖住，15a 已如此）；修改 15a 的日期控件（区域、夏令时、秒与毫秒）；ProTable 的隐含行为容易漏掉（逐条写进列表页测试）；嵌套 `Sheet` 的焦点与 Escape（e2e 覆盖）；迁移期间两套实现并存（转换只有一份，旧的由 15c 删除，记入已知问题）；15b 与 15c 都改 `@jabiz/ui` 的导出与文案（组合组件先在 15b-1 合入）；产物大小在 15d 前继续增加（记录前后大小）。
 
 **验收标准**
-- [ ] 22 个文件及新增的 `SchemaForm`、`AdminPage`、`cells`、`dataColumns` 不引用 antd 系包；`meta/columns.ts` 只剩给 15c 的旧部分并注明。
-- [ ] `@jabiz/ui` 新增 9 个组合组件，日期控件可键入并可限定范围；每个组件有 Vitest，亮、暗 axe 无违规。
-- [ ] "要保持的行为"逐条有 Vitest 覆盖并通过；`validation.cases.test` 不变且通过；不引入第二套校验库，没有新依赖。
-- [ ] 已迁移的页面在暗色外观下为暗色，未迁移的页面与扩展页仍为亮色；列表、历史、流程表单有面包屑。
-- [ ] e2e 35 个用例全部通过；涉及本阶段页面的地方不再使用 `.ant-*`。
-- [ ] `a11y.spec.ts`：本阶段页面在亮、暗外观下无违规，弹出层也检查过。
-- [ ] `@jabiz/admin` 导出的 `EntityFormDrawer`、`ReferenceSelect`、`FilePreview`、`FieldErrors` 不再依赖 antd，契约变化已写入扩展指南；`pnpm ext:check` 通过。
+- [x] 22 个文件及新增的 `SchemaForm`、`AdminPage`、`cells`、`dataColumns` 不引用 antd 系包；`meta/columns.ts` 只剩给 15c 的旧部分并注明。
+- [x] `@jabiz/ui` 新增 9 个组合组件，日期控件可键入并可限定范围；每个组件有 Vitest，亮、暗 axe 无违规。
+- [x] "要保持的行为"逐条有 Vitest 覆盖并通过；`validation.cases.test` 不变且通过；不引入第二套校验库，没有新依赖。
+- [x] 已迁移的页面在暗色外观下为暗色，未迁移的页面与扩展页仍为亮色；列表、历史、流程表单有面包屑。
+- [x] e2e 35 个用例全部通过；涉及本阶段页面的地方不再使用 `.ant-*`。
+- [x] `a11y.spec.ts`：本阶段页面在亮、暗外观下无违规，弹出层也检查过。
+- [x] `@jabiz/admin` 导出的 `EntityFormDrawer`、`ReferenceSelect`、`FilePreview`、`FieldErrors` 不再依赖 antd，契约变化已写入扩展指南；`pnpm ext:check` 通过。
 - [ ] 前端全部检查与 `./gradlew check` 通过；ROADMAP 记下产物大小与出入；12 已更新。
 
 要保持的行为（逐条测试）：远程分页 / 排序 / 筛选只限白名单；回看写在 URL、回看时只读；遮蔽值每次请求服务端；多语言页签的必填、出错、回退与预览；文件按策略上传、预览释放、下载、移除为 `null`；引用显示名按页批量取；`processOnly` 只读不发送；生效时间与原因；只发送改动的字段；违规回填带规则码；step-up 后同键重试；二次验证绑定与恢复码；单点登录的授权码只送一次。
+
+**15b-2 状态**：☑ 已完成（分支 `1.2/phase-15b2-list-pages`，PR 待建）。验收标准的勾选包括 15b-1 已满足的部分（9 个组合组件、登录与目录等页面）；
+`./gradlew check` 未在本地完整运行（只运行了 `:app:bootJar`，含前端构建；本阶段没有后端改动），留给 CI。
+
+**15b-2 与计划的出入**
+- `MoneyInput` 的 `scale` 改为可选：表单中的金额"不传小数位、不截断不取整"，多出的小数位由规则报 `MONETARY_SCALE`，而原来的 `scale` 必填且会拒绝多键入的小数位。
+- `DataTable` 的表头单元格加 `scope="col"`：没有它时 Playwright 把带排序按钮的 `th` 算作普通单元格，`getByRole('columnheader')` 找不到。
+  列需要 `accessorFn` 才能排序（TanStack Table 只排序取值列），`dataColumns` 为每列给出；每列先升序（`sortDescFirst: false`），与原来 ProTable 相同。
+- 时间点（`asOf` / `knownAt`）的两个 `DateTimePicker` 放在筛选栏上方（原来在表格工具栏），各有标签；页面标题由 `AdminPage` 的 `<h1 data-testid="page-title">` 给出。
+- `FilePreview`：图片本身可点击放大，旁边另有"放大预览"按钮供键盘使用（图片放在按钮里时，按钮的内容不作为图片暴露，e2e 按 `img` 角色找不到）；放大图取最宽的变体，没有足够宽的变体时取（重新编码过的）原件。
+- 子实体列表放在表单的 `<form>` 之外（同一个 `Sheet` 内），表单的提交事件另外 `stopPropagation`：React 的事件会穿过门户从子实体的 `Sheet` 冒泡到父表单。
+- 多语言文本的各语言输入框以"字段名（语言）"命名，字段标签命名整个 `group`；页签上出错的语言带 `data-invalid`。
+- 路由表以 `appRoutes` 从 `App.tsx` 导出，供 `App.test.tsx` 检查哪些路由标为 `@jabiz/ui` 页面。
+- e2e 辅助函数（`support.ts`）新增 `confirm`（确认对话框的"确定"）、`sortBy`（表头的排序按钮）、`entityForm`（`data-testid="entity-form"` 的表单 `Sheet`）；
+  15b-1 已有的 `dataRows`、`option`、`rangeEnd`、`dialog`、`pageRendered` 照用。`a11y.spec` 为引用的选择先插入一个供应商（全新数据库中没有可选项）；登录后的两个检查标为 `test.slow()`（约 30 个页面与弹出层，在负载下超过默认的 1 分钟）。
+
+**15b-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 001.6 kB / 924.9 kB、CSS 79.4 kB / 13.3 kB；之后 JS 3 021.1 kB / 929.6 kB、CSS 79.8 kB / 13.4 kB
+（antd 与 ProComponents 仍由 15c 的页面使用，摇树去不掉；15d 删除后回落）。
+
+**15b-2 已知问题**
+- 旧的 `meta/columns.ts`（ProTable 列）与 `SchemaInputs` 仍供报表与导入页使用，15c 迁完后删除；单元格的转换只有一份（`meta/cells.ts`）。
+- 子实体列表的引用列不按显示名显示（与迁移前相同：子列表不取引用的显示名）。
+- 表单 `Sheet` 关闭时随父组件卸载，没有滑出动画（打开时有）。
+- e2e 中待办、报表、导入、审计、封存、保留、安全设置与单据页仍用 `.ant-*` 选择器（15c / 15d）。
 
 ### 15c – 15d
 
