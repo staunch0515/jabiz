@@ -41,6 +41,17 @@ services:
       SPRING_FLYWAY_USER: quizbuks
       SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-quizbuks}
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # Sign-in entries and mail (README.md, "账户"): registration is on at the app and the sponsor console; mail is
+      # off unless switched on, and then registered users cannot verify their address. The mail server (SPRING_MAIL_*)
+      # comes from .env as it is.
+      QB_ADMIN_ROLES: ${QB_ADMIN_ROLES:-ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
+      QB_APP_SELF_REGISTRATION: ${QB_APP_SELF_REGISTRATION:-true}
+      QB_SPONSOR_SELF_REGISTRATION: ${QB_SPONSOR_SELF_REGISTRATION:-true}
+      JABIZ_MAIL_ENABLED: ${JABIZ_MAIL_ENABLED:-false}
+      JABIZ_MAIL_FROM: ${JABIZ_MAIL_FROM:-}
+      JABIZ_MAIL_BASE_URL: ${JABIZ_MAIL_BASE_URL:-http://localhost:8080/admin}
+      QB_SPONSOR_LINK: ${QB_SPONSOR_LINK:-}
+      JABIZ_TRUSTED_PROXIES: ${JABIZ_TRUSTED_PROXIES:-}
     volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]
 
 volumes:

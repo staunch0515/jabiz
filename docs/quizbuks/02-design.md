@@ -45,26 +45,29 @@ docs/quizbuks/               本文件等
 
 一个可部署的 jar 提供三个前端与接口：
 
-| 路径 | 前端 | 登录入口（G1） | 接受的角色 |
-|---|---|---|---|
-| `/` | `quizbuks-web/app`（PWA） | `app` | `QB_TAKER` |
-| `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） |
-| `/admin/` | 平台通用后台 + QuizBuks 扩展页 | `admin` | `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE` |
+| 路径 | 前端 | 登录入口（G1） | 接受的角色 | 自助注册（授予） | 要求已验证才能登录 |
+|---|---|---|---|---|---|
+| `/` | `quizbuks-web/app`（PWA） | `app` | `QB_TAKER` | 是（`QB_TAKER`，`QB_APP_SELF_REGISTRATION`） | 否：未验证可登录浏览，QuizBuks 的写入一律要求已验证 |
+| `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） | 是（`QB_SPONSOR`，`QB_SPONSOR_SELF_REGISTRATION`） | 是 |
+| `/admin/` | 平台通用后台 + QuizBuks 扩展页 | `admin` | `ADMIN`（首个管理员）/ `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE`（`QB_ADMIN_ROLES` 可改） | 否 | 否 |
 
 三个入口**分开登录**：入口决定接受哪些角色，签发的令牌只带这些角色的权限（同一邮箱既是答题人又是商家时，在 App 中拿不到商家权限，反之亦然）。
-入口的机制属于平台（G1），本应用只声明三个入口与各自的角色。
+入口的机制属于平台（G1），本应用只声明三个入口与各自的角色（`application.yml`，Q2 D-Q2-1）。"待激活"即邮箱未验证（不另设状态）。
 
 ## 2. 角色与权限
 
 | 角色 | 权限（应用自定义的权限码，前缀 `qb.`） |
 |---|---|
-| `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户） |
-| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write` |
-| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`approval.decide`、`task.read` |
-| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`ledger.read`、`report.issue`、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）|
+| `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户）、`qb.account.read`（本人资料与登录记录，Q2）、`qb.sponsor.avatar.read`（发布人头像，Q2） |
+| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read` |
+| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
+| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）|
 | `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
+- 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
+  平台 D41 实现（16l）后，`internal()` 的流程只允许系统身份运行，这些系统权限随之只起声明作用。
+- 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
 - 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）：
   平台决策 D40，`QbParams.CONTROLLED`（抽成比例、转账门槛、人工审核额、转账开关、两个免审核开关）以 `ControlledParams` 声明，一切直接写入 422 `PARAM_CONTROLLED`。
@@ -80,8 +83,9 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbProfile` | T | `userId`（唯一）、`displayName`、`countryCode`（字典）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考）、`status`（ACTIVE / BANNED，`processOnly`）、`banReason` | 答题人与商家共用的资料；激活状态由平台（G1）管 |
-| `QbSponsor` | T | `userId`（唯一）、`company`、`intro`（Markdown）、`avatar`（文件，公开）、`reviewStatus`（PENDING / APPROVED / REJECTED，`processOnly`）、`termsAcceptedAt` | 商家入驻；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
+| `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（注册时间）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
+| `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt` | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
+| `QbUserBan` | T | 主键 `banId`；`userId`（引用平台用户，不可变、唯一）；`processOnly`：`banned`、`reason`、`bannedAt` / `bannedBy`、`liftedAt` / `liftedBy` / `liftNote`、`revision` | 封禁（Q2 D-Q2-4）：与资料分开，没有资料的人也能封禁；历史即封禁与解封的记录 |
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | T | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（`f.masked(qb.admin.finance.read, LAST4)`）、`payoutsEnabled`（`processOnly`，由 Stripe 通知更新） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号 |
 
@@ -168,8 +172,9 @@ docs/quizbuks/               本文件等
 |---|---|---|
 | `qb.pub:<发布>` | 开始答题、提交、暂停 / 恢复、到期结束 | `QbPublicationCounter`（名额、预算占用）、发布状态 |
 | `qb.wallet:<所有者>` | 结算、补发待支付、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
+| `qb.account:<用户>` | 资料、入驻、商家资料、审批结果、封禁 / 解封（Q2） | 该用户的 `QbProfile`、`QbSponsor`、`QbUserBan` |
 
-- 加锁顺序固定：**模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 发布锁 → 钱包锁**（Q4，D-Q4-5）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
+- 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 发布锁 → 钱包锁**（Q4，D-Q4-5；Q2 D-Q2-10）。账户锁目前不与其他锁同时持有（提交发布只读入驻与封禁，不取账户锁）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
 - 【缺省 Q11】单个发布的提交在发布锁上串行。每次结算是一个短事务（读快照、写答案、两行余额、一笔 2–3 行的分录），预计每秒数十次。
   如压测不足，把"商家钱包"拆为按发布预留：发布上架时从商家钱包转入发布预算，结算只取发布锁（以后的优化，不在 MVP）。
 
@@ -205,8 +210,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | 流程 | 权限 | 要点 |
 |---|---|---|
-| `QB_PROFILE_SAVE` | `qb.me` | 注册第二步与资料修改（U-02、U-70）；国家来自字典 |
-| `QB_SPONSOR_APPLY` | `qb.sponsor.me` | 商家入驻资料 + 同意条款 → 审批（自动或人工） |
+| `QB_PROFILE_SAVE` | `qb.me`，要求已验证 | 注册第二步与资料修改（U-02、U-70）；国家来自字典；第一次给出国家时发 `qb.welcome` |
+| `QB_SPONSOR_APPLY` | `qb.sponsor.me`，要求已验证 | 商家入驻资料 + 同意条款 → 审批（受控参数 `qb.review.sponsor.auto` 为真即自动通过；无规则时拒绝 `QB_REVIEW_NOT_CONFIGURED`）；待审核时再申请即取代旧请求；关闭"重新提交"待办 |
+| `QB_SPONSOR_PROFILE_SAVE` | `qb.sponsor.me`，要求已验证 | 已通过的商家修改名字、公司、简介、头像，不再审核 |
+| `QB_SPONSOR_APPROVAL_RESULT` | 系统（审批事件；`qb.sponsor.system`，不授予任何角色） | 只认入驻自己的请求，且请求绑定的内容等于当前内容：批准 → `APPROVED` 并发邮件；驳回（理由取自审批人的决定）→ `REJECTED`、邮件、给商家"重新提交"待办 |
 | `QB_QUIZ_SAVE` / `QB_QUIZ_DELETE` / `QB_QUIZ_CLONE` | `qb.content.write` | 只有拥有者（锁 `qb.quiz:<id>` 后经商家视图读取）；删除即移除（`removed`，子项写墓碑），版本保留，已提交过的发布所用版本的文件保留（Q4）；克隆可取草稿或指定版本 |
 | `QB_QUESTION_SAVE` / `_DELETE` / `_REORDER`、`QB_MATERIAL_SAVE` / `_DELETE` / `_REORDER` | `qb.content.write` | 一道题（连同选项）或一条资料（连同图片组）各自保存，只写改变的行；可带 `baseRevision`（过期即 `QB_QUIZ_CHANGED`）；上限见 `content.ContentLimits` |
 | `QB_QUIZ_PUBLISH_VERSION` | `qb.content.write` | "保存版本"：校验完整性（M-31 中属于内容的部分，一次报告全部）→ 与最新版本哈希相同即拒绝 → 生成 `QbQuizVersion` 快照（只写一次）并补登 `QbVersionFile` |
@@ -227,7 +234,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_TRANSFER_RUN`（任务） | 系统 | 每日：余额 ≥ 门槛、`payoutsEnabled`、未封禁的用户各建一笔转账（全额）；超过人工审核额的进 REVIEW（审批） |
 | `QB_TRANSFER_SEND` | 系统 | 钱包锁 → 分录（2120 → 2130）→ 提交后（`AFTER_COMMIT`）调用 Stripe Transfer（幂等键 = 转账编号） |
 | `QB_TRANSFER_RESULT` | 系统（G9） | 成功：2130 → 1110；失败 / 撤回：2130 → 2120，站内信 |
-| `QB_USER_BAN` / `QB_USER_UNBAN` | `qb.admin.users.ban` | 封禁：不能登录（G1 登录前检查）、不进转账 |
+| `QB_USER_BAN` / `QB_USER_UNBAN` | `qb.admin.users.ban` | 封禁（`QbUserBan`）：三个入口都不能登录（`QbSignInGuard`），下一次刷新令牌即失效；有价值的动作在流程中再查（提交发布已接上；答题、转账随 Q5、Q6）；不能封禁自己与管理员 |
 | `QB_BROADCAST_SAVE` / `QB_BROADCAST_DISPATCH`（任务） | `qb.broadcast.write` / 系统 | 定时发送：到时置 SENT；商家通知只能关联自己的进行中发布 |
 | `QB_MESSAGE_MARK` | `qb.me` | 已读 / 点击 |
 | `QB_PUBLICATION_TICK`（任务）/ `QB_PUBLICATION_ADVANCE` | 系统（`qb.publication.system`，不授予任何角色） | 每分钟：按日程表找出到期的发布（至多 50 条），逐条在发布锁内 SCHEDULED → LIVE、到期 → ENDED、待审核而到期 → DRAFT |
@@ -289,7 +296,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 正确答案只在提交后返回：答题人的数据视图与模板都不含 `correct`；结果页由提交流程的输出给出。
 - 选项按会话打乱（`optionOrder`），题目顺序不打乱。
 - 一人一次：`QbAttempt (userId, publicationId)` 唯一。
-- 未激活的用户不能开始答题；封禁的不能登录、不能收款。
+- 未激活（邮箱未验证）的用户不能写入任何 QuizBuks 数据：每个写入流程声明 `requiresVerifiedEmail()`（入口检查，403 `EMAIL_NOT_VERIFIED`）；商家入口不接受未验证的登录。
+  因此预占他人邮箱注册的人留不下应用数据（平台接管时不清理应用数据）。
+- 封禁的不能登录（`QbSignInGuard`，登录与刷新时检查）；已签发的访问令牌在到期前仍可用，所以提交发布（`SponsorChecks`）、开始答题与提交（Q5）、转账（Q6）在流程中再查 `QbUserBan`（422 `QB_USER_BANNED`）。
 - 一个 Stripe 收款账户只能属于一个用户（`externalAccountId` 唯一），减少多账号刷奖后套现。
 - 限流：开始答题、提交、AI 请求、充值按用户限流（平台限流能力只覆盖公开接口与上传，若不够在 G1 中补"按用户的接口限流"——计划时评估）。
 
@@ -310,6 +319,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | G10 | API Key | M-73（P2） | 以后 |
 
 ★ = 改变已有决策，须先在 `09-decisions.md` 新增决策并确认。分析中的 G6（视频）已取消；G8（账本余额下限）改由应用在钱包锁内判断（4.3），不再需要。
+
+G1（16b）、G3（16a）、G4（16b-1）已合入并在 Q2 中使用；G2（16f）合入后追加社交登录（Q2 D-Q2-9）。Q2 发现的新平台缺口见 `plans/Q2-accounts.md` 的平台缺口表（第 15–20 项）。
 
 ## 11. 需求对照
 
