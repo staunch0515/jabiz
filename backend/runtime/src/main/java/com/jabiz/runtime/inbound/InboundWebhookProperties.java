@@ -4,6 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,8 +57,9 @@ public record InboundWebhookProperties(Map<String, Provider> providers) {
         DataSize maxBodySize, RateLimit rateLimit) {
 
         public Provider {
-            secrets = secrets == null ? List.of() : List.copyOf(secrets);
-            eventTypes = eventTypes == null ? List.of() : List.copyOf(eventTypes);
+            // Null entries are kept for the startup check to report, rather than failing the binding.
+            secrets = secrets == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(secrets));
+            eventTypes = eventTypes == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(eventTypes));
             tolerance = tolerance == null ? DEFAULT_TOLERANCE : tolerance;
             maxBodySize = maxBodySize == null ? MAX_BODY_SIZE : maxBodySize;
             rateLimit = rateLimit == null ? new RateLimit(null, null) : rateLimit;

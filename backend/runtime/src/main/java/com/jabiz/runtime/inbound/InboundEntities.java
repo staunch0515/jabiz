@@ -11,8 +11,9 @@ import org.springframework.context.annotation.Configuration;
  * Received inbound webhook events as a platform entity (docs/design/11-ledger-events-jobs.md section 2.5; decision
  * D37): {@code InboundEvent}, one row of the append-only {@code sys_inbound_event}, which the platform's receiver
  * inserts itself (like {@code MailAttempt}: a log of what arrived, not entity data, so no audit record). Its dataset
- * is read-only and needs {@code inbound.read}. The body is not a field: lists and reads of the dataset carry its
- * SHA-256 only, and the body itself, up to 1 MB of what may be personal data, is read one event at a time through
+ * is read-only and needs {@code inbound.read}. The body is not a field, nor a column of the table: it is kept in
+ * {@code sys_inbound_event_body}, so that lists, exports and reports carry its SHA-256 only, and the body itself, up
+ * to 1 MB of what may be personal data, is read one event at a time through
  * {@code GET /api/inbound-events/{id}/body}. Applications may declare a retention policy counted from
  * {@code receivedTime}.
  */
@@ -22,8 +23,10 @@ public class InboundEntities {
     public static final String EVENT = "InboundEvent";
     public static final String EVENT_DATASET = "urn:jabiz:dataset:platform:InboundEvent";
     static final String TABLE = "sys_inbound_event";
+    /** The bodies, one row per event, apart so that nothing reading the events carries them. */
+    static final String BODY_TABLE = "sys_inbound_event_body";
     /** The unique key of (provider, external event id): a second arrival of an event fails on it. */
-    static final String EXTERNAL_KEY = "sys_inbound_event_external_key";
+    public static final String EXTERNAL_KEY = "sys_inbound_event_external_key";
 
     static final int MAX_ROWS = 1000;
 

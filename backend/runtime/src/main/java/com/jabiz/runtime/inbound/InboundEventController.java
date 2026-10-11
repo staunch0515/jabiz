@@ -50,8 +50,9 @@ class InboundEventController {
     Mono<ResponseEntity<InboundEventBody>> body(@PathVariable String inboundEventId) {
         return RequestContexts.current().flatMap(context -> {
             Permissions.require(context, InboundPermissions.READ, "Reading inbound events");
-            return storages.getEngine(poolRef).select("SELECT inbound_event_id, content_type, body_sha256, body FROM "
-                    + InboundEntities.TABLE + " WHERE inbound_event_id = :id",
+            return storages.getEngine(poolRef).select("SELECT e.inbound_event_id, e.content_type, e.body_sha256, b.body"
+                    + " FROM " + InboundEntities.TABLE + " e JOIN " + InboundEntities.BODY_TABLE
+                    + " b ON b.inbound_event_id = e.inbound_event_id WHERE e.inbound_event_id = :id",
                     Map.of("id", BoundValue.of(inboundEventId)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("Inbound event not found")))

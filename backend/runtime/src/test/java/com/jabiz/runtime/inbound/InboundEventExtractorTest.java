@@ -60,6 +60,18 @@ class InboundEventExtractorTest {
     }
 
     @Test
+    void numbersWithHugeExponentsAreRefused() {
+        assertThat(reason(() -> stripe("{\"id\":\"evt_1\",\"type\":\"t\",\"n\":1e1001}")))
+            .isEqualTo("number_out_of_range");
+        assertThat(reason(() -> stripe("{\"id\":\"evt_1\",\"type\":\"t\",\"d\":{\"n\":[1, 2.5e-1001]}}")))
+            .isEqualTo("number_out_of_range");
+        assertThat(reason(() -> stripe("{\"id\":\"evt_1\",\"type\":\"t\",\"n\":1E999999999}")))
+            .isEqualTo("number_out_of_range");
+        assertThat(stripe("{\"id\":\"evt_1\",\"type\":\"t\",\"n\":[1e1000, -2.5e-999, 12345678901234567890]}")
+            .externalEventId()).isEqualTo("evt_1");
+    }
+
+    @Test
     void theBodyMustBeStrictUtf8() {
         byte[] latin1 = "{\"id\":\"évt\",\"type\":\"t\"}".getBytes(StandardCharsets.ISO_8859_1);
         assertThat(reason(() -> InboundEventExtractor.extract("stripe", NONE, latin1))).isEqualTo("not_utf8");

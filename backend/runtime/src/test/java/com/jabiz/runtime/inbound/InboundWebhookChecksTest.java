@@ -73,6 +73,17 @@ class InboundWebhookChecksTest {
     }
 
     @Test
+    void nullOrBlankEntriesAreReportedNotThrown() {
+        Map<String, InboundWebhookProperties.Provider> providers = new LinkedHashMap<>();
+        providers.put("holes", provider("stripe", java.util.Arrays.asList(SECRET, null),
+            java.util.Arrays.asList("a", null, " ")));
+        assertThat(problems(providers)).containsExactlyInAnyOrder(
+            "INBOUND jabiz.inbound-webhooks.providers.holes.secrets[1]: missing or shorter than 32 characters",
+            "INBOUND jabiz.inbound-webhooks.providers.holes.event-types[1]: missing or blank",
+            "INBOUND jabiz.inbound-webhooks.providers.holes.event-types[2]: missing or blank");
+    }
+
+    @Test
     void onlyValidProvidersAreServed() {
         InboundWebhookProperties properties = new InboundWebhookProperties(Map.of(
             "good", provider("stripe", List.of(SECRET), List.of("a")),

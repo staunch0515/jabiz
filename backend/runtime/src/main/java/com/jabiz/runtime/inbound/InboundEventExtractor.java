@@ -33,9 +33,16 @@ final class InboundEventExtractor {
     static final int MAX_ID = 255;
     private static final Pattern ID = Pattern.compile("[\\x21-\\x7E]{1," + MAX_ID + "}");
 
+    /**
+     * The largest power of ten a number of a body may carry, either way ({@code 1e1000}, {@code 1e-1000}): beyond it,
+     * an exact decimal of it is a denial of service waiting for the first arithmetic or comparison of a consumer.
+     */
+    static final int MAX_EXPONENT = 1000;
+
     private static final JsonMapper STRICT = JsonMapper.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
         .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+        .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
         .build();
 
     /**
@@ -78,6 +85,9 @@ final class InboundEventExtractor {
         if (root == null || !root.isObject()) {
             throw new InboundRejectedException("not_json");
         }
+        if (!withinRange(root)) {
+            throw new InboundRejectedException("number_out_of_range");
+        }
         JsonNode id = root.get(idField);
         if (id == null || !id.isString() || !ID.matcher(id.asString()).matches()) {
             throw new InboundRejectedException("no_event_id");
@@ -98,6 +108,25 @@ final class InboundEventExtractor {
             agrees(headers.values("X-Jabiz-Event-Type"), type.asString());
         }
         return new Extracted(id.asString(), type.asString(), livemode, text);
+    }
+
+    /** Whether every number in the tree has a power of ten within {@value #MAX_EXPONENT} either way. */
+    static boolean withinRange(JsonNode node) {
+        if (node.isContainer()) {
+            for (JsonNode child : node) {
+                if (!withinRange(child)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (node.isFloatingPointNumber()) {
+            java.math.BigDecimal value = node.decimalValue();
+            // The exponent of the leading digit: scale alone would let 1e1000 pass written as 1000 digits.
+            long exponent = (long) value.precision() - value.scale() - 1;
+            return Math.abs((long) value.scale()) <= MAX_EXPONENT && Math.abs(exponent) <= MAX_EXPONENT;
+        }
+        return true;
     }
 
     private static void agrees(List<String> header, String signed) {

@@ -42,7 +42,9 @@ import java.util.Objects;
  * </ol>
  * Any failure of steps 2 and 3 is an {@link InboundRejectedException} (400, the same answer whatever went wrong); its
  * reason is logged and tagged, never stored. Nothing of the body, the signature or the secrets is logged or tagged:
- * the observation {@code jabiz.inbound.receive} carries the provider, the result and the reason only. The
+ * the observation {@code jabiz.inbound.receive} carries the provider, the result ({@code ACCEPTED}, {@code DUPLICATE},
+ * {@code IGNORED}, {@code REJECTED}, or {@code FAILED} for an unexpected error) and the reason ({@code none}, the
+ * rejection's, or {@code error}) only. The
  * application's processes run later, from the outbox, never in the request.
  */
 @Component
@@ -52,6 +54,9 @@ public class InboundReceiver {
 
     static final String REASON = "reason";
     private static final String NO_REASON = "none";
+    static final String REJECTED = "REJECTED";
+    static final String FAILED = "FAILED";
+    private static final String ERROR = "error";
     private static final int MAX_CONTENT_TYPE = 100;
 
     /** What became of an accepted request; each is answered 200. */
@@ -102,15 +107,21 @@ public class InboundReceiver {
             InboundWebhookProperties.Provider configuration = served(provider);
             Mono<Outcome> work = body.defaultIfEmpty(new byte[0])
                 .flatMap(bytes -> receive(provider, configuration, headers, contentType, bytes))
-                .flatMap(outcome -> PlatformObservations.tag(PlatformObservations.RESULT,
-                        outcome.name().toLowerCase(Locale.ROOT))
+                // Results are named as the outbox delivery names its own (CONSUMED, DUPLICATE, FAILED).
+                .flatMap(outcome -> PlatformObservations.tag(PlatformObservations.RESULT, outcome.name())
                     .then(PlatformObservations.tag(REASON, NO_REASON))
                     .thenReturn(outcome))
-                .onErrorResume(InboundRejectedException.class, rejected -> {
-                    log.info("Inbound webhook request of {} rejected: {}", provider, rejected.reason());
-                    return PlatformObservations.tag(PlatformObservations.RESULT, "rejected")
-                        .then(PlatformObservations.tag(REASON, rejected.reason()))
-                        .then(Mono.error(rejected));
+                .onErrorResume(error -> {
+                    if (error instanceof InboundRejectedException rejected) {
+                        log.info("Inbound webhook request of {} rejected: {}", provider, rejected.reason());
+                        return PlatformObservations.tag(PlatformObservations.RESULT, REJECTED)
+                            .then(PlatformObservations.tag(REASON, rejected.reason()))
+                            .then(Mono.error(rejected));
+                    }
+                    // Not the sender's doing (the database, a defect): the provider will deliver it again.
+                    return PlatformObservations.tag(PlatformObservations.RESULT, FAILED)
+                        .then(PlatformObservations.tag(REASON, ERROR))
+                        .then(Mono.error(error));
                 });
             return observations.mono(PlatformObservations.INBOUND, "inbound " + provider,
                 KeyValues.of("provider", provider), work);

@@ -53,7 +53,8 @@ public class PlatformObservations {
     public static final String WEBHOOK = "jabiz.webhook.delivery";
     /**
      * One inbound webhook request of a served provider (decision D37): tags {@code provider}, {@code result}
-     * ({@code accepted}, {@code duplicate}, {@code ignored}, {@code rejected}) and {@code reason} only.
+     * ({@code ACCEPTED}, {@code DUPLICATE}, {@code IGNORED}, {@code REJECTED}, {@code FAILED}) and {@code reason}
+     * ({@code none}, the rejection's, or {@code error}) only.
      */
     public static final String INBOUND = "jabiz.inbound.receive";
     public static final String INBOUND_RATE_LIMITED = "jabiz.inbound.rate_limited";

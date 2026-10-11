@@ -78,7 +78,12 @@ public class InboundWebhookChecks implements PlatformCheck {
                 "no event types: every request would be ignored"));
         }
         for (int i = 0; i < provider.eventTypes().size(); i++) {
-            String type = InboundEvents.type(name, provider.eventTypes().get(i));
+            String listed = provider.eventTypes().get(i);
+            if (listed == null || listed.isBlank()) {
+                found.add(CheckProblem.error(CATEGORY, at + ".event-types[" + i + "]", "missing or blank"));
+                continue;
+            }
+            String type = InboundEvents.type(name, listed);
             if (!EventSubscription.NAME.matcher(type).matches()) {
                 found.add(CheckProblem.error(CATEGORY, at + ".event-types[" + i + "]", type + " is not a valid event "
                     + "type (letters, digits, '.', '_', ':', '-'; at most 100 characters)"));

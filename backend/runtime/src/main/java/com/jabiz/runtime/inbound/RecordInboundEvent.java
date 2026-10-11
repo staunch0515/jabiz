@@ -26,7 +26,8 @@ import java.util.Objects;
 
 /**
  * The step of {@code INBOUND_RECEIVE} (decision D37 item 2): inserts the verified event into the append-only
- * {@code sys_inbound_event}, its body as received with its SHA-256 computed here, and publishes the outbox event
+ * {@code sys_inbound_event} with the SHA-256 of its body, computed here, and the body as received into
+ * {@code sys_inbound_event_body}, and publishes the outbox event
  * {@code jabiz.inbound.<provider>.<type>} that refers to it, both in the process's transaction. The row is written
  * directly, not through the change set: it is a log of what arrived, like the mail attempts, so it has no audit record
  * (docs/design/21-audit-retention.md section 1). A second arrival of the same event fails on the unique key of
@@ -90,7 +91,6 @@ class RecordInboundEvent implements StepHandler<RecordInboundEvent.Metadata, Pro
             row.put("signed_time", input.signedTime());
             row.put("received_time", received);
             row.put("content_type", input.contentType());
-            row.put("body", input.rawBody());
             row.put("body_sha256", sha256(input.rawBody()));
             row.put("process_seq_id", ctx.processSeqId());
             // Only a reference: the body is not copied into the outbox, which inbound.read does not guard and whose
@@ -101,7 +101,12 @@ class RecordInboundEvent implements StepHandler<RecordInboundEvent.Metadata, Pro
             payload.put("externalEventId", input.externalEventId());
             payload.put("eventType", input.eventType());
             payload.put("receivedTime", received.toString());
-            return storages.getEngine(poolRef).insert(InboundEntities.TABLE, row)
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("inbound_event_id", id);
+            body.put("body", input.rawBody());
+            var engine = storages.getEngine(poolRef);
+            return engine.insert(InboundEntities.TABLE, row)
+                .then(engine.insert(InboundEntities.BODY_TABLE, body))
                 .then(events.publish(InboundEvents.type(input.provider(), input.eventType()), payload,
                     ctx.processSeqId()))
                 .then(Mono.fromRunnable(() -> ctx.put(metadata.outputKey(), id)));
