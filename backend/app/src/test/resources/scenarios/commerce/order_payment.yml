@@ -2,7 +2,8 @@
 # payment_intent.succeeded for an order; the platform verifies and stores it and publishes a reference, and the
 # consumer runs ORDER_RECORD_PAYMENT from the outbox, which records the payment on its order. The same event arriving
 # again changes nothing, types the provider is not listed for are not kept, a request signed too long ago is refused,
-# and a payment that does not fit its order becomes a task rather than a failure.
+# and a payment that does not fit its order becomes a task rather than a failure. Only the system runs the consumer's
+# process (phase 16l).
 name: Payments of orders by inbound webhook
 clock: 2026-05-01T00:00:00Z
 actor: { id: shop-admin, permissions: ["*"] }
@@ -71,6 +72,28 @@ steps:
     deliverEvents: true
   - expect: { entity: SalesOrder, id: "${paid}", fields: { paymentRef: pi_pay_1, paidTime: "2026-05-01T01:00:00Z" } }
   - expect: { entity: SalesOrder, id: "${short}", fields: { paymentRef: null, paidTime: null } }
+
+  - note: >-
+      ORDER_RECORD_PAYMENT is internal() (decision D41): the scenario's administrator, holding every permission, cannot
+      run it to record a payment no provider reported.
+    expectError:
+      process: ORDER_RECORD_PAYMENT@latest
+      input: { inboundEventId: forged }
+      status: 403
+      ruleCode: PROCESS_INTERNAL
+  - note: FILE_ARCHIVE is subProcessOnly() and never runs as a step of its own, not even as the system.
+    expectError:
+      actor: { id: system }
+      process: FILE_ARCHIVE@latest
+      input: { fileName: x.txt, mediaType: text/plain, fileContent: AQ==, permissions: [commerce.order.read] }
+      status: 403
+      ruleCode: PROCESS_INTERNAL
+  - note: The system passes the check and reaches the process, which finds no such event.
+    expectError:
+      actor: { id: system }
+      process: ORDER_RECORD_PAYMENT@latest
+      input: { inboundEventId: no-such-event }
+      status: 404
 snapshot:
   entities: [SalesOrder, InboundEvent, SysTask]
   asOf: end

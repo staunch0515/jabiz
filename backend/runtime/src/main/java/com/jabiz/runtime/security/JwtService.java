@@ -326,6 +326,12 @@ public final class JwtService {
         if (subject == null || subject.isBlank()) {
             throw new InvalidTokenException("Token without subject");
         }
+        // Nobody signs in as the system or as the anonymous visitor: a token naming them would pass for the platform
+        // itself (decision D41) or for nobody.
+        if (com.jabiz.context.RequestContext.SYSTEM_ACTOR.equals(subject)
+            || com.jabiz.context.RequestContext.ANONYMOUS_ACTOR.equals(subject)) {
+            throw new InvalidTokenException("Token of a reserved subject");
+        }
         return claims;
     }
 

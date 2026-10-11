@@ -6,6 +6,9 @@ import com.jabiz.document.DocumentLayout;
 import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.entity.EntityDefinition;
+import com.jabiz.external.ExternalJobCompletion;
+import com.jabiz.external.ExternalJobFailure;
+import com.jabiz.external.ExternalJobType;
 import com.jabiz.external.ExternalService;
 import com.jabiz.numbering.NumberSequence;
 import com.jabiz.process.ProcessContext;
@@ -180,6 +183,27 @@ class CommerceConfig {
     ProcessDefinition<ProductRenaming.RenameInput, ProductRenaming.RenameOutput, ProcessContext>
         productRenameProcess() {
         return ProductRenaming.RENAME_PROCESS;
+    }
+
+    /** Marketing copy written by the demo AI service as an external job (decision D38). */
+    @Bean
+    ExternalJobType<ProductCopy.ProductCopyInput, ProductCopy.ProductCopyResult> productCopyJob() {
+        return ProductCopy.COPY_JOB;
+    }
+
+    @Bean
+    ProcessDefinition<ProductCopy.RequestInput, ProductCopy.RequestOutput, ProcessContext> productCopyRequestProcess() {
+        return ProductCopy.REQUEST_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ExternalJobCompletion, ProductCopy.ApplyOutput, ProcessContext> productCopyApplyProcess() {
+        return ProductCopy.APPLY_PROCESS;
+    }
+
+    @Bean
+    ProcessDefinition<ExternalJobFailure, ProductCopy.ApplyOutput, ProcessContext> productCopyFailedProcess() {
+        return ProductCopy.FAILED_PROCESS;
     }
 
     @Bean

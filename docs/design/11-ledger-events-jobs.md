@@ -140,7 +140,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
-- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean。
+- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean；流程应为 `internal()`（D41，06 §8）：`entryOnly()` / `subProcessOnly()` 为错误，普通流程为警告，
+  除非订阅声明 `manualToo()`（该流程也供人经流程接口运行）。
 
 ### 2.4 Webhook：把事件送给其他系统【D33】
 
@@ -200,7 +201,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   ```java
   EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
       event -> new Input(InboundEvents.ref(event).inboundEventId()));
-  // 流程中（消费流程只由投递以系统身份运行：`internal()` 只是不进目录，流程自己拒绝其他执行者）：
+  // 流程声明 internal()：只由投递以系统身份运行，其他执行者（含持有全部权限的管理员）在启动时即 403 PROCESS_INTERNAL（06 §8，D41）：
   .step("Load the payment", LoadInboundEvent.of("pay", "payment_intent.succeeded",
       ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
   ```
@@ -255,9 +256,178 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
      重复的执行重放第一次的结果（`REPLAYED`）。
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
-- `GET /api/jobs`（权限 `job.read`）：任务、cron、时区、流程、下一次计划时刻、最近 10 次执行。
-- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean。
-- 场景回放：步骤 `runJob: {job, at, outcome}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`）与 `deliverEvents: true`（07 §3.1）。
+- `GET /api/jobs`（权限 `job.read`）：任务、种类（`SINGLE` / `PER_ITEM`）、cron、时区、流程、下一次计划时刻、最近 10 次执行
+  （逐项任务的执行带各结果的项数）；逐项任务另有"连续失败中的项"（项键、连续次数、最近错误（至多 200 字符）、最近失败时刻、下次可重试时刻，至多 50 条）。
+- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；流程的声明同事件消费者（`internal()`，或普通流程加 `JobDefinition…manualToo()`，D41）；
+  逐项任务另见 §4.1（每项流程只能是 `internal()`，没有 `manualToo()`）。
+  平台的 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 也可手工运行，任务声明 `manualToo()`。
+- 场景回放：步骤 `runJob: {job, at, outcome, items}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`；`items` 见 §4.1）与 `deliverEvents: true`（07 §3.1）。
+  场景回放缺省 `jabiz.jobs.lock-at-least-for=0s`，同一任务在一个场景中连续运行不会因自己的锁而 `LOCKED`。
+
+### 4.1 逐项任务（16k，决策 D42）
+
+一批多项的工作（到期自动取消、自动提交、上下架）**不写成根流程 + `CallProcess.forEach`**：子流程与根流程同一事务（06 §5），一项失败整批回滚，
+锁持有到整批提交，与在线请求按不同顺序取锁即可能死锁。改用逐项任务：
+
+```java
+JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of("Asia/Tokyo"),
+        JobItems.template("commerce.job.unpaid-orders",                 // 选取模板（须有 list.defaultSort 与 list.key）
+            scheduledTime -> Map.of("cutoff", scheduledTime.minus(ttl)), // 模板参数（同步、无 I/O）
+            "orderId"),                                                 // 项键所在的结果列
+        ORDER_EXPIRE,                                                   // 每项流程（internal()）
+        (scheduledTime, row) -> new ExpireInput(Rows.uuid(row.get("orderId"))))
+    .maxItems(500)                        // 每次至多处理的项数，缺省 500，上限 10 000
+    .parallelism(1)                       // 实例内同时执行的项数，缺省 1，上限 8
+    .itemLockWait(Duration.ofSeconds(2))  // 每项中 HoldLock 的最长等待，缺省 2 s，不超过 jabiz.process.lock-timeout
+    .itemRetry(Duration.ofMinutes(1), Duration.ofHours(1))  // 连续失败的退避：起点、上限
+    .maxRunTime(Duration.ofMinutes(5))    // 之后不再开始新项，缺省 lockAtMostFor 的一半，必须小于 lockAtMostFor
+    .lockAtMostFor(Duration.ofMinutes(10));
+```
+
+- **选取**：以系统身份在只读短事务中运行 SQL 模板（不产生操作记录；遮蔽字段一律遮蔽，选取不留显示记录），按模板的 `defaultSort` + `key` 排序，
+  `LIMIT` = `maxItems` + 退避中的项数（至多 `jabiz.jobs.max-in-backoff`，缺省 1 000；只读最近"最长退避"时段内的失败行）+ 1；
+  再按**每个选中项自己的**失败记录（不受上述上限影响）滤掉退避中的项，取前 `maxItems` 项；还有更多（或选取已满）记为 `items_more`。
+  退避中的项超过上限时，后面的项可能要等到它们退避期满才被选中（不会被提前重试）。选取失败 → 运行 `FAILED`，不处理任何项。
+  项键为空、不符合 `[A-Za-z0-9._:-]{1,36}` 或同一次选取中重复 → 该项记为 `FAILED`（`JOB_ITEM_KEY_INVALID`，error 日志；没有可记的键，不写失败行），其余照常；
+  全部项都无效时运行为 `PARTIAL`。**项键必须是代理键**（实体主键、UUID 之类不变、不含个人信息的标识）：它进入幂等键、失败表、日志与 `GET /api/jobs`，
+  不能用邮箱、姓名、单据号等业务值；选取以遮蔽方式读取遮蔽字段，项键列来自遮蔽字段即启动检查错误，模板中出现遮蔽字段为告警。
+  业务参数由每项流程自己读（`LoadParams`）。
+- **逐项执行**：每项以系统身份作为**根流程**、各自一个事务与 `op_process`；幂等键 `job:<名称>:<计划时刻 epoch 毫秒>:<项键>`（至多 119 字符），
+  请求标识 `job-<名称>-<毫秒>-<项键>`；执行选项 `lockWait = itemLockWait`：项的整个事务（行锁、平台的锁、幂等键）与 `HoldLock` 都以它为等待上限（06 §4.1）。并发至多 `parallelism`（每项占一个连接；超过连接池一半时启动检查告警）。
+- **每项的结果**（只影响该项）：
+
+  | 结果 | 条件 | 记录 |
+  |---|---|---|
+  | `SUCCEEDED` | 提交 | 计数；该项此前有未恢复的失败时追加一行 `RECOVERED` |
+  | `REPLAYED` | 同一计划时刻已处理过（幂等键重放） | 计数 |
+  | `BUSY` | 只有"忙"的冲突（`ConcurrentUpdateException.busy()`）：锁等待超时（`55P03`）与死锁（`40P01`）译为 `LockNotAvailableException`，版本过期为 `ConcurrentUpdateException.stale` | 计数，不算失败、不退避；info 日志，同一项连续 5 次起 warn（实例内计数）；仍然到期的项由下次运行重新选取 |
+  | `FAILED` | 其他异常（422、404、500 …），包括不是"忙"的冲突（实体已存在、撤销与变基冲突等）；事务已回滚，不留任何效果 | 追加 `sys_job_item_failure`（`FAILED`，`attempt` = 连续次数）；warn 日志，连续第 5 次起 error |
+  | `DEFERRED` | 退避中（选取后滤掉），或超过 `maxRunTime`、停机后未开始；停机开始后才出错的项 | 计数 |
+
+- **运行结果**：`sys_job_run` 一行，带 `items_selected`（各结果之和）、`items_succeeded` / `replayed` / `busy` / `failed` / `deferred` 与 `items_more`；
+  没有 `FAILED` 项 → `SUCCEEDED`，有 → `PARTIAL`，选取失败 → `FAILED`（`REPLAYED` 只属于单流程任务）。`JobRunner.execute(job, 时刻)` 返回结果与计数，`run` 只返回结果。
+- **失败与退避**（逐项、持久化，同 Outbox）：不在一次运行中重试。连续失败次数 = 该项最近一次 `RECOVERED` 之后的 `FAILED` 行数（即最近一行的 `attempt`，按 `entry_no` 排序）；
+  第 1 次失败后下一次运行即可重试，第 n 次（n ≥ 2）后等 `min(起点 × 2^(n−2), 上限)`。从不放弃：封顶后按上限重试并写 error 日志。
+  退避中的项另外放宽选取上限，"毒项"不会占满 `maxItems` 使后面的项饿死。
+- **集群**：一次运行（选取 + 全部项）在该任务的 ShedLock 下，同一时刻只有一个实例运行；项不在实例间分发。`maxRunTime` < `lockAtMostFor`，到时不再开始新项，
+  进行中的项照常结束。即使锁过期、另一实例开始同一计划时刻，幂等键保证同一项在同一计划时刻至多执行一次（并发时一方等待唯一约束后重放）。
+  运行超过 cron 间隔时下一时刻 `LOCKED`；逐项任务按状态选取，下一次运行自然接上。停机（`JobScheduler` 的 `@PreDestroy`）时不再开始新项，
+  等待进行中的项至多 `jabiz.jobs.scheduler.shutdown-grace`（缺省 30 秒）后中断其余；停机开始后出错的项记为 `DEFERRED`，不写失败行。
+  `maxRunTime` 与锁时间一样是真实时间（基础设施时间）；退避与失败记录的时刻来自注入的 `Clock`。
+- **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
+  每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
+- **D41**：每项流程必须是 `internal()`（启动检查 `JOB`：`entryOnly()`、`subProcessOnly()` 与普通流程一律报错，逐项任务没有 `manualToo()`）：
+  其输入来自系统的选取，人不应能直接调用；执行时 `ProcessExecutor.requireStartable` 只允许系统身份启动它（403 `PROCESS_INTERNAL`）。
+  单流程任务按 §4 的规则（`internal()`，或普通流程加 `manualToo()`）。
+- **启动检查 `JOB`**（一次报全）：选取模板存在、不是公开模板、声明 `list.defaultSort` 与 `list.key`、必填参数都由参数函数给出且没有未声明的参数；
+  项键列是模板的结果列；每项流程已注册且 `internal()`；`itemLockWait` 不超过 `jabiz.process.lock-timeout`；`parallelism` 超过 R2DBC 连接池（`spring.r2dbc.pool.max-size`）一半时告警。
+  `maxItems`、`parallelism`、`maxRunTime < lockAtMostFor` 等范围在声明时即检查。
+- **"连续失败中的项"**（`GET /api/jobs`）只列最近 7 天内失败过的项（更早的多半已不再被选中）。
+- **表**：`sys_job_item_failure`（只追加，平台迁移 `V36`，索引 `(job_name, item_key, entry_no DESC)` 与 `(job_name, recorded_time)`）：`failure_id`、`entry_no`（自增，定序）、`job_name`、`item_key`、`kind`（`FAILED` / `RECOVERED`）、`run_id`、
+  `scheduled_time`、`attempt`、`error`（至多 2 000 字符）、`process_seq_id`（`RECOVERED` 行的成功操作）、`recorded_time`。`sys_job_run` 加列不执行 UPDATE，封存按各块记下的列清单校验（21 §2）。
+- **观测**：每项 `jabiz.job.item`（标签只有 `job` 与 `result`），每项流程的 `jabiz.process` 嵌在其下；运行 `jabiz.job.run` 的结果增加 `PARTIAL`；选取记为 `jabiz.query.template`（13）。
+- **场景**：`runJob: {job, at, outcome, items: {succeeded, replayed, busy, failed, deferred}}`，`outcome` 缺省 `SUCCEEDED`（可写 `PARTIAL`），`items` 只比较写出的键。
+- **示范**：`commerce.unpaid-order-expire`（每天 03:10 东京时间，模板 `commerce.job.unpaid-orders`：`PLACED`、未付款、下单早于 `计划时刻 − app.commerce.unpaid-order-ttl`（缺省 14 天））
+  的每项流程 `ORDER_EXPIRE {orderId}`：以 `internal()` 只由系统启动（D41：其他执行者 403 `PROCESS_INTERNAL`）、取订单锁 `commerce.order:<id>`、重新读取，仍未付款且已超过期限才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
+  "刚付款"与"过期取消"不交错。场景 `scenarios/commerce/unpaid_order_expiry.yml`。
+
+## 4a. 异步外部作业【D38 第 3–5 条，阶段 16e-2】
+
+耗时数十秒的外部调用（生成文案、图片）不放在流程事务中：流程登记作业后立即返回，平台在任何事务之外执行，结果经完成流程写入。
+不引入队列系统：领取、租约、重试、取消都记在只追加的表中，多实例与重启都安全。
+
+- **作业类型**（core `ExternalJobType`，Bean）：
+  ```java
+  ExternalJobType.define("commerce.product-copy", ProductCopyInput.class, ProductCopyResult.class, t -> t
+      .handler(ProductCopyHandler.class).services("demo-ai").timeout(ofSeconds(90))
+      .retry(3, ofSeconds(10), ofMinutes(10)).maxConcurrency(2).oneOpenPerReference()
+      .onCompleted("PRODUCT_COPY_APPLY").onFailed("PRODUCT_COPY_FAILED"))
+  ```
+  名字 `[a-z][a-z0-9._-]{0,99}`；输入与结果是 record，都不含 `@Sensitive` 组件（作业保存它们）；超时至多 1 小时（缺省 1 分钟），
+  且须长于所用服务的请求超时；
+  `retry(次数, 初始退避, 最长退避)` 的次数含第一次（缺省 3 次、10 s、10 min），第 n 次失败后等待 `初始 × 2^(n−1)`，不超过最长退避；
+  `maxConcurrency` 为全部实例合计（缺省 4，Q11）。
+  **开始的限制**：`maxOpenPerRequester(n)`（缺省 10）——同一请求人此类型未结束（无最终结果、未取消）的作业至多 n 个；`oneOpenPerReference()`——
+  同一引用至多一个未结束的作业（此时开始必须给引用）。超过即 422 `EXTERNAL_JOB_LIMIT`（三语，参数 `jobType`、`limit`、`scope`）。
+  计数在类型与请求人、类型与引用各自的 advisory 锁下进行（持有到流程事务结束；先取引用的锁再取请求人的锁），并发的开始也不会同时通过。
+- **处理器**（core `ExternalJobHandler<I, R>`，同步，Bean）：`ExternalJobResult<R> run(I input, ExternalJobContext ctx)`。在执行器的虚拟线程上运行，
+  不持有任何事务或连接，不访问数据库（共用 ArchUnit 规则 `handlersStayOutOfTheDatabase`）。`ctx`：`jobId`、`attempt`、`idempotencyKey()`
+  （`jabiz-job-<作业号>`，各次尝试相同）、`deadline`、`http(服务)` 与 `secret(服务, 名)`（只限类型声明的服务）、`recordUsage(名, 数量)`（失败的尝试也保留）。
+  返回 `ExternalJobResult.of(值).usage("promptTokens", 812)`：用量名 `[a-zA-Z][A-Za-z0-9._-]{0,63}`，数量为非负整数，同名相加。
+  失败：`ExternalJobException.permanent(码, 消息)` 不重试，`retryable(码, 消息)` 与其他异常、超时按可重试处理；平台自己的码：`TIMEOUT`、`LEASE_EXPIRED`、
+  `EXTERNAL_CALL_FAILED`（外部调用失败，被拒的调用不重试）、`HANDLER_ERROR`（其他异常，只记异常的类名，不记消息：消息可能重复请求或密钥）、
+  `RESULT_TOO_LARGE`（结果 JSON 超过 256 KiB，不重试，Q16）、`BAD_RESULT`（不是声明的结果类型，或其 JSON 读不回该类型，不重试）、
+  `NO_RESULT`（处理器返回 null，不重试）、`BAD_INPUT`（保存的输入读不成输入类型，或找不到处理器，不重试）、`ATTEMPTS_EXHAUSTED`、`TYPE_REMOVED`（见下）。
+- **登记**：平台步骤 `StartExternalJob.of(类型, ctx -> 输入).reference(ctx -> …).outputKey("jobId")`（可加 `.when(…)`；在 `com.jabiz.runtime.process.steps`）
+  在流程事务内插入 `sys_external_job`（请求人为请求的操作人、`process_seq_id`、引用至多 200 字），作业号写入上下文。回滚或试运行即没有作业；
+  带 `Idempotency-Key` 的重放返回同一作业号（重放的是输出）。输入中 `@Sensitive` 组件的非空值（按声明反射查找，含嵌套 record、集合、Map、数组与
+  `Object` 类型的值）→ 422 `EXTERNAL_JOB_INPUT_SECRET`（参数为字段路径，不含值）；只看声明、不看名字，`maxTokens` 之类不受影响。
+  遮蔽字段（`f.masked`）的值不按名字查找：输入是自己的 record，组件不是实体字段，按名字匹配会误拒；输入不经任何接口返回，个人信息的保留见 21 §3.1。
+  JSON 超过 64 KiB → 422 `EXTERNAL_JOB_INPUT_TOO_LARGE`。
+  启动检查（`CheckedStep`）：引用的类型已声明。
+- **执行器** `ExternalJobExecutor`（`jabiz.external-jobs.executor.enabled`（测试关闭）、`poll-interval` 1 s、每实例 `max-in-flight` 8、`instance-id`
+  缺省为主机名加随机串、`shutdown-grace` 30 s、`watermark-refresh` 1 min；测试与场景调用 `runPending()`，领取后执行并等全部记录完）：
+  1. **领取**（每个类型一个短事务，**每次轮询对每个类型都做**，实例已满也做前两项）：`pg_advisory_xact_lock(hashtextextended('jabiz.external-job:'||类型))`，
+     取得锁之后才读时钟；把租约已到期而没有结果的领取补记为尝试 `LEASE_EXPIRED`（可重试；已取消的作业随即为 `CANCELLED`，次数用尽的为 `FAILED`）；
+     没有未记录的领取而不能再尝试的作业给出最终结果——已取消的为 `CANCELLED`，尝试次数已达类型现在的上限（类型改小了次数）的为 `FAILED` `ATTEMPTS_EXHAUSTED`；
+     实例有空位时，统计有效领取数（有领取、无尝试、租约未到）得到剩余名额，
+     选出到期的作业——无最终结果、未取消、无未记录的领取、尝试次数未满、首次或已过退避——`FOR UPDATE OF j SKIP LOCKED LIMIT 名额`。
+     退避由 Java 按 `ExternalJobType.backoffAfter` 算成每个失败次数的等待（毫秒数组）交给 SQL，属性测试覆盖的即是生产所用的计算；时间取 `Clock`。
+     为每个插入 `sys_external_job_claim`（尝试号 = 已有尝试数 + 1，租约 = 现在 + 超时 + 30 s），`ON CONFLICT DO NOTHING`，
+     并且插入语句自己再看一次取消（与取消之间的竞争）。真正的保证是主键 (作业, 尝试号)：竞争失败者什么也没插入，跳过。
+     **轮流**：每次轮询从上次取得名额的类型的下一个开始，一个忙碌的类型占不满实例的每次轮询。
+     **水位线**：每个类型记住最小的无最终结果的 `job_seq`（没有则为最大加一），上面的查询只看水位线以上的作业；每隔 `watermark-refresh`
+     一次轮询是**全量扫描**（不用水位线，并刷新水位线），以找到晚提交而编号较小的作业（它最多晚一个刷新间隔被领取），
+     同时把已不再声明的类型的未结束作业记为 `FAILED` `TYPE_REMOVED`（其完成不调用任何流程）。`sys_external_job_claim (lease_until)` 有索引。
+  2. **执行**：处理器在 `boundedElastic`（虚拟线程）上、作业的 `ExternalCallScope` 中运行，`Mono.timeout(超时)`（中断线程，尽力而为）；
+     此时没有任何事务或连接被占用。
+  3. **记录**（独立事务，先 `FOR UPDATE` 锁作业行，与取消串行；数据库失败时退避重试 3 次）：插入尝试（`SUCCEEDED` / `FAILED` / `TIMED_OUT`、是否可重试、码、说明（至多 2000 字）、耗时）
+     ——`ON CONFLICT DO NOTHING`：租约过期后迟到的实例发现尝试已被记为 `LEASE_EXPIRED`，丢弃自己的结果（`DISCARDED`）；再插入用量。
+     已取消 → 最终结果 `CANCELLED`（丢弃结果）；成功 → `SUCCEEDED` 与结果 JSON；不可重试或次数用尽 → `FAILED` 与最后的码和说明；否则等待重试。
+     最终结果 `sys_external_job_outcome`（主键 `job_id`，`ON CONFLICT DO NOTHING`：只有一个）与 Outbox 事件
+     `jabiz.external-job.finished`（`{jobId, jobType, status}`，不含结果）同一事务。用量计数器在提交之后才增加。
+  4. **停止**：执行器是 `SmartLifecycle`（在数据库连接关闭之前停止）：不再领取，等本实例正在执行的尝试记录完，至多 `shutdown-grace`；
+     没等到的在租约到期后由其他实例重新领取。
+  - 锁的顺序：领取先取类型的 advisory 锁再取作业行；记录与取消只取作业行。持有作业行的事务从不等待 advisory 锁，所以不会死锁。
+- **完成**：平台的消费者 `jabiz.external-jobs` 接收 `jabiz.external-job.finished`，以系统身份运行内部流程 `EXTERNAL_JOB_COMPLETE`。
+  其步骤 `RunExternalJobCallback` 读取作业、结果与用量合计，以 `executeChild` 调用类型声明的流程：成功为 `ExternalJobCompletion(jobId, jobType,
+  requestedBy, reference, result（按声明的结果类型反序列化，`result(类型)` 取出）, usage, attempts, finishedTime)`，失败为
+  `ExternalJobFailure(…, errorCode, errorMessage)`；`CANCELLED` 不调用（Q13）。保存的结果读不回声明的类型（类型改了）时，
+  改为以 `RESULT_UNREADABLE` 调用失败流程，而不是让事件反复重试；类型已不再声明的作业不调用任何流程。
+  两个流程的操作记录（`op_process.input_summary`）不含结果与处理器的消息：结果只记字节数 `resultBytes`，消息只记长度 `errorMessageLength`
+  （`SensitiveDataMasker` 对这两种输入的特例）；`ExternalJobFailure.toString` 同样遮蔽消息。消费记录与子流程同一事务：只调用一次；失败按 Outbox 重试（D14）。
+  完成与失败流程必须是 `internal()`（启动检查），并由它们以 `CreateTask` / `SendMail` 通知请求人。
+  **在 D41 决定之前**，`internal()` 只是不进目录，持有权限的人仍能经 `/api/processes` 调用：`EXTERNAL_JOB_COMPLETE` 的步骤与示范的
+  `PRODUCT_COPY_APPLY` / `PRODUCT_COPY_FAILED` 都在步骤中拒绝系统以外的操作人（403，同 16d 的 `RecordInboundEvent` 与示范消费者），应用的回调流程须照做。
+- **取消**：`POST /api/external-jobs/{id}/cancel` 运行 `EXTERNAL_JOB_CANCEL`（`entryOnly()`，只由该入口以调用人身份运行，D41；步骤检查请求人本人或持有 `external-job.cancel` 者）。
+  请求人本人或持有 `external-job.cancel` 的人，其他人 404（与不存在相同）——先在不加锁的行上判断，无权的人不会取得或等待行锁；
+  然后 `FOR UPDATE` 锁作业行；已有最终结果或已取消 → 422 `EXTERNAL_JOB_FINISHED`。
+  插入 `sys_external_job_cancel`；没有正在执行的尝试则同时写最终结果 `CANCELLED`（含事件，不调用流程）；执行中的，执行器记录尝试后写 `CANCELLED` 并丢弃结果。
+  回答为取消后的状态。
+- **查看**：`GET /api/external-jobs/{id}`（请求人本人或 `external-job.read`，其他人 404，`Cache-Control: no-store`）：作业号、类型、引用、请求人、
+  状态（`QUEUED` 从未领取 / `RUNNING` 有效领取中 / `WAITING_RETRY` 等待重试（含租约过期待补记）/ `SUCCEEDED` / `FAILED` / `CANCELLED`
+  （已取消而尝试仍在执行的也是，其结果必被丢弃））、尝试次数、请求 / 首次领取 / 结束时间、最近的错误码、用量合计；不含输入与结果（Q14）。
+  只读平台实体 `ExternalJob`（不含输入）、`ExternalJobAttempt`、`ExternalJobUsage` 的数据视图（`external-job.read`）供后台查看；
+  报表模板 `jabiz.external_job_usage`：按类型、用量名、尝试结束的月份（UTC）汇总数量与尝试数（参数 `from` / `to` / `jobType`）。平台不计费。
+- **表**（`db/jabiz/V37__external_jobs.sql`，全部只追加并有主键，D27 封存）：`sys_external_job`（`job_id` 为 `varchar(36)`，与其他平台实体的标识一致）、
+  `sys_external_job_claim`、`sys_external_job_attempt`（另有唯一的 `attempt_id` 作实体主键）、`sys_external_job_usage`（另有 `usage_id`）、
+  `sys_external_job_cancel`、`sys_external_job_outcome`。`SELECT … FOR UPDATE` 只加行锁，不触发只追加的 UPDATE 触发器。
+- **观测**：`jabiz.external.job`（每次尝试，从处理器开始到记录完；标签 `job_type`、`outcome`：`SUCCEEDED` / `WAITING_RETRY` / `FAILED` /
+  `CANCELLED` / `DISCARDED` / `error`）；计数器 `jabiz.external.usage`（标签 `job_type`、`metric`，增加记录的数量）。
+- **启动检查 `EXTERNAL`**：类型名唯一且合法、处理器恰好一个 Bean、服务已声明且其请求超时短于作业的超时、完成与失败流程存在且为 `internal()` 并分别以
+  `ExternalJobCompletion` / `ExternalJobFailure` 为输入、超时 / 重试 / 并发 / 开始限制在范围内、输入与结果是 record、两者都无 `@Sensitive` 组件（含嵌套 record）。
+- **场景回放**：`runExternalJobs: true`；`completeExternalJob: {jobType, reference?, result, usage?, status?, errorCode?, errorMessage?}`
+  不调用处理器，经同一领取与记录路径写入结果（`ExternalJobExecutor.completeWithoutHandler`，Q17），07 §3.1。
+  `completeWithoutHandler` 只在 `jabiz.external-jobs.simulated-results=true`（只有测试配置设置）时可用，否则 `IllegalStateException`。
+- **风险与限制**：超时不能强行停止卡住的处理器（中断只是尽力而为，靠请求超时与租约兜底；超时后旧线程若仍在运行，同一类型可能短暂超出并发上限）；
+  至少一次——执行完、记录前崩溃，会以同一幂等键再调用一次，不支持幂等键的提供方可能计费两次（用量按尝试记录，可统计）；
+  迟到实例被丢弃的尝试不记录用量；每次轮询每个类型一个领取事务（查询限于水位线以上，全量扫描每个刷新间隔一次）；
+  晚提交的作业最多晚一个刷新间隔；完成流程持续失败时 Outbox 重试用尽后由运维处理。
+  输入与结果可能含个人信息：保留策略与删除见 21 §3.1。
+- 示范：`app` 的 `PRODUCT_COPY_REQUEST`（`actsOn Product`，`commerce.product.write`）登记 `commerce.product-copy`；`ProductCopyHandler` 调用
+  `POST /v1/generate`（`{text, usage:{promptTokens, completionTokens}}`，不绑定提供方；4xx 为永久失败，429 / 5xx 重试）；
+  每个商品同时只有一个未结束的作业（`oneOpenPerReference`）；`PRODUCT_COPY_APPLY` 写 `Product.marketingCopy`（`processOnly`）并给请求人待办，`PRODUCT_COPY_FAILED` 告知失败。测试 `ExternalJobIT`，
+  场景 `scenarios/commerce/product_copy.yml`。
 
 ## 5. 示范（`app` 的 `FreightBilling`）
 
@@ -283,3 +453,16 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 | 事务回滚时不产生事件；投递失败会重试，消费端不会重复处理 | `OutboxIT`：流程回滚、数据视图提交失败均无事件；消费者前两次失败后按退避重试成功且只留一次效果；重复投递与 4 路并发投递都只处理一次 |
 
 另有 `LedgerIT`（过账、余额、冲正、只能经流程写入、撤销被拒、数据库兜底、只追加）、`AuditIT`、`JobChecksTest`、场景回放。
+
+逐项任务（16k，§4.1）：
+
+| 验收标准 | 测试 |
+|---|---|
+| 每项以系统身份、各自一个事务执行；一项失败只回滚该项，运行 `PARTIAL` 并有计数 | `JobItemsIT.oneFailingItemAffectsNoOther`：5 项中第 3 项 422 → 4 项提交、1 行失败、失败项无 `op_process` 与写入 |
+| 同一计划时刻重跑、两个实例在锁过期后各跑一次，同一项只产生一次效果 | `rerunsOfAScheduledTimeReplayAndFailingItemsRecover`；`itemsRunInParallelOnceEachAndTwoInstancesRunATimeOnce`（`parallelism = 4`、200 项、两个实例一个 `LOCKED`，锁释放后另一实例全部 `REPLAYED`）；`concurrentInstancesAfterAnExpiredLockRunEachItemOnce`（运行中锁过期，两个实例并行跑同一时刻） |
+| 失败按连续次数退避、成功后 `RECOVERED`、持续失败的项不使其他项饿死 | `aFailingItemBacksOffWithoutStarvingTheOthers`（1、2、4 分钟，`maxItems = 2` 时其他项照常）；`retriesAreCappedAndNeverGivenUp` |
+| 任务项取不到锁即 `BUSY`、不算失败；请求中超时 409 | `anItemWhoseLockIsHeldIsBusyAndRunsNextTime`；`HoldLockIT.aStepsOwnWaitAndTheExecutionsWaitAreShorterThanTheTimeout`；`HoldLockTimeoutTest` |
+| Q5 的锁形状下无死锁、在线请求不等整批 | `itemsDoNotDeadlockWithRequests`；对照 `theOldBatchInOneTransactionDeadlocksWithRequests`（`CallProcess.forEach` 同一事务，数据库报死锁） |
+| `maxRunTime` | `afterMaxRunTimeNoItemStarts` |
+| 只追加、封存 | `itemRecordsAreAppendOnly`（无 UPDATE / DELETE、触发器拒绝、封存与校验通过） |
+| 接口、启动检查、场景 | `JobIT.aPerItemJobIsListedWithItsCountsAndFailingItems`；`JobChecksTest`；`ScenarioParserTest`；场景 `commerce/unpaid_order_expiry.yml` |

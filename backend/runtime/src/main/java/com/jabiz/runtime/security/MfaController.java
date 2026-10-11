@@ -125,7 +125,7 @@ class MfaController {
     Mono<MfaProcesses.Enrollment> enrollUnderChallenge(@RequestBody(required = false) ChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request, JwtService.Purpose.ENROLL);
-            return ActingUser.as(challenge.userId(), processes.execute(MfaProcesses.ENROLL_BEGIN,
+            return ActingUser.as(challenge.userId(), processes.executeAtEntry(MfaProcesses.ENROLL_BEGIN,
                 new MfaProcesses.UserInput(challenge.userId())));
         });
     }
@@ -134,7 +134,7 @@ class MfaController {
     Mono<MfaProcesses.RecoveryCodeList> confirmUnderChallenge(@RequestBody(required = false) ChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request, JwtService.Purpose.ENROLL);
-            return ActingUser.as(challenge.userId(), processes.execute(MfaProcesses.ENROLL_CONFIRM,
+            return ActingUser.as(challenge.userId(), processes.executeAtEntry(MfaProcesses.ENROLL_CONFIRM,
                 new MfaProcesses.ConfirmInput(challenge.userId(), request.code())));
         });
     }
@@ -157,13 +157,13 @@ class MfaController {
 
     @PostMapping("/api/auth/mfa/enroll")
     Mono<MfaProcesses.Enrollment> enroll() {
-        return RequestContexts.current().flatMap(context -> processes.execute(MfaProcesses.ENROLL_BEGIN,
+        return RequestContexts.current().flatMap(context -> processes.executeAtEntry(MfaProcesses.ENROLL_BEGIN,
             new MfaProcesses.UserInput(requireUser(context).toString())));
     }
 
     @PostMapping("/api/auth/mfa/enroll/confirm")
     Mono<MfaProcesses.RecoveryCodeList> confirm(@RequestBody(required = false) CodeRequest request) {
-        return RequestContexts.current().flatMap(context -> processes.execute(MfaProcesses.ENROLL_CONFIRM,
+        return RequestContexts.current().flatMap(context -> processes.executeAtEntry(MfaProcesses.ENROLL_CONFIRM,
             new MfaProcesses.ConfirmInput(requireUser(context).toString(), request == null ? null : request.code())));
     }
 
@@ -203,7 +203,7 @@ class MfaController {
     }
 
     private Mono<SponsorSignInOutput> verifyCode(String userId, String code, Long attemptNo, SignInSource source) {
-        return processes.execute(SponsorMfaVerifyProcess.DEFINITION, new SponsorMfaVerifyInput(userId, code,
+        return processes.executeAtEntry(SponsorMfaVerifyProcess.DEFINITION, new SponsorMfaVerifyInput(userId, code,
             attemptNo, source));
     }
 

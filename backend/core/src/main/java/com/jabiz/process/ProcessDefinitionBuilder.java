@@ -24,7 +24,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private final Set<String> stepNames = new HashSet<>();
     private final Set<String> permissions = new LinkedHashSet<>();
     private boolean deprecated;
-    private boolean internal;
+    private ProcessAccess access = ProcessAccess.OPEN;
     private com.jabiz.security.MfaRequirement mfa = com.jabiz.security.MfaRequirement.NONE;
     private boolean verifiedEmail;
     private ActsOn actsOn;
@@ -94,11 +94,32 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     }
 
     /**
-     * Marks the process as run by the platform or a dedicated entry point only: it is left out of the process
-     * catalog clients build forms from (decision D15). Its permissions are checked as usual.
+     * Marks the process as a hand-off point run as the system only - event consumers, jobs, callbacks (decision D41;
+     * {@link ProcessAccess#INTERNAL}): anyone else gets 403 {@code PROCESS_INTERNAL}, whatever their permissions, as
+     * do sub-process calls under a process not run by the system. Left out of the process catalog.
      */
     public ProcessDefinitionBuilder<I, O, C> internal() {
-        this.internal = true;
+        this.access = ProcessAccess.INTERNAL;
+        return this;
+    }
+
+    /**
+     * Marks the process as run only by the platform's own entry point for it, as the real caller (decision D41;
+     * {@link ProcessAccess#ENTRY_ONLY}): the process API and sub-process calls get 403 {@code PROCESS_INTERNAL}.
+     * Left out of the process catalog.
+     */
+    public ProcessDefinitionBuilder<I, O, C> entryOnly() {
+        this.access = ProcessAccess.ENTRY_ONLY;
+        return this;
+    }
+
+    /**
+     * Marks the process as run only as a sub-process, under any top-level process (decision D41;
+     * {@link ProcessAccess#SUB_PROCESS_ONLY}): started on its own it gets 403 {@code PROCESS_INTERNAL}. Left out of
+     * the process catalog.
+     */
+    public ProcessDefinitionBuilder<I, O, C> subProcessOnly() {
+        this.access = ProcessAccess.SUB_PROCESS_ONLY;
         return this;
     }
 
@@ -119,7 +140,8 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     }
 
     /** Appends an in-transaction platform step, as returned by the step's factory (for example {@code LoadEntity.by}). */
-    public <M> ProcessDefinitionBuilder<I, O, C> step(String stepName, StepSpec<M, C> spec) {
+    public <M> ProcessDefinitionBuilder<I, O, C> step(String stepName, StepSource<M, C> source) {
+        StepSpec<M, C> spec = source.toStepSpec();
         return add(new StepDefinition<>(stepName, spec.handlerClass(), spec.metadata()));
     }
 
@@ -136,7 +158,8 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return add(new StepDefinition<>(stepName, handlerClass, metadata, StepPhase.AFTER_COMMIT, retryPolicy, null));
     }
 
-    public <M> ProcessDefinitionBuilder<I, O, C> afterCommit(String stepName, StepSpec<M, C> spec) {
+    public <M> ProcessDefinitionBuilder<I, O, C> afterCommit(String stepName, StepSource<M, C> source) {
+        StepSpec<M, C> spec = source.toStepSpec();
         return afterCommit(stepName, spec.handlerClass(), spec.metadata(), RetryPolicy.DEFAULT);
     }
 
@@ -166,6 +189,6 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, internal, actsOn, mfa, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail);
     }
 }

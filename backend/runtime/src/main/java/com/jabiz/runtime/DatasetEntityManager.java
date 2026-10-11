@@ -186,7 +186,9 @@ public class DatasetEntityManager {
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             List<EntityChange> ordered = List.copyOf(changes);
             ValidationContext validation = new ValidationContext(clock, request);
-            Map<String, Object> scope = dataset.scope().resolve(request);
+            // Converted to the fields' types once, so inserts fill in and checks compare what reads bind.
+            Map<String, Object> scope = queryCompiler.scopeValues(dataset,
+                entityRegistry.getOrThrow(dataset.targetEntityType()), dataset.scope().resolve(request));
 
             Mono<List<EntityInstance>> apply = Flux.fromIterable(ordered)
                 .concatMap(change -> applyChange(engine, dataset, scope, change, validation))
@@ -412,7 +414,7 @@ public class DatasetEntityManager {
         ValidationContext validation
     ) {
         if (current.version() != instance.version()) {
-            return Mono.error(new ConcurrentUpdateException(String.format(
+            return Mono.error(ConcurrentUpdateException.stale(String.format(
                 "Optimistic lock conflict on %s [ID: %s]: expected version [%d], stored version [%d]",
                 def.name, instance.id(), instance.version(), current.version())));
         }
@@ -515,7 +517,7 @@ public class DatasetEntityManager {
                 .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
                 .flatMap(current -> {
                     if (current.version() != instance.version()) {
-                        return Mono.<Void>error(new ConcurrentUpdateException(String.format(
+                        return Mono.<Void>error(ConcurrentUpdateException.stale(String.format(
                             "Optimistic lock conflict on deleting %s [ID: %s]: expected version [%d], stored version [%d]",
                             def.name, instance.id(), instance.version(), current.version())));
                     }
@@ -653,7 +655,7 @@ public class DatasetEntityManager {
             java.util.UUID uuid = (java.util.UUID) key;
             StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
             String table = queryCompiler.resolveTable(dataset, def);
-            Map<String, Object> scope = dataset.scope().resolve(request);
+            Map<String, Object> scope = queryCompiler.scopeValues(dataset, def, dataset.scope().resolve(request));
             return temporalStore.history(engine, table, def, uuid).flatMap(entries -> {
                 Timeline timeline = Timeline.of(entries.stream().map(TemporalStore.HistoryEntry::version).toList());
                 Optional<EntityVersion> latest = timeline.at(clock.instant())
@@ -1213,7 +1215,7 @@ public class DatasetEntityManager {
     }
 
     private static ConcurrentUpdateException conflict(EntityDefinition def, Object id) {
-        return new ConcurrentUpdateException(
+        return ConcurrentUpdateException.stale(
             "Optimistic lock conflict on " + def.name + " [ID: " + id + "]");
     }
 }

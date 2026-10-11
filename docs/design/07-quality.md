@@ -80,8 +80,10 @@ snapshot:
 - 步骤（每步可带说明 `note`）：`process: 名称@版本|latest`（`input`、`save`、可选 `expectOutput` 子集匹配，可选 `actor: {id, permissions}` 以另一个操作人运行，
   用于准备人与审批人不同的四眼步骤，18 §3；`expectError` 同样可带 `actor`；步骤的 `actor.id` 可引用变量，如 `"${hana}"`，以先前步骤建立的用户身份运行，阶段 16b-2）；
   操作人可声明 `mfa: true`（每步视为刚通过二次验证，写平台管理数据时需要，10 §10）；场景可带 `properties`（回放所用应用上下文的额外配置，优先于应用自己的，如打开某个入口的注册）；`advanceClock`（ISO-8601 时长 `PT2H` 或期间 `P1D`、`P1M`）；
-  `setClock`；`runJob: 任务名` 或 `{job, at, outcome}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`）；
-  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`inbound: {provider, body, at?, outcome?}`（入站 Webhook：`body` 为映射时按 JSON 发送、为文本时原样发送，以提供方配置的第一个密钥在 `at`（缺省为当前时钟）签名后交给与接口相同的 `InboundReceiver`，结果须为 `outcome`：缺省 `ACCEPTED`，或 `DUPLICATE` / `IGNORED` / `REJECTED`；消费者在之后的 `deliverEvents` 中运行，11 §2.5）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
+  `setClock`；`runJob: 任务名` 或 `{job, at, outcome, items}`（按计划时刻 `at`（缺省为当前时钟）执行定时任务，结果缺省须为 `SUCCEEDED`，逐项任务可写 `PARTIAL`；
+  `items: {succeeded, replayed, busy, failed, deferred}` 断言逐项任务的项数，只比较写出的键，11 §4.1；回放缺省 `jabiz.jobs.lock-at-least-for=0s`，
+  同一任务在一个场景中连续运行不会 `LOCKED`，场景的 `properties` 仍可覆盖，阶段 16k）；
+  `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`inbound: {provider, body, at?, outcome?}`（入站 Webhook：`body` 为映射时按 JSON 发送、为文本时原样发送，以提供方配置的第一个密钥在 `at`（缺省为当前时钟）签名后交给与接口相同的 `InboundReceiver`，结果须为 `outcome`：缺省 `ACCEPTED`，或 `DUPLICATE` / `IGNORED` / `REJECTED`；消费者在之后的 `deliverEvents` 中运行，11 §2.5）；`runExternalJobs: true`（执行到期的异步外部作业的处理器，直到没有到期的作业；重试等退避，需要推进时钟，11 §4a）；`completeExternalJob: {jobType, reference?, result, usage?, status?, errorCode?, errorMessage?}`（不调用处理器，以同一记录路径为该类型（与引用）最早的未结束作业写入一次尝试的结果：`status` 缺省 `SUCCEEDED` 带 `result`，`FAILED` 为不可重试的失败；使应用的场景不依赖外部服务（Q17）；完成或失败流程在之后的 `deliverEvents` 中运行）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
   `expectError: {process, input, status, ruleCode, field}`；
   `import: 导入 id`（20，阶段 14e-2）带 `file: {name, content}`（按导入的文件策略存入，内容为 UTF-8 文本）、`mapping`、`params`、`commit`（缺省预览）、
   `notes`、`expect`（与导入报告按含义比较，被拒的提交也是报告）、`save`、`actor`；导入入口的权限照常检查。未知键即报错（拼错的期望不会静默通过）。
@@ -89,6 +91,9 @@ snapshot:
 - 比较按含义：数值按大小（`0.1` 与 `0.1000` 相等）、时间按时刻（不论偏移）、映射按包含、列表逐项。
 - 流程经 `ProcessExecutor` 以场景的操作人（显式 `RequestContext`）执行，不经 HTTP，入口权限不检查（D11 第 2 条），流程内部的检查照常；
   输入转换与 Bean Validation 与流程 API 相同（`ProcessInputs`），失败的状态码与违规与 API 相同（`ProblemStatuses`）。
+- 谁能启动流程照常检查（06 §8，【D41】，阶段 16l）：调用 `internal()` 流程的步骤须以系统身份运行（`actor: {id: system}`，场景或步骤的操作人；否则 403 `PROCESS_INTERNAL`，
+  可用 `expectError` 断言）；`subProcessOnly()` 流程不能作为步骤；`entryOnly()` 流程的 `process` 步骤以步骤的操作人运行，如同来自它的平台入口（通用实体接口、自助注册等）；
+  入口自己的检查（如实体接口先查数据视图的写权限、注册接口的限流）不适用，流程内部的检查照常（`import` 步骤则经导入服务运行，入口的检查照常）。场景格式不变。
 - 隔离：每次回放在**新 schema + 新应用上下文**中执行（迁移与集成测试相同），因此操作号、行号从头开始；主键由确定性的 UUIDv7 生成器按时钟与计数生成。
 
 ### 3.2 可控时钟

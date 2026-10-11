@@ -265,7 +265,7 @@ final class TemporalWriter {
     }
 
     private static ConcurrentUpdateException stale(EntityDefinition def, UUID id, long expected, long actual) {
-        return new ConcurrentUpdateException(String.format(
+        return ConcurrentUpdateException.stale(String.format(
             "Version conflict on %s [ID: %s]: expected version [%d], version in effect [%d]",
             def.name, id, expected, actual));
     }

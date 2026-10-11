@@ -147,14 +147,18 @@ class AccessControlIT extends SecurityItSupport {
     @Test
     void theGenericProcessesNeedTheWritePermissionOfTheEntitysDataset() {
         String roleId = createRole(unique("ADMINISH"), "*");
-        Map<String, Object> input = Map.of("entityType", SecurityEntities.USER_ROLE,
-            "attributes", Map.of("userId", createUser(unique("mallory"), "long enough password"), "roleId", roleId));
+        Map<String, Object> attributes = Map.of("userId", createUser(unique("mallory"), "long enough password"),
+            "roleId", roleId);
+        String entities = "/api/entities/" + SecurityEntities.USER_ROLE;
 
-        Map<String, Object> problem = post("/api/processes/ADD_ENTITY/latest", bearer("entity.write"), input)
+        Map<String, Object> problem = post(entities, bearer("entity.write"), attributes)
             .expectStatus().isForbidden().expectBody(MAP).returnResult().getResponseBody();
         assertThat(violations(problem).getFirst().get("message").toString()).contains("security.user-role.write");
-        post("/api/processes/ADD_ENTITY/latest", bearer("entity.write", "security.user-role.write"), input)
-            .expectStatus().isOk();
+        post(entities, bearer("entity.write", "security.user-role.write"), attributes).expectStatus().isCreated();
+        // Through the process API not at all: the generic processes are entryOnly() (decision D41).
+        assertThat(post("/api/processes/ADD_ENTITY/latest", admin(), Map.of("entityType", SecurityEntities.USER_ROLE,
+            "attributes", attributes)).expectStatus().isForbidden().expectBody(String.class).returnResult()
+            .getResponseBody()).contains("PROCESS_INTERNAL");
     }
 
     /** A revert writes like any other change: temporal.revert alone cannot undo changes to security data. */
@@ -185,7 +189,7 @@ class AccessControlIT extends SecurityItSupport {
             Map.of("changes", List.of())).expectStatus().isForbidden();
         post("/api/processes/SEC_USER_CREATE/latest", bearer("security.user.write"),
             Map.of("userName", unique("u"), "password", "long enough password")).expectStatus().isForbidden();
-        // The sign-in process itself is reachable only through /api/auth/login.
+        // The sign-in process itself is reachable only through /api/auth/login (entryOnly(), decision D41).
         post("/api/processes/SPONSOR_SIGN_IN/latest", bearer("security.user.write"),
             Map.of("userName", "x", "password", "y")).expectStatus().isForbidden();
     }

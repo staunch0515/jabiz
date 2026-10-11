@@ -21,6 +21,7 @@ import java.net.InetAddress;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -279,5 +280,37 @@ class JdkExternalHttpTest {
         assertThat(request.toString()).doesNotContain(SECRET);
         ExternalHttp.Response response = send("stub", request);
         assertThat(response.toString()).doesNotContain(SECRET);
+    }
+
+    /**
+     * A job's handler calls only its type's services, from the job's scope; its idempotency keys are the job's own,
+     * the same for every attempt; and only the platform's executor opens such a scope.
+     */
+    @Test
+    void aJobsHandlerCallsOnlyItsTypesServices() throws Exception {
+        ExternalCallScope job = ExternalCallScope.ofJob("0190f0e2-aaaa-7bbb-8ccc-000000000001", "it.copy",
+            Set.of("stub"));
+        assertThat(job.jobId()).contains("0190f0e2-aaaa-7bbb-8ccc-000000000001");
+        assertThat(job.toString()).contains("it.copy").doesNotContain("processSeqId");
+        ExternalHttp.Response response = ExternalCallScope.run(job, () -> services.http("stub")
+            .send(ExternalHttp.Request.post("echo").json("{}")));
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(ExternalCallScope.run(job, () -> services.secret("stub", "apiKey"))).isEqualTo(SECRET);
+        assertThat(ExternalCallScope.run(job, () -> services.idempotencyKey("part-1")))
+            .isEqualTo("jabiz-job-0190f0e2-aaaa-7bbb-8ccc-000000000001-part-1");
+
+        server.reset();
+        assertThatThrownBy(() -> ExternalCallScope.run(job, () -> services.http("dry")
+            .send(ExternalHttp.Request.get("echo"))))
+            .isInstanceOfSatisfying(ExternalCallException.class,
+                e -> assertThat(e.kind()).isEqualTo(ExternalCallException.Kind.REFUSED))
+            .hasMessageContaining("not among the services of the running external job's type");
+        assertThatThrownBy(() -> ExternalCallScope.run(job, () -> services.secret("dry", "apiKey")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("job it.copy");
+        assertThat(server.requests()).isEmpty();
+        assertThat(ExternalCallScope.current()).isEmpty();
+
+        assertThatThrownBy(() -> ExternalCallScope.openJob("forged", "it.copy", Set.of("stub"), () -> "x"))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining(JdkExternalHttpTest.class.getName());
     }
 }

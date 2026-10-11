@@ -7,6 +7,7 @@ import com.jabiz.entity.FieldDefinition;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.Violation;
+import com.jabiz.process.ProcessAccess;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
@@ -28,6 +29,7 @@ import com.jabiz.runtime.imports.ImportReport;
 import com.jabiz.runtime.imports.ImportService;
 import com.jabiz.inbound.InboundHeaders;
 import com.jabiz.inbound.InboundSchemes;
+import com.jabiz.runtime.external.ExternalJobExecutor;
 import com.jabiz.runtime.inbound.InboundReceiver;
 import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.inbound.InboundWebhookProperties;
@@ -71,7 +73,12 @@ import java.util.Map;
 /**
  * Replays a {@link Scenario} against a running application (docs/design/07-quality.md section 3). Processes run
  * through the {@link ProcessExecutor} with the scenario's actor as an explicit request context, as jobs do (decision
- * D11): entry-point permission checks do not apply, checks inside processes do. Inputs are converted exactly as the
+ * D11): entry-point permission checks do not apply, checks inside processes do. Who may start a process does
+ * (decision D41): a step running an {@code internal()} process declares the system as its actor ({@code actor: {id:
+ * system}}); a {@code subProcessOnly()} process is refused as the process API refuses it; a step of an
+ * {@code entryOnly()} process runs as the step's actor as if from its platform entry point (the entity API, signing
+ * up); the entry's own checks do not apply, the process's do. The {@code import} step goes through the import
+ * service, its entry checks included. Inputs are converted exactly as the
  * process API converts request bodies, and failures are judged by the status and violations the API would answer
  * with ({@link ProblemStatuses}). All business time comes from the {@link MutableClock}.
  *
@@ -107,6 +114,7 @@ public final class ScenarioRunner {
     private final JsonMapper json;
     private final InboundWebhookProperties inboundProviders;
     private final InboundReceiver inboundReceiver;
+    private final ExternalJobExecutor externalJobs;
 
     public ScenarioRunner(ApplicationContext context) {
         this.processes = context.getBean(ProcessRegistry.class);
@@ -130,6 +138,7 @@ public final class ScenarioRunner {
         this.json = context.getBean(JsonMapper.class);
         this.inboundProviders = context.getBean(InboundWebhookProperties.class);
         this.inboundReceiver = context.getBean(InboundReceiver.class);
+        this.externalJobs = context.getBean(ExternalJobExecutor.class);
     }
 
     public Result run(Scenario scenario) {
@@ -201,10 +210,22 @@ public final class ScenarioRunner {
             case Scenario.RunJob j -> {
                 JobDefinition<?> job = jobs.find(j.job())
                     .orElseThrow(() -> failure(scenario, step, "unknown job " + j.job(), null));
-                JobRunner.Outcome outcome = jobRunner.run(job, j.at() == null ? clock.instant() : j.at());
-                if (!outcome.name().equals(j.outcome())) {
-                    throw failure(scenario, step, "job " + j.job() + " ended " + outcome + ", not " + j.outcome(),
-                        null);
+                JobRunner.JobRun run = jobRunner.execute(job, j.at() == null ? clock.instant() : j.at());
+                if (!run.outcome().name().equals(j.outcome())) {
+                    throw failure(scenario, step, "job " + j.job() + " ended " + run.outcome() + ", not "
+                        + j.outcome(), null);
+                }
+                if (j.items() != null) {
+                    Map<String, Integer> counts = run.items() == null ? Map.of() : Map.of(
+                        "succeeded", run.items().succeeded(), "replayed", run.items().replayed(),
+                        "busy", run.items().busy(), "failed", run.items().failed(),
+                        "deferred", run.items().deferred());
+                    j.items().forEach((name, expected) -> {
+                        if (!expected.equals(counts.get(name))) {
+                            throw failure(scenario, step, "job " + j.job() + " had " + counts.get(name) + " "
+                                + name + " item(s), not " + expected + " (" + run.items() + ")", null);
+                        }
+                    });
                 }
             }
             case Scenario.DeliverEvents d -> {
@@ -214,6 +235,24 @@ public final class ScenarioRunner {
                 }
             }
             case Scenario.InboundStep i -> inbound(scenario, i, variables);
+            case Scenario.RunExternalJobs r -> {
+                // Until nothing is due; failed attempts wait for their backoff, so this ends.
+                for (int round = 0; round < 100 && externalJobs.runPending().block() > 0; round++) {
+                    // run again: a handler may finish before another job of its type is due
+                }
+            }
+            case Scenario.CompleteExternalJob c -> {
+                Map<String, Long> usage = new LinkedHashMap<>();
+                c.usage().forEach((metric, quantity) -> usage.put(metric, ((Number) quantity).longValue()));
+                Object result = ScenarioValues.resolve(c.result(), variables);
+                String reference = c.reference() == null ? null
+                    : String.valueOf(ScenarioValues.resolve(c.reference(), variables));
+                if (externalJobs.completeWithoutHandler(c.jobType(), reference, c.status(), result, usage,
+                    c.errorCode(), c.errorMessage()).block() == null) {
+                    throw failure(scenario, step, "no open external job of type " + c.jobType()
+                        + (reference == null ? "" : " with reference " + reference), null);
+                }
+            }
             case Scenario.Expect e -> expect(scenario, step, e.expectation(), variables);
             case Scenario.ExpectError e -> expectError(scenario, e, variables);
         }
@@ -344,7 +383,11 @@ public final class ScenarioRunner {
 
     private <I, O, C extends ProcessContext> Mono<ProcessResult<O>> run(ProcessDefinition<I, O, C> definition,
         Map<String, Object> input) {
-        return executor.run(definition, inputs.convert(definition.inputType(), input), ExecutionOptions.NONE);
+        // A step of an entryOnly() process stands for its platform entry point (the entity API, signing up...), which
+        // runs it as the caller; other steps stand for the process API (decision D41).
+        ExecutionOptions options = definition.access() == ProcessAccess.ENTRY_ONLY
+            ? ExecutionOptions.NONE.atEntryOf(definition) : ExecutionOptions.NONE;
+        return executor.run(definition, inputs.convert(definition.inputType(), input), options);
     }
 
     /** Stores the scenario's file as an upload would, then previews or commits the import. */
@@ -366,9 +409,10 @@ public final class ScenarioRunner {
         Scenario.Actor actor = step.actor() == null ? scenario.actor() : step.actor();
         fileStore.write(FileKeys.key(fileId, FileKeys.ORIGINAL),
             Flux.just(DefaultDataBufferFactory.sharedInstance.wrap(bytes))).block();
+        // Stands in for the upload API, FILE_REGISTER's entry point (decision D41).
         as(actor, executor.run(FileProcesses.REGISTER_PROCESS, new FileProcesses.RegisterInput(fileId,
             definition.filePolicy(), type.contentType(), bytes.length, sha256, null, null, List.of(),
-            step.fileName()), ExecutionOptions.NONE));
+            step.fileName()), ExecutionOptions.NONE.atEntryOf(FileProcesses.REGISTER_PROCESS)));
         ImportMapping mapping = step.mapping() == null ? null
             : json.convertValue(ScenarioValues.resolveMap(step.mapping(), variables), ImportMapping.class);
         Map<String, Object> params = ScenarioValues.resolveMap(step.params(), variables);

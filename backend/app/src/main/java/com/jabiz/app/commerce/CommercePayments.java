@@ -14,6 +14,7 @@ import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.inbound.InboundEvents;
 import com.jabiz.runtime.inbound.LoadInboundEvent;
 import com.jabiz.runtime.inbound.ReceivedEvent;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CreateTask;
 import com.jabiz.runtime.task.TaskSpec;
@@ -42,7 +43,8 @@ import static com.jabiz.app.commerce.CommerceEntities.ORDER_DATASET;
  * and the pattern applications copy. The provider {@value #PROVIDER} (configured for development and tests only,
  * scheme {@code stripe}) sends {@code payment_intent.succeeded} with the order's number in the payment's metadata. The
  * platform verifies, stores and publishes it; the consumer {@value #CONSUMER} runs {@value #RECORD_PAYMENT} once for
- * each, as the system (anyone else is refused: {@code internal()} only keeps a process out of the catalog).
+ * each, as the system: {@code internal()} refuses anyone else at the start (decision D41); the process's own check of
+ * the actor predates that and stays as a second line.
  *
  * <p>A verified signature says who sent the event, not that it fits: the process trusts nothing in it. It loads only an
  * event of its own provider and type, and records the payment only when everything fits:
@@ -110,6 +112,10 @@ class CommercePayments {
                 .step("Load the payment", LoadInboundEvent.of(PROVIDER, SUCCEEDED,
                     ctx -> ctx.get(INPUT, PaymentInput.class).inboundEventId(), PAYMENT))
                 .step("Find the order", QueryEntities.of(ORDER_DATASET, CommercePayments::orderQuery, ORDERS))
+                // The expiry of unpaid orders (OrderExpiry) takes the same lock: a payment and the expiry do not
+                // interleave. Read again under the lock, since the order may have changed while waiting for it.
+                .step("Lock the order", HoldLock.<ProcessContext>exclusive(CommercePayments::orderLock))
+                .step("Read the order again", QueryEntities.of(ORDER_DATASET, CommercePayments::orderQuery, ORDERS))
                 .compute("Record the payment", (metadata, ctx) -> record(ctx, acceptTestMode))
                 .step("Ask for a check", CreateTask.when(ctx -> "CHECK".equals(ctx.get(OUTCOME)),
                     CommercePayments::checkTask)));
@@ -165,6 +171,13 @@ class CommercePayments {
         return EntityQuery.builder()
             .where(new QueryPredicate.In("orderNo", orderNo == null ? List.of() : List.of(orderNo)))
             .limit(1).build();
+    }
+
+    /** The lock of the order found, or none. */
+    @SuppressWarnings("unchecked")
+    static String orderLock(ProcessContext ctx) {
+        List<EntityInstance> orders = (List<EntityInstance>) ctx.get(ORDERS);
+        return orders == null || orders.isEmpty() ? null : OrderExpiry.lockName(orders.getFirst().id());
     }
 
     @SuppressWarnings("unchecked")

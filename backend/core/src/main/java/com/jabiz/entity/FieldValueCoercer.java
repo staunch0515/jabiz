@@ -20,7 +20,7 @@ import java.util.Date;
  *   <li>Date: {@link LocalDate}</li>
  *   <li>Monetary, Numeric: {@link BigDecimal}</li>
  *   <li>Version: {@link Long}</li>
- *   <li>Code, Text: {@link String}</li>
+ *   <li>Code, Text: {@link String} (a UUID as its canonical text)</li>
  *   <li>Bool: {@link Boolean}</li>
  *   <li>Custom: whatever its {@link CustomKindSupport} returns</li>
  *   <li>SemanticIdentity, Reference, None: unchanged</li>
@@ -180,8 +180,10 @@ public final class FieldValueCoercer {
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to an integer");
     }
 
+    /** Text, or a UUID in its canonical form: an id held in a text column (a user id kept as text). */
     private static String toText(Object raw) {
         if (raw instanceof CharSequence s) return s.toString();
+        if (raw instanceof java.util.UUID u) return u.toString();
         throw new IllegalArgumentException("cannot convert " + raw.getClass().getSimpleName() + " to text");
     }
 

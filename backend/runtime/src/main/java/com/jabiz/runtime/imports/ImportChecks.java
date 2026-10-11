@@ -32,6 +32,21 @@ class ImportChecks implements PlatformCheck {
     private final ProcessRegistry processes;
     private final MessageCatalog messages;
 
+    /**
+     * Rows are run as sub-processes of {@code IMPORT_RUN}, as the importing user: the target is open (the process of
+     * manual entry) or {@code subProcessOnly()}; an {@code internal()} or {@code entryOnly()} one could never run
+     * (decision D41).
+     */
+    static java.util.List<CheckProblem> targetProblems(String location,
+        com.jabiz.process.ProcessDefinition<?, ?, ?> process) {
+        return switch (process.access()) {
+            case OPEN, SUB_PROCESS_ONLY -> java.util.List.of();
+            case INTERNAL, ENTRY_ONLY -> java.util.List.of(CheckProblem.error(CATEGORY, location, "process "
+                + process.name() + " v" + process.version() + " is " + process.access() + ": rows run as "
+                + "sub-processes of the importing user, so the target must be open or subProcessOnly() (decision D41)"));
+        };
+    }
+
     ImportChecks(ImportRegistry imports, FilePolicyRegistry policies, ProcessRegistry processes,
         MessageCatalog messages) {
         this.imports = imports;
@@ -68,8 +83,11 @@ class ImportChecks implements PlatformCheck {
                 }
             }
             String target = definition.target().process() + " v" + definition.target().version();
-            if (processes.find(definition.target().process(), definition.target().version()).isEmpty()) {
+            var process = processes.find(definition.target().process(), definition.target().version());
+            if (process.isEmpty()) {
                 problems.add(CheckProblem.error(CATEGORY, location, "process " + target + " is not registered"));
+            } else {
+                problems.addAll(targetProblems(location, process.get()));
             }
             if (definition.hasParams()) {
                 for (String unsupported : ProcessInputSchemas.of(definition.paramsType()).problems()) {

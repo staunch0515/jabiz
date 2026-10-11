@@ -59,7 +59,7 @@ public class ImportProcesses {
             .description("Imports a file: every row is checked and handed to the import's process; any problem "
                 + "rejects the whole file.")
             .permissions(RUN_PERMISSION)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
