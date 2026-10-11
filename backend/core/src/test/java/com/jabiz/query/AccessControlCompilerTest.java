@@ -6,6 +6,8 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dataset.DatasetScope;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.MaskStyle;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.i18n.PlatformErrorCodes;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -13,8 +15,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Masked fields and data periods in generated SQL (docs/design/10-security.md sections 13.1 and 13.2): masked columns
@@ -102,6 +106,38 @@ class AccessControlCompilerTest {
         assertThat(compiler.scopeCondition(LINES, LINE, Map.of("txnId", new DatasetScope.PeriodCondition(
                 new DataPeriod(null, TO), "bookingTime")), open))
             .isEqualTo("txn_id IN (SELECT txn_id FROM t_txn WHERE (booking_time < :q0))");
+    }
+
+    /** ROADMAP 16b fix (QuizBuks Q2 gap 16): scope values are bound as the type of their field. */
+    @Test
+    void scopeValuesAreBoundAsTheTypeOfTheirField() {
+        String id = "0190a8b2-0000-7000-8000-000000000001";
+        QueryCompiler.Binder binder = new QueryCompiler.Binder("v");
+        assertThat(compiler.scopeCondition(LINES, LINE, Map.of("txnId", id), binder)).isEqualTo("txn_id = :v0");
+        // A reference to a temporal entity is a uuid column: text from the request context is bound as a UUID.
+        assertThat(binder.params().get("v0").value()).isEqualTo(UUID.fromString(id));
+
+        QueryCompiler.Binder text = new QueryCompiler.Binder("t");
+        compiler.scopeCondition(SUPPLIERS, SUPPLIER, Map.of("name", UUID.fromString(id)), text);
+        assertThat(text.params().get("t0").value()).isEqualTo(id);
+
+        DatasetScope.PeriodCondition period = new DatasetScope.PeriodCondition(new DataPeriod(FROM, TO), null);
+        assertThat(compiler.scopeValues(LINES, LINE, Map.of("txnId", id, "lineId", "L-1")))
+            .containsEntry("txnId", UUID.fromString(id)).containsEntry("lineId", "L-1");
+        assertThat(compiler.scopeValues(TRANSACTIONS, TRANSACTION, Map.of("bookingTime", period)))
+            .containsEntry("bookingTime", period);
+        // Not the dataset's target: the scope does not apply, the values are left alone.
+        assertThat(compiler.scopeValues(LINES, SUPPLIER, Map.of("name", 42))).containsEntry("name", 42);
+    }
+
+    @Test
+    void aScopeValueThatCannotBeConvertedIsAnInvalidValue() {
+        assertThatThrownBy(() -> compiler.scopeCondition(LINES, LINE, Map.of("txnId", "alice"),
+            new QueryCompiler.Binder("v")))
+            .isInstanceOfSatisfying(ValidationException.class, e -> assertThat(e.violations()).singleElement()
+                .satisfies(v -> assertThat(v.ruleCode()).isEqualTo(PlatformErrorCodes.INVALID_VALUE)));
+        assertThatThrownBy(() -> compiler.scopeValues(LINES, LINE, Map.of("txnId", "alice")))
+            .isInstanceOf(ValidationException.class);
     }
 
     @Test

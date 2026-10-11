@@ -273,8 +273,11 @@ class FieldValueCoercerTest {
     class NewKinds {
 
         @Test
-        void textAcceptsCharacterSequencesOnly() {
+        void textAcceptsCharacterSequencesAndUuids() {
             assertThat(coerce(TEXT, new StringBuilder("abc"))).isEqualTo("abc");
+            // An id kept in a text column (ROADMAP 16b fix).
+            assertThat(coerce(TEXT, java.util.UUID.fromString("0190a8b2-0000-7000-8000-000000000001")))
+                .isEqualTo("0190a8b2-0000-7000-8000-000000000001");
             assertThatThrownBy(() -> coerce(TEXT, 42))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("to text");

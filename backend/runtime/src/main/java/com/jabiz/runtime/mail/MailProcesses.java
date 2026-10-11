@@ -69,7 +69,7 @@ public class MailProcesses {
             ProcessContext.class, pb -> pb
                 .description("Turns the notifications of a mail template on or off for the user.")
                 .permissions(MailPermissions.PREFERENCE)
-                .internal()
+                .entryOnly()
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);

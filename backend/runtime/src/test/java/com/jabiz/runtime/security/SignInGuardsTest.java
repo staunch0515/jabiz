@@ -27,7 +27,7 @@ class SignInGuardsTest {
         for (int i = 0; i < guards.length; i++) {
             factory.addBean("guard" + i, guards[i]);
         }
-        return new SignInGuards(factory.getBeanProvider(SignInGuard.class), null, null, null);
+        return new SignInGuards(factory.getBeanProvider(SignInGuard.class), null, null, null, null);
     }
 
     private static SignInDecision check(SignInGuards guards) {

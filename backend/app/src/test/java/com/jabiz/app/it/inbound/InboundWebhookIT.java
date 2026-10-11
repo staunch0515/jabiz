@@ -136,9 +136,27 @@ class InboundWebhookIT extends SecurityItSupport {
                     HANDLED.add(ctx.get("event", ReceivedEvent.class).externalEventId());
                 }));
 
+        /** An ordinary process reading a received event: allowed to whoever holds inbound.read. */
+        static final ProcessDefinition<PeerInput, PeerInput, ProcessContext> LOOKUP = ProcessDefinition.define(
+            "IT_PEER_LOOKUP", 1, PeerInput.class, PeerInput.class, ProcessContext.class, pb -> pb
+                .permissions("it.peer")
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get("input", PeerInput.class))
+                .step("Load the event", LoadInboundEvent.of("it-peer", "jabiz.task.created",
+                    ctx -> ctx.get("input", PeerInput.class).inboundEventId(), "event")));
+
         @Bean
         ProcessDefinition<PeerInput, PeerInput, ProcessContext> peerProcess() {
             return PROCESS;
+        }
+
+        @Bean
+        ProcessDefinition<PeerInput, PeerInput, ProcessContext> peerLookupProcess() {
+            return LOOKUP;
         }
 
         @Bean
@@ -624,13 +642,16 @@ class InboundWebhookIT extends SecurityItSupport {
         String eventId = unique("evt");
         accepted(payment(eventId, "SO-NONE", 1, "pi_forged"));
         String id = (String) stored(eventId).getFirst().get("inbound_event_id");
-        // internal() keeps a process out of the catalog; the process itself refuses anyone but the delivery.
+        // internal(): refused at the start for anyone but the system, an administrator too (decision D41).
         post("/api/processes/ORDER_RECORD_PAYMENT/latest", admin(), Map.of("inboundEventId", id))
             .expectStatus().isForbidden();
-        // A step loading an event: 403 without inbound.read, 404 for an unknown id.
-        post("/api/processes/IT_PEER_EVENT/latest", bearer("it.peer"), Map.of("inboundEventId", id))
+        post("/api/processes/IT_PEER_EVENT/latest", bearer("it.peer", "inbound.read"), Map.of("inboundEventId", id))
+            .expectStatus().isForbidden().expectBody(String.class)
+            .value(body -> assertThat(body).contains("PROCESS_INTERNAL"));
+        // A step loading an event in an ordinary process: 403 without inbound.read, 404 for an unknown id.
+        post("/api/processes/IT_PEER_LOOKUP/latest", bearer("it.peer"), Map.of("inboundEventId", id))
             .expectStatus().isForbidden();
-        post("/api/processes/IT_PEER_EVENT/latest", bearer("it.peer", "inbound.read"),
+        post("/api/processes/IT_PEER_LOOKUP/latest", bearer("it.peer", "inbound.read"),
             Map.of("inboundEventId", "no-such-event")).expectStatus().isNotFound();
         // A consumer of the peer's events does not load a payment of demo-pay.
         assertThatThrownBy(() -> asRequest(com.jabiz.context.RequestContext.system(java.util.Locale.ENGLISH, "it"),

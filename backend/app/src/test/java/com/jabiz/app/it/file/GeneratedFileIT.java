@@ -113,7 +113,8 @@ class GeneratedFileIT extends PostgresIntegrationTest {
 
     /**
      * Passes its input to {@code FILE_ARCHIVE} as a business process does: a sub-process's input is not bean-validated,
-     * so the archive step itself must refuse what it cannot keep.
+     * so the archive step itself must refuse what it cannot keep. {@code FILE_ARCHIVE} runs only so (subProcessOnly,
+     * decision D41), whoever runs the relay.
      */
     @TestConfiguration
     static class Relay {
@@ -128,13 +129,16 @@ class GeneratedFileIT extends PostgresIntegrationTest {
             return ProcessDefinition.define("IT_ARCHIVE_RELAY", 1, RelayInput.class, output, ProcessContext.class,
                 pb -> pb
                     .permissions("it.relay")
-                    .internal()
                     .contextFactory((start, input) -> {
                         ProcessContext ctx = new ProcessContext(start);
                         ctx.put("in", input);
                         return ctx;
                     })
-                    .outputMapper(ctx -> Map.of())
+                    .outputMapper(ctx -> {
+                        GeneratedFileProcesses.ArchiveOutput kept =
+                            ctx.get("kept", GeneratedFileProcesses.ArchiveOutput.class);
+                        return Map.of("fileId", kept.fileId(), "sha256", kept.sha256(), "size", kept.size());
+                    })
                     .step("Keep", CallProcess.<ProcessContext>of(GeneratedFileProcesses.ARCHIVE, 1, ctx -> {
                         RelayInput in = ctx.get("in", RelayInput.class);
                         return new GeneratedFileProcesses.ArchiveInput(in.fileName(), in.mediaType(), in.fileContent(),
@@ -165,9 +169,11 @@ class GeneratedFileIT extends PostgresIntegrationTest {
                 .as(String.valueOf(input.get("fileName")))
                 .containsAnyOf("GENERATED_FILE_NOT_ALLOWED", "GENERATED_FILE_TOO_LARGE");
         }
-        // Called directly, the archive's own input is validated first.
-        process(input("open.txt", "text/plain", x), bearer("it-archiver", "file.generated.archive"))
-            .expectStatus().isBadRequest();
+        // Never called directly (subProcessOnly, decision D41), even holding its permission or every permission.
+        for (String token : List.of(bearer("it-archiver", "file.generated.archive"), admin())) {
+            assertThat(process(input("kept.txt", "text/plain", x, "it.bank.file"), token).expectStatus()
+                .isForbidden().expectBody(MAP).returnResult().getResponseBody().toString()).contains("PROCESS_INTERNAL");
+        }
         assertThat(query("SELECT file_id FROM sys_generated_file")).hasSize(before);
     }
 
@@ -218,9 +224,9 @@ class GeneratedFileIT extends PostgresIntegrationTest {
 
     private Map<String, Object> archive(String fileName, String mediaType, byte[] content, String... permissions) {
         @SuppressWarnings("unchecked")
-        Map<String, Object> output = (Map<String, Object>) process(input(fileName, mediaType, content, permissions),
-            bearer("it-archiver", "file.generated.archive")).expectStatus().isOk().expectBody(MAP).returnResult()
-            .getResponseBody().get("output");
+        Map<String, Object> output = (Map<String, Object>) runAs("IT_ARCHIVE_RELAY", relayed(fileName, mediaType,
+            content, List.of(permissions), "RUN-1"), bearer("it-relay", "it.relay")).expectStatus().isOk()
+            .expectBody(MAP).returnResult().getResponseBody().get("output");
         return output;
     }
 

@@ -41,8 +41,8 @@
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
 | `AssignNumber.of(序列, [ctx -> 范围,] targetKey)` / `AssignNumber.when(条件, 序列, ctx -> 范围 或 null, targetKey)` | 该序列在该范围内的下一个号码（文本）；在流程事务内取号，回滚即归还，无缺号、无重复（18 §2、D23） |
 | `RequireApproval.of(审批对象, ctx -> ApprovalCase, targetKey)` / `RequireApproval.when(条件, …)` | 该单据是否需要审批：`ApprovalOutcome`（`NOT_REQUIRED` / `PENDING` / `APPROVED`）；需要时建请求，批准绑定内容哈希（18 §3.3、D23） |
-| `WithdrawApproval.of(审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3） |
-| `HoldLock.shared(ctx -> 名称)` / `HoldLock.exclusive(ctx -> 名称)` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取 |
+| `WithdrawApproval.of(审批对象, ctx -> 单据标识)` / `WithdrawApproval.when(ctx -> 条件, 审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3）；`when` 的条件不成立时什么也不做（阶段 16k） |
+| `HoldLock.shared(ctx -> 名称[, 最长等待])` / `HoldLock.exclusive(ctx -> 名称[, 最长等待])` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取；`最长等待`（`Duration`，阶段 16k）短于全局时限时以它为准 |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
@@ -55,9 +55,11 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
 
 与 golden 的"业务只修改数据、最后由框架统一保存"是同一思想。
 
-### 2.3 外部调用【D38，阶段 16e-1】
+### 2.3 外部调用【D38，阶段 16e-1 / 16e-2】
 
-业务调用其他系统**只在 `BlockingStep` 中、只经声明的外部服务**进行（短调用；耗时数十秒的调用用异步外部作业，16e-2）。
+业务调用其他系统**只在 `BlockingStep` 中、只经声明的外部服务**进行（短调用）；耗时数十秒的调用用**异步外部作业**（11 §4a）：流程以平台步骤
+`StartExternalJob` 登记作业后立即返回，平台在任何事务之外执行作业类型的处理器（`ExternalJobHandler`），结果经完成流程写入。
+处理器与阻塞步骤同样只经声明的外部服务调用（只限其作业类型声明的服务），不访问数据库。
 
 - **声明**（core `com.jabiz.external.ExternalService`，Bean）：
   ```java
@@ -76,7 +78,9 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   交给提供方去重。
 - **平台对每次请求的检查**（runtime `JdkExternalHttp`，每个服务一个 JDK `HttpClient`）：
   1. 在非阻塞线程上调用即 `IllegalStateException`；不在阻塞步骤中（没有 `ExternalCallScope`）同样拒绝。`ProcessExecutor` 执行 `BlockingStep` 时在其虚拟线程上设置
-     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完（含失败）即清除。只有平台的执行器能打开范围（`ExternalCallScope.open` 检查调用方），
+     `ExternalCallScope`（`processSeqId`、步骤名、是否试运行），执行完（含失败）即清除；`ExternalJobExecutor` 执行作业的处理器时设置作业的范围
+     （作业号、作业类型，只允许该类型声明的服务，其他服务的调用与密钥一律拒绝；`idempotencyKey(后缀)` 为 `jabiz-job-<作业号>-<后缀>`）。
+     只有平台的执行器能打开范围（`ExternalCallScope.open` / `openJob` 检查调用方），
      业务代码不能伪造"在阻塞步骤中"或"不是试运行"；共用的 ArchUnit 规则另禁止业务包依赖 `com.jabiz.runtime.external`。
   2. 试运行中拒绝，除非服务声明 `allowInDryRun()`（只读、幂等的调用）。
   3. 解析后的地址按 `OutboundAddresses`（与 Webhook 共用）检查：https（http 只限本机）、不带用户信息、主机在该服务的白名单中。`//其他主机/…` 这类相对目标解析后同样被拒。
@@ -97,9 +101,12 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
   `noDirectNetworkAccess(业务包)`——业务包不得使用 `java.net.http..`、`javax.net..`、Spring 的 HTTP 客户端与请求工厂（`web.client`、
   `web.reactive.function.client`、`http.client`）、Netty（含 Reactor Netty）、套接字与套接字通道、`URLConnection`、Spring 的 `UrlResource`，
   不得调用 `URL#openConnection` / `openStream` / `getContent`，不得以 XML 解析器的 `parse(String uri)` 从地址读取文档；
-  `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
+  `noPlatformInternals(业务包)`——业务包不得依赖 `com.jabiz.runtime.external`（作业的步骤 `StartExternalJob` 因此在 `com.jabiz.runtime.process.steps`）；
+  `handlersStayOutOfTheDatabase(业务包)`——业务包中的 `ExternalJobHandler` 与 `BlockingStep` 不得依赖 JDBC、R2DBC、Spring 的数据访问、
+  平台的 `storage` / `query` 包与 `DatasetEntityManager`。规则是护栏而不是沙箱：反射、方法句柄、把地址交给第三方库等看不见。
 - 观测：`jabiz.external.call`（标签只有 `service` 与 `outcome`：`2xx` `3xx` `4xx` `5xx` `timeout` `refused` `error`）。
-- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`。
+- 示范：`app` 的 `PRODUCT_RENAME` 以阻塞步骤 `ModerateText`（`POST /v1/moderate`，请求自己的超时 10 s；服务的请求超时 60 s 是给生成文案的作业的）审核新名称，被判为不当即违规 `COMMERCE_TEXT_INAPPROPRIATE`；
+  长调用的示范是异步外部作业 `commerce.product-copy`（11 §4a）。
   只有这个流程审核：通用表单与数据视图 API 写入（含新建）的商品名不经审核——示范的是外部调用，不是受审核的字段（需要时字段设为 `processOnly()`，
   新建也走审核的流程）。桩服务 `tools/demo/ai-stub/AiStub.java`：手工演示 `java tools/demo/ai-stub/AiStub.java`（`dev` 指向 `http://localhost:8091/v1`）；
   Docker Compose 中是服务 `ai-stub`，与 `app` 共用网络（`http://localhost:8091/v1`）。
@@ -162,6 +169,14 @@ public class ProcessContext {
 - 在读取受保护的状态**之前**取锁；一个流程取多个锁时各处按同一顺序，否则可能互相等待。
 - 等待最长 `jabiz.process.lock-timeout`（缺省 30 秒，只对取锁这一条语句生效）；超时或数据库判定死锁时流程失败，回滚，返回 409（可重试）。
   平台把这两种数据库错误（`55P03`、`40P01`）一律译为 `ConcurrentUpdateException`。持有者应短：不要在持锁的流程里做长时间的外部调用。
+- **整个事务的等待上限**（阶段 16k）：每个流程事务开始时以 `SET LOCAL lock_timeout`（`set_config(…, true)`）设为 `jabiz.process.lock-timeout`；
+  逐项任务的项改用执行选项 `ExecutionOptions.lockWait`（= `itemLockWait`，较短时）。因此行锁、平台自己的锁（审批、账本科目层级、编号等）、
+  并发重复请求等待同一幂等键，都不会无限等待；超时同样是 409（`LockNotAvailableException`）。
+  风险：以前没有上限的等待（例如长事务持有的行锁）现在在 30 秒后以 409 结束——这是想要的结果（请求可重试，不占住连接）；
+  任务项的整个事务以 `itemLockWait`（缺省 2 秒）为限，取不到即 `BUSY`、下次运行再处理。
+- **逐步的最长等待**（阶段 16k，D42）：`HoldLock` 取锁语句的 `lock_timeout` = min(步骤声明的等待, 执行选项的等待, `jabiz.process.lock-timeout`)，
+  至少 1 毫秒；只对这一条语句生效，之后恢复为事务的设置。执行选项由平台设置（逐项任务），经 Reactor 上下文传给子流程，不对业务开放。超时仍是 409：
+  请求中即"快速失败"，任务项中即 `BUSY`（跳过到下一次运行，11 §4.1）。
 - 只用于事务内的步骤：提交后步骤没有事务，锁取得即释放。试运行同样取锁，在回滚时释放；导入的单元在保存点中回滚时，其中取的锁随之释放。
 
 ## 5. 流程组合
@@ -172,6 +187,8 @@ public class ProcessContext {
 - 撤销父操作时，按相反顺序一并撤销子操作（见 04 第 6 节）。
 - 禁止递归调用同一流程（启动时检查调用图有无环）。
 - 实现：`CallProcess` 步骤调用 `ProcessExecutor.executeChild`；子流程的变更在它结束时（同一事务内）提交，输出放入父流程上下文（`outputKey`）。
+- `CallProcess.forEach` 的各次调用同样在**同一事务**中：一项失败整批回滚，各项取的锁持有到整批提交。需要逐项提交的批量工作
+  （一项失败不影响其他项、不与在线请求形成锁环）用逐项任务 `JobDefinition.forEach`（11 §4.1、D42），不用 `CallProcess.forEach`。
 
 ## 6. 版本化
 
@@ -212,9 +229,21 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程输入以遮蔽后的 JSON 记入 `op_process.input_summary`，秘密（敏感字段、`@Sensitive` 组件）在流程 API 响应与 `op_process_result` 中为 `null`【D12】。
 - 同一流程执行器也被定时任务、事件消费者和场景测试调用（传输方式无关，11 §2.3、§4）。
 - 流程目录 `GET /api/meta/processes` 列出调用方可执行的流程及其输入的 JSON Schema（`ProcessInputSchemas`），前端据此生成表单（12 §2）。
-  只经专用入口或由平台执行的流程声明 `pb.internal()`（`SPONSOR_SIGN_IN`、`SEC_BOOTSTRAP_ADMIN`、通用实体流程），不进目录，权限检查不变【D15】。
-- `ExecutionOptions`（平台内部）：`idempotencyKey`，以及 `beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
-  （事件投递用它写消费标记，与消费效果同一事务）【D14】。
+- **谁能启动流程**【D41】：不经流程接口的流程按用途三选一声明，都不进目录、不能作为行操作（声明 `actsOn` 即启动失败），权限照常声明。
+  执行器在启动根流程与子流程时统一检查（`ProcessExecutor.requireStartable` / 子流程同理；流程接口在转换输入之前先查），不符即 403 `PROCESS_INTERNAL`（三语），不论权限：
+
+  | 声明 | 作为根流程 | 作为子流程（`CallProcess`） | 平台中的例子 |
+  |---|---|---|---|
+  | `pb.internal()` | 只有系统身份（流程接口一律拒绝） | 只在系统身份的根流程下（调用方须也是 `internal()`，启动检查） | `MAIL_SEND`、`TASK_NOTIFY`、`INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、`SEC_BOOTSTRAP_ADMIN`；应用的事件消费、定时任务、回调流程（示范 `ORDER_RECORD_PAYMENT`、`CERTIFICATION_APPROVAL_RESULT`、`FREIGHT_POST_REVENUE`） |
+  | `pb.entryOnly()` | 只经平台自己的入口，以真实调用者运行（入口传执行选项 `ExecutionOptions.atEntryOf(流程)` / `ProcessExecutor.executeAtEntry`） | 一律拒绝（调用它在启动检查中报错） | 登录与二次验证（`SPONSOR_SIGN_IN`、`SPONSOR_MFA_VERIFY`、`SPONSOR_OIDC_SIGN_IN`）、通用实体流程（`ADD/UPDATE/DELETE_ENTITY`，实体接口）、`FILE_REGISTER`（上传）、`IMPORT_RUN` 与导入映射（`IMPORT_MAPPING_SAVE/REMOVE`）、自助注册与找回密码（`SPONSOR_SIGN_UP*`、`SPONSOR_EMAIL_VERIFY*`、`SPONSOR_PASSWORD_RESET_*`）、`SEC_MFA_ENROLL_*`、`SEC_USER_SET_LOCALE`、`SEC_MAIL_PREFERENCE_SET` |
+  | `pb.subProcessOnly()` | 一律拒绝（系统身份也不行） | 任何根流程下都可以，权限由根流程的声明保证 | `FILE_ARCHIVE`（14 §10） |
+
+  流程接口对三种流程一律 403 `PROCESS_INTERNAL`（不是 404：流程存在，只是不由这里运行；目录已隐去它们），消息说明它如何运行（由平台在事件、计划、回调中运行 / 经它自己的接口 / 只作另一流程的一部分）。
+  名字 `system`、`anonymous` 保留：开发请求头与访问令牌都不能以它们为操作人。业务代码不引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（`PlatformArchRules.noProcessMachinery`）。
+  操作记录与审计中的操作人总是根流程的操作人：`entryOnly()` 流程保留真实的调用者，子流程沿用根流程的身份。
+  新的平台流程按用途选择其一；应用的事件、定时任务、回调接续点用 `internal()`。
+- `ExecutionOptions`（平台内部）：`idempotencyKey`，`beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
+  （事件投递用它写消费标记，与消费效果同一事务）【D14】，`dryRun`（导入预览，20 §5），以及 `entry`——平台入口声明自己是哪个 `entryOnly()` 流程的入口（`atEntryOf`）【D41】；流程接口从不传它。
 
 ## 9. 启动自检
 
@@ -222,7 +251,10 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
 - 流程调用图无环；被调用的流程和版本存在；平台步骤引用的数据视图、模板存在；`PublishEvent` 需要 `EventPublisher`，事件类型名合法（11 §2.2）。
 - 调用已废弃（`pb.deprecated()`）的版本给出警告。
 - 权限已声明（`dev` 下为警告）。
-- 非内部流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
+- 不进目录的流程（`internal()`、`entryOnly()`、`subProcessOnly()`）不能声明 `actsOn`；`CallProcess` 不能调用 `entryOnly()` 流程；
+  不是 `internal()` 的流程（普通、`entryOnly()`、`subProcessOnly()`）不能调用 `internal()` 流程——静态不知道普通流程的根是否以系统身份运行，只认 `internal()` 的调用方【D41】。
+  事件消费者与定时任务的流程、导入的目标流程的声明分别由 `EVENT` / `JOB`（11）与 `IMPORT`（20 §6）检查。
+- 进目录的流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接

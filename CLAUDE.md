@@ -36,6 +36,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
    业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`；不能重叠的流程以 `HoldLock.shared/exclusive` 取命名锁，见 06 §4.1）
    做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
+   不经流程接口的流程按用途声明（06 §8、决策 D41）：事件消费、定时任务、回调用 `internal()`（只由系统身份运行），平台入口自己运行的用 `entryOnly()`，只作子流程的用 `subProcessOnly()`；依赖声明，由平台检查（步骤中对系统身份的检查只是已有处的多余的第二道防线，不再新加）。
 4. 业务模块（`app` 及以后的业务模块）**禁止引用 `reactor.*`**。以上规则由 ArchUnit 测试强制执行。
 5. 请求路径上禁止阻塞调用；测试环境启用 BlockHound 检测。
 
@@ -104,6 +105,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。账本的科目层级、分析维度（`LedgerDimension` Bean）、行备注、来源单据与外币分录见 11 §1.4–§1.8 与决策 D24，
   子账单据过账时带上来源（`sourceEntity` / `sourceId`）。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
+  需要逐项提交的批量任务用 `JobDefinition.forEach`（每项一个事务、每项流程为 `internal()`），不用 `CallProcess.forEach` 做批量（11 §4.1、决策 D42）。
   送给其他系统的事件用 webhook（11 §2.4 与决策 D33）：订阅只写在 `jabiz.webhooks.subscriptions`（密钥以占位符取自环境变量，主机须在 `allowed-hosts` 中；有订阅的事件不放遮蔽字段的值），
   由平台签名投递并重试。接收外部回调只经入站 Webhook（`/api/inbound/{提供方}`，验签、存档、去重后以事件交给流程，D37），不自写接收接口。
   业务的出站调用只在 `BlockingStep` 中经声明的 `ExternalService` 进行（有副作用的放提交后或带幂等键）；耗时的调用用异步外部作业 `StartExternalJob`（决策 D38）。
@@ -171,8 +173,9 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   上传文件的存储目录 `JABIZ_FILES_LOCAL_ROOT`（非 dev 必须设置，dev 默认 `backend/app/build/jabiz-files`；见 14 §6）
 - 集成测试调用 HTTP API：`dev` profile 下用 `X-Jabiz-*` 请求头；非 dev 下用 `TestTokens.bearer(jwtService, actor, permissions…)` 签发真实令牌
   （测试配置 `config/application.properties` 提供固定测试密钥与 BCrypt 强度 4）
-- 事件与定时任务：测试配置关闭后台投递与调度（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`），
-  测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)`，场景中用 `deliverEvents: true` / `runJob` 步骤
+- 事件、定时任务与外部作业：测试配置关闭后台投递、调度与外部作业执行器（`jabiz.events.delivery.enabled=false`、`jabiz.jobs.scheduler.enabled=false`、
+  `jabiz.external-jobs.executor.enabled=false`），测试直接调用 `OutboxDeliverer.deliverPending()` / `JobRunner.run(job, 计划时刻)` /
+  `ExternalJobExecutor.runPending()`，场景中用 `deliverEvents: true` / `runJob` / `runExternalJobs: true` / `completeExternalJob`（不调用外部服务）步骤
 - 场景回放（07 §3）：场景放在各模块 `src/test/resources/scenarios/**/*.yml`，快照为同目录的 `<名>.snapshot.json`（随变更提交）；
   `./gradlew :app:test --tests '*ScenarioTest'` 回放全部场景；确认行为变化正确后用 `./gradlew :app:test --tests '*ScenarioTest' -Dscenario.update-snapshots=true` 更新快照。
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）

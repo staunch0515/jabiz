@@ -15,8 +15,9 @@ public final class FilePermissions {
      */
     public static final String GENERATED_READ = "file.generated.read";
     /**
-     * Running {@code FILE_ARCHIVE} directly; granted to no role. Business processes keep the files they make by
-     * calling it as their sub-process, after their own checks.
+     * Declared by {@code FILE_ARCHIVE}; granted to no role. The process is {@code subProcessOnly()} (decision D41):
+     * business processes keep the files they make by calling it as their sub-process, after their own checks, and it
+     * never runs on its own.
      */
     public static final String GENERATED_ARCHIVE = "file.generated.archive";
 
