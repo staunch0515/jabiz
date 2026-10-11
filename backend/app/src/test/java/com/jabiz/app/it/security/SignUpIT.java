@@ -133,6 +133,8 @@ class SignUpIT extends SignUpItSupport {
         // Every header alike but the request's own id.
         assertThat(withoutRequestId(taken.getResponseHeaders())).isEqualTo(withoutRequestId(fresh.getResponseHeaders()));
         assertThat(taken.getResponseHeaders().getFirst("X-Request-Id")).isNotBlank();
+        // Said to have no body, so that clients do not wait for one.
+        assertThat(taken.getResponseHeaders().getContentLength()).isZero();
         assertThat(taken.getResponseBodyContent()).isEqualTo(fresh.getResponseBodyContent());
         assertThat(query("SELECT 1 FROM sec_user_version WHERE lower(email) = ?", email)).hasSize(1);
         assertThat(userOf(email)).containsEntry("user_id", userId).containsEntry("password_hash", hashBefore);

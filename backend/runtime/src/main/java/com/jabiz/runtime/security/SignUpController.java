@@ -162,7 +162,7 @@ class SignUpController {
                 .onErrorResume(e -> e instanceof ValidationException v && v.violations().stream()
                     .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode())),
                     e -> Mono.just(SignUpProcesses.Done.DONE))
-                .thenReturn(ResponseEntity.accepted().<Void>build());
+                .thenReturn(accepted());
         });
     }
 
@@ -193,7 +193,7 @@ class SignUpController {
             String[] valid = emailAndEntry(request);
             limits.email(SignUpRateLimits.Kind.VERIFY_RESEND, valid[0]);
             return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(valid[1], valid[0], null))
-                .thenReturn(ResponseEntity.accepted().<Void>build());
+                .thenReturn(accepted());
         });
     }
 
@@ -206,7 +206,7 @@ class SignUpController {
             limits.user(SignUpRateLimits.Kind.VERIFY_RESEND, user.toString());
             return processes.execute(verifySend, new SignUpProcesses.VerifySendInput(context.entry(), null,
                     user.toString()))
-                .thenReturn(ResponseEntity.accepted().<Void>build());
+                .thenReturn(accepted());
         });
     }
 
@@ -219,7 +219,7 @@ class SignUpController {
             String[] valid = emailAndEntry(request);
             limits.email(SignUpRateLimits.Kind.PASSWORD_RESET, valid[0]);
             return processes.execute(resetRequest, new SignUpProcesses.ResetRequestInput(valid[1], valid[0]))
-                .thenReturn(ResponseEntity.accepted().<Void>build());
+                .thenReturn(accepted());
         });
     }
 
@@ -257,6 +257,11 @@ class SignUpController {
             throw new ValidationException(problems);
         }
         return new String[] {body.email().strip(), entry.get().name()};
+    }
+
+    /** 202 without a body, saying so ({@code Content-Length: 0}): the same for every address. */
+    private static ResponseEntity<Void> accepted() {
+        return ResponseEntity.accepted().contentLength(0).build();
     }
 
     private static List<Violation> emailProblems(String email) {
