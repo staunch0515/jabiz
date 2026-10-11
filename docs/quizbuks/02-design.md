@@ -109,9 +109,10 @@ docs/quizbuks/               本文件等
 | `QbRewardTier` | T | `publicationId`、`sponsorId`、`seq`、`fromScore`、`toScore`、`reward` | 每个发布至多 20 档；区间不重叠、覆盖 0 到满分、至少一档奖励大于 0（提交时 `TierCoverage` 检查）；可从 0 分起 |
 | `QbPublicationSchedule` | P | `publicationId`（主键）、`quizId`、`versionId`、`nextDueAt` | 已提交且未退回草稿的发布：定时任务按 `nextDueAt` 取到期的，移除模版时按 `quizId` 找出要保留文件的版本（都是普通索引；时态表上按可变字段查找要扫全部历史） |
 | `QbPublicationCounter` | P | `publicationId`（主键）、`starts`、`completions`、`passes`、`winners`、`reserved`、`spent` | 高频计数与预算占用，上架时插入全 0 的一行（Q4），只在发布锁内更新（4.3，Q5）；不进时态（否则每次答题都给发布追加一个版本） |
-| `QbAttempt` | P → 结束后封存 | `userId`、`publicationId`（二者唯一，6 一人一次）、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`optionOrder`（jsonb，打乱后的顺序【缺省 Q8】）、`currentIndex`、`submittedAt`、`score`、`passed`、`tierId`、`reward`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt` | 答题会话。进行中可改（保存进度，U-41），提交后不再变（流程拒绝，审计照常） |
-| `QbAttemptAnswer` | P | `attemptId`、`questionNo`、`selected`（选项号数组）、`correct` | 逐题答案；`correct` 在提交时才写 |
-| `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次 |
+| `QbPublicationCard` | P | `publicationId`（主键）、`sponsorId`、`status`、`regions`、`startAt`、`endAt`、`name`、`quizTitle`、`cover`、`versionId`、`maxReward`、`fullScore`、`passScore`、`timeLimitSec`、`questionCount`、`budgetCap`、`maxWinners`、`tiers`（档位的规范 JSON）、`sponsorCountry`、`wentOnAt` | 上架时随计数行插入（Q5）。除状态外全部在提交时冻结，状态由发布的流程在发布锁内同步。答题人的首页、详情、档位与答题流程只读它（时态表上按状态、时间、地区筛选要读全部版本） |
+| `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开 |
+| `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
+| `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟写入（已认证的模板没有缓存）；累计完成数取计数行，实时 |
 
 ### 3.4 钱包与资金
 
@@ -119,7 +120,7 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbWallet` | P | `ownerId`（主键）、`kind`（SPONSOR / TAKER）、`balance`、`pendingOut`（转账中） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本 |
+| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；用户余额按账本维度汇总，用户钱包与其锁由 Q6 定 |
 | `QbTopUp` | T | `sponsorId`、`amount`、`checkoutSessionId`（唯一）、`paymentIntentId`、`status`（CREATED / PAID / EXPIRED / FAILED）、`paidAt`、`stripeFee`、`presentmentCurrency`、`presentmentAmount`（F-04 原币信息，若 Stripe 给出） | 充值 |
 | `QbTransfer` | T | `userId`、`amount`、`status`（REVIEW / SENDING / SENT / FAILED / REVERSED）、`externalTransferId`、`failureReason` | 自动转账（4.7）。大额先进 REVIEW 走审批 |
 | `QbFxRate` | T | `currency`、`rateDate`、`perJpy`、`source`（ECB / MANUAL） | 显示用参考汇率（"约合 X USD"），可手动覆盖；不参与记账 |
@@ -148,7 +149,7 @@ docs/quizbuks/               本文件等
 | 4110 | 平台服务收入（抽成） | 收入 | — |
 | 5110 | 支付手续费（Stripe） | 费用 | — |
 
-维度"当事人"（`LedgerDimension`，取值为用户编号）。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
+维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
 
 ### 4.2 分录
 
@@ -156,13 +157,14 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | 充值到账（Stripe 通知） | `QB_TOPUP_CONFIRM` | 1110 Stripe 余额（总额） | 2110 商家预收款（商家） |
 | Stripe 手续费确定 | `QB_TOPUP_CONFIRM`（或对账） | 5110 支付手续费 | 1110 Stripe 余额 |
-| 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_PENDING_SETTLE` | 2110 商家预收款（商家）：奖励 | 2120 应付用户奖励（用户）：奖励 − 抽成；4110：抽成（当前 0，为 0 时不出该行） |
+| 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
 | 转账发出 | `QB_TRANSFER_SEND` | 2120 应付用户奖励（用户） | 2130 转账中（用户） |
 | 转账成功（Stripe 通知） | `QB_TRANSFER_RESULT` | 2130 转账中（用户） | 1110 Stripe 余额 |
 | 转账失败 / 被撤回 | `QB_TRANSFER_RESULT` | 2130 转账中（用户） | 2120 应付用户奖励（用户） |
 | Stripe 打款到银行 | `QB_STRIPE_PAYOUT_RECORD` | 1120 银行存款 | 1110 Stripe 余额 |
 
-- 待支付奖励**不入账**（需求 7.1）：只在 `QbAttempt.rewardStatus = PENDING` 记录。
+- 待支付奖励**不入账**（需求 7.1）：只在 `QbAttempt.rewardStatus = PENDING` 与钱包的待支付计数中记录。
+- **抽成按结算时**生效的受控参数 `qb.creator-fee-rate` 计算（补发时用补发时的比例），向下取整到整数 Kudos（`RewardSplit`）；来源单据为答题会话（`QbAttempt`），记账时间为完成（或补发）时间。
 - 更正一律冲正（平台 `LEDGER_REVERSE`）。
 - 余额核对（F-06，每日任务）：`QbWallet.balance` = 账本维度余额；2110 合计 = 商家钱包合计；2120 合计 = 用户钱包合计；不等则建待办给财务并停止当日导出。
 
@@ -171,11 +173,14 @@ docs/quizbuks/               本文件等
 | 锁（`HoldLock.exclusive`） | 谁持有 | 保护什么 |
 |---|---|---|
 | `qb.pub:<发布>` | 开始答题、提交、暂停 / 恢复、到期结束 | `QbPublicationCounter`（名额、预算占用）、发布状态 |
-| `qb.wallet:<所有者>` | 结算、补发待支付、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
+| `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`） | 结算、补发待支付、开发入账（Q5）、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
 | `qb.account:<用户>` | 资料、入驻、商家资料、审批结果、封禁 / 解封（Q2） | 该用户的 `QbProfile`、`QbSponsor`、`QbUserBan` |
 
 - 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 发布锁 → 钱包锁**（Q4，D-Q4-5；Q2 D-Q2-10）。账户锁目前不与其他锁同时持有（提交发布只读入驻与封禁，不取账户锁）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
-- 【缺省 Q11】单个发布的提交在发布锁上串行。每次结算是一个短事务（读快照、写答案、两行余额、一笔 2–3 行的分录），预计每秒数十次。
+- **晚取锁**（Q5）：提交先在锁外读会话、版本与抽成比例，锁内只重读会话、计数、发布与卡片，评分后（奖励大于 0 时）再取钱包锁、过账与写入；
+  开始只取发布锁（不取钱包锁：商家余额是软检查，并发多出的人完成后记为待支付）；继续答题与保存进度不取锁（会话行的乐观版本）。
+  恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）由补发清空后发布的事件在另一事务中进行，只取发布锁，因此锁序不成环。
+- 【缺省 Q11】单个发布的提交在发布锁上串行。Q5 的基线（`PlayThroughputIT`，见 `plans/Q5-answering.md` 的实施记录）由 Q10 压测对照；退路依次为降低过账成本、按发布预留预算、分批过账。每次结算是一个短事务（读快照、写答案、两行余额、一笔 2–3 行的分录），预计每秒数十次。
   如压测不足，把"商家钱包"拆为按发布预留：发布上架时从商家钱包转入发布预算，结算只取发布锁（以后的优化，不在 MVP）。
 
 ## 5. 状态机与流程
@@ -198,8 +203,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   因此定时任务晚一分钟不影响正确性。`PAUSED`、`FUNDS_SHORT`、`ENDED` 拒绝新的开始，已开始的会话照常作答与提交（需求 5.3-2、M-33）。
 - **定时上下架**（`QB_PUBLICATION_TICK`，每分钟）：按 `QbPublicationSchedule.nextDueAt` 找出全部到期的发布（停机期间错过的时刻由下一次运行补上），每次至多 50 条，逐条在发布锁内按
   `PublicationRules.next` 迁移：`SCHEDULED` 到开始时间 → `LIVE`；`SCHEDULED / LIVE / PAUSED / FUNDS_SHORT` 到结束时间 → `ENDED`（`endReason = EXPIRED`）。
-- **暂停**：可从 `SCHEDULED`、`LIVE` 暂停；恢复按时间回到 `SCHEDULED`（未到开始）、`LIVE`（进行中）或 `ENDED`（已过结束）。`FUNDS_SHORT` 的暂停与恢复由 Q5/Q6 定。
-- **预算不足**：发布的预算上限或名额用完即 `ENDED`（`BUDGET` / `QUOTA`，Q5）；商家钱包余额不足即 `FUNDS_SHORT`，充值后补发完该商家全部待支付奖励时回到 `LIVE`（若未到期，Q5/Q6）。
+- **暂停**：可从 `SCHEDULED`、`LIVE`、`FUNDS_SHORT`（Q5）暂停；恢复按时间回到 `SCHEDULED`（未到开始）、`LIVE`（进行中）或 `ENDED`（已过结束）。
+- **预算不足**：发布的预算上限或名额用完即 `ENDED`（`BUDGET` / `QUOTA`，Q5；进行中的会话预占名额与最高奖励，因此不会超额）；商家钱包付不起一笔奖励即 `FUNDS_SHORT`（Q5）。
+  补发（`QB_PENDING_SETTLE`）清空该商家的待支付后发布事件 `qb.sponsor.funds-restored`，`QB_PUBLICATION_FUNDS_RESTORED` 按编号逐个在发布锁内把 `FUNDS_SHORT` 的发布放回 `LIVE`（已过结束时间的直接 `ENDED`）；
+  `FUNDS_SHORT` 可以暂停，恢复照旧按时间。已结束的发布不因补发而改变。
 - **提交即冻结**：只有 `DRAFT` 可改；提交后内容（只写一次的版本）与全部策略不再改变，要改就复制（M-36）。待审核的可撤回。
 - **审核**：`QbPublication` 是审批对象 `qb.publication`（事实 `autoApprove`、`maxReward`、`maxSpend`、`sponsorId`、`regions`；批准绑定版本内容哈希与全部策略）。
   规则 `qb.publication.review`（`autoApprove = false` 时需要 `qb.review.publication` 审批）由 `QB_SETUP` 以受控变更提出；"自动通过"即受控参数
@@ -222,14 +229,17 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
 | `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态 |
 | `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件；`qb.publication.system`，不授予任何角色） | 只认发布自己的请求（`approvalRequestId`）：批准且内容未变 → 上架；驳回（以存储的请求为准）→ 草稿附理由 |
-| `QB_VIEW` | `qb.play` | 记第一次浏览（重复忽略） |
-| `QB_ATTEMPT_START` | `qb.play` | 发布锁内：发布 `LIVE`、用户可见（地区、时间）、用户 `ACTIVE` 且已激活、未参加过、名额与预算（`spent + reserved + maxReward ≤ budgetCap`）→ 建会话（`deadline = now + timeLimit`）、`reserved += maxReward`、`starts += 1`。返回题目（**不含正确答案**）与打乱后的选项顺序 |
-| `QB_ATTEMPT_SAVE` | `qb.play` | 保存当前题号与已选答案；超过 `deadline` 拒绝 |
-| `QB_ATTEMPT_SUBMIT` | `qb.play` | 发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`；评分 → 档位 → `reserved -= maxReward`、`spent += reward`、计数 → 钱包锁 → 余额够则记分录、`PAID`，否则 `PENDING` 并把发布置 `FUNDS_SHORT` → 站内信。幂等键防重复提交 |
-| `QB_ATTEMPT_EXPIRE`（任务） | 系统 | 每分钟：过了 `deadline` 仍 IN_PROGRESS 的会话按已保存答案自动提交（"到时自动提交"的服务端兜底） |
+| `QB_VIEW` | `qb.play`，要求已验证 | 记第一次浏览（重复忽略）；发布须对本人可见，否则 404 |
+| `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查）→ 建会话（`deadline = now + 时限`，选项按会话打乱）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
+| `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（不取锁）；超过 `deadline` 拒绝；非法题号或选项一次报告全部 |
+| `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
+| `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。选取它们的任务 `qb.attempt-expire` 在 Q5b（平台 16k 之后） |
 | `QB_TOPUP_START` | `qb.topup` | 建 `QbTopUp` 与 Stripe Checkout Session（`BlockingStep`，Stripe 幂等键 = 充值编号），返回支付页地址 |
 | `QB_TOPUP_CONFIRM` | 系统（G9） | Stripe `checkout.session.completed`：钱包锁 → 记分录、`PAID` → 子流程 `QB_PENDING_SETTLE` |
-| `QB_PENDING_SETTLE` | 系统 | 钱包锁内按提交时间顺序补发该商家的待支付奖励，直到余额不足；补完的发布从 `FUNDS_SHORT` 回到 `LIVE` |
+| `QB_PENDING_SETTLE` / `QB_PENDING_PAY` | 系统（`qb.play.system`） | 只取钱包锁：按提交顺序取至多 50 条待支付，逐条（`QB_PENDING_PAY`，按结算时的抽成）补发，遇到付不起的即停止（不跳过）；还能付下一条时发布事件在新事务中续接；清空后发布 `qb.sponsor.funds-restored` |
+| `QB_PUBLICATION_FUNDS_RESTORED` / `QB_PUBLICATION_FUNDED` | 系统（`qb.publication.system`） | 订阅 `qb.sponsor.funds-restored`：按编号逐个在发布锁内把该商家 `FUNDS_SHORT` 的发布放回 `LIVE`（已过结束时间即 `ENDED`）；不取钱包锁 |
+| `QB_PUBLICATION_STATS_REFRESH`（任务 `qb.publication-stats`） | 系统（`qb.play.system`） | 每 10 分钟：进行中及 31 天内结束的发布的近 1 小时、24 小时、7 天、30 天完成数写入 `qb_publication_stats`（只写变化的行） |
+| `QB_WALLET_DEV_CREDIT` | `qb.wallet.dev-credit`（不授予任何角色），只在 `quizbuks.wallet.dev-credit.enabled=true` 时注册 | 开发与测试用的入账（Q6 的充值之前）：钱包锁 → 借 1110 / 贷 2110 → 子流程 `QB_PENDING_SETTLE`。生产不开 |
 | `QB_PAYOUT_ONBOARD` | `qb.payout.onboard` | 创建 Stripe Express 账户（首次）与开通链接，返回地址；结果由 `account.updated` 通知更新 `payoutsEnabled` |
 | `QB_TRANSFER_RUN`（任务） | 系统 | 每日：余额 ≥ 门槛、`payoutsEnabled`、未封禁的用户各建一笔转账（全额）；超过人工审核额的进 REVIEW（审批） |
 | `QB_TRANSFER_SEND` | 系统 | 钱包锁 → 分录（2120 → 2130）→ 提交后（`AFTER_COMMIT`）调用 Stripe Transfer（幂等键 = 转账编号） |
@@ -247,14 +257,16 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | 模板 | 用途 | 权限 |
 |---|---|---|
-| `qb.app.feed` | 首页卡片：可见性（LIVE + 地区交集 + 时间内 + 未满额）、关键字、筛选、排序（U-10 – U-14） | `qb.play` |
-| `qb.app.publication` | 详情（U-20 – U-22）：基本信息、档位、资料、发布人、完成人数（1 小时 / 24 小时 / 周 / 月 / 累计） | `qb.play` |
-| `qb.app.history` / `qb.app.ledger` / `qb.app.wallet` | 答题记录、交易流水、余额概览（U-40 – U-52） | `qb.me` |
+| `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
+| `qb.app.publication` / `qb.app.publication-tiers` | 详情（U-20 – U-23）：卡片、简介与资料（版本快照中，不含题目）、发布人（入驻已通过的）、完成人数（近期窗口取统计表，累计取计数行）、本人的会话；档位取卡片 | `qb.play` |
+| `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选 | `qb.me` |
+| `qb.app.ledger` / `qb.app.wallet` | 交易流水、余额概览（U-50 – U-52，Q6） | `qb.me` |
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` / `qb.sponsor.transactions` | M-10 – M-11、M-34、M-40 – M-43、M-50 – M-52 | 各自权限 |
+| `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` / `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表）/ `qb.admin.journal-export` | P-01、P-03、F-06、F-08、F-02 – F-03（CSV 汇总凭证） | 管理权限 |
 
-- 完成人数与分析按索引直接统计（`QbAttempt (publicationId, submittedAt)`），模板缓存 10 分钟（需求 6.1 允许）；不另建汇总表。
+- 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。
 - 导出（M-52）用平台导出（CSV / XLSX / PDF）。
 
 ## 7. 前端

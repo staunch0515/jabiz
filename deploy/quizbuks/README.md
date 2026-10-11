@@ -33,6 +33,16 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - 只起数据库做本地开发：`docker compose -f deploy/quizbuks/docker-compose.yml up -d db`，再在 `backend/` 下
   `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`。
 
+## 答题（Q5）
+
+- **部署后再执行一次 `QB_SETUP`**：答题人（`QB_TAKER`）新增 `qb.content.file.read`（读题目的封面、图片与资料文件）。Q5 没有新的受控参数或审批规则。
+- **开发入账在生产中关闭**：`QB_WALLET_DEV_CREDIT`（不付款就给商家钱包入账，Q6 的充值之前供开发与测试使用）只在
+  `quizbuks.wallet.dev-credit.enabled=true` 时注册（只有 `dev` 配置与测试开启）。**生产不得开启**：开启时若 `STRIPE_API_KEY` 是正式密钥（`sk_live_…`），
+  启动即失败。其权限 `qb.wallet.dev-credit` 不授予任何角色，但持有 `*` 的首个管理员可以调用。
+- **结算与待支付**：答题奖励在提交的同一事务中从商家钱包（科目 2110）记到用户（2120）；商家余额不足时记为待支付、发布进入预算不足，
+  有余额后（Q5 只有开发入账，Q6 起为充值）按提交顺序补发，补完后发布自动回到进行中。
+- **完成人数**：任务 `qb.publication-stats` 每 10 分钟统计各发布近 1 小时、24 小时、7 天、30 天的完成数（集群中只有一个实例执行）。
+
 ## 环境变量
 
 放在 `deploy/quizbuks/.env`（不提交，已在 `.gitignore` 中）或部署平台的密钥库中。密钥都是 Base64、至少 32 字节（`openssl rand -base64 48`）。
@@ -58,7 +68,7 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_SPONSOR_LINK` | 否 | 商家邮件中的商家后台地址；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录据此取客户端地址 |
 
-以后阶段使用、本阶段**不读取**的外部密钥（先列出，便于准备）：
+以后阶段使用的外部密钥（先列出，便于准备；Q5 起启动检查读取 `STRIPE_API_KEY`，只为拒绝与开发入账同时开启的正式密钥）：
 
 | 变量 | 阶段 | 说明 |
 |---|---|---|
