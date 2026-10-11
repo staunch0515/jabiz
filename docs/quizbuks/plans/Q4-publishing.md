@@ -143,6 +143,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ### D-Q4-7 定时上下架
 
+> **Q5b 起已替换**（2026-10-11，见 `Q5-answering.md` 的 Q5b 实施记录）：`qb.publication-tick` 改为平台 16k 的逐项任务（决策 D42）
+> `JobDefinition.forEach`，模板 `qb.system.publications-due`（`next_due_at <= 计划时刻`）选出到期的发布，每项以 `QB_PUBLICATION_ADVANCE` 在自己的事务中迁移，
+> 每次至多 2 000 项（`PublishingLimits.TICK_BATCH`）；`QB_PUBLICATION_TICK` 已删去。下面保留 Q4 当时的设计（任务、批量 200 / 50、一批一个事务）作为历史。
+
 - **任务**：`JobDefinition.cron("qb.publication-tick", "0 * * * * *", UTC, QB_PUBLICATION_TICK, t -> new TickInput(t))`。
 - **`QB_PUBLICATION_TICK`**（内部流程，系统身份）用当前操作时间找出全部到期的发布，因此停机后也能补上：
   - `SCHEDULED` 且 `startAt ≤ now`；
@@ -234,7 +238,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_PUBLICATION_PAUSE` | 同上 | `publicationId` | `actsOn`（`SCHEDULED`、`LIVE`）；发布锁 → `PAUSED`、`pausedAt`。之后的开始答题在同一把锁内看到 `PAUSED`，立即不可进入（M-35） | 迁移 422 |
 | `QB_PUBLICATION_RESUME` | 同上 | `publicationId` | `actsOn`（`PAUSED`）；按 D-Q4-1 回到 `SCHEDULED`、`LIVE` 或进入 `ENDED` | 迁移 422 |
 | `QB_PUBLICATION_APPROVAL_RESULT` | `qb.publication.system`（不授予任何角色），`internal()` | 审批事件 | D-Q4-4 | — |
-| `QB_PUBLICATION_TICK` | `qb.publication.system`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7 | — |
+| ~~`QB_PUBLICATION_TICK`~~ | `qb.publication.system`（不授予任何角色），`internal()` | `scheduledTime` | D-Q4-7。**Q5b 删去**：由逐项任务 `qb.publication-tick`（模板 `qb.system.publications-due`，每项 `QB_PUBLICATION_ADVANCE`，批量 2 000）代替 | — |
 | `QB_PUBLICATION_ADVANCE` | 同上，`internal()` | `publicationId` | 发布锁内按时间迁移，写 `endedAt`、`endReason = EXPIRED`；待审核而已过结束时间的撤回审批、回到草稿 | — |
 
 **纯 Java 部件**（无 I/O，单元测试）：

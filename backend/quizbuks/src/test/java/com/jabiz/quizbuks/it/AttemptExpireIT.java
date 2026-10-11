@@ -113,7 +113,7 @@ class AttemptExpireIT extends PlayItSupport {
             attempts.add(started(publicationId, "t-missed-" + i, i % 2 == 0));
             clock.advance(Duration.ofMinutes(1));
         }
-        // Down for ten minutes: one run finishes everything due, earliest first.
+        // Down for ten minutes: one run finishes everything due (the order and the cap: AttemptExpireBatchIT).
         clock.advance(Duration.ofMinutes(10));
         JobRunner.JobRun run = runExpire(clock.instant());
         assertThat(run.items()).isEqualTo(new JobRunner.ItemCounts(3, 3, 0, 0, 0, 0, false));
@@ -246,11 +246,13 @@ class AttemptExpireIT extends PlayItSupport {
     }
 
     /**
-     * The job, a second expiry of the same attempt (another instance, a later minute) and the taker's late submission
-     * at once: the attempt is finished and paid exactly once.
+     * Two expiries of the same attempt at once (the job's item and another run, as another instance or a later minute
+     * would start) settle it exactly once: the second, under the publication's lock, finds it finished. The taker's
+     * submission sent at the same time is refused because it is past the deadline and grace, not because of the race:
+     * a submission in time and the job cannot overlap by design (the job only takes attempts past the grace).
      */
     @Test
-    void anAttemptRacedByTheJobAnotherExpiryAndItsTakerIsFinishedOnce() throws Exception {
+    void twoExpiriesAtOnceSettleTheAttemptOnce() throws Exception {
         warmUp();
         String sponsor = newSponsor("s-once");
         String publicationId = publication(sponsor, "Once");

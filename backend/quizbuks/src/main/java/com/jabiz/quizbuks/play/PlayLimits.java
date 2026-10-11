@@ -19,7 +19,10 @@ public final class PlayLimits {
      */
     public static final int SETTLE_BATCH = 50;
 
-    /** Attempts one run of the expiry job finishes, by deadline (Q5b, D-Q5-9). */
+    /**
+     * Attempts one run of the expiry job finishes, by deadline (Q5b, D-Q5-9); {@code quizbuks.attempt-expire.max-items}
+     * may lower it (tests).
+     */
     public static final int EXPIRE_BATCH = 2_000;
 
     /** Most publications the statistics job counts in one run: those running or ended lately. */

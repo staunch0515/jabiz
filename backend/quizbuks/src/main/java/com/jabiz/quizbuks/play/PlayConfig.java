@@ -190,17 +190,21 @@ public class PlayConfig {
      * publication, reads the attempt again and does nothing to one submitted meanwhile. An attempt whose publication
      * is locked longer than the item's lock wait is left to the next minute (busy); minutes missed while the system
      * was down are made up by the next run, which selects by deadline, not by minute.
+     *
+     * @param maxItems attempts one run finishes ({@code quizbuks.attempt-expire.max-items}, default
+     *                 {@link PlayLimits#EXPIRE_BATCH}; lowered in tests)
      */
     @Bean
     JobDefinition<AttemptFinishing.ExpireInput> qbAttemptExpireJob(
         ProcessDefinition<AttemptFinishing.ExpireInput, AttemptFinishing.ExpireOutput, ProcessContext>
-            qbAttemptExpire) {
+            qbAttemptExpire,
+        @Value("${quizbuks.attempt-expire.max-items:" + PlayLimits.EXPIRE_BATCH + "}") int maxItems) {
         return JobDefinition.forEach(AttemptFinishing.EXPIRE_JOB, "0 * * * * *", ZoneOffset.UTC,
                 JobItems.template(AttemptFinishing.DUE_TEMPLATE,
                     scheduledTime -> Map.of("cutoff", scheduledTime.minus(PlayLimits.SUBMIT_GRACE)), "attemptId"),
                 qbAttemptExpire,
                 (scheduledTime, row) -> new AttemptFinishing.ExpireInput(String.valueOf(row.get("attemptId"))))
-            .maxItems(PlayLimits.EXPIRE_BATCH);
+            .maxItems(maxItems);
     }
 
     /** Every ten minutes (U-22, requirement 6.1); a missed run is made up by the next, which counts from scratch. */

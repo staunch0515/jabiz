@@ -736,7 +736,7 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 
 - **任务 `qb.attempt-expire`**（`play.PlayConfig`）：平台 16k 的逐项任务（决策 D42，`JobDefinition.forEach`），每分钟（UTC，`0 * * * * *`）。
   选取模板 `qb.system.attempts-due`（`IN_PROGRESS` 且 `deadline < 计划时刻 − 宽限 5 秒`，走 V6 的部分索引；`defaultSort` 截止时间、`key` 会话编号），
-  项键为会话编号，每项以系统身份运行 `QB_ATTEMPT_EXPIRE {attemptId}`，各自一个事务，至多 `PlayLimits.EXPIRE_BATCH`（2 000）项，其余由下一分钟接上；
+  项键为会话编号，每项以系统身份运行 `QB_ATTEMPT_EXPIRE {attemptId}`，各自一个事务，至多 `PlayLimits.EXPIRE_BATCH`（2 000）项（`quizbuks.attempt-expire.max-items` 可调低，测试用），其余由下一分钟接上；
   停机错过的分钟由下一次运行按截止时间补上。并发 1、项的锁等待 2 秒（平台缺省）。
 - **`QB_ATTEMPT_EXPIRE`** 未改（Q5a 已与提交共用步骤）：先在锁外读会话，再取发布锁、重读会话，已提交或未到期即什么也不做，到期则按已保存答案评分并结算（钱包锁在发布锁之后）。
   它已是 `internal()`，满足逐项任务的启动检查。
@@ -745,16 +745,16 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
   每项 `QB_PUBLICATION_ADVANCE`（本就在发布锁内重读并按时间迁移、`internal()`），批量由 50 改为 2 000（`PublishingLimits.TICK_BATCH`，`quizbuks.publication-tick.max-items` 可调低，测试用）。
   `QB_PUBLICATION_TICK` 与 `TickInput` / `TickOutput` 删去（消息、`ProcessAccessIT`、`PublicationOwnerIT` 同步）。Q4 的已知问题"一批的事务"随之解决。
 - **竞争与幂等**（自查）：
-  - 任务与提交：都先取发布锁再重读会话；提交只在 `now ≤ deadline + 宽限` 时有效，任务只处理 `now > deadline + 宽限`，二者在时间上互斥；锁内重读保证先到者赢、后到者什么也不做（或 422）。
+  - 任务与提交：都先取发布锁再重读会话；提交只在 `now ≤ deadline + 宽限` 时有效，任务只处理 `now > deadline + 宽限`，二者在时间上互斥（按设计不会重叠，所以没有"按时提交与任务同时"的测试）；锁内重读另外保证同一会话的两次到期处理中后到者什么也不做。
   - 任务与保存进度：保存不取锁，但只在 `now ≤ deadline` 有效，任务至少晚 5 秒才选中；即使慢的保存在任务读取后提交，会话按版本号更新，任务一方得到版本过期，记为 `BUSY`，下一分钟按新的答案完成。
   - 同一会话在不同计划时刻（或两个实例在锁过期后）各跑一次：第二次在锁内读到已完成，什么也不做；同一计划时刻由平台的幂等键 `job:<名称>:<时刻>:<项键>` 保证至多一次。
   - 失败的项（例如数据损坏）只回滚它自己，写入 `sys_job_item_failure`，按连续次数退避重试，不挡住其他项；修好后下一次运行完成并记 `RECOVERED`。
   - 发布锁被在线请求长时间占用：该项 2 秒后 `BUSY`，不算失败、不退避，下一分钟再选中；其他发布上的项照常进行。
   - 锁序：每项只取"发布 → 商家钱包"，与提交相同；各项独立提交，不在一个事务中跨发布持锁，因此不会与在线提交形成"钱包 → 发布"的环。
 - **测试**：
-  - `AttemptExpireIT`（6）：到期会话按已保存答案完成并结算（未到期的不动；同一分钟重跑什么也不选；下一分钟完成后来的）；一次运行补上停机错过的分钟；
+  - `AttemptExpireIT`（6）：到期会话按已保存答案完成并结算（未到期的不动；同一分钟重跑什么也不选；下一分钟完成后来的）；一次运行补上停机错过的分钟；`AttemptExpireBatchIT`（`quizbuks.attempt-expire.max-items = 2`）：先完成截止时间最早的（而非最先开始的）两项，`items.more`，余下的下一分钟；
     一项失败（`option_order` 被破坏）→ 运行 `PARTIAL`、该项回滚并记 `FAILED`，修好后下一次运行完成并记 `RECOVERED`；发布锁被占用（测试持有同名的 advisory 锁）→ 该项 `BUSY`、另一发布的项照常，
-    下一分钟完成；任务与 12 个在线提交在同一商家的三个发布上同时进行 → 提交全部 200、任务无失败、无死锁，余额与账本一致；任务、另一次 `QB_ATTEMPT_EXPIRE` 与本人的迟到提交同时 → 只完成一次（一笔过账、完成人数 1，迟到提交 422）。
+    下一分钟完成；任务与 12 个在线提交在同一商家的三个发布上同时进行 → 提交全部 200、任务无失败、无死锁，余额与账本一致；任务的项与另一次 `QB_ATTEMPT_EXPIRE` 同时处理同一会话 → 只结算一次（一笔过账、完成人数 1）；同时发出的本人提交得到 422，原因是已过时限与宽限，不是竞争。
   - `PublicationTickFailureIT` 改写：坏的日程行只使该项 `FAILED`（运行 `PARTIAL`），同一次运行中其他发布照常上架，第二次失败后按退避跳过（`DEFERRED`）。
   - `PublicationTickBatchIT` 改写：`max-items = 2`，三个到期发布按到期时间分两次运行（`items.more`）。
   - 场景 `qb/play.yml` 增加：U3 开始、保存一题后不提交 → `runJob qb.attempt-expire`（`items.succeeded: 1`）→ `EXPIRED`、得分 2、无奖励；再运行一次无项。快照随之更新（新增会话、计数，占位编号顺延）。
