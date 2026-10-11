@@ -1527,6 +1527,10 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 预读字段放不下用户编号（UUID）→ 错误。测试：`ValueBindingIT`（7，修复前 6 个失败）、`PlatformCheckIT` 补一条，runtime `DatasetRegistryTest` 补一条，core `AccessControlCompilerTest`（2）、`FieldValueCoercerTest` 补充。
 复审后另修：`admin` 入口自己允许注册为启动错误（`SignInEntriesTest`）。
 
+**测试修复（分支 `1.2/fix-blockhound-otel`，QuizBuks PR #123 平台缺口 17）**：事件循环结束被采样的 span 时，OpenTelemetry `BatchSpanProcessor$Worker.addSpan`
+经容量为 1 的队列唤醒导出线程，与之争锁时 `Unsafe#park`，BlockHound 随机使请求 500（只在测试中；生产没有 BlockHound，这是线程交接而非 I/O）。
+`JabizBlockHoundIntegration` 容许该处的等待；回归测试 `TracingUnderBlockHoundTest`（runtime，2，修复前 1 个失败）。应用中的同一容许（`QbBlockHoundIntegration`）可随之删去。
+
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 
 ### 16d 入站 Webhook（3.5–4 天）
