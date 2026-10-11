@@ -41,8 +41,9 @@ d.scope(s -> s
 - `fromContext` 取值为 null（或空白）时：**拒绝请求**（默认拒绝），不能退化为"不过滤"：
   `ScopeUnavailableException` → 403，违规 `SCOPE_UNAVAILABLE`（参数 `source`，即上下文属性名，可用
   `fromContext(field, source, fn)` 指定）。读、写、SQL 模板一律如此。
-- 范围值由运行时从 `RequestContext` 解析（`DatasetScope.resolve`）后传给 `QueryCompiler`；
-  引用存在性检查使用目标实体默认视图的范围；删除前的"仍被引用"检查**不**使用范围（范围外的引用同样阻止删除）。
+- 范围值由运行时从 `RequestContext` 解析（`DatasetScope.resolve`）后传给 `QueryCompiler`，按字段的语义类型转换后绑定（`QueryCompiler.fieldValue`，
+  与查询条件相同：主键与对时态实体的引用为 UUID，文本字段为文本）：`actorId` 等文本与 `uuid` 列比较时按 UUID，读、写、SQL 模板一律如此；
+  转换不了 → 400 `INVALID_VALUE`。固定范围值不符合字段类型是启动错误。引用存在性检查使用目标实体默认视图的范围；删除前的"仍被引用"检查**不**使用范围（范围外的引用同样阻止删除）。
 - 范围同样作用于写入：插入时自动填充，更新时不允许把数据移出范围。
 - 范围作用于时态实体时，**在取得当前版本之后再过滤**【决策 D3】（见 04 第 5.1 节），否则会读到已经移出范围的旧版本。
 - **数据期限**【决策 D28 第 8 条，10 §13.2】：`withinDataPeriod("bookingTime")`（目标实体的时态字段）或

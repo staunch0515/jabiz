@@ -5,10 +5,13 @@ import com.jabiz.dataset.DatasetPolicy;
 import com.jabiz.dataset.DatasetScope;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
+import com.jabiz.entity.FieldValueCoercer;
 import com.jabiz.entity.ListViewDefinition;
 import com.jabiz.entity.SemanticKind;
 import com.jabiz.entity.SemanticKinds;
 import com.jabiz.entity.TemporalRole;
+import com.jabiz.entity.ValidationException;
+import com.jabiz.query.QueryCompiler;
 import com.jabiz.query.QueryOperator;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
@@ -34,8 +37,9 @@ import java.util.Optional;
  * <p>An entity may be served by several datasets, exactly one of which is its default; generic lookups by
  * entity type (URN resolution, reference checks) use the default. Misconfiguration is reported at startup, all
  * problems at once (section 4): unknown target entity or storage engine, missing or duplicate default,
- * scope fields that do not exist or cannot be compared for equality, soft-delete fields of the wrong kind,
- * unknown list views, and undeclared permissions (a warning in the {@code dev} profile). The problems are reported
+ * scope fields that do not exist or cannot be compared for equality, fixed scope values that do not fit their
+ * field, soft-delete fields of the wrong kind, unknown list views, and undeclared permissions (a warning in the
+ * {@code dev} profile). The problems are reported
  * by {@link com.jabiz.runtime.check.PlatformCheckRunner} together with those of the other startup checks.
  */
 @Component
@@ -132,6 +136,8 @@ public final class DatasetRegistry implements PlatformCheck {
                 checkDataPeriod(within, field, entity, entities, label, problems);
             } else if (!allowsEquality(field.kind())) {
                 problems.add(label + ": scope field " + entry.field() + " cannot be compared for equality");
+            } else if (entry instanceof DatasetScope.Fixed fixed) {
+                checkFixedValue(fixed, field, entity, entities, label, problems);
             }
         }
         DatasetPolicy policy = dataset.policy();
@@ -175,6 +181,25 @@ public final class DatasetRegistry implements PlatformCheck {
         boolean explicitListView = !ListViewDefinition.DEFAULT.equals(dataset.listView());
         if (explicitListView && entity.listView(dataset.listView()).isEmpty()) {
             problems.add(label + ": list view " + dataset.listView() + " does not exist on " + entity.name);
+        }
+    }
+
+    /**
+     * A fixed scope value is bound as the type of its field, as every request would bind it (ROADMAP 16b fix): one that
+     * cannot be converted would refuse every request, so it is reported here instead.
+     */
+    private static void checkFixedValue(DatasetScope.Fixed fixed, FieldDefinition field, EntityDefinition entity,
+        EntityDefinitionRegistry entities, String label, List<String> problems) {
+        try {
+            FieldValueCoercer.javaType(field.kind());
+        } catch (IllegalArgumentException unregisteredCustomKind) {
+            return; // reported by SemanticKindChecker
+        }
+        try {
+            new QueryCompiler(entities::find).fieldValue(entity, field, fixed.value());
+        } catch (ValidationException e) {
+            problems.add(label + ": fixed scope value of " + fixed.field() + " does not fit the field: "
+                + e.violations().getFirst().message());
         }
     }
 

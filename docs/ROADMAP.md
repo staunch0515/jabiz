@@ -1518,6 +1518,12 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 **升级**：之前创建的账号（管理员设置的邮箱）在本人登录并验证邮箱之前不能找回密码、匿名重发也不发信，忘记密码时由管理员重设；
 示范的 `CUSTOMER` 角色是数据，需由管理员或演示脚本创建（未创建时注册为 422 `SIGN_UP_DISABLED`，启动告警）；`V33` 与其他并行阶段的平台迁移编号须在合并时协调。
 安全复审记下、暂不修改的（10 §15.6）：持有 `security.user.write` 的人可把受害人邮箱改成自己的，受害人若随后登录要求验证，攻击者即得到已验证的邮箱并可找回密码（二次验证保留；计划发送前向本人显示目标地址）；管理员改邮箱时 `verifiedEmail` 不清除，改回以前验证过的地址即重新算作已验证；16f 的自助关联外部身份实现时，接管须同时删除 `SecUserIdentity` 关联（已写入 16f）；`CurrentPasswordStep` 的错误密码只按客户端地址限流。
+
+**16b 修复（分支 `1.2/fix-16b-guard-binding`，QuizBuks Q2 平台缺口 15、16）**：守卫的预读把用户编号一律按 UUID 绑定，预读文本字段时读取失败、所有人在所有入口被拒；
+数据视图范围值（`fromContext` 的文本）按原样绑定，与 `uuid` 列（引用时态实体）比较时 500，写入时填入的值同样出错。现在两者都经 `QueryCompiler.fieldValue`
+（与查询条件相同的转换：语义类型的规范类型，主键与对时态实体的引用为 UUID；`FieldValueCoercer` 的文本也接受 UUID）：预读以文本给出用户编号，
+范围值在 SQL（数据视图与模板）中、写入前（`QueryCompiler.scopeValues`）都转换，转换不了为 400 `INVALID_VALUE`。启动检查新增：固定范围值不符合字段类型、
+预读字段放不下用户编号（UUID）→ 错误。测试：`ValueBindingIT`（7，修复前 6 个失败）、`PlatformCheckIT` 补一条，runtime `DatasetRegistryTest` 补一条，core `AccessControlCompilerTest`（2）、`FieldValueCoercerTest` 补充。
 复审后另修：`admin` 入口自己允许注册为启动错误（`SignInEntriesTest`）。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
