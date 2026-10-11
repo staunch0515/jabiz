@@ -112,7 +112,8 @@ docs/quizbuks/               本文件等
 | `QbPublicationCard` | P | `publicationId`（主键）、`sponsorId`、`status`、`regions`、`startAt`、`endAt`、`name`、`quizTitle`、`cover`、`versionId`、`maxReward`、`fullScore`、`passScore`、`timeLimitSec`、`questionCount`、`budgetCap`、`maxWinners`、`tiers`（档位的规范 JSON）、`sponsorCountry`、`wentOnAt` | 上架时随计数行插入（Q5）。除状态外全部在提交时冻结，状态由发布的流程在发布锁内同步。答题人的首页、详情、档位与答题流程只读它（时态表上按状态、时间、地区筛选要读全部版本） |
 | `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开 |
 | `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
-| `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟写入（已认证的模板没有缓存）；累计完成数取计数行，实时 |
+| `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟分块写入（只写变化的行；运行时间记在 `QbStatsRun`）；已认证的模板没有缓存；累计完成数取计数行，实时 |
+| `QbPublicationOwner` | 视图 | `publicationId`、`sponsorId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
 
 ### 3.4 钱包与资金
 

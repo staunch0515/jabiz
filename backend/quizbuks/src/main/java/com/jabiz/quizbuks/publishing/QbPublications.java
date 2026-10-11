@@ -38,6 +38,9 @@ public final class QbPublications {
     public static final String COUNTER = "QbPublicationCounter";
     public static final String SCHEDULE = "QbPublicationSchedule";
     public static final String CARD = "QbPublicationCard";
+    public static final String OWNER = "QbPublicationOwner";
+    /** The cards of the caller's own publications: the takers' templates leave them out of what can be started. */
+    public static final String MY_OWNER_DATASET = "urn:jabiz:dataset:me:" + OWNER;
 
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-status";
     public static final String END_REASON_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-end-reason";
@@ -259,12 +262,33 @@ public final class QbPublications {
         eb.field("sponsorCountry", f -> f.physicalColumn("sponsor_country").immutable(true).asText(2));
         eb.field("wentOnAt", f -> f.physicalColumn("went_on_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
+        // When it ended, by whatever reason (its time, its winners, its budget): the statistics job counts a
+        // publication for a month after this.
+        eb.field("endedAt", f -> f.physicalColumn("ended_at").asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
             .columns("name", "quizTitle", "sponsorId", "status", "regions", "startAt", "endAt", "maxReward")
-            .filters("sponsorId", "status", "startAt", "endAt")
+            .filters("sponsorId", "status", "startAt", "endAt", "endedAt")
             .sorts("startAt", "endAt", "wentOnAt", "publicationId")
             .defaultSort("wentOnAt", false));
+    });
+
+    /**
+     * Who published a publication that went on: a read-only view of the cards' keys and sponsors
+     * ({@code qb_publication_owner}). Read only through {@link #MY_OWNER_DATASET}, limited to the caller, so that a
+     * template knows which publications are the caller's own without a parameter the caller could choose.
+     */
+    public static final EntityDefinition OWNER_ENTITY = EntityDefinition.define(OWNER, eb -> {
+        eb.physicalTable("qb_publication_owner");
+        eb.primaryKey("publicationId");
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
+        eb.listView("default", lv -> lv
+            .columns("publicationId", "sponsorId")
+            .filters("publicationId")
+            .sorts("publicationId")
+            .defaultSort("publicationId", true));
     });
 
     /**

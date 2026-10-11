@@ -8,7 +8,9 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
+import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.publishing.PublicationMoves;
+import com.jabiz.quizbuks.publishing.PublicationRules;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.EntityInstance;
@@ -111,10 +113,8 @@ public final class AttemptProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ViewOutput.class))
                 .steps(b -> PlaySteps.loadCard(b, "Load the card", ctx -> ctx.get(PUB_KEY), CARD))
-                .steps(b -> PlaySteps.loadCounter(b, ctx -> ctx.get(PUB_KEY), COUNTER))
-                .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
-                    QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.SPONSOR,
-                        sponsorOf(first(ctx, CARD))), WALLET))
+                .step("Load the caller's attempt", QueryEntities.<ProcessContext>of(QbPlay.TAKER_ATTEMPTS,
+                    ctx -> mine(ctx.get(PUB_KEY)), MINE))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 .step("Load an earlier view", QueryEntities.<ProcessContext>of(QbPlay.defaultDataset(QbPlay.VIEW),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
@@ -126,9 +126,8 @@ public final class AttemptProcesses {
     static void view(ProcessContext ctx) {
         UUID publicationId = ctx.get(PUB_KEY, UUID.class);
         EntityInstance card = first(ctx, CARD);
-        EntityInstance counter = first(ctx, COUNTER);
         String userId = ctx.request().actorId();
-        if (card == null || counter == null || visibleRefusal(ctx, userId, card, counter) != null) {
+        if (card == null || !(first(ctx, MINE) != null || shown(ctx, card))) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
         }
         boolean first = first(ctx, VIEWS) == null;
@@ -143,15 +142,14 @@ public final class AttemptProcesses {
     }
 
     /**
-     * Why the publication is not on the caller's feed (D-Q5-6), or null when it is: the feed's conditions, as
-     * {@link AttemptRules#startRefusal} checks them, but one's own publications are shown.
+     * Whether the publication's page is shown to the caller, as {@code qb.app.publication} decides (an attempt of
+     * theirs aside): live, within its time and aimed at a region of their country. Its winners, budget and sponsor's
+     * funds decide only whether an attempt can start.
      */
-    private static String visibleRefusal(ProcessContext ctx, String userId, EntityInstance card,
-        EntityInstance counter) {
-        EntityInstance wallet = first(ctx, WALLET);
-        String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), PlaySteps.cardOf(card),
-            PlaySteps.counts(counter), QbWallets.balance(wallet), QbWallets.pendingCount(wallet), ctx.opTime());
-        return PlayCodes.OWN_PUBLICATION.equals(refusal) ? null : refusal;
+    private static boolean shown(ProcessContext ctx, EntityInstance card) {
+        return PublicationRules.acceptsNewAttempts(card.get("status"), PlaySteps.instant(card.get("startAt")),
+            PlaySteps.instant(card.get("endAt")), ctx.opTime())
+            && Regions.overlaps(PlaySteps.userRegions(ctx), card.get("regions"));
     }
 
     private static Object sponsorOf(EntityInstance card) {

@@ -1,13 +1,14 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbWallet, QbCountry, QbSponsor]
+entities: [QbPublicationCard, QbPublicationCounter, QbWallet, QbCountry, QbSponsor, QbPublicationOwner]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -38,7 +39,8 @@ permissions: [qb.play]
 -- The conditions of play.AttemptRules.startRefusal (D-Q5-6), which QB_ATTEMPT_START checks again by the server's
 -- clock: live and within its time; aimed at a region of the taker's country (every country is in GLOBAL); budget and
 -- winners not used up, attempts in progress counting with the highest reward and a winner's place each; a sponsor
--- with nothing pending and a balance that pays the highest reward (no wallet row is a balance of 0). Only ordinary
+-- with nothing pending and a balance that pays the highest reward (no wallet row is a balance of 0); not the caller's
+-- own (QbPublicationOwner: the cards of the caller's publications). Only ordinary
 -- tables but the countries and the sponsors, both small. The sponsor's name and avatar are an approved onboarding's
 -- only (Q2 review). The text is found as written: strpos takes it literally, so % _ and \ match themselves.
 SELECT
@@ -76,6 +78,8 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
           < c.{{QbPublicationCard.maxWinners}})
   AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
   AND coalesce(w.{{QbWallet.balance}}, 0) >= c.{{QbPublicationCard.maxReward}}
+  AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
+                  WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0)

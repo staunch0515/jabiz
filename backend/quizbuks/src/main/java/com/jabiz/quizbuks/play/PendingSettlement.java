@@ -220,6 +220,10 @@ public final class PendingSettlement {
             return;
         }
         BigDecimal rate = ctx.get(PARAMS, ParamValues.class).get(QbParams.CREATOR_FEE_RATE, BigDecimal.class);
+        if (!RewardSplit.validRate(rate)) {
+            ctx.reject(AttemptFinishing.feeRateInvalid(rate));
+            return;
+        }
         RewardSplit.Split split = RewardSplit.of(reward, rate);
         QbWallets.change(ctx, wallet, QbWallets.SPONSOR, input.sponsorId(), reward.negate(), -1, reward.negate());
         ctx.put("play.fee", split.fee());

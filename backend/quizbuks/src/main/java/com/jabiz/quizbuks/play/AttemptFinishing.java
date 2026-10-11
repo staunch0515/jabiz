@@ -159,7 +159,9 @@ public final class AttemptFinishing {
                         return ctx;
                     })
                     .outputMapper(ctx -> {
-                        EntityInstance attempt = first(ctx, ctx.contains(ACTIVE) ? CURRENT : FOUND);
+                        // The attempt as read again under the lock when it was (a submission may have come first).
+                        EntityInstance current = first(ctx, CURRENT);
+                        EntityInstance attempt = current != null ? current : first(ctx, FOUND);
                         return new ExpireOutput(String.valueOf((Object) ctx.get(ATTEMPT_KEY)),
                             ctx.contains(PLAN) ? AttemptStatus.EXPIRED
                                 : attempt == null ? null : attempt.get("status"), ctx.contains(PLAN));
@@ -335,6 +337,10 @@ public final class AttemptFinishing {
         Object sponsorId = plan.attempt().get("sponsorId");
         if (QbWallets.pays(wallet, plan.reward())) {
             BigDecimal rate = ctx.get(PARAMS, ParamValues.class).get(QbParams.CREATOR_FEE_RATE, BigDecimal.class);
+            if (!RewardSplit.validRate(rate)) {
+                ctx.reject(feeRateInvalid(rate));
+                return;
+            }
             RewardSplit.Split split = RewardSplit.of(plan.reward(), rate);
             QbWallets.change(ctx, wallet, QbWallets.SPONSOR, sponsorId, plan.reward().negate(), 0, BigDecimal.ZERO);
             ctx.put(SETTLEMENT, new Settlement(RewardStatus.PAID, split.fee(), QbWallets.rewardPosting(
@@ -345,6 +351,12 @@ public final class AttemptFinishing {
             QbWallets.change(ctx, wallet, QbWallets.SPONSOR, sponsorId, BigDecimal.ZERO, 1, plan.reward());
             ctx.put(SETTLEMENT, new Settlement(RewardStatus.PENDING, null, null));
         }
+    }
+
+    /** A commission rate that cannot be applied: refused rather than paid wrong (422). */
+    static Violation feeRateInvalid(BigDecimal rate) {
+        return new Violation(null, PlayCodes.FEE_RATE_INVALID, "The commission rate " + rate + " is not from 0 to "
+            + "below 1", Map.of("rate", String.valueOf(rate)));
     }
 
     /** Writes the attempt, the counters and the publication's move; puts the output. */

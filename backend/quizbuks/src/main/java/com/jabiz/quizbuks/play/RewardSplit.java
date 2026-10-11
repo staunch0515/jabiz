@@ -13,18 +13,23 @@ public final class RewardSplit {
     /** @param fee the platform's part; {@code net} the taker's */
     public record Split(BigDecimal fee, BigDecimal net) {}
 
+    /** Whether a commission rate may be applied: from 0 up to, not including, 1 (null is 0). */
+    public static boolean validRate(BigDecimal rate) {
+        return rate == null || rate.signum() >= 0 && rate.compareTo(BigDecimal.ONE) < 0;
+    }
+
     /**
-     * @param rate a fraction from 0 to 1; null is 0
-     * @throws IllegalArgumentException for a rate outside 0 to 1, or a negative reward
+     * @param rate a fraction from 0 to below 1 ({@link #validRate}); null is 0
+     * @throws IllegalArgumentException for another rate, or a negative reward
      */
     public static Split of(BigDecimal reward, BigDecimal rate) {
         if (reward.signum() < 0) {
             throw new IllegalArgumentException("A reward is never negative: " + reward);
         }
-        BigDecimal r = rate == null ? BigDecimal.ZERO : rate;
-        if (r.signum() < 0 || r.compareTo(BigDecimal.ONE) > 0) {
-            throw new IllegalArgumentException("The commission rate must be between 0 and 1: " + r);
+        if (!validRate(rate)) {
+            throw new IllegalArgumentException("The commission rate must be from 0 to below 1: " + rate);
         }
+        BigDecimal r = rate == null ? BigDecimal.ZERO : rate;
         BigDecimal fee = reward.multiply(r).setScale(0, RoundingMode.FLOOR);
         return new Split(fee, reward.setScale(0, RoundingMode.UNNECESSARY).subtract(fee));
     }

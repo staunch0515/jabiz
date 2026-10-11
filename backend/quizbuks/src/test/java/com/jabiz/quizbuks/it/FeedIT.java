@@ -206,6 +206,25 @@ class FeedIT extends PlayItSupport {
     }
 
     @Test
+    void theCallersOwnPublicationAndAFullOneAreShownButCannotBeStarted() {
+        String sponsor = newSponsor("s-own-detail");
+        profile(sponsor, "JP");
+        credit(sponsor, 10_000);
+        String own = livePublication(sponsor, "Own detail", Map.of("regions", List.of("GLOBAL")));
+        String full = livePublication(sponsor, "Full detail", Map.of("regions", List.of("GLOBAL"), "maxWinners", 1));
+        start(taker(newTaker("t-full-detail", null)), full);
+
+        assertThat(detail(sponsorToken(sponsor), own, "JP", clock.instant())).containsEntry("canStart", false);
+        assertThat(detail(taker(u1()), own, "JP", clock.instant())).containsEntry("canStart", true);
+        assertThat(ids(feed(sponsorToken(sponsor), "JP", Map.of()))).doesNotContain(own);
+        assertThat(ids(feed(taker(u1()), "JP", Map.of()))).contains(own).doesNotContain(full);
+        // Full: the page is shown (and its view recorded), but no attempt can start.
+        assertThat(detail(taker(u1()), full, "JP", clock.instant())).containsEntry("canStart", false);
+        assertThat(tiers(taker(u1()), full, "JP")).hasSize(3);
+        assertThat(run("QB_VIEW", taker(u1()), body("publicationId", full))).containsEntry("firstView", true);
+    }
+
+    @Test
     void theHistoryHasItsCategoriesAndFilters() {
         String sponsor = newSponsor("s-history");
         credit(sponsor, 10_000);

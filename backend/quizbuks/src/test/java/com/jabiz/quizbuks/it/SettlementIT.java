@@ -103,6 +103,31 @@ class SettlementIT extends PlayItSupport {
     }
 
     @Test
+    void aCommissionRateOfOneOrMoreIsRefusedAndANegativeOneIsNotApplied() {
+        // At the proposal: the parameter is numeric(4, 4), below 1.
+        Map<String, Object> problem = refused("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", "qb.creator-fee-rate", "value", "1"), "reason", "Too much"), 422);
+        assertThat(codes(problem)).containsExactly("PARAM_VALUE_INVALID");
+        // A negative one passes the parameter's kind; paying with it is refused, nothing is written.
+        String sponsor = newSponsor("s-bad-fee");
+        String publicationId = livePublication(sponsor, "Bad commission", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 1_000);
+        String taker = taker(newTaker("t-bad-fee", null));
+        String attemptId = (String) start(taker, publicationId).get("attemptId");
+        feeRate("-0.1");
+        try {
+            assertThat(codes(refused("QB_ATTEMPT_SUBMIT", taker, body("attemptId", attemptId, "answers",
+                answers(true, true)), 422))).containsExactly("QB_FEE_RATE_INVALID");
+            assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS");
+            assertThat(balance(sponsor)).isEqualByComparingTo("1000");
+        } finally {
+            feeRate("0");
+        }
+        assertThat(submit(taker, attemptId, answers(true, true))).containsEntry("rewardStatus", "PAID");
+        assertBooksBalance();
+    }
+
+    @Test
     void theWalletsAgreeWithTheLedgerAndNothingIsRewritten() {
         String sponsor = newSponsor("s-books");
         String publicationId = livePublication(sponsor, "Books", Map.of("regions", List.of("GLOBAL")));

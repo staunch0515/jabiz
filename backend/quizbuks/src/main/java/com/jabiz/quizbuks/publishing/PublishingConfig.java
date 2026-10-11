@@ -109,6 +109,23 @@ public class PublishingConfig {
     }
 
     @Bean
+    EntityDefinition qbPublicationOwnerEntity() {
+        return QbPublications.OWNER_ENTITY;
+    }
+
+    /** The caller's own publications, read only (a view over the cards); its write permission is no role's. */
+    @Bean
+    DatasetDefinition qbMyPublicationOwnerDataset() {
+        return DatasetDefinition.define(QbPublications.MY_OWNER_DATASET, d -> d
+            .targetEntityType(QbPublications.OWNER)
+            .asDefault()
+            .permissions(QbPermissions.PLAY, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    @Bean
     ProcessDefinition<QbWallets.SponsorRef, PublicationFunds.RestoredOutput, ProcessContext>
         qbPublicationFundsRestored() {
         return FUNDS_RESTORED;

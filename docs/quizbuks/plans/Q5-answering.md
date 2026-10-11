@@ -677,6 +677,26 @@ Q6 之前，商家没有办法充值，但结算、待支付与补发都需要�
 
 **已知问题**：
 - 同一版本被多个发布使用时，完成其中一个的答题人知道另一个的答案（一人一次只按发布）。是否限制为"一人一版本"待需求方确认。
-- 抽成参数是 `numeric(5,4)`，没有 0–1 的范围规则；受控变更若发布了大于 1 的比例，付款的提交会失败（500）直到改回。
+- 平台的参数没有下限规则：负的抽成比例能被提出与发布，只在付款时被拒（422 `QB_FEE_RATE_INVALID`，见下）。
 - 过了时限而未提交的会话在 Q5b 的任务之前一直占着名额与最高奖励的预算（只有 `QB_ATTEMPT_EXPIRE` 被调用时才释放）。
 - 同一用户并发两次 `QB_VIEW` 时第二次可能因唯一约束失败（只影响浏览记录）。
+
+### 评审后的修正（2026-10-11）
+
+- **统计任务分块**：`QB_PUBLICATION_STATS_REFRESH` 按编号取出要统计的发布（至多 `PlayLimits.STATS_BATCH`），按 `quizbuks.stats.chunk-size`
+  （缺省 500，至多 `STATS_CHUNK_MAX` = 1000 = 统计数据视图的 `maxWriteBatchSize`）切块，每块一个子流程 `QB_PUBLICATION_STATS_CHUNK`（模板
+  `qb.system.publication-stats` 改为按 `ids` 统计），不再因一次写入超过批量而每次 422。要统计的发布：进行中、暂停、预算不足，以及**实际结束**（`QbPublicationCard.endedAt`，
+  卡片随状态写入；名额或预算提前结束的也按结束时间）31 天内的。
+- **统计时间**：新普通表 `qb_stats_run`（`QbStatsRun`，每个任务一行）每次运行记下运行时间；详情的 `statsAt` 取它，不再取"计数最后变化的时间"。行仍只在计数变化时写。
+- **`QB_VIEW` 与详情一致**：只要求卡片存在且（进行中、在时间内、地区有交集，或本人有会话）；名额、预算、商家余额只决定能否开始。详情与档位模板同样按此显示，
+  `canStart` 另加名额、预算、商家余额、本人尚无会话、**不是本人的发布**。
+- **本人的发布**：新的只读实体 `QbPublicationOwner`（迁移中的视图 `qb_publication_owner`，卡片的编号与商家），数据视图 `urn:jabiz:dataset:me:QbPublicationOwner`
+  限本人；首页排除本人的发布，详情的 `canStart` 为假。模板不必让调用方传自己的编号。
+- **`QB_ATTEMPT_EXPIRE` 的输出**取锁内重读的会话（与提交竞争时不再报旧的 `IN_PROGRESS`）。
+- **开发入账的启动检查**也拒绝受限的正式密钥（`rk_live_`）。
+- **抽成比例的范围**：参数改为 `numeric(4,4)`（新安装：1 及以上在提出时即 422 `PARAM_VALUE_INVALID`）；付款时（提交、补发）比例不在 0 到 1（不含）之间即 422
+  `QB_FEE_RATE_INVALID`，什么也不写。已有安装的参数种类仍是 `numeric(5,4)`（`QB_SETUP` 不改已有参数）：由付款时的检查兜底。平台缺口：参数没有上下限规则。
+- 新测试：`StatsChunkIT`（块大小 2，6 个发布全部统计；提前结束的发布一个月后不再统计；无变化的运行也记下时间）、`FeedIT` 的本人发布与名额已满的详情、
+  `PlayOwnerIT` 的暂停后有会话者仍可浏览、`SettlementIT` 的抽成比例（提出 1 被拒、负比例付款被拒）、单元测试的 `validRate` 与 `rk_live_`。
+  `QB_ATTEMPT_EXPIRE` 与提交的竞争没有确定性的测试（输出取锁内的会话，逻辑见代码）。`./gradlew :quizbuks:check --max-workers=2` 通过（263 个测试）；
+  `setup` 的快照因参数种类与说明改变而更新。

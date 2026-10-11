@@ -15,6 +15,8 @@ import java.util.List;
 @Component
 class DevCreditCheck implements PlatformCheck {
 
+    static final java.util.regex.Pattern LIVE_KEY = java.util.regex.Pattern.compile("(sk|rk)_live_");
+
     private final boolean enabled;
     private final String stripeKey;
 
@@ -30,7 +32,8 @@ class DevCreditCheck implements PlatformCheck {
     }
 
     static List<CheckProblem> problems(boolean enabled, String stripeKey) {
-        if (enabled && stripeKey != null && stripeKey.startsWith("sk_live_")) {
+        // Secret and restricted keys of live mode alike.
+        if (enabled && stripeKey != null && LIVE_KEY.matcher(stripeKey).lookingAt()) {
             return List.of(CheckProblem.error(CountryCatalog.CATEGORY, DevCredit.ENABLED, "The development credit "
                 + "(QB_WALLET_DEV_CREDIT) is on next to a live Stripe key: turn it off in production"));
         }

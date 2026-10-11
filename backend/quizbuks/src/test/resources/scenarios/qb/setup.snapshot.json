@@ -813,12 +813,12 @@
       "paramId" : "#uuid:93",
       "paramKey" : "qb.creator-fee-rate",
       "valueKind" : {
-        "precision" : 5,
+        "precision" : 4,
         "scale" : 4,
         "type" : "numeric"
       },
       "value" : "0.0000",
-      "description" : "Commission of the platform on each reward, as a fraction (0.1 = 10%)",
+      "description" : "Commission of the platform on each reward, as a fraction from 0 to below 1 (0.1 = 10%)",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -893,7 +893,7 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.creator-fee-rate\",\"valueKind\":{\"precision\":5,\"scale\":4,\"type\":\"numeric\"},\"value\":\"0.0000\",\"description\":\"Commission of the platform on each reward, as a fraction (0.1 = 10%)\"}",
+      "changeValues" : "{\"paramKey\":\"qb.creator-fee-rate\",\"valueKind\":{\"precision\":4,\"scale\":4,\"type\":\"numeric\"},\"value\":\"0.0000\",\"description\":\"Commission of the platform on each reward, as a fraction from 0 to below 1 (0.1 = 10%)\"}",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",
       "status" : "PUBLISHED",

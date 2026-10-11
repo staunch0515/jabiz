@@ -93,8 +93,10 @@ class SetupIT extends QbItSupport {
         publishProposals(setup());
         for (String key : QbParams.CONTROLLED) {
             // A valid value of the parameter's kind: refused for being controlled, not for its value.
-            String value = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
-                .valueKind().get("type").equals("bool") ? "true" : "1";
+            Object type = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
+                .valueKind().get("type");
+            // The commission rate is a fraction below 1.
+            String value = "bool".equals(type) ? "true" : "numeric".equals(type) ? "0.1" : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()

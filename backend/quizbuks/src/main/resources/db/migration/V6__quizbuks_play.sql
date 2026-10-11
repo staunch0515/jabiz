@@ -28,10 +28,16 @@ CREATE TABLE qb_publication_card (
     tiers           varchar(4000)  NOT NULL,
     sponsor_country varchar(2),
     went_on_at      timestamptz    NOT NULL,
+    ended_at        timestamptz,
     version         bigint         NOT NULL
 );
 CREATE INDEX qb_publication_card_status_idx ON qb_publication_card (status, end_at);
 CREATE INDEX qb_publication_card_sponsor_idx ON qb_publication_card (sponsor_id);
+-- The statistics job counts publications for a month after they ended, by whatever reason.
+-- Who published each card: read through a dataset limited to the caller, so the takers' templates leave the caller's
+-- own publications out of what can be started.
+CREATE VIEW qb_publication_owner AS SELECT publication_id, sponsor_id FROM qb_publication_card;
+CREATE INDEX qb_publication_card_ended_idx ON qb_publication_card (ended_at) WHERE status = 'ENDED';
 
 -- An attempt: one per taker and publication (requirement 5.3-6). The answers, the options' order and the result are
 -- canonical JSON (play.Answers, play.Scoring); the result, with the correct answers, is written only at the end.
@@ -90,6 +96,13 @@ CREATE TABLE qb_publication_stats (
     version        bigint        NOT NULL
 );
 
+-- When each statistics job last ran (the time of the counts the detail page shows).
+CREATE TABLE qb_stats_run (
+    job          varchar(64) PRIMARY KEY,
+    refreshed_at timestamptz NOT NULL,
+    version      bigint      NOT NULL
+);
+
 -- The wallets' balance cache (the ledger is the truth), changed only under the wallet's lock. A balance never goes
 -- below 0: the processes check it under the lock, this constraint stops anything else.
 CREATE TABLE qb_wallet (
@@ -109,7 +122,7 @@ CREATE TABLE qb_wallet (
 -- in their order) and its sponsor's country.
 INSERT INTO qb_publication_card (publication_id, sponsor_id, status, regions, start_at, end_at, name, quiz_title, cover,
     version_id, max_reward, full_score, pass_score, time_limit_sec, question_count, budget_cap, max_winners, tiers,
-    sponsor_country, went_on_at, version)
+    sponsor_country, went_on_at, ended_at, version)
 SELECT p.publication_id, p.sponsor_id, p.status, p.regions, p.start_at, p.end_at, p.name, v.title,
     CAST(v.content AS jsonb) ->> 'cover', p.version_id, p.max_reward, p.full_score, p.pass_score, p.time_limit_sec,
     v.question_count, p.budget_cap, p.max_winners,
@@ -124,7 +137,7 @@ SELECT p.publication_id, p.sponsor_id, p.status, p.regions, p.start_at, p.end_at
                                  WHERE user_id = p.sponsor_id
                                  ORDER BY profile_id, effect_start_time DESC, version_no DESC) f
      WHERE NOT f.is_deleted LIMIT 1),
-    coalesce(p.approved_at, p.submitted_at, p.edited_at), 1
+    coalesce(p.approved_at, p.submitted_at, p.edited_at), p.ended_at, 1
 FROM (SELECT DISTINCT ON (publication_id) * FROM qb_publication_version
       ORDER BY publication_id, effect_start_time DESC, version_no DESC) p
 JOIN qb_publication_schedule s ON s.publication_id = p.publication_id

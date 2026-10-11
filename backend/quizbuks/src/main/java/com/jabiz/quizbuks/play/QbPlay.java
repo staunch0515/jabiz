@@ -16,6 +16,7 @@ public final class QbPlay {
     public static final String ATTEMPT = "QbAttempt";
     public static final String VIEW = "QbPublicationView";
     public static final String STATS = "QbPublicationStats";
+    public static final String STATS_RUN = "QbStatsRun";
 
     public static final String ATTEMPT_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:attempt-status";
     public static final String REWARD_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:reward-status";
@@ -122,6 +123,24 @@ public final class QbPlay {
             .filters("publicationId", "refreshedAt")
             .sorts("last24h", "last30d", "refreshedAt")
             .defaultSort("last24h", false));
+    });
+
+    /**
+     * The last run of a statistics job: when its counts were taken. One row per job; the detail page shows it as the
+     * time of the completion counts, which change only when the counts do.
+     */
+    public static final EntityDefinition STATS_RUN_ENTITY = EntityDefinition.define(STATS_RUN, eb -> {
+        eb.physicalTable("qb_stats_run");
+        eb.primaryKey("job");
+        eb.field("job", f -> f.physicalColumn("job").immutable(true).required(true).asText(64));
+        eb.field("refreshedAt", f -> f.physicalColumn("refreshed_at").required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("job", "refreshedAt")
+            .filters("job")
+            .sorts("job", "refreshedAt")
+            .defaultSort("job", true));
     });
 
     private QbPlay() {}

@@ -1,14 +1,14 @@
 /*---
 id: qb.system.publication-stats
-description: Completions of the last hour, day, week and month of the publications live or ended lately, for the statistics job
+description: Completions of the last hour, day, week and month of some publications, for the statistics job
 entities: [QbPublicationCard, QbAttempt, QbPublicationStats]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublicationStats: urn:jabiz:dataset:default:QbPublicationStats
 params:
-  at:    { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time counted back from }
-  since: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: Publications ended before this are left as they are }
+  at:  { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time counted back from }
+  ids: { like: QbPublicationCard.publicationId, list: true, required: true, description: The publications of one chunk }
 results:
   publicationId: { from: QbPublicationCard.publicationId }
   last1h:        { kind: { type: numeric, precision: 9, scale: 0 } }
@@ -24,8 +24,9 @@ list:
   key: [publicationId]
 permissions: [qb.play.system]
 ---*/
--- Cards that are running, or ended after "since"; the attempts finished within the month before "at", through the
--- index on (publication, submission time); the stored counts beside them, so the job writes only what changed.
+-- One chunk of the job (play.PublicationStats chooses the publications): the attempts finished within the month
+-- before "at", through the index on (publication, submission time); the stored counts beside them, so the job writes
+-- only what changed.
 SELECT
     c.{{QbPublicationCard.publicationId}} AS publicationId,
     CAST(count(a.{{QbAttempt.attemptId}}) FILTER (
@@ -45,7 +46,6 @@ LEFT JOIN {{QbAttempt}} a ON a.{{QbAttempt.publicationId}} = c.{{QbPublicationCa
     AND a.{{QbAttempt.submittedAt}} > CAST(:at AS timestamptz) - interval '30 days'
     AND a.{{QbAttempt.submittedAt}} <= CAST(:at AS timestamptz)
 LEFT JOIN {{QbPublicationStats}} s ON s.{{QbPublicationStats.publicationId}} = c.{{QbPublicationCard.publicationId}}
-WHERE c.{{QbPublicationCard.status}} IN ('LIVE', 'PAUSED', 'FUNDS_SHORT')
-   OR (c.{{QbPublicationCard.status}} = 'ENDED' AND c.{{QbPublicationCard.endAt}} > :since)
+WHERE c.{{QbPublicationCard.publicationId}} = ANY(:ids)
 GROUP BY c.{{QbPublicationCard.publicationId}}, s.{{QbPublicationStats.version}}, s.{{QbPublicationStats.last1h}},
     s.{{QbPublicationStats.last24h}}, s.{{QbPublicationStats.last7d}}, s.{{QbPublicationStats.last30d}}

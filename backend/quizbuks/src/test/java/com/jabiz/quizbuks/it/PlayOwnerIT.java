@@ -55,6 +55,12 @@ class PlayOwnerIT extends PlayItSupport {
             .containsEntry("firstView", false);
         assertThat(query("SELECT count(*) AS n FROM qb_publication_view WHERE publication_id = ?::uuid",
             publicationId).getFirst()).containsEntry("n", 1L);
+        // Paused, it is not shown: unless the caller has an attempt of it, as the detail page.
+        String paused = livePublication(sponsor, "Viewed paused", Map.of("regions", List.of("GLOBAL")));
+        start(taker(u2()), paused);
+        run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", paused));
+        assertThat(run("QB_VIEW", taker(u2()), body("publicationId", paused))).containsEntry("firstView", true);
+        refused("QB_VIEW", taker(u1()), body("publicationId", paused), 404);
         // Not aimed at U2's region; and nothing that never went on.
         refused("QB_VIEW", taker(u2()), body("publicationId", publicationId), 404);
         refused("QB_VIEW", taker(u1()), body("publicationId", UUID.randomUUID().toString()), 404);

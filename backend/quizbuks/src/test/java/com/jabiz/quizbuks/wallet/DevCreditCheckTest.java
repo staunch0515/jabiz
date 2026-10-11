@@ -10,7 +10,11 @@ class DevCreditCheckTest {
     void refusesTheDevelopmentCreditNextToALiveStripeKey() {
         assertThat(DevCreditCheck.problems(true, "sk_live_abc")).singleElement()
             .satisfies(problem -> assertThat(problem.toString()).contains(DevCredit.ENABLED));
+        // Restricted keys of live mode too.
+        assertThat(DevCreditCheck.problems(true, "rk_live_abc")).hasSize(1);
         assertThat(DevCreditCheck.problems(true, "sk_test_abc")).isEmpty();
+        assertThat(DevCreditCheck.problems(true, "rk_test_abc")).isEmpty();
+        assertThat(DevCreditCheck.problems(true, "pk_live_abc")).isEmpty();
         assertThat(DevCreditCheck.problems(true, "")).isEmpty();
         assertThat(DevCreditCheck.problems(false, "sk_live_abc")).isEmpty();
     }

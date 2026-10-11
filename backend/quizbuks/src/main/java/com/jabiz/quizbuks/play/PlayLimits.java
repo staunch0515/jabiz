@@ -22,8 +22,16 @@ public final class PlayLimits {
     /** Attempts one run of the expiry job finishes, by deadline (Q5b, D-Q5-9). */
     public static final int EXPIRE_BATCH = 2_000;
 
-    /** Publications whose completions the statistics job counts in one run: those live or ended lately. */
-    public static final int STATS_BATCH = 10_000;
+    /** Most publications the statistics job counts in one run: those running or ended lately. */
+    public static final int STATS_BATCH = 100_000;
+
+    /**
+     * Most publications one chunk of the statistics job counts and writes, in one commit to the statistics' dataset
+     * (its {@code maxWriteBatchSize}); the run is cut into chunks of {@code quizbuks.stats.chunk-size} (default
+     * {@link #STATS_CHUNK_DEFAULT}), no more than this.
+     */
+    public static final int STATS_CHUNK_MAX = 1_000;
+    public static final int STATS_CHUNK_DEFAULT = 500;
 
     /** Days after its end a publication's completion counts are still refreshed (the 30-day window and a day). */
     public static final int STATS_DAYS = 31;

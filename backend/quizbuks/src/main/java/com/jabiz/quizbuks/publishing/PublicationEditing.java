@@ -294,7 +294,12 @@ final class PublicationEditing {
     static void card(ProcessContext ctx, String status) {
         EntityInstance row = first(ctx, CARD);
         if (row != null && !status.equals(row.get("status"))) {
-            ctx.changes().update(QbPublications.CARD, row.id(), row.version(), Map.of("status", status));
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("status", status);
+            if (PublicationStatus.ENDED.equals(status)) {
+                values.put("endedAt", ctx.opTime());
+            }
+            ctx.changes().update(QbPublications.CARD, row.id(), row.version(), values);
         }
     }
 

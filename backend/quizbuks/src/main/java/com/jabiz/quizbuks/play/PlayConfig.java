@@ -30,9 +30,14 @@ import java.time.ZoneOffset;
 public class PlayConfig {
 
     private final String poolRef;
+    private final ProcessDefinition<PublicationStats.RefreshInput, PublicationStats.RefreshOutput, ProcessContext>
+        stats;
 
-    PlayConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    /** @param statsChunk publications one chunk of the statistics job counts and writes (1 to 1000) */
+    PlayConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${quizbuks.stats.chunk-size:" + PlayLimits.STATS_CHUNK_DEFAULT + "}") int statsChunk) {
         this.poolRef = poolRef;
+        this.stats = PublicationStats.refresh(statsChunk);
     }
 
     private DatasetDefinition defaultDataset(String entity, String readPermission, int maxWriteBatch) {
@@ -72,7 +77,17 @@ public class PlayConfig {
 
     @Bean
     DatasetDefinition qbPublicationStatsDataset() {
-        return defaultDataset(QbPlay.STATS, QbPermissions.ADMIN_PUBLICATION_READ, PlayLimits.STATS_BATCH);
+        return defaultDataset(QbPlay.STATS, QbPermissions.ADMIN_PUBLICATION_READ, PlayLimits.STATS_CHUNK_MAX);
+    }
+
+    @Bean
+    EntityDefinition qbStatsRunEntity() {
+        return QbPlay.STATS_RUN_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbStatsRunDataset() {
+        return defaultDataset(QbPlay.STATS_RUN, QbPermissions.ADMIN_PUBLICATION_READ, 10);
     }
 
     /**
@@ -147,14 +162,17 @@ public class PlayConfig {
     @Bean
     ProcessDefinition<PublicationStats.RefreshInput, PublicationStats.RefreshOutput, ProcessContext>
         qbPublicationStatsRefresh() {
-        return STATS;
+        return stats;
+    }
+
+    @Bean
+    ProcessDefinition<PublicationStats.ChunkInput, PublicationStats.ChunkOutput, ProcessContext>
+        qbPublicationStatsChunk() {
+        return PublicationStats.chunk();
     }
 
     private static final ProcessDefinition<QbWallets.SponsorRef, PendingSettlement.SettleOutput, ProcessContext>
         SETTLE = PendingSettlement.settle();
-
-    private static final ProcessDefinition<PublicationStats.RefreshInput, PublicationStats.RefreshOutput,
-        ProcessContext> STATS = PublicationStats.refresh();
 
     /** The next batch of pending rewards, in a transaction of its own (D-Q5-5). */
     @Bean
@@ -166,7 +184,7 @@ public class PlayConfig {
     /** Every ten minutes (U-22, requirement 6.1); a missed run is made up by the next, which counts from scratch. */
     @Bean
     JobDefinition<PublicationStats.RefreshInput> qbPublicationStatsJob() {
-        return JobDefinition.cron(PublicationStats.JOB, "0 */10 * * * *", ZoneOffset.UTC, STATS,
+        return JobDefinition.cron(PublicationStats.JOB, "0 */10 * * * *", ZoneOffset.UTC, stats,
             PublicationStats.RefreshInput::new);
     }
 }
