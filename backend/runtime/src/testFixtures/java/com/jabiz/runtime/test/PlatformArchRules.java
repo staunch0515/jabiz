@@ -109,7 +109,35 @@ public final class PlatformArchRules {
                 + "(decision D38)");
     }
 
-    private static final DescribedPredicate<JavaClass> NETWORK_TYPES =new DescribedPredicate<>(
+        /** The platform's own ways of starting processes and of acting as someone, which only the platform uses. */
+    static final List<String> PROCESS_MACHINERY = List.of("com.jabiz.runtime.process.ProcessExecutor",
+        "com.jabiz.runtime.process.ExecutionOptions", "com.jabiz.runtime.security.ActingUser");
+
+    /**
+     * Business code does not start processes or choose who runs them (decision D41): no {@code ProcessExecutor}, no
+     * {@code ExecutionOptions} (with which a platform entry point declares itself), no {@code ActingUser}, and no
+     * {@code RequestContext.system}. Business processes run through the process API, events, jobs and
+     * {@code CallProcess}, as their declarations allow; reading who acts ({@code RequestContext.SYSTEM_ACTOR}) is fine.
+     *
+     * @param businessPackages the application's packages, ArchUnit style ({@code com.example.app..})
+     */
+    public static ArchRule noProcessMachinery(String... businessPackages) {
+        return noClasses().that().resideInAnyPackage(businessPackages)
+            .should().dependOnClassesThat(PROCESS_MACHINERY_TYPES)
+            .orShould().callMethod("com.jabiz.context.RequestContext", "system", "java.util.Locale",
+                "java.lang.String")
+            .because("processes are started by the platform, as their declarations allow (decision D41)");
+    }
+
+    private static final DescribedPredicate<JavaClass> PROCESS_MACHINERY_TYPES = new DescribedPredicate<>(
+        "are the platform's process executor, execution options or acting user") {
+        @Override
+        public boolean test(JavaClass type) {
+            return PROCESS_MACHINERY.contains(type.getName());
+        }
+    };
+
+    private static final DescribedPredicate<JavaClass> NETWORK_TYPES = new DescribedPredicate<>(
         "are sockets, socket channels, URL connections or URL resources") {
         @Override
         public boolean test(JavaClass type) {

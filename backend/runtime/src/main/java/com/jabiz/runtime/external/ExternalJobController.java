@@ -68,7 +68,8 @@ class ExternalJobController {
     Mono<ResponseEntity<ExternalJobStatus>> cancelExternalJob(@PathVariable String jobId,
         @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
         return RequestContexts.current().flatMap(request -> executor.run(ExternalJobProcesses.CANCEL_PROCESS,
-                new ExternalJobProcesses.CancelInput(jobId), new ExecutionOptions(idempotencyKey))
+                new ExternalJobProcesses.CancelInput(jobId),
+                new ExecutionOptions(idempotencyKey).atEntryOf(ExternalJobProcesses.CANCEL_PROCESS))
             .then(status(jobId, request, ExternalJobPermissions.CANCEL)))
             .map(status -> ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(status));
     }

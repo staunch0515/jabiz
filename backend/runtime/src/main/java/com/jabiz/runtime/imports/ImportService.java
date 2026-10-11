@@ -142,7 +142,8 @@ public class ImportService {
             inputs.validate(input);
             return observations.mono(PlatformObservations.IMPORT, "import preview " + definition.id(),
                 KeyValues.of("import", definition.id(), "mode", "preview"),
-                executor.run(importProcess(), input, ExecutionOptions.DRY_RUN).map(ProcessResult::output));
+                executor.run(importProcess(), input, ExecutionOptions.DRY_RUN.atEntryOf(importProcess()))
+                    .map(ProcessResult::output));
         });
     }
 
@@ -161,7 +162,8 @@ public class ImportService {
             inputs.validate(input);
             return observations.mono(PlatformObservations.IMPORT, "import commit " + definition.id(),
                 KeyValues.of("import", definition.id(), "mode", "commit"),
-                executor.run(importProcess(), input, ExecutionOptions.NONE).map(ProcessResult::output));
+                executor.run(importProcess(), input, ExecutionOptions.NONE.atEntryOf(importProcess()))
+                    .map(ProcessResult::output));
         });
     }
 
@@ -210,12 +212,12 @@ public class ImportService {
      * its mapping permission and the mapping's fields.
      */
     public Mono<ImportMappings.MappingOutput> saveMapping(String importId, String name, ImportMapping mapping) {
-        return executor.execute(process(ImportMappings.SAVE), new ImportMappings.SaveInput(importId, name,
+        return executor.executeAtEntry(process(ImportMappings.SAVE), new ImportMappings.SaveInput(importId, name,
             mapping == null ? ImportMapping.DEFAULT : mapping));
     }
 
     public Mono<ImportMappings.MappingOutput> removeMapping(String importId, String name) {
-        return executor.execute(process(ImportMappings.REMOVE), new ImportMappings.RemoveInput(importId, name));
+        return executor.executeAtEntry(process(ImportMappings.REMOVE), new ImportMappings.RemoveInput(importId, name));
     }
 
     @SuppressWarnings("unchecked")

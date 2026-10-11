@@ -77,8 +77,9 @@ class FreightBillingConfig {
     /** Closes the previous month at 00:05 on the first of each month, Japan time. */
     @Bean
     JobDefinition<FreightBilling.CloseInput> freightMonthCloseJob() {
+        // The month is also closed by hand (logistics.freight.close): the process stays open (decision D41).
         return JobDefinition.cron(FreightBilling.CLOSE_JOB, "0 5 0 1 * *", FreightBilling.ZONE,
-            FreightBilling.CLOSE_PROCESS, FreightBilling::previousMonth);
+            FreightBilling.CLOSE_PROCESS, FreightBilling::previousMonth).manualToo();
     }
 
     /** Posts each closed month's revenue to the ledger. */

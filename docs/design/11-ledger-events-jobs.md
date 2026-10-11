@@ -140,7 +140,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
-- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean。
+- 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean；流程应为 `internal()`（D41，06 §8）：`entryOnly()` / `subProcessOnly()` 为错误，普通流程为警告，
+  除非订阅声明 `manualToo()`（该流程也供人经流程接口运行）。
 
 ### 2.4 Webhook：把事件送给其他系统【D33】
 
@@ -200,7 +201,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   ```java
   EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
       event -> new Input(InboundEvents.ref(event).inboundEventId()));
-  // 流程中（消费流程只由投递以系统身份运行：`internal()` 只是不进目录，流程自己拒绝其他执行者）：
+  // 流程声明 internal()：只由投递以系统身份运行，其他执行者（含持有全部权限的管理员）在启动时即 403 PROCESS_INTERNAL（06 §8，D41）：
   .step("Load the payment", LoadInboundEvent.of("pay", "payment_intent.succeeded",
       ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
   ```
@@ -256,7 +257,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
 - `GET /api/jobs`（权限 `job.read`）：任务、cron、时区、流程、下一次计划时刻、最近 10 次执行。
-- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean。
+- 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；流程的声明同事件消费者（`internal()`，或普通流程加 `JobDefinition…manualToo()`，D41）。
+  平台的 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 也可手工运行，任务声明 `manualToo()`。
 - 场景回放：步骤 `runJob: {job, at, outcome}`（`at` 缺省为当前时钟，`outcome` 缺省 `SUCCEEDED`）与 `deliverEvents: true`（07 §3.1）。
 
 ## 4a. 异步外部作业【D38 第 3–5 条，阶段 16e-2】
@@ -327,7 +329,7 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   完成与失败流程必须是 `internal()`（启动检查），并由它们以 `CreateTask` / `SendMail` 通知请求人。
   **在 D41 决定之前**，`internal()` 只是不进目录，持有权限的人仍能经 `/api/processes` 调用：`EXTERNAL_JOB_COMPLETE` 的步骤与示范的
   `PRODUCT_COPY_APPLY` / `PRODUCT_COPY_FAILED` 都在步骤中拒绝系统以外的操作人（403，同 16d 的 `RecordInboundEvent` 与示范消费者），应用的回调流程须照做。
-- **取消**：`POST /api/external-jobs/{id}/cancel` 运行 `EXTERNAL_JOB_CANCEL`（权限 `external-job.cancel` 只用于流程 API；入口自己检查）。
+- **取消**：`POST /api/external-jobs/{id}/cancel` 运行 `EXTERNAL_JOB_CANCEL`（`entryOnly()`，只由该入口以调用人身份运行，D41；步骤检查请求人本人或持有 `external-job.cancel` 者）。
   请求人本人或持有 `external-job.cancel` 的人，其他人 404（与不存在相同）——先在不加锁的行上判断，无权的人不会取得或等待行锁；
   然后 `FOR UPDATE` 锁作业行；已有最终结果或已取消 → 422 `EXTERNAL_JOB_FINISHED`。
   插入 `sys_external_job_cancel`；没有正在执行的尝试则同时写最终结果 `CANCELLED`（含事件，不调用流程）；执行中的，执行器记录尝试后写 `CANCELLED` 并丢弃结果。

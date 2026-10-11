@@ -17,6 +17,7 @@ import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.i18n.PlatformLanguages;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -463,7 +464,7 @@ public class QueryCompiler {
                 parts.add(periodCondition(def, fd, period, binder));
                 continue;
             }
-            Object value = FieldValueCoercer.coerce(fd, entry.getValue(), false);
+            Object value = fieldValue(def, fd, entry.getValue());
             parts.add(SqlIdentifiers.require(fd.physicalColumn()) + " = :" + binder.bind(BoundValue.of(value)));
         }
         DatasetPolicy policy = dataset.policy();
@@ -686,6 +687,39 @@ public class QueryCompiler {
                 Map.of("operator", operator.name()))));
         }
         return fd;
+    }
+
+    /**
+     * The scope values resolved for a request, each converted to the type of its field as {@link #fieldValue} does
+     * (a period condition is kept as it is), so that writes fill in and compare the same values reads bind. Values of
+     * other entities than the dataset's target are returned unchanged, as the scope does not apply to them.
+     *
+     * @throws ValidationException ({@code INVALID_VALUE}) if a value cannot be converted
+     */
+    public Map<String, Object> scopeValues(DatasetDefinition dataset, EntityDefinition def,
+        Map<String, Object> scopeValues) {
+        if (!dataset.isTarget(def.name) || scopeValues.isEmpty()) {
+            return scopeValues;
+        }
+        Map<String, Object> converted = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : scopeValues.entrySet()) {
+            converted.put(entry.getKey(), entry.getValue() instanceof DatasetScope.PeriodCondition
+                ? entry.getValue()
+                : fieldValue(def, resolveField(def, entry.getKey()), entry.getValue()));
+        }
+        return Collections.unmodifiableMap(converted);
+    }
+
+    /**
+     * A value as it is bound against a field: converted to the canonical type of the field's semantic kind
+     * ({@link FieldValueCoercer}), and for the primary key, or a reference to a temporal entity, to the UUID that
+     * identifies the instance. Text from a request (an actor id, a scope value, a filter) is thereby compared with a
+     * {@code uuid} column as a UUID, and a UUID with a text column as text.
+     *
+     * @throws ValidationException ({@code INVALID_VALUE}) if the value cannot be converted
+     */
+    public Object fieldValue(EntityDefinition def, FieldDefinition fd, Object value) {
+        return coerce(def, fd, value);
     }
 
     private Object coerce(EntityDefinition def, FieldDefinition fd, Object value) {

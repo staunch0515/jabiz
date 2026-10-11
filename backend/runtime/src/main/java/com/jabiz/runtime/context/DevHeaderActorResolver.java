@@ -40,6 +40,11 @@ public final class DevHeaderActorResolver implements ActorResolver {
         if (actorId == null) {
             return null;
         }
+        // Not even in development does a request pass for the platform itself (decision D41) or for nobody.
+        if (com.jabiz.context.RequestContext.SYSTEM_ACTOR.equals(actorId)
+            || com.jabiz.context.RequestContext.ANONYMOUS_ACTOR.equals(actorId)) {
+            throw new IllegalArgumentException("Reserved actor in header " + ACTOR_HEADER);
+        }
         return new Actor(actorId,
             token(headers.getFirst(TENANT_HEADER), TENANT_HEADER),
             tokens(headers.getFirst(ROLES_HEADER), ROLES_HEADER),

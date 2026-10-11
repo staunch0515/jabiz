@@ -129,6 +129,16 @@ class DatasetRegistryTest {
             dataset("urn:ds", d -> d.asDefault().scope(s -> s.fixed("custom", 1))))).doesNotThrowAnyException();
     }
 
+    /** ROADMAP 16b fix: a fixed scope value is bound as the type of its field, so one that does not fit is reported. */
+    @Test
+    void fixedScopeValuesMustFitTheirField() {
+        assertThatThrownBy(() -> registry(dataset("urn:ds", d -> d.asDefault().scope(s -> s.fixed("express", "maybe")))))
+            .hasMessageContaining("Dataset urn:ds | fixed scope value of express does not fit the field: ")
+            .hasMessageContaining("not a boolean: 'maybe'");
+        assertThatCode(() -> registry(dataset("urn:ds", d -> d.asDefault().scope(s -> s.fixed("express", "true")))))
+            .doesNotThrowAnyException();
+    }
+
     @Test
     void duplicateResourceIdsAreRejected() {
         assertThatThrownBy(() -> registry(

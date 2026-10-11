@@ -18,7 +18,8 @@ import org.springframework.context.annotation.Configuration;
  *   <li>{@value #CANCEL}: cancels a job, for the requester or a holder of {@code external-job.cancel}
  *       ({@link CancelExternalJob}); {@code POST /api/external-jobs/{id}/cancel} runs it.</li>
  * </ul>
- * Both are {@code internal()}, which only keeps them out of the catalog: their steps check who runs them.
+ * {@value #COMPLETE} is {@code internal()}; {@value #CANCEL} is {@code entryOnly()}: only its endpoint runs it, as the
+ * real caller, and its step checks who may cancel (decision D41).
  */
 @Configuration
 public class ExternalJobProcesses {
@@ -61,7 +62,7 @@ public class ExternalJobProcesses {
         ProcessDefinition.define(CANCEL, 1, CancelInput.class, CancelOutput.class, ProcessContext.class, pb -> pb
             .description("Cancels an external job.")
             .permissions(ExternalJobPermissions.CANCEL)
-            .internal()
+            .entryOnly()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);

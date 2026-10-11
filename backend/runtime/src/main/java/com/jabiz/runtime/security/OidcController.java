@@ -162,7 +162,7 @@ class OidcController {
     private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity,
         SignInSource source) {
         java.time.Instant mfaAt = IdTokenValidator.secondFactorAt(identity, provider, clock.instant());
-        return processes.execute(SponsorOidcSignInProcess.DEFINITION,
+        return processes.executeAtEntry(SponsorOidcSignInProcess.DEFINITION,
                 new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null, source))
             .flatMap(result -> {
                 if (result.outcome() == LoginOutcome.BAD_CREDENTIALS) {

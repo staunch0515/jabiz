@@ -15,7 +15,9 @@ import java.util.Set;
 
 /**
  * Startup check of scheduled jobs (category {@code JOB}): names are unique, cron expressions parse, and the process a
- * job runs is the registered process of that name and version.
+ * job runs is the registered process of that name and version. The process is {@code internal()} (decision D41): an
+ * {@code entryOnly()} or {@code subProcessOnly()} one cannot run as the system's root process and is an error; an
+ * open one is a warning unless the job declares {@code manualToo()}.
  */
 @Component
 public class JobChecks implements PlatformCheck {
@@ -44,8 +46,26 @@ public class JobChecks implements PlatformCheck {
                     + "' is not valid (six fields: second minute hour day month weekday)"));
             }
             problems.addAll(processProblems(processes, CATEGORY, where, job.process()));
+            problems.addAll(accessProblems(CATEGORY, where, job.process(), job.alsoRunByHand()));
         }
         return problems;
+    }
+
+    /**
+     * What a process run by the system on its own (a job, an event consumer) must be (decision D41): {@code internal()}
+     * as a rule; open only when it is also run by hand ({@code manualToo}, else a warning); never {@code entryOnly()}
+     * or {@code subProcessOnly()}, which the system cannot start.
+     */
+    public static List<CheckProblem> accessProblems(String category, String where, ProcessDefinition<?, ?, ?> process,
+        boolean manualToo) {
+        String target = "runs process " + process.name() + " v" + process.version();
+        return switch (process.access()) {
+            case INTERNAL -> List.of();
+            case OPEN -> manualToo ? List.of() : List.of(CheckProblem.warning(category, where, target
+                + ", which is open: declare it internal() (decision D41), or manualToo() if it is also run by hand"));
+            case ENTRY_ONLY, SUB_PROCESS_ONLY -> List.of(CheckProblem.error(category, where, target + ", which is "
+                + process.access() + " and cannot be started by the system: declare it internal() (decision D41)"));
+        };
     }
 
     /** The process must be the one registered under its name and version, or it would bypass the process checks. */

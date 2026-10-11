@@ -56,7 +56,10 @@ import java.util.Objects;
  * </ol>
  * Any failure before the commit rolls everything back, the operation records included. Domain exceptions propagate
  * unchanged. The caller's {@link RequestContext} must be in the Reactor context; permissions are checked by the
- * entry point (the process API), not here, so that jobs and tests call the same executor (decision D11).
+ * entry point (the process API), not here, so that jobs and tests call the same executor (decision D11). Who may start
+ * a process at all is checked here, for every caller (decision D41, {@link #requireStartable}): an
+ * {@code internal()} process runs as the system only, an {@code entryOnly()} one only from its platform entry point,
+ * a {@code subProcessOnly()} one only as a sub-process.
  *
  * <p>Steps run as their kind requires: platform {@link StepHandler}s return their own publisher,
  * {@link ComputeStep}s run synchronously on the current thread, {@link BlockingStep}s on a virtual thread of
@@ -102,6 +105,15 @@ public class ProcessExecutor {
     }
 
     /**
+     * Executes the process from the platform's own entry point for it, as the caller, and returns its output: how an
+     * {@code entryOnly()} process runs (decision D41). Only platform entry points (signing in, the entity API,
+     * uploads, imports, account settings...) call it.
+     */
+    public <I, O, C extends ProcessContext> Mono<O> executeAtEntry(ProcessDefinition<I, O, C> definition, I input) {
+        return run(definition, input, ExecutionOptions.NONE.atEntryOf(definition)).map(ProcessResult::output);
+    }
+
+    /**
      * Executes the process as a top-level operation. With an idempotency key, a request the actor already made with
      * the same key returns the stored result of that execution instead (decision D4); concurrent duplicates wait
      * for the first one and then replay it, so the process runs once.
@@ -114,6 +126,7 @@ public class ProcessExecutor {
         Objects.requireNonNull(options, "options must not be null");
         return observations.mono(PlatformObservations.PROCESS, "process " + definition.name(), tags(definition),
             RequestContexts.current().flatMap(request -> {
+                requireStartable(definition, request, options);
                 String key = options.idempotencyKey();
                 if (key == null) {
                     return executeRoot(definition, input, request, null, options);
@@ -128,6 +141,51 @@ public class ProcessExecutor {
                     .onErrorResume(ProcessExecutor::isIdempotencyRace,
                         race -> replay.switchIfEmpty(Mono.error(race)))));
             }));
+    }
+
+    /**
+     * Refuses to start {@code definition} as a top-level process unless its declaration allows it (decision D41):
+     * an {@code internal()} process as the system only, an {@code entryOnly()} one only from its platform entry point
+     * ({@link ExecutionOptions#atEntryOf}), a {@code subProcessOnly()} one never. 403 {@code PROCESS_INTERNAL},
+     * whatever the actor's permissions. The process API calls it before converting the input, too.
+     */
+    public static void requireStartable(ProcessDefinition<?, ?, ?> definition, RequestContext request,
+        ExecutionOptions options) {
+        boolean allowed = switch (definition.access()) {
+            case OPEN -> true;
+            case INTERNAL -> isSystem(request);
+            case ENTRY_ONLY -> options.isEntryOf(definition);
+            case SUB_PROCESS_ONLY -> false;
+        };
+        if (!allowed) {
+            throw refused(definition, "Process " + definition.name() + " cannot be started here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
+        }
+    }
+
+    /**
+     * Refuses to call {@code definition} as a sub-process unless its declaration allows it (decision D41): an
+     * {@code internal()} process only under a top-level process run as the system (a sub-process runs as the actor of
+     * the top-level one), an {@code entryOnly()} one never.
+     */
+    static void requireCallable(ProcessDefinition<?, ?, ?> definition, RequestContext request) {
+        boolean allowed = switch (definition.access()) {
+            case OPEN, SUB_PROCESS_ONLY -> true;
+            case INTERNAL -> isSystem(request);
+            case ENTRY_ONLY -> false;
+        };
+        if (!allowed) {
+            throw refused(definition, "Process " + definition.name() + " cannot be called as a sub-process here: "
+                + ProcessInternalException.howItRuns(definition.access()) + " (decision D41)");
+        }
+    }
+
+    private static boolean isSystem(RequestContext request) {
+        return RequestContext.SYSTEM_ACTOR.equals(request.actorId());
+    }
+
+    private static ProcessInternalException refused(ProcessDefinition<?, ?, ?> definition, String message) {
+        return new ProcessInternalException(definition.name(), definition.access(), message);
     }
 
     private static KeyValues tags(ProcessDefinition<?, ?, ?> definition) {
@@ -195,12 +253,13 @@ public class ProcessExecutor {
                     return Mono.error(new IllegalStateException("Process " + definition.name()
                         + " can only be called as a sub-process from a step of a running process"));
                 }
-                return RequestContexts.current().flatMap(request -> sequence.next().flatMap(seq -> {
-                    OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq,
-                        parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
-                    return operations.begin(engine(), operation, request)
-                        .flatMap(started -> runProcess(definition, input, started, request, frame.afterCommit(), false));
-                })).map(ProcessResult::output);
+                return RequestContexts.current().doOnNext(request -> requireCallable(definition, request))
+                    .flatMap(request -> sequence.next().flatMap(seq -> {
+                        OperationRequest operation = new OperationRequest(definition.name(), definition.version(),
+                            seq, parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
+                        return operations.begin(engine(), operation, request).flatMap(started ->
+                            runProcess(definition, input, started, request, frame.afterCommit(), false));
+                    })).map(ProcessResult::output);
             }));
     }
 

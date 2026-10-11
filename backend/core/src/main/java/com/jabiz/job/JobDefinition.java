@@ -25,12 +25,19 @@ import java.util.regex.Pattern;
  * @param input         builds the process input from the scheduled time of the run; synchronous and free of I/O
  * @param lockAtMostFor how long a run holds the cluster lock at most, should the instance die while running; longer
  *                      than any run takes
+ * @param alsoRunByHand whether the process is also meant to be run by hand, through the process API: then it is not
+ *                      {@code internal()} on purpose, and the startup check does not warn about it (decision D41)
  */
 public record JobDefinition<I>(String name, String cron, ZoneId zone, ProcessDefinition<I, ?, ?> process,
-    Function<Instant, I> input, Duration lockAtMostFor) {
+    Function<Instant, I> input, Duration lockAtMostFor, boolean alsoRunByHand) {
 
     public static final Pattern NAME = Pattern.compile("[A-Za-z0-9._-]{1,64}");
     public static final Duration DEFAULT_LOCK_AT_MOST_FOR = Duration.ofMinutes(10);
+
+    public JobDefinition(String name, String cron, ZoneId zone, ProcessDefinition<I, ?, ?> process,
+        Function<Instant, I> input, Duration lockAtMostFor) {
+        this(name, cron, zone, process, input, lockAtMostFor, false);
+    }
 
     public JobDefinition {
         if (name == null || !NAME.matcher(name).matches()) {
@@ -54,6 +61,14 @@ public record JobDefinition<I>(String name, String cron, ZoneId zone, ProcessDef
     }
 
     public JobDefinition<I> lockAtMostFor(Duration duration) {
-        return new JobDefinition<>(name, cron, zone, process, input, duration);
+        return new JobDefinition<>(name, cron, zone, process, input, duration, alsoRunByHand);
+    }
+
+    /**
+     * This job, whose process is also run by hand through the process API, so it stays an open process rather than
+     * {@code internal()} (decision D41); the startup check then does not warn about it.
+     */
+    public JobDefinition<I> manualToo() {
+        return new JobDefinition<>(name, cron, zone, process, input, lockAtMostFor, true);
     }
 }
