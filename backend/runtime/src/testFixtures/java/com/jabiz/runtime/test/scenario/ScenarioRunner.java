@@ -26,6 +26,11 @@ import com.jabiz.runtime.file.FileStore;
 import com.jabiz.runtime.imports.ImportRegistry;
 import com.jabiz.runtime.imports.ImportReport;
 import com.jabiz.runtime.imports.ImportService;
+import com.jabiz.inbound.InboundHeaders;
+import com.jabiz.inbound.InboundSchemes;
+import com.jabiz.runtime.inbound.InboundReceiver;
+import com.jabiz.runtime.inbound.InboundRejectedException;
+import com.jabiz.runtime.inbound.InboundWebhookProperties;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import tools.jackson.databind.json.JsonMapper;
@@ -100,6 +105,8 @@ public final class ScenarioRunner {
     private final FileStore fileStore;
     private final EntityIdGenerator ids;
     private final JsonMapper json;
+    private final InboundWebhookProperties inboundProviders;
+    private final InboundReceiver inboundReceiver;
 
     public ScenarioRunner(ApplicationContext context) {
         this.processes = context.getBean(ProcessRegistry.class);
@@ -121,6 +128,8 @@ public final class ScenarioRunner {
         this.fileStore = context.getBean(FileStore.class);
         this.ids = context.getBean(EntityIdGenerator.class);
         this.json = context.getBean(JsonMapper.class);
+        this.inboundProviders = context.getBean(InboundWebhookProperties.class);
+        this.inboundReceiver = context.getBean(InboundReceiver.class);
     }
 
     public Result run(Scenario scenario) {
@@ -204,8 +213,33 @@ public final class ScenarioRunner {
                     // deliver again: consumers may publish events of their own
                 }
             }
+            case Scenario.InboundStep i -> inbound(scenario, i, variables);
             case Scenario.Expect e -> expect(scenario, step, e.expectation(), variables);
             case Scenario.ExpectError e -> expectError(scenario, e, variables);
+        }
+    }
+
+    /** Signs the body as the provider would, with its first secret, and receives it as the endpoint does. */
+    private void inbound(Scenario scenario, Scenario.InboundStep step, Map<String, Object> variables) {
+        InboundWebhookProperties.Provider provider = inboundProviders.find(step.provider())
+            .orElseThrow(() -> failure(scenario, step, "unknown inbound webhook provider " + step.provider(), null));
+        Object body = ScenarioValues.resolve(step.body(), variables);
+        byte[] bytes = (body instanceof String text ? text : json.writeValueAsString(body))
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        long signedAt = (step.at() == null ? clock.instant() : step.at()).getEpochSecond();
+        Map<String, List<String>> headers = new LinkedHashMap<>();
+        InboundSchemes.of(provider.scheme()).orElseThrow()
+            .sign(provider.secrets().getFirst(), signedAt, bytes)
+            .forEach((name, value) -> headers.put(name, List.of(value)));
+        String outcome;
+        try {
+            outcome = as(scenario, inboundReceiver.receive(step.provider(), InboundHeaders.of(headers),
+                "application/json", bytes)).name();
+        } catch (InboundRejectedException e) {
+            outcome = "REJECTED";
+        }
+        if (!outcome.equals(step.outcome())) {
+            throw failure(scenario, step, "inbound request was " + outcome + ", not " + step.outcome(), null);
         }
     }
 
