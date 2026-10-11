@@ -29,6 +29,7 @@ import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import com.jabiz.runtime.test.StubHttpServer;
 import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.security.Sensitive;
 import io.micrometer.common.KeyValue;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.Observation;
@@ -101,10 +102,23 @@ class ExternalJobIT extends PostgresIntegrationTest {
 
     public record ItResult(String label, int attempt) {}
 
-    /** The name says it is a secret; the declaration does not: only the step catches it. */
-    public record LeakyInput(String label, String accessToken) {}
+    /** A secret the type's declaration cannot see: it is in a value of {@code detail}, typed Object. */
+    public record Credentials(@Sensitive String apiKey) {}
 
-    public record StartInput(String label, String reference, Boolean failAfter, String accessToken) {}
+    /**
+     * {@code maxTokens} only sounds like a secret; {@code detail} may hide one ({@link Credentials}), which only the
+     * step sees.
+     */
+    public record LeakyInput(String label, Integer maxTokens, Object detail) {}
+
+    public record StartInput(String label, String reference, Boolean failAfter, String credentialValue) {}
+
+    /** Written but not read back by Jackson: an interface without type information. */
+    public interface Shape {}
+
+    public record Circle(int radius) implements Shape {}
+
+    public record ShapeResult(Shape shape) {}
 
     public record StartOutput(String jobId) {}
 
@@ -140,6 +154,12 @@ class ExternalJobIT extends PostgresIntegrationTest {
                 }
             }
             ctx.recordUsage("units", 1);
+            if (input.label().startsWith("null-")) {
+                return null;
+            }
+            if (input.label().startsWith("big-")) {
+                return ExternalJobResult.of(new ItResult("x".repeat(300 * 1024), ctx.attempt()));
+            }
             if (input.label().startsWith("call-")) {
                 ctx.http(ModerateText.SERVICE).send(ExternalHttp.Request.post("/v1/" + input.label().substring(5))
                     .json("{}").idempotencyKey(ctx.idempotencyKey()));
@@ -155,6 +175,14 @@ class ExternalJobIT extends PostgresIntegrationTest {
                 }
             }
             return ExternalJobResult.of(new ItResult(input.label(), ctx.attempt())).usage("units", 2);
+        }
+    }
+
+    public static class ShapeHandler implements ExternalJobHandler<ItInput, ShapeResult> {
+        @Override
+        public ExternalJobResult<ShapeResult> run(ItInput input, ExternalJobContext ctx) {
+            RUNS.add(input.label() + ":" + ctx.attempt());
+            return ExternalJobResult.of(new ShapeResult(new Circle(3)));
         }
     }
 
@@ -183,7 +211,8 @@ class ExternalJobIT extends PostgresIntegrationTest {
             .outputMapper(ctx -> new StartOutput(ctx.get("jobId", String.class)))
             .step("Start", StartExternalJob.<ProcessContext>of(jobType, ctx -> {
                     StartInput in = ctx.get("in", StartInput.class);
-                    return leaky ? new LeakyInput(in.label(), in.accessToken()) : new ItInput(in.label());
+                    return leaky ? new LeakyInput(in.label(), 512, in.credentialValue() == null ? null
+                        : new Credentials(in.credentialValue())) : new ItInput(in.label());
                 })
                 .reference(ctx -> ctx.get("in", StartInput.class).reference())
                 .outputKey("jobId"))
@@ -217,8 +246,11 @@ class ExternalJobIT extends PostgresIntegrationTest {
 
     static ExternalJobType<ItInput, ItResult> gateType(String name, int maxConcurrency, Duration timeout,
         int attempts) {
+        // Attempts that call demo-ai outlast its request timeout (60 s); a shorter one calls nothing.
+        String[] services = timeout.compareTo(Duration.ofSeconds(60)) > 0 ? new String[] {ModerateText.SERVICE}
+            : new String[0];
         return ExternalJobType.define(name, ItInput.class, ItResult.class, t -> t
-            .handler(GateHandler.class).services(ModerateText.SERVICE).timeout(timeout)
+            .handler(GateHandler.class).services(services).timeout(timeout)
             .retry(attempts, Duration.ofSeconds(10), Duration.ofMinutes(1)).maxConcurrency(maxConcurrency)
             .onCompleted("IT_JOB_DONE").onFailed("IT_JOB_FAILED"));
     }
@@ -239,19 +271,48 @@ class ExternalJobIT extends PostgresIntegrationTest {
         /** Two at a time, three attempts, a timeout long enough for the gates. */
         @Bean
         ExternalJobType<ItInput, ItResult> itGateJob() {
-            return gateType("it.gate", 2, Duration.ofSeconds(30), 3);
+            return gateType("it.gate", 2, Duration.ofSeconds(90), 3);
         }
 
         /** One at a time across instances, one attempt. */
         @Bean
         ExternalJobType<ItInput, ItResult> itSerialJob() {
-            return gateType("it.serial", 1, Duration.ofSeconds(30), 1);
+            return gateType("it.serial", 1, Duration.ofSeconds(90), 1);
         }
 
-        /** A timeout of a second. */
+        /** A timeout of a second; it calls no service. */
         @Bean
         ExternalJobType<ItInput, ItResult> itQuickJob() {
             return gateType("it.quick", 2, Duration.ofSeconds(1), 3);
+        }
+
+        /** At most two open per requester, one per reference. */
+        @Bean
+        ExternalJobType<ItInput, ItResult> itLimitedJob() {
+            return ExternalJobType.define("it.limited", ItInput.class, ItResult.class, t -> t
+                .handler(GateHandler.class).maxOpenPerRequester(2).oneOpenPerReference()
+                .onCompleted("IT_JOB_DONE").onFailed("IT_JOB_FAILED"));
+        }
+
+        @Bean
+        ProcessDefinition<StartInput, StartOutput, ProcessContext> startLimited() {
+            return starter("IT_START_LIMITED", "it.limited", false);
+        }
+
+        @Bean
+        ShapeHandler shapeHandler() {
+            return new ShapeHandler();
+        }
+
+        @Bean
+        ExternalJobType<ItInput, ShapeResult> itShapeJob() {
+            return ExternalJobType.define("it.shape", ItInput.class, ShapeResult.class, t -> t
+                .handler(ShapeHandler.class).onCompleted("IT_JOB_DONE").onFailed("IT_JOB_FAILED"));
+        }
+
+        @Bean
+        ProcessDefinition<StartInput, StartOutput, ProcessContext> startShape() {
+            return starter("IT_START_SHAPE", "it.shape", false);
         }
 
         @Bean
@@ -394,14 +455,15 @@ class ExternalJobIT extends PostgresIntegrationTest {
     @Test
     void inputsWithSecretsOrTooLargeAreRefused() {
         String ref = unique("leak");
+        // A value of an @Sensitive component, even where the type's declaration cannot see it, is refused.
         Map<String, Object> leaked = process("IT_START_LEAKY", Map.of("label", "x", "reference", ref,
-            "accessToken", "tok-it-very-secret"), "it-req").expectStatus().isEqualTo(422).expectBody(MAP)
+            "credentialValue", "sk-it-very-secret"), "it-req").expectStatus().isEqualTo(422).expectBody(MAP)
             .returnResult().getResponseBody();
         assertThat(violations(leaked)).singleElement().satisfies(v -> {
-            assertThat(v).containsEntry("ruleCode", "EXTERNAL_JOB_INPUT_SECRET").containsEntry("field", "accessToken");
-            assertThat(String.valueOf(v)).doesNotContain("tok-it-very-secret");
+            assertThat(v).containsEntry("ruleCode", "EXTERNAL_JOB_INPUT_SECRET").containsEntry("field", "detail.apiKey");
+            assertThat(String.valueOf(v)).doesNotContain("sk-it-very-secret");
         });
-        // Without the secret the same input is fine.
+        // Names that only sound secret (maxTokens) are fine: the declaration decides, not the name.
         process("IT_START_LEAKY", Map.of("label", "x", "reference", ref), "it-req").expectStatus().isOk();
 
         Map<String, Object> large = process("IT_START_GATE", Map.of("label", "x".repeat(70_000),
@@ -410,7 +472,7 @@ class ExternalJobIT extends PostgresIntegrationTest {
         assertThat(violations(large)).singleElement().satisfies(v ->
             assertThat(v).containsEntry("ruleCode", "EXTERNAL_JOB_INPUT_TOO_LARGE"));
         assertThat(query("SELECT input FROM sys_external_job WHERE reference = ?", ref)).singleElement()
-            .satisfies(row -> assertThat(row.get("input").toString()).contains("\"accessToken\":null"));
+            .satisfies(row -> assertThat(row.get("input").toString()).contains("\"maxTokens\":512"));
     }
 
     // ---------------------------------------------------------------- the demo: marketing copy
@@ -587,8 +649,9 @@ class ExternalJobIT extends PostgresIntegrationTest {
 
     @Test
     void anAttemptPastItsTimeoutIsTimedOutAndRetried() {
-        STUB.script(StubHttpServer.Answer.json(200, "{}").after(Duration.ofSeconds(4)), "/v1/slow");
-        String jobId = start("IT_START_QUICK", "call-slow", unique("ref"), "it-req");
+        String label = unique("slow");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_START_QUICK", label, unique("ref"), "it-req");
         long began = System.nanoTime();
         assertThat(executor.runPending().block()).isEqualTo(1);
         assertThat(Duration.ofNanos(System.nanoTime() - began)).isLessThan(Duration.ofSeconds(4));
@@ -597,8 +660,7 @@ class ExternalJobIT extends PostgresIntegrationTest {
         clock.advance(Duration.ofSeconds(10));
         assertThat(executor.runPending().block()).isEqualTo(1);
         assertThat(attempts(jobId)).containsExactly("1:TIMED_OUT:true:TIMEOUT", "2:SUCCEEDED:false:null");
-        assertThat(STUB.requests("/v1/slow")).hasSize(2)
-            .extracting(request -> request.header("Idempotency-Key")).containsOnly("jabiz-job-" + jobId);
+        assertThat(RUNS).filteredOn(run -> run.startsWith(label + ":")).containsExactly(label + ":1", label + ":2");
     }
 
     // ---------------------------------------------------------------- several instances
@@ -669,9 +731,9 @@ class ExternalJobIT extends PostgresIntegrationTest {
             .isTrue();
         assertThat(status(jobId, "it-req").get("status")).isEqualTo("RUNNING");
 
-        // The lease (timeout 30 s and 30 s of margin) runs out: another instance takes the job over.
+        // The lease (timeout 90 s and 30 s of margin) runs out: another instance takes the job over.
         ExternalJobExecutor other = secondInstance("it-takeover");
-        clock.advance(Duration.ofSeconds(61));
+        clock.advance(Duration.ofSeconds(121));
         assertThat(other.runPending().block()).isZero();
         clock.advance(Duration.ofSeconds(10));
         assertThat(other.runPending().block()).isEqualTo(1);
@@ -701,12 +763,18 @@ class ExternalJobIT extends PostgresIntegrationTest {
         CompletableFuture<Integer> running = executor.runPending().toFuture();
         assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
             .isTrue();
-        // Give a transaction that would be left open the time to show.
-        Thread.sleep(200);
-        assertThat(query("SELECT pid, state, query FROM pg_stat_activity WHERE datname = current_database()"
-            + " AND state LIKE 'idle in transaction%' AND query ILIKE '%external_job%'")).isEmpty();
-        assertThat(query("SELECT pid FROM pg_stat_activity WHERE datname = current_database()"
-            + " AND state = 'active' AND query ILIKE '%sys_external_job%' AND pid <> pg_backend_pid()")).isEmpty();
+        // The handler is held at its gate for the whole check: sampled several times, no connection of the
+        // executor is in a transaction (or a statement) on the jobs' tables.
+        for (int sample = 0; sample < 5; sample++) {
+            assertThat(RUNS).contains(label + ":1");
+            assertThat(query("SELECT pid, state, query FROM pg_stat_activity WHERE datname = current_database()"
+                + " AND state LIKE 'idle in transaction%' AND query ILIKE '%external_job%'")).isEmpty();
+            assertThat(query("SELECT pid FROM pg_stat_activity WHERE datname = current_database()"
+                + " AND xact_start IS NOT NULL AND query ILIKE '%sys_external_job%' AND pid <> pg_backend_pid()"))
+                .isEmpty();
+            Thread.sleep(100);
+        }
+        assertThat(running).isNotDone();
         GATES.get(label + ":1").countDown();
         assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
         assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
@@ -831,14 +899,379 @@ class ExternalJobIT extends PostgresIntegrationTest {
         }
     }
 
+    // ---------------------------------------------------------------- after the review
+
+    @Test
+    void aHandlerReturningNoResultFailsForGood() {
+        String jobId = start("IT_START_GATE", "null-" + unique("none"), unique("ref"), "it-req");
+        assertThat(executor.runPending().block()).isEqualTo(1);
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:NO_RESULT");
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("error_code", "NO_RESULT");
+    }
+
+    @Test
+    void aResultLargerThanTheLimitFailsForGood() {
+        String jobId = start("IT_START_GATE", "big-" + unique("big"), unique("ref"), "it-req");
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:RESULT_TOO_LARGE");
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("result", null);
+    }
+
+    @Test
+    void aResultThatCannotBeReadBackIsABadResult() {
+        String jobId = start("IT_START_SHAPE", unique("shape"), unique("ref"), "it-req");
+        executor.runPending().block();
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:BAD_RESULT");
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("error_code", "BAD_RESULT");
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(callback.process()).isEqualTo("IT_JOB_FAILED"));
+    }
+
+    /** A stored result the completion cannot read (the result type changed since) goes to the failure process. */
+    @Test
+    void aStoredResultThatCannotBeReadCallsTheFailureProcess() {
+        String jobId = start("IT_START_GATE", unique("unreadable"), unique("ref"), "it-req");
+        execute("INSERT INTO sys_external_job_outcome (job_id, status, result, attempts, finished_time)"
+            + " VALUES (?, 'SUCCEEDED', '{\"label\": {\"not\": \"text\"}, \"attempt\": \"x\"}', 1, ?)", jobId,
+            java.sql.Timestamp.from(START));
+        execute("INSERT INTO sys_outbox_event (event_id, event_type, entity_type, entity_id, payload, created_time)"
+            + " VALUES (?::uuid, 'jabiz.external-job.finished', 'ExternalJob', ?, ?::jsonb, ?)",
+            UUID.randomUUID().toString(), jobId, "{\"jobId\":\"" + jobId + "\",\"jobType\":\"it.gate\","
+                + "\"status\":\"SUCCEEDED\"}", java.sql.Timestamp.from(START));
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback -> {
+            assertThat(callback.process()).isEqualTo("IT_JOB_FAILED");
+            assertThat(((ExternalJobFailure) callback.payload()).errorCode()).isEqualTo("RESULT_UNREADABLE");
+        });
+    }
+
+    /** Attempts used up (the type now allows fewer) and no outcome: the job is failed when its type is claimed. */
+    @Test
+    void aJobWithItsAttemptsUsedUpIsFailed() {
+        String jobId = start("IT_START_GATE", unique("used-up"), unique("ref"), "it-req");
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            insertClaim(jobId, attempt, START.minusSeconds(600));
+            insertAttempt(jobId, attempt, "FAILED", true, "IT_BUSY");
+        }
+        assertThat(executor.runPending().block()).isZero();
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("error_code", "ATTEMPTS_EXHAUSTED");
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).singleElement().satisfies(callback ->
+            assertThat(((ExternalJobFailure) callback.payload()).errorCode()).isEqualTo("ATTEMPTS_EXHAUSTED"));
+    }
+
+    /** A job of a type no longer declared is failed rather than left open; its completion calls nothing. */
+    @Test
+    void aJobOfARemovedTypeIsFailed() {
+        String jobId = insertJob("it.removed", "{\"label\":\"gone\"}");
+        // A sweep (every watermark-refresh) looks for them: here every poll is one.
+        ExternalJobExecutor sweeping = secondInstance("it-sweep",
+            executor.settings().withInstanceId("it-sweep").withWatermarkRefresh(Duration.ZERO));
+        assertThat(sweeping.runPending().block()).isZero();
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("error_code", "TYPE_REMOVED");
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_outbox_attempt WHERE consumer = 'jabiz.external-jobs'")).isEmpty();
+    }
+
+    @Test
+    void anInputThatCannotBeReadIsAPermanentBadInput() {
+        String jobId = insertJob("it.gate", "not json at all");
+        assertThat(executor.runPending().block()).isEqualTo(1);
+        assertThat(attempts(jobId)).containsExactly("1:FAILED:false:BAD_INPUT");
+        assertThat(outcome(jobId)).containsEntry("status", "FAILED").containsEntry("error_code", "BAD_INPUT");
+    }
+
+    /** With room for one attempt, the job types take turns instead of the first one taking every poll. */
+    @Test
+    void jobTypesTakeTurnsWhenAnInstanceIsFull() {
+        ExternalJobExecutor one = instance("it-one", 1);
+        String tag = unique("turn");
+        for (String suffix : List.of("a1", "a2")) {
+            start("IT_START_GATE", tag + "-gate-" + suffix, unique("ref"), "it-req");
+        }
+        for (String suffix : List.of("b1", "b2")) {
+            start("IT_START_SERIAL", tag + "-serial-" + suffix, unique("ref"), "it-req");
+        }
+        assertThat(one.runPending().block()).isEqualTo(1);
+        assertThat(one.runPending().block()).isEqualTo(1);
+        List<String> firstTwo = RUNS.stream().filter(run -> run.startsWith(tag)).toList();
+        assertThat(firstTwo).hasSize(2).anyMatch(run -> run.contains("-gate-")).anyMatch(run -> run.contains("-serial-"));
+    }
+
+    /** A full instance still records the expired leases of every type. */
+    @Test
+    void expiredLeasesAreRecordedEvenWhenTheInstanceIsFull() throws Exception {
+        ExternalJobExecutor one = instance("it-full", 1);
+        String label = unique("full");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        start("IT_START_GATE", label, unique("ref"), "it-req");
+        CompletableFuture<Integer> running = one.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        String crashed = start("IT_START_SERIAL", unique("crashed"), unique("ref"), "it-req");
+        insertClaim(crashed, 1, START.minusSeconds(60));
+        assertThat(one.runPending().block()).isZero();
+        assertThat(attempts(crashed)).containsExactly("1:LEASE_EXPIRED:true:LEASE_EXPIRED");
+        GATES.get(label + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+    }
+
+    @Test
+    void aJobWhoseLeaseExpiredUnrecordedIsCancelledAtOnce() {
+        String label = unique("cancel-expired");
+        String jobId = start("IT_START_GATE", label, unique("ref"), "it-req-x");
+        insertClaim(jobId, 1, START.minusSeconds(60));
+        assertThat(cancel(jobId, bearer("it-req-x")).expectStatus().isOk().expectBody(MAP).returnResult()
+            .getResponseBody()).containsEntry("status", "CANCELLED");
+        assertThat(outcome(jobId)).containsEntry("status", "CANCELLED");
+        assertThat(executor.runPending().block()).isZero();
+        assertThat(RUNS).noneMatch(run -> run.startsWith(label + ":"));
+        deliverer.deliverPending().block();
+        assertThat(callbacks(jobId)).isEmpty();
+    }
+
+    @Test
+    void maxInFlightLimitsOneInstance() throws Exception {
+        ExternalJobExecutor one = instance("it-limited", 1);
+        String first = unique("limit-a");
+        String second = unique("limit-b");
+        GATES.put(first + ":1", new CountDownLatch(1));
+        GATES.put(second + ":1", new CountDownLatch(1));
+        String jobA = start("IT_START_GATE", first, unique("ref"), "it-req");
+        String jobB = start("IT_START_GATE", second, unique("ref"), "it-req");
+        CompletableFuture<Integer> running = one.runPending().toFuture();
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (RUNS.stream().noneMatch(run -> run.startsWith(first) || run.startsWith(second))
+            && System.nanoTime() < until) {
+            Thread.onSpinWait();
+        }
+        assertThat(one.runPending().block()).isZero();
+        assertThat(query("SELECT 1 FROM sys_external_job_claim WHERE job_id IN (?, ?)", jobA, jobB)).hasSize(1);
+        GATES.get(first + ":1").countDown();
+        GATES.get(second + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(one.runPending().block()).isEqualTo(1);
+    }
+
+    /** Neither the result nor the handler's message is copied into the callbacks' operation records. */
+    @Test
+    void theCallbacksOperationRecordsCarryNoResultNorMessage() {
+        String label = unique("summary");
+        String done = start("IT_START_GATE", label, unique("ref"), "it-req");
+        String failedLabel = "fail-" + unique("summary");
+        BEHAVIOUR.put(failedLabel, List.of("permanent"));
+        String failed = start("IT_START_GATE", failedLabel, unique("ref"), "it-req");
+        executor.runPending().block();
+        deliverer.deliverPending().block();
+        assertThat(query("SELECT input_summary FROM op_process WHERE process_name = 'IT_JOB_DONE'"
+            + " AND input_summary::text LIKE ?", "%" + done + "%")).singleElement().satisfies(row ->
+                assertThat(row.get("input_summary").toString()).contains("resultBytes").doesNotContain(label));
+        assertThat(query("SELECT input_summary FROM op_process WHERE process_name = 'IT_JOB_FAILED'"
+            + " AND input_summary::text LIKE ?", "%" + failed + "%")).singleElement().satisfies(row ->
+                assertThat(row.get("input_summary").toString()).contains("errorMessageLength", "IT_REFUSED")
+                    .doesNotContain("Refused for the test"));
+    }
+
+    // ---------------------------------------------------------------- start limits, watermarks, shutdown
+
+    @Test
+    void aRequesterMayHaveOnlySoManyOpenJobsOfAType() {
+        String requester = unique("it-many");
+        start("IT_START_LIMITED", unique("lim"), unique("ref"), requester);
+        start("IT_START_LIMITED", unique("lim"), unique("ref"), requester);
+        Map<String, Object> refused = process("IT_START_LIMITED", Map.of("label", "third", "reference",
+            unique("ref")), requester).expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(violations(refused)).singleElement().satisfies(v -> {
+            assertThat(v).containsEntry("ruleCode", "EXTERNAL_JOB_LIMIT");
+            assertThat(String.valueOf(v.get("message"))).contains("it.limited", "2", "for one requester");
+        });
+        // Someone else may; and once one has finished, so may the requester again.
+        start("IT_START_LIMITED", unique("lim"), unique("ref"), unique("it-other"));
+        assertThat(executor.runPending().block()).isEqualTo(3);
+        start("IT_START_LIMITED", unique("lim"), unique("ref"), requester);
+    }
+
+    @Test
+    void aReferenceMayHaveOnlyOneOpenJobOfATypeEvenWhenStartsRace() throws Exception {
+        String reference = unique("one-ref");
+        List<CompletableFuture<Integer>> starts = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            String actor = "it-racer-" + i;
+            starts.add(CompletableFuture.supplyAsync(() -> process("IT_START_LIMITED", Map.of("label",
+                unique("race"), "reference", reference), actor).returnResult(Void.class).getStatus().value()));
+        }
+        List<Integer> statuses = new ArrayList<>();
+        for (CompletableFuture<Integer> start : starts) {
+            statuses.add(start.get(30, TimeUnit.SECONDS));
+        }
+        assertThat(statuses).containsOnly(200, 422).filteredOn(status -> status == 200).hasSize(1);
+        assertThat(query("SELECT 1 FROM sys_external_job WHERE reference = ?", reference)).hasSize(1);
+        // A cancelled job is not open: the reference may have another.
+        String jobId = query("SELECT job_id FROM sys_external_job WHERE reference = ?", reference).getFirst()
+            .get("job_id").toString();
+        cancel(jobId, bearer("it-admin", "external-job.cancel")).expectStatus().isOk();
+        start("IT_START_LIMITED", unique("again"), reference, "it-racer-0");
+    }
+
+    @Test
+    void theDemoAllowsOneOpenCopyJobPerProduct() {
+        String productId = product(sku(), "Yellow mug");
+        String jobId = copy(productId);
+        Map<String, Object> refused = client.post().uri("/api/processes/" + ProductCopy.REQUEST + "/latest")
+            .header(HttpHeaders.AUTHORIZATION, bearer("it-copywriter-2", "commerce.product.write"))
+            .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("productId", productId))
+            .exchange().expectStatus().isEqualTo(422).expectBody(MAP).returnResult().getResponseBody();
+        assertThat(violations(refused)).singleElement().satisfies(v ->
+            assertThat(String.valueOf(v.get("message"))).contains("for one reference"));
+        executor.runPending().block();
+        assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
+        copy(productId);
+    }
+
+    /**
+     * Polls look at the jobs from each type's watermark on; a job of a transaction that committed late with a lower
+     * number is found by the next sweep.
+     */
+    @Test
+    void aJobBelowTheWatermarkIsFoundByTheNextSweep() {
+        ExternalJobExecutor marked = secondInstance("it-marked",
+            executor.settings().withInstanceId("it-marked").withWatermarkRefresh(Duration.ofHours(1)));
+        String first = start("IT_START_GATE", unique("mark"), unique("ref"), "it-req");
+        assertThat(marked.runPending().block()).isEqualTo(1);
+        assertThat(outcome(first)).containsEntry("status", "SUCCEEDED");
+        String late = insertJob("it.gate", "{\"label\":\"" + unique("late") + "\"}", -5L);
+        String fresh = start("IT_START_GATE", unique("fresh"), unique("ref"), "it-req");
+        assertThat(marked.runPending().block()).isEqualTo(1);
+        assertThat(outcome(fresh)).containsEntry("status", "SUCCEEDED");
+        assertThat(query("SELECT 1 FROM sys_external_job_claim WHERE job_id = ?", late)).isEmpty();
+        ExternalJobExecutor sweeping = secondInstance("it-sweeper",
+            executor.settings().withInstanceId("it-sweeper").withWatermarkRefresh(Duration.ZERO));
+        assertThat(sweeping.runPending().block()).isEqualTo(1);
+        assertThat(outcome(late)).containsEntry("status", "SUCCEEDED");
+    }
+
+    /** The claims' lookups have indexes (with sequential scans off, as a large table would choose). */
+    @Test
+    void theClaimQueriesUseTheirIndexes() throws Exception {
+        try (java.sql.Connection connection = DB.connect(schema());
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("SET enable_seqscan = off");
+            assertThat(plan(statement, "SELECT c.job_id FROM sys_external_job_claim c WHERE c.lease_until <= now()"))
+                .contains("sys_external_job_claim_lease_idx");
+            assertThat(plan(statement, "SELECT j.job_id FROM sys_external_job j WHERE j.job_type = 'it.gate'"
+                + " AND j.job_seq >= 100 ORDER BY j.job_seq")).contains("sys_external_job_type_idx");
+            assertThat(plan(statement, "SELECT count(*) FROM sys_external_job j WHERE j.job_type = 'it.gate'"
+                + " AND j.requested_by = 'it-req'")).doesNotContain("Seq Scan");
+            assertThat(plan(statement, "SELECT count(*) FROM sys_external_job j WHERE j.job_type = 'it.gate'"
+                + " AND j.reference = 'x'")).doesNotContain("Seq Scan");
+        }
+    }
+
+    private static String plan(java.sql.Statement statement, String sql) throws java.sql.SQLException {
+        StringBuilder plan = new StringBuilder();
+        try (java.sql.ResultSet rows = statement.executeQuery("EXPLAIN " + sql)) {
+            while (rows.next()) {
+                plan.append(rows.getString(1)).append('\n');
+            }
+        }
+        return plan.toString();
+    }
+
+    /** On shutdown an instance stops claiming and waits for its running attempts to be recorded. */
+    @Test
+    void aStoppingInstanceFinishesWhatItRunsAndClaimsNothingMore() throws Exception {
+        ExternalJobExecutor stopping = secondInstance("it-stopping",
+            executor.settings().withInstanceId("it-stopping").withShutdownGrace(Duration.ofSeconds(20)));
+        String label = unique("stop");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        String jobId = start("IT_START_GATE", label, unique("ref"), "it-req");
+        CompletableFuture<Integer> running = stopping.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        stopping.start();
+        CompletableFuture<Void> stopped = CompletableFuture.runAsync(stopping::stop);
+        Thread.sleep(300);
+        assertThat(stopped).isNotDone();
+        String later = start("IT_START_GATE", unique("after-stop"), unique("ref"), "it-req");
+        assertThat(stopping.runPending().block()).isZero();
+        GATES.get(label + ":1").countDown();
+        stopped.get(20, TimeUnit.SECONDS);
+        assertThat(stopping.isRunning()).isFalse();
+        assertThat(running.get(5, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(outcome(jobId)).containsEntry("status", "SUCCEEDED");
+        assertThat(query("SELECT 1 FROM sys_external_job_claim WHERE job_id = ?", later)).isEmpty();
+    }
+
+    /** A shutdown waits no longer than its grace; the attempt left running is taken again after its lease. */
+    @Test
+    void aStoppingInstanceWaitsNoLongerThanItsGrace() throws Exception {
+        ExternalJobExecutor stopping = secondInstance("it-impatient",
+            executor.settings().withInstanceId("it-impatient").withShutdownGrace(Duration.ofMillis(300)));
+        String label = unique("grace");
+        GATES.put(label + ":1", new CountDownLatch(1));
+        start("IT_START_GATE", label, unique("ref"), "it-req");
+        CompletableFuture<Integer> running = stopping.runPending().toFuture();
+        assertThat(STARTED.computeIfAbsent(label + ":1", k -> new CountDownLatch(1)).await(20, TimeUnit.SECONDS))
+            .isTrue();
+        long began = System.nanoTime();
+        stopping.stop();
+        assertThat(Duration.ofNanos(System.nanoTime() - began)).isLessThan(Duration.ofSeconds(5));
+        GATES.get(label + ":1").countDown();
+        assertThat(running.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+    }
+
     // ---------------------------------------------------------------- helpers
 
+    private ExternalJobExecutor instance(String id, int maxInFlight) {
+        return secondInstance(id, executor.settings().withInstanceId(id).withMaxInFlight(maxInFlight));
+    }
+
+    /** A job written directly, as an older version of the application or a broken writer might have left it. */
+    private static String insertJob(String type, String input) {
+        return insertJob(type, input, null);
+    }
+
+    /** With {@code jobSeq}, a number lower than the jobs before it (a transaction that committed late). */
+    private static String insertJob(String type, String input, Long jobSeq) {
+        Object seq = query("SELECT process_seq_id FROM op_process ORDER BY process_seq_id DESC LIMIT 1").getFirst()
+            .get("process_seq_id");
+        String id = UUID.randomUUID().toString();
+        if (jobSeq == null) {
+            execute("INSERT INTO sys_external_job (job_id, job_type, input, reference, requested_by, process_seq_id,"
+                + " created_time) VALUES (?, ?, ?, ?, 'it-req', ?, ?)", id, type, input, unique("ref"), seq,
+                java.sql.Timestamp.from(START));
+        } else {
+            execute("INSERT INTO sys_external_job (job_id, job_seq, job_type, input, reference, requested_by,"
+                + " process_seq_id, created_time) OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, 'it-req', ?, ?)", id,
+                jobSeq, type, input, unique("ref"), seq, java.sql.Timestamp.from(START));
+        }
+        return id;
+    }
+
+    private static void insertClaim(String jobId, int attempt, java.time.Instant leaseUntil) {
+        execute("INSERT INTO sys_external_job_claim (job_id, attempt_no, instance_id, claimed_time, lease_until)"
+            + " VALUES (?, ?, 'it-crashed', ?, ?)", jobId, attempt, java.sql.Timestamp.from(leaseUntil.minusSeconds(60)),
+            java.sql.Timestamp.from(leaseUntil));
+    }
+
+    private static void insertAttempt(String jobId, int attempt, String outcome, boolean retryable, String code) {
+        execute("INSERT INTO sys_external_job_attempt (job_id, attempt_no, attempt_id, outcome, retryable, error_code,"
+            + " finished_time) VALUES (?, ?, ?, ?, ?, ?, ?)", jobId, attempt, UUID.randomUUID().toString(), outcome,
+            retryable, code, java.sql.Timestamp.from(START.minusSeconds(500)));
+    }
+
     private ExternalJobExecutor secondInstance(String id) {
+        return secondInstance(id, executor.settings().withInstanceId(id));
+    }
+
+    private ExternalJobExecutor secondInstance(String id, ExternalJobExecutor.Settings settings) {
         return new ExternalJobExecutor(context.getBean(ExternalJobRegistry.class),
             context.getBean(ExternalJobRecorder.class), context, context.getBean(ExternalServices.class),
             context.getBean(JsonMapper.class), context.getBean(Clock.class),
             context.getBean(PlatformObservations.class), context.getBeanProvider(MeterRegistry.class),
-            executor.settings().withInstanceId(id));
+            settings);
     }
 
     private static void drain(ExternalJobExecutor instance, List<String> jobs) {

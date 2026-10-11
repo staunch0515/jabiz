@@ -30,7 +30,8 @@ import static com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET;
  * the sample applications copy for long calls:
  * <ul>
  *   <li>{@value #REQUEST} ({@code actsOn Product}, {@code commerce.product.write}) starts a job of type
- *       {@value #JOB_TYPE} and answers at once with its id; nothing waits for the service.</li>
+ *       {@value #JOB_TYPE} and answers at once with its id; nothing waits for the service. A product has one open job
+ *       at a time ({@code oneOpenPerReference}): asking again before it finished is 422 {@code EXTERNAL_JOB_LIMIT}.</li>
  *   <li>The platform runs {@link ProductCopyHandler} outside any transaction, at most two at a time, retried after a
  *       failure (three attempts in all).</li>
  *   <li>With the text, the platform runs {@value #APPLY}: it sets the product's {@code marketingCopy}
@@ -74,7 +75,7 @@ public final class ProductCopy {
     public static final ExternalJobType<ProductCopyInput, ProductCopyResult> COPY_JOB = ExternalJobType.define(
         JOB_TYPE, ProductCopyInput.class, ProductCopyResult.class, t -> t
             .handler(ProductCopyHandler.class).services(ModerateText.SERVICE).timeout(Duration.ofSeconds(90))
-            .retry(3, Duration.ofSeconds(10), Duration.ofMinutes(10)).maxConcurrency(2)
+            .retry(3, Duration.ofSeconds(10), Duration.ofMinutes(10)).maxConcurrency(2).oneOpenPerReference()
             .onCompleted(APPLY).onFailed(FAILED));
 
     private static final String PRODUCT_ID = "productId";
