@@ -318,18 +318,57 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ## 验收标准
 
-- [ ] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过。
-- [ ] M-30：保存 → 提交 → 待审核 → 通过后上架，驳回时显示原因；确认页需要的问题列表与预计最大支出由保存的输出给出。
-- [ ] M-31：至少 1 题、选项合规（以快照重新检查）、存在出资方（Q2 起生效），不通过不得提交。
-- [ ] M-32 / M-33：名称、地区（多选）、起止时间、时限、满分（取自版本）、合格分；档位不重叠、覆盖 0 到满分、可从 0 分起；预算上限与最大获奖人数可选；按最高档给出预计最大支出。
-- [ ] M-34：发布列表有关联模版、状态、地区、参与人数、获奖人数 / 上限、已花 / 预算，可按状态过滤与搜索（计数在 Q5 之前为 0）。
-- [ ] M-35：暂停后 `acceptsNewAttempts` 立即为 false（Q5 在同一把锁内使用）；恢复按时间回到正确状态。
-- [ ] M-36：复制策略，只替换内容或时间；一个模版可以发布多次。
-- [ ] P-09（发布）：审核队列即平台待办；通过 / 驳回附原因；可经受控参数切换为自动通过；规则未配置时拒绝而不是放行。
-- [ ] 5.3-1：发布引用只写一次的版本，之后修改模版不影响它；其文件在模版移除后仍保留。
-- [ ] 5.3-2：状态机完整声明，非法迁移 422；到开始时间进入进行中、到期结束由定时任务完成，错过的时刻会补上。
-- [ ] 5.3-3（Q4 的部分）：可见性与接受新答题的时间、状态条件写在 `PublicationRules`。地区交集与余额由 Q5 的模板实现。
-- [ ] 时态表上没有 UPDATE / DELETE；消息三语齐全；文档已更新；部署后执行 `QB_SETUP`，并由另一位管理员发布规则提案。
+- [x] `./gradlew :quizbuks:check` 通过（含 `platformCheck`）；`tools/check-app-paths.sh` 通过。PR 上的 CI：**待 PR 验证**（本阶段按要求未开 PR）。
+- [x] M-30：保存 → 提交 → 待审核 → 通过后上架，驳回时显示原因；确认页需要的问题列表与预计最大支出由保存的输出给出。
+- [x] M-31：至少 1 题、选项合规（以快照重新检查）、存在出资方（Q2 起生效），不通过不得提交。
+- [x] M-32 / M-33：名称、地区（多选）、起止时间、时限、满分（取自版本）、合格分；档位不重叠、覆盖 0 到满分、可从 0 分起；预算上限与最大获奖人数可选；按最高档给出预计最大支出。
+- [x] M-34：发布列表有关联模版、状态、地区、参与人数、获奖人数 / 上限、已花 / 预算，可按状态过滤与搜索（计数在 Q5 之前为 0）。
+- [x] M-35：暂停后 `acceptsNewAttempts` 立即为 false（Q5 在同一把锁内使用）；恢复按时间回到正确状态。
+- [x] M-36：复制策略，只替换内容或时间；一个模版可以发布多次。
+- [x] P-09（发布）：审核队列即平台待办；通过 / 驳回附原因；可经受控参数切换为自动通过；规则未配置时拒绝而不是放行。
+- [x] 5.3-1：发布引用只写一次的版本，之后修改模版不影响它；其文件在模版移除后仍保留。
+- [x] 5.3-2：状态机完整声明，非法迁移 422；到开始时间进入进行中、到期结束由定时任务完成，错过的时刻会补上。
+- [x] 5.3-3（Q4 的部分）：可见性与接受新答题的时间、状态条件写在 `PublicationRules`。地区交集与余额由 Q5 的模板实现。
+- [x] 时态表上没有 UPDATE / DELETE；消息三语齐全；文档已更新；部署后执行 `QB_SETUP`，并由另一位管理员发布规则提案。
+
+## 实施记录（2026-10-11）
+
+状态：后端完成（分支 `1.2/quizbuks-4-publishing`，未开 PR）。页面按计划延后。
+
+### 与计划的差异
+
+- **错误码**：字段规则另有代码（`QB_PUBLICATION_NAME_BLANK`、`_TIME_LIMIT_RANGE`、`_SCORE_RANGE`、`_BUDGET_RANGE`、`_MAX_WINNERS_RANGE`、`QB_TIER_REWARD_RANGE`，400）；
+  提交时缺项一律 `QB_PUBLICATION_FIELD_REQUIRED`（参数 `field`），不逐项设码；保存时给出不属于本发布的 `tierId` 为 422 `QB_TIER_NOT_IN_PUBLICATION`；
+  没有档位只报 `QB_TIER_NO_REWARD`（不再报覆盖问题）；地区代码不认识时流程 422 `QB_PUBLICATION_REGIONS_FORMAT`（存储文本不合格式由字段规则 400）。全部在 `PublishingCodes`。
+- **以快照重查内容**的违规路径加前缀 `version.`（如 `version.questions[0].options`），与发布自己的字段区分。
+- **档位按键比较**：同 Q3 的选项，给出的列表是完整列表，带 `tierId` 的是原档位、不带的是新档位（保存输出给出 `tierIds`）。不带键重存同样的档位会删旧插新（`revision + 1`）。
+- **`revision` 与 `editedAt`**：发布行的每一次写入（含状态变化）都加 1、记时间，不只是策略的修改。撤回时清空 `approvalRequestId`，恢复时清空 `pausedAt`。
+- **迁移由流程自己先查起点**：平台只拒绝声明之外的迁移，看不到"迁到原状态"（如暂停已暂停的）或"声明了但不是本操作的"（如对进行中的发布恢复而已过结束 → 结束）。
+  撤回、暂停、恢复先查起点（`PENDING_REVIEW`；`SCHEDULED`、`LIVE`；`PAUSED`），不符即以平台的 422 `ILLEGAL_TRANSITION` 拒绝；写入时也再查一次声明。
+- **提交先读一次发布再取锁**：模版锁在前，而只有发布知道其模版；先读出 `quizId`，取模版锁（共享）与发布锁，再读一次，期间模版变了即 409（只有持发布锁的保存会改它）。
+- **系统身份的流程**（`APPROVAL_RESULT`、`TICK`、`ADVANCE`）经默认视图读取（商家视图按操作人限定，系统读不到）。`TICK` 输出 `due`（本次找到并推进的条数）。
+- **保存输出的 `problems`** 带按调用者语言的文案（`field`、`code`、`message`、`params`）；复制的缺省名称为消息 `qb.publication.copy-name`（三语，过长时截短源名称）。
+- **`qb.sponsor.quizzes`** 增加 `publicationCount`、`published`（可筛选）。`content.yml` 的快照不含模板结果，因此没有变化；`setup.yml` 增加发布第 7 个提案（规则）的步骤并更新快照。
+- **测试结构**：`ContentFilesIT` 改为继承 `PublicationItSupport`（商家令牌多了 `qb.publication.write`）；另有 `PublicationReviewSettingsIT`（需要未发布提案的新装系统）
+  与 `PublicationTickBatchIT`（数全部发布）各成一类。平台测试基类在每个测试前把时钟拨回起点，发布的集成测试因此先把时钟拨到本类已有操作之后（否则定时任务写的版本早于已有版本，变基冲突；清扫任务的计划时刻重复而被重放）。
+- **场景**需要 `properties: jabiz.jobs.lock-at-least-for: 0s`：同一任务在几秒内运行两次，否则第二次因集群锁 `LOCKED`（平台缺口 7）。
+- `deploy/quizbuks/README.md` 写明：规则与参数的提案发布之前，提交发布一律被拒。
+
+### 测试
+
+单元：`TierCoverageTest`（含 500 例 jqwik 与逐分计数的独立实现对照）、`PublicationReadinessTest`、`PublicationRulesTest`（迁移表穷举、边界前后 1 毫秒、规则产生的迁移都已声明）、
+`PublicationApprovalsTest`、`RegionsTest`、`QbRolesTest`、`MessagesTest`。
+集成：`PublicationIT`（10）、`PublicationLifecycleIT`（6，含暂停与定时任务并发）、`PublicationOwnerIT`（5）、`PublicationReviewSettingsIT`（1）、`PublicationTickBatchIT`（1，201 条分两次）、
+`ContentFilesIT` 新增 2（移除模版后已提交发布的文件保留、草稿的被清扫且不可再提交；提交与移除并发）、`SetupIT` / `SetupRemovalsIT` 扩展（规则只提出一次，停用后不加回）。
+每个发布集成测试后检查 9 张时态表没有 UPDATE / DELETE。场景 `qb/publishing.yml`（新快照）。
+
+### 已知问题
+
+- 被复制过的草稿不能删除：副本的 `copiedFrom` 引用它，平台 422 `STILL_REFERENCED`。可接受（删除副本后即可删除）；若要改，`copiedFrom` 改为不作引用的文本。
+- 定时任务的一批在同一事务中（平台缺口 6）：一条失败整批回滚、下一分钟重试。
+- 状态在结束时间后至多一分钟仍为 `LIVE`；判断一律以 `PublicationRules` 为准。
+- `SponsorChecks` 在 Q2 之前恒为通过。
+- 页面未做；PR 上的 CI 未运行。
 
 ## 风险
 
@@ -361,6 +400,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 5. **（新）没有规则时审批放行**：`RequireApproval` 在没有成立的规则时得出 `NOT_REQUIRED`，新装系统上默认放行。应用以 `autoApprove` 事实加 `QB_REVIEW_NOT_CONFIGURED` 自行拒绝（D-Q4-4）。
    建议平台提供 `ApprovalSubject.define(…).requireRule()`：该对象没有启用的规则时，`RequireApproval` 报 422 `APPROVAL_RULE_MISSING`；"不需要审批"只能由显式的无层级规则表达。
 6. **（新）定时任务里逐项独立的事务**：`CallProcess.forEach` 与根流程同一事务，一项失败整批回滚。建议平台提供"任务按项分事务执行子流程"（例如 `JobDefinition.forEach(查询, 流程)`，每项一次提交，失败的单独记录与重试）。Q4 以批量上限与锁内重新检查绕行；Q5 的 `QB_ATTEMPT_EXPIRE`（每分钟批量自动提交）同样受益，Q5 前评估。
+
+7. **（新，小）场景中同一定时任务在几秒内运行两次会得到 `LOCKED`**：`runJob` 不重置集群锁，`jabiz.jobs.lock-at-least-for`（缺省 30 秒，真实时间）使第二次被挡。
+   Q4 的场景以 `properties: jabiz.jobs.lock-at-least-for: 0s` 绕行。建议场景回放默认把它设为 0（或 `runJob` 前释放该任务的锁）。
 
 不需要平台新能力的点：
 - 受控参数（D40）与受控变更已支持 `SysApprovalRule`；
