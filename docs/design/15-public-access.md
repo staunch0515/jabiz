@@ -119,6 +119,9 @@ WHERE s.{{Story.slug}} = :slug
 - `SecurityConfig`：`/api/public/**` 的 `GET`/`HEAD` 放行（`permitAll`），位于"`/api/**` 必须已认证"之前；认证过滤器不处理这些路径。
 - 其他方法对 `/api/public/**` 仍然拒绝（405，从不进入任何写入路径）。
 - 公开页面本身（静态资源）与后台一样由 SPA 提供，内容安全策略按 SPA 配置（17 §3）。
+- 入站 Webhook `POST /api/inbound/{提供方}`（11 §2.5、决策 D37 第 5 条）同样匿名、同样在安全过滤链之前限流：`InboundWebhookWebFilter` 与
+  `PublicAccessWebFilter` 写法相同（客户端地址取自 `ClientAddresses`，进程内令牌桶，429 `RATE_LIMITED` + `Retry-After`），但每个提供方一个桶
+  （`jabiz.inbound-webhooks.providers.<名>.rate-limit.per-minute`，缺省 120），且不受 `jabiz.public.enabled` 影响。
 
 ## 7. 前端类型契约
 

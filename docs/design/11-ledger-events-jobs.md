@@ -164,6 +164,52 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 新加的订阅会收到该类型的全部历史事件（2.3）；只想要今后的事件时，在订阅之前不发布该类型，或接收方按 `createdTime` 丢弃。
 - 观测：`jabiz.webhook.delivery`（标签 `subscription`，即订阅名）。
 
+### 2.5 入站 Webhook：接收其他系统的回调【D37】
+
+- **提供方是配置**（`jabiz.inbound-webhooks.providers.<名>`，名字 `[a-z][a-z0-9-]{0,39}`）：`scheme`（`stripe` 或 `hmac-sha256`）、`secrets`
+  （每个至少 32 字符，以占位符取自环境变量；可同时配置新旧两个以换密钥）、`event-types`（接受的外部事件类型白名单）、`tolerance`（缺省 5 分钟，上限 1 小时）、
+  `max-body-size`（缺省且最大 1 MB，只能调低）、`rate-limit.per-minute`（缺省每地址每分钟 120）/ `max-clients`。缺省没有提供方，即所有入站请求 404。
+  启动检查（类别 `INBOUND`）一次报告名字、方案、密钥、白名单（及拼出的事件类型是否合法、不超过 100 字符）、容差、大小与限流的全部问题；有问题的提供方即使不阻止启动也不提供服务。
+  `toString` 只显示密钥个数。
+- **签名方案**在 core `com.jabiz.inbound`（同步纯函数，`InboundSignatureScheme.verify(请求头, 原样正文, 密钥列表, 时刻, 容差)`）：
+  - `stripe`：`Stripe-Signature: t=<秒>,v1=<hex>[,v1=…]`，`v1` = HMAC-SHA256(密钥, `t + "." + 正文`)；任一 `v1` 与任一密钥匹配即通过，`v0` 与未知方案忽略；
+    `t` 缺失、重复、不是数字，头重复或多于 16 项即拒绝。
+  - `hmac-sha256`：即 D33 的出站格式（`X-Jabiz-Timestamp`、`X-Jabiz-Signature: v1=…`，core `WebhookSignature.matchesAny`），jabiz 实例之间可以互连。
+  - 一律常量时间比较；先验签再看时间，时间只对验签通过的请求有意义；`|Clock − t| ≤ tolerance`，同时拒绝过旧与过于靠后的时间戳（时间来自注入的 `Clock`）。
+- **接收** `POST /api/inbound/{提供方}`（匿名，签名即凭证；不看 `Authorization` 头，带过期令牌也不会 401）：
+  1. `InboundWebhookWebFilter`（安全过滤链之前）：路径不是一段已提供服务的提供方 → 404（任何方法）；非 `POST` → 405 `Allow: POST`；
+     按客户端地址（`ClientAddresses`，10 §15.5）的进程内令牌桶，每个提供方一个，超限 → 429 `RATE_LIMITED` + `Retry-After`；不受 `jabiz.public.enabled` 影响。
+  2. 控制器读原始字节（不经任何解码器）：声明的 `Content-Length` 超限即拒绝、不读正文；分块传输在超过上限时中止读取。
+  3. `InboundReceiver`：验签 → 正文必须是严格的 UTF-8 且是一个 JSON 对象（不允许重复键与尾随内容）→ 取事件号与类型（只取已签名的正文）：
+     `stripe` 取顶层 `id`、`type` 与 `livemode`；`hmac-sha256` 取顶层 `eventId`、`eventType`，其请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type` 不在签名范围内，
+     若出现必须与正文一致。事件号为 1–255 个可见 ASCII 字符。
+  4. 类型不在白名单 → 200，不存储（`result=ignored`）；同一提供方的事件号已存在 → 200（`duplicate`）。
+  5. 否则以系统身份执行内部流程 `INBOUND_RECEIVE`（权限 `inbound.receive`，不授予任何人；其步骤 `RecordInboundEvent` 只在系统身份下执行，管理员经流程接口调用得到 403）：
+     在一个事务中直接插入只追加的 `sys_inbound_event`（原样正文 `text` 与 `body_sha256`，不经变更集、不进审计，同 `MailAttempt`）并经 Outbox 发布
+     `jabiz.inbound.<提供方>.<外部类型>`；提交后答 200 `{"received":true}`。并发的同一事件在唯一键 `(provider, external_event_id)` 上等待，之后失败、整体回滚，答 200。
+  - 签名错、过期或过于靠后、缺头、超过大小、不是 UTF-8 或 JSON、缺少事件号或类型：一律 400，同一个 problem `INBOUND_REJECTED`（响应正文相同，`Cache-Control: no-store`）；
+    原因只进日志（info，只有提供方与原因）与观测标签 `reason`，不存储，不写 `op_process`。
+  - 流程输入的正文组件 `rawBody` 标 `@Sensitive`：`op_process.input_summary` 中为 `***`；正文不进日志、观测与 Outbox。
+- **事件载荷只带引用**：`{inboundEventId, provider, externalEventId, eventType, receivedTime}`（`InboundEvents.ref(event)`）。正文不复制进 `sys_outbox_event`
+  （那里不受 `inbound.read` 保护，还可能被出站订阅转发）。
+- **处理**是应用的普通事件订阅（2.3 的全部规则：系统身份、只处理一次、失败退避重试；请求中不执行业务流程）：
+  ```java
+  EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
+      event -> new Input(InboundEvents.ref(event).inboundEventId()));
+  // 流程中：
+  .step("Load the payment", LoadInboundEvent.of(ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
+  ```
+  平台步骤 `LoadInboundEvent` 把事件读成 `ReceivedEvent`（正文解析为 `Map` / `List`，数值一律 `BigDecimal`；`at("data.object.id")` 取路径上的值；`toString` 不含正文），
+  只允许系统身份或持有 `inbound.read` 的执行者。业务上不成立的事件（找不到单据、金额不符）应登记待办而不是让流程失败，否则消费者会无谓地重试到上限。
+- **读取与保留**：平台实体 `InboundEvent`（只读数据视图 `urn:jabiz:dataset:platform:InboundEvent`，权限 `inbound.read`）列表与详情都不含正文，只有 `bodySha256`；
+  正文以 `GET /api/inbound-events/{id}/body`（`inbound.read`，`Cache-Control: no-store`）逐个读取。应用可声明 `RetentionPolicy.of("InboundEvent")…from("receivedTime")`，
+  进入到期报告；表只追加，物理删除不在本阶段。
+- 观测：`jabiz.inbound.receive`（标签 `provider`、`result` = `accepted` / `duplicate` / `ignored` / `rejected`、`reason`，以及平台观测共有的 `outcome` / `status`）、
+  `jabiz.inbound.rate_limited`（无标签）。未知提供方不产生观测；不记录客户端地址。
+- 场景回放步骤 `inbound: {provider, body, at?, outcome?}`（07 §3.1）以配置的第一个密钥签名后交给 `InboundReceiver`，之后用 `deliverEvents: true` 运行消费者。
+- 示范：`app` 的提供方 `demo-pay`（`stripe`，只在 dev 与测试配置中）→ 消费者 `commerce.payment-received` → `ORDER_RECORD_PAYMENT`（`CommercePayments`），
+  手工演示 `tools/demo/inbound-demo.sh`。
+
 ## 3. 审计视图
 
 `GET /api/audit/operations`（权限 `audit.read`）：基于 `op_process` / `op_process_item` 的只读查询。
