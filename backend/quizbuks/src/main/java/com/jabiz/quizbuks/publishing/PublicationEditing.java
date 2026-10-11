@@ -52,6 +52,8 @@ final class PublicationEditing {
     static final String OUTPUT = "output";
     static final String SPONSOR_ROWS = "sponsorRows";
     static final String BAN_ROWS = "banRows";
+    static final String CARD = "card";
+    static final String SPONSOR_PROFILE = "sponsorProfile";
 
     static String lockName(Object publicationId) {
         return publicationId == null ? null : "qb.pub:" + publicationId;
@@ -72,11 +74,31 @@ final class PublicationEditing {
         loadSchedule(pb);
     }
 
-    /** Loads the schedule row of the publication named by {@link #PUB_ID}, if it has one. */
+    /**
+     * Loads the schedule row and the card of the publication named by {@link #PUB_ID}, if it has them: {@link #write}
+     * keeps both with the state.
+     */
     static <I, O> void loadSchedule(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Load the schedule", QueryEntities.<ProcessContext>of(
             QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), SCHEDULE));
+                .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), SCHEDULE))
+            .step("Load the card", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), CARD));
+    }
+
+    /**
+     * Loads the profile of the publication's sponsor (none when they have none), whose country the card keeps
+     * ({@link #goingOn}). By the immutable user, so the query reads only that user's versions.
+     */
+    static <I, O> void loadSponsorProfile(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, EntityInstance> publication) {
+        pb.step("Load the sponsor's profile", QueryEntities.<ProcessContext>of(
+            QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.In("userId",
+                    ids(found == null ? null : found.get("sponsorId")))).limit(1).build();
+            }, SPONSOR_PROFILE));
     }
 
     /**
@@ -230,6 +252,7 @@ final class PublicationEditing {
         ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), next);
         if (status != null) {
             schedule(ctx, publication, status.toString());
+            card(ctx, status.toString());
         }
         ApprovalOutputs approval = ApprovalOutputs.of(ctx);
         ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()),
@@ -267,6 +290,14 @@ final class PublicationEditing {
         }
     }
 
+    /** Keeps the card's state with the publication's (under its lock, read by {@link #loadSchedule}). */
+    static void card(ProcessContext ctx, String status) {
+        EntityInstance row = first(ctx, CARD);
+        if (row != null && !status.equals(row.get("status"))) {
+            ctx.changes().update(QbPublications.CARD, row.id(), row.version(), Map.of("status", status));
+        }
+    }
+
     /** The output when nothing was written. */
     static void unchanged(ProcessContext ctx, EntityInstance publication) {
         ApprovalOutputs approval = ApprovalOutputs.of(ctx);
@@ -285,12 +316,15 @@ final class PublicationEditing {
 
     /**
      * The values of a publication that goes on (D-Q4-4) at the operation time: scheduled or live by its times, the
-     * time of the approval, and the reasons of an earlier refusal cleared. Inserts its counters, all zero.
+     * time of the approval, and the reasons of an earlier refusal cleared. Inserts its counters, all zero, and its
+     * card (Q5, D-Q5-6) from the publication, its version ({@link #VERSIONS}), tiers ({@link #TIERS}) and sponsor's
+     * profile ({@link #SPONSOR_PROFILE}).
      */
     static Map<String, Object> goingOn(ProcessContext ctx, EntityInstance publication, String requestId) {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("status", PublicationRules.resumeTo(instant(publication.get("startAt")),
-            instant(publication.get("endAt")), ctx.opTime()));
+        String status = PublicationRules.resumeTo(instant(publication.get("startAt")),
+            instant(publication.get("endAt")), ctx.opTime());
+        values.put("status", status);
         values.put("approvedAt", ctx.opTime());
         values.put("approvalRequestId", requestId);
         values.put("rejectReason", null);
@@ -301,7 +335,36 @@ final class PublicationEditing {
             counter.put(count, BigDecimal.ZERO);
         }
         ctx.changes().insert(QbPublications.COUNTER, counter);
+        ctx.changes().insert(QbPublications.CARD, cardOf(ctx, publication, status));
         return values;
+    }
+
+    /** The card of a publication going on in {@code status}. */
+    private static Map<String, Object> cardOf(ProcessContext ctx, EntityInstance publication, String status) {
+        EntityInstance version = first(ctx, VERSIONS);
+        if (version == null) {
+            // Submission requires a version, and it is written once: it is always there.
+            throw new IllegalStateException(QbPublications.PUBLICATION + " " + publication.id() + " has no version");
+        }
+        QuizSnapshot snapshot = snapshot(version);
+        EntityInstance profile = first(ctx, SPONSOR_PROFILE);
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("publicationId", publication.id());
+        card.put("sponsorId", publication.get("sponsorId"));
+        card.put("status", status);
+        for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
+            "passScore", "timeLimitSec", "budgetCap", "maxWinners")) {
+            card.put(field, publication.get(field));
+        }
+        card.put("quizTitle", version.get("title"));
+        card.put("questionCount", version.get("questionCount"));
+        card.put("cover", snapshot.cover() == null ? null : snapshot.cover().toString());
+        card.put("tiers", CardTiers.toJson(ordered(list(ctx, TIERS)).stream().map(row -> new CardTiers.Tier(
+            String.valueOf(row.id()), integer(row.get("fromScore")), integer(row.get("toScore")),
+            money(row.get("reward")))).toList()));
+        card.put("sponsorCountry", profile == null ? null : profile.get("countryCode"));
+        card.put("wentOnAt", ctx.opTime());
+        return card;
     }
 
     /** The publication's policy as the readiness check and the approval see it. */

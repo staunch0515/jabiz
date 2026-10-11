@@ -22,3 +22,27 @@ dependencies {
     // Registration and mail against a local SMTP server (Q2), as the platform's own tests.
     testImplementation("com.icegreen:greenmail-junit5:2.1.3")
 }
+
+// The throughput baseline (docs/quizbuks/plans/Q5-answering.md, D-Q5-10) is tagged "perf": not part of check, run on
+// its own with ./gradlew :quizbuks:perfTest.
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("perf")
+    }
+}
+
+tasks.register<Test>("perfTest") {
+    description = "Runs the answering throughput baseline (tag perf)."
+    group = "verification"
+    val test = tasks.named<Test>("test").get()
+    testClassesDirs = test.testClassesDirs
+    classpath = test.classpath
+    systemProperties(test.systemProperties)
+    jvmArgs(test.jvmArgs ?: emptyList<String>())
+    useJUnitPlatform {
+        includeTags("perf")
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+}

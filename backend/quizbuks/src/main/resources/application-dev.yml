@@ -5,3 +5,9 @@ jabiz:
   files:
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:build/jabiz-files}
+# The development credit stands in for top-ups until Q6 (docs/quizbuks/plans/Q5-answering.md, D-Q5-8); never in
+# production.
+quizbuks:
+  wallet:
+    dev-credit:
+      enabled: true

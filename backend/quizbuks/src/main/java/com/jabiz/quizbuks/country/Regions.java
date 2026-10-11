@@ -91,5 +91,16 @@ public final class Regions {
         return List.of(written.split(","));
     }
 
+    /**
+     * Whether a taker whose country is in {@code countryRegions} is among those a publication is aimed at
+     * ({@code publicationRegions}): the two written sets share a region (docs/quizbuks/plans/Q5-answering.md, D-Q5-6).
+     * Every country is in {@link #GLOBAL}, so a publication aimed at {@code GLOBAL} reaches everyone. The feed template
+     * writes the same condition as {@code string_to_array(..) && string_to_array(..)}.
+     */
+    public static boolean overlaps(String countryRegions, String publicationRegions) {
+        List<String> mine = parse(countryRegions);
+        return parse(publicationRegions).stream().anyMatch(mine::contains);
+    }
+
     private Regions() {}
 }
