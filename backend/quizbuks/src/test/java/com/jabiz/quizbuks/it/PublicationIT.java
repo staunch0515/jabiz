@@ -161,7 +161,7 @@ class PublicationIT extends PublicationItSupport {
         String first = (String) submit(sponsorA(), id).get("approvalRequestId");
         decide(first, "REJECT", "The rewards are too high.");
         assertThat(row(id)).containsEntry("status", PublicationStatus.DRAFT)
-            .containsEntry("reject_reason", "The rewards are too high.");
+            .containsEntry("reject_reason", "The rewards are too high.").containsEntry("approval_request_id", null);
         assertThat(items("qb.sponsor.publications", sponsorA(), body("params", Map.of("q", "too generous"))))
             .singleElement().satisfies(item -> assertThat(item)
                 .containsEntry("rejectReason", "The rewards are too high.").containsEntry("status", "DRAFT"));
@@ -211,6 +211,23 @@ class PublicationIT extends PublicationItSupport {
     }
 
     @Test
+    void aPublicationStillInReviewAtItsEndGoesBackToItsDraft() {
+        Instant now = clock.instant();
+        String id = (String) run("QB_PUBLICATION_SAVE", sponsorA(), complete(version(sponsorA(), "Unreviewed"),
+            "Never reviewed", now.minus(Duration.ofHours(1)), now.plus(Duration.ofHours(2)))).get("publicationId");
+        String requestId = (String) submit(sponsorA(), id).get("approvalRequestId");
+        clock.advance(Duration.ofHours(2));
+        assertThat(runTick()).isEqualTo(com.jabiz.runtime.job.JobRunner.Outcome.SUCCEEDED);
+        assertThat(row(id)).containsEntry("status", PublicationStatus.DRAFT)
+            .containsEntry("reject_code", PublishingCodes.EXPIRED_IN_REVIEW)
+            .containsEntry("approval_request_id", null);
+        assertThat(latest("sys_approval_request_version", "request_id", "request_id = '" + requestId + "'"))
+            .singleElement().satisfies(request -> assertThat(request).containsEntry("status", "WITHDRAWN"));
+        assertThat(tasks(reviewer())).noneSatisfy(task -> assertThat(String.valueOf(task.get("title")))
+            .contains("Never reviewed"));
+    }
+
+    @Test
     void aCopyKeepsThePolicyAndMayTakeAnotherVersionOrOtherTimes() {
         String versionId = version(sponsorA(), "Copied");
         String source = draft(sponsorA(), versionId, "Original");
@@ -221,7 +238,7 @@ class PublicationIT extends PublicationItSupport {
         assertThat(copy).containsEntry("status", PublicationStatus.DRAFT).containsEntry("problems", List.of());
         Map<String, Object> original = row(source);
         assertThat(row(copyId)).containsEntry("name", "Original (copy)").containsEntry("copied_from",
-            UUID.fromString(source)).satisfies(r -> {
+            source).satisfies(r -> {
                 for (String column : List.of("version_id", "regions", "start_at", "end_at", "time_limit_sec",
                     "pass_score", "budget_cap", "max_winners", "max_reward", "max_spend", "full_score")) {
                     assertThat(r.get(column)).as(column).isEqualTo(original.get(column));
@@ -306,6 +323,76 @@ class PublicationIT extends PublicationItSupport {
             .containsEntry("n", 1L);
         assertThat(query("SELECT count(DISTINCT request_id) AS n FROM sys_approval_request_version "
             + "WHERE entity_id = ?", id).getFirst()).containsEntry("n", 1L);
+    }
+
+    @Test
+    void aStaleRejectionIsIgnoredAndTheNewRequestStillCounts() {
+        String id = draft(sponsorA(), version(sponsorA(), "Stale"), "Stale rejection");
+        String first = (String) submit(sponsorA(), id).get("approvalRequestId");
+        // Rejected, but the event is not delivered yet; meanwhile the sponsor withdraws and submits it unchanged.
+        run("APPROVAL_DECIDE", reviewer(), body("requestId", first, "decision", "REJECT", "reason", "Old reason."));
+        run("QB_PUBLICATION_WITHDRAW", sponsorA(), body("publicationId", id));
+        String second = (String) submit(sponsorA(), id).get("approvalRequestId");
+        assertThat(second).isNotEqualTo(first);
+        deliverEvents();
+        // The rejection was of the first request: the publication still waits for the second.
+        assertThat(row(id)).containsEntry("status", PublicationStatus.PENDING_REVIEW)
+            .containsEntry("approval_request_id", second).containsEntry("reject_reason", null);
+        decide(second, "APPROVE", null);
+        assertThat(status(id)).isEqualTo(PublicationStatus.SCHEDULED);
+    }
+
+    @Test
+    void forgedOrForeignApprovalResultsChangeNothing() {
+        String id = draft(sponsorA(), version(sponsorA(), "Forged"), "Forged");
+        String requestId = (String) submit(sponsorA(), id).get("approvalRequestId");
+        // Even an administrator holding every permission cannot reject without a rejected request.
+        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "qb.publication", "entityId", id,
+            "status", "REJECTED", "requestId", requestId, "preparerId", "sponsor-a", "reason", "Forged"));
+        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "qb.publication", "entityId", id,
+            "status", "REJECTED", "requestId", UUID.randomUUID().toString(), "reason", "Forged"));
+        // An event of another subject is not about publications, whatever its entity.
+        run("QB_PUBLICATION_APPROVAL_RESULT", admin(), body("subject", "commerce.certification", "entityId", id,
+            "status", "APPROVED", "requestId", requestId, "preparerId", "sponsor-a"));
+        assertThat(row(id)).containsEntry("status", PublicationStatus.PENDING_REVIEW)
+            .containsEntry("reject_reason", null);
+    }
+
+    @Test
+    void moneyStaysWithinItsColumns() {
+        String versionId = version(sponsorA(), "Money");
+        assertThat(codes(refused("QB_PUBLICATION_SAVE", sponsorA(), body("name", "x", "tiers",
+            List.of(body("fromScore", 0, "toScore", 5, "reward", new java.math.BigDecimal("10000000000000")))),
+            400))).containsExactly(PublishingCodes.TIER_REWARD_RANGE);
+        assertThat(codes(refused("QB_PUBLICATION_SAVE", sponsorA(), body("name", "x", "budgetCap",
+            new java.math.BigDecimal("10000000000000")), 400))).containsExactly(PublishingCodes.BUDGET_RANGE);
+        // The most winners at the highest reward is more than any spend: refused at submission, never stored.
+        Map<String, Object> policy = complete(versionId, "Huge", clock.instant().plus(Duration.ofDays(1)),
+            clock.instant().plus(Duration.ofDays(2)));
+        policy.remove("budgetCap");
+        policy.put("maxWinners", 999_999_999);
+        policy.put("tiers", List.of(body("fromScore", 0, "toScore", 4, "reward", 0), body("fromScore", 5,
+            "toScore", 5, "reward", new java.math.BigDecimal("1000000000000"))));
+        Map<String, Object> saved = run("QB_PUBLICATION_SAVE", sponsorA(), policy);
+        assertThat(problemCodes(saved)).containsExactly(PublishingCodes.SPEND_RANGE);
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId",
+            saved.get("publicationId")), 422))).containsExactly(PublishingCodes.SPEND_RANGE);
+    }
+
+    @Test
+    void aCopiedDraftCanStillBeDeletedAndCopyNamesKeepWholeCharacters() {
+        String versionId = version(sponsorA(), "Copied draft");
+        String source = draft(sponsorA(), versionId, "x".repeat(92) + "\uD83D\uDE00");
+        String copy = (String) run("QB_PUBLICATION_COPY", sponsorA(), body("publicationId", source))
+            .get("publicationId");
+        String name = (String) row(copy).get("name");
+        assertThat(name).endsWith(" (copy)").doesNotContain("\uFFFD");
+        assertThat(name.codePointCount(0, name.length())).isLessThanOrEqualTo(100);
+        // 93 characters as people count them, and " (copy)": exactly the 100 a name may have, the emoji whole.
+        assertThat(name).isEqualTo("x".repeat(92) + "\uD83D\uDE00 (copy)");
+        run("QB_PUBLICATION_DELETE", sponsorA(), body("publicationId", source));
+        assertThat(row(source)).containsEntry("is_deleted", true);
+        assertThat(row(copy)).containsEntry("copied_from", source);
     }
 
     @Test

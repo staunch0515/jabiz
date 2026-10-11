@@ -40,7 +40,7 @@ public class ContentConfig {
         return DatasetDefinition.define(QbContent.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
-            .permissions(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_WRITE)
+            .permissions(QbPermissions.ADMIN_QUIZ_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             // Cloning and removing a quiz write all its parts at once.
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

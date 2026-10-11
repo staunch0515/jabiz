@@ -154,6 +154,13 @@
       "spent" : "0",
       "version" : 1
     } ],
+    "QbPublicationSchedule" : [ {
+      "publicationId" : "#uuid:1",
+      "quizId" : "#uuid:2",
+      "versionId" : "#uuid:3",
+      "nextDueAt" : null,
+      "version" : 4
+    } ],
     "SysApprovalRequest" : [ {
       "requestId" : "#uuid:12",
       "subject" : "qb.publication",

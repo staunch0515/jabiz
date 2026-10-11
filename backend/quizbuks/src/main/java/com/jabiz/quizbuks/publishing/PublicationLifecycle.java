@@ -85,9 +85,13 @@ public final class PublicationLifecycle {
 
     public record PublicationRef(@NotNull UUID publicationId) {}
 
-    /** Input of {@code QB_PUBLICATION_APPROVAL_RESULT}, from an approval event of any subject. */
+    /**
+     * Input of {@code QB_PUBLICATION_APPROVAL_RESULT}, from an approval event of any subject.
+     *
+     * @param requestId the request decided: only the publication's own request (its {@code approvalRequestId}) counts
+     */
     public record ApprovalResultInput(@NotBlank String subject, @NotBlank String entityId, @NotBlank String status,
-        String preparerId, String contentHash, String reason) {}
+        String requestId, String preparerId, String contentHash, String reason) {}
 
     public record TickInput(@NotNull Instant scheduledTime) {}
 
@@ -97,6 +101,7 @@ public final class PublicationLifecycle {
     static final String FIRST = "first";
     static final String PARAMS = "params";
     static final String DUE = "due";
+    static final String REQUEST = "request";
 
     // ---- submit ----------------------------------------------------------------------------------------------------
 
@@ -267,15 +272,17 @@ public final class PublicationLifecycle {
     // ---- approval result -------------------------------------------------------------------------------------------
 
     /**
-     * Continues after a review is decided (subscribed to both approval events, run as the system). An approval goes
-     * through only when {@link RequireApproval} finds it for the publication's content (the preparer's request); a
-     * rejection only when it was for that content. A publication no longer under review is left alone.
+     * Continues after a review is decided (subscribed to both approval events, run as the system; the permission is
+     * granted to no role). Only the publication's own request counts: the event must name the request the publication
+     * waits for. An approval goes through only when {@link RequireApproval} finds that same request approved for the
+     * publication's content; a rejection only when the stored request is rejected, for that content. Anything else
+     * (another subject, a stale event, a forged call) changes nothing.
      */
     public static ProcessDefinition<ApprovalResultInput, PublicationOutput, ProcessContext> approvalResult() {
         return ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class, PublicationOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Moves a publication on after its review is decided.")
-                .permissions(QbPermissions.REVIEW_PUBLICATION)
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
                 .internal()
                 .contextFactory((start, input) -> PublicationEditing.start(start, input,
                     PublicationApprovals.SUBJECT.equals(input.subject()) ? uuidOrNull(input.entityId()) : null))
@@ -293,12 +300,23 @@ public final class PublicationLifecycle {
                     EntityInstance found = first(ctx, FOUND);
                     return found == null ? null : found.get("versionId");
                 }, false))
+                .steps(PublicationEditing::loadSchedule)
+                .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
+                        ownRequest(ctx) ? PublicationEditing.ids(input(ctx).requestId()) : new ArrayList<>()))
+                        .limit(1).build(), REQUEST))
                 .step("Check the approval", RequireApproval.<ProcessContext>when(
-                    ctx -> underReview(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
+                    ctx -> ownRequest(ctx) && ApprovalEntities.APPROVED.equals(input(ctx).status()),
                     PublicationApprovals.SUBJECT, ctx -> PublicationEditing.approvalCase(first(ctx, FOUND),
                         list(ctx, TIERS), first(ctx, VERSIONS), false).preparedBy(input(ctx).preparerId()),
                     APPROVAL))
                 .compute("Move on", (metadata, ctx) -> approvalResult(ctx)));
+    }
+
+    /** Whether the event is about the request the publication, still under review, waits for. */
+    private static boolean ownRequest(ProcessContext ctx) {
+        return underReview(ctx) && input(ctx).requestId() != null
+            && input(ctx).requestId().equals(first(ctx, FOUND).get("approvalRequestId"));
     }
 
     private static UUID uuidOrNull(String id) {
@@ -319,7 +337,7 @@ public final class PublicationLifecycle {
     }
 
     static void approvalResult(ProcessContext ctx) {
-        if (!underReview(ctx)) {
+        if (!ownRequest(ctx)) {
             return;
         }
         EntityInstance publication = first(ctx, FOUND);
@@ -327,7 +345,8 @@ public final class PublicationLifecycle {
         Map<String, Object> values = new LinkedHashMap<>();
         if (ApprovalEntities.APPROVED.equals(input.status())) {
             ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
-            if (approval.status() != ApprovalOutcome.Status.APPROVED) {
+            if (approval.status() != ApprovalOutcome.Status.APPROVED
+                || !input.requestId().equals(approval.requestId())) {
                 PublicationEditing.unchanged(ctx, publication);
                 return;
             }
@@ -339,9 +358,7 @@ public final class PublicationLifecycle {
                 values.put("rejectCode", PublishingCodes.EXPIRED_IN_REVIEW);
                 values.put("rejectReason", null);
             }
-        } else if (ApprovalEntities.REJECTED.equals(input.status()) && PublicationApprovals.hash(
-            PublicationEditing.approvalCase(publication, list(ctx, TIERS), first(ctx, VERSIONS), false).content())
-            .equals(input.contentHash())) {
+        } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, publication)) {
             values.put("status", DRAFT);
             values.put("rejectReason", input.reason());
             values.put("rejectCode", null);
@@ -352,18 +369,33 @@ public final class PublicationLifecycle {
         PublicationEditing.write(ctx, publication, values);
     }
 
+    /** Whether the stored request (not the event) says that the publication's present content was rejected. */
+    private static boolean rejected(ProcessContext ctx, EntityInstance publication) {
+        EntityInstance request = first(ctx, REQUEST);
+        if (request == null) {
+            return false;
+        }
+        String hash = PublicationApprovals.hash(PublicationEditing.approvalCase(publication, list(ctx, TIERS),
+            first(ctx, VERSIONS), false).content());
+        return ApprovalEntities.REJECTED.equals(request.get("status"))
+            && PublicationApprovals.SUBJECT.equals(request.get("subject"))
+            && String.valueOf(publication.id()).equals(request.get("entityId"))
+            && hash.equals(String.valueOf((Object) request.get("contentHash")).strip());
+    }
+
     // ---- tick ------------------------------------------------------------------------------------------------------
 
     /**
      * {@code QB_PUBLICATION_TICK}: every publication due at the operation time, by key, at most
-     * {@link PublishingLimits#TICK_BATCH}: scheduled ones whose start has come, running ones whose end has come. It
-     * looks at the state and the times, not at the minute, so the minutes missed while the system was down are made
-     * up by the next run. Each is moved on by {@code QB_PUBLICATION_ADVANCE} under its own lock.
+     * {@link PublishingLimits#TICK_BATCH}, from the schedule ({@code nextDueAt}, kept with the state): scheduled ones
+     * whose start has come, running ones and ones still in review whose end has come. It looks at the due time, not at
+     * the minute, so the minutes missed while the system was down are made up by the next run. Each is moved on by
+     * {@code QB_PUBLICATION_ADVANCE} under its own lock, all in one transaction (platform gap 6).
      */
     public static ProcessDefinition<TickInput, TickOutput, ProcessContext> tick() {
         return ProcessDefinition.define(TICK, 1, TickInput.class, TickOutput.class, ProcessContext.class, pb -> pb
             .description("Moves publications on whose start or end has come.")
-            .permissions(QbPermissions.PUBLICATION_TICK)
+            .permissions(QbPermissions.PUBLICATION_SYSTEM)
             .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
@@ -372,16 +404,12 @@ public final class PublicationLifecycle {
             })
             .outputMapper(ctx -> new TickOutput(list(ctx, DUE).size()))
             .step("Find the publications due", QueryEntities.<ProcessContext>of(
-                QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.Or(List.of(
-                        new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", SCHEDULED),
-                            new QueryPredicate.Lte("startAt", ctx.opTime()))),
-                        new QueryPredicate.And(List.of(
-                            new QueryPredicate.In("status", new ArrayList<>(PublicationStatus.RUNNING)),
-                            new QueryPredicate.Lte("endAt", ctx.opTime()))))))
-                    .orderBy("publicationId", true).limit(PublishingLimits.TICK_BATCH).build(), DUE))
+                QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Lte("nextDueAt", ctx.opTime()))
+                    .orderBy("nextDueAt", true).orderBy("publicationId", true)
+                    .limit(PublishingLimits.TICK_BATCH).build(), DUE))
             .step("Move each on", CallProcess.<ProcessContext>forEach(ADVANCE, 1, ctx -> list(ctx, DUE).stream()
-                .map(publication -> new PublicationRef(uuid(publication.id()))).toList(), null)));
+                .map(row -> new PublicationRef(uuid(row.id()))).toList(), null)));
     }
 
     /**
@@ -392,7 +420,7 @@ public final class PublicationLifecycle {
         return ProcessDefinition.define(ADVANCE, 1, PublicationRef.class, PublicationOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Moves one publication on as its start and end times say.")
-                .permissions(QbPermissions.PUBLICATION_TICK)
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
                 .internal()
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
@@ -400,27 +428,50 @@ public final class PublicationLifecycle {
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
                 .step("Load the publication", LoadEntity.by(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), PUB_ID, PUBLICATION))
-                .compute("Move on", (metadata, ctx) -> {
-                    EntityInstance publication = PublicationEditing.publication(ctx);
-                    String status = publication.get("status");
-                    String to = PublicationRules.next(status, instant(publication.get("startAt")),
-                        instant(publication.get("endAt")), ctx.opTime());
-                    if (to.equals(status)) {
-                        PublicationEditing.unchanged(ctx, publication);
-                        return;
-                    }
-                    Map<String, Object> values = new LinkedHashMap<>();
-                    values.put("status", to);
-                    ended(ctx, values, to);
-                    PublicationEditing.write(ctx, publication, values);
-                }));
+                .steps(PublicationEditing::loadSchedule)
+                // Only a publication still in review has a pending request: one past its end loses it.
+                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>of(
+                    PublicationApprovals.SUBJECT, ctx -> expiredInReview(ctx)
+                        ? PublicationEditing.publication(ctx).id() : NO_REQUEST))
+                .compute("Move on", (metadata, ctx) -> advance(ctx)));
+    }
+
+    /** An entity id no publication has (WithdrawApproval has no condition): the withdrawal then finds nothing. */
+    private static final String NO_REQUEST = "none";
+
+    private static boolean expiredInReview(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        return PENDING_REVIEW.equals(publication.get("status")) && DRAFT.equals(PublicationRules.next(
+            PENDING_REVIEW, instant(publication.get("startAt")), instant(publication.get("endAt")), ctx.opTime()));
+    }
+
+    static void advance(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        String status = publication.get("status");
+        String to = PublicationRules.next(status, instant(publication.get("startAt")),
+            instant(publication.get("endAt")), ctx.opTime());
+        if (to.equals(status)) {
+            // A due time that no longer fits the state is put right, so the tick does not find it again.
+            PublicationEditing.schedule(ctx, publication, status);
+            PublicationEditing.unchanged(ctx, publication);
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", to);
+        if (DRAFT.equals(to)) {
+            // Still in review at its end (R3): nothing left to approve.
+            values.put("rejectCode", PublishingCodes.EXPIRED_IN_REVIEW);
+            values.put("rejectReason", null);
+        }
+        ended(ctx, values, to);
+        PublicationEditing.write(ctx, publication, values);
     }
 
     /** The input of {@code QB_PUBLICATION_APPROVAL_RESULT} from an approval event. */
     static ApprovalResultInput resultInput(DomainEvent event) {
         Map<String, Object> payload = event.payload();
         return new ApprovalResultInput(text(payload, "subject"), text(payload, "entityId"), text(payload, "status"),
-            text(payload, "preparerId"), text(payload, "contentHash"), text(payload, "reason"));
+            text(payload, "requestId"), text(payload, "preparerId"), text(payload, "contentHash"), text(payload, "reason"));
     }
 
     private static String text(Map<String, Object> payload, String key) {

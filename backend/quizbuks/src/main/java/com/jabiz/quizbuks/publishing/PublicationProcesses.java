@@ -367,7 +367,7 @@ public final class PublicationProcesses {
         values.put("status", PublicationStatus.DRAFT);
         values.put("revision", BigDecimal.ONE);
         values.put("editedAt", ctx.opTime());
-        values.put("copiedFrom", source.id());
+        values.put("copiedFrom", String.valueOf(source.id()));
         UUID publicationId = uuid(ctx.changes().insert(QbPublications.PUBLICATION, values));
         List<UUID> tierIds = new ArrayList<>();
         writeTiers(ctx, publicationId, ctx.request().actorId(), List.of(), tiers, tierIds);
@@ -376,9 +376,20 @@ public final class PublicationProcesses {
 
     /** "Name (copy)" in the caller's language, the source's name shortened to fit the name's length. */
     static String copyName(MessageCatalog messages, ProcessContext ctx, String source) {
-        String template = messages.find(COPY_NAME, ctx.request().locale()).orElse("{name} (copy)");
-        int room = PublishingLimits.NAME_LENGTH - MessageTemplate.format(template, Map.of("name", "")).length();
-        String name = source.length() > room ? source.substring(0, Math.max(room, 0)).strip() : source;
+        return copyName(messages.find(COPY_NAME, ctx.request().locale()).orElse("{name} (copy)"), source);
+    }
+
+    /**
+     * {@code template} with the source's name, shortened by whole characters (code points, as the name's length is
+     * counted) so that the result fits; a character is never cut in half.
+     */
+    static String copyName(String template, String source) {
+        String suffix = MessageTemplate.format(template, Map.of("name", ""));
+        int room = Math.max(PublishingLimits.NAME_LENGTH - suffix.codePointCount(0, suffix.length()), 0);
+        String name = source;
+        if (source.codePointCount(0, source.length()) > room) {
+            name = source.substring(0, source.offsetByCodePoints(0, room)).strip();
+        }
         return MessageTemplate.format(template, Map.of("name", name));
     }
 

@@ -94,6 +94,10 @@ class PublicationOwnerIT extends PublicationItSupport {
         call("QB_PUBLICATION_ADVANCE", sponsorA(), body("publicationId", id)).expectStatus().isForbidden();
         call("QB_PUBLICATION_APPROVAL_RESULT", sponsorA(), body("subject", "qb.publication", "entityId", id,
             "status", "APPROVED")).expectStatus().isForbidden();
+        // Nor a content administrator, who reviews: a review result comes only from the approval events.
+        call("QB_PUBLICATION_APPROVAL_RESULT", reviewer(), body("subject", "qb.publication", "entityId", id,
+            "status", "REJECTED", "requestId", UUID.randomUUID().toString())).expectStatus().isForbidden();
+        call("QB_PUBLICATION_ADVANCE", reviewer(), body("publicationId", id)).expectStatus().isForbidden();
         // The administrators read; writing a publication is not theirs.
         call("QB_PUBLICATION_SAVE", reviewer(), body("name", "No")).expectStatus().isForbidden();
     }

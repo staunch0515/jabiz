@@ -2,8 +2,10 @@ package com.jabiz.quizbuks.publishing;
 
 import java.time.Instant;
 
+import static com.jabiz.quizbuks.publishing.PublicationStatus.DRAFT;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.ENDED;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.LIVE;
+import static com.jabiz.quizbuks.publishing.PublicationStatus.PENDING_REVIEW;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.RUNNING;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
 
@@ -24,9 +26,14 @@ public final class PublicationRules {
 
     /**
      * The state the minute's tick moves the publication to at {@code now}: a running one ends at its end time, a
-     * scheduled one goes live at its start time; any other stays as it is (the state itself is returned).
+     * scheduled one goes live at its start time, one still in review at its end goes back to its draft; any other
+     * stays as it is (the state itself is returned).
      */
     public static String next(String status, Instant startAt, Instant endAt, Instant now) {
+        // Never reviewed before its end: nothing to approve any more (the tick withdraws the review).
+        if (PENDING_REVIEW.equals(status) && endAt != null && !now.isBefore(endAt)) {
+            return DRAFT;
+        }
         if (RUNNING.contains(status) && endAt != null && !now.isBefore(endAt)) {
             return ENDED;
         }
@@ -34,6 +41,17 @@ public final class PublicationRules {
             return LIVE;
         }
         return status;
+    }
+
+    /**
+     * When the tick must next look at a publication in {@code status}: a scheduled one at its start, one running or in
+     * review at its end; never (null) a draft or an ended one.
+     */
+    public static Instant nextDue(String status, Instant startAt, Instant endAt) {
+        if (SCHEDULED.equals(status)) {
+            return startAt;
+        }
+        return RUNNING.contains(status) || PENDING_REVIEW.equals(status) ? endAt : null;
     }
 
     /**

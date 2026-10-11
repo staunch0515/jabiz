@@ -47,10 +47,23 @@ class PublicationRulesTest {
         for (String running : List.of(SCHEDULED, LIVE, PAUSED, FUNDS_SHORT)) {
             assertThat(PublicationRules.next(running, START, END, END)).as(running).isEqualTo(ENDED);
         }
-        for (String other : List.of(DRAFT, PENDING_REVIEW, ENDED)) {
+        // Still in review at its end: back to the draft (its review is withdrawn).
+        assertThat(PublicationRules.next(PENDING_REVIEW, START, END, END.minus(MS))).isEqualTo(PENDING_REVIEW);
+        assertThat(PublicationRules.next(PENDING_REVIEW, START, END, END)).isEqualTo(DRAFT);
+        for (String other : List.of(DRAFT, ENDED)) {
             assertThat(PublicationRules.next(other, START, END, END.plusSeconds(1))).as(other).isEqualTo(other);
         }
         assertThat(PublicationRules.next(PAUSED, START, END, START)).isEqualTo(PAUSED);
+    }
+
+    @Test
+    void theNextDueTimeIsTheStartOfAScheduledOneAndTheEndOfAnyOtherRunningOne() {
+        assertThat(PublicationRules.nextDue(SCHEDULED, START, END)).isEqualTo(START);
+        for (String status : List.of(LIVE, PAUSED, FUNDS_SHORT, PENDING_REVIEW)) {
+            assertThat(PublicationRules.nextDue(status, START, END)).as(status).isEqualTo(END);
+        }
+        assertThat(PublicationRules.nextDue(DRAFT, START, END)).isNull();
+        assertThat(PublicationRules.nextDue(ENDED, START, END)).isNull();
     }
 
     @Test

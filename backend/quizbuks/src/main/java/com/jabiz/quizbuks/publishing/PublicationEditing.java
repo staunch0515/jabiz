@@ -46,6 +46,7 @@ final class PublicationEditing {
     static final String VERSIONS = "versions";
     static final String QUIZZES = "quizzes";
     static final String CASE = "case";
+    static final String SCHEDULE = "schedule";
     static final String APPROVAL = "approval";
     static final String OUTPUT = "output";
 
@@ -65,6 +66,14 @@ final class PublicationEditing {
         pb.step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))))
             .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
                 PUB_ID, PUBLICATION));
+        loadSchedule(pb);
+    }
+
+    /** Loads the schedule row of the publication named by {@link #PUB_ID}, if it has one. */
+    static <I, O> void loadSchedule(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the schedule", QueryEntities.<ProcessContext>of(
+            QbPublications.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID)))).limit(1).build(), SCHEDULE));
     }
 
     /** Loads the tiers of the publication named by {@link #PUB_ID} (none without one). */
@@ -173,14 +182,50 @@ final class PublicationEditing {
         }
         long revision = number(publication.get("revision")) + 1;
         Map<String, Object> next = new LinkedHashMap<>(values);
+        if (PublicationStatus.DRAFT.equals(status)) {
+            // Back to its draft, the publication has no review any more: its next submission makes a new one.
+            next.put("approvalRequestId", null);
+        }
         next.put("revision", BigDecimal.valueOf(revision));
         next.put("editedAt", ctx.opTime());
         ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), next);
+        if (status != null) {
+            schedule(ctx, publication, status.toString());
+        }
         ApprovalOutputs approval = ApprovalOutputs.of(ctx);
         ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()),
             status == null ? publication.get("status") : status.toString(), revision, approval.status(),
             next.containsKey("approvalRequestId") ? (String) next.get("approvalRequestId")
                 : publication.get("approvalRequestId")));
+    }
+
+    /**
+     * Keeps the publication's schedule row with its state (under the publication's lock, read by
+     * {@link #loadSchedule}): none for a draft; for any other state the version and the time the tick must next look
+     * at it (none once it ended).
+     */
+    static void schedule(ProcessContext ctx, EntityInstance publication, String status) {
+        EntityInstance row = first(ctx, SCHEDULE);
+        if (PublicationStatus.DRAFT.equals(status)) {
+            if (row != null) {
+                ctx.changes().delete(QbPublications.SCHEDULE, row.id(), row.version());
+            }
+            return;
+        }
+        Instant due = PublicationRules.nextDue(status, instant(publication.get("startAt")),
+            instant(publication.get("endAt")));
+        if (row == null) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("publicationId", publication.id());
+            values.put("quizId", publication.get("quizId"));
+            values.put("versionId", publication.get("versionId"));
+            values.put("nextDueAt", due);
+            ctx.changes().insert(QbPublications.SCHEDULE, values);
+        } else if (!same(row.get("nextDueAt"), due)) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("nextDueAt", due);
+            ctx.changes().update(QbPublications.SCHEDULE, row.id(), row.version(), values);
+        }
     }
 
     /** The output when nothing was written. */

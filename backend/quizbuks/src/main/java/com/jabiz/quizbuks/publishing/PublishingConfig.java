@@ -19,12 +19,12 @@ import org.springframework.context.annotation.Configuration;
 import java.time.ZoneOffset;
 
 /**
- * Registers publishing (docs/quizbuks/plans/Q4-publishing.md): the three entities, their datasets, the two
+ * Registers publishing (docs/quizbuks/plans/Q4-publishing.md): the four entities, their datasets, the two
  * dictionaries, the approval subject, the ten processes, the minute's job and the two subscriptions to the approval
  * events.
  *
  * <p>Each entity has a default dataset, read only by administrators ({@code qb.admin.publication.read}) and written
- * by the processes only ({@code processOnlyWrites}). A sponsor reads their own publications and tiers through the
+ * by the processes only ({@code processOnlyWrites}; its write permission is one no role holds). A sponsor reads their own publications and tiers through the
  * sponsor datasets ({@code sponsorId} = the caller), read only and without history; counters through the templates.
  */
 @Configuration
@@ -40,7 +40,7 @@ public class PublishingConfig {
         return DatasetDefinition.define(QbPublications.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
-            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PUBLICATION_WRITE)
+            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
@@ -84,6 +84,16 @@ public class PublishingConfig {
     @Bean
     DatasetDefinition qbPublicationCounterDataset() {
         return defaultDataset(QbPublications.COUNTER, 100);
+    }
+
+    @Bean
+    EntityDefinition qbPublicationScheduleEntity() {
+        return QbPublications.SCHEDULE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbPublicationScheduleDataset() {
+        return defaultDataset(QbPublications.SCHEDULE, 100);
     }
 
     @Bean

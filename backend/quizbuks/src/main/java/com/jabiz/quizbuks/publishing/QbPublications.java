@@ -23,10 +23,11 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.PENDING_REVIEW;
 import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
 
 /**
- * The three entities of publishing (docs/quizbuks/02-design.md section 3.3, docs/quizbuks/plans/Q4-publishing.md):
+ * The four entities of publishing (docs/quizbuks/02-design.md section 3.3, docs/quizbuks/plans/Q4-publishing.md):
  * the publication and its reward tiers, temporal and without scheduled versions, and the counters of a publication
- * that is on (an ordinary table: Q5 updates it on every attempt, under the publication's lock). Each row carries the
- * sponsor ({@code sponsorId}), so a sponsor's dataset is limited without a join. Only the processes of
+ * that is on (an ordinary table: Q5 updates it on every attempt, under the publication's lock) and the schedule of a
+ * submitted publication (an ordinary table the tick and the removal of a quiz read). Each publication and tier
+ * carries the sponsor ({@code sponsorId}), so a sponsor's dataset is limited without a join. Only the processes of
  * {@link PublicationProcesses} and {@link PublicationLifecycle} write them.
  */
 public final class QbPublications {
@@ -34,6 +35,7 @@ public final class QbPublications {
     public static final String PUBLICATION = "QbPublication";
     public static final String TIER = "QbRewardTier";
     public static final String COUNTER = "QbPublicationCounter";
+    public static final String SCHEDULE = "QbPublicationSchedule";
 
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-status";
     public static final String END_REASON_DICTIONARY = "urn:jabiz:dict:quizbuks:publication-end-reason";
@@ -74,7 +76,7 @@ public final class QbPublications {
         eb.field("passScore", f -> f.physicalColumn("pass_score").asNumeric(6, 0)
             .apply(Rules.range(PublishingCodes.SCORE_RANGE, BigDecimal.ZERO, decimal(PublishingLimits.MAX_SCORE))));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").asMonetary("JPY", 0)
-            .apply(Rules.range(PublishingCodes.BUDGET_RANGE, BigDecimal.ONE, null)));
+            .apply(Rules.range(PublishingCodes.BUDGET_RANGE, BigDecimal.ONE, PublishingLimits.MAX_MONEY)));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
             .apply(Rules.range(PublishingCodes.MAX_WINNERS_RANGE, BigDecimal.ONE,
                 decimal(PublishingLimits.MAX_WINNERS))));
@@ -99,7 +101,8 @@ public final class QbPublications {
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
         eb.field("editedAt", f -> f.physicalColumn("edited_at").required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
-        eb.field("copiedFrom", f -> f.physicalColumn("copied_from").immutable(true).asReference(PUBLICATION));
+        // The source's key, not a reference: a draft that was copied can still be deleted.
+        eb.field("copiedFrom", f -> f.physicalColumn("copied_from").immutable(true).asText(36));
         // D-Q4-1. A rejected or withdrawn publication goes back to its draft, so the first state is declared.
         eb.stateTransitions("status", st -> st
             .initial(DRAFT)
@@ -150,7 +153,7 @@ public final class QbPublications {
         eb.field("toScore", f -> f.physicalColumn("to_score").required(true).asNumeric(6, 0)
             .apply(Rules.range(PublishingCodes.SCORE_RANGE, BigDecimal.ZERO, decimal(PublishingLimits.MAX_SCORE))));
         eb.field("reward", f -> f.physicalColumn("reward").required(true).asMonetary("JPY", 0)
-            .apply(Rules.range(PublishingCodes.TIER_REWARD_RANGE, BigDecimal.ZERO, null)));
+            .apply(Rules.range(PublishingCodes.TIER_REWARD_RANGE, BigDecimal.ZERO, PublishingLimits.MAX_MONEY)));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("publicationId", "seq", "fromScore", "toScore", "reward")
@@ -181,6 +184,31 @@ public final class QbPublications {
             .filters("publicationId")
             .sorts("starts", "spent")
             .defaultSort("starts", false));
+    });
+
+    /**
+     * A publication that was submitted and is not a draft again: its version (so that removing its quiz keeps the
+     * version's files) and when the minute's tick must next look at it ({@link PublicationRules#nextDue}; none once it
+     * ended). An ordinary table, kept by the processes under the publication's lock, so that the tick and the removal
+     * of a quiz find their publications through plain indexes ({@code next_due_at}, {@code quiz_id}) rather than
+     * through the current versions of every publication. Removed when the publication goes back to its draft.
+     */
+    public static final EntityDefinition SCHEDULE_ENTITY = EntityDefinition.define(SCHEDULE, eb -> {
+        eb.physicalTable("qb_publication_schedule");
+        eb.primaryKey("publicationId");
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asReference(PUBLICATION));
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true)
+            .asReference(QbContent.QUIZ));
+        eb.field("versionId", f -> f.physicalColumn("version_id").immutable(true).required(true)
+            .asReference(QbContent.VERSION));
+        eb.field("nextDueAt", f -> f.physicalColumn("next_due_at").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("publicationId", "quizId", "versionId", "nextDueAt")
+            .filters("publicationId", "quizId", "nextDueAt")
+            .sorts("nextDueAt", "publicationId")
+            .defaultSort("nextDueAt", true));
     });
 
     /**

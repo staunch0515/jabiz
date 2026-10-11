@@ -26,9 +26,9 @@ public final class QbPermissions {
     /** Read the files of quiz content: covers, question and option images, material images, PDFs and audio. */
     public static final String CONTENT_FILE_READ = "qb.content.file.read";
     /**
-     * The write permission of the sponsors' read-only datasets (content and publications). A dataset must declare
-     * one; this one is granted to no role, so the datasets stay unwritable even if their read-only policy were
-     * dropped.
+     * The write permission of the QuizBuks datasets only processes write: the sponsors' read-only datasets and the
+     * default ones of content and publications. A dataset must declare one; this one is granted to no role, so the
+     * datasets stay unwritable through their API even if their policy were relaxed.
      */
     public static final String SPONSOR_VIEW_WRITE = "qb.content.view.write";
     /** Ask the AI for questions and covers. */
@@ -36,10 +36,13 @@ public final class QbPermissions {
     /** Create, submit, withdraw, pause, resume and copy one's own publications, and read them. */
     public static final String PUBLICATION_WRITE = "qb.publication.write";
     /**
-     * Move publications on as time passes ({@code QB_PUBLICATION_TICK}, {@code QB_PUBLICATION_ADVANCE}): only the
-     * platform's job runs them, as the system; granted to no role.
+     * The processes only the platform runs, as the system: moving publications on as time passes
+     * ({@code QB_PUBLICATION_TICK}, {@code QB_PUBLICATION_ADVANCE}, run by the job) and applying a review's result
+     * ({@code QB_PUBLICATION_APPROVAL_RESULT}, run for the approval events). Granted to no role: {@code internal()}
+     * only hides a process from the catalog, its permission is still checked, so a role holding a permission it
+     * shares (such as {@code qb.review.publication}) could call it directly.
      */
-    public static final String PUBLICATION_TICK = "qb.publication.tick";
+    public static final String PUBLICATION_SYSTEM = "qb.publication.system";
     /** Top up the sponsor wallet. */
     public static final String TOPUP = "qb.topup";
     /** A sponsor's own transactions and reports. */

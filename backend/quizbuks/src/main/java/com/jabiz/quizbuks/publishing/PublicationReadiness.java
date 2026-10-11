@@ -83,6 +83,12 @@ public final class PublicationReadiness {
                 + draft.budgetCap() + " is less than the highest reward " + maxReward,
                 Map.of("budgetCap", draft.budgetCap(), "maxReward", maxReward)));
         }
+        BigDecimal spend = TierCoverage.uncappedSpend(draft.budgetCap(), draft.maxWinners(), maxReward);
+        if (spend != null && spend.compareTo(PublishingLimits.MAX_MONEY) > 0) {
+            problems.add(new Violation("maxWinners", PublishingCodes.SPEND_RANGE, "The winners times the highest "
+                + "reward come to more than " + PublishingLimits.MAX_MONEY + "; set a budget or fewer winners",
+                Map.of("max", PublishingLimits.MAX_MONEY)));
+        }
         if (version != null) {
             QuizCompleteness.check(version).forEach(problem -> problems.add(new Violation(
                 problem.field() == null ? "version" : "version." + problem.field(), problem.ruleCode(),

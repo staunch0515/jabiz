@@ -62,6 +62,22 @@ class TierCoverageTest {
     }
 
     @Test
+    void aTierInsideAnotherIsAnOverlapNotAGapAndTheTopIsTheHighestEnd() {
+        // 0–10 holds 2–3 and 4–10: every score is covered, 2 to 10 twice.
+        assertThat(TierCoverage.check(List.of(tier(0, 10, 5), tier(2, 3, 0), tier(4, 10, 0)), 10))
+            .extracting(Violation::field, Violation::ruleCode).containsExactly(
+                tuple("tiers[1].fromScore", PublishingCodes.TIER_OVERLAP),
+                tuple("tiers[2].fromScore", PublishingCodes.TIER_OVERLAP));
+        assertThat(TierCoverage.check(List.of(tier(0, 10, 5), tier(2, 3, 0), tier(4, 10, 0)), 10).get(1).params())
+            .containsEntry("other", 1).containsEntry("score", 4);
+        // 0–10 and 2–3 reach the full score through the first tier, not the one that starts last.
+        assertThat(codes(List.of(tier(0, 10, 5), tier(2, 3, 0)), 10)).containsExactly(PublishingCodes.TIER_OVERLAP);
+        // A gap after a nested tier counts from the highest end so far.
+        assertThat(codes(List.of(tier(0, 6, 5), tier(1, 2, 0), tier(8, 10, 0)), 10))
+            .containsExactly(PublishingCodes.TIER_OVERLAP, PublishingCodes.TIER_GAP);
+    }
+
+    @Test
     void withoutAVersionTheTopIsNotChecked() {
         assertThat(TierCoverage.check(List.of(tier(0, 3, 10)), null)).isEmpty();
     }
@@ -86,6 +102,53 @@ class TierCoverageTest {
         @ForAll("fullScores") int fullScore) {
         assertThat(TierCoverage.check(tiers, fullScore).isEmpty()).as(tiers + " up to " + fullScore)
             .isEqualTo(coversOnce(tiers, fullScore));
+    }
+
+    /** For tiers that each start no later than they end, the codes are those a count of every score finds. */
+    @Property(tries = 1000)
+    void reportsTheCodesACountOfEveryScoreFinds(@ForAll("wellFormed") List<TierCoverage.Tier> tiers,
+        @ForAll("fullScores") int fullScore) {
+        assertThat(java.util.Set.copyOf(codes(tiers, fullScore))).as(tiers + " up to " + fullScore)
+            .isEqualTo(referenceCodes(tiers, fullScore));
+    }
+
+    /** An independent reference: counts how often each score is covered. */
+    private static java.util.Set<String> referenceCodes(List<TierCoverage.Tier> tiers, int fullScore) {
+        java.util.Set<String> codes = new java.util.HashSet<>();
+        if (tiers.isEmpty()) {
+            return java.util.Set.of(PublishingCodes.TIER_NO_REWARD);
+        }
+        if (tiers.stream().anyMatch(t -> t.reward().signum() < 0)) {
+            codes.add(PublishingCodes.TIER_REWARD_RANGE);
+        }
+        if (tiers.stream().noneMatch(t -> t.reward().signum() > 0)) {
+            codes.add(PublishingCodes.TIER_NO_REWARD);
+        }
+        int low = tiers.stream().mapToInt(TierCoverage.Tier::fromScore).min().orElseThrow();
+        int high = tiers.stream().mapToInt(TierCoverage.Tier::toScore).max().orElseThrow();
+        if (low != 0) {
+            codes.add(PublishingCodes.TIER_NOT_FROM_ZERO);
+        }
+        if (high != fullScore) {
+            codes.add(PublishingCodes.TIER_NOT_TO_FULL);
+        }
+        for (int score = low; score <= high; score++) {
+            int s = score;
+            long covering = tiers.stream().filter(t -> t.fromScore() <= s && s <= t.toScore()).count();
+            if (covering == 0) {
+                codes.add(PublishingCodes.TIER_GAP);
+            } else if (covering > 1) {
+                codes.add(PublishingCodes.TIER_OVERLAP);
+            }
+        }
+        return codes;
+    }
+
+    @Provide
+    Arbitrary<List<TierCoverage.Tier>> wellFormed() {
+        return Combinators.combine(Arbitraries.integers().between(-1, 9), Arbitraries.integers().between(0, 4),
+                Arbitraries.longs().between(-1, 3))
+            .as((from, length, reward) -> tier(from, from + length, reward)).list().ofMaxSize(5);
     }
 
     private static boolean coversOnce(List<TierCoverage.Tier> tiers, int fullScore) {

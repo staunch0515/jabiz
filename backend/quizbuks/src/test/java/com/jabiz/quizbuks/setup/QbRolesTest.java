@@ -86,9 +86,9 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .contains(QbPermissions.REVIEW_PUBLICATION, "approval.decide", "task.read");
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ);
-        // Only the platform's job moves publications on, as the system.
+        // Only the platform runs the system's publication processes (the job, the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
-            .doesNotContain(QbPermissions.PUBLICATION_TICK));
+            .doesNotContain(QbPermissions.PUBLICATION_SYSTEM));
     }
 
     @Test

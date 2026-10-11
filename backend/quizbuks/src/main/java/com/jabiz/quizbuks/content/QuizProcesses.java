@@ -6,7 +6,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.publishing.PublicationStatus;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -196,10 +195,10 @@ public final class QuizProcesses {
                 .steps(b -> QuizEditing.loadAll(b, "Load the options", QbContent.OPTION, OPTIONS))
                 .steps(b -> QuizEditing.loadAll(b, "Load the version files", QbContent.VERSION_FILE, VERSION_FILES))
                 // Under the quiz's lock: a submission holds it too (shared), so none slips in meanwhile.
+                // The schedule holds every publication submitted and not back to its draft, by quiz (a plain index).
                 .step("Load the publications submitted", QueryEntities.<ProcessContext>of(
-                    QbContent.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
-                            new QueryPredicate.Ne("status", PublicationStatus.DRAFT))))
+                    QbContent.defaultDataset(QbPublications.SCHEDULE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)))
                         .limit(Integer.MAX_VALUE).build(), PUBLICATIONS))
                 .step("Load their versions", QueryEntities.<ProcessContext>of(
                     QbContent.defaultDataset(QbContent.VERSION), ctx -> EntityQuery.builder()
@@ -292,8 +291,8 @@ public final class QuizProcesses {
 
     /**
      * The files a removed quiz must keep (Q4, D-Q4-5): those in the snapshots of the versions its submitted
-     * publications use (in any state but a draft; a draft of a removed quiz cannot be submitted any more). A
-     * publication submitted and sent back keeps them too: a small leak the plan accepts.
+     * publications use (in any state but a draft, as their schedule rows say; a draft of a removed quiz cannot be
+     * submitted any more, and a publication sent back to its draft loses its row).
      */
     static Set<UUID> filesStillNeeded(ProcessContext ctx) {
         Set<UUID> needed = new HashSet<>();

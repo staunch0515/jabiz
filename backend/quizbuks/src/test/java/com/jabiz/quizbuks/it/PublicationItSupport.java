@@ -188,7 +188,11 @@ abstract class PublicationItSupport extends ContentItSupport {
             .returnResult().getResponseBody();
     }
 
-    /** The content and publishing tables were only ever inserted into, and carry the append-only guard. */
+    /**
+     * The content and publishing tables were only ever inserted into, and carry the append-only guard. The guard (a
+     * trigger refusing UPDATE, DELETE and TRUNCATE) is what guarantees it; the {@code pg_stat_user_tables} counters
+     * only confirm it and may lag (they are flushed after the transaction, so a late write can go unseen).
+     */
     static void assertNothingUpdated() {
         assertOnlyInserted();
         List<String> tables = new ArrayList<>(PUBLISHING_TABLES);

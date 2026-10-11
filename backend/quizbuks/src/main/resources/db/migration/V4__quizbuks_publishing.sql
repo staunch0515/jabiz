@@ -51,7 +51,7 @@ SELECT quizbuks_create_temporal_table('qb_publication_version', 'publication_id'
     end_reason          varchar(20),
     revision            numeric(9, 0)  NOT NULL,
     edited_at           timestamptz    NOT NULL,
-    copied_from         uuid');
+    copied_from         varchar(36)');
 
 SELECT quizbuks_create_temporal_table('qb_reward_tier_version', 'tier_id', '
     publication_id uuid           NOT NULL,
@@ -61,15 +61,11 @@ SELECT quizbuks_create_temporal_table('qb_reward_tier_version', 'tier_id', '
     to_score       numeric(6, 0)  NOT NULL,
     reward         numeric(19, 0) NOT NULL');
 
--- The sponsor datasets limit by sponsor; removing a quiz looks up its publications; versions are looked up by the
--- publications that use them.
+-- Only conditions on fields that never change reach an index of a temporal table (the current version is found
+-- per instance): the sponsor, the source of a copy, a tier's publication. Conditions on state, times or the quiz go
+-- through qb_publication_schedule below.
 CREATE INDEX qb_publication_version_sponsor_idx ON qb_publication_version (sponsor_id);
-CREATE INDEX qb_publication_version_quiz_idx ON qb_publication_version (quiz_id);
-CREATE INDEX qb_publication_version_version_idx ON qb_publication_version (version_id);
 CREATE INDEX qb_publication_version_copied_idx ON qb_publication_version (copied_from);
--- The minute's tick and the feed: publications by state and time.
-CREATE INDEX qb_publication_version_start_idx ON qb_publication_version (status, start_at);
-CREATE INDEX qb_publication_version_end_idx ON qb_publication_version (status, end_at);
 CREATE INDEX qb_reward_tier_version_publication_idx ON qb_reward_tier_version (publication_id);
 CREATE INDEX qb_reward_tier_version_sponsor_idx ON qb_reward_tier_version (sponsor_id);
 
@@ -87,3 +83,17 @@ CREATE TABLE qb_publication_counter (
     spent          numeric(19, 0) NOT NULL CHECK (spent >= 0),
     version        bigint         NOT NULL
 );
+
+-- One row per publication submitted and not back to its draft (D-Q4-5, D-Q4-7): its quiz and version, so that
+-- removing a quiz finds the versions to keep, and when the minute's tick must next look at it (none once it ended).
+-- Kept by the processes under the publication's lock; ordinary, so both lookups use plain indexes.
+CREATE TABLE qb_publication_schedule (
+    publication_id uuid        PRIMARY KEY REFERENCES entity_registry (entity_id),
+    quiz_id        uuid,
+    version_id     uuid,
+    next_due_at    timestamptz,
+    version        bigint      NOT NULL
+);
+CREATE INDEX qb_publication_schedule_due_idx ON qb_publication_schedule (next_due_at)
+    WHERE next_due_at IS NOT NULL;
+CREATE INDEX qb_publication_schedule_quiz_idx ON qb_publication_schedule (quiz_id);

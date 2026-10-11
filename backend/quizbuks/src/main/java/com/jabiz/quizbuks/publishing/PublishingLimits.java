@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.publishing;
 
 import com.jabiz.quizbuks.content.ContentLimits;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 
 /**
@@ -14,8 +15,11 @@ public final class PublishingLimits {
     public static final int MAX_TIERS = 20;
     /** Longest time a publication runs, from its start to its end. */
     public static final Duration MAX_RUNNING = Duration.ofDays(366);
-    /** Publications one run of the minute's tick moves on; the rest wait for the next minute. */
-    public static final int TICK_BATCH = 200;
+    /**
+     * Publications one run of the minute's tick moves on; the rest wait for the next minute. Small, because the batch
+     * is one transaction (platform gap 6): one item that keeps failing holds up the others.
+     */
+    public static final int TICK_BATCH = 50;
 
     public static final int NAME_LENGTH = 100;
     public static final int REJECT_REASON_LENGTH = 500;
@@ -26,6 +30,11 @@ public final class PublishingLimits {
 
     /** Largest score of a tier or pass mark (column {@code numeric(6, 0)}); a full score is at most 100 000. */
     public static final int MAX_SCORE = 999_999;
+    /**
+     * Largest amount of money (Kudos) of a reward, a budget or the most a publication pays out: well within the
+     * columns ({@code numeric(19, 0)}) even multiplied by the most winners.
+     */
+    public static final BigDecimal MAX_MONEY = BigDecimal.TEN.pow(12);
     /** Largest number of winners (column {@code numeric(9, 0)}). */
     public static final int MAX_WINNERS = 999_999_999;
 

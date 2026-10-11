@@ -58,10 +58,12 @@ public final class TierCoverage {
                 + "tier starts at " + tiers.get(first).fromScore() + ", not 0",
                 Map.of("tier", first + 1, "fromScore", tiers.get(first).fromScore())));
         }
+        // Sweep in score order, keeping the tier that reaches highest so far: a tier inside another is an overlap,
+        // and a gap counts from the highest end reached, not from the end of the tier that started last.
+        int highest = first;
         for (int k = 1; k < order.size(); k++) {
-            int previous = order.get(k - 1);
             int next = order.get(k);
-            long expected = (long) tiers.get(previous).toScore() + 1;
+            long expected = (long) tiers.get(highest).toScore() + 1;
             int start = tiers.get(next).fromScore();
             if (start > expected) {
                 problems.add(new Violation(path(next, "fromScore"), PublishingCodes.TIER_GAP, "No tier covers the "
@@ -69,15 +71,17 @@ public final class TierCoverage {
                     "toScore", start - 1)));
             } else if (start < expected) {
                 problems.add(new Violation(path(next, "fromScore"), PublishingCodes.TIER_OVERLAP, "Tiers "
-                    + (previous + 1) + " and " + (next + 1) + " both cover score " + start,
-                    Map.of("tier", next + 1, "other", previous + 1, "score", start)));
+                    + (highest + 1) + " and " + (next + 1) + " both cover score " + start,
+                    Map.of("tier", next + 1, "other", highest + 1, "score", start)));
+            }
+            if (tiers.get(next).toScore() > tiers.get(highest).toScore()) {
+                highest = next;
             }
         }
-        int last = order.getLast();
-        if (fullScore != null && tiers.get(last).toScore() != fullScore) {
-            problems.add(new Violation(path(last, "toScore"), PublishingCodes.TIER_NOT_TO_FULL, "The highest tier "
-                + "ends at " + tiers.get(last).toScore() + ", not at the full score " + fullScore,
-                Map.of("tier", last + 1, "toScore", tiers.get(last).toScore(), "fullScore", fullScore)));
+        if (fullScore != null && tiers.get(highest).toScore() != fullScore) {
+            problems.add(new Violation(path(highest, "toScore"), PublishingCodes.TIER_NOT_TO_FULL, "The highest "
+                + "tier ends at " + tiers.get(highest).toScore() + ", not at the full score " + fullScore,
+                Map.of("tier", highest + 1, "toScore", tiers.get(highest).toScore(), "fullScore", fullScore)));
         }
         if (tiers.stream().noneMatch(tier -> tier.reward().signum() > 0)) {
             problems.add(new Violation("tiers", PublishingCodes.TIER_NO_REWARD, "No tier has a reward", Map.of()));
@@ -95,6 +99,13 @@ public final class TierCoverage {
      * is smaller; the one given when only one is; null (no cap) when neither is.
      */
     public static BigDecimal maxSpend(BigDecimal budgetCap, Integer maxWinners, BigDecimal maxReward) {
+        BigDecimal spend = uncappedSpend(budgetCap, maxWinners, maxReward);
+        // Never more than any amount may be: an uncapped one is refused at submission (QB_PUBLICATION_SPEND_RANGE).
+        return spend == null ? null : spend.min(PublishingLimits.MAX_MONEY);
+    }
+
+    /** {@link #maxSpend} without the limit of {@link PublishingLimits#MAX_MONEY}. */
+    public static BigDecimal uncappedSpend(BigDecimal budgetCap, Integer maxWinners, BigDecimal maxReward) {
         BigDecimal byWinners = maxWinners == null || maxReward == null ? null
             : maxReward.multiply(BigDecimal.valueOf(maxWinners));
         if (budgetCap == null) {
