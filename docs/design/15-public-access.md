@@ -122,6 +122,7 @@ WHERE s.{{Story.slug}} = :slug
 - 入站 Webhook `POST /api/inbound/{提供方}`（11 §2.5、决策 D37 第 5 条）同样匿名、同样在安全过滤链之前限流：`InboundWebhookWebFilter` 与
   `PublicAccessWebFilter` 写法相同（客户端地址取自 `ClientAddresses`，进程内令牌桶，429 `RATE_LIMITED` + `Retry-After`），但每个提供方一个桶
   （`jabiz.inbound-webhooks.providers.<名>.rate-limit.per-minute`，缺省 120），且不受 `jabiz.public.enabled` 影响。
+  在未列入 `jabiz.security.trusted-proxies` 的代理之后，所有发送方的地址都是代理的地址，共用一个桶。
 
 ## 7. 前端类型契约
 

@@ -27,7 +27,7 @@
   数据视图 API、通用实体流程、业务流程的 `SaveChanges`、平台流程（账本、审批、导入……）都经过这两处，因此不需要各自记录。
 - 投递记录与操作日志不是实体数据，不进审计：`op_*`、`sys_outbox_*`、`sys_event_consumption`、待办通知与单据发送的尝试
   （`sys_notification_attempt`、`sys_document_delivery_attempt`）、事务邮件的尝试与令牌（`sys_mail_attempt`、`sys_mail_token`、`sys_mail_token_use`，18 §5.6）、
-  收到的入站 Webhook（`sys_inbound_event`，11 §2.5，原样正文另有 SHA-256）由平台直接插入；它们只追加并被封存（第 2 节），可追溯性来自封存而不是审计记录。其中以平台实体展示的（`MailAttempt`、`InboundEvent`）只有只读数据视图，
+  收到的入站 Webhook（`sys_inbound_event` 与正文 `sys_inbound_event_body`，11 §2.5，正文另有 SHA-256）由平台直接插入；它们只追加并被封存（第 2 节），可追溯性来自封存而不是审计记录。其中以平台实体展示的（`MailAttempt`、`InboundEvent`）只有只读数据视图，
   不能经任何写入路径修改。邮件消息本身（`MailMessage`）经变更集写入，照常审计。
 - "前"：普通实体取更新或删除前读到的当前行（CAS 本来就要读）；时态实体取基础版本的状态（同一次写入中先写的版本优先），基础版本是墓碑时为空。
 

@@ -1668,8 +1668,9 @@ Q6 时间容差同时拒绝过旧与过于靠后的时间戳；Q7 示范在 `Sal
 
 **完成情况（分支 `1.2/phase-16d-inbound-webhooks`）**：平台迁移 `V34__inbound_webhooks.sql`，示范应用 `V17__order_payment.sql`；
 测试 core `StripeSignatureTest`（9，openssl 计算的固定向量）、`HmacSha256SignatureTest`（5）、属性测试 `InboundSignatureProperties`（2 × 300 次）；
-runtime `InboundEventExtractorTest`（5）、`InboundWebhookChecksTest`（3）、`InboundWebhookPropertiesTest`（2）、`ScenarioParserTest` 补一条；
-app `InboundWebhookIT`（15，真实 PostgreSQL，服务监听真实端口）；场景 `commerce/order_payment.yml`。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
+runtime `InboundEventExtractorTest`（6）、`InboundWebhookChecksTest`（4）、`InboundWebhookPropertiesTest`（2）、`InboundReceiverTest`（7）、`InboundSubscriptionChecksTest`（2）、
+`LoadInboundEventTest`（2）、`ScenarioParserTest` 补一条；app `CommercePaymentsTest`（5）、`InboundWebhookIT`（18，真实 PostgreSQL，服务监听真实端口）；
+场景 `commerce/order_payment.yml`。`./gradlew check` 与 `pnpm lint typecheck test check:api` 通过。
 验收标准逐条对应：验签与属性测试见 core；400 / 不存储（含响应正文逐字节相同，`sys_inbound_event`、Outbox、`op_process` 均无新行）、1 MB（带长度与分块）、
 白名单外、重复与 4 路并发见 `InboundWebhookIT`；只处理一次与失败重试见其出站→入站用例（消费者第一次失败）；`input_summary` 中正文为 `***`、Outbox 载荷只有引用、
 日志中没有正文（`OutputCaptureExtension`）、表上没有 UPDATE / DELETE（SQL 记录与触发器）；`inbound.read` 与保留策略（示范声明 7 年）；限流 429 与伪造的 `X-Forwarded-For`；
@@ -1678,21 +1679,43 @@ app `InboundWebhookIT`（15，真实 PostgreSQL，服务监听真实端口）；
 与计划的出入：
 - **事件号与类型只取已签名的正文**：`hmac-sha256` 取 D33 正文的 `eventId` / `eventType`，而不是计划中的请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type`；
   这两个头不在 D33 的签名范围内（只签时间戳与正文），若取自请求头，截获者可在容差内重放同一正文并换掉事件号（绕过去重）或类型（换处理流程）。头仍可出现，但必须与正文一致，否则 400。
-- **正文不是 `InboundEvent` 的字段**：数据视图的列表接口返回实体的全部字段（不只列表列），为使"列表不含正文"成立，`InboundEvent` 只有 `bodySha256`，
+- **正文不是 `InboundEvent` 的字段**（评审后另放在 `sys_inbound_event_body`）：数据视图的列表接口返回实体的全部字段（不只列表列），为使"列表不含正文"成立，`InboundEvent` 只有 `bodySha256`，
   正文以新接口 `GET /api/inbound-events/{id}/body`（`inbound.read`，`no-store`）逐个读取。数据视图为只读（`readOnly`，同 `MailAttempt`），不是计划写的 `processOnlyWrites`。
 - **流程只有一个步骤**：`RecordInboundEvent` 插入行后直接经 `EventPublisher` 发布，因为 `PublishEvent` 的事件类型在定义时固定，而这里的类型取决于提供方与外部类型。
 - 输入组件名为 `rawBody` 而不是 `body`：`@Sensitive` 的组件名在所有 JSON 中遮蔽，`body` 会误伤其他流程与事件中同名的属性。
-- `InboundEvents.ref(event)`（计划写作 `input`）返回 `InboundEventRef`；`LoadInboundEvent` 给出 `ReceivedEvent`（`at("a.b.c")` 取路径值）；步骤只允许系统身份或持有 `inbound.read` 的执行者。
-- 观测 `jabiz.inbound.receive` 的标签为 `provider`、`result`（`accepted` / `duplicate` / `ignored` / `rejected`）、`reason`，外加所有平台观测共有的 `outcome` / `status`
-  （`outcome` 已被平台占用，故结果放在 `result`）；另有 `jabiz.inbound.rate_limited`。
+- `InboundEvents.ref(event)`（计划写作 `input`）返回 `InboundEventRef`；`LoadInboundEvent.of(提供方, 类型, 编号, 键)` 给出 `ReceivedEvent`（`at("a.b.c")` 取路径值）；步骤只允许系统身份或持有 `inbound.read` 的执行者。
+- 观测 `jabiz.inbound.receive` 的标签为 `provider`、`result`（`ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`）、`reason`，外加所有平台观测共有的
+  `outcome` / `status`（`outcome` 已被平台占用，故结果放在 `result`）；另有 `jabiz.inbound.rate_limited`。
 - 示范的复核待办交给 `commerce.order.place`（订单数据视图的写权限；示范中没有 `commerce.order.write`）；`ORDER_RECORD_PAYMENT` 声明不授予任何人的 `commerce.order.pay`，只由消费者以系统身份运行。
 - 接收前先查已有的行（重复投递不占操作与序号），并发的重复仍以唯一键 `sys_inbound_event_external_key` 识别。`Stripe-Signature` 重复或多于 16 项即拒绝；`livemode` 不是布尔即拒绝；
   JSON 不允许重复键与尾随内容；`Content-Type` 只保留前 100 个可见 ASCII 字符。
 - 场景步骤多一个可选的 `outcome`（缺省 `ACCEPTED`，可写 `DUPLICATE` / `IGNORED` / `REJECTED`）。
 
+**评审后的修订**（安全 S1–S4、代码评审 R1–R10，11 §2.5 与 D37 实现说明已同步；每项先写失败的测试）：
+- S1 示范消费者不再信任事件内容：`LoadInboundEvent.of(提供方, 类型, …)` 必须声明它处理的提供方与类型，不符即失败；`ORDER_RECORD_PAYMENT` 先拒绝系统以外的执行者
+  （`internal()` 只是不进目录），核对模式（`commerce.payments.accept-test-mode`，示范为 true）与币种 `jpy`，不符登记待办；Javadoc 写明 Stripe 金额以最小货币单位表示。
+  测试：`CommercePaymentsTest`（5），IT 中管理员经流程接口调用 403、`it-peer` 的消费者读 `demo-pay` 的事件失败。
+- S2 正文移到单独的只追加表 `sys_inbound_event_body`（同一事务写入，修改了尚未合并的 V34，加入 `PLATFORM_TABLES`）；`LoadInboundEvent` 与正文接口改为联表读取。
+  IT 断言 `sys_inbound_event` 没有 `body` 列，两张表都没有执行过 UPDATE / DELETE。
+- S3 数值的十进制指数绝对值超过 1000：接收时 400（原因 `number_out_of_range`），`LoadInboundEvent` 解析时也拒绝（`InboundEventExtractorTest`、`LoadInboundEventTest`）。
+- S4 11 §2.5、15 §6 与 D37 写明：在未配置为可信代理的代理之后，所有发送方共用一个限流桶。
+- R2 新的启动检查 `InboundSubscriptionChecks`：订阅了已配置提供方未列出的类型为错误，列出却无人订阅为警告（`InboundSubscriptionChecksTest`）。
+- R3 `InboundReceiverTest`（Mockito 替身）：唯一键 `EXTERNAL_KEY` → `DUPLICATE`，其他约束名照常抛出；IT 以 `pg_constraint` 断言约束名。
+- R4 出站→入站的重试用例先排空（`deliverPending()` 为 0，至多 50 轮）再设失败，`HANDLED` 只看本用例的事件号。
+- R5 限流与 1 MB 的用例经真实端口（`WebTestClient.bindToServer`）：伪造的 `X-Forwarded-For` 来自不可信的 127.0.0.1 不能绕过，带长度与分块的超限都 400，正好 1 MB 被接受；
+  本类开启 Netty 的 PARANOID 泄漏检测并断言没有服务器端读取的缓冲区泄漏（测试自己的 HTTP 客户端的报告不计）。
+- R6 观测 `result` 改为与 `OutboxDeliverer` 一样的大写（`ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED`），意外错误为 `FAILED` 与 `reason=error`；
+  以 `TestObservationRegistry` 测试（runtime 新增测试依赖 `micrometer-observation-test`）。
+- R7 / R8 复核待办的标题含金额、币种与原因代码，空值显示 `-`、发送方的值只显示可打印的前 40 个字符；找到订单时指向订单；来源键 `payment:<提供方>:<外部事件号>`
+  （过长时用其 SHA-256）；付款编号（`[A-Za-z0-9_-]{1,255}`）与订单号（订单号规则）格式不对也登记待办而不是失败。场景快照随之更新。
+- R9 补测：`LoadInboundEvent` 的 403 与 404（IT）、小数为 `BigDecimal`（`LoadInboundEventTest`）、`InboundEvent` 出现在到期报告中（IT）、`Content-Type` 的处理（`InboundReceiverTest`）。
+- R10 `secrets` / `event-types` 中的空项不再在绑定时抛出 NPE，而由 `INBOUND` 检查报告（空白类型同样）；测试的 `freePort` 绑定失败时重试。
+
 **已知问题**：限流在内存中、按实例计数，所有经 `WebTestClient` 绑定上下文的测试请求共用地址 `unknown`；每个请求最多 1 MB 在内存中，HMAC 在事件循环上计算；
 原样正文只追加、不能删除，到期只进报告（物理删除另议）；消费者重试用尽后没有重新投递的工具；通用后台没有显示正文的页面（只有接口）；
 既有场景的 `SalesOrder` 快照未重写（新字段为空，比较时不受影响）；`V34` / `V17` 须与并行的 16e（V35 / V18）按合并顺序协调。
+**将另行提议（平台全局，需用户决定，本阶段不实现）**：`internal()` 的流程默认拒绝系统身份以外的调用者。目前 `internal()` 只使流程不进目录，权限仍照常检查，
+因此每个内部流程（如 `INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、示范的 `ORDER_RECORD_PAYMENT`）都要在自己的步骤中拒绝其他调用者。
 
 
 ### 16e 外部服务声明与异步外部作业（4.5–6 天，分 16e-1 / 16e-2 两个 PR）

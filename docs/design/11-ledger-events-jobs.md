@@ -179,13 +179,17 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - **接收** `POST /api/inbound/{提供方}`（匿名，签名即凭证；不看 `Authorization` 头，带过期令牌也不会 401）：
   1. `InboundWebhookWebFilter`（安全过滤链之前）：路径不是一段已提供服务的提供方 → 404（任何方法）；非 `POST` → 405 `Allow: POST`；
      按客户端地址（`ClientAddresses`，10 §15.5）的进程内令牌桶，每个提供方一个，超限 → 429 `RATE_LIMITED` + `Retry-After`；不受 `jabiz.public.enabled` 影响。
+     **部署注意**：应用在反向代理或负载均衡之后、却没有把它列入 `jabiz.security.trusted-proxies` 时，所有请求的客户端地址都是代理的地址，
+     该提供方的所有发送方共用一个桶（一个发送方的突发会使其他发送方也得到 429）；在代理之后部署时必须配置可信代理（同 15 §5 的公开接口）。
   2. 控制器读原始字节（不经任何解码器）：声明的 `Content-Length` 超限即拒绝、不读正文；分块传输在超过上限时中止读取。
-  3. `InboundReceiver`：验签 → 正文必须是严格的 UTF-8 且是一个 JSON 对象（不允许重复键与尾随内容）→ 取事件号与类型（只取已签名的正文）：
+  3. `InboundReceiver`：验签 → 正文必须是严格的 UTF-8 且是一个 JSON 对象（不允许重复键与尾随内容，数值的十进制指数绝对值不超过 1000，
+     超过即拒绝，避免消费者对 `1e999999999` 之类的精确小数做运算时耗尽资源）→ 取事件号与类型（只取已签名的正文）：
      `stripe` 取顶层 `id`、`type` 与 `livemode`；`hmac-sha256` 取顶层 `eventId`、`eventType`，其请求头 `X-Jabiz-Event-Id` / `X-Jabiz-Event-Type` 不在签名范围内，
      若出现必须与正文一致。事件号为 1–255 个可见 ASCII 字符。
   4. 类型不在白名单 → 200，不存储（`result=ignored`）；同一提供方的事件号已存在 → 200（`duplicate`）。
   5. 否则以系统身份执行内部流程 `INBOUND_RECEIVE`（权限 `inbound.receive`，不授予任何人；其步骤 `RecordInboundEvent` 只在系统身份下执行，管理员经流程接口调用得到 403）：
-     在一个事务中直接插入只追加的 `sys_inbound_event`（原样正文 `text` 与 `body_sha256`，不经变更集、不进审计，同 `MailAttempt`）并经 Outbox 发布
+     在一个事务中直接插入只追加的 `sys_inbound_event`（元数据与 `body_sha256`）与 `sys_inbound_event_body`（原样正文 `text`，单独一张表，
+     列表、导出与到期报告读事件时都不会带上每行至多 1 MB 的正文；都不经变更集、不进审计，同 `MailAttempt`）并经 Outbox 发布
      `jabiz.inbound.<提供方>.<外部类型>`；提交后答 200 `{"received":true}`。并发的同一事件在唯一键 `(provider, external_event_id)` 上等待，之后失败、整体回滚，答 200。
   - 签名错、过期或过于靠后、缺头、超过大小、不是 UTF-8 或 JSON、缺少事件号或类型：一律 400，同一个 problem `INBOUND_REJECTED`（响应正文相同，`Cache-Control: no-store`）；
     原因只进日志（info，只有提供方与原因）与观测标签 `reason`，不存储，不写 `op_process`。
@@ -196,18 +200,27 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   ```java
   EventSubscription.of("shop.payment-received", InboundEvents.type("pay", "payment_intent.succeeded"), PROCESS,
       event -> new Input(InboundEvents.ref(event).inboundEventId()));
-  // 流程中：
-  .step("Load the payment", LoadInboundEvent.of(ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
+  // 流程中（消费流程只由投递以系统身份运行：`internal()` 只是不进目录，流程自己拒绝其他执行者）：
+  .step("Load the payment", LoadInboundEvent.of("pay", "payment_intent.succeeded",
+      ctx -> ctx.get(INPUT, Input.class).inboundEventId(), "payment"))
   ```
-  平台步骤 `LoadInboundEvent` 把事件读成 `ReceivedEvent`（正文解析为 `Map` / `List`，数值一律 `BigDecimal`；`at("data.object.id")` 取路径上的值；`toString` 不含正文），
-  只允许系统身份或持有 `inbound.read` 的执行者。业务上不成立的事件（找不到单据、金额不符）应登记待办而不是让流程失败，否则消费者会无谓地重试到上限。
+  平台步骤 `LoadInboundEvent` 必须声明它处理的提供方与事件类型：事件属于其他提供方或类型时步骤失败（为一个发送方写的流程不会处理另一个发送方的事件）。
+  它把事件读成 `ReceivedEvent`（正文解析为 `Map` / `List`，数值一律 `BigDecimal`，指数超限即失败；`at("data.object.id")` 取路径上的值；`toString` 不含正文），
+  只允许系统身份或持有 `inbound.read` 的执行者（否则 403，未知编号 404）。
+  **签名只说明是谁发的，不说明内容可信**：消费流程要逐项核对（格式与长度、正式还是测试模式、币种、金额与单据），
+  业务上不成立的事件（找不到单据、金额不符、币种不对）登记写明原因的待办而不是让流程失败，否则消费者会无谓地重试到上限。
+- 启动检查（类别 `INBOUND`）还比较订阅与白名单：订阅了已配置提供方的 `jabiz.inbound.<提供方>.<类型>`、但该提供方未列出此类型 → 错误
+  （这类事件会被答 200 并丢弃）；列出的类型没有任何订阅 → 警告。未在本环境配置的提供方不比较。
 - **读取与保留**：平台实体 `InboundEvent`（只读数据视图 `urn:jabiz:dataset:platform:InboundEvent`，权限 `inbound.read`）列表与详情都不含正文，只有 `bodySha256`；
-  正文以 `GET /api/inbound-events/{id}/body`（`inbound.read`，`Cache-Control: no-store`）逐个读取。应用可声明 `RetentionPolicy.of("InboundEvent")…from("receivedTime")`，
+  正文（`sys_inbound_event_body`）以 `GET /api/inbound-events/{id}/body`（`inbound.read`，`Cache-Control: no-store`）逐个读取。应用可声明 `RetentionPolicy.of("InboundEvent")…from("receivedTime")`，
   进入到期报告；表只追加，物理删除不在本阶段。
-- 观测：`jabiz.inbound.receive`（标签 `provider`、`result` = `accepted` / `duplicate` / `ignored` / `rejected`、`reason`，以及平台观测共有的 `outcome` / `status`）、
+- 观测：`jabiz.inbound.receive`（标签 `provider`、`result` = `ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`（与 `jabiz.outbox.delivery` 同样大写）、
+  `reason` = `none`、拒绝原因或意外错误时的 `error`，以及平台观测共有的 `outcome` / `status`）、
   `jabiz.inbound.rate_limited`（无标签）。未知提供方不产生观测；不记录客户端地址。
 - 场景回放步骤 `inbound: {provider, body, at?, outcome?}`（07 §3.1）以配置的第一个密钥签名后交给 `InboundReceiver`，之后用 `deliverEvents: true` 运行消费者。
-- 示范：`app` 的提供方 `demo-pay`（`stripe`，只在 dev 与测试配置中）→ 消费者 `commerce.payment-received` → `ORDER_RECORD_PAYMENT`（`CommercePayments`），
+- 示范：`app` 的提供方 `demo-pay`（`stripe`，只在 dev 与测试配置中）→ 消费者 `commerce.payment-received` → `ORDER_RECORD_PAYMENT`（`CommercePayments`：
+  只由投递运行；付款编号与订单号的格式、模式（`commerce.payments.accept-test-mode`，示范接受测试模式）、币种 `jpy`、金额（Stripe 以最小货币单位表示，日元即元）、
+  订单状态都核对，不成立时待办写明金额、币种与原因代码，指向订单（找到时），来源键 `payment:<提供方>:<外部事件号>`），
   手工演示 `tools/demo/inbound-demo.sh`。
 
 ## 3. 审计视图
