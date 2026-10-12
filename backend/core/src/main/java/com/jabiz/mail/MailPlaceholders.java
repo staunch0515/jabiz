@@ -14,8 +14,11 @@ import java.util.regex.Pattern;
  */
 public final class MailPlaceholders {
 
-    /** As {@code MessageTemplate}: {@code {name}}; token placeholders may carry a namespace ({@code {jabiz.verify}}). */
-    static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)}");
+    /**
+     * As {@code MessageTemplate}: {@code {name}}; token placeholders may carry a namespace ({@code {jabiz.verify}}), and
+     * {@code {entryUrl.<entry>}} names an entry, whose names may have hyphens.
+     */
+    static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_-]*)?)}");
 
     private MailPlaceholders() {}
 
@@ -31,14 +34,20 @@ public final class MailPlaceholders {
         return names;
     }
 
-    /** Problems of one language's subject and body; empty when they agree with the declaration. */
+    /**
+     * Problems of one language's subject and body; empty when they agree with the declaration. Whether the entries of
+     * {@code {entryUrl.<entry>}} exist is configuration, checked by the runtime.
+     */
     public static List<String> problems(MailTemplate template, String subject, String body) {
         List<String> problems = new ArrayList<>();
         Set<String> allowed = template.placeholders();
         Set<String> used = new LinkedHashSet<>(of(subject));
         used.addAll(of(body));
         for (String name : used) {
-            if (!allowed.contains(name)) {
+            if (MailTemplate.ENTRY_URL.equals(name) && !allowed.contains(name)) {
+                problems.add("uses {" + name + "}, which needs the parameter " + MailTemplate.ENTRY_PARAM
+                    + " (or name the entry: {" + MailTemplate.NAMED_ENTRY_URL_PREFIX + "<entry>})");
+            } else if (!allowed.contains(name) && !MailTemplate.namedEntryUrl(name)) {
                 problems.add("uses {" + name + "}, which the template does not declare");
             }
         }

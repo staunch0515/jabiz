@@ -60,12 +60,16 @@ abstract class SignUpItSupport extends SecurityItSupport {
     static final String PASSWORD = "correct horse battery";
     static final String CONNECTION = "X-It-Connection";
 
+    /**
+     * The links of the platform's mail: below the entry's frontend ({entryUrl}, decision D43 item 4), {@code /portal/}
+     * for the portal, the root for the other entries.
+     */
     static final Pattern VERIFY_LINK = Pattern.compile(
-        "https://app\\.example\\.com/auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://app\\.example\\.com/(?:portal/)?auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
     static final Pattern JOIN_LINK = Pattern.compile(
-        "https://app\\.example\\.com/auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://app\\.example\\.com/(?:portal/)?auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
     static final Pattern RESET_LINK = Pattern.compile(
-        "https://app\\.example\\.com/auth/password-reset\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://app\\.example\\.com/(?:portal/)?auth/password-reset\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
 
     private static final AtomicInteger ADDRESSES = new AtomicInteger();
 

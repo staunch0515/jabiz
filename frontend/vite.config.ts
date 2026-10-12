@@ -63,6 +63,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.{ts,tsx}',
       'packages/*/src/**/*.test.{ts,tsx}',
+      'packages/client/vite.test.ts',
       'scripts/**/*.test.ts',
       ...(extension ? [`${extension}/src/**/*.test.{ts,tsx}`] : []),
     ],

@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/verify-email": {
         parameters: {
             query?: never;
@@ -1732,6 +1748,8 @@ export interface components {
             name?: string;
             requireVerifiedEmail?: boolean;
             selfRegistration?: boolean;
+            /** @enum {string} */
+            sessionPersistence?: "tab" | "device";
         };
         ExecuteResponse: {
             output?: unknown;
@@ -2153,6 +2171,11 @@ export interface components {
         };
         PartEvent: {
             last?: boolean;
+        };
+        PasswordRequest: {
+            currentPassword?: string;
+            newPassword?: string;
+            refreshToken?: string;
         };
         PeriodEntry: {
             from?: string;
@@ -2671,6 +2694,28 @@ export interface operations {
             };
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     resendOwn: {
         parameters: {
             query?: never;
@@ -3047,7 +3092,9 @@ export interface operations {
     };
     providers: {
         parameters: {
-            query?: never;
+            query?: {
+                entry?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

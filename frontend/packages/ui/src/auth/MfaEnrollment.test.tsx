@@ -1,8 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/problem'
-import i18n from '../i18n'
-import MfaEnrollment from './MfaEnrollment'
+import { ApiError, i18n } from '@jabiz/client'
+import { MfaEnrollment } from './MfaEnrollment'
 import { expectAccessible } from '../test/axe'
 
 vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))

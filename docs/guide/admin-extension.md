@@ -84,6 +84,10 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
   `disabledDays` 限定可选的日子，`DateTimePicker` 的 `toDate` 限定最晚时刻；原来的按钮式触发改为文本框加"打开日历"按钮，`id` / `aria-*` 落在文本框上。
   `DataTable` 的列可用 `meta: { className, pinned: 'right' }`，数据行带 `data-slot="data-table-row"`。
   表单状态用 `useForm`、`useFieldArray`、`useWatch`、`Controller`（react-hook-form，由 `@jabiz/ui` 再导出，扩展不另加依赖）；字段规则仍只来自元数据。
+- 登录与账户的积木（16c-1 起，`@jabiz/ui` 的 `auth/`，经 `@jabiz/admin` 一并导出，见 12 §12）：扩展页面里可直接用的是 `ChangePasswordForm`、
+  `MfaEnrollment`、`VerifyEmailBanner`、`OfflineBanner`；登录、注册、邮件链接页与 step-up 由后台自己提供，扩展不要另写。
+  文案在平台的命名空间 `auth`（三语）。`useAuth()` 另有 `entry`、`email`、`emailVerified` 与
+  `refreshSession({ force: true })`（验证邮箱后取新令牌）。
 - 不要 import `frontend/src/...`（lint 会拒绝），不要自己存令牌，不要访问后端以外的地址。
 
 ## 4. 测试

@@ -5,6 +5,7 @@
 **/.gradle
 frontend/node_modules
 frontend/packages/*/node_modules
+backend/**/node_modules
 frontend/dist
 frontend/playwright-report
 frontend/test-results

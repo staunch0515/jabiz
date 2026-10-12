@@ -65,7 +65,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: |
+            frontend/pnpm-lock.yaml
+            backend/app/portal/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
@@ -77,6 +79,16 @@ jobs:
       - run: pnpm ext:check
         env:
           JABIZ_ADMIN_EXTENSION: ../backend/app/admin-extension
+      # The demo's customer portal (docs/guide/app-spa.md, decision D43): an application's own SPA with its own
+      # lockfile, linking the platform's packages; the same versions as the platform (app:check), then its own checks.
+      - run: pnpm app:check ../backend/app/portal
+      - name: Customer portal
+        working-directory: backend/app/portal
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm typecheck
+          pnpm test
       # The admin frontend under a sub-path (docs/design/16-content-authoring.md section 6): assets resolve below it.
       - name: Build under /admin/
         run: |
@@ -155,6 +167,9 @@ jobs:
           # the sample's portal therefore takes no registrations (decision D36: the startup check refuses both).
           export JABIZ_ADMIN_ROLES='*'
           export JABIZ_PORTAL_SELF_REGISTRATION=false
+          # No mail is sent here, so nobody could verify an address: the portal lets customers sign in without
+          # (ordering itself still requires one, PORTAL_ORDER_PLACE).
+          export JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true -jar app/build/libs/app-0.0.1-SNAPSHOT.jar \
             > ../app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done

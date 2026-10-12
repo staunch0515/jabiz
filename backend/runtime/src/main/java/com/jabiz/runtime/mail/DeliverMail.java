@@ -1,6 +1,7 @@
 package com.jabiz.runtime.mail;
 
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.mail.MailPlaceholders;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
@@ -167,6 +168,10 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             Map<String, String> values = new LinkedHashMap<>();
             pending.params().forEach((name, value) -> values.put(name, value == null ? "" : String.valueOf(value)));
             values.put(MailTemplate.BASE_URL, templates.baseUrl());
+            if (template.params().contains(MailTemplate.ENTRY_PARAM)) {
+                Object entry = pending.params().get(MailTemplate.ENTRY_PARAM);
+                values.put(MailTemplate.ENTRY_URL, templates.entryUrl(entry == null ? null : String.valueOf(entry)));
+            }
             if (template.unsubscribable() && pending.userId() != null) {
                 values.put(MailTemplate.UNSUBSCRIBE_URL, templates.unsubscribeUrl(
                     tokens.issueUnsubscribe(pending.userId().toString(), template.name())));
@@ -199,7 +204,11 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             "No message " + template.subjectKey() + " [" + locale + "]"));
         String body = messages.find(template.bodyKey(), locale).orElseThrow(() -> new IllegalStateException(
             "No message " + template.bodyKey() + " [" + locale + "]"));
-        return MailRenderer.render(subject, body, values, template.urlSafePlaceholders());
+        // The roots of named entries' frontends ({entryUrl.<entry>}, decision D43 item 4), from configuration.
+        Map<String, String> filled = new LinkedHashMap<>(values);
+        MailPlaceholders.of(subject + "\n" + body).stream().filter(MailTemplate::namedEntryUrl)
+            .forEach(name -> filled.put(name, templates.entryUrl(MailTemplate.entryOf(name))));
+        return MailRenderer.render(subject, body, filled, template.urlSafePlaceholders());
     }
 
     private Mono<Void> storeToken(Pending pending, String purpose, String token, Instant issued, Duration validity) {

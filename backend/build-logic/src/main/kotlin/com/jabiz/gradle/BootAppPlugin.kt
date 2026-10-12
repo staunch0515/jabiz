@@ -5,6 +5,7 @@ import com.github.gradle.node.pnpm.task.PnpmTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
@@ -17,6 +18,7 @@ import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.testing.Test
 import org.gradle.kotlin.dsl.project
 import org.gradle.process.CommandLineArgumentProvider
@@ -49,7 +51,8 @@ class BootAppPlugin : Plugin<Project> {
             maxParallelUsages.set(1)
         }
 
-        val app = JabizAppExtension(project.objects) { spa -> registerSpa(project, spa, pnpm) }
+        lateinit var app: JabizAppExtension
+        app = JabizAppExtension(project.objects) { spa -> registerSpa(project, app, spa, pnpm) }
         app.openApiSnapshot.convention(
             project.rootProject.layout.projectDirectory.file("../frontend/openapi/openapi.json"))
         app.publicQueriesSnapshot.convention(
@@ -69,12 +72,14 @@ class BootAppPlugin : Plugin<Project> {
 
     /**
      * `META-INF/jabiz-app.properties` in the jar: the settings the server shares with the admin frontend, from the
-     * same `jabizApp` block, so the two cannot disagree (decision D22 item 7).
+     * same `jabizApp` block, so the two cannot disagree (decision D22 item 7), and the SPAs packaged into the jar with
+     * their entries and PWA modes: the server's default `jabiz.web.spa` (decision D43 item 6).
      */
     private fun registerAppProperties(project: Project, app: JabizAppExtension) {
         val write = project.tasks.register("jabizAppProperties", AppPropertiesTask::class.java) {
             languages.set(app.languages)
             region.set(app.region.orElse(""))
+            spas.set(project.provider { app.spas.map { listOf(it.path, it.entry ?: "", it.pwa.value).joinToString("|") } })
             outputDir.set(project.layout.buildDirectory.dir("generated/jabiz-app"))
         }
         val main = project.extensions.getByType(SourceSetContainer::class.java).getByName("main")
@@ -134,37 +139,83 @@ class BootAppPlugin : Plugin<Project> {
     }
 
     /**
+     * `pnpm install --frozen-lockfile` in [dir], once per directory in this module: the platform frontend's under
+     * [PLATFORM_INSTALL], which the SPAs built from it and the application SPAs linking its packages share.
+     */
+    private fun installTask(project: Project, name: String, dir: Directory, pnpm: Provider<PnpmLock>): TaskProvider<PnpmTask> {
+        if (name in project.tasks.names) {
+            return project.tasks.named(name, PnpmTask::class.java)
+        }
+        return project.tasks.register(name, PnpmTask::class.java) {
+            dependsOn("pnpmSetup")
+            usesService(pnpm)
+            workingDir.set(dir)
+            pnpmCommand.set(listOf("install", "--frozen-lockfile"))
+            // A pnpm workspace (decision D34): the frontend packages' manifests are installed with it.
+            inputs.files(
+                dir.file("package.json"),
+                dir.file("pnpm-lock.yaml"),
+                project.fileTree(dir) { include("pnpm-workspace.yaml", "packages/*/package.json") },
+            )
+            outputs.file(dir.file("node_modules/.modules.yaml"))
+        }
+    }
+
+    /**
      * Installs and builds one SPA with `VITE_BASE` set to its prefix (and `JABIZ_ADMIN_EXTENSION` to the application's
      * admin pages), into a directory of this module's own (two applications can build the same frontend with
-     * different bases), and packages it under `static/<prefix>`.
+     * different bases), and packages it under `static/<prefix>`. An SPA of the application's own (not the platform
+     * frontend) links the platform's packages (decision D34 item 5): the platform frontend is installed first, its
+     * packages are inputs of the build, and `spaCheck<name>` (`pnpm app:check`, part of `check`) makes sure the SPA
+     * resolves the very versions the platform does before it is built.
      */
-    private fun registerSpa(project: Project, spa: SpaSpec, pnpm: Provider<PnpmLock>) {
+    private fun registerSpa(project: Project, app: JabizAppExtension, spa: SpaSpec, pnpm: Provider<PnpmLock>) {
         val sourceDir = project.layout.projectDirectory.dir(spa.sourceDir)
+        val platformDir = project.rootProject.layout.projectDirectory.dir("../frontend")
+        val platform = sourceDir.asFile.canonicalFile == platformDir.asFile.canonicalFile
         val suffix = spa.name.split('-').joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
         val outDir = project.layout.buildDirectory.dir("spa/${spa.name}")
         val extensionDir = spa.extension?.let { project.layout.projectDirectory.dir(it) }
 
-        val install = project.tasks.register("pnpmInstall$suffix", PnpmTask::class.java) {
-            dependsOn("pnpmSetup")
+        val platformInstall = installTask(project, PLATFORM_INSTALL, platformDir, pnpm)
+        val install = if (platform) platformInstall else installTask(project, "pnpmInstall$suffix", sourceDir, pnpm)
+        val spaCheck = if (platform) null else project.tasks.register("spaCheck$suffix", PnpmTask::class.java) {
+            group = "verification"
+            description = "Checks that the SPA served under ${spa.path} uses the platform frontend's versions (app:check)."
+            dependsOn(platformInstall, install)
             usesService(pnpm)
-            workingDir.set(sourceDir)
-            pnpmCommand.set(listOf("install", "--frozen-lockfile"))
-            // A pnpm workspace (decision D34): the frontend packages' manifests are installed with it.
+            workingDir.set(platformDir)
+            pnpmCommand.set(listOf("run", "app:check", sourceDir.asFile.absolutePath))
             inputs.files(
                 sourceDir.file("package.json"),
                 sourceDir.file("pnpm-lock.yaml"),
-                project.fileTree(sourceDir) { include("pnpm-workspace.yaml", "packages/*/package.json") },
+                platformDir.file("pnpm-lock.yaml"),
+                platformDir.file("scripts/app-check.mjs"),
+                project.fileTree(platformDir) { include("packages/*/package.json") },
             )
-            outputs.file(sourceDir.file("node_modules/.modules.yaml"))
+            val marker = project.layout.buildDirectory.file("spa-check/${spa.name}.ok")
+            outputs.file(marker)
+            doLast { marker.get().asFile.apply { parentFile.mkdirs(); writeText("ok\n") } }
         }
+        spaCheck?.let { check -> project.tasks.named("check") { dependsOn(check) } }
 
         val build = project.tasks.register("spaBuild$suffix", PnpmTask::class.java) {
             group = "build"
             description = "Builds the single-page application served under ${spa.path}."
-            dependsOn(install)
+            dependsOn(install, platformInstall)
+            spaCheck?.let { dependsOn(it) }
             usesService(pnpm)
             workingDir.set(sourceDir)
             environment.put("VITE_BASE", spa.base)
+            // The sign-in entry, the PWA mode and the other SPAs' prefixes, which its Service Worker leaves alone
+            // (decision D43 items 1 and 6).
+            environment.put("VITE_JABIZ_ENTRY", spa.entry ?: "")
+            environment.put("VITE_JABIZ_PWA", spa.pwa.value)
+            val others = project.provider { app.spas.filter { it.path != spa.path }.joinToString(",") { it.base } }
+            environment.put("VITE_JABIZ_SPA_PREFIXES", others)
+            inputs.property("entry", spa.entry ?: "")
+            inputs.property("pwa", spa.pwa.value)
+            inputs.property("otherPrefixes", others)
             // Interface languages and region (decision D22 item 7); the server gets the same from jabiz-app.properties.
             val app = project.extensions.getByType(JabizAppExtension::class.java)
             environment.put("VITE_JABIZ_LANGUAGES", app.languages.map { it.joinToString(",") })
@@ -183,8 +234,8 @@ class BootAppPlugin : Plugin<Project> {
                 project.fileTree(sourceDir.dir("src")),
                 project.fileTree(sourceDir.dir("public")),
                 project.fileTree(sourceDir.dir("openapi")),
-                // @jabiz/client and @jabiz/ui, built from source with the admin frontend.
-                project.fileTree(sourceDir.dir("packages")) { exclude("**/node_modules/**") },
+                // @jabiz/client and @jabiz/ui, built from source, linked by an application's own SPA.
+                project.fileTree(platformDir.dir("packages")) { exclude("**/node_modules/**") },
                 project.fileTree(sourceDir) {
                     include(
                         "index.html", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "vite.config.ts",
@@ -208,6 +259,10 @@ class BootAppPlugin : Plugin<Project> {
         @get:Input
         abstract val region: Property<String>
 
+        /** The SPAs, each `path|entry|pwa`. */
+        @get:Input
+        abstract val spas: ListProperty<String>
+
         @get:OutputDirectory
         abstract val outputDir: DirectoryProperty
 
@@ -219,6 +274,16 @@ class BootAppPlugin : Plugin<Project> {
             languages.get().takeIf { it.isNotEmpty() }?.let { lines += "jabiz.i18n.languages=${it.joinToString(",")}" }
             // Exported reports format numbers and times like the frontend (docs/design/19-reports.md section 4).
             region.get().takeIf { it.isNotBlank() }?.let { lines += "jabiz.region=$it" }
+            // The SPAs in the jar (decision D43 item 6): the default of jabiz.web.spa, which an application's own
+            // configuration replaces as a whole, and what was built, which the startup check compares it with.
+            spas.get().forEachIndexed { i, spa ->
+                val (path, entry, pwa) = spa.split('|')
+                for (prefix in listOf("jabiz.web.spa[$i]", "jabiz.build.spa[$i]")) {
+                    lines += "$prefix.path=$path"
+                    if (entry.isNotEmpty()) lines += "$prefix.entry=$entry"
+                    lines += "$prefix.pwa=$pwa"
+                }
+            }
             file.writeText(lines.joinToString("\n", postfix = "\n"))
         }
     }
@@ -243,6 +308,9 @@ class BootAppPlugin : Plugin<Project> {
     abstract class PnpmLock : BuildService<BuildServiceParameters.None>
 
     private companion object {
+        /** The task installing the platform frontend (`../frontend` of the backend root). */
+        const val PLATFORM_INSTALL = "pnpmInstallPlatformFrontend"
+
         fun RegularFileProperty.absolutePath(): Provider<String> = map { it.asFile.absolutePath }
 
         /** Integration tests and platformCheck connect to a local PostgreSQL when these are set (CLAUDE.md section 6). */

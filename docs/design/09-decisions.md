@@ -1221,3 +1221,36 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 
 **放弃的方案**：①每项发一条事件、由事件消费者处理（每项多一次 Outbox 往返，吞吐受投递限制）；②在实例间以 `SKIP LOCKED` 分发各项（本阶段不需要，留待以后）；③运行中逐项重试（延长持锁时间）。
 
+
+## D43 应用 SPA：按入口的会话、邮件链接与 OIDC 回调、PWA
+
+**背景**：应用自有的前端（D19 第 3 条、D34 第 5 条）与通用后台同源部署时，`@jabiz/client` 只有一份不带入口的会话；
+平台的邮件链接与 OIDC 回调固定指向后台；手机上的 PWA 关闭后再打开需要重新登录（D15 第 4 条只允许 `sessionStorage`）。
+本条补充 D15 第 4 条、D19 第 3 条、D34 第 5 条与 D36 实现说明第 13 条，不取代任何决策（ROADMAP 16c、16m；2026-10-12 确认）。
+
+**决策**
+1. **会话按入口**：客户端以构建时的入口（`VITE_JABIZ_ENTRY`）登录、刷新与发起 OIDC；刷新令牌的键按入口分开（`jabiz.session.<入口>.refresh`），同源的各 SPA 会话互不影响。
+2. **会话设置按入口**（16m）：`jabiz.security.entries.<名>.session.refresh-token-ttl`（上限 90 天）、`.idle-timeout`（`0` 表示不按闲置结束）、`.persistence`。
+   `persistence: tab`（缺省）把刷新令牌放 `sessionStorage`（同 D15）；`device` 放 `localStorage`，关闭后再打开仍保持登录；**`admin` 入口不能用 `device`**（启动错误）。
+   访问令牌仍只在内存中；多个标签页的刷新以 Web Locks 串行，避免被当作令牌重用而吊销整个令牌族。
+3. **本人改密码**（16m）：只经平台接口与 `entryOnly()` 流程，须当前密码（错误计入锁定），吊销其他令牌族、保留当前族，写登录记录并在邮件开启时通知。
+4. **邮件链接按入口**：入口的 `app-path` 即该入口前端的根；平台邮件用内置占位符 `{entryUrl}`，应用模板可用 `{entryUrl.<入口>}`；后台的 `/auth/*` 落地页保留以兼容旧链接。
+5. **OIDC 回调按入口**：提供方的 `redirect-uris.<入口>`；没有该入口回调的提供方不对该入口提供。
+6. **PWA**：Service Worker 只预缓存应用外壳；页面导航网络优先、离线回退外壳；**不拦截、不缓存任何 `/api/**` 响应**、其他 SPA 的前缀、跨源与非 GET 请求；
+   新版本须用户同意后生效；可以撤下（`pwa = REMOVE`）。服务端只为声明了 PWA 的 SPA 的 `sw.js` 回答 Service Worker 脚本请求，从不发送 `Service-Worker-Allowed`。
+7. **内容安全策略**：所有 SPA 的缺省策略加 `base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`；脚本一律不允许内联。
+
+**理由**：答题人主要在手机上使用 PWA，每次重新登录不可接受；把长期会话限定在显式声明的非管理入口、以轮换与重用即吊销约束，风险与收益相称。
+按入口分开会话、链接与回调，使一个部署中的多个前端互不干扰。
+
+**放弃的方案**：①刷新令牌放 HttpOnly Cookie（需要 SameSite、CSRF 头与 Origin 检查，改变 D12、D15 的"无 Cookie、无 CSRF"）；②引入 Workbox（多一套依赖，策略难以收紧到"只缓存外壳"）；③邮件链接一律经后台中转（应用 SPA 的用户要先进入后台）。
+
+**实现说明（16m）**：①会话设置在 `SignInEntries`（`Entry.session()`），`RefreshTokenStore` 按令牌族的入口取有效期与闲置窗口，`/api/auth/me` 的 `idleTimeoutSeconds` 按会话的入口给出（`0` 不锁定），`GET /api/auth/entries/{name}` 给出 `sessionPersistence`；`session.refresh-token-ttl` 的 90 天上限只约束入口自己的设置。"非管理入口"的实现：`admin` 不能用 `device` 或闲置时长 `0`；长期会话的入口（`device` 或闲置时长 `0`）不能接受 `*`（启动错误）；角色是运行时数据，所以每次登录与刷新时，授予 `*` 或 `security.*` 权限的角色在长期会话中不计入（10 §15.1）。
+②本人改密码是 `POST /api/auth/account/password` → `SEC_ACCOUNT_PASSWORD_CHANGE`（10 §15.8）：吊销原因 `PASSWORD_CHANGE`，登录记录 `PASSWORD_CHANGED`（不计失败、不清零），同一用户的尝试以排他锁逐个进行（并发猜测各自计数），无论当前密码对错都计算新密码的哈希（耗时相同），锁定期间不比对密码，没有密码的账号 422 `PASSWORD_NOT_SET`，按用户（`jabiz.security.account.rate-limit.per-user`）与地址限流。不需要迁移。
+
+**实现说明（16c-2）**：①`{entryUrl}` 只用于声明了参数 `entry` 的模板，值为 `jabiz.mail.base-url` 加该入口的 `app-path`（以 `/` 结尾，未知入口取 `/`）；`{entryUrl.<入口>}` 任何模板可用，入口须是可用的登录入口（启动检查 `MAIL`）；两者只取自配置，原样代入链接。平台的四封邮件（含 16m 的 `jabiz.auth.password-changed`）都改用 `{entryUrl}`。入口的 `app-path` 不在任何 SPA 之下、或不在声明了该入口的 SPA 之下时启动检查 `SECURITY` 告警。
+②OIDC：`redirect-uris.<入口>`（`redirect-uri` 即 `admin` 的）；`GET /api/auth/oidc/providers?entry=` 只列出有该入口回调的提供方，`start` 对没有回调的答 401；换取令牌用 state 所记入口的回调。
+③`jabiz.web.spa[i].entry` 与 `.pwa`（`off` / `on` / `remove`）；`jabizApp` 把 SPA 写入 jar（`jabiz.web.spa` 的缺省与 `jabiz.build.spa` 的记录），启动检查 `WEB` 对配置与构建的差异告警、对未知入口报错。缓存头由 `SpaFallbackFilter` 在提交前写入，替换 Spring Security 的 `no-store`（已核实它作用于全部静态文件）；Service Worker 守卫是最先执行的过滤器 `ServiceWorkerScriptGuard`，`/api/**` 也在它之下。
+④预设 `@jabiz/client/vite` 是纯 JavaScript（`vite.mjs` 加 `vite.d.mts`）：Vite 从应用的 `vite.config.ts` 加载经 `link:` 的包时不打包它，Node 22.18 之前不能直接执行 TypeScript。Service Worker 以 Vite 自己的打包器编译为经典脚本（Vite 8 不再带 esbuild，原计划的 esbuild 不适用）。Vitest 中预设把平台前端的依赖交给 Vite 处理、取其 ES 模块版本并指向 SPA 自己的副本，否则测试中会有两个 React；TypeScript 中应用以 `paths` 统一 `react` 等的类型（指南 `app-spa.md`）。
+⑤`device` 的刷新令牌另存一份到 IndexedDB，刷新在 Web Lock 内从 IndexedDB 读、提交后才释放锁：Chromium 中一个标签页看到的 `localStorage` 是稍后才同步的副本，e2e 中两个标签页同时重新加载时后一个读到了已轮换的旧令牌，服务端按重用吊销了整个令牌族。会话结束时写空值（墓碑），不退回旧副本；写入 IndexedDB 失败时删除该记录，读取退回 `localStorage`（否则会优先读到已轮换的令牌或旧的墓碑）。本人改密码时随请求送出的刷新令牌也在锁内这样读。
+⑥Service Worker 激活时保留上一个版本的缓存（还在运行它的标签页仍能取到按需加载的文件），更早的删除；撤下 PWA 须先发布 `REMOVE` 的版本，再改为 `OFF`。

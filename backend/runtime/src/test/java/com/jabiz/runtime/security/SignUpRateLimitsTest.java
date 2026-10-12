@@ -58,6 +58,19 @@ class SignUpRateLimitsTest {
     }
 
     @Test
+    void passwordChangesAreCountedPerUser() {
+        SignUpRateLimits limits = new SignUpRateLimits(20, 3, 2, Duration.ofHours(1), () -> 0L);
+        limits.passwordChange("u1");
+        limits.passwordChange("u1");
+        assertThatThrownBy(() -> limits.passwordChange("u1")).isInstanceOf(RateLimitedException.class);
+        // Another user has a bucket of their own; the address limit of a request about an address is apart.
+        limits.passwordChange("u2");
+        limits.user(SignUpRateLimits.Kind.VERIFY_RESEND, "u1");
+        assertThatThrownBy(() -> new SignUpRateLimits(1, 1, 0, Duration.ofHours(1), () -> 0L))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void limitsArePositive() {
         assertThatThrownBy(() -> new SignUpRateLimits(0, 1, Duration.ofHours(1)))
             .isInstanceOf(IllegalArgumentException.class);

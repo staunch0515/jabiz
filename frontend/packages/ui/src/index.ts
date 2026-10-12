@@ -1,7 +1,8 @@
 /**
  * `@jabiz/ui`: the components of jabiz frontends (decision D34): shadcn/ui's components (generated into this
  * package only; applications and extensions do not keep copies), the platform's composite components and the theme
- * (`@jabiz/ui/theme.css`). Texts are in the i18next namespace `ui`, in every platform language.
+ * (`@jabiz/ui/theme.css`), and the sign-in and account building blocks (`auth/`). Texts are in the i18next namespaces
+ * `ui` and `auth`, in every platform language.
  */
 import './i18n'
 
@@ -105,3 +106,6 @@ export type { PageStateKind, PageStateProps } from './components/page-state'
 export { Spinner } from './components/spinner'
 export type { SpinnerProps } from './components/spinner'
 export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'
+
+// Signing in and the account (decision D43): pages and parts of pages, without a router, texts in namespace `auth`.
+export * from './auth'

@@ -99,11 +99,12 @@ public class OidcClient {
             }));
     }
 
-    Mono<String> authorizationUrl(OidcProvider provider, OidcStateStore.Started started) {
+    /** The provider's page to send the user to; it sends them back to {@code redirectUri} (the entry's callback). */
+    Mono<String> authorizationUrl(OidcProvider provider, OidcStateStore.Started started, String redirectUri) {
         return metadata(provider).map(found -> UriComponentsBuilder.fromUriString(found.authorizationEndpoint())
             .queryParam("response_type", "code")
             .queryParam("client_id", provider.clientId())
-            .queryParam("redirect_uri", provider.redirectUri())
+            .queryParam("redirect_uri", redirectUri)
             .queryParam("scope", String.join(" ", provider.scopes()))
             .queryParam("state", started.state())
             .queryParam("nonce", started.nonce())
@@ -112,10 +113,13 @@ public class OidcClient {
             .encode().build().toUriString());
     }
 
-    /** Exchanges an authorization code (client_secret_basic, PKCE) for the ID token. */
-    Mono<String> idToken(OidcProvider provider, String code, String codeVerifier) {
+    /**
+     * Exchanges an authorization code (client_secret_basic, PKCE) for the ID token, naming the callback the
+     * authorization request named ({@code redirectUri}), as the provider requires.
+     */
+    Mono<String> idToken(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
         String form = Map.of("grant_type", "authorization_code", "code", code,
-                "redirect_uri", provider.redirectUri(), "code_verifier", codeVerifier).entrySet().stream()
+                "redirect_uri", redirectUri, "code_verifier", codeVerifier).entrySet().stream()
             .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
             .collect(Collectors.joining("&"));
         // RFC 6749 section 2.3.1: client credentials are form-encoded before Basic authentication.

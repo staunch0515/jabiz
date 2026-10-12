@@ -86,16 +86,24 @@ class OidcController {
         this.clock = clock;
     }
 
+    /**
+     * The providers offered to the sign-in entry {@code entry} (none: the administration): those with a callback for it
+     * (decision D43 item 5). None for an entry that does not exist.
+     */
     @GetMapping(BASE + "/providers")
-    Mono<List<ProviderEntry>> providers() {
-        return RequestContexts.current().map(context -> providers.all().stream()
+    Mono<List<ProviderEntry>> providers(
+        @org.springframework.web.bind.annotation.RequestParam(name = "entry", required = false) String entry) {
+        java.util.Optional<SignInEntries.Entry> found = entries.find(entry);
+        List<OidcProvider> offered = found.map(e -> providers.offeredTo(e.name())).orElse(List.of());
+        return RequestContexts.current().map(context -> offered.stream()
             .map(provider -> new ProviderEntry(provider.id(), provider.label(context.locale().getLanguage())))
             .toList());
     }
 
     /**
      * @param entry the sign-in entry to sign in to (decision D36); none: the administration. Stored with the state:
-     *              the callback cannot pick another one.
+     *              the callback cannot pick another one. A provider without a callback for the entry is refused like an
+     *              unknown entry (decision D43 item 5).
      */
     @PostMapping(BASE + "/{id}/start")
     Mono<StartResponse> start(@PathVariable String id,
@@ -108,8 +116,13 @@ class OidcController {
                 return Mono.error(AuthController.loginFailed("Unknown sign-in entry"));
             }
             String resolved = found.get().name();
-            return states.start(provider.id(), resolved).flatMap(started -> client.authorizationUrl(provider, started)
-                    .map(url -> new StartResponse(url, started.binder())))
+            String redirectUri = provider.redirectUri(resolved);
+            if (redirectUri == null) {
+                return Mono.error(AuthController.loginFailed("Identity provider " + provider.id()
+                    + " has no callback for entry " + resolved));
+            }
+            return states.start(provider.id(), resolved).flatMap(started -> client.authorizationUrl(provider, started,
+                    redirectUri).map(url -> new StartResponse(url, started.binder())))
                 .onErrorMap(OidcClient.ProviderException.class, e -> {
                     log.warn("Identity provider {} unavailable: {}", provider.id(), e.getMessage());
                     return AuthController.loginFailed("Identity provider unavailable");
@@ -132,8 +145,14 @@ class OidcController {
             return states.consume(request.state(), request.binder()).flatMap(pending -> {
                 OidcProvider provider = providers.find(pending.providerId()).orElseThrow(
                     () -> new IllegalStateException("The provider of the state is no longer configured"));
+                // The callback the sign-in started with: the state's entry, whatever the request says.
+                String redirectUri = provider.redirectUri(pending.entry());
+                if (redirectUri == null) {
+                    return Mono.error(new IllegalStateException("The provider no longer has a callback for entry "
+                        + pending.entry()));
+                }
                 Mono<AuthController.TokenResponse> work = client.idToken(provider, request.code(),
-                        pending.codeVerifier())
+                        pending.codeVerifier(), redirectUri)
                     .flatMap(idToken -> identity(provider, idToken, pending.nonceHash()))
                     .flatMap(identity -> signIn(provider, identity,
                         AuthController.source(clients, http, pending.entry())));
