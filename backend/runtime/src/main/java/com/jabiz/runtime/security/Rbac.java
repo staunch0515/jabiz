@@ -77,6 +77,35 @@ public final class Rbac {
         return complete(roles).stream().filter(role -> entry.accepts(role.get("roleCode"))).toList();
     }
 
+    /** Prefix of the security module's permissions (users, roles, passwords, second factors, access review). */
+    static final String SECURITY_PERMISSIONS = "security.";
+
+    /**
+     * The roles among {@code roles} that count in a session of {@code entry}: all of them, except that in an entry with
+     * long sessions ({@link SignInEntries.Session#longLived}: kept on the device or never ended for idleness; decision
+     * D43 item 2) a role granting the platform's administration (every permission, or any of the security module's,
+     * {@code security.*}) does not count. Roles are data an administrator can change at any time, so this is decided
+     * at every sign-in and refresh, not only at startup (which refuses such an entry accepting every role).
+     *
+     * @param grants the permission grants of {@code roles}
+     */
+    public static List<EntityInstance> withoutAdministration(Collection<EntityInstance> roles,
+        Collection<EntityInstance> grants, SignInEntries.Entry entry) {
+        complete(roles);
+        if (entry == null || !entry.session().longLived()) {
+            return List.copyOf(roles);
+        }
+        Set<String> administrative = new HashSet<>();
+        for (EntityInstance grant : complete(grants)) {
+            String permission = String.valueOf(grant.<Object>get("permission"));
+            if (permission.equals(com.jabiz.context.RequestContext.ALL_PERMISSIONS)
+                || permission.startsWith(SECURITY_PERMISSIONS)) {
+                administrative.add(String.valueOf(grant.<Object>get("roleId")));
+            }
+        }
+        return roles.stream().filter(role -> !administrative.contains(String.valueOf(role.id()))).toList();
+    }
+
     /** The permissions granted to the enabled roles among {@code roles}. */
     public static EntityQuery permissionsOf(Collection<EntityInstance> roles) {
         List<Object> enabled = complete(roles).stream().filter(Rbac::enabled).map(EntityInstance::id).toList();

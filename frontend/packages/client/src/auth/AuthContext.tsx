@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, refreshSession, unwrap } from '../api/client'
+import { api, endSession, refreshSession as refreshTokens, unwrap, type RefreshOptions } from '../api/client'
 import { session } from '../api/session'
+import { loadSessionSettings } from './account'
 
 /**
  * How far a sign-in got (docs/design/10-security.md section 9): signed in, or a second factor (or its enrolment)
@@ -11,15 +12,24 @@ export type SignInStep =
   | { status: 'SIGNED_IN' }
   | { status: 'MFA_REQUIRED' | 'MFA_ENROLLMENT_REQUIRED'; challenge: string }
 
-interface AuthState {
+export interface AuthState {
   /** False until a stored session has been restored (or found missing). */
   ready: boolean
   signedIn: boolean
+  /** The sign-in entry of this frontend (decision D43): sessions, sign-in and refresh are the entry's. */
+  entry: string
   userId: string | null
   /** The signed-in user's display name (or user name); null for an actor that is no user. */
   displayName: string | null
+  /** The signed-in user's e-mail address; null when none or not known yet. */
+  email: string | null
+  /**
+   * Whether the address was verified when the access token was issued (decision D36); a fresh verification counts
+   * after {@link refreshSession} with `force`. False while not known.
+   */
+  emailVerified: boolean
   permissions: ReadonlySet<string>
-  /** After how many seconds without activity the session is locked (section 11); null until known. */
+  /** After how many seconds without activity the session is locked (section 11); null until known or never. */
   idleTimeoutSeconds: number | null
   /** The span of business time the session's data is limited to (section 13.2); null when not limited. */
   dataPeriod: DataPeriod | null
@@ -28,6 +38,8 @@ interface AuthState {
   verify(challenge: string, code: string): Promise<void>
   /** The return from an identity provider (docs/design/10-security.md section 12): state and code. */
   signInWithProvider(state: string, code: string, binder: string): Promise<SignInStep>
+  /** New tokens for the session: with `force`, after the address was verified, so that the new ones say so. */
+  refreshSession(options?: RefreshOptions): Promise<boolean>
   signOut(): Promise<void>
   /** Whether the user holds the permission ("*" holds all). Only decides what the UI offers; the server checks. */
   can(permission: string): boolean
@@ -44,6 +56,8 @@ export interface DataPeriod {
 interface Identity {
   userId: string
   displayName: string | null
+  email: string | null
+  emailVerified: boolean
   permissions: string[]
   idleTimeoutSeconds: number
   dataPeriod: DataPeriod | null
@@ -73,10 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const token = useSyncExternalStore(session.subscribe, session.accessToken, () => null)
   const [ready, setReady] = useState(false)
 
-  // A reload keeps the refresh token (sessionStorage) but not the access token: restore the session once.
+  // A reload keeps the refresh token (stored) but not the access token: restore the session once. Where the entry
+  // keeps it is read alongside; a token found on the device is used meanwhile (only the server put it there).
   useEffect(() => {
     let cancelled = false
-    const restore = session.refreshToken() && !session.accessToken() ? refreshSession() : Promise.resolve(false)
+    void loadSessionSettings()
+    const restore = session.refreshToken() && !session.accessToken() ? refreshTokens() : Promise.resolve(false)
     void restore.finally(() => {
       if (!cancelled) setReady(true)
     })
@@ -90,11 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ['auth', 'identity', token],
     enabled: !!token,
     staleTime: Infinity,
-    queryFn: async (): Promise<Identity> => {
+    queryFn: async (): Promise<Identity | null> => {
       const answer = await unwrap(api.GET('/api/auth/me'))
+      if (answer.entry && answer.entry !== session.entry()) {
+        // A session of another entry (decision D43 item 1) is never this frontend's: it ends here (signed out).
+        session.clear()
+        return null
+      }
       return {
         userId: answer.userId ?? '',
         displayName: answer.displayName ?? null,
+        email: answer.email ?? null,
+        emailVerified: answer.emailVerified ?? false,
         permissions: answer.permissions ?? [],
         idleTimeoutSeconds: answer.idleTimeoutSeconds ?? 0,
         dataPeriod:
@@ -106,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (userName: string, password: string): Promise<SignInStep> => {
-      const answer = await unwrap(api.POST('/api/auth/login', { body: { userName, password } }))
+      const answer = await unwrap(api.POST('/api/auth/login', { body: { userName, password, entry: session.entry() } }))
       rememberUserName(userName)
       if (answer.status === 'MFA_REQUIRED' || answer.status === 'MFA_ENROLLMENT_REQUIRED') {
         return { status: answer.status, challenge: answer.challenge! }
@@ -141,16 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
-    const refreshToken = session.refreshToken()
-    session.clear()
+    const ended = endSession()
     queryClient.clear()
-    if (refreshToken) {
-      try {
-        await api.POST('/api/auth/logout', { body: { refreshToken } })
-      } catch {
-        // The local session is gone either way.
-      }
-    }
+    await ended
   }, [queryClient])
 
   const value = useMemo<AuthState>(() => {
@@ -158,14 +174,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       ready,
       signedIn: !!token,
+      entry: session.entry(),
       userId: identity?.userId ?? null,
       displayName: identity?.displayName ?? null,
+      email: identity?.email ?? null,
+      emailVerified: identity?.emailVerified ?? false,
       permissions,
       idleTimeoutSeconds: identity?.idleTimeoutSeconds || null,
       dataPeriod: identity?.dataPeriod ?? null,
       signIn,
       verify,
       signInWithProvider,
+      // A new access token changes the identity query's key, so the identity is asked again.
+      refreshSession: refreshTokens,
       signOut,
       can: (permission: string) => permissions.has('*') || permissions.has(permission),
     }
@@ -178,4 +199,9 @@ export function useAuth(): AuthState {
   const state = useContext(AuthContext)
   if (!state) throw new Error('useAuth outside AuthProvider')
   return state
+}
+
+/** The session when there is an {@link AuthProvider} around, else null: for components that also work without. */
+export function useOptionalAuth(): AuthState | null {
+  return useContext(AuthContext)
 }

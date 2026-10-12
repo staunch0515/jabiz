@@ -53,6 +53,37 @@ class SpaConfigCheckTest {
         assertThat(problems.get(5).message()).contains("/api or /actuator");
     }
 
+    @Test
+    void unknownEntriesAreErrorsAndDifferencesFromTheJarWarnings() {
+        List<Spa> built = List.of(
+            new Spa("/", null, null, "admin", null),
+            new Spa("/portal", null, null, "portal", JabizWebProperties.Pwa.ON),
+            new Spa("/shop", null, null, "shop", JabizWebProperties.Pwa.ON));
+        List<Spa> configured = List.of(
+            new Spa("/", null, null, "admin", null),
+            new Spa("/portal", null, null, "customers", JabizWebProperties.Pwa.OFF),
+            new Spa("/extra", null, null, "Bad Entry", null));
+
+        List<CheckProblem> problems = new SpaConfigCheck(new JabizWebProperties(configured), built,
+            name -> List.of("admin", "portal", "shop").contains(name)).check();
+
+        assertThat(problems).extracting(CheckProblem::isError, CheckProblem::location).containsExactly(
+            org.assertj.core.groups.Tuple.tuple(true, "jabiz.web.spa[2].entry"),
+            org.assertj.core.groups.Tuple.tuple(true, "jabiz.web.spa[1].entry"),
+            org.assertj.core.groups.Tuple.tuple(false, "jabiz.web.spa (/portal)"),
+            org.assertj.core.groups.Tuple.tuple(false, "jabiz.web.spa (/portal)"),
+            org.assertj.core.groups.Tuple.tuple(false, "jabiz.web.spa"),
+            org.assertj.core.groups.Tuple.tuple(false, "jabiz.web.spa (/extra)"));
+        assertThat(problems.get(1).message()).contains("no usable sign-in entry customers");
+        assertThat(problems.get(2).message()).contains("entry is customers, but the SPA was built for portal");
+        assertThat(problems.get(3).message()).contains("pwa is off, but the SPA was built with on");
+        assertThat(problems.get(4).message()).contains("the jar contains the SPA /shop");
+        assertThat(problems.get(5).message()).contains("the jar contains no SPA /extra");
+
+        // As built: nothing to report.
+        assertThat(new SpaConfigCheck(new JabizWebProperties(built), built, name -> true).check()).isEmpty();
+    }
+
     private static List<CheckProblem> check(List<Spa> spas) {
         return new SpaConfigCheck(new JabizWebProperties(spas)).check();
     }

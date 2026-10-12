@@ -1,7 +1,8 @@
 // Checks an application's own single-page application against the platform's frontend (decision D34 item 5):
 //   pnpm app:check <directory of the SPA>
 // React, React DOM, Tailwind CSS, TanStack Query, i18next and react-i18next (they hold state the packages share with
-// the SPA: hooks, contexts, the i18next instance), and the runtime dependencies of @jabiz/client and @jabiz/ui when the
+// the SPA: hooks, contexts, the i18next instance), Vite (the preset @jabiz/client/vite is a Vite plugin and compiles the
+// Service Worker with it, decision D43), and the runtime dependencies of @jabiz/client and @jabiz/ui when the
 // SPA uses them, must be the very versions the platform's frontend resolves: two Reacts break hooks and
 // context, two Tailwinds or Radix versions make the shared components look or behave differently. The versions are
 // read from the lockfiles (pnpm-lock.yaml, else package-lock.json), else from exact versions in package.json.
@@ -9,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 
 /** What every SPA that uses the platform's packages shares with the platform. */
-export const SHARED = ['react', 'react-dom', 'tailwindcss', '@tanstack/react-query', 'i18next', 'react-i18next']
+export const SHARED = ['react', 'react-dom', 'tailwindcss', '@tanstack/react-query', 'i18next', 'react-i18next', 'vite']
 
 const SECTIONS = new Set(['dependencies', 'devDependencies', 'optionalDependencies'])
 

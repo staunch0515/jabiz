@@ -4,7 +4,9 @@ The components of jabiz frontends (decision D34): shadcn/ui's components, the pl
 (`DataTable`, `ConfirmDialog`, `notify`, `DatePicker` / `DateTimePicker` (typeable), `DecimalInput` / `MoneyInput`,
 `ThemeToggle`, `PageHeader`, `AppShell` / `ShellNav`, `Combobox`, `FilterBar`, `FileUpload`, `Timeline`,
 `DescriptionList`, `TagsInput`, `CopyButton`, `PageState`, `Spinner`), react-hook-form's form state re-exported
-(`useForm`, `useFieldArray`, `useWatch`, `Controller`; `src/form-state.ts`) and the theme (`@jabiz/ui/theme.css`). It builds on
+(`useForm`, `useFieldArray`, `useWatch`, `Controller`; `src/form-state.ts`), the sign-in and account building blocks
+(`src/auth/`: `AuthFrame`, `SignInForm`, `SignUpForm`, `MailLinkPage`, `StepUpProvider`, `ChangePasswordForm`, … —
+decision D43; they know no router and take navigation as callbacks) and the theme (`@jabiz/ui/theme.css`). It builds on
 `@jabiz/client` and is used by the admin frontend, its extensions (through `@jabiz/admin`) and applications' own
 single-page applications.
 
@@ -14,7 +16,8 @@ single-page applications.
   components; a component they need is added to this package first.
 - **Tokens only.** Components use Tailwind utilities and the theme's tokens (`bg-primary`, `text-muted-foreground`,
   …), never fixed colours. `src/styles/theme.test.ts` checks the tokens' contrast (WCAG 2.2 AA) in both appearances.
-- **Texts** go through i18next, namespace `ui` (`src/i18n.ts`), in every platform language.
+- **Texts** go through i18next, namespace `ui` (`src/i18n.ts`) and, for the building blocks of `src/auth/`, `auth`
+  (`src/auth/messages.ts`), in every platform language.
 - **Accessibility**: every composite component has a Vitest test with `expectAccessible` (axe, light and dark).
 
 ## The shadcn sources and updating them

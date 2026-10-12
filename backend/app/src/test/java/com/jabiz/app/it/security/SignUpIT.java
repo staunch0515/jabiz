@@ -123,7 +123,7 @@ class SignUpIT extends SignUpItSupport {
 
         deliver();
         assertThat(to(email)).singleElement().satisfies(message -> assertThat(text(message))
-            .contains("https://app.example.com/auth/verify-email?entry=portal&token="));
+            .contains("https://app.example.com/portal/auth/verify-email?entry=portal&token="));
         String token = token(VERIFY_LINK, email);
         // Somebody may have registered the address of somebody else: the link alone does not verify it.
         assertThat(check(token)).containsEntry("passwordRequired", true);
@@ -182,8 +182,8 @@ class SignUpIT extends SignUpItSupport {
         // Only the mail differs: a verification for the new user, "you already have an account" for the second.
         deliver();
         assertThat(to(email)).hasSize(2);
-        assertThat(text(to(email).get(0))).contains("/auth/verify-email?entry=portal&token=");
-        assertThat(text(to(email).get(1))).contains("/auth/join?entry=portal&token=");
+        assertThat(text(to(email).get(0))).contains("https://app.example.com/portal/auth/verify-email?entry=portal&token=");
+        assertThat(text(to(email).get(1))).contains("https://app.example.com/portal/auth/join?entry=portal&token=");
     }
 
     @Test
@@ -262,7 +262,7 @@ class SignUpIT extends SignUpItSupport {
         post("/api/auth/account/verify-email", bearer, Map.of()).expectStatus().isAccepted();
         post("/api/auth/account/verify-email", null, Map.of()).expectStatus().isUnauthorized();
         deliver();
-        assertThat(text(to(email).getFirst())).contains("/auth/verify-email?entry=loose&token=");
+        assertThat(text(to(email).getFirst())).contains("https://app.example.com/auth/verify-email?entry=loose&token=");
         String token = token(VERIFY_LINK, email);
         assertThat(check(token)).containsEntry("passwordRequired", false);
         verify(Map.of("token", token)).expectStatus().isNoContent();
@@ -345,7 +345,7 @@ class SignUpIT extends SignUpItSupport {
         // What a front end may know of its entry.
         assertThat(get("/api/auth/entries/portal", null).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody()).containsEntry("name", "portal").containsEntry("selfRegistration", true)
-            .containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/");
+            .containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/portal/");
         assertThat(get("/api/auth/entries/admin", null).expectStatus().isOk().expectBody(MAP).returnResult()
             .getResponseBody()).containsEntry("selfRegistration", false);
         get("/api/auth/entries/no-such-entry", null).expectStatus().isNotFound();

@@ -84,7 +84,9 @@ public record LoginAttemptPolicy(int maxFailures, Duration lockDuration) {
             // causes. Only a complete sign-in clears the counter, so wrong codes after a right password still lock.
             // A guard's refusal and an unverified address are not guesses either (decision D36): repeated refusals
             // must not lock the account.
-            case DISABLED, NO_ROLE, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED, REFUSED, EMAIL_NOT_VERIFIED ->
+            // A password change proves the password, not a whole sign-in (no second factor): it clears nothing either.
+            case DISABLED, NO_ROLE, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED, REFUSED, EMAIL_NOT_VERIFIED,
+                PASSWORD_CHANGED ->
                 new State(attemptNo, carried, null);
         };
     }

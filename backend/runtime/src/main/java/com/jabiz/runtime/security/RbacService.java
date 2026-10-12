@@ -128,7 +128,9 @@ public class RbacService {
                 .map(roles -> Rbac.acceptedBy(roles, entry))
                 .flatMap(roles -> query(SecurityEntities.ROLE_PERMISSION_DATASET,
                     SecurityEntities.SEC_ROLE_PERMISSION, Rbac.permissionsOf(roles))
-                    .map(grants -> Rbac.access(assignments, roles, grants))));
+                    // In a long session, roles granting the administration do not count (decision D43 item 2).
+                    .map(grants -> Rbac.access(assignments, Rbac.withoutAdministration(roles, grants, entry),
+                        grants))));
     }
 
     private Mono<List<EntityInstance>> query(String datasetId, EntityDefinition def, EntityQuery query) {

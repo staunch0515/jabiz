@@ -20,8 +20,10 @@ import java.util.regex.Pattern;
  * }</pre>
  * Subject and body are messages {@code mail.<name>.subject} and {@code mail.<name>.body} in every language of the
  * application; the body is Markdown. Both may use the placeholders of {@link #placeholders()}: the declared
- * parameters, the one-time tokens (drawn when the mail is sent, never stored as such), {@value #BASE_URL} and, for
- * {@link MailCategory#NOTIFICATION}, {@value #UNSUBSCRIBE_URL}.
+ * parameters, the one-time tokens (drawn when the mail is sent, never stored as such), {@value #BASE_URL}, the root of
+ * a sign-in entry's frontend ({@value #ENTRY_URL} for the entry the parameter {@value #ENTRY_PARAM} names,
+ * {@code {entryUrl.<entry>}} for a named one; decision D43 item 4) and, for {@link MailCategory#NOTIFICATION},
+ * {@value #UNSUBSCRIBE_URL}.
  *
  * @param name     unique; letters, digits and {@code . _ : -} like event names, at most 100 characters
  * @param category whether recipients may unsubscribe
@@ -45,6 +47,18 @@ public record MailTemplate(String name, MailCategory category, List<String> para
     public static final String BASE_URL = "baseUrl";
     /** The signed link that turns this template off for the recipient (notifications only). */
     public static final String UNSUBSCRIBE_URL = "unsubscribeUrl";
+    /**
+     * The root of the frontend of the sign-in entry named by the parameter {@value #ENTRY_PARAM}: {@value #BASE_URL}
+     * and the entry's {@code app-path}, ending in {@code /} (decision D43 item 4). Only for templates declaring that
+     * parameter.
+     */
+    public static final String ENTRY_URL = "entryUrl";
+    /** The parameter naming the sign-in entry whose frontend {@value #ENTRY_URL} is the root of. */
+    public static final String ENTRY_PARAM = "entry";
+    /** {@code {entryUrl.<entry>}}: the root of a named entry's frontend; the entry must exist (startup check). */
+    public static final String NAMED_ENTRY_URL_PREFIX = ENTRY_URL + ".";
+    /** Names of sign-in entries, as {@code jabiz.security.entries.<name>}. */
+    public static final Pattern ENTRY_NAME = Pattern.compile("[a-z][a-z0-9-]{0,39}");
 
     public MailTemplate {
         if (name == null || !NAME.matcher(name).matches()) {
@@ -79,7 +93,7 @@ public record MailTemplate(String name, MailCategory category, List<String> para
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template
                 + " must match " + pattern.pattern());
         }
-        if (BASE_URL.equals(value) || UNSUBSCRIBE_URL.equals(value)) {
+        if (BASE_URL.equals(value) || UNSUBSCRIBE_URL.equals(value) || ENTRY_URL.equals(value)) {
             throw new IllegalArgumentException("The " + what + " '" + value + "' of mail template " + template
                 + " is a placeholder of the platform");
         }
@@ -111,6 +125,9 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         Set<String> names = new LinkedHashSet<>(params);
         names.addAll(tokens.keySet());
         names.add(BASE_URL);
+        if (params.contains(ENTRY_PARAM)) {
+            names.add(ENTRY_URL);
+        }
         if (unsubscribable()) {
             names.add(UNSUBSCRIBE_URL);
         }
@@ -119,13 +136,33 @@ public record MailTemplate(String name, MailCategory category, List<String> para
 
     /**
      * Placeholders whose values the platform makes and that are inserted into links as they are: the address of the
-     * application, the unsubscribe link and the tokens (URL-safe Base64). Parameters are percent-encoded there.
+     * application, the roots of the entries' frontends (also every {@code {entryUrl.<entry>}}, see
+     * {@link #namedEntryUrl}), the unsubscribe link and the tokens (URL-safe Base64). Parameters are percent-encoded
+     * there.
      */
     public Set<String> urlSafePlaceholders() {
         Set<String> names = new LinkedHashSet<>(tokens.keySet());
         names.add(BASE_URL);
+        names.add(ENTRY_URL);
         names.add(UNSUBSCRIBE_URL);
         return Collections.unmodifiableSet(names);
+    }
+
+    /**
+     * Whether a placeholder is {@code {entryUrl.<entry>}} with a well-formed entry name. Its value is made by the
+     * platform from configuration (never from a parameter, whose names have no dot), so it goes into links as it is.
+     */
+    public static boolean namedEntryUrl(String placeholder) {
+        return placeholder != null && placeholder.startsWith(NAMED_ENTRY_URL_PREFIX)
+            && ENTRY_NAME.matcher(placeholder.substring(NAMED_ENTRY_URL_PREFIX.length())).matches();
+    }
+
+    /** The entry a {@link #namedEntryUrl} placeholder names. */
+    public static String entryOf(String namedEntryUrl) {
+        if (!namedEntryUrl(namedEntryUrl)) {
+            throw new IllegalArgumentException("Not an {entryUrl.<entry>} placeholder: " + namedEntryUrl);
+        }
+        return namedEntryUrl.substring(NAMED_ENTRY_URL_PREFIX.length());
     }
 
     /** Declaration of a template. */

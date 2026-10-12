@@ -91,7 +91,38 @@ class PasswordResetIT extends SignUpItSupport {
         assertThat(to(disabled)).isEmpty();
         assertThat(to(unverified)).isEmpty();
         assertThat(to(enabled)).singleElement().satisfies(message -> assertThat(text(message))
-            .contains("https://app.example.com/auth/password-reset?entry=portal&token="));
+            .contains("https://app.example.com/portal/auth/password-reset?entry=portal&token="));
+    }
+
+    @Test
+    void eachEntrysLinkLeadsToItsOwnFrontendAndTheTokenIsTheLinksOnlyCredential() {
+        // The portal's frontend is at /portal/ (its app-path), the administration's and the loose entry's at the root.
+        String portal = address("portal");
+        userWithEmail(unique("portal"), portal);
+        ask(portal, PORTAL);
+        String admin = address("admin");
+        userWithEmail(unique("admin"), admin);
+        ask(admin, null);
+        String loose = address("loose");
+        userWithEmail(unique("loose"), loose);
+        ask(loose, LOOSE);
+
+        deliver();
+        assertThat(text(to(portal).getFirst()))
+            .contains("https://app.example.com/portal/auth/password-reset?entry=portal&token=");
+        assertThat(text(to(admin).getFirst()))
+            .contains("https://app.example.com/auth/password-reset?entry=admin&token=")
+            .doesNotContain("/portal/");
+        assertThat(text(to(loose).getFirst()))
+            .contains("https://app.example.com/auth/password-reset?entry=loose&token=");
+        // A link of the earlier form (the administration's landing page, /auth/...) carries the same token, which is
+        // all the API needs: links sent before the portal had its own pages keep working.
+        java.util.regex.Matcher link = RESET_LINK.matcher(text(to(portal).getFirst()));
+        assertThat(link.find()).isTrue();
+        String earlierForm = "https://app.example.com/auth/password-reset?entry=" + link.group(1) + "&token="
+            + link.group(2);
+        assertThat(RESET_LINK.matcher(earlierForm).matches()).isTrue();
+        confirm(link.group(2), NEW_PASSWORD);
     }
 
     @Test

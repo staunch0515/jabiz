@@ -70,7 +70,12 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
-  自助注册、邮箱验证、找回密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
+  自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
+  会话的有效期、闲置时长与存放方式按入口配置（`jabiz.security.entries.<名>.session.*`，D43）；`admin` 入口不能用 `device`。
+- **应用前端与 PWA**（见 17 §4.1、指南 `docs/guide/app-spa.md` 与决策 D43）：需要登录的应用前端放在应用目录中（自己的 lockfile，经 `link:` 用 `@jabiz/client` / `@jabiz/ui`，
+  版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，
+  会话按入口（`configureClient({ entry })`）。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
+  Service Worker 只用平台的（只缓存外壳、不缓存接口、更新经用户同意，撤下用 `Pwa.REMOVE`），不引入 Workbox；不开 CORS、不用 Cookie。
 - **二次验证**（见 10 §9–§11 与决策 D28）：只用 TOTP 与恢复码（`SecUserMfa`，密钥以 `JABIZ_MFA_KEY` 加密）；登录与 step-up 都是写登录记录的流程，不另写验证逻辑。
   需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
@@ -181,14 +186,15 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   每次回放使用新的 schema 与应用上下文（数据库同集成测试）
 - 前端（`frontend/` 下，见 12）：`pnpm lint`、`pnpm typecheck`、`pnpm test`（Vitest）、`pnpm build`；`pnpm check:api` 确认生成的类型与快照一致。
   应用扩展（12 §9）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm ext:check`（类型、lint、测试；`app` 的示范为 `../backend/app/admin-extension`）
-  应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败）
+  应用自有 SPA（12 §12）：`pnpm app:check <目录>`（共用依赖的版本须与平台前端一致，不一致即失败；Gradle 构建中为 `spaCheck<名>`，在 `check` 中）。
+  示范门户 `backend/app/portal/`（`/portal/`，PWA）：`pnpm app:check ../backend/app/portal`，以及在该目录下 `pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`
   挂在子路径下构建：`VITE_BASE=/admin/ pnpm build`；后端按 `jabiz.web.spa[i].path` / `.index` / `.content-security-policy` 提供多个 SPA（见 17 §3.2）
   接口变化后：`./gradlew :app:test --tests '*OpenApiSnapshotIT' -Dopenapi.update-snapshot=true`（写 `frontend/openapi/openapi.json`）→ `pnpm gen:api`，一起提交
 - 公开模板目录快照（15 §7）：`./gradlew :app:test --tests '*PublicQueriesSnapshotIT' -Dpublic-queries.update-snapshot=true`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
-- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此
