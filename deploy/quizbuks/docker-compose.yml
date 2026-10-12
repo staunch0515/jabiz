@@ -49,7 +49,7 @@ services:
       QB_SPONSOR_SELF_REGISTRATION: ${QB_SPONSOR_SELF_REGISTRATION:-true}
       JABIZ_MAIL_ENABLED: ${JABIZ_MAIL_ENABLED:-false}
       JABIZ_MAIL_FROM: ${JABIZ_MAIL_FROM:-}
-      JABIZ_MAIL_BASE_URL: ${JABIZ_MAIL_BASE_URL:-http://localhost:8080/admin}
+      JABIZ_MAIL_BASE_URL: ${JABIZ_MAIL_BASE_URL:-http://localhost:8080}
       QB_SPONSOR_LINK: ${QB_SPONSOR_LINK:-}
       JABIZ_TRUSTED_PROXIES: ${JABIZ_TRUSTED_PROXIES:-}
     volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]
