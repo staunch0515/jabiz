@@ -145,6 +145,13 @@ public final class QbPayouts {
         // When Stripe was last asked about it while in doubt (the hourly check asks again after an hour).
         eb.field("checkRequestedAt", f -> f.physicalColumn("check_requested_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // When the sending job reported its end (result or failure): only a lookup well after it says "none" for sure.
+        eb.field("sendEndedAt", f -> f.physicalColumn("send_ended_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        // Who released the taker held after this transfer (rejected or reversed), and when.
+        eb.field("releasedBy", f -> f.physicalColumn("released_by").processOnly().asText(128));
+        eb.field("releasedAt", f -> f.physicalColumn("released_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_transfer_stripe", "stripeTransferId");
         eb.stateTransitions("status", st -> st

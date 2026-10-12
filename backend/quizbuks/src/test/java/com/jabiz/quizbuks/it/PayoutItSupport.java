@@ -142,6 +142,29 @@ abstract class PayoutItSupport extends TopUpItSupport {
         return run;
     }
 
+    /**
+     * Hands a check job's result to {@code QB_TRANSFER_CHECKED} as the platform would, whenever the test chooses
+     * (completions come in any order with the transfer's other news).
+     */
+    @SuppressWarnings("unchecked")
+    Object completeCheck(String transferId, com.jabiz.quizbuks.wallet.PayoutObjects.TransferLookup lookup) {
+        var definition = (com.jabiz.process.ProcessDefinition<Object, Object, com.jabiz.process.ProcessContext>)
+            processes.findLatest("QB_TRANSFER_CHECKED").orElseThrow();
+        Object input = new com.jabiz.external.ExternalJobCompletion("job-" + transferId,
+            com.jabiz.quizbuks.wallet.PayoutJobs.TRANSFER_CHECK, "system", transferId, lookup, Map.of(), 1, now());
+        Object output = asRequest(com.jabiz.context.RequestContext.system(java.util.Locale.ENGLISH, "qb-it"),
+            executor.execute(definition, input)).block();
+        deliverEvents();
+        return output;
+    }
+
+    /** Releases a taker held after a rejected or reversed transfer, as a finance administrator. */
+    Map<String, Object> releaseHold(String userId) {
+        String finance = userWithRole(unique("finance"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
+        return run("QB_TRANSFER_HOLD_RELEASE", tokenOf(finance, com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE),
+            body("userId", userId));
+    }
+
     // ---- reading ---------------------------------------------------------------------------------------------------
 
     /** The calls about one transfer (its group's lookups and creations), in order: other takers' runs aside. */

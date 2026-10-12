@@ -92,7 +92,7 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 ## 收款账户与自动转账（Q6b）
 
 - **部署后再执行一次 `QB_SETUP`，并由另一位管理员发布新的提案**：受控参数 `qb.transfer.fee`（转账手续费，缺省 0 = 不收）与审批规则 `qb.transfer.review`
-  （超过 `qb.transfer.review-above` 的转账由持有 `qb.payout.review` 的财务审核；收款人不能审核自己的转账）。规则未发布时，大额转账一律驳回并开待办。
+  （超过 `qb.transfer.review-above` 的转账由持有 `qb.payout.review` 的财务审核；收款人不能审核自己的转账）。规则未发布或停用时，大额转账跳过（不写记录，用户看不到失败），每天开一个待办。
 - **自动转账缺省关闭**（受控参数 `qb.transfer.enabled = false`，四眼）。**正式开放转账（以及正式模式）之前必须先取得法务意见**（资金決済法，`docs/quizbuks/03-plan.md` 第 4 节）；
   测试模式下可以打开以演示。门槛 `qb.transfer.threshold`、审核额 `qb.transfer.review-above`、手续费 `qb.transfer.fee` 都是受控参数。
 - **Connect 端点**（Stripe 后台 → 开发者 → Webhook → 添加端点，选择"已连接的账户"）：`https://<主机>/api/inbound/stripe-connect`，事件只选
@@ -102,9 +102,10 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - **App 的地址**（`QB_APP_LINK`，如 `https://quizbuks.example.com/`）是 Stripe 开通页面完成后跳回的地址（`…/wallet/payout?onboarding=done|refresh`）；没有它开通一律被拒（启动告警）。
   收款账户只在 `QB_STRIPE_CONNECT_COUNTRY`（缺省 `JP`）开通，资料国家不同即拒绝（不跨境）。平台不保存银行信息，由 Stripe 的页面收集。
 - **转账只转一次**：每人至多一笔未结束的转账（数据库部分唯一索引）；发出作业先按 `transfer_group = qb-<转账号>` 查询，已有即作为结果，否则以固定的幂等键
-  `qb-transfer-<转账号>` 创建。Stripe 明确拒绝创建时冲正、钱回到用户余额；结果不明（超时、5xx、租约丢失）时进入 `CHECK` 并开待办，**不冲回**，
-  由每小时的 `qb.transfer-stale` 在至少 10 分钟后按组查询定论。同一用户连续 3 次失败后不再自动转账，开待办等财务处理。
-- **Stripe 的可用余额**：充值几天后才变为可用余额，余额不足时转账作业按退避重试数小时，用尽后作为确定失败冲正，次日再试。上线前要定资金调度。
+  `qb-transfer-<转账号>` 创建。Stripe 明确拒绝创建时冲正、钱回到用户余额；结果不明（超时、429、5xx、租约丢失）时进入 `CHECK` 并开待办，**不冲回**，
+  由每小时的 `qb.transfer-stale` 按组查询定论（只有晚于发送结束至少 10 分钟的查询说"没有"才冲正）。同一用户因账户连续 3 次失败后不再自动转账，开待办等财务处理。
+- **暂停与放行**：转账被审核驳回、或被 Stripe 撤回（含部分）后，该用户不再自动转账，直到财务（`qb.payout.review`）执行 `QB_TRANSFER_HOLD_RELEASE` 放行。
+- **Stripe 的可用余额**：充值几天后才变为可用余额，余额不足时 Stripe 拒绝创建并把拒绝保存在幂等键下：该转账立即冲正，次日以新的转账（新键）再试，不计入用户的连续失败。上线前要定资金调度。
 - 被 Stripe 撤回的转账（`transfer.reversed`）按累计金额退回用户余额（手续费不退），并开待办。打款到银行（`payout.paid`）记借 1120 / 贷 1110，失败冲正。
 
 ## 环境变量

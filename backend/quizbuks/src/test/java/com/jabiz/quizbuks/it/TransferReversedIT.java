@@ -72,6 +72,12 @@ class TransferReversedIT extends PayoutItSupport {
             .containsExactly("task.qb.transfer-check.OVER_REVERSAL");
         assertThat(ledger("2120", taker)).isEqualByComparingTo("2000");
         assertBooksBalance();
+        // What came back is not sent again until finance has looked: the taker is held.
+        runTransfers();
+        assertThat(transfersOf(taker)).hasSize(1);
+        releaseHold(taker);
+        runTransfers();
+        assertThat(transfersOf(taker)).hasSize(2);
     }
 
     @Test

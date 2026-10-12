@@ -52,6 +52,9 @@ CREATE TABLE qb_transfer (
     sent_at                 timestamptz,
     failed_at               timestamptz,
     check_requested_at      timestamptz,
+    send_ended_at           timestamptz,
+    released_by             varchar(128),
+    released_at             timestamptz,
     version                 bigint         NOT NULL,
     CONSTRAINT uk_qb_transfer_stripe UNIQUE (stripe_transfer_id),
     CONSTRAINT qb_transfer_send_posting UNIQUE (send_transaction_id),
@@ -62,8 +65,12 @@ CREATE TABLE qb_transfer (
     CONSTRAINT qb_transfer_sent CHECK (status NOT IN ('SENT', 'REVERSED') OR (stripe_transfer_id IS NOT NULL
         AND send_transaction_id IS NOT NULL AND settle_transaction_id IS NOT NULL)),
     CONSTRAINT qb_transfer_failed CHECK (status <> 'FAILED' OR reversal_transaction_id IS NOT NULL),
-    CONSTRAINT qb_transfer_unposted CHECK (status NOT IN ('REVIEW', 'REJECTED') OR send_transaction_id IS NULL)
+    CONSTRAINT qb_transfer_unposted CHECK (status NOT IN ('REVIEW', 'REJECTED') OR send_transaction_id IS NULL),
+    CONSTRAINT qb_transfer_release CHECK ((released_by IS NULL) = (released_at IS NULL))
 );
+-- The transfers that hold their taker (rejected, or reversed in whole or part) until finance releases them.
+CREATE INDEX qb_transfer_hold_idx ON qb_transfer (user_id)
+    WHERE released_at IS NULL AND (status = 'REJECTED' OR reversed_amount > 0);
 -- At most one unfinished transfer per user, whatever runs at the same time.
 CREATE UNIQUE INDEX qb_transfer_unfinished_idx ON qb_transfer (user_id)
     WHERE status IN ('REVIEW', 'SENDING', 'CHECK');

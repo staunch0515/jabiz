@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.entity.Violation;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.external.ExternalJobCompletion;
 import com.jabiz.external.ExternalJobFailure;
@@ -12,8 +13,10 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.BanRules;
+import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.approval.ApprovalCase;
 import com.jabiz.runtime.approval.ApprovalEntities;
@@ -31,6 +34,7 @@ import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.process.steps.StartExternalJob;
 import com.jabiz.runtime.task.CreateTask;
+import com.jabiz.runtime.task.TaskEntities;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -82,6 +86,7 @@ public final class TransferProcesses {
     public static final String CHECK_FAILED = "QB_TRANSFER_CHECK_FAILED";
     public static final String REVERSED = "QB_TRANSFER_REVERSED";
     public static final String REVERSED_CONSUMER = "qb.transfer-reversed";
+    public static final String HOLD_RELEASE = "QB_TRANSFER_HOLD_RELEASE";
 
     /** The daily job and its selection; the hourly check of the transfers in doubt and its selection. */
     public static final String RUN_JOB = "qb.transfer-run";
@@ -154,6 +159,17 @@ public final class TransferProcesses {
     static final String SKIP = "skip";
     static final String ASK = "ask";
     static final String JOB_ID = "jobId";
+    static final String HOLDS = "holds";
+    static final String RULES = "rules";
+    static final String REVIEW_TASKS = "reviewTasks";
+    static final String PENDING_WRITE = "pendingWrite";
+
+    /** The code of a transfer in doubt that Stripe was found not to have: reversed (not the taker's failure). */
+    public static final String NOT_AT_STRIPE = "NOT_AT_STRIPE";
+    /** The code of a transfer a reviewer rejected (their note stays with the approval). */
+    public static final String REVIEW_REJECTED = "REVIEW_REJECTED";
+    /** The most transfers one release reads (a taker held by more is released by more runs). */
+    static final int HOLD_BATCH = 100;
 
     // ---- create ----------------------------------------------------------------------------------------------------
 
@@ -173,8 +189,22 @@ public final class TransferProcesses {
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
+                .step("Load what holds the taker", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> holds(userOf(ctx)), HOLDS))
+                .step("Load the review rule", QueryEntities.<ProcessContext>of(ApprovalEntities.RULE_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("subject", QbPayouts.APPROVAL_SUBJECT),
+                        new QueryPredicate.Eq("enabled", true)))).limit(1).build(), RULES))
                 .steps(b -> TakerWallets.load(b, TransferProcesses::userOf))
                 .compute("Decide", (metadata, ctx) -> plan(ctx))
+                // No rule: nothing is written for the taker; finance hears of it once a day, not once per taker.
+                .step("Find the day's task about the rule", QueryEntities.<ProcessContext>of(TaskEntities.TASK_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("sourceKey", reviewMissing(ctx)
+                        ? new ArrayList<>(List.of(PayoutTasks.reviewMissingSource(ctx.opTime())))
+                        : new ArrayList<>())).limit(1).build(), REVIEW_TASKS))
+                .step("Tell finance the rule is missing", CreateTask.<ProcessContext>when(
+                    ctx -> reviewMissing(ctx) && list(ctx, REVIEW_TASKS).isEmpty(),
+                    ctx -> PayoutTasks.reviewMissing(ctx.opTime())))
                 .step("Save the transfer", SaveChanges.now())
                 .step("Read the transfer", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> byId((String) ctx.get(NEW_ID)), TRANSFER))
@@ -191,7 +221,7 @@ public final class TransferProcesses {
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         EntityInstance ban = first(ctx, BAN);
         EntityInstance account = first(ctx, ACCOUNT);
-        List<String> statuses = list(ctx, LATEST).stream().map(t -> (String) t.get("status")).toList();
+        List<TransferRules.Past> latest = past(list(ctx, LATEST));
         TransferRules.Plan plan = TransferRules.plan(
             new TransferRules.Params(params.get(QbParams.TRANSFER_ENABLED, Boolean.class),
                 params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
@@ -199,8 +229,9 @@ public final class TransferProcesses {
                 params.get(QbParams.TRANSFER_FEE, BigDecimal.class)),
             new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
                 account == null ? null : account.get("status"),
-                statuses.stream().anyMatch(TransferStatus.UNFINISHED::contains),
-                TransferRules.failureStreak(statuses), ledgerBalance(ctx)));
+                latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),
+                TransferRules.failureStreak(latest), TransferRules.held(past(list(ctx, HOLDS))),
+                first(ctx, RULES) != null, ledgerBalance(ctx)));
         ctx.put(PLAN, plan);
         if (!plan.transfers()) {
             ctx.put(SKIP, plan.skip());
@@ -234,8 +265,10 @@ public final class TransferProcesses {
                 ctx.put(STATUS_AFTER, TransferStatus.REVIEW);
             }
             case APPROVED -> ctx.put(SEND, true);
-            // No rule asked for a review: the rule is missing or off. Rejected rather than sent unreviewed.
-            case NOT_REQUIRED -> reject(ctx, transfer, PayoutChecks.REVIEW_NOT_CONFIGURED, null);
+            // A rule is in effect (plan) yet none asked for a review: its condition was changed. Never sent
+            // unreviewed; the whole item fails and nothing is kept (the job's run shows it).
+            case NOT_REQUIRED -> throw new IllegalStateException("The transfer review rule did not apply to "
+                + transfer.id());
             default -> throw new IllegalStateException("Unknown approval outcome " + approval.status());
         }
     }
@@ -307,10 +340,11 @@ public final class TransferProcesses {
             if (sendable) {
                 ctx.put(SEND, true);
             } else {
-                reject(ctx, transfer, PayoutChecks.NOT_SENDABLE, null);
+                reject(ctx, transfer, PayoutChecks.NOT_SENDABLE);
             }
         } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, transfer)) {
-            reject(ctx, transfer, null, input.reason());
+            // The reviewer's note stays with the approval (finance's): the taker reads their transfer.
+            reject(ctx, transfer, null);
         }
     }
 
@@ -402,6 +436,7 @@ public final class TransferProcesses {
                 .contextFactory(TransferProcesses::context)
                 .outputMapper(TransferProcesses::output)
                 .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobCompletion.class).reference()))
+                .compute("Note the sending's end", (metadata, ctx) -> sendEnded(ctx))
                 .compute("Check Stripe's transfer", (metadata, ctx) -> found(ctx, stripe,
                     ctx.get(INPUT, ExternalJobCompletion.class).result(PayoutObjects.TransferLookup.class), false,
                     "sent"))
@@ -421,6 +456,7 @@ public final class TransferProcesses {
                 .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobFailure.class).reference()))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(transferUser(ctx)), LATEST))
+                .compute("Note the sending's end", (metadata, ctx) -> sendEnded(ctx))
                 .compute("Decide", (metadata, ctx) -> {
                     EntityInstance transfer = first(ctx, TRANSFER);
                     if (transfer == null || !TransferStatus.SENDING.equals(transfer.get("status"))) {
@@ -464,7 +500,8 @@ public final class TransferProcesses {
                     })
                     .reference(ctx -> String.valueOf(first(ctx, TRANSFER).id()))
                     .when(ctx -> ctx.contains(ASK))
-                    .outputKey(JOB_ID)));
+                    .outputKey(JOB_ID))
+                .compute("Save the transfer's changes", (metadata, ctx) -> save(ctx)));
     }
 
     /**
@@ -483,10 +520,25 @@ public final class TransferProcesses {
         }
         String status = transfer.get("status");
         Instant created = transfer.get("createdAt");
-        Instant doubted = transfer.get("failedAt");
-        return (TransferStatus.CHECK.equals(status) && (doubted == null
-                || !doubted.isAfter(now.minus(SETTLE_BEFORE_CHECK))))
+        return (TransferStatus.CHECK.equals(status) && settledBefore(transfer, now))
             || (TransferStatus.SENDING.equals(status) && created != null && created.isBefore(now.minus(STALE_AFTER)));
+    }
+
+    /**
+     * Whether the transfer's sending job ended at least {@link #SETTLE_BEFORE_CHECK} before {@code time}: no request
+     * of it can still reach Stripe after that, so a lookup from then on that finds nothing is final.
+     */
+    static boolean settledBefore(EntityInstance transfer, Instant time) {
+        Instant ended = transfer.get("sendEndedAt");
+        return ended != null && time != null && !time.isBefore(ended.plus(SETTLE_BEFORE_CHECK));
+    }
+
+    /** The sending job reported (its result or its failure): when, the first time. */
+    static void sendEnded(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer != null && transfer.get("sendEndedAt") == null) {
+            write(ctx, transfer, Map.of("sendEndedAt", ctx.opTime()));
+        }
     }
 
     public static ProcessDefinition<ExternalJobCompletion, TransferOutput, ProcessContext> checked(
@@ -551,7 +603,11 @@ public final class TransferProcesses {
         }
         if (!lookup.found()) {
             if (fromCheck && TransferStatus.CHECK.equals(status)) {
-                failed(ctx, transfer, "NOT_AT_STRIPE", "Stripe has no transfer of the group");
+                // Final only for a lookup well after the sending ended: a check started while the transfer was
+                // still sending may have asked before its last attempt created it. Otherwise the next check asks.
+                if (settledBefore(transfer, lookup.lookedUpFrom())) {
+                    failed(ctx, transfer, NOT_AT_STRIPE, "Stripe has no transfer of the group");
+                }
             } else if (!fromCheck) {
                 doubt(ctx, transfer, StripeErrors.BAD_RESPONSE, "Stripe reported no transfer");
             }
@@ -648,16 +704,66 @@ public final class TransferProcesses {
                 write(ctx, transfer, values);
                 ctx.put(STATUS_AFTER, TransferStatus.FAILED);
                 // The latest transfers were read before this one failed: it is the newest of them.
-                List<String> statuses = new ArrayList<>();
-                statuses.add(TransferStatus.FAILED);
-                list(ctx, LATEST).stream().filter(t -> !t.id().equals(transfer.id()))
-                    .forEach(t -> statuses.add(t.get("status")));
-                if (TransferRules.failureStreak(statuses) == TransferRules.MAX_FAILURE_STREAK) {
+                List<TransferRules.Past> latest = new ArrayList<>();
+                latest.add(new TransferRules.Past(TransferStatus.FAILED, failure[0], BigDecimal.ZERO, null));
+                latest.addAll(past(list(ctx, LATEST).stream().filter(t -> !t.id().equals(transfer.id())).toList()));
+                if (TransferRules.ACCOUNT_FAILURES.contains(failure[0])
+                    && TransferRules.failureStreak(latest) == TransferRules.MAX_FAILURE_STREAK) {
                     ctx.put(REASON, PayoutChecks.FAILURE_STREAK);
                     ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("net")));
                 }
             });
     }
+
+    // ---- releasing a held taker ------------------------------------------------------------------------------------
+
+    /**
+     * Releases a taker held after a rejected or reversed transfer ({@link TransferRules#HELD}), once finance has looked:
+     * the next daily run transfers their balance again. Records who released them on each transfer that held them.
+     */
+    public static ProcessDefinition<UserRef, HoldReleaseOutput, ProcessContext> holdRelease() {
+        return ProcessDefinition.define(HOLD_RELEASE, 1, UserRef.class, HoldReleaseOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Lets transfers to a taker held after a rejected or reversed transfer go on.")
+                .permissions(QbPermissions.PAYOUT_REVIEW)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(ctx -> {
+                    List<EntityInstance> held = list(ctx, HOLDS);
+                    return new HoldReleaseOutput(userOf(ctx), held.isEmpty() ? null
+                        : String.valueOf(held.getFirst().id()), held.size());
+                })
+                .step("Lock the taker's wallet", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
+                .step("Load what holds the taker", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> holds(userOf(ctx)), HOLDS))
+                .compute("Release", (metadata, ctx) -> {
+                    List<EntityInstance> held = list(ctx, HOLDS);
+                    if (userOf(ctx).equals(ctx.request().actorId())) {
+                        // Four eyes: the payee never releases their own money (as they never approve it).
+                        throw new BusinessRuleViolationException(List.of(new Violation("userId",
+                            WalletCodes.TRANSFER_RELEASE_OWN, "Transfers to yourself are released by someone else",
+                            Map.of())));
+                    }
+                    if (held.isEmpty()) {
+                        throw new BusinessRuleViolationException(List.of(new Violation("userId",
+                            WalletCodes.TRANSFER_NOT_HELD, "Transfers to this taker are not held", Map.of())));
+                    }
+                    for (EntityInstance transfer : held) {
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("releasedBy", ctx.request().actorId());
+                        values.put("releasedAt", ctx.opTime());
+                        ctx.changes().update(QbPayouts.TRANSFER, transfer.id(), transfer.version(), values);
+                    }
+                }));
+    }
+
+    /**
+     * @param transferId the newest transfer that held the taker
+     * @param released   how many transfers held them
+     */
+    public record HoldReleaseOutput(String userId, String transferId, int released) {}
 
     // ---- Stripe's reversal -----------------------------------------------------------------------------------------
 
@@ -791,7 +897,8 @@ public final class TransferProcesses {
      * the change announced (and its outcome, for Q7), a task when there is a reason.
      */
     private static <I, O> void finish(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
-        pb.compute("Note what changed", (metadata, ctx) -> {
+        pb.compute("Save the transfer's changes", (metadata, ctx) -> save(ctx))
+            .compute("Note what changed", (metadata, ctx) -> {
                 if (ctx.contains(SEND) || ctx.contains(SETTLE) || ctx.contains(REVERSE) || ctx.contains(RETURN)) {
                     ctx.put(CHANGED, true);
                 }
@@ -824,11 +931,11 @@ public final class TransferProcesses {
         return payload;
     }
 
-    private static void reject(ProcessContext ctx, EntityInstance transfer, String reason, String note) {
+    /** Rejected by the reviewer (no reason), or for a reason found after the approval (a task). */
+    private static void reject(ProcessContext ctx, EntityInstance transfer, String reason) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", TransferStatus.REJECTED);
-        values.put("failureCode", reason == null ? "REVIEW_REJECTED" : reason);
-        values.put("failureMessage", clip(note, 200));
+        values.put("failureCode", reason == null ? REVIEW_REJECTED : reason);
         values.put("failedAt", ctx.opTime());
         write(ctx, transfer, values);
         ctx.put(STATUS_AFTER, TransferStatus.REJECTED);
@@ -838,18 +945,60 @@ public final class TransferProcesses {
         }
     }
 
+    /**
+     * Notes changes of the process's transfer; {@link #save} registers them as one update (several steps may change
+     * it, and each update is checked against the version read).
+     */
+    @SuppressWarnings("unchecked")
     private static void write(ProcessContext ctx, EntityInstance transfer, Map<String, Object> values) {
-        ctx.changes().update(QbPayouts.TRANSFER, transfer.id(), transfer.version(), values);
+        Map<String, Object> pending = ctx.contains(PENDING_WRITE) ? (Map<String, Object>) ctx.get(PENDING_WRITE)
+            : new LinkedHashMap<>();
+        pending.putAll(values);
+        ctx.put(PENDING_WRITE, pending);
     }
 
-    /** The latest three transfers of a taker, newest first (the unfinished one, if any, is among them). */
+    @SuppressWarnings("unchecked")
+    private static void save(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer == null || !ctx.contains(PENDING_WRITE)) {
+            return;
+        }
+        ctx.changes().update(QbPayouts.TRANSFER, transfer.id(), transfer.version(),
+            (Map<String, Object>) ctx.get(PENDING_WRITE));
+        ctx.put(PENDING_WRITE, null);
+    }
+
+    /** The latest transfers of a taker, newest first (the unfinished one, if any, is among them). */
     static EntityQuery latest(Object userId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("userId", userIds(userId)))
+            .orderBy("createdAt", false).limit(TransferRules.LATEST).build();
+    }
+
+    /** The taker's transfers that hold them (rejected, or reversed in whole or part) and were not released. */
+    static EntityQuery holds(Object userId) {
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.In("userId", userIds(userId)),
+            new QueryPredicate.IsNull("releasedAt"),
+            new QueryPredicate.Or(List.of(new QueryPredicate.Eq("status", TransferStatus.REJECTED),
+                new QueryPredicate.Gt("reversedAmount", BigDecimal.ZERO))))))
+            .orderBy("createdAt", false).limit(HOLD_BATCH).build();
+    }
+
+    private static List<Object> userIds(Object userId) {
         List<Object> ids = new ArrayList<>();
         if (userId != null) {
             ids.add(String.valueOf(userId));
         }
-        return EntityQuery.builder().where(new QueryPredicate.In("userId", ids))
-            .orderBy("createdAt", false).limit(TransferRules.MAX_FAILURE_STREAK).build();
+        return ids;
+    }
+
+    static List<TransferRules.Past> past(List<EntityInstance> transfers) {
+        return transfers.stream().map(t -> new TransferRules.Past(t.get("status"), t.get("failureCode"),
+            QbPayouts.money(t.get("reversedAmount")), t.get("releasedAt"))).toList();
+    }
+
+    private static boolean reviewMissing(ProcessContext ctx) {
+        return TransferRules.REVIEW_NOT_CONFIGURED.equals(ctx.get(SKIP));
     }
 
     static EntityQuery byId(String transferId) {

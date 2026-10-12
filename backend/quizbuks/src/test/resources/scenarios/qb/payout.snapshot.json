@@ -65,6 +65,9 @@
       "sentAt" : "2026-10-01T02:11:00Z",
       "failedAt" : null,
       "checkRequestedAt" : null,
+      "sendEndedAt" : "2026-10-01T02:11:00Z",
+      "releasedBy" : null,
+      "releasedAt" : null,
       "version" : 4
     }, {
       "transferId" : "#uuid:11",
@@ -86,6 +89,9 @@
       "sentAt" : null,
       "failedAt" : "2026-10-01T02:11:00Z",
       "checkRequestedAt" : null,
+      "sendEndedAt" : "2026-10-01T02:11:00Z",
+      "releasedBy" : null,
+      "releasedAt" : null,
       "version" : 3
     }, {
       "transferId" : "#uuid:14",
@@ -107,6 +113,9 @@
       "sentAt" : "2026-10-01T02:11:00Z",
       "failedAt" : null,
       "checkRequestedAt" : null,
+      "sendEndedAt" : "2026-10-01T02:11:00Z",
+      "releasedBy" : null,
+      "releasedAt" : null,
       "version" : 3
     } ],
     "QbWallet" : [ {

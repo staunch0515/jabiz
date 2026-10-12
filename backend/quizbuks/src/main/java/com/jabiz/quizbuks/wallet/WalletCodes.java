@@ -18,9 +18,13 @@ public final class WalletCodes {
     public static final String PAYOUT_UNAVAILABLE = "QB_PAYOUT_UNAVAILABLE";
     /** The taker disconnected their payout account from QuizBuks: finance opens it again. */
     public static final String PAYOUT_ACCOUNT_CLOSED = "QB_PAYOUT_ACCOUNT_CLOSED";
+    /** A release of a taker whose transfers are not held (nothing rejected or reversed since the last release). */
+    public static final String TRANSFER_NOT_HELD = "QB_TRANSFER_NOT_HELD";
+    /** A finance administrator releasing transfers to themselves (four eyes, as with the review). */
+    public static final String TRANSFER_RELEASE_OWN = "QB_TRANSFER_RELEASE_OWN";
 
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
-        PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED);
+        PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN);
 
     private WalletCodes() {}
 }

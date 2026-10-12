@@ -159,11 +159,39 @@ class TransferIT extends PayoutItSupport {
             run("APPROVAL_DECIDE", transferReviewer(), body("requestId", second.get("approval_request_id"),
                 "decision", "REJECT", "reason", "Check the account first."));
             deliverEvents();
+            // The reviewer's note stays with the approval (finance's); the taker's own record has the code only.
             assertThat(transfer((String) second.get("transfer_id"))).containsEntry("status", "REJECTED")
-                .containsEntry("failure_message", "Check the account first.");
+                .containsEntry("failure_code", "REVIEW_REJECTED").containsEntry("failure_message", null);
+            assertThat(rows(com.jabiz.quizbuks.wallet.QbPayouts.MY_TRANSFERS, taker(other)))
+                .singleElement().satisfies(row -> assertThat(row.values()).doesNotContain("Check the account first."));
             assertThat(transferPostings((String) second.get("transfer_id"))).isEmpty();
             assertThat(ledger("2120", other)).isEqualByComparingTo("2000");
             assertBooksBalance();
+
+            // Held: the same balance is not queued again until finance releases the taker.
+            runTransfers();
+            assertThat(transfersOf(other)).hasSize(1);
+            Map<?, ?> held = (Map<?, ?>) toMap(systemRun("QB_TRANSFER_CREATE", body("userId", other)));
+            assertThat(held.get("reason")).isEqualTo("HELD");
+            // Not by the taker.
+            assertThat(client.post().uri("/api/processes/QB_TRANSFER_HOLD_RELEASE/latest")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header(org.springframework.http.HttpHeaders.AUTHORIZATION, taker(other))
+                .bodyValue(body("userId", other)).exchange().returnResult(String.class).getStatus().value())
+                .isEqualTo(403);
+            // Nor by a payee who holds the permission: four eyes, as with the review.
+            assertThat(codes(refused("QB_TRANSFER_HOLD_RELEASE", tokenOf(other, QbRoles.ADMIN_FINANCE),
+                body("userId", other), 422))).containsExactly("QB_TRANSFER_RELEASE_OWN");
+            Map<String, Object> released = releaseHold(other);
+            assertThat(released).containsEntry("transferId", second.get("transfer_id"));
+            assertThat(transfer((String) second.get("transfer_id")).get("released_by")).isNotNull();
+            // Released once: a second release finds nothing held.
+            String finance = userWithRole(unique("finance"), QbRoles.ADMIN_FINANCE);
+            assertThat(codes(refused("QB_TRANSFER_HOLD_RELEASE", tokenOf(finance, QbRoles.ADMIN_FINANCE),
+                body("userId", other), 422))).containsExactly("QB_TRANSFER_NOT_HELD");
+            runTransfers();
+            assertThat(transfersOf(other)).hasSize(2);
+            assertThat(transfersOf(other).getLast()).containsEntry("status", "REVIEW");
         } finally {
             param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
         }

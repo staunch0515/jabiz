@@ -175,14 +175,22 @@ public final class ReconChecks {
         return items;
     }
 
-    /** The run's outcome from every difference found, keeping the first {@code maxItems} as items. */
+    /** The checks of the takers' cache: the next run reads them back ("found before"), notes included. */
+    public static final Set<String> TAKER_CHECKS = Set.of(TAKER_WALLET, TAKER_IN_TRANSFER, TAKER_WALLET_LAG);
+
+    /**
+     * The run's outcome from every difference found, keeping {@code maxItems} as items: the takers' first, so that
+     * the next run finds whom this one found (the "two runs in a row" rule) however many other differences there are.
+     */
     public static Result result(List<Item> found, int maxItems) {
         Map<String, Integer> counts = new TreeMap<>();
         ALL.forEach(check -> counts.put(check, 0));
         found.forEach(item -> counts.merge(item.check(), 1, Integer::sum));
         StringJoiner json = new StringJoiner(",", "{", "}");
         counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
-        List<Item> kept = found.size() <= maxItems ? List.copyOf(found) : List.copyOf(found.subList(0, maxItems));
+        List<Item> ordered = new ArrayList<>(found.stream().filter(i -> TAKER_CHECKS.contains(i.check())).toList());
+        found.stream().filter(i -> !TAKER_CHECKS.contains(i.check())).forEach(ordered::add);
+        List<Item> kept = List.copyOf(ordered.size() <= maxItems ? ordered : ordered.subList(0, maxItems));
         boolean differs = found.stream().anyMatch(item -> !NOTES.contains(item.check()));
         return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), json.toString());
     }

@@ -19,7 +19,8 @@ import java.util.Map;
  *       with the transfer's own idempotency key (not the job's).</li>
  * </ol>
  * A failure of the lookup is never certain ({@value #LOOKUP_FAILED}): only Stripe's refusal of the creation itself
- * tells that no transfer exists ({@link TransferRules#certainFailure}).
+ * tells that no transfer exists ({@link TransferRules#certainFailure}). An answer Stripe keeps under the key ends the
+ * job at once ({@link #kept}).
  */
 @Component
 public class StripeTransferHandler
@@ -44,18 +45,38 @@ public class StripeTransferHandler
         if (existing.found()) {
             return ExternalJobResult.of(existing);
         }
-        Map<String, Object> created = api.post("/v1/transfers", StripeForm.of()
-            .with("amount", input.net().toBigIntegerExact())
-            .with("currency", StripeService.CURRENCY)
-            .with("destination", input.destination())
-            .with("transfer_group", PayoutChecks.transferGroup(input.transferId()))
-            .with("metadata[transferId]", input.transferId()), transferKey(input.transferId()));
+        Map<String, Object> created;
+        try {
+            created = api.post("/v1/transfers", StripeForm.of()
+                .with("amount", input.net().toBigIntegerExact())
+                .with("currency", StripeService.CURRENCY)
+                .with("destination", input.destination())
+                .with("transfer_group", PayoutChecks.transferGroup(input.transferId()))
+                .with("metadata[transferId]", input.transferId()), transferKey(input.transferId()));
+        } catch (ExternalJobException e) {
+            throw kept(e);
+        }
         PayoutObjects.Transfer transfer = PayoutObjects.transfer(created);
         if (transfer.id() == null) {
             // The creation answered without a transfer: whether one exists is not known.
             throw ExternalJobException.retryable(StripeErrors.BAD_RESPONSE, "Stripe's answer has no transfer id");
         }
         return ExternalJobResult.of(PayoutObjects.TransferLookup.of(transfer));
+    }
+
+    /**
+     * Stripe keeps the answer of a request that ran under an idempotency key, errors included, and gives it again:
+     * retrying an insufficient balance or a 500 under the transfer's key can never pass. Both end the job at once: the
+     * balance as a certain refusal (reversed; the next day's transfer has a key of its own), the 500 in doubt (asked
+     * about later, {@link TransferRules#certainFailure}). Answers given before the request ran (429, 409, a lock) are
+     * not kept and are tried again.
+     */
+    static ExternalJobException kept(ExternalJobException e) {
+        if (!e.isPermanent()
+            && (StripeErrors.BALANCE_INSUFFICIENT.equals(e.code()) || StripeErrors.UNAVAILABLE.equals(e.code()))) {
+            return ExternalJobException.permanent(e.code(), e.getMessage());
+        }
+        return e;
     }
 
     /** The transfer of the group, or none; any failure of the lookup leaves it in doubt. */

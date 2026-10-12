@@ -112,4 +112,20 @@ class ReconChecksTest {
             .containsEntry(ReconChecks.LEDGER_ZERO, 1);
         assertThat(result.summary()).contains("\"SPONSOR_WALLET\":5", "\"LEDGER_ZERO\":1");
     }
+
+    @Test
+    void theTakersAreKeptFirstWhenItemsAreCapped() {
+        List<ReconChecks.Item> found = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            found.add(new ReconChecks.Item(ReconChecks.SPONSOR_WALLET, "s" + i, null, BigDecimal.ONE, BigDecimal.TEN));
+        }
+        found.add(new ReconChecks.Item(ReconChecks.TAKER_WALLET_LAG, "t1", null, BigDecimal.ONE, BigDecimal.TEN));
+        found.add(new ReconChecks.Item(ReconChecks.TAKER_WALLET, "t2", null, BigDecimal.ONE, BigDecimal.TEN));
+        ReconChecks.Result result = ReconChecks.result(found, 3);
+        // The next run reads whom this one found: the notes must survive the cap.
+        assertThat(result.items()).extracting(ReconChecks.Item::check).containsExactly(
+            ReconChecks.TAKER_WALLET_LAG, ReconChecks.TAKER_WALLET, ReconChecks.SPONSOR_WALLET);
+        assertThat(result.total()).isEqualTo(5);
+        assertThat(result.differences()).isEqualTo(4);
+    }
 }

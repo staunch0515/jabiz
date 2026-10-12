@@ -27,17 +27,51 @@ public final class TransferRules {
     public static final String BELOW_THRESHOLD = "BELOW_THRESHOLD";
     /** The fee takes the whole amount. */
     public static final String FEE_TOO_HIGH = "FEE_TOO_HIGH";
+    /**
+     * A transfer of the user's was rejected by a reviewer, or reversed by Stripe (wholly or in part), and finance has
+     * not released them ({@code QB_TRANSFER_HOLD_RELEASE}): the same money is not sent or queued again on its own.
+     */
+    public static final String HELD = "HELD";
+    /** It would need a review, but no review rule is in effect: nothing is written, finance is told once a day. */
+    public static final String REVIEW_NOT_CONFIGURED = PayoutChecks.REVIEW_NOT_CONFIGURED;
 
     public static final int MAX_FAILURE_STREAK = 3;
+
+    /** How many of a user's latest transfers the processes read (the streak skips failures that are not theirs). */
+    public static final int LATEST = 10;
 
     /**
      * The codes of a transfer job's failure that mean Stripe refused the creation itself (the handler fails with
      * these only for the answer to {@code POST /v1/transfers}, after looking the group up): no transfer exists, so the
-     * posting is reversed. Every other code (time-outs, lost leases, 5xx, a lookup that failed, a conflict of the
-     * idempotency key) leaves the transfer in doubt.
+     * posting is reversed. A refusal is kept by Stripe under the idempotency key, so the transfer's key can never pass
+     * (an insufficient balance included): the next day's transfer has a key of its own. A key refused (401) never
+     * reaches the request. Every other code (time-outs, lost leases, 5xx, 429, a lookup that failed, a conflict of
+     * the idempotency key) leaves the transfer in doubt: a 429 says nothing of an earlier attempt, and Stripe keeps a
+     * 500 under the key.
      */
     public static final Set<String> CERTAIN_FAILURES = Set.of(StripeErrors.DECLINED,
-        StripeErrors.BALANCE_INSUFFICIENT, StripeErrors.AUTH, StripeErrors.NOT_FOUND, StripeErrors.RATE_LIMITED);
+        StripeErrors.BALANCE_INSUFFICIENT, StripeErrors.AUTH, StripeErrors.NOT_FOUND);
+
+    /**
+     * The failures that point at the user's account and count towards {@value #FAILURE_STREAK}: Stripe refused the
+     * request as it was ({@code STRIPE_DECLINED}) or does not know the account ({@code STRIPE_NOT_FOUND}). The
+     * platform's own (its balance, its key, Stripe unavailable, a transfer found absent after a doubt) do not count.
+     */
+    public static final Set<String> ACCOUNT_FAILURES = Set.of(StripeErrors.DECLINED, StripeErrors.NOT_FOUND);
+
+    /**
+     * One of the user's earlier transfers, as the rules need it.
+     *
+     * @param releasedAt when finance released the user after it (a hold), or null
+     */
+    public record Past(String status, String failureCode, BigDecimal reversedAmount, java.time.Instant releasedAt) {
+
+        /** Whether it holds the user: rejected, or reversed in whole or part, and not released. */
+        public boolean holds() {
+            return releasedAt == null && (TransferStatus.REJECTED.equals(status) || TransferStatus.REVERSED.equals(
+                status) || (reversedAmount != null && reversedAmount.signum() > 0));
+        }
+    }
 
     /** The values of the parameters on the day. */
     public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee) {}
@@ -49,7 +83,7 @@ public final class TransferRules {
      * @param balance       account 2120 for the user, from the ledger
      */
     public record Facts(boolean banned, String accountStatus, boolean openTransfer, int failureStreak,
-        BigDecimal balance) {}
+        boolean held, boolean reviewConfigured, BigDecimal balance) {}
 
     /**
      * The decision: skip (with the reason) or transfer {@code amount}, of which {@code fee} is the platform's and
@@ -87,6 +121,9 @@ public final class TransferRules {
         if (facts.openTransfer()) {
             return Plan.skip(OPEN_TRANSFER);
         }
+        if (facts.held()) {
+            return Plan.skip(HELD);
+        }
         if (facts.failureStreak() >= MAX_FAILURE_STREAK) {
             return Plan.skip(FAILURE_STREAK);
         }
@@ -99,19 +136,33 @@ public final class TransferRules {
         if (net.signum() <= 0) {
             return Plan.skip(FEE_TOO_HIGH);
         }
-        return new Plan(null, balance, params.fee(), net, balance.compareTo(params.reviewAbove()) > 0);
+        boolean review = balance.compareTo(params.reviewAbove()) > 0;
+        if (review && !facts.reviewConfigured()) {
+            return Plan.skip(REVIEW_NOT_CONFIGURED);
+        }
+        return new Plan(null, balance, params.fee(), net, review);
     }
 
-    /** How many of the latest transfers (newest first) failed in a row. */
-    public static int failureStreak(List<String> latestStatuses) {
+    /**
+     * How many of the latest transfers (newest first) failed in a row for the user's account
+     * ({@link #ACCOUNT_FAILURES}); the platform's own failures in between neither count nor break the run.
+     */
+    public static int failureStreak(List<Past> latest) {
         int streak = 0;
-        for (String status : latestStatuses) {
-            if (!TransferStatus.FAILED.equals(status)) {
+        for (Past past : latest) {
+            if (!TransferStatus.FAILED.equals(past.status())) {
                 break;
             }
-            streak++;
+            if (ACCOUNT_FAILURES.contains(past.failureCode())) {
+                streak++;
+            }
         }
         return streak;
+    }
+
+    /** Whether any of the user's transfers holds them ({@link Past#holds()}). */
+    public static boolean held(List<Past> transfers) {
+        return transfers.stream().anyMatch(Past::holds);
     }
 
     /** Whether a job's failure means that Stripe made no transfer. */

@@ -44,9 +44,13 @@ public final class PayoutJobs {
             .maxConcurrency(1).maxOpenPerRequester(1).oneOpenPerReference()
             .onCompleted(PayoutProcesses.ONBOARD_READY).onFailed(PayoutProcesses.ONBOARD_FAILED));
 
+    /** How long an attempt of a check may take: its lookup is no earlier than the attempt's deadline less this. */
+    public static final Duration CHECK_TIMEOUT = Duration.ofSeconds(30);
+
     /**
-     * Sends a transfer (the system's). An insufficient balance is retried for hours (the platform's balance becomes
-     * available days after the top-ups); two at a time.
+     * Sends a transfer (the system's). Retried only for answers Stripe does not keep under the key (time-outs, 429,
+     * 409, a failed lookup); an insufficient balance or a 500 ends it at once ({@link StripeTransferHandler#kept}). Two
+     * at a time.
      */
     public static final ExternalJobType<TransferInput, PayoutObjects.TransferLookup> TRANSFER_JOB =
         ExternalJobType.define(TRANSFER, TransferInput.class, PayoutObjects.TransferLookup.class, t -> t
@@ -59,7 +63,7 @@ public final class PayoutJobs {
     public static final ExternalJobType<TransferInput, PayoutObjects.TransferLookup> TRANSFER_CHECK_JOB =
         ExternalJobType.define(TRANSFER_CHECK, TransferInput.class, PayoutObjects.TransferLookup.class, t -> t
             .handler(TransferCheckHandler.class).services(StripeService.SERVICE)
-            .timeout(Duration.ofSeconds(30)).retry(5, Duration.ofSeconds(30), Duration.ofMinutes(10))
+            .timeout(CHECK_TIMEOUT).retry(5, Duration.ofSeconds(30), Duration.ofMinutes(10))
             .maxConcurrency(1).maxOpenPerRequester(ExternalJobType.MAX_OPEN_PER_REQUESTER).oneOpenPerReference()
             .onCompleted(TransferProcesses.CHECKED).onFailed(TransferProcesses.CHECK_FAILED));
 

@@ -5,6 +5,8 @@ import com.jabiz.runtime.inbound.InboundEntities;
 import com.jabiz.runtime.task.TaskSpec;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -46,6 +48,24 @@ final class PayoutTasks {
             return task.about(QbPayouts.TRANSFER, transferId);
         }
         return inboundEventId == null ? task : task.about(InboundEntities.EVENT, inboundEventId);
+    }
+
+    /**
+     * Transfers above the review limit skipped because no review rule is in effect: one task a day
+     * ({@link #reviewMissingSource}), not one per taker.
+     */
+    static TaskSpec reviewMissing(Instant at) {
+        return TaskSpec.forPermission(TRANSFER_CHECK, "task.qb.transfer-check." + PayoutChecks.REVIEW_NOT_CONFIGURED,
+            Map.of("date", day(at)), QbPermissions.RECONCILE).source(reviewMissingSource(at));
+    }
+
+    /** {@code transfer-review-missing:<UTC date>}. */
+    static String reviewMissingSource(Instant at) {
+        return "transfer-review-missing:" + day(at);
+    }
+
+    private static String day(Instant at) {
+        return at.atOffset(ZoneOffset.UTC).toLocalDate().toString();
     }
 
     /** {@code transfer:<transfer>:<what>}: the same task when the same thing happens again. */

@@ -1,6 +1,6 @@
 /*---
 id: qb.system.transfers-due
-description: Takers to transfer to at the given time - transfers on, a cached balance at the threshold, an enabled payout account, not banned, nothing unfinished, not three failures in a row (the items of the job qb.transfer-run)
+description: Takers to transfer to at the given time - transfers on, a cached balance at the threshold, an enabled payout account, not banned, nothing unfinished, not held (the items of the job qb.transfer-run)
 entities: [QbWallet, QbPayoutAccount, QbTransfer, QbUserBan, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -44,7 +44,9 @@ WHERE w.{{QbWallet.kind}} = 'TAKER'
   AND NOT EXISTS (SELECT 1 FROM {{QbTransfer}} t
                   WHERE t.{{QbTransfer.userId}} = w.{{QbWallet.ownerId}}
                     AND t.{{QbTransfer.status}} IN ('REVIEW', 'SENDING', 'CHECK'))
-  AND (SELECT count(*) FROM (SELECT t2.{{QbTransfer.status}} AS s FROM {{QbTransfer}} t2
-                             WHERE t2.{{QbTransfer.userId}} = w.{{QbWallet.ownerId}}
-                             ORDER BY t2.{{QbTransfer.createdAt}} DESC LIMIT 3) latest
-       WHERE latest.s = 'FAILED') < 3
+  -- Held after a rejected or reversed transfer until finance releases them (the partial index qb_transfer_hold_idx).
+  -- The failure streak is left to the process (only the account's failures count: TransferRules.failureStreak).
+  AND NOT EXISTS (SELECT 1 FROM {{QbTransfer}} h
+                  WHERE h.{{QbTransfer.userId}} = w.{{QbWallet.ownerId}}
+                    AND h.{{QbTransfer.releasedAt}} IS NULL
+                    AND (h.{{QbTransfer.status}} = 'REJECTED' OR h.{{QbTransfer.reversedAmount}} > 0))

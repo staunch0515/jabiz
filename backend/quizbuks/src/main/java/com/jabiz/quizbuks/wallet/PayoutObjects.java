@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.wallet;
 
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -61,16 +62,31 @@ public final class PayoutObjects {
     /**
      * What a transfer job learned: the transfer QuizBuks's group names, or none.
      *
-     * @param found whether Stripe has a transfer of the group
+     * @param found        whether Stripe has a transfer of the group
+     * @param lookedUpFrom no earlier than when Stripe was asked (the attempt's start): a "none" says nothing about a
+     *                     creation after it; null when not known
      */
-    public record TransferLookup(boolean found, Transfer transfer) {
+    public record TransferLookup(boolean found, Transfer transfer, Instant lookedUpFrom) {
 
         public static TransferLookup none() {
-            return new TransferLookup(false, null);
+            return none(null);
+        }
+
+        public static TransferLookup none(Instant lookedUpFrom) {
+            return new TransferLookup(false, null, lookedUpFrom);
         }
 
         public static TransferLookup of(Transfer transfer) {
-            return new TransferLookup(true, transfer);
+            return of(transfer, null);
+        }
+
+        public static TransferLookup of(Transfer transfer, Instant lookedUpFrom) {
+            return new TransferLookup(true, transfer, lookedUpFrom);
+        }
+
+        /** The same answer, asked no earlier than {@code from}. */
+        public TransferLookup askedFrom(Instant from) {
+            return new TransferLookup(found, transfer, from);
         }
     }
 

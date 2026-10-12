@@ -24,5 +24,32 @@ public final class PayoutAccountStatus {
         return Boolean.TRUE.equals(account.detailsSubmitted()) ? RESTRICTED : PENDING;
     }
 
+    /**
+     * Whether a report made at {@code reported} (Stripe's {@code created}, in whole seconds) replaces the one recorded
+     * at {@code recorded}: a newer one does; an older one does not; of two in the same second, which came first is
+     * not known, so the more restrictive state wins (an account is never enabled by a tie).
+     */
+    public static boolean replaces(String current, java.time.Instant recorded, String reported,
+        java.time.Instant reportedAt) {
+        if (recorded == null || reportedAt.isAfter(recorded)) {
+            return true;
+        }
+        if (reportedAt.isBefore(recorded)) {
+            return false;
+        }
+        return restriction(reported) >= restriction(current);
+    }
+
+    /** How much a state holds the account back: enabled least, disconnected most. */
+    static int restriction(String status) {
+        return switch (status == null ? "" : status) {
+            case ENABLED -> 0;
+            case PENDING -> 1;
+            case RESTRICTED -> 2;
+            case DEAUTHORIZED -> 3;
+            default -> 1;
+        };
+    }
+
     private PayoutAccountStatus() {}
 }

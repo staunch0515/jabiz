@@ -47,6 +47,11 @@ class PayoutOnboardIT extends PayoutItSupport {
         });
         assertThat(items("qb.app.payout-account", taker(payee("t-onboard-other")),
             Map.of("params", Map.of("now", now().toString())))).isEmpty();
+        // Not even finance: whoever follows a pending account's link could put their own bank account on it.
+        String finance = tokenOf(userWithRole(unique("finance"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE),
+            com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
+        queryDataset(com.jabiz.quizbuks.wallet.QbPayouts.defaultDataset(
+            com.jabiz.quizbuks.wallet.QbPayouts.ONBOARDING), finance).expectStatus().isForbidden();
 
         // Asked again (the link used or expired): the same account, a new link.
         openPayoutAccount(taker);

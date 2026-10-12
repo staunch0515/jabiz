@@ -19,7 +19,19 @@ class TransferRulesTest {
     static final TransferRules.Params ON = new TransferRules.Params(true, d(1000), d(50000), d(0));
 
     static TransferRules.Facts facts(long balance) {
-        return new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, d(balance));
+        return facts(false, PayoutAccountStatus.ENABLED, false, 0, d(balance));
+    }
+
+    static TransferRules.Facts facts(boolean banned, String account, boolean open, int streak, BigDecimal balance) {
+        return new TransferRules.Facts(banned, account, open, streak, false, true, balance);
+    }
+
+    static TransferRules.Past failed(String code) {
+        return new TransferRules.Past(TransferStatus.FAILED, code, d(0), null);
+    }
+
+    static TransferRules.Past past(String status) {
+        return new TransferRules.Past(status, null, d(0), null);
     }
 
     @Test
@@ -62,36 +74,72 @@ class TransferRulesTest {
             .isEqualTo(TransferRules.INVALID_PARAMS);
         assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(-1)), facts(5000)).skip())
             .isEqualTo(TransferRules.INVALID_PARAMS);
-        assertThat(TransferRules.plan(ON, new TransferRules.Facts(true, PayoutAccountStatus.ENABLED, false, 0,
+        assertThat(TransferRules.plan(ON, facts(true, PayoutAccountStatus.ENABLED, false, 0,
             d(5000))).skip()).isEqualTo(TransferRules.BANNED);
-        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, null, false, 0, d(5000))).skip())
+        assertThat(TransferRules.plan(ON, facts(false, null, false, 0, d(5000))).skip())
             .isEqualTo(TransferRules.NO_ACCOUNT);
         for (String status : List.of(PayoutAccountStatus.PENDING, PayoutAccountStatus.RESTRICTED,
             PayoutAccountStatus.DEAUTHORIZED)) {
-            assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, status, false, 0, d(5000))).skip())
+            assertThat(TransferRules.plan(ON, facts(false, status, false, 0, d(5000))).skip())
                 .as(status).isEqualTo(TransferRules.ACCOUNT_NOT_ENABLED);
         }
-        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, true, 0,
+        assertThat(TransferRules.plan(ON, facts(false, PayoutAccountStatus.ENABLED, true, 0,
             d(5000))).skip()).isEqualTo(TransferRules.OPEN_TRANSFER);
-        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 3,
+        assertThat(TransferRules.plan(ON, facts(false, PayoutAccountStatus.ENABLED, false, 3,
             d(5000))).skip()).isEqualTo(TransferRules.FAILURE_STREAK);
-        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 2,
+        assertThat(TransferRules.plan(ON, facts(false, PayoutAccountStatus.ENABLED, false, 2,
             d(5000))).transfers()).isTrue();
+        // Held after a rejected or reversed transfer, until finance releases the taker.
+        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, true,
+            true, d(5000))).skip()).isEqualTo(TransferRules.HELD);
+        // Above the review limit without a review rule: skipped (nothing written), not rejected.
+        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, false,
+            false, d(50001))).skip()).isEqualTo(TransferRules.REVIEW_NOT_CONFIGURED);
+        assertThat(TransferRules.plan(ON, new TransferRules.Facts(false, PayoutAccountStatus.ENABLED, false, 0, false,
+            false, d(50000))).transfers()).isTrue();
     }
 
     @Test
-    void theStreakCountsTheLatestFailuresInARow() {
+    void rejectedOrReversedTransfersHoldUntilReleased() {
+        assertThat(TransferRules.held(List.of())).isFalse();
+        assertThat(TransferRules.held(List.of(past(TransferStatus.SENT), failed(StripeErrors.DECLINED)))).isFalse();
+        assertThat(TransferRules.held(List.of(past(TransferStatus.REJECTED)))).isTrue();
+        assertThat(TransferRules.held(List.of(past(TransferStatus.REVERSED)))).isTrue();
+        // Reversed in part: still SENT, but money came back.
+        assertThat(TransferRules.held(List.of(new TransferRules.Past(TransferStatus.SENT, null, d(1), null))))
+            .isTrue();
+        assertThat(TransferRules.held(List.of(new TransferRules.Past(TransferStatus.REJECTED, null, d(0),
+            java.time.Instant.EPOCH)))).isFalse();
+    }
+
+    @Test
+    void theStreakCountsTheLatestFailuresOfTheAccountInARow() {
+        TransferRules.Past declined = failed(StripeErrors.DECLINED);
         assertThat(TransferRules.failureStreak(List.of())).isZero();
-        assertThat(TransferRules.failureStreak(List.of("FAILED", "FAILED", "SENT", "FAILED"))).isEqualTo(2);
-        assertThat(TransferRules.failureStreak(List.of("SENT", "FAILED", "FAILED"))).isZero();
-        assertThat(TransferRules.failureStreak(List.of("FAILED", "FAILED", "FAILED"))).isEqualTo(3);
+        assertThat(TransferRules.failureStreak(List.of(declined, declined, past(TransferStatus.SENT), declined)))
+            .isEqualTo(2);
+        assertThat(TransferRules.failureStreak(List.of(past(TransferStatus.SENT), declined, declined))).isZero();
+        assertThat(TransferRules.failureStreak(List.of(declined, failed(StripeErrors.NOT_FOUND), declined)))
+            .isEqualTo(3);
+        // The platform's own failures (its balance, its key, Stripe down, found absent) neither count nor break it.
+        for (String code : List.of(StripeErrors.BALANCE_INSUFFICIENT, StripeErrors.AUTH, StripeErrors.RATE_LIMITED,
+            StripeErrors.UNAVAILABLE, TransferProcesses.NOT_AT_STRIPE)) {
+            assertThat(TransferRules.failureStreak(List.of(failed(code), failed(code), failed(code)))).as(code)
+                .isZero();
+            assertThat(TransferRules.failureStreak(List.of(declined, failed(code), declined))).as(code)
+                .isEqualTo(2);
+        }
     }
 
     @Test
     void onlyARefusedCreationIsCertain() {
         assertThat(TransferRules.certainFailure(StripeErrors.DECLINED)).isTrue();
         assertThat(TransferRules.certainFailure(StripeErrors.BALANCE_INSUFFICIENT)).isTrue();
-        for (String code : List.of(StripeErrors.UNAVAILABLE, StripeErrors.CONFLICT, StripeErrors.BAD_RESPONSE,
+        assertThat(TransferRules.certainFailure(StripeErrors.NOT_FOUND)).isTrue();
+        assertThat(TransferRules.certainFailure(StripeErrors.AUTH)).isTrue();
+        // A 429 says nothing about an earlier attempt under the same key.
+        for (String code : List.of(StripeErrors.RATE_LIMITED, StripeErrors.UNAVAILABLE, StripeErrors.CONFLICT,
+            StripeErrors.BAD_RESPONSE,
             StripeTransferHandler.LOOKUP_FAILED, "TIMEOUT", "LEASE_EXPIRED", "EXTERNAL_CALL_FAILED", "HANDLER_ERROR",
             "RESULT_TOO_LARGE", "ATTEMPTS_EXHAUSTED")) {
             assertThat(TransferRules.certainFailure(code)).as(code).isFalse();

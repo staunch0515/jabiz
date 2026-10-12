@@ -22,15 +22,18 @@ final class StripeSim {
     static final JsonMapper JSON = JsonMapper.builder().build();
     static final AtomicInteger SEQUENCE = new AtomicInteger();
 
-    /** Transfers by group, and the answer given to each idempotency key. */
+    /** Transfers by group, and the answer kept for each idempotency key (errors too, as Stripe keeps them). */
     static final Map<String, Map<String, Object>> TRANSFERS = new ConcurrentHashMap<>();
-    static final Map<String, Map<String, Object>> BY_KEY = new ConcurrentHashMap<>();
+    static final Map<String, StubHttpServer.Answer> ANSWERS = new ConcurrentHashMap<>();
     static final Map<String, String> ACCOUNTS_BY_KEY = new ConcurrentHashMap<>();
 
     /** The next creations refused with this error code ({@code card_declined}-like 400, or {@code balance_insufficient}). */
     static final AtomicInteger REFUSE = new AtomicInteger();
     static volatile String refuseCode = "transfers_not_allowed";
-    /** The next creations made at Stripe, but answered 500 (the answer lost). */
+    /**
+     * The next creations made at Stripe, their answer cut off on its way back (a body that is not JSON: as a dropped
+     * connection, the attempt fails and is tried again; Stripe keeps the success under the key).
+     */
     static final AtomicInteger LOSE_ANSWER = new AtomicInteger();
     /** The group the faults are for (null: every request): other takers' transfers in the same run go through. */
     static volatile String target;
@@ -38,16 +41,19 @@ final class StripeSim {
     static final AtomicInteger LOOKUP_FAILS = new AtomicInteger();
     /** The next creations answered 500 without making a transfer. */
     static final AtomicInteger UNAVAILABLE = new AtomicInteger();
+    /** The next creations answered 429 (nothing kept under the key). */
+    static final AtomicInteger RATE_LIMITED = new AtomicInteger();
 
     static void reset() {
         TRANSFERS.clear();
-        BY_KEY.clear();
+        ANSWERS.clear();
         ACCOUNTS_BY_KEY.clear();
         REFUSE.set(0);
         refuseCode = "transfers_not_allowed";
         LOSE_ANSWER.set(0);
         LOOKUP_FAILS.set(0);
         UNAVAILABLE.set(0);
+        RATE_LIMITED.set(0);
         target = null;
     }
 
@@ -98,18 +104,24 @@ final class StripeSim {
         }
         if ("POST".equals(request.method()) && "/v1/transfers".equals(path)) {
             String key = request.header("Idempotency-Key");
-            Map<String, Object> earlier = key == null ? null : BY_KEY.get(key);
-            if (earlier != null) {
-                return json(200, earlier);
-            }
             Map<String, String> form = form(request.body());
             String group = form.get("transfer_group");
+            // A rate limit is answered before the request runs: nothing is kept under the key.
+            if (fault(RATE_LIMITED, group)) {
+                return StubHttpServer.Answer.json(429, "{\"error\":{\"type\":\"invalid_request_error\","
+                    + "\"code\":\"rate_limit\"}}");
+            }
+            // Whatever the request ran into is kept under its key, errors included, and given again.
+            StubHttpServer.Answer earlier = key == null ? null : ANSWERS.get(key);
+            if (earlier != null) {
+                return earlier;
+            }
             if (fault(UNAVAILABLE, group)) {
-                return StubHttpServer.Answer.json(500, "{\"error\":{\"type\":\"api_error\"}}");
+                return keep(key, StubHttpServer.Answer.json(500, "{\"error\":{\"type\":\"api_error\"}}"));
             }
             if (fault(REFUSE, group)) {
-                return StubHttpServer.Answer.json(400, "{\"error\":{\"type\":\"invalid_request_error\",\"code\":\""
-                    + refuseCode + "\"}}");
+                return keep(key, StubHttpServer.Answer.json(400, "{\"error\":{\"type\":\"invalid_request_error\","
+                    + "\"code\":\"" + refuseCode + "\"}}"));
             }
             Map<String, Object> transfer = new LinkedHashMap<>();
             transfer.put("id", "tr_test" + SEQUENCE.incrementAndGet());
@@ -122,15 +134,21 @@ final class StripeSim {
             transfer.put("metadata", Map.of("transferId", form.get("metadata[transferId]")));
             transfer.put("livemode", false);
             TRANSFERS.put(form.get("transfer_group"), transfer);
-            if (key != null) {
-                BY_KEY.put(key, transfer);
-            }
+            StubHttpServer.Answer made = keep(key, json(200, transfer));
             if (fault(LOSE_ANSWER, group)) {
-                return StubHttpServer.Answer.json(500, "{\"error\":{\"type\":\"api_error\"}}");
+                // Made and kept at Stripe; the answer cut off on its way back.
+                return StubHttpServer.Answer.json(200, "{\"id\":\"tr_");
             }
-            return json(200, transfer);
+            return made;
         }
         return null;
+    }
+
+    private static StubHttpServer.Answer keep(String key, StubHttpServer.Answer answer) {
+        if (key != null) {
+            ANSWERS.put(key, answer);
+        }
+        return answer;
     }
 
     /** How many transfers Stripe made in all. */

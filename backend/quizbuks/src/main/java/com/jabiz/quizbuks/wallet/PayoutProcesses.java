@@ -325,12 +325,13 @@ public final class PayoutProcesses {
                 check(ctx, PayoutChecks.ACCOUNT_MISMATCH);
                 return;
             }
-            if (last != null && happened.isBefore(last)) {
-                // An older report than the one recorded (events come in any order).
+            String status = PayoutAccountStatus.of(reported);
+            if (!PayoutAccountStatus.replaces(account.get("status"), last, status, happened)) {
+                // An older report than the one recorded (events come in any order), or one of the same second that
+                // would hold the account back less.
                 ctx.put(OUTCOME, "NOTHING");
                 return;
             }
-            String status = PayoutAccountStatus.of(reported);
             values.put("status", status);
             values.put("payoutsEnabled", Boolean.TRUE.equals(reported.payoutsEnabled()));
             values.put("detailsSubmitted", Boolean.TRUE.equals(reported.detailsSubmitted()));

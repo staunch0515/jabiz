@@ -1,10 +1,12 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.quizbuks.wallet.PayoutObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,10 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Transfers that do not simply succeed (docs/quizbuks/plans/Q6-payments.md, D-Q6-12): a creation Stripe refuses is
  * certain (no transfer): the sending is reversed and the money is back on the taker's balance; an insufficient balance
- * is tried again until it passes; anything else leaves the transfer in doubt ({@code CHECK}, a task, nothing undone)
- * until Stripe is asked by the group: found, it is settled (once); certainly not there, it is reversed. A creation whose
- * answer was lost is found by the next attempt's lookup and never made twice. After three failures in a row the taker
- * is left for a person.
+ * too (Stripe keeps the refusal under the key: the next day's transfer has its own); anything else (a 500 kept under the
+ * key, a 429) leaves the transfer in doubt ({@code CHECK}, a task, nothing undone) until Stripe is asked by the group:
+ * found, it is settled (once); certainly not there, asked well after the sending ended, it is reversed. A creation
+ * whose answer was lost is found by the next attempt's lookup and never made twice. After three failures of the
+ * account in a row the taker is left for a person; the platform's own failures do not count.
  */
 class TransferFailureIT extends PayoutItSupport {
 
@@ -62,16 +65,72 @@ class TransferFailureIT extends PayoutItSupport {
     }
 
     @Test
-    void anInsufficientBalanceIsTriedAgainUntilItPasses() {
+    void anInsufficientBalanceIsCertainAndNotTheTakersFailure() {
         String taker = payee("t-fail-balance");
-        String transferId = sendingTransfer(taker, 1200);
+        enabledPayee(taker);
+        earn(taker, 1200);
+        // Stripe keeps a refusal under the key it answered: the same key can never pass, so it is certain at once and
+        // the next day is a new transfer with a key of its own. The platform's balance is not the taker's failure.
+        for (int i = 0; i < 3; i++) {
+            runTransfers();
+            String transferId = (String) transfersOf(taker).getLast().get("transfer_id");
+            StripeSim.target = "qb-" + transferId;
+            StripeSim.refuseCode = "balance_insufficient";
+            StripeSim.REFUSE.set(1);
+            exhaustJobs();
+            assertThat(transfer(transferId)).containsEntry("status", "FAILED")
+                .containsEntry("failure_code", "STRIPE_BALANCE_INSUFFICIENT");
+            assertThat(transferCalls(transferId).stream().filter(r -> "POST".equals(r.method()))).hasSize(1);
+            assertThat(ledger("2120", taker)).isEqualByComparingTo("1200");
+        }
+        assertThat(tasksAbout("transfer:")).noneSatisfy(t -> assertThat(t.get("title_key"))
+            .isEqualTo("task.qb.transfer-check.FAILURE_STREAK"));
+        runTransfers();
+        assertThat(transfersOf(taker)).hasSize(4);
+        String next = (String) transfersOf(taker).getLast().get("transfer_id");
+        runJobs();
+        assertThat(transfer(next)).containsEntry("status", "SENT");
+        assertThat(StripeSim.TRANSFERS).containsKey("qb-" + next);
+        assertTakerCacheIsTheLedger(taker);
+    }
+
+    @Test
+    void aRateLimitIsNeverCertain() {
+        String taker = payee("t-fail-rate");
+        String transferId = sendingTransfer(taker, 1250);
         StripeSim.target = "qb-" + transferId;
-        StripeSim.refuseCode = "balance_insufficient";
-        StripeSim.REFUSE.set(2);
+        // A 429 says nothing about an earlier attempt: run out, it is in doubt, not reversed.
+        StripeSim.RATE_LIMITED.set(100);
         exhaustJobs();
-        assertThat(transfer(transferId)).containsEntry("status", "SENT");
-        assertThat(transferCalls(transferId).stream().filter(r -> "POST".equals(r.method()))).hasSize(3);
-        assertThat(StripeSim.TRANSFERS).containsKey("qb-" + transferId);
+        assertThat(transfer(transferId)).containsEntry("status", "CHECK")
+            .containsEntry("failure_code", "STRIPE_RATE_LIMITED");
+        assertThat(ledger("2130", taker)).isEqualByComparingTo("1250");
+        assertThat(ledger("2120", taker)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void aCheckWhoseLookupMayPrecedeTheLastAttemptReversesNothing() {
+        String taker = payee("t-fail-check-race");
+        String transferId = sendingTransfer(taker, 1600);
+        StripeSim.target = "qb-" + transferId;
+        StripeSim.UNAVAILABLE.set(1);
+        exhaustJobs();
+        assertThat(transfer(transferId)).containsEntry("status", "CHECK");
+        // The hourly check started while the transfer was still sending; its lookup found nothing, and its answer is
+        // handled only now, after the sending ended in doubt. Its "none" may predate a creation: nothing is undone.
+        completeCheck(transferId, PayoutObjects.TransferLookup.none());
+        assertThat(transfer(transferId)).containsEntry("status", "CHECK");
+        Instant ended = ((java.sql.Timestamp) transfer(transferId).get("send_ended_at")).toInstant();
+        completeCheck(transferId, PayoutObjects.TransferLookup.none(ended.minus(Duration.ofMinutes(5))));
+        completeCheck(transferId, PayoutObjects.TransferLookup.none(ended.plus(Duration.ofMinutes(9))));
+        assertThat(transfer(transferId)).containsEntry("status", "CHECK");
+        assertThat(ledger("2130", taker)).isEqualByComparingTo("1600");
+        assertThat(transferPostings(transferId)).hasSize(2);
+        // Asked well after the sending ended: final.
+        completeCheck(transferId, PayoutObjects.TransferLookup.none(ended.plus(Duration.ofMinutes(10))));
+        assertThat(transfer(transferId)).containsEntry("status", "FAILED")
+            .containsEntry("failure_code", "NOT_AT_STRIPE");
+        assertThat(ledger("2120", taker)).isEqualByComparingTo("1600");
         assertTakerCacheIsTheLedger(taker);
     }
 
@@ -125,11 +184,13 @@ class TransferFailureIT extends PayoutItSupport {
         String taker = payee("t-fail-doubt-none");
         String transferId = sendingTransfer(taker, 1500);
         StripeSim.target = "qb-" + transferId;
-        StripeSim.UNAVAILABLE.set(100);
+        // A 500 is kept under the key too: the same key would only get it again. In doubt at once, asked about later.
+        StripeSim.UNAVAILABLE.set(1);
         exhaustJobs();
-        assertThat(transfer(transferId)).containsEntry("status", "CHECK");
+        assertThat(transfer(transferId)).containsEntry("status", "CHECK")
+            .containsEntry("failure_code", "STRIPE_UNAVAILABLE");
+        assertThat(transferCalls(transferId).stream().filter(r -> "POST".equals(r.method()))).hasSize(1);
         assertThat(ledger("2120", taker)).isEqualByComparingTo("0");
-        StripeSim.UNAVAILABLE.set(0);
         runStaleTransfers(now());
         runJobs();
         Map<String, Object> failed = transfer(transferId);

@@ -73,9 +73,13 @@ class PayoutConfig {
         return processOnly(QbPayouts.ACCOUNT, 10);
     }
 
+    /**
+     * Read by the system only (a permission no role holds): whoever follows a pending account's link could put their
+     * own bank account on it. The taker reads theirs through {@link QbPayouts#MY_ONBOARDING}.
+     */
     @Bean
     DatasetDefinition qbPayoutOnboardingDataset() {
-        return processOnly(QbPayouts.ONBOARDING, 10);
+        return processOnly(QbPayouts.ONBOARDING, 10, QbPermissions.PAYOUT_SYSTEM);
     }
 
     @Bean
@@ -107,10 +111,14 @@ class PayoutConfig {
     }
 
     private DatasetDefinition processOnly(String entity, int maxWriteBatch) {
+        return processOnly(entity, maxWriteBatch, QbPermissions.ADMIN_FINANCE_READ);
+    }
+
+    private DatasetDefinition processOnly(String entity, int maxWriteBatch, String readPermission) {
         return DatasetDefinition.define(QbPayouts.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
-            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .permissions(readPermission, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatch))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
@@ -212,6 +220,12 @@ class PayoutConfig {
     ProcessDefinition<TransferProcesses.UserRef, TransferProcesses.TransferOutput, ProcessContext> qbTransferCreate(
         StripeSettings stripe) {
         return TransferProcesses.create(stripe);
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.UserRef, TransferProcesses.HoldReleaseOutput, ProcessContext>
+        qbTransferHoldRelease() {
+        return TransferProcesses.holdRelease();
     }
 
     @Bean

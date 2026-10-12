@@ -101,7 +101,10 @@
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。
     转账的一切流程只持 `qb.wallet:TAKER:<用户>`，锁内从账本读余额；金额只取自账本与记录。每人至多一笔未结束的转账（部分唯一索引）；
     发出作业先按 `transfer_group` 查询再以转账自己的幂等键创建；**只有 Stripe 拒绝创建（`TransferRules.certainFailure`）才冲正**，其他结果进入 `CHECK`、
-    向 Stripe 核实后定论。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
+    向 Stripe 核实后定论：查询"没有"只有在晚于发送结束（`sendEndedAt`）至少 10 分钟时才是定论。Stripe 把执行过的请求的回答（含错误）保存在幂等键下，
+    同一键重试余额不足或 5xx 永远得到同样的回答：这两者立即结束作业（`StripeTransferHandler.kept`），次日的新转账用新键。
+    被驳回或被撤回（含部分）的转账使用户暂停，直到财务以 `QB_TRANSFER_HOLD_RELEASE` 放行；审核人的意见不写进用户可读的字段。
+    开通链接只由本人的数据视图读取（默认数据视图的读权限是不授予任何角色的 `qb.payout.system`）。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 
 ## 5. 测试与命令（在 `backend/` 下）

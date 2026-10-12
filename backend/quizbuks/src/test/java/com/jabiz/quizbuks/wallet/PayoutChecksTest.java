@@ -106,4 +106,25 @@ class PayoutChecksTest {
         assertThat(PayoutChecks.TRANSFER_REASONS).doesNotHaveDuplicates();
         assertThat(PayoutChecks.transferGroup(TRANSFER)).isEqualTo("qb-" + TRANSFER);
     }
+
+    @Test
+    void ofTwoReportsInTheSameSecondTheMoreRestrictiveWins() {
+        java.time.Instant t = java.time.Instant.parse("2026-10-01T00:00:00Z");
+        // Newer always, older never.
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.RESTRICTED, t, PayoutAccountStatus.ENABLED,
+            t.plusSeconds(1))).isTrue();
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.ENABLED, t, PayoutAccountStatus.RESTRICTED,
+            t.minusSeconds(1))).isFalse();
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.PENDING, null, PayoutAccountStatus.ENABLED, t))
+            .isTrue();
+        // A tie never enables an account Stripe also held back in that second.
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.RESTRICTED, t, PayoutAccountStatus.ENABLED, t))
+            .isFalse();
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.PENDING, t, PayoutAccountStatus.ENABLED, t))
+            .isFalse();
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.ENABLED, t, PayoutAccountStatus.RESTRICTED, t))
+            .isTrue();
+        assertThat(PayoutAccountStatus.replaces(PayoutAccountStatus.ENABLED, t, PayoutAccountStatus.ENABLED, t))
+            .isTrue();
+    }
 }

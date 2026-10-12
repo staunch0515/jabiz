@@ -9,7 +9,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Asks Stripe whether a transfer in doubt was made (docs/quizbuks/plans/Q6-payments.md, D-Q6-12): lists the transfer's
  * group only, never creates one. The completion process settles a found transfer, or reverses the posting of one that
- * certainly does not exist.
+ * certainly does not exist: one asked about well after the sending ended (the attempt's start,
+ * {@link PayoutObjects.TransferLookup#lookedUpFrom}).
  */
 @Component
 public class TransferCheckHandler
@@ -26,7 +27,9 @@ public class TransferCheckHandler
     @Override
     public ExternalJobResult<PayoutObjects.TransferLookup> run(PayoutJobs.TransferInput input,
         ExternalJobContext ctx) {
+        // When the attempt began bounds when Stripe was asked from below: only a "none" asked well after the sending
+        // ended is final (TransferProcesses.found).
         return ExternalJobResult.of(StripeTransferHandler.lookup(StripeApi.of(ctx, settings, json),
-            input.transferId()));
+            input.transferId()).askedFrom(ctx.deadline().minus(PayoutJobs.CHECK_TIMEOUT)));
     }
 }
