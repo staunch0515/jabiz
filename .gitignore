@@ -12,3 +12,4 @@ frontend/dist/
 .vscode/
 .env
 .jqwik-database
+backend/app/portal/dist/

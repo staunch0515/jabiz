@@ -11,7 +11,7 @@ export type { AuthFrameProps, AuthNavigation } from './frame'
 export { SignInForm } from './SignInForm'
 export type { SignInFormProps } from './SignInForm'
 export { SignUpForm, SignUpSent } from './SignUpForm'
-export type { SignUpFormProps, SignUpSentProps, SignUpValues } from './SignUpForm'
+export type { SignUpFormProps, SignUpSentProps, SignUpSubmitted, SignUpValues } from './SignUpForm'
 export {
   MailLinkPage,
   VerifyEmailPanel,
@@ -35,6 +35,6 @@ export { OidcCallback } from './OidcCallback'
 export type { OidcCallbackProps } from './OidcCallback'
 export { ChangePasswordForm } from './ChangePasswordForm'
 export type { ChangePasswordFormProps } from './ChangePasswordForm'
-export { VerifyEmailBanner, OfflineBanner } from './banners'
-export type { VerifyEmailBannerProps } from './banners'
+export { VerifyEmailBanner, OfflineBanner, PwaUpdatePrompt } from './banners'
+export type { VerifyEmailBannerProps, PwaUpdatePromptProps } from './banners'
 export { invalidLink, passwordProblems, passwordRequired } from './problems'

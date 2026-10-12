@@ -252,27 +252,30 @@
 | `id` | 小写字母、数字与连字符，唯一；出现在接口路径与登录记录中 |
 | `issuer` | 发现文档 `{issuer}/.well-known/openid-configuration` 的 `issuer` 必须与之完全相同 |
 | `client-id`、`client-secret` | 密钥只来自环境变量（如 `JABIZ_OIDC_<ID>_CLIENT_SECRET` 经 Spring 的松散绑定），不写入仓库 |
-| `redirect-uri` | 在身份提供方登记的绝对地址，指向前端的 `/login/oidc`（挂在子路径时带上子路径） |
+| `redirect-uri` | 在身份提供方登记的绝对地址，指向后台的 `/login/oidc`（挂在子路径时带上子路径）：入口 `admin` 的回调 |
+| `redirect-uris.<入口>` | 其他入口的回调（阶段 16c-2，决策 D43 第 5 条）：该入口前端的 `login/oidc`，如 `https://shop.example.com/portal/login/oidc`；也可写 `admin`（与 `redirect-uri` 二选一）。没有某入口的回调，该提供方就不对该入口提供 |
 | `scopes` | 缺省 `openid profile email`，必须含 `openid` |
 | `labels` | 登录按钮的文字（`{语言: 文本}`），缺省为 `id` |
 | `mfa-amr` | ID 令牌的 `amr` 含其中任一值时视同平台的二次验证；缺省为空（不信任，照常走第 9 节） |
 
-启动检查（类别 `SECURITY`）一次报告全部问题：缺项、`id` 格式或重复、`scopes` 无 `openid`、`issuer` / `redirect-uri` 不是绝对的 `https` 地址（只有
-`localhost` / `127.0.0.1` 可用 `http`，供开发与测试）。启动时不访问身份提供方。
+启动检查（类别 `SECURITY`）一次报告全部问题：缺项（`redirect-uri` 与 `redirect-uris` 至少有一个）、`id` 格式或重复、`scopes` 无 `openid`、
+`issuer` / `redirect-uri` / `redirect-uris.<入口>` 不是绝对的 `https` 地址（只有 `localhost` / `127.0.0.1` 可用 `http`，供开发与测试）、回调带片段（`#`）、
+`redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同。启动时不访问身份提供方。
 
 **接口**（公开，认证过滤器不处理）
 
 | 方法与路径 | 说明 |
 |---|---|
-| `GET /api/auth/oidc/providers` | 已配置的提供方：`id` 与按请求语言的 `label`，只此而已 |
-| `POST /api/auth/oidc/{id}/start` | 生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
+| `GET /api/auth/oidc/providers?entry=` | 对该入口（缺省 `admin`）提供的提供方，即有该入口回调的：`id` 与按请求语言的 `label`，只此而已；未知入口为空列表 |
+| `POST /api/auth/oidc/{id}/start?entry=` | 提供方没有该入口的回调时与未知入口一样答 401 `LOGIN_FAILED`。生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
 | `POST /api/auth/oidc/callback {state, code, binder}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED` |
 
 **回调**
 
 1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、binder 不符 → 401。
    binder 把回调绑定到发起登录的那个浏览器：攻击者停在回调之前、把自己的 state 与授权码发给别人时，别人的页面没有对应的 binder，不会以攻击者身份登录（login CSRF）。
-2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）。
+2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）；`redirect_uri` 是 state 所记入口的回调（与授权请求相同，
+   身份提供方据此核对），回调请求里的任何入口都不算；配置中已没有该入口的回调则拒绝。
 3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；`iss` 等于配置；`aud` 含 `client-id`，
    多个受众时 `azp` 必须是 `client-id`；`exp` 未过、`iat` 不在将来（按注入的 `Clock`，容许 60 秒偏差）；`nonce` 的 SHA-256 与记录的一致；`sub` 非空。
 4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`；成功时刷新令牌记下所经的关联（`sec_refresh_token.identity_id`），每次刷新都要求该关联仍在，
@@ -380,7 +383,7 @@ jabiz.security.entries.portal.accepted-roles=CUSTOMER        # 角色码，* 为
 jabiz.security.entries.portal.self-registration=true          # 缺省 false（16b-2）
 jabiz.security.entries.portal.registration-roles=CUSTOMER     # 注册时授予，须在 accepted-roles 中
 jabiz.security.entries.portal.require-verified-email=true     # 缺省 false
-jabiz.security.entries.portal.app-path=/portal/               # 缺省 /，邮件链接完成后跳到这里（16b-2）
+jabiz.security.entries.portal.app-path=/portal/               # 缺省 /；该入口前端的根，邮件链接在它之下（16c-2）
 jabiz.security.entries.portal.session.refresh-token-ttl=30d   # 缺省为 jabiz.security.refresh-token-ttl；上限 90 天（16m）
 jabiz.security.entries.portal.session.idle-timeout=0          # 缺省为 jabiz.security.session.idle-timeout；0 表示不按闲置结束
 jabiz.security.entries.portal.session.persistence=device      # tab（缺省）或 device；admin 入口不能用 device
@@ -391,7 +394,8 @@ jabiz.security.entries.portal.session.persistence=device      # tab（缺省）�
 - 启动检查（类别 `SECURITY`）一次报告全部问题：名字非法、`accepted-roles` 为空、角色码格式、注册角色为 `*` 或不在接受的角色中、允许注册却无注册角色、
   `app-path` 不是绝对路径（含 `.` / `..` 段）、`session.refresh-token-ttl` 不为正或（入口自己设置时）超过 90 天、`session.idle-timeout` 为负、
   `session.persistence` 不是 `tab` / `device`、`admin` 入口用 `device` 或 `session.idle-timeout` 为 `0`、长期会话的入口（`device` 或闲置时长 `0`）接受 `*`；
-  允许注册而 `jabiz.mail.enabled` 未开启、角色码（当前版本中）不存在为**警告**。
+  允许注册而 `jabiz.mail.enabled` 未开启、角色码（当前版本中）不存在、`app-path` 不在任何已配置 SPA 之下（或有 SPA 声明了该入口
+  （`jabiz.web.spa[i].entry`）而 `app-path` 不在它之下，16c-2）为**警告**。
   有错误的入口不提供（请求它即 401）。访问令牌有效期长于某入口的闲置时长另由 `SessionChecks` 报告（§11）。
 - **会话设置**（决策 D43 第 2 条，阶段 16m）：有效期与闲置时长见 §2、§11；`persistence` 告诉前端把刷新令牌放在哪里（`tab` 为 `sessionStorage`，
   `device` 为 `localStorage`，关闭后再打开仍保持登录），由 `GET /api/auth/entries/{name}` 的 `sessionPersistence` 给出；服务端对两者一视同仁（轮换、重用即吊销照常）。
@@ -415,7 +419,8 @@ jabiz.security.entries.portal.session.persistence=device      # tab（缺省）�
 - **刷新**：`sec_refresh_token.entry` 随令牌族沿用（旧行为空，读作 `admin`）。`POST /api/auth/refresh {refreshToken, entry?}` 的入口与令牌的不符 →
   401 `INVALID_REFRESH_TOKEN`，**不消费**、不吊销。刷新时 `RbacService.renew` 按入口过滤角色、重读 `emailVerified`（入口要求已验证而现在未验证 → 401，
   例如管理员改了邮箱）并调用守卫。
-- **OIDC**：`POST /api/auth/oidc/{id}/start?entry=…` 把入口存入 `sec_oidc_state.entry`（未知入口 401），回调用存下的值；回调请求中的任何入口都不算。
+- **OIDC**：`POST /api/auth/oidc/{id}/start?entry=…` 把入口存入 `sec_oidc_state.entry`（未知入口、或提供方没有该入口的回调，401），回调用存下的值
+  （包括换取令牌时的回调地址，§12）；回调请求中的任何入口都不算。
 - 开发用请求头的操作人属于 `admin`、视为已验证（同二次验证）；`TestTokens.bearer(…)` 签发的令牌属于 `admin`、已验证，`TestTokens.unverified(…)` 未验证。
 
 ### 15.3 登录前的应用检查 `SignInGuard`
@@ -514,7 +519,10 @@ class PortalSignInGuard implements SignInGuard {
   `jabiz.security.sign-up.verify-ttl` 缺省 24 小时）、`jabiz.auth.account-exists`（令牌 `jabiz.join`，`jabiz.security.sign-up.join-ttl` 缺省 24 小时）、
   `jabiz.auth.password-reset`（令牌 `jabiz.reset`，`jabiz.security.password-reset.ttl` 缺省 1 小时）。令牌用途在平台的命名空间 `jabiz.` 中，
   应用的模板不能使用这个前缀（名字或令牌用途，启动检查 `MAIL` 报错），因此应用的邮件令牌不会被这些流程接受。
-  链接 `{baseUrl}/auth/<页>?entry=<入口>&token=<令牌>`，由通用后台的落地页处理（12 §6），完成后到入口的 `app-path`；落地页读出令牌后即用 `history.replaceState`
+  链接 `{entryUrl}auth/<页>?entry=<入口>&token=<令牌>`（阶段 16c-2，决策 D43 第 4 条）：`{entryUrl}` 是 `{baseUrl}` 加入口的 `app-path`（以 `/` 结尾），
+  即该入口自己的前端（后台为 `{baseUrl}/auth/…`，示范门户为 `{baseUrl}/portal/auth/…`），由 `@jabiz/ui` 的 `MailLinkPage` 处理（12 §12）；
+  后台的落地页 `/auth/*` 保留并照常接受任何入口，16c-2 之前发出的链接（`{baseUrl}/auth/…?entry=portal`）仍可用；完成后到入口的 `app-path`。
+  落地页读出令牌后即用 `history.replaceState`
   从地址栏去掉它，打开期间 `<meta name="referrer" content="no-referrer">`，并且只在点击后才提交（邮件扫描器打开链接不改变任何东西）。
   令牌只存 SHA-256，同一用户同一用途只有最新的有效（重发即作废旧的），用一次即失效。
 - **不可枚举**：注册、重发、找回密码先检查请求的每个值（邮箱格式与长度、密码规则、显示名、语言、入口），再计数限流，最后运行流程；
@@ -562,6 +570,6 @@ class PortalSignInGuard implements SignInGuard {
   否则（没给、别人的、别的入口的、已用过的）全部吊销，客户端重新登录。204。
 - **登录记录**带入口、地址与 UA（§15.5），因素 `PASSWORD`。
 - **邮件**：`jabiz.mail.enabled` 开启且用户有邮箱时发 `TRANSACTIONAL` 邮件 `jabiz.auth.password-changed`（三语消息 `mail.jabiz.auth.password-changed.subject|body`，
-  唯一的参数是入口，**没有令牌**；正文给出不带令牌的找回密码页 `{baseUrl}/auth/password-reset?entry=<入口>`）。
+  唯一的参数是入口，**没有令牌**；正文给出不带令牌的找回密码页 `{entryUrl}auth/password-reset?entry=<入口>`，即该入口前端的）。
 - **不要求近期的二次验证**（当前密码已足够；16m-2）。已签发的其他会话的访问令牌在到期前仍可用（§2 的已知限制）。
 - 秘密不进操作记录：输入的 `currentPassword`、`newPassword`、`refreshToken` 都标 `@Sensitive` 并按名字遮蔽；拒绝只记 info 日志（用户编号）。

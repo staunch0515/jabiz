@@ -1,5 +1,5 @@
-import { resendVerification, useOnline, useOptionalAuth } from '@jabiz/client'
-import { MailWarning, WifiOff } from 'lucide-react'
+import { resendVerification, useOnline, useOptionalAuth, useServiceWorkerUpdate } from '@jabiz/client'
+import { MailWarning, RefreshCw, WifiOff } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '../components/ui/alert'
@@ -73,6 +73,34 @@ export function OfflineBanner({ className }: { className?: string }) {
     <Alert variant="warning" role="status" className={className} data-testid="offline-banner">
       <WifiOff aria-hidden />
       <AlertDescription className="text-current">{t('banner.offline')}</AlertDescription>
+    </Alert>
+  )
+}
+
+export interface PwaUpdatePromptProps {
+  /** Applies the new version; the waiting Service Worker's (`useServiceWorkerUpdate` of `@jabiz/client`) by default. */
+  update?: (() => void) | null
+  className?: string
+}
+
+/**
+ * Says that a new version of the PWA is ready (decision D43 item 10) and offers to reload; nothing while there is none.
+ * The new version takes over only when the user agrees, so nobody is interrupted half-way through what they are doing.
+ */
+export function PwaUpdatePrompt({ className, ...given }: PwaUpdatePromptProps) {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const waiting = useServiceWorkerUpdate()
+  const update = given.update !== undefined ? given.update : waiting
+  if (!update) return null
+  return (
+    <Alert role="status" className={cn('flex-wrap', className)} data-testid="pwa-update">
+      <RefreshCw aria-hidden />
+      <AlertDescription className="text-current">
+        <span>{t('banner.update')}</span>
+        <Button size="sm" className="h-auto" data-testid="pwa-update-reload" onClick={() => update()}>
+          {t('banner.reload')}
+        </Button>
+      </AlertDescription>
     </Alert>
   )
 }

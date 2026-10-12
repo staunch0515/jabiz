@@ -191,6 +191,26 @@ test.describe('accessibility', () => {
     })
   }
 
+  // The demo's customer portal (phase 16c-2): an application's own SPA built from the platform's blocks.
+  for (const appearance of ['light', 'dark'] as const) {
+    test(`the portal's sign-in, sign-up and mailed-link pages, ${appearance}`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('jabiz.appearance', value), appearance)
+      await page.goto('/portal/login')
+      await expect(page.getByPlaceholder('用户名')).toBeVisible()
+      await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
+      await expectAccessible(page, `portal sign-in (${appearance})`)
+      await page.goto('/portal/signup')
+      await expect(page.getByTestId('sign-up')).toBeVisible()
+      await expectAccessible(page, `portal sign-up (${appearance})`)
+      await page.goto('/portal/password-reset')
+      await expect(page.getByTestId('password-reset')).toBeVisible()
+      await expectAccessible(page, `portal password reset (${appearance})`)
+      await page.goto('/portal/auth/verify-email?entry=portal&token=not-a-token')
+      await expect(page.getByTestId('verify-state')).toBeVisible()
+      await expectAccessible(page, `portal mailed link (${appearance})`)
+    })
+  }
+
   test('the pages after signing in', async ({ page, request }) => {
     // About thirty pages and pop-ups, each checked by axe: more than the default minute on a loaded machine.
     test.slow()

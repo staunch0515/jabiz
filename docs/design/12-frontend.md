@@ -72,6 +72,10 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   后台第一次启动时把旧键 `jabiz.refreshToken` 迁移为 `jabiz.session.admin.refresh`（一次）。
   收到 401 时用刷新令牌刷新一次（同一标签页的并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
   `device` 下多个标签页以 Web Locks（锁名 `jabiz.refresh.<入口>`）轮流刷新，取得锁之后才读存储中的令牌，所以别的标签页刚换新的令牌不会被再用一次（否则服务端视为重用而吊销整个令牌族）；
+  `device` 的令牌另写一份到 IndexedDB（库 `jabiz-session`），刷新时在锁内从那里读、写完（事务提交）才释放锁（16c-2）：各标签页读 IndexedDB 的结果一致，
+  而一个标签页看到的 `localStorage` 是浏览器稍后才从其他标签页同步过来的副本（Chromium 如此），刚轮到它时仍可能读到旧令牌；`localStorage` 中的副本只供同步的判断（有没有会话）。
+  会话结束时 IndexedDB 中留下空值（墓碑），不会再退回到旧的 `localStorage` 副本；写入 IndexedDB 失败时删除该记录，读取退回 `localStorage`；
+  没有 IndexedDB 的浏览器只用 `localStorage`；本人改密码随请求送出的刷新令牌也在锁内这样读；
   登出与在两种存储之间搬移令牌也在锁内；`tab` 的令牌是本标签页自己的，不取锁；浏览器拒绝锁（沙箱、不透明源）时不加锁执行。
   刷新限时 15 秒；只有服务端拒绝（400 / 401 / 403 / 422）才清除会话，5xx、429 与网络失败保留会话。清除会话时两种存储中该入口的键都删除。
   `device` 下一个标签页登出时其他标签页随之登出。`refreshSession({ force: true })` 不搭已在进行的刷新、另取新令牌（验证邮箱后令牌的 `email_verified` 才为真）。
@@ -81,7 +85,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   为 `MFA_ENROLLMENT_REQUIRED` 时先绑定（二维码与密钥、确认码、只显示一次的恢复码），然后重新登录。挑战令牌只在页面状态中，不存储。
 - 按操作要求二次验证（10 §10）：任何请求收到 403 且违规为 `MFA_REQUIRED` 时，API 客户端请外框弹出输入框（`StepUpProvider`，并发请求共用一次），
   `POST /api/auth/step-up` 成功后以新的访问令牌重发原请求；取消则把原 403 交给调用方。未绑定时提示先到"安全设置"绑定。
-- 单点登录（10 §12）：登录页列出 `/api/auth/oidc/providers` 的提供方按钮；点击后以本前端的入口取得授权地址并整页跳转（登录后要回到的页面与绑定值记在
+- 单点登录（10 §12）：登录页列出 `/api/auth/oidc/providers?entry=<入口>` 的提供方按钮（只有该入口有回调的，16c-2）；点击后以本前端的入口取得授权地址并整页跳转（登录后要回到的页面与绑定值记在
   `sessionStorage` 的 `jabiz.session.<入口>.oidcReturnTo` / `.oidcBinder`，只接受本站的路径，缺省由调用方给出：`takeReturnPath(fallback)`）；身份提供方回到 `/login/oidc`，该页把 state 与授权码交给服务端一次，结果与密码登录相同（需要第二步时回到登录页的验证码或绑定步骤）。
 - 闲置锁定（10 §11）：外框按键盘、指针、滚动与触摸活动计时（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出并回到登录页，提示原因、填好用户名（`sessionStorage`，只是便利）。
 - 数据期限（10 §13.2）：`/api/auth/me` 的 `dataFrom` / `dataTo` 不为空时，页头显示期限标签（列表与报表只含该期间，由服务端过滤）。
@@ -186,6 +190,8 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 - 子路径：`VITE_BASE=/admin/`（`src/base.ts` 校验并换算 React Router 的 `basename`，16 §6）；CI 检查以 `/admin/` 构建后的资源路径。
 - 检查：`pnpm lint`、`pnpm typecheck`、`pnpm check:api`、`pnpm test`、`pnpm build`；端到端 `pnpm e2e`（见第 8 节）。
 - 应用扩展（第 9 节）：`JABIZ_ADMIN_EXTENSION=<目录> pnpm build` 把它编入；`pnpm ext:check` 检查它（类型、lint、测试）。
+- 应用自有的 SPA 与 PWA（第 12 节，17 §3.1、§4.1）：应用目录中的 pnpm 工程，用预设 `@jabiz/client/vite`；`jabizApp { spa(…, entry, pwa) }` 构建并打包，
+  `pnpm app:check <目录>` 检查版本（Gradle 的 `spaCheck<名>`）。示范门户 `backend/app/portal/`。
 
 ## 8. 测试
 
@@ -296,5 +302,16 @@ jabizApp {
   `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
-- **应用自有 SPA**（D34 第 5 条）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'` 并 `@source` 该包的 `src`；
-  `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`（以及使用 `@jabiz/ui` 时其运行时依赖）的版本与平台前端一致，不一致即失败。
+- **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；
+  `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`（以及使用两个包时其运行时依赖）
+  的版本与平台前端一致，不一致即失败。写法见指南 `docs/guide/app-spa.md`。
+- **构建预设 `@jabiz/client/vite`**（16c-2，只在 Node 中运行，纯 JavaScript `vite.mjs` 加类型 `vite.d.mts`，任何 Node 版本都能从应用的 `vite.config.ts` 加载）：
+  `jabizSpa({ pwa })` 取并校验构建变量（`VITE_BASE`、`VITE_JABIZ_ENTRY`、`VITE_JABIZ_PWA`、`VITE_JABIZ_SPA_PREFIXES`），设 `base`，以 `resolve.dedupe`
+  统一 React、i18next、TanStack Query 的副本（Vitest 中另把平台前端的依赖交给 Vite、取其 ES 模块版本并指向 SPA 自己的副本：否则经 `link:` 的包会带来第二个 React）；
+  `pwa = ON` 时生成 `manifest.webmanifest`（`id`、`start_url`、`scope` 为前缀，`display: standalone`；图标必须是 `public/` 中尺寸相符的 PNG，且有 192×192、512×512
+  与 maskable 的，否则构建失败）、在页面中链接它，并以 Vite 自己的打包器（Vite 8 不再带 esbuild）把 `packages/client/src/pwa/sw.ts` 编译为经典脚本 `sw.js`，
+  注入预缓存清单、缓存名与要放过的前缀；`REMOVE` 只生成注销自己的 `sw.js`。路由判断是纯函数 `swRoute`（`src/pwa/route.ts`），Service Worker 的逻辑在
+  `src/pwa/worker.ts`，都有单元测试。
+- **PWA 的注册与更新**：`registerServiceWorker()`（`@jabiz/client`，按构建的 `VITE_JABIZ_PWA`；以前缀为作用域、`updateViaCache: 'none'`）；新版本安装后等待，
+  `useServiceWorkerUpdate()` 给出应用它的函数，`@jabiz/ui` 的 `PwaUpdatePrompt` 据此提示"有新版本"与"刷新"按钮：用户同意后才 `SKIP_WAITING`，
+  控制者切换后重新加载，从不自动重新加载；首次安装不提示。`REMOVE` 时页面一侧也注销本 SPA 的注册并删除自己的缓存。

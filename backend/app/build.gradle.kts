@@ -1,5 +1,7 @@
-// The demo application: runtime + business declarations, packaged together with the admin frontend
-// (docs/design/17-apps-and-branches.md section 3.1).
+// The demo application: runtime + business declarations, packaged together with the admin frontend and the customer
+// portal (docs/design/17-apps-and-branches.md section 3.1).
+import com.jabiz.gradle.Pwa
+
 plugins {
     id("jabiz.boot-app")
 }
@@ -7,7 +9,10 @@ plugins {
 jabizApp {
     mainClass = "com.jabiz.app.App"
     // The admin frontend with the demo's own page (docs/design/12-frontend.md section 9, decision D22).
-    spa("/", "../../frontend", extension = "admin-extension")
+    spa("/", "../../frontend", extension = "admin-extension", entry = "admin")
+    // The customer portal: the application's own SPA, a PWA signing in to the entry portal
+    // (docs/guide/app-spa.md, decision D43).
+    spa("/portal", "portal", entry = "portal", pwa = Pwa.ON)
 }
 
 dependencies {

@@ -21,7 +21,8 @@ class MailTemplateTest {
         assertThat(template.bodyKey()).isEqualTo("mail.jabiz.verify-email.body");
         assertThat(template.unsubscribable()).isFalse();
         assertThat(template.placeholders()).containsExactly("userName", "appName", "verify", "baseUrl");
-        assertThat(template.urlSafePlaceholders()).containsExactlyInAnyOrder("verify", "baseUrl", "unsubscribeUrl");
+        assertThat(template.urlSafePlaceholders()).containsExactlyInAnyOrder("verify", "baseUrl", "entryUrl",
+            "unsubscribeUrl");
     }
 
     @Test
@@ -96,6 +97,37 @@ class MailTemplateTest {
             .param("jabiz.entry"))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.TRANSACTIONAL)
             .token("a.b.c", Duration.ofHours(1)))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void theRootOfAnEntrysFrontendIsAPlaceholderOfThePlatform() {
+        MailTemplate withEntry = MailTemplate.define("shop.welcome", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("entry"));
+        MailTemplate without = MailTemplate.define("shop.other", t -> t.category(MailCategory.TRANSACTIONAL));
+        // {entryUrl} needs the parameter naming the entry; {entryUrl.<entry>} names it itself.
+        assertThat(withEntry.placeholders()).containsExactly("entry", "baseUrl", "entryUrl");
+        assertThat(without.placeholders()).doesNotContain("entryUrl");
+        assertThat(MailPlaceholders.problems(withEntry, "s", "[x]({entryUrl}a?e={entry})")).isEmpty();
+        assertThat(MailPlaceholders.problems(without, "s", "[x]({entryUrl}a)")).singleElement().asString()
+            .contains("needs the parameter entry");
+        assertThat(MailPlaceholders.problems(without, "s", "[x]({entryUrl.portal}a) [y]({entryUrl.my-app-2}b)"))
+            .isEmpty();
+        assertThat(MailPlaceholders.of("{entryUrl.my-app}")).containsExactly("entryUrl.my-app");
+        assertThat(MailTemplate.namedEntryUrl("entryUrl.portal")).isTrue();
+        assertThat(MailTemplate.namedEntryUrl("entryUrl.Portal")).isFalse();
+        assertThat(MailTemplate.namedEntryUrl("entryUrl.")).isFalse();
+        assertThat(MailTemplate.namedEntryUrl("entryUrl")).isFalse();
+        assertThat(MailTemplate.entryOf("entryUrl.my-app")).isEqualTo("my-app");
+        assertThatThrownBy(() -> MailTemplate.entryOf("baseUrl")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> MailTemplate.define("a.b", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("entryUrl"))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("placeholder of the platform");
+        // Made by the platform from configuration: inserted into links as they are, parameters still encoded.
+        String text = MailRenderer.render("s", "[x]({entryUrl}auth/v?entry={entry}) [y]({entryUrl.portal}auth/w)",
+            java.util.Map.of("entryUrl", "https://a.example/portal/", "entry", "a b&c",
+                "entryUrl.portal", "https://a.example/portal/"), withEntry.urlSafePlaceholders()).text();
+        assertThat(text).contains("https://a.example/portal/auth/v?entry=a%20b%26c")
+            .contains("https://a.example/portal/auth/w");
     }
 
     @Test

@@ -90,6 +90,115 @@ class SpaFallbackFilterTest {
         assertThat(run(custom, "GET", "/admin/x").forwardedPath()).isEqualTo("/admin/app.html");
     }
 
+    private static final JabizWebProperties PWA = new JabizWebProperties(List.of(
+        new Spa("/", null, null, "admin", null),
+        new Spa("/portal", null, null, "portal", JabizWebProperties.Pwa.ON),
+        new Spa("/old", null, null, "old", JabizWebProperties.Pwa.REMOVE)));
+
+    @Test
+    void theDefaultPolicyIsTightenedForEverySpa() {
+        assertThat(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY).contains("default-src 'self'",
+            "base-uri 'self'", "object-src 'none'", "form-action 'self'", "worker-src 'self'",
+            "manifest-src 'self'", "frame-ancestors 'none'").doesNotContain("script-src", "unsafe-eval");
+        assertThat(run(PWA, "GET", "/portal/orders").csp()).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        assertThat(run(PWA, "GET", "/data").csp()).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+    }
+
+    @ParameterizedTest
+    @CsvSource(nullValues = "-", value = {
+        // Pages and the files that say what the current version is: revalidated on every use.
+        "/, 200, no-cache",
+        "/data/carrier, 200, no-cache",
+        "/index.html, 200, no-cache",
+        "/portal, 200, no-cache",
+        "/portal/orders, 200, no-cache",
+        "/portal/index.html, 200, no-cache",
+        "/portal/sw.js, 200, no-cache",
+        "/portal/manifest.webmanifest, 200, no-cache",
+        "/portal/index.html, 304, no-cache",
+        // Content-hashed files never change.
+        "/assets/index-abc.js, 200, 'public, max-age=31536000, immutable'",
+        "/portal/assets/index-abc.js, 200, 'public, max-age=31536000, immutable'",
+        // Not found is not cached for a year; other files keep what they have.
+        "/portal/assets/missing.js, 404, -",
+        "/portal/icon-192.png, 200, -",
+        "/portal/sw.js, 404, -",
+    })
+    void cacheHeadersFollowWhatAFileIs(String path, int status, String cacheControl) {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path));
+        new SpaFallbackFilter(PWA).filter(exchange, e -> {
+            // As Spring Security writes them on every response.
+            e.getResponse().getHeaders().setCacheControl("no-cache, no-store, max-age=0, must-revalidate");
+            e.getResponse().getHeaders().set("Pragma", "no-cache");
+            e.getResponse().getHeaders().set("Expires", "0");
+            e.getResponse().setStatusCode(org.springframework.http.HttpStatusCode.valueOf(status));
+            return e.getResponse().setComplete();
+        }).block();
+        var headers = exchange.getResponse().getHeaders();
+        if (cacheControl == null) {
+            assertThat(headers.getCacheControl()).isEqualTo("no-cache, no-store, max-age=0, must-revalidate");
+        } else {
+            assertThat(headers.getCacheControl()).as(path).isEqualTo(cacheControl);
+            assertThat(headers.getFirst("Pragma")).isNull();
+            assertThat(headers.getFirst("Expires")).isNull();
+        }
+    }
+
+    @Test
+    void theManifestIsAManifestAndNoScopeIsWidened() {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/portal/manifest.webmanifest"));
+        new SpaFallbackFilter(PWA).filter(exchange, e -> {
+            e.getResponse().getHeaders().set("Content-Type", "application/octet-stream");
+            e.getResponse().getHeaders().set("Service-Worker-Allowed", "/");
+            return e.getResponse().setComplete();
+        }).block();
+        assertThat(exchange.getResponse().getHeaders().getContentType()).hasToString("application/manifest+json");
+        assertThat(exchange.getResponse().getHeaders().getFirst("Service-Worker-Allowed")).isNull();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // Only the declared Service Workers of PWAs (and of one being taken back).
+        "/portal/sw.js, 200",
+        "/old/sw.js, 200",
+        // Not the API, not an SPA without a PWA, not any other file, not another place.
+        "/sw.js, 404",
+        "/api/files/x, 404",
+        "/api/public/files/1, 404",
+        "/portal/assets/sw.js, 404",
+        "/portal/assets/index-abc.js, 404",
+        "/portal/sw.js/, 404",
+        "/elsewhere/sw.js, 404",
+    })
+    void onlyTheDeclaredServiceWorkerAnswersAServiceWorkerScriptRequest(String path, int status) {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path).header("Service-Worker", "script"));
+        AtomicReference<ServerWebExchange> passed = new AtomicReference<>();
+        new ServiceWorkerScriptGuard(PWA).filter(exchange, e -> {
+            passed.set(e);
+            e.getResponse().setStatusCode(org.springframework.http.HttpStatus.OK);
+            return e.getResponse().setComplete();
+        }).block();
+        assertThat(exchange.getResponse().getStatusCode().value()).as(path).isEqualTo(status);
+        assertThat(passed.get() != null).isEqualTo(status == 200);
+    }
+
+    @Test
+    void requestsThatFetchNoServiceWorkerPass() {
+        for (String path : new String[] {"/sw.js", "/api/meta/datasets", "/portal/assets/a.js"}) {
+            var exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path));
+            AtomicReference<ServerWebExchange> passed = new AtomicReference<>();
+            new ServiceWorkerScriptGuard(PWA).filter(exchange, e -> {
+                passed.set(e);
+                return e.getResponse().setComplete();
+            }).block();
+            assertThat(passed.get()).as(path).isNotNull();
+        }
+        // Without any PWA, every Service Worker script request is refused.
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/sw.js").header("Service-Worker", "script"));
+        new ServiceWorkerScriptGuard(DEFAULT).filter(exchange, e -> e.getResponse().setComplete()).block();
+        assertThat(exchange.getResponse().getStatusCode().value()).isEqualTo(404);
+    }
+
     private record Result(String forwardedPath, String csp) {}
 
     private static Result run(JabizWebProperties properties, String method, String path) {

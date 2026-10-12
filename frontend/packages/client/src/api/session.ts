@@ -10,6 +10,11 @@
  * installed application stays signed in when opened again. The administration (`admin`) is never kept on the device,
  * whatever the server says, and neither is any entry in a browser without Web Locks: tabs sharing one stored token
  * must take turns refreshing it (see refreshSession), or the server takes the second use for a stolen token.
+ *
+ * A token kept on the device is also written to IndexedDB, and a refresh reads it from there (phase 16c-2): every tab
+ * reads IndexedDB alike, whereas a tab's view of localStorage is a copy the browser updates from other tabs a little
+ * later, so a tab that takes its turn right after another has rotated the token could still read the old one there
+ * and send it again (Chromium does). localStorage keeps a copy for the synchronous checks ("is there a session").
  */
 export type SessionPersistence = 'tab' | 'device'
 
@@ -68,6 +73,80 @@ function write(store: Storage | null, key: string, value: string | null) {
     else store?.setItem(key, value)
   } catch {
     // Without storage the session lasts as long as the page.
+  }
+}
+
+/**
+ * The shared copy of tokens kept on the device: what every tab reads alike (see the module's description). A record
+ * holds the token, or `''` once the session ended; no record: never written (a token stored before this copy existed
+ * is taken from localStorage). Replaceable for tests.
+ */
+export interface SharedTokens {
+  get(key: string): Promise<string | undefined>
+  put(key: string, value: string): Promise<void>
+  delete(key: string): Promise<void>
+}
+
+function indexedDbTokens(): SharedTokens | null {
+  if (typeof indexedDB === 'undefined') return null
+  let opened: Promise<IDBDatabase> | null = null
+  const db = () => {
+    opened ??= new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('jabiz-session', 1)
+      request.onupgradeneeded = () => request.result.createObjectStore('refresh')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    opened.catch(() => {
+      opened = null
+    })
+    return opened
+  }
+  const run = <T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>) =>
+    db().then((database) => new Promise<T>((resolve, reject) => {
+      const transaction = database.transaction('refresh', mode)
+      const request = work(transaction.objectStore('refresh'))
+      // Committed, not only requested: the next tab's turn reads what this one wrote.
+      transaction.oncomplete = () => resolve(request.result)
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    }))
+  return {
+    get: (key) => run('readonly', (store) => store.get(key) as IDBRequest<string | undefined>),
+    put: (key, value) => run('readwrite', (store) => store.put(value, key)).then(() => undefined),
+    delete: (key) => run('readwrite', (store) => store.delete(key)).then(() => undefined),
+  }
+}
+
+let shared: SharedTokens | null | undefined
+
+function sharedTokens(): SharedTokens | null {
+  if (shared === undefined) shared = indexedDbTokens()
+  return shared
+}
+
+/** Uses `tokens` as the shared copy (tests); null: none, as in a browser without IndexedDB. */
+export function setSharedTokens(tokens: SharedTokens | null) {
+  shared = tokens
+}
+
+/**
+ * Writes the shared copy. A copy that cannot be written must not stay behind either: it would be preferred to
+ * localStorage, and the next refresh would send a token already rotated (and lose the session to reuse detection), or
+ * an old sign-out marker would hide the new token. So a failed write removes the record, and reads fall back to
+ * localStorage; a database that refuses even that is one whose reads fail too, which also falls back.
+ */
+async function share(key: string, value: string | null): Promise<void> {
+  const tokens = sharedTokens()
+  if (!tokens) return
+  try {
+    await tokens.put(key, value ?? '')
+  } catch {
+    try {
+      await tokens.delete(key)
+    } catch {
+      // IndexedDB refused altogether (private mode of some browsers): localStorage alone.
+    }
   }
 }
 
@@ -186,6 +265,7 @@ export const session = {
     write(store(), key, null)
     persistence = next
     if (token !== null) write(store(), key, token)
+    void share(key, next === 'device' ? token : null)
   },
   accessToken(): string | null {
     return accessToken
@@ -193,9 +273,36 @@ export const session = {
   refreshToken(): string | null {
     return read(store(), refreshKey())
   },
+  /**
+   * The refresh token to send now, read under the refresh lock: the shared copy of a token kept on the device (see
+   * the module's description), else the stored one.
+   */
+  async lockedRefreshToken(): Promise<string | null> {
+    const key = refreshKey()
+    const local = read(store(), key)
+    if (persistence !== 'device') return local
+    let copy: string | undefined
+    try {
+      copy = await sharedTokens()?.get(key)
+    } catch {
+      copy = undefined
+    }
+    if (copy === undefined) return local
+    // Another tab's turn may have changed it: localStorage follows.
+    if ((copy || null) !== local) write(store(), key, copy || null)
+    return copy || null
+  },
   store(access: string, refresh: string) {
     accessToken = access
     write(store(), refreshKey(), refresh)
+    if (persistence === 'device') void share(refreshKey(), refresh)
+    notify()
+  },
+  /** As {@link session.store}, once the shared copy is written: before the refresh lock is released. */
+  async storeShared(access: string, refresh: string): Promise<void> {
+    accessToken = access
+    write(store(), refreshKey(), refresh)
+    if (persistence === 'device') await share(refreshKey(), refresh)
     notify()
   },
   /** A new access token for the same session (after a step-up, docs/design/10-security.md section 10). */
@@ -208,6 +315,7 @@ export const session = {
     accessToken = null
     write(tabStorage(), refreshKey(), null)
     write(deviceStorage(), refreshKey(), null)
+    void share(refreshKey(), null)
     notify()
   },
   subscribe(listener: () => void): () => void {

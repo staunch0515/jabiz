@@ -106,7 +106,7 @@ public final class MailRenderer {
             String replacement;
             if (value == null) {
                 replacement = matcher.group();
-            } else if (inUrl && !urlSafe.contains(name)) {
+            } else if (inUrl && !urlSafe.contains(name) && !MailTemplate.namedEntryUrl(name)) {
                 replacement = URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
             } else {
                 replacement = value;

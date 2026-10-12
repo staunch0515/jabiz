@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -117,7 +118,7 @@ public class SignInEntries implements PlatformCheck {
      * @param selfRegistration     whether people may register themselves here (phase 16b-2)
      * @param registrationRoles    the roles a registration grants
      * @param requireVerifiedEmail whether only users with a verified e-mail address may sign in here
-     * @param appPath              where the entry's pages are, for links in mail
+     * @param appPath              the root of the entry's frontend, which mailed links lead below (decision D43 item 4)
      * @param session              its sessions: lifetime, idle end and persistence (phase 16m)
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
@@ -163,6 +164,8 @@ public class SignInEntries implements PlatformCheck {
     private final Supplier<Collection<String>> roleCodes;
     private final Session defaults;
     private final Map<String, Entry> usable = new LinkedHashMap<>();
+    /** The SPAs served, to check the entries' app-paths against; null: not checked. */
+    private volatile JabizWebProperties web;
 
     @Autowired
     public SignInEntries(Environment environment, StorageAdapterRegistry storages) {
@@ -256,6 +259,7 @@ public class SignInEntries implements PlatformCheck {
             referenced.addAll(entry.registrationRoles());
         });
         problems.addAll(administrationProblems());
+        problems.addAll(appPathProblems());
         if (!referenced.isEmpty() && roleCodes != null) {
             try {
                 Set<String> existing = new java.util.HashSet<>(roleCodes.get());
@@ -264,6 +268,40 @@ public class SignInEntries implements PlatformCheck {
             } catch (RuntimeException e) {
                 problems.add(CheckProblem.warning(SessionChecks.CATEGORY, PROPERTY,
                     "the role codes could not be checked: " + e.getMessage()));
+            }
+        }
+        return problems;
+    }
+
+    /** The SPAs this application serves, whose prefixes the entries' app-paths should lie under (decision D43). */
+    @Autowired(required = false)
+    void spas(JabizWebProperties web) {
+        this.web = web;
+    }
+
+    /**
+     * An entry's {@code app-path} is the root of its frontend (decision D43 item 4): mailed links lead below it. It
+     * should lie under an SPA served here, and under the SPA declaring the entry when one does
+     * ({@code jabiz.web.spa[i].entry}); otherwise the links lead nowhere, or into another frontend (warnings).
+     */
+    private List<CheckProblem> appPathProblems() {
+        JabizWebProperties served = web;
+        List<CheckProblem> problems = new ArrayList<>();
+        if (served == null) {
+            return problems;
+        }
+        for (Entry entry : usable.values()) {
+            String location = PROPERTY + "." + entry.name() + ".app-path";
+            List<JabizWebProperties.Spa> own = served.spa().stream()
+                .filter(spa -> entry.name().equals(spa.entry()) && spa.path() != null).toList();
+            Optional<JabizWebProperties.Spa> owner = served.spaFor(entry.appPath());
+            if (!own.isEmpty() && (owner.isEmpty() || !own.contains(owner.get()))) {
+                problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "'" + entry.appPath()
+                    + "' is not under the SPA of entry " + entry.name() + " (" + String.join(", ", own.stream()
+                    .map(JabizWebProperties.Spa::base).toList()) + "): its mailed links would open another frontend"));
+            } else if (own.isEmpty() && owner.isEmpty()) {
+                problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "'" + entry.appPath()
+                    + "' is under none of the SPAs served (jabiz.web.spa): its mailed links would lead nowhere"));
             }
         }
         return problems;

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { api, sessionFetch, unwrap } from '../api/client'
 import { ApiError, toApiError } from '../api/problem'
 import type { components } from '../api/schema'
-import { session, type SessionPersistence } from '../api/session'
+import { session, withRefreshLock } from '../api/session'
 
 /**
  * The account functions without a page (decision D43; docs/design/10-security.md section 15): what the sign-up,
@@ -11,10 +11,7 @@ import { session, type SessionPersistence } from '../api/session'
  */
 
 /** What a sign-in entry offers (`GET /api/auth/entries/{name}`), with its session's persistence (phase 16m). */
-export type EntryInfo = components['schemas']['EntryInfo'] & {
-  /** Where the entry's refresh token is kept; absent from servers before phase 16m, which means `tab`. */
-  sessionPersistence?: SessionPersistence
-}
+export type EntryInfo = components['schemas']['EntryInfo']
 
 const entries = new Map<string, Promise<EntryInfo>>()
 
@@ -47,6 +44,9 @@ export async function loadSessionSettings(): Promise<void> {
     // Offline or refused: the token stays where it was found.
   }
 }
+
+/** The body of `POST /api/auth/account/password`. */
+type PasswordChange = components['schemas']['PasswordRequest']
 
 export interface Registration {
   email: string
@@ -85,13 +85,14 @@ export async function resendVerification(email: string, entry: string = session.
  * refresh token is sent along.
  */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  // Typed here until the OpenAPI snapshot of phase 16m is generated into the client. The body is made for each attempt:
-  // a refresh between them rotates the token, and the session kept is the one of the token current when sent.
-  const response = await sessionFetch('/api/auth/account/password', () => ({
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ currentPassword, newPassword, refreshToken: session.refreshToken() ?? undefined }),
-  }))
+  // Not api.POST: the body is made for each attempt, since a refresh between them rotates the token, and the session
+  // kept is the one of the token current when sent. Read as a refresh reads it (under the lock, from the copy every tab
+  // sees alike): this tab's view of localStorage may lag another tab's refresh, and an unknown token keeps no session.
+  const response = await sessionFetch('/api/auth/account/password', async () => {
+    const refreshToken = await withRefreshLock(() => session.lockedRefreshToken())
+    const body: PasswordChange = { currentPassword, newPassword, refreshToken: refreshToken ?? undefined }
+    return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  })
   if (!response.ok) throw await toApiError(response)
 }
 

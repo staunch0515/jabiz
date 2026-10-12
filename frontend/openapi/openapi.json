@@ -3361,6 +3361,14 @@
     "/api/auth/oidc/providers" : {
       "get" : {
         "operationId" : "providers",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "entry",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {

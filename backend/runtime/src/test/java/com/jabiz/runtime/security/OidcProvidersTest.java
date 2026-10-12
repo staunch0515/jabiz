@@ -42,6 +42,54 @@ class OidcProvidersTest {
         assertThat(providers.find(null)).isEmpty();
     }
 
+    private static OidcProvider withCallbacks(String id, String redirect, Map<String, String> callbacks) {
+        return new OidcProvider(id, "https://idp.example.com", "client", "s", redirect, null, null, null, callbacks);
+    }
+
+    @Test
+    void eachEntryHasItsOwnCallbackAndOnlyEntriesWithOneAreOffered() {
+        OidcProvider both = withCallbacks("both", "https://erp.example.com/login/oidc",
+            Map.of("portal", "https://erp.example.com/portal/login/oidc"));
+        OidcProvider portalOnly = withCallbacks("portal-only", null,
+            Map.of("portal", "http://localhost:5174/portal/login/oidc"));
+        OidcProviders providers = new OidcProviders(List.of(both, portalOnly));
+
+        assertThat(providers.check()).isEmpty();
+        // The former redirect-uri is the administration's.
+        assertThat(both.redirectUri(null)).isEqualTo("https://erp.example.com/login/oidc");
+        assertThat(both.redirectUri("admin")).isEqualTo("https://erp.example.com/login/oidc");
+        assertThat(both.redirectUri("portal")).isEqualTo("https://erp.example.com/portal/login/oidc");
+        assertThat(both.redirectUri("shop")).isNull();
+        assertThat(portalOnly.offers("admin")).isFalse();
+        assertThat(providers.offeredTo("admin")).extracting(OidcProvider::id).containsExactly("both");
+        assertThat(providers.offeredTo(null)).extracting(OidcProvider::id).containsExactly("both");
+        assertThat(providers.offeredTo("portal")).extracting(OidcProvider::id).containsExactly("both", "portal-only");
+        assertThat(providers.offeredTo("shop")).isEmpty();
+        // redirect-uris.admin may stand for redirect-uri.
+        assertThat(withCallbacks("a", null, Map.of("admin", "https://a.example/cb")).redirectUri(null))
+            .isEqualTo("https://a.example/cb");
+    }
+
+    @Test
+    void callbacksOfEntriesAreCheckedLikeTheAdministrations() {
+        OidcProviders providers = new OidcProviders(List.of(
+            withCallbacks("none", null, Map.of()),
+            withCallbacks("bad", "https://a.example/cb#x", Map.of(
+                "Portal", "https://a.example/portal/cb",
+                "shop", "http://shop.example/cb",
+                "site", "/site/cb",
+                "admin", "https://a.example/other"))));
+
+        assertThat(providers.check()).extracting(CheckProblem::message).containsExactly(
+            "redirect-uri is required (or redirect-uris.<entry> for the entries offered the provider)",
+            "redirect-uri must not have a fragment",
+            "redirect-uris: 'Portal' is not the name of a sign-in entry",
+            "redirect-uris.shop must be an absolute https URL (http only for localhost)",
+            "redirect-uris.site must be an absolute https URL (http only for localhost)",
+            "redirect-uri and redirect-uris.admin are both the administration's callback but differ: set one");
+        assertThat(providers.all()).isEmpty();
+    }
+
     @Test
     void labelsFallBackToEnglishThenTheId() {
         OidcProvider corp = good("corp");

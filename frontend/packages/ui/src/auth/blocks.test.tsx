@@ -11,6 +11,7 @@ import {
   MailLinkPage,
   OfflineBanner,
   OidcCallback,
+  PwaUpdatePrompt,
   SignInForm,
   SignUpForm,
   StepUpProvider,
@@ -422,5 +423,20 @@ describe('banners', () => {
     expect(screen.getByTestId('offline-banner')).toHaveTextContent('You are offline')
     await expectAccessible()
     onLine.mockRestore()
+  })
+
+  it('offer a new version of the PWA only when one waits, and apply it when asked', async () => {
+    const apply = vi.fn()
+    const { rerender } = render(<PwaUpdatePrompt update={null} />)
+    expect(screen.queryByTestId('pwa-update')).toBeNull()
+    rerender(<PwaUpdatePrompt update={apply} />)
+    expect(screen.getByTestId('pwa-update')).toHaveTextContent('A new version is available.')
+    await expectAccessible()
+    expect(apply).not.toHaveBeenCalled()
+    await user().click(screen.getByRole('button', { name: 'Reload' }))
+    expect(apply).toHaveBeenCalledOnce()
+    // Without a waiting version (none registered in the tests), nothing.
+    rerender(<PwaUpdatePrompt />)
+    expect(screen.queryByTestId('pwa-update')).toBeNull()
   })
 })

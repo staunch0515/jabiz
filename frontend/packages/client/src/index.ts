@@ -56,6 +56,10 @@ export type { EntryInfo, Registration } from './auth/account'
 export { readMailLink, parseMailLink, useMailLink, useNoReferrer, sitePath } from './auth/mailLink'
 export type { MailLink } from './auth/mailLink'
 export { default as UserName, useUserName } from './components/UserName'
+
+// The PWA: the Service Worker's registration and its update (decision D43 items 6 and 10).
+export { registerServiceWorker, useServiceWorkerUpdate, onServiceWorkerUpdate } from './pwa/register'
+export type { PwaMode, ServiceWorkerOptions } from './pwa/register'
 export type { UserNameProps } from './components/UserName'
 
 // Language and formatting.
