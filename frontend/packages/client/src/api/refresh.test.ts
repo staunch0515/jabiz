@@ -99,6 +99,7 @@ describe('refreshSession', () => {
       put: vi.fn(async (key: string, value: string) => {
         copies.set(key, value)
       }),
+      delete: vi.fn(async (key: string) => void copies.delete(key)),
     }
     // Each tab takes the same shared copy (one IndexedDB per origin).
     const tabA = await openTab('quiz')
@@ -124,6 +125,43 @@ describe('refreshSession', () => {
     await vi.waitFor(() => expect(copies.get('jabiz.session.quiz.refresh')).toBe(''))
     window.localStorage.setItem('jabiz.session.quiz.refresh', 'r3')
     expect(await tabB.session.lockedRefreshToken()).toBeNull()
+  })
+
+  it('never prefers a shared copy that could not be updated over the token in localStorage', async () => {
+    withLocks(fakeLocks())
+    window.localStorage.setItem('jabiz.session.quiz.refresh', 'r1')
+    // An older copy is there, and writing the next one fails (quota, private mode, a closed database).
+    const copies = new Map([['jabiz.session.quiz.refresh', 'r1']])
+    let failing = true
+    const shared = {
+      get: vi.fn(async (key: string) => copies.get(key)),
+      put: vi.fn(async (key: string, value: string) => {
+        if (failing) throw new Error('QuotaExceededError')
+        copies.set(key, value)
+      }),
+      delete: vi.fn(async (key: string) => void copies.delete(key)),
+    }
+    const tabA = await openTab('quiz')
+    ;(await import('./session')).setSharedTokens(shared)
+    const server = rotatingServer('r1')
+    vi.stubGlobal('fetch', server.fetch)
+
+    expect(await tabA.client.refreshSession()).toBe(true)
+    // The stale copy is gone: the next turn reads localStorage, not the rotated r1.
+    expect(copies.has('jabiz.session.quiz.refresh')).toBe(false)
+    expect(await tabA.session.lockedRefreshToken()).toBe('r2')
+    expect(await tabA.client.refreshSession({ force: true })).toBe(true)
+    expect(server.sent.map((s) => s.refreshToken)).toEqual(['r1', 'r2'])
+    expect(server.reused).toEqual([])
+
+    // A sign-out marker left behind, and the next sign-in's copy cannot be written: the new token is not lost.
+    failing = false
+    tabA.session.clear()
+    await vi.waitFor(() => expect(copies.get('jabiz.session.quiz.refresh')).toBe(''))
+    failing = true
+    tabA.session.store('a9', 'r9')
+    await vi.waitFor(() => expect(copies.has('jabiz.session.quiz.refresh')).toBe(false))
+    expect(await tabA.session.lockedRefreshToken()).toBe('r9')
   })
 
   it('shares one refresh among the calls of a tab, unless one is forced', async () => {

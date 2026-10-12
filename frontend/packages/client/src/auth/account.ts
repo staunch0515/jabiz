@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { api, sessionFetch, unwrap } from '../api/client'
 import { ApiError, toApiError } from '../api/problem'
 import type { components } from '../api/schema'
-import { session } from '../api/session'
+import { session, withRefreshLock } from '../api/session'
 
 /**
  * The account functions without a page (decision D43; docs/design/10-security.md section 15): what the sign-up,
@@ -86,9 +86,11 @@ export async function resendVerification(email: string, entry: string = session.
  */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   // Not api.POST: the body is made for each attempt, since a refresh between them rotates the token, and the session
-  // kept is the one of the token current when sent (an earlier one would be taken for a reused token).
-  const response = await sessionFetch('/api/auth/account/password', () => {
-    const body: PasswordChange = { currentPassword, newPassword, refreshToken: session.refreshToken() ?? undefined }
+  // kept is the one of the token current when sent. Read as a refresh reads it (under the lock, from the copy every tab
+  // sees alike): this tab's view of localStorage may lag another tab's refresh, and an unknown token keeps no session.
+  const response = await sessionFetch('/api/auth/account/password', async () => {
+    const refreshToken = await withRefreshLock(() => session.lockedRefreshToken())
+    const body: PasswordChange = { currentPassword, newPassword, refreshToken: refreshToken ?? undefined }
     return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   })
   if (!response.ok) throw await toApiError(response)

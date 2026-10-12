@@ -149,8 +149,9 @@ jabizApp {
 - **PWA**（D43 第 6、10 条）：Service Worker 只预缓存应用外壳（`index.html`、带哈希的 JS / CSS、`public/` 中的文件），缓存名 `jabiz-shell-<SPA名>-<产物哈希>`；
   页面导航网络优先、离线时回退到缓存的外壳，导航的响应从不写入缓存（带令牌的邮件链接与 OIDC 回调不会被缓存）；不拦截 `/api`、`/actuator`、
   同一 jar 中其他 SPA 的前缀、跨源与非 GET 请求，不缓存任何接口响应；激活时只删除自己前缀的旧缓存（Cache Storage 由同源的 SPA 共用）。
-  新版本安装后等待，`PwaUpdatePrompt` 提示，用户点"刷新"后才生效并重新加载。撤下 PWA 用 `pwa = REMOVE`：发布一个注销自己、删除自己缓存的 `sw.js`
-  （只是删去 `sw.js` 不行：404 不会注销已安装的 Service Worker）。服务端的配合见 §3.2。
+  新版本安装后等待，`PwaUpdatePrompt` 提示，用户点"刷新"后才生效并重新加载；激活时保留上一个版本的缓存（还在运行它的标签页仍能取到按需加载的文件），
+  更早的删除。撤下 PWA 用 `pwa = REMOVE`：发布一个注销自己、删除自己缓存的 `sw.js`，至少保留一个发布周期后才改为 `OFF`
+  （直接删去 `sw.js` 不行：404 不会注销已安装的 Service Worker）。服务端的配合见 §3.2。
 - **只支持同源**：不开 CORS；令牌只经 `Authorization` 头，不用 Cookie，所以 CSRF 防护照旧关闭（D12、D15）。
 - **检查**：`pnpm app:check <目录>`（版本与平台一致，Gradle 中的 `spaCheck<名>`），以及该工程自己的 `lint` / `typecheck` / `test`（平台 CI 对示范门户运行）。
 

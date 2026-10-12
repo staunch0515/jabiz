@@ -168,9 +168,12 @@ async function authFetch(request: Request): Promise<Response> {
  * single refresh on 401. The body is passed as given, so a FormData upload is streamed by the browser. `init` may be a
  * function, called for each attempt: for a body that must say what is current when it is sent.
  */
-export async function sessionFetch(path: string, request: RequestInit | (() => RequestInit) = {}): Promise<Response> {
-  const send = () => {
-    const init = typeof request === 'function' ? request() : request
+export async function sessionFetch(
+  path: string,
+  request: RequestInit | (() => RequestInit | Promise<RequestInit>) = {},
+): Promise<Response> {
+  const send = async () => {
+    const init = typeof request === 'function' ? await request() : request
     const headers = new Headers(init.headers)
     headers.set('Accept-Language', language)
     const token = session.accessToken()

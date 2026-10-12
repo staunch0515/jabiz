@@ -74,7 +74,8 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   `device` 下多个标签页以 Web Locks（锁名 `jabiz.refresh.<入口>`）轮流刷新，取得锁之后才读存储中的令牌，所以别的标签页刚换新的令牌不会被再用一次（否则服务端视为重用而吊销整个令牌族）；
   `device` 的令牌另写一份到 IndexedDB（库 `jabiz-session`），刷新时在锁内从那里读、写完（事务提交）才释放锁（16c-2）：各标签页读 IndexedDB 的结果一致，
   而一个标签页看到的 `localStorage` 是浏览器稍后才从其他标签页同步过来的副本（Chromium 如此），刚轮到它时仍可能读到旧令牌；`localStorage` 中的副本只供同步的判断（有没有会话）。
-  会话结束时 IndexedDB 中留下空值（墓碑），不会再退回到旧的 `localStorage` 副本；没有 IndexedDB 的浏览器只用 `localStorage`；
+  会话结束时 IndexedDB 中留下空值（墓碑），不会再退回到旧的 `localStorage` 副本；写入 IndexedDB 失败时删除该记录，读取退回 `localStorage`；
+  没有 IndexedDB 的浏览器只用 `localStorage`；本人改密码随请求送出的刷新令牌也在锁内这样读；
   登出与在两种存储之间搬移令牌也在锁内；`tab` 的令牌是本标签页自己的，不取锁；浏览器拒绝锁（沙箱、不透明源）时不加锁执行。
   刷新限时 15 秒；只有服务端拒绝（400 / 401 / 403 / 422）才清除会话，5xx、429 与网络失败保留会话。清除会话时两种存储中该入口的键都删除。
   `device` 下一个标签页登出时其他标签页随之登出。`refreshSession({ force: true })` 不搭已在进行的刷新、另取新令牌（验证邮箱后令牌的 `email_verified` 才为真）。

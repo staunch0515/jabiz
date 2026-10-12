@@ -72,14 +72,19 @@ export function shellCachePrefix(spaName: string): string {
 }
 
 /**
- * The caches to delete when a worker activates: the other versions of its own shell only. The Cache Storage is shared by
+ * The caches to delete when a worker activates: older versions of its own shell only. The Cache Storage is shared by
  * every SPA of the origin, so another SPA's caches (and the application's own) are left alone: a version is the
  * prefix followed by the build's hash alone, so that `jabiz-shell-portal-` does not take `jabiz-shell-portal-x-…`
- * (the SPA at /portal/x or /portal-x).
+ * (the SPA at /portal/x or /portal-x). The version in use until now is kept too (the last before `current`, in
+ * `names`' order, which is `caches.keys()`'s creation order): tabs still running it can load its lazy chunks after the
+ * server has a new build. With no `current` (the PWA taken back), every version goes.
  */
 export function staleCaches(names: readonly string[], prefix: string, current: string | null): string[] {
-  return names.filter((name) => name.startsWith(prefix) && /^[0-9a-f]+$/.test(name.slice(prefix.length))
-    && name !== current)
+  const own = names.filter((name) => name.startsWith(prefix) && /^[0-9a-f]+$/.test(name.slice(prefix.length)))
+  if (current === null) return own
+  const before = own.indexOf(current) > 0 ? own.slice(0, own.indexOf(current)) : own.filter((n) => n !== current)
+  const previous = before.at(-1)
+  return own.filter((name) => name !== current && name !== previous)
 }
 
 /** The SPA's name in its cache names: `root` for `/`, else the prefix's segments joined by `-` (as `jabizApp`). */

@@ -84,6 +84,7 @@ function write(store: Storage | null, key: string, value: string | null) {
 export interface SharedTokens {
   get(key: string): Promise<string | undefined>
   put(key: string, value: string): Promise<void>
+  delete(key: string): Promise<void>
 }
 
 function indexedDbTokens(): SharedTokens | null {
@@ -113,6 +114,7 @@ function indexedDbTokens(): SharedTokens | null {
   return {
     get: (key) => run('readonly', (store) => store.get(key) as IDBRequest<string | undefined>),
     put: (key, value) => run('readwrite', (store) => store.put(value, key)).then(() => undefined),
+    delete: (key) => run('readwrite', (store) => store.delete(key)).then(() => undefined),
   }
 }
 
@@ -128,12 +130,23 @@ export function setSharedTokens(tokens: SharedTokens | null) {
   shared = tokens
 }
 
-/** Writes the shared copy; a failure leaves localStorage's (the next refresh falls back to it). */
+/**
+ * Writes the shared copy. A copy that cannot be written must not stay behind either: it would be preferred to
+ * localStorage, and the next refresh would send a token already rotated (and lose the session to reuse detection), or
+ * an old sign-out marker would hide the new token. So a failed write removes the record, and reads fall back to
+ * localStorage; a database that refuses even that is one whose reads fail too, which also falls back.
+ */
 async function share(key: string, value: string | null): Promise<void> {
+  const tokens = sharedTokens()
+  if (!tokens) return
   try {
-    await sharedTokens()?.put(key, value ?? '')
+    await tokens.put(key, value ?? '')
   } catch {
-    // IndexedDB refused (private mode of some browsers): localStorage alone.
+    try {
+      await tokens.delete(key)
+    } catch {
+      // IndexedDB refused altogether (private mode of some browsers): localStorage alone.
+    }
   }
 }
 

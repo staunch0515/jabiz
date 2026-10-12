@@ -80,7 +80,13 @@ describe('the caches of a shell', () => {
     expect(shellCachePrefix('portal')).toBe('jabiz-shell-portal-')
     const names = ['jabiz-shell-portal-aaa', 'jabiz-shell-portal-bbb', 'jabiz-shell-portalx-ccc',
       'jabiz-shell-root-ddd', 'app-images', 'jabiz-shell-portal', 'jabiz-shell-portal-x-abc123', 'jabiz-shell-portal-']
-    expect(staleCaches(names, 'jabiz-shell-portal-', 'jabiz-shell-portal-bbb')).toEqual(['jabiz-shell-portal-aaa'])
+    // The version before the current one stays (in creation order, as caches.keys() gives them): tabs still running
+    // it may load its lazy chunks.
+    expect(staleCaches(names, 'jabiz-shell-portal-', 'jabiz-shell-portal-bbb')).toEqual([])
+    expect(staleCaches(['jabiz-shell-portal-a1', 'jabiz-shell-portal-b2', 'jabiz-shell-portal-c3'], 'jabiz-shell-portal-',
+      'jabiz-shell-portal-c3')).toEqual(['jabiz-shell-portal-a1'])
+    expect(staleCaches(['jabiz-shell-portal-a1', 'jabiz-shell-portal-c3'], 'jabiz-shell-portal-',
+      'jabiz-shell-portal-c3')).toEqual([])
     // Not the SPA at /portal/x (or /portal-x), whose caches also start with jabiz-shell-portal-.
     expect(staleCaches(names, 'jabiz-shell-portal-', null)).toEqual(['jabiz-shell-portal-aaa',
       'jabiz-shell-portal-bbb'])

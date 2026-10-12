@@ -77,7 +77,10 @@ export default defineConfig({
 - PWA（`VITE_JABIZ_PWA=on`）：生成 `manifest.webmanifest` 并在页面中链接它；编译平台的 Service Worker 为 `sw.js`，内含预缓存清单（`index.html`、带哈希的
   JS / CSS、`public/` 中的文件）、缓存名 `jabiz-shell-<SPA名>-<产物哈希>` 与要放过的其他 SPA 前缀。**图标**必须是 `public/` 中的 PNG，尺寸与 `sizes`
   一致，且至少有 192×192、512×512 与一个 `maskable`（内容在中间 80% 的安全区内）的，否则构建失败。
-- `pwa = REMOVE`：只生成注销自己、删除自己缓存的 `sw.js`，不再有 manifest。
+- `pwa = REMOVE`：只生成注销自己、删除自己缓存的 `sw.js`，不再有 manifest。**撤下 PWA 时先发布至少一个 `REMOVE` 的版本，再改为 `OFF`**：
+  直接从 `ON` 改为 `OFF` 时服务器不再有 `sw.js`，浏览器的更新检查得到 404 却保留已安装的 Service Worker，它会一直按旧的外壳运行。
+  `REMOVE` 的版本要留到用户大都打开过一次之后（例如一个发布周期）。
+- 新版本激活时删除自己更早的缓存，但保留上一个版本的：还在运行上一版的标签页仍能取到它的按需加载的文件（服务器已换成新构建）。
 
 ## 4. TypeScript、样式与测试
 

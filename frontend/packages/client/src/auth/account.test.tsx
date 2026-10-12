@@ -1,8 +1,8 @@
 import { act, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
-import { configureSession, session } from '../api/session'
-import { json, urlOf } from '../test/locks'
+import { configureSession, session, setSharedTokens } from '../api/session'
+import { fakeLocks, json, urlOf, withLocks } from '../test/locks'
 import {
   changePassword,
   confirmPasswordReset,
@@ -78,6 +78,29 @@ describe('account functions (decision D43)', () => {
     const refused = await changePassword('wrong', 'new one').catch((e: unknown) => e)
     expect(refused).toBeInstanceOf(ApiError)
     expect(isProblem(refused, 'PASSWORD_INCORRECT')).toBe(true)
+  })
+
+  it("send the session's token as the other tabs see it, not this tab's late view of localStorage", async () => {
+    // A session kept on the device: the token is read from the shared copy (IndexedDB in the browser) under the lock.
+    withLocks(fakeLocks())
+    window.localStorage.setItem('jabiz.session.portal.refresh', 'refresh-1')
+    configureSession('portal')
+    const copies = new Map([['jabiz.session.portal.refresh', 'refresh-2']])
+    setSharedTokens({
+      get: async (key) => copies.get(key),
+      put: async (key, value) => void copies.set(key, value),
+      delete: async (key) => void copies.delete(key),
+    })
+    session.storeAccess('access')
+    try {
+      const posts = server(() => new Response(null, { status: 204 }))
+      await changePassword('old one', 'new one')
+      expect(posts[0].body).toEqual({ currentPassword: 'old one', newPassword: 'new one', refreshToken: 'refresh-2' })
+    } finally {
+      setSharedTokens(null)
+      withLocks(undefined)
+      window.localStorage.clear()
+    }
   })
 
   it("read an entry's settings once", async () => {

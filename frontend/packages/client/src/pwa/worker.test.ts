@@ -84,15 +84,18 @@ describe('the worker', () => {
     expect(worker.skipWaiting).toHaveBeenCalledOnce()
   })
 
-  it('deletes only its own older shells when activated: the Cache Storage is shared', async () => {
+  it('deletes only its own older shells when activated, keeping the previous one: the Cache Storage is shared', async () => {
     const { worker, dispatch } = scope()
     const { storage, stores } = cacheStorage({
-      'jabiz-shell-portal-a1': {}, 'jabiz-shell-portal-b2': {}, 'jabiz-shell-root-x': {}, 'app-data': {},
+      'jabiz-shell-portal-a0': {}, 'jabiz-shell-portal-a1': {}, 'jabiz-shell-portal-b2': {}, 'jabiz-shell-root-x': {},
+      'app-data': {},
     })
     startWorker(worker as unknown as WorkerScope, CONFIG, storage, vi.fn())
 
     await dispatch('activate')
-    expect([...stores.keys()].sort()).toEqual(['app-data', 'jabiz-shell-portal-b2', 'jabiz-shell-root-x'])
+    // a1 was in use until now: tabs still running it keep their lazy chunks; a0 is older and goes.
+    expect([...stores.keys()].sort()).toEqual(['app-data', 'jabiz-shell-portal-a1', 'jabiz-shell-portal-b2',
+      'jabiz-shell-root-x'])
     expect(worker.clients.claim).toHaveBeenCalled()
   })
 
