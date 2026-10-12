@@ -11,7 +11,8 @@ import java.util.function.Predicate;
 /**
  * Checks a password given in a process against a user's BCrypt hash and puts whether it matched into the context
  * (blocking: BCrypt is slow on purpose). The plain password does not stay in the context. Used where somebody proves
- * that they are who registered an account (docs/design/10-security.md section 15.7).
+ * that they are who registered an account (docs/design/10-security.md section 15.7), and where a signed-in user changes
+ * their own password (section 15.8; that process counts a mismatch towards the lock, this step does not).
  */
 @Component
 public class CurrentPasswordStep implements BlockingStep<CurrentPasswordStep.Metadata, ProcessContext> {

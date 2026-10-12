@@ -104,6 +104,42 @@ class PortalIT extends SignUpItSupport {
             .satisfies(row -> assertThat(row).containsEntry("customer_code", code));
     }
 
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> rows(String template, String bearer) {
+        Map<String, Object> page = post("/api/queries/" + template, bearer, Map.of("params", Map.of()))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        return (List<Map<String, Object>>) page.get("items");
+    }
+
+    @Test
+    void aCustomerSeesTheirOwnOrdersOnlyAndWhatTheyCanOrder() {
+        // The portal's pages (phase 16c-2): my orders, through the dataset of the caller's own customer.
+        String mine = address("mine");
+        customerOf(registered(mine), unique("M").toUpperCase());
+        String theirs = address("theirs");
+        customerOf(registered(theirs), unique("T").toUpperCase());
+        String bearer = bearerOf(session(mine));
+        String placed = (String) ((Map<?, ?>) post(ORDER, bearer, order(3)).expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody().get("output")).get("orderNo");
+        post(ORDER, bearerOf(session(theirs)), order(1)).expectStatus().isOk();
+
+        assertThat(rows("commerce.portal_orders", bearer)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("orderNo", placed).containsEntry("lineCount", 1));
+        String other = bearerOf(session(theirs));
+        assertThat(rows("commerce.portal_orders", other)).singleElement().satisfies(row -> assertThat(row)
+            .doesNotContainEntry("orderNo", placed));
+        // An account without a customer has no orders at all.
+        String none = address("nobody");
+        registered(none);
+        assertThat(rows("commerce.portal_orders", bearerOf(session(none)))).isEmpty();
+        assertThat(rows("commerce.portal_products", bearer)).anySatisfy(row -> assertThat(row)
+            .containsEntry("warehouseCode", "PRT").containsEntry("sku", "PRT-1"));
+        // The caller's customer cannot be written through the portal's dataset.
+        post("/api/datasets/" + PortalOrders.OWN_CUSTOMER_DATASET + "/commit", bearer, Map.of("changes", List.of(
+            Map.of("action", "INSERT", "attributes", Map.of("customerCode", "X", "customerName", "X")))))
+            .expectStatus().isForbidden();
+    }
+
     @Test
     void anUnverifiedSessionCannotOrder() {
         // Signed in where no verified address is required.

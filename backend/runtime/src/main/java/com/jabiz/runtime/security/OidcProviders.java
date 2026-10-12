@@ -46,6 +46,11 @@ public class OidcProviders implements PlatformCheck {
         return List.copyOf(usable.values());
     }
 
+    /** The providers offered to the sign-in entry {@code entry} (none: the administration): those with its callback. */
+    public List<OidcProvider> offeredTo(String entry) {
+        return usable.values().stream().filter(provider -> provider.offers(entry)).toList();
+    }
+
     public Optional<OidcProvider> find(String id) {
         return Optional.ofNullable(id == null ? null : usable.get(id));
     }

@@ -1,9 +1,14 @@
 package com.jabiz.runtime.security;
 
 import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,7 +20,13 @@ class SignInEntriesTest {
 
     private static SignInEntries.Config config(List<String> accepted, Boolean registration, List<String> granted,
         Boolean verified, String appPath) {
-        return new SignInEntries.Config(accepted, registration, granted, verified, appPath);
+        return new SignInEntries.Config(accepted, registration, granted, verified, appPath, null);
+    }
+
+    private static SignInEntries.Config sessions(List<String> accepted, Duration ttl, Duration idle,
+        String persistence) {
+        return new SignInEntries.Config(accepted, null, null, null, null,
+            new SignInEntries.SessionConfig(ttl, idle, persistence));
     }
 
     @Test
@@ -117,6 +128,119 @@ class SignInEntriesTest {
     }
 
     @Test
+    void entriesSetTheirOwnSessionsOrHaveTheGlobalOnes() {
+        SignInEntries.Session global = new SignInEntries.Session(Duration.ofHours(4), Duration.ofMinutes(20),
+            SignInEntries.Persistence.TAB);
+        SignInEntries entries = new SignInEntries(Map.of(
+            "app", sessions(List.of("PLAYER"), Duration.ofDays(30), Duration.ZERO, "device"),
+            "shop", sessions(List.of("SELLER"), null, Duration.ofHours(1), null),
+            "kiosk", config(List.of("KIOSK"), null, null, null, null)), false, null, global);
+
+        assertThat(entries.session("app")).isEqualTo(new SignInEntries.Session(Duration.ofDays(30), Duration.ZERO,
+            SignInEntries.Persistence.DEVICE));
+        assertThat(entries.session("app").idleEnds()).isFalse();
+        assertThat(entries.session("shop")).isEqualTo(new SignInEntries.Session(Duration.ofHours(4),
+            Duration.ofHours(1), SignInEntries.Persistence.TAB));
+        assertThat(entries.session("kiosk")).isEqualTo(global);
+        // The administration, unconfigured, and an entry that went away: the global settings.
+        assertThat(entries.session(null)).isEqualTo(global);
+        assertThat(entries.session("gone")).isEqualTo(global);
+        assertThat(entries.check()).isEmpty();
+        assertThat(SignInEntries.Persistence.DEVICE.value()).isEqualTo("device");
+    }
+
+    @Test
+    void theAdministrationNeverKeepsSessionsOnTheDeviceAndLifetimesAreBounded() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", sessions(List.of("ADMIN"), null, null, "DEVICE"),
+            "long", sessions(List.of("A"), Duration.ofDays(91), null, null),
+            "none", sessions(List.of("A"), Duration.ZERO, null, null),
+            "back", sessions(List.of("A"), null, Duration.ofMinutes(-1), null),
+            "odd", sessions(List.of("A"), Duration.ofDays(90), null, "disk")), false, null);
+
+        List<String> errors = entries.check().stream().filter(CheckProblem::isError)
+            .map(p -> p.location() + ": " + p.message()).toList();
+        assertThat(errors).anySatisfy(e -> assertThat(e).isEqualTo("jabiz.security.entries.admin: session.persistence "
+            + "cannot be device for the administration entry: its sessions stay in the tab"));
+        assertThat(errors).anySatisfy(e -> assertThat(e).startsWith("jabiz.security.entries.long: "
+            + "session.refresh-token-ttl must be positive and at most 90 days"));
+        assertThat(errors).anySatisfy(e -> assertThat(e).startsWith("jabiz.security.entries.none: "
+            + "session.refresh-token-ttl must be positive"));
+        assertThat(errors).anySatisfy(e -> assertThat(e).startsWith("jabiz.security.entries.back: "
+            + "session.idle-timeout must not be negative"));
+        assertThat(errors).anySatisfy(e -> assertThat(e).isEqualTo("jabiz.security.entries.odd: session.persistence "
+            + "must be tab or device, not 'disk'"));
+        assertThat(errors).hasSize(5);
+        // Nor does the administration end its idle lock.
+        assertThat(new SignInEntries(Map.of("admin", sessions(List.of("ADMIN"), null, Duration.ZERO, null)), false,
+            null).check()).singleElement().satisfies(p -> {
+                assertThat(p.isError()).isTrue();
+                assertThat(p.message()).isEqualTo("session.idle-timeout cannot be 0 for the administration entry: "
+                    + "its sessions end when idle");
+            });
+        // None of them is offered; the configured administration is not either (requests for it are refused).
+        assertThat(entries.all()).isEmpty();
+        // 90 days is the bound itself; the global lifetime is not bound (the administration has always used it).
+        assertThat(new SignInEntries(Map.of("ok", sessions(List.of("A"), Duration.ofDays(90), null, "device")), false,
+            null, new SignInEntries.Session(Duration.ofDays(120), Duration.ofMinutes(15),
+                SignInEntries.Persistence.TAB)).check()).isEmpty();
+    }
+
+    @Test
+    void longSessionsNeverAcceptEveryRole() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "kept", sessions(List.of("*"), null, null, "device"),
+            "awake", sessions(List.of("A", "*"), null, Duration.ZERO, null),
+            "plain", sessions(List.of("*"), null, null, null)), false, null);
+
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
+            + p.message()).containsExactlyInAnyOrder(
+                "jabiz.security.entries.kept: accepted-roles cannot be * for an entry with long sessions "
+                    + "(persistence device or idle-timeout 0): list its roles",
+                "jabiz.security.entries.awake: accepted-roles cannot be * for an entry with long sessions "
+                    + "(persistence device or idle-timeout 0): list its roles");
+        assertThat(entries.all()).extracting(SignInEntries.Entry::name).containsExactlyInAnyOrder("admin", "plain");
+        assertThat(entries.session("plain").longLived()).isFalse();
+        assertThat(new SignInEntries.Session(Duration.ofDays(1), Duration.ZERO, SignInEntries.Persistence.TAB)
+            .longLived()).isTrue();
+        assertThat(new SignInEntries.Session(Duration.ofDays(1), Duration.ofMinutes(15),
+            SignInEntries.Persistence.DEVICE).longLived()).isTrue();
+    }
+
+    @Test
+    void theIdleTimeoutOfEveryEntryIsCheckedAgainstTheAccessToken() {
+        byte[] key = new byte[32];
+        JwtService tokens = new JwtService(key, Duration.ofMinutes(15), Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+        MfaSettings settings = new MfaSettings("j", Duration.ofMinutes(5), Duration.ofMinutes(10), true,
+            Duration.ofMinutes(15));
+        SignInEntries entries = new SignInEntries(Map.of(
+            "short", sessions(List.of("A"), null, Duration.ofMinutes(5), null),
+            "brief", sessions(List.of("A"), null, Duration.ofMinutes(10), null),
+            "never", sessions(List.of("A"), null, Duration.ZERO, null),
+            "long", sessions(List.of("A"), null, Duration.ofHours(1), null)), false, null);
+
+        assertThat(new SessionChecks(tokens, settings, entries).check()).extracting(CheckProblem::location)
+            .containsExactlyInAnyOrder("jabiz.security.entries.short.session.idle-timeout",
+                "jabiz.security.entries.brief.session.idle-timeout");
+    }
+
+    @Test
+    void sessionsAreBoundFromTheEnvironment() {
+        MockEnvironment environment = new MockEnvironment()
+            .withProperty("jabiz.security.refresh-token-ttl", "PT2H")
+            .withProperty("jabiz.security.entries.app.accepted-roles", "PLAYER")
+            .withProperty("jabiz.security.entries.app.session.refresh-token-ttl", "30d")
+            .withProperty("jabiz.security.entries.app.session.idle-timeout", "0")
+            .withProperty("jabiz.security.entries.app.session.persistence", "device");
+        SignInEntries entries = new SignInEntries(environment, null);
+
+        assertThat(entries.session("app")).isEqualTo(new SignInEntries.Session(Duration.ofDays(30), Duration.ZERO,
+            SignInEntries.Persistence.DEVICE));
+        assertThat(entries.session("admin")).isEqualTo(new SignInEntries.Session(Duration.ofHours(2),
+            Duration.ofMinutes(15), SignInEntries.Persistence.TAB));
+    }
+
+    @Test
     void roleCodesThatCannotBeReadAreAWarning() {
         SignInEntries entries = new SignInEntries(Map.of("portal", config(List.of("C"), null, null, null, null)),
             false, () -> {
@@ -126,6 +250,39 @@ class SignInEntriesTest {
             assertThat(p.isError()).isFalse();
             assertThat(p.message()).contains("could not be checked");
         });
+    }
+
+    @Test
+    void anAppPathOutsideTheServedSpasIsAWarning() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", config(List.of("ADMIN"), null, null, null, "/admin/"),
+            "portal", config(List.of("CUSTOMER"), null, null, null, "/portal/"),
+            "shop", config(List.of("SHOPPER"), null, null, null, "/"),
+            "site", config(List.of("VISITOR"), null, null, null, "/site/")), false, null);
+        // No SPA at /: the site's and the shop's links would lead nowhere; the administration's SPA is at /admin, but
+        // the portal's app-path is not under the portal's SPA.
+        entries.spas(new JabizWebProperties(List.of(
+            new JabizWebProperties.Spa("/admin", null, null, "admin", null),
+            new JabizWebProperties.Spa("/portal/app", null, null, "portal", JabizWebProperties.Pwa.ON),
+            new JabizWebProperties.Spa("/site", null, null))));
+
+        assertThat(entries.check()).allSatisfy(p -> assertThat(p.isError()).isFalse())
+            .extracting(CheckProblem::location, CheckProblem::message).containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.portal.app-path", "'/portal/' is not "
+                    + "under the SPA of entry portal (/portal/app/): its mailed links would open another frontend"),
+                org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.shop.app-path", "'/' is under none of "
+                    + "the SPAs served (jabiz.web.spa): its mailed links would lead nowhere"));
+
+        // An SPA at / holds every path; the entry's own SPA is the longest prefix.
+        SignInEntries fine = new SignInEntries(Map.of("portal", config(List.of("C"), null, null, null, "/portal/")),
+            false, null);
+        fine.spas(new JabizWebProperties(List.of(new JabizWebProperties.Spa("/", null, null, "admin", null),
+            new JabizWebProperties.Spa("/portal", null, null, "portal", null))));
+        assertThat(fine.check()).isEmpty();
+        fine.spas(new JabizWebProperties(List.of(new JabizWebProperties.Spa("/", null, null, "portal", null),
+            new JabizWebProperties.Spa("/portal", null, null, "admin", null))));
+        assertThat(fine.check()).extracting(CheckProblem::location).containsExactly(
+            "jabiz.security.entries.admin.app-path", "jabiz.security.entries.portal.app-path");
     }
 
     @Test

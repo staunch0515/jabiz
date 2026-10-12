@@ -117,8 +117,14 @@ class SignUpController {
         }
     }
 
-    /** What a front end needs to know about its sign-in entry; nothing secret. */
-    record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath) {}
+    /**
+     * What a front end needs to know about its sign-in entry; nothing secret.
+     *
+     * @param sessionPersistence where the front end keeps the refresh token: {@code tab} ({@code sessionStorage}) or
+     *                           {@code device} ({@code localStorage}; decision D43 item 2)
+     */
+    record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath,
+        SignInEntries.Persistence sessionPersistence) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
@@ -301,12 +307,15 @@ class SignUpController {
         });
     }
 
-    /** Whether the entry lets people register, requires a verified address, and where its pages are; 404 if none. */
+    /**
+     * Whether the entry lets people register, requires a verified address, where its pages are and where its sessions
+     * are kept; 404 if none.
+     */
     @GetMapping(ENTRIES + "/{name}")
     Mono<EntryInfo> entry(@PathVariable String name) {
         return Mono.fromCallable(() -> entries.find(name)
             .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
-                entry.appPath()))
+                entry.appPath(), entry.session().persistence()))
             .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
     }
 

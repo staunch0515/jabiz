@@ -288,11 +288,15 @@ e2e `tasks.spec`。
 - 名称规则同事件名；参数与令牌用途为不含下划线的标识符（`[a-z][A-Za-z0-9]*`，免得 Markdown 把 `_` 当作强调），不能与内置占位符同名，不能重复。
 - `TRANSACTIONAL`（验证、重置、安全通知）不能退订；`NOTIFICATION` 可按用户与模板退订，其正文必须使用 `{unsubscribeUrl}`。
 - 标题与正文在消息 `mail.<名>.subject` / `mail.<名>.body`（应用所选的每种语言）；正文为 Markdown。占位符：声明的参数、令牌（以用途为名，值为令牌原文）、
-  `{baseUrl}`（`jabiz.mail.base-url`）、`{unsubscribeUrl}`（仅 NOTIFICATION）。
+  `{baseUrl}`（`jabiz.mail.base-url`）、`{unsubscribeUrl}`（仅 NOTIFICATION），以及入口前端的根（阶段 16c-2，决策 D43 第 4 条）：
+  - `{entryUrl}`：`{baseUrl}` 加参数 `entry` 所名入口的 `app-path`，以 `/` 结尾（`https://shop.example.com/portal/`）；只用于声明了参数 `entry` 的模板，
+    未知的入口取应用的根（后台的落地页接受任何入口）。平台的四封邮件都用它：`[…]({entryUrl}auth/verify-email?entry={entry}&token={jabiz.verify})`。
+  - `{entryUrl.<入口>}`：指定入口前端的根，任何模板都可用（`[打开 App]({entryUrl.app})`），入口须存在（启动检查）。
+  两者的值只来自配置（`app-path` 已按路径检查），从不来自参数或请求。
 
 **渲染**（core `MailRenderer`，commonmark-java）：先解析 Markdown，再把值放进解析结果（文本、代码、链接目标与标题）——值从不被当作 Markdown 或 HTML。
 HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原值；链接只允许 `http`、`https`、`mailto` 或相对地址（包括由值拼出的地址，其他一律去掉）；
-链接目标中的参数做百分号编码，`{baseUrl}`、`{unsubscribeUrl}` 与令牌原样代入；标题为纯文本、去换行、截断 300。不做模板样式，只用 commonmark 的基本元素。
+链接目标中的参数做百分号编码，`{baseUrl}`、`{entryUrl}`、`{entryUrl.<入口>}`、`{unsubscribeUrl}` 与令牌原样代入；标题为纯文本、去换行、截断 300。不做模板样式，只用 commonmark 的基本元素。
 
 **发送**：步骤 `SendMail.of(模板, 收件人, Map<参数名, 取值函数>)` / `SendMail.when(条件, …)`（平台 I/O 步骤）。
 
@@ -341,7 +345,8 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
 （`sys_mail_attempt`，每次尝试一条；最新一条即消息的状态；数据视图 `readOnly`）。尝试与令牌是投递日志，由平台直接插入，不进审计（21 §1），靠封存防篡改。实体不能连接其他表，所以"最近一次尝试的结果"是 `MailAttempt` 中按 `messageId` 筛选的最新一行；场景回放把两者列入快照即可看到。
 
 **启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
-NOTIFICATION 缺 `{unsubscribeUrl}`）；开启邮件时需 `jabiz.mail.from`、邮件服务器，以及有模板链接到应用（`{baseUrl}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
+NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、
+邮件服务器，以及有模板链接到应用（`{baseUrl}`、`{entryUrl…}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
 
 **不变**：`TASK_NOTIFY` 与单据发送（22 §5）仍是 `AFTER_COMMIT` 的进程内重试、纯文本，以后另议。
 

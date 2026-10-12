@@ -620,6 +620,10 @@
           },
           "selfRegistration" : {
             "type" : "boolean"
+          },
+          "sessionPersistence" : {
+            "enum" : [ "tab", "device" ],
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1698,6 +1702,20 @@
         "properties" : {
           "last" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "PasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string"
+          },
+          "newPassword" : {
+            "type" : "string"
+          },
+          "refreshToken" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2943,6 +2961,26 @@
         "tags" : [ "account-controller" ]
       }
     },
+    "/api/auth/account/password" : {
+      "post" : {
+        "operationId" : "changePassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
     "/api/auth/account/verify-email" : {
       "post" : {
         "operationId" : "resendOwn",
@@ -3323,6 +3361,14 @@
     "/api/auth/oidc/providers" : {
       "get" : {
         "operationId" : "providers",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "entry",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "200" : {
             "content" : {

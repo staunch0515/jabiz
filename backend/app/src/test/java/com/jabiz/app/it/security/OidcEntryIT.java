@@ -19,7 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Sign-in through an identity provider into an entry (docs/design/10-security.md section 15; decision D36): the entry
  * is chosen when the sign-in starts and kept with its state; the callback cannot change it. The sign-in guards are
- * asked on this path too.
+ * asked on this path too. Each entry has its own callback (decision D43 item 5): the provider sends the user back to
+ * the entry's frontend, the code is exchanged with that callback, and an entry without one is not offered the
+ * provider.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
     properties = {"jabiz.security.entries.portal.accepted-roles=IT_OIDC_CUSTOMER",
@@ -37,7 +39,16 @@ class OidcEntryIT extends SecurityItSupport {
         registry.add("jabiz.security.oidc.providers[0].client-id", () -> TestOidcProvider.CLIENT_ID);
         registry.add("jabiz.security.oidc.providers[0].client-secret", () -> TestOidcProvider.CLIENT_SECRET);
         registry.add("jabiz.security.oidc.providers[0].redirect-uri", () -> TestOidcProvider.REDIRECT_URI);
+        registry.add("jabiz.security.oidc.providers[0].redirect-uris.portal", () -> PORTAL_CALLBACK);
+        // A provider of the administration only.
+        registry.add("jabiz.security.oidc.providers[1].id", () -> "staff");
+        registry.add("jabiz.security.oidc.providers[1].issuer", IDP::issuer);
+        registry.add("jabiz.security.oidc.providers[1].client-id", () -> TestOidcProvider.CLIENT_ID);
+        registry.add("jabiz.security.oidc.providers[1].client-secret", () -> TestOidcProvider.CLIENT_SECRET);
+        registry.add("jabiz.security.oidc.providers[1].redirect-uri", () -> TestOidcProvider.REDIRECT_URI);
     }
+
+    static final String PORTAL_CALLBACK = "http://localhost/portal/login/oidc";
 
     @AfterAll
     static void stop() {
@@ -46,10 +57,16 @@ class OidcEntryIT extends SecurityItSupport {
 
     private static String customerRole;
 
-    private record Request(String state, String nonce, String challenge, String binder) {}
+    /** A started sign-in, with the callback its authorization request named. */
+    private record Request(String state, String nonce, String challenge, String binder, String redirectUri) {}
 
     private WebTestClient.ResponseSpec start(String entry) {
-        return post("/api/auth/oidc/test/start" + (entry == null ? "" : "?entry=" + entry), null, Map.of());
+        return start("test", entry);
+    }
+
+    private WebTestClient.ResponseSpec start(String provider, String entry) {
+        return post("/api/auth/oidc/" + provider + "/start" + (entry == null ? "" : "?entry=" + entry), null,
+            Map.of());
     }
 
     private Request started(String entry) {
@@ -57,13 +74,53 @@ class OidcEntryIT extends SecurityItSupport {
             .getResponseBody();
         Map<String, String> query = TestOidcProvider.query((String) started.get("authorizationUrl"));
         return new Request(query.get("state"), query.get("nonce"), query.get("code_challenge"),
-            (String) started.get("binder"));
+            (String) started.get("binder"), query.get("redirect_uri"));
     }
 
     private WebTestClient.ResponseSpec callback(Request request, String subject) {
+        return callback(request, subject, request.redirectUri());
+    }
+
+    /** The provider issued the code for {@code redirectUri}; the token request must name the same callback. */
+    private WebTestClient.ResponseSpec callback(Request request, String subject, String redirectUri) {
         String idToken = IDP.idToken(IDP.claims(subject, request.nonce(), clock.instant()).build());
         return post("/api/auth/oidc/callback", null, Map.of("state", request.state(),
-            "code", IDP.code(request.challenge(), idToken), "binder", request.binder(), "entry", "admin"));
+            "code", IDP.code(request.challenge(), idToken, redirectUri), "binder", request.binder(), "entry",
+            "admin"));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private List<String> providers(String query) {
+        List<Map> offered = client.get().uri("/api/auth/oidc/providers" + query).exchange().expectStatus().isOk()
+            .expectBodyList(Map.class).returnResult().getResponseBody();
+        return offered.stream().map(p -> (String) p.get("id")).toList();
+    }
+
+    @Test
+    void eachEntrySignsInThroughItsOwnCallback() {
+        // The provider sends the portal's users back to the portal's frontend, the administration's to its own.
+        assertThat(started("portal").redirectUri()).isEqualTo(PORTAL_CALLBACK);
+        assertThat(started(null).redirectUri()).isEqualTo(TestOidcProvider.REDIRECT_URI);
+        assertThat(started("admin").redirectUri()).isEqualTo(TestOidcProvider.REDIRECT_URI);
+
+        String subject = unique("sub");
+        linkedCustomer(subject);
+        // The code is exchanged with the callback of the state's entry: a code issued for another callback fails.
+        Request portal = started("portal");
+        assertThat(ruleCode(callback(portal, subject, TestOidcProvider.REDIRECT_URI).expectStatus().isUnauthorized()
+            .expectBody(MAP).returnResult().getResponseBody())).isEqualTo("LOGIN_FAILED");
+        callback(started("portal"), subject).expectStatus().isOk();
+    }
+
+    @Test
+    void anEntryWithoutACallbackIsNotOfferedTheProvider() {
+        assertThat(providers("")).containsExactly("test", "staff");
+        assertThat(providers("?entry=admin")).containsExactly("test", "staff");
+        assertThat(providers("?entry=portal")).containsExactly("test");
+        assertThat(providers("?entry=nowhere")).isEmpty();
+        assertThat(ruleCode(start("staff", "portal").expectStatus().isUnauthorized().expectBody(MAP).returnResult()
+            .getResponseBody())).isEqualTo("LOGIN_FAILED");
+        start("staff", null).expectStatus().isOk();
     }
 
     /** A user with the portal's role and another one, linked to a subject; returns the user id. */

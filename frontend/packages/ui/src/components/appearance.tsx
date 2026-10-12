@@ -91,6 +91,11 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>
 }
 
+/** Whether an {@link AppearanceProvider} is around: components that offer the choice only then. */
+export function useHasAppearance(): boolean {
+  return useContext(AppearanceContext) !== null
+}
+
 export function useAppearance(): AppearanceState {
   const state = useContext(AppearanceContext)
   if (!state) throw new Error('useAppearance needs an <AppearanceProvider> around it')
