@@ -23,6 +23,8 @@ public final class QbParams {
     public static final String TRANSFER_REVIEW_ABOVE = "qb.transfer.review-above";
     /** Whether the daily automatic transfers run at all. */
     public static final String TRANSFER_ENABLED = "qb.transfer.enabled";
+    /** The platform's fee on each transfer, in Kudos; 0 switches it off (Q6b, requirement 5.3-14). */
+    public static final String TRANSFER_FEE = "qb.transfer.fee";
     /** The smallest top-up, in Kudos (Q6a). */
     public static final String TOPUP_MIN = "qb.topup.min";
     /** The largest top-up, in Kudos (Q6a). */
@@ -41,7 +43,8 @@ public final class QbParams {
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
     public static final List<String> CONTROLLED = List.of(CREATOR_FEE_RATE, TRANSFER_THRESHOLD,
-        TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO, TOPUP_MIN, TOPUP_MAX);
+        TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO, TOPUP_MIN, TOPUP_MAX,
+        TRANSFER_FEE);
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -69,7 +72,8 @@ public final class QbParams {
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
             "Oldest app version that may still be used"),
         new Param(TOPUP_MIN, KUDOS, "1000", "The smallest top-up a sponsor may make, in Kudos"),
-        new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"));
+        new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"),
+        new Param(TRANSFER_FEE, KUDOS, "0", "The platform's fee on each transfer, in Kudos (0: none)"));
 
     private QbParams() {}
 }

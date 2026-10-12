@@ -31,6 +31,21 @@ public final class StripeService {
     public static final String DISPUTE_CREATED = "charge.dispute.created";
     public static final String DISPUTE_CLOSED = "charge.dispute.closed";
 
+    /** A transfer to a connected account was reversed, in part or in full ({@code amount_reversed}: running total). */
+    public static final String TRANSFER_REVERSED = "transfer.reversed";
+    /** A payout of the platform's balance reached its bank, or failed (D-Q6-13). */
+    public static final String PAYOUT_PAID = "payout.paid";
+    public static final String PAYOUT_FAILED = "payout.failed";
+
+    /**
+     * The inbound provider of the Connect endpoint (Q6b): events of the connected accounts come only there, signed with
+     * another secret ({@value #CONNECT_SECRET}).
+     */
+    public static final String PROVIDER_CONNECT = "stripe-connect";
+    public static final String CONNECT_SECRET = "STRIPE_CONNECT_WEBHOOK_SECRET";
+    public static final String ACCOUNT_UPDATED = "account.updated";
+    public static final String ACCOUNT_DEAUTHORIZED = "account.application.deauthorized";
+
     /** The only currency QuizBuks charges in: Kudos are yen, which Stripe counts without a minor unit. */
     public static final String CURRENCY = "jpy";
 

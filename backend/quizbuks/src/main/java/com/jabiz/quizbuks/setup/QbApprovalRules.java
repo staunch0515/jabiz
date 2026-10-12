@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.setup;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
+import com.jabiz.quizbuks.wallet.QbPayouts;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -45,7 +46,16 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.REVIEW_SPONSOR)), 100,
         "Sponsor onboarding is reviewed unless qb.review.sponsor.auto is on");
 
-    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW);
+    /**
+     * Transfers above {@code qb.transfer.review-above} wait for a finance administrator's review (Q6b, P-03); the
+     * payee prepares the case, so they cannot approve their own.
+     */
+    public static final Rule TRANSFER_REVIEW = new Rule(QbPayouts.REVIEW_RULE, QbPayouts.APPROVAL_SUBJECT,
+        entries("fact", "needsReview", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.PAYOUT_REVIEW)), 100,
+        "Transfers above qb.transfer.review-above are reviewed");
+
+    public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

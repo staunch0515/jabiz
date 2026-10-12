@@ -73,6 +73,22 @@ class MessagesTest {
                 "process.QB_TOPUP_DISPUTE_OPENED", "process.QB_TOPUP_DISPUTE_CLOSED", "process.QB_RECONCILE_RUN",
                 "query.qb.sponsor.wallet", "query.qb.sponsor.topups", "query.qb.app.wallet", "query.qb.app.ledger",
                 "query.qb.admin.topups", "query.qb.admin.recon-runs", "query.qb.admin.recon-items");
+        // Q6b: payout accounts, transfers and the bank payouts.
+        assertThat(en.stringPropertyNames())
+            .containsAll(com.jabiz.quizbuks.wallet.PayoutChecks.ACCOUNT_REASONS.stream()
+                .map(r -> "task.qb.payout-check." + r).toList())
+            .containsAll(com.jabiz.quizbuks.wallet.PayoutChecks.TRANSFER_REASONS.stream()
+                .map(r -> "task.qb.transfer-check." + r).toList())
+            .contains("approval.subject.qb.transfer", "param.qb.transfer.fee", "entity.QbPayoutAccount",
+                "entity.QbPayoutOnboarding", "entity.QbTransfer", "entity.QbStripePayout", "process.QB_PAYOUT_ONBOARD",
+                "process.QB_PAYOUT_ONBOARD_READY", "process.QB_PAYOUT_ONBOARD_FAILED",
+                "process.QB_PAYOUT_ACCOUNT_UPDATED", "process.QB_PAYOUT_ACCOUNT_DEAUTHORIZED",
+                "process.QB_TAKER_WALLET_SYNC", "process.QB_TAKER_WALLET_RESYNC", "process.QB_TRANSFER_CREATE",
+                "process.QB_TRANSFER_APPROVAL_RESULT", "process.QB_TRANSFER_SENT", "process.QB_TRANSFER_SEND_FAILED",
+                "process.QB_TRANSFER_CHECK", "process.QB_TRANSFER_CHECKED", "process.QB_TRANSFER_CHECK_FAILED",
+                "process.QB_TRANSFER_REVERSED", "process.QB_STRIPE_PAYOUT_RECORD", "process.QB_STRIPE_PAYOUT_FAILED",
+                "query.qb.app.payout-account", "query.qb.admin.transfers", "query.qb.admin.payout-accounts",
+                "task.qb.topup-check.FEE_CURRENCY");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

@@ -63,6 +63,7 @@ abstract class TopUpItSupport extends PlayItSupport {
     @BeforeEach
     void resetStripe() {
         STRIPE.reset();
+        StripeSim.reset();
     }
 
     /**
@@ -90,6 +91,10 @@ abstract class TopUpItSupport extends PlayItSupport {
             session.put("url", "https://checkout.stripe.com/c/pay/" + id);
             session.put("expires_at", Long.parseLong(form.get("expires_at")));
             return StubHttpServer.Answer.json(200, JsonMapper.builder().build().writeValueAsString(session));
+        }
+        StubHttpServer.Answer simulated = StripeSim.answer(request);
+        if (simulated != null) {
+            return simulated;
         }
         return StubHttpServer.Answer.json(404, "{\"error\":{\"type\":\"invalid_request_error\","
             + "\"code\":\"resource_missing\"}}");

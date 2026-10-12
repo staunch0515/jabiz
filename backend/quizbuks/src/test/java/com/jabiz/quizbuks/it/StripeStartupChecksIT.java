@@ -34,6 +34,8 @@ class StripeStartupChecksIT {
         Outcome outcome = check(
             // No webhook secret (the environment variable is missing).
             "--jabiz.inbound-webhooks.providers.stripe.secrets[0]=",
+            // Nor the Connect endpoint's (Q6b).
+            "--jabiz.inbound-webhooks.providers.stripe-connect.secrets[0]=",
             // The provider accepts the completions only, while refunds and disputes are consumed too.
             "--jabiz.inbound-webhooks.providers.stripe.event-types[0]=checkout.session.completed",
             // A live key in test mode.
@@ -45,6 +47,8 @@ class StripeStartupChecksIT {
             .anySatisfy(line -> assertThat(line).startsWith("INBOUND | EventSubscription qb.topup-refund")
                 .contains("charge.refunded"))
             .anySatisfy(line -> assertThat(line).startsWith("INBOUND | EventSubscription qb.topup-expire"))
+            .anySatisfy(line -> assertThat(line).startsWith("INBOUND | jabiz.inbound-webhooks.providers.stripe-connect"
+                + ".secrets[0]"))
             .anySatisfy(line -> assertThat(line).startsWith("QUIZBUKS | STRIPE_API_KEY").contains("test key"))
             // The development credit (on in the tests) next to a live key.
             .anySatisfy(line -> assertThat(line).startsWith("QUIZBUKS | quizbuks.wallet.dev-credit.enabled"));

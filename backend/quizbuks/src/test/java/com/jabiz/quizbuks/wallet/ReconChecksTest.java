@@ -42,6 +42,52 @@ class ReconChecksTest {
         assertThat(items.get(1).partyId()).isEqualTo("s1");
     }
 
+    static Map<String, Object> taker(String party, long balance, long cached, long out, long cachedOut) {
+        Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("partyId", party);
+        row.put("expectedBalance", BigDecimal.valueOf(balance));
+        row.put("actualBalance", BigDecimal.valueOf(cached));
+        row.put("expectedOut", BigDecimal.valueOf(out));
+        row.put("actualOut", BigDecimal.valueOf(cachedOut));
+        return row;
+    }
+
+    @Test
+    void aTakerBehindCountsOnlyWhenTwoRunsInARowFindThem() {
+        List<Map<String, Object>> rows = List.of(taker("u1", 100, 90, 0, 0), taker("u2", 50, 50, 30, 0),
+            taker("u3", 10, 10, 0, 0));
+        // First run: notes only, everyone found resynced; the run is OK.
+        ReconChecks.TakerItems first = ReconChecks.takers(rows, java.util.Set.of());
+        assertThat(first.items()).extracting(ReconChecks.Item::check).containsOnly(ReconChecks.TAKER_WALLET_LAG);
+        assertThat(first.items()).hasSize(2);
+        assertThat(first.resync()).containsExactly("u1", "u2");
+        ReconChecks.Result notes = ReconChecks.result(first.items(), 10);
+        assertThat(notes.status()).isEqualTo(ReconChecks.OK);
+        assertThat(notes.differences()).isZero();
+        assertThat(notes.total()).isEqualTo(2);
+        // Next run: u1 still behind is a difference; u2 was found too, its amount in transfer differs.
+        ReconChecks.TakerItems second = ReconChecks.takers(rows, java.util.Set.of("u1", "u2"));
+        assertThat(second.items()).extracting(ReconChecks.Item::check)
+            .containsExactly(ReconChecks.TAKER_WALLET, ReconChecks.TAKER_IN_TRANSFER);
+        ReconChecks.Result diff = ReconChecks.result(second.items(), 10);
+        assertThat(diff.status()).isEqualTo(ReconChecks.DIFF);
+        assertThat(diff.differences()).isEqualTo(2);
+    }
+
+    @Test
+    void transfersAreCodedByTransferAndTaker() {
+        Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("transferId", "tr1");
+        row.put("userId", "u1");
+        row.put("checkCode", ReconChecks.TRANSFER_LEDGER);
+        row.put("expected", BigDecimal.TEN);
+        row.put("actual", BigDecimal.ZERO);
+        assertThat(ReconChecks.coded(List.of(row))).singleElement().satisfies(item -> {
+            assertThat(item.reference()).isEqualTo("tr1");
+            assertThat(item.partyId()).isEqualTo("u1");
+        });
+    }
+
     @Test
     void aRunWithoutDifferencesIsOk() {
         ReconChecks.Result result = ReconChecks.result(List.of(), 10);

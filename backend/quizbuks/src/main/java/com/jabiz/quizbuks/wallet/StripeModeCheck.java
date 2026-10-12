@@ -34,16 +34,40 @@ class StripeModeCheck implements PlatformCheck {
     private final boolean devCredit;
     private final String apiKey;
 
-    StripeModeCheck(StripeSettings settings, @Value("${" + DevCredit.ENABLED + ":false}") boolean devCredit,
+    private final PayoutSettings payouts;
+
+    StripeModeCheck(StripeSettings settings, PayoutSettings payouts,
+        @Value("${" + DevCredit.ENABLED + ":false}") boolean devCredit,
         @Value("${" + StripeService.API_KEY + ":}") String apiKey) {
         this.settings = settings;
+        this.payouts = payouts;
         this.devCredit = devCredit;
         this.apiKey = apiKey;
     }
 
     @Override
     public List<CheckProblem> check() {
-        return problems(settings, devCredit, apiKey);
+        List<CheckProblem> problems = new ArrayList<>(problems(settings, devCredit, apiKey));
+        problems.addAll(payoutProblems(payouts, settings.livemode()));
+        return List.copyOf(problems);
+    }
+
+    /**
+     * The settings of payout accounts (Q6b); a missing app address only warns, since onboarding then refuses
+     * ({@code QB_PAYOUT_UNAVAILABLE}).
+     */
+    static List<CheckProblem> payoutProblems(PayoutSettings payouts, boolean livemode) {
+        List<CheckProblem> problems = new ArrayList<>();
+        for (String problem : payouts.problems(livemode)) {
+            int colon = problem.indexOf(':');
+            problems.add(CheckProblem.error(CountryCatalog.CATEGORY, problem.substring(0, colon),
+                problem.substring(colon + 2)));
+        }
+        if (payouts.appLink().isEmpty()) {
+            problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "quizbuks.links.app", "No address of the app "
+                + "(quizbuks.links.app): payout accounts are refused, since Stripe has nowhere to send the taker back"));
+        }
+        return List.copyOf(problems);
     }
 
     static List<CheckProblem> problems(StripeSettings settings, boolean devCredit, String apiKey) {

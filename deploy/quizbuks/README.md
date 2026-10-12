@@ -84,10 +84,28 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
   支付页上的按钮把签名的事件发回 `http://localhost:8080/api/inbound/stripe`。改用 Stripe 的真实测试模式：设置 `STRIPE_API_KEY`、
   `QB_STRIPE_API_URL=https://api.stripe.com`、`QB_STRIPE_API_HOSTS=api.stripe.com`、`QB_STRIPE_CHECKOUT_URL_PREFIX=https://checkout.stripe.com/`，
   并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
-- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）与 `STRIPE_WEBHOOK_SECRET`
-  （只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`）。仓库中不放任何签名密钥：
+- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）、`STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET`
+  （Q6b；只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`，Connect 的同样）。仓库中不放任何签名密钥：
   知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
   也不能在任何可访问的环境中使用该密钥。
+
+## 收款账户与自动转账（Q6b）
+
+- **部署后再执行一次 `QB_SETUP`，并由另一位管理员发布新的提案**：受控参数 `qb.transfer.fee`（转账手续费，缺省 0 = 不收）与审批规则 `qb.transfer.review`
+  （超过 `qb.transfer.review-above` 的转账由持有 `qb.payout.review` 的财务审核；收款人不能审核自己的转账）。规则未发布时，大额转账一律驳回并开待办。
+- **自动转账缺省关闭**（受控参数 `qb.transfer.enabled = false`，四眼）。**正式开放转账（以及正式模式）之前必须先取得法务意见**（资金決済法，`docs/quizbuks/03-plan.md` 第 4 节）；
+  测试模式下可以打开以演示。门槛 `qb.transfer.threshold`、审核额 `qb.transfer.review-above`、手续费 `qb.transfer.fee` 都是受控参数。
+- **Connect 端点**（Stripe 后台 → 开发者 → Webhook → 添加端点，选择"已连接的账户"）：`https://<主机>/api/inbound/stripe-connect`，事件只选
+  `account.updated`、`account.application.deauthorized`；把该端点的签名密钥放进 `STRIPE_CONNECT_WEBHOOK_SECRET`（**缺少即启动失败**），API 版本同账户端点。
+  账户端点另加事件 `transfer.reversed`、`payout.paid`、`payout.failed`。
+- **受限密钥**另开：Accounts 与 Account Links 写、Transfers 写与读。
+- **App 的地址**（`QB_APP_LINK`，如 `https://quizbuks.example.com/`）是 Stripe 开通页面完成后跳回的地址（`…/wallet/payout?onboarding=done|refresh`）；没有它开通一律被拒（启动告警）。
+  收款账户只在 `QB_STRIPE_CONNECT_COUNTRY`（缺省 `JP`）开通，资料国家不同即拒绝（不跨境）。平台不保存银行信息，由 Stripe 的页面收集。
+- **转账只转一次**：每人至多一笔未结束的转账（数据库部分唯一索引）；发出作业先按 `transfer_group = qb-<转账号>` 查询，已有即作为结果，否则以固定的幂等键
+  `qb-transfer-<转账号>` 创建。Stripe 明确拒绝创建时冲正、钱回到用户余额；结果不明（超时、5xx、租约丢失）时进入 `CHECK` 并开待办，**不冲回**，
+  由每小时的 `qb.transfer-stale` 在至少 10 分钟后按组查询定论。同一用户连续 3 次失败后不再自动转账，开待办等财务处理。
+- **Stripe 的可用余额**：充值几天后才变为可用余额，余额不足时转账作业按退避重试数小时，用尽后作为确定失败冲正，次日再试。上线前要定资金调度。
+- 被 Stripe 撤回的转账（`transfer.reversed`）按累计金额退回用户余额（手续费不退），并开待办。打款到银行（`payout.paid`）记借 1120 / 贷 1110，失败冲正。
 
 ## 环境变量
 
@@ -126,7 +144,10 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | Stripe 账户余额的币种（手续费与净额的币种），缺省 `jpy`；收款与退款始终是日元，非日元的结算手续费不自动过账，开待办 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
 | `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | Q6b | Connect 端点的签名密钥 |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | 是（Q6b） | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥（`whsec_…`）；缺少即启动失败 |
+| `QB_APP_LINK` | 收款时 | App 的地址，Stripe 开通收款账户后跳回（缺省空：开通被拒） |
+| `QB_STRIPE_CONNECT_COUNTRY` | 否 | 收款账户的国家，缺省 `JP` |
+| `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发中改指桩服务） |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

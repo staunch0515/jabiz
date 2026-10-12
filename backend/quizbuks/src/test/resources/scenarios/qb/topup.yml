@@ -16,7 +16,8 @@ steps:
     input: {}
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]",
-      p9: "$.proposals[8]", p10: "$.proposals[9]" }
+      p9: "$.proposals[8]", p10: "$.proposals[9]", p11: "$.proposals[10]",
+      p12: "$.proposals[11]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -47,6 +48,12 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
   - expect: { param: qb.topup.min, value: 1000 }
   - expect: { param: qb.topup.max, value: 1000000 }
   - note: Publications go on without a review (the controlled switch, four eyes).
@@ -251,6 +258,7 @@ steps:
       takers' own templates, scoped to the caller, are covered by TopUpIT).
     expect:
       query: qb.admin.wallets
+      params: { kind: SPONSOR }
       rows: 1
       values: [{ company: Capitals Inc, balance: 4900, pendingCount: 0, pendingAmount: 0 }]
   - expect:

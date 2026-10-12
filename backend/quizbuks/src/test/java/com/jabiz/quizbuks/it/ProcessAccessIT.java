@@ -59,7 +59,23 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TOPUP_REFUNDED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_DISPUTE_OPENED", ProcessAccess.INTERNAL),
         Map.entry("QB_TOPUP_DISPUTE_CLOSED", ProcessAccess.INTERNAL),
-        Map.entry("QB_RECONCILE_RUN", ProcessAccess.INTERNAL));
+        Map.entry("QB_RECONCILE_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_PAYOUT_ONBOARD_READY", ProcessAccess.INTERNAL),
+        Map.entry("QB_PAYOUT_ONBOARD_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PAYOUT_ACCOUNT_UPDATED", ProcessAccess.INTERNAL),
+        Map.entry("QB_PAYOUT_ACCOUNT_DEAUTHORIZED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TAKER_WALLET_SYNC", ProcessAccess.INTERNAL),
+        Map.entry("QB_TAKER_WALLET_RESYNC", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_CREATE", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_SENT", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_SEND_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_CHECK", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_CHECKED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_CHECK_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TRANSFER_REVERSED", ProcessAccess.INTERNAL),
+        Map.entry("QB_STRIPE_PAYOUT_RECORD", ProcessAccess.INTERNAL),
+        Map.entry("QB_STRIPE_PAYOUT_FAILED", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

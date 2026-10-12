@@ -1,0 +1,952 @@
+package com.jabiz.quizbuks.wallet;
+
+import com.jabiz.event.DomainEvent;
+import com.jabiz.external.ExternalJobCompletion;
+import com.jabiz.external.ExternalJobFailure;
+import com.jabiz.ledger.Direction;
+import com.jabiz.param.ParamValues;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.BanRules;
+import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.approval.ApprovalCase;
+import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.approval.ApprovalOutcome;
+import com.jabiz.runtime.approval.RequireApproval;
+import com.jabiz.runtime.inbound.LoadInboundEvent;
+import com.jabiz.runtime.inbound.ReceivedEvent;
+import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
+import com.jabiz.runtime.process.steps.PublishEvent;
+import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
+import com.jabiz.runtime.process.steps.SaveChanges;
+import com.jabiz.runtime.process.steps.StartExternalJob;
+import com.jabiz.runtime.task.CreateTask;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+
+import static com.jabiz.quizbuks.wallet.TopUpCrediting.first;
+import static com.jabiz.quizbuks.wallet.TopUpCrediting.list;
+
+/**
+ * Automatic transfers of the takers' rewards to their Stripe accounts (U-53, P-03; docs/quizbuks/plans/
+ * Q6-payments.md, D-Q6-12). Every process holds the taker's wallet lock ({@code qb.wallet:TAKER:<user>}) and no other,
+ * reads everything again under it, and changes nothing when the state no longer fits.
+ * <ul>
+ *   <li>{@value #CREATE} (each item of the daily job {@value #RUN_JOB}): transfers the taker's whole balance, read
+ *       from the ledger, when transfers are on, it reaches the threshold, the taker is not banned, their account is
+ *       enabled, nothing of theirs is unfinished and their last transfers did not all fail. Above the review limit it
+ *       waits for a person ({@code REVIEW}, the payee as the preparer: they cannot approve it); otherwise it is
+ *       sent.</li>
+ *   <li>Sending: debit 2120 (the taker) the amount / credit 2130 (the taker) the net and 4110 the fee, the job that
+ *       calls Stripe ({@link StripeTransferHandler}: the group looked up first, the transfer's own key), the cache
+ *       recomputed, {@value QbPayouts#CHANGED_EVENT}.</li>
+ *   <li>{@value #APPROVAL_RESULT}: an approval of the transfer's own request, for its content, sends it if it still
+ *       can (balance, account, ban, switch); a rejection rejects it. Nothing was posted for a transfer in review.</li>
+ *   <li>{@value #SENT}: Stripe's transfer, checked against the record, settles it (debit 2130 / credit 1110).</li>
+ *   <li>{@value #SEND_FAILED}: a refusal of the creation is certain (no transfer): the sending is reversed
+ *       ({@code LEDGER_REVERSE}, the money back on 2120). Anything else leaves the transfer in doubt: {@code CHECK}, a
+ *       task, nothing undone until Stripe is asked ({@value #CHECK} / {@value #CHECKED}, the hourly job
+ *       {@value #STALE_JOB}).</li>
+ *   <li>{@value #REVERSED} ({@code transfer.reversed}): what Stripe reversed comes back to the taker (debit 1110 /
+ *       credit 2120), from the running total, once.</li>
+ * </ul>
+ */
+public final class TransferProcesses {
+
+    public static final String CREATE = "QB_TRANSFER_CREATE";
+    public static final String APPROVAL_RESULT = "QB_TRANSFER_APPROVAL_RESULT";
+    public static final String SENT = "QB_TRANSFER_SENT";
+    public static final String SEND_FAILED = "QB_TRANSFER_SEND_FAILED";
+    public static final String CHECK = "QB_TRANSFER_CHECK";
+    public static final String CHECKED = "QB_TRANSFER_CHECKED";
+    public static final String CHECK_FAILED = "QB_TRANSFER_CHECK_FAILED";
+    public static final String REVERSED = "QB_TRANSFER_REVERSED";
+    public static final String REVERSED_CONSUMER = "qb.transfer-reversed";
+
+    /** The daily job and its selection; the hourly check of the transfers in doubt and its selection. */
+    public static final String RUN_JOB = "qb.transfer-run";
+    public static final String DUE_TEMPLATE = "qb.system.transfers-due";
+    public static final String STALE_JOB = "qb.transfer-stale";
+    public static final String STALE_TEMPLATE = "qb.system.transfers-stale";
+
+    /** A transfer still sending after this long is asked about; Stripe is asked again after this long. */
+    public static final Duration STALE_AFTER = Duration.ofHours(1);
+    public static final Duration ASK_AGAIN_AFTER = Duration.ofMinutes(50);
+    /**
+     * A transfer in doubt is asked about this long after its doubt began at the earliest: far longer than any request
+     * of its job may still take (a lease lost while a request was under way), so a lookup that finds nothing is final.
+     */
+    public static final Duration SETTLE_BEFORE_CHECK = Duration.ofMinutes(10);
+    /** The most takers one daily run creates transfers for. */
+    public static final int RUN_BATCH = 2000;
+    public static final int STALE_BATCH = 500;
+
+    public record UserRef(@NotBlank @Size(max = 128) String userId) {}
+
+    public record TransferRef(@NotBlank @Size(max = 36) String transferId) {}
+
+    /**
+     * Input of {@value #APPROVAL_RESULT}, from an approval event of any subject.
+     *
+     * @param requestId the request decided: only the transfer's own request counts
+     */
+    public record ApprovalResultInput(@NotBlank String subject, @NotBlank String entityId, @NotBlank String status,
+        String requestId, String preparerId, String contentHash, String reason) {}
+
+    /**
+     * @param status            the transfer's state after the process; null without a transfer
+     * @param reason            why nothing was done, or the task's reason
+     * @param approvalRequestId the review's request of a transfer waiting for one
+     */
+    public record TransferOutput(String transferId, String status, String reason, String approvalRequestId) {}
+
+    static final String INPUT = "input";
+    static final String PARAMS = "params";
+    static final String BAN = "ban";
+    static final String ACCOUNT = "account";
+    static final String LATEST = "latest";
+    static final String LEDGER = "ledger";
+    static final String FOUND = "found";
+    static final String TRANSFER = "transfer";
+    static final String NEW_ID = "newId";
+    static final String PLAN = "plan";
+    static final String APPROVAL = "approval";
+    static final String REQUEST = "request";
+    static final String EVENT = "event";
+    static final String SEND = "send";
+    static final String SETTLE = "settle";
+    static final String REVERSE = "reverse";
+    static final String RETURN = "return";
+    static final String POST_INPUT = "postInput";
+    static final String POSTING = "posting";
+    static final String SETTLE_INPUT = "settleInput";
+    static final String SETTLEMENT = "settlement";
+    static final String REVERSE_INPUT = "reverseInput";
+    static final String REVERSAL = "reversal";
+    static final String RETURN_INPUT = "returnInput";
+    static final String RETURNED = "returned";
+    static final String STRIPE_TRANSFER = "stripeTransfer";
+    static final String FAILURE = "failure";
+    static final String CHANGED = "changed";
+    static final String STATUS_AFTER = "statusAfter";
+    static final String REASON = "reason";
+    static final String REASON_AMOUNT = "reasonAmount";
+    static final String SKIP = "skip";
+    static final String ASK = "ask";
+    static final String JOB_ID = "jobId";
+
+    // ---- create ----------------------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<UserRef, TransferOutput, ProcessContext> create(StripeSettings stripe) {
+        return ProcessDefinition.define(CREATE, 1, UserRef.class, TransferOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Transfers a taker's whole balance to their Stripe account, or asks for a review.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .step("Lock the taker's wallet", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
+                .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
+                    QbParams.TRANSFER_FEE))
+                .steps(b -> loadTaker(b, TransferProcesses::userOf))
+                .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
+                .steps(b -> TakerWallets.load(b, TransferProcesses::userOf))
+                .compute("Decide", (metadata, ctx) -> plan(ctx))
+                .step("Save the transfer", SaveChanges.now())
+                .step("Read the transfer", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> byId((String) ctx.get(NEW_ID)), TRANSFER))
+                .step("Ask for a review", RequireApproval.<ProcessContext>when(
+                    ctx -> first(ctx, TRANSFER) != null && TransferStatus.REVIEW.equals(first(ctx, TRANSFER)
+                        .get("status")), QbPayouts.APPROVAL_SUBJECT, ctx -> approvalCase(first(ctx, TRANSFER)),
+                    APPROVAL))
+                .compute("Send or wait", (metadata, ctx) -> created(ctx))
+                .steps(b -> sending(b, stripe))
+                .steps(TransferProcesses::finish));
+    }
+
+    static void plan(ProcessContext ctx) {
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        EntityInstance ban = first(ctx, BAN);
+        EntityInstance account = first(ctx, ACCOUNT);
+        List<String> statuses = list(ctx, LATEST).stream().map(t -> (String) t.get("status")).toList();
+        TransferRules.Plan plan = TransferRules.plan(
+            new TransferRules.Params(params.get(QbParams.TRANSFER_ENABLED, Boolean.class),
+                params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
+                params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
+                params.get(QbParams.TRANSFER_FEE, BigDecimal.class)),
+            new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
+                account == null ? null : account.get("status"),
+                statuses.stream().anyMatch(TransferStatus.UNFINISHED::contains),
+                TransferRules.failureStreak(statuses), ledgerBalance(ctx)));
+        ctx.put(PLAN, plan);
+        if (!plan.transfers()) {
+            ctx.put(SKIP, plan.skip());
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("userId", userOf(ctx));
+        values.put("externalAccountId", account.get("externalAccountId"));
+        values.put("amount", plan.amount());
+        values.put("fee", plan.fee());
+        values.put("net", plan.net());
+        values.put("status", plan.review() ? TransferStatus.REVIEW : TransferStatus.SENDING);
+        values.put("reversedAmount", BigDecimal.ZERO);
+        values.put("createdAt", ctx.opTime());
+        ctx.put(NEW_ID, String.valueOf(ctx.changes().insert(QbPayouts.TRANSFER, values)));
+    }
+
+    static void created(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer == null) {
+            return;
+        }
+        if (TransferStatus.SENDING.equals(transfer.get("status"))) {
+            ctx.put(SEND, true);
+            return;
+        }
+        ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
+        switch (approval.status()) {
+            case PENDING -> {
+                write(ctx, transfer, Map.of("approvalRequestId", approval.requestId()));
+                ctx.put(STATUS_AFTER, TransferStatus.REVIEW);
+            }
+            case APPROVED -> ctx.put(SEND, true);
+            // No rule asked for a review: the rule is missing or off. Rejected rather than sent unreviewed.
+            case NOT_REQUIRED -> reject(ctx, transfer, PayoutChecks.REVIEW_NOT_CONFIGURED, null);
+            default -> throw new IllegalStateException("Unknown approval outcome " + approval.status());
+        }
+    }
+
+    // ---- approval result -------------------------------------------------------------------------------------------
+
+    /**
+     * Continues after a review is decided (subscribed to both approval events, run as the system). Only the transfer's
+     * own request counts; an approval goes through only when {@link RequireApproval} finds that request approved for
+     * the transfer's content, a rejection only when the stored request is rejected for it.
+     */
+    public static ProcessDefinition<ApprovalResultInput, TransferOutput, ProcessContext> approvalResult(
+        StripeSettings stripe) {
+        return ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Sends or rejects a transfer after its review is decided.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .steps(b -> lockAndLoad(b, ctx -> {
+                    ApprovalResultInput input = ctx.get(INPUT, ApprovalResultInput.class);
+                    return QbPayouts.APPROVAL_SUBJECT.equals(input.subject()) ? input.entityId() : null;
+                }))
+                .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.TRANSFER_ENABLED))
+                .steps(b -> loadTaker(b, TransferProcesses::transferUser))
+                .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId", ownRequest(ctx)
+                        ? ids(approvalInput(ctx).requestId()) : new ArrayList<>())).limit(1).build(), REQUEST))
+                .step("Check the approval", RequireApproval.<ProcessContext>when(
+                    ctx -> ownRequest(ctx) && ApprovalEntities.APPROVED.equals(approvalInput(ctx).status()),
+                    QbPayouts.APPROVAL_SUBJECT,
+                    ctx -> approvalCase(first(ctx, TRANSFER)).preparedBy(approvalInput(ctx).preparerId()), APPROVAL))
+                .compute("Send or reject", (metadata, ctx) -> decided(ctx))
+                .steps(b -> sending(b, stripe))
+                .steps(TransferProcesses::finish));
+    }
+
+    private static boolean ownRequest(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        ApprovalResultInput input = approvalInput(ctx);
+        return transfer != null && TransferStatus.REVIEW.equals(transfer.get("status")) && input.requestId() != null
+            && input.requestId().equals(transfer.get("approvalRequestId"));
+    }
+
+    static void decided(ProcessContext ctx) {
+        if (!ownRequest(ctx)) {
+            return;
+        }
+        EntityInstance transfer = first(ctx, TRANSFER);
+        ApprovalResultInput input = approvalInput(ctx);
+        if (ApprovalEntities.APPROVED.equals(input.status())) {
+            ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
+            if (approval.status() != ApprovalOutcome.Status.APPROVED
+                || !input.requestId().equals(approval.requestId())) {
+                return;
+            }
+            // Approved: sent only if it still can be, as it was when created (D-Q6-12).
+            EntityInstance account = first(ctx, ACCOUNT);
+            EntityInstance ban = first(ctx, BAN);
+            BigDecimal amount = QbPayouts.money(transfer.get("amount"));
+            boolean sendable = Boolean.TRUE.equals(ctx.get(PARAMS, ParamValues.class)
+                    .get(QbParams.TRANSFER_ENABLED, Boolean.class))
+                && !BanRules.banned(ban == null ? null : ban.attributes())
+                && account != null && PayoutAccountStatus.ENABLED.equals(account.get("status"))
+                && transfer.get("externalAccountId").equals(account.get("externalAccountId"))
+                && ledgerBalance(ctx).compareTo(amount) >= 0;
+            if (sendable) {
+                ctx.put(SEND, true);
+            } else {
+                reject(ctx, transfer, PayoutChecks.NOT_SENDABLE, null);
+            }
+        } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, transfer)) {
+            reject(ctx, transfer, null, input.reason());
+        }
+    }
+
+    /** Whether the stored request (not the event) says that the transfer, as it is, was rejected. */
+    private static boolean rejected(ProcessContext ctx, EntityInstance transfer) {
+        EntityInstance request = first(ctx, REQUEST);
+        if (request == null) {
+            return false;
+        }
+        String hash = com.jabiz.approval.ContentHash.of(approvalCase(transfer).content());
+        return ApprovalEntities.REJECTED.equals(request.get("status"))
+            && QbPayouts.APPROVAL_SUBJECT.equals(request.get("subject"))
+            && String.valueOf(transfer.id()).equals(request.get("entityId"))
+            && hash.equals(String.valueOf((Object) request.get("contentHash")).strip());
+    }
+
+    /**
+     * The review's case: the facts the rule tests, and the content approved (who, how much, to which account). The
+     * payee is the preparer, so the platform refuses their own approval ({@code APPROVAL_OWN_REQUEST}).
+     */
+    static ApprovalCase approvalCase(EntityInstance transfer) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("needsReview", true);
+        facts.put("amount", QbPayouts.money(transfer.get("amount")));
+        facts.put("userId", transfer.get("userId"));
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("transferId", String.valueOf(transfer.id()));
+        content.put("userId", transfer.get("userId"));
+        content.put("externalAccountId", transfer.get("externalAccountId"));
+        content.put("amount", QbPayouts.money(transfer.get("amount")));
+        content.put("fee", QbPayouts.money(transfer.get("fee")));
+        content.put("net", QbPayouts.money(transfer.get("net")));
+        return ApprovalCase.of(transfer.id(), facts, content).preparedBy(transfer.get("userId"))
+            .reference(String.valueOf(transfer.id()));
+    }
+
+    // ---- sending (create and approval) -----------------------------------------------------------------------------
+
+    private static <I, O> void sending(ProcessDefinitionBuilder<I, O, ProcessContext> pb, StripeSettings stripe) {
+        pb.compute("Prepare the sending", (metadata, ctx) -> {
+                if (!ctx.contains(SEND)) {
+                    return;
+                }
+                EntityInstance transfer = first(ctx, TRANSFER);
+                String userId = transfer.get("userId");
+                BigDecimal fee = QbPayouts.money(transfer.get("fee"));
+                List<LedgerProcesses.Line> lines = new ArrayList<>();
+                lines.add(new LedgerProcesses.Line(QbLedger.REWARDS_PAYABLE, Direction.DEBIT,
+                    QbPayouts.money(transfer.get("amount")), null, Map.of(QbLedger.PARTY, userId)));
+                lines.add(new LedgerProcesses.Line(QbLedger.TRANSFERS_IN_TRANSIT, Direction.CREDIT,
+                    QbPayouts.money(transfer.get("net")), null, Map.of(QbLedger.PARTY, userId)));
+                if (fee.signum() > 0) {
+                    lines.add(new LedgerProcesses.Line(QbLedger.SERVICE_REVENUE, Direction.CREDIT, fee));
+                }
+                ctx.put(POST_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), "Transfer",
+                    String.valueOf(transfer.id()), lines, QbPayouts.TRANSFER, String.valueOf(transfer.id())));
+            })
+            .step("Post the sending", CallProcess.<ProcessContext>when(ctx -> ctx.contains(SEND),
+                LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
+            .compute("Record the sending", (metadata, ctx) -> {
+                if (!ctx.contains(SEND)) {
+                    return;
+                }
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("status", TransferStatus.SENDING);
+                values.put("sendTransactionId", ctx.get(POSTING, LedgerProcesses.PostOutput.class).transactionId());
+                write(ctx, first(ctx, TRANSFER), values);
+                ctx.put(STATUS_AFTER, TransferStatus.SENDING);
+            })
+            .step("Send it", StartExternalJob.<ProcessContext>of(PayoutJobs.TRANSFER, ctx -> {
+                    EntityInstance transfer = first(ctx, TRANSFER);
+                    return new PayoutJobs.TransferInput(String.valueOf(transfer.id()),
+                        transfer.get("externalAccountId"), QbPayouts.money(transfer.get("net")));
+                })
+                .reference(ctx -> String.valueOf(first(ctx, TRANSFER).id()))
+                .when(ctx -> ctx.contains(SEND))
+                .outputKey(JOB_ID));
+    }
+
+    // ---- the job's result ------------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<ExternalJobCompletion, TransferOutput, ProcessContext> sent(
+        StripeSettings stripe) {
+        return ProcessDefinition.define(SENT, 1, ExternalJobCompletion.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Settles a transfer Stripe made.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobCompletion.class).reference()))
+                .compute("Check Stripe's transfer", (metadata, ctx) -> found(ctx, stripe,
+                    ctx.get(INPUT, ExternalJobCompletion.class).result(PayoutObjects.TransferLookup.class), false,
+                    "sent"))
+                .steps(TransferProcesses::settling)
+                .steps(TransferProcesses::reversing)
+                .steps(TransferProcesses::finish));
+    }
+
+    public static ProcessDefinition<ExternalJobFailure, TransferOutput, ProcessContext> sendFailed() {
+        return ProcessDefinition.define(SEND_FAILED, 1, ExternalJobFailure.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Reverses a transfer Stripe refused, or holds one in doubt until Stripe is asked.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobFailure.class).reference()))
+                .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
+                    QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(transferUser(ctx)), LATEST))
+                .compute("Decide", (metadata, ctx) -> {
+                    EntityInstance transfer = first(ctx, TRANSFER);
+                    if (transfer == null || !TransferStatus.SENDING.equals(transfer.get("status"))) {
+                        return;
+                    }
+                    ExternalJobFailure job = ctx.get(INPUT, ExternalJobFailure.class);
+                    if (TransferRules.certainFailure(job.errorCode())) {
+                        failed(ctx, transfer, job.errorCode(), job.errorMessage());
+                    } else {
+                        doubt(ctx, transfer, job.errorCode(), job.errorMessage());
+                    }
+                })
+                .steps(TransferProcesses::settling)
+                .steps(TransferProcesses::reversing)
+                .steps(TransferProcesses::finish));
+    }
+
+    // ---- the check of a transfer in doubt --------------------------------------------------------------------------
+
+    public static ProcessDefinition<TransferRef, TransferOutput, ProcessContext> check() {
+        return ProcessDefinition.define(CHECK, 1, TransferRef.class, TransferOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Asks Stripe whether a transfer in doubt was made.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, TransferRef.class).transferId()))
+                .compute("Decide whether to ask", (metadata, ctx) -> {
+                    EntityInstance transfer = first(ctx, TRANSFER);
+                    if (transfer == null || !inDoubt(transfer, ctx.opTime())) {
+                        return;
+                    }
+                    ctx.put(ASK, true);
+                    write(ctx, transfer, Map.of("checkRequestedAt", ctx.opTime()));
+                })
+                .step("Ask Stripe", StartExternalJob.<ProcessContext>of(PayoutJobs.TRANSFER_CHECK, ctx -> {
+                        EntityInstance transfer = first(ctx, TRANSFER);
+                        return new PayoutJobs.TransferInput(String.valueOf(transfer.id()),
+                            transfer.get("externalAccountId"), QbPayouts.money(transfer.get("net")));
+                    })
+                    .reference(ctx -> String.valueOf(first(ctx, TRANSFER).id()))
+                    .when(ctx -> ctx.contains(ASK))
+                    .outputKey(JOB_ID)));
+    }
+
+    /**
+     * In doubt and not asked about within {@link #ASK_AGAIN_AFTER}: a transfer in {@code CHECK} for at least
+     * {@link #SETTLE_BEFORE_CHECK} (so that no request of its job can still be under way, and Stripe's list shows what
+     * was made), or one still {@code SENDING} after {@link #STALE_AFTER} (its job stuck). One whose transfer at Stripe
+     * does not fit the record is a person's: Stripe would only say the same again.
+     */
+    static boolean inDoubt(EntityInstance transfer, Instant now) {
+        Instant asked = transfer.get("checkRequestedAt");
+        if (asked != null && asked.isAfter(now.minus(ASK_AGAIN_AFTER))) {
+            return false;
+        }
+        if (PayoutChecks.TRANSFER_MISMATCH.equals(transfer.get("failureCode"))) {
+            return false;
+        }
+        String status = transfer.get("status");
+        Instant created = transfer.get("createdAt");
+        Instant doubted = transfer.get("failedAt");
+        return (TransferStatus.CHECK.equals(status) && (doubted == null
+                || !doubted.isAfter(now.minus(SETTLE_BEFORE_CHECK))))
+            || (TransferStatus.SENDING.equals(status) && created != null && created.isBefore(now.minus(STALE_AFTER)));
+    }
+
+    public static ProcessDefinition<ExternalJobCompletion, TransferOutput, ProcessContext> checked(
+        StripeSettings stripe) {
+        return ProcessDefinition.define(CHECKED, 1, ExternalJobCompletion.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Settles or reverses a transfer in doubt as Stripe says.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .steps(b -> lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobCompletion.class).reference()))
+                .compute("Decide", (metadata, ctx) -> found(ctx, stripe,
+                    ctx.get(INPUT, ExternalJobCompletion.class).result(PayoutObjects.TransferLookup.class), true,
+                    "checked"))
+                .steps(TransferProcesses::settling)
+                .steps(TransferProcesses::reversing)
+                .steps(TransferProcesses::finish));
+    }
+
+    public static ProcessDefinition<ExternalJobFailure, TransferOutput, ProcessContext> checkFailed() {
+        return ProcessDefinition.define(CHECK_FAILED, 1, ExternalJobFailure.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Asks a person to look at a transfer Stripe could not be asked about.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .step("Find the transfer", QueryEntities.<ProcessContext>of(QbPayouts.defaultDataset(QbPayouts.TRANSFER),
+                    ctx -> byId(ctx.get(INPUT, ExternalJobFailure.class).reference()), TRANSFER))
+                .compute("Note it", (metadata, ctx) -> {
+                    ctx.put(REASON, PayoutChecks.UNCERTAIN);
+                    EntityInstance transfer = first(ctx, TRANSFER);
+                    ctx.put(REASON_AMOUNT, transfer == null ? null : QbPayouts.money(transfer.get("net")));
+                })
+                .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
+                    ExternalJobFailure job = ctx.get(INPUT, ExternalJobFailure.class);
+                    return PayoutTasks.transfer(PayoutChecks.UNCERTAIN, job.reference(),
+                        (BigDecimal) ctx.get(REASON_AMOUNT), PayoutTasks.transferSource(job.reference(),
+                            "check-failed:" + job.jobId()), null);
+                })));
+    }
+
+    /**
+     * What a job learned about the transfer: Stripe's transfer of the record is settled; one that does not fit holds
+     * it in doubt (a task); none, after the check of a transfer whose sending job ended ({@code CHECK}), means none
+     * was made: reversed. A transfer still sending (its job may still run) is left as it is.
+     */
+    static void found(ProcessContext ctx, StripeSettings stripe, PayoutObjects.TransferLookup lookup,
+        boolean fromCheck, String what) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer == null) {
+            return;
+        }
+        String status = transfer.get("status");
+        if (!TransferStatus.SENDING.equals(status) && !TransferStatus.CHECK.equals(status)) {
+            return;
+        }
+        if (lookup == null) {
+            doubt(ctx, transfer, StripeErrors.BAD_RESPONSE, "The job's result is missing");
+            return;
+        }
+        if (!lookup.found()) {
+            if (fromCheck && TransferStatus.CHECK.equals(status)) {
+                failed(ctx, transfer, "NOT_AT_STRIPE", "Stripe has no transfer of the group");
+            } else if (!fromCheck) {
+                doubt(ctx, transfer, StripeErrors.BAD_RESPONSE, "Stripe reported no transfer");
+            }
+            return;
+        }
+        String problem = PayoutChecks.transferProblem(String.valueOf(transfer.id()),
+            QbPayouts.money(transfer.get("net")), transfer.get("externalAccountId"), lookup.transfer(),
+            stripe.livemode());
+        if (problem != null) {
+            if (TransferStatus.SENDING.equals(status)) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("status", TransferStatus.CHECK);
+                values.put("failureCode", problem);
+                values.put("failedAt", ctx.opTime());
+                write(ctx, transfer, values);
+                ctx.put(STATUS_AFTER, TransferStatus.CHECK);
+            }
+            ctx.put(REASON, problem);
+            ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("net")));
+            return;
+        }
+        ctx.put(SETTLE, true);
+        ctx.put(STRIPE_TRANSFER, lookup.transfer().id());
+        String userId = transfer.get("userId");
+        BigDecimal net = QbPayouts.money(transfer.get("net"));
+        ctx.put(SETTLE_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), "Transfer settled",
+            TopUpCrediting.reference(lookup.transfer().id()), List.of(
+                new LedgerProcesses.Line(QbLedger.TRANSFERS_IN_TRANSIT, Direction.DEBIT, net, null,
+                    Map.of(QbLedger.PARTY, userId)),
+                new LedgerProcesses.Line(QbLedger.STRIPE_BALANCE, Direction.CREDIT, net)),
+            QbPayouts.TRANSFER, String.valueOf(transfer.id())));
+    }
+
+    /** Stripe certainly made no transfer: the sending is reversed and the money is back on the taker's balance. */
+    static void failed(ProcessContext ctx, EntityInstance transfer, String code, String message) {
+        ctx.put(REVERSE, true);
+        ctx.put(FAILURE, new String[] {clip(code, 100), clip(message, 200)});
+        ctx.put(REVERSE_INPUT, new LedgerProcesses.ReverseInput(transfer.get("sendTransactionId"),
+            "Transfer failed: " + clip(code, 100), ctx.opTime()));
+    }
+
+    /** Whether Stripe made the transfer is not known: held, a task, nothing undone. */
+    static void doubt(ProcessContext ctx, EntityInstance transfer, String code, String message) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (!TransferStatus.CHECK.equals(transfer.get("status"))) {
+            values.put("status", TransferStatus.CHECK);
+            ctx.put(STATUS_AFTER, TransferStatus.CHECK);
+        }
+        values.put("failureCode", clip(code, 100));
+        values.put("failureMessage", clip(message, 200));
+        // When the doubt began: the check waits a little after it (inDoubt).
+        values.put("failedAt", ctx.opTime());
+        write(ctx, transfer, values);
+        ctx.put(REASON, PayoutChecks.UNCERTAIN);
+        ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("net")));
+    }
+
+    private static <I, O> void settling(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Post the settlement", CallProcess.<ProcessContext>when(ctx -> ctx.contains(SETTLE),
+                LedgerProcesses.POST, 1, ctx -> ctx.get(SETTLE_INPUT), SETTLEMENT))
+            .compute("Record the settlement", (metadata, ctx) -> {
+                if (!ctx.contains(SETTLE)) {
+                    return;
+                }
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("status", TransferStatus.SENT);
+                values.put("stripeTransferId", ctx.get(STRIPE_TRANSFER));
+                values.put("settleTransactionId", ctx.get(SETTLEMENT, LedgerProcesses.PostOutput.class)
+                    .transactionId());
+                values.put("sentAt", ctx.opTime());
+                values.put("failureCode", null);
+                values.put("failureMessage", null);
+                write(ctx, first(ctx, TRANSFER), values);
+                ctx.put(STATUS_AFTER, TransferStatus.SENT);
+            });
+    }
+
+    private static <I, O> void reversing(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Reverse the sending", CallProcess.<ProcessContext>when(ctx -> ctx.contains(REVERSE),
+                LedgerProcesses.REVERSE, 1, ctx -> ctx.get(REVERSE_INPUT), REVERSAL))
+            .compute("Record the failure", (metadata, ctx) -> {
+                if (!ctx.contains(REVERSE)) {
+                    return;
+                }
+                String[] failure = (String[]) ctx.get(FAILURE);
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("status", TransferStatus.FAILED);
+                values.put("reversalTransactionId", ctx.get(REVERSAL, LedgerProcesses.ReverseOutput.class)
+                    .transactionId());
+                values.put("failureCode", failure[0]);
+                values.put("failureMessage", failure[1]);
+                values.put("failedAt", ctx.opTime());
+                EntityInstance transfer = first(ctx, TRANSFER);
+                write(ctx, transfer, values);
+                ctx.put(STATUS_AFTER, TransferStatus.FAILED);
+                // The latest transfers were read before this one failed: it is the newest of them.
+                List<String> statuses = new ArrayList<>();
+                statuses.add(TransferStatus.FAILED);
+                list(ctx, LATEST).stream().filter(t -> !t.id().equals(transfer.id()))
+                    .forEach(t -> statuses.add(t.get("status")));
+                if (TransferRules.failureStreak(statuses) == TransferRules.MAX_FAILURE_STREAK) {
+                    ctx.put(REASON, PayoutChecks.FAILURE_STREAK);
+                    ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("net")));
+                }
+            });
+    }
+
+    // ---- Stripe's reversal -----------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<TopUpEvents.InboundRef, TransferOutput, ProcessContext> reversed(
+        StripeSettings stripe) {
+        return ProcessDefinition.define(REVERSED, 1, TopUpEvents.InboundRef.class, TransferOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Returns what Stripe reversed of a transfer to the taker's balance.")
+                .permissions(QbPermissions.PAYOUT_SYSTEM)
+                .internal()
+                .contextFactory(TransferProcesses::context)
+                .outputMapper(TransferProcesses::output)
+                .step("Load the event", LoadInboundEvent.of(StripeService.PROVIDER, StripeService.TRANSFER_REVERSED,
+                    ctx -> ctx.get(INPUT, TopUpEvents.InboundRef.class).inboundEventId(), EVENT))
+                .compute("Read the transfer", (metadata, ctx) -> ctx.put(STRIPE_TRANSFER,
+                    PayoutObjects.transfer(event(ctx).at("data.object"))))
+                .steps(b -> lockAndLoad(b, ctx -> {
+                    PayoutObjects.Transfer reported = reported(ctx);
+                    return StripeIds.valid(StripeIds.TOPUP, reported.metadataTransferId());
+                }))
+                .compute("Decide", (metadata, ctx) -> reversal(ctx, stripe))
+                .step("Post the return", CallProcess.<ProcessContext>when(ctx -> ctx.contains(RETURN),
+                    LedgerProcesses.POST, 1, ctx -> ctx.get(RETURN_INPUT), RETURNED))
+                .compute("Record the return", (metadata, ctx) -> {
+                    if (!ctx.contains(RETURN)) {
+                        return;
+                    }
+                    EntityInstance transfer = first(ctx, TRANSFER);
+                    BigDecimal total = (BigDecimal) ctx.get(RETURN);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("reversedAmount", total);
+                    if (total.compareTo(QbPayouts.money(transfer.get("net"))) == 0) {
+                        values.put("status", TransferStatus.REVERSED);
+                        ctx.put(STATUS_AFTER, TransferStatus.REVERSED);
+                    }
+                    write(ctx, transfer, values);
+                })
+                .steps(TransferProcesses::finish));
+    }
+
+    private static PayoutObjects.Transfer reported(ProcessContext ctx) {
+        return ctx.get(STRIPE_TRANSFER, PayoutObjects.Transfer.class);
+    }
+
+    static void reversal(ProcessContext ctx, StripeSettings stripe) {
+        ReceivedEvent event = event(ctx);
+        PayoutObjects.Transfer reported = reported(ctx);
+        EntityInstance transfer = first(ctx, TRANSFER);
+        String source = TopUpTasks.eventSource(event.externalEventId());
+        // The transfer is the record whose Stripe transfer this is (the metadata only finds it).
+        boolean ours = transfer != null && StripeIds.is(StripeIds.TRANSFER, reported.id())
+            && reported.id().equals(transfer.get("stripeTransferId"));
+        if (!ours) {
+            Instant received = event.receivedTime() == null ? ctx.opTime() : event.receivedTime();
+            if (transfer != null && transfer.get("stripeTransferId") == null
+                && ctx.opTime().isBefore(received.plus(WalletLimits.UNKNOWN_PAYMENT_GRACE))) {
+                // Its settlement may not be processed yet (events and results come in any order): tried again.
+                throw new IllegalStateException("The transfer is not settled yet");
+            }
+            reasonTask(ctx, PayoutChecks.UNKNOWN_TRANSFER, reported.amountReversed(), source);
+            return;
+        }
+        if (!Boolean.valueOf(stripe.livemode()).equals(event.livemode())
+            || !Boolean.valueOf(stripe.livemode()).equals(reported.livemode())) {
+            reasonTask(ctx, PayoutChecks.LIVEMODE, reported.amountReversed(), source);
+            return;
+        }
+        if (!StripeService.CURRENCY.equals(reported.currency())) {
+            reasonTask(ctx, PayoutChecks.CURRENCY, reported.amountReversed(), source);
+            return;
+        }
+        BigDecimal net = QbPayouts.money(transfer.get("net"));
+        BigDecimal recorded = QbPayouts.money(transfer.get("reversedAmount"));
+        BigDecimal part = TransferRules.reversalPart(net, recorded, reported.amountReversed());
+        if (part == null) {
+            reasonTask(ctx, PayoutChecks.OVER_REVERSAL, reported.amountReversed(), source);
+            return;
+        }
+        if (part.signum() == 0) {
+            return;
+        }
+        String userId = transfer.get("userId");
+        ctx.put(RETURN, recorded.add(part));
+        ctx.put(RETURN_INPUT, new LedgerProcesses.PostInput(TopUpEvents.happened(event), "Transfer reversed",
+            TopUpCrediting.reference(reported.id()), List.of(
+                new LedgerProcesses.Line(QbLedger.STRIPE_BALANCE, Direction.DEBIT, part),
+                new LedgerProcesses.Line(QbLedger.REWARDS_PAYABLE, Direction.CREDIT, part, null,
+                    Map.of(QbLedger.PARTY, userId))),
+            QbPayouts.TRANSFER, String.valueOf(transfer.id())));
+        ctx.put(CHANGED, true);
+        reasonTask(ctx, PayoutChecks.REVERSED, part, source);
+    }
+
+    private static void reasonTask(ProcessContext ctx, String reason, BigDecimal amount, String source) {
+        ctx.put(REASON, reason);
+        ctx.put(REASON_AMOUNT, amount);
+        ctx.put("reasonSource", source);
+    }
+
+    // ---- shared ----------------------------------------------------------------------------------------------------
+
+    /** Finds the transfer, locks its taker's wallet, reads the transfer and the wallet again. */
+    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, String> transferId) {
+        pb.step("Find the transfer", QueryEntities.<ProcessContext>of(QbPayouts.defaultDataset(QbPayouts.TRANSFER),
+                ctx -> byId(transferId.apply(ctx)), FOUND))
+            .step("Lock the taker's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
+                EntityInstance found = first(ctx, FOUND);
+                return found == null ? null : QbWallets.lockName(QbWallets.TAKER, found.get("userId"));
+            }))
+            .step("Read the transfer again", QueryEntities.<ProcessContext>of(
+                QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> byId(transferId.apply(ctx)), TRANSFER))
+            .steps(b -> TakerWallets.load(b, TransferProcesses::transferUser));
+    }
+
+    /** The taker's ban, payout account and ledger balance (under their wallet lock). */
+    private static <I, O> void loadTaker(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, Object> userId) {
+        pb.step("Load the taker's ban", QueryEntities.<ProcessContext>of(QbAccounts.defaultDataset(QbAccounts.BAN),
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("userId", uuids(userId.apply(ctx))))
+                    .limit(1).build(), BAN))
+            .step("Load the payout account", QueryEntities.<ProcessContext>of(
+                QbPayouts.defaultDataset(QbPayouts.ACCOUNT), ctx -> PayoutProcesses.byUser(userId.apply(ctx)),
+                ACCOUNT))
+            .step("Read the taker's balance", RunTemplate.<ProcessContext>of(TakerWallets.BALANCE_TEMPLATE,
+                ctx -> Map.of("userId", String.valueOf(userId.apply(ctx))), LEDGER));
+    }
+
+    /**
+     * The end of every transfer process: the taker's wallet recomputed from the ledger when the transfer moved money,
+     * the change announced (and its outcome, for Q7), a task when there is a reason.
+     */
+    private static <I, O> void finish(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.compute("Note what changed", (metadata, ctx) -> {
+                if (ctx.contains(SEND) || ctx.contains(SETTLE) || ctx.contains(REVERSE) || ctx.contains(RETURN)) {
+                    ctx.put(CHANGED, true);
+                }
+            })
+            .steps(b -> TakerWallets.refresh(b, TransferProcesses::transferUser, ctx -> ctx.contains(CHANGED)))
+            .step("Announce the change", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(CHANGED)
+                || ctx.contains(STATUS_AFTER), QbPayouts.CHANGED_EVENT, TransferProcesses::payload))
+            .step("Announce the transfer", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(SETTLE),
+                QbPayouts.SENT_EVENT, TransferProcesses::payload))
+            .step("Announce the failure", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(REVERSE),
+                QbPayouts.FAILED_EVENT, TransferProcesses::payload))
+            .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
+                EntityInstance transfer = first(ctx, TRANSFER);
+                String transferId = transfer == null ? null : String.valueOf(transfer.id());
+                String source = ctx.contains("reasonSource") ? (String) ctx.get("reasonSource")
+                    : PayoutTasks.transferSource(String.valueOf(transferId), (String) ctx.get(REASON));
+                ReceivedEvent event = ctx.contains(EVENT) ? event(ctx) : null;
+                return PayoutTasks.transfer((String) ctx.get(REASON), transferId, (BigDecimal) ctx.get(REASON_AMOUNT),
+                    source, event == null ? null : event.inboundEventId());
+            }));
+    }
+
+    private static Map<String, Object> payload(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("transferId", String.valueOf(transfer.id()));
+        payload.put("userId", transfer.get("userId"));
+        payload.put("status", ctx.contains(STATUS_AFTER) ? ctx.get(STATUS_AFTER) : transfer.get("status"));
+        payload.put("net", QbPayouts.money(transfer.get("net")).toPlainString());
+        return payload;
+    }
+
+    private static void reject(ProcessContext ctx, EntityInstance transfer, String reason, String note) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", TransferStatus.REJECTED);
+        values.put("failureCode", reason == null ? "REVIEW_REJECTED" : reason);
+        values.put("failureMessage", clip(note, 200));
+        values.put("failedAt", ctx.opTime());
+        write(ctx, transfer, values);
+        ctx.put(STATUS_AFTER, TransferStatus.REJECTED);
+        if (reason != null) {
+            ctx.put(REASON, reason);
+            ctx.put(REASON_AMOUNT, QbPayouts.money(transfer.get("amount")));
+        }
+    }
+
+    private static void write(ProcessContext ctx, EntityInstance transfer, Map<String, Object> values) {
+        ctx.changes().update(QbPayouts.TRANSFER, transfer.id(), transfer.version(), values);
+    }
+
+    /** The latest three transfers of a taker, newest first (the unfinished one, if any, is among them). */
+    static EntityQuery latest(Object userId) {
+        List<Object> ids = new ArrayList<>();
+        if (userId != null) {
+            ids.add(String.valueOf(userId));
+        }
+        return EntityQuery.builder().where(new QueryPredicate.In("userId", ids))
+            .orderBy("createdAt", false).limit(TransferRules.MAX_FAILURE_STREAK).build();
+    }
+
+    static EntityQuery byId(String transferId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("transferId", ids(transferId))).limit(1).build();
+    }
+
+    private static List<Object> ids(String id) {
+        List<Object> ids = new ArrayList<>();
+        if (StripeIds.is(StripeIds.TOPUP, id)) {
+            ids.add(id);
+        }
+        return ids;
+    }
+
+    private static List<Object> uuids(Object id) {
+        List<Object> ids = new ArrayList<>();
+        try {
+            if (id != null) {
+                ids.add(UUID.fromString(String.valueOf(id)));
+            }
+        } catch (IllegalArgumentException e) {
+            // Not a platform user: nobody to ban.
+        }
+        return ids;
+    }
+
+    private static BigDecimal ledgerBalance(ProcessContext ctx) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(LEDGER);
+        return rows == null || rows.isEmpty() ? BigDecimal.ZERO : TakerWallets.money(rows.getFirst().get("available"));
+    }
+
+    private static String userOf(ProcessContext ctx) {
+        return ctx.get(INPUT, UserRef.class).userId();
+    }
+
+    /** The taker the process is about: the transfer's, or the input's for the creation. */
+    private static Object transferUser(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer != null) {
+            return transfer.get("userId");
+        }
+        EntityInstance found = first(ctx, FOUND);
+        if (found != null) {
+            return found.get("userId");
+        }
+        Object input = ctx.get(INPUT);
+        return input instanceof UserRef ref ? ref.userId() : null;
+    }
+
+    private static ApprovalResultInput approvalInput(ProcessContext ctx) {
+        return ctx.get(INPUT, ApprovalResultInput.class);
+    }
+
+    private static ReceivedEvent event(ProcessContext ctx) {
+        return ctx.get(EVENT, ReceivedEvent.class);
+    }
+
+    private static String clip(String text, int max) {
+        return text == null || text.length() <= max ? text : text.substring(0, max);
+    }
+
+    private static ProcessContext context(com.jabiz.process.ProcessStart start, Object input) {
+        ProcessContext ctx = new ProcessContext(start);
+        ctx.put(INPUT, input);
+        return ctx;
+    }
+
+    private static TransferOutput output(ProcessContext ctx) {
+        EntityInstance transfer = first(ctx, TRANSFER);
+        if (transfer == null && TransferRules.OPEN_TRANSFER.equals(ctx.get(SKIP))) {
+            // Skipped for the unfinished one: that is the transfer the caller is told about.
+            transfer = list(ctx, LATEST).stream().filter(t -> TransferStatus.UNFINISHED.contains(t.get("status")))
+                .findFirst().orElse(null);
+        }
+        String status = ctx.contains(STATUS_AFTER) ? (String) ctx.get(STATUS_AFTER)
+            : transfer == null ? null : transfer.get("status");
+        String reason = ctx.contains(REASON) ? (String) ctx.get(REASON) : (String) ctx.get(SKIP);
+        ApprovalOutcome approval = ctx.contains(APPROVAL) ? ctx.get(APPROVAL, ApprovalOutcome.class) : null;
+        String requestId = approval != null && approval.status() == ApprovalOutcome.Status.PENDING
+            ? approval.requestId() : transfer == null ? null : transfer.get("approvalRequestId");
+        return new TransferOutput(transfer == null ? null : String.valueOf(transfer.id()), status, reason,
+            requestId);
+    }
+
+    /** The input of {@value #APPROVAL_RESULT} from an approval event. */
+    static ApprovalResultInput resultInput(DomainEvent event) {
+        Map<String, Object> payload = event.payload();
+        return new ApprovalResultInput(text(payload, "subject"), text(payload, "entityId"), text(payload, "status"),
+            text(payload, "requestId"), text(payload, "preparerId"), text(payload, "contentHash"),
+            text(payload, "reason"));
+    }
+
+    private static String text(Map<String, Object> payload, String key) {
+        Object value = payload.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private TransferProcesses() {}
+}

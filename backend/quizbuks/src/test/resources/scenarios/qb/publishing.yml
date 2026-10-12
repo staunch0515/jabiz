@@ -15,10 +15,11 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rulesProposed: [qb.publication.review, qb.sponsor.review]
+      rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]",
-      p9: "$.proposals[8]", p10: "$.proposals[9]" }
+      p9: "$.proposals[8]", p10: "$.proposals[9]", p11: "$.proposals[10]",
+      p12: "$.proposals[11]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -50,6 +51,12 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
 
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: sponsor-a, permissions: [qb.sponsor.me] }
