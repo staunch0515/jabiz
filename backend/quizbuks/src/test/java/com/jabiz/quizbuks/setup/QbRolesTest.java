@@ -28,7 +28,8 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions().stream()
-                .filter(permission -> !permission.equals("control.publish")).toList())
+                .filter(permission -> !permission.equals("control.publish") && !permission.equals("inbound.read"))
+                .toList())
             .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.read", "control.propose",
                 "security.user-role.write")
             .doesNotHaveDuplicates();
@@ -137,5 +138,20 @@ class QbRolesTest {
     @Test
     void refusesUnknownRoles() {
         assertThatThrownBy(() -> QbRoles.of("QB_NOBODY")).hasMessageContaining("QB_NOBODY");
+    }
+
+    @Test
+    void topUpsAndReconciliationGrants() {
+        // Q6a: Stripe's events as received hold payers' details: the finance administrator alone reads them.
+        assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("inbound.read"))
+            .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_FINANCE);
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions()).contains("external-job.read",
+            QbPermissions.RECONCILE, QbPermissions.ADMIN_FINANCE_READ);
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.TOPUP,
+            QbPermissions.SPONSOR_FINANCE_READ);
+        // The system's processes, the development credit and the ledger's writes are nobody's.
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions()).doesNotContain(
+            QbPermissions.WALLET_SYSTEM, QbPermissions.WALLET_DEV_CREDIT, QbPermissions.PLAY_SYSTEM, "ledger.post",
+            "ledger.reverse", "inbound.write", "external-job.complete", "external-job.write"));
     }
 }

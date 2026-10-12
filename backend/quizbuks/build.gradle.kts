@@ -31,6 +31,13 @@ tasks.named<Test>("test") {
     }
 }
 
+// platformCheck starts the application with application.yml only: Stripe's webhook secret, which comes from the
+// environment and fails the startup when missing, gets a throwaway value there, so that the inbound provider and its
+// consumers are checked (the platform's launcher brings throwaway keys of its own, but none for inbound providers).
+tasks.named<JavaExec>("platformCheck") {
+    environment("STRIPE_WEBHOOK_SECRET", "whsec_platform_check_throwaway_00000000000")
+}
+
 tasks.register<Test>("perfTest") {
     description = "Runs the answering throughput baseline (tag perf)."
     group = "verification"

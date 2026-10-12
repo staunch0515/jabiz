@@ -33,5 +33,19 @@ public final class SponsorChecks {
         return List.copyOf(problems);
     }
 
+    /**
+     * Adds the steps that read the caller's onboarding and ban, for {@link #problems} (other modules' processes that
+     * act as a sponsor, such as a top-up, Q6).
+     */
+    public static <I, O> void load(com.jabiz.process.ProcessDefinitionBuilder<I, O, com.jabiz.process.ProcessContext>
+        pb) {
+        PublicationEditing.loadSponsor(pb);
+    }
+
+    /** Why the caller, read by {@link #load}, may not act as a sponsor; none when they may. */
+    public static List<Violation> problems(com.jabiz.process.ProcessContext ctx) {
+        return PublicationEditing.sponsorProblems(ctx);
+    }
+
     private SponsorChecks() {}
 }

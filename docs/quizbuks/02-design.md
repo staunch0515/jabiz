@@ -121,9 +121,10 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；用户余额按账本维度汇总，用户钱包与其锁由 Q6 定 |
-| `QbTopUp` | T | `sponsorId`、`amount`、`checkoutSessionId`（唯一）、`paymentIntentId`、`status`（CREATED / PAID / EXPIRED / FAILED）、`paidAt`、`stripeFee`、`presentmentCurrency`、`presentmentAmount`（F-04 原币信息，若 Stripe 给出） | 充值 |
-| `QbTransfer` | T | `userId`、`amount`、`status`（REVIEW / SENDING / SENT / FAILED / REVERSED）、`externalTransferId`、`failureReason` | 自动转账（4.7）。大额先进 REVIEW 走审批 |
+| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
+| `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`amount`（`> 0`）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`；`checkReason`、`checkRequestedAt` | 充值（`plans/Q6-payments.md` D-Q6-2）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
+| `QbReconRun` / `QbReconItem` | W（Q6a） | 运行：`scheduledTime`（唯一）、`status`（OK / DIFF）、`checkedAt`、`itemCount`、`summary`（各项差异数的规范 JSON）；差异：`runId`、`check`（字典 `recon-check`）、`partyId`、`reference`、`expected`、`actual`、`difference` | 每日核对（F-06）的结果，只写一次 |
+| `QbTransfer` | P（Q6b） | `userId`、`amount`、`fee`、`net`、`status`（REVIEW / SENDING / SENT / FAILED / CHECK / REJECTED / REVERSED）、`stripeTransferId`、交易号等（`plans/Q6-payments.md`） | 自动转账（4.7）。大额先进 REVIEW 走审批 |
 | `QbFxRate` | T | `currency`、`rateDate`、`perJpy`、`source`（ECB / MANUAL） | 显示用参考汇率（"约合 X USD"），可手动覆盖；不参与记账 |
 | `QbStripeEvent` | — | — | 不建：Stripe 通知由平台入站 Webhook（G9）原样存档与去重 |
 
@@ -156,8 +157,9 @@ docs/quizbuks/               本文件等
 
 | 事件 | 流程 | 借 | 贷 |
 |---|---|---|---|
-| 充值到账（Stripe 通知） | `QB_TOPUP_CONFIRM` | 1110 Stripe 余额（总额） | 2110 商家预收款（商家） |
-| Stripe 手续费确定 | `QB_TOPUP_CONFIRM`（或对账） | 5110 支付手续费 | 1110 Stripe 余额 |
+| 充值到账（Stripe 通知或核实） | `QB_TOPUP_CONFIRM` / `QB_TOPUP_CHECKED` | 1110 Stripe 余额（记录的金额） | 2110 商家预收款（商家） |
+| Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
+| 退款 / 争议败诉（Stripe 后台发生；余额不够即待办、不过账） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
 | 转账发出 | `QB_TRANSFER_SEND` | 2120 应付用户奖励（用户） | 2130 转账中（用户） |
 | 转账成功（Stripe 通知） | `QB_TRANSFER_RESULT` | 2130 转账中（用户） | 1110 Stripe 余额 |
@@ -167,7 +169,10 @@ docs/quizbuks/               本文件等
 - 待支付奖励**不入账**（需求 7.1）：只在 `QbAttempt.rewardStatus = PENDING` 与钱包的待支付计数中记录。
 - **抽成按结算时**生效的受控参数 `qb.creator-fee-rate` 计算（补发时用补发时的比例），向下取整到整数 Kudos（`RewardSplit`）；来源单据为答题会话（`QbAttempt`），记账时间为完成（或补发）时间。
 - 更正一律冲正（平台 `LEDGER_REVERSE`）。
-- 余额核对（F-06，每日任务）：`QbWallet.balance` = 账本维度余额；2110 合计 = 商家钱包合计；2120 合计 = 用户钱包合计；不等则建待办给财务并停止当日导出。
+- 充值、手续费、退款的分录来源都是 `QbTopUp`；到账的记账时间是 Stripe 事件的 `created`（付款发生的时间），手续费的是到账时间。
+- 余额核对（F-06，每日任务 `qb.reconcile`，Q6a）：每个商家的 `QbWallet.balance` = 2110 按当事人的余额；待支付笔数与金额 = `PENDING` 会话；2110 合计 = 商家钱包合计；
+  全部分录借贷平衡；每笔充值的到账、扣回与手续费分录与记录相符（Q6b 另加用户钱包与转账）。每项比较是一条语句（一个快照），模板只返回差异行；
+  有差异则记 `QbReconRun` / `QbReconItem`、建待办给财务、发布 `qb.reconcile.diff`（Q9 的导出据此停止）。
 
 ### 4.3 并发与锁
 
@@ -177,6 +182,8 @@ docs/quizbuks/               本文件等
 | `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`） | 结算、补发待支付、开发入账（Q5）、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
 | `qb.account:<用户>` | 资料、入驻、商家资料、审批结果、封禁 / 解封（Q2） | 该用户的 `QbProfile`、`QbSponsor`、`QbUserBan` |
 
+- Q6a 的充值流程（开始除外）、到账、过期、核实、手续费、退款与争议**都只取 `qb.wallet:SPONSOR:<充值的商家>`**（锁名取自服务端的记录，不取自 Stripe 的元数据），
+  先在锁外按编号找到充值、再取锁、锁内重读；每日核对不取业务锁。所以不会与"发布锁 → 钱包锁"成环。
 - 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 发布锁 → 钱包锁**（Q4，D-Q4-5；Q2 D-Q2-10）。账户锁目前不与其他锁同时持有（提交发布只读入驻与封禁，不取账户锁）；只有提交发布同时取模版锁与发布锁，移除模版只取模版锁（独占），两者因此不会交错。只持钱包锁的流程（充值、补发、转账）不再取发布锁（补发不改发布计数，计数在提交时已算入），因此不会死锁。
 - **晚取锁**（Q5）：提交先在锁外读会话、版本与抽成比例，锁内只重读会话、计数、发布与卡片，评分后（奖励大于 0 时）再取钱包锁、过账与写入；
   开始只取发布锁（不取钱包锁：商家余额是软检查，并发多出的人完成后记为待支付）；继续答题与保存进度不取锁（会话行的乐观版本）。
@@ -235,12 +242,18 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（不取锁）；超过 `deadline` 拒绝；非法题号或选项一次报告全部 |
 | `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
 | `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |
-| `QB_TOPUP_START` | `qb.topup` | 建 `QbTopUp` 与 Stripe Checkout Session（`BlockingStep`，Stripe 幂等键 = 充值编号），返回支付页地址 |
-| `QB_TOPUP_CONFIRM` | 系统（G9） | Stripe `checkout.session.completed`：钱包锁 → 记分录、`PAID` → 子流程 `QB_PENDING_SETTLE` |
+| `QB_TOPUP_START` | `qb.topup`，要求已验证 | 未封禁、入驻已通过；金额为受控参数 `qb.topup.min` – `max` 之间的整数 Kudos；未完成的至多 3 笔 → 插入 `OPENING`，登记作业 `qb.stripe.checkout-create`（会话的金额、引用与返回地址只来自服务端记录与配置）。页面轮询到 `OPEN` 后跳转 |
+| `QB_TOPUP_OPENED` / `QB_TOPUP_OPEN_FAILED` | 系统（作业完成 / 失败，`qb.wallet.system`，`internal()`） | 商家钱包锁：核对会话（编号、模式、地址前缀、引用、金额）后 `OPEN`，不符或作业失败即 `FAILED`（不符另开待办） |
+| `QB_TOPUP_CONFIRM` | 系统（`checkout.session.completed`，`internal()`） | 商家钱包锁 → `TopUpChecks` 逐项核对 → 同一事务中过账、钱包增加、`PAID`，发布 `qb.sponsor.settle-pending`（补发在另一事务中）与 `qb.topup.paid`，登记手续费作业；不符即待办、不入账 |
+| `QB_TOPUP_EXPIRE` | 系统（`checkout.session.expired`） | 未付的充值 `EXPIRED`；已付的开待办 |
+| `QB_TOPUP_CHECK` / `QB_TOPUP_CHECKED` / `QB_TOPUP_CHECK_FAILED` | 系统（逐项任务 `qb.topup-stale` 每小时 / 作业） | 支付页过期一小时仍无通知的充值向 Stripe 核实（6 小时内不重复），按回答与通知同一套步骤入账或过期 |
+| `QB_TOPUP_FEE_RECORD` / `QB_TOPUP_FEE_FAILED` | 系统（作业） | Stripe 手续费：核对币种与 `fee + net = 金额` 后过账 5110 / 1110 并记流水号；不符或失败即待办 |
+| `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_OPENED` / `QB_TOPUP_DISPUTE_CLOSED` | 系统（`charge.refunded`、`charge.dispute.*`） | 按累计退款额只扣回一次（`RefundMath`），余额不够即待办；争议开立即待办，败诉同退款，胜诉只记状态；付款尚未确认的退款先失败重试 30 分钟 |
+| `QB_RECONCILE_RUN`（任务 `qb.reconcile`） | 系统（`qb.wallet.system`） | 每日核对（4.2），同一计划时刻只一次 |
 | `QB_PENDING_SETTLE` / `QB_PENDING_PAY` | 系统（`qb.play.system`） | 只取钱包锁：按提交顺序取至多 50 条待支付，逐条（`QB_PENDING_PAY`，按结算时的抽成）补发，遇到付不起的即停止（不跳过）；还能付下一条时发布事件在新事务中续接；清空后发布 `qb.sponsor.funds-restored` |
 | `QB_PUBLICATION_FUNDS_RESTORED` / `QB_PUBLICATION_FUNDED` | 系统（`qb.publication.system`） | 订阅 `qb.sponsor.funds-restored`：按编号逐个在发布锁内把该商家 `FUNDS_SHORT` 的发布放回 `LIVE`（已过结束时间即 `ENDED`）；不取钱包锁 |
 | `QB_PUBLICATION_STATS_REFRESH`（任务 `qb.publication-stats`） | 系统（`qb.play.system`） | 每 10 分钟：进行中及 31 天内结束的发布的近 1 小时、24 小时、7 天、30 天完成数写入 `qb_publication_stats`（只写变化的行） |
-| `QB_WALLET_DEV_CREDIT` | `qb.wallet.dev-credit`（不授予任何角色），只在 `quizbuks.wallet.dev-credit.enabled=true` 时注册 | 开发与测试用的入账（Q6 的充值之前）：钱包锁 → 借 1110 / 贷 2110 → 子流程 `QB_PENDING_SETTLE`。生产不开 |
+| `QB_WALLET_DEV_CREDIT` | `qb.wallet.dev-credit`（不授予任何角色），只在 `quizbuks.wallet.dev-credit.enabled=true` 时注册 | 开发与测试用的入账：钱包锁 → 借 1110 / 贷 2110 → 发布 `qb.sponsor.settle-pending`。生产不开：与正式模式或正式密钥同时开启即启动失败（`StripeModeCheck`） |
 | `QB_PAYOUT_ONBOARD` | `qb.payout.onboard` | 创建 Stripe Express 账户（首次）与开通链接，返回地址；结果由 `account.updated` 通知更新 `payoutsEnabled` |
 | `QB_TRANSFER_RUN`（任务） | 系统 | 每日：余额 ≥ 门槛、`payoutsEnabled`、未封禁的用户各建一笔转账（全额）；超过人工审核额的进 REVIEW（审批） |
 | `QB_TRANSFER_SEND` | 系统 | 钱包锁 → 分录（2120 → 2130）→ 提交后（`AFTER_COMMIT`）调用 Stripe Transfer（幂等键 = 转账编号） |
@@ -250,7 +263,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_MESSAGE_MARK` | `qb.me` | 已读 / 点击 |
 | `QB_PUBLICATION_ADVANCE`（逐项任务 `qb.publication-tick` 的每项） | 系统（`qb.publication.system`，不授予任何角色，`internal()`） | 每分钟：模板 `qb.system.publications-due` 按日程表选出到期的发布（至多 2 000 条），每条一个事务，在发布锁内 SCHEDULED → LIVE、到期 → ENDED、待审核而到期 → DRAFT；一条失败只影响它自己（退避重试），锁被占用则下一分钟再做 |
 | `QB_FX_FETCH`（任务） | 系统 | 每日取 ECB 参考汇率（`BlockingStep`），手动覆盖优先 |
-| `QB_RECONCILE`（任务） | 系统 | 每日余额核对（4.2）、与 Stripe 余额交易报告核对（以后，F-05） |
+| （以后，F-05） | 系统 | 与 Stripe 余额交易报告逐笔核对、银行流水导入 |
 
 所有流程的业务规则违规以 422 与错误码返回（`QB_*`，三语文案）。
 
@@ -261,7 +274,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
 | `qb.app.publication` / `qb.app.publication-tiers` | 详情（U-20 – U-23）：卡片、简介与资料（版本快照中，不含题目）、发布人（入驻已通过的）、完成人数（近期窗口取统计表，累计取计数行）、本人的会话；档位取卡片 | `qb.play` |
 | `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选 | `qb.me` |
-| `qb.app.ledger` / `qb.app.wallet` | 交易流水、余额概览（U-50 – U-52，Q6） | `qb.me` |
+| `qb.app.wallet` / `qb.app.ledger` | 余额概览（可用 = 本人 2120、累计收入、待支付、转账中 = 2130）与流水（奖励：已到账 / 处理中；Q6b 加转账），只读本人的分录（数据视图 `taker:LedgerEntry`，按 `dimension1` = 调用者）与会话（U-50 – U-52，Q6a） | `qb.me` |
+| `qb.sponsor.wallet` / `qb.sponsor.topups` | 商家钱包概览（余额、待支付、累计充值与退款、累计支出）与本人充值记录（支付页地址只在 `OPEN` 且未过期时给出）（M-04，Q6a） | `qb.sponsor.finance.read` |
+| `qb.admin.topups` / `qb.admin.recon-runs` / `qb.admin.recon-items` | 全部充值（不含支付页地址）；核对结果与差异（F-06，Q6a） | `qb.admin.finance.read` / `qb.reconcile` |
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` / `qb.sponsor.transactions` | M-10 – M-11、M-34、M-40 – M-43、M-50 – M-52 | 各自权限 |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
@@ -297,7 +312,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | 系统 | 用途 | 接入方式 | 配置 |
 |---|---|---|---|
-| Stripe | 充值（Checkout）、用户收款账户（Connect Express）、转账（Transfers） | 出站：官方 Java SDK，在 `BlockingStep` 中调用（有副作用的放 `AFTER_COMMIT` 或用 Stripe 幂等键）；入站：平台入站 Webhook（G9），按 Stripe 签名校验 | `STRIPE_API_KEY`、`STRIPE_WEBHOOK_SECRET`（环境变量） |
+| Stripe | 充值（Checkout）、用户收款账户（Connect Express，Q6b）、转账（Transfers，Q6b） | 出站：外部服务 `stripe`，只经平台的 JDK HTTP（D38：官方 SDK 自带的连接不受主机白名单约束，不用），应用自写 `StripeApi`（表单编码、错误分类、JSON 解析），**全部调用都是异步外部作业**（重试与幂等键由平台持久化），以 `Stripe-Version` 固定 API 版本；入站：平台入站 Webhook（D37）的提供方 `stripe`（账户端点；Q6b 另加 `stripe-connect`），验签、存档、去重后交给 `internal()` 的消费流程 | `STRIPE_API_KEY`、`STRIPE_WEBHOOK_SECRET`（环境变量）；`quizbuks.stripe.*`（模式、API 版本、支付页有效期） |
 | OpenAI | AI 生成题目与封面 | 平台异步外部作业（G7）+ 官方 Java SDK；模型名是业务参数 | `OPENAI_API_KEY` |
 | ECB | 参考汇率 | 定时任务中的 `BlockingStep` | — |
 | 邮件 | 激活、欢迎、转账结果 | 平台事务邮件（G3） | `spring.mail.*` |
@@ -313,6 +328,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   因此预占他人邮箱注册的人留不下应用数据（平台接管时不清理应用数据）。
 - 封禁的不能登录（`QbSignInGuard`，登录与刷新时检查）；已签发的访问令牌在到期前仍可用，所以提交发布（`SponsorChecks`）、开始答题与提交（Q5）、转账（Q6）在流程中再查 `QbUserBan`（422 `QB_USER_BANNED`）。
 - 一个 Stripe 收款账户只能属于一个用户（`externalAccountId` 唯一），减少多账号刷奖后套现。
+- **Stripe 的通知**（Q6a）：验签、时间容差、去重由平台入口完成；签名不等于内容可信，消费流程逐项核对会话、引用、模式、币种与金额，
+  只按服务端记录的金额、对记录的商家入账，锁名也取自记录；不成立的开待办而不入账。客户端唯一的输入是金额（受控上下限），
+  返回地址由配置生成（没有开放重定向），浏览器回跳不入账。测试与正式模式、密钥前缀与开发入账由启动检查与消费流程共同隔离。
+  密钥只来自环境变量，不进日志与作业的输入；原样事件可能含付款人信息，只有财务管理员能读，保留 7 年。
 - 限流：开始答题、提交、AI 请求、充值按用户限流（平台限流能力只覆盖公开接口与上传，若不够在 G1 中补"按用户的接口限流"——计划时评估）。
 
 ## 10. 依赖的平台能力（`1.2/platform`）

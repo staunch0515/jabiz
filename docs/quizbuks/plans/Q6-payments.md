@@ -768,20 +768,20 @@ Q6b：
 
 ## 验收标准
 
-- [ ] `./gradlew :quizbuks:check` 通过（含 `platformCheck`：`INBOUND`、`EXTERNAL`、`JOB`、`EVENT`、`PROCESS`、`LEDGER` 无错误）；`tools/check-app-paths.sh` 通过。
-- [ ] M-04：商家以 Stripe Checkout 充值；到账只以签名的 Stripe 通知（或向 Stripe 核实的结果）为准，按服务端记录的金额入账；补发待支付奖励，发布回到进行中。
-- [ ] 同一笔付款无论通知重复、乱序、并发或与核实同时到达，只入账一次（测试覆盖四层保证）。
-- [ ] 客户端给出的金额、地址、编号都不能改变入账的金额或对象；不成立的通知只开待办、不入账。
-- [ ] 签名错误、过期、重放的请求被拒绝，不存储；密钥只来自环境变量，不出现在日志、操作记录与仓库中。
-- [ ] F-04：每笔充值记录 Stripe 流水号、手续费（借 5110 / 贷 1110）、原币金额与汇率（若有）。
-- [ ] 退款与争议：冲减商家钱包而不使其为负；不够时开待办；重复事件不重复冲减。
-- [ ] U-50 – U-52：答题人的余额概览（可用、累计收入、待支付、处理中的转账）与流水（奖励含待支付、转账；按关键字、类型、状态、日期、金额筛选）；商家的钱包概览与充值记录。
-- [ ] F-06：每日核对商家钱包、待支付、2110 合计、账本平衡、每笔充值的分录（Q6b 另加用户钱包与转账）；有差异时记录、开待办、发布事件；运行期间的结算不产生假差异。
-- [ ] 开发入账只在 dev 与测试中存在；与正式模式或正式密钥同时开启时启动失败。
+- [x] `./gradlew :quizbuks:check` 通过（含 `platformCheck`：`INBOUND`、`EXTERNAL`、`JOB`、`EVENT`、`PROCESS`、`LEDGER` 无错误）；`tools/check-app-paths.sh` 通过。
+- [x] M-04：商家以 Stripe Checkout 充值；到账只以签名的 Stripe 通知（或向 Stripe 核实的结果）为准，按服务端记录的金额入账；补发待支付奖励，发布回到进行中。
+- [x] 同一笔付款无论通知重复、乱序、并发或与核实同时到达，只入账一次（测试覆盖四层保证）。
+- [x] 客户端给出的金额、地址、编号都不能改变入账的金额或对象；不成立的通知只开待办、不入账。
+- [x] 签名错误、过期、重放的请求被拒绝，不存储；密钥只来自环境变量，不出现在日志、操作记录与仓库中。
+- [x] F-04：每笔充值记录 Stripe 流水号、手续费（借 5110 / 贷 1110）、原币金额与汇率（若有）。
+- [x] 退款与争议：冲减商家钱包而不使其为负；不够时开待办；重复事件不重复冲减。
+- [x] U-50 – U-52（Q6a：奖励部分；转账在 Q6b）：答题人的余额概览（可用、累计收入、待支付、处理中的转账）与流水（奖励含待支付、转账；按关键字、类型、状态、日期、金额筛选）；商家的钱包概览与充值记录。
+- [x] F-06（Q6a 部分；用户钱包与转账在 Q6b）：每日核对商家钱包、待支付、2110 合计、账本平衡、每笔充值的分录（Q6b 另加用户钱包与转账）；有差异时记录、开待办、发布事件；运行期间的结算不产生假差异。
+- [x] 开发入账只在 dev 与测试中存在；与正式模式或正式密钥同时开启时启动失败。
 - [ ] （Q6b）U-53：用户开通 Stripe Express 收款账户（不保存银行信息），余额达到门槛后每日自动全额转账；大额经审批，收款人不能审批自己；封禁的用户不转账。
 - [ ] （Q6b）转账不会重复、不会超过余额：每人至多一笔未结束的转账；不确定的结果先向 Stripe 核实再定论；失败冲正回用户余额，撤回恢复用户余额。
 - [ ] 5.3-14：转账门槛、手续费、开关是受控参数（四眼）；手续费为 0 即关闭。
-- [ ] 全部系统流程为 `internal()`；普通表只经流程写入；时态与只写一次的表没有 UPDATE / DELETE；消息三语齐全；文档与部署说明已更新；部署后执行 `QB_SETUP` 并发布新的提案。
+- [x] （Q6a 部分）全部系统流程为 `internal()`；普通表只经流程写入；时态与只写一次的表没有 UPDATE / DELETE；消息三语齐全；文档与部署说明已更新；部署后执行 `QB_SETUP` 并发布新的提案。
 
 ## 风险
 
@@ -868,3 +868,76 @@ Q6b：
 ## 确认
 
 2026-10-12：计划与待确认问题 Q6-1 – Q6-21 全部按缺省处理：先做 Q6a（充值、退款与争议、余额与流水模板、每日核对），Q6b（收款账户与自动转账）随后；Q6b 正式开放转账与正式模式之前须取得法务意见。
+
+## 实施记录（Q6a，2026-10-12）
+
+分支 `1.2/quizbuks-6a-topup`（从 `1.2/quizbuks` 拉出）。Q6a 是本计划中没有标为 Q6b 的全部内容；收款账户、用户钱包、转账与打款在 Q6b。
+
+**Stripe 事实的核实**（按 Stripe 的 API 参考与文档，开工时对照；上线前在 Stripe 的变更日志中再确认一次）：
+- 日元是零小数位币种，`amount` 即日元；Checkout 的 `expires_at` 须在创建后 30 分钟到 24 小时之间——成立。配置的有效期限为 40 分钟到 23 小时（作业可能晚几分钟才创建会话）。
+- 卡支付时 `checkout.session.completed` 的 `payment_status = paid`（延迟支付方式为 `unpaid`，之后才有 `async_payment_succeeded`）；过期发 `checkout.session.expired`——成立。
+- `charge.refunded` 的 `amount_refunded` 是累计值——成立。争议对象有 `payment_intent`、`amount`、`status`（`won` / `lost` / `warning_closed` 等）。
+- Connect 账户的事件只发到 Connect 端点、签名密钥不同；转账是同步 API、可按 `transfer_group` 列出——成立（Q6b 使用）。
+- 幂等键至少保留 24 小时；`Stripe-Version` 固定请求的版本，事件正文的版本由端点决定——成立。
+- **补充（影响实现）**：本地货币显示（Adaptive Pricing）下会话的结构**随 API 版本不同**：`2025-03-31.basil` 之前会话的 `currency` / `amount_total` 是顾客的币种，
+  原币与汇率在 `currency_conversion`；从该版本起会话保持集成方的币种，顾客的金额在 `presentment_details`。`StripeObjects.session` 两种都读成同一组字段
+  （核对用日元金额，原币金额、币种与汇率写入充值行）。API 版本缺省 `2025-03-31.basil`（`quizbuks.stripe.api-version`），部署说明要求端点版本与之相同。
+- 退款与争议以扣款的币种计：顾客以外币付款时 `amount_refunded` 是外币，Q6a 不换算，开待办（`CURRENCY`）由财务处理。
+
+**与计划的出入**（都不改需求）：
+- 作业类型 `qb.stripe.checkout-create` 的幂等键用**充值自己的** `qb-checkout-<充值号>`（不随作业变化），任何作业、任何尝试都只建一个会话。作业的结果类型就是解析后的会话
+  （`StripeObjects.CheckoutSession`），核实作业同样。
+- 充值行不存 `openJobId`（插入时作业号尚未生成；作业可按引用 = 充值号查到）；多存 `checkRequestedAt`（6 小时内不重复向 Stripe 核实）、`disputeId`、`disputeAmount`、
+  `disputeClawback`（争议败诉的扣回与累计退款分开记，累计退款的幂等算法不受争议影响）。`refundedAmount` 是**已扣回**的退款，`refundShortfall` 是未能扣回的部分。
+- `TopUpChecks` 的原因多一个 `NO_PAYMENT_INTENT`；作业的不符与失败另有 `OPEN_MISMATCH`、`CHECK_FAILED`、`FEE_MISMATCH`、`FEE_FAILED`；退款与争议的原因在
+  `RefundMath.REASONS`。待办标题每个原因一条消息（`task.qb.topup-check.<原因>`、`task.qb.refund-check.<原因>`），读者以自己的语言看到原因。
+- 到账、退款的**记账时间是事件正文的 `created`**（付款发生的时间；晚于签名时间的不信，取签名时间），不是签名时间：Stripe 重试投递时签名时间可能晚几天。
+  核实作业入账用运行时间。手续费的记账时间是到账时间。
+- 过期核实只选 `OPEN` 且支付页过期超过 1 小时的充值；`OPENING` 卡住的不选（没有会话号可查，作业有自己的重试与失败流程）。为免永久占位，
+  "未完成至多 3 笔"只把创建 1 小时内的 `OPENING` 算在内。
+- 退款早于到账的重试窗口是 **30 分钟**（不是计划的 1 小时）：Outbox 缺省 10 次、指数退避，最后一次约在第 43 分钟，1 小时的窗口会让事件进入死信而永远不开待办。
+- 每日核对的检查分为 `SPONSOR_WALLET`、`SPONSOR_PENDING_COUNT`、`SPONSOR_PENDING_AMOUNT`、`TOTAL_2110`、`LEDGER_ZERO`、`TOPUP_LEDGER`（到账金额）、
+  `TOPUP_ARRIVALS`（到账笔数）、`TOPUP_REFUNDS`（扣回）、`TOPUP_FEE`（手续费）；差异项至多记 1 000 条（计数为全部）。"连续两次"的规则只用于 Q6b 的用户钱包，未实现。
+- 商家的累计支出取 2110 中带发布维度的借方（奖励行带发布，扣回行不带），不连接时态的交易表。
+- 答题人与商家的余额模板经新的只读数据视图 `urn:jabiz:dataset:taker:LedgerEntry` / `sponsor:LedgerEntry`（范围 `dimension1` = 调用者）读本人的分录，
+  商家钱包经 `urn:jabiz:dataset:sponsor:QbWallet`。
+- `QbRoles`：`inbound.read` 只给财务管理员（不经超级管理员继承：原样事件可能含付款人信息）；`external-job.read` 给财务（超级管理员随之继承）。
+  `qb.payout.system` 留到 Q6b 再加。
+- `DevCreditCheck` 并入 `StripeModeCheck`（同时检查密钥前缀与模式、支付页地址前缀、API 版本格式、有效期；缺少商家后台地址只告警，充值时 422 `QB_TOPUP_UNAVAILABLE`）。
+- **compose 不再缺省可启动**：`STRIPE_WEBHOOK_SECRET` 与 `STRIPE_API_KEY` 须在 `deploy/quizbuks/.env` 中给出（仓库中不放任何签名密钥：知道它即可伪造到账通知）。
+  `platformCheck` 在 `backend/quizbuks/build.gradle.kts` 中给一次性的签名密钥，以便检查提供方与订阅的连接。
+- 场景 `scenarios/qb/topup.yml`：正文以场景变量引用流程生成的充值号（平台缺口 23 不存在：`inbound.body` 支持变量）。`expect` 步骤不能指定操作人，
+  所以商家与答题人自己的模板（按调用者限定）由 `TopUpIT` 覆盖，场景读管理员的模板。其他场景因新的两个受控参数改为发布 10 个提案，确定性编号顺延，快照随之更新。
+
+**平台缺口**（接上表，未改平台目录）：
+- 28：`PlatformCheckLauncher` 为签名密钥等给一次性值，但不为入站提供方的密钥给；应用只好在自己的 `build.gradle.kts` 中设环境变量。建议启动器为配置了 `secrets` 占位符的提供方给一次性值。
+- 29：场景的 `expect` 没有 `actor`，不能以某个用户读按调用者限定的模板。
+- 18、19、21、22、24、25、26、27 照计划绕行（26：唯一的交易号列与状态机兜底；27：消费流程核对模式）。
+
+**测试**（`backend/` 下，本地 PostgreSQL：`JABIZ_TEST_DB_URL=jdbc:postgresql://localhost:5432/jabiz_test`）：
+- 单元：`StripeFormTest`、`CheckoutRequestTest`、`StripeErrorsTest`、`TopUpChecksTest`（逐项不成立的矩阵、两种外币结构、jqwik：不等于记录的金额从不入账）、
+  `RefundMathTest`（累计、重复、乱序，jqwik）、`ReconChecksTest`、`StripeModeCheckTest`（含 `rk_live_`、锁名）、`QbRolesTest`、`MessagesTest`、`ArchitectureTest`
+  （加 `noDirectNetworkAccess`、`noPlatformInternals`、`handlersStayOutOfTheDatabase`）。
+- 集成（`StubHttpServer` 充当 Stripe，无真实网络）：`TopUpIT`、`TopUpIdempotencyIT`（重复事件、同一会话两个事件、通知与核实并发、4 路并发投递与并发请求、
+  篡改 / 过期 / 未签名 / 超大请求、逐项不成立、数据库约束）、`TopUpExpiryIT`、`TopUpFeeIT`、`TopUpRefundIT`、`TopUpOwnerIT`、`ReconcileIT`、`StripeStartupChecksIT`、
+  `ProcessAccessIT`（加入全部新的系统流程）。
+- 场景回放 `scenarios/qb/topup.yml`（快照已核对：到账 5 000、补发 100、手续费 180、第二笔过期、核对 OK、钱包 4 900）。
+- `./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 个错误）：359 个测试中只有 `PlayConcurrencyIT.noStartGetsInAfterAPause` 失败一次
+  （Jackson 首次并发序列化的 500，Q5 记录过的测试现象，与本阶段无关），单独重跑通过。`tools/check-app-paths.sh origin/1.2/platform` 通过。
+
+**本地端到端**（2026-10-12，不进 `check`）：`StripeStub` + `bootRun`（`dev`，单独的数据库）：`QB_SETUP` 与提案发布 → 商家入驻 → `QB_TOPUP_START 3000` →
+执行器约 1 秒后建好会话、充值 `OPEN` → 桩服务支付页"Pay"（303 跳回 `…/sponsor/wallet/topups/<编号>?checkout=paid`）→ 签名的 `checkout.session.completed`
+（200）→ `PAID`、手续费 108（3.6 %）入账、商家钱包 3 000。日志、操作记录的 `input_summary` 与作业输入中都没有密钥。
+
+**自查（正确性与安全）后的修正**：
+- 支付页的核对另查 `mode = payment` 与 `expires_at` 的范围（超出 `Instant` 的值使流程异常而不是开待办）。
+- 金额字段只接受 JSON 数字（以文本写的金额不再被当作数字）；只有汇率可以是文本。
+- "未完成至多 3 笔"不再永久计入卡住的 `OPENING`（见上）。
+- 测试夹具：Stripe 桩服务在全部充值测试类之间共用（它们共用缓存的应用上下文），不在某个类结束时关闭。
+
+**已知问题**：
+- 顾客以外币付款时的退款、争议（扣款以外币计）只开待办，不自动扣回。
+- 余额不够扣回的退款与败诉争议留在 Stripe 余额与 1110 的差额中，直到 F-05 的逐笔对账；`refundShortfall` 记下未扣回的退款，争议的只记在待办与 `checkReason`。
+- `OPENING` 卡住（作业完成而完成流程进入死信）的充值不自动处理；它一小时后不再占用"未完成"的名额。
+- 每日核对的全量汇总随账本增长变慢（平台缺口 25），Q10 前评估。
+- Q6a 不含页面（Q6 页面）与 Q6b。

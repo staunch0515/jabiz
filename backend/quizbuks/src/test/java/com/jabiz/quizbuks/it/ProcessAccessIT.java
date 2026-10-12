@@ -44,7 +44,22 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_FUNDS_RESTORED", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_FUNDED", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_STATS_REFRESH", ProcessAccess.INTERNAL),
-        Map.entry("QB_PUBLICATION_STATS_CHUNK", ProcessAccess.INTERNAL));
+        Map.entry("QB_PUBLICATION_STATS_CHUNK", ProcessAccess.INTERNAL),
+        // Top-ups and reconciliation (Q6a): the results of the jobs that call Stripe, Stripe's events, the items of
+        // the stale top-ups' job and the daily reconciliation.
+        Map.entry("QB_TOPUP_OPENED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_OPEN_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_CONFIRM", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_CHECK", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_CHECKED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_CHECK_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_FEE_RECORD", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_FEE_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_REFUNDED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_DISPUTE_OPENED", ProcessAccess.INTERNAL),
+        Map.entry("QB_TOPUP_DISPUTE_CLOSED", ProcessAccess.INTERNAL),
+        Map.entry("QB_RECONCILE_RUN", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;
@@ -67,7 +82,8 @@ class ProcessAccessIT extends QbItSupport {
             // Holding the processes' own permissions, which no role grants, does not open them either.
             TestTokens.bearer(tokens, "sponsor-with-system", Stream.concat(
                 QbRoles.of(QbRoles.SPONSOR).permissions().stream(), Stream.of(QbPermissions.SPONSOR_SYSTEM,
-                    QbPermissions.CONTENT_SYSTEM, QbPermissions.PUBLICATION_SYSTEM)).toArray(String[]::new)),
+                    QbPermissions.CONTENT_SYSTEM, QbPermissions.PUBLICATION_SYSTEM, QbPermissions.WALLET_SYSTEM,
+                    QbPermissions.PLAY_SYSTEM)).toArray(String[]::new)),
             admin());
         for (String process : CLOSED.keySet()) {
             for (String caller : callers) {
@@ -89,7 +105,7 @@ class ProcessAccessIT extends QbItSupport {
             .header(HttpHeaders.AUTHORIZATION, admin()).exchange().expectStatus().isOk().expectBody(LIST)
             .returnResult().getResponseBody();
         assertThat(catalog).extracting(entry -> entry.get("name"))
-            .contains("QB_SETUP", "QB_QUIZ_DELETE", "QB_PUBLICATION_SUBMIT")
+            .contains("QB_SETUP", "QB_QUIZ_DELETE", "QB_PUBLICATION_SUBMIT", "QB_TOPUP_START")
             .doesNotContainAnyElementsOf(CLOSED.keySet());
     }
 

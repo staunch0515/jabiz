@@ -75,6 +75,12 @@ public final class QbPermissions {
      * process is registered only with {@code quizbuks.wallet.dev-credit.enabled=true}; granted to no role.
      */
     public static final String WALLET_DEV_CREDIT = "qb.wallet.dev-credit";
+    /**
+     * The top-up and reconciliation processes only the platform runs, as the system (Q6a): Stripe's events, the
+     * results of the jobs that call Stripe, the stale top-ups' check and the daily reconciliation. They are
+     * {@code internal()} (platform decision D41); granted to no role, as {@link #PLAY_SYSTEM}.
+     */
+    public static final String WALLET_SYSTEM = "qb.wallet.system";
     /** Top up the sponsor wallet. */
     public static final String TOPUP = "qb.topup";
     /** A sponsor's own transactions and reports. */

@@ -23,6 +23,10 @@ public final class QbParams {
     public static final String TRANSFER_REVIEW_ABOVE = "qb.transfer.review-above";
     /** Whether the daily automatic transfers run at all. */
     public static final String TRANSFER_ENABLED = "qb.transfer.enabled";
+    /** The smallest top-up, in Kudos (Q6a). */
+    public static final String TOPUP_MIN = "qb.topup.min";
+    /** The largest top-up, in Kudos (Q6a). */
+    public static final String TOPUP_MAX = "qb.topup.max";
     /** Whether sponsor onboarding is approved without a person's review. */
     public static final String REVIEW_SPONSOR_AUTO = "qb.review.sponsor.auto";
     /** Whether publications are approved without a person's review. */
@@ -37,7 +41,7 @@ public final class QbParams {
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
     public static final List<String> CONTROLLED = List.of(CREATOR_FEE_RATE, TRANSFER_THRESHOLD,
-        TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO);
+        TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO, TOPUP_MIN, TOPUP_MAX);
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -63,7 +67,9 @@ public final class QbParams {
         new Param(AI_MODEL, Map.of("type", "text", "maxLength", 100), "gpt-4o-mini",
             "OpenAI model used to generate questions and covers"),
         new Param(APP_MIN_VERSION, Map.of("type", "text", "maxLength", 20), "1.0.0",
-            "Oldest app version that may still be used"));
+            "Oldest app version that may still be used"),
+        new Param(TOPUP_MIN, KUDOS, "1000", "The smallest top-up a sponsor may make, in Kudos"),
+        new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"));
 
     private QbParams() {}
 }
