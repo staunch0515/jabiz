@@ -1,0 +1,148 @@
+# 应用自有的前端与 PWA
+
+需要登录的应用前端（答题 App、商家后台、客户门户……）如何建在平台上：一个应用目录中的 pnpm 工程，经 `link:` 使用平台的 `@jabiz/client` 与 `@jabiz/ui`，
+由 `jabizApp` 构建进同一个 jar。依据：决策 D34 第 5 条、D43；设计 12 §4 / §12、17 §3 / §4.1、10 §12 / §15。完整的示范是 `backend/app/portal/`（`/portal/`）。
+
+公开网站（不登录、只读公开接口）另见 17 §4 与 15；通用后台里的应用页面见 `admin-extension.md`。
+
+## 1. 目录与依赖
+
+```
+backend/<应用>/
+  build.gradle.kts            jabizApp { spa("/app", "web", entry = "app", pwa = Pwa.ON) }
+  web/
+    package.json              自己的依赖，"@jabiz/client": "link:../../../frontend/packages/client"（ui 同理）
+    pnpm-lock.yaml            自己的 lockfile
+    vite.config.ts            jabizSpa({ pwa: { … } })
+    tsconfig*.json            见第 4 节
+    index.html  public/  src/
+```
+
+- **共享的包版本必须与平台前端一致**：`react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`，以及两个包的运行时依赖
+  （`dayjs`、`openapi-fetch`、`radix-ui`、`react-hook-form`、`lucide-react`、`qrcode` 等）都写成平台前端 lockfile 中的确切版本。
+  `pnpm app:check <目录>`（在 `frontend/` 下）逐项比对；Gradle 构建中它是 `spaCheck<名>`，挂在 `check` 上，不一致即构建失败。
+- 平台前端须先 `pnpm install`（被 `link:` 的包从它们自己的 `node_modules` 解析依赖）；Gradle 构建自动安排（`pnpmInstallPlatformFrontend`）。
+- 应用分支上，应用目录列入 `.jabiz-app-paths`；`node_modules/` 不提交。
+
+## 2. 构建（`jabizApp`）
+
+```kotlin
+import com.jabiz.gradle.Pwa
+
+jabizApp {
+    mainClass = "com.example.quiz.QuizApp"
+    spa("/", "web", entry = "app", pwa = Pwa.ON)            // 答题 App
+    spa("/sponsor", "sponsor-web", entry = "sponsor")       // 商家后台，不是 PWA
+    spa("/admin", "../../frontend", entry = "admin")        // 通用后台
+}
+```
+
+- 构建变量：`VITE_BASE`（`/sponsor/`）、`VITE_JABIZ_ENTRY`、`VITE_JABIZ_PWA`（`on` / `off` / `remove`）、`VITE_JABIZ_SPA_PREFIXES`（其他 SPA 的前缀）。
+- 插件把各 SPA 的路径、入口与 `pwa` 写入 jar（`META-INF/jabiz-app.properties`），作为服务端 `jabiz.web.spa` 的缺省：通常不必在 `application.yml` 里再写。
+  写了就整体替换它（例如要给公开网站配置自己的内容安全策略时，要把全部 SPA 都写上）；与 jar 中构建的不一致时启动检查 `WEB` 告警。
+- `spa` 的 `build` 脚本要能接受 `--outDir`：`"build": "tsc -b && vite build"`。
+
+## 3. Vite 预设 `@jabiz/client/vite`
+
+```ts
+import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
+import { jabizSpa } from '@jabiz/client/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    jabizSpa({
+      pwa: {
+        name: 'Quiz', shortName: 'Quiz', themeColor: '#0f172a', backgroundColor: '#ffffff',
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192' },
+          { src: 'icon-512.png', sizes: '512x512' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', purpose: 'maskable' },
+        ],
+      },
+    }),
+    tailwindcss(),
+    react(),
+  ],
+  test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'] },
+})
+```
+
+预设做的事：
+
+- 取并校验构建变量，设 `base`（不要再自己写 `base`）。
+- 统一共享包的副本：`resolve.dedupe` 让经 `link:` 的包与 SPA 用同一个 React、i18next、TanStack Query。Vitest 中另把平台前端的依赖交给 Vite 处理、取其
+  ES 模块版本并指向 SPA 自己的副本（否则测试中会出现两个 React，报 "Invalid hook call"）。
+- PWA（`VITE_JABIZ_PWA=on`）：生成 `manifest.webmanifest` 并在页面中链接它；编译平台的 Service Worker 为 `sw.js`，内含预缓存清单（`index.html`、带哈希的
+  JS / CSS、`public/` 中的文件）、缓存名 `jabiz-shell-<SPA名>-<产物哈希>` 与要放过的其他 SPA 前缀。**图标**必须是 `public/` 中的 PNG，尺寸与 `sizes`
+  一致，且至少有 192×192、512×512 与一个 `maskable`（内容在中间 80% 的安全区内）的，否则构建失败。
+- `pwa = REMOVE`：只生成注销自己、删除自己缓存的 `sw.js`，不再有 manifest。
+
+## 4. TypeScript、样式与测试
+
+- `tsconfig.app.json`：`"types": ["vite/client"]`、`"jsx": "react-jsx"`、`"moduleResolution": "bundler"`；被 `link:` 的包以源码形式参与类型检查，
+  它们的 `react` 类型会从平台前端解析，与 SPA 自己的副本"同名不同型"。用 `paths` 统一到 SPA 的副本：
+
+  ```json
+  "paths": {
+    "react": ["./node_modules/@types/react"], "react/*": ["./node_modules/@types/react/*"],
+    "react-dom": ["./node_modules/@types/react-dom"], "react-dom/*": ["./node_modules/@types/react-dom/*"],
+    "i18next": ["./node_modules/i18next"], "react-i18next": ["./node_modules/react-i18next"],
+    "@tanstack/react-query": ["./node_modules/@tanstack/react-query"]
+  }
+  ```
+- `tsconfig.node.json` 检查 `vite.config.ts`（`"module": "nodenext"`、`"types": ["node"]`）。预设是纯 JavaScript（带类型声明），任何 Node 版本都能加载。
+- 样式表：`@import '@jabiz/ui/theme.css';`（它已 `@source` 了 `@jabiz/ui` 的源码；Tailwind 自动扫描本工程）。preflight 只作用于带 `.jabiz-ui` 的元素：
+  页面的根元素加 `UI_SCOPE`（`className={cn(UI_SCOPE, …)}`）。颜色只用主题 token（D34）。
+- 测试：Vitest + Testing Library，`setup.ts` 补上 jsdom 缺少的 `matchMedia`、`ResizeObserver` 与指针捕获（示范门户的 `src/test/setup.ts`）。
+  示范门户的 CI：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`，以及 `pnpm app:check ../backend/app/portal`。
+
+## 5. 入口、会话与页面
+
+- **入口**（10 §15.1）：
+
+  ```yaml
+  jabiz.security.entries:
+    app:
+      accepted-roles: QUIZ_TAKER
+      self-registration: true
+      registration-roles: QUIZ_TAKER
+      app-path: /                 # 该入口前端的根：邮件链接在它之下
+      session:
+        persistence: device       # 关闭 App 后再打开仍登录（admin 不能用）
+        refresh-token-ttl: P30D
+        idle-timeout: 0           # 不按闲置结束
+  ```
+  `app-path` 不在该入口的 SPA 之下时启动检查告警。
+- **客户端**：`configureClient({ entry: 'app' })`（缺省取 `VITE_JABIZ_ENTRY`；本地 `pnpm dev` 时没有它，所以示范门户在 `main.tsx` 中写明），
+  `AuthProvider`、`QueryClientProvider`、`AppearanceProvider` 包住页面，`registerServiceWorker()` 在启动时调用一次。
+- **页面积木**（`@jabiz/ui`，不依赖路由，导航经 `onNavigate` / `hrefOf`）：`SignInForm`（`signUpPath`、`passwordResetPath`）、`SignUpForm`、
+  `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
+  `OidcCallback`（路径 `login/oidc`）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
+  示范门户用一个几十行的小路由（`src/router.ts`）；也可以用任何版本的 react-router。
+- **邮件链接**：平台的邮件链接是 `{entryUrl}auth/<页>?entry=…&token=…`，即入口自己的前端；应用自己的邮件模板可以写 `{entryUrl.<入口>}`（18 §5.6）。
+  升级说明：曾把 `jabiz.mail.base-url` 设为后台子路径（如 `https://<主机>/admin`）以绕行的应用，改回 `https://<主机>`；已发出的旧链接经后台的 `/auth/*` 照常可用。
+- **单点登录**：提供方配置 `redirect-uris.<入口>`（该前端的 `login/oidc` 的绝对地址，在身份提供方登记）；没有的提供方不对该入口提供（10 §12）。
+- **接口类型**：平台接口用 `api`；应用自己的接口以 `createApiClient<paths>()`（与 `api` 共用令牌、刷新与 step-up）配合应用自己快照生成的类型：
+
+  ```json
+  "gen:api": "openapi-typescript ../src/test/resources/openapi.json -o src/api/schema.d.ts",
+  "check:api": "openapi-typescript ../src/test/resources/openapi.json -o node_modules/.tmp/schema.d.ts && diff -q node_modules/.tmp/schema.d.ts src/api/schema.d.ts"
+  ```
+  流程与模板照常经 `runProcess` / `runQuery`。
+
+## 6. 服务端为 SPA 做的事（17 §3.2）
+
+- 客户端路由回退到该 SPA 的 `index.html`；`index.html`、`sw.js`、`manifest.webmanifest` 为 `Cache-Control: no-cache`，`assets/*` 一年且 `immutable`；
+  manifest 的类型为 `application/manifest+json`。
+- 只为声明了 PWA 的 SPA 的 `<前缀>/sw.js` 回答 Service Worker 脚本请求，其他一律 404；从不发送 `Service-Worker-Allowed`。
+- 缺省的内容安全策略不允许内联脚本、插件、外部表单目标与外部 base；`worker-src` / `manifest-src` 只允许本源。
+- 只支持同源：不开 CORS，令牌只经 `Authorization` 头。
+
+## 7. 已知限制
+
+- `device` 的刷新令牌存在设备上（`localStorage` 与 IndexedDB）：XSS 能取走它。缓解：轮换与重用即吊销、不允许内联脚本、`admin` 不能用、只按入口开启。
+- 没有 Web Locks 的浏览器（Safari 15.4 之前）一律按 `tab`。"复制标签页"会复制 `sessionStorage`（`tab` 下原有问题）。
+- iOS 上安装到主屏幕的 PWA 与 Safari 的存储分开：在 Safari 中登录不会让 PWA 也登录。
+- 不做推送、后台同步与数据离线；离线时只能打开外壳并提示离线。

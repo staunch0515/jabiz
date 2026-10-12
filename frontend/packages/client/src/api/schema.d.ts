@@ -3092,7 +3092,9 @@ export interface operations {
     };
     providers: {
         parameters: {
-            query?: never;
+            query?: {
+                entry?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

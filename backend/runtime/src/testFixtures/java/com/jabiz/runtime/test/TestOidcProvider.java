@@ -48,7 +48,8 @@ public final class TestOidcProvider implements AutoCloseable {
     public static final String CLIENT_SECRET = "test-client-secret";
     public static final String REDIRECT_URI = "http://localhost/login/oidc";
 
-    private record Grant(String codeChallenge, String idToken) {}
+    /** A grant: the token for a code, issued for an authorization request naming this callback. */
+    private record Grant(String codeChallenge, String idToken, String redirectUri) {}
 
     private final HttpServer server;
     private final String issuer;
@@ -150,8 +151,16 @@ public final class TestOidcProvider implements AutoCloseable {
 
     /** Registers the token the code will be exchanged for; the verifier must match {@code codeChallenge}. */
     public String code(String codeChallenge, String idToken) {
+        return code(codeChallenge, idToken, REDIRECT_URI);
+    }
+
+    /**
+     * As {@link #code(String, String)}, for an authorization request that named the callback {@code redirectUri}: the
+     * token request must name the same one, as a real provider requires.
+     */
+    public String code(String codeChallenge, String idToken, String redirectUri) {
         String code = UUID.randomUUID().toString();
-        grants.put(code, new Grant(codeChallenge, idToken));
+        grants.put(code, new Grant(codeChallenge, idToken, redirectUri));
         return code;
     }
 
@@ -184,7 +193,7 @@ public final class TestOidcProvider implements AutoCloseable {
         }
         Grant grant = grants.remove(String.valueOf(form.get("code")));
         if (grant == null || !"authorization_code".equals(form.get("grant_type"))
-            || !REDIRECT_URI.equals(form.get("redirect_uri"))
+            || !grant.redirectUri().equals(form.get("redirect_uri"))
             || !grant.codeChallenge().equals(challenge(String.valueOf(form.get("code_verifier"))))) {
             json(exchange, 400, "{\"error\": \"invalid_grant\"}");
             return;

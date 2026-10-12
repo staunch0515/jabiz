@@ -95,6 +95,8 @@ const en = {
     resend: 'Send the link again',
     resent: 'A new link is on its way.',
     offline: 'You are offline. What you see may be out of date, and nothing can be sent until you are back online.',
+    update: 'A new version is available.',
+    reload: 'Reload',
   },
   mfa: {
     start: 'Set up',
@@ -197,6 +199,8 @@ const zh: Messages = {
     resend: '重新发送链接',
     resent: '新链接已发出。',
     offline: '您已离线。看到的内容可能不是最新的；恢复联网后才能提交修改。',
+    update: '有新版本可用。',
+    reload: '刷新',
   },
   mfa: {
     start: '开始设置',
@@ -297,6 +301,8 @@ const ja: Messages = {
     resend: 'リンクをもう一度送る',
     resent: '新しいリンクを送りました。',
     offline: 'オフラインです。表示が最新でない場合があり、オンラインに戻るまで送信できません。',
+    update: '新しいバージョンがあります。',
+    reload: '再読み込み',
   },
   mfa: {
     start: '設定する',

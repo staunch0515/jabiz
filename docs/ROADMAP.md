@@ -1260,7 +1260,7 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
-| 16c | 应用 SPA 的接入：`@jabiz/client` 按入口的会话与页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker、内容安全策略）；邮件链接与 OIDC 回调按入口（分 16c-1 / 16c-2；计划已确认） | D34、D43 | 5.5–6.5 天 | 15a、16b、16m（16c-2） |
+| 16c | 应用 SPA 的接入：`@jabiz/client` 按入口的会话与页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker、内容安全策略）；邮件链接与 OIDC 回调按入口（分 16c-1 / 16c-2；16c-1 ☑ 已完成（#129）；16c-2 ☑ 已完成，PR 待创建） | D34、D43 | 5.5–6.5 天 | 15a、16b、16m（16c-2） |
 | 16m | 本人改密码与按入口的会话设置（QuizBuks Q2 平台缺口 1、2；计划已确认；☑ 已完成，PR 待创建） | D43 | 1–1.5 天 | 16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名）（☑ 已完成，PR 待创建） | D37 | 3.5–4 天 | — |
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成；16e-2 ☑ 已完成，PR 待建） | D38 | 4.5–6 天 | — |
@@ -1552,7 +1552,11 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 
 需要新增决策 **D43**（见【待确认 16c-1】），补充 D15、D19、D34、D36，不取代任何决策。
 
-**16c 状态**：◐ 计划已确认（2026-10-12）；16c-1 已实现（分支 `1.2/phase-16c1-client-session`，待评审合入）；16c-2 未开工（等 16m）。
+**16c 状态**：☑ 计划已确认（2026-10-12）；16c-1 已合入（#129）；16c-2 已实现（分支 `1.2/phase-16c2-app-spa`，PR 待创建）。
+16c-2 与计划的出入（详见 D43 的实现说明（16c-2））：预设是纯 JavaScript（`vite.mjs` + `vite.d.mts`），Service Worker 以 Vite 自己的打包器编译（Vite 8 不再带 esbuild）；
+`device` 的刷新令牌另存一份到 IndexedDB 并在锁内从那里读（e2e 发现 Chromium 中 `localStorage` 跨标签页同步滞后会导致重用吊销）；Service Worker 守卫是独立的最先执行的过滤器；
+示范门户的"我的订单"为新模板 `commerce.portal_orders`（经按调用者限定的数据视图 `urn:jabiz:dataset:commerce:PortalCustomer`）与可订购商品 `commerce.portal_products`；
+门户入口 `session.idle-timeout: 0`、`refresh-token-ttl: P30D`；e2e 中门户的客户不能验证邮箱，下单（`requiresVerifiedEmail()`）只检查提示，订单由管理员代下后在"我的订单"中出现。
 
 **现状（`origin/1.2/platform`，`f943118`）**
 
@@ -1813,15 +1817,15 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - **iOS 的 PWA 存储与 Safari 分开**（已知限制）。
 
 **验收标准**
-- [ ] 应用 SPA 只要声明入口，就能用 `@jabiz/client` 的会话：登录、刷新、二次验证、step-up、OIDC 都带入口；同源的各 SPA 会话互不影响；`device` 模式关闭后再打开仍登录，多个标签页不触发重用吊销。
-- [ ] `@jabiz/ui` 提供登录、注册、邮件链接、找回密码、二次验证、step-up、改密码、离线与更新提示的积木（三语，亮、暗外观 axe 无违规）；后台改用它们后行为与测试不变。
-- [ ] 平台的三封邮件链接到入口自己的 SPA（`{entryUrl}`），应用模板可用 `{entryUrl.<入口>}`；旧链接仍可用。
-- [ ] OIDC 可按入口回到该入口的 SPA；没有回调的入口不提供该提供方。
-- [ ] `jabizApp { spa(…, entry, pwa) }` 构建出 manifest 与 Service Worker；Service Worker 只缓存外壳、不拦截 `/api` 与其他 SPA；更新须用户同意；可以撤下。
-- [ ] 服务端为 PWA 的文件给出正确的缓存头与 manifest 类型，只为声明的 `sw.js` 回答 Service Worker 脚本请求；所有 SPA 的缺省 CSP 已收紧，e2e 无 CSP 违规。
-- [ ] `spaCheck`（`app:check`）在构建中执行，版本不一致即构建失败。
-- [ ] 示范门户可运行（`/portal/`），e2e 与 a11y 通过；`./gradlew check` 与前端全部检查通过。
-- [ ] D43、12、17、10、18、功能清单、`docs/guide/app-spa.md`、CLAUDE.md、ROADMAP 已更新。
+- [x] 应用 SPA 只要声明入口，就能用 `@jabiz/client` 的会话：登录、刷新、二次验证、step-up、OIDC 都带入口；同源的各 SPA 会话互不影响；`device` 模式关闭后再打开仍登录，多个标签页不触发重用吊销。
+- [x] `@jabiz/ui` 提供登录、注册、邮件链接、找回密码、二次验证、step-up、改密码、离线与更新提示的积木（三语，亮、暗外观 axe 无违规）；后台改用它们后行为与测试不变。
+- [x] 平台的三封邮件链接到入口自己的 SPA（`{entryUrl}`），应用模板可用 `{entryUrl.<入口>}`；旧链接仍可用。
+- [x] OIDC 可按入口回到该入口的 SPA；没有回调的入口不提供该提供方。
+- [x] `jabizApp { spa(…, entry, pwa) }` 构建出 manifest 与 Service Worker；Service Worker 只缓存外壳、不拦截 `/api` 与其他 SPA；更新须用户同意；可以撤下。
+- [x] 服务端为 PWA 的文件给出正确的缓存头与 manifest 类型，只为声明的 `sw.js` 回答 Service Worker 脚本请求；所有 SPA 的缺省 CSP 已收紧，e2e 无 CSP 违规。
+- [x] `spaCheck`（`app:check`）在构建中执行，版本不一致即构建失败。
+- [x] 示范门户可运行（`/portal/`），e2e 与 a11y 通过；`./gradlew check` 与前端全部检查通过。
+- [x] D43、12、17、10、18、功能清单、`docs/guide/app-spa.md`、CLAUDE.md、ROADMAP 已更新。
 
 **预估**
 

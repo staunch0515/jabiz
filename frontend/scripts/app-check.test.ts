@@ -62,6 +62,14 @@ describe('app:check (decision D34 item 5)', () => {
     ])
   })
 
+  it('covers vite, which runs the preset of @jabiz/client/vite (decision D43)', () => {
+    expect(SHARED).toContain('vite')
+    const versions = { ...platformDeps(false), vite: '7.1.0' }
+    expect(checkApp(spa(versions, { pnpm: versions }), frontend)).toEqual([
+      `vite: 7.1.0, the platform has ${platform.shared.get('vite')}`,
+    ])
+  })
+
   it("requires @jabiz/client's runtime dependencies from SPAs that use it", () => {
     const shared = platformDeps(false)
     const problems = checkApp(spa({ ...shared, '@jabiz/client': 'link:x' }, { pnpm: shared }), frontend)

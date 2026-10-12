@@ -101,6 +101,23 @@ class MailChecksTest {
     }
 
     @Test
+    void theEntriesNamedInLinksMustExist() {
+        MailTemplate entry = MailTemplate.define("t.entry", t -> t.category(MailCategory.TRANSACTIONAL).param("entry"));
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("template", entry);
+        List<CheckProblem> problems = new MailChecks(true, "jabiz@example.com", "", beans.getBeanProvider(
+            JavaMailSender.class), beans.getBeanProvider(MailTemplate.class), catalog(Locale.ENGLISH), name -> false,
+            name -> name.equals("shop")).check();
+        assertThat(problems).extracting(CheckProblem::location, CheckProblem::message).containsExactly(
+            org.assertj.core.groups.Tuple.tuple("mail template t.entry", "[en] uses {entryUrl.gone-away}, but there "
+                + "is no usable sign-in entry gone-away (jabiz.security.entries.gone-away)"),
+            org.assertj.core.groups.Tuple.tuple("spring.mail.host", "mail is enabled but no mail server is configured"),
+            // Links to an entry's frontend are links to the application.
+            org.assertj.core.groups.Tuple.tuple("jabiz.mail.base-url", "mail is enabled and templates link to the "
+                + "application, but its address is not configured"));
+    }
+
+    @Test
     void reportsATemplateDeclaredTwice() {
         assertThat(checks(false, "", "", null, catalog(Locale.ENGLISH), OK, OK).check())
             .extracting(CheckProblem::message).containsExactly("is declared more than once");

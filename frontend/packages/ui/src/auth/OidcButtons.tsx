@@ -1,4 +1,4 @@
-import { api, sitePath, startProviderSignIn, unwrap, type components } from '@jabiz/client'
+import { api, session, sitePath, startProviderSignIn, unwrap, type components } from '@jabiz/client'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/button'
@@ -7,13 +7,16 @@ import { AUTH_NAMESPACE } from './messages'
 
 export type OidcProvider = components['schemas']['ProviderEntry']
 
-/** The identity providers offered (`GET /api/auth/oidc/providers`), loaded once; none while loading or on failure. */
+/**
+ * The identity providers offered to the frontend's sign-in entry (`GET /api/auth/oidc/providers?entry=`, decision D43
+ * item 5: only those with a callback for it), loaded once; none while loading or on failure.
+ */
 export function useOidcProviders(given?: readonly OidcProvider[]): readonly OidcProvider[] {
   const [loaded, setLoaded] = useState<readonly OidcProvider[]>([])
   useEffect(() => {
     if (given) return undefined
     let live = true
-    unwrap(api.GET('/api/auth/oidc/providers'))
+    unwrap(api.GET('/api/auth/oidc/providers', { params: { query: { entry: session.entry() } } }))
       .then((list) => {
         if (live) setLoaded(list ?? [])
       })

@@ -1,6 +1,7 @@
 package com.jabiz.runtime.security;
 
 import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -249,6 +250,39 @@ class SignInEntriesTest {
             assertThat(p.isError()).isFalse();
             assertThat(p.message()).contains("could not be checked");
         });
+    }
+
+    @Test
+    void anAppPathOutsideTheServedSpasIsAWarning() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "admin", config(List.of("ADMIN"), null, null, null, "/admin/"),
+            "portal", config(List.of("CUSTOMER"), null, null, null, "/portal/"),
+            "shop", config(List.of("SHOPPER"), null, null, null, "/"),
+            "site", config(List.of("VISITOR"), null, null, null, "/site/")), false, null);
+        // No SPA at /: the site's and the shop's links would lead nowhere; the administration's SPA is at /admin, but
+        // the portal's app-path is not under the portal's SPA.
+        entries.spas(new JabizWebProperties(List.of(
+            new JabizWebProperties.Spa("/admin", null, null, "admin", null),
+            new JabizWebProperties.Spa("/portal/app", null, null, "portal", JabizWebProperties.Pwa.ON),
+            new JabizWebProperties.Spa("/site", null, null))));
+
+        assertThat(entries.check()).allSatisfy(p -> assertThat(p.isError()).isFalse())
+            .extracting(CheckProblem::location, CheckProblem::message).containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.portal.app-path", "'/portal/' is not "
+                    + "under the SPA of entry portal (/portal/app/): its mailed links would open another frontend"),
+                org.assertj.core.groups.Tuple.tuple("jabiz.security.entries.shop.app-path", "'/' is under none of "
+                    + "the SPAs served (jabiz.web.spa): its mailed links would lead nowhere"));
+
+        // An SPA at / holds every path; the entry's own SPA is the longest prefix.
+        SignInEntries fine = new SignInEntries(Map.of("portal", config(List.of("C"), null, null, null, "/portal/")),
+            false, null);
+        fine.spas(new JabizWebProperties(List.of(new JabizWebProperties.Spa("/", null, null, "admin", null),
+            new JabizWebProperties.Spa("/portal", null, null, "portal", null))));
+        assertThat(fine.check()).isEmpty();
+        fine.spas(new JabizWebProperties(List.of(new JabizWebProperties.Spa("/", null, null, "portal", null),
+            new JabizWebProperties.Spa("/portal", null, null, "admin", null))));
+        assertThat(fine.check()).extracting(CheckProblem::location).containsExactly(
+            "jabiz.security.entries.admin.app-path", "jabiz.security.entries.portal.app-path");
     }
 
     @Test

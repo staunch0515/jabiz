@@ -10,10 +10,11 @@ import java.time.Duration;
 
 /**
  * The platform's mail of self-registration, address verification and password reset (docs/design/10-security.md
- * section 15; decision D36, sent as decision D35 says) and of a changed password (phase 16m). All are transactional (no unsubscribing) and carry the
- * sign-in entry as their only parameter; their links lead to the administration's pages
- * {@code {baseUrl}/auth/<page>?entry=<entry>&token=<token>}, which finish at the entry's {@code app-path}. Texts are
- * the messages {@code mail.jabiz.auth.<name>.subject|body}.
+ * section 15; decision D36, sent as decision D35 says) and of a changed password (phase 16m). All are transactional (no
+ * unsubscribing) and carry the sign-in entry as their only parameter; their links lead to the pages of the entry's own
+ * frontend, {@code {entryUrl}auth/<page>?entry=<entry>&token=<token>} (decision D43 item 4: the entry's
+ * {@code app-path} under {@code jabiz.mail.base-url}); the administration's pages {@code /auth/*} take links of every
+ * entry, as mailed before. Texts are the messages {@code mail.jabiz.auth.<name>.subject|body}.
  * <ul>
  *   <li>{@value #VERIFY_EMAIL}: token {@value #VERIFY}, valid {@code jabiz.security.sign-up.verify-ttl} (24 hours);</li>
  *   <li>{@value #ACCOUNT_EXISTS}: token {@value #JOIN}, valid {@code jabiz.security.sign-up.join-ttl} (24 hours),

@@ -13,6 +13,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.DatasetDefinition;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -34,6 +37,12 @@ public class PortalOrders {
     public static final String NAME = "PORTAL_ORDER_PLACE";
     /** Granted to the portal's customer role. */
     public static final String PERMISSION = "commerce.portal.order";
+
+    /**
+     * The caller's own customer, for the portal's templates (phase 16c-2): the customers whose account is the caller,
+     * read-only. The portal's "my orders" ({@code commerce.portal_orders}) reads customers through it.
+     */
+    public static final String OWN_CUSTOMER_DATASET = "urn:jabiz:dataset:commerce:PortalCustomer";
 
     public static final String NO_CUSTOMER = "COMMERCE_PORTAL_NO_CUSTOMER";
     public static final String CUSTOMER_BLOCKED = "COMMERCE_CUSTOMER_BLOCKED";
@@ -97,5 +106,16 @@ public class PortalOrders {
     @Bean
     ProcessDefinition<PortalPlaceInput, CommerceProcesses.PlaceOutput, ProcessContext> portalOrderPlaceProcess() {
         return PROCESS;
+    }
+
+    /** {@link #OWN_CUSTOMER_DATASET}: scoped to the caller, never written through. */
+    @Bean
+    DatasetDefinition portalCustomerDataset(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        return DatasetDefinition.define(OWN_CUSTOMER_DATASET, d -> d
+            .targetEntityType(CommerceEntities.CUSTOMER)
+            .permissions(PERMISSION, "commerce.customer.write")
+            .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId))
+            .policy(p -> p.processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 }

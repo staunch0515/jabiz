@@ -88,6 +88,13 @@ jabizApp {
 - 应用自己的后台页面（D22）：`spa("/", "../../frontend", extension = "<目录>")` 把应用目录中的扩展编入通用后台（`JABIZ_ADMIN_EXTENSION`，
   扩展目录是构建输入）；见 12 §9。`app` 以此编入示范扩展 `admin-extension/`。
 - 界面语言与区域（D22 第 7 条）：`languages("en")`、`region = "en-US"`，插件同时传给前端构建并写入 jar 的 `META-INF/jabiz-app.properties`（12 §10）。
+- 应用自己的 SPA（阶段 16c-2，决策 D43；§4.1、指南 `docs/guide/app-spa.md`）：`spa("/portal", "portal", entry = "portal", pwa = Pwa.ON)`
+  （`import com.jabiz.gradle.Pwa`）。`entry` 是它登录的入口，`pwa` 为 `OFF`（缺省）、`ON` 或 `REMOVE`。构建变量 `VITE_BASE`、`VITE_JABIZ_ENTRY`、
+  `VITE_JABIZ_PWA` 与 `VITE_JABIZ_SPA_PREFIXES`（同一 jar 中其他 SPA 的前缀，以逗号分隔，如 `/,/sponsor/`）。插件把各 SPA 的路径、入口与 `pwa`
+  写入 `jabiz-app.properties`：`jabiz.web.spa[i].*` 是服务端最低优先级的缺省，`jabiz.build.spa[i].*` 记下构建了什么（§3.2 的检查用）。
+- `sourceDir` 不是平台前端时（经 `link:` 引用平台的两个包）：先安装平台前端（`pnpmInstallPlatformFrontend`，同一模块内只注册一次，
+  以平台前端构建的 SPA 也用它），平台的 `frontend/packages/**` 是其构建输入；`spaCheck<名>` 在平台前端中运行 `pnpm app:check <目录>`，
+  是 `spaBuild<名>` 的前置并挂在 `check` 上，版本不一致即构建失败。
 
 ### 3.2 多个单页应用（SPA）
 
@@ -95,13 +102,23 @@ jabizApp {
   缺省只有 `/` → `/index.html`，与现在相同。`/api`、`/actuator` 与带扩展名的路径不回退（不变）。
 - 前缀按路径段匹配（`/admin` 匹配 `/admin` 与 `/admin/…`，不匹配 `/administrator`）；`index` 缺省为 `<前缀>/index.html`。
 - 每个 SPA 可配置内容安全策略 `jabiz.web.spa[i].content-security-policy`，写入该前缀下全部响应（`/api`、`/actuator` 除外）的响应头；
-  未配置时用后台的缺省值
-  `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`
-  （antd 的 CSS-in-JS 需要内联样式；未配置即取最严格的现有策略，默认拒绝）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
-- 配置由 `SpaConfigCheck`（启动检查，类别 `WEB`）一次性报告：前缀格式、重复、落在 `/api` `/actuator` 下，`index` 格式，CSP 为空或多行。
+  未配置时用平台的缺省值（`JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY`，阶段 16c-2 对所有 SPA 收紧，决策 D43 第 7 条）
+  `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`
+  （Radix 的滚动锁与通知、antd 的 CSS-in-JS 需要内联样式；脚本一律不允许内联）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
+- `jabiz.web.spa[i].entry` 是该 SPA 登录的入口，`.pwa` 为 `off` / `on` / `remove`（16c-2）。jar 中由 `jabizApp` 写入的 SPA 是缺省；
+  应用配置中的 `jabiz.web.spa` 整体替换它（Spring 的列表覆盖规则）。
+- **缓存与类型**（16c-2，`SpaFallbackFilter`）：成功的 `index.html`（含客户端路由的回退）、`<前缀>/sw.js`、`<前缀>/manifest.webmanifest` 为
+  `Cache-Control: no-cache`，`<前缀>/assets/*`（带内容哈希）为 `public, max-age=31536000, immutable`；它们替换 Spring Security 写在每个响应上的
+  `no-cache, no-store…`（并去掉 `Pragma`、`Expires`；不这样做，每次打开页面都要重新下载全部文件）。其他文件与非 200 的响应保持 Spring Security 的头。
+  `.webmanifest` 为 `application/manifest+json`（Spring 的类型表中没有它）。响应从不带 `Service-Worker-Allowed`，Service Worker 的作用域不能大于它所在的目录。
+- **Service Worker 守卫**（16c-2，`ServiceWorkerScriptGuard`，最先执行的过滤器）：带 `Service-Worker: script` 请求头的请求，只有 `pwa` 为 `on` 或 `remove`
+  的 SPA 的 `<前缀>/sw.js` 才回答，其余（包括 `/api/**`、其他 SPA、同一 SPA 的其他文件）一律 404：同源上被上传或注入的脚本不能被注册为 Service Worker。
+- 配置由 `SpaConfigCheck`（启动检查，类别 `WEB`）一次性报告：前缀格式、重复、落在 `/api` `/actuator` 下，`index` 格式，CSP 为空或多行，
+  `entry` 格式（错误）与不是可用的登录入口（错误）；与 jar 中构建的 SPA 不一致（配置了但没有构建、构建了但没有配置、入口或 `pwa` 不同）为警告。
 - 同源的多个 SPA 共享 `localStorage` / `sessionStorage`：公开前端不存令牌（第 4 节），也不得读写后台的会话键。
-- 构建：插件为每个 `spa(...)` 注册 `pnpmInstall<名>` 与 `spaBuild<名>`（`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，
-  因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），`bootJar` 把输出放到 `static/<前缀>`。
+- 构建：插件为每个 `spa(...)` 注册安装任务（平台前端为 `pnpmInstallPlatformFrontend`，其他目录为 `pnpmInstall<名>`）与 `spaBuild<名>`
+  （`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），
+  应用自己的 SPA 另有 `spaCheck<名>`（§3.1），`bootJar` 把输出放到 `static/<前缀>`。
 
 ### 3.3 部署与 CI
 
@@ -116,6 +133,26 @@ jabizApp {
 - **不使用 Ant Design / ProComponents**：视觉由应用自己设计（CSS Modules + CSS 自定义属性），以减小体积并满足编辑风格的设计要求。
 - 数据只来自公开接口（15），类型由公开模板目录快照生成（15 §7）；不登录、不存令牌。
 - 无障碍（WCAG 2.2 AA）与移动端适配是公开前端的验收项（axe 自动检查纳入 Playwright）。
+
+### 4.1 需登录的应用前端与 PWA（阶段 16c-2，决策 D43）
+
+需要登录的应用前端（商家后台、答题 App、客户门户）与公开网站不同，它用平台的界面与会话：
+
+- **形态**：应用目录中的 pnpm 工程（自己的 `package.json` 与 `pnpm-lock.yaml`），以 `link:` 引用 `@jabiz/client` 与 `@jabiz/ui`，
+  在 `jabizApp` 中声明 `spa("/<前缀>", "<目录>", entry = "<入口>", pwa = …)`。示范：`backend/app/portal/`（`/portal/`，入口 `portal`，`pwa = ON`）。
+- **会话与积木**：`@jabiz/client` 以构建的入口登录、刷新与发起 OIDC，会话按入口分开（12 §4）；页面用 `@jabiz/ui` 的登录、注册、邮件链接、找回密码、
+  二次验证、step-up、改密码与横幅积木（12 §12），不依赖路由。入口的 `app-path` 即该前端的根（`/portal/`）：邮件链接（`{entryUrl}`）与 OIDC 回调
+  （`redirect-uris.<入口>`）都回到它自己的页面。
+- **构建预设** `@jabiz/client/vite`（`jabizSpa({ pwa })`）：取 `jabizApp` 给出的构建变量并校验，统一 React 等共享包的副本（`resolve.dedupe`；Vitest 中另把
+  平台前端的依赖交给 Vite 处理并指向 SPA 自己的副本），PWA 时生成 `manifest.webmanifest`（缺少 192 / 512 或 maskable 的 PNG 图标即构建失败）
+  与 `sw.js`。
+- **PWA**（D43 第 6、10 条）：Service Worker 只预缓存应用外壳（`index.html`、带哈希的 JS / CSS、`public/` 中的文件），缓存名 `jabiz-shell-<SPA名>-<产物哈希>`；
+  页面导航网络优先、离线时回退到缓存的外壳，导航的响应从不写入缓存（带令牌的邮件链接与 OIDC 回调不会被缓存）；不拦截 `/api`、`/actuator`、
+  同一 jar 中其他 SPA 的前缀、跨源与非 GET 请求，不缓存任何接口响应；激活时只删除自己前缀的旧缓存（Cache Storage 由同源的 SPA 共用）。
+  新版本安装后等待，`PwaUpdatePrompt` 提示，用户点"刷新"后才生效并重新加载。撤下 PWA 用 `pwa = REMOVE`：发布一个注销自己、删除自己缓存的 `sw.js`
+  （只是删去 `sw.js` 不行：404 不会注销已安装的 Service Worker）。服务端的配合见 §3.2。
+- **只支持同源**：不开 CORS；令牌只经 `Authorization` 头，不用 Cookie，所以 CSRF 防护照旧关闭（D12、D15）。
+- **检查**：`pnpm app:check <目录>`（版本与平台一致，Gradle 中的 `spaCheck<名>`），以及该工程自己的 `lint` / `typecheck` / `test`（平台 CI 对示范门户运行）。
 
 ## 5. 测试
 

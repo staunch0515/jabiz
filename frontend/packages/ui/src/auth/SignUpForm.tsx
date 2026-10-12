@@ -13,6 +13,12 @@ import { failure, passwordProblems } from './problems'
 /** The values of the sign-up form; an application's own fields (`extra`) add theirs. */
 export type SignUpValues = NewPassword & { email: string; displayName: string; locale: string } & Record<string, unknown>
 
+/**
+ * What `onSubmitted` receives: everything entered but the passwords. Spelt out, since `Omit` of a type with an index
+ * signature loses the named fields.
+ */
+export type SignUpSubmitted = { email: string; displayName: string; locale: string } & Record<string, unknown>
+
 export interface SignUpFormProps extends AuthNavigation {
   /** The application's name, the page's heading. */
   brand: ReactNode
@@ -25,7 +31,7 @@ export interface SignUpFormProps extends AuthNavigation {
    */
   extra?: (form: UseFormReturn<SignUpValues>) => ReactNode
   /** Called once the server accepted the sign-up, with what was entered (not the password). */
-  onSubmitted?: (values: Omit<SignUpValues, 'password' | 'confirm'>) => void
+  onSubmitted?: (values: SignUpSubmitted) => void
   /** Registers the account; `register` of `@jabiz/client` (the frontend's entry) by default. */
   submit?: (registration: Registration) => Promise<void>
 }
@@ -77,7 +83,7 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
               displayName: values.displayName.trim() || undefined,
               locale: values.locale || undefined,
             })
-            onSubmitted?.({ ...rest, email })
+            onSubmitted?.({ ...rest, email, displayName: values.displayName, locale: values.locale })
             setSent(email)
           } catch (e) {
             if (passwordProblems(e).length > 0) setFieldError(passwordProblems(e).join(' '))

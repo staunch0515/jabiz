@@ -89,6 +89,43 @@ describe('refreshSession', () => {
     expect(window.localStorage.getItem('jabiz.session.quiz.refresh')).toBe('r3')
   })
 
+  it("reads the shared copy under the lock, not a tab's late view of localStorage", async () => {
+    withLocks(fakeLocks())
+    window.localStorage.setItem('jabiz.session.quiz.refresh', 'r1')
+    // IndexedDB in the browser: every tab reads it alike.
+    const copies = new Map<string, string>()
+    const shared = {
+      get: vi.fn(async (key: string) => copies.get(key)),
+      put: vi.fn(async (key: string, value: string) => {
+        copies.set(key, value)
+      }),
+    }
+    // Each tab takes the same shared copy (one IndexedDB per origin).
+    const tabA = await openTab('quiz')
+    ;(await import('./session')).setSharedTokens(shared)
+    const tabB = await openTab('quiz')
+    ;(await import('./session')).setSharedTokens(shared)
+    const server = rotatingServer('r1')
+    vi.stubGlobal('fetch', server.fetch)
+
+    // No copy yet (a token stored before it existed): localStorage's, then the copy follows.
+    expect(await tabA.client.refreshSession()).toBe(true)
+    expect(copies.get('jabiz.session.quiz.refresh')).toBe('r2')
+    // Chromium updates a tab's view of localStorage from other tabs a little later: tab B still sees r1 there.
+    window.localStorage.setItem('jabiz.session.quiz.refresh', 'r1')
+    expect(await tabB.client.refreshSession()).toBe(true)
+    expect(server.sent.map((s) => s.refreshToken)).toEqual(['r1', 'r2'])
+    expect(server.reused).toEqual([])
+    expect(window.localStorage.getItem('jabiz.session.quiz.refresh')).toBe('r3')
+    expect(tabA.session.persistence()).toBe('device')
+
+    // Signing out leaves a tombstone, so that nobody falls back to a stale localStorage.
+    tabB.session.clear()
+    await vi.waitFor(() => expect(copies.get('jabiz.session.quiz.refresh')).toBe(''))
+    window.localStorage.setItem('jabiz.session.quiz.refresh', 'r3')
+    expect(await tabB.session.lockedRefreshToken()).toBeNull()
+  })
+
   it('shares one refresh among the calls of a tab, unless one is forced', async () => {
     withLocks(fakeLocks())
     const { session, client } = await openTab('portal')

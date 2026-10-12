@@ -70,7 +70,7 @@ function timeLimit(): AbortSignal | undefined {
 
 /** The refresh itself, with the token read only now: under the lock, after any other tab's turn. */
 async function exchange(): Promise<boolean> {
-  const refreshToken = session.refreshToken()
+  const refreshToken = await session.lockedRefreshToken()
   if (!refreshToken) return false
   try {
     const response = await globalThis.fetch('/api/auth/refresh', {
@@ -85,7 +85,7 @@ async function exchange(): Promise<boolean> {
       return false
     }
     const tokens = (await response.json()) as { accessToken: string; refreshToken: string }
-    session.store(tokens.accessToken, tokens.refreshToken)
+    await session.storeShared(tokens.accessToken, tokens.refreshToken)
     return true
   } catch {
     return false
@@ -108,7 +108,7 @@ function refresh(): Promise<boolean> {
  */
 export function endSession(): Promise<void> {
   return withRefreshLock(async () => {
-    const refreshToken = session.refreshToken()
+    const refreshToken = await session.lockedRefreshToken()
     session.clear()
     if (!refreshToken) return
     try {
