@@ -1,0 +1,302 @@
+# Payout accounts and transfers (docs/quizbuks/plans/Q6-payments.md, Q6b): QB_SETUP and its proposals (the transfer
+# fee and the transfer review among them); transfers switched on with a threshold of 10 Kudos and a review above 50.
+# Sponsor A's quiz pays U1 and U3 10 Kudos and U2 100. Each opens a payout account (the job's result written here,
+# without Stripe) that Stripe's signed Connect event enables. U2's 100 need a review: approved by finance, sent. U3's
+# is under way when the daily run sends U1's; Stripe refuses U3's: reversed. The reconciliation finds the books in order.
+name: Payouts
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+  quizbuks.links.sponsor: https://sponsor.quizbuks.test/sponsor/
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]",
+      p9: "$.proposals[8]", p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - expect: { param: qb.transfer.fee, value: 0 }
+  - note: Transfers on, from 10 Kudos, reviewed above 50; publications without a review (all four eyes).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.transfer.enabled, value: "true" }, reason: Go }
+    save: { on: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${on}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.transfer.threshold, value: "10" }, reason: Threshold }
+    save: { threshold: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${threshold}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.transfer.review-above, value: "50" }, reason: Review }
+    save: { review: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${review}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.review.publication.auto, value: "true" },
+      reason: Review switch }
+    save: { auto: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${auto}" }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Ken, email: u2@example.com }
+    save: { u2: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u3, displayName: Sora, email: u3@example.com }
+    save: { u3: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ken, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Sora, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: A's quiz pays 10 Kudos for 3 points and 100 for full marks.
+    advanceClock: PT1H
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: World capitals, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of France?, points: 2,
+      options: [{ text: Paris, correct: true }, { text: Lyon }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Capital of Japan?, points: 3,
+      options: [{ text: Tokyo, correct: true }, { text: Osaka }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { version: $.versionId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${version}"
+      name: Capitals week
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 4, reward: 10 }
+        - { fromScore: 5, toScore: 5, reward: 100 }
+    save: { pub: $.publicationId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${pub}" }
+    expectOutput: { status: LIVE }
+  - process: QB_WALLET_DEV_CREDIT@latest
+    input: { sponsorId: "${a}", amount: 1000 }
+
+  - note: U1 and U3 answer the second question only (10 Kudos), U2 both (100); their wallets follow by events.
+    advanceClock: PT5M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t1: $.attemptId }
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t1}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1] }] }
+    expectOutput: { reward: 10, rewardStatus: PAID }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t2: $.attemptId }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t2}", answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [1] }] }
+    expectOutput: { reward: 100, rewardStatus: PAID }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${pub}" }
+    save: { t3: $.attemptId }
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${t3}", answers: [{ questionNo: 1, selected: [2] }, { questionNo: 2, selected: [1] }] }
+    expectOutput: { reward: 10, rewardStatus: PAID }
+  - deliverEvents: true
+
+  - note: Each opens a payout account; the job's result (without Stripe) records it, Stripe's Connect event enables it.
+    advanceClock: PT5M
+  - actor: { id: "${u1}", permissions: [qb.payout.onboard, qb.me] }
+    process: QB_PAYOUT_ONBOARD@latest
+    input: {}
+  - completeExternalJob:
+      jobType: qb.stripe.connect-onboard
+      reference: "${u1}"
+      result: { accountId: acct_scenario1, accountCountry: JP, livemode: false,
+        url: "https://connect.stripe.com/setup/e/acct_scenario1/one", expiresAt: 1790823600 }
+  - actor: { id: "${u2}", permissions: [qb.payout.onboard, qb.me] }
+    process: QB_PAYOUT_ONBOARD@latest
+    input: {}
+  - completeExternalJob:
+      jobType: qb.stripe.connect-onboard
+      reference: "${u2}"
+      result: { accountId: acct_scenario2, accountCountry: JP, livemode: false,
+        url: "https://connect.stripe.com/setup/e/acct_scenario2/two", expiresAt: 1790823600 }
+  - actor: { id: "${u3}", permissions: [qb.payout.onboard, qb.me] }
+    process: QB_PAYOUT_ONBOARD@latest
+    input: {}
+  - completeExternalJob:
+      jobType: qb.stripe.connect-onboard
+      reference: "${u3}"
+      result: { accountId: acct_scenario3, accountCountry: JP, livemode: false,
+        url: "https://connect.stripe.com/setup/e/acct_scenario3/three", expiresAt: 1790823600 }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.payout-accounts
+      rows: 3
+      values: [{ status: PENDING }, { status: PENDING }, { status: PENDING }]
+  - advanceClock: PT1M
+  - inbound:
+      provider: stripe-connect
+      body: { id: evt_scenario_acct1, object: event, type: account.updated, account: acct_scenario1, livemode: false,
+        data: { object: { id: acct_scenario1, object: account, country: JP, payouts_enabled: true,
+          details_submitted: true, capabilities: { transfers: active }, requirements: { currently_due: [] },
+          metadata: { userId: "${u1}" }, livemode: false } } }
+  - inbound:
+      provider: stripe-connect
+      body: { id: evt_scenario_acct2, object: event, type: account.updated, account: acct_scenario2, livemode: false,
+        data: { object: { id: acct_scenario2, object: account, country: JP, payouts_enabled: true,
+          details_submitted: true, capabilities: { transfers: active }, requirements: { currently_due: [] },
+          metadata: { userId: "${u2}" }, livemode: false } } }
+  - inbound:
+      provider: stripe-connect
+      body: { id: evt_scenario_acct3, object: event, type: account.updated, account: acct_scenario3, livemode: false,
+        data: { object: { id: acct_scenario3, object: account, country: JP, payouts_enabled: true,
+          details_submitted: true, capabilities: { transfers: active }, requirements: { currently_due: [] },
+          metadata: { userId: "${u3}" }, livemode: false } } }
+  - deliverEvents: true
+  - expect:
+      query: qb.admin.payout-accounts
+      rows: 3
+      values: [{ status: ENABLED }, { status: ENABLED }, { status: ENABLED }]
+
+  - note: U2's 100 Kudos need a review; the payee prepared it, finance approves, and it is sent.
+    advanceClock: PT1H
+  - actor: { id: system }
+    process: QB_TRANSFER_CREATE@latest
+    input: { userId: "${u2}" }
+    expectOutput: { status: REVIEW }
+    save: { x2: $.transferId, x2request: $.approvalRequestId }
+  - actor: { id: finance-admin, permissions: [qb.payout.review, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${x2request}", decision: APPROVE }
+  - deliverEvents: true
+  - expect: { entity: QbTransfer, id: "${x2}", fields: { status: SENDING } }
+  - completeExternalJob:
+      jobType: qb.stripe.transfer
+      reference: "${x2}"
+      result: { found: true, transfer: { id: tr_scenario2, amount: 100, amountReversed: 0, currency: jpy,
+        destination: acct_scenario2, transferGroup: "qb-${x2}", metadataTransferId: "${x2}", livemode: false } }
+  - deliverEvents: true
+  - expect: { entity: QbTransfer, id: "${x2}", fields: { status: SENT, stripeTransferId: tr_scenario2 } }
+
+  - note: U3's transfer is sending; the daily run then finds only U1 (U2 has nothing left, U3 a transfer under way).
+    actor: { id: system }
+    process: QB_TRANSFER_CREATE@latest
+    input: { userId: "${u3}" }
+    expectOutput: { status: SENDING }
+    save: { x3: $.transferId }
+  - runJob: { job: qb.transfer-run, at: 2026-10-02T01:07:00Z }
+  - note: The run's transfer of U1, as the creation tells when asked again (one is under way).
+    actor: { id: system }
+    process: QB_TRANSFER_CREATE@latest
+    input: { userId: "${u1}" }
+    expectOutput: { status: SENDING, reason: OPEN_TRANSFER }
+    save: { x1: $.transferId }
+  - completeExternalJob:
+      jobType: qb.stripe.transfer
+      reference: "${x1}"
+      result: { found: true, transfer: { id: tr_scenario1, amount: 10, amountReversed: 0, currency: jpy,
+        destination: acct_scenario1, transferGroup: "qb-${x1}", metadataTransferId: "${x1}", livemode: false } }
+  - note: Stripe refuses U3's (certain); the sending is reversed and the 10 Kudos are back on U3's balance.
+    completeExternalJob:
+      jobType: qb.stripe.transfer
+      reference: "${x3}"
+      status: FAILED
+      errorCode: STRIPE_DECLINED
+      errorMessage: Stripe answered 400 (transfers_not_allowed)
+  - deliverEvents: true
+  - expect: { entity: QbTransfer, id: "${x1}", fields: { status: SENT, stripeTransferId: tr_scenario1 } }
+  - expect: { entity: QbTransfer, id: "${x3}", fields: { status: FAILED, failureCode: STRIPE_DECLINED } }
+  - expect:
+      query: qb.admin.transfers
+      rows: 3
+
+  - note: The daily reconciliation finds the books in order.
+    runJob: { job: qb.reconcile, at: 2026-10-02T18:37:00Z }
+  - expect:
+      query: qb.admin.recon-runs
+      rows: 1
+      values: [{ status: OK }]
+snapshot:
+  entities: [QbPayoutAccount, QbTransfer, QbWallet, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry]
+  asOf: end

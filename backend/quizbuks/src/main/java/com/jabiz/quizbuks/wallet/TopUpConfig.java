@@ -137,7 +137,14 @@ class TopUpConfig {
             .item(ReconChecks.TOPUP_ARRIVALS, "en", "Top-up postings (count)", "zh", "充值分录笔数",
                 "ja", "チャージの仕訳件数")
             .item(ReconChecks.TOPUP_REFUNDS, "en", "Top-up refunds", "zh", "充值退款", "ja", "チャージの返金")
-            .item(ReconChecks.TOPUP_FEE, "en", "Top-up fee", "zh", "充值手续费", "ja", "チャージの手数料"));
+            .item(ReconChecks.TOPUP_FEE, "en", "Top-up fee", "zh", "充值手续费", "ja", "チャージの手数料")
+            .item(ReconChecks.TAKER_WALLET, "en", "Taker wallet", "zh", "用户钱包", "ja", "回答者ウォレット")
+            .item(ReconChecks.TAKER_IN_TRANSFER, "en", "Taker wallet (in transfer)", "zh", "用户钱包（转账中）",
+                "ja", "回答者ウォレット（送金中）")
+            .item(ReconChecks.TAKER_WALLET_LAG, "en", "Taker wallet behind (note)", "zh", "用户钱包落后（提示）",
+                "ja", "回答者ウォレットの遅れ（注記）")
+            .item(ReconChecks.TRANSFER_LEDGER, "en", "Transfer posting", "zh", "转账分录", "ja", "送金の仕訳")
+            .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達"));
     }
 
     /** The bodies of Stripe's events may hold payers' names and addresses: kept as accounting evidence is. */

@@ -24,8 +24,10 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
   （`QB_SPONSOR`，允许自助注册，**要求已验证邮箱**）。注册的角色由 `QB_SETUP` 建立：执行之前注册一律 422 `SIGN_UP_DISABLED`。
   升级说明：此前在后台登录的商家、答题人的测试账号改用各自的入口（页面随 16c 加入之前用 API，`POST /api/auth/login` 带 `entry`）。
 - **邮件必须开启**才能激活：`JABIZ_MAIL_ENABLED=true` 并配置发件人与邮件服务器（`JABIZ_MAIL_FROM`、`SPRING_MAIL_*`）；
-  否则注册的用户收不到验证邮件，永远"待激活"（启动告警）。`JABIZ_MAIL_BASE_URL` 是**后台的地址**（如 `https://quizbuks.example.com/admin`）：
-  平台的验证、找回密码链接由后台的落地页处理后跳回入口的页面。商家邮件中的商家后台地址取 `QB_SPONSOR_LINK`，缺省为该主机上的 `/sponsor/`。
+  否则注册的用户收不到验证邮件，永远"待激活"（启动告警）。`JABIZ_MAIL_BASE_URL` 是**主机的根地址**（如 `https://quizbuks.example.com`，不带 `/admin`）：
+  平台 16c 之后，验证、找回密码等链接指向各入口自己的前端（App `/auth/…`、商家后台 `/sponsor/auth/…`、后台 `/admin/auth/…`，D43），
+  退订页在后台（`/admin/mail/unsubscribe`）。App 与商家后台的页面随 QuizBuks 的页面阶段加入；在那之前，这两个入口的链接页面尚不存在，
+  此前发出的 `/admin/auth/…` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。商家邮件中的商家后台地址取 `QB_SPONSOR_LINK`，缺省为该主机上的 `/sponsor/`。
 - **在反向代理之后**运行时设置 `JABIZ_TRUSTED_PROXIES`（代理的地址或网段），否则登录记录中的 IP 都是代理的地址。不要同时设置 `server.forward-headers-strategy`（启动错误）。
 - **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
   Q2 之前由管理员手工建的商家账号没有入驻记录，须申请一次（`QB_SPONSOR_APPLY`）。
@@ -84,10 +86,29 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
   支付页上的按钮把签名的事件发回 `http://localhost:8080/api/inbound/stripe`。改用 Stripe 的真实测试模式：设置 `STRIPE_API_KEY`、
   `QB_STRIPE_API_URL=https://api.stripe.com`、`QB_STRIPE_API_HOSTS=api.stripe.com`、`QB_STRIPE_CHECKOUT_URL_PREFIX=https://checkout.stripe.com/`，
   并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
-- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）与 `STRIPE_WEBHOOK_SECRET`
-  （只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`）。仓库中不放任何签名密钥：
+- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）、`STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET`
+  （Q6b；只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`，Connect 的同样）。仓库中不放任何签名密钥：
   知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
   也不能在任何可访问的环境中使用该密钥。
+
+## 收款账户与自动转账（Q6b）
+
+- **部署后再执行一次 `QB_SETUP`，并由另一位管理员发布新的提案**：受控参数 `qb.transfer.fee`（转账手续费，缺省 0 = 不收）与审批规则 `qb.transfer.review`
+  （超过 `qb.transfer.review-above` 的转账由持有 `qb.payout.review` 的财务审核；收款人不能审核自己的转账）。规则未发布或停用时，大额转账跳过（不写记录，用户看不到失败），每天开一个待办。
+- **自动转账缺省关闭**（受控参数 `qb.transfer.enabled = false`，四眼）。**正式开放转账（以及正式模式）之前必须先取得法务意见**（资金決済法，`docs/quizbuks/03-plan.md` 第 4 节）；
+  测试模式下可以打开以演示。门槛 `qb.transfer.threshold`、审核额 `qb.transfer.review-above`、手续费 `qb.transfer.fee` 都是受控参数。
+- **Connect 端点**（Stripe 后台 → 开发者 → Webhook → 添加端点，选择"已连接的账户"）：`https://<主机>/api/inbound/stripe-connect`，事件只选
+  `account.updated`、`account.application.deauthorized`；把该端点的签名密钥放进 `STRIPE_CONNECT_WEBHOOK_SECRET`（**缺少即启动失败**），API 版本同账户端点。
+  账户端点另加事件 `transfer.reversed`、`payout.paid`、`payout.failed`。
+- **受限密钥**另开：Accounts 与 Account Links 写、Transfers 写与读。
+- **App 的地址**（`QB_APP_LINK`，如 `https://quizbuks.example.com/`）是 Stripe 开通页面完成后跳回的地址（`…/wallet/payout?onboarding=done|refresh`）；没有它开通一律被拒（启动告警）。
+  收款账户只在 `QB_STRIPE_CONNECT_COUNTRY`（缺省 `JP`）开通，资料国家不同即拒绝（不跨境）。平台不保存银行信息，由 Stripe 的页面收集。
+- **转账只转一次**：每人至多一笔未结束的转账（数据库部分唯一索引）；发出作业先按 `transfer_group = qb-<转账号>` 查询，已有即作为结果，否则以固定的幂等键
+  `qb-transfer-<转账号>` 创建。Stripe 明确拒绝创建时冲正、钱回到用户余额；结果不明（超时、429、5xx、租约丢失）时进入 `CHECK` 并开待办，**不冲回**，
+  由每小时的 `qb.transfer-stale` 按组查询定论（只有晚于发送结束至少 10 分钟的查询说"没有"才冲正）。同一用户因账户连续 3 次失败后不再自动转账，开待办等财务处理。
+- **暂停与放行**：转账被审核驳回、或被 Stripe 撤回（含部分）后，该用户不再自动转账，直到财务（`qb.payout.review`）执行 `QB_TRANSFER_HOLD_RELEASE` 放行。
+- **Stripe 的可用余额**：充值几天后才变为可用余额，余额不足时 Stripe 拒绝创建并把拒绝保存在幂等键下：该转账立即冲正，次日以新的转账（新键）再试，不计入用户的连续失败。上线前要定资金调度。
+- 被 Stripe 撤回的转账（`transfer.reversed`）按累计金额退回用户余额（手续费不退），并开待办。打款到银行（`payout.paid`）记借 1120 / 贷 1110，失败冲正。
 
 ## 环境变量
 
@@ -109,7 +130,7 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 答题 App、商家后台是否允许自助注册，缺省 `true` |
 | `JABIZ_MAIL_ENABLED` | 注册时必需 | `true` 开启邮件（缺省关闭：消息只记录为 `SKIPPED`） |
 | `JABIZ_MAIL_FROM` | 开启邮件时 | 发件人地址 |
-| `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 后台的地址，如 `https://quizbuks.example.com/admin`（链接与退订页） |
+| `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页在 `/admin/`） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家邮件中的商家后台地址；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录据此取客户端地址 |
@@ -126,7 +147,10 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | Stripe 账户余额的币种（手续费与净额的币种），缺省 `jpy`；收款与退款始终是日元，非日元的结算手续费不自动过账，开待办 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
 | `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | Q6b | Connect 端点的签名密钥 |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | 是（Q6b） | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥（`whsec_…`）；缺少即启动失败 |
+| `QB_APP_LINK` | 收款时 | App 的地址，Stripe 开通收款账户后跳回（缺省空：开通被拒） |
+| `QB_STRIPE_CONNECT_COUNTRY` | 否 | 收款账户的国家，缺省 `JP` |
+| `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发中改指桩服务） |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

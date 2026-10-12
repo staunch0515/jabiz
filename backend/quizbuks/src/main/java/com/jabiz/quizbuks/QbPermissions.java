@@ -81,6 +81,11 @@ public final class QbPermissions {
      * {@code internal()} (platform decision D41); granted to no role, as {@link #PLAY_SYSTEM}.
      */
     public static final String WALLET_SYSTEM = "qb.wallet.system";
+    /**
+     * The payout account, taker wallet and transfer processes only the platform runs, as the system (Q6b): Stripe's
+     * events, the jobs' results, the daily transfers and their checks. {@code internal()}; granted to no role.
+     */
+    public static final String PAYOUT_SYSTEM = "qb.payout.system";
     /** Top up the sponsor wallet. */
     public static final String TOPUP = "qb.topup";
     /** A sponsor's own transactions and reports. */

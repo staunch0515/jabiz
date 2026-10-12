@@ -58,6 +58,8 @@ class ReconcileIT extends TopUpItSupport {
             .get("attemptId");
         play(newTaker("t-recon-" + name + "-0", null), publicationId, true, true);
         assertThat(attempt(first)).containsEntry("status", "IN_PROGRESS");
+        // Settled rewards refresh the takers' wallet caches by event (D-Q6-11); undelivered, the lag is a note.
+        deliverEvents();
     }
 
     @Test

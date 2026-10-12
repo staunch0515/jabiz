@@ -43,6 +43,8 @@ public final class Reconciliation {
     public static final String PENDING_TEMPLATE = "qb.system.recon-sponsor-pending";
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
+    public static final String TAKERS_TEMPLATE = "qb.system.recon-taker-wallets";
+    public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -99,6 +101,11 @@ public final class Reconciliation {
     static final String PENDING = "pending";
     static final String TOTALS = "totals";
     static final String TOPUPS = "topUps";
+    static final String TAKERS = "takers";
+    static final String TRANSFERS = "transfers";
+    static final String PREVIOUS = "previous";
+    static final String PREVIOUS_TAKERS = "previousTakers";
+    static final String RESYNC = "resync";
     static final String RESULT = "result";
     static final String RUN_ID = "runId";
 
@@ -129,14 +136,37 @@ public final class Reconciliation {
                 .step("Compare the totals", RunTemplate.<ProcessContext>of(TOTALS_TEMPLATE, ctx -> Map.of(), TOTALS))
                 .step("Compare the top-ups", RunTemplate.<ProcessContext>of(TOPUPS_TEMPLATE, ctx -> Map.of(),
                     TOPUPS))
+                .step("Compare the taker wallets", RunTemplate.<ProcessContext>of(TAKERS_TEMPLATE, ctx -> Map.of(),
+                    TAKERS))
+                .step("Compare the transfers", RunTemplate.<ProcessContext>of(TRANSFERS_TEMPLATE, ctx -> Map.of(),
+                    TRANSFERS))
+                // The takers' cache follows by events: one found behind counts only when the previous run found them.
+                .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
+                        ctx.get(INPUT, ReconcileInput.class).scheduledTime()))
+                        .orderBy("scheduledTime", false).limit(1).build(), PREVIOUS))
+                .step("Find whom it found", QueryEntities.<ProcessContext>of(defaultDataset(ITEM_ENTITY_NAME),
+                    ctx -> {
+                        List<Object> runs = new ArrayList<>();
+                        if (TopUpCrediting.first(ctx, PREVIOUS) != null) {
+                            runs.add(TopUpCrediting.first(ctx, PREVIOUS).id());
+                        }
+                        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("runId", runs),
+                            new QueryPredicate.In("check", List.of(ReconChecks.TAKER_WALLET,
+                                ReconChecks.TAKER_IN_TRANSFER, ReconChecks.TAKER_WALLET_LAG)))))
+                            .limit(WalletLimits.MAX_RECON_ITEMS).build();
+                    }, PREVIOUS_TAKERS))
                 .compute("Record the result", (metadata, ctx) -> record(ctx))
                 .step("Ask a person", CreateTask.<ProcessContext>when(Reconciliation::differs, Reconciliation::task))
+                .step("Resync the takers found", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(RESYNC),
+                    TakerWallets.RESYNC_EVENT, ctx -> Map.of("userIds", ctx.get(RESYNC))))
                 .step("Announce the differences", PublishEvent.<ProcessContext>when(Reconciliation::differs,
                     DIFF_EVENT, ctx -> {
                         Map<String, Object> payload = new LinkedHashMap<>();
                         payload.put("runId", String.valueOf(ctx.get(RUN_ID)));
                         payload.put("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime().toString());
-                        payload.put("differences", result(ctx).total());
+                        payload.put("differences", result(ctx).differences());
                         return payload;
                     })));
     }
@@ -151,6 +181,15 @@ public final class Reconciliation {
         found.addAll(ReconChecks.pending(rows(ctx, PENDING)));
         found.addAll(ReconChecks.coded(rows(ctx, TOTALS)));
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));
+        found.addAll(ReconChecks.coded(rows(ctx, TRANSFERS)));
+        java.util.Set<String> foundBefore = new java.util.HashSet<>();
+        TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
+        ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);
+        found.addAll(takers.items());
+        if (!takers.resync().isEmpty()) {
+            ctx.put(RESYNC, takers.resync().size() <= WalletLimits.MAX_RECON_ITEMS ? takers.resync()
+                : List.copyOf(takers.resync().subList(0, WalletLimits.MAX_RECON_ITEMS)));
+        }
         ReconChecks.Result result = ReconChecks.result(found, WalletLimits.MAX_RECON_ITEMS);
         ctx.put(RESULT, result);
         Map<String, Object> run = new LinkedHashMap<>();
@@ -182,7 +221,7 @@ public final class Reconciliation {
         String day = ctx.get(INPUT, ReconcileInput.class).scheduledTime().atOffset(ZoneOffset.UTC).toLocalDate()
             .toString();
         return TaskSpec.forPermission("qb.recon-diff", "task.qb.recon-diff", Map.of("date", day,
-                "differences", String.valueOf(result(ctx).total())), QbPermissions.RECONCILE)
+                "differences", String.valueOf(result(ctx).differences())), QbPermissions.RECONCILE)
             .about(RUN_ENTITY_NAME, ctx.get(RUN_ID)).source("recon:" + day);
     }
 
@@ -193,7 +232,7 @@ public final class Reconciliation {
                 ((Number) existing.get("itemCount")).intValue(), true);
         }
         ReconChecks.Result result = result(ctx);
-        return new ReconcileOutput(String.valueOf(ctx.get(RUN_ID)), result.status(), result.total(), false);
+        return new ReconcileOutput(String.valueOf(ctx.get(RUN_ID)), result.status(), result.differences(), false);
     }
 
     private static ReconChecks.Result result(ProcessContext ctx) {

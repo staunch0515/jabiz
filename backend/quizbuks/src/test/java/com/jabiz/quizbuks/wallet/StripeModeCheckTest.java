@@ -68,6 +68,20 @@ class StripeModeCheckTest {
     }
 
     @Test
+    void payoutAccountsNeedTheirSettings() {
+        assertThat(StripeModeCheck.payoutProblems(new PayoutSettings("JP", "https://app.example.com/", null), false))
+            .isEmpty();
+        assertThat(StripeModeCheck.payoutProblems(new PayoutSettings("JP", "", null), false)).singleElement()
+            .satisfies(p -> assertThat(p.severity()).isEqualTo(CheckProblem.Severity.WARNING));
+        assertThat(StripeModeCheck.payoutProblems(new PayoutSettings("Japan", "https://a.example.com/", null), false))
+            .anySatisfy(p -> assertThat(p.toString()).contains("connect-country"));
+        assertThat(StripeModeCheck.payoutProblems(new PayoutSettings("JP", "https://a.example.com/",
+            "http://localhost:8093/"), true)).anySatisfy(p -> assertThat(p.toString()).contains("connect-url-prefix"));
+        assertThat(new PayoutSettings("JP", "https://app.example.com", null).returnUrl("done"))
+            .isEqualTo("https://app.example.com/wallet/payout?onboarding=done");
+    }
+
+    @Test
     void lockNamesKeepTheKindsApart() {
         assertThat(QbWallets.lockName(QbWallets.SPONSOR, "u1")).isEqualTo("qb.wallet:SPONSOR:u1");
         assertThat(QbWallets.lockName(QbWallets.TAKER, "u1")).isNotEqualTo(QbWallets.lockName(QbWallets.SPONSOR, "u1"));

@@ -4,8 +4,10 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * The daily reconciliation's judgement (F-06; docs/quizbuks/plans/Q6-payments.md, D-Q6-8): the differences the
@@ -34,9 +36,27 @@ public final class ReconChecks {
     /** A top-up's posted fee against the fee it recorded. */
     public static final String TOPUP_FEE = "TOPUP_FEE";
 
+    /** A taker's cached balance against account 2120 for them, found by two runs in a row (Q6b). */
+    public static final String TAKER_WALLET = "TAKER_WALLET";
+    /** A taker's cached amount on its way out against 2130 for them, found by two runs in a row (Q6b). */
+    public static final String TAKER_IN_TRANSFER = "TAKER_IN_TRANSFER";
+    /**
+     * A taker's cache found behind the ledger by this run only: a note, not a difference (the cache follows by events,
+     * seconds later); a resync is asked for, and the next run counts it if it is still there.
+     */
+    public static final String TAKER_WALLET_LAG = "TAKER_WALLET_LAG";
+    /** What left a transfer's taker balance (2120) against its state and amount (Q6b). */
+    public static final String TRANSFER_LEDGER = "TRANSFER_LEDGER";
+    /** What a transfer holds in transit (2130) against its state (Q6b). */
+    public static final String TRANSFER_IN_TRANSIT = "TRANSFER_IN_TRANSIT";
+
     /** Every check, in the order of the summary. */
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
-        TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE);
+        TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
+        TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT);
+
+    /** The checks that only note something: a run with notes alone is {@code OK}. */
+    public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);
 
     public static final String OK = "OK";
     public static final String DIFF = "DIFF";
@@ -63,9 +83,58 @@ public final class ReconChecks {
      * @param summary {@code counts} as canonical JSON (keys sorted)
      */
     public record Result(String status, List<Item> items, Map<String, Integer> counts, String summary) {
+        /** Every item found, notes included. */
         public int total() {
             return counts.values().stream().mapToInt(Integer::intValue).sum();
         }
+
+        /** The differences: the items that are not notes. */
+        public int differences() {
+            return counts.entrySet().stream().filter(e -> !NOTES.contains(e.getKey()))
+                .mapToInt(Map.Entry::getValue).sum();
+        }
+    }
+
+    /**
+     * The takers' items and whom to resync (D-Q6-8, "two runs in a row").
+     *
+     * @param resync the takers whose cache differs, sorted
+     */
+    public record TakerItems(List<Item> items, List<String> resync) {}
+
+    /**
+     * A taker whose cache differs is a difference ({@value #TAKER_WALLET}, {@value #TAKER_IN_TRANSFER}) only when the
+     * previous run found them too (noted or counted); otherwise a note ({@value #TAKER_WALLET_LAG}). Every taker found
+     * is resynced.
+     *
+     * @param rows        {@code partyId, expectedBalance, actualBalance, expectedOut, actualOut}
+     * @param foundBefore the takers the previous run found
+     */
+    public static TakerItems takers(List<Map<String, Object>> rows, Set<String> foundBefore) {
+        List<Item> items = new ArrayList<>();
+        TreeSet<String> resync = new TreeSet<>();
+        for (Map<String, Object> row : rows) {
+            String party = text(row.get("partyId"));
+            BigDecimal expectedBalance = number(row.get("expectedBalance"));
+            BigDecimal actualBalance = number(row.get("actualBalance"));
+            BigDecimal expectedOut = number(row.get("expectedOut"));
+            BigDecimal actualOut = number(row.get("actualOut"));
+            boolean balanceDiffers = expectedBalance.compareTo(actualBalance) != 0;
+            boolean outDiffers = expectedOut.compareTo(actualOut) != 0;
+            if (party == null || (!balanceDiffers && !outDiffers)) {
+                continue;
+            }
+            resync.add(party);
+            if (foundBefore.contains(party)) {
+                add(items, TAKER_WALLET, party, null, expectedBalance, actualBalance);
+                add(items, TAKER_IN_TRANSFER, party, null, expectedOut, actualOut);
+            } else if (balanceDiffers) {
+                items.add(new Item(TAKER_WALLET_LAG, party, null, expectedBalance, actualBalance));
+            } else {
+                items.add(new Item(TAKER_WALLET_LAG, party, "out", expectedOut, actualOut));
+            }
+        }
+        return new TakerItems(List.copyOf(items), List.copyOf(resync));
     }
 
     /** Rows {@code partyId, expected, actual} of a check per sponsor. */
@@ -88,28 +157,42 @@ public final class ReconChecks {
         return items;
     }
 
-    /** Rows {@code checkCode, expected, actual} of the totals, or {@code topUpId, sponsorId, …} of the top-ups. */
+    /**
+     * Rows {@code checkCode, expected, actual} of the totals, {@code topUpId, sponsorId, …} of the top-ups or
+     * {@code transferId, userId, …} of the transfers.
+     */
     public static List<Item> coded(List<Map<String, Object>> rows) {
         List<Item> items = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String check = text(row.get("checkCode"));
             if (check != null && ALL.contains(check)) {
-                add(items, check, text(row.get("sponsorId")), text(row.get("topUpId")), row.get("expected"),
-                    row.get("actual"));
+                String party = row.containsKey("userId") ? text(row.get("userId")) : text(row.get("sponsorId"));
+                String reference = row.containsKey("transferId") ? text(row.get("transferId"))
+                    : text(row.get("topUpId"));
+                add(items, check, party, reference, row.get("expected"), row.get("actual"));
             }
         }
         return items;
     }
 
-    /** The run's outcome from every difference found, keeping the first {@code maxItems} as items. */
+    /** The checks of the takers' cache: the next run reads them back ("found before"), notes included. */
+    public static final Set<String> TAKER_CHECKS = Set.of(TAKER_WALLET, TAKER_IN_TRANSFER, TAKER_WALLET_LAG);
+
+    /**
+     * The run's outcome from every difference found, keeping {@code maxItems} as items: the takers' first, so that
+     * the next run finds whom this one found (the "two runs in a row" rule) however many other differences there are.
+     */
     public static Result result(List<Item> found, int maxItems) {
         Map<String, Integer> counts = new TreeMap<>();
         ALL.forEach(check -> counts.put(check, 0));
         found.forEach(item -> counts.merge(item.check(), 1, Integer::sum));
         StringJoiner json = new StringJoiner(",", "{", "}");
         counts.forEach((check, count) -> json.add("\"" + check + "\":" + count));
-        List<Item> kept = found.size() <= maxItems ? List.copyOf(found) : List.copyOf(found.subList(0, maxItems));
-        return new Result(found.isEmpty() ? OK : DIFF, kept, Map.copyOf(counts), json.toString());
+        List<Item> ordered = new ArrayList<>(found.stream().filter(i -> TAKER_CHECKS.contains(i.check())).toList());
+        found.stream().filter(i -> !TAKER_CHECKS.contains(i.check())).forEach(ordered::add);
+        List<Item> kept = List.copyOf(ordered.size() <= maxItems ? ordered : ordered.subList(0, maxItems));
+        boolean differs = found.stream().anyMatch(item -> !NOTES.contains(item.check()));
+        return new Result(differs ? DIFF : OK, kept, Map.copyOf(counts), json.toString());
     }
 
     private static void add(List<Item> items, String check, String party, String reference, Object expected,

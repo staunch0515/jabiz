@@ -169,6 +169,37 @@ public final class QbWallets {
     }
 
     /**
+     * Writes a taker's wallet as the ledger says (Q6b, D-Q6-11): the balance (account 2120 for them) and what is on its
+     * way out (2130), recomputed rather than added to, so repeated or reordered syncs agree. Inserts the row when the
+     * user has none and something to show; writes nothing when nothing changes.
+     */
+    public static void setTaker(com.jabiz.process.ProcessContext ctx, EntityInstance wallet, Object userId,
+        BigDecimal balance, BigDecimal pendingOut) {
+        if (wallet == null) {
+            if (balance.signum() == 0 && pendingOut.signum() == 0) {
+                return;
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("ownerId", String.valueOf(userId));
+            values.put("kind", TAKER);
+            values.put("balance", balance);
+            values.put("held", BigDecimal.ZERO);
+            values.put("pendingCount", BigDecimal.ZERO);
+            values.put("pendingAmount", BigDecimal.ZERO);
+            values.put("pendingOut", pendingOut);
+            ctx.changes().insert(WALLET, values);
+            return;
+        }
+        if (balance(wallet).compareTo(balance) == 0 && money(wallet.get("pendingOut")).compareTo(pendingOut) == 0) {
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("balance", balance);
+        values.put("pendingOut", pendingOut);
+        ctx.changes().update(WALLET, wallet.id(), wallet.version(), values);
+    }
+
+    /**
      * The posting of a reward (D-Q5-4): the sponsor's wallet pays it (2110, debit), the taker's receives it less the
      * commission (2120, credit), the platform the commission (4110, credit; no line when it is 0). Each line carries
      * the publication; the wallet lines the party. Its source is the attempt.

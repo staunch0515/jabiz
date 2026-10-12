@@ -18,6 +18,11 @@ public final class StripeIds {
     public static final Pattern CHARGE = Pattern.compile("(ch|py)_[A-Za-z0-9]{1,240}");
     public static final Pattern BALANCE_TRANSACTION = Pattern.compile("txn_[A-Za-z0-9]{1,240}");
     public static final Pattern DISPUTE = Pattern.compile("(dp|du)_[A-Za-z0-9]{1,240}");
+    /** Connected accounts (Q6b). */
+    public static final Pattern ACCOUNT = Pattern.compile("acct_[A-Za-z0-9]{1,240}");
+    public static final Pattern TRANSFER = Pattern.compile("tr_[A-Za-z0-9]{1,240}");
+    /** Payouts of the platform's balance to its bank. */
+    public static final Pattern PAYOUT = Pattern.compile("po_[A-Za-z0-9]{1,240}");
     /** A three-letter currency code as Stripe writes them (lower case). */
     public static final Pattern CURRENCY = Pattern.compile("[a-z]{3}");
 

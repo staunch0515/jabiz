@@ -60,11 +60,13 @@ jabiz:
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
   # Mail (decision D35): verification, password reset, welcome and onboarding mail. Off unless switched on; the
   # server is spring.mail.* (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD). The
-  # base address is the administration's (its pages handle the platform's links until the app has its own).
+  # base address is the host's root: the platform's links go to each entry's own frontend (its app-path, decision
+  # D43 item 4), and the unsubscribe page is the administration's.
   mail:
     enabled: ${JABIZ_MAIL_ENABLED:false}
     from: ${JABIZ_MAIL_FROM:}
     base-url: ${JABIZ_MAIL_BASE_URL:}
+    unsubscribe-path: /admin/mail/unsubscribe
   files:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:
@@ -77,14 +79,20 @@ jabiz:
       allowed-hosts: ${QB_STRIPE_API_HOSTS:api.stripe.com}
   # Stripe's events (decision D37) at /api/inbound/stripe: the account endpoint's signing secret from the environment
   # only (STRIPE_WEBHOOK_SECRET; to rotate it, deploy/quizbuks/README.md). Startup fails without it.
-  # Only the types QuizBuks consumes are stored; others are answered and dropped.
+  # Only the types QuizBuks consumes are stored; others are answered and dropped. The connected accounts' events come
+  # to the Connect endpoint only, /api/inbound/stripe-connect, signed with its own secret (STRIPE_CONNECT_WEBHOOK_SECRET,
+  # Q6b).
   inbound-webhooks:
     providers:
       stripe:
         scheme: stripe
         secrets: ["${STRIPE_WEBHOOK_SECRET:}"]
         event-types: [checkout.session.completed, checkout.session.expired, charge.refunded,
-          charge.dispute.created, charge.dispute.closed]
+          charge.dispute.created, charge.dispute.closed, transfer.reversed, payout.paid, payout.failed]
+      stripe-connect:
+        scheme: stripe
+        secrets: ["${STRIPE_CONNECT_WEBHOOK_SECRET:}"]
+        event-types: [account.updated, account.application.deauthorized]
   i18n:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
@@ -110,6 +118,9 @@ management:
 quizbuks:
   links:
     sponsor: ${QB_SPONSOR_LINK:}
+    # The app's address, where Stripe sends a taker back after opening a payout account (Q6b); payout accounts are
+    # refused without it.
+    app: ${QB_APP_LINK:}
   # Stripe (D-Q6-1): test mode until the go-live (and the legal opinion, docs/quizbuks/03-plan.md section 4). The key,
   # Stripe's events and the development credit must agree with the mode (startup check). The API version is pinned on
   # every request; the webhook endpoints in Stripe's dashboard must use the same one.
@@ -123,3 +134,7 @@ quizbuks:
     # Going live refuses to start while test-mode top-ups or a non-zero 2110 are in the database (README go-live),
     # unless this is set on purpose.
     allow-live-with-test-data: ${QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA:false}
+    # Payout accounts (Q6b): opened in this country only (no transfers across borders, Q18); Stripe's onboarding links
+    # start with this address.
+    connect-country: ${QB_STRIPE_CONNECT_COUNTRY:JP}
+    connect-url-prefix: ${QB_STRIPE_CONNECT_URL_PREFIX:https://connect.stripe.com/}

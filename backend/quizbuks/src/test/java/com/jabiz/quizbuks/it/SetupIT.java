@@ -41,7 +41,8 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("paramsProposed")).isEqualTo(QbParams.CONTROLLED);
         // Approval rules change only through controlled changes as well: the publication review (Q4) and the
         // sponsor onboarding review (Q2) are proposed.
-        assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE));
+        assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
+            com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size());
         assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
@@ -64,7 +65,14 @@ class SetupIT extends QbItSupport {
                     .containsEntry("subject", SponsorApprovals.SUBJECT).containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
-                        .contains(QbPermissions.REVIEW_SPONSOR)));
+                        .contains(QbPermissions.REVIEW_SPONSOR)),
+                // Q6b: transfers above the limit, reviewed by finance.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.wallet.QbPayouts.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("needsReview"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.PAYOUT_REVIEW)));
         assertRoles();
         assertAccounts();
         assertCountries();
@@ -161,12 +169,13 @@ class SetupIT extends QbItSupport {
         Map<Object, Object> values = new TreeMap<>(query("SELECT param_key, param_value FROM sys_param_version "
             + "WHERE param_key LIKE 'qb.%'").stream()
             .collect(Collectors.toMap(row -> row.get("param_key"), row -> row.get("param_value"))));
-        assertThat(values).containsExactlyInAnyOrderEntriesOf(Map.of(
-            QbParams.CREATOR_FEE_RATE, "0.0000", QbParams.TRANSFER_THRESHOLD, "1000",
-            QbParams.TRANSFER_REVIEW_ABOVE, "50000", QbParams.TRANSFER_ENABLED, "false",
-            QbParams.REVIEW_SPONSOR_AUTO, "false", QbParams.REVIEW_PUBLICATION_AUTO, "false",
-            QbParams.AI_MODEL, "gpt-4o-mini", QbParams.APP_MIN_VERSION, "1.0.0",
-            QbParams.TOPUP_MIN, "1000", QbParams.TOPUP_MAX, "1000000"));
+        assertThat(values).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+            Map.entry(QbParams.CREATOR_FEE_RATE, "0.0000"), Map.entry(QbParams.TRANSFER_THRESHOLD, "1000"),
+            Map.entry(QbParams.TRANSFER_REVIEW_ABOVE, "50000"), Map.entry(QbParams.TRANSFER_ENABLED, "false"),
+            Map.entry(QbParams.REVIEW_SPONSOR_AUTO, "false"), Map.entry(QbParams.REVIEW_PUBLICATION_AUTO, "false"),
+            Map.entry(QbParams.AI_MODEL, "gpt-4o-mini"), Map.entry(QbParams.APP_MIN_VERSION, "1.0.0"),
+            Map.entry(QbParams.TOPUP_MIN, "1000"), Map.entry(QbParams.TOPUP_MAX, "1000000"),
+            Map.entry(QbParams.TRANSFER_FEE, "0")));
     }
 
     /** Rows of every table QB_SETUP writes, by table. */

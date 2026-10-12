@@ -783,9 +783,9 @@ Q6b：
 - [x] U-50 – U-52（Q6a：奖励部分；转账在 Q6b）：答题人的余额概览（可用、累计收入、待支付、处理中的转账）与流水（奖励含待支付、转账；按关键字、类型、状态、日期、金额筛选）；商家的钱包概览与充值记录。
 - [x] F-06（Q6a 部分；用户钱包与转账在 Q6b）：每日核对商家钱包、待支付、2110 合计、账本平衡、每笔充值的分录（Q6b 另加用户钱包与转账）；有差异时记录、开待办、发布事件；运行期间的结算不产生假差异。
 - [x] 开发入账只在 dev 与测试中存在；与正式模式或正式密钥同时开启时启动失败。
-- [ ] （Q6b）U-53：用户开通 Stripe Express 收款账户（不保存银行信息），余额达到门槛后每日自动全额转账；大额经审批，收款人不能审批自己；封禁的用户不转账。
-- [ ] （Q6b）转账不会重复、不会超过余额：每人至多一笔未结束的转账；不确定的结果先向 Stripe 核实再定论；失败冲正回用户余额，撤回恢复用户余额。
-- [ ] 5.3-14：转账门槛、手续费、开关是受控参数（四眼）；手续费为 0 即关闭。
+- [x] （Q6b）U-53：用户开通 Stripe Express 收款账户（不保存银行信息），余额达到门槛后每日自动全额转账；大额经审批，收款人不能审批自己；封禁的用户不转账。
+- [x] （Q6b）转账不会重复、不会超过余额：每人至多一笔未结束的转账；不确定的结果先向 Stripe 核实再定论；失败冲正回用户余额，撤回恢复用户余额。
+- [x] 5.3-14：转账门槛、手续费、开关是受控参数（四眼）；手续费为 0 即关闭。
 - [x] （Q6a 部分）全部系统流程为 `internal()`；普通表只经流程写入；时态与只写一次的表没有 UPDATE / DELETE；消息三语齐全；文档与部署说明已更新；部署后执行 `QB_SETUP` 并发布新的提案。
 
 ## 风险
@@ -965,3 +965,101 @@ Q6b：
 - `OPENING` 卡住（作业完成而完成流程进入死信）的充值不自动处理；它一小时后不再占用"未完成"的名额。
 - 每日核对的全量汇总随账本增长变慢（平台缺口 25），Q10 前评估。
 - Q6a 不含页面（Q6 页面）与 Q6b。
+
+
+## 实施记录（Q6b，2026-10-12）
+
+分支 `1.2/quizbuks-6b-payout`（从合入 Q6a 后的 `1.2/quizbuks` 拉出）。Q6b 是本计划中标为 Q6b 的全部内容：收款账户、用户钱包缓存、自动转账（选取、审核、发出、结果、核实、撤回）、
+打款到银行、核对的扩展、流水中的转账。代码在 `wallet` 包：`PayoutProcesses`、`TakerWallets`、`TransferProcesses`、`StripePayouts`、`PayoutJobs` 与三个处理器、
+纯 Java 的 `TransferRules`、`PayoutChecks`、`PayoutObjects`，配置 `PayoutConfig`；迁移 `V8__quizbuks_payouts.sql`。
+
+**与计划的出入**（都不改需求）：
+- `QbPayoutAccount` 是**普通表**（计划写的是时态表）：Stripe 的通知按 Stripe 账户号查找，且只有表的唯一约束能保证"一个 Stripe 账户只属于一个用户"
+  （时态表的唯一性由平台在写入时检查，不同用户的锁不同，并发时挡不住）；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（`url` 不进审计）。
+- 确定失败的错误码比计划多：Stripe 对**创建请求**的明确拒绝 `STRIPE_DECLINED`、`STRIPE_BALANCE_INSUFFICIENT`、`STRIPE_AUTH`、`STRIPE_NOT_FOUND`、
+  `STRIPE_RATE_LIMITED` 都是确定的（同一幂等键下，之前若已创建，Stripe 会重放成功的回答）；查询阶段的失败一律记为 `STRIPE_LOOKUP_FAILED`（不确定）。
+  （复审后改正：429 不确定；余额不足与 5xx 立即结束作业，见"复审后的修正"。）
+- `CHECK` 的转账至少 10 分钟后才核实（`SETTLE_BEFORE_CHECK`），这样不会有作业的请求仍在途中，查不到即可定论；Stripe 的转账与记录不符（`TRANSFER_MISMATCH`）
+  的不再自动核实，交给财务。
+- 核对的"连续两次"规则：第一次发现的用户记为提示 `TAKER_WALLET_LAG`（不算差异，运行仍 `OK`），并发布一个 `qb.taker-wallet.resync`（载荷 `userIds`，
+  由 `QB_TAKER_WALLET_RESYNC` 逐个重算）；前一次运行也发现的才记 `TAKER_WALLET` / `TAKER_IN_TRANSFER`。转账的核对拆为 `TRANSFER_LEDGER`（2120）与
+  `TRANSFER_IN_TRANSIT`（2130）。
+- `qb.admin.wallets` 加可选参数 `kind`（SPONSOR / TAKER）：加入用户行后，场景按种类断言。
+- `QB_TRANSFER_CREATE` 的输出带 `approvalRequestId`，跳过（`OPEN_TRANSFER`）时给出那笔未结束的转账，供场景与运维引用。
+- 收款账户的配置：`quizbuks.links.app`（`QB_APP_LINK`）、`quizbuks.stripe.connect-country`（缺省 JP）、`quizbuks.stripe.connect-url-prefix`
+  （缺省 `https://connect.stripe.com/`，正式模式只能是它），由 `StripeModeCheck` 检查；没有 App 地址只告警，开通被拒（`QB_PAYOUT_UNAVAILABLE`）。
+  已解除关联的账户再开通被拒（`QB_PAYOUT_ACCOUNT_CLOSED`，由财务处理）。
+- 本地桩服务加了 Connect（账户、开通页、`account.updated`）与转账端点；dev 配置给 `stripe-connect` 固定的开发密钥。
+
+**Stripe 事实的核实**（API 参考）：Connect 账户的事件只发到 Connect 端点，事件顶层带 `account`；`account.updated` 的 `payouts_enabled`、
+`capabilities.transfers`（`active` / `pending` / `inactive`）、`requirements.currently_due`；`account.application.deauthorized` 的对象是应用，账户在事件的
+`account`；`POST /v1/transfers` 同步返回转账，`GET /v1/transfers?transfer_group=` 可按组列出；`transfer.reversed` 的 `amount_reversed` 是累计值；
+`payout.paid` / `payout.failed` 发到账户端点——成立。
+
+**Q6a 复审经验的落实**：转账只用用户钱包（与商家的 `held` 无关）；撤回按累计金额、记下的永不重复；Connect 事件逐项核对模式（事件与对象的 `livemode`）；
+密钥只来自环境变量（`STRIPE_CONNECT_WEBHOOK_SECRET`；`platformCheck` 与 CI 的打包作业用一次性的值）。
+
+**自查（正确性与安全）**：
+- 不重复转账：每人至多一笔未结束的转账（部分唯一索引，`TransferConcurrencyIT` 并发三次创建只有一笔）；发出作业先按组查询（`aLostAnswerIsFound…`：
+  第二次尝试查到，不再创建）；幂等键属于转账而非作业；不确定的结果不冲回，等核实（`aTransferInDoubt…`）。剩余风险：租约丢失的处理器若在
+  10 分钟之后才把请求送到 Stripe（请求超时 20 秒，作业超时 40 秒，实际不会），核实会把它当作不存在而冲正。
+- 不超过余额：金额在用户钱包锁内从账本读取；2120 只有转账会减少，而转账都在这把锁内；奖励结算不取这把锁，并发入账只会让余额更大（`TransferConcurrencyIT`）。
+- 同步、转账与奖励的竞争：缓存一律按账本重算后覆盖，与事件的次数和顺序无关；转账在自己的事务内过账后重算（同一语句看到本事务的分录）。
+- 锁序：转账与同步只持用户钱包锁；收款账户的流程只持账户锁；重算多人时按编号排序。没有流程同时持两类锁，不会成环。
+- 伪造的 Connect 事件：只有 Connect 端点的密钥能签（用账户端点的密钥签名被拒，`connectEventsNeedTheConnectSecret`）；签名的事件也只按表中已有的
+  Stripe 账户号改状态，并核对元数据中的用户与模式。
+- `acct_` 被另一用户占用：表的唯一约束 + 完成流程的检查（`ACCOUNT_TAKEN` 待办，不给链接）；事件元数据换了用户即 `ACCOUNT_MISMATCH`。
+- 收款人审批自己：审批的准备人是收款人，平台拒绝（`APPROVAL_OWN_REQUEST`）；批准后重查开关、封禁、账户与余额，不成立即驳回（`NOT_SENDABLE`）。
+- 封禁：选取模板、创建流程与批准后的重查都排除。
+- 个人信息：开通链接只在本人的数据视图中给出，不进审计与日志（`Onboarding.toString` 遮蔽）；Stripe 账户号对没有 `qb.admin.finance.read` 的人遮蔽（`LAST4`），
+  待办标题只显示末 4 位；失败信息只有状态与 Stripe 的错误码。作业的结果（含开通链接）由平台保存在 `sys_external_job_outcome`，平台的作业接口不给出结果。
+  （复审后改正：开通链接的默认数据视图原先财务可读，见"复审后的修正" R4。）
+
+**平台缺口**（接上表，未改平台目录）：
+- 19 仍在：转账与核实作业由系统身份发起，"每请求人未结束上限"取平台最大值 `MAX_OPEN_PER_REQUESTER`；每日选取 `maxItems` 2000，远低于它。
+- 24 仍在：`qb.system.transfers-due` 以 `timeSlice` 连接 `SysParam` 读开关与门槛（参数即计划时刻），每项 `QB_TRANSFER_CREATE` 再以 `LoadParams` 判断一次。
+- 25 仍在：转账核对（`qb.system.recon-transfers`）与用户钱包核对按当事人汇总，只返回差异行；Q10 前评估。
+- 28（新，小）：异步外部作业的结果不能标 `@Sensitive`（平台拒绝），开通作业结果中的一次性开通链接（数分钟失效）因此原样存于作业结果；
+  应用把链接另存 `QbPayoutOnboarding`（`auditMasked`，只有本人的数据视图可读）；作业的结果不经接口给出，只在数据库中。建议平台允许结果组件 `@Sensitive`（存储时遮蔽）。
+
+**测试**（`backend/` 下，本地 PostgreSQL：`JABIZ_TEST_DB_URL=jdbc:postgresql://localhost:5432/jabiz_test`）：
+- 单元：`TransferRulesTest`、`PayoutChecksTest`，`ReconChecksTest`、`StripeModeCheckTest`、`QbRolesTest`、`MessagesTest` 的新用例。
+- 集成：`PayoutOnboardIT`、`TransferIT`、`TransferFailureIT`、`TransferReversedIT`、`TakerWalletSyncIT`、`TransferConcurrencyIT`、`StripePayoutIT`
+  （Stripe 以有状态的本地桩 `StripeSim` 模拟，可注入拒绝、丢失回答、查询失败；不连接网络）；`ProcessAccessIT`、`SetupIT`、`StripeStartupChecksIT`、
+  `ReconcileIT` 与两个审核设置测试随新规则、参数、提供方更新。
+- 场景 `scenarios/qb/payout.yml`（开通、到账通知、奖励同步、每日转账、大额审核、发出、撤回、打款到银行）；其他场景发布新增的受控变更。
+- `./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 个错误）：414 个测试全部通过。`tools/check-app-paths.sh origin/1.2/platform` 通过。
+
+**已知问题**：
+- 开通作业的账户创建以 `qb-connect-<用户>` 为幂等键，Stripe 只保留 24 小时：结果丢失且一天后重试时，Stripe 会另建一个账户（旧的成为孤立账户，无资金）。
+- 处于 `CHECK` 的转账占用"未结束"名额，直到核实（每小时，至少 10 分钟后）。
+- ~~`REVIEW_NOT_CONFIGURED`（规则未发布）时，每天的运行都会建一笔被驳回的转账并开待办~~（复审后改正：跳过、不写记录，每天一个待办）。
+- 用户钱包同步的事件量与奖励相同；新订阅回填历史事件（部署 Q6b 后一次性）。Q10 评估。
+- Q6b 不含页面（开通收款、流水中的转账展示、审核面板），在 Q6 页面阶段。
+
+**复审后的修正（Q6b）**（独立复审；每项先写失败的测试，再修正）：
+- R1（阻塞，重复付款）：等待 10 分钟只在**开始**核实时检查，没有在**使用**结果时检查。核实在转账仍 `SENDING` 时开始、查到"没有"，之后发出作业的
+  最后一次尝试创建了转账而回答丢失（→ `CHECK`），再处理核实的结果就会冲正，而 Stripe 已付款，次日再付一次。修正：转账记下发送作业报告结束的时刻
+  （`sendEndedAt`，`QB_TRANSFER_SENT` / `_SEND_FAILED` 第一次处理时写）；核实作业的结果带查询时刻的下界（`TransferLookup.lookedUpFrom` = 该次尝试的
+  期限 − 超时，即尝试开始的时刻）；"没有"只有在 `lookedUpFrom ≥ sendEndedAt + 10 分钟` 时才冲正，否则留在 `CHECK` 由下一次核实再问
+  （`TransferFailureIT.aCheckWhoseLookupMayPrecedeTheLastAttemptReversesNothing`：没有时刻、早于结束、结束后 9 分钟的"没有"都不冲正，10 分钟的才冲正）。
+  `CHECK` 而发送作业仍未结束的只有"与记录不符"一种，它从不自动核实；`sendEndedAt` 为空的"没有"也不冲正。
+- R2：Stripe 把执行过的请求的回答（含 4xx 与 500）保存在幂等键下并重放，同一键重试余额不足或 5xx 永远不会成功。修正：发出作业对创建请求的
+  余额不足与 5xx 立即结束（`StripeTransferHandler.kept`）：余额不足是确定失败（冲正，次日新转账、新键），5xx 进入 `CHECK`（选了更安全的一种，
+  不在查询确认没有之后换键重发）；429、409 等未执行的回答照常重试。连续失败只计指向用户账户的失败（`STRIPE_DECLINED`、`STRIPE_NOT_FOUND`），
+  平台自身的（余额、密钥、429、5xx、核实后没有）既不计也不中断。`StripeSim` 照 Stripe 按键保存回答（429 除外），"回答丢失"改为被截断的 200。
+- R3：`STRIPE_RATE_LIMITED` 不再是确定失败（429 不说明之前的尝试），用尽重试后进入 `CHECK`。
+- R4：开通链接的默认数据视图原先 `qb.admin.finance.read` 可读：财务人员可以替 `PENDING` 的用户完成开通、填入自己的银行账户。改为不授予任何角色的
+  `qb.payout.system`，只有本人的数据视图可读（`PayoutOnboardIT`：财务查询 403）。作业结果不经平台接口给出（改正上文关于 `external-job.read` 的说法）。
+- R5：没有生效的审核规则时，大额转账先查规则（`SysApprovalRule` 中 `qb.transfer` 的启用规则）再决定：跳过（`REVIEW_NOT_CONFIGURED`），不写转账，
+  用户看不到"失败的转账"；财务每天一个待办（来源 `transfer-review-missing:<UTC 日期>`，`TransferReviewSettingsIT`）。规则存在却未要求审核
+  （条件被改）时整项失败、什么也不留，不会未经审核发出。
+- R6：被审核驳回或被 Stripe 撤回（全部或部分）后，下一次运行会把同一笔钱再送去审核或发出。修正：这样的转账使用户暂停（`TransferRules.HELD`，
+  选取模板与流程都排除），直到财务执行新流程 `QB_TRANSFER_HOLD_RELEASE {userId}`（`qb.payout.review`，财务角色已有；要求已验证邮箱、未封禁；
+  在用户钱包锁内给每笔暂停的转账记下 `releasedBy` / `releasedAt`；没有暂停即 422 `QB_TRANSFER_NOT_HELD`；收款人放行自己即 422 `QB_TRANSFER_RELEASE_OWN`，四眼同审核）。三语消息；`TransferIT`、`TransferReversedIT`。
+- 小项：同一秒的 `account.updated` 取更严格的状态（`PayoutAccountStatus.replaces`：并列时不会因此变为 `ENABLED`）；核对的条目超过 1000 时先保留
+  用户钱包的条目（下一次运行据此判断"连续两次"）；审核人的驳回意见不再写进用户可读的 `failureMessage`（只记 `REVIEW_REJECTED`，意见留在审批中）。
+- 迁移：仍在本分支的 `V8` 中加列 `send_ended_at`、`released_by`、`released_at` 与部分索引 `qb_transfer_hold_idx`（V8 尚未合入，没有已部署的库；
+  已在本地执行过旧 V8 的开发库要重建）。转账流程对同一转账的多处改动合并为一次更新（`write` / `save`）。
+- 原计划中"`balance_insufficient` 可重试、重试后成功"（D-Q6-12 与测试清单）由 R2 取代。
+- 测试：`./gradlew :quizbuks:check --max-workers=2`（含 `platformCheck`，0 个错误）：420 个测试全部通过；场景快照只多了三列（`payout.snapshot.json`）。`tools/check-app-paths.sh origin/1.2/platform` 通过。
