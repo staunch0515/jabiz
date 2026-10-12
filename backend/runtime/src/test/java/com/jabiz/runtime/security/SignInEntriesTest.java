@@ -170,11 +170,12 @@ class SignInEntriesTest {
         assertThat(errors).anySatisfy(e -> assertThat(e).isEqualTo("jabiz.security.entries.odd: session.persistence "
             + "must be tab or device, not 'disk'"));
         assertThat(errors).hasSize(5);
-        // The administration may end its idle lock, but is told.
+        // Nor does the administration end its idle lock.
         assertThat(new SignInEntries(Map.of("admin", sessions(List.of("ADMIN"), null, Duration.ZERO, null)), false,
             null).check()).singleElement().satisfies(p -> {
-                assertThat(p.isError()).isFalse();
-                assertThat(p.message()).isEqualTo("the administration's sessions never end when idle");
+                assertThat(p.isError()).isTrue();
+                assertThat(p.message()).isEqualTo("session.idle-timeout cannot be 0 for the administration entry: "
+                    + "its sessions end when idle");
             });
         // None of them is offered; the configured administration is not either (requests for it are refused).
         assertThat(entries.all()).isEmpty();
@@ -182,6 +183,27 @@ class SignInEntriesTest {
         assertThat(new SignInEntries(Map.of("ok", sessions(List.of("A"), Duration.ofDays(90), null, "device")), false,
             null, new SignInEntries.Session(Duration.ofDays(120), Duration.ofMinutes(15),
                 SignInEntries.Persistence.TAB)).check()).isEmpty();
+    }
+
+    @Test
+    void longSessionsNeverAcceptEveryRole() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "kept", sessions(List.of("*"), null, null, "device"),
+            "awake", sessions(List.of("A", "*"), null, Duration.ZERO, null),
+            "plain", sessions(List.of("*"), null, null, null)), false, null);
+
+        assertThat(entries.check()).filteredOn(CheckProblem::isError).extracting(p -> p.location() + ": "
+            + p.message()).containsExactlyInAnyOrder(
+                "jabiz.security.entries.kept: accepted-roles cannot be * for an entry with long sessions "
+                    + "(persistence device or idle-timeout 0): list its roles",
+                "jabiz.security.entries.awake: accepted-roles cannot be * for an entry with long sessions "
+                    + "(persistence device or idle-timeout 0): list its roles");
+        assertThat(entries.all()).extracting(SignInEntries.Entry::name).containsExactlyInAnyOrder("admin", "plain");
+        assertThat(entries.session("plain").longLived()).isFalse();
+        assertThat(new SignInEntries.Session(Duration.ofDays(1), Duration.ZERO, SignInEntries.Persistence.TAB)
+            .longLived()).isTrue();
+        assertThat(new SignInEntries.Session(Duration.ofDays(1), Duration.ofMinutes(15),
+            SignInEntries.Persistence.DEVICE).longLived()).isTrue();
     }
 
     @Test

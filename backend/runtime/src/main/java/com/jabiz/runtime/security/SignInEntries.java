@@ -99,6 +99,15 @@ public class SignInEntries implements PlatformCheck {
         public boolean idleEnds() {
             return idleTimeout.isPositive();
         }
+
+        /**
+         * Whether sessions here are long: kept on the device, or never ended for idleness (decision D43 item 2). Such
+         * an entry never accepts every role, and roles granting the platform's administration do not count in its
+         * sessions ({@link Rbac#withoutAdministration}).
+         */
+        public boolean longLived() {
+            return persistence == Persistence.DEVICE || !idleEnds();
+        }
     }
 
     /**
@@ -243,11 +252,6 @@ public class SignInEntries implements PlatformCheck {
                 problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "self-registration is on, but "
                     + "jabiz.mail.enabled is not: registered users cannot verify their address"));
             }
-            if (RequestContext.DEFAULT_ENTRY.equals(name) && !entry.session().idleEnds()) {
-                // Allowed, but the administration's idle lock (decision D28 item 5) is then gone.
-                problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location + ".session.idle-timeout",
-                    "the administration's sessions never end when idle"));
-            }
             entry.acceptedRoles().stream().filter(role -> !ALL_ROLES.equals(role)).forEach(referenced::add);
             referenced.addAll(entry.registrationRoles());
         });
@@ -329,6 +333,11 @@ public class SignInEntries implements PlatformCheck {
                 + entry.appPath() + "'");
         }
         errors.addAll(sessionErrors(name, config == null ? null : config.session(), entry.session()));
+        if (entry.session().longLived() && entry.acceptedRoles().contains(ALL_ROLES)) {
+            // Long sessions are for the application's own front ends (decision D43 item 2), never every role.
+            errors.add("accepted-roles cannot be " + ALL_ROLES + " for an entry with long sessions (persistence device "
+                + "or idle-timeout 0): list its roles");
+        }
         return errors;
     }
 
@@ -356,6 +365,10 @@ public class SignInEntries implements PlatformCheck {
         if (RequestContext.DEFAULT_ENTRY.equals(name) && session.persistence() == Persistence.DEVICE) {
             errors.add("session.persistence cannot be device for the administration entry: its sessions stay in the "
                 + "tab");
+        }
+        if (RequestContext.DEFAULT_ENTRY.equals(name) && !session.idleEnds() && !session.idleTimeout().isNegative()) {
+            // The administration's idle lock (decision D28 item 5) stays.
+            errors.add("session.idle-timeout cannot be 0 for the administration entry: its sessions end when idle");
         }
         return errors;
     }

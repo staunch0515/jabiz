@@ -1245,5 +1245,5 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 
 **放弃的方案**：①刷新令牌放 HttpOnly Cookie（需要 SameSite、CSRF 头与 Origin 检查，改变 D12、D15 的"无 Cookie、无 CSRF"）；②引入 Workbox（多一套依赖，策略难以收紧到"只缓存外壳"）；③邮件链接一律经后台中转（应用 SPA 的用户要先进入后台）。
 
-**实现说明（16m）**：①会话设置在 `SignInEntries`（`Entry.session()`），`RefreshTokenStore` 按令牌族的入口取有效期与闲置窗口，`/api/auth/me` 的 `idleTimeoutSeconds` 按会话的入口给出（`0` 不锁定），`GET /api/auth/entries/{name}` 给出 `sessionPersistence`；`session.refresh-token-ttl` 的 90 天上限只约束入口自己的设置。
-②本人改密码是 `POST /api/auth/account/password` → `SEC_ACCOUNT_PASSWORD_CHANGE`（10 §15.8）：吊销原因 `PASSWORD_CHANGE`，登录记录 `PASSWORD_CHANGED`（不计失败、不清零），锁定期间不比对密码，没有密码的账号 422 `PASSWORD_NOT_SET`，按用户（`jabiz.security.account.rate-limit.per-user`）与地址限流。不需要迁移。
+**实现说明（16m）**：①会话设置在 `SignInEntries`（`Entry.session()`），`RefreshTokenStore` 按令牌族的入口取有效期与闲置窗口，`/api/auth/me` 的 `idleTimeoutSeconds` 按会话的入口给出（`0` 不锁定），`GET /api/auth/entries/{name}` 给出 `sessionPersistence`；`session.refresh-token-ttl` 的 90 天上限只约束入口自己的设置。"非管理入口"的实现：`admin` 不能用 `device` 或闲置时长 `0`；长期会话的入口（`device` 或闲置时长 `0`）不能接受 `*`（启动错误）；角色是运行时数据，所以每次登录与刷新时，授予 `*` 或 `security.*` 权限的角色在长期会话中不计入（10 §15.1）。
+②本人改密码是 `POST /api/auth/account/password` → `SEC_ACCOUNT_PASSWORD_CHANGE`（10 §15.8）：吊销原因 `PASSWORD_CHANGE`，登录记录 `PASSWORD_CHANGED`（不计失败、不清零），同一用户的尝试以排他锁逐个进行（并发猜测各自计数），无论当前密码对错都计算新密码的哈希（耗时相同），锁定期间不比对密码，没有密码的账号 422 `PASSWORD_NOT_SET`，按用户（`jabiz.security.account.rate-limit.per-user`）与地址限流。不需要迁移。

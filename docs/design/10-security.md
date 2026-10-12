@@ -390,12 +390,15 @@ jabiz.security.entries.portal.session.persistence=device      # tab（缺省）�
   请求不带 `entry` 即 `admin`，现有后台前端无需改动。
 - 启动检查（类别 `SECURITY`）一次报告全部问题：名字非法、`accepted-roles` 为空、角色码格式、注册角色为 `*` 或不在接受的角色中、允许注册却无注册角色、
   `app-path` 不是绝对路径（含 `.` / `..` 段）、`session.refresh-token-ttl` 不为正或（入口自己设置时）超过 90 天、`session.idle-timeout` 为负、
-  `session.persistence` 不是 `tab` / `device`、`admin` 入口用 `device`；允许注册而 `jabiz.mail.enabled` 未开启、角色码（当前版本中）不存在、
-  `admin` 入口的 `session.idle-timeout` 为 `0`（后台不再闲置锁定）为**警告**。
+  `session.persistence` 不是 `tab` / `device`、`admin` 入口用 `device` 或 `session.idle-timeout` 为 `0`、长期会话的入口（`device` 或闲置时长 `0`）接受 `*`；
+  允许注册而 `jabiz.mail.enabled` 未开启、角色码（当前版本中）不存在为**警告**。
   有错误的入口不提供（请求它即 401）。访问令牌有效期长于某入口的闲置时长另由 `SessionChecks` 报告（§11）。
 - **会话设置**（决策 D43 第 2 条，阶段 16m）：有效期与闲置时长见 §2、§11；`persistence` 告诉前端把刷新令牌放在哪里（`tab` 为 `sessionStorage`，
   `device` 为 `localStorage`，关闭后再打开仍保持登录），由 `GET /api/auth/entries/{name}` 的 `sessionPersistence` 给出；服务端对两者一视同仁（轮换、重用即吊销照常）。
-  长期会话不设绝对上限（滑动；以后可加 `session.max-lifetime`）。后台（`admin`）的会话只能在标签页内。
+  长期会话不设绝对上限（滑动；以后可加 `session.max-lifetime`）。后台（`admin`）的会话只能在标签页内，且按闲置结束。
+- **长期会话不含管理权限**（D43 第 2 条）：`device` 或闲置时长 `0` 的入口，启动检查拒绝 `accepted-roles=*`；角色与其权限是可随时修改的数据，启动时无从确定，
+  所以在每次登录（三条路径）与刷新时（`Rbac.withoutAdministration`），被接受的角色中授予 `*` 或任何 `security.*` 权限的**不计入**该会话
+  （其权限、二次验证要求与数据期限都不算）；只剩这类角色的用户在该入口即 `NO_ROLE`（401）。
 - 已不存在的入口（例如升级前签发的挑战或刷新令牌所属的入口被删除）不接受任何角色：默认拒绝。
 
 ### 15.2 登录、令牌与刷新
@@ -551,9 +554,10 @@ class PortalSignInGuard implements SignInGuard {
 - **顺序**：按客户端地址（`ClientAddresses`）与按用户限流（`jabiz.security.account.rate-limit.per-user`，缺省每小时 10 次；地址同注册的 20 次），超限 429 `RATE_LIMITED`；
   再检查请求：缺 `currentPassword` 400 `REQUIRED`，`newPassword` 不合密码规则 400（`PASSWORD_TOO_SHORT` 等）——这两种都不算一次尝试；然后运行流程。
 - **流程**：读用户（须是调用者本人、已启用，否则 403）；没有密码（只用 OIDC）→ 422 `PASSWORD_NOT_SET`（不写记录，引导走找回密码，§15.7）；
-  读最新登录记录，**锁定期间不比对密码**（记 `LOCKED`）；否则 `CurrentPasswordStep`（阻塞步骤，BCrypt）比对当前密码，错误记 `BAD_CREDENTIALS`
+  先取该用户的排他锁（`HoldLock`，同一用户的改密码尝试逐个进行：并发的尝试否则都基于同一条最新登录记录，除一条外都在唯一约束上失败而不留记录，猜测不被计数），
+  再读最新登录记录，**锁定期间不比对密码**（记 `LOCKED`）；否则 `CurrentPasswordStep`（阻塞步骤，BCrypt）比对当前密码，错误记 `BAD_CREDENTIALS`
   （**计入失败次数与锁定**，同登录 §4），两者都答 422 `PASSWORD_INCORRECT`（`field: currentPassword`），流程正常结束使登录记录留下。
-  正确时 `HashPasswordStep` 计算新哈希、写入，记登录记录 `PASSWORD_CHANGED`（不计失败，计数也不清零：没有完成一次完整的登录），
+  比对了当前密码（无论对错）就计算新密码的哈希（`HashPasswordStep`），两种结果做同样的工作，耗时不泄露猜测是否正确；正确时写入新哈希，记登录记录 `PASSWORD_CHANGED`（不计失败，计数也不清零：没有完成一次完整的登录），
   吊销本人的其他令牌族（原因 `PASSWORD_CHANGE`）：`refreshToken` 是本人在**当前会话入口**的有效刷新令牌（未用过、未过期、族未吊销）时保留其族，
   否则（没给、别人的、别的入口的、已用过的）全部吊销，客户端重新登录。204。
 - **登录记录**带入口、地址与 UA（§15.5），因素 `PASSWORD`。

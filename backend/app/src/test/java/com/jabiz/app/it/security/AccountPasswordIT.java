@@ -10,7 +10,18 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import com.jabiz.runtime.security.PasswordHasher;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,8 +38,27 @@ import static org.assertj.core.api.Assertions.assertThat;
     "jabiz.mail.enabled=true", "jabiz.mail.from=jabiz@example.com", "jabiz.mail.base-url=https://app.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3036", SignUpItSupport.ENTRY_PROPERTIES_REGISTRATION,
     SignUpItSupport.ENTRY_PROPERTIES_ADMIN, SignUpItSupport.ENTRY_PROPERTIES_LOOSE})
-@Import(SignUpItSupport.FixedTimeLimits.class)
+@Import({SignUpItSupport.FixedTimeLimits.class, AccountPasswordIT.CountingHasher.class})
 class AccountPasswordIT extends SignUpItSupport {
+
+    /** The password hasher, counting the hashes it computes (the work a password change does). */
+    @TestConfiguration
+    static class CountingHasher {
+
+        static final AtomicInteger HASHES = new AtomicInteger();
+
+        @Bean
+        @Primary
+        PasswordHasher countingPasswordHasher() {
+            return new PasswordHasher(4, 10) {
+                @Override
+                public String hash(String password) {
+                    HASHES.incrementAndGet();
+                    return super.hash(password);
+                }
+            };
+        }
+    }
 
     @RegisterExtension
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3036, null, ServerSetup.PROTOCOL_SMTP));
@@ -171,6 +201,54 @@ class AccountPasswordIT extends SignUpItSupport {
         deliver();
         assertThat(to(email)).isEmpty();
         assertThat(userOf(email).get("password_hash")).isNotNull();
+    }
+
+    @Test
+    void concurrentWrongAttemptsEachCountTowardsTheLock() throws Exception {
+        String name = unique("kai");
+        String userId = customer(name, address("kai"));
+        Map<String, Object> mine = session(name, PASSWORD, LOOSE);
+        String bearer = bearerOf(mine);
+
+        ExecutorService pool = Executors.newFixedThreadPool(5);
+        try {
+            List<Callable<Integer>> attempts = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                String client = nextClient();
+                attempts.add(() -> this.client.post().uri(PATH).header(HttpHeaders.AUTHORIZATION, bearer)
+                    .header(CONNECTION, client).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("currentPassword", "wrong horse battery", "newPassword", NEW_PASSWORD))
+                    .exchange().returnResult(Void.class).getStatus().value());
+            }
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> status : pool.invokeAll(attempts)) {
+                statuses.add(status.get());
+            }
+            assertThat(statuses).containsOnly(422);
+        } finally {
+            pool.shutdownNow();
+        }
+        // Not one guess got lost in a race: five failures, and the account is locked.
+        assertThat(records(userId)).extracting(row -> row.get("outcome")).containsExactly("SUCCESS",
+            "BAD_CREDENTIALS", "BAD_CREDENTIALS", "BAD_CREDENTIALS", "BAD_CREDENTIALS", "BAD_CREDENTIALS");
+        assertThat(records(userId).getLast().get("locked_until")).isNotNull();
+        assertThat(refusal(loginTo(name, PASSWORD, LOOSE), 401)).isEqualTo("LOGIN_FAILED");
+    }
+
+    @Test
+    void aRightAndAWrongCurrentPasswordCostTheSameWork() {
+        String name = unique("lee");
+        customer(name, address("lee"));
+        Map<String, Object> mine = session(name, PASSWORD, LOOSE);
+
+        int before = CountingHasher.HASHES.get();
+        change(mine, "wrong horse battery", NEW_PASSWORD, false).expectStatus().isEqualTo(422);
+        int wrong = CountingHasher.HASHES.get() - before;
+        before = CountingHasher.HASHES.get();
+        change(mine, PASSWORD, NEW_PASSWORD, false).expectStatus().isNoContent();
+        int right = CountingHasher.HASHES.get() - before;
+        // Both hash the new password: whether the current one was right does not show in the time taken.
+        assertThat(wrong).isEqualTo(right).isEqualTo(1);
     }
 
     @Test

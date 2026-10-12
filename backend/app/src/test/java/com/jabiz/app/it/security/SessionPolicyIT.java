@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -20,11 +21,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * keeps the global settings (eight hours, fifteen minutes), as before.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {"it.sql-log.enabled=true",
-    "jabiz.security.entries.app.accepted-roles=IT_PLAYER",
+    "jabiz.security.entries.app.accepted-roles=IT_PLAYER,IT_ROOT,IT_ALL",
     "jabiz.security.entries.app.session.refresh-token-ttl=30d",
     "jabiz.security.entries.app.session.idle-timeout=0",
     "jabiz.security.entries.app.session.persistence=device",
-    "jabiz.security.entries.shop.accepted-roles=IT_PLAYER",
+    "jabiz.security.entries.shop.accepted-roles=IT_PLAYER,IT_ROOT,IT_ALL",
     "jabiz.security.entries.shop.session.refresh-token-ttl=PT2H",
     "jabiz.security.entries.shop.session.idle-timeout=PT1H"})
 class SessionPolicyIT extends SecurityItSupport {
@@ -33,6 +34,9 @@ class SessionPolicyIT extends SecurityItSupport {
     private static final String PLAYER = "IT_PLAYER";
     private static final String APP = "app";
     private static final String SHOP = "shop";
+    /** Roles granting the platform's administration: never counted in a long session. */
+    private static final String ROOT = "IT_ROOT";
+    private static final String ALL = "IT_ALL";
 
     private String name;
 
@@ -40,6 +44,8 @@ class SessionPolicyIT extends SecurityItSupport {
     void player() {
         if (query("SELECT 1 FROM sec_role_version WHERE role_code = ?", PLAYER).isEmpty()) {
             createRole(PLAYER, "p");
+            createRole(ROOT, "security.user.write", "q");
+            createRole(ALL, "*");
         }
         name = unique("pat");
         String userId = createUser(name, PASSWORD);
@@ -72,6 +78,39 @@ class SessionPolicyIT extends SecurityItSupport {
 
     private static Instant expiry(Map<String, Object> session) {
         return Instant.parse(String.valueOf(session.get("refreshTokenExpiresAt")));
+    }
+
+    private String roleId(String code) {
+        return String.valueOf(query("SELECT role_id::text AS id FROM sec_role_version WHERE role_code = ?", code)
+            .getFirst().get("id"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void rolesGrantingTheAdministrationDoNotCountInLongSessions() {
+        String userId = String.valueOf(query("SELECT user_id::text AS id FROM sec_user_version WHERE user_name = ?",
+            name).getFirst().get("id"));
+        assign(userId, roleId(ROOT), null);
+        assign(userId, roleId(ALL), null);
+
+        Map<String, Object> app = signInAt(APP);
+        assertThat((List<String>) app.get("roles")).containsExactly(PLAYER);
+        assertThat((List<String>) app.get("permissions")).containsExactly("p");
+        // Not after a refresh either.
+        Map<String, Object> renewed = refreshed(app, APP);
+        assertThat((List<String>) renewed.get("permissions")).containsExactly("p");
+        assertThat(tokens.verify((String) renewed.get("accessToken")).permissions()).containsExactly("p");
+
+        // In a session that ends when idle, they count as before.
+        assertThat((List<String>) signInAt(SHOP).get("permissions")).contains("*", "security.user.write", "q", "p");
+
+        // A user with such roles only has none that counts there.
+        String root = unique("root");
+        assign(createUser(root, PASSWORD), roleId(ROOT), null);
+        post("/api/auth/login", null, Map.of("userName", root, "password", PASSWORD, "entry", APP))
+            .expectStatus().isUnauthorized();
+        post("/api/auth/login", null, Map.of("userName", root, "password", PASSWORD, "entry", SHOP))
+            .expectStatus().isOk();
     }
 
     @Test

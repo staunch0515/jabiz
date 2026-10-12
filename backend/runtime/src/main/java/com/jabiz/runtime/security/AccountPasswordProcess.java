@@ -10,6 +10,7 @@ import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorSignInProcess;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.LoginAttemptPolicy;
@@ -30,8 +31,9 @@ import java.util.Map;
  *
  * <p>Like signing in, a wrong current password is not a failed process: it ends normally with
  * {@link Outcome#INCORRECT} and a login record {@link LoginOutcome#BAD_CREDENTIALS}, which counts towards the lock of
- * the account; while the account is locked the password is not even checked ({@link LoginOutcome#LOCKED}). A right one
- * sets the new password (checked against the password rules and hashed in a blocking step), records
+ * the account; while the account is locked the password is not even checked ({@link LoginOutcome#LOCKED}). A user's
+ * attempts run one at a time (an exclusive lock per user), so that concurrent guesses each count. The new password is
+ * hashed whether the current one was right or not (the same work either way). A right one sets it, records
  * {@link LoginOutcome#PASSWORD_CHANGED} (no failure; the counter stays), ends every other session of the user (the one
  * of the refresh token given, if it is a live one of the caller's, stays) and, with mail on, tells the user by mail
  * ({@value AuthMailTemplates#PASSWORD_CHANGED}). A user without a password (identity provider only) has none to change:
@@ -80,6 +82,8 @@ public class AccountPasswordProcess {
     static final String SOURCE = "source";
     static final String OUTCOME = "outcome";
     static final String CHANGED_USER = "changed_user";
+    /** Name of the lock that serializes a user's attempts (the platform's own, apart from applications' names). */
+    static final String LOCK = "jabiz.platform.account-password:";
 
     static ProcessDefinition<Input, Output, ProcessContext> definition(LoginAttemptPolicy policy,
         boolean mailEnabled) {
@@ -99,6 +103,9 @@ public class AccountPasswordProcess {
                 return ctx;
             })
             .outputMapper(ctx -> new Output(ctx.get(OUTCOME, Outcome.class)))
+            // One attempt of a user at a time: concurrent attempts would all build on the same latest login record,
+            // and all but one would lose the race for the next one unrecorded (guesses that never count).
+            .step("One attempt at a time", HoldLock.<ProcessContext>exclusive(ctx -> LOCK + ctx.get(USER_ID)))
             .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
             .compute("Check the account", (metadata, ctx) -> checkAccount(ctx))
             .step("Load the latest login record", QueryEntities.of(SecurityEntities.LOGIN_RECORD_DATASET,
@@ -109,9 +116,10 @@ public class AccountPasswordProcess {
             .step("Check the current password", CurrentPasswordStep.class, new CurrentPasswordStep.Metadata(
                 CURRENT_PASSWORD, ctx -> user(ctx).get("passwordHash"), MATCHES,
                 ctx -> !ctx.hasViolations() && !Boolean.TRUE.equals(ctx.get(LOCKED))))
-            // Only after the right password: a wrong one costs no second hash.
+            // Whenever the current password was checked, right or wrong: the work (and so the time) is the same, and
+            // tells nothing about the guess. Only a right one uses the hash.
             .step("Hash the new password", HashPasswordStep.class, new HashPasswordStep.Metadata(NEW_PASSWORD, HASH,
-                "newPassword", false, AccountPasswordProcess::matched))
+                "newPassword", false, ctx -> !ctx.hasViolations() && ctx.get(MATCHES) != null))
             .compute("Record the attempt", (metadata, ctx) -> record(ctx, policy))
             .step("End the other sessions", RevokeSessionsStep.class, new RevokeSessionsStep.Metadata(CHANGED_USER,
                 RefreshTokenStore.REASON_PASSWORD_CHANGE, ctx -> ctx.get(CHANGED_USER) != null, KEEP_TOKEN))
