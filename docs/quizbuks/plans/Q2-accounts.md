@@ -53,6 +53,7 @@
 - 同一邮箱既是答题人又是商家：在另一个入口注册即收到"你已有账号"，点击后追加角色（平台）；App 的令牌拿不到商家权限，反之亦然。
 - 邮件：`jabiz.mail.enabled`、`jabiz.mail.base-url` 与 SMTP 设置来自环境变量（`deploy/quizbuks/README.md`）。在 16c 提供应用自己的验证页之前，`base-url` 取 `https://<主机>/admin`，
   平台的落地页在通用后台中处理链接，完成后跳到入口的 `app-path`（`/`、`/sponsor/` 的页面随 16c 加入；平台缺口 6）。
+  **更新（平台 16c-2 同步后）**：`base-url` 改为主机的根地址，链接按入口指向各自的前端（`{entryUrl}`，D43），退订页 `jabiz.mail.unsubscribe-path=/admin/mail/unsubscribe`；平台缺口 6、20 已由 16c-2 解决。
 - 部署：在反向代理之后运行时设置 `jabiz.security.trusted-proxies`，否则登录记录的 IP 都是代理的地址。
 - 测试配置（`src/test/resources/config/application.properties`）：两个注册入口关闭注册（各 IT 用 `TestTokens`），注册相关的 IT 与场景以 `properties` 打开（同平台示范）。
 

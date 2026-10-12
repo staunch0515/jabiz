@@ -60,11 +60,13 @@ jabiz:
       password: ${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:}
   # Mail (decision D35): verification, password reset, welcome and onboarding mail. Off unless switched on; the
   # server is spring.mail.* (SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD). The
-  # base address is the administration's (its pages handle the platform's links until the app has its own).
+  # base address is the host's root: the platform's links go to each entry's own frontend (its app-path, decision
+  # D43 item 4), and the unsubscribe page is the administration's.
   mail:
     enabled: ${JABIZ_MAIL_ENABLED:false}
     from: ${JABIZ_MAIL_FROM:}
     base-url: ${JABIZ_MAIL_BASE_URL:}
+    unsubscribe-path: /admin/mail/unsubscribe
   files:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:

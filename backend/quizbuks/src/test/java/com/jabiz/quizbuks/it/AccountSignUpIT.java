@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.mail.enabled=true", "jabiz.mail.from=quizbuks@example.com",
-    "jabiz.mail.base-url=https://quizbuks.example.com/admin",
+    "jabiz.mail.base-url=https://quizbuks.example.com",
     "spring.mail.host=localhost", "spring.mail.port=3041",
     "jabiz.security.entries.app.self-registration=true", "jabiz.security.entries.sponsor.self-registration=true",
     "jabiz.security.sign-up.rate-limit.per-address=1000", "jabiz.security.sign-up.rate-limit.per-email=100"})
@@ -47,10 +47,13 @@ class AccountSignUpIT extends AccountItSupport {
     static final GreenMailExtension MAIL = new GreenMailExtension(new ServerSetup(3041, null,
         ServerSetup.PROTOCOL_SMTP));
 
+    // Links go to the frontend of the entry they belong to (decision D43 item 4): the app at /, sponsors at /sponsor/,
+    // the administration at /admin/.
     private static final Pattern VERIFY_LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/admin/auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/)?)auth/verify-email\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
     private static final Pattern JOIN_LINK = Pattern.compile(
-        "https://quizbuks\\.example\\.com/admin/auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+        "https://quizbuks\\.example\\.com/((?:admin/|sponsor/)?)auth/join\\?entry=([a-z0-9-]+)&token=([A-Za-z0-9_-]+)");
+    private static final Map<String, String> ENTRY_ROOTS = Map.of("app", "", "sponsor", "sponsor/", "admin", "admin/");
     private static final AtomicInteger ADDRESSES = new AtomicInteger();
 
     /** Anonymous requests, each from an address of its own (the mock server has no connections). */
@@ -168,7 +171,9 @@ class AccountSignUpIT extends AccountItSupport {
         for (int i = mail.size() - 1; i >= 0; i--) {
             Matcher matcher = pattern.matcher(text(mail.get(i)));
             if (matcher.find()) {
-                return matcher.group(2);
+                assertThat(matcher.group(1)).as("the root of entry %s", matcher.group(2))
+                    .isEqualTo(ENTRY_ROOTS.get(matcher.group(2)));
+                return matcher.group(3);
             }
         }
         throw new AssertionError("No link " + pattern + " in the mail to " + address);
