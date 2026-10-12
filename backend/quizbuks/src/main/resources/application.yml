@@ -117,3 +117,9 @@ quizbuks:
     livemode: ${QB_STRIPE_LIVEMODE:false}
     api-version: ${QB_STRIPE_API_VERSION:2025-03-31.basil}
     checkout-ttl: ${QB_STRIPE_CHECKOUT_TTL:PT1H}
+    # The Stripe account's balance currency (a payment's fee and net come in it). Charges are yen whatever it is; a
+    # settlement in another currency is not posted automatically (a task for finance).
+    settlement-currency: ${QB_STRIPE_SETTLEMENT_CURRENCY:jpy}
+    # Going live refuses to start while test-mode top-ups or a non-zero 2110 are in the database (README go-live),
+    # unless this is set on purpose.
+    allow-live-with-test-data: ${QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA:false}

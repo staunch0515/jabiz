@@ -217,22 +217,38 @@ class TopUpChecksTest {
         TopUpChecks.TopUpView paid = topUp(TopUpStatus.PAID, SESSION);
         TopUpChecks.Fee fee = new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"), new BigDecimal("180"),
             new BigDecimal("4820"), "jpy");
-        assertThat(TopUpChecks.feeProblem(paid, fee)).isNull();
+        assertThat(TopUpChecks.feeProblem(paid, fee, "jpy")).isNull();
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"),
-            BigDecimal.ZERO, new BigDecimal("5000"), "jpy"))).isNull();
-        assertThat(TopUpChecks.feeProblem(topUp(TopUpStatus.OPEN, SESSION), fee)).isEqualTo(TopUpChecks.STATUS);
-        assertThat(TopUpChecks.feeProblem(null, fee)).isEqualTo(TopUpChecks.UNKNOWN_TOPUP);
+            BigDecimal.ZERO, new BigDecimal("5000"), "jpy"), "jpy")).isNull();
+        assertThat(TopUpChecks.feeProblem(topUp(TopUpStatus.OPEN, SESSION), fee, "jpy"))
+            .isEqualTo(TopUpChecks.STATUS);
+        assertThat(TopUpChecks.feeProblem(null, fee, "jpy")).isEqualTo(TopUpChecks.UNKNOWN_TOPUP);
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"),
-            new BigDecimal("180"), new BigDecimal("4800"), "jpy"))).isEqualTo(TopUpChecks.FEE_MISMATCH);
+            new BigDecimal("180"), new BigDecimal("4800"), "jpy"), "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("4000"),
-            new BigDecimal("180"), new BigDecimal("3820"), "jpy"))).isEqualTo(TopUpChecks.FEE_MISMATCH);
+            new BigDecimal("180"), new BigDecimal("3820"), "jpy"), "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"),
-            new BigDecimal("180"), new BigDecimal("4820"), "usd"))).isEqualTo(TopUpChecks.FEE_MISMATCH);
+            new BigDecimal("180"), new BigDecimal("4820"), "usd"), "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"),
-            new BigDecimal("-1"), new BigDecimal("5001"), "jpy"))).isEqualTo(TopUpChecks.FEE_MISMATCH);
+            new BigDecimal("-1"), new BigDecimal("5001"), "jpy"), "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
         assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("x", "txn_1", new BigDecimal("5000"),
-            new BigDecimal("180"), new BigDecimal("4820"), "jpy"))).isEqualTo(TopUpChecks.FEE_MISMATCH);
-        assertThat(TopUpChecks.feeProblem(paid, null)).isEqualTo(TopUpChecks.FEE_MISMATCH);
+            new BigDecimal("180"), new BigDecimal("4820"), "jpy"), "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
+        assertThat(TopUpChecks.feeProblem(paid, null, "jpy")).isEqualTo(TopUpChecks.FEE_MISMATCH);
+    }
+
+    @Test
+    void theSettlementCurrencyIsASetting() {
+        TopUpChecks.TopUpView paid = topUp(TopUpStatus.PAID, SESSION);
+        // Settled in dollars (a Stripe account outside Japan): the expected currency, but not yen, so the fee and the
+        // net cannot be checked against the payment nor posted in the yen ledger: a person books them.
+        TopUpChecks.Fee usd = new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("3350"), new BigDecimal("127"),
+            new BigDecimal("3223"), "usd");
+        assertThat(TopUpChecks.feeProblem(paid, usd, "usd")).isEqualTo(TopUpChecks.FEE_CURRENCY);
+        // Another currency than the setting's is a mismatch, yen included.
+        assertThat(TopUpChecks.feeProblem(paid, usd, "eur")).isEqualTo(TopUpChecks.FEE_MISMATCH);
+        assertThat(TopUpChecks.feeProblem(paid, new TopUpChecks.Fee("ch_1", "txn_1", new BigDecimal("5000"),
+            new BigDecimal("180"), new BigDecimal("4820"), "jpy"), "usd")).isEqualTo(TopUpChecks.FEE_MISMATCH);
+        assertThat(TopUpChecks.REASONS).contains(TopUpChecks.FEE_CURRENCY);
     }
 
     @Test

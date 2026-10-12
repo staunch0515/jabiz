@@ -26,6 +26,8 @@ results:
   refundShortfall:      { from: QbTopUp.refundShortfall }
   disputeStatus:        { from: QbTopUp.disputeStatus }
   disputeClawback:      { from: QbTopUp.disputeClawback }
+  disputeShortfall:     { from: QbTopUp.disputeShortfall }
+  disputeHeld:          { from: QbTopUp.disputeHeld }
   failureCode:          { from: QbTopUp.failureCode }
   checkReason:          { from: QbTopUp.checkReason }
   ledgerTransactionId:  { from: QbTopUp.ledgerTransactionId }
@@ -57,6 +59,8 @@ SELECT
     t.{{QbTopUp.refundShortfall}}      AS refundShortfall,
     t.{{QbTopUp.disputeStatus}}        AS disputeStatus,
     t.{{QbTopUp.disputeClawback}}      AS disputeClawback,
+    t.{{QbTopUp.disputeShortfall}}     AS disputeShortfall,
+    t.{{QbTopUp.disputeHeld}}          AS disputeHeld,
     t.{{QbTopUp.failureCode}}          AS failureCode,
     t.{{QbTopUp.checkReason}}          AS checkReason,
     t.{{QbTopUp.ledgerTransactionId}}  AS ledgerTransactionId

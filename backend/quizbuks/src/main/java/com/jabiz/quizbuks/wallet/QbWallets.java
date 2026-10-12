@@ -84,9 +84,11 @@ public final class QbWallets {
         eb.field("pendingAmount", f -> f.physicalColumn("pending_amount").required(true).asMonetary("JPY", 0));
         // Transfers in flight (Q6).
         eb.field("pendingOut", f -> f.physicalColumn("pending_out").required(true).asMonetary("JPY", 0));
+        // What open disputes hold (Q6a): in the balance, but paying no reward until the dispute is closed.
+        eb.field("held", f -> f.physicalColumn("held").required(true).asMonetary("JPY", 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("ownerId", "kind", "balance", "pendingCount", "pendingAmount", "pendingOut")
+            .columns("ownerId", "kind", "balance", "held", "pendingCount", "pendingAmount", "pendingOut")
             .filters("ownerId", "kind")
             .sorts("balance", "pendingAmount")
             .defaultSort("balance", false));
@@ -107,6 +109,19 @@ public final class QbWallets {
         return wallet == null ? BigDecimal.ZERO : money(wallet.get("balance"));
     }
 
+    /** What open disputes hold of a wallet; 0 without a row. */
+    public static BigDecimal held(EntityInstance wallet) {
+        return wallet == null ? BigDecimal.ZERO : money(wallet.get("held"));
+    }
+
+    /**
+     * What a wallet can pay rewards with: its balance less what open disputes hold (Q6a). The balance (the ledger's
+     * truth) is what the reconciliation compares; this is only what may be spent.
+     */
+    public static BigDecimal available(EntityInstance wallet) {
+        return balance(wallet).subtract(held(wallet));
+    }
+
     /** A wallet's pending rewards; 0 without a row. */
     public static long pendingCount(EntityInstance wallet) {
         return wallet == null ? 0 : money(wallet.get("pendingCount")).longValueExact();
@@ -118,10 +133,11 @@ public final class QbWallets {
 
     /**
      * Whether a sponsor's wallet pays {@code amount} now: nothing is pending (rewards are paid in their order, so a
-     * new one never overtakes a pending one, D-Q5-5) and the balance covers it.
+     * new one never overtakes a pending one, D-Q5-5) and what is available (the balance less what open disputes
+     * hold) covers it.
      */
     public static boolean pays(EntityInstance wallet, BigDecimal amount) {
-        return pendingCount(wallet) == 0 && balance(wallet).compareTo(amount) >= 0;
+        return pendingCount(wallet) == 0 && available(wallet).compareTo(amount) >= 0;
     }
 
     /**
@@ -130,8 +146,16 @@ public final class QbWallets {
      */
     public static void change(com.jabiz.process.ProcessContext ctx, EntityInstance wallet, String kind,
         Object ownerId, BigDecimal balanceDelta, long pendingCountDelta, BigDecimal pendingAmountDelta) {
+        change(ctx, wallet, kind, ownerId, balanceDelta, pendingCountDelta, pendingAmountDelta, BigDecimal.ZERO);
+    }
+
+    /** As the other {@code change}, and also changes what open disputes hold by {@code heldDelta}. */
+    public static void change(com.jabiz.process.ProcessContext ctx, EntityInstance wallet, String kind,
+        Object ownerId, BigDecimal balanceDelta, long pendingCountDelta, BigDecimal pendingAmountDelta,
+        BigDecimal heldDelta) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("balance", balance(wallet).add(balanceDelta));
+        values.put("held", held(wallet).add(heldDelta));
         values.put("pendingCount", BigDecimal.valueOf(pendingCount(wallet) + pendingCountDelta));
         values.put("pendingAmount", pendingAmount(wallet).add(pendingAmountDelta));
         if (wallet == null) {

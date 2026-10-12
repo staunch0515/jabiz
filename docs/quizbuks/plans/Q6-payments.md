@@ -241,15 +241,20 @@ QuizBuks 不提供退款流程（Q14 缺省）。退款只可能由管理员在 
 - **`QB_TOPUP_REFUNDED`**（订阅 `charge.refunded`）的步骤：
   1. 按 `payment_intent` 找充值（唯一索引）；
   2. 商家钱包锁；
-  3. 纯 Java 的 `RefundMath`：本次 = 累计 `amount_refunded` − 已记的 `refundedAmount`。不大于 0 即什么也不做（重复与乱序的事件幂等）。
-  4. 商家余额 ≥ 本次：过账借 2110（商家）/ 贷 1110，钱包减少，`refundedAmount` 改为累计值。
-  5. 余额不够（Kudos 已被奖励花掉，钱包不能为负）：**不过账**，记 `refundShortfall`，开待办 `REFUND_SHORTFALL`，由财务线下处理。差额会出现在 F-05 中。
+  3. 纯 Java 的 `RefundMath`：本次 = 累计 `amount_refunded` −（已扣回的 `refundedAmount` + 已记的差额 `refundShortfall`）。
+     不大于 0 即什么也不做（重复与乱序的事件幂等）。**记下的差额不再自动扣回**（从此归财务，可能已在线下结清）。
+  4. 扣回 min(可用余额, 本次)：过账借 2110（商家）/ 贷 1110，钱包减少，`refundedAmount` 加上扣回的部分。
+  5. 余下的（Kudos 已被奖励花掉，钱包不能为负）记入 `refundShortfall`，开待办 `REFUND_SHORTFALL`（金额为余下部分），由财务线下处理。差额会出现在 F-05 中。
+  （复审补充 R2、R3：原设计为"够则全扣、不够则全不扣"，且后来的退款会把记下的差额重新扣一次。）
 - **乱序**：退款事件可能先于到账事件处理（投递不保证顺序）。找不到 `paymentIntentId` 时，事件接收不到 1 小时即让流程失败（Outbox 按退避重试），超过 1 小时开待办 `UNKNOWN_PAYMENT`。
 - **争议**：
-  - `charge.dispute.created` → `QB_TOPUP_DISPUTE_OPENED`：记 `disputeStatus = OPEN`，开待办。
-  - `charge.dispute.closed` → `QB_TOPUP_DISPUTE_CLOSED`：
-    - `lost` 时按退款同样处理（扣回争议金额，余额不够即待办）；
-    - `won` 时只记状态。
+  - `charge.dispute.created` → `QB_TOPUP_DISPUTE_OPENED`：记 `disputeStatus = OPEN`，开待办；并**冻结**争议金额（可用余额以内）：
+    商家钱包 `held` 与充值 `disputeHeld` 增加。冻结不是账本分录（余额与 2110 不变，核对照旧比较余额），只是 `QbWallets.available`
+    （余额 − 冻结）不能再付奖励：新的奖励待支付、发布显示资金不足、开始答题与列表按可用余额判断。
+  - `charge.dispute.closed` → `QB_TOPUP_DISPUTE_CLOSED`（无论结果都释放本争议的冻结）：
+    - `lost` 时按退款同样处理：从冻结与其余可用余额中扣回 min(可用 + 本冻结, 争议金额)，余下记 `disputeShortfall` 并开待办；
+    - `won` / `warning_closed` 时只记状态，释放冻结并发出 `qb.sponsor.settle-pending`（支付待付奖励）。
+  - （复审补充 R2：防止商家发起拒付后在争议期间把余额花光。）
   - 争议手续费留给 F-05。
 - 两个类型各一个流程：`LoadInboundEvent` 一步只认一个类型（平台缺口 18），共用步骤 `TopUpClawback.steps`。
 
@@ -935,9 +940,28 @@ Q6b：
 - "未完成至多 3 笔"不再永久计入卡住的 `OPENING`（见上）。
 - 测试夹具：Stripe 桩服务在全部充值测试类之间共用（它们共用缓存的应用上下文），不在某个类结束时关闭。
 
+**独立复审后的修正**（无伪造事件、重复入账或越权问题；以下均先写失败的测试）：
+- R1（CI）：`.github/workflows/quizbuks.yml` 的 `package` 作业启动打包的应用时给出一次性的 `STRIPE_WEBHOOK_SECRET` 与测试密钥
+  `STRIPE_API_KEY=sk_test_ci_throwaway`，否则 `INBOUND` / `EXTERNAL` 检查使启动失败。
+- R2（设计补充）：退款与败诉争议**部分扣回**——扣 min(可用余额, 本次)，只把余下的记为差额并开待办；争议期间**冻结**争议金额
+  （`qb_wallet.held`、`qb_topup.dispute_held`，约束 `0 ≤ held ≤ balance`、只在 `OPEN` 时有冻结），奖励只用可用余额
+  （`QbWallets.available` = 余额 − 冻结；`pays`、待支付结算、开始答题、列表与发布的"资金不足"），胜诉释放并结算待付奖励，败诉转为扣回。
+  冻结不是账本移动：每日核对仍比较余额与 2110；测试的账本平衡断言另查 `held` = 各充值 `dispute_held` 之和。新列 `dispute_shortfall`
+  记败诉争议未扣回的部分；"扣回 + 差额"之和不超过充值金额（约束 `qb_topup_taken_back`）。
+- R3：后来的退款只扣"累计退款 −（已扣回 + 已记差额）"，记下的差额不再自动扣回（争议同理）。
+- R4：支付页关闭 Adaptive Pricing（`adaptive_pricing[enabled]=false`）；Stripe 账户的结算币种为设置
+  `quizbuks.stripe.settlement-currency`（缺省 `jpy`），手续费检查按它核对余额交易的币种；非日元结算的手续费不自动过账，开待办 `FEE_CURRENCY`。
+  收款与退款仍只收日元。
+- R5：以正式模式启动时，数据库中还有测试模式的充值（`livemode=false` 或 `cs_test_` 会话）或 2110 不为 0 即启动失败，除非显式设置
+  `quizbuks.stripe.allow-live-with-test-data=true`（只告警）。实现为读数据库的 `PlatformCheck`（`LiveModeDataCheck`，与平台的 SQL 模板预编译检查
+  同样以 Flyway 的连接设置走 JDBC，只在启动与 `platformCheck` 中运行；测试模式不连接）。
+- 文档（README）：确认后超过 30 分钟才入账的充值，其退款只开待办 `UNKNOWN_PAYMENT`，须人工对照；1110 在 F-05 之前与 Stripe 的余额有出入
+  （争议手续费、不退还的手续费）；`dev` 配置的固定签名密钥绝不能用于可访问的实例。
+
 **已知问题**：
 - 顾客以外币付款时的退款、争议（扣款以外币计）只开待办，不自动扣回。
-- 余额不够扣回的退款与败诉争议留在 Stripe 余额与 1110 的差额中，直到 F-05 的逐笔对账；`refundShortfall` 记下未扣回的退款，争议的只记在待办与 `checkReason`。
+- 未扣回的退款与败诉争议（`refundShortfall`、`disputeShortfall`）留在 Stripe 余额与 1110 的差额中，直到 F-05 的逐笔对账。
+- 冻结只在争议开立事件被处理时按当时的可用余额计算；先于开立事件处理的结果（乱序）不冻结，败诉时按当时可用余额扣回。
 - `OPENING` 卡住（作业完成而完成流程进入死信）的充值不自动处理；它一小时后不再占用"未完成"的名额。
 - 每日核对的全量汇总随账本增长变慢（平台缺口 25），Q10 前评估。
 - Q6a 不含页面（Q6 页面）与 Q6b。

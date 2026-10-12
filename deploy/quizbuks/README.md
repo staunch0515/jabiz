@@ -64,7 +64,19 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - **在反向代理之后**必须设置 `JABIZ_TRUSTED_PROXIES`：入站 Webhook 按客户端地址限流，否则 Stripe 的全部投递共用一个桶（每分钟 120 次）。
 - **商家后台的地址**（`QB_SPONSOR_LINK`，或 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/`）也是 Stripe 支付后跳回的地址；两者都没有时充值一律被拒（启动告警）。
 - **到账只以 Stripe 的签名通知（或向 Stripe 核实的结果）为准**，按服务端记录的金额入账，浏览器跳回不入账。丢失通知的充值由每小时的任务
-  `qb.topup-stale` 在支付页过期一小时后向 Stripe 核实。退款与争议只能在 Stripe 后台发生：余额够则从商家钱包扣回，不够则开待办由财务线下处理。
+  `qb.topup-stale` 在支付页过期一小时后向 Stripe 核实。退款与争议只能在 Stripe 后台发生：按可用余额（余额减去冻结）能扣多少扣多少，
+  余下的记为差额（`refund_shortfall` / `dispute_shortfall`）并开待办由财务线下处理；**差额记下后不再自动扣回**，以后的退款只扣新增的部分。
+  争议一开始就把争议金额（可用余额以内）冻结在商家钱包中（`held`，不是账本分录：余额与 2110 不变，只是不能再付奖励，奖励因此待支付）；
+  胜诉释放并支付待付奖励，败诉从冻结中扣回。
+- **退款晚于充值确认 30 分钟以上**才到、而充值当时尚未入账的（极少：确认丢失且核实也失败），退款事件只开待办 `UNKNOWN_PAYMENT`，
+  须财务在充值入账后人工对照扣回（应用不会再次处理这条事件）。
+- **1110（Stripe 余额）在 F-05 之前会与 Stripe 的实际余额有出入**：争议手续费、退款时 Stripe 不退还的手续费等不经 QuizBuks 入账；
+  每日核对不比较 Stripe 的余额，由财务按 Stripe 报表调整。
+- **正式上线（go-live）**：`QB_STRIPE_LIVEMODE=true` 时，只要数据库中还有测试模式的充值（`livemode=false` 或 `cs_test_` 会话），
+  或 2110（商家钱包合计）不为 0，**启动即失败**（`QUIZBUKS | quizbuks.stripe.allow-live-with-test-data`，启动检查直接读数据库）：
+  测试的 Kudos 不能在正式环境中付出真实奖励。正式环境用新的数据库；确需沿用时，核清测试数据后显式设置
+  `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA=true`（只告警），上线后再删去。
+- **Adaptive Pricing 已关闭**：创建支付页时发送 `adaptive_pricing[enabled]=false`，只收日元（D-Q6-5）；若 Stripe 仍报告了买方币种，照常记录。
 - **每日核对** `qb.reconcile`（UTC 18:37，即东京 03:37）比较商家钱包、待支付、2110 合计、账本平衡与每笔充值的分录；有差异时开待办（`qb.reconcile`
   权限）并记录在 `qb.admin.recon-runs` / `qb.admin.recon-items`。
 - **Stripe 的原样事件保留 7 年**（与会计凭证相同，`RetentionPolicy`），只有财务管理员能读。
@@ -74,7 +86,8 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
   并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
 - **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）与 `STRIPE_WEBHOOK_SECRET`
   （只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`）。仓库中不放任何签名密钥：
-  知道签名密钥的人可以伪造到账通知。
+  知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
+  也不能在任何可访问的环境中使用该密钥。
 
 ## 环境变量
 
@@ -110,6 +123,8 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_STRIPE_LIVEMODE` | 否 | 缺省 `false`（测试模式）；`true` 时须正式密钥、开发入账关闭 |
 | `QB_STRIPE_API_VERSION` | 否 | 缺省 `2025-03-31.basil`，须与 Stripe 后台端点的 API 版本相同 |
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 支付页的有效期，缺省 `PT1H`（40 分钟到 23 小时） |
+| `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | Stripe 账户余额的币种（手续费与净额的币种），缺省 `jpy`；收款与退款始终是日元，非日元的结算手续费不自动过账，开待办 |
+| `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
 | `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Q6b | Connect 端点的签名密钥 |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |

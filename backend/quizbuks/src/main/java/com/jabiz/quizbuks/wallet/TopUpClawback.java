@@ -12,6 +12,7 @@ import com.jabiz.runtime.inbound.ReceivedEvent;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CreateTask;
 
@@ -27,12 +28,14 @@ import java.util.Map;
  * itself: these happen in Stripe's dashboard, and the consumers keep the wallet and the ledger true to them.
  * <ul>
  *   <li>{@value #REFUNDED} ({@code charge.refunded}): takes back this time's part of the running total refunded
- *       ({@link RefundMath}): debit 2110 (the sponsor) / credit 1110, the wallet lowered. When the balance does not
- *       cover it, nothing is posted, the shortfall is recorded and a person is asked.</li>
- *   <li>{@value #DISPUTE_OPENED} ({@code charge.dispute.created}): records the dispute and asks a person to answer it
- *       at Stripe.</li>
- *   <li>{@value #DISPUTE_CLOSED} ({@code charge.dispute.closed}): a lost dispute is taken back as a refund is (once:
- *       the dispute's outcome is recorded); a won one is only recorded.</li>
+ *       ({@link RefundMath}): debit 2110 (the sponsor) / credit 1110, the wallet lowered, as far as what is available
+ *       goes; the rest is recorded as the shortfall (never taken again) and a person is asked.</li>
+ *   <li>{@value #DISPUTE_OPENED} ({@code charge.dispute.created}): records the dispute, holds what is available of its
+ *       amount in the wallet (no posting: the balance stays, but pays no reward while held) and asks a person to
+ *       answer it at Stripe.</li>
+ *   <li>{@value #DISPUTE_CLOSED} ({@code charge.dispute.closed}): releases the hold; a lost dispute is taken back as a
+ *       refund is, from the hold first (once: the dispute's outcome is recorded); a won one is only recorded, and the
+ *       sponsor's pending rewards are asked to be paid.</li>
  * </ul>
  * One process per event type, since a step loads events of one type only (platform gap 18). The top-up is found by
  * the payment (unique), and only a paid top-up has one: a refund of a payment whose confirmation is not processed yet
@@ -65,6 +68,8 @@ public final class TopUpClawback {
     static final String POST_INPUT = "postInput";
     static final String POSTING = "posting";
     static final String VALUES = "values";
+    static final String SHORTFALL = "shortfall";
+    static final String HELD_DELTA = "heldDelta";
 
     public static ProcessDefinition<TopUpEvents.InboundRef, ClawbackOutput, ProcessContext> refunded(
         StripeSettings settings) {
@@ -123,11 +128,16 @@ public final class TopUpClawback {
                 .step("Post the clawback", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
                 .compute("Record it", (metadata, ctx) -> record(ctx))
+                .step("Ask for the pending rewards to be paid", PublishEvent.<ProcessContext>when(
+                    TopUpClawback::released, QbWallets.SETTLE_EVENT,
+                    ctx -> Map.of("sponsorId", TopUpCrediting.first(ctx, TOPUP).get("sponsorId"))))
                 .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
                     EntityInstance topUp = TopUpCrediting.first(ctx, TOPUP);
                     ReceivedEvent event = event(ctx);
                     Object payment = ctx.get(PAYMENT);
-                    BigDecimal amount = payment instanceof StripeObjects.Charge c ? c.amountRefunded()
+                    // A shortfall's task names what is left for a person, not the whole event's amount.
+                    BigDecimal amount = ctx.contains(SHORTFALL) ? (BigDecimal) ctx.get(SHORTFALL)
+                        : payment instanceof StripeObjects.Charge c ? c.amountRefunded()
                         : ((StripeObjects.Dispute) payment).amount();
                     String currency = payment instanceof StripeObjects.Charge c ? c.currency()
                         : ((StripeObjects.Dispute) payment).currency();
@@ -158,9 +168,12 @@ public final class TopUpClawback {
             return;
         }
         BigDecimal amount = QbTopUps.money(topUp.get("amount"));
-        BigDecimal refunded = QbTopUps.money(topUp.get("refundedAmount"));
-        BigDecimal clawedBack = QbTopUps.money(topUp.get("disputeClawback"));
-        BigDecimal balance = QbWallets.balance(TopUpCrediting.first(ctx, WALLET));
+        RefundMath.Recorded recorded = new RefundMath.Recorded(amount, QbTopUps.money(topUp.get("refundedAmount")),
+            QbTopUps.money(topUp.get("refundShortfall")), QbTopUps.money(topUp.get("disputeClawback")),
+            QbTopUps.money(topUp.get("disputeShortfall")));
+        // What this top-up's open dispute holds; what else the wallet can give (its balance less every hold).
+        BigDecimal ownHold = QbTopUps.money(topUp.get("disputeHeld"));
+        BigDecimal available = QbWallets.available(TopUpCrediting.first(ctx, WALLET));
         Map<String, Object> values = new LinkedHashMap<>();
         switch (kind) {
             case REFUND -> {
@@ -169,14 +182,12 @@ public final class TopUpClawback {
                     check(ctx, RefundMath.CURRENCY);
                     return;
                 }
-                RefundMath.Plan plan = RefundMath.refund(amount, refunded, clawedBack, charge.amountRefunded(),
-                    balance);
+                RefundMath.Plan plan = RefundMath.refund(recorded, charge.amountRefunded(), available);
                 apply(ctx, plan, topUp, "Refund", charge.id(), event);
-                if (plan.kind() == RefundMath.Kind.CLAW_BACK) {
-                    values.put("refundedAmount", refunded.add(plan.amount()));
-                    values.put("refundShortfall", BigDecimal.ZERO);
-                } else if (plan.kind() == RefundMath.Kind.SHORTFALL) {
-                    values.put("refundShortfall", plan.amount());
+                if (plan.kind() == RefundMath.Kind.CLAW_BACK || plan.kind() == RefundMath.Kind.SHORTFALL) {
+                    // A shortfall is added and never taken again: it is finance's from then on.
+                    values.put("refundedAmount", recorded.refunded().add(plan.amount()));
+                    values.put("refundShortfall", recorded.refundShortfall().add(plan.shortfall()));
                 }
             }
             case DISPUTE_OPENED -> {
@@ -190,9 +201,17 @@ public final class TopUpClawback {
                     ctx.put(OUTCOME, "NOTHING");
                     return;
                 }
+                BigDecimal disputed = wholeOrNull(dispute.amount(), dispute.currency());
+                // Held from rewards while open, as far as the wallet goes (never more than the top-up brought in),
+                // so that a sponsor cannot spend what a lost dispute takes back.
+                BigDecimal hold = RefundMath.hold(available, disputed == null ? null : disputed.min(amount));
                 values.put("disputeId", dispute.id());
                 values.put("disputeStatus", TopUpStatus.DISPUTE_OPEN);
-                values.put("disputeAmount", wholeOrNull(dispute.amount(), dispute.currency()));
+                values.put("disputeAmount", disputed);
+                values.put("disputeHeld", hold);
+                if (hold.signum() > 0) {
+                    ctx.put(HELD_DELTA, hold);
+                }
                 ctx.put(OUTCOME, "RECORDED");
                 ctx.put(REASON, RefundMath.DISPUTE_OPENED);
             }
@@ -207,9 +226,19 @@ public final class TopUpClawback {
                     ctx.put(OUTCOME, "NOTHING");
                     return;
                 }
+                String outcome = String.valueOf(dispute.status());
+                if (!List.of("lost", "won", "warning_closed").contains(outcome)) {
+                    check(ctx, RefundMath.DISPUTE_MISMATCH);
+                    return;
+                }
                 values.put("disputeId", dispute.id());
                 values.put("disputeAmount", wholeOrNull(dispute.amount(), dispute.currency()));
-                switch (String.valueOf(dispute.status())) {
+                // Closed whatever the outcome: what it held is released (a lost one takes it back below).
+                values.put("disputeHeld", BigDecimal.ZERO);
+                if (ownHold.signum() > 0) {
+                    ctx.put(HELD_DELTA, ownHold.negate());
+                }
+                switch (outcome) {
                     case "lost" -> {
                         values.put("disputeStatus", TopUpStatus.DISPUTE_LOST);
                         if (!StripeService.CURRENCY.equals(dispute.currency())) {
@@ -218,8 +247,8 @@ public final class TopUpClawback {
                             ctx.put(REASON, RefundMath.CURRENCY);
                             break;
                         }
-                        RefundMath.Plan plan = RefundMath.disputeLost(amount, refunded, clawedBack, dispute.amount(),
-                            balance);
+                        RefundMath.Plan plan = RefundMath.disputeLost(recorded, dispute.amount(),
+                            available.add(ownHold));
                         if (plan.kind() == RefundMath.Kind.CHECK) {
                             // The outcome is still recorded: it does not change, whatever a person decides.
                             values.put("checkReason", plan.reason());
@@ -228,21 +257,16 @@ public final class TopUpClawback {
                             break;
                         }
                         apply(ctx, plan, topUp, "Lost dispute", dispute.id(), event);
-                        if (plan.kind() == RefundMath.Kind.CLAW_BACK) {
-                            values.put("disputeClawback", clawedBack.add(plan.amount()));
-                        }
+                        values.put("disputeClawback", recorded.disputeClawback().add(plan.amount()));
+                        values.put("disputeShortfall", recorded.disputeShortfall().add(plan.shortfall()));
                     }
                     case "won" -> {
                         values.put("disputeStatus", TopUpStatus.DISPUTE_WON);
                         ctx.put(OUTCOME, "RECORDED");
                     }
-                    case "warning_closed" -> {
+                    default -> {
                         values.put("disputeStatus", TopUpStatus.DISPUTE_CLOSED);
                         ctx.put(OUTCOME, "RECORDED");
-                    }
-                    default -> {
-                        check(ctx, RefundMath.DISPUTE_MISMATCH);
-                        return;
                     }
                 }
             }
@@ -263,15 +287,19 @@ public final class TopUpClawback {
                 ctx.put(OUTCOME, "CHECK");
                 ctx.put(REASON, plan.reason());
             }
-            case SHORTFALL -> {
-                ctx.put(OUTCOME, "SHORTFALL");
-                ctx.put(REASON, plan.reason());
-                ctx.put(AMOUNT, plan.amount());
-            }
-            case CLAW_BACK -> {
+            case CLAW_BACK, SHORTFALL -> {
                 String sponsorId = topUp.get("sponsorId");
-                ctx.put(OUTCOME, "CLAWED_BACK");
                 ctx.put(AMOUNT, plan.amount());
+                if (plan.kind() == RefundMath.Kind.SHORTFALL) {
+                    ctx.put(OUTCOME, "SHORTFALL");
+                    ctx.put(REASON, plan.reason());
+                    ctx.put(SHORTFALL, plan.shortfall());
+                } else {
+                    ctx.put(OUTCOME, "CLAWED_BACK");
+                }
+                if (plan.amount().signum() == 0) {
+                    return;
+                }
                 ctx.put(POST_INPUT, new LedgerProcesses.PostInput(TopUpEvents.happened(event), description,
                     TopUpCrediting.reference(stripeId), List.of(
                         new LedgerProcesses.Line(QbLedger.SPONSOR_PREPAYMENTS, Direction.DEBIT, plan.amount(), null,
@@ -290,12 +318,20 @@ public final class TopUpClawback {
         if (topUp == null || values == null || values.isEmpty()) {
             return;
         }
-        if (ctx.contains(POSTING)) {
-            BigDecimal amount = (BigDecimal) ctx.get(AMOUNT);
+        BigDecimal balanceDelta = ctx.contains(POSTING) ? ((BigDecimal) ctx.get(AMOUNT)).negate() : BigDecimal.ZERO;
+        BigDecimal heldDelta = ctx.contains(HELD_DELTA) ? (BigDecimal) ctx.get(HELD_DELTA) : BigDecimal.ZERO;
+        if (balanceDelta.signum() != 0 || heldDelta.signum() != 0) {
+            // The hold is no ledger movement: only the balance follows the posting, the hold only what is spendable.
             QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), QbWallets.SPONSOR, topUp.get("sponsorId"),
-                amount.negate(), 0, BigDecimal.ZERO);
+                balanceDelta, 0, BigDecimal.ZERO, heldDelta);
         }
         ctx.changes().update(QbTopUps.TOPUP, topUp.id(), topUp.version(), values);
+    }
+
+    /** A dispute was closed and what it held is spendable again (a lost one took it back instead). */
+    private static boolean released(ProcessContext ctx) {
+        return ctx.contains(HELD_DELTA) && ((BigDecimal) ctx.get(HELD_DELTA)).signum() < 0
+            && !ctx.contains(POSTING);
     }
 
     private static void check(ProcessContext ctx, String reason) {

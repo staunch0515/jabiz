@@ -32,6 +32,9 @@ CREATE TABLE qb_topup (
     dispute_status         varchar(20)    CHECK (dispute_status IN ('OPEN', 'WON', 'LOST', 'CLOSED')),
     dispute_amount         numeric(19, 0),
     dispute_clawback       numeric(19, 0) NOT NULL DEFAULT 0,
+    -- What a lost dispute could not take back (a person's from then on), and what an open one holds in the wallet.
+    dispute_shortfall      numeric(19, 0) NOT NULL DEFAULT 0 CHECK (dispute_shortfall >= 0),
+    dispute_held           numeric(19, 0) NOT NULL DEFAULT 0 CHECK (dispute_held >= 0),
     check_reason           varchar(40),
     check_requested_at     timestamptz,
     version                bigint         NOT NULL,
@@ -42,13 +45,20 @@ CREATE TABLE qb_topup (
     CONSTRAINT qb_topup_paid_posted CHECK (status <> 'PAID' OR (ledger_transaction_id IS NOT NULL
         AND payment_intent_id IS NOT NULL)),
     CONSTRAINT qb_topup_taken_back CHECK (refunded_amount >= 0 AND dispute_clawback >= 0
-        AND refunded_amount + dispute_clawback <= amount)
+        AND refunded_amount + refund_shortfall + dispute_clawback + dispute_shortfall <= amount),
+    CONSTRAINT qb_topup_held CHECK (dispute_held = 0 OR dispute_status = 'OPEN')
 );
 -- A sponsor's own top-ups, newest first; the open ones whose checkout expired (the stale job); the administrators'
 -- list by state.
+-- What open disputes hold of a wallet (the sum of its top-ups' dispute_held): still in the balance and in the
+-- ledger, but paying no reward until the dispute is closed. Never more than the balance.
+ALTER TABLE qb_wallet ADD COLUMN held numeric(19, 0) NOT NULL DEFAULT 0;
+ALTER TABLE qb_wallet ADD CONSTRAINT qb_wallet_held CHECK (held >= 0 AND held <= balance);
+
 CREATE INDEX qb_topup_sponsor_idx ON qb_topup (sponsor_id, created_at DESC);
 CREATE INDEX qb_topup_unsettled_idx ON qb_topup (expires_at) WHERE status IN ('OPENING', 'OPEN');
 CREATE INDEX qb_topup_status_idx ON qb_topup (status, created_at);
+CREATE INDEX qb_topup_held_idx ON qb_topup (sponsor_id) WHERE dispute_held > 0;
 
 CREATE FUNCTION quizbuks_create_temporal_table(p_table text, p_key text, p_columns text) RETURNS void
     LANGUAGE plpgsql AS $$

@@ -1,9 +1,16 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.wallet.LiveModeDataCheck;
+import com.jabiz.quizbuks.wallet.StripeSettings;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.test.StubHttpServer;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +58,7 @@ class TopUpIT extends TopUpItSupport {
             .containsEntry("line_items[0][price_data][currency]", "jpy")
             .containsEntry("client_reference_id", topUpId)
             .containsEntry("metadata[sponsorId]", sponsor)
+            .containsEntry("adaptive_pricing[enabled]", "false")
             .containsEntry("success_url", "https://sponsor.quizbuks.test/sponsor/wallet/topups/" + topUpId
                 + "?checkout=paid");
         Map<String, Object> open = topUp(topUpId);
@@ -67,7 +75,7 @@ class TopUpIT extends TopUpItSupport {
 
         // Stripe's signed completion: credited at the record's amount, once.
         Instant paidAt = now();
-        advance(java.time.Duration.ofSeconds(30));
+        advance(Duration.ofSeconds(30));
         Map<String, Object> event = event(eventId(), "checkout.session.completed", completed(topUpId));
         event.put("created", paidAt.getEpochSecond());
         deliver(event);
@@ -155,5 +163,32 @@ class TopUpIT extends TopUpItSupport {
             "eq", "value", "PROCESSING"))))).isEmpty();
         assertThat(items("qb.app.ledger", taker(taker), Map.of("filters", List.of(Map.of("field", "amount", "op",
             "gte", "value", 100))))).hasSize(1);
+    }
+
+    @Autowired
+    Environment environment;
+    @Autowired
+    EntityDefinitionRegistry entityDefinitions;
+
+    /** Going live on a database with test mode's top-ups and wallets fails the startup check, unless allowed. */
+    @Test
+    void goingLiveOnTestModesMoneyFailsTheStartupCheck() {
+        String sponsor = newSponsor("s-topup-golive");
+        deliver(event(eventId(), "checkout.session.completed", completed(openTopUp(sponsor, 1000))));
+        StripeSettings live = new StripeSettings(true,
+            "2025-03-31.basil", Duration.ofHours(1), null, "https://q.example.com/sponsor/");
+        var refused = new LiveModeDataCheck(live, false, environment, entityDefinitions)
+            .check();
+        assertThat(refused).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+            assertThat(problem.message()).contains("test-mode top-up").doesNotContain(" 0 test-mode");
+        });
+        assertThat(new LiveModeDataCheck(live, true, environment, entityDefinitions)
+            .check()).singleElement().satisfies(problem -> assertThat(problem.severity())
+                .isEqualTo(CheckProblem.Severity.WARNING));
+        // Test mode does not look.
+        assertThat(new LiveModeDataCheck(new StripeSettings(
+            false, "2025-03-31.basil", Duration.ofHours(1), null, "x"), false, environment,
+            entityDefinitions).check()).isEmpty();
     }
 }

@@ -30,6 +30,8 @@ class CheckoutRequestTest {
         assertThat(form.get("payment_intent_data[metadata][topUpId]")).isEqualTo(TOPUP);
         assertThat(form.get("payment_method_types[0]")).isEqualTo("card");
         assertThat(form.get("allow_promotion_codes")).isEqualTo("false");
+        // Yen only (D-Q6-5): Stripe does not offer the customer their own currency.
+        assertThat(form.get("adaptive_pricing[enabled]")).isEqualTo("false");
         // Nothing of the customer: Stripe collects it on its own page.
         assertThat(form.fields()).noneMatch(f -> f.key().startsWith("customer"));
     }
@@ -59,6 +61,18 @@ class CheckoutRequestTest {
         assertThat(new StripeSettings(false, "2025-03-31.basil", Duration.ofHours(24), null, "x").problems())
             .anyMatch(p -> p.startsWith("quizbuks.stripe.checkout-ttl"));
         assertThat(SETTINGS.problems()).isEmpty();
+    }
+
+    @Test
+    void theSettlementCurrencyIsYenUnlessSetAndACurrencyCode() {
+        assertThat(SETTINGS.settlementCurrency()).isEqualTo("jpy");
+        StripeSettings usd = new StripeSettings(false, "2025-03-31.basil", Duration.ofHours(1), null, "x", " USD ");
+        assertThat(usd.settlementCurrency()).isEqualTo("usd");
+        assertThat(usd.problems()).isEmpty();
+        assertThat(new StripeSettings(false, "2025-03-31.basil", Duration.ofHours(1), null, "x", "dollars")
+            .problems()).anyMatch(p -> p.startsWith("quizbuks.stripe.settlement-currency"));
+        assertThat(new StripeSettings(false, "2025-03-31.basil", Duration.ofHours(1), null, "x", "")
+            .settlementCurrency()).isEqualTo("jpy");
     }
 
     @Test

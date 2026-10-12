@@ -72,6 +72,11 @@ public final class QbTopUps {
         eb.field("disputeAmount", f -> f.physicalColumn("dispute_amount").processOnly().asMonetary("JPY", 0));
         eb.field("disputeClawback", f -> f.physicalColumn("dispute_clawback").required(true).processOnly()
             .asMonetary("JPY", 0));
+        // What a lost dispute could not take back (a person's), and what an open one holds in the wallet.
+        eb.field("disputeShortfall", f -> f.physicalColumn("dispute_shortfall").required(true).processOnly()
+            .asMonetary("JPY", 0));
+        eb.field("disputeHeld", f -> f.physicalColumn("dispute_held").required(true).processOnly()
+            .asMonetary("JPY", 0));
         // The last reason a person was asked to look, and when Stripe was last asked about a stale one.
         eb.field("checkReason", f -> f.physicalColumn("check_reason").processOnly().asText(40));
         eb.field("checkRequestedAt", f -> f.physicalColumn("check_requested_at").processOnly()

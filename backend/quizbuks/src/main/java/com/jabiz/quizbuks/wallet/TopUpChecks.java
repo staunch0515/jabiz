@@ -35,10 +35,13 @@ public final class TopUpChecks {
     public static final String FEE_MISMATCH = "FEE_MISMATCH";
     /** Asking Stripe for the fee failed. */
     public static final String FEE_FAILED = "FEE_FAILED";
+    /** Stripe settled the payment in another currency than yen (the setting's): finance books the fee. */
+    public static final String FEE_CURRENCY = "FEE_CURRENCY";
 
     /** Every reason of a top-up's task, each with its title {@code task.qb.topup-check.<reason>}. */
     public static final List<String> REASONS = List.of(UNKNOWN_TOPUP, LIVEMODE, SESSION_MISMATCH, STATUS, NOT_PAYMENT,
-        NOT_PAID, NO_PAYMENT_INTENT, CURRENCY, AMOUNT_MISMATCH, OPEN_MISMATCH, CHECK_FAILED, FEE_MISMATCH, FEE_FAILED);
+        NOT_PAID, NO_PAYMENT_INTENT, CURRENCY, AMOUNT_MISMATCH, OPEN_MISMATCH, CHECK_FAILED, FEE_MISMATCH, FEE_FAILED,
+        FEE_CURRENCY);
 
     /** The latest expiry believed (epoch seconds, year 3000): beyond it the value is not a time at all. */
     static final long LAST_EXPIRY = 32_503_680_000L;
@@ -161,19 +164,30 @@ public final class TopUpChecks {
         return null;
     }
 
-    /** Why Stripe's fee does not fit the paid top-up; null when it does. */
-    public static String feeProblem(TopUpView topUp, Fee fee) {
+    /**
+     * Why Stripe's fee does not fit the paid top-up; null when it does.
+     *
+     * @param settlementCurrency the Stripe account's balance currency ({@link StripeSettings#settlementCurrency}):
+     *                           the balance transaction must be in it; only a yen one is checked against the payment
+     *                           and posted ({@link #FEE_CURRENCY} otherwise)
+     */
+    public static String feeProblem(TopUpView topUp, Fee fee, String settlementCurrency) {
         if (topUp == null) {
             return UNKNOWN_TOPUP;
         }
         if (!TopUpStatus.PAID.equals(topUp.status())) {
             return STATUS;
         }
-        if (fee == null || !StripeService.CURRENCY.equals(fee.currency())
+        if (fee == null || fee.currency() == null || !fee.currency().equals(settlementCurrency)
             || !StripeIds.is(StripeIds.CHARGE, fee.chargeId())
             || !StripeIds.is(StripeIds.BALANCE_TRANSACTION, fee.balanceTransactionId())
-            || !whole(fee.fee()) || !whole(fee.net()) || fee.fee().signum() < 0 || fee.net().signum() < 0
-            || !same(topUp.amount(), fee.amount()) || fee.fee().add(fee.net()).compareTo(topUp.amount()) != 0) {
+            || !whole(fee.fee()) || !whole(fee.net()) || fee.fee().signum() < 0 || fee.net().signum() < 0) {
+            return FEE_MISMATCH;
+        }
+        if (!StripeService.CURRENCY.equals(settlementCurrency)) {
+            return FEE_CURRENCY;
+        }
+        if (!same(topUp.amount(), fee.amount()) || fee.fee().add(fee.net()).compareTo(topUp.amount()) != 0) {
             return FEE_MISMATCH;
         }
         return null;

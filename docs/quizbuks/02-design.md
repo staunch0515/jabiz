@@ -121,8 +121,8 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
-| `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`amount`（`> 0`）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`；`checkReason`、`checkRequestedAt` | 充值（`plans/Q6-payments.md` D-Q6-2）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
+| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b）、`held`（开立中的争议冻结，`0 ≤ held ≤ balance`，Q6a；不是账本分录，可用余额 = 余额 − 冻结） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
+| `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`amount`（`> 0`）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`、`disputeShortfall`、`disputeHeld`（开立中的争议冻结的部分）；`checkReason`、`checkRequestedAt` | 充值（`plans/Q6-payments.md` D-Q6-2）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
 | `QbReconRun` / `QbReconItem` | W（Q6a） | 运行：`scheduledTime`（唯一）、`status`（OK / DIFF）、`checkedAt`、`itemCount`、`summary`（各项差异数的规范 JSON）；差异：`runId`、`check`（字典 `recon-check`）、`partyId`、`reference`、`expected`、`actual`、`difference` | 每日核对（F-06）的结果，只写一次 |
 | `QbTransfer` | P（Q6b） | `userId`、`amount`、`fee`、`net`、`status`（REVIEW / SENDING / SENT / FAILED / CHECK / REJECTED / REVERSED）、`stripeTransferId`、交易号等（`plans/Q6-payments.md`） | 自动转账（4.7）。大额先进 REVIEW 走审批 |
 | `QbFxRate` | T | `currency`、`rateDate`、`perJpy`、`source`（ECB / MANUAL） | 显示用参考汇率（"约合 X USD"），可手动覆盖；不参与记账 |
@@ -159,7 +159,7 @@ docs/quizbuks/               本文件等
 |---|---|---|---|
 | 充值到账（Stripe 通知或核实） | `QB_TOPUP_CONFIRM` / `QB_TOPUP_CHECKED` | 1110 Stripe 余额（记录的金额） | 2110 商家预收款（商家） |
 | Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
-| 退款 / 争议败诉（Stripe 后台发生；余额不够即待办、不过账） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
+| 退款 / 争议败诉（Stripe 后台发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
 | 转账发出 | `QB_TRANSFER_SEND` | 2120 应付用户奖励（用户） | 2130 转账中（用户） |
 | 转账成功（Stripe 通知） | `QB_TRANSFER_RESULT` | 2130 转账中（用户） | 1110 Stripe 余额 |
@@ -248,7 +248,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_TOPUP_EXPIRE` | 系统（`checkout.session.expired`） | 未付的充值 `EXPIRED`；已付的开待办 |
 | `QB_TOPUP_CHECK` / `QB_TOPUP_CHECKED` / `QB_TOPUP_CHECK_FAILED` | 系统（逐项任务 `qb.topup-stale` 每小时 / 作业） | 支付页过期一小时仍无通知的充值向 Stripe 核实（6 小时内不重复），按回答与通知同一套步骤入账或过期 |
 | `QB_TOPUP_FEE_RECORD` / `QB_TOPUP_FEE_FAILED` | 系统（作业） | Stripe 手续费：核对币种与 `fee + net = 金额` 后过账 5110 / 1110 并记流水号；不符或失败即待办 |
-| `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_OPENED` / `QB_TOPUP_DISPUTE_CLOSED` | 系统（`charge.refunded`、`charge.dispute.*`） | 按累计退款额只扣回一次（`RefundMath`），余额不够即待办；争议开立即待办，败诉同退款，胜诉只记状态；付款尚未确认的退款先失败重试 30 分钟 |
+| `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_OPENED` / `QB_TOPUP_DISPUTE_CLOSED` | 系统（`charge.refunded`、`charge.dispute.*`） | 按累计退款额只处理一次（`RefundMath`），扣回可用余额以内的部分、余下记差额并开待办（差额不再自动扣回）；争议开立即待办并冻结争议金额（钱包 `held`，不付奖励），败诉同退款（先从冻结扣），胜诉释放并结算待付奖励；付款尚未确认的退款先失败重试 30 分钟 |
 | `QB_RECONCILE_RUN`（任务 `qb.reconcile`） | 系统（`qb.wallet.system`） | 每日核对（4.2），同一计划时刻只一次 |
 | `QB_PENDING_SETTLE` / `QB_PENDING_PAY` | 系统（`qb.play.system`） | 只取钱包锁：按提交顺序取至多 50 条待支付，逐条（`QB_PENDING_PAY`，按结算时的抽成）补发，遇到付不起的即停止（不跳过）；还能付下一条时发布事件在新事务中续接；清空后发布 `qb.sponsor.funds-restored` |
 | `QB_PUBLICATION_FUNDS_RESTORED` / `QB_PUBLICATION_FUNDED` | 系统（`qb.publication.system`） | 订阅 `qb.sponsor.funds-restored`：按编号逐个在发布锁内把该商家 `FUNDS_SHORT` 的发布放回 `LIVE`（已过结束时间即 `ENDED`）；不取钱包锁 |

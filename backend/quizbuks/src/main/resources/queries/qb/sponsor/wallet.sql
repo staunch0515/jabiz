@@ -8,6 +8,7 @@ datasets:
   LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
 results:
   balance:       { from: QbWallet.balance }
+  held:          { from: QbWallet.held }
   pendingCount:  { from: QbWallet.pendingCount }
   pendingAmount: { from: QbWallet.pendingAmount }
   toppedUp:      { kind: { type: monetary, currency: JPY, scale: 0 } }
@@ -21,6 +22,7 @@ permissions: [qb.sponsor.finance.read]
 -- account 2110 debited with a publication (refunds taken back carry none).
 SELECT
     coalesce(w.w_balance, 0)        AS balance,
+    coalesce(w.w_held, 0)           AS held,
     coalesce(w.w_pending_count, 0)  AS pendingCount,
     coalesce(w.w_pending_amount, 0) AS pendingAmount,
     coalesce(p.p_paid, 0)           AS toppedUp,
@@ -29,7 +31,8 @@ SELECT
     coalesce(s.s_spent, 0)          AS spent
 FROM (SELECT 1 AS one) base
 LEFT JOIN (
-    SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.pendingCount}} AS w_pending_count,
+    SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.held}} AS w_held,
+           x.{{QbWallet.pendingCount}} AS w_pending_count,
            x.{{QbWallet.pendingAmount}} AS w_pending_amount
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'SPONSOR') w ON true

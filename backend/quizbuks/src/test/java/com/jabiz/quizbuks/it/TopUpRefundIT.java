@@ -78,7 +78,7 @@ class TopUpRefundIT extends TopUpItSupport {
     }
 
     @Test
-    void aRefundTheWalletCannotCoverIsATaskAndPostsNothing() {
+    void aRefundTheWalletCannotCoverIsTakenAsFarAsItGoesAndTheRestIsATask() {
         String sponsor = newSponsor("s-refund-short");
         String topUpId = paidTopUp(sponsor, 1000);
         // The Kudos were paid out as rewards.
@@ -90,14 +90,45 @@ class TopUpRefundIT extends TopUpItSupport {
         assertThat(balance(sponsor)).isEqualByComparingTo("500");
         Map<String, Object> refund = event(eventId(), "charge.refunded", charge(topUpId, 1000, 1000));
         deliver(refund);
-        assertThat(balance(sponsor)).isEqualByComparingTo("500");
-        assertThat(clawbacks(topUpId)).isEmpty();
+        // What the balance covers is taken back; only the rest is the shortfall, a person's to settle.
+        assertThat(balance(sponsor)).isEqualByComparingTo("0");
+        assertThat(clawbacks(topUpId)).singleElement().satisfies(line -> assertThat(money(line.get("amount")))
+            .isEqualByComparingTo("500"));
         Map<String, Object> row = topUp(topUpId);
-        assertThat(money(row.get("refunded_amount"))).isEqualByComparingTo("0");
-        assertThat(money(row.get("refund_shortfall"))).isEqualByComparingTo("1000");
+        assertThat(money(row.get("refunded_amount"))).isEqualByComparingTo("500");
+        assertThat(money(row.get("refund_shortfall"))).isEqualByComparingTo("500");
         assertThat(tasksAbout("stripe:" + refund.get("id"))).singleElement().satisfies(task -> assertThat(task)
             .containsEntry("title_key", "task.qb.refund-check.REFUND_SHORTFALL").containsEntry("subject_id",
                 topUpId));
+        assertBooksBalance();
+    }
+
+    @Test
+    void aRecordedShortfallIsNeverTakenAgainByALaterRefund() {
+        String sponsor = newSponsor("s-refund-again");
+        String topUpId = paidTopUp(sponsor, 1000);
+        String publicationId = livePublication(sponsor, "Spent again", Map.of("regions", List.of("GLOBAL")));
+        for (int i = 0; i < 10; i++) {
+            assertThat(play(newTaker("t-refund-again-" + i, null), publicationId, true, true))
+                .containsEntry("rewardStatus", "PAID");
+        }
+        assertThat(balance(sponsor)).isEqualByComparingTo("0");
+        // 600 refunded while the wallet is empty: all short, settled by finance outside QuizBuks from then on.
+        deliver(event(eventId(), "charge.refunded", charge(topUpId, 1000, 600)));
+        assertThat(money(topUp(topUpId).get("refund_shortfall"))).isEqualByComparingTo("600");
+        assertThat(clawbacks(topUpId)).isEmpty();
+        // Money comes in; a later refund (running total 750) takes its own 150 only, not the old shortfall again.
+        credit(sponsor, 5000);
+        deliver(event(eventId(), "charge.refunded", charge(topUpId, 1000, 750)));
+        assertThat(clawbacks(topUpId)).singleElement().satisfies(line -> assertThat(money(line.get("amount")))
+            .isEqualByComparingTo("150"));
+        Map<String, Object> row = topUp(topUpId);
+        assertThat(money(row.get("refunded_amount"))).isEqualByComparingTo("150");
+        assertThat(money(row.get("refund_shortfall"))).isEqualByComparingTo("600");
+        assertThat(balance(sponsor)).isEqualByComparingTo("4850");
+        // The first total again: nothing.
+        deliver(event(eventId(), "charge.refunded", charge(topUpId, 1000, 600)));
+        assertThat(clawbacks(topUpId)).hasSize(1);
         assertBooksBalance();
     }
 
@@ -160,12 +191,17 @@ class TopUpRefundIT extends TopUpItSupport {
             "needs_response"));
         deliver(opened);
         assertThat(topUp(lost)).containsEntry("dispute_status", "OPEN").containsEntry("dispute_id", "dp_lost");
+        // The disputed amount is held from rewards while the dispute is open; the balance is unchanged.
+        assertThat(money(topUp(lost).get("dispute_held"))).isEqualByComparingTo("3000");
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("3000");
         assertThat(tasksAbout("stripe:" + opened.get("id"))).extracting(t -> t.get("title_key"))
             .containsExactly("task.qb.refund-check.DISPUTE_OPENED");
         assertThat(balance(sponsor)).isEqualByComparingTo("5000");
         deliver(event(eventId(), "charge.dispute.closed", dispute(lost, "dp_lost", 3000, "lost")));
         assertThat(topUp(lost)).containsEntry("dispute_status", "LOST");
         assertThat(money(topUp(lost).get("dispute_clawback"))).isEqualByComparingTo("3000");
+        assertThat(money(topUp(lost).get("dispute_held"))).isEqualByComparingTo("0");
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("0");
         assertThat(balance(sponsor)).isEqualByComparingTo("2000");
         // The outcome again: nothing more.
         deliver(event(eventId(), "charge.dispute.closed", dispute(lost, "dp_lost", 3000, "lost")));
@@ -174,6 +210,7 @@ class TopUpRefundIT extends TopUpItSupport {
         deliver(event(eventId(), "charge.dispute.closed", dispute(won, "dp_won", 2000, "won")));
         deliver(event(eventId(), "charge.dispute.created", dispute(won, "dp_won", 2000, "needs_response")));
         assertThat(topUp(won)).containsEntry("dispute_status", "WON");
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("0");
         assertThat(clawbacks(won)).isEmpty();
         // A second dispute of a charge: a task, nothing changed.
         Map<String, Object> second = event(eventId(), "charge.dispute.created", dispute(won, "dp_other", 100,
@@ -186,20 +223,72 @@ class TopUpRefundIT extends TopUpItSupport {
     }
 
     @Test
-    void aLostDisputeTheWalletCannotCoverIsATask() {
+    void aLostDisputeTheWalletCannotCoverIsTakenAsFarAsItGoes() {
         String sponsor = newSponsor("s-dispute-short");
         String topUpId = paidTopUp(sponsor, 1000);
         String publicationId = livePublication(sponsor, "Spent too", Map.of("regions", List.of("GLOBAL")));
         assertThat(play(newTaker("t-dispute-short", null), publicationId, true, true))
             .containsEntry("rewardStatus", "PAID");
+        // Its opening not seen (events come in any order): nothing was held, 900 is left.
         Map<String, Object> closed = event(eventId(), "charge.dispute.closed", dispute(topUpId, "dp_short", 1000,
             "lost"));
         deliver(closed);
-        assertThat(topUp(topUpId)).containsEntry("dispute_status", "LOST");
-        assertThat(money(topUp(topUpId).get("dispute_clawback"))).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(balance(sponsor)).isEqualByComparingTo("900");
+        Map<String, Object> row = topUp(topUpId);
+        assertThat(row).containsEntry("dispute_status", "LOST");
+        assertThat(money(row.get("dispute_clawback"))).isEqualByComparingTo("900");
+        assertThat(money(row.get("dispute_shortfall"))).isEqualByComparingTo("100");
+        assertThat(balance(sponsor)).isEqualByComparingTo("0");
         assertThat(tasksAbout("stripe:" + closed.get("id"))).extracting(t -> t.get("title_key"))
             .containsExactly("task.qb.refund-check.DISPUTE_SHORTFALL");
+        assertBooksBalance();
+    }
+
+    @Test
+    void anOpenDisputeHoldsItsAmountFromRewardsUntilItIsWon() {
+        String sponsor = newSponsor("s-dispute-hold");
+        String topUpId = paidTopUp(sponsor, 1000);
+        String publicationId = livePublication(sponsor, "Held", Map.of("regions", List.of("GLOBAL")));
+        String token = taker(newTaker("t-dispute-hold", null));
+        String attemptId = (String) start(token, publicationId).get("attemptId");
+        // The payment of the top-up is disputed while a reward is on its way.
+        deliver(event(eventId(), "charge.dispute.created", dispute(topUpId, "dp_hold", 1000, "needs_response")));
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("1000");
+        // The held Kudos pay no reward: it waits, as for a short balance, and the publication is underfunded.
+        assertThat(submit(token, attemptId, answers(true, true))).containsEntry("rewardStatus", "PENDING");
+        assertThat(balance(sponsor)).isEqualByComparingTo("1000");
+        assertThat(status(publicationId)).isEqualTo("FUNDS_SHORT");
+        // A new attempt cannot start on held Kudos either.
+        assertThat(codes(refused("QB_ATTEMPT_START", taker(newTaker("t-dispute-hold-2", null)),
+            body("publicationId", publicationId), 422))).isNotEmpty();
+        // Won: the hold is released and the pending reward paid.
+        deliver(event(eventId(), "charge.dispute.closed", dispute(topUpId, "dp_hold", 1000, "won")));
+        deliverEvents();
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("0");
+        assertThat(money(topUp(topUpId).get("dispute_held"))).isEqualByComparingTo("0");
+        assertThat(attempt(attemptId)).containsEntry("reward_status", "PAID");
+        assertThat(balance(sponsor)).isEqualByComparingTo("900");
+        assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertBooksBalance();
+    }
+
+    @Test
+    void aLostDisputeTakesWhatItsOpeningHeld() {
+        String sponsor = newSponsor("s-dispute-held-lost");
+        String topUpId = paidTopUp(sponsor, 1000);
+        credit(sponsor, 50);
+        deliver(event(eventId(), "charge.dispute.created", dispute(topUpId, "dp_heldlost", 1000,
+            "needs_response")));
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("1000");
+        // Only the unheld 50 can pay rewards: not the top reward (100), so no attempt starts.
+        String publicationId = livePublication(sponsor, "Held lost", Map.of("regions", List.of("GLOBAL")));
+        assertThat(codes(refused("QB_ATTEMPT_START", taker(newTaker("t-dispute-held-lost", null)),
+            body("publicationId", publicationId), 422))).isNotEmpty();
+        deliver(event(eventId(), "charge.dispute.closed", dispute(topUpId, "dp_heldlost", 1000, "lost")));
+        Map<String, Object> row = topUp(topUpId);
+        assertThat(money(row.get("dispute_clawback"))).isEqualByComparingTo("1000");
+        assertThat(money(row.get("dispute_shortfall"))).isEqualByComparingTo("0");
+        assertThat(money(wallet(sponsor).get("held"))).isEqualByComparingTo("0");
+        assertThat(balance(sponsor)).isEqualByComparingTo("50");
         assertBooksBalance();
     }
 }

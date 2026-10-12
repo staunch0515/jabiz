@@ -52,6 +52,8 @@ public final class CheckoutRequest {
             .with("line_items[0][price_data][product_data][name]", PRODUCT_NAME)
             .with("payment_method_types[0]", "card")
             .with("allow_promotion_codes", "false")
+            // Yen only (D-Q6-5): no price in the customer's currency, whatever the account's settings say.
+            .with("adaptive_pricing[enabled]", "false")
             .with("expires_at", input.expiresAt().getEpochSecond())
             .with("success_url", input.successUrl())
             .with("cancel_url", input.cancelUrl())

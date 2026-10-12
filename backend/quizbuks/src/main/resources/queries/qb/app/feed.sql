@@ -77,7 +77,7 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
        OR n.{{QbPublicationCounter.winners}} + n.{{QbPublicationCounter.starts}} - n.{{QbPublicationCounter.completions}}
           < c.{{QbPublicationCard.maxWinners}})
   AND coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
-  AND coalesce(w.{{QbWallet.balance}}, 0) >= c.{{QbPublicationCard.maxReward}}
+  AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

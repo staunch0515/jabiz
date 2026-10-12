@@ -133,6 +133,7 @@
       "pendingCount" : "0",
       "pendingAmount" : "0",
       "pendingOut" : "0",
+      "held" : "0",
       "version" : 5
     } ],
     "LedgerTransaction" : [ {

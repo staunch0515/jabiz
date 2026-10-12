@@ -161,6 +161,8 @@ public final class TopUpProcesses {
         values.put("refundedAmount", BigDecimal.ZERO);
         values.put("refundShortfall", BigDecimal.ZERO);
         values.put("disputeClawback", BigDecimal.ZERO);
+        values.put("disputeShortfall", BigDecimal.ZERO);
+        values.put("disputeHeld", BigDecimal.ZERO);
         ctx.put(TOPUP_ID, String.valueOf(ctx.changes().insert(QbTopUps.TOPUP, values)));
     }
 
@@ -319,7 +321,8 @@ public final class TopUpProcesses {
 
     // ---- the fee ---------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<ExternalJobCompletion, TopUpOutput, ProcessContext> feeRecord() {
+    public static ProcessDefinition<ExternalJobCompletion, TopUpOutput, ProcessContext> feeRecord(
+        StripeSettings settings) {
         return ProcessDefinition.define(FEE_RECORD, 1, ExternalJobCompletion.class, TopUpOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Records and posts Stripe's fee of a top-up's payment.")
@@ -329,7 +332,7 @@ public final class TopUpProcesses {
                 .outputMapper(TopUpProcesses::output)
                 .steps(b -> TopUpCrediting.lockAndLoad(b, ctx -> ctx.get(INPUT, ExternalJobCompletion.class)
                     .reference()))
-                .compute("Check the fee", (metadata, ctx) -> feePlan(ctx))
+                .compute("Check the fee", (metadata, ctx) -> feePlan(ctx, settings))
                 .step("Post the fee", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
                 .compute("Record the fee", (metadata, ctx) -> feeWrite(ctx))
@@ -343,16 +346,16 @@ public final class TopUpProcesses {
                 })));
     }
 
-    static void feePlan(ProcessContext ctx) {
+    static void feePlan(ProcessContext ctx, StripeSettings settings) {
         EntityInstance topUp = first(ctx, TOPUP);
         if (topUp != null && topUp.get("stripeFee") != null) {
             return;
         }
         TopUpChecks.Fee fee = ctx.get(INPUT, ExternalJobCompletion.class).result(TopUpChecks.Fee.class);
-        String problem = TopUpChecks.feeProblem(QbTopUps.view(topUp), fee);
+        String problem = TopUpChecks.feeProblem(QbTopUps.view(topUp), fee, settings.settlementCurrency());
         if (problem != null) {
             ctx.put(PROBLEM, TopUpChecks.STATUS.equals(problem) || TopUpChecks.UNKNOWN_TOPUP.equals(problem)
-                ? problem : TopUpChecks.FEE_MISMATCH);
+                || TopUpChecks.FEE_CURRENCY.equals(problem) ? problem : TopUpChecks.FEE_MISMATCH);
             return;
         }
         if (fee.fee().signum() > 0) {

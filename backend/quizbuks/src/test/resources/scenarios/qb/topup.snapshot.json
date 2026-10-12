@@ -31,6 +31,8 @@
       "disputeStatus" : null,
       "disputeAmount" : null,
       "disputeClawback" : "0",
+      "disputeShortfall" : "0",
+      "disputeHeld" : "0",
       "checkReason" : null,
       "checkRequestedAt" : null,
       "version" : 4
@@ -63,6 +65,8 @@
       "disputeStatus" : null,
       "disputeAmount" : null,
       "disputeClawback" : "0",
+      "disputeShortfall" : "0",
+      "disputeHeld" : "0",
       "checkReason" : null,
       "checkRequestedAt" : null,
       "version" : 3
@@ -75,6 +79,7 @@
       "pendingCount" : "0",
       "pendingAmount" : "0",
       "pendingOut" : "0",
+      "held" : "0",
       "version" : 5
     } ],
     "QbAttempt" : [ {

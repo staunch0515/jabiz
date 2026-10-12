@@ -20,9 +20,21 @@ import java.util.regex.Pattern;
  * @param checkoutUrlPrefix what the address of a checkout must start with: Stripe's, or the local stub's in development
  * @param sponsorLink       the sponsor console's address ({@code quizbuks.links.sponsor}), where Stripe sends the
  *                          sponsor back; empty when not configured (top-ups are then refused)
+ * @param settlementCurrency the currency of the Stripe account's balance, in which a payment's balance transaction
+ *                          (its fee and net) comes ({@code quizbuks.stripe.settlement-currency}, default {@code jpy}).
+ *                          Charges and refunds are yen whatever it is (D-Q6-5); only a yen settlement is checked
+ *                          against the payment and posted, another one is a task for finance.
  */
 public record StripeSettings(boolean livemode, String apiVersion, Duration checkoutTtl, String checkoutUrlPrefix,
-    String sponsorLink) {
+    String sponsorLink, String settlementCurrency) {
+
+    private static final Pattern CURRENCY = Pattern.compile("[a-z]{3}");
+
+    /** The settings of a yen settlement. */
+    public StripeSettings(boolean livemode, String apiVersion, Duration checkoutTtl, String checkoutUrlPrefix,
+        String sponsorLink) {
+        this(livemode, apiVersion, checkoutTtl, checkoutUrlPrefix, sponsorLink, StripeService.CURRENCY);
+    }
 
     public static final String STRIPE_CHECKOUT = "https://checkout.stripe.com/";
     public static final Duration MIN_TTL = Duration.ofMinutes(40);
@@ -35,6 +47,8 @@ public record StripeSettings(boolean livemode, String apiVersion, Duration check
         checkoutUrlPrefix = checkoutUrlPrefix == null || checkoutUrlPrefix.isBlank() ? STRIPE_CHECKOUT
             : checkoutUrlPrefix.strip();
         sponsorLink = sponsorLink == null ? "" : sponsorLink.strip();
+        settlementCurrency = settlementCurrency == null || settlementCurrency.isBlank() ? StripeService.CURRENCY
+            : settlementCurrency.strip().toLowerCase(java.util.Locale.ROOT);
     }
 
     /** What is wrong with the settings, as {@code "property: message"}. */
@@ -53,6 +67,10 @@ public record StripeSettings(boolean livemode, String apiVersion, Duration check
         if (!checkoutUrlPrefix.startsWith("https://") && !checkoutUrlPrefix.startsWith("http://localhost:")
             && !checkoutUrlPrefix.startsWith("http://127.0.0.1:")) {
             problems.add("quizbuks.stripe.checkout-url-prefix: must be an https address (or a local stub's)");
+        }
+        if (!CURRENCY.matcher(settlementCurrency).matches()) {
+            problems.add("quizbuks.stripe.settlement-currency: '" + settlementCurrency
+                + "' is not a currency code (such as jpy)");
         }
         return List.copyOf(problems);
     }

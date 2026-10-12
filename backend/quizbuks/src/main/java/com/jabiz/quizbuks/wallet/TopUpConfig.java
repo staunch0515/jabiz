@@ -46,8 +46,9 @@ class TopUpConfig {
         @Value("${quizbuks.stripe.api-version:2025-03-31.basil}") String apiVersion,
         @Value("${quizbuks.stripe.checkout-ttl:PT1H}") Duration checkoutTtl,
         @Value("${quizbuks.stripe.checkout-url-prefix:" + StripeSettings.STRIPE_CHECKOUT + "}") String urlPrefix,
+        @Value("${quizbuks.stripe.settlement-currency:" + StripeService.CURRENCY + "}") String settlementCurrency,
         AccountLinks links) {
-        return new StripeSettings(livemode, apiVersion, checkoutTtl, urlPrefix, links.sponsor());
+        return new StripeSettings(livemode, apiVersion, checkoutTtl, urlPrefix, links.sponsor(), settlementCurrency);
     }
 
     @Bean
@@ -198,8 +199,9 @@ class TopUpConfig {
     }
 
     @Bean
-    ProcessDefinition<ExternalJobCompletion, TopUpProcesses.TopUpOutput, ProcessContext> qbTopUpFeeRecord() {
-        return TopUpProcesses.feeRecord();
+    ProcessDefinition<ExternalJobCompletion, TopUpProcesses.TopUpOutput, ProcessContext> qbTopUpFeeRecord(
+        StripeSettings settings) {
+        return TopUpProcesses.feeRecord(settings);
     }
 
     @Bean
