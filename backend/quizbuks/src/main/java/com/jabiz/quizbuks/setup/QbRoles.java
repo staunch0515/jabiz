@@ -39,7 +39,9 @@ public final class QbRoles {
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
-        QbPermissions.RECONCILE, QbPermissions.SPONSOR_AVATAR_READ, "ledger.read", "ledger.account.read", "report.issue", "approval.decide", "task.read");
+        QbPermissions.RECONCILE, QbPermissions.SPONSOR_AVATAR_READ, "ledger.read", "ledger.account.read", "report.issue", "approval.decide", "task.read",
+        // Q6a: the jobs that call Stripe (their state and errors, never their secrets).
+        "external-job.read");
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
@@ -61,6 +63,12 @@ public final class QbRoles {
      */
     private static final List<String> PUBLISH = List.of("control.publish");
 
+    /**
+     * Stripe's events as received (Q6a, D-Q6-14): their bodies may hold payers' names and addresses, so only the finance
+     * administrator reads them, not the super administrator built from {@link #FINANCE}.
+     */
+    private static final List<String> FINANCE_ONLY = List.of("inbound.read");
+
     private static final Map<String, Role> ROLES = new LinkedHashMap<>();
 
     static {
@@ -73,7 +81,8 @@ public final class QbRoles {
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
-        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH);
+        add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
+            FINANCE_ONLY);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true, CONTENT, FINANCE,
             SUPER);
     }

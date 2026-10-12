@@ -69,6 +69,22 @@ jabiz:
     # Uploaded files (docs/design/14-files.md section 6): a directory of this host, a volume in containers.
     local:
       root: ${JABIZ_FILES_LOCAL_ROOT:}
+  # Stripe (docs/quizbuks/plans/Q6-payments.md, D-Q6-1): the API through the platform's client only (decision D38),
+  # its key in STRIPE_API_KEY (startup fails without it outside dev). Development and the tests point it at a stub.
+  external-services:
+    stripe:
+      base-url: ${QB_STRIPE_API_URL:https://api.stripe.com}
+      allowed-hosts: ${QB_STRIPE_API_HOSTS:api.stripe.com}
+  # Stripe's events (decision D37) at /api/inbound/stripe: the account endpoint's signing secret from the environment
+  # only (STRIPE_WEBHOOK_SECRET; to rotate it, deploy/quizbuks/README.md). Startup fails without it.
+  # Only the types QuizBuks consumes are stored; others are answered and dropped.
+  inbound-webhooks:
+    providers:
+      stripe:
+        scheme: stripe
+        secrets: ["${STRIPE_WEBHOOK_SECRET:}"]
+        event-types: [checkout.session.completed, checkout.session.expired, charge.refunded,
+          charge.dispute.created, charge.dispute.closed]
   i18n:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
@@ -94,3 +110,16 @@ management:
 quizbuks:
   links:
     sponsor: ${QB_SPONSOR_LINK:}
+  # Stripe (D-Q6-1): test mode until the go-live (and the legal opinion, docs/quizbuks/03-plan.md section 4). The key,
+  # Stripe's events and the development credit must agree with the mode (startup check). The API version is pinned on
+  # every request; the webhook endpoints in Stripe's dashboard must use the same one.
+  stripe:
+    livemode: ${QB_STRIPE_LIVEMODE:false}
+    api-version: ${QB_STRIPE_API_VERSION:2025-03-31.basil}
+    checkout-ttl: ${QB_STRIPE_CHECKOUT_TTL:PT1H}
+    # The Stripe account's balance currency (a payment's fee and net come in it). Charges are yen whatever it is; a
+    # settlement in another currency is not posted automatically (a task for finance).
+    settlement-currency: ${QB_STRIPE_SETTLEMENT_CURRENCY:jpy}
+    # Going live refuses to start while test-mode top-ups or a non-zero 2110 are in the database (README go-live),
+    # unless this is set on purpose.
+    allow-live-with-test-data: ${QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA:false}

@@ -5,6 +5,9 @@ import com.jabiz.quizbuks.identity.AccountCodes;
 import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
+import com.jabiz.quizbuks.wallet.RefundMath;
+import com.jabiz.quizbuks.wallet.TopUpChecks;
+import com.jabiz.quizbuks.wallet.WalletCodes;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -58,6 +61,18 @@ class MessagesTest {
                 "entity.QbWallet", "query.qb.app.feed", "query.qb.app.publication",
                 "query.qb.app.publication-tiers", "query.qb.app.history", "query.qb.admin.attempts",
                 "query.qb.admin.wallets", "query.qb.system.publication-stats");
+        // Q6a: top-ups, refunds, disputes and the reconciliation; one task title per reason.
+        assertThat(en.stringPropertyNames()).containsAll(WalletCodes.ALL)
+            .containsAll(TopUpChecks.REASONS.stream().map(r -> "task.qb.topup-check." + r).toList())
+            .containsAll(RefundMath.REASONS.stream().map(r -> "task.qb.refund-check." + r).toList())
+            .contains("task.qb.recon-diff", "param.qb.topup.min", "param.qb.topup.max", "entity.QbTopUp",
+                "entity.QbReconRun", "entity.QbReconItem", "process.QB_TOPUP_START", "process.QB_TOPUP_OPENED",
+                "process.QB_TOPUP_OPEN_FAILED", "process.QB_TOPUP_CONFIRM", "process.QB_TOPUP_EXPIRE",
+                "process.QB_TOPUP_CHECK", "process.QB_TOPUP_CHECKED", "process.QB_TOPUP_CHECK_FAILED",
+                "process.QB_TOPUP_FEE_RECORD", "process.QB_TOPUP_FEE_FAILED", "process.QB_TOPUP_REFUNDED",
+                "process.QB_TOPUP_DISPUTE_OPENED", "process.QB_TOPUP_DISPUTE_CLOSED", "process.QB_RECONCILE_RUN",
+                "query.qb.sponsor.wallet", "query.qb.sponsor.topups", "query.qb.app.wallet", "query.qb.app.ledger",
+                "query.qb.admin.topups", "query.qb.admin.recon-runs", "query.qb.admin.recon-items");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

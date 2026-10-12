@@ -1,6 +1,8 @@
 package com.jabiz.quizbuks.wallet;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.runtime.ledger.LedgerEntities;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.ledger.LedgerDimension;
@@ -58,6 +60,41 @@ class WalletConfig {
             .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.processOnlyWrites().maxWriteBatchSize(100))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** A sponsor's own wallet, read only, for the wallet's template (Q6a). */
+    @Bean
+    DatasetDefinition qbSponsorWalletDataset() {
+        return DatasetDefinition.define(QbWallets.SPONSOR_WALLETS, d -> d
+            .targetEntityType(QbWallets.WALLET)
+            .permissions(QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("ownerId", "actorId", RequestContext::actorId)));
+    }
+
+    /**
+     * The caller's own ledger lines (the party is the caller: {@code dimension1}, indexed), read only: a taker's
+     * rewards and transfers (Q6a's wallet template) and a sponsor's top-ups and spending. The ledger's own dataset is
+     * for whoever reads the whole ledger ({@code ledger.read}).
+     */
+    @Bean
+    DatasetDefinition qbTakerLedgerDataset() {
+        return partyLedger(QbWallets.TAKER_LEDGER, QbPermissions.ME);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorLedgerDataset() {
+        return partyLedger(QbWallets.SPONSOR_LEDGER, QbPermissions.SPONSOR_FINANCE_READ);
+    }
+
+    private DatasetDefinition partyLedger(String id, String readPermission) {
+        return DatasetDefinition.define(id, d -> d
+            .targetEntityType(LedgerEntities.ENTRY)
+            .permissions(readPermission, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("dimension1", "actorId", RequestContext::actorId)));
     }
 
     @Bean

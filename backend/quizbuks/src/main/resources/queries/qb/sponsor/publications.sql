@@ -56,7 +56,7 @@ SELECT
     coalesce(c.{{QbPublicationCounter.spent}}, 0)   AS spent,
     (p.{{QbPublication.status}} = 'FUNDS_SHORT'
      OR (p.{{QbPublication.status}} = 'LIVE' AND (coalesce(w.{{QbWallet.pendingCount}}, 0) > 0
-         OR coalesce(w.{{QbWallet.balance}}, 0) < p.{{QbPublication.maxReward}}))) AS fundsShort,
+         OR coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) < p.{{QbPublication.maxReward}}))) AS fundsShort,
     coalesce(w.{{QbWallet.pendingCount}}, 0)  AS pendingCount,
     coalesce(w.{{QbWallet.pendingAmount}}, 0) AS pendingAmount,
     p.{{QbPublication.budgetCap}}           AS budgetCap,

@@ -11,6 +11,7 @@ results:
   kind:          { from: QbWallet.kind }
   company:       { from: QbSponsor.company }
   balance:       { from: QbWallet.balance }
+  held:          { from: QbWallet.held }
   pendingCount:  { from: QbWallet.pendingCount }
   pendingAmount: { from: QbWallet.pendingAmount }
   pendingOut:    { from: QbWallet.pendingOut }
@@ -28,6 +29,7 @@ SELECT
     w.{{QbWallet.kind}}          AS kind,
     s.{{QbSponsor.company}}      AS company,
     w.{{QbWallet.balance}}       AS balance,
+    w.{{QbWallet.held}}          AS held,
     w.{{QbWallet.pendingCount}}  AS pendingCount,
     w.{{QbWallet.pendingAmount}} AS pendingAmount,
     w.{{QbWallet.pendingOut}}    AS pendingOut

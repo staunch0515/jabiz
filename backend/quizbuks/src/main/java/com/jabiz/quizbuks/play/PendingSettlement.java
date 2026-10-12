@@ -120,9 +120,9 @@ public final class PendingSettlement {
                     QbWallets.FUNDS_RESTORED_EVENT, PendingSettlement::payload)));
     }
 
-    /** The rewards to pay, in order, as long as the balance covers each; stops at the first it does not. */
+    /** The rewards to pay, in order, as long as what is available covers each; stops at the first it does not. */
     static void choose(ProcessContext ctx) {
-        BigDecimal balance = QbWallets.balance(first(ctx, WALLET));
+        BigDecimal balance = QbWallets.available(first(ctx, WALLET));
         List<PayInput> pays = new ArrayList<>();
         for (EntityInstance attempt : list(ctx, QUEUE)) {
             BigDecimal reward = PlaySteps.money(attempt.get("reward"));
@@ -139,7 +139,7 @@ public final class PendingSettlement {
     private static boolean more(ProcessContext ctx) {
         EntityInstance head = first(ctx, HEAD);
         return !ctx.hasViolations() && head != null
-            && QbWallets.balance(first(ctx, WALLET_AFTER)).compareTo(PlaySteps.money(head.get("reward"))) >= 0;
+            && QbWallets.available(first(ctx, WALLET_AFTER)).compareTo(PlaySteps.money(head.get("reward"))) >= 0;
     }
 
     /**
@@ -216,7 +216,7 @@ public final class PendingSettlement {
             return;
         }
         BigDecimal reward = PlaySteps.money(head.get("reward"));
-        if (QbWallets.balance(wallet).compareTo(reward) < 0) {
+        if (QbWallets.available(wallet).compareTo(reward) < 0) {
             return;
         }
         BigDecimal rate = ctx.get(PARAMS, ParamValues.class).get(QbParams.CREATOR_FEE_RATE, BigDecimal.class);

@@ -165,7 +165,8 @@ class SetupIT extends QbItSupport {
             QbParams.CREATOR_FEE_RATE, "0.0000", QbParams.TRANSFER_THRESHOLD, "1000",
             QbParams.TRANSFER_REVIEW_ABOVE, "50000", QbParams.TRANSFER_ENABLED, "false",
             QbParams.REVIEW_SPONSOR_AUTO, "false", QbParams.REVIEW_PUBLICATION_AUTO, "false",
-            QbParams.AI_MODEL, "gpt-4o-mini", QbParams.APP_MIN_VERSION, "1.0.0"));
+            QbParams.AI_MODEL, "gpt-4o-mini", QbParams.APP_MIN_VERSION, "1.0.0",
+            QbParams.TOPUP_MIN, "1000", QbParams.TOPUP_MAX, "1000000"));
     }
 
     /** Rows of every table QB_SETUP writes, by table. */

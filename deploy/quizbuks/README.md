@@ -36,12 +36,58 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 ## 答题（Q5）
 
 - **部署后再执行一次 `QB_SETUP`**：答题人（`QB_TAKER`）新增 `qb.content.file.read`（读题目的封面、图片与资料文件）。Q5 没有新的受控参数或审批规则。
-- **开发入账在生产中关闭**：`QB_WALLET_DEV_CREDIT`（不付款就给商家钱包入账，Q6 的充值之前供开发与测试使用）只在
-  `quizbuks.wallet.dev-credit.enabled=true` 时注册（只有 `dev` 配置与测试开启）。**生产不得开启**：开启时若 `STRIPE_API_KEY` 是正式密钥（`sk_live_…`），
-  启动即失败。其权限 `qb.wallet.dev-credit` 不授予任何角色，但持有 `*` 的首个管理员可以调用。
+- **开发入账在生产中关闭**：`QB_WALLET_DEV_CREDIT`（不付款就给商家钱包入账，供开发与测试使用；Q6a 起有了充值，生产不需要它）只在
+  `quizbuks.wallet.dev-credit.enabled=true` 时注册（只有 `dev` 配置与测试开启）。**生产不得开启**：开启时若为正式模式或 `STRIPE_API_KEY` 是正式密钥
+  （`sk_live_…` / `rk_live_…`），启动即失败。其权限 `qb.wallet.dev-credit` 不授予任何角色，但持有 `*` 的首个管理员可以调用。
 - **结算与待支付**：答题奖励在提交的同一事务中从商家钱包（科目 2110）记到用户（2120）；商家余额不足时记为待支付、发布进入预算不足，
   有余额后（Q5 只有开发入账，Q6 起为充值）按提交顺序补发，补完后发布自动回到进行中。
 - **完成人数**：任务 `qb.publication-stats` 每 10 分钟统计各发布近 1 小时、24 小时、7 天、30 天的完成数（集群中只有一个实例执行）。
+
+## 充值与核对（Q6a）
+
+- **部署后再执行一次 `QB_SETUP`，并由另一位管理员发布新的提案**：受控参数 `qb.topup.min`（1 000）、`qb.topup.max`（1 000 000）；
+  财务管理员新增 `inbound.read`（查看 Stripe 的原样事件，可能含付款人姓名与邮箱）与 `external-job.read`（查看调用 Stripe 的作业）。
+  发布之前发起充值一律被拒（`PARAM_NOT_FOUND`）。
+- **当前只走测试模式**：`QB_STRIPE_LIVEMODE` 缺省 `false`，`STRIPE_API_KEY` 必须是测试密钥（`sk_test_…`，建议受限密钥 `rk_test_…`）；
+  正式模式须用正式密钥，且**开发入账必须关闭**，否则启动失败。正式开放之前须取得法务意见（`docs/quizbuks/03-plan.md` 第 4 节）。
+  模式与配置不同的 Stripe 事件不入账，只开待办。
+- **受限密钥**（Stripe 后台 → 开发者 → API 密钥 → 创建受限密钥）只开：Checkout Sessions 写、PaymentIntents 读（读手续费），
+  Q6b 再加 Transfers 写与读、Accounts 与 Account Links 写。密钥只放在环境变量中，不进仓库与日志。
+- **Webhook 端点**（Stripe 后台 → 开发者 → Webhook → 添加端点）：
+  - 账户端点 `https://<主机>/api/inbound/stripe`，事件只选 `checkout.session.completed`、`checkout.session.expired`、`charge.refunded`、
+    `charge.dispute.created`、`charge.dispute.closed`；把该端点的签名密钥（`whsec_…`）放进 `STRIPE_WEBHOOK_SECRET`。**缺少即启动失败**。
+  - **API 版本**：端点的 API 版本必须与 `QB_STRIPE_API_VERSION`（缺省 `2025-03-31.basil`）相同。应用以 `Stripe-Version` 固定自己请求的版本，
+    但事件正文的结构由端点的版本决定；不一致时字段对不上，事件只会开待办。
+  - Q6b 另加 Connect 端点（`/api/inbound/stripe-connect`，另一个签名密钥）。
+  - 换签名密钥：Stripe 后台"滚动"密钥时新旧两个同时有效一段时间；期间把两者都配上——环境变量
+    `JABIZ_INBOUNDWEBHOOKS_PROVIDERS_STRIPE_SECRETS_0`（新）与 `JABIZ_INBOUNDWEBHOOKS_PROVIDERS_STRIPE_SECRETS_1`（旧），过期后删去旧的。
+- **在反向代理之后**必须设置 `JABIZ_TRUSTED_PROXIES`：入站 Webhook 按客户端地址限流，否则 Stripe 的全部投递共用一个桶（每分钟 120 次）。
+- **商家后台的地址**（`QB_SPONSOR_LINK`，或 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/`）也是 Stripe 支付后跳回的地址；两者都没有时充值一律被拒（启动告警）。
+- **到账只以 Stripe 的签名通知（或向 Stripe 核实的结果）为准**，按服务端记录的金额入账，浏览器跳回不入账。丢失通知的充值由每小时的任务
+  `qb.topup-stale` 在支付页过期一小时后向 Stripe 核实。退款与争议只能在 Stripe 后台发生：按可用余额（余额减去冻结）能扣多少扣多少，
+  余下的记为差额（`refund_shortfall` / `dispute_shortfall`）并开待办由财务线下处理；**差额记下后不再自动扣回**，以后的退款只扣新增的部分。
+  争议一开始就把争议金额（可用余额以内）冻结在商家钱包中（`held`，不是账本分录：余额与 2110 不变，只是不能再付奖励，奖励因此待支付）；
+  胜诉释放并支付待付奖励，败诉从冻结中扣回。
+- **退款晚于充值确认 30 分钟以上**才到、而充值当时尚未入账的（极少：确认丢失且核实也失败），退款事件只开待办 `UNKNOWN_PAYMENT`，
+  须财务在充值入账后人工对照扣回（应用不会再次处理这条事件）。
+- **1110（Stripe 余额）在 F-05 之前会与 Stripe 的实际余额有出入**：争议手续费、退款时 Stripe 不退还的手续费等不经 QuizBuks 入账；
+  每日核对不比较 Stripe 的余额，由财务按 Stripe 报表调整。
+- **正式上线（go-live）**：`QB_STRIPE_LIVEMODE=true` 时，只要数据库中还有测试模式的充值（`livemode=false` 或 `cs_test_` 会话），
+  或 2110（商家钱包合计）不为 0，**启动即失败**（`QUIZBUKS | quizbuks.stripe.allow-live-with-test-data`，启动检查直接读数据库）：
+  测试的 Kudos 不能在正式环境中付出真实奖励。正式环境用新的数据库；确需沿用时，核清测试数据后显式设置
+  `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA=true`（只告警），上线后再删去。
+- **Adaptive Pricing 已关闭**：创建支付页时发送 `adaptive_pricing[enabled]=false`，只收日元（D-Q6-5）；若 Stripe 仍报告了买方币种，照常记录。
+- **每日核对** `qb.reconcile`（UTC 18:37，即东京 03:37）比较商家钱包、待支付、2110 合计、账本平衡与每笔充值的分录；有差异时开待办（`qb.reconcile`
+  权限）并记录在 `qb.admin.recon-runs` / `qb.admin.recon-items`。
+- **Stripe 的原样事件保留 7 年**（与会计凭证相同，`RetentionPolicy`），只有财务管理员能读。
+- **本地开发**：`java tools/quizbuks/stripe-stub/StripeStub.java` 起桩服务（端口 8093），`dev` 配置已指向它（API、支付页、开发用签名密钥）；
+  支付页上的按钮把签名的事件发回 `http://localhost:8080/api/inbound/stripe`。改用 Stripe 的真实测试模式：设置 `STRIPE_API_KEY`、
+  `QB_STRIPE_API_URL=https://api.stripe.com`、`QB_STRIPE_API_HOSTS=api.stripe.com`、`QB_STRIPE_CHECKOUT_URL_PREFIX=https://checkout.stripe.com/`，
+  并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
+- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）与 `STRIPE_WEBHOOK_SECRET`
+  （只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`）。仓库中不放任何签名密钥：
+  知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
+  也不能在任何可访问的环境中使用该密钥。
 
 ## 环境变量
 
@@ -68,12 +114,19 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_SPONSOR_LINK` | 否 | 商家邮件中的商家后台地址；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录据此取客户端地址 |
 
-以后阶段使用的外部密钥（先列出，便于准备；Q5 起启动检查读取 `STRIPE_API_KEY`，只为拒绝与开发入账同时开启的正式密钥）：
+外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：
 
-| 变量 | 阶段 | 说明 |
+| 变量 | 必需 | 说明 |
 |---|---|---|
-| `STRIPE_API_KEY` | Q6 | Stripe 密钥（测试模式用 `sk_test_…`）；每个部署（美国、日本）用本国的 Stripe 账户 |
-| `STRIPE_WEBHOOK_SECRET` | Q6 | Stripe 通知的签名密钥（平台入站 Webhook 校验） |
+| `STRIPE_API_KEY` | 是 | Stripe 密钥，模式须与 `QB_STRIPE_LIVEMODE` 相同（测试模式 `sk_test_…` / `rk_test_…`，建议受限密钥）；每个部署（美国、日本）用本国的 Stripe 账户 |
+| `STRIPE_WEBHOOK_SECRET` | 是 | 账户端点 `/api/inbound/stripe` 的签名密钥（`whsec_…`，至少 32 字符）；缺少即启动失败 |
+| `QB_STRIPE_LIVEMODE` | 否 | 缺省 `false`（测试模式）；`true` 时须正式密钥、开发入账关闭 |
+| `QB_STRIPE_API_VERSION` | 否 | 缺省 `2025-03-31.basil`，须与 Stripe 后台端点的 API 版本相同 |
+| `QB_STRIPE_CHECKOUT_TTL` | 否 | 支付页的有效期，缺省 `PT1H`（40 分钟到 23 小时） |
+| `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | Stripe 账户余额的币种（手续费与净额的币种），缺省 `jpy`；收款与退款始终是日元，非日元的结算手续费不自动过账，开待办 |
+| `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
+| `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Q6b | Connect 端点的签名密钥 |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

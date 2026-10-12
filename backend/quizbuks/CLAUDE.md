@@ -65,10 +65,10 @@
   **超时自动提交**只由逐项任务 `qb.attempt-expire`（每分钟，模板 `qb.system.attempts-due`）对每个会话运行 `QB_ATTEMPT_EXPIRE`。**逐项取锁或可能逐项失败的批量系统工作写成逐项任务**
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
-  **钱包余额只在钱包锁内改**（`wallet.QbWallets.change`），与同一事务中的 `LEDGER_POST` 一起；判断可支付一律经 `QbWallets.pays`（无待支付且余额足够）：待支付不入账、按提交顺序补发、不插队；
+  **钱包余额只在钱包锁内改**（`wallet.QbWallets.change`），与同一事务中的 `LEDGER_POST` 一起；判断可支付一律经 `QbWallets.pays`（无待支付且可用余额 `QbWallets.available` = 余额 − 争议冻结 `held` 足够；SQL 模板同样用 `balance - held`，核对仍比较 `balance`）：待支付不入账、按提交顺序补发、不插队；
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
-  `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查拒绝它与 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
+  `quizbuks.wallet.dev-credit.enabled=true`（`dev` 与测试）时注册，权限 `qb.wallet.dev-credit` 不授予任何角色，生产不开（启动检查 `StripeModeCheck` 拒绝它与正式模式或 Stripe 正式密钥同时出现）。它是开放流程，补发经事件 `qb.sponsor.settle-pending` 由系统运行（`QB_PENDING_SETTLE` 等答题的系统流程都是 `internal()`，D41）。
 - **账户**（`identity`，`docs/quizbuks/plans/Q2-accounts.md`）：三个登录入口 `admin` / `app` / `sponsor` 写在 `application.yml`（平台 10 §15）；`app` 允许未验证的用户登录浏览，`sponsor` 要求已验证。
   **QuizBuks 的一切写入流程声明 `requiresVerifiedEmail()`**（未验证即"待激活"；预占他人邮箱的人因此留不下应用数据），以后的阶段照此。
   资料、入驻、封禁各是一人一行的时态实体（主键是生成的 UUID，`userId` 不可变、唯一；资料与入驻的 `userId` 是操作人编号的文本，封禁的是平台用户的引用），只经 `QB_PROFILE_*` / `QB_SPONSOR_*` / `QB_USER_*BAN` 写入；
@@ -82,7 +82,20 @@
   **谁能启动流程**（D41）：QuizBuks 的事件消费者、定时任务、回调接续点与审批结果（发布与入驻）一律 `internal()`，只作子流程的用 `subProcessOnly()`，由人发起的照常开放；
   事件与定时任务只运行 `internal()` 流程（启动检查），不用 `.manualToo()`，除非该开放流程确实也由人手工运行。测试中以系统身份运行内部流程用 `ContentItSupport.runAsSystem`，场景中用 `actor: {id: system}`。
   事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；商家后台的地址是参数 `link`（`quizbuks.links.sponsor`），写在正文里而不是 Markdown 链接中（平台对链接中的参数做百分号编码）。
-- **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）。
+- **支付**（`wallet`，`docs/quizbuks/plans/Q6-payments.md`）：
+  - **全部 Stripe 调用都是异步外部作业**（`wallet.TopUpJobs`，处理器只经外部服务 `stripe` 与 `StripeApi`：自写表单编码与解析，不用 SDK；以 `Stripe-Version` 固定版本），
+    不在事务中等外部调用，不放在提交后步骤（其重试不持久化）。作业的完成与失败流程、入站事件的消费流程一律 `internal()`，权限 `qb.wallet.system` 不授予任何角色。
+  - **只信服务端记录**：Checkout 的金额、币种、引用与返回地址只由 `CheckoutRequest` 按记录与配置生成；入账的金额、对象与锁名只取自记录，不取自 Stripe 的元数据；
+    签名的事件同样逐项核对（`TopUpChecks`、`RefundMath`），不成立的开待办（`TopUpTasks`，给 `qb.reconcile`）、不入账、不让流程失败。浏览器跳回不入账。
+  - **只入账一次的四层**：平台按事件号去重；每个（消费者，事件）只处理一次；同一会话的各种报告（通知、核实）走同一套步骤 `TopUpCrediting`，在商家钱包锁内重读，
+    只有 `OPENING` / `OPEN` 能变为 `PAID`；数据库兜底（会话、付款、交易号唯一，`PAID` 必有分录）。新的入账来源照此接入，不另写入账步骤。
+  - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q6b）。
+    充值、到账、过期、核实、手续费、退款与争议只取商家钱包锁（先在锁外按编号或付款找到充值，锁内重读）；每日核对不取业务锁。
+  - **模式**：`quizbuks.stripe.livemode`（缺省 false）、密钥前缀、开发入账由 `StripeModeCheck` 一起检查；事件模式不同即待办。
+    **开发入账** `QB_WALLET_DEV_CREDIT` 只留在 `dev` 与测试中，与正式模式或正式密钥同时开启即启动失败。
+  - 入站提供方 `stripe` 的密钥只来自 `STRIPE_WEBHOOK_SECRET`（`platformCheck` 用一次性的值，见 `build.gradle.kts`）；白名单只列各阶段订阅的类型。
+  - 核对模板（`qb.system.recon-*`）每项比较是一条语句、只返回差异行；结果 `QbReconRun` / `QbReconItem` 只写一次。
+- **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 
 ## 5. 测试与命令（在 `backend/` 下）
 

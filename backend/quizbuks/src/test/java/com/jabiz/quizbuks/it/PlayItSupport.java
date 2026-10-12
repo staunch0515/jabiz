@@ -302,9 +302,14 @@ abstract class PlayItSupport extends AccountItSupport {
      */
     static void assertBooksBalance() {
         assertThat(ledgerTotal()).isEqualByComparingTo(BigDecimal.ZERO);
-        for (Map<String, Object> wallet : query("SELECT owner_id, balance FROM qb_wallet WHERE kind = 'SPONSOR'")) {
+        for (Map<String, Object> wallet : query("SELECT w.owner_id, w.balance, w.held, (SELECT coalesce(sum("
+            + "t.dispute_held), 0) FROM qb_topup t WHERE t.sponsor_id = w.owner_id) AS holds FROM qb_wallet w "
+            + "WHERE w.kind = 'SPONSOR'")) {
+            // The balance (not less what is held: a hold is no ledger movement) is the ledger's.
             assertThat(ledger("2110", (String) wallet.get("owner_id"))).as("wallet of " + wallet.get("owner_id"))
                 .isEqualByComparingTo((BigDecimal) wallet.get("balance"));
+            assertThat((BigDecimal) wallet.get("held")).as("held of " + wallet.get("owner_id"))
+                .isEqualByComparingTo((BigDecimal) wallet.get("holds"));
         }
         for (String table : LEDGER_TABLES) {
             assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "

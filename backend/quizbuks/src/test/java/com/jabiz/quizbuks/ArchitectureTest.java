@@ -23,6 +23,17 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /**
+     * Stripe is reached through the declared external service only, by the jobs' handlers, which stay out of the
+     * database (decision D38; docs/quizbuks/plans/Q6-payments.md, D-Q6-14).
+     */
+    @Test
+    void quizbuksCallsOtherSystemsOnlyThroughThePlatform() {
+        PlatformArchRules.noDirectNetworkAccess("com.jabiz.quizbuks..").check(CLASSES);
+        PlatformArchRules.noPlatformInternals("com.jabiz.quizbuks..").check(CLASSES);
+        PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.quizbuks..").check(CLASSES);
+    }
+
     /** QuizBuks starts no process and passes for nobody: the platform does, by the declarations (decision D41). */
     @Test
     void quizbuksStaysOutOfTheProcessMachinery() {

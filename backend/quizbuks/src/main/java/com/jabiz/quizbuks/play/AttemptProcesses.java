@@ -254,7 +254,7 @@ public final class AttemptProcesses {
         String userId = ctx.request().actorId();
         EntityInstance wallet = first(ctx, WALLET);
         String refusal = AttemptRules.startRefusal(userId, PlaySteps.userRegions(ctx), PlaySteps.cardOf(card),
-            PlaySteps.counts(counter), QbWallets.balance(wallet), QbWallets.pendingCount(wallet), ctx.opTime());
+            PlaySteps.counts(counter), QbWallets.available(wallet), QbWallets.pendingCount(wallet), ctx.opTime());
         if (refusal != null) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", refusal, "The attempt cannot start: "
                 + refusal, Map.of("publicationId", String.valueOf(ctx.get(PUB_KEY)))));
