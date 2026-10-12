@@ -1,7 +1,7 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
 import { ApiError, toApiError } from './problem'
-import { session } from './session'
+import { hasWebLocks, session } from './session'
 
 /**
  * The typed API client, generated from the backend's OpenAPI document (docs/design/12-frontend.md section 3).
@@ -58,14 +58,15 @@ function decorate(request: Request): Request {
 
 let refreshing: Promise<boolean> | null = null
 
-async function refresh(): Promise<boolean> {
+/** The refresh itself, with the token read only now: under the lock, after any other tab's turn. */
+async function exchange(): Promise<boolean> {
   const refreshToken = session.refreshToken()
   if (!refreshToken) return false
   try {
     const response = await globalThis.fetch('/api/auth/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept-Language': language },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({ refreshToken, entry: session.entry() }),
     })
     if (!response.ok) {
       session.clear()
@@ -79,8 +80,31 @@ async function refresh(): Promise<boolean> {
   }
 }
 
+/**
+ * Tabs sharing a refresh token kept on the device (decision D43 item 2) take turns: each reads the token only once it
+ * holds the entry's lock, so a token another tab has just rotated is never sent again (the server would take that
+ * for a stolen token and end the session everywhere). Without Web Locks no token is shared (see session.ts).
+ */
+function refresh(): Promise<boolean> {
+  if (!session.refreshToken()) return Promise.resolve(false)
+  if (!hasWebLocks()) return exchange()
+  return navigator.locks.request(`jabiz.refresh.${session.entry()}`, () => exchange())
+}
+
+/** Options of {@link refreshSession}. */
+export interface RefreshOptions {
+  /**
+   * A refresh of its own rather than joining one under way: after something changed what new tokens say (an address
+   * just verified, decision D36), a refresh that started before it does not count.
+   */
+  force?: boolean
+}
+
 /** Refreshes the session; concurrent callers share one refresh (a refresh token can be used only once). */
-export function refreshSession(): Promise<boolean> {
+export function refreshSession(options: RefreshOptions = {}): Promise<boolean> {
+  if (options.force && refreshing) {
+    return refreshing.then(() => refreshSession(options))
+  }
   refreshing ??= refresh().finally(() => {
     refreshing = null
   })
@@ -137,10 +161,20 @@ export async function stepUp(code: string): Promise<void> {
   session.storeAccess(answer.accessToken!)
 }
 
-export const api = createClient<paths>({
-  baseUrl: typeof window === 'undefined' ? 'http://localhost' : window.location.origin,
-  fetch: authFetch,
-})
+/**
+ * A typed client of other paths with the platform's session (decision D43; docs/design/12-frontend.md section 12):
+ * an application's own single-page application passes the types generated from its own OpenAPI snapshot. Every call
+ * carries the access token and the language, is refreshed once on 401 and stepped up on MFA_REQUIRED, as with
+ * {@link api}; processes and templates still go through runProcess / runQuery.
+ */
+export function createApiClient<Paths extends object>() {
+  return createClient<Paths>({
+    baseUrl: typeof window === 'undefined' ? 'http://localhost' : window.location.origin,
+    fetch: authFetch,
+  })
+}
+
+export const api = createApiClient<paths>()
 
 /** The data of a successful call; otherwise throws an {@link ApiError} with the server's violations. */
 export async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {

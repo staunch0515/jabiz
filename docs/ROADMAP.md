@@ -1552,7 +1552,7 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 
 需要新增决策 **D43**（见【待确认 16c-1】），补充 D15、D19、D34、D36，不取代任何决策。
 
-**16c 状态**：☐ 计划已确认（2026-10-12），未开工。
+**16c 状态**：◐ 计划已确认（2026-10-12）；16c-1 已实现（分支 `1.2/phase-16c1-client-session`，待评审合入）；16c-2 未开工（等 16m）。
 
 **现状（`origin/1.2/platform`，`f943118`）**
 

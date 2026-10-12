@@ -63,15 +63,24 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 ## 4. 登录与令牌
 
 - 登录 `POST /api/auth/login`；登出调用 `/api/auth/logout` 并清除本地会话。
-- **访问令牌只在内存中**；**刷新令牌在 `sessionStorage`**（刷新页面保持登录，关闭标签页即结束）。收到 401 时用刷新令牌刷新一次
-  （并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
-- 当前操作人与权限来自 `GET /api/auth/me`，不在前端解码令牌。
+- **会话按入口**（D43 第 1、2 条，16c-1）：每个前端有一个登录入口（`configureClient({ entry })`，缺省取构建变量 `VITE_JABIZ_ENTRY`，再缺省 `admin`），
+  登录、刷新与 OIDC 的 `start` 都带 `entry`；`/api/auth/me` 的入口与配置的入口不符时清掉会话。同源的几个 SPA 因此各有各的会话。
+- **访问令牌只在内存中**；**刷新令牌的键按入口分开**（`jabiz.session.<入口>.refresh`），存在哪里由入口的 `session.persistence` 决定
+  （客户端启动时读 `GET /api/auth/entries/{name}` 的 `sessionPersistence`，没有该项即 `tab`；`admin` 不读，固定 `tab`）：
+  `tab` 在 `sessionStorage`（刷新页面保持登录，关闭标签页即结束）；`device` 在 `localStorage`（关闭后再打开仍登录）。
+  `admin` 入口、以及没有 Web Locks 的浏览器一律按 `tab`；启动时在 `localStorage` 中找到的令牌先照用，读到设置后再按设置搬到对应的存储。
+  后台第一次启动时把旧键 `jabiz.refreshToken` 迁移为 `jabiz.session.admin.refresh`（一次）。
+  收到 401 时用刷新令牌刷新一次（同一标签页的并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
+  多个标签页以 Web Locks（锁名 `jabiz.refresh.<入口>`）轮流刷新，取得锁之后才读存储中的令牌，所以别的标签页刚换新的令牌不会被再用一次（否则服务端视为重用而吊销整个令牌族）。
+  `device` 下一个标签页登出（删除存储的令牌）时其他标签页随之登出。`refreshSession({ force: true })` 不搭已在进行的刷新、另取新令牌（验证邮箱后令牌的 `email_verified` 才为真）。
+  外观与界面语言是用户偏好，同源的各 SPA 有意共用。已知限制："复制标签页"会复制 `sessionStorage`，两个标签页之后各自刷新会触发重用吊销（`tab` 下原有问题）。
+- 当前操作人与权限来自 `GET /api/auth/me`，不在前端解码令牌；`useAuth()` 另给出 `entry`、`email`、`emailVerified`。
 - 二次验证（10 §9，D28）：登录响应为 `MFA_REQUIRED` 时，登录页转入输入验证码（或恢复码）的一步（`/api/auth/challenge/verify`）；
   为 `MFA_ENROLLMENT_REQUIRED` 时先绑定（二维码与密钥、确认码、只显示一次的恢复码），然后重新登录。挑战令牌只在页面状态中，不存储。
 - 按操作要求二次验证（10 §10）：任何请求收到 403 且违规为 `MFA_REQUIRED` 时，API 客户端请外框弹出输入框（`StepUpProvider`，并发请求共用一次），
   `POST /api/auth/step-up` 成功后以新的访问令牌重发原请求；取消则把原 403 交给调用方。未绑定时提示先到"安全设置"绑定。
-- 单点登录（10 §12）：登录页列出 `/api/auth/oidc/providers` 的提供方按钮；点击后取得授权地址并整页跳转（登录后要回到的页面记在 `sessionStorage`，
-  只接受本应用的路径）；身份提供方回到 `/login/oidc`，该页把 state 与授权码交给服务端一次，结果与密码登录相同（需要第二步时回到登录页的验证码或绑定步骤）。
+- 单点登录（10 §12）：登录页列出 `/api/auth/oidc/providers` 的提供方按钮；点击后以本前端的入口取得授权地址并整页跳转（登录后要回到的页面与绑定值记在
+  `sessionStorage` 的 `jabiz.session.<入口>.oidcReturnTo` / `.oidcBinder`，只接受本站的路径，缺省由调用方给出：`takeReturnPath(fallback)`）；身份提供方回到 `/login/oidc`，该页把 state 与授权码交给服务端一次，结果与密码登录相同（需要第二步时回到登录页的验证码或绑定步骤）。
 - 闲置锁定（10 §11）：外框按键盘、指针、滚动与触摸活动计时（`idleTimeoutSeconds` 来自 `/api/auth/me`），到时登出并回到登录页，提示原因、填好用户名（`sessionStorage`，只是便利）。
 - 数据期限（10 §13.2）：`/api/auth/me` 的 `dataFrom` / `dataTo` 不为空时，页头显示期限标签（列表与报表只含该期间，由服务端过滤）。
 - 所有请求带 `Accept-Language`（界面语言），服务端据此返回错误文案、标签与字典。
@@ -272,5 +281,18 @@ jabizApp {
   （`src/index.css`），antd 的全局规则（链接颜色等）不影响新组件；antd 页面所在的内容区固定为亮色 token（`light`），暗色外观只作用于外壳与弹出层；
   路由带 `handle: { ui: 'jabiz' }` 的页面（已迁移到 `@jabiz/ui`，15b、15c）不固定，随外观变化。
   15d 删除 antd 后 preflight 改为全局、去掉层 `antd` 与 `light` 固定。
+- **登录与账户的积木**（D43，16c-1）：`@jabiz/ui` 的 `src/auth/`，文案在命名空间 `auth`（三语，应用可用 `addMessages('auth', …)` 覆盖个别键），
+  都在 `UI_SCOPE` 内，亮、暗两种外观都过 axe。`AuthFrame`（品牌与标题由属性给出，带语言与外观切换）、`SignInForm`（密码、二次验证码、
+  绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案）、
+  `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
+  `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
+  `MfaCodeStep`、`MfaEnrollment`、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
+  没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
+  是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
+- **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
+  调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'` 并 `@source` 该包的 `src`；
   `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`（以及使用 `@jabiz/ui` 时其运行时依赖）的版本与平台前端一致，不一致即失败。

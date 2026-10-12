@@ -1,65 +1,28 @@
-import { Alert, AlertDescription, Button, cn, PageState, UI_SCOPE } from '@jabiz/ui'
-import { TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate, useSearchParams } from 'react-router'
-import { ApiError } from '../api/problem'
+import { OidcCallback } from '@jabiz/ui'
+import { useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
 import { takeBinder, takeReturnPath } from '../auth/oidc'
+import { extension } from '../extension'
+import { homePath } from '../extension/registry'
 
 /**
- * Where an identity provider sends the user back (docs/design/10-security.md section 12): hands state and code to the
- * server once, then continues like a sign-in with a password — into the application, or to the second step.
+ * Where an identity provider sends the user back (docs/design/10-security.md section 12): @jabiz/ui's OidcCallback
+ * (decision D43) on the admin's router; a second step continues on the sign-in page.
  */
 export default function OidcCallbackPage() {
-  const { t } = useTranslation()
-  const [params] = useSearchParams()
   const { signInWithProvider } = useAuth()
   const navigate = useNavigate()
-  const [failure, setFailure] = useState<string | null>(null)
-  const started = useRef(false)
-  const state = params.get('state')
-  const code = params.get('code')
-  // The provider refused, or the page was opened without what it needs.
-  const refused = !state || !code
-    ? params.get('error_description') ?? params.get('error') ?? t('login.providerFailed')
-    : null
-  const error = refused ?? failure
-
-  useEffect(() => {
-    // The code works once: never send it twice (React may run effects twice in development).
-    if (started.current || !state || !code) return
-    started.current = true
-    signInWithProvider(state, code, takeBinder() ?? '')
-      .then((next) => {
-        const returnTo = takeReturnPath()
-        if (next.status === 'SIGNED_IN') {
-          navigate(returnTo, { replace: true })
-        } else {
-          navigate('/login', { replace: true, state: { from: returnTo, step: next } })
-        }
-      })
-      .catch((e: unknown) => setFailure(e instanceof ApiError ? e.display : t('app.error')))
-  }, [state, code, signInWithProvider, navigate, t])
-
+  const location = useLocation()
   return (
-    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20')}>
-      {!error ? (
-        <PageState kind="loading" title={t('app.loading')} />
-      ) : (
-        <PageState
-          kind="warning"
-          titleAs="h1"
-          title={t('login.providerFailed')}
-          description={
-            <Alert variant="destructive" data-testid="oidc-error" className="text-left">
-              <TriangleAlert aria-hidden />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          }
-          action={<Button onClick={() => navigate('/login', { replace: true })}>{t('login.back')}</Button>}
-        />
-      )}
-    </main>
+    <OidcCallback
+      search={location.search}
+      fallbackPath={homePath(extension)}
+      auth={{ signInWithProvider }}
+      takeBinder={takeBinder}
+      takeReturnPath={takeReturnPath}
+      onSignedIn={(path) => void navigate(path, { replace: true })}
+      onSecondStep={(step, path) => void navigate('/login', { replace: true, state: { from: path, step } })}
+      onBack={() => void navigate('/login', { replace: true })}
+    />
   )
 }
