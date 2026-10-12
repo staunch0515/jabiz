@@ -53,5 +53,9 @@ describe('startProviderSignIn', () => {
     expect(url.searchParams.get('entry')).toBe('portal')
     expect(window.sessionStorage.getItem('jabiz.session.portal.oidcBinder')).toBe('bind-1')
     expect(window.sessionStorage.getItem('jabiz.session.portal.oidcReturnTo')).toBe('/portal/orders')
+
+    // Only a path of this site is kept for the way back.
+    await startProviderSignIn('corp', '/\t/evil.com')
+    expect(window.sessionStorage.getItem('jabiz.session.portal.oidcReturnTo')).toBe('/')
   })
 })

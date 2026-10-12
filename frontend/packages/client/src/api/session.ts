@@ -140,6 +140,27 @@ if (typeof window !== 'undefined') {
   })
 }
 
+/**
+ * Runs work on the stored refresh token under the entry's Web Lock (`jabiz.refresh.<entry>`), where tabs share it: a
+ * session kept on the device, or `always` (moving the token between storages). Tabs with a token of their own need
+ * no lock. A browser that refuses the lock (SecurityError in sandboxed or opaque origins) runs the work unlocked:
+ * such a page keeps nothing on the device anyway.
+ */
+export async function withRefreshLock<T>(work: () => Promise<T>, always = false): Promise<T> {
+  if (!hasWebLocks() || (!always && persistence !== 'device')) return work()
+  let started = false
+  try {
+    return await navigator.locks.request(`jabiz.refresh.${entry}`, () => {
+      started = true
+      return work()
+    })
+  } catch (error) {
+    // The work's own failure is its caller's; only a refused lock falls back.
+    if (started) throw error
+    return work()
+  }
+}
+
 export const session = {
   /** The sign-in entry of this frontend. */
   entry(): string {
@@ -153,6 +174,10 @@ export const session = {
    * Keeps the refresh token as the entry's settings say (`GET /api/auth/entries/{name}`): moves a stored token to
    * the other storage when the setting differs from what was found.
    */
+  /** {@link session.setPersistence} under the refresh lock, so that no other tab refreshes while the token moves. */
+  applyPersistence(asked: SessionPersistence): Promise<void> {
+    return withRefreshLock(async () => session.setPersistence(asked), true)
+  },
   setPersistence(asked: SessionPersistence) {
     const next = effective(asked)
     if (next === persistence) return
@@ -178,9 +203,11 @@ export const session = {
     accessToken = access
     notify()
   },
+  /** Ends the session here: the access token, and the entry's refresh token wherever it is kept. */
   clear() {
     accessToken = null
-    write(store(), refreshKey(), null)
+    write(tabStorage(), refreshKey(), null)
+    write(deviceStorage(), refreshKey(), null)
     notify()
   },
   subscribe(listener: () => void): () => void {

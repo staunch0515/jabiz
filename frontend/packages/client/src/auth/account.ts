@@ -42,7 +42,7 @@ export async function loadSessionSettings(): Promise<void> {
   if (session.entry() === 'admin') return
   try {
     const info = await entryInfo()
-    session.setPersistence(info.sessionPersistence === 'device' ? 'device' : 'tab')
+    await session.applyPersistence(info.sessionPersistence === 'device' ? 'device' : 'tab')
   } catch {
     // Offline or refused: the token stays where it was found.
   }
@@ -85,12 +85,13 @@ export async function resendVerification(email: string, entry: string = session.
  * refresh token is sent along.
  */
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  // Typed here until the OpenAPI snapshot of phase 16m is generated into the client.
-  const response = await sessionFetch('/api/auth/account/password', {
+  // Typed here until the OpenAPI snapshot of phase 16m is generated into the client. The body is made for each attempt:
+  // a refresh between them rotates the token, and the session kept is the one of the token current when sent.
+  const response = await sessionFetch('/api/auth/account/password', () => ({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ currentPassword, newPassword, refreshToken: session.refreshToken() ?? undefined }),
-  })
+  }))
   if (!response.ok) throw await toApiError(response)
 }
 

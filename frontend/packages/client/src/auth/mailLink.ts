@@ -56,9 +56,21 @@ export function useNoReferrer() {
   }, [])
 }
 
-/** Only a path of this site; anything else is the root. */
+/**
+ * Only a path of this site, else `fallback`. Resolved rather than matched: URL parsers drop tabs and line breaks and
+ * read backslashes as slashes, so `/\t/evil.com` would pass a prefix check and still lead to another site. Control
+ * characters and backslashes are refused outright; what is left must resolve to this origin.
+ */
 export function sitePath(path: string | null | undefined, fallback = '/'): string {
-  return path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\') ? path : fallback
+  // eslint-disable-next-line no-control-regex
+  if (!path || !path.startsWith('/') || /[\u0000-\u001f\u007f\\]/.test(path)) return fallback
+  try {
+    const origin = window.location.origin
+    const url = new URL(path, origin)
+    return url.origin === origin ? url.pathname + url.search + url.hash : fallback
+  } catch {
+    return fallback
+  }
 }
 
 /**

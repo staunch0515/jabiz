@@ -1,4 +1,4 @@
-import { api, startProviderSignIn, unwrap, type components } from '@jabiz/client'
+import { api, sitePath, startProviderSignIn, unwrap, type components } from '@jabiz/client'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/button'
@@ -60,7 +60,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
             data-testid={`oidc-${provider.id}`}
             onClick={() => {
               onError?.(null)
-              start(provider.id!, returnTo).catch((e: unknown) => onError?.(e))
+              start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
             }}
           >
             {provider.label}

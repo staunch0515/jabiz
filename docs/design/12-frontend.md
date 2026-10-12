@@ -71,8 +71,10 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   `admin` 入口、以及没有 Web Locks 的浏览器一律按 `tab`；启动时在 `localStorage` 中找到的令牌先照用，读到设置后再按设置搬到对应的存储。
   后台第一次启动时把旧键 `jabiz.refreshToken` 迁移为 `jabiz.session.admin.refresh`（一次）。
   收到 401 时用刷新令牌刷新一次（同一标签页的并发请求共享同一次刷新：刷新令牌只能用一次），成功后重发原请求；刷新被服务端拒绝时清除会话回到登录页，网络失败时保留会话以便重试。
-  多个标签页以 Web Locks（锁名 `jabiz.refresh.<入口>`）轮流刷新，取得锁之后才读存储中的令牌，所以别的标签页刚换新的令牌不会被再用一次（否则服务端视为重用而吊销整个令牌族）。
-  `device` 下一个标签页登出（删除存储的令牌）时其他标签页随之登出。`refreshSession({ force: true })` 不搭已在进行的刷新、另取新令牌（验证邮箱后令牌的 `email_verified` 才为真）。
+  `device` 下多个标签页以 Web Locks（锁名 `jabiz.refresh.<入口>`）轮流刷新，取得锁之后才读存储中的令牌，所以别的标签页刚换新的令牌不会被再用一次（否则服务端视为重用而吊销整个令牌族）；
+  登出与在两种存储之间搬移令牌也在锁内；`tab` 的令牌是本标签页自己的，不取锁；浏览器拒绝锁（沙箱、不透明源）时不加锁执行。
+  刷新限时 15 秒；只有服务端拒绝（400 / 401 / 403 / 422）才清除会话，5xx、429 与网络失败保留会话。清除会话时两种存储中该入口的键都删除。
+  `device` 下一个标签页登出时其他标签页随之登出。`refreshSession({ force: true })` 不搭已在进行的刷新、另取新令牌（验证邮箱后令牌的 `email_verified` 才为真）。
   外观与界面语言是用户偏好，同源的各 SPA 有意共用。已知限制："复制标签页"会复制 `sessionStorage`，两个标签页之后各自刷新会触发重用吊销（`tab` 下原有问题）。
 - 当前操作人与权限来自 `GET /api/auth/me`，不在前端解码令牌；`useAuth()` 另给出 `entry`、`email`、`emailVerified`。
 - 二次验证（10 §9，D28）：登录响应为 `MFA_REQUIRED` 时，登录页转入输入验证码（或恢复码）的一步（`/api/auth/challenge/verify`）；

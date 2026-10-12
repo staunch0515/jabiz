@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, refreshSession as refreshTokens, unwrap, type RefreshOptions } from '../api/client'
+import { api, endSession, refreshSession as refreshTokens, unwrap, type RefreshOptions } from '../api/client'
 import { session } from '../api/session'
 import { loadSessionSettings } from './account'
 
@@ -164,16 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
-    const refreshToken = session.refreshToken()
-    session.clear()
+    const ended = endSession()
     queryClient.clear()
-    if (refreshToken) {
-      try {
-        await api.POST('/api/auth/logout', { body: { refreshToken } })
-      } catch {
-        // The local session is gone either way.
-      }
-    }
+    await ended
   }, [queryClient])
 
   const value = useMemo<AuthState>(() => {

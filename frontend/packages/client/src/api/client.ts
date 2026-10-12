@@ -1,7 +1,7 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
 import { ApiError, toApiError } from './problem'
-import { hasWebLocks, session } from './session'
+import { session, withRefreshLock } from './session'
 
 /**
  * The typed API client, generated from the backend's OpenAPI document (docs/design/12-frontend.md section 3).
@@ -58,6 +58,16 @@ function decorate(request: Request): Request {
 
 let refreshing: Promise<boolean> | null = null
 
+/** How long a refresh may take before it counts as a network failure (the lock is held meanwhile). */
+const REFRESH_TIMEOUT_MS = 15_000
+
+/** Answers that refuse the refresh token itself: the session is over. Anything else (5xx, 429, network) may pass. */
+const REFUSED = new Set([400, 401, 403, 422])
+
+function timeLimit(): AbortSignal | undefined {
+  return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(REFRESH_TIMEOUT_MS) : undefined
+}
+
 /** The refresh itself, with the token read only now: under the lock, after any other tab's turn. */
 async function exchange(): Promise<boolean> {
   const refreshToken = session.refreshToken()
@@ -67,9 +77,11 @@ async function exchange(): Promise<boolean> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept-Language': language },
       body: JSON.stringify({ refreshToken, entry: session.entry() }),
+      signal: timeLimit(),
     })
     if (!response.ok) {
-      session.clear()
+      // Refused: the session is over (in every tab, when kept on the device). A passing failure keeps it for later.
+      if (REFUSED.has(response.status)) session.clear()
       return false
     }
     const tokens = (await response.json()) as { accessToken: string; refreshToken: string }
@@ -83,12 +95,33 @@ async function exchange(): Promise<boolean> {
 /**
  * Tabs sharing a refresh token kept on the device (decision D43 item 2) take turns: each reads the token only once it
  * holds the entry's lock, so a token another tab has just rotated is never sent again (the server would take that
- * for a stolen token and end the session everywhere). Without Web Locks no token is shared (see session.ts).
+ * for a stolen token and end the session everywhere). A token kept in the tab is the tab's own and needs no lock.
  */
 function refresh(): Promise<boolean> {
   if (!session.refreshToken()) return Promise.resolve(false)
-  if (!hasWebLocks()) return exchange()
-  return navigator.locks.request(`jabiz.refresh.${session.entry()}`, () => exchange())
+  return withRefreshLock(exchange)
+}
+
+/**
+ * Ends the session: clears it here and signs the refresh token out on the server, under the refresh lock, so that a
+ * refresh in another tab can neither use the token at the same time nor store a new one after it.
+ */
+export function endSession(): Promise<void> {
+  return withRefreshLock(async () => {
+    const refreshToken = session.refreshToken()
+    session.clear()
+    if (!refreshToken) return
+    try {
+      await globalThis.fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept-Language': language },
+        body: JSON.stringify({ refreshToken }),
+        signal: timeLimit(),
+      })
+    } catch {
+      // The local session is gone either way.
+    }
+  })
 }
 
 /** Options of {@link refreshSession}. */
@@ -132,10 +165,12 @@ async function authFetch(request: Request): Promise<Response> {
 
 /**
  * fetch with the session for calls outside the typed client (uploads, file contents): the same headers and the same
- * single refresh on 401. The body is passed as given, so a FormData upload is streamed by the browser.
+ * single refresh on 401. The body is passed as given, so a FormData upload is streamed by the browser. `init` may be a
+ * function, called for each attempt: for a body that must say what is current when it is sent.
  */
-export async function sessionFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function sessionFetch(path: string, request: RequestInit | (() => RequestInit) = {}): Promise<Response> {
   const send = () => {
+    const init = typeof request === 'function' ? request() : request
     const headers = new Headers(init.headers)
     headers.set('Accept-Language', language)
     const token = session.accessToken()

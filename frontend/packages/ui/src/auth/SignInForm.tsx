@@ -1,4 +1,4 @@
-import { api, entryInfo, isProblem, lastUserName, unwrap, useOptionalAuth, type AuthState, type SignInStep } from '@jabiz/client'
+import { api, entryInfo, isProblem, lastUserName, sitePath, unwrap, useOptionalAuth, type AuthState, type SignInStep } from '@jabiz/client'
 import { CircleCheck, Info, LockKeyhole, TriangleAlert, User } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
@@ -57,7 +57,9 @@ export interface SignInFormProps extends AuthNavigation {
  * cause), in the language of the request.
  */
 export function SignInForm(props: SignInFormProps) {
-  const { brand, returnTo, initialStep, notice, appearance, onNavigate, hrefOf } = props
+  const { brand, initialStep, notice, appearance, onNavigate, hrefOf } = props
+  // Only a path of this site: the page to return to may come from an address anyone can write.
+  const returnTo = sitePath(props.returnTo)
   const { t } = useTranslation(AUTH_NAMESPACE)
   const session = useOptionalAuth()
   const auth = props.auth ?? session ?? NO_AUTH

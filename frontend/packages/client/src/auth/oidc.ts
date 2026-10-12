@@ -20,7 +20,7 @@ export async function startProviderSignIn(providerId: string, returnTo: string):
     params: { path: { id: providerId }, query: { entry: session.entry() } },
   }))
   try {
-    window.sessionStorage.setItem(returnKey(), returnTo)
+    window.sessionStorage.setItem(returnKey(), sitePath(returnTo))
     window.sessionStorage.setItem(binderKey(), started.binder!)
   } catch {
     // Without storage the callback is refused: the binder cannot come back.

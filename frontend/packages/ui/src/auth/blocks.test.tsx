@@ -178,6 +178,22 @@ describe('SignInForm', () => {
     expect(onSignedIn).toHaveBeenCalledWith('/portal/orders')
   })
 
+  it('leads only to paths of this site after signing in, by password or provider', async () => {
+    server()
+    signIn.mockResolvedValue({ status: 'SIGNED_IN' })
+    const onNavigate = vi.fn()
+    const startProvider = vi.fn(async () => undefined)
+    render(
+      <SignInForm brand="Portal" returnTo={'/\t/evil.com'} auth={{ signIn, verify }} onNavigate={onNavigate}
+        startProvider={startProvider} providers={[{ id: 'corp', label: 'Corp' }]} />,
+    )
+    await user().click(screen.getByTestId('oidc-corp'))
+    expect(startProvider).toHaveBeenCalledWith('corp', '/')
+    await user().type(screen.getByRole('textbox', { name: 'User name' }), 'amy')
+    await user().type(screen.getByLabelText('Password'), 'secret{Enter}')
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/'))
+  })
+
   it('offers the identity providers it loads', async () => {
     server()
     vi.stubGlobal('fetch', vi.fn(async () => json(200, [{ id: 'corp', label: 'Corporate directory' }])))
