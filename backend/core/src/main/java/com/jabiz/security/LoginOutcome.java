@@ -31,7 +31,12 @@ public enum LoginOutcome {
      */
     EMAIL_NOT_VERIFIED,
     /** Not an attempt: the user set a new password through a reset link, which clears the counter and the lock. */
-    PASSWORD_RESET;
+    PASSWORD_RESET,
+    /**
+     * Not a sign-in: the signed-in user changed their own password, proving the current one
+     * (docs/design/10-security.md section 15.8). Not a failure; the counter is neither raised nor cleared.
+     */
+    PASSWORD_CHANGED;
 
     /** Codes of the login outcome dictionary. */
     public static String[] codes() {

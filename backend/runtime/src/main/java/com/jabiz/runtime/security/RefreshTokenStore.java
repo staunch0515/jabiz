@@ -28,7 +28,8 @@ import java.util.function.Supplier;
  * Refresh tokens (decision D12): random, opaque, single use. The database keeps their SHA-256 only, so a leaked
  * table does not leak usable tokens. Every refresh consumes a token and issues the next one of the same family (the
  * family is one sign-in); presenting a consumed token again means it was stolen or replayed, and revokes the whole
- * family. All three tables are append-only.
+ * family. All three tables are append-only. How long a token lives and whether its session ends when idle is the
+ * policy of the sign-in entry of its family (decision D43 item 2).
  */
 public class RefreshTokenStore {
 
@@ -79,37 +80,63 @@ public class RefreshTokenStore {
      * implementation note 6): whoever registered it before may hold sessions.
      */
     public static final String REASON_JOIN = "JOIN";
+    /** The user changed their own password (section 15.8): every other session of theirs ends. */
+    public static final String REASON_PASSWORD_CHANGE = "PASSWORD_CHANGE";
     /** Verifying an address with a new password took over an account somebody else may have registered. */
     public static final String REASON_CLAIM = "CLAIM";
 
     private static final int TOKEN_BYTES = 32;
     private static final int MAX_TOKEN_LENGTH = 128;
 
+    /**
+     * How the sessions of a sign-in entry live (decision D43 item 2).
+     *
+     * @param ttl        lifetime of each token, from its issue: every refresh starts it afresh (sliding)
+     * @param idleWindow how long after its issue a token can be used at most: the access token issued with it plus the
+     *                   idle timeout (docs/design/10-security.md section 11), a session idle for longer ends; null for
+     *                   no idle end (only the lifetime ends the session)
+     */
+    public record Policy(Duration ttl, Duration idleWindow) {
+        public Policy {
+            if (ttl == null || !ttl.isPositive()) {
+                throw new IllegalArgumentException("The refresh token lifetime must be positive");
+            }
+            if (idleWindow != null && !idleWindow.isPositive()) {
+                throw new IllegalArgumentException("The idle window must be positive");
+            }
+        }
+    }
+
     private final Supplier<StorageEngine> engine;
-    private final Duration ttl;
-    private final Duration idleWindow;
+    private final Function<String, Policy> policies;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
-    /**
-     * @param idleWindow how long after its issue a token can be used at most: the access token issued with it plus the
-     *                   idle timeout (docs/design/10-security.md section 11); a session idle for longer ends
-     */
+    /** The same lifetime and idle window for every entry. */
     public RefreshTokenStore(Supplier<StorageEngine> engine, Duration ttl, Duration idleWindow, Clock clock) {
+        this(engine, constant(new Policy(ttl, Objects.requireNonNull(idleWindow, "idleWindow must not be null"))),
+            clock);
+    }
+
+    /**
+     * @param policies the policy of the sessions of an entry, by its name (never null: the administration's is
+     *                 {@value RequestContext#DEFAULT_ENTRY}); a token's family keeps the entry it was signed in at, and
+     *                 the policy of that entry applies to it
+     */
+    public RefreshTokenStore(Supplier<StorageEngine> engine, Function<String, Policy> policies, Clock clock) {
         this.engine = Objects.requireNonNull(engine, "engine must not be null");
-        if (ttl == null || ttl.isNegative() || ttl.isZero()) {
-            throw new IllegalArgumentException("The refresh token lifetime must be positive");
-        }
-        if (idleWindow == null || idleWindow.isNegative() || idleWindow.isZero()) {
-            throw new IllegalArgumentException("The idle window must be positive");
-        }
-        this.ttl = ttl;
-        this.idleWindow = idleWindow;
+        this.policies = Objects.requireNonNull(policies, "policies must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
-    public Duration ttl() {
-        return ttl;
+    private static Function<String, Policy> constant(Policy policy) {
+        return entry -> policy;
+    }
+
+    /** The policy of the sessions of the entry (null: the administration). */
+    public Policy policy(String entry) {
+        return Objects.requireNonNull(policies.apply(entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY
+            : entry), "no session policy");
     }
 
     /**
@@ -195,8 +222,10 @@ public class RefreshTokenStore {
             if (!now.isBefore(found.expiresAt())) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
             }
-            // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed.
-            if (!now.isBefore(found.issuedAt().plus(idleWindow))) {
+            // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed. The
+            // family's entry says how long that is, if idleness ends its sessions at all (decision D43 item 2).
+            Duration idleWindow = policy(found.grant().entry()).idleWindow();
+            if (idleWindow != null && !now.isBefore(found.issuedAt().plus(idleWindow))) {
                 return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
             }
             // Another front end's live session: not this client's to renew. Not consumed, not revoked.
@@ -215,13 +244,44 @@ public class RefreshTokenStore {
      * there is one.
      */
     public Mono<Void> revokeUser(UUID userId, String reason) {
+        return revokeUser(userId, reason, null);
+    }
+
+    /**
+     * Ends every session of a user but the one of the family {@code keep} (null: every one), for example the session
+     * that changed the password itself. Runs in the caller's transaction when there is one.
+     */
+    public Mono<Void> revokeUser(UUID userId, String reason, UUID keep) {
         return engine.get().select("""
                 SELECT DISTINCT t.family_id FROM sec_refresh_token t
                 WHERE t.user_id = :user AND NOT EXISTS (
                     SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
                 Map.of("user", BoundValue.of(userId)))
-            .concatMap(row -> revokeSession(Rows.uuid(row.get("family_id")), reason))
+            .map(row -> Rows.uuid(row.get("family_id")))
+            .filter(family -> !family.equals(keep))
+            .concatMap(family -> revokeSession(family, reason))
             .then();
+    }
+
+    /**
+     * The session (token family) a token stands for, when it is a live token of {@code userId}'s session at
+     * {@code entry}: not consumed, not expired, not of a revoked family. Empty otherwise, also for a malformed token;
+     * nothing is consumed or revoked, so a stale or foreign token only fails to name a session.
+     */
+    public Mono<UUID> liveSession(String token, UUID userId, String entry) {
+        String expected = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
+        return Mono.defer(() -> {
+            String hash;
+            try {
+                hash = hash(token);
+            } catch (InvalidRefreshTokenException malformed) {
+                return Mono.empty();
+            }
+            Instant now = now();
+            return find(hash).filter(found -> !found.revoked() && !found.used() && now.isBefore(found.expiresAt())
+                    && found.grant().userId().equals(userId) && expected.equals(found.grant().entry()))
+                .map(found -> found.grant().familyId());
+        });
     }
 
     /** Ends the session the token belongs to. Unknown or already revoked tokens are ignored. */
@@ -235,7 +295,7 @@ public class RefreshTokenStore {
         return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Instant now = now();
-            Instant expires = now.plus(ttl);
+            Instant expires = now.plus(policy(grant.entry()).ttl());
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash(token));
             row.put("family_id", grant.familyId());

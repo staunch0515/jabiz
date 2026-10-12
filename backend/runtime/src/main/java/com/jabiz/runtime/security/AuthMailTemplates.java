@@ -10,7 +10,7 @@ import java.time.Duration;
 
 /**
  * The platform's mail of self-registration, address verification and password reset (docs/design/10-security.md
- * section 15; decision D36, sent as decision D35 says). All three are transactional (no unsubscribing) and carry the
+ * section 15; decision D36, sent as decision D35 says) and of a changed password (phase 16m). All are transactional (no unsubscribing) and carry the
  * sign-in entry as their only parameter; their links lead to the administration's pages
  * {@code {baseUrl}/auth/<page>?entry=<entry>&token=<token>}, which finish at the entry's {@code app-path}. Texts are
  * the messages {@code mail.jabiz.auth.<name>.subject|body}.
@@ -18,7 +18,9 @@ import java.time.Duration;
  *   <li>{@value #VERIFY_EMAIL}: token {@value #VERIFY}, valid {@code jabiz.security.sign-up.verify-ttl} (24 hours);</li>
  *   <li>{@value #ACCOUNT_EXISTS}: token {@value #JOIN}, valid {@code jabiz.security.sign-up.join-ttl} (24 hours),
  *       sent instead of a verification when the address registered with belongs to an account already;</li>
- *   <li>{@value #PASSWORD_RESET}: token {@value #RESET}, valid {@code jabiz.security.password-reset.ttl} (1 hour).</li>
+ *   <li>{@value #PASSWORD_RESET}: token {@value #RESET}, valid {@code jabiz.security.password-reset.ttl} (1 hour);</li>
+ *   <li>{@value #PASSWORD_CHANGED}: no token; tells the user that their password was changed (section 15.8), with a
+ *       link to the password reset (no token: whoever did not change it asks for one).</li>
  * </ul>
  */
 @Configuration
@@ -27,9 +29,11 @@ public class AuthMailTemplates {
     public static final String VERIFY_EMAIL = "jabiz.auth.verify-email";
     public static final String ACCOUNT_EXISTS = "jabiz.auth.account-exists";
     public static final String PASSWORD_RESET = "jabiz.auth.password-reset";
+    public static final String PASSWORD_CHANGED = "jabiz.auth.password-changed";
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
-    public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET);
+    public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
+        PASSWORD_CHANGED);
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application
@@ -58,6 +62,15 @@ public class AuthMailTemplates {
     static MailTemplate passwordReset(Duration validity) {
         return MailTemplate.define(PASSWORD_RESET, t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY)
             .token(RESET, validity));
+    }
+
+    /** Tells a user that their password was changed (section 15.8): no token, the entry its only parameter. */
+    public static final MailTemplate PASSWORD_CHANGED_MAIL = MailTemplate.define(PASSWORD_CHANGED,
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY));
+
+    @Bean
+    MailTemplate authPasswordChangedMail() {
+        return PASSWORD_CHANGED_MAIL;
     }
 
     @Bean

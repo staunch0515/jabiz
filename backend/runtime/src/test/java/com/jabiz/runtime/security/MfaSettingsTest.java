@@ -66,9 +66,11 @@ class MfaSettingsTest {
             Duration.ofMinutes(15))).isInstanceOf(IllegalArgumentException.class);
         MutableClock clock = new MutableClock(T0);
         byte[] key = new byte[32];
-        assertThat(new SessionChecks(new JwtService(key, Duration.ofMinutes(15), clock), settings(true)).check())
-            .isEmpty();
-        assertThat(new SessionChecks(new JwtService(key, Duration.ofMinutes(20), clock), settings(true)).check())
+        SignInEntries entries = new SignInEntries(java.util.Map.of(), false, null);
+        assertThat(new SessionChecks(new JwtService(key, Duration.ofMinutes(15), clock), settings(true), entries)
+            .check()).isEmpty();
+        assertThat(new SessionChecks(new JwtService(key, Duration.ofMinutes(20), clock), settings(true), entries)
+            .check())
             .singleElement().satisfies(problem -> assertThat(problem.category()).isEqualTo("SECURITY"));
     }
 

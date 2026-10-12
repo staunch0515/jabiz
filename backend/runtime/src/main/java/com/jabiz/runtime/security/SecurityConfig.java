@@ -136,11 +136,15 @@ public class SecurityConfig {
 
     @Bean
     RefreshTokenStore refreshTokenStore(StorageAdapterRegistry storages, Clock clock, JwtService tokens,
-        MfaSettings mfa, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
-        @Value("${jabiz.security.refresh-token-ttl:PT8H}") Duration ttl) {
-        // A session idle for longer than its access token plus the idle timeout cannot be refreshed (section 11).
-        return new RefreshTokenStore(() -> storages.getEngine(poolRef), ttl, tokens.ttl().plus(mfa.idleTimeout()),
-            clock);
+        SignInEntries entries, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        // Each entry's sessions live as long as it says (jabiz.security.entries.<name>.session.*, the global settings
+        // otherwise; decision D43 item 2). A session idle for longer than its access token plus the idle timeout
+        // cannot be refreshed (section 11), unless the entry's idle timeout is 0.
+        return new RefreshTokenStore(() -> storages.getEngine(poolRef), entry -> {
+            SignInEntries.Session session = entries.session(entry);
+            return new RefreshTokenStore.Policy(session.refreshTokenTtl(),
+                session.idleEnds() ? tokens.ttl().plus(session.idleTimeout()) : null);
+        }, clock);
     }
 
     @Bean

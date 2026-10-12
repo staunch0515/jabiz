@@ -87,8 +87,10 @@ public final class SponsorSignInProcess {
                 if (ctx.outcome() != LoginOutcome.SUCCESS) {
                     return;
                 }
-                Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ASSIGNMENTS), ctx.acceptedRoles(),
-                    ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
+                // In a long session, roles granting the administration do not count (decision D43 item 2).
+                Rbac.Access access = Rbac.access(ctx.list(LoginContext.KEY_ASSIGNMENTS),
+                    Rbac.withoutAdministration(ctx.acceptedRoles(), ctx.list(LoginContext.KEY_ROLE_PERMISSIONS),
+                        ctx.entry()), ctx.list(LoginContext.KEY_ROLE_PERMISSIONS));
                 if (access.roles().isEmpty()) {
                     ctx.setOutcome(LoginOutcome.NO_ROLE);
                 } else {

@@ -97,6 +97,15 @@ class LoginAttemptPolicyTest {
     }
 
     @Test
+    void aPasswordChangeNeitherCountsNorClears() {
+        LoginAttemptPolicy.State twice = fail(fail(null, T0), T0);
+        LoginAttemptPolicy.State changed = policy.next(twice, LoginOutcome.PASSWORD_CHANGED, T0.plusSeconds(1));
+        assertThat(changed).isEqualTo(new LoginAttemptPolicy.State(3, 2, null));
+        // Wrong current passwords before it still lock with the next one.
+        assertThat(policy.isLocked(fail(changed, T0.plusSeconds(2)), T0.plusSeconds(2))).isTrue();
+    }
+
+    @Test
     void wrongSecondFactorsCountWithWrongPasswordsTowardsTheLock() {
         LoginAttemptPolicy.State state = null;
         for (int i = 0; i < 2; i++) {
@@ -131,6 +140,6 @@ class LoginAttemptPolicyTest {
     void outcomeCodesAreTheEnumNames() {
         assertThat(LoginOutcome.codes()).containsExactly("SUCCESS", "BAD_CREDENTIALS", "LOCKED", "DISABLED", "NO_ROLE",
             "UNLOCKED", "MFA_REQUIRED", "MFA_ENROLLMENT_REQUIRED", "MFA_FAILED", "REFUSED", "EMAIL_NOT_VERIFIED",
-            "PASSWORD_RESET");
+            "PASSWORD_RESET", "PASSWORD_CHANGED");
     }
 }
