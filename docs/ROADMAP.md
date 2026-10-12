@@ -1260,7 +1260,8 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 |---|---|---|---|---|
 | 16a | 事务邮件（☑ 已完成） | D35 | 3–4 天 | — |
 | 16b | 登录入口、自助注册、邮箱验证、找回密码、`SignInGuard`、登录记录带来源（16b-1 ☑ 已完成；16b-2 ☑ 已完成） | D36 | 6–8 天 | 16a |
-| 16c | 应用 SPA 的接入：`@jabiz/client` 带登录入口、注册与验证页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker 作用域、内容安全策略） | D34 | 3–4 天 | 15a、16b |
+| 16c | 应用 SPA 的接入：`@jabiz/client` 按入口的会话与页面积木；`jabizApp` 支持多个应用 SPA 与 PWA（manifest、Service Worker、内容安全策略）；邮件链接与 OIDC 回调按入口（分 16c-1 / 16c-2；计划已确认） | D34、D43 | 5.5–6.5 天 | 15a、16b、16m（16c-2） |
+| 16m | 本人改密码与按入口的会话设置（QuizBuks Q2 平台缺口 1、2；计划已确认） | D43 | 1–1.5 天 | 16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名）（☑ 已完成，PR 待创建） | D37 | 3.5–4 天 | — |
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成；16e-2 ☑ 已完成，PR 待建） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
@@ -1532,6 +1533,391 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 `JabizBlockHoundIntegration` 容许该处的等待；回归测试 `TracingUnderBlockHoundTest`（runtime，2，修复前 1 个失败）。应用中的同一容许（`QbBlockHoundIntegration`）可随之删去。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
+
+### 16c 应用 SPA 的接入（5.5–6.5 天，分 16c-1 / 16c-2 两个 PR）
+
+依据：
+- 决策 D34 第 4、5 条，D19 第 3 条，D15 第 4 条，D36（含实现说明第 13 条），D28 第 4、6 条，D39；
+- 设计 12 §4、§12，17 §3.2，10 §2、§11、§12、§15；
+- QuizBuks：`docs/quizbuks/02-design.md` §1 与 §7.1、`plans/Q2-accounts.md` 的平台缺口 1、2、6、20 与待确认 Q2-18（来源 G12）。
+
+依赖 15a、16b（都已合入），以及 16m（见本节末尾，建议先做）。
+
+比阶段表的 3–4 天多 2–3 天，多出的部分是：
+- 会话按入口隔离，并支持跨标签页刷新；
+- 把后台已有的登录、注册、验证页面改成通用积木，并证明后台行为不变；
+- 邮件链接与 OIDC 回调按入口；
+- PWA 的构建插件与 Service Worker 及其后端配合；
+- 带自己 lockfile 的示范 SPA 与 e2e。
+
+需要新增决策 **D43**（见【待确认 16c-1】），补充 D15、D19、D34、D36，不取代任何决策。
+
+**16c 状态**：☐ 计划已确认（2026-10-12），未开工。
+
+**现状（`origin/1.2/platform`，`f943118`）**
+
+1. **`@jabiz/client` 的会话只有一份，也不带入口**
+   - `packages/client/src/api/session.ts`：刷新令牌在 `sessionStorage` 的固定键 `jabiz.refreshToken` 中，同源的几个 SPA 共用这个键。
+   - `api/client.ts` 刷新时只发 `{refreshToken}`，不带 `entry`：令牌属于其他入口时服务端答 401，客户端随即清掉会话（`session.clear()`）。
+   - `auth/AuthContext.tsx`：`signIn` 只发 `{userName, password}`；`AuthState` 没有 `entry`、`email`、`emailVerified`（`/api/auth/me` 已经返回这三项，10 §15.2）。
+   - `auth/oidc.ts`：`startProviderSignIn` 不带 `?entry=`；`takeReturnPath` 缺省回到后台的 `/data`；键 `jabiz.oidcReturnTo` / `jabiz.oidcBinder` 也是共用的。
+   - step-up 的处理函数是全局的（`setStepUpHandler`），这一点可以沿用。
+   - 生成的类型中，`LoginRequest`、`RefreshRequest` 已有可选的 `entry`，`EntryInfo` 已有 `selfRegistration` / `requireVerifiedEmail` / `appPath`。
+2. **页面在后台工程里，不在包中**
+   - 登录与二次验证（`src/pages/LoginPage.tsx`）、`components/MfaEnrollment.tsx`、`auth/StepUp.tsx`、`components/SignInFrame.tsx`、`pages/OidcCallbackPage.tsx`；
+   - 三个邮件落地页（`pages/auth/VerifyEmailPage.tsx`、`JoinPage.tsx`、`PasswordResetPage.tsx`、`link.ts`）。
+   - 这些页面都已改用 `@jabiz/ui`、不再依赖 antd，但它们依赖 react-router（`useNavigate`、`useSearchParams`、`Link`）、后台的文案（`src/i18n/resources.ts` 的 `login.*` / `auth.*`）和后台扩展（`homePath`）。
+   - 二维码库 `qrcode` 只在后台工程的依赖中。
+   - 没有注册表单（16b-2 写明"注册表单在 16c"）。
+3. **邮件链接固定指向后台**
+   - core 消息 `mail.jabiz.auth.{verify-email,account-exists,password-reset}.body`（三语）写死了 `{baseUrl}/auth/<页>?entry={entry}&token=…`。
+   - `AuthMailTemplates` 只有参数 `entry`。
+   - 后台落地页（`link.ts`）处理完后跳到入口的 `app-path`。
+   - 应用模板只有全局的 `{baseUrl}`，参数一律百分号编码（缺口 20）。
+   - QuizBuks 为此把 `jabiz.mail.base-url` 设为 `https://<主机>/admin` 绕行（Q2）。
+4. **OIDC 每个提供方只有一个 `redirect-uri`**：`OidcProvider.redirectUri` 同时用于授权地址和换取令牌（`OidcClient`），指向后台的 `/login/oidc`。`start?entry=` 已有，入口记在 `sec_oidc_state.entry`。
+5. **SPA 的服务端**
+   - `JabizWebProperties.Spa(path, index, contentSecurityPolicy)`。缺省策略 `ADMIN_CONTENT_SECURITY_POLICY` 为 `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`。
+   - `SpaFallbackFilter` 给前缀下 `/api`、`/actuator` 以外的全部响应加该策略，并把不带扩展名的 GET 改写为 index；它不设缓存头，也不认识 Service Worker。
+   - `SecurityConfig` 没有定制响应头，所以 Spring Security 的缺省头（含 `Cache-Control: no-cache, no-store…`）很可能作用于全部静态文件。这一点要在实现的第一步核实。
+   - `.webmanifest` 的 `Content-Type` 未核实。
+   - `MultiSpaIT` 覆盖了两个 SPA 的回退与 CSP。
+6. **构建**（`BootAppPlugin` / `JabizAppExtension`）
+   - `spa(path, sourceDir, extension?)` 已支持多个 SPA，以 `VITE_BASE`、`VITE_JABIZ_LANGUAGES`、`VITE_JABIZ_REGION` 构建。
+   - 构建输入按平台前端的目录结构写（`packages/**`、`openapi/**`、`scripts/**`）。应用 SPA 经 `link:` 引用平台的两个包时：
+     - 那两个包的源码不是它的构建输入，可能用到过时的产物；
+     - 平台前端须先 `pnpm install`（被 `link:` 的包从自己的 `node_modules` 解析依赖），插件没有安排这一步。
+   - `jabiz-app.properties` 只有语言与区域；`jabiz.web.spa` 须在 `application.yml` 中再写一遍（QuizBuks 现在为 `/admin` 手写了一条）。
+7. **`app:check`**（`frontend/scripts/app-check.mjs`）比对的是 `SHARED`（react、react-dom、tailwindcss、@tanstack/react-query、i18next、react-i18next）以及两个包的运行时依赖。它不在 Gradle 构建中自动运行。
+8. **示范应用与 CI**
+   - 入口 `admin`（`JABIZ_ADMIN_ROLES`，缺省 `ADMIN`）与 `portal`（`CUSTOMER`，允许注册，要求已验证，`app-path: /`）。`application.yml` 的注释写着门户页面在 16c。
+   - `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`。
+   - CI 的 e2e 以 `JABIZ_ADMIN_ROLES=*`、`JABIZ_PORTAL_SELF_REGISTRATION=false` 运行，所以 e2e 中不能注册。
+9. **会话时长**：`RefreshTokenStore` 每次轮换都从当时起算 `expires = now + ttl`（滑动），闲置窗口是全局的；`/me` 的 `idleTimeoutSeconds` 也是全局的。这是缺口 2，见 16m。
+10. **其他**
+    - 功能清单（`docs/guide/platform-features.md` 第 416、463 行）写着"不做离线"。
+    - 最新决策 D42，最新平台迁移 V37。**本阶段没有迁移**。
+11. **QuizBuks 需要的形态**（`02-design.md` §1、§7.1、Q12，Q2 D-Q2-1）
+    - 一个 jar 提供三个 SPA：`/` 答题人 PWA（入口 `app`，不要求已验证；≤430px）、`/sponsor/`（入口 `sponsor`，要求已验证）、`/admin/`（通用后台）。
+    - App 不闲置锁定、刷新令牌 30 天（缺省 Q12）。
+    - Service Worker 只缓存应用外壳与静态资源，不离线缓存数据，不做推送。
+    - App 支持中、英、日三种语言，商家后台支持中、英；金额显示为 Kudos（已有 `setAmountUnit`）。
+    - QuizBuks 的 OpenAPI 快照在应用目录（`backend/quizbuks/src/test/resources/openapi.json`）。
+    - 页面 U-01…U-07、U-10…U-53、U-70、U-71、M-01…M-03 在 16c 之后由应用做。
+    - App 在 `/`，所以它的 Service Worker 作用域会覆盖 `/admin/` 与 `/sponsor/`。
+
+#### 设计决定（各项的缺省见文末待确认表）
+
+1. **D43**【待确认 16c-1】新增决策"应用 SPA：按入口的会话、邮件链接与 OIDC 回调、PWA"，内容是下面第 3、5、6、8–11 条，以及 16m 的会话设置。
+
+2. **包的边界**【待确认 16c-2】
+   - **`@jabiz/client`**（无界面）：
+     - `configureClient({ entry })`，缺省取构建变量 `VITE_JABIZ_ENTRY`；`AuthProvider` 按入口工作。
+     - `register()`、`requestPasswordReset()`、`confirmPasswordReset()`、`resendVerification()`。
+     - `readMailLink()`：读出入口与令牌，用 `replaceState` 去掉令牌，期间不发 referrer（由 `link.ts` 迁入）。
+     - `entryInfo()`、`refreshSession({ force: true })`：验证邮箱后重新取令牌，`email_verified` 才会是真；Q2 已核实这一点。
+     - `useOnline()`、`registerServiceWorker()`、`isProblem(error, code)`。
+     - 新增 `createApiClient<Paths>()`（见第 7 条）。
+   - **`@jabiz/ui` 新增 `src/auth/` 积木**（三语，命名空间 `auth`），都在 `UI_SCOPE` 内，亮、暗两种外观都过 axe：
+     - `AuthFrame`：品牌与标题由属性给出，带语言与外观切换；
+     - `SignInForm`：密码、二次验证码、绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；处理 403 `EMAIL_NOT_VERIFIED`（附重发）与 `SIGN_IN_REFUSED`；
+     - `SignUpForm` + `SignUpSent`：邮箱、密码与确认、显示名、语言；应用的附加字段（如条款同意）经插槽给出；
+     - `MailLinkPage`：按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`；另有 `PasswordResetRequest`；
+     - `MfaCodeStep`、`MfaEnrollment`、`StepUpProvider`（均从后台迁入；`qrcode` 随之成为 `@jabiz/ui` 的依赖，`app:check` 会自动比对它）；
+     - `OidcButtons`、`OidcCallback`；
+     - `ChangePasswordForm`（需要 16m）、`VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
+   - 不新建运行时包，仍是 D34 的两个包。
+   - 构建预设放在子路径 `@jabiz/client/vite`（只在 Node 中运行，不进浏览器产物）。
+
+3. **积木不依赖路由**【待确认 16c-3】
+   - 积木以回调交出结果（`onSignedIn(path)`、`onNavigate(path)`），令牌与入口从 `window.location` 读。
+   - 所以应用 SPA 不必与平台用同一版本的 react-router，`app:check` 不必加 react-router。
+   - 后台的页面成为积木外的薄包装（React Router 适配），测试 id 与行为不变。
+
+4. **令牌存放**【待确认 16c-4】
+   - 访问令牌仍只在内存中。
+   - 刷新令牌的键按入口分开：`jabiz.session.<入口>.refresh`。后台第一次启动时读一次旧键 `jabiz.refreshToken` 并迁移。
+   - 存在哪里由入口的 `session.persistence`（16m）决定，客户端启动时从 `GET /api/auth/entries/{name}` 读取：
+     - `tab`（缺省，同 D15）放 `sessionStorage`；
+     - `device` 放 `localStorage`，PWA 关闭后再打开仍保持登录（QuizBuks 缺省 Q12）。`admin` 入口不能设为 `device`（启动错误）。
+   - 刷新经 Web Locks（`navigator.locks`，锁名 `jabiz.refresh.<入口>`）串行；取得锁后先重新读存储，令牌已被其他标签页换新时用新的。否则 `device` 模式下两个标签页并发刷新会被当作重用，整个令牌族被吊销。
+   - 刷新与 OIDC 的 `start` 都带 `entry`。`/me` 的入口与配置的入口不符时，清掉会话。
+   - 外观与界面语言是用户偏好，同源的各 SPA 有意共用。
+   - 另一种做法是刷新令牌放 HttpOnly Cookie（需要 SameSite=Strict、自定义头与 Origin 检查，并改变 D12、D15 的"无 Cookie、无 CSRF"），见待确认表。
+
+5. **邮件链接按入口**（缺口 6、20）【待确认 16c-5】
+   - 入口的 `app-path` 的含义改为"该入口前端的根路径"。
+   - 平台三封邮件改用内置占位符 `{entryUrl}`，即 `{baseUrl}` 加入口的 `app-path`（以 `/` 结尾）；链接为 `{entryUrl}auth/<页>?entry=…&token=…`。
+   - 应用模板可以写 `{entryUrl.<入口>}`，原样插入；入口不存在即启动检查 `MAIL` 报错。
+   - 后台的 `/auth/*` 落地页保留，并照常接受任何入口，兼容已发出的链接。
+   - 启动检查 `SECURITY`：入口的 `app-path` 不属于任何已配置 SPA 的前缀时告警。
+   - 升级说明：QuizBuks 把 `jabiz.mail.base-url` 改回 `https://<主机>`。
+
+6. **OIDC 回调按入口**【待确认 16c-6】
+   - `jabiz.security.oidc.providers[i].redirect-uris.<入口>`：绝对的 https 地址，开发可用 localhost；指向该入口 SPA 的 `login/oidc`。
+   - 原 `redirect-uri` 即 `admin` 的回调。
+   - 没有该入口回调的提供方：`GET /api/auth/oidc/providers?entry=` 不列出它，`start` 答 401。
+   - 换取令牌时用 state 中入口对应的回调地址，没有新列。
+   - 自动开户本身仍在 16f。
+
+7. **API 类型**【待确认 16c-7】
+   - `@jabiz/client` 的 `api` 仍以平台快照生成。
+   - 应用以 `createApiClient<Paths>()`（与 `api` 共用 `authFetch`：令牌、刷新、step-up）使用自己快照（如 QuizBuks 的快照）生成的类型。
+   - 应用 SPA 的 `gen:api` / `check:api` 在指南中给出写法；流程与模板仍经 `runProcess` / `runQuery`。
+
+8. **Service Worker 的实现**【待确认 16c-8】
+   - 平台自己写，不引入 Workbox / vite-plugin-pwa。
+   - `@jabiz/client/vite` 的插件 `jabizSpa({ pwa })` 在构建时：
+     - 从 Vite 产物生成 `manifest.webmanifest`：`id`、`start_url` 与 `scope` 为 `VITE_BASE`，`display: standalone`，名称、颜色、图标由应用给出；缺少 192 / 512 或 maskable 图标即构建失败；
+     - 以 esbuild 编译 `packages/client/src/pwa/sw.ts` 为 `<base>sw.js`，注入预缓存清单、缓存名 `jabiz-shell-<SPA名>-<产物哈希>` 与排除的前缀。
+   - 路由判断写成纯函数 `swRoute(url, ctx)`（`packages/client/src/pwa/route.ts`），单独测试。
+
+9. **离线策略**【待确认 16c-9】
+   - 只预缓存应用外壳：`index.html`、带哈希的 JS / CSS、图标、字体。预缓存的地址按原地址缓存优先。
+   - 本作用域内的页面导航网络优先；离线时回退到缓存的 `index.html`。导航的响应从不写入缓存，所以含令牌的邮件链接、OIDC 回调不会被缓存。
+   - 一律不拦截（不调用 `respondWith`）：`/api/**`、`/actuator/**`、同一 jar 中其他 SPA 的前缀（插件以 `VITE_JABIZ_SPA_PREFIXES` 传入；App 在 `/` 时排除 `/admin/`、`/sponsor/`）、跨源请求、非 GET。
+   - 没有运行时缓存，没有推送，也不缓存任何接口响应，含公开模板（公开模板走 HTTP 缓存，15 §5）。
+   - 激活时只删除自己前缀 `jabiz-shell-<SPA名>-` 的旧缓存：Cache Storage 由同源的所有 SPA 共用。
+   - 离线时 `OfflineBanner` 提示；接口的网络失败保留会话（现有行为）。
+
+10. **更新流程**【待确认 16c-10】
+    - 新版本安装后进入等待，`PwaUpdatePrompt` 提示"有新版本"。
+    - 用户点"刷新"才 `postMessage(SKIP_WAITING)`，`controllerchange` 后重新加载。不自动重新加载：答题中途不应被打断。
+    - 撤下 PWA 用 `pwa = REMOVE`：发布一个注销自己并清理自己缓存的 `sw.js`。只是去掉 `sw.js` 不行，404 不会注销已安装的 Service Worker。
+
+11. **服务端配合**【待确认 16c-11、16c-12】
+    - `jabiz.web.spa[i]` 增加 `entry` 与 `pwa`（`OFF` / `ON` / `REMOVE`）。
+    - 插件把 `spa(...)` 的路径、入口、`pwa` 写入 `jabiz-app.properties`，作为最低优先级的缺省；应用配置中的 `jabiz.web.spa` 仍整体覆盖它。启动检查 `WEB` 报告配置与 jar 中声明的 SPA 不一致（缺前缀、`pwa` 或入口不同），并报告入口不存在。
+    - `SpaFallbackFilter`：
+      - `index.html`、`sw.js`、`manifest.webmanifest` 设 `Cache-Control: no-cache`；`<前缀>/assets/*` 设 `public, max-age=31536000, immutable`（覆盖 Spring Security 的缺省头）；
+      - `.webmanifest` 设 `application/manifest+json`；
+      - 带 `Service-Worker: script` 请求头的请求，只有声明了 `pwa` 的 SPA 的 `<前缀>/sw.js` 才回答，其余（含 `/api/**`）一律 404。这是第二道防线：同源上被上传或注入的脚本不能被注册为 Service Worker。
+      - 平台从不发送 `Service-Worker-Allowed`，所以 Service Worker 的作用域不能大于它所在的目录。
+    - 内容安全策略：平台的缺省策略对所有 SPA 收紧为原值加 `base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`。
+    - `style-src 'unsafe-inline'` 暂时保留：Radix 的滚动锁与 sonner 会插入 `<style>`，要去掉须先在浏览器中核实。
+    - 脚本一律不允许内联（Vite 产物与 Service Worker 的注册都在打包后的文件中）。
+    - 只支持同源：不开 CORS；令牌只经 `Authorization` 头，不用 Cookie，所以 CSRF 防护照旧关闭（D12、D15）。若 16c-4 选 Cookie，则另需上面所说的防护。
+
+12. **构建**（`jabizApp`）
+    - 写法：`spa("/portal", "portal", entry = "portal", pwa = Pwa.ON)`。
+    - 构建变量：`VITE_JABIZ_ENTRY`、`VITE_JABIZ_PWA`、`VITE_JABIZ_SPA_PREFIXES`。
+    - `sourceDir` 不是平台前端时：
+      - 先安装平台前端（`pnpmInstallPlatformFrontend`，共用 `PnpmLock`，已有同名任务即复用）；
+      - 把 `frontend/packages/**` 加入构建输入；
+      - 注册 `spaCheck<名>`，即在平台前端中运行 `pnpm app:check <目录>`，它是 `spaBuild` 的前置并挂在 `check` 上。
+    - `app:check` 的 `SHARED` 加 `vite`（预设是 Vite 插件）。
+
+13. **示范**【待确认 16c-14、16c-15】
+    - `backend/app/portal/`：自己的 `package.json` 与 `pnpm-lock.yaml`，经 `link:` 引用两个包，与 QuizBuks 的 `quizbuks-web` 同一形态。
+    - 挂在 `/portal/`，入口 `portal`，`app-path: /portal/`，`pwa = ON`，`persistence: device`。
+    - 内容是一个小的客户门户：
+      - 登录、注册、邮件链接页、找回密码、二次验证与 step-up、改密码（16m）、我的订单；
+      - "下单"调用 `PORTAL_ORDER_PLACE`，未验证时显示 `VerifyEmailBanner`；
+      - 离线提示与更新提示。
+    - 后台仍在 `/`。
+    - `application.yml`：`portal.require-verified-email: ${JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL:true}`。e2e 设为 false（e2e 中邮件关闭，无法验证）。
+
+#### 16c-1 客户端会话与页面积木（2.5–3 天）
+
+只改前端，后台行为不变。
+
+**要求**
+1. `@jabiz/client`：
+   - 第 4 条：按入口的会话，`tab` / `device`，Web Locks，旧键迁移，刷新与 OIDC 带入口，`AuthState` 加 `entry`、`email`、`emailVerified` 与 `refreshSession({ force })`；
+   - 第 2 条中的无界面函数；
+   - `createApiClient<Paths>()`；
+   - `takeReturnPath(fallback)` 的缺省由调用方给出，不再写死 `/data`。
+2. `@jabiz/ui` 的 `src/auth/` 积木（第 2、3 条）；命名空间 `auth` 三语，应用可以用 `addMessages('auth', …)` 覆盖个别键。【待确认 16c-16】
+3. 后台：
+   - `LoginPage`、`OidcCallbackPage`、三个落地页、`StepUp`、`SignInFrame`、`MfaEnrollment` 改为积木加路由适配，测试 id 与行为不变；
+   - 后台的 `login.*` / `auth.*` 文案移入 `auth` 命名空间；
+   - `@jabiz/admin` 照常再导出；
+   - `ChangePasswordForm` 放在账户安全页（16m 已合入时）。
+4. 文档：12 §4（按入口的会话）与 §12（积木），扩展指南。
+
+**改动**
+- `packages/client/src/{api/session.ts, api/client.ts, auth/AuthContext.tsx, auth/oidc.ts, auth/account.ts(新), auth/mailLink.ts(新), index.ts}`；
+- `packages/ui/src/auth/*`（新，约 12 个组件）、`packages/ui/src/i18n.ts`、`packages/ui/package.json`（`qrcode`）；
+- `src/pages/LoginPage.tsx`、`OidcCallbackPage.tsx`、`pages/auth/*`、`auth/StepUp.tsx`、`components/SignInFrame.tsx`、`components/MfaEnrollment.tsx`、`pages/AccountSecurityPage.tsx`、`i18n/resources.ts`、`lib/index.ts`；
+- `pnpm-lock.yaml`。
+
+无后端改动，无迁移。
+
+#### 16c-2 多个应用 SPA、PWA、按入口的链接与回调、示范（3–3.5 天）
+
+依赖 16c-1 与 16m。涉及匿名接口与安全响应头，单独做 `/security-review`。
+
+**要求**：设计决定第 5、6、8–13 条。
+
+**改动**
+- **build-logic**：`JabizAppExtension`（`entry`、`pwa`、`Pwa` 枚举）、`BootAppPlugin`（构建变量、平台前端的安装与输入、`spaCheck`、写入 `jabiz-app.properties`）。
+- **runtime `web`**：`JabizWebProperties`（`entry`、`pwa`、新的缺省策略、读取 jar 中的声明）、`SpaFallbackFilter`（缓存头、Service Worker 守卫、manifest 类型）、`SpaConfigCheck`。
+- **runtime `security`**：`SignInEntries`（`app-path` 与 SPA 的告警）、`OidcProvider` / `OidcProviders` / `OidcClient` / `OidcController`（按入口的回调与筛选）。
+- **runtime `mail`**：发送时计算 `{entryUrl}` / `{entryUrl.<入口>}`，`MailChecks` 检查它们。
+- **core**：`MailTemplate` / `MailRenderer` 认识这两个内置占位符；`jabiz/messages_{zh,ja,en}.properties` 的三封邮件。
+- **前端**：`packages/client/src/pwa/{sw.ts, route.ts, register.ts}`、`packages/client/vite.ts`（`exports` 加 `./vite`）、`scripts/app-check.mjs`（加 `vite`）。
+- **示范**：`backend/app/build.gradle.kts`、`application.yml`、`portal/**`。
+- **CI**：`frontend` 作业加门户的 `pnpm install` / `lint` / `typecheck` / `test` 与 `app:check`；e2e 设 `JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`。
+- **文档**：
+  - D43；12 §4、§7、§12；17 §3.1、§3.2 与新的 §4.1（需登录的应用前端与 PWA）；10 §12、§15.1、§15.7（链接）；18 §5.6（内置占位符）；
+  - 功能清单：改为"只缓存应用外壳，不做数据离线"；
+  - 新指南 `docs/guide/app-spa.md`（目录结构、`link:`、Tailwind 的 `@source`、预设、入口、类型生成、PWA 图标）；
+  - CLAUDE.md 第 4、6 节；ROADMAP。
+
+无迁移；OpenAPI 快照更新（`/providers?entry`）后执行 `pnpm gen:api`。
+
+**测试**
+- **Vitest（`@jabiz/client`）**：
+  - 键按入口分开，`tab` / `device` 两种存放，旧键迁移；
+  - 登录、刷新、OIDC `start` 都带入口，入口不符时清掉会话；
+  - Web Locks 下两个"标签页"并发刷新只消费一次（模拟的锁）；
+  - 强制刷新后 `emailVerified` 变化；`readMailLink` 去掉令牌、不发 referrer；
+  - `createApiClient` 共用刷新与 step-up；
+  - `swRoute` 的分类表：`/api`、其他前缀、跨源、非 GET、预缓存、导航、带令牌的导航；
+  - `registerServiceWorker` 的更新流程（模拟 `navigator.serviceWorker`）；
+  - 缓存清理只删自己的前缀。
+- **Vitest（`@jabiz/ui` 积木）**：
+  - 每个积木：渲染、键盘、名称与角色，亮、暗外观的 axe；
+  - 注册的 202 面板与重发；登录时 403 `EMAIL_NOT_VERIFIED` 显示重发，`SIGN_IN_REFUSED` 只给出通用文案；
+  - 落地页（迁入的 `AuthPages.test.tsx` 原样通过）；step-up 同键重发。
+- **Vitest（后台）**：`LoginPage.test.tsx`、`AuthPages.test.tsx`、`App.test.tsx` 不改断言即通过。
+- **预设**：manifest 的内容；缺少图标时构建失败；`sw.js` 中的预缓存清单只含产物，不含 `/api`；`REMOVE` 模式；`VITE_BASE` 与入口的校验。
+- **`app:check`**：`vite` 版本不一致即失败；门户通过检查。
+- **runtime 单元**：
+  - `SpaFallbackFilterTest`：缓存头；`Service-Worker: script` 只认声明的路径（`/api/x`、未声明 PWA 的 SPA、其他文件都 404）；manifest 的类型；新的缺省策略；
+  - `SpaConfigCheckTest`：与 jar 声明不一致、入口未知；
+  - `SignInEntriesTest`：`app-path` 不属于任何 SPA 时告警；
+  - `OidcProvidersTest`：按入口的回调地址格式；
+  - `MailChecksTest`：`{entryUrl.x}` 中 x 未知即报错。
+- **集成**（`backend/app`，真实 PostgreSQL）：
+  - `MultiSpaIT` 加一个 PWA SPA 的资源：manifest、`sw.js`、带哈希的资源，以及上述响应头；`/` 与 `/admin` 原有用例不变。
+  - `SignUpIT` / `PasswordResetIT`：`portal` 的邮件链接为 `{baseUrl}/portal/auth/…`，`admin` 的仍为 `{baseUrl}/auth/…`（GreenMail）；旧形式的链接经后台落地页照常可用。
+  - `OidcEntryIT`：`portal` 的授权地址与换取令牌用 `portal` 的回调地址；没有回调的入口不列出该提供方、`start` 401；回调中改写入口无效。
+  - `BootAppPlugin` 的单元测试（同 `BootAppPluginSnapshotPathsTest` 的写法）：构建变量、输入、`spaCheck` 的依赖关系。
+- **e2e（Playwright，打包的 jar）**：
+  - `portal.spec.ts`：管理员经 API 建一个 `CUSTOMER` 客户 → 在 `/portal/` 登录 → 刷新页面仍保持登录（`device`） → 新标签页共享会话、两个标签页同时刷新不被吊销 → 后台 `/` 的会话与门户互不影响；
+  - `pwa.spec.ts`：Service Worker 只控制 `/portal/`；离线后打开 `/portal/orders` 显示外壳与离线提示；任何 `/api` 响应都不经 Service Worker（`response.fromServiceWorker()` 为假），`caches` 中没有 `/api` 的条目；更新提示（换 `sw.js` 后出现提示，点击后重新加载）；
+  - `a11y.spec.ts`：门户的登录、注册、落地页在亮、暗外观下各查一次；
+  - 任何 CSP 违规即失败（现有夹具）；现有 36 个用例照常通过。
+
+**风险**
+- **`device` 模式**：刷新令牌留在设备上，XSS 能取走长期有效的令牌。缓解：轮换与重用即吊销、不允许内联脚本、`admin` 入口不能用、只按入口开启；写入 D43。
+- **多个标签页的刷新**：靠 Web Locks（Safari 15.4 起支持）；没有它时退回为每个标签页各自的内存会话、不持久化。另外，"复制标签页"会复制 `sessionStorage`，这是现有问题，记为已知限制。
+- **Service Worker 的缺陷不易收回**：靠网络优先的导航与 `no-cache` 的 `sw.js`，以及 `REMOVE` 模式。
+- **共用的 Cache Storage**：清理只认自己的前缀。
+- **`style-src 'unsafe-inline'`**：暂留；`connect-src` 由 `default-src` 收住。
+- **Spring Security 的缺省头会盖住缓存头**：实现第一步核实。
+- **构建**：门户多一次 `pnpm install`，CI 与 `bootJar` 变慢（记录前后耗时）。
+- **`link:` 的依赖解析**：靠 `dedupe` 与 `app:check`；预设统一处理，指南写明。
+- **升级**：邮件链接的路径变化（QuizBuks 改 `base-url`）；已发出的旧链接经后台落地页照常可用。
+- **iOS 的 PWA 存储与 Safari 分开**（已知限制）。
+
+**验收标准**
+- [ ] 应用 SPA 只要声明入口，就能用 `@jabiz/client` 的会话：登录、刷新、二次验证、step-up、OIDC 都带入口；同源的各 SPA 会话互不影响；`device` 模式关闭后再打开仍登录，多个标签页不触发重用吊销。
+- [ ] `@jabiz/ui` 提供登录、注册、邮件链接、找回密码、二次验证、step-up、改密码、离线与更新提示的积木（三语，亮、暗外观 axe 无违规）；后台改用它们后行为与测试不变。
+- [ ] 平台的三封邮件链接到入口自己的 SPA（`{entryUrl}`），应用模板可用 `{entryUrl.<入口>}`；旧链接仍可用。
+- [ ] OIDC 可按入口回到该入口的 SPA；没有回调的入口不提供该提供方。
+- [ ] `jabizApp { spa(…, entry, pwa) }` 构建出 manifest 与 Service Worker；Service Worker 只缓存外壳、不拦截 `/api` 与其他 SPA；更新须用户同意；可以撤下。
+- [ ] 服务端为 PWA 的文件给出正确的缓存头与 manifest 类型，只为声明的 `sw.js` 回答 Service Worker 脚本请求；所有 SPA 的缺省 CSP 已收紧，e2e 无 CSP 违规。
+- [ ] `spaCheck`（`app:check`）在构建中执行，版本不一致即构建失败。
+- [ ] 示范门户可运行（`/portal/`），e2e 与 a11y 通过；`./gradlew check` 与前端全部检查通过。
+- [ ] D43、12、17、10、18、功能清单、`docs/guide/app-spa.md`、CLAUDE.md、ROADMAP 已更新。
+
+**预估**
+
+| 工作 | 天数 |
+|---|---|
+| 16c-1 `@jabiz/client`：入口、两种存放、Web Locks、无界面函数 | 1 |
+| 16c-1 `@jabiz/ui` 积木（迁入与新写）、后台改用、文案 | 1.5–2 |
+| 16c-2 插件与 `jabizApp`、`app:check`、服务端（缓存头、Service Worker 守卫、CSP、检查） | 1 |
+| 16c-2 Service Worker、预设、更新流程 | 0.75 |
+| 16c-2 邮件 `{entryUrl}`、OIDC 按入口 | 0.5 |
+| 16c-2 示范门户、e2e、CI、文档 | 0.75–1 |
+| **合计** | **5.5–6.5** |
+
+**不在本阶段**：推送通知、后台同步、数据离线；原生应用、跨源 SPA 与 CORS；OIDC 自动开户（16f）；会话列表（16g）；去掉 `style-src 'unsafe-inline'`；应用的页面（QuizBuks Q2 页面、Q5 页面等）。
+
+**待确认**
+
+| 编号 | 问题 | 缺省 |
+|---|---|---|
+| 16c-1 | 新增决策？ | 新增 D43（补充 D15 第 4 条、D19 第 3 条、D34 第 5 条与 D36 实现说明第 13 条，不取代任何决策），内容为设计决定第 3–6、8–11 条与 16m 的会话设置 |
+| 16c-2 | 积木与预设放在哪里？ | 积木在 `@jabiz/ui` 的 `auth/`，无界面部分在 `@jabiz/client`，预设在 `@jabiz/client/vite`；不新建包（另一做法：第三个包 `@jabiz/vite`） |
+| 16c-3 | 积木是否依赖 react-router？ | 不依赖，以回调交出导航；后台自己做适配 |
+| 16c-4 | App 的长期会话怎样保存刷新令牌？ | 入口的 `persistence: device` 放 `localStorage`（`admin` 禁止），Web Locks 串行刷新；另一做法：HttpOnly Cookie（SameSite=Strict + 自定义头 + Origin 检查，改变"无 Cookie、无 CSRF"，多约 1 天） |
+| 16c-5 | 邮件链接如何到达应用 SPA？ | `app-path` 即入口前端的根；内置 `{entryUrl}` 与 `{entryUrl.<入口>}`；后台落地页保留并兼容旧链接 |
+| 16c-6 | OIDC 按入口回调放在 16c 还是 16f？ | 16c-2（每个提供方 `redirect-uris.<入口>`，没有即不提供）；自动开户仍在 16f |
+| 16c-7 | 应用 SPA 的接口类型 | `createApiClient<Paths>()` 加应用自己快照生成的类型；平台的 `api` 不变 |
+| 16c-8 | Service Worker 自写还是用 Workbox？ | 自写（约 150 行，路由判断为可测的纯函数），不加依赖 |
+| 16c-9 | 离线策略 | 只预缓存外壳；导航网络优先、离线回退外壳；不拦截 `/api`、`/actuator`、其他 SPA、跨源、非 GET；不缓存任何接口响应；不做推送 |
+| 16c-10 | 新版本如何生效？ | 提示后由用户同意，不自动重新加载；`pwa = REMOVE` 撤下 |
+| 16c-11 | 缺省 CSP 是否对后台一起收紧？ | 对所有 SPA 加 `base-uri`、`object-src 'none'`、`form-action`、`worker-src`、`manifest-src`；`style-src 'unsafe-inline'` 暂留 |
+| 16c-12 | SPA 清单的来源 | `jabizApp` 写入 jar 作为缺省，应用配置可整体覆盖，不一致时启动检查报告；Service Worker 守卫与缓存头由平台统一给出 |
+| 16c-13 | `app:check` 的范围 | 加 `vite`；在 Gradle 中以 `spaCheck` 自动运行 |
+| 16c-14 | 示范放在哪里、什么形态？ | `backend/app/portal/`，自带 lockfile，经 `link:` 引用两个包，挂 `/portal/`，入口 `portal`，`pwa = ON`，`device`；另一做法：放进 `frontend` 工作区（不能证明 `link:` 与 `app:check`） |
+| 16c-15 | e2e 中门户如何登录？ | `JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`；注册与邮件链接只由 Vitest 与后端 IT（GreenMail）覆盖 |
+| 16c-16 | 积木的文案 | `@jabiz/ui` 的命名空间 `auth`（三语）；后台的 `login.*` / `auth.*` 移入；应用可覆盖个别键 |
+| 16c-17 | 平台缺口 1、2 放在哪里？ | 另做 16m（下节），在 16c-2 之前合入；16c-1 可以并行 |
+
+**确认**：2026-10-12 用户确认：同意新增决策 D43；16c-1 – 16c-17 全部按缺省。
+
+---
+
+### 16m 本人改密码与按入口的会话设置（1–1.5 天，QuizBuks Q2 平台缺口 1、2）
+
+**建议**：作为独立的小阶段先做，不并进 16c。
+- 这是登录与会话的后端关键路径（改 `RefreshTokenStore`、新增已登录的写接口），应单独评审并做 `/security-review`。
+- 16c 的客户端存放方式（`persistence`）与 `ChangePasswordForm` 都要读它的接口。
+- 它不依赖前端，可以马上开工，与 16c-1 并行。
+- Q2-18 要求它在 App 页面之前完成。
+
+另一做法：并入 16c 作为 16c-0，总预估相同，但 16c 的评审面会变大。
+
+**现状**
+- 只有管理员的 `SEC_USER_SET_PASSWORD`（吊销全部令牌族，原因 `PASSWORD`）与匿名的找回密码。
+- `CurrentPasswordStep` 已有，但只按地址限流。
+- 刷新令牌是滑动的 `now + jabiz.security.refresh-token-ttl`（8 小时），闲置窗口为"访问令牌有效期 + `jabiz.security.session.idle-timeout`"，两者都是全局的；`SessionChecks` 检查闲置时长 ≥ 访问令牌有效期。
+- `sec_refresh_token` 已存 `expires_at` 与 `entry`，因此**不需要迁移**。
+
+**要求**
+1. **按入口的会话**：`jabiz.security.entries.<名>.session.refresh-token-ttl`（缺省为全局值，上限 90 天）、`.idle-timeout`（缺省为全局值；`0` 表示不按闲置结束）、`.persistence`（`tab` 缺省或 `device`；`admin` 用 `device` 即启动错误）。
+   - `RefreshTokenStore` 按令牌族的入口取有效期与闲置窗口。
+   - `/api/auth/me` 的 `idleTimeoutSeconds` 按入口给出（`0` 表示不锁定，客户端现有逻辑即不锁）。
+   - `GET /api/auth/entries/{name}` 加 `sessionPersistence`。
+   - `SessionChecks` 按入口检查，一次报全。
+2. **本人改密码**：`POST /api/auth/account/password {currentPassword, newPassword, refreshToken?}` → 新流程 `SEC_ACCOUNT_PASSWORD_CHANGE`（`entryOnly()`，权限 `auth.account`，不授予任何角色，只能本人运行）。
+   - 步骤：`CurrentPasswordStep`（错误 422 `PASSWORD_INCORRECT`，计入该账号的失败次数与锁定）→ 密码规则 → `HashPasswordStep` → 写入 → 吊销其他令牌族。给出的 `refreshToken` 属于本人时保留其所在的族，否则全部吊销，客户端重新登录。
+   - 写登录记录 `PASSWORD_CHANGED`（新的 `LoginOutcome`，不计失败）。
+   - 邮件开启时发 `TRANSACTIONAL` 邮件 `jabiz.auth.password-changed`（三语，无令牌）。
+   - 按用户与地址限流。
+   - 只用 OIDC 的用户（没有密码）答 422，引导走找回密码。
+3. 文档：10 §2、§11、§15.1，D43 中的会话设置，CLAUDE.md 第 4 节。OpenAPI 快照与 `pnpm gen:api`。
+
+**测试**
+- `SessionPolicyIT`（固定时钟）：
+  - 各入口有效期与闲置窗口不同；
+  - `idle-timeout: 0` 时只受有效期限制；
+  - 不带入口的后台行为不变（`SignInIT`、`MfaIT` 原样通过）。
+- `AccountPasswordIT`（GreenMail）：
+  - 正确改密后旧密码失效、其他族 401、当前族保留；
+  - 错误的当前密码 422 并计入锁定；
+  - 登录记录与邮件；
+  - 管理员经流程接口调用 403 `PROCESS_INTERNAL`；
+  - 没有密码的用户 422。
+- `SignInEntriesTest`：`admin` 用 `device`、有效期越界都报错。
+- 涉及的表上没有 UPDATE / DELETE。
+
+**待确认**
+
+| 编号 | 问题 | 缺省 |
+|---|---|---|
+| 16m-1 | 改密码时吊销哪些会话？ | 除请求中给出的当前族外全部吊销 |
+| 16m-2 | 改密码是否还要求近期的二次验证？ | 不要求（当前密码已足够）；错误的当前密码计入锁定 |
+| 16m-3 | 是否发"密码已修改"邮件？ | 邮件开启时发（`TRANSACTIONAL`） |
+| 16m-4 | 长期会话是否设绝对上限？ | 不设（30 天为滑动，与 Q12 一致）；以后可加 `session.max-lifetime` |
+| 16m-5 | `device` 的适用范围 | 除 `admin` 外任何入口都可以显式开启；缺省 `tab` |
+
+**确认**（16m）：2026-10-12 用户确认：16m-1 – 16m-5 全部按缺省；16m 先做，与 16c-1 并行，16c-2 在 16m 之后。
 
 ### 16d 入站 Webhook（3.5–4 天）
 

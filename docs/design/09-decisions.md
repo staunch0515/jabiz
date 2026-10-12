@@ -1221,3 +1221,26 @@ OIDC 的入口以 `start` 的查询参数 `entry` 给出；数据视图的声明
 
 **放弃的方案**：①每项发一条事件、由事件消费者处理（每项多一次 Outbox 往返，吞吐受投递限制）；②在实例间以 `SKIP LOCKED` 分发各项（本阶段不需要，留待以后）；③运行中逐项重试（延长持锁时间）。
 
+
+## D43 应用 SPA：按入口的会话、邮件链接与 OIDC 回调、PWA
+
+**背景**：应用自有的前端（D19 第 3 条、D34 第 5 条）与通用后台同源部署时，`@jabiz/client` 只有一份不带入口的会话；
+平台的邮件链接与 OIDC 回调固定指向后台；手机上的 PWA 关闭后再打开需要重新登录（D15 第 4 条只允许 `sessionStorage`）。
+本条补充 D15 第 4 条、D19 第 3 条、D34 第 5 条与 D36 实现说明第 13 条，不取代任何决策（ROADMAP 16c、16m；2026-10-12 确认）。
+
+**决策**
+1. **会话按入口**：客户端以构建时的入口（`VITE_JABIZ_ENTRY`）登录、刷新与发起 OIDC；刷新令牌的键按入口分开（`jabiz.session.<入口>.refresh`），同源的各 SPA 会话互不影响。
+2. **会话设置按入口**（16m）：`jabiz.security.entries.<名>.session.refresh-token-ttl`（上限 90 天）、`.idle-timeout`（`0` 表示不按闲置结束）、`.persistence`。
+   `persistence: tab`（缺省）把刷新令牌放 `sessionStorage`（同 D15）；`device` 放 `localStorage`，关闭后再打开仍保持登录；**`admin` 入口不能用 `device`**（启动错误）。
+   访问令牌仍只在内存中；多个标签页的刷新以 Web Locks 串行，避免被当作令牌重用而吊销整个令牌族。
+3. **本人改密码**（16m）：只经平台接口与 `entryOnly()` 流程，须当前密码（错误计入锁定），吊销其他令牌族、保留当前族，写登录记录并在邮件开启时通知。
+4. **邮件链接按入口**：入口的 `app-path` 即该入口前端的根；平台邮件用内置占位符 `{entryUrl}`，应用模板可用 `{entryUrl.<入口>}`；后台的 `/auth/*` 落地页保留以兼容旧链接。
+5. **OIDC 回调按入口**：提供方的 `redirect-uris.<入口>`；没有该入口回调的提供方不对该入口提供。
+6. **PWA**：Service Worker 只预缓存应用外壳；页面导航网络优先、离线回退外壳；**不拦截、不缓存任何 `/api/**` 响应**、其他 SPA 的前缀、跨源与非 GET 请求；
+   新版本须用户同意后生效；可以撤下（`pwa = REMOVE`）。服务端只为声明了 PWA 的 SPA 的 `sw.js` 回答 Service Worker 脚本请求，从不发送 `Service-Worker-Allowed`。
+7. **内容安全策略**：所有 SPA 的缺省策略加 `base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`；脚本一律不允许内联。
+
+**理由**：答题人主要在手机上使用 PWA，每次重新登录不可接受；把长期会话限定在显式声明的非管理入口、以轮换与重用即吊销约束，风险与收益相称。
+按入口分开会话、链接与回调，使一个部署中的多个前端互不干扰。
+
+**放弃的方案**：①刷新令牌放 HttpOnly Cookie（需要 SameSite、CSRF 头与 Origin 检查，改变 D12、D15 的"无 Cookie、无 CSRF"）；②引入 Workbox（多一套依赖，策略难以收紧到"只缓存外壳"）；③邮件链接一律经后台中转（应用 SPA 的用户要先进入后台）。
