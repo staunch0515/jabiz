@@ -97,7 +97,8 @@ class AuthController {
 
     /**
      * @param mfaAt              when the session last passed a second factor, or null
-     * @param idleTimeoutSeconds after how long without activity the client locks the session (section 11)
+     * @param idleTimeoutSeconds after how long without activity the client locks the session (section 11), as the
+     *                           session's sign-in entry sets it; 0: never
      * @param dataFrom           start of the data period the session is limited to, or null (section 13.2)
      * @param dataTo             its (exclusive) end, or null; both null: not limited in time
      * @param entry              the sign-in entry of the session (section 15)
@@ -247,7 +248,8 @@ class AuthController {
             .onErrorReturn(new UserNames.Self("", null))
             .map(self -> new Me(context.actorId(), self.name().isEmpty() ? null : self.name(), context.tenantId(),
                 context.roles().stream().sorted().toList(), context.permissions().stream().sorted().toList(),
-                context.mfaAt(), mfa.idleTimeout().toSeconds(),
+                // The idle timeout of the session's entry (decision D43 item 2); 0: the client does not lock.
+                context.mfaAt(), entries.session(context.entry()).idleTimeout().toSeconds(),
                 context.dataPeriod() == null ? null : context.dataPeriod().from(),
                 context.dataPeriod() == null ? null : context.dataPeriod().to(),
                 context.entry(), self.email(), context.emailVerified())));

@@ -128,9 +128,14 @@ public final class PlatformErrorCodes {
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
     /**
      * 422: the current password given to verify the address of an account that may have been registered by somebody
-     * else is wrong (docs/design/10-security.md section 15.7).
+     * else is wrong (docs/design/10-security.md section 15.7), or to change one's own password (section 15.8).
      */
     public static final String PASSWORD_INCORRECT = "PASSWORD_INCORRECT";
+    /**
+     * 422: a user who signs in through an identity provider only has no password to change; a password is set through
+     * the password reset (docs/design/10-security.md section 15.8).
+     */
+    public static final String PASSWORD_NOT_SET = "PASSWORD_NOT_SET";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -235,7 +240,7 @@ public final class PlatformErrorCodes {
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
