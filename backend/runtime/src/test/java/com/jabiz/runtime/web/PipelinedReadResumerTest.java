@@ -57,6 +57,38 @@ class PipelinedReadResumerTest {
         }
     }
 
+    /**
+     * The buffered request is a {@code POST} whose body is still on its way: answered at once, it leaves only part of
+     * its body in the buffer, and the rest and the next request must still be read.
+     */
+    @Test
+    void theNextRequestIsAnsweredAfterARequestWithPartOfItsBody() throws IOException {
+        DisposableServer server = start(new PipelinedReadResumer()::apply);
+        try {
+            for (int i = 0; i < CONNECTIONS; i++) {
+                assertThat(answeredAfterPartialBody(server)).as("connection %d", i).isTrue();
+            }
+        }
+        finally {
+            server.disposeNow();
+        }
+    }
+
+    @Test
+    void withoutItReactorNettyStopsReadingAfterARequestWithPartOfItsBody() throws IOException {
+        DisposableServer server = start(UnaryOperator.identity());
+        try {
+            boolean stalled = false;
+            for (int i = 0; i < CONNECTIONS && !stalled; i++) {
+                stalled = !answeredAfterPartialBody(server);
+            }
+            assertThat(stalled).isTrue();
+        }
+        finally {
+            server.disposeNow();
+        }
+    }
+
     @Test
     void addsItselfToHttp11PipelinesOnce() {
         var channel = new EmbeddedChannel();
@@ -80,6 +112,12 @@ class PipelinedReadResumerTest {
                     .sendString(Mono.just("slow").delayElement(Duration.ofMillis(20)))
                 : response.status(404).header(HttpHeaderNames.CONTENT_LENGTH, "0").send())
             .bindNow();
+    }
+
+    private static boolean answeredAfterPartialBody(DisposableServer server) throws IOException {
+        String partialPost = "POST /missing HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n12345";
+        return PipelinedRequests.answeredAfter(server.port(), get("/slow") + partialPost, 2, "67890" + get("/missing"),
+            1000);
     }
 
     private static boolean thirdAnswered(DisposableServer server) throws IOException {
