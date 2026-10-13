@@ -40,8 +40,8 @@ async function expectAccessible(page: Page, name: string) {
 
 /**
  * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and the
- * pages built with @jabiz/ui (sign-in, catalogs, list and form sheet, history, process form) are dark; the Ant Design
- * pages keep the light tokens until they move (phase 15c).
+ * pages built with @jabiz/ui (sign-in, catalogs, list and form sheet, history, process form, reports, imports) are
+ * dark; the Ant Design pages keep the light tokens until they move (phase 15c-2).
  */
 async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, appearance: 'light' | 'dark') {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
@@ -136,9 +136,12 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/processes/PRICE_ADJUST/1', 'process form', '[data-testid="process-run"]'],
     ['/processes/APPROVAL_DECIDE/1', 'process form with a required choice', '[data-testid="process-run"]'],
     ['/tasks', 'tasks', '.ant-list, .ant-empty'],
-    ['/reports', 'report catalog', '.ant-list-item'],
-    ['/reports/run?id=jabiz.ledger.account_balances', 'report', '[data-testid="page-title"]'],
-    ['/imports', 'import catalog', '.ant-list-item, .ant-empty'],
+    ['/reports', 'report catalog', '[data-testid="report-commerce.stock_availability"]'],
+    ['/reports/run?id=jabiz.ledger.account_balances', 'report', '[data-testid="report-not-run"]'],
+    ['/reports/run?id=commerce.stock_availability', 'report with rows', '[data-testid="report-table"] table'],
+    ['/reports/archive', 'report archive', '[data-testid="report-archive"] table'],
+    ['/imports', 'import catalog', '[data-testid="import-commerce.stock"]'],
+    ['/imports/runs', 'import history', '[data-testid="import-runs"] table'],
     ['/audit', 'audit', '[data-testid="audit-records"] .ant-table-row'],
     ['/integrity', 'integrity', '[data-testid="integrity-verify"]'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
@@ -151,6 +154,36 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
     await expectAccessible(page, at(name))
   }
+
+  // The pop-ups of a report: the export menu and the issue confirmation.
+  await page.goto('/reports/run?id=commerce.stock_availability')
+  await expect(page.getByTestId('report-export')).toBeVisible()
+  await pageRendered(page)
+  await page.getByTestId('report-export').click()
+  await expect(page.getByRole('menuitem').first()).toBeVisible()
+  await expectAccessible(page, at('report export menu'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem')).toHaveCount(0)
+  await page.getByTestId('report-issue').click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  await expectAccessible(page, at('report issue confirmation'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+
+  // The import wizard at its mapping step (a file uploaded, nothing imported), with a column's choices open.
+  await page.goto('/imports/run?id=commerce.stock')
+  await expect(page.getByTestId('import-upload')).toBeAttached()
+  await expectAccessible(page, at('import wizard'))
+  await page.getByTestId('import-upload').setInputFiles({
+    name: 'a11y.csv', mimeType: 'text/csv', buffer: Buffer.from('Ref,Store,Item,Count\nA11Y-1,W,S,1\n'),
+  })
+  await expect(page.getByTestId('import-sample')).toBeVisible()
+  await expectAccessible(page, at('import mapping'))
+  await page.getByRole('combobox', { name: /的来源列/ }).first().click()
+  await expect(page.getByRole('option').first()).toBeVisible()
+  await expectAccessible(page, at('import mapping choice'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('option')).toHaveCount(0)
 
   // A choice of the process form, open (a combobox's list in a popover).
   await page.goto('/processes/APPROVAL_DECIDE/1')

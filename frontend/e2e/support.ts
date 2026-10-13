@@ -139,8 +139,13 @@ export function rangeEnd(scope: Page | Locator, label: string, end: 'from' | 'to
 
 /** Confirms the open confirmation (an alert dialog, "确定"), as a row's delete or action asks for. */
 export async function confirm(page: Page) {
+  await confirmWith(page, '确定')
+}
+
+/** Confirms the open confirmation with its own button ("签发", "导入") and waits until it has closed. */
+export async function confirmWith(page: Page, button: string) {
   const question = page.getByRole('alertdialog')
-  await question.getByRole('button', { name: '确定' }).click()
+  await question.getByRole('button', { name: button, exact: true }).click()
   await expect(question).toHaveCount(0)
 }
 
@@ -154,9 +159,12 @@ export function entityForm(page: Page): Locator {
   return page.getByTestId('entity-form')
 }
 
-/** Waits until a page built with @jabiz/ui shows its content: no loading state, no error or "not found". */
+/**
+ * Waits until a page built with @jabiz/ui shows its content: no loading state, no error or "not found". An empty
+ * page (`data-state="empty"`, "no reports") has rendered: it says so.
+ */
 export async function pageRendered(page: Page) {
-  await expect(page.locator('[data-slot="page-state"]')).toHaveCount(0)
+  await expect(page.locator('[data-slot="page-state"]:not([data-state="empty"])')).toHaveCount(0)
 }
 
 /** Signs out from the user's menu in the header (in any interface language) and waits for the sign-in page. */
