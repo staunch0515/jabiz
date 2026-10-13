@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import ReportArchivePage from './ReportArchivePage'
 
 const get = vi.fn()
@@ -24,38 +25,58 @@ const RUN = {
   supersededBy: 'r-2',
 }
 
+function show(path = '/reports/archive?template=jabiz.ledger.account_balances') {
+  return render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={[path]}>
+        <ReportArchivePage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
 describe('ReportArchivePage', () => {
   beforeEach(async () => {
     get.mockReset()
     post.mockReset()
     exportRun.mockReset()
-    await i18n.changeLanguage('en')
+    await act(() => i18n.changeLanguage('en'))
   })
 
   it('lists the issued runs of a template, saves one as issued and verifies it', async () => {
     get.mockResolvedValue([RUN])
     post.mockResolvedValue({ verdict: 'identical', recomputable: true, contentHash: RUN.contentHash })
     exportRun.mockResolvedValue(undefined)
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <App>
-          <MemoryRouter initialEntries={['/reports/archive?template=jabiz.ledger.account_balances']}>
-            <ReportArchivePage />
-          </MemoryRouter>
-        </App>
-      </QueryClientProvider>,
-    )
+    show()
 
     expect(await screen.findByText('Trial balance')).toBeTruthy()
     expect(get.mock.calls[0][1]).toEqual({ params: { query: { template: 'jabiz.ledger.account_balances', limit: 200 } } })
     expect(screen.getByText('c2741d77d343')).toBeTruthy()
     expect(screen.getByText('Superseded')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Issued reports' })).toBeInTheDocument()
+    await expectAccessible()
 
-    fireEvent.click(screen.getByTestId('run-verify-r-1'))
+    await userEvent.click(screen.getByTestId('run-verify-r-1'))
     await waitFor(() => expect(screen.getByTestId('verdict-r-1').textContent).toBe('Matches the data'))
+    expect(post.mock.calls[0]).toEqual(['/api/reports/runs/{runId}/verify', { params: { path: { runId: 'r-1' } } }])
 
-    fireEvent.mouseEnter(screen.getByTestId('run-save-r-1'))
-    fireEvent.click(await screen.findByText('PDF'))
+    fireEvent.pointerDown(screen.getByTestId('run-save-r-1'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['PDF', 'Excel (.xlsx)', 'CSV'])
+    await userEvent.click(screen.getByRole('menuitem', { name: 'PDF' }))
     await waitFor(() => expect(exportRun).toHaveBeenCalledWith('r-1', 'pdf'))
+  })
+
+  it('marks a run that can only be shown as issued, and a verdict that differs', async () => {
+    get.mockResolvedValue([{ ...RUN, supersededBy: undefined, recomputable: false }])
+    post.mockResolvedValue({ verdict: 'differs', recomputable: false })
+    show('/reports/archive')
+    expect(await screen.findByText('Archive only')).toBeInTheDocument()
+    expect(screen.queryByText('Superseded')).toBeNull()
+    expect(get.mock.calls[0][1]).toEqual({ params: { query: { template: undefined, limit: 200 } } })
+    await userEvent.click(screen.getByTestId('run-verify-r-1'))
+    const verdict = await screen.findByTestId('verdict-r-1')
+    expect(verdict).toHaveTextContent('Differs from the data')
+    expect(verdict.getAttribute('class')).toContain('bg-destructive')
+    expect(within(screen.getByTestId('report-archive')).getByText('alice')).toBeInTheDocument()
   })
 })

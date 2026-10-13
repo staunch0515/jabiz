@@ -1,7 +1,7 @@
 import { isValidElement, type ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import i18n from '../i18n'
-import { renderCell } from './columns'
+import { renderCell, toRow } from './cells'
 import type { FieldMeta } from './types'
 
 const base = { immutable: false, required: false, generated: false, systemManaged: false, sensitive: false, processOnly: false, operators: [], rules: [] }
@@ -25,5 +25,12 @@ describe('cells', () => {
     expect(element.props.lang).toBe('en')
     expect(element.props.children).toBe('Title')
     expect(renderCell(title, null, {}, i18n.t, 'en')).toBe('—')
+  })
+
+  it('key rows by their instance', () => {
+    const row = toRow({ id: 'x1', version: 3, attributes: { countryCode: 'CN' } })
+    expect(row.__key).toBe('x1')
+    expect(row.countryCode).toBe('CN')
+    expect(row.__instance.version).toBe(3)
   })
 })
