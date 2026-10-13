@@ -59,9 +59,12 @@ public class GlobalExceptionHandler {
         this.messages = messages;
     }
 
+    /** 404; with the rule code when the platform names one (an unknown session, 10 section 15.9). */
     @ExceptionHandler({EntityNotFoundException.class, ResourceNotFoundException.class})
-    ProblemDetail handleNotFound(RuntimeException ex) {
-        return ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage());
+    ProblemDetail handleNotFound(RuntimeException ex, ServerWebExchange exchange) {
+        List<Violation> violations = ProblemStatuses.violations(ex);
+        return violations.isEmpty() ? ProblemDetail.forStatusAndDetail(statusOf(ex), ex.getMessage())
+            : withViolations(statusOf(ex), ex.getMessage(), violations, exchange);
     }
 
     @ExceptionHandler(InvalidResourceIdException.class)

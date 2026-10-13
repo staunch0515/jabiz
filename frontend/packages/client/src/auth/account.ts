@@ -96,6 +96,36 @@ export async function changePassword(currentPassword: string, newPassword: strin
   if (!response.ok) throw await toApiError(response)
 }
 
+/** The signed-in user's live sessions at this frontend's entry (`GET /api/auth/account/sessions`, phase 16g). */
+export type SessionList = components['schemas']['SessionList']
+/** One live session: where and with what it was last used, whether it is this one (`current`). */
+export type SessionInfo = components['schemas']['SessionView']
+/** How many sessions ended, and how long their access tokens may still work. */
+export type SessionsRevoked = components['schemas']['Revoked']
+
+/**
+ * The signed-in user's live sessions at the entry of this one, the most recently used first (at most 50, `truncated`
+ * when there are more). Sessions at other entries (another frontend) are not listed (decision D36).
+ */
+export async function listSessions(): Promise<SessionList> {
+  return unwrap(api.GET('/api/auth/account/sessions')) as Promise<SessionList>
+}
+
+/**
+ * Ends one of the signed-in user's sessions (`POST /api/auth/account/sessions/{id}/revoke`): it can no longer be
+ * refreshed, its access token works until it expires (`effectiveWithinSeconds` of the list). Ending this frontend's
+ * own session (`current`) signs it out here as well.
+ */
+export async function revokeSession(id: string, current = false): Promise<void> {
+  await unwrap(api.POST('/api/auth/account/sessions/{id}/revoke', { params: { path: { id } } }))
+  if (current) session.clear()
+}
+
+/** Ends every other session of the signed-in user at this entry; this one stays. */
+export async function revokeOtherSessions(): Promise<SessionsRevoked> {
+  return unwrap(api.POST('/api/auth/account/sessions/revoke-others')) as Promise<SessionsRevoked>
+}
+
 /** Whether a failure is the server's refusal with this rule code (and, when given, this status). */
 export function isProblem(error: unknown, code: string, status?: number): error is ApiError {
   return error instanceof ApiError && (status === undefined || error.status === status)

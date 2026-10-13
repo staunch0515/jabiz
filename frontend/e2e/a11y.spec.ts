@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
+import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -145,7 +145,8 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/audit', 'audit', '[data-testid="audit-records"] .ant-table-row'],
     ['/integrity', 'integrity', '[data-testid="integrity-verify"]'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
-    ['/account/security', 'account security', '.ant-card'],
+    ['/account/security', 'account security', '[data-testid="session-item"]'],
+    ['/security/sessions', 'sessions', '[data-testid="session-user-select"]'],
   ] as const) {
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
@@ -154,6 +155,19 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
     await expectAccessible(page, at(name))
   }
+
+  // A user's sessions (phase 16g), and the dialog that ends them.
+  await page.goto('/security/sessions')
+  await page.getByTestId('session-user-select').click()
+  await page.keyboard.type(ADMIN.userName)
+  await page.getByRole('listbox').getByRole('option', { name: new RegExp(`^${ADMIN.userName}\\b`) }).first().click()
+  await expect(dataRows(page).first()).toBeVisible()
+  await expectAccessible(page, at('sessions of a user'))
+  await page.getByTestId('admin-session-revoke-all').click()
+  await expect(page.getByTestId('admin-session-reason')).toBeVisible()
+  await expectAccessible(page, at('end sessions dialog'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('admin-session-reason')).toHaveCount(0)
 
   // The pop-ups of a report: the export menu and the issue confirmation.
   await page.goto('/reports/run?id=commerce.stock_availability')

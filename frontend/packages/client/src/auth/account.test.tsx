@@ -9,9 +9,12 @@ import {
   entryInfo,
   forgetEntryInfo,
   isProblem,
+  listSessions,
   register,
   requestPasswordReset,
   resendVerification,
+  revokeOtherSessions,
+  revokeSession,
   useOnline,
 } from './account'
 import { parseMailLink, readMailLink, useMailLink } from './mailLink'
@@ -162,5 +165,52 @@ describe('mailed links (decision D43 item 4)', () => {
     await waitFor(() => expect(getByTestId('probe').getAttribute('href')).toBe('/portal/'))
     unmount()
     expect(document.querySelector('meta[name="referrer"]')).toBeNull()
+  })
+})
+
+describe('session functions (phase 16g)', () => {
+  beforeEach(() => configureSession('portal'))
+  afterEach(() => {
+    session.clear()
+    configureSession('admin')
+    vi.unstubAllGlobals()
+  })
+
+  /** Answers by method and path; records the calls. */
+  function sessionServer() {
+    const calls: { method: string; path: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : null
+      const method = request?.method ?? init?.method ?? 'GET'
+      const path = new URL(urlOf(input), 'http://localhost').pathname
+      calls.push({ method, path, auth: new Headers(request?.headers ?? init?.headers).get('Authorization') })
+      if (method === 'GET') return json(200, { sessions: [{ id: 's1', current: true }], truncated: false, effectiveWithinSeconds: 900 })
+      if (path.endsWith('/revoke-others')) return json(200, { revoked: 2, effectiveWithinSeconds: 900 })
+      return new Response(null, { status: 204 })
+    }))
+    return calls
+  }
+
+  it('list, end one and end the others of the signed-in user', async () => {
+    session.store('access', 'refresh-1')
+    const calls = sessionServer()
+    expect((await listSessions()).sessions).toEqual([{ id: 's1', current: true }])
+    await revokeSession('s2')
+    expect(await revokeOtherSessions()).toEqual({ revoked: 2, effectiveWithinSeconds: 900 })
+    expect(calls).toEqual([
+      { method: 'GET', path: '/api/auth/account/sessions', auth: 'Bearer access' },
+      { method: 'POST', path: '/api/auth/account/sessions/s2/revoke', auth: 'Bearer access' },
+      { method: 'POST', path: '/api/auth/account/sessions/revoke-others', auth: 'Bearer access' },
+    ])
+    // Another session ended: this one stays.
+    expect(session.refreshToken()).toBe('refresh-1')
+  })
+
+  it('ending this session signs it out here', async () => {
+    session.store('access', 'refresh-1')
+    sessionServer()
+    await revokeSession('s1', true)
+    expect(session.accessToken()).toBeNull()
+    expect(session.refreshToken()).toBeNull()
   })
 })

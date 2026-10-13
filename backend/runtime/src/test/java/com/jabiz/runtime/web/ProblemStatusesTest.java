@@ -15,6 +15,7 @@ import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
+import com.jabiz.runtime.security.SessionNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ProblemDetail;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
@@ -45,7 +46,16 @@ class ProblemStatusesTest {
         BusinessRuleViolationException rule = new BusinessRuleViolationException(violations);
         assertThat(ProblemStatuses.status(rule)).isEqualTo(handler.handleBusinessRule(rule, exchange).getStatus());
         EntityNotFoundException missing = new EntityNotFoundException("gone");
-        assertThat(ProblemStatuses.status(missing)).isEqualTo(handler.handleNotFound(missing).getStatus());
+        ProblemDetail missingProblem = handler.handleNotFound(missing, exchange);
+        assertThat(ProblemStatuses.status(missing)).isEqualTo(missingProblem.getStatus());
+        assertThat(missingProblem.getProperties()).isNull();
+        // An unknown session is a 404 with its rule code (docs/design/10-security.md section 15.9).
+        SessionNotFoundException session = new SessionNotFoundException();
+        ProblemDetail sessionProblem = handler.handleNotFound(session, exchange);
+        assertThat(ProblemStatuses.status(session)).isEqualTo(sessionProblem.getStatus()).isEqualTo(404);
+        assertThat(ProblemStatuses.violations(session)).extracting(Violation::ruleCode)
+            .containsExactly("SESSION_NOT_FOUND");
+        assertThat(sessionProblem.getProperties()).containsKey("violations");
         ConcurrentUpdateException conflict = new ConcurrentUpdateException("stale");
         assertThat(ProblemStatuses.status(conflict))
             .isEqualTo(handler.handleConcurrentUpdate(conflict, exchange).getStatus());

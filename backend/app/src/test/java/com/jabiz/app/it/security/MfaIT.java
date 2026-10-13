@@ -244,6 +244,33 @@ class MfaIT extends SecurityItSupport {
             Map.of("userName", unique("new"), "password", PASSWORD)).expectStatus().isOk();
     }
 
+    /** Access tokens name their session through the second step and step-up (docs/design/10-security.md 15.9). */
+    @Test
+    void theSessionIsNamedAfterTheSecondStepAndStepUpButAnEndedOneCannotStepUp() {
+        String name = unique("hob");
+        String secret = enrolled(name, "p");
+        Map<String, Object> session = verify(challenge(name), code(secret));
+        assertThat(sessionIdOfMe(bearerOf(session))).isEqualTo(familyOf(session));
+        clock.advance(Duration.ofSeconds(30));
+        Map<String, Object> other = verify(challenge(name), code(secret));
+        assertThat(familyOf(other)).isNotEqualTo(familyOf(session));
+
+        clock.advance(Duration.ofSeconds(30));
+        Map<String, Object> stepped = post("/api/auth/step-up", bearerOf(session), Map.of("code", code(secret)))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(sessionIdOfMe("Bearer " + stepped.get("accessToken"))).isEqualTo(familyOf(session));
+
+        // Ended from the other session: its access token works until it expires, but gets no new one by a step-up.
+        post("/api/auth/account/sessions/" + familyOf(session) + "/revoke", bearerOf(other), Map.of())
+            .expectStatus().isNoContent();
+        clock.advance(Duration.ofSeconds(30));
+        assertThat(ruleCode(post("/api/auth/step-up", "Bearer " + stepped.get("accessToken"),
+            Map.of("code", code(secret))).expectStatus().isUnauthorized().expectBody(MAP).returnResult()
+            .getResponseBody())).isEqualTo("UNAUTHENTICATED");
+        // The other session steps up as before.
+        post("/api/auth/step-up", bearerOf(other), Map.of("code", code(secret))).expectStatus().isOk();
+    }
+
     @Test
     void administrationWithoutASecondFactorIsRefusedEverywhere() {
         String noMfa = TestTokens.withoutMfa(tokens, "it-admin", "*");

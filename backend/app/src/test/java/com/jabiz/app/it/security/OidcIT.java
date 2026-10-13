@@ -125,7 +125,9 @@ class OidcIT extends SecurityItSupport {
         assertThat(session).containsEntry("status", "SIGNED_IN").containsEntry("userId", userId);
         Map<String, Object> me = get("/api/auth/me", bearerOf(session)).expectStatus().isOk().expectBody(MAP)
             .returnResult().getResponseBody();
-        assertThat(me).containsEntry("userId", userId).containsEntry("mfaAt", null);
+        assertThat(me).containsEntry("userId", userId).containsEntry("mfaAt", null)
+            // The access token names the session the sign-in opened (docs/design/10-security.md section 15.9).
+            .containsEntry("sessionId", familyOf(session));
         assertThat(records(userId)).singleElement().satisfies(r -> assertThat(r).containsEntry("outcome", "SUCCESS")
             .containsEntry("factor", "OIDC"));
         // Without a password, nobody signs in with one.

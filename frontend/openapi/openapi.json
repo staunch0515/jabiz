@@ -289,6 +289,23 @@
         },
         "type" : "object"
       },
+      "Device" : {
+        "properties" : {
+          "browser" : {
+            "enum" : [ "EDGE", "OPERA", "SAMSUNG", "WECHAT", "FIREFOX", "CHROME", "SAFARI", "OTHER" ],
+            "type" : "string"
+          },
+          "deviceType" : {
+            "enum" : [ "DESKTOP", "MOBILE", "TABLET", "OTHER" ],
+            "type" : "string"
+          },
+          "os" : {
+            "enum" : [ "WINDOWS", "IOS", "ANDROID", "CHROME_OS", "MACOS", "LINUX", "OTHER" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "DictItem" : {
         "properties" : {
           "code" : {
@@ -1600,6 +1617,9 @@
             },
             "type" : "array"
           },
+          "sessionId" : {
+            "type" : "string"
+          },
           "tenantId" : {
             "type" : "string"
           },
@@ -2219,6 +2239,19 @@
         },
         "type" : "object"
       },
+      "Revoked" : {
+        "properties" : {
+          "effectiveWithinSeconds" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "revoked" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "RunDetail" : {
         "properties" : {
           "columns" : {
@@ -2370,6 +2403,65 @@
             "$ref" : "#/components/schemas/ImportMapping"
           },
           "name" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SessionList" : {
+        "properties" : {
+          "effectiveWithinSeconds" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "sessions" : {
+            "items" : {
+              "$ref" : "#/components/schemas/SessionView"
+            },
+            "type" : "array"
+          },
+          "truncated" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "SessionView" : {
+        "properties" : {
+          "clientIp" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "device" : {
+            "$ref" : "#/components/schemas/Device"
+          },
+          "entry" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "mfa" : {
+            "type" : "boolean"
+          },
+          "oidc" : {
+            "type" : "boolean"
+          },
+          "userAgent" : {
             "type" : "string"
           }
         },
@@ -2979,6 +3071,61 @@
           }
         },
         "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/auth/account/sessions" : {
+      "get" : {
+        "operationId" : "mine_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SessionList"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "session-controller" ]
+      }
+    },
+    "/api/auth/account/sessions/revoke-others" : {
+      "post" : {
+        "operationId" : "revokeOthers",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Revoked"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "session-controller" ]
+      }
+    },
+    "/api/auth/account/sessions/{id}/revoke" : {
+      "post" : {
+        "operationId" : "revoke",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "session-controller" ]
       }
     },
     "/api/auth/account/verify-email" : {
@@ -5628,6 +5775,33 @@
           }
         },
         "tags" : [ "access-review-controller" ]
+      }
+    },
+    "/api/security/sessions" : {
+      "get" : {
+        "operationId" : "ofUser",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SessionList"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "session-controller" ]
       }
     },
     "/api/sod/conflicts" : {

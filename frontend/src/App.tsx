@@ -15,6 +15,7 @@ import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
 import AccountSecurityPage from './pages/AccountSecurityPage'
 import AccessReviewPage from './pages/AccessReviewPage'
+import SessionsPage from './pages/SessionsPage'
 import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
@@ -98,6 +99,7 @@ export const appRoutes: RouteObject[] = [
           { path: '/documents', element: <DocumentsPage /> },
           { path: '/audit', element: <AuditPage /> },
           { path: '/access-review', element: <AccessReviewPage /> },
+          { path: '/security/sessions', element: <SessionsPage />, handle: JABIZ_UI },
           { path: '/integrity', element: <IntegrityPage /> },
           { path: '/retention', element: <RetentionPage /> },
           { path: '/account/security', element: <AccountSecurityPage /> },

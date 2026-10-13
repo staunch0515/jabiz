@@ -63,6 +63,23 @@ class JwtServiceTest {
             .hasMessageContaining("signature");
     }
 
+    /** The session a token was issued for travels with it (docs/design/10-security.md section 15.9). */
+    @Test
+    void tokensNameTheirSession() throws Exception {
+        java.util.UUID session = java.util.UUID.fromString("0190a6b2-7c1e-7d3a-9f00-1234567890ab");
+        Actor inSession = alice.inEntry("portal", true).inSession(session);
+        assertThat(service.verify(service.issue(inSession).token())).isEqualTo(inSession);
+        // A second factor later (step-up) keeps the session.
+        assertThat(service.verify(service.issue(inSession.withMfaAt(T0)).token()).sessionId()).isEqualTo(session);
+
+        // Tokens of no session, or from before sessions were listed, name none.
+        assertThat(service.verify(service.issue(alice).token()).sessionId()).isNull();
+        // A session id that is no UUID makes the token malformed.
+        String malformed = signed(new JWTClaimsSet.Builder().issuer(JwtService.ISSUER).subject("alice")
+            .expirationTime(Date.from(T0.plusSeconds(60))).claim(JwtService.SESSION, "not-a-uuid").build());
+        assertThatThrownBy(() -> service.verify(malformed)).isInstanceOf(JwtService.InvalidTokenException.class);
+    }
+
     /** The system and the anonymous visitor are no one a token may name (decision D41), even signed rightly. */
     @Test
     void tokensOfTheReservedSubjectsAreRefused() throws Exception {

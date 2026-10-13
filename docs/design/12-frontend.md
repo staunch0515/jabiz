@@ -155,13 +155,14 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/imports/runs[?import=]` | 导入记录（20 §5）：结果、行数、重复、问题、说明；问题明细；报告保存为 PDF / Excel / CSV |
 | `/audit[?entityType=&entityId=]` | 审计记录（21 §1.4，`audit.read`）：按实体、操作人、时间、流程、字段筛选；展开看每个字段的前后值（敏感值为 `***`，遮蔽字段为其遮蔽形式）；按记录筛选时一并列出其审批。历史页与列表行有入口。"明文显示"页签列出 `sys_reveal_record`（10 §13.1） |
 | `/access-review` | 访问审查（10 §13.3，`security.access-review.read`）：选期间（整日，结束为次日 0 时）、签发访问权限报表（`report.issue`，进入报表存档）、期间内的安全变更、职责分离冲突、签核（`security.access-review.sign`，填写意见，需要二次验证）、已签核列表 |
+| `/security/sessions` | 会话（10 §15.9，`security.user.session.read`；以 `@jabiz/ui` 构建，`handle: { ui: 'jabiz' }`）：按用户名搜索用户（`SecUser` 默认视图的查询，需要 `security.user.read`），列出其在全部入口的有效会话（设备、入口、地址、最近使用、登录与到期时间）；持有 `security.user.session.revoke` 时可结束单个或全部会话，须填写原因，二次验证由 step-up 处理。用户列表上另有生成的行操作"结束会话"（`SEC_USER_SESSIONS_REVOKE`） |
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（哈希可复制，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`）、校验记录及其问题 |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`：选数据视图、时点、是否附报表 PDF，下载 ZIP） |
 | `/login/oidc` | 身份提供方的回调（10 §12）：不需要已登录；显示身份提供方或服务端的拒绝 |
 | `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；点击后才先问 `check`、再提交（可预占的账号要当前密码或新密码），成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答），其他失败可重试 |
 | `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
 | `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
-| `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；从页头用户菜单进入 |
+| `/account/security` | 安全设置（10 §9）：本人的两步验证状态、绑定（二维码用 `qrcode` 绘制在 canvas 上，另显示密钥）、剩余恢复码数；改密码（10 §15.8）；本人当前入口的会话（`SessionList`，10 §15.9）；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
@@ -233,7 +234,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | 项 | 规定 |
 |---|---|
 | 编入 | `jabizApp { spa("/", "../../frontend", extension = "admin-extension") }`：插件以 `JABIZ_ADMIN_EXTENSION` 构建；`vite.config.ts` 把 `virtual:jabiz-extension` 指向其 `src/index.tsx`（未指定时为空扩展 `src/extension/none.ts`），并以 `resolve.dedupe` 让扩展的第三方引用解析到平台前端的 `node_modules`（一份 React、一份 `@jabiz/ui`；共存期间也是一份 antd） |
-| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/auth…`、`/mail…` 等平台路径（`PLATFORM_PATHS`）；不能是 index 路由（用 `home`） |
+| `routes` | 挂在已登录的外框（`ProLayout`）内；绝对路径、不重复，不能占用 `/`、`/login`、`/data…`、`/processes…`、`/tasks…`、`/access-review…`、`/security…`、`/auth…`、`/mail…` 等平台路径（`PLATFORM_PATHS`）；不能是 index 路由（用 `home`） |
 | `menu` | 排在服务端菜单之后；`label` 是扩展文案的键；`permission` 只决定是否显示；子项全部不可见的分组不显示 |
 | `messages` | 每种界面语言一份，放在 i18next 命名空间 `app`（`useTranslation(EXTENSION_NAMESPACE)`），不覆盖平台文案 |
 | `home` | 登录后（没有要返回的页面时）、根路径与未知路径的落点；缺省 `/data` |
@@ -302,11 +303,13 @@ jabizApp {
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
+  提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
-  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；

@@ -37,6 +37,13 @@ public final class SecurityPermissions {
      * it is a credential of its own, apart from {@link #USER_WRITE} (docs/design/10-security.md section 12).
      */
     public static final String IDENTITY_WRITE = "security.user.identity.write";
+    /**
+     * Listing another user's sessions, with their addresses and user agents ({@code GET /api/security/sessions};
+     * docs/design/10-security.md section 15.9).
+     */
+    public static final String SESSION_READ = "security.user.session.read";
+    /** Ending another user's sessions (SEC_USER_SESSIONS_REVOKE), which always needs a recent second factor. */
+    public static final String SESSION_REVOKE = "security.user.session.revoke";
     /** Resetting another user's second factor (SEC_MFA_RESET). */
     public static final String MFA_RESET = "security.user.mfa-reset";
     /**

@@ -104,10 +104,11 @@ class AuthController {
      * @param entry              the sign-in entry of the session (section 15)
      * @param email              the user's own e-mail address, or null
      * @param emailVerified      whether it was verified when the session's access token was issued
+     * @param sessionId          the session the access token belongs to (section 15.9), or null when it names none
      */
     record Me(String userId, String displayName, String tenantId, List<String> roles, List<String> permissions,
         Instant mfaAt, long idleTimeoutSeconds, Instant dataFrom, Instant dataTo, String entry, String email,
-        boolean emailVerified) {}
+        boolean emailVerified, String sessionId) {}
 
     private final ProcessExecutor processes;
     private final JwtService tokens;
@@ -152,7 +153,7 @@ class AuthController {
                 .onErrorMap(e -> e instanceof ValidationException v && v.violations().stream()
                         .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode())),
                     e -> loginFailed("Concurrent sign-in attempt"))
-                .flatMap(result -> answer(result, null, null, source.entryOrDefault(), refreshTokens, tokens, mfa,
+                .flatMap(result -> answer(result, null, null, source, refreshTokens, tokens, mfa,
                     "Sign-in of '" + request.userName().trim() + "'"));
         });
     }
@@ -164,12 +165,14 @@ class AuthController {
      *
      * @param mfaAt      when the attempt passed a second factor, or null
      * @param identityId the provider account of the sign-in, or null
+     * @param source     where the attempt came from: its entry, address and user agent
      */
-    static Mono<TokenResponse> answer(SponsorSignInOutput result, Instant mfaAt, UUID identityId, String entry,
+    static Mono<TokenResponse> answer(SponsorSignInOutput result, Instant mfaAt, UUID identityId, SignInSource source,
         RefreshTokenStore refreshTokens, JwtService tokens, MfaSettings mfa, String what) {
+        String entry = source.entryOrDefault();
         return switch (result.outcome()) {
             case SUCCESS -> session(refreshTokens, tokens, actor(result, mfaAt), UUID.fromString(result.userId()),
-                identityId);
+                identityId, source);
             case MFA_REQUIRED -> Mono.just(TokenResponse.challenge(SignInStatus.MFA_REQUIRED,
                 tokens.issueChallenge(result.userId(), JwtService.Purpose.VERIFY, result.attemptNo(),
                     identityId == null ? null : identityId.toString(), entry, mfa.challengeTtl())));
@@ -194,14 +197,16 @@ class AuthController {
     }
 
     @PostMapping(REFRESH)
-    Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request) {
+    Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request, ServerHttpRequest http) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> {
             java.util.Optional<SignInEntries.Entry> entry = entries.find(request == null ? null : request.entry());
             if (entry.isEmpty()) {
                 return Mono.error(invalidRefresh("Unknown sign-in entry"));
             }
+            // Where the session was last used: the session list shows it (section 15.9).
             return refreshTokens.rotate(request == null ? null : request.refreshToken(), entry.get().name(),
+                    source(clients, http, entry.get().name()),
                     grant -> rbac.renew(grant.userId(), grant.mfaAt(), grant.identityId(), grant.entry())
                         .flatMap(renewal -> {
                             if (renewal.refused()) {
@@ -219,7 +224,10 @@ class AuthController {
                     return refreshTokens.revokeSession(refused.grant.familyId(), RefreshTokenStore.REASON_REFUSED)
                         .then(Mono.error(invalidRefresh("Refused by a sign-in guard")));
                 })
-                .map(rotated -> response(tokens.issue(rotated.value()), rotated.value(), rotated.next()));
+                .map(rotated -> {
+                    Actor actor = rotated.value().inSession(rotated.next().familyId());
+                    return response(tokens.issue(actor), actor, rotated.next());
+                });
         });
     }
 
@@ -243,7 +251,10 @@ class AuthController {
     @GetMapping("/api/auth/me")
     Mono<Me> me() {
         // The name shown for the signed-in user; none for an actor that is no user (the development headers').
-        return RequestContexts.current().flatMap(context -> userNames.self(context.actorId())
+        return RequestContexts.current().zipWith(CurrentSession.id()).flatMap(current -> {
+            com.jabiz.context.RequestContext context = current.getT1();
+            String sessionId = current.getT2().map(UUID::toString).orElse(null);
+            return userNames.self(context.actorId())
             // A name is a convenience: the identity is still answered when it cannot be read.
             .onErrorReturn(new UserNames.Self("", null))
             .map(self -> new Me(context.actorId(), self.name().isEmpty() ? null : self.name(), context.tenantId(),
@@ -252,7 +263,8 @@ class AuthController {
                 context.mfaAt(), entries.session(context.entry()).idleTimeout().toSeconds(),
                 context.dataPeriod() == null ? null : context.dataPeriod().from(),
                 context.dataPeriod() == null ? null : context.dataPeriod().to(),
-                context.entry(), self.email(), context.emailVerified())));
+                context.entry(), self.email(), context.emailVerified(), sessionId));
+        });
     }
 
     @GetMapping("/api/auth/menus")
@@ -280,16 +292,18 @@ class AuthController {
         }
     }
 
-    /** Tokens of a new session; the refresh tokens of the session remember when it passed a second factor. */
-    static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId) {
-        return session(refreshTokens, tokens, actor, userId, null);
-    }
-
-    /** As {@link #session}, for a sign-in through the provider account {@code identityId}. */
+    /**
+     * Tokens of a new session, for a sign-in through the provider account {@code identityId} (or none) from
+     * {@code source}. The refresh tokens of the session remember when it passed a second factor; the access token
+     * names the session (section 15.9).
+     */
     static Mono<TokenResponse> session(RefreshTokenStore refreshTokens, JwtService tokens, Actor actor, UUID userId,
-        UUID identityId) {
-        return refreshTokens.issue(userId, actor.mfaAt(), identityId, actor.entry())
-            .map(next -> response(tokens.issue(actor), actor, next));
+        UUID identityId, SignInSource source) {
+        return refreshTokens.issue(userId, actor.mfaAt(), identityId, actor.entry(), source)
+            .map(next -> {
+                Actor inSession = actor.inSession(next.familyId());
+                return response(tokens.issue(inSession), inSession, next);
+            });
     }
 
     private static TokenResponse response(JwtService.Issued access, Actor actor, RefreshTokenStore.Issued refresh) {

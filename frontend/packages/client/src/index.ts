@@ -49,10 +49,13 @@ export {
   confirmPasswordReset,
   resendVerification,
   changePassword,
+  listSessions,
+  revokeSession,
+  revokeOtherSessions,
   isProblem,
   useOnline,
 } from './auth/account'
-export type { EntryInfo, Registration } from './auth/account'
+export type { EntryInfo, Registration, SessionList, SessionInfo, SessionsRevoked } from './auth/account'
 export { readMailLink, parseMailLink, useMailLink, useNoReferrer, sitePath } from './auth/mailLink'
 export type { MailLink } from './auth/mailLink'
 export { default as UserName, useUserName } from './components/UserName'
