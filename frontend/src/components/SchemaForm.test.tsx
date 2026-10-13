@@ -127,4 +127,49 @@ describe('SchemaForm', () => {
     expect(screen.getByLabelText('id')).toHaveValue('x-1')
     expect(screen.getByLabelText('id')).toHaveAttribute('readonly')
   })
+
+  it('is submitted from a button elsewhere when it hides its own, with the same checks', async () => {
+    const onSubmit = vi.fn()
+    const required = inputNodes({ type: 'object', properties: { warehouse: { type: 'string' } }, required: ['warehouse'] })
+    render(
+      <>
+        <SchemaForm id="params" hideSubmit nodes={required} onSubmit={onSubmit} />
+        <button type="submit" form="params">
+          Preview
+        </button>
+      </>,
+    )
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull()
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('warehouse: REQUIRED')).toBeInTheDocument()
+    expect(screen.getByLabelText(/warehouse/)).toHaveFocus()
+
+    await userEvent.type(screen.getByLabelText(/warehouse/), 'W1')
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(onSubmit).toHaveBeenCalledWith({ warehouse: 'W1' })
+    // A script submits it the same way (requestSubmit, as a confirmation's button does).
+    ;(document.getElementById('params') as HTMLFormElement).requestSubmit()
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
+    await expectAccessible()
+  })
+
+  it('shows further controls between the fields and its button', async () => {
+    render(
+      <SchemaForm nodes={inputNodes({ type: 'object', properties: { sku: { type: 'string' } } })} submitLabel="Run"
+        onSubmit={() => {}}>
+        <label>
+          Effective at
+          <input data-testid="extra" />
+        </label>
+      </SchemaForm>,
+    )
+    const form = screen.getByRole('button', { name: 'Run' }).closest('form')!
+    const order = [...form.querySelectorAll('input, button')].map((e) => e.getAttribute('data-testid') ?? e.textContent)
+    expect(order.indexOf('extra')).toBeGreaterThan(-1)
+    expect(form.querySelector('input')).toBe(screen.getByLabelText('sku'))
+    expect(order.at(-1)).toBe('Run')
+    await expectAccessible()
+  })
 })

@@ -45,7 +45,8 @@ describe('reports', () => {
       { field: 'accountCode', op: 'like', value: '%10%' },
       { field: 'balance', op: 'gte', value: '0' },
     ])
-    expect(buildSorts(view, { accountCode: 'descend', balance: 'ascend' })).toEqual([{ field: 'accountCode', asc: false }])
+    expect(buildSorts(view, [{ id: 'accountCode', desc: true }, { id: 'balance', desc: false }]))
+      .toEqual([{ field: 'accountCode', asc: false }])
   })
 
   it('knows where a run takes its point in time from', () => {

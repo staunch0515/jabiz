@@ -1,8 +1,9 @@
-import { PageContainer } from '@ant-design/pro-components'
-import { Card, Empty, List, Spin, Typography } from 'antd'
+import { Button, Card, CardContent, CardHeader, CardTitle, PageState } from '@jabiz/ui'
+import { Archive } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
+import AdminPage from '../layout/AdminPage'
 import { useQueryCatalog } from '../meta/hooks'
 import { reportGroups } from '../meta/reports'
 import { paths } from './paths'
@@ -15,41 +16,50 @@ export default function ReportCatalogPage() {
   const { t } = useTranslation()
   const catalog = useQueryCatalog()
   const { can } = useAuth()
-  if (catalog.isLoading) return <Spin style={{ margin: 48 }} />
+  if (catalog.isLoading) return <PageState kind="loading" />
   const groups = reportGroups(catalog.data ?? [])
   return (
-    <PageContainer
+    <AdminPage
       title={t('reports.title')}
-      extra={can('report.archive.read') ? [
-        <Link key="archive" to={paths.reportArchive()} data-testid="report-archive-link">
-          {t('reports.archive.title')}
-        </Link>,
-      ] : []}
+      actions={
+        can('report.archive.read') && (
+          <Button variant="outline" asChild>
+            <Link to={paths.reportArchive()} data-testid="report-archive-link">
+              <Archive aria-hidden />
+              {t('reports.archive.title')}
+            </Link>
+          </Button>
+        )
+      }
     >
-      {groups.length === 0 && <Empty description={t('reports.empty')} />}
+      {groups.length === 0 && <PageState kind="empty" title={t('reports.empty')} />}
       {groups.map(({ group, reports }) => (
-        <Card key={group} title={group} style={{ marginBottom: 16 }} data-testid={`report-group-${group}`}>
-          <List
-            dataSource={reports}
-            renderItem={(report) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={
-                    <Link to={paths.report(report.id!)} data-testid={`report-${report.id}`}>
-                      {report.title}
-                    </Link>
-                  }
-                  description={
-                    <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ margin: 0 }}>
-                      {report.description}
-                    </Typography.Paragraph>
-                  }
-                />
-              </List.Item>
-            )}
-          />
+        <Card key={group} data-testid={`report-group-${group}`} className="gap-2">
+          <CardHeader>
+            <CardTitle>
+              <h2 className="font-mono text-sm">{group}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-border divide-y">
+              {reports.map((report) => (
+                <li key={report.id} className="flex flex-col gap-0.5 py-2.5">
+                  <Link
+                    to={paths.report(report.id!)}
+                    data-testid={`report-${report.id}`}
+                    className="text-primary w-fit font-medium hover:underline"
+                  >
+                    {report.title}
+                  </Link>
+                  {report.description && (
+                    <p className="text-muted-foreground line-clamp-2 text-sm">{report.description}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
         </Card>
       ))}
-    </PageContainer>
+    </AdminPage>
   )
 }

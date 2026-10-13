@@ -43,6 +43,7 @@ const TEXT: [string, string][] = [
   ['success-foreground', 'success'],
   ['warning-foreground', 'warning'],
   ['warning', 'card'],
+  ['success', 'card'],
   ['primary', 'background'],
   ['sidebar-foreground', 'sidebar'],
   ['sidebar-primary-foreground', 'sidebar-primary'],

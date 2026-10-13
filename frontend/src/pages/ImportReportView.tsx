@@ -1,28 +1,69 @@
-import { Alert, Descriptions, Segmented, Space, Table, Tag, Typography } from 'antd'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  DataTable,
+  DescriptionList,
+  SegmentedControl,
+  type ColumnDef,
+} from '@jabiz/ui'
+import { CircleAlert, CircleCheck } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ImportEntry, ImportIssue, ImportReport } from '../api/imports'
+import { useLocalPage } from '../components/useLocalPage'
 import { fieldLabel } from '../meta/imports'
 
-const STATUS_COLORS: Record<string, string> = { ok: 'green', duplicate: 'default', error: 'red' }
+type Result = NonNullable<ImportReport['results']>[number]
 
-/** Problems of an import, a run or an inspection: where, which field, what. */
+const STATUS_VARIANTS = { ok: 'success', duplicate: 'secondary', error: 'destructive' } as const
+
+/** Problems of an import, a run or an inspection: where, which field, what; 20 to a page. */
 export function IssueTable({ entry, issues }: { entry?: ImportEntry; issues: ImportIssue[] }) {
   const { t } = useTranslation()
+  const page = useLocalPage(issues, 20)
+  const columns = useMemo<ColumnDef<ImportIssue, unknown>[]>(
+    () => [
+      {
+        id: 'row',
+        header: t('imports.row'),
+        meta: { className: 'w-16' },
+        cell: ({ row }) => (row.original.row ? row.original.row : t('imports.file')),
+      },
+      { id: 'location', header: t('imports.location'), cell: ({ row }) => row.original.location },
+      { id: 'field', header: t('imports.field'), cell: ({ row }) => fieldLabel(entry, row.original.field) },
+      { id: 'message', header: t('imports.problem'), cell: ({ row }) => row.original.message },
+    ],
+    [t, entry],
+  )
   return (
-    <Table<ImportIssue>
-      size="small"
-      rowKey={(issue) => `${issue.row}-${issue.field}-${issue.code}-${issue.message}`}
-      dataSource={issues}
-      pagination={{ pageSize: 20, hideOnSinglePage: true }}
-      data-testid="import-issues"
-      columns={[
-        { title: t('imports.row'), dataIndex: 'row', width: 70, render: (row: number) => (row ? row : t('imports.file')) },
-        { title: t('imports.location'), dataIndex: 'location', width: 140 },
-        { title: t('imports.field'), dataIndex: 'field', width: 160, render: (field: string) => fieldLabel(entry, field) },
-        { title: t('imports.problem'), dataIndex: 'message' },
-      ]}
-    />
+    <div data-testid="import-issues">
+      <DataTable
+        label={t('imports.issuesTable')}
+        columns={columns}
+        getRowId={(issue, index) => `${index}-${issue.row}-${issue.field}-${issue.code}`}
+        {...page.paging}
+        data={page.data}
+      />
+    </div>
+  )
+}
+
+/** The records of a report with their outcome, 50 to a page. */
+function RecordsTable({ columns, results }: { columns: ColumnDef<Result, unknown>[]; results: Result[] }) {
+  const { t } = useTranslation()
+  const page = useLocalPage(results, 50)
+  return (
+    <div data-testid="import-rows">
+      <DataTable
+        label={t('imports.rowsTable')}
+        columns={columns}
+        getRowId={(result) => String(result.number)}
+        {...page.paging}
+        data={page.data}
+      />
+    </div>
   )
 }
 
@@ -33,64 +74,81 @@ export function IssueTable({ entry, issues }: { entry?: ImportEntry; issues: Imp
 export default function ImportReportView({ entry, report }: { entry?: ImportEntry; report: ImportReport }) {
   const { t } = useTranslation()
   const [show, setShow] = useState<'all' | 'error' | 'duplicate'>('all')
-  const fields = entry?.fields ?? []
   const results = useMemo(
     () => (report.results ?? []).filter((r) => show === 'all' || r.status === show),
     [report.results, show],
   )
   const issues = report.issues ?? []
+  const columns = useMemo<ColumnDef<Result, unknown>[]>(
+    () => [
+      { id: 'number', header: t('imports.row'), meta: { className: 'w-16' }, cell: ({ row }) => row.original.number },
+      {
+        id: 'status',
+        header: t('imports.status'),
+        cell: ({ row }) => {
+          const status = row.original.status ?? ''
+          return (
+            <Badge variant={STATUS_VARIANTS[status as keyof typeof STATUS_VARIANTS] ?? 'outline'}>
+              {t(`imports.statuses.${status}`)}
+            </Badge>
+          )
+        },
+      },
+      ...(entry?.fields ?? []).map(
+        (field): ColumnDef<Result, unknown> => ({
+          id: field.name ?? '',
+          header: field.label,
+          cell: ({ row }) => {
+            const value = (row.original.values as Record<string, unknown> | undefined)?.[field.name ?? '']
+            return value === null || value === undefined ? '' : String(value)
+          },
+        }),
+      ),
+    ],
+    [t, entry],
+  )
+
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle" data-testid="import-report">
-      {report.accepted
-        ? <Alert type="success" showIcon message={t(report.committed ? 'imports.committed' : 'imports.accepted')} />
-        : <Alert type="error" showIcon message={t('imports.problems', { count: issues.length })}
-            description={report.runId && !report.committed ? t('imports.rejected') : undefined} />}
-      <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 4 }}>
-        <Descriptions.Item label={t('imports.records')}>{report.records}</Descriptions.Item>
-        <Descriptions.Item label={t('imports.rows')}>{report.rows}</Descriptions.Item>
-        <Descriptions.Item label={t('imports.duplicates')}>{report.duplicates}</Descriptions.Item>
-        <Descriptions.Item label={t('imports.processed')}>{`${report.processed} / ${report.units}`}</Descriptions.Item>
-        {Object.entries(report.totals ?? {}).map(([field, total]) => (
-          <Descriptions.Item key={field} label={`${t('imports.total')} ${fieldLabel(entry, field)}`}>
-            <span data-testid={`import-total-${field}`}>{String(total)}</span>
-          </Descriptions.Item>
-        ))}
-      </Descriptions>
+    <div className="flex flex-col gap-4" data-testid="import-report">
+      {report.accepted ? (
+        <Alert variant="success">
+          <CircleCheck aria-hidden />
+          <AlertTitle>{t(report.committed ? 'imports.committed' : 'imports.accepted')}</AlertTitle>
+        </Alert>
+      ) : (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden />
+          <AlertTitle>{t('imports.problems', { count: issues.length })}</AlertTitle>
+          {report.runId && !report.committed && <AlertDescription>{t('imports.rejected')}</AlertDescription>}
+        </Alert>
+      )}
+      <DescriptionList
+        columns={4}
+        items={[
+          { key: 'records', label: t('imports.records'), value: report.records },
+          { key: 'rows', label: t('imports.rows'), value: report.rows },
+          { key: 'duplicates', label: t('imports.duplicates'), value: report.duplicates },
+          { key: 'processed', label: t('imports.processed'), value: `${report.processed} / ${report.units}` },
+          ...Object.entries(report.totals ?? {}).map(([field, total]) => ({
+            key: `total-${field}`,
+            label: `${t('imports.total')} ${fieldLabel(entry, field)}`,
+            value: <span data-testid={`import-total-${field}`}>{String(total)}</span>,
+          })),
+        ]}
+      />
       {issues.length > 0 && <IssueTable entry={entry} issues={issues} />}
-      <Segmented
+      <SegmentedControl
+        aria-label={t('imports.show.label')}
         value={show}
-        onChange={(value) => setShow(value as typeof show)}
+        onChange={setShow}
         options={[
           { value: 'all', label: t('imports.show.all') },
           { value: 'error', label: t('imports.show.error') },
           { value: 'duplicate', label: t('imports.show.duplicate') },
         ]}
       />
-      <Table
-        size="small"
-        rowKey="number"
-        dataSource={results}
-        scroll={{ x: 'max-content' }}
-        pagination={{ pageSize: 50, hideOnSinglePage: true }}
-        data-testid="import-rows"
-        columns={[
-          { title: t('imports.row'), dataIndex: 'number', width: 70 },
-          {
-            title: t('imports.status'),
-            dataIndex: 'status',
-            width: 110,
-            render: (status: string) => <Tag color={STATUS_COLORS[status]}>{t(`imports.statuses.${status}`)}</Tag>,
-          },
-          ...fields.map((field) => ({
-            title: field.label,
-            key: field.name,
-            render: (_: unknown, row: { values?: Record<string, unknown> }) => {
-              const value = row.values?.[field.name ?? '']
-              return value === null || value === undefined ? '' : <Typography.Text>{String(value)}</Typography.Text>
-            },
-          })),
-        ]}
-      />
-    </Space>
+      {/* Another choice of what to show starts at its first page. */}
+      <RecordsTable key={show} columns={columns} results={results} />
+    </div>
   )
 }

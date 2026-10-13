@@ -16,8 +16,12 @@ describe('the routes of the admin', () => {
     for (const path of ['/data', '/data/:datasetId', '/data/:datasetId/:entityId/history', '/processes', '/processes/:name/:version']) {
       expect(marked(path), path).toBe(true)
     }
-    // Still on Ant Design (phase 15c): kept in the light tokens.
-    for (const path of ['/tasks', '/reports/run', '/imports/run', '/audit', '/account/security']) {
+    // Phase 15c-1: the reports and the imports.
+    for (const path of ['/reports', '/reports/run', '/reports/archive', '/imports', '/imports/run', '/imports/runs']) {
+      expect(marked(path), path).toBe(true)
+    }
+    // Still on Ant Design (phase 15c-2): kept in the light tokens.
+    for (const path of ['/tasks', '/documents', '/audit', '/access-review', '/integrity', '/retention', '/account/security']) {
       expect(marked(path), path).toBe(false)
     }
   })

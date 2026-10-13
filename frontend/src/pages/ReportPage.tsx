@@ -1,27 +1,51 @@
-import { PageContainer, ProForm, ProFormDateTimePicker, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { DownloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
-import { Alert, App, Button, Card, Dropdown, Popconfirm, Result, Spin, Typography } from 'antd'
-import { useMemo, useRef, useState } from 'react'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  ConfirmDialog,
+  DataTable,
+  DateTimePicker,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  FilterBar,
+  Label,
+  notify,
+  PageState,
+  Spinner,
+  type ColumnDef,
+  type FilterValues,
+  type PaginationState,
+  type SortingState,
+} from '@jabiz/ui'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { CircleAlert, Download, ShieldCheck } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
-import { exportQuery, type ExportFormat, type ExportRequest } from '../api/reports'
+import { exportQuery, type ExportFormat } from '../api/reports'
 import { useAuth } from '../auth/AuthContext'
-import { renderNode } from '../components/SchemaInputs'
+import SchemaForm from '../components/SchemaForm'
+import AdminPage from '../layout/AdminPage'
 import { runProcess } from '../lib/calls'
-import type { Row } from '../meta/columns'
-import { buildColumns } from '../meta/columns'
+import type { Row } from '../meta/cells'
+import { dataColumns, defaultSorting, filterFields } from '../meta/dataColumns'
 import { formatAmount } from '../meta/format'
 import { useQueryCatalog } from '../meta/hooks'
 import { scaleOf } from '../meta/kinds'
 import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
 import { InvalidJson, inputNodes, toProcessInput, type JsonSchema } from '../meta/processForm'
-import { pointInTimeOf, reportEntity } from '../meta/reports'
-import type { Violation } from '../meta/types'
+import { pointInTimeOf, reportEntity, type QueryEntry } from '../meta/reports'
+import type { EntityMeta, ListViewMeta, Violation } from '../meta/types'
 import { paths } from './paths'
 
 const EXPORT_FORMATS: ExportFormat[] = ['xlsx', 'pdf', 'csv']
+const DEFAULT_PAGE_SIZE = 50
 
 /** What the table runs: the parameters and point in time of the last submitted form. */
 interface Run {
@@ -32,13 +56,7 @@ interface Run {
   serial: number
 }
 
-function instant(value: unknown): string | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  const text = typeof value === 'object' && 'toISOString' in (value as object)
-    ? (value as { toISOString(): string }).toISOString()
-    : String(value)
-  return text
-}
+const NO_VIOLATIONS: Violation[] = []
 
 /**
  * Runs one report (docs/design/19-reports.md section 3.3): a form generated from the template's parameters, the
@@ -48,8 +66,7 @@ function instant(value: unknown): string | undefined {
  * contents archived to be shown again exactly (section 5).
  */
 export default function ReportPage() {
-  const { t, i18n } = useTranslation()
-  const { message } = App.useApp()
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const id = searchParams.get('id') ?? ''
   const catalog = useQueryCatalog()
@@ -59,200 +76,273 @@ export default function ReportPage() {
   const view = entity ? listViewOf(entity, 'default') : undefined
   const needsInput = nodes.some((n) => n.required)
   const [run, setRun] = useState<Run | null>(null)
-  const [violations, setViolations] = useState<Violation[]>([])
+  const [formViolations, setFormViolations] = useState<Violation[]>(NO_VIOLATIONS)
+  const [queryViolations, setQueryViolations] = useState<Violation[]>(NO_VIOLATIONS)
+  // The point in time of a template that takes one from the request; typed text that is no time keeps it from running.
+  const [asOf, setAsOf] = useState<string | null>(null)
+  const [knownAt, setKnownAt] = useState<string | null>(null)
+  const [timeInvalid, setTimeInvalid] = useState<ReadonlySet<string>>(new Set())
+  const asOfId = useId()
+  const knownAtId = useId()
   const effective = run ?? (entry && !needsInput ? { params: {}, serial: 0 } : null)
-  // The filters and sort of the rows on screen: an export gives the same rows, all of them.
-  const shown = useRef<Pick<ExportRequest, 'filters' | 'sorts'>>({})
-  const [exporting, setExporting] = useState(false)
 
-  const [issuing, setIssuing] = useState(false)
-  const { can } = useAuth()
-  const navigate = useNavigate()
+  const markInvalid = (name: string) => (invalid: boolean) =>
+    setTimeInvalid((current) => {
+      const next = new Set(current)
+      if (invalid) next.add(name)
+      else next.delete(name)
+      return next
+    })
 
-  // Issues the report with the parameters and point in time of the run on screen (all rows, not only the filtered).
-  const issue = async () => {
-    if (!effective) return
-    setIssuing(true)
+  if (catalog.isLoading) return <PageState kind="loading" />
+  if (!entry || !entry.report || !entity) return <PageState kind="notFound" titleAs="h1" title={id} />
+  const pointInTime = pointInTimeOf(entry)
+  const violations = [...formViolations, ...queryViolations]
+
+  const submit = (values: Record<string, unknown>) => {
+    setFormViolations(NO_VIOLATIONS)
+    if (timeInvalid.size > 0) return
     try {
-      await runProcess('REPORT_ISSUE', {
-        templateId: id,
-        params: effective.params,
-        asOf: effective.asOf,
-        knownAt: effective.knownAt,
+      setRun({
+        params: toProcessInput(nodes, values),
+        asOf: asOf ?? undefined,
+        knownAt: knownAt ?? undefined,
+        serial: (run?.serial ?? 0) + 1,
       })
-      message.success(t('reports.issued'))
-      navigate(paths.reportArchive(id))
     } catch (e) {
-      message.error(e instanceof ApiError ? e.display : String(e))
-    } finally {
-      setIssuing(false)
+      if (e instanceof InvalidJson) {
+        setFormViolations([{ field: e.path, ruleCode: 'INVALID_VALUE', message: t('process.invalidJson') }])
+        return
+      }
+      throw e
     }
   }
 
+  return (
+    <AdminPage
+      title={entry.title}
+      breadcrumb={[{ label: t('nav.reports'), to: '/reports' }, { label: entry.title }]}
+      description={
+        <span className="flex flex-col gap-1">
+          <span>{t('reports.version', { version: entry.version?.slice(0, 12) })}</span>
+          {entry.description && <span>{entry.description}</span>}
+        </span>
+      }
+    >
+      {violations.length > 0 && (
+        <Alert variant="destructive" data-testid="report-error">
+          <CircleAlert aria-hidden />
+          <AlertDescription>
+            {violations.map((v) => `${v.field ? `${v.field}: ` : ''}${v.message}`).join(' ')}
+          </AlertDescription>
+        </Alert>
+      )}
+      {(nodes.length > 0 || pointInTime === 'request') && (
+        <Card>
+          <CardContent>
+            <SchemaForm nodes={nodes} submitLabel={t('reports.run')} onSubmit={submit}>
+              {pointInTime === 'request' && (
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={asOfId}>{t('reports.asOf')}</Label>
+                    <DateTimePicker id={asOfId} value={asOf} onChange={setAsOf} clearable data-testid="report-as-of"
+                      onInvalidChange={markInvalid('asOf')} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={knownAtId}>{t('reports.knownAt')}</Label>
+                    <DateTimePicker id={knownAtId} value={knownAt} onChange={setKnownAt} clearable
+                      onInvalidChange={markInvalid('knownAt')} />
+                  </div>
+                </div>
+              )}
+            </SchemaForm>
+          </CardContent>
+        </Card>
+      )}
+      {effective ? (
+        // A new run (or report) starts a new table: the first page, the default order, no filters.
+        <ReportResult
+          key={`${id}#${effective.serial}`}
+          id={id}
+          entry={entry}
+          entity={entity}
+          view={view}
+          run={effective}
+          onViolations={setQueryViolations}
+        />
+      ) : (
+        <Card>
+          <CardContent>
+            <p className="text-muted-foreground" data-testid="report-not-run">
+              {t('reports.notRun')}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </AdminPage>
+  )
+}
+
+/** The rows of one run: filtered, sorted and paged by the server, exported or issued as shown. */
+function ReportResult({
+  id,
+  entry,
+  entity,
+  view,
+  run,
+  onViolations,
+}: {
+  id: string
+  entry: QueryEntry
+  entity: EntityMeta
+  view: ListViewMeta | undefined
+  run: Run
+  onViolations: (violations: Violation[]) => void
+}) {
+  const { t, i18n } = useTranslation()
+  const { can } = useAuth()
+  const navigate = useNavigate()
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE })
+  // The template's whitelist decides; a report's masked columns are compared by nobody here, as before.
+  const [sorting, setSorting] = useState<SortingState>(() => defaultSorting(entity, view))
+  const [filters, setFilters] = useState<FilterValues>({})
+  const [exporting, setExporting] = useState(false)
+
+  // The filters and sort of the rows on screen: an export gives the same rows, all of them.
+  const shown = { filters: buildFilters(entity, view, filters), sorts: buildSorts(view, sorting) }
+  const offset = pagination.pageIndex * pagination.pageSize
+  const body = {
+    params: run.params,
+    asOf: run.asOf,
+    knownAt: run.knownAt,
+    ...shown,
+    offset,
+    limit: pagination.pageSize,
+  }
+  const query = useQuery({
+    queryKey: ['report', id, run.serial, body],
+    placeholderData: keepPreviousData,
+    // A refusal (400) or a query stopped at its time limit (503) does not get better by asking again.
+    retry: false,
+    queryFn: async () => {
+      const result = await unwrap(api.POST('/api/queries/{queryId}', { params: { path: { queryId: id } }, body }))
+      const rows = (result.items ?? []).map((item, i) => ({
+        ...(item as Record<string, unknown>),
+        __key: String(offset + i),
+      })) as unknown as Row[]
+      return { rows, total: result.total ?? 0 }
+    },
+  })
+  const { error } = query
+  useEffect(() => {
+    if (error instanceof ApiError && error.violations.length > 0) {
+      onViolations(error.violations)
+      return
+    }
+    onViolations(NO_VIOLATIONS)
+    if (error) notify.error(error instanceof ApiError ? error.display : String(error))
+  }, [error, onViolations])
+
   const download = async (format: ExportFormat) => {
-    if (!effective) return
     setExporting(true)
     try {
-      await exportQuery(id, format, {
-        params: effective.params,
-        asOf: effective.asOf,
-        knownAt: effective.knownAt,
-        ...shown.current,
-      })
+      await exportQuery(id, format, { params: run.params, asOf: run.asOf, knownAt: run.knownAt, ...shown })
     } catch (e) {
-      message.error(e instanceof ApiError ? e.display : String(e))
+      notify.error(e instanceof ApiError ? e.display : String(e))
     } finally {
       setExporting(false)
     }
   }
 
-  const columns = useMemo<ProColumns<Row>[]>(() => {
-    if (!entity) return []
-    return buildColumns(entity, view, {}, t, i18n.language).map((column) => {
-      const field = entity.fields.find((f) => f.name === column.dataIndex)
-      if (!field || (field.type !== 'monetary' && field.type !== 'numeric')) return column
-      const scale = scaleOf(field) ?? 0
-      return {
-        ...column,
-        align: 'right',
-        render: (_, row) => formatAmount(row[field.name], { scale, negative: 'parentheses' }),
-      }
-    })
-  }, [entity, view, t, i18n.language])
+  // Issues the report with the parameters and point in time of the run on screen (all rows, not only the filtered).
+  const issue = useCallback(async () => {
+    try {
+      await runProcess('REPORT_ISSUE', { templateId: id, params: run.params, asOf: run.asOf, knownAt: run.knownAt })
+      notify.success(t('reports.issued'))
+      navigate(paths.reportArchive(id))
+    } catch (e) {
+      notify.error(e instanceof ApiError ? e.display : String(e))
+    }
+  }, [id, run, t, navigate])
 
-  if (catalog.isLoading) return <Spin style={{ margin: 48 }} />
-  if (!entry || !entry.report || !entity) return <Result status="404" title={id} />
-  const pointInTime = pointInTimeOf(entry)
+  const columns = useMemo<ColumnDef<Row, unknown>[]>(
+    () =>
+      dataColumns(entity, view, {}, t, i18n.language).map((column) => {
+        const field = entity.fields.find((f) => f.name === column.id)
+        if (!field || (field.type !== 'monetary' && field.type !== 'numeric')) return column
+        const scale = scaleOf(field) ?? 0
+        return {
+          ...column,
+          meta: { className: 'text-right tabular-nums' },
+          cell: ({ row }) => formatAmount(row.original[field.name], { scale, negative: 'parentheses' }),
+        }
+      }),
+    [entity, view, t, i18n.language],
+  )
+  const filterBarFields = useMemo(() => filterFields(entity, view, {}, t), [entity, view, t])
 
   return (
-    <PageContainer
-      title={<span data-testid="page-title">{entry.title}</span>}
-      subTitle={<Typography.Text type="secondary">{t('reports.version', { version: entry.version?.slice(0, 12) })}</Typography.Text>}
-      content={entry.description}
-    >
-      {violations.length > 0 && (
-        <Alert
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-          data-testid="report-error"
-          message={violations.map((v) => `${v.field ? `${v.field}: ` : ''}${v.message}`).join(' ')}
-        />
-      )}
-      {(nodes.length > 0 || pointInTime === 'request') && (
-        <Card style={{ marginBottom: 16 }}>
-          <ProForm
-            name="report"
-            layout="inline"
-            dateFormatter={false}
-            submitter={{ searchConfig: { submitText: t('reports.run') }, resetButtonProps: false }}
-            onFinish={async (values: Record<string, unknown>) => {
-              setViolations([])
-              const { __asOf, __knownAt, ...params } = values
-              try {
-                setRun({
-                  params: toProcessInput(nodes, params),
-                  asOf: instant(__asOf),
-                  knownAt: instant(__knownAt),
-                  serial: (run?.serial ?? 0) + 1,
-                })
-              } catch (e) {
-                if (e instanceof InvalidJson) {
-                  setViolations([{ field: e.path, ruleCode: 'INVALID_VALUE', message: t('process.invalidJson') }])
-                  return false
-                }
-                throw e
-              }
-              return true
-            }}
-          >
-            {nodes.map((node) => renderNode(node, t))}
-            {pointInTime === 'request' && (
-              <>
-                <ProFormDateTimePicker name="__asOf" label={t('reports.asOf')} fieldProps={{ 'data-testid': 'report-as-of' } as object} />
-                <ProFormDateTimePicker name="__knownAt" label={t('reports.knownAt')} />
-              </>
-            )}
-          </ProForm>
-        </Card>
-      )}
-      {effective ? (
-        <ProTable<Row>
-          // A new run (or report) starts a new table, so its search values hold nothing but filters.
-          key={`${id}#${effective.serial}`}
-          toolBarRender={() => [
-            <Dropdown
-              key="export"
-              menu={{
-                items: EXPORT_FORMATS.map((format) => ({ key: format, label: t(`reports.formats.${format}`) })),
-                onClick: ({ key }) => void download(key as ExportFormat),
-              }}
-            >
-              <Button icon={<DownloadOutlined />} loading={exporting} data-testid="report-export">
-                {t('reports.export')}
-              </Button>
-            </Dropdown>,
-            ...(can('report.issue')
-              ? [
-                  <Popconfirm
-                    key="issue"
-                    title={t('reports.issueConfirm')}
-                    okText={t('reports.issue')}
-                    cancelText={t('reports.cancel')}
-                    onConfirm={() => void issue()}
-                  >
-                    <Button type="primary" icon={<SafetyCertificateOutlined />} loading={issuing} data-testid="report-issue">
-                      {t('reports.issue')}
-                    </Button>
-                  </Popconfirm>,
-                ]
-              : []),
-          ]}
-          rowKey="__key"
-          columns={columns}
-          dateFormatter={(value) => value.toISOString()}
-          scroll={{ x: 'max-content' }}
-          pagination={{ defaultPageSize: 50, showSizeChanger: true }}
-          search={view?.filters?.length ? { labelWidth: 'auto', defaultCollapsed: true } : false}
-          data-testid="report-table"
-          request={async (params, sort) => {
-            const { current = 1, pageSize = 50, ...values } = params
-            setViolations([])
-            shown.current = {
-              filters: buildFilters(entity, view, values),
-              sorts: buildSorts(view, sort as Record<string, string>),
-            }
-            try {
-              const result = await unwrap(
-                api.POST('/api/queries/{queryId}', {
-                  params: { path: { queryId: id } },
-                  body: {
-                    params: effective.params,
-                    asOf: effective.asOf,
-                    knownAt: effective.knownAt,
-                    ...shown.current,
-                    offset: (current - 1) * pageSize,
-                    limit: pageSize,
-                  },
-                }),
-              )
-              const data = (result.items ?? []).map((item, i) => ({
-                ...(item as Record<string, unknown>),
-                __key: String((current - 1) * pageSize + i),
-              })) as unknown as Row[]
-              return { data, total: result.total ?? 0, success: true }
-            } catch (e) {
-              if (e instanceof ApiError && e.violations.length > 0) setViolations(e.violations)
-              else message.error(e instanceof ApiError ? e.display : String(e))
-              return { data: [], total: 0, success: false }
-            }
+    <div className="flex flex-col gap-4">
+      {filterBarFields.length > 0 && (
+        <FilterBar
+          fields={filterBarFields}
+          values={filters}
+          onSubmit={(values) => {
+            // A new search starts at the first page.
+            setFilters(values)
+            setPagination({ ...pagination, pageIndex: 0 })
           }}
         />
-      ) : (
-        <Card>
-          <Typography.Text type="secondary" data-testid="report-not-run">{t('reports.notRun')}</Typography.Text>
-        </Card>
       )}
-    </PageContainer>
+      <div className="flex flex-wrap justify-end gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={exporting} aria-busy={exporting || undefined} data-testid="report-export">
+              {exporting ? <Spinner className="text-current" /> : <Download aria-hidden />}
+              {t('reports.export')}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {EXPORT_FORMATS.map((format) => (
+              <DropdownMenuItem key={format} onSelect={() => void download(format)}>
+                {t(`reports.formats.${format}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {can('report.issue') && (
+          <ConfirmDialog
+            title={t('reports.issueConfirm')}
+            confirmLabel={t('reports.issue')}
+            cancelLabel={t('reports.cancel')}
+            onConfirm={issue}
+            trigger={
+              <Button data-testid="report-issue">
+                <ShieldCheck aria-hidden />
+                {t('reports.issue')}
+              </Button>
+            }
+          />
+        )}
+      </div>
+      <div data-testid="report-table">
+        <DataTable
+          label={entry.title ?? id}
+          columns={columns}
+          data={query.data?.rows ?? []}
+          getRowId={(row) => row.__key}
+          loading={query.isFetching}
+          stale={query.isPlaceholderData}
+          pagination={pagination}
+          onPaginationChange={setPagination}
+          rowCount={query.data?.total}
+          sorting={sorting}
+          onSortingChange={(next) => {
+            setSorting(next)
+            setPagination({ ...pagination, pageIndex: 0 })
+          }}
+        />
+      </div>
+    </div>
   )
 }

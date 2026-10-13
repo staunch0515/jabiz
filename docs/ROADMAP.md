@@ -20,7 +20,7 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c-1 已完成；15c-2、15d 计划中 |
 | 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
@@ -1247,10 +1247,90 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 - 子实体列表的引用列不按显示名显示（与迁移前相同：子列表不取引用的显示名）。
 - e2e 中待办、报表、导入、审计、封存、保留、安全设置与单据页仍用 `.ant-*` 选择器（15c / 15d）。
 
-### 15c – 15d
+### 15c 其余页面（5–7 天，分 15c-1 / 15c-2 两个 PR）
 
-详细计划在开工前给出（CLAUDE.md 第 7 节）。15c 在 15b-1 合入后开工（共用的组合组件在 15b-1）。15d 的验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；
-12 与扩展指南改写完毕。
+依据：决策 D22、D34；12 §1、§6、§9、§11、§12；15a、15b-1、15b-2 的出入与已知问题。目标：其余页面与示范扩展不再用 antd、ProComponents 与 icons，行为不变；
+这些页面在暗色外观下随外观变化，有 `AdminPage` 的面包屑和唯一的 `<h1>`；e2e 与 a11y 中涉及这些页面的 `.ant-*` 选择器改为角色、名称或稳定的 `data-*`。
+**无后端改动，无新表、无迁移，无新依赖**（新的 shadcn 基础组件来自 `@jabiz/ui` 已依赖的 `radix-ui`）。
+
+**计划摘要**（拆分原则沿用 15b：同一棵弹出层子树一次迁完；哪个 PR 迁某页，就由它改掉该页在 e2e 里的 `.ant-*`）：
+
+| PR | 分支 | 内容 | 估时 |
+|---|---|---|---|
+| 15c-1 | `1.2/phase-15c1-reports-imports` | 报表三页、导入四页（含报告视图）；`SchemaForm` 增加 `id` / `hideSubmit` / `children`；`@jabiz/ui` 新组件（`Steps`、toggle-group 与 `SegmentedControl`、`FileUpload` 拖放区、`PageState` 的 `data-state`、`ConfirmDialog` 的按钮文字、`DescriptionList` 多列与复制）；删除 `SchemaInputs`、`meta/columns.ts` | 3–3.5 天 |
+| 15c-2 | `1.2/phase-15c2-admin-pages` | 待办与审批面板、单据与单据面板、审计、访问审查、防篡改、保留与导出、账户安全（由各节组成，两步验证一节抽成 `@jabiz/ui` 的 `MfaSettings`，后台与门户共用；节由数组 `ACCOUNT_SECTIONS` 声明，16g 的 `SessionList` 只需加一项）；删除 `expandIcon`、`AccessibleSelect`；示范扩展迁移并取消 lint 豁免；扩展路由由 registry 统一加 `handle` | 3–3.5 天 |
+
+15c-2 在 15c-1 合入后开工（两者都改 `@jabiz/ui` 的导出与 `i18n/resources.ts`，新组件全部在 15c-1）。`ApprovalPanel`、`DocumentPanel` 是 `@jabiz/admin` 的约定，props 不变。
+账户设置中的邮件订阅与语言不放进 15c（只做迁移），由 16g 或单独的小项按 `ACCOUNT_SECTIONS` 加节。
+
+**确认**：2026-10-13，待确认项全部按缺省（两个 PR；`SchemaForm` 增加三个 props 而不另造无界面的 hook；账户设置的邮件订阅与语言不放进 15c；抽出 `MfaSettings`；
+15c-2 由 registry 给扩展路由加 `handle`、15d 连同开关去掉；15d 后保留 `UI_SCOPE` 的导出与扩展 lint 的 NO_ANT_DESIGN；15d 的 preflight 改为全局、不留作用域版本；
+15d 收紧 e2e 中 `/查\s*询/` 一类名称；`dayjs` 不删，只去掉 `processForm` 中为旧表单保留的 Dayjs 分支）。
+
+**验收标准**（15c，对应 D34 第 6 条）
+- [ ] 报表、导入、旧适配、待办与单据、治理、账户各组文件以及示范扩展都不再引用 antd 系包；`SchemaInputs`、`meta/columns.ts`、`expandIcon`、`AccessibleSelect` 已删除；antd 只剩 `App.tsx`、`main.tsx`、`index.css` 这些外壳部分。
+- [ ] 这些页面在暗色外观下为暗色，有 `AdminPage` 的面包屑和唯一的 `<h1>`。
+- [ ] 改写前后行为不变，逐条有 Vitest 覆盖；`ApprovalPanel`、`DocumentPanel` 的 props 不变；`pnpm ext:check` 在取消豁免后通过。
+- [ ] e2e 全部通过，涉及这些页面的地方不再使用 `.ant-*`；`a11y.spec` 对这些页面和弹出层在亮、暗两种外观下无违规。
+- [ ] 账户安全页由各节组成，`MfaSettings` 由后台与门户共用。
+
+#### 15c-1（3–3.5 天）：报表与导入
+
+**要求**
+1. **`@jabiz/ui`**（各配 Vitest，亮、暗两种外观下 axe 无违规；文案 `ui` 命名空间三语）：`Steps`（有序列表，当前步骤 `aria-current="step"`，已完成的步骤有文字标记）；
+   shadcn 的 toggle-group 与 `SegmentedControl`（`role="radiogroup"`，以标签命名）；`FileUpload` 的 `variant="dropzone"`（可拖放，仍是真实的 file 输入）；
+   `PageState` 的稳定 `data-state`；`ConfirmDialog` 的确认按钮文字；`DescriptionList` 的多列与复制按钮。
+2. **`SchemaForm`** 增加 `id`、`hideSubmit`（由外部的 `<Button form={id}>` 提交）、`children`（字段之后、提交按钮之前）。
+3. **报表**：目录（`AdminPage` + `Card` 列表，空状态用 `PageState`，testid `report-<id>`）；报表页（参数 `SchemaForm`、时点放在 `children`、结果 `DataTable` + `FilterBar`，
+   与列表页共用 `dataColumns` / `buildFilters` / `buildSorts` 和白名单；导出 `DropdownMenu`；签发 `ConfirmDialog`；404 `PageState`；testid `report-as-of` 在日期文本框上）；
+   存档（`DataTable`，下载 `DropdownMenu`，核对结果 `Badge` 加 `Tooltip`）。
+4. **导入**：目录；向导（`Steps`、上传拖放区、版式用 `Combobox` / `Input` / `Switch` / `DecimalInput`、每个字段一个以"字段名 的来源列"命名的 `Combobox`、
+   保存与载入映射、参数 `SchemaForm`（`hideSubmit`）、预览 `DataTable`、提交 `ConfirmDialog`、被拒的提交显示报告）；报告视图（`DescriptionList`、`SegmentedControl`、`DataTable`）；
+   记录（`DataTable`，详情 `Sheet`，报告导出 `DropdownMenu`）。
+5. 删除 `components/SchemaInputs.tsx`、`meta/columns.ts`（仍有意义的测试移入 `cells.test.ts` / `masked.test.ts` / `listQuery.test.ts`）；`toProcessInput` 只接受文本。
+6. 这些路由加 `handle: JABIZ_UI`；e2e `reports.spec`、`imports.spec`、`a11y.spec` 不再用 `.ant-*`，a11y 新增导入向导的映射步骤（展开的组合框）与报表存档。
+
+**15c-1 状态**：☑ 已完成（分支 `1.2/phase-15c1-reports-imports`，PR 待建）。
+`pnpm lint`、`typecheck`、`test`（90 个文件、663 个用例）、`build`、`check:api`、`ext:check` 通过；e2e 对打包的应用（同 CI 的 `e2e` 作业）43 个用例全部通过；
+`./gradlew :app:check` 通过（含前端构建与 `platformCheck`）。
+
+**15c-1 与计划的出入**
+- 路由是 6 条（报表目录、报表、存档、导入目录、向导、记录）：导入的报告视图是向导与记录共用的组件，不是路由。
+- `PageState` 已经以 `data-state` 给出 `kind`（`loading`、`notFound`、`error`、`warning`），写法沿用 `kind`（`notFound` 而非计划中的 `not-found`）；
+  新增 `kind="empty"`（目录为空），不是 `alert`；e2e 的 `pageRendered` 把空状态当作已渲染。
+- shadcn 的 toggle-group 引用 toggle 的样式（`toggleVariants`），一并加入 `ui/toggle.tsx`（同一 `radix-ui` 包，无新依赖）；`Alert` 加上 README 已列出而未实现的 `success` 变体。
+- `ConfirmDialog` 的确认按钮文字（`confirmLabel`）已支持且已有测试，未改。
+- 两个目录不分页（原来的 antd `List` 也不分页），没有用 `useLocalPage`；导入报告的记录、问题表与导入记录用 `useLocalPage`（每页 50 / 20 / 50，与原来相同）。
+- 映射表是普通的 `Table`，不是 `DataTable`：`DataTable` 把单元格当作组件渲染，列定义随键入的值改变时会重新挂载输入框而丢失焦点（15b-2 评审第 9 条）。
+- 有参数的导入：确认提交后以 `requestSubmit()` 提交参数表单（与预览同样的检查，参数的问题显示在字段下、不发送），确认框随即关闭（与原来的 `Popconfirm` 相同）。
+- 提交只发送预览过的内容（比原来严格）：预览之后改了版式、映射或常量，预览的报告与"导入"按钮随即撤下，须重新预览；改了参数时，提交前比对预览所用的参数，不同则不提交、撤下报告并提示重新预览。
+- 版式中的数字（跳过行数、表头行）键入时可以暂时为空，离开字段仍为空时才取缺省值（0 / 1），原来清空即写入缺省值（"1" 改成 "2" 会变成 "12"）。
+- 报表结果的请求不重试（`retry: false`，原来的 ProTable 也不重试）；服务端的违规与表单的 JSON 错误合在页面顶部的同一个提示中（testid `report-error` 不变）。
+- 存档的内容哈希：原来悬停显示全文，改为 `title` 加复制按钮；"仅存档"的说明用 `Tooltip`，触发器是按钮（键盘可达）。
+- 上传：拖放区在上传前按导入的扩展名检查（`FileUpload` 的 `accept`），不符的文件不上传并在框下提示（原来拖放不检查，由服务端拒绝）；上传失败仍以提示条显示。
+- 评审后的修正（各有测试）：存档中核对结果经 context 传给单元格，列定义不随结果重建（原来重建时单元格重新挂载，"核对"按钮失去焦点）；
+  `theme.test.ts` 加查 `success` 文字在 `card` 上的对比度；换文件时清除"已保存的映射"的选择，以新名称保存后选中新名称；导入报告切换"显示"时回到第 1 页；
+  上传后拖放区的名称为"<文件名> — 点击或拖放文件以替换"。
+- e2e：`support.ts` 新增 `confirmWith(page, 按钮)`（以自己的按钮确认，如"签发""导入"）；Radix 菜单不随悬停打开，导出改为点击。
+  `a11y.spec` 另加报表（有结果表、导出菜单、签发确认）、导入记录、导入向导上传前的页面；报表与导入各页以 testid 判断已渲染。
+
+**15c-1 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 056.3 kB / 940.5 kB、CSS 79.9 kB / 13.4 kB；之后 JS 3 029.2 kB / 930.2 kB、CSS 83.8 kB / 13.9 kB
+（ProComponents 的表单与表格、antd 的 `Steps`、`Upload`、`Segmented`、`Descriptions` 不再被引用；其余 antd 由 15c-2 的页面使用，15d 删除后回落）。
+
+**15c-1 已知问题**
+- 待办、单据、审计、访问审查、防篡改、保留、账户安全与示范扩展仍是 antd（15c-2），e2e 中这些页面仍用 `.ant-*`。
+- 有参数的导入在确认提交时若参数已改为无效，问题显示在字段下，但焦点回到"导入"按钮（确认框关闭时还焦点），不在出错的字段上；
+  改了参数而未重新预览时，提交被拒并提示，报告撤下（参数表单不报告每次键入，所以不能像映射那样在改动时立即撤下）。
+
+#### 15c-2（3–3.5 天）：其余页面与示范扩展
+
+计划中（见上表）。
+
+### 15d 删除 antd（2–2.5 天）
+
+计划中：删除 antd、`@ant-design/*` 与 React 19 补丁；`App.tsx` 去掉 antd 的 provider、语言包、`ACCESSIBLE_THEME` 与 `JABIZ_UI`；preflight 改为全局；
+删除 11 个只做重新导出的文件；平台前端与 e2e 的 lint 禁止 antd 与 `.ant-*`；文档（12、`guide/admin-extension.md`、功能清单、CLAUDE.md §2、README、00、08、17）。
+验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；12 与扩展指南改写完毕；ROADMAP 记录产物大小（低于 15a 之前）。
 
 ## 阶段 16：应用所需的通用能力（由 QuizBuks 提出，线 1.2）
 
