@@ -353,7 +353,7 @@
 - 秘密不进操作记录：`currentPassword` 标 `@Sensitive`；请求与 `Identity` 的 `toString` 遮蔽。
 - 前端：`@jabiz/client` 的 `startIdentityLink(provider, {currentPassword?}, returnTo)`（在 `sessionStorage` 记下用途 `LINK`，每次发起都重写）、`finishIdentityLink`、
   `listIdentities`、`unlinkIdentity`；`@jabiz/ui` 的 `OidcCallback` 按记下的用途走登录或关联（`onLinked`），`OIDC_ACCOUNT_EXISTS` 时说明怎样继续；积木 `LinkedIdentities`
-  （列表、需要时先问当前密码、解除）；`OidcButtons` 按 `kind` 画提供方的标志（Google 的单色"G"，颜色只用主题 token）。示范门户的账户页使用它；后台账户安全页在 15c-2 之后加入。
+  （列表、需要时先问当前密码、解除）；`OidcButtons` 按 `kind` 画提供方的标志（Google 的单色"G"，颜色只用主题 token）。示范门户的账户页与后台安全设置页（`/account/security` 的一节，只在后台入口提供了身份提供方时显示）使用它。
 
 ## 13. 按权限显示明文、数据期限、访问审查【D28 第 7–9 条，阶段 14g-3】
 

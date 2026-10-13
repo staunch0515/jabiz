@@ -1419,7 +1419,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
 
 **待办**
 - [ ] 16f-2（Apple 登录）：取得 Apple 开发者账号后，用真实的 Services ID 核对后实现。
-- [ ] 后台账户安全页加 `<LinkedIdentities/>`（一行）：等 16f-1 与 15c-2（`AccountSecurityPage` 迁入 `ACCOUNT_SECTIONS`）都合入后再加，16f-1 没有改动该页面。
+- [x] 后台账户安全页加 `<LinkedIdentities/>`：15c-2 合入后作为 `ACCOUNT_SECTIONS` 的一节 `identities`（会话之后，只在后台入口提供了身份提供方时显示），在 16f-1 的分支上完成。
 - [ ] Reactor Netty 1.3.1 受 CVE-2026-47874 影响（HTTP/1.1 管道化导致内存耗尽，1.3.7 修复）；2026-10-13 决定暂不升级，以后升级。
 
 ### 16a 事务邮件（3–4 天）
@@ -2209,11 +2209,12 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - 没有密码又没有近期二次验证的账号开始关联时答 422 `REAUTHENTICATION_UNAVAILABLE`（不再弹出无法回答的密码框），`LinkedIdentities` 说明可开启两步验证或经找回密码设密码（三语）。
 - 回调本身也不在 `admin` 入口开户（`OidcController.opensAccounts`）；解除与关联共用按用户的限流（写入 10 §12）。
 - 解除按钮的可访问名称带提供方（"Remove Google"）。
+- 合入 15c-2 后：后台安全设置页的 `ACCOUNT_SECTIONS` 加一节 `identities`（`LinkedIdentities`，会话之后；节可声明 `shown`，只在后台入口提供了身份提供方时显示，与登录页同一查询）；
+  OIDC 回调页关联完成后经路由状态回到本页并显示结果。Vitest 测显示与隐藏、axe；e2e 的应用没有配置身份提供方，所以 `a11y.spec` 不覆盖这一节。
 - 补测：验证邮件（新密码）接管时删除关联；开户后守卫拒绝（403，用户留下）；两个 subject 同时以同一邮箱开户（一个 200、一个 403，只一个用户）；
   经 `SEC_IDENTITY_LINK_BEGIN` 达到锁定后正确的密码也被拒；`ProcessAccessIT` 列入四个新流程。
 
 **已知问题**
-- 后台账户安全页还没有 `LinkedIdentities`（15c-2 正在迁移该页，见上方待办）。
 - Google 的邮箱规则可能使少数非 gmail、非 Workspace 的 Google 用户不能自动开户（Q2 的取舍）；他们可以先注册，再在账户中关联。
 - 自动开户可被用来批量建账号：靠限流与提供方本身的门槛缓解，以后可加 `SignUpGuard`。
 
