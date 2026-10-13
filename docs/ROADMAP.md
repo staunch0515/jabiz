@@ -1351,8 +1351,8 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
   测试 id `access-review-sign` 现在是打开签核对话框的按钮，提交按钮是 `access-review-sign-submit`；意见必填的提示在提交时显示，并显示已输入的字数（原来的 `showCount`）。
 - 审计：筛选是 `FilterBar`（时间区间可只填一端，原来两端必填）；地址中的筛选值作为初值显示在筛选栏中；每页 20 / 50 / 100，缺省 50（与原来相同）。
 - `MfaSettings` 不用 TanStack Query（`@jabiz/ui` 不依赖它），与 `SessionList` 一样以 `useState` / `useEffect` 读状态；三个调用（状态、开始、确认）缺省走 `/api/auth/mfa*`，可经属性替换；
-  绑定完成后自己再读一次状态并调用 `onEnrolled`（后台据此让查询键 `['auth','mfa']` 失效）。状态文案移到命名空间 `auth`（`mfa.on` / `off` / `recoveryLeft`，三语）；
-  后台的 `mfa.enrolled` / `notEnrolled` / `recoveryLeft` 与门户的 `account.mfaOn` / `mfaOff` 删除（门户的状态句因此用平台的说法"两步验证"，节标题仍是门户的"二次验证"）。
+  绑定完成后自己再读一次状态并调用 `onEnrolled`。状态文案移到命名空间 `auth`（`mfa.on` / `off` / `recoveryLeft`，三语）；
+  后台的 `mfa.enrolled` / `notEnrolled` / `recoveryLeft` 与门户的 `account.mfaOn` / `mfaOff` 删除；门户的节标题随之改用平台的说法（"两步验证"、"2 段階認証"）。
 - `ACCOUNT_SECTIONS` 的每项是 `{ name, title(t), Content }`；每节的标题是 `<h2>`，节以它命名（`aria-labelledby`）。
 - 扩展路由的标记：`registry.ts` 新增 `extensionRoutes(extension)`，给顶层路由加 `handle.ui`（保留扩展自己的 `handle` 中的其他键；外壳按任一匹配的路由判断，所以子路由不必加）。
   `extension-lint.mjs` 删除 `ANT_DESIGN_EXEMPT`，`extensionRulesFor` 保留（`ext.mjs` 用它），对任何扩展返回同一套规则。
@@ -1363,6 +1363,17 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
 - e2e：`a11y.spec` 的循环不再检查 `.ant-spin-spinning` 与 `.ant-result-*`（循环中已没有 antd 页面，`pageRendered` 判断 `PageState`）；安全设置另等会话列表出现。
   新增的检查自己准备数据：经 API 下单并签发确认书（单据页），以一个仓库不存在的 CSV 经 `POST /api/imports/commerce.stock/commit` 留下一条被拒的导入记录（详情 `Sheet`）；
   访问审查每次运行会签发一份访问权限报表（测试只增不删数据，可重复运行）。
+
+**15c-2 评审后的修正**（同一分支，各有测试）
+- 审计的两个页签切换后保留各自的筛选与页码（Radix 的 `TabsContent` 默认卸载隐藏的页签；页签第一次显示后以 `forceMount` 保留并隐藏，仍是第一次显示时才查询）。
+- 门户的"两步验证"一节标题与 `MfaSettings` 的状态句用同一说法（三语，门户文案的测试比对平台的 `auth` 文案）。
+- 安全设置页删除无用的 `['auth','mfa']` 失效（没有别处读这个键）。`MfaSettings` 新增 `refreshKey`（改变即重读状态）；在别处（另一个标签页、设备）完成的绑定
+  没有通知到达浏览器，页面再次打开或调用方改变 `refreshKey` 时才显示（写在属性说明中）。重读失败时只显示错误，不再显示旧的"未开启"状态和绑定表单。
+- 示范扩展：清空筛选框（手动或输入框的清除按钮）即重新查询全部仓库（原来 antd 的 `allowClear`）。
+- 发送单据："发送"一并取走已键入、尚未成为标签的地址（一次点击即可发送）；没有任何地址时不再禁用按钮，而是把光标放到地址框。
+- 防篡改的问题表以这次校验命名（"校验 #n"），不再以"问题"一列命名。
+- `a11y.spec`：单据页等到有数据行（签发确认书移到循环之前）；访问审查与防篡改的表等到不再忙碌；循环中每页都断言没有错误提示（`[data-sonner-toast][data-type="error"]`），
+  接口失败时不再被空表当作已渲染。
 
 **15c-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 047.7 kB / 935.8 kB、CSS 84.0 kB / 13.9 kB；之后 JS 1 572.7 kB / 484.1 kB、CSS 84.1 kB / 13.9 kB。
 页面不再引用 ProComponents 与 antd 的组件，只剩外壳中的 `ConfigProvider`、`App` 与语言包，其余都被摇树去掉，已低于 15a 之前（2 651.0 kB / 819.2 kB）；

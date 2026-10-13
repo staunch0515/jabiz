@@ -303,7 +303,7 @@ jabizApp {
   绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
-  `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，

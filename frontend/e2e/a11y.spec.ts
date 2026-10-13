@@ -132,6 +132,9 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await page.keyboard.press('Escape')
   await expect(dialog(page, /撤销操作/)).toHaveCount(0)
 
+  // An issued document (phase 15c-2), for the documents page below.
+  const orderId = await issuedOrderConfirmation(request, token)
+
   // Each page with what shows it has rendered its content (not a loading or error state).
   for (const [path, name, ready] of [
     ['/processes', 'process catalog', '[data-testid="process-PRICE_ADJUST-1"]'],
@@ -145,9 +148,11 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/imports', 'import catalog', '[data-testid="import-commerce.stock"]'],
     ['/imports/runs', 'import history', '[data-testid="import-runs"] table'],
     ['/audit', 'audit', '[data-testid="audit-records"] [data-slot="data-table-row"]'],
-    ['/documents', 'documents', '[data-testid="documents"] table'],
-    ['/access-review', 'access review', '[data-testid="access-review-list"] table'],
-    ['/integrity', 'integrity', '[data-testid="integrity-checks"] table'],
+    // Documents exist by now (issued above); the review's and the seals' lists may be empty on a new database:
+    // their tables have loaded once no longer busy, and an answer that failed would show an error toast (below).
+    ['/documents', 'documents', '[data-testid="documents"] [data-slot="data-table-row"]'],
+    ['/access-review', 'access review', '[data-testid="access-review-list"] table:not([aria-busy])'],
+    ['/integrity', 'integrity', '[data-testid="integrity-checks"] table:not([aria-busy])'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
     ['/account/security', 'account security', '[data-testid="account-section-mfa"] [data-testid="mfa-status"]'],
     ['/security/sessions', 'sessions', '[data-testid="session-user-select"]'],
@@ -155,12 +160,12 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
     await pageRendered(page)
+    await expect(page.locator('[data-sonner-toast][data-type="error"]'), `${name}: no error`).toHaveCount(0)
     if (path === '/account/security') await expect(page.getByTestId('session-item').first()).toBeVisible()
     await expectAccessible(page, at(name))
   }
 
-  // An issued document (phase 15c-2): its deliveries opened under the row, and the dialog that sends it.
-  const orderId = await issuedOrderConfirmation(request, token)
+  // The issued document: its deliveries opened under the row, and the dialog that sends it.
   await page.goto(`/documents?subject=${orderId}`)
   await expect(dataRows(page.getByTestId('documents'))).toHaveCount(1)
   await page.getByRole('button', { name: '展开行' }).first().click()
