@@ -3,7 +3,7 @@ import type { RouteObject } from 'react-router'
 import type { AdminExtension, ExtensionMenuItem } from './api'
 
 /** Paths the platform's own pages use; an extension route may not take them over. */
-export const PLATFORM_PATHS = ['/login', '/data', '/processes', '/tasks', '/reports', '/documents', '/imports', '/audit', '/integrity', '/retention', '/account', '/auth', '/mail'] as const
+export const PLATFORM_PATHS = ['/login', '/data', '/processes', '/tasks', '/reports', '/documents', '/imports', '/audit', '/integrity', '/retention', '/access-review', '/security', '/account', '/auth', '/mail'] as const
 
 const PATH = /^\/[A-Za-z0-9._~:@!$&'()*+,;=/-]*$/
 

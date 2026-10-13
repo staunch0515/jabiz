@@ -1,12 +1,13 @@
 import { api, unwrap } from '@jabiz/client'
-import { AUTH_NAMESPACE, ChangePasswordForm, MfaEnrollment, PageState } from '@jabiz/ui'
+import { AUTH_NAMESPACE, ChangePasswordForm, MfaEnrollment, PageState, SessionList } from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { PORTAL } from '../messages'
 
 /**
- * The customer's own account: their password (`POST /api/auth/account/password`, decision D43 item 3) and two-step
- * verification (docs/design/10-security.md section 9), which step-up asks for.
+ * The customer's own account: their password (`POST /api/auth/account/password`, decision D43 item 3), two-step
+ * verification (docs/design/10-security.md section 9), which step-up asks for, and their sessions at the portal
+ * (section 15.9).
  */
 export function AccountPage() {
   const { t } = useTranslation(PORTAL)
@@ -41,6 +42,10 @@ export function AccountPage() {
             />
           </>
         )}
+      </div>
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-medium">{tAuth('sessions.title')}</h2>
+        <SessionList />
       </div>
     </section>
   )

@@ -142,7 +142,8 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/audit', 'audit', '[data-testid="audit-records"] .ant-table-row'],
     ['/integrity', 'integrity', '[data-testid="integrity-verify"]'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
-    ['/account/security', 'account security', '.ant-card'],
+    ['/account/security', 'account security', '[data-testid="session-item"]'],
+    ['/security/sessions', 'sessions', '[data-testid="reference-select"]'],
   ] as const) {
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
@@ -151,6 +152,18 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
     await expectAccessible(page, at(name))
   }
+
+  // A user's sessions (phase 16g), and the dialog that ends them.
+  await page.goto('/security/sessions')
+  await page.getByTestId('reference-select').click()
+  await page.getByRole('listbox').getByRole('option').first().click()
+  await expect(dataRows(page).first()).toBeVisible()
+  await expectAccessible(page, at('sessions of a user'))
+  await page.getByTestId('admin-session-revoke-all').click()
+  await expect(page.getByTestId('admin-session-reason')).toBeVisible()
+  await expectAccessible(page, at('end sessions dialog'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('admin-session-reason')).toHaveCount(0)
 
   // A choice of the process form, open (a combobox's list in a popover).
   await page.goto('/processes/APPROVAL_DECIDE/1')
