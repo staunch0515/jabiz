@@ -1,34 +1,48 @@
 package com.jabiz.runtime.security;
 
+import com.jabiz.entity.ValidationException;
+import com.jabiz.i18n.PlatformErrorCodes;
+import com.jabiz.i18n.PlatformLanguages;
+import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.AuthenticationFailedException;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInInput;
-import com.jabiz.runtime.web.ClientAddresses;
-import org.springframework.http.server.reactive.ServerHttpRequest;
 import com.jabiz.runtime.process.sponsor.SponsorOidcSignInProcess;
+import com.jabiz.runtime.web.ClientAddresses;
 import com.jabiz.security.LoginOutcome;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Sign-in through OpenID Connect providers (docs/design/10-security.md section 12; decision D28 item 6). Public: the
  * authorization code and the state are the credentials. Every refusal is answered alike (401 {@code LOGIN_FAILED});
- * the reason goes to the log only.
+ * the reason goes to the log only. Exceptions, told only to whom the provider has just vouched for: a guard's refusal or
+ * an unverified address (403, as after a right password), and an address that belongs to an account already when the
+ * provider would open one (403 {@code OIDC_ACCOUNT_EXISTS}, decision D39 item 2).
+ *
+ * <p>A provider with {@code auto-provision} opens an account for a subject nobody linked (decision D39 items 1 and 4):
+ * at an entry that lets people register, for an address the provider vouches for
+ * ({@link IdTokenValidator.Identity#trustedEmail}) that no user has; counted per client address
+ * ({@link SignUpRateLimits.Kind#OIDC_SIGN_UP}). Then it signs in as usual.
  */
 @RestController
 class OidcController {
@@ -37,7 +51,10 @@ class OidcController {
 
     private static final Logger log = LoggerFactory.getLogger(OidcController.class);
 
-    record ProviderEntry(String id, String label) {}
+    /**
+     * @param kind {@code generic} or {@code google}: which button to draw
+     */
+    record ProviderEntry(String id, String label, String kind) {}
 
     /**
      * @param binder a secret of this browser's sign-in, kept by the page and sent back with the callback; it never
@@ -60,6 +77,7 @@ class OidcController {
 
     private final OidcProviders providers;
     private final OidcClient client;
+    private final OidcExchange exchange;
     private final OidcStateStore states;
     private final ProcessExecutor processes;
     private final JwtService tokens;
@@ -69,14 +87,17 @@ class OidcController {
     private final Clock clock;
     private final SignInEntries entries;
     private final ClientAddresses clients;
+    private final SignUpRateLimits limits;
+    private final ProcessDefinition<OidcSignUpProcess.Input, OidcSignUpProcess.Output, AccountContext> signUp;
 
-    OidcController(OidcProviders providers, OidcClient client, OidcStateStore states, ProcessExecutor processes,
-        JwtService tokens, RefreshTokenStore refreshTokens, MfaSettings mfa, PlatformObservations observations,
-        Clock clock, SignInEntries entries, ClientAddresses clients) {
-        this.entries = entries;
-        this.clients = clients;
+    OidcController(OidcProviders providers, OidcClient client, OidcExchange exchange, OidcStateStore states,
+        ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens, MfaSettings mfa,
+        PlatformObservations observations, Clock clock, SignInEntries entries, ClientAddresses clients,
+        SignUpRateLimits limits,
+        ProcessDefinition<OidcSignUpProcess.Input, OidcSignUpProcess.Output, AccountContext> signUp) {
         this.providers = providers;
         this.client = client;
+        this.exchange = exchange;
         this.states = states;
         this.processes = processes;
         this.tokens = tokens;
@@ -84,6 +105,10 @@ class OidcController {
         this.mfa = mfa;
         this.observations = observations;
         this.clock = clock;
+        this.entries = entries;
+        this.clients = clients;
+        this.limits = limits;
+        this.signUp = signUp;
     }
 
     /**
@@ -91,27 +116,27 @@ class OidcController {
      * (decision D43 item 5). None for an entry that does not exist.
      */
     @GetMapping(BASE + "/providers")
-    Mono<List<ProviderEntry>> providers(
-        @org.springframework.web.bind.annotation.RequestParam(name = "entry", required = false) String entry) {
-        java.util.Optional<SignInEntries.Entry> found = entries.find(entry);
-        List<OidcProvider> offered = found.map(e -> providers.offeredTo(e.name())).orElse(List.of());
+    Mono<List<ProviderEntry>> providers(@RequestParam(name = "entry", required = false) String entry) {
+        List<OidcProvider> offered = entries.find(entry).map(e -> providers.offeredTo(e.name())).orElse(List.of());
         return RequestContexts.current().map(context -> offered.stream()
-            .map(provider -> new ProviderEntry(provider.id(), provider.label(context.locale().getLanguage())))
+            .map(provider -> new ProviderEntry(provider.id(), provider.label(context.locale().getLanguage()),
+                provider.kind()))
             .toList());
     }
 
     /**
      * @param entry the sign-in entry to sign in to (decision D36); none: the administration. Stored with the state:
      *              the callback cannot pick another one. A provider without a callback for the entry is refused like an
-     *              unknown entry (decision D43 item 5).
+     *              unknown entry (decision D43 item 5). Counted per client address (each start writes a row).
      */
     @PostMapping(BASE + "/{id}/start")
-    Mono<StartResponse> start(@PathVariable String id,
-        @org.springframework.web.bind.annotation.RequestParam(name = "entry", required = false) String entry) {
+    Mono<StartResponse> start(@PathVariable String id, @RequestParam(name = "entry", required = false) String entry,
+        ServerHttpRequest http) {
         return Mono.defer(() -> {
+            limits.oidcStart(clients.clientOf(http));
             OidcProvider provider = providers.find(id)
                 .orElseThrow(() -> new EntityNotFoundException("Unknown identity provider " + id));
-            java.util.Optional<SignInEntries.Entry> found = entries.find(entry);
+            Optional<SignInEntries.Entry> found = entries.find(entry);
             if (found.isEmpty()) {
                 return Mono.error(AuthController.loginFailed("Unknown sign-in entry"));
             }
@@ -131,8 +156,9 @@ class OidcController {
     }
 
     /**
-     * The provider sent the user back with a code: use the state once, exchange the code, check the ID token, then
-     * sign in whom the subject is linked to, like {@code POST /api/auth/login} answers.
+     * The provider sent the user back with a code: use the state once (a sign-in's, not a link's), exchange the code,
+     * check the ID token, then sign in whom the subject is linked to, like {@code POST /api/auth/login} answers; open
+     * an account first where the provider may (decision D39).
      */
     @PostMapping(BASE + "/callback")
     Mono<AuthController.TokenResponse> callback(@RequestBody(required = false) CallbackRequest request,
@@ -143,55 +169,93 @@ class OidcController {
             }
             // The state says which provider the sign-in started with; it is used up whatever follows.
             return states.consume(request.state(), request.binder()).flatMap(pending -> {
+                if (pending.purpose() != OidcStateStore.Purpose.SIGN_IN) {
+                    return Mono.error(new IllegalStateException("The state is of a link, not a sign-in"));
+                }
                 OidcProvider provider = providers.find(pending.providerId()).orElseThrow(
                     () -> new IllegalStateException("The provider of the state is no longer configured"));
-                // The callback the sign-in started with: the state's entry, whatever the request says.
-                String redirectUri = provider.redirectUri(pending.entry());
-                if (redirectUri == null) {
-                    return Mono.error(new IllegalStateException("The provider no longer has a callback for entry "
-                        + pending.entry()));
-                }
-                Mono<AuthController.TokenResponse> work = client.idToken(provider, request.code(),
-                        pending.codeVerifier(), redirectUri)
-                    .flatMap(idToken -> identity(provider, idToken, pending.nonceHash()))
-                    .flatMap(identity -> signIn(provider, identity,
-                        AuthController.source(clients, http, pending.entry())));
+                SignInSource source = AuthController.source(clients, http, pending.entry());
+                Mono<AuthController.TokenResponse> work = exchange.identity(provider, request.code(), pending)
+                    .flatMap(identity -> signIn(provider, identity, source, http, false));
                 return observations.mono(PlatformObservations.AUTH_OIDC, "oidc " + provider.id(),
                     KeyValues.of("provider", provider.id()), work);
-            // Refusals after the identity was proven (a guard, an unverified address) keep their 403.
-            }).onErrorMap(e -> !(e instanceof AuthenticationFailedException)
-                && !(e instanceof SignInRefusedException) && !(e instanceof EmailNotVerifiedException), e -> {
+            // Refusals after the identity was proven (a guard, an unverified address, an address in use) keep their
+            // 403; too many accounts opened from one address is 429.
+            }).onErrorMap(e -> !(e instanceof AuthenticationFailedException) && !(e instanceof SignInRefusedException)
+                && !(e instanceof EmailNotVerifiedException) && !(e instanceof OidcAccountExistsException)
+                && !(e instanceof RateLimitedException), e -> {
                 log.info("Sign-in through an identity provider refused: {}", e.getMessage());
                 return AuthController.loginFailed("Sign-in through the identity provider refused");
             });
         });
     }
 
-    /** Checks the ID token; reads the provider's keys again once when the token names a key not seen yet. */
-    private Mono<IdTokenValidator.Identity> identity(OidcProvider provider, String idToken, String nonceHash) {
-        com.nimbusds.jwt.SignedJWT token = IdTokenValidator.parse(idToken);
-        return client.keys(provider, false)
-            .map(keys -> IdTokenValidator.validate(token, keys, provider.issuer(), provider.clientId(), nonceHash,
-                clock.instant()))
-            .onErrorResume(IdTokenValidator.UnknownKeyException.class, unknown -> client.keys(provider, true)
-                .map(keys -> IdTokenValidator.validate(token, keys, provider.issuer(), provider.clientId(),
-                    nonceHash, clock.instant())));
-    }
-
+    /**
+     * Signs in whom the subject is linked to; a subject nobody linked may get an account ({@link #open}) and signs in
+     * then. {@code again}: this is the sign-in after opening (or after losing a race to open), which opens nothing more.
+     */
     private Mono<AuthController.TokenResponse> signIn(OidcProvider provider, IdTokenValidator.Identity identity,
-        SignInSource source) {
+        SignInSource source, ServerHttpRequest http, boolean again) {
         java.time.Instant mfaAt = IdTokenValidator.secondFactorAt(identity, provider, clock.instant());
-        return processes.executeAtEntry(SponsorOidcSignInProcess.DEFINITION,
-                new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null, source))
+        SponsorOidcSignInInput input = new SponsorOidcSignInInput(provider.id(), identity.subject(), mfaAt != null,
+            source);
+        return processes.executeAtEntry(SponsorOidcSignInProcess.DEFINITION, input)
+            // Two sign-ins of one user at once: the later loses the race for the next login record. No password is
+            // guessed here, so it simply signs in once more.
+            .onErrorResume(OidcController::raceLost, e -> processes.executeAtEntry(
+                SponsorOidcSignInProcess.DEFINITION, input))
             .flatMap(result -> {
                 if (result.outcome() == LoginOutcome.BAD_CREDENTIALS) {
-                    return Mono.error(AuthController.loginFailed("No user is linked to the subject"));
+                    return again ? Mono.error(AuthController.loginFailed("No user is linked to the subject"))
+                        : open(provider, identity, source, http, false);
                 }
                 return AuthController.answer(result, mfaAt,
                     result.identityId() == null ? null : UUID.fromString(result.identityId()),
                     source, refreshTokens, tokens, mfa,
                     "Sign-in through identity provider " + provider.id());
             });
+    }
+
+    /**
+     * Opens an account for a subject nobody linked, when the provider may, the entry lets people register and the
+     * provider vouches for the address (decision D39 item 1); otherwise 401 as for any unknown subject. An address in
+     * use is 403 {@code OIDC_ACCOUNT_EXISTS}: nothing is linked. Losing a race (the same subject, or the address, at
+     * once) asks once more ({@code retried}), which then finds the link or the address in use.
+     */
+    private Mono<AuthController.TokenResponse> open(OidcProvider provider, IdTokenValidator.Identity identity,
+        SignInSource source, ServerHttpRequest http, boolean retried) {
+        return Mono.defer(() -> {
+            String entry = source.entryOrDefault();
+            String email = identity.trustedEmail(provider);
+            boolean registering = entries.find(entry).filter(SignInEntries.Entry::selfRegistration).isPresent();
+            if (!provider.autoProvision() || !registering || email == null) {
+                return Mono.error(AuthController.loginFailed("No user is linked to the subject (and none is opened: "
+                    + (!provider.autoProvision() ? "the provider opens no accounts"
+                    : !registering ? "the entry " + entry + " takes no registrations"
+                    : "the provider does not vouch for an address") + ")"));
+            }
+            if (!retried) {
+                limits.client(SignUpRateLimits.Kind.OIDC_SIGN_UP, clients.clientOf(http));
+            }
+            return RequestContexts.current().flatMap(context -> {
+                String language = context.locale() == null ? null : context.locale().getLanguage();
+                return processes.executeAtEntry(signUp, new OidcSignUpProcess.Input(entry, provider.id(),
+                    identity.subject(), email, identity.name(),
+                    PlatformLanguages.isSupported(language) ? language : null));
+            }).flatMap(opened -> switch (opened.outcome()) {
+                case CREATED, EXISTS -> signIn(provider, identity, source, http, true);
+                case EMAIL_IN_USE -> Mono.<AuthController.TokenResponse>error(new OidcAccountExistsException(
+                    "The address belongs to an account already"));
+                case DISABLED -> Mono.<AuthController.TokenResponse>error(AuthController.loginFailed(
+                    "The entry " + entry + " takes no registrations"));
+            }).onErrorResume(e -> !retried && raceLost(e), e -> open(provider, identity, source, http, true));
+        });
+    }
+
+    /** The unique violation of an account opened at the same time (the subject's link, the address or the name). */
+    private static boolean raceLost(Throwable error) {
+        return error instanceof ValidationException v && v.violations().stream()
+            .anyMatch(violation -> PlatformErrorCodes.UNIQUE_VIOLATION.equals(violation.ruleCode()));
     }
 
     private static boolean blank(String value) {

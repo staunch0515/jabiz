@@ -111,7 +111,7 @@ class OidcIT extends SecurityItSupport {
         List<Map<String, Object>> providers = get("/api/auth/oidc/providers", null).expectStatus().isOk()
             .expectBody(LIST).returnResult().getResponseBody();
         assertThat(providers).singleElement().satisfies(p -> assertThat(p).containsEntry("id", "test")
-            .containsEntry("label", "Test directory").hasSize(2));
+            .containsEntry("label", "Test directory").containsEntry("kind", "generic").hasSize(3));
         post("/api/auth/oidc/nope/start", null, Map.of()).expectStatus().isNotFound();
     }
 

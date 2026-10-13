@@ -98,6 +98,7 @@ public class SignUpProcesses {
     static final String ROLES = "roles";
     static final String ASSIGNMENTS = "assignments";
     static final String MFA = "mfa";
+    static final String IDENTITIES = "identities";
     static final String LATEST_RECORD = "latest_login_record";
     static final String RANDOM = "random";
     static final String CONSUMED = "consumed";
@@ -170,7 +171,7 @@ public class SignUpProcesses {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static <M> Class<? extends StepImplementation<M, AccountContext>> on(
+    static <M> Class<? extends StepImplementation<M, AccountContext>> on(
         Class<? extends StepImplementation<M, ? super AccountContext>> step) {
         return (Class) step;
     }
@@ -234,7 +235,9 @@ public class SignUpProcesses {
             .step("Find the registration roles", QueryEntities.<AccountContext>of(SecurityEntities.ROLE_DATASET,
                 ctx -> rolesNamed(entries.resolve(ctx.entryName()).registrationRoles()), ROLES))
             .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
-                SignUpProcesses::secondFactorOf, MFA))
+                SignUpProcesses::ofLinkedUser, MFA))
+            .step("Load the provider links", QueryEntities.<AccountContext>of(SecurityEntities.USER_IDENTITY_DATASET,
+                SignUpProcesses::ofLinkedUser, IDENTITIES))
             // Only a pre-claimable account takes a new password (and only then is it hashed).
             .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD, HASH,
                 PASSWORD, true, ctx -> preClaimable(linked(ctx))))
@@ -277,7 +280,9 @@ public class SignUpProcesses {
                 SignUpProcesses::linkUser, USERS))
             .compute("Check the link", (metadata, ctx) -> checkLink(ctx, false))
             .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
-                SignUpProcesses::secondFactorOf, MFA))
+                SignUpProcesses::ofLinkedUser, MFA))
+            .step("Load the provider links", QueryEntities.<AccountContext>of(SecurityEntities.USER_IDENTITY_DATASET,
+                SignUpProcesses::ofLinkedUser, IDENTITIES))
             // A pre-claimable account: a new password takes it over, or the current one keeps it.
             .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD, HASH,
                 "newPassword", true, ctx -> preClaimable(linked(ctx))))
@@ -346,7 +351,9 @@ public class SignUpProcesses {
                     SecurityEntities.LOGIN_RECORD_DATASET, ctx -> Rbac.latestLoginRecordOf(linkedId(ctx)),
                     LATEST_RECORD))
                 .step("Load the second factor", QueryEntities.<AccountContext>of(SecurityEntities.USER_MFA_DATASET,
-                    SignUpProcesses::secondFactorOf, MFA))
+                    SignUpProcesses::ofLinkedUser, MFA))
+                .step("Load the provider links", QueryEntities.<AccountContext>of(
+                    SecurityEntities.USER_IDENTITY_DATASET, SignUpProcesses::ofLinkedUser, IDENTITIES))
                 // Not for a link that is no good: no hashing work for made-up tokens.
                 .step("Hash the new password", on(HashPasswordStep.class), new HashPasswordStep.Metadata(PASSWORD,
                     HASH, PASSWORD, false, ctx -> linked(ctx) != null))
@@ -515,12 +522,17 @@ public class SignUpProcesses {
     }
 
     /**
-     * Takes over a pre-claimable account: whoever registered it may have set up a second factor and may hold sessions.
-     * Both go with the new password (account pre-claim protection).
+     * Takes over a pre-claimable account: whoever registered it may have set up a second factor, linked a provider
+     * account and may hold sessions. All go with the new password (account pre-claim protection;
+     * docs/design/10-security.md section 15.6). A pre-claimable account cannot link a provider itself
+     * ({@code SEC_IDENTITY_LINK_SELF}), but an administrator may have linked one.
      */
     private static void claim(AccountContext ctx) {
         for (EntityInstance mfa : ctx.list(MFA)) {
             ctx.changes().delete(SecurityEntities.USER_MFA, mfa.id(), mfa.version());
+        }
+        for (EntityInstance identity : ctx.list(IDENTITIES)) {
+            ctx.changes().delete(SecurityEntities.USER_IDENTITY, identity.id(), identity.version());
         }
         ctx.put(END_SESSIONS, linked(ctx));
     }
@@ -599,7 +611,7 @@ public class SignUpProcesses {
         return EntityQuery.builder().where(where).limit(1).build();
     }
 
-    private static EntityQuery secondFactorOf(AccountContext ctx) {
+    private static EntityQuery ofLinkedUser(AccountContext ctx) {
         Object user = linkedId(ctx);
         return Rbac.all(new QueryPredicate.In("userId", user == null ? List.of() : List.of(user)), "userId");
     }

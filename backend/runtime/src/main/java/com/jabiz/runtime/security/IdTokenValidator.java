@@ -47,12 +47,54 @@ public final class IdTokenValidator {
         }
     }
 
+    /** Longest display name taken from a token ({@code SecUser.displayName}). */
+    static final int MAX_NAME = 200;
+    /** Longest address taken from a token ({@code SecUser.email}). */
+    static final int MAX_EMAIL = 320;
+
     /**
      * What the platform takes from an accepted token.
      *
-     * @param authTime when the user authenticated at the provider ({@code auth_time}), or null if not told
+     * @param authTime      when the user authenticated at the provider ({@code auth_time}), or null if not told
+     * @param email         the address the token names ({@code email}), or null
+     * @param emailVerified whether the provider says it verified the address ({@code email_verified}: a boolean, or
+     *                      the text {@code "true"}, as some providers send it)
+     * @param name          the person's name ({@code name}) without control characters, at most 200 characters, or
+     *                      null
+     * @param hostedDomain  Google's Workspace domain of the account ({@code hd}), or null
      */
-    public record Identity(String subject, List<String> amr, Instant authTime) {}
+    public record Identity(String subject, List<String> amr, Instant authTime, String email, boolean emailVerified,
+        String name, String hostedDomain) {
+
+        public Identity(String subject, List<String> amr, Instant authTime) {
+            this(subject, amr, authTime, null, false, null, null);
+        }
+
+        /**
+         * The address the provider vouches for, or null: verified by the provider, and for Google an address Google
+         * itself owns (gmail) or one of a Workspace account ({@code hd}); Google verified other addresses once, when
+         * the account was made, and their mailbox may belong to someone else by now (docs/design/10-security.md
+         * section 12; decision D39 implementation note).
+         */
+        public String trustedEmail(OidcProvider provider) {
+            if (email == null || !emailVerified) {
+                return null;
+            }
+            if (provider.google()) {
+                String domain = email.substring(email.lastIndexOf('@') + 1).toLowerCase(java.util.Locale.ROOT);
+                boolean google = domain.equals("gmail.com") || domain.equals("googlemail.com");
+                if (!google && (hostedDomain == null || hostedDomain.isBlank())) {
+                    return null;
+                }
+            }
+            return email;
+        }
+
+        @Override
+        public String toString() {
+            return "Identity[subject=" + subject + ", ***]";
+        }
+    }
 
     private IdTokenValidator() {}
 
@@ -130,7 +172,47 @@ public final class IdTokenValidator {
         } catch (ParseException e) {
             // Unreadable: as if not told.
         }
-        return new Identity(subject, amr(claims), authTime);
+        return new Identity(subject, amr(claims), authTime, email(claims), verified(claims.getClaim("email_verified")),
+            name(claims.getClaim("name")), text(claims.getClaim("hd")));
+    }
+
+    /** The token's address when it looks like one and fits; otherwise none (nothing is opened with it). */
+    private static String email(JWTClaimsSet claims) {
+        String email = text(claims.getClaim("email"));
+        if (email == null || email.length() > MAX_EMAIL
+            || !com.jabiz.mail.MailRecipient.ADDRESS.matcher(email).matches()) {
+            return null;
+        }
+        return email;
+    }
+
+    /** {@code email_verified}: true, or the text {@code "true"} (regardless of case); anything else is false. */
+    static boolean verified(Object claim) {
+        return Boolean.TRUE.equals(claim) || (claim instanceof String text && text.strip().equalsIgnoreCase("true"));
+    }
+
+    /** A name to show: without control or format characters, collapsed blanks, cut to {@link #MAX_NAME}. */
+    static String name(Object claim) {
+        if (!(claim instanceof String text)) {
+            return null;
+        }
+        StringBuilder cleaned = new StringBuilder();
+        text.codePoints().forEach(c -> cleaned.appendCodePoint(Character.isISOControl(c)
+            || Character.getType(c) == Character.FORMAT ? ' ' : c));
+        String name = cleaned.toString().strip().replaceAll("\\s+", " ");
+        if (name.isEmpty()) {
+            return null;
+        }
+        if (name.length() > MAX_NAME) {
+            // Cut by UTF-16 units, as the field's length rule counts, never inside a surrogate pair.
+            int end = Character.isHighSurrogate(name.charAt(MAX_NAME - 1)) ? MAX_NAME - 1 : MAX_NAME;
+            name = name.substring(0, end).strip();
+        }
+        return name;
+    }
+
+    private static String text(Object claim) {
+        return claim instanceof String text && !text.isBlank() ? text.strip() : null;
     }
 
     private static List<String> amr(JWTClaimsSet claims) {
