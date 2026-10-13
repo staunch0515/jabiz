@@ -48,12 +48,42 @@ describe('display components', () => {
     await expectAccessible()
   })
 
+  it('DescriptionList puts items side by side and copies a value', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(
+      <DescriptionList
+        columns={4}
+        items={[
+          { label: 'Records', value: 2 },
+          { label: 'Rows', value: 1 },
+          { label: 'SHA-256', value: 'abc123', copy: 'abc123' },
+        ]}
+      />,
+    )
+    const list = screen.getAllByRole('term')[0].closest('dl')!
+    expect(list).toHaveAttribute('data-columns', '4')
+    expect(list.className).toContain('lg:grid-cols-4')
+    expect(screen.getAllByRole('definition')[2]).toHaveTextContent('abc123')
+    await userEvent.click(screen.getByRole('button', { name: 'Copy SHA-256' }))
+    expect(writeText).toHaveBeenCalledWith('abc123')
+    await expectAccessible()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+  })
+
   it('Spinner and PageState say what state the page is in', async () => {
     const { rerender } = render(<Spinner />)
     expect(screen.getByRole('status')).toHaveTextContent('Loading…')
     rerender(<PageState kind="loading" />)
     expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    expect(screen.getByRole('status').closest('[data-slot="page-state"]')).toHaveAttribute('data-state', 'loading')
+    rerender(<PageState kind="empty" title="No reports." />)
+    expect(screen.getByText('No reports.').closest('[data-slot="page-state"]')).toHaveAttribute('data-state', 'empty')
+    expect(screen.queryByRole('alert')).toBeNull()
+    rerender(<PageState kind="empty" />)
+    expect(screen.getByText('No data')).toBeInTheDocument()
     rerender(<PageState kind="notFound" title="PRICE_ADJUST@9" />)
+    expect(screen.getByText('PRICE_ADJUST@9').closest('[data-slot="page-state"]')).toHaveAttribute('data-state', 'notFound')
     expect(screen.getByText('PRICE_ADJUST@9')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
     rerender(<PageState kind="error" description="The server is down." />)

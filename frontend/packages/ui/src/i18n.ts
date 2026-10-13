@@ -47,6 +47,7 @@ const en = {
   filter: { label: 'Filters', submit: 'Query', reset: 'Reset', from: '{{label}}, from', to: '{{label}}, to' },
   upload: {
     choose: 'Choose a file',
+    dropzone: 'Click or drop a file here',
     uploading: 'Uploading…',
     tooLarge: 'The file is larger than {{max}}.',
     wrongType: 'Files of this type are not accepted ({{types}}).',
@@ -54,7 +55,8 @@ const en = {
   },
   copy: { copy: 'Copy', copyValue: 'Copy {{value}}', copied: 'Copied', failed: 'Could not copy' },
   tags: { remove: 'Remove {{tag}}', placeholder: 'Type and press Enter' },
-  pageState: { notFound: 'Not found', error: 'Something went wrong', warning: 'Attention' },
+  pageState: { empty: 'No data', notFound: 'Not found', error: 'Something went wrong', warning: 'Attention' },
+  steps: { label: 'Progress', completed: 'completed' },
 }
 
 type Messages = typeof en
@@ -94,6 +96,7 @@ const zh: Messages = {
   filter: { label: '筛选', submit: '查询', reset: '重置', from: '{{label}}（起）', to: '{{label}}（止）' },
   upload: {
     choose: '选择文件',
+    dropzone: '点击或将文件拖到这里',
     uploading: '上传中…',
     tooLarge: '文件大于 {{max}}。',
     wrongType: '不接受这种类型的文件（{{types}}）。',
@@ -101,7 +104,8 @@ const zh: Messages = {
   },
   copy: { copy: '复制', copyValue: '复制 {{value}}', copied: '已复制', failed: '无法复制' },
   tags: { remove: '移除 {{tag}}', placeholder: '输入后按 Enter' },
-  pageState: { notFound: '不存在', error: '出错了', warning: '请注意' },
+  pageState: { empty: '暂无数据', notFound: '不存在', error: '出错了', warning: '请注意' },
+  steps: { label: '进度', completed: '已完成' },
 }
 
 const ja: Messages = {
@@ -148,6 +152,7 @@ const ja: Messages = {
   filter: { label: '絞り込み', submit: '検索', reset: 'リセット', from: '{{label}}（開始）', to: '{{label}}（終了）' },
   upload: {
     choose: 'ファイルを選択',
+    dropzone: 'クリックするか、ファイルをここにドロップ',
     uploading: 'アップロード中…',
     tooLarge: 'ファイルが {{max}} を超えています。',
     wrongType: 'この種類のファイルは受け付けません（{{types}}）。',
@@ -155,7 +160,8 @@ const ja: Messages = {
   },
   copy: { copy: 'コピー', copyValue: '{{value}} をコピー', copied: 'コピーしました', failed: 'コピーできませんでした' },
   tags: { remove: '{{tag}} を削除', placeholder: '入力して Enter' },
-  pageState: { notFound: '見つかりません', error: 'エラーが発生しました', warning: '注意' },
+  pageState: { empty: 'データがありません', notFound: '見つかりません', error: 'エラーが発生しました', warning: '注意' },
+  steps: { label: '進捗', completed: '完了' },
 }
 
 export const uiMessages = { zh, ja, en }
