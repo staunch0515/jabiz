@@ -122,7 +122,8 @@ export default defineConfig({
   `AuthProvider`、`QueryClientProvider`、`AppearanceProvider` 包住页面，`registerServiceWorker()` 在启动时调用一次。
 - **页面积木**（`@jabiz/ui`，不依赖路由，导航经 `onNavigate` / `hrefOf`）：`SignInForm`（`signUpPath`、`passwordResetPath`）、`SignUpForm`、
   `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
-  `OidcCallback`（路径 `login/oidc`）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
+  `OidcCallback`（路径 `login/oidc`）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
+  `VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
   示范门户用一个几十行的小路由（`src/router.ts`）；也可以用任何版本的 react-router。
 - **邮件链接**：平台的邮件链接是 `{entryUrl}auth/<页>?entry=…&token=…`，即入口自己的前端；应用自己的邮件模板可以写 `{entryUrl.<入口>}`（18 §5.6）。
   升级说明：曾把 `jabiz.mail.base-url` 设为后台子路径（如 `https://<主机>/admin`）以绕行的应用，改回 `https://<主机>`；已发出的旧链接经后台的 `/auth/*` 照常可用。

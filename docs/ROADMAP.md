@@ -21,7 +21,7 @@
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
 | 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c–15d 计划中 |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；决策 D35–D39 已确认 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；16g 已完成（PR 待创建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1265,12 +1265,21 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 | 16d | 入站 Webhook（先实现 Stripe 签名）（☑ 已完成，PR 待创建） | D37 | 3.5–4 天 | — |
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成；16e-2 ☑ 已完成，PR 待建） | D38 | 4.5–6 天 | — |
 | 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
-| 16g | 会话列表与吊销 | — | 1–2 天 | 16b |
+| 16g | 会话列表与吊销（计划已确认；☑ 已完成，PR 待创建） | D12（实现说明） | 1–2 天（实际 2–2.5 天） | 16b |
 | 16k | 定时任务逐项独立事务（`JobDefinition.forEach`、`HoldLock` 的最长等待、`BUSY`）；D42（☑ 已完成，PR 待建） | D42 | 2.5–3 天 | — |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 | 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
+
+**其余工作的顺序**（2026-10-13 确认）：
+- 前端线：15c-1 → 15c-2 → 15d。
+- 安全线：16g → 16f-1（自动开户、Google、本人关联、接管时删除关联）。
+- 16f-2（Apple）推后：暂无 Apple 开发者账号，用真实的 Services ID 核对后再做。
+
+**待办**
+- [ ] 16f-2（Apple 登录）：取得 Apple 开发者账号后，用真实的 Services ID 核对后实现。
+- [ ] Reactor Netty 1.3.1 受 CVE-2026-47874 影响（HTTP/1.1 管道化导致内存耗尽，1.3.7 修复）；2026-10-13 决定暂不升级，以后升级。
 
 ### 16a 事务邮件（3–4 天）
 
@@ -1922,6 +1931,61 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 | 16m-5 | `device` 的适用范围 | 除 `admin` 外任何入口都可以显式开启；缺省 `tab` |
 
 **确认**（16m）：2026-10-12 用户确认：16m-1 – 16m-5 全部按缺省；16m 先做，与 16c-1 并行，16c-2 在 16m 之后。
+
+### 16g 会话列表与吊销（1–2 天，实际约 2–2.5 天）
+
+分支 `1.2/phase-16g-sessions`，从 `1.2/platform` 拉出。依据：10 §2、§9–§11、§15；决策 D12、D28、D36、D41、D43。详见 10 §15.9。
+
+**定义**：一个会话 = 一个刷新令牌族（一次登录）；有效 = 族未吊销、最新令牌未用过未过期、按入口未闲置；会话编号即 `family_id`（不是凭证）。
+
+**要求**
+1. 迁移 `V38__session_list.sql`：`sec_refresh_token` 加 `client_ip`、`user_agent` 与索引 `(user_id, expires_at)`；`sec_refresh_family_revocation` 加 `process_seq_id`。不新建表，仍只追加。
+2. core `UserAgentLabels`：UA → 浏览器、系统、设备类型的固定码（不引入库，纳入覆盖率门禁）；接口另返回原样的 UA。不做大致位置。
+3. 访问令牌加 `sid`（`Actor.sessionId`）：三条登录路径、刷新、step-up 都带；`/api/auth/me` 返回 `sessionId`。登录、刷新、OIDC、二次验证都把来源（地址、UA）记进令牌行。
+4. 本人：`GET /api/auth/account/sessions`（当前入口的有效会话，按最近使用倒序，最多 50 条，`truncated`、`effectiveWithinSeconds`）；
+   `POST …/{id}/revoke`（`SEC_ACCOUNT_SESSION_REVOKE`，204；其他一律 404 `SESSION_NOT_FOUND`）；`POST …/revoke-others`（`SEC_ACCOUNT_SESSIONS_REVOKE_OTHERS`；没有 `sid` 时 422 `SESSION_UNKNOWN`）。
+   两个流程 `entryOnly()`、权限 `auth.account`；吊销按用户限流。
+5. 管理员：`GET /api/security/sessions?userId=`（`security.user.session.read`，全部入口）；流程 `SEC_USER_SESSIONS_REVOKE {userId, sessionId?, reason}`
+   （`security.user.session.revoke`，`requiresMfa(ADMINISTRATION)`，`actsOn(SecUser)`，原因必填）。
+6. 吊销原因新增 `SELF_REVOKE`、`ADMIN_REVOKE`，流程中的吊销带 `process_seq_id`；`revokeUser` 只吊销仍有效的族。不做访问令牌的拒绝名单。
+7. 前端：`@jabiz/client` 的 `listSessions` / `revokeSession` / `revokeOtherSessions`；`@jabiz/ui` 的积木 `SessionList`（三语）；后台账户安全页加一个卡片（页面仍是 antd，15c 迁移）、
+   示范门户的账户页；后台管理页 `/security/sessions`（`@jabiz/ui`）。
+8. 文档：10 §2、§3、§5、§15.9；D12 的实现说明；CLAUDE.md 第 4 节"安全"；12；`guide/app-spa.md`、`guide/platform-features.md`。OpenAPI 快照与 `pnpm gen:api`。
+
+**待确认**（16g-1 … 16g-10）：本人只限当前入口；不做拒绝名单；可吊销当前会话（即登出）；本人吊销不要求密码或二次验证（按用户限流）；管理员必须填原因、不发邮件；
+新增 `security.user.session.read` / `.revoke`；不新增决策（写入 D12 的实现说明）；UA 在服务端 core 解析；列表上限 50 条；本人列表显示完整 IP。
+
+**确认**：2026-10-13，待确认项全部按缺省。
+
+**测试**
+- core：`UserAgentLabelsTest`（约 25 个真实 UA、空值与超长值）。runtime：`JwtServiceTest`（`sid` 往返、旧令牌、step-up 后不变）、`ProblemStatusesTest`（`SESSION_NOT_FOUND` 为 404 带规则码）。
+- `SessionListIT`：两次登录两个会话（地址、UA、本机标记）；刷新后最近使用与地址更新；过期、闲置、已登出的不列出，`idle-timeout: 0` 只看有效期；别人的、别的入口的看不到；超过 50 条 `truncated`。
+- `SessionRevokeIT`：吊销一个后其刷新 401、其他照常；吊销当前会话；`revoke-others` 只留当前、不碰其他入口；没有 `sid` 时 422；别人的、未知的、别的入口的、格式不对的同样 404；
+  经流程接口 403 `PROCESS_INTERNAL`；吊销行的原因与 `process_seq_id`；`op_process` 中没有令牌；没有 UPDATE / DELETE；限流 429。
+- `AdminSessionIT`：列表与流程的权限、`MFA_REQUIRED`、缺原因与超长原因 400、单个与全部吊销后刷新 401、行操作在目录中；改密码不再给已过期的族补写吊销行。
+- 回归：`com.jabiz.app.it.security.*`、`OpenApiSnapshotIT`、`platformCheck`。
+- 前端：Vitest `SessionList.test`（渲染、本机标记、确认后吊销、其他全部、`SESSION_UNKNOWN`、吊销本机后清空令牌、三语、axe 亮暗）、`account.test`（三个函数）、`SessionsPage.test`；
+  e2e `sessions.spec`（两个浏览器上下文登录同一账号，一处"退出其他全部设备"后另一处的刷新立即 401）；`a11y.spec` 加两个页面与对话框（亮暗）。
+
+**验收标准**
+- [x] 本人能看到当前入口的有效会话（设备、地址、创建与最近使用时间、本机标记），看不到别人的和别的入口的（`SessionListIT`）。
+- [x] 本人吊销某个会话后，该会话下一次刷新 401；"退出其他全部设备"只保留当前会话；吊销都经 `entryOnly()` 流程，有操作记录（`SessionRevokeIT`）。
+- [x] 管理员凭 `security.user.session.read` 列出某用户的全部会话；凭 `security.user.session.revoke` 加近期二次验证、填写原因后吊销单个或全部会话，有行操作（`AdminSessionIT`）。
+- [x] 吊销行带原因与 `process_seq_id`；令牌表只追加，没有令牌明文进入日志或 `input_summary`（`SessionRevokeIT`、`AdminSessionIT`）。
+- [x] 访问令牌最长有效期内仍可用，写进文档（10 §15.9、D12 实现说明），界面按 `effectiveWithinSeconds` 提示。
+- [x] 前端两个页面通过 Vitest、e2e 与 axe（亮暗），新组件与新页面不引用 antd；OpenAPI 快照与生成的类型一致。
+- [x] 全部测试与 `platformCheck` 通过。
+
+**与计划的出入**
+- 管理页选用户不用引用选择器：`SecUser` 不声明显示字段（10 §14 不让登录名作为显示名外露），`lookup` 用不上；改为按用户名搜索（`SecUser` 默认视图的查询，`userName` 的 `LIKE`，另需 `security.user.read`）。
+- 列表查询没有用 `DISTINCT ON`：有效族的最新令牌就是族内唯一未用过的令牌，直接取未用过、未过期、族未吊销的令牌，族的最早签发时间用子查询；闲置在 Java 中按入口过滤。
+- 吊销流程用新的步骤 `RevokeSessionStep`；`RevokeSessionsStep`（改密码等）也给吊销行带上 `process_seq_id`。流程中的吊销插入放在保存点内：同一族并发吊销时后来者不再中止所在事务。
+- 管理员流程的显示名写在平台消息 `process.SEC_USER_SESSIONS_REVOKE`（三语）。扩展不能占用的平台路径加上 `/security` 与（此前漏掉的）`/access-review`。
+
+**已知问题**
+- 每次刷新都记下地址与 UA，令牌表的受控清除尚未实现（10 §2）。
+- 吊销与轮换并发时，已签发的新访问令牌可能多活到期满（10 §15.9）。
+- 后台账户安全页仍是 antd（15c 迁移），会话卡片里的 `SessionList` 已是 `@jabiz/ui`。
 
 ### 16d 入站 Webhook（3.5–4 天）
 
