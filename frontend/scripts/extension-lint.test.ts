@@ -27,9 +27,9 @@ describe('extension lint rules (decisions D22, D34)', () => {
     expect(await lint("import { UserOutlined } from '@ant-design/icons'\nexport const x = UserOutlined\n")).toBe(1)
   })
 
-  it('lets only the demo extension keep Ant Design until it moves (phase 15c)', async () => {
+  it('refuses Ant Design in the demo extension too: its exemption ended with phase 15c-2', async () => {
     const demo = extensionRulesFor(resolve(import.meta.dirname, '../../backend/app/admin-extension'))
-    expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", demo)).toBe(0)
+    expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", demo)).toBe(1)
     expect(await lint("import e from 'virtual:jabiz-extension'\nexport const x = e\n", demo)).toBe(1)
     const other = extensionRulesFor(resolve(import.meta.dirname, '../../backend/quizbuks/admin-extension'))
     expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", other)).toBe(1)
