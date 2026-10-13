@@ -53,6 +53,36 @@ describe('MfaSettings', () => {
     expect(await screen.findByTestId('mfa-settings-error')).toHaveTextContent('The server is down.')
   })
 
+  it('shows the error, not the old status with the enrolment, when reading again after an enrolment fails', async () => {
+    const status = vi.fn()
+      .mockResolvedValueOnce({ enrolled: false })
+      .mockRejectedValueOnce(new ApiError(503, { violations: [{ ruleCode: 'X', message: 'Try again later.' }] }))
+    const read = async () => status()
+    render(<MfaSettings status={read} begin={async () => ({ secret: 'K', otpauthUri: 'otpauth://totp/x?secret=K' })}
+      confirm={async () => ['AAAAA-BBBBB']} />)
+    await screen.findByTestId('mfa-status')
+    fireEvent.click(screen.getByTestId('mfa-start'))
+    await screen.findByTestId('mfa-secret')
+    fireEvent.change(screen.getByTestId('mfa-code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByTestId('mfa-confirm'))
+    fireEvent.click(await screen.findByTestId('mfa-saved'))
+
+    expect(await screen.findByTestId('mfa-settings-error')).toHaveTextContent('Try again later.')
+    expect(screen.queryByTestId('mfa-status')).toBeNull()
+    expect(screen.queryByTestId('mfa-start')).toBeNull()
+  })
+
+  it('reads the status again when the caller changes its refresh key', async () => {
+    const status = vi.fn()
+      .mockResolvedValueOnce({ enrolled: false })
+      .mockResolvedValueOnce({ enrolled: true, recoveryCodesLeft: 10 })
+    const read = async () => status()
+    const { rerender } = render(<MfaSettings status={read} refreshKey={1} />)
+    expect(await screen.findByTestId('mfa-status')).toHaveTextContent('Two-step verification is off.')
+    rerender(<MfaSettings status={read} refreshKey={2} />)
+    await waitFor(() => expect(screen.getByTestId('mfa-status')).toHaveTextContent('10 recovery codes left.'))
+  })
+
   it('speaks every platform language', async () => {
     await act(() => i18n.changeLanguage('zh'))
     render(<MfaSettings status={async () => ({ enrolled: true, recoveryCodesLeft: 2 })} />)

@@ -1,5 +1,4 @@
 import { AUTH_NAMESPACE, Card, CardContent, CardHeader, CardTitle, ChangePasswordForm, MfaSettings, SessionList } from '@jabiz/ui'
-import { useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import AdminPage from '../layout/AdminPage'
@@ -11,12 +10,6 @@ export interface AccountSection {
   Content: () => ReactNode
 }
 
-function MfaSection() {
-  const queryClient = useQueryClient()
-  // Other parts of the admin read the status too (step-up): they read it again once it is set up.
-  return <MfaSettings className="max-w-2xl" onEnrolled={() => void queryClient.invalidateQueries({ queryKey: ['auth', 'mfa'] })} />
-}
-
 /**
  * The sections of the security page, in order (phase 15c-2): a new section of the user's own account (a mail
  * preference, the language) is one more entry here, a building block of @jabiz/ui where an application's account page
@@ -24,7 +17,7 @@ function MfaSection() {
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export const ACCOUNT_SECTIONS: AccountSection[] = [
-  { name: 'mfa', title: (t) => t('mfa.title'), Content: MfaSection },
+  { name: 'mfa', title: (t) => t('mfa.title'), Content: () => <MfaSettings className="max-w-2xl" /> },
   {
     name: 'password',
     title: (t) => t('password.changeTitle', { ns: AUTH_NAMESPACE }),

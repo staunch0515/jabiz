@@ -54,7 +54,7 @@ const zh: typeof en = {
     verifyFirst: '请先验证邮箱再下单。',
     noCustomer: '您的账号尚未关联客户，请与我们联系。',
   },
-  account: { title: '账户', mfa: '二次验证' },
+  account: { title: '账户', mfa: '两步验证' },
   notFound: '页面不存在。',
   failed: '出错了，请重试。',
 }
@@ -82,7 +82,7 @@ const ja: typeof en = {
     verifyFirst: '注文の前にメールアドレスを確認してください。',
     noCustomer: 'アカウントがまだ顧客に関連付けられていません。お問い合わせください。',
   },
-  account: { title: 'アカウント', mfa: '2段階認証' },
+  account: { title: 'アカウント', mfa: '2 段階認証' },
   notFound: 'このページは存在しません。',
   failed: 'エラーが発生しました。もう一度お試しください。',
 }

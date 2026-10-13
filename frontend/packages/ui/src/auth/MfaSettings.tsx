@@ -37,6 +37,12 @@ export interface MfaSettingsProps {
   confirm?: (code: string) => Promise<string[]>
   /** Called once it is set up and the recovery codes were seen (the status is read again here as well). */
   onEnrolled?: () => void
+  /**
+   * The status is read again whenever this changes. The block itself reads it when it appears and after an enrolment
+   * done here; an enrolment finished elsewhere (another tab, another device) shows once the page is opened again, or
+   * when the caller changes this key (no notification of it reaches the browser).
+   */
+  refreshKey?: string | number
   className?: string
 }
 
@@ -51,6 +57,7 @@ export function MfaSettings({
   begin = beginEnrollment,
   confirm = confirmEnrollment,
   onEnrolled,
+  refreshKey,
   className,
 }: MfaSettingsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
@@ -68,13 +75,16 @@ export function MfaSettings({
         setError(null)
       },
       (e: unknown) => {
-        if (!cancelled) setError(failure(e, t('common.error')))
+        if (cancelled) return
+        // No status rather than the one read before (after an enrolment it would offer setting up again).
+        setCurrent(null)
+        setError(failure(e, t('common.error')))
       },
     )
     return () => {
       cancelled = true
     }
-  }, [status, version, t])
+  }, [status, version, refreshKey, t])
 
   return (
     <div className={cn(UI_SCOPE, 'flex flex-col gap-4', className)} data-testid="mfa-settings">
