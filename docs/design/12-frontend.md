@@ -302,14 +302,16 @@ jabizApp {
   绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
-  `MfaCodeStep`、`MfaEnrollment`、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  `MfaCodeStep`、`MfaEnrollment`、`StepUpProvider`、`OidcButtons`（按提供方的 `kind` 画标志，Google 为文字颜色的单色"G"，16f-1）、`OidcCallback`（登录与本人关联共用：按
+  `startIdentityLink` 记下的用途完成关联后调用 `onLinked`；403 `OIDC_ACCOUNT_EXISTS` 时说明用原方式登录后关联）、`LinkedIdentities`（本人的外部账号：列表、关联（需要时先问当前密码）、
+  确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
-  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；

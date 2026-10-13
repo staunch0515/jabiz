@@ -251,7 +251,8 @@
 ## 12. OIDC 单点登录【D28 第 6 条，阶段 14g-2】
 
 授权码 + PKCE（S256）+ nonce；平台自己校验 ID 令牌，然后照常签发自己的访问令牌与刷新令牌（第 2 节不变）。不用 Spring 的 oauth2-client（它依赖服务端会话），
-只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不做单点登出；缺省不自动开户（线 1.2 起可按提供方开启，【决策 D39】）。
+只用已有的 Nimbus 与 JDK 的异步 HTTP 客户端。不做 SAML、不做单点登出；缺省不自动开户，按提供方开启（【决策 D39】，阶段 16f-1，见下文"自动开户"）；
+已登录的用户可自行关联与解除外部账号（见下文"本人关联"）。Apple（`kind: apple`、form_post 回调、以 JWT 作客户端密钥）在 16f-2，推后。
 
 **配置**（`jabiz.security.oidc.providers[i]`）
 
@@ -265,28 +266,31 @@
 | `scopes` | 缺省 `openid profile email`，必须含 `openid` |
 | `labels` | 登录按钮的文字（`{语言: 文本}`），缺省为 `id` |
 | `mfa-amr` | ID 令牌的 `amr` 含其中任一值时视同平台的二次验证；缺省为空（不信任，照常走第 9 节） |
+| `kind` | `generic`（缺省）或 `google`（16f-1）：Google 的 `issuer` 缺省为 `https://accounts.google.com`，邮箱是否可信另有规则（见"自动开户"）；其他值启动报错（`apple` 在 16f-2） |
+| `auto-provision` | 缺省 `false`：未关联的外部账号可否开户（D39，见"自动开户"） |
 
 启动检查（类别 `SECURITY`）一次报告全部问题：缺项（`redirect-uri` 与 `redirect-uris` 至少有一个）、`id` 格式或重复、`scopes` 无 `openid`、
 `issuer` / `redirect-uri` / `redirect-uris.<入口>` 不是绝对的 `https` 地址（只有 `localhost` / `127.0.0.1` 可用 `http`，供开发与测试）、回调带片段（`#`）、
-`redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同。启动时不访问身份提供方。
+`redirect-uris` 的键不是入口名、`redirect-uri` 与 `redirect-uris.admin` 都写了却不同、`kind` 未知、`auto-provision` 而 `scopes` 无 `email`；
+`auto-provision` 而它服务的入口（有回调的）都不允许注册为**警告**。启动时不访问身份提供方。
 
 **接口**（公开，认证过滤器不处理）
 
 | 方法与路径 | 说明 |
 |---|---|
-| `GET /api/auth/oidc/providers?entry=` | 对该入口（缺省 `admin`）提供的提供方，即有该入口回调的：`id` 与按请求语言的 `label`，只此而已；未知入口为空列表 |
-| `POST /api/auth/oidc/{id}/start?entry=` | 提供方没有该入口的回调时与未知入口一样答 401 `LOGIN_FAILED`。生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
-| `POST /api/auth/oidc/callback {state, code, binder}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED` |
+| `GET /api/auth/oidc/providers?entry=` | 对该入口（缺省 `admin`）提供的提供方，即有该入口回调的：`id`、按请求语言的 `label` 与 `kind`（前端据此画按钮），只此而已；未知入口为空列表 |
+| `POST /api/auth/oidc/{id}/start?entry=` | 按客户端地址限流（`jabiz.security.oidc.rate-limit.per-address`，缺省每小时 60 次，超限 429 `RATE_LIMITED`：每次发起都写一行）。提供方没有该入口的回调时与未知入口一样答 401 `LOGIN_FAILED`。生成 state、nonce、PKCE verifier 与浏览器绑定值 binder（各 32 字节随机数），写一行 `sec_oidc_state`（state、nonce、binder 只存 SHA-256；verifier 原样，换令牌时要用；10 分钟有效），返回 `{authorizationUrl, binder}`；前端把 binder 存进 `sessionStorage`（它不出现在任何 URL 中）后整页跳转 |
+| `POST /api/auth/oidc/callback {state, code, binder}` | 见下；结果与 `POST /api/auth/login` 相同（`SIGNED_IN` / `MFA_REQUIRED` / `MFA_ENROLLMENT_REQUIRED`），其他一律 401 `LOGIN_FAILED`；例外：守卫拒绝、入口要求已验证（403，同 §15.2）、开户时邮箱已被使用（403 `OIDC_ACCOUNT_EXISTS`）、开户超限（429） |
 
 **回调**
 
-1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、binder 不符 → 401。
+1. 消费 state：在 `sec_oidc_state_use` 插入一行（主键保证只能用一次，与刷新令牌相同）；未知、过期、用过、binder 不符、用途不是登录（`purpose = LINK`，本人关联的状态）→ 401。
    binder 把回调绑定到发起登录的那个浏览器：攻击者停在回调之前、把自己的 state 与授权码发给别人时，别人的页面没有对应的 binder，不会以攻击者身份登录（login CSRF）。
 2. 以 `client_secret_basic` 与 `code_verifier` 在令牌端点换取令牌（5 秒超时）；`redirect_uri` 是 state 所记入口的回调（与授权请求相同，
    身份提供方据此核对），回调请求里的任何入口都不算；配置中已没有该入口的回调则拒绝。
 3. 校验 ID 令牌：签名只接受 RS256 / ES256（拒绝 `none` 与 HS*，防止以公钥作 HMAC 密钥），按 `kid` 取 JWKS 中的公钥；`iss` 等于配置；`aud` 含 `client-id`，
    多个受众时 `azp` 必须是 `client-id`；`exp` 未过、`iat` 不在将来（按注入的 `Clock`，容许 60 秒偏差）；`nonce` 的 SHA-256 与记录的一致；`sub` 非空。
-4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`；成功时刷新令牌记下所经的关联（`sec_refresh_token.identity_id`），每次刷新都要求该关联仍在，
+4. 以 `(提供方, sub)` 执行流程 `SPONSOR_OIDC_SIGN_IN`（没有关联时先看能否开户，见"自动开户"）；成功时刷新令牌记下所经的关联（`sec_refresh_token.identity_id`），每次刷新都要求该关联仍在，
    因此解除关联即结束其会话（最迟在下一次刷新）。
 
 发现文档与 JWKS 在首次使用时读取并缓存 1 小时；遇到未知的 `kid` 时重新读取 JWKS（至多每分钟一次）；端点必须是 `https`（同上，`localhost` 除外）。
@@ -294,9 +298,10 @@
 
 **账号关联与登录流程**
 
-- 时态实体 `SecUserIdentity`（`sec_user_identity_version`，`V24__oidc.sql`）：`userId`、`provider`、`subject`，`(provider, subject)` 唯一；
-  管理员经其数据视图维护（读 `security.user.read`，写 `security.user.identity.write`：关联让对方以该用户登录，是独立的凭证，不随修改用户的权限一并授予；
-  写入为管理级二次验证）。**缺省不自动开户**：没有关联即拒绝（线 1.2 起按提供方开启自动开户，见【决策 D39】；自助注册见【决策 D36】）。
+- 时态实体 `SecUserIdentity`（`sec_user_identity_version`，`V24__oidc.sql`）：`userId`、`provider`、`subject`，`(provider, subject)` 唯一；`email`（`V39`，`processOnly`，
+  开户与本人关联时记下提供方给的邮箱，只用于显示，从不用于登录）。管理员经其数据视图维护（读 `security.user.read`，写 `security.user.identity.write`：关联让对方以该用户登录，
+  是独立的凭证，不随修改用户的权限一并授予；写入为管理级二次验证）；用户本人经下文的接口关联与解除；提供方开户时由 `SPONSOR_OIDC_SIGN_UP` 建立。
+  **缺省不自动开户**：没有关联即拒绝，除非提供方开启了 `auto-provision`（【决策 D39】；自助注册见【决策 D36】）。
 - `SPONSOR_OIDC_SIGN_IN`（`auth.sign-in`，内部）与密码登录一样写登录记录（`factor = OIDC`）：没有关联 → 不写记录；锁定中 → `LOCKED`；禁用 → `DISABLED`；
   无角色 → `NO_ROLE`；然后二次验证：`amr` 符合 `mfa-amr` 且 ID 令牌带 `auth_time` → 登录，会话的 `mfa_at` 取 `auth_time`（不是现在：
   提供方很久以前的二次验证不算第 10 节的"最近"；没有 `auth_time` 则不视同）；否则已绑定 TOTP → `MFA_REQUIRED`（第 9 节的第二步）；
@@ -305,6 +310,47 @@
   否则任何人都能以错误的密码锁住这类账号（它们没有能对的密码）。
 - 谁都可以发起登录，所以 `sec_oidc_state` / `sec_oidc_state_use` **不是**只追加表：每次发起时删除过期的请求，表中至多是最近 10 分钟的请求；它们也不被封存（21 §2）。
 - 发现文档、JWKS 与令牌响应至多读 256 KB，超出即停止读取。没有 `kid` 的 ID 令牌逐一尝试同类的全部公钥（密钥轮换期间常有两把）。
+- `sec_oidc_state` 记下用途（`purpose`：`SIGN_IN` 或 `LINK`，`V39`）与关联的用户（`link_user_id`，只有 `LINK`）：登录的回调不接受关联的状态，关联的回调只接受调用者本人、本入口的关联状态。
+
+**自动开户**【决策 D39 第 1、4 条，阶段 16f-1】
+
+- **条件**（同时满足才开户）：提供方 `auto-provision: true`；状态记录的入口 `self-registration: true`（`admin` 入口不能允许注册，§15.7，所以后台从不开户）；
+  提供方担保的邮箱（`IdTokenValidator.Identity.trustedEmail`）：ID 令牌有像样的 `email`（至多 320 字符）且 `email_verified` 为真（布尔，或不分大小写的文本 `"true"`）；
+  `kind: google` 还要求邮箱是 `@gmail.com` / `@googlemail.com`，或令牌带 `hd`（Workspace 域）——Google 对其他域的邮箱只在建账号时验证过一次，账号的主人未必仍拥有该邮箱；
+  该邮箱（不分大小写）没有被任何用户使用。
+- **开户**（流程 `SPONSOR_OIDC_SIGN_UP`，`entryOnly`，权限 `auth.sign-up`，只经回调运行）：用户名同注册（小写邮箱，被占用时加 `-` 与 6 位随机字符）；写 `email`、
+  `verifiedEmail`、`emailVerifiedAt`，**不写 `registeredEmail`**（永不可预占）；没有密码；`displayName` 取 ID 令牌的 `name`（去掉控制与格式字符、合并空白、至多 200 字符）；
+  `locale` 取请求的语言（平台语言之一，否则不写）；授予入口的注册角色（缺少或停用即不开户）；建 `SecUserIdentity`（带邮箱）。之后照常运行 `SPONSOR_OIDC_SIGN_IN`：
+  写登录记录，受入口、`SignInGuard`、锁定与二次验证规则约束（角色要求二次验证即 `MFA_ENROLLMENT_REQUIRED`）。开户时不发邮件（用户刚刚亲自登录）。
+- **邮箱已被使用**（任何用户，含可预占的账号与禁用的账号）：不开户、不关联，403 `OIDC_ACCOUNT_EXISTS`（"请用原来的方式登录，再在账户设置中关联"）。提供方刚向请求者证明了邮箱，
+  只对他区分这种情况（同 D36 实现说明第 2 条）；可预占账号的主人照常经找回密码接管。其他不满足的情况一律 401 `LOGIN_FAILED`，不建用户、不写记录，原因只记日志。
+- **限流**：开户按客户端地址（`SignUpRateLimits` 的 `OIDC_SIGN_UP`，沿用 `jabiz.security.sign-up.rate-limit.per-address`，缺省每小时 20 次），超限 429，不建用户。
+- **并发**：同一 subject 或同一邮箱同时开户时，`(provider, subject)` 与邮箱的唯一约束保证只建一个用户；输的一方再问一次（这时得到已关联或邮箱已被使用）。
+  同一用户两个登录同时写登录记录时，后者再登录一次（OIDC 登录不猜密码，重试不影响锁定计数）。
+- 只信任经令牌端点换来的 ID 令牌；重放与绑定照旧（state 只能用一次、nonce、PKCE S256、binder、10 分钟）。
+
+**本人关联**【决策 D39 第 2 条，阶段 16f-1】
+
+已登录的平台用户在**当前会话的入口**关联与解除外部账号；只提供对该入口提供的提供方（有该入口的回调）。会话已结束的访问令牌（§15.9）一律 401。
+
+| 方法与路径 | 说明 |
+|---|---|
+| `GET /api/auth/account/identities` | 本人的关联：`[{id, provider, label, kind, email, linkedAt}]`（`linkedAt` 为关联第一个版本的生效时间；提供方已不在配置中时 `label` 为其 `id`、`kind` 为空） |
+| `POST /api/auth/account/identities/start {provider, currentPassword?}` | 按用户限流（同改密码的 `jabiz.security.account.rate-limit.per-user`，各自计数）；提供方未知或不对该入口提供 404。访问令牌的 `mfa_at` 在 `step-up-max-age` 之内即开始；否则须有当前密码（流程 `SEC_IDENTITY_LINK_BEGIN`）：错误 422 `PASSWORD_INCORRECT`，两者都没有 422 `REAUTHENTICATION_REQUIRED`。写状态记录（`purpose = LINK`、`link_user_id`），回答 `{authorizationUrl, binder}`（同登录的 `start`） |
+| `POST /api/auth/account/identities/callback {state, code, binder}` | 消费状态（须是调用者本人、本入口的关联状态），换取并校验 ID 令牌，运行 `SEC_IDENTITY_LINK_SELF`：`{status: LINKED | ALREADY_LINKED, provider}`。往返本身的任何失败（状态、换令牌、ID 令牌）答 422 `IDENTITY_LINK_FAILED`（不是 401：调用者的会话没有问题，401 会让客户端登出） |
+| `DELETE /api/auth/account/identities/{id}` | `SEC_IDENTITY_UNLINK_SELF`，204；不是本人的关联 404；解除后既无密码又无其他关联时 422 `LAST_SIGN_IN_METHOD`。经该关联登录的会话在下一次刷新时结束（每次刷新都要求关联仍在） |
+
+- 流程都是 `entryOnly()`、权限 `auth.account`（不授予任何角色），经流程接口调用即 403 `PROCESS_INTERNAL`；流程内再确认操作的是调用者本人、账号已启用。
+- `SEC_IDENTITY_LINK_BEGIN`：与本人改密码（§15.8）共用同一把按用户的排他锁；锁定期间不比对密码（记 `LOCKED`），错误记 `BAD_CREDENTIALS`（计入失败次数与锁定），
+  正确时不写记录；没有密码的账号 422 `PASSWORD_NOT_SET`（这类用户用近期二次验证，或先经找回密码设一个密码）。
+- `SEC_IDENTITY_LINK_SELF`：按用户的排他锁逐个进行（关联与解除共用）；可预占的账号（§15.7）422 `IDENTITY_LINK_UNAVAILABLE`——邮箱的主人仍可接管它，预占者不能先留下外部登录的后门；
+  外部账号已关联到别人 422 `IDENTITY_IN_USE`（并发时唯一约束同样答这个）；已关联到本人即幂等（`ALREADY_LINKED`，不发邮件）；本人已关联该提供方的另一个外部账号 422 `IDENTITY_PROVIDER_LINKED`
+  （每个提供方一个）。成功时写关联（带 ID 令牌的邮箱）；`jabiz.mail.enabled` 开启且用户有邮箱时发 `TRANSACTIONAL` 邮件 `jabiz.auth.identity-linked`（三语，参数为入口与提供方的标签，不带令牌，
+  正文给出不带令牌的找回密码页）。
+- 秘密不进操作记录：`currentPassword` 标 `@Sensitive`；请求与 `Identity` 的 `toString` 遮蔽。
+- 前端：`@jabiz/client` 的 `startIdentityLink(provider, {currentPassword?}, returnTo)`（在 `sessionStorage` 记下用途 `LINK`，每次发起都重写）、`finishIdentityLink`、
+  `listIdentities`、`unlinkIdentity`；`@jabiz/ui` 的 `OidcCallback` 按记下的用途走登录或关联（`onLinked`），`OIDC_ACCOUNT_EXISTS` 时说明怎样继续；积木 `LinkedIdentities`
+  （列表、需要时先问当前密码、解除）；`OidcButtons` 按 `kind` 画提供方的标志（Google 的单色"G"，颜色只用主题 token）。示范门户的账户页使用它；后台账户安全页在 15c-2 之后加入。
 
 ## 13. 按权限显示明文、数据期限、访问审查【D28 第 7–9 条，阶段 14g-3】
 
@@ -494,7 +540,7 @@ class PortalSignInGuard implements SignInGuard {
 - 管理员设置的邮箱在本人验证之前不能找回密码（升级前的账号都如此）；忘记密码又没验证过邮箱的用户由管理员重设密码。
 - 持有 `security.user.write` 的人可以把受害人的邮箱改成自己的；受害人若随后在登录状态下要求验证邮件，攻击者就得到一个已验证的邮箱，可以找回密码（二次验证在重置后保留）。计划的缓解：发送前向本人显示目标地址。
 - 管理员改邮箱时 `verifiedEmail` 不清除：改回以前验证过的地址即重新算作已验证。
-- 自助关联外部身份（D39，16f）实现时，接管可预占的账号也必须删除其 `SecUserIdentity` 关联（现在只有管理员能关联，不需要）。
+- 接管可预占的账号时删除其全部 `SecUserIdentity` 关联（16f-1；可预占的账号自己不能关联，但管理员可能关联过）；预占者经该关联已签发的访问令牌在有效期内仍可用（同 §2）。
 - 验证时输错当前密码（`CurrentPasswordStep`）只按客户端地址限流，不计入账号的失败次数与锁定（持有链接的人本来就能设新密码）；本人改密码（§15.8）输错则计入。
 
 ### 15.7 自助注册、邮箱验证与找回密码（16b-2）
@@ -518,7 +564,8 @@ class PortalSignInGuard implements SignInGuard {
 **两类账号**（决定哪些邮件可以发、链接能做什么；不另设状态）：
 
 - **可预占的账号**：自助注册而来（`registeredEmail`，`processOnly`，只由注册写入）、**从未**验证过（`emailVerifiedAt` 为空）、当前邮箱（不分大小写）仍是注册时的邮箱。
-  注册它的人未必拥有这个邮箱，所以证明邮箱所有权（加入、验证、重置）的人可以**接管**它：设新密码、删除二次验证、吊销全部令牌族（`claim`）。
+  注册它的人未必拥有这个邮箱，所以证明邮箱所有权（加入、验证、重置）的人可以**接管**它：设新密码、删除二次验证、删除外部账号的关联（16f-1）、吊销全部令牌族（`claim`）。
+  可预占的账号不能自行关联外部账号（`SEC_IDENTITY_LINK_SELF` 答 422 `IDENTITY_LINK_UNAVAILABLE`，§12）。
 - **可信的邮箱**：已验证，或属于可预占的账号。只有这类邮箱收得到找回密码与"你已有账号"的邮件，这两种链接也只对它有效。
   **管理员设置或修改的邮箱从不可信**（持有 `security.user.write` 的人改了别人的邮箱，不能借找回密码接管账号）：其用户登录后用 `POST /api/auth/account/verify-email` 验证一次。
   因此 16b-2 之前创建的账号在验证邮箱之前不能找回密码（升级说明）。
