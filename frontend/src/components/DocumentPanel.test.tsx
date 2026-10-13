@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import DocumentPanel from './DocumentPanel'
 
 const get = vi.fn()
@@ -33,9 +33,7 @@ const RUN = { runId: 'd-1', layoutId: 'commerce.order_confirmation', title: 'Ord
 function renderPanel(props: Partial<Parameters<typeof DocumentPanel>[0]> = {}) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <App>
-        <DocumentPanel layoutId="commerce.order_confirmation" params={{ orderId: 'o-1' }} subjectId="o-1" {...props} />
-      </App>
+      <DocumentPanel layoutId="commerce.order_confirmation" params={{ orderId: 'o-1' }} subjectId="o-1" {...props} />
     </QueryClientProvider>,
   )
 }
@@ -94,8 +92,10 @@ describe('DocumentPanel', () => {
     runProcess.mockResolvedValueOnce({ addresses: ['ap@customer.example'], deliveryIds: ['x-1'] })
     renderPanel()
     fireEvent.click(await screen.findByTestId('document-send-d-1'))
-    expect(await screen.findByText('ap@customer.example')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send by e-mail' })
+    expect(within(screen.getByTestId('document-send-to')).getByText('ap@customer.example')).toBeTruthy()
+    await expectAccessible()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
       { runId: 'd-1', to: ['ap@customer.example'] }))
     await waitFor(() => expect(screen.queryByTestId('document-send-to')).toBeNull())
@@ -104,7 +104,7 @@ describe('DocumentPanel', () => {
       message: 'Sending to x@other.example needs the permission to send documents to any address.' }] }))
     fireEvent.click(screen.getByTestId('document-send-d-1'))
     await screen.findByTestId('document-send-to')
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send' }))
     expect((await screen.findByTestId('document-send-error')).textContent).toContain('x@other.example')
   })
 
@@ -114,5 +114,22 @@ describe('DocumentPanel', () => {
     renderPanel()
     expect(await screen.findByText('SO-1')).toBeTruthy()
     expect(screen.queryByTestId('document-send-d-1')).toBeNull()
+  })
+
+  it('takes several addresses at once and offers a removed address of the document back', async () => {
+    get.mockResolvedValue([RUN])
+    runProcess.mockResolvedValue({ addresses: [], deliveryIds: [] })
+    renderPanel()
+    fireEvent.click(await screen.findByTestId('document-send-d-1'))
+    const dialog = await screen.findByRole('dialog', { name: 'Send by e-mail' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove ap@customer.example' }))
+    expect((within(dialog).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+    const field = within(dialog).getByLabelText('Addresses')
+    fireEvent.change(field, { target: { value: 'a@x.example; b@x.example' } })
+    fireEvent.blur(field)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ap@customer.example' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
+      { runId: 'd-1', to: ['a@x.example', 'b@x.example', 'ap@customer.example'] }))
   })
 })
