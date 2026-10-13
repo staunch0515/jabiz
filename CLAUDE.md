@@ -69,6 +69,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+  会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
   会话的有效期、闲置时长与存放方式按入口配置（`jabiz.security.entries.<名>.session.*`，D43）；`admin` 入口不能用 `device`。

@@ -1,5 +1,3 @@
-import dayjs from 'dayjs'
-
 /**
  * Process input JSON Schema (GET /api/meta/processes, runtime ProcessInputSchemas) → a tree of form inputs, and the
  * form's values → the request body of POST /api/processes/{name}/{version} (docs/design/12-frontend.md section 6).
@@ -106,12 +104,10 @@ class InvalidJson extends Error {
 function convert(node: InputNode, value: unknown, path: string): unknown {
   if (blank(value)) return undefined
   switch (node.kind) {
-    // The new form (SchemaForm) holds instants and dates as their API text; the old one (SchemaInputs, until
-    // phase 15c) as Dayjs.
+    // The form (SchemaForm) holds instants and dates as their API text already.
     case 'datetime':
-      return dayjs.isDayjs(value) ? value.toISOString() : value
     case 'date':
-      return dayjs.isDayjs(value) ? value.format('YYYY-MM-DD') : value
+      return value
     case 'decimal':
       // Exact text: the server reads it into a BigDecimal without passing through binary floating point.
       return String(value)
@@ -165,10 +161,7 @@ export interface InputProblem {
   shownByField?: boolean
 }
 
-/**
- * The schema's pattern, when this browser can compile it; otherwise the server checks it alone. Shared by the
- * process form (`checkInputs`) and the old form inputs of the report and import pages (`SchemaInputs`, until 15c).
- */
+/** The schema's pattern, when this browser can compile it; otherwise the server checks it alone. */
 export function compiledPattern(pattern: string | undefined): RegExp | undefined {
   if (!pattern) return undefined
   try {

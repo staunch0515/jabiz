@@ -63,13 +63,15 @@ public class RevokeSessionsStep implements StepHandler<RevokeSessionsStep.Metada
             }
             EntityInstance user = ctx.get(metadata.userKey(), EntityInstance.class);
             UUID userId = UUID.fromString(String.valueOf(user.id()));
+            // The revocations name the operation (section 15.9).
+            long operation = ctx.processSeqId();
             if (token == null) {
-                return refreshTokens.revokeUser(userId, metadata.reason());
+                return refreshTokens.revokeUser(userId, metadata.reason(), null, operation);
             }
             return refreshTokens.liveSession(token, userId, ctx.request().entry())
                 .map(java.util.Optional::of)
                 .defaultIfEmpty(java.util.Optional.empty())
-                .flatMap(keep -> refreshTokens.revokeUser(userId, metadata.reason(), keep.orElse(null)));
+                .flatMap(keep -> refreshTokens.revokeUser(userId, metadata.reason(), keep.orElse(null), operation));
         });
     }
 }

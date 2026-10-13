@@ -345,6 +345,7 @@
 **已实现**
 
 1. **认证与会话**：用户名密码（BCrypt）；JWT 短期访问令牌 + 轮换的刷新令牌（重用即吊销整族）；登出、改密吊销；闲置锁定（服务端与前端）；令牌表只追加。
+   会话列表（10 §15.9）：本人看并结束当前入口的会话（设备、地址、最近使用，本机标记；单个或"其他全部"），管理员看并结束某用户全部入口的会话（须填原因、二次验证）；被结束的会话下一次刷新即失效，访问令牌至多再用一个有效期。
 2. **登录保护**：失败计数与锁定（阈值、时长可配）；并发猜密码不能绕过；不泄露用户名是否存在；每次尝试写登录记录。
 3. **RBAC**：用户、角色、角色权限、用户角色（可预定生效、可带数据期限）、菜单、登录记录——都是平台时态实体，经后台维护、有历史与审计；权限码即数据视图 / 模板 / 流程声明的字符串；`*` 为全部权限；菜单按权限过滤成树。
 4. **默认拒绝**：`/api/**` 必须认证；未声明权限的入口启动失败 / 请求拒绝；范围取不到即拒绝；缺密钥不启动。
@@ -399,13 +400,13 @@
 - 数据视图目录；通用列表（远程分页、白名单筛选 / 排序、按时间点与"按当时所知"回看、引用列显示名称、遮蔽字段"显示"按钮、文件缩略图）；新建 / 编辑抽屉（控件按语义类型、前端校验与服务端错误码一致、只发送改变的字段、生效时间与原因、多语言标签页、上传控件、引用下拉、只读的 `processOnly` 字段）；详情（实体上的操作、子实体列表）。
 - 历史时间线（版本、动作、前后值、预定标记、按时间点回看并对比、操作详情、撤销）。
 - 流程目录与由输入 Schema 生成的表单（嵌套、列表、自动幂等键）；实体行上的操作按钮。
-- 我的待办与审批面板；报表（列表、运行、导出、签发）与报表存档；单据；导入向导与导入记录；审计（含明文显示页签）；访问审查；防篡改；保留与保全与导出；账户安全设置。
+- 我的待办与审批面板；报表（列表、运行、导出、签发）与报表存档；单据；导入向导与导入记录；审计（含明文显示页签）；访问审查；会话；防篡改；保留与保全与导出；账户安全设置（含本人的会话）。
 - 按权限隐藏操作（权限仍由服务端判断）；三种语言；区域格式（日期、千分位、括号负数）；用户编号显示为名字。
 - 无障碍：以 WCAG 2.2 A / AA 为目标，主要页面经 axe 自动检查（对比度、名称、属性）且任何违规即失败；扩展页在同一主题下并可用同一工具检查。
 - **应用扩展**（`admin-extension`）：应用用 React 写自己的页面与菜单（分录录入网格、对账、看板等），经 `@jabiz/admin` 复用平台的 API 客户端、元数据 hooks、表单抽屉、审批面板、单据面板、格式化函数；构建时编入、路由不占平台路径、不自带依赖；类型 / lint / 测试检查。
 - 后台可挂在子路径（`/admin/`），与公开网站同一 jar 提供，各自内容安全策略。
 - **应用自有的前端与 PWA**（阶段 16c，决策 D43；指南 `app-spa.md`）：需要登录的应用前端（App、商家后台、客户门户）放在应用目录中，经 `link:` 用平台的
-  `@jabiz/client` 与 `@jabiz/ui`（登录、注册、邮件链接、找回密码、二次验证与 step-up、改密码、离线与更新提示的积木，三语、亮暗外观）；会话按登录入口分开，
+  `@jabiz/client` 与 `@jabiz/ui`（登录、注册、邮件链接、找回密码、二次验证与 step-up、改密码、会话列表、离线与更新提示的积木，三语、亮暗外观）；会话按登录入口分开，
   可按入口保持在设备上（关闭后再打开仍登录）；邮件链接与单点登录回到各自入口的前端；同一 jar 可提供多个 SPA，各自内容安全策略。
   PWA：manifest 与 Service Worker 由构建预设生成，**只缓存应用外壳**（离线时能打开页面并提示离线），不缓存任何接口数据；新版本经用户同意才生效，可以撤下。
 
@@ -483,7 +484,7 @@
 | 领域 | 权限码 |
 |---|---|
 | 时态与操作 | `temporal.backdate`、`temporal.revert`、`operation.read`、`entity.write`（通用实体流程） |
-| 安全 | `security.user.read/.write/.create/.password/.unlock/.mfa-reset/.identity.write`、`security.role.read/.write`、`security.user-role.read/.write`、`security.menu.read/.write`、`security.login-record.read/.write`、`security.access-review.read/.sign`；`*` 为全部 |
+| 安全 | `security.user.read/.write/.create/.password/.unlock/.mfa-reset/.identity.write`、`security.role.read/.write`、`security.user-role.read/.write`、`security.menu.read/.write`、`security.login-record.read/.write`、`security.access-review.read/.sign`、`security.user.session.read/.revoke`（会话列表与结束，10 §15.9）；`*` 为全部 |
 | 业务参数 | `platform.param.read`、`platform.param.write` |
 | 账本 | `ledger.account.read/.write`、`ledger.read`、`ledger.post`、`ledger.reverse` |
 | 审计与任务 | `audit.read`、`job.read` |
@@ -499,7 +500,7 @@
 
 ## 附录 B 平台内置的流程、事件与任务
 
-- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；入站 Webhook（`INBOUND_RECEIVE`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
+- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_USER_SESSIONS_REVOKE` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；入站 Webhook（`INBOUND_RECEIVE`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
 - 事件：`jabiz.entity-changed.<实体>`、`jabiz.approval.requested` / `approved` / `rejected`、`jabiz.task.created`、`jabiz.mail.queued`、`jabiz.report.issued`、`jabiz.document.issued`、`jabiz.import.committed`。
 - 定时任务：`FILE_SWEEP`（每日）、`jabiz.integrity-seal`（每 5 分钟）、`jabiz.integrity-verify`（每日）。
 

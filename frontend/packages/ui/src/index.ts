@@ -42,6 +42,8 @@ export * from './components/ui/switch'
 export * from './components/ui/table'
 export * from './components/ui/tabs'
 export * from './components/ui/textarea'
+export * from './components/ui/toggle'
+export * from './components/ui/toggle-group'
 export * from './components/ui/tooltip'
 
 // The platform's composite components.
@@ -105,6 +107,10 @@ export { PageState } from './components/page-state'
 export type { PageStateKind, PageStateProps } from './components/page-state'
 export { Spinner } from './components/spinner'
 export type { SpinnerProps } from './components/spinner'
+export { Steps } from './components/steps'
+export type { StepItem, StepsProps } from './components/steps'
+export { SegmentedControl } from './components/segmented-control'
+export type { SegmentedControlProps, SegmentedOption } from './components/segmented-control'
 export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'
 
 // Signing in and the account (decision D43): pages and parts of pages, without a router, texts in namespace `auth`.

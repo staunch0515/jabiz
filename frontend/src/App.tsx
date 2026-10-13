@@ -11,10 +11,11 @@ import { ApiError } from './api/problem'
 import { routerBasename } from './base'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { extension } from './extension'
-import { homePath } from './extension/registry'
+import { extensionRoutes, homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
 import AccountSecurityPage from './pages/AccountSecurityPage'
 import AccessReviewPage from './pages/AccessReviewPage'
+import SessionsPage from './pages/SessionsPage'
 import AuditPage from './pages/AuditPage'
 import DatasetCatalogPage from './pages/DatasetCatalogPage'
 import DatasetListPage from './pages/DatasetListPage'
@@ -51,8 +52,9 @@ const queryClient = new QueryClient({
 })
 
 /**
- * Marks a route whose page is built with @jabiz/ui (phases 15b–15c): the shell lets it follow the appearance instead
- * of pinning it to the light tokens Ant Design pages need. Phase 15d removes the mark with Ant Design.
+ * Marks a route whose page is built with @jabiz/ui (phases 15b–15c; since 15c-2 every page of the admin): the shell
+ * lets it follow the appearance instead of pinning it to the light tokens Ant Design pages needed. Phase 15d removes
+ * the mark with Ant Design.
  */
 const JABIZ_UI = { ui: 'jabiz' } as const
 
@@ -88,21 +90,23 @@ export const appRoutes: RouteObject[] = [
           { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage />, handle: JABIZ_UI },
           { path: '/processes', element: <ProcessCatalogPage />, handle: JABIZ_UI },
           { path: '/processes/:name/:version', element: <ProcessFormPage />, handle: JABIZ_UI },
-          { path: '/tasks', element: <TasksPage /> },
-          { path: '/imports', element: <ImportCatalogPage /> },
-          { path: '/imports/run', element: <ImportPage /> },
-          { path: '/imports/runs', element: <ImportRunsPage /> },
-          { path: '/reports', element: <ReportCatalogPage /> },
-          { path: '/reports/run', element: <ReportPage /> },
-          { path: '/reports/archive', element: <ReportArchivePage /> },
-          { path: '/documents', element: <DocumentsPage /> },
-          { path: '/audit', element: <AuditPage /> },
-          { path: '/access-review', element: <AccessReviewPage /> },
-          { path: '/integrity', element: <IntegrityPage /> },
-          { path: '/retention', element: <RetentionPage /> },
-          { path: '/account/security', element: <AccountSecurityPage /> },
-          // The application's own pages (decision D22), checked at startup not to take a platform path.
-          ...(extension.routes ?? []),
+          { path: '/tasks', element: <TasksPage />, handle: JABIZ_UI },
+          { path: '/imports', element: <ImportCatalogPage />, handle: JABIZ_UI },
+          { path: '/imports/run', element: <ImportPage />, handle: JABIZ_UI },
+          { path: '/imports/runs', element: <ImportRunsPage />, handle: JABIZ_UI },
+          { path: '/reports', element: <ReportCatalogPage />, handle: JABIZ_UI },
+          { path: '/reports/run', element: <ReportPage />, handle: JABIZ_UI },
+          { path: '/reports/archive', element: <ReportArchivePage />, handle: JABIZ_UI },
+          { path: '/documents', element: <DocumentsPage />, handle: JABIZ_UI },
+          { path: '/audit', element: <AuditPage />, handle: JABIZ_UI },
+          { path: '/access-review', element: <AccessReviewPage />, handle: JABIZ_UI },
+          { path: '/security/sessions', element: <SessionsPage />, handle: JABIZ_UI },
+          { path: '/integrity', element: <IntegrityPage />, handle: JABIZ_UI },
+          { path: '/retention', element: <RetentionPage />, handle: JABIZ_UI },
+          { path: '/account/security', element: <AccountSecurityPage />, handle: JABIZ_UI },
+          // The application's own pages (decision D22), checked at startup not to take a platform path, and built with
+          // @jabiz/ui (decision D34): they follow the appearance.
+          ...extensionRoutes(extension),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },
         ],
       },

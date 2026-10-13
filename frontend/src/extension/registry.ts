@@ -3,7 +3,7 @@ import type { RouteObject } from 'react-router'
 import type { AdminExtension, ExtensionMenuItem } from './api'
 
 /** Paths the platform's own pages use; an extension route may not take them over. */
-export const PLATFORM_PATHS = ['/login', '/data', '/processes', '/tasks', '/reports', '/documents', '/imports', '/audit', '/integrity', '/retention', '/account', '/auth', '/mail'] as const
+export const PLATFORM_PATHS = ['/login', '/data', '/processes', '/tasks', '/reports', '/documents', '/imports', '/audit', '/integrity', '/retention', '/access-review', '/security', '/account', '/auth', '/mail'] as const
 
 const PATH = /^\/[A-Za-z0-9._~:@!$&'()*+,;=/-]*$/
 
@@ -89,6 +89,18 @@ export function extensionMenu(
       children: children && children.length > 0 ? children : undefined,
     }]
   })
+}
+
+/**
+ * The extension's routes, marked as built with @jabiz/ui (`handle.ui`, phase 15c-2): extensions use no other
+ * components (decision D34), so their pages follow the appearance like the platform's. A handle of the extension's own
+ * is kept. Phase 15d removes the mark with Ant Design.
+ */
+export function extensionRoutes(extension: AdminExtension): RouteObject[] {
+  return (extension.routes ?? []).map((route) => ({
+    ...route,
+    handle: { ...(typeof route.handle === 'object' && route.handle !== null ? route.handle : {}), ui: 'jabiz' },
+  }))
 }
 
 /** Where a signed-in user lands. */

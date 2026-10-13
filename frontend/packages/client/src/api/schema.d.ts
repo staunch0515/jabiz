@@ -116,6 +116,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mine_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeOthers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/sessions/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/verify-email": {
         parameters: {
             query?: never;
@@ -1460,6 +1508,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/security/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ofUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sod/conflicts": {
         parameters: {
             query?: never;
@@ -1618,6 +1682,14 @@ export interface components {
             temporal?: boolean;
             writeRequiresMfa?: boolean;
             writeRequiresVerifiedEmail?: boolean;
+        };
+        Device: {
+            /** @enum {string} */
+            browser?: "EDGE" | "OPERA" | "SAMSUNG" | "WECHAT" | "FIREFOX" | "CHROME" | "SAFARI" | "OTHER";
+            /** @enum {string} */
+            deviceType?: "DESKTOP" | "MOBILE" | "TABLET" | "OTHER";
+            /** @enum {string} */
+            os?: "WINDOWS" | "IOS" | "ANDROID" | "CHROME_OS" | "MACOS" | "LINUX" | "OTHER";
         };
         DictItem: {
             code?: string;
@@ -2134,6 +2206,7 @@ export interface components {
             mfaAt?: string;
             permissions?: string[];
             roles?: string[];
+            sessionId?: string;
             tenantId?: string;
             userId?: string;
         };
@@ -2364,6 +2437,12 @@ export interface components {
             /** Format: date-time */
             signedAt?: string;
         };
+        Revoked: {
+            /** Format: int64 */
+            effectiveWithinSeconds?: number;
+            /** Format: int32 */
+            revoked?: number;
+        };
         RunDetail: {
             columns?: components["schemas"]["ColumnEntry"][];
             company?: string;
@@ -2424,6 +2503,28 @@ export interface components {
         SavedMapping: {
             mapping?: components["schemas"]["ImportMapping"];
             name?: string;
+        };
+        SessionList: {
+            /** Format: int64 */
+            effectiveWithinSeconds?: number;
+            sessions?: components["schemas"]["SessionView"][];
+            truncated?: boolean;
+        };
+        SessionView: {
+            clientIp?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            current?: boolean;
+            device?: components["schemas"]["Device"];
+            entry?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            id?: string;
+            /** Format: date-time */
+            lastUsedAt?: string;
+            mfa?: boolean;
+            oidc?: boolean;
+            userAgent?: string;
         };
         Sort: {
             asc?: boolean;
@@ -2706,6 +2807,66 @@ export interface operations {
                 "application/json": components["schemas"]["PasswordRequest"];
             };
         };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mine_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionList"];
+                };
+            };
+        };
+    };
+    revokeOthers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Revoked"];
+                };
+            };
+        };
+    };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description No Content */
             204: {
@@ -4773,6 +4934,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Conflicts"];
+                };
+            };
+        };
+    };
+    ofUser: {
+        parameters: {
+            query: {
+                userId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionList"];
                 };
             };
         };

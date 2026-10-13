@@ -17,7 +17,8 @@ import java.util.function.LongSupplier;
  * and per e-mail address, lower case. Defaults: {@code jabiz.security.sign-up.rate-limit.per-address} (20) and
  * {@code .per-email} (3) requests per {@code .period} (one hour), counted for each kind of request apart
  * (registering, resending the verification, asking for a password reset). A signed-in user's own password change
- * counts per client address and per user ({@code jabiz.security.account.rate-limit.per-user}, 10 per period).
+ * counts per client address and per user ({@code jabiz.security.account.rate-limit.per-user}, 10 per period); ending
+ * sessions of one's own counts per user with the same limit, apart.
  *
  * <p>An address is counted whether or not it belongs to an account, so a refusal tells nothing about it. Kept in
  * memory, per instance (as the public API's limit, docs/design/15-public-access.md section 6).
@@ -32,7 +33,9 @@ public class SignUpRateLimits {
     public enum Kind {
         REGISTER, VERIFY_RESEND, PASSWORD_RESET, LINK,
         /** A signed-in user changing their own password (section 15.8): counted per user and per address. */
-        PASSWORD_CHANGE
+        PASSWORD_CHANGE,
+        /** A signed-in user ending sessions of their own (section 15.9): counted per user. */
+        SESSION_REVOKE
     }
 
     /** Default of {@code jabiz.security.account.rate-limit.per-user}. */
@@ -91,6 +94,14 @@ public class SignUpRateLimits {
     /** Counts a signed-in user's attempt to change their own password; 429 {@code RATE_LIMITED} beyond the limit. */
     public void passwordChange(String userId) {
         acquire(perUser, Kind.PASSWORD_CHANGE + " user:" + Objects.requireNonNull(userId, "userId"));
+    }
+
+    /**
+     * Counts a signed-in user's request to end sessions of their own, with the limit of password changes (in buckets of
+     * its own); 429 {@code RATE_LIMITED} beyond the limit.
+     */
+    public void sessionRevoke(String userId) {
+        acquire(perUser, Kind.SESSION_REVOKE + " user:" + Objects.requireNonNull(userId, "userId"));
     }
 
     private static void acquire(TokenBucketLimiter limiter, String key) {

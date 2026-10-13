@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import DocumentsPage from './DocumentsPage'
 
 const get = vi.fn()
@@ -30,11 +30,9 @@ const RUN = {
 function renderPage(path: string) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <App>
-        <MemoryRouter initialEntries={[path]}>
-          <DocumentsPage />
-        </MemoryRouter>
-      </App>
+      <MemoryRouter initialEntries={[path]}>
+        <DocumentsPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -86,12 +84,17 @@ describe('DocumentsPage', () => {
     runProcess.mockResolvedValue({ addresses: ['ap@customer.example'], deliveryIds: ['x-3'] })
     renderPage('/documents')
     await screen.findByText(/SO-1/)
-    fireEvent.click(document.querySelector('.ant-table-row-expand-icon') as Element)
+    const expand = screen.getByRole('button', { name: 'Expand row' })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(expand)
+    expect(screen.getByRole('button', { name: 'Collapse row' }).getAttribute('aria-expanded')).toBe('true')
     expect((await screen.findByTestId('delivery-x-1')).textContent).toBe('Sent')
     expect(screen.getByTestId('delivery-x-2').textContent).toBe('Failed, retrying')
 
     fireEvent.click(screen.getByTestId('document-send-d-1'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Send' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send by e-mail' })
+    await expectAccessible()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
       { runId: 'd-1', to: ['ap@customer.example'] }))
   })

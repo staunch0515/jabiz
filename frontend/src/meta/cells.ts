@@ -8,8 +8,7 @@ import { isFileField, type DictItem, type EntityInstance, type FieldMeta } from 
 
 /*
  * The cells of generated tables, independent of the table component (docs/design/12-frontend.md section 5): rows,
- * what a cell shows, and who may compare by a field. Used by the DataTable columns (dataColumns.tsx) and, until phase
- * 15c removes it, by the ProTable columns of columns.ts.
+ * what a cell shows, and who may compare by a field. Used by the DataTable columns (dataColumns.tsx).
  */
 
 /** One table row: the entity's attributes by field name, plus the instance itself. */

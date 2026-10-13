@@ -26,6 +26,7 @@ import {
   Languages,
   ListChecks,
   LogOut,
+  MonitorSmartphone,
   ScrollText,
   ShieldCheck,
   ShieldEllipsis,
@@ -122,6 +123,10 @@ export default function AppLayout() {
     // The periodic access review (docs/design/10-security.md section 13.3).
     ...(can('security.access-review.read')
       ? [{ key: 'access-review', label: t('nav.accessReview'), path: '/access-review', icon: Users }]
+      : []),
+    // Users' sessions, for those who may see them (docs/design/10-security.md section 15.9).
+    ...(can('security.user.session.read')
+      ? [{ key: 'sessions', label: t('nav.sessions'), path: '/security/sessions', icon: MonitorSmartphone }]
       : []),
     // Retention, legal holds and the export (docs/design/21-audit-retention.md sections 3 and 4).
     ...(['retention.read', 'legal.hold.read', 'legal.hold.write', 'data.export'].some((p) => can(p))

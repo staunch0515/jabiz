@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import RetentionPage from './RetentionPage'
+
+const user = () => userEvent.setup()
 
 const get = vi.fn()
 const exportData = vi.fn()
@@ -41,11 +44,9 @@ describe('RetentionPage', () => {
     exportData.mockResolvedValue(undefined)
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <App>
-          <MemoryRouter>
-            <RetentionPage />
-          </MemoryRouter>
-        </App>
+        <MemoryRouter>
+          <RetentionPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     )
 
@@ -55,11 +56,25 @@ describe('RetentionPage', () => {
     expect(screen.getByTestId('retention-holds').getAttribute('href'))
       .toBe('/data/urn%3Ajabiz%3Adataset%3Aplatform%3ASysLegalHold')
 
-    fireEvent.mouseDown(screen.getByTestId('export-datasets').querySelector('.ant-select-selector')!)
-    fireEvent.click(await screen.findByText('Entries (urn:jabiz:dataset:platform:LedgerEntry)'))
+    // At least one dataset.
     fireEvent.click(screen.getByTestId('export-submit'))
-    await waitFor(() => expect(exportData).toHaveBeenCalledWith(expect.objectContaining({
+    expect(await screen.findByText('Choose at least one dataset.')).toBeTruthy()
+    expect(exportData).not.toHaveBeenCalled()
+
+    await user().click(screen.getByRole('combobox', { name: 'Datasets' }))
+    await user().click(await screen.findByRole('option', { name: /Entries \(urn:jabiz:dataset:platform:LedgerEntry\)/ }))
+    expect(within(screen.getByTestId('export-chosen')).getByText('Entries (urn:jabiz:dataset:platform:LedgerEntry)'))
+      .toBeTruthy()
+    await user().click(screen.getByRole('checkbox', { name: 'Add the issued reports' }))
+    await user().type(screen.getByLabelText('Issued from'), '2026-01-01{Enter}')
+    await user().click(screen.getByTestId('export-submit'))
+    await waitFor(() => expect(exportData).toHaveBeenCalledWith({
       datasets: ['urn:jabiz:dataset:platform:LedgerEntry'],
-    })))
+      asOf: undefined,
+      reports: true,
+      reportsFrom: new Date(2026, 0, 1).toISOString(),
+      reportsTo: undefined,
+    }))
+    await expectAccessible()
   })
 })

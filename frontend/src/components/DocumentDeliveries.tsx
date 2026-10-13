@@ -1,5 +1,17 @@
+import {
+  Badge,
+  Spinner,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { Table, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, unwrap } from '../api/client'
 import type { components } from '@jabiz/client'
@@ -7,11 +19,34 @@ import { formatDateTime } from '../meta/format'
 
 type Delivery = components['schemas']['DocumentDeliveryEntry']
 
-const COLORS: Record<string, string> = { SENT: 'green', FAILED: 'red', PENDING: 'default' }
+const VARIANTS = { SENT: 'success', FAILED: 'destructive', PENDING: 'secondary' } as const
+
+/** A delivery's outcome; the last error of a failed one on hover or focus. */
+function Outcome({ delivery }: { delivery: Delivery }) {
+  const { t } = useTranslation()
+  const outcome = (delivery.outcome ?? 'PENDING') as keyof typeof VARIANTS
+  const badge = (
+    <Badge variant={VARIANTS[outcome] ?? 'secondary'} data-testid={`delivery-${delivery.deliveryId}`}>
+      {t(`documents.outcome.${outcome}`)}
+    </Badge>
+  )
+  if (!delivery.lastError) return badge
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* A button, so the error is reached with the keyboard too (focus opens the tooltip). */}
+        <button type="button" className="focus-visible:ring-ring/50 rounded-md outline-none focus-visible:ring-[3px]">
+          {badge}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{delivery.lastError}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 /**
  * Every address an issued document was sent to and how it went (docs/design/22-documents.md section 5): sent, waiting
- * for the first attempt, or failed so far (the platform retries; the last error is shown on hover).
+ * for the first attempt, or failed so far (the platform retries; the last error is shown on hover or focus).
  */
 export default function DocumentDeliveries({ runId }: { runId: string }) {
   const { t } = useTranslation()
@@ -19,36 +54,40 @@ export default function DocumentDeliveries({ runId }: { runId: string }) {
     queryKey: ['document', runId],
     queryFn: () => unwrap(api.GET('/api/documents/runs/{runId}', { params: { path: { runId } } })),
   })
+  const deliveries = detail.data?.deliveries ?? []
+  if (detail.isLoading) return <Spinner />
   return (
-    <Table<Delivery>
-      size="small"
-      rowKey="deliveryId"
-      loading={detail.isLoading}
-      pagination={false}
-      dataSource={detail.data?.deliveries ?? []}
-      locale={{ emptyText: t('documents.noDeliveries') }}
-      data-testid={`document-deliveries-${runId}`}
-      columns={[
-        { title: t('documents.delivery.address'), dataIndex: 'address' },
-        {
-          title: t('documents.delivery.outcome'),
-          dataIndex: 'outcome',
-          render: (_, delivery) => (
-            <Tooltip title={delivery.lastError}>
-              <Tag color={COLORS[delivery.outcome ?? 'PENDING']} data-testid={`delivery-${delivery.deliveryId}`}>
-                {t(`documents.outcome.${delivery.outcome ?? 'PENDING'}`)}
-              </Tag>
-            </Tooltip>
-          ),
-        },
-        { title: t('documents.delivery.attempts'), dataIndex: 'attempts', align: 'right' },
-        {
-          title: t('documents.delivery.requested'),
-          dataIndex: 'createdTime',
-          render: (_, delivery) =>
-            `${delivery.createdTime ? formatDateTime(delivery.createdTime) : ''} · ${delivery.requestedBy ?? ''}`,
-        },
-      ]}
-    />
+    <Table data-testid={`document-deliveries-${runId}`} aria-label={t('documents.recipients')}>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('documents.delivery.address')}</TableHead>
+          <TableHead>{t('documents.delivery.outcome')}</TableHead>
+          <TableHead className="text-right">{t('documents.delivery.attempts')}</TableHead>
+          <TableHead>{t('documents.delivery.requested')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {deliveries.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={4} className="text-muted-foreground text-center">
+              {t('documents.noDeliveries')}
+            </TableCell>
+          </TableRow>
+        ) : (
+          deliveries.map((delivery) => (
+            <TableRow key={delivery.deliveryId}>
+              <TableCell>{delivery.address}</TableCell>
+              <TableCell>
+                <Outcome delivery={delivery} />
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{delivery.attempts}</TableCell>
+              <TableCell>
+                {`${delivery.createdTime ? formatDateTime(delivery.createdTime) : ''} · ${delivery.requestedBy ?? ''}`}
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
   )
 }

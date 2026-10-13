@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
-import { UploadIcon } from 'lucide-react'
+import { InboxIcon, UploadIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
@@ -24,6 +24,11 @@ export interface FileUploadProps {
   /** Further text under the button (accepted types and size), tied to the input with `aria-describedby`. */
   hint?: ReactNode
   disabled?: boolean
+  /**
+   * `button` (default): the input drawn as a button. `dropzone`: a large area the file can also be dragged onto (an
+   * import's file); clicking it, or Enter / Space on the input within it, opens the file chooser as before.
+   */
+  variant?: 'button' | 'dropzone'
   id?: string
   className?: string
   'aria-describedby'?: string
@@ -63,6 +68,7 @@ export function FileUpload({
   label,
   hint,
   disabled = false,
+  variant = 'button',
   id,
   className,
   'aria-describedby': describedBy,
@@ -75,6 +81,7 @@ export function FileUpload({
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   const choose = async (file: File | undefined) => {
     // The same file can be chosen again after a refusal.
@@ -103,28 +110,81 @@ export function FileUpload({
     .filter(Boolean)
     .join(' ')
 
+  const blocked = disabled || busy
+  const inputElement = (
+    <input
+      ref={input}
+      id={inputId}
+      type="file"
+      accept={accept}
+      disabled={blocked}
+      aria-busy={busy || undefined}
+      aria-invalid={error || invalid ? true : undefined}
+      aria-describedby={describedByIds || undefined}
+      data-testid={testId}
+      className="peer sr-only"
+      onChange={(event) => void choose(event.target.files?.[0])}
+    />
+  )
+  const focusRing = 'peer-focus-visible:border-ring peer-focus-visible:ring-ring/50 peer-focus-visible:ring-[3px]'
+
+  if (variant === 'dropzone') {
+    return (
+      <div data-slot="file-upload" data-variant="dropzone" className={cn(UI_SCOPE, 'flex flex-col gap-1.5', className)}>
+        {inputElement}
+        <label
+          htmlFor={inputId}
+          data-dragging={dragging || undefined}
+          className={cn(
+            UI_SCOPE,
+            'border-input bg-background hover:bg-muted/50 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors',
+            'data-[dragging]:border-primary data-[dragging]:bg-muted',
+            focusRing,
+            'peer-disabled:pointer-events-none peer-disabled:opacity-50',
+          )}
+          onDragOver={(event) => {
+            if (blocked) return
+            // Without this the browser opens the dropped file itself.
+            event.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            if (blocked) return
+            event.preventDefault()
+            setDragging(false)
+            void choose(event.dataTransfer.files?.[0])
+          }}
+        >
+          {busy ? <Spinner label={t('upload.uploading')} showLabel /> : <InboxIcon aria-hidden className="text-muted-foreground size-8" />}
+          <span className="font-medium">{label ?? t('upload.dropzone')}</span>
+          {/* Part of the input's description, not of its name (a description may point at hidden text). */}
+          {hint && (
+            <span id={`${inputId}-hint`} aria-hidden className="text-muted-foreground text-xs">
+              {hint}
+            </span>
+          )}
+        </label>
+        {error && (
+          <p id={`${inputId}-error`} role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div data-slot="file-upload" className={cn(UI_SCOPE, 'flex flex-col gap-1.5', className)}>
       <div className="flex items-center gap-2">
-        <input
-          ref={input}
-          id={inputId}
-          type="file"
-          accept={accept}
-          disabled={disabled || busy}
-          aria-busy={busy || undefined}
-          aria-invalid={error || invalid ? true : undefined}
-          aria-describedby={describedByIds || undefined}
-          data-testid={testId}
-          className="peer sr-only"
-          onChange={(event) => void choose(event.target.files?.[0])}
-        />
+        {inputElement}
         <label
           htmlFor={inputId}
           className={cn(
             UI_SCOPE,
             buttonVariants({ variant: 'outline' }),
-            'cursor-pointer peer-focus-visible:border-ring peer-focus-visible:ring-ring/50 peer-focus-visible:ring-[3px]',
+            'cursor-pointer',
+            focusRing,
             'peer-disabled:pointer-events-none peer-disabled:opacity-50',
           )}
         >

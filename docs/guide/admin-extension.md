@@ -27,10 +27,11 @@ finance-web/
 ```
 
 扩展没有 `package.json`，也不 `pnpm install`：React、TanStack Query、dayjs、i18next、lucide-react 等都用平台前端的；组件经 `@jabiz/admin` 取自 `@jabiz/ui`
-（线 1.2 起，决策 D34；扩展的 lint 拒绝引用 antd，示范扩展在阶段 15c 前豁免）。
-阶段 15 期间页面所在的内容区仍固定为亮色、没有全局的 Tailwind preflight：`@jabiz/ui` 的组件各自带着 preflight 的作用域（`.jabiz-ui`），
-扩展自己写的 HTML 元素（`<h2>`、`<ul>`、`<button>` …）若要同样的重置，放在带 `className={UI_SCOPE}` 的容器里（`UI_SCOPE` 由 `@jabiz/admin` 导出），
-不要把 antd 组件放进这样的容器。15d 后 preflight 改为全局，这一步不再需要。
+（线 1.2 起，决策 D34；扩展的 lint 拒绝引用 antd，示范扩展也不例外（阶段 15c-2 起））。
+扩展的路由由平台统一标为以 `@jabiz/ui` 构建（15c-2），页面随亮、暗外观变化：颜色只用主题 token（`bg-card`、`text-muted-foreground` …），不要写死。
+阶段 15d 之前还没有全局的 Tailwind preflight：`@jabiz/ui` 的组件各自带着 preflight 的作用域（`.jabiz-ui`），
+扩展自己写的 HTML 元素（`<h2>`、`<ul>`、`<form>` …）若要同样的重置，放在带 `className={UI_SCOPE}` 的容器里（`UI_SCOPE` 由 `@jabiz/admin` 导出）。
+15d 后 preflight 改为全局，这一步不再需要。
 
 ## 2. 写入口
 
@@ -67,6 +68,34 @@ const rows = await runQuery<Row>('finance.gl.account_activity', { params: { acco
 const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // 自动带幂等键
 ```
 
+示范页 `backend/app/admin-extension/src/StockOverviewPage.tsx` 的骨架（15c-2 起只用 `@jabiz/ui`）：
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { cn, DataTable, EXTENSION_NAMESPACE, PageHeader, runQuery, UI_SCOPE, type ColumnDef } from '@jabiz/admin'
+
+export default function StockOverviewPage() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const stock = useQuery({ queryKey: ['ext', 'stock'], queryFn: () => runQuery<StockRow>('commerce.stock_availability', { limit: 100 }) })
+  const columns: ColumnDef<StockRow, unknown>[] = [
+    { id: 'sku', header: t('stock.sku'), cell: ({ row }) => row.original.sku },
+    { id: 'onHand', header: t('stock.onHand'), meta: { className: 'text-right tabular-nums' }, cell: ({ row }) => row.original.onHand },
+  ]
+  return (
+    <div className={cn(UI_SCOPE, 'flex flex-col gap-4')}>
+      <PageHeader title={t('stock.title')} />                    {/* 页面唯一的 <h1> */}
+      <div data-testid="stock-table">
+        <DataTable label={t('stock.title')} columns={columns} data={stock.data?.items ?? []} loading={stock.isLoading} />
+      </div>
+    </div>
+  )
+}
+```
+
+入库表单是 react-hook-form（`useForm`、`Form` / `FormField` / `FormItem` / `FormLabel` / `FormControl` / `FormMessage`，都由 `@jabiz/admin` 导出）加 `Input` / `DecimalInput`（`scale={0}`）；
+成功与失败用 `notify.success` / `notify.error`（应用根部的 `Toaster` 由平台外壳提供；页面测试中自己放一个 `<Toaster />`，外面包 `AppearanceProvider`）。
+
 - 读数据：SQL 模板用 `runQuery`，数据视图用 `api.POST('/api/datasets/{id}/query', …)`，元数据用 `useEntityMeta` 等 hooks。
 - 写数据：只经流程（`runProcess`）或数据视图接口；失败时 `ApiError` 带服务端的全部违规（`display`、`forField`）。
 - 通用组件：`EntityFormDrawer`、`ReferenceSelect`、`FieldErrors`、`FilePreview`、`MarkdownView`、`ApprovalPanel`（批准 / 驳回一个审批请求）、`DocumentPanel`（一个对象的单据：已签发的副本、预览、签发，docs/design/22-documents.md §6）；
@@ -77,6 +106,8 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
   `aria-invalid` / `aria-required` 与 `placeholder`（以 `<Label htmlFor={id}>` 命名）；`FieldErrors` 新增可选的 `id`（输入框以 `aria-describedby` 指向它），
   每条违规仍带 `data-rule-code`，不再借用 antd 的类名；`FilePreview` 的图片点击（或旁边"放大预览"按钮）在 `Dialog` 中放大，非图片为下载按钮。
   e2e 中原来按 antd 类名找的，改为 `getByTestId('entity-form')`（表单）、`getByRole('option')`（引用的选项）、`getByRole('alertdialog')`（确认）。
+  阶段 15c-2 起 `ApprovalPanel`、`DocumentPanel` 也不再依赖 antd：props 不变，不再需要外面包 antd 的 `App`；结果经 `notify` 提示（同样需要 `Toaster`）；
+  `DocumentPanel` 的发送对话框是 Radix `Dialog`（名称"以邮件发送"），地址是 `TagsInput`。
 - `@jabiz/ui` 的组合组件（阶段 15b-1 起，经 `@jabiz/admin` 一并导出）：`Combobox`（可搜索的选择，静态或远程）、`FilterBar`（列表上方的筛选：文本、选项、数值 / 时间 / 日期区间）、
   `FileUpload`（真实的文件输入，上传前查类型与大小）、`Timeline`、`DescriptionList`、`TagsInput`、`CopyButton`、`PageState`（加载 / 不存在 / 出错 / 警告）、`Spinner`；
   `DatePicker` / `DateTimePicker` 可以键入（应用区域的格式，ISO `YYYY-MM-DD` / 本地时间 `YYYY-MM-DD HH:mm:ss` 也可；失焦或 Enter 读取；无效时 `aria-invalid`、框下说明，
@@ -94,6 +125,15 @@ const out = await runProcess<Output>('FIN_JOURNAL_SUBMIT', { journalId })   // �
 
 页面测试与平台前端相同（Vitest + Testing Library）；调用可用 `vi.mock('@jabiz/admin', …)` 替换，示范见
 `backend/app/admin-extension/src/StockOverviewPage.test.tsx`。端到端测试放在应用自己的 Playwright 目录，或（平台示范）`frontend/e2e/`。
+
+e2e 按角色、名称或稳定的 `data-*` 找元素，不按 antd 的类名（平台的辅助函数在 `frontend/e2e/support.ts`）：
+
+| 原来（antd） | 现在（`@jabiz/ui`） |
+|---|---|
+| `locator('tr.ant-table-row')` | `dataRows(scope)`（`[data-slot="data-table-row"]`）；展开行用 `getByRole('button', { name: '展开行' })` |
+| `locator('.ant-modal')`、`.ant-drawer` | `dialog(page, 标题)`（`role="dialog"`，含 `Sheet`） |
+| `locator('.ant-select-item-option')` | 先点 `getByRole('combobox', { name })`，再 `option(page, 名称)` |
+| `Popconfirm` 的"确定" | `confirm(page)`；按钮另有文字时 `confirmWith(page, '签发')`（`role="alertdialog"`） |
 
 在 `frontend/` 下：
 

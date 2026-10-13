@@ -20,6 +20,7 @@ import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.process.ProcessInternalException;
 import com.jabiz.runtime.security.EmailNotVerifiedException;
 import com.jabiz.runtime.security.MfaRequiredException;
+import com.jabiz.runtime.security.SessionNotFoundException;
 import com.jabiz.runtime.security.SignInRefusedException;
 import com.jabiz.runtime.sod.SodConflictException;
 
@@ -78,6 +79,8 @@ public final class ProblemStatuses {
             case ProcessInternalException e -> List.of(new Violation(null, PlatformErrorCodes.PROCESS_INTERNAL,
                 e.getMessage(), Map.of("process", e.process())));
             case SignInRefusedException e -> List.of(new Violation(null, PlatformErrorCodes.SIGN_IN_REFUSED,
+                e.getMessage()));
+            case SessionNotFoundException e -> List.of(new Violation(null, PlatformErrorCodes.SESSION_NOT_FOUND,
                 e.getMessage()));
             case PermissionDeniedException e -> List.of(new Violation(null, PlatformErrorCodes.PERMISSION_DENIED,
                 e.getMessage(), Map.of("permission", e.permission())));

@@ -102,8 +102,8 @@ class MfaController {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
             // The session belongs to the entry the challenge was issued for, never to one the request names.
-            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo(),
-                    AuthController.source(clients, http, challenge.entry()))
+            SignInSource source = AuthController.source(clients, http, challenge.entry());
+            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo(), source)
                 .onErrorMap(MfaController::concurrentAttempt, e -> AuthController.loginFailed("Concurrent attempt"))
                 .flatMap(result -> {
                     if (result.outcome() != LoginOutcome.SUCCESS) {
@@ -115,7 +115,7 @@ class MfaController {
                     // A sign-in through an identity provider stays tied to its account link (section 12).
                     return AuthController.session(refreshTokens, tokens,
                         AuthController.actor(result, clock.instant()), UUID.fromString(result.userId()),
-                        challenge.identityId() == null ? null : UUID.fromString(challenge.identityId()));
+                        challenge.identityId() == null ? null : UUID.fromString(challenge.identityId()), source);
                 });
         });
     }
@@ -169,11 +169,15 @@ class MfaController {
 
     /**
      * Confirms the signed-in user with a second factor for operations that require a recent one (section 10): a new
-     * access token whose {@code mfa_at} is now. Wrong codes count towards the lock like at sign-in.
+     * access token whose {@code mfa_at} is now. Wrong codes count towards the lock like at sign-in. An access token
+     * whose session has ended (revoked, expired) gets none: 401, so that it cannot outlive its session by stepping up
+     * again and again (section 15.9).
      */
     @PostMapping("/api/auth/step-up")
     Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request, ServerHttpRequest http) {
-        return RequestContexts.current().flatMap(context -> {
+        return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
+            .map(session -> reactor.util.function.Tuples.of(context, session))).flatMap(current -> {
+            RequestContext context = current.getT1();
             UUID user = requireUser(context);
             if (request == null || blank(request.code())) {
                 return Mono.error(codeInvalid());
@@ -196,7 +200,9 @@ class MfaController {
                         throw codeInvalid();
                     }
                     Instant now = clock.instant();
-                    JwtService.Issued access = tokens.issue(AuthController.actor(result, now));
+                    // Still the caller's session: the session list keeps telling it apart (section 15.9).
+                    JwtService.Issued access = tokens.issue(AuthController.actor(result, now)
+                        .inSession(current.getT2().orElse(null)));
                     return new StepUpResponse(access.token(), access.expiresAt(), now);
                 });
         });

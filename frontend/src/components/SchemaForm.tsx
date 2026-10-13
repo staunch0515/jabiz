@@ -250,7 +250,17 @@ export interface SchemaFormProps {
   nodes: InputNode[]
   /** Top-level inputs filled in by the row an action was started on (16 section 3): shown read-only. */
   preset?: Record<string, string>
-  submitLabel: string
+  /**
+   * The <form>'s id: a button elsewhere on the page submits it with `<Button type="submit" form={id}>` (an import's
+   * "Preview"), or a script with `requestSubmit()`. The checks and {@link onSubmit} run as for the form's own button.
+   */
+  id?: string
+  /** Leaves out the form's own submit button (it is submitted from elsewhere, see {@link id}). */
+  hideSubmit?: boolean
+  /** Further controls after the fields and before the submit button (a report's point in time). */
+  children?: ReactNode
+  /** The submit button's text; needed unless {@link hideSubmit}. */
+  submitLabel?: string
   /** The submit button's test id. */
   submitTestId?: string
   /** The form's values once the required inputs are filled in and patterns match; convert with toProcessInput. */
@@ -259,13 +269,23 @@ export interface SchemaFormProps {
 }
 
 /**
- * A form generated from a JSON Schema (process inputs; template parameters and import parameters from phase 15c):
+ * A form generated from a JSON Schema (process inputs, report parameters, import parameters):
  * one control per property by its kind, a group per nested object, removable items for a list of objects. It checks
  * only that required inputs are filled in, that text matches the schema's pattern and that date fields hold no text
  * that is no date (`checkInputs`), on submitting and, after that, as the user types; the server judges the rest.
  * Values are watched only after the first submission, so typing does not re-render the whole form before.
  */
-export default function SchemaForm({ nodes, preset, submitLabel, submitTestId, onSubmit, className }: SchemaFormProps) {
+export default function SchemaForm({
+  nodes,
+  preset,
+  id,
+  hideSubmit = false,
+  children,
+  submitLabel,
+  submitTestId,
+  onSubmit,
+  className,
+}: SchemaFormProps) {
   const idPrefix = useId()
   const defaultValues = useMemo(() => initialInputValues(nodes, preset), [nodes, preset])
   const form = useForm<Values>({ defaultValues })
@@ -295,6 +315,7 @@ export default function SchemaForm({ nodes, preset, submitLabel, submitTestId, o
   return (
     <SchemaFormContext.Provider value={context}>
       <form
+        id={id}
         noValidate
         className={cn(UI_SCOPE, 'flex flex-col gap-4', className)}
         onSubmit={(event) =>
@@ -313,12 +334,15 @@ export default function SchemaForm({ nodes, preset, submitLabel, submitTestId, o
         {nodes.map((node) => (
           <SchemaField key={node.name} node={node} path={node.name} />
         ))}
-        <div>
-          <Button type="submit" disabled={busy} aria-busy={busy || undefined} data-testid={submitTestId}>
-            {busy && <Spinner className="text-current" />}
-            {submitLabel}
-          </Button>
-        </div>
+        {children}
+        {!hideSubmit && (
+          <div>
+            <Button type="submit" disabled={busy} aria-busy={busy || undefined} data-testid={submitTestId}>
+              {busy && <Spinner className="text-current" />}
+              {submitLabel}
+            </Button>
+          </div>
+        )}
       </form>
     </SchemaFormContext.Provider>
   )

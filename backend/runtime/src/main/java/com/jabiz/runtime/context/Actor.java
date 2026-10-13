@@ -5,6 +5,7 @@ import com.jabiz.context.DataPeriod;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * The identity part of a {@link com.jabiz.context.RequestContext}, as determined for one request.
@@ -15,15 +16,23 @@ import java.util.Set;
  * @param entry         the sign-in entry of the session (section 15; decision D36), or null for an actor that did not
  *                      sign in through one
  * @param emailVerified whether the actor's e-mail address was verified when the session's token was issued
+ * @param sessionId     the session (refresh token family) the access token was issued for (section 15.9), or null:
+ *                      tokens of no session (development headers, tests) and tokens issued before sessions were listed
  */
 public record Actor(String actorId, String tenantId, Set<String> roles, Set<String> permissions, Instant mfaAt,
-    DataPeriod dataPeriod, String entry, boolean emailVerified) {
+    DataPeriod dataPeriod, String entry, boolean emailVerified, UUID sessionId) {
 
     /** Actor id of requests nobody has authenticated. */
     public static final String ANONYMOUS_ID = com.jabiz.context.RequestContext.ANONYMOUS_ACTOR;
 
     /** An unauthenticated caller: no tenant, no roles, no permissions. */
     public static final Actor ANONYMOUS = new Actor(ANONYMOUS_ID, null, Set.of(), Set.of());
+
+    /** An actor of no known session. */
+    public Actor(String actorId, String tenantId, Set<String> roles, Set<String> permissions, Instant mfaAt,
+        DataPeriod dataPeriod, String entry, boolean emailVerified) {
+        this(actorId, tenantId, roles, permissions, mfaAt, dataPeriod, entry, emailVerified, null);
+    }
 
     /** An actor outside any sign-in entry, whose e-mail address is not known to be verified. */
     public Actor(String actorId, String tenantId, Set<String> roles, Set<String> permissions, Instant mfaAt,
@@ -49,11 +58,16 @@ public record Actor(String actorId, String tenantId, Set<String> roles, Set<Stri
 
     /** This actor, having passed a second factor at {@code time}. */
     public Actor withMfaAt(Instant time) {
-        return new Actor(actorId, tenantId, roles, permissions, time, dataPeriod, entry, emailVerified);
+        return new Actor(actorId, tenantId, roles, permissions, time, dataPeriod, entry, emailVerified, sessionId);
     }
 
     /** This actor in the sign-in entry {@code entry}, with its e-mail address verified or not. */
     public Actor inEntry(String entry, boolean emailVerified) {
-        return new Actor(actorId, tenantId, roles, permissions, mfaAt, dataPeriod, entry, emailVerified);
+        return new Actor(actorId, tenantId, roles, permissions, mfaAt, dataPeriod, entry, emailVerified, sessionId);
+    }
+
+    /** This actor in the session {@code sessionId} (null: none known). */
+    public Actor inSession(UUID sessionId) {
+        return new Actor(actorId, tenantId, roles, permissions, mfaAt, dataPeriod, entry, emailVerified, sessionId);
     }
 }

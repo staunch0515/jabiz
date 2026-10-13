@@ -136,6 +136,16 @@ public final class PlatformErrorCodes {
      * the password reset (docs/design/10-security.md section 15.8).
      */
     public static final String PASSWORD_NOT_SET = "PASSWORD_NOT_SET";
+    /**
+     * 404: no live session of the caller's (at the caller's entry) with this id, or of the user named; told alike
+     * whether it never existed, has ended or is somebody else's (docs/design/10-security.md section 15.9).
+     */
+    public static final String SESSION_NOT_FOUND = "SESSION_NOT_FOUND";
+    /**
+     * 422: the caller's access token does not name its session (issued before sessions were listed), so "the other
+     * sessions" cannot be told apart; signing in again gives one that does (section 15.9).
+     */
+    public static final String SESSION_UNKNOWN = "SESSION_UNKNOWN";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -240,7 +250,7 @@ public final class PlatformErrorCodes {
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
