@@ -1987,6 +1987,11 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - 吊销与轮换并发时，已签发的新访问令牌可能多活到期满（10 §15.9）。
 - 后台账户安全页仍是 antd（15c 迁移），会话卡片里的 `SessionList` 已是 `@jabiz/ui`。
 
+**评审后的补充（同一分支）**
+- step-up 与本人的会话接口先确认令牌的 `sid` 所指的族尚未结束，否则 401 `UNAUTHENTICATED`：被吊销会话的访问令牌不能靠 step-up 续命，也不能吊销别的会话（`MfaIT`、`SessionRevokeIT`）。
+- 吊销全部（吊销其他、管理员吊销全部、改密码等）取全部尚未结束的族，含闲置的：入口的闲置时长以后放宽时它们不会复活（`SessionRevokeIT`、`AdminSessionIT`）；吊销单个仍只认有效会话。
+- 吊销全部的查询留 5 分钟时钟偏差余量。补测：二次验证、step-up、OIDC 登录后 `/api/auth/me` 的 `sessionId` 即令牌族；流程中同一族的第二次吊销不中止事务。
+
 ### 16d 入站 Webhook（3.5–4 天）
 
 决策 D37；无硬依赖。限流用的客户端地址取自 16b-1 的 `ClientAddresses`（已合入）。

@@ -316,8 +316,8 @@ D9 第 9 条原本就只描述"阶段 6 之前"的操作产生方式，数据视
 登录、刷新、step-up 都带上（升级前签发的没有，照常可用）。②本人只看、只吊销当前会话入口的有效会话（D36），经 `entryOnly()` 流程 `SEC_ACCOUNT_SESSION_REVOKE` /
 `SEC_ACCOUNT_SESSIONS_REVOKE_OTHERS`；管理员凭 `security.user.session.read` 列出、凭 `security.user.session.revoke` 加近期二次验证与原因经 `SEC_USER_SESSIONS_REVOKE` 吊销全部入口的会话。
 ③吊销仍只插入 `sec_refresh_family_revocation`（新增原因 `SELF_REVOKE`、`ADMIN_REVOKE`，由流程吊销时带 `process_seq_id`）；令牌行另记签发时的地址与 UA（`V38`），表仍只追加。
-④**不做访问令牌的拒绝名单**：被吊销的会话下一次刷新即 401，已签发的访问令牌在到期前仍有效（同第 1 条的代价），接口给出 `effectiveWithinSeconds` 供界面提示。
-⑤"改密码吊销该用户的全部令牌族"只指仍可刷新的族（族内有未过期的令牌）。详见 10 §15.9。
+④**不做访问令牌的拒绝名单**：被吊销的会话下一次刷新即 401，已签发的访问令牌在到期前仍有效（同第 1 条的代价），接口给出 `effectiveWithinSeconds` 供界面提示；只有 step-up 与本人的会话接口另查令牌的 `sid` 所指的族是否已结束（401），使被吊销会话的访问令牌不能续命或去吊销别的会话。
+⑤"吊销该用户的全部令牌族"（改密码、吊销其他、管理员吊销全部）指尚未结束的族：未吊销、族内有未过期的令牌（含闲置的，留 5 分钟时钟偏差余量），早已过期的不再补写。详见 10 §15.9。
 
 ---
 

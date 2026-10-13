@@ -15,6 +15,7 @@ import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
+import com.jabiz.runtime.security.SessionNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ProblemDetail;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
@@ -22,8 +23,6 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
 
 import java.util.List;
-import com.jabiz.runtime.security.SessionNotFoundException;
-
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;

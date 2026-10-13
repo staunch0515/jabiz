@@ -2,9 +2,15 @@ package com.jabiz.app.it.security;
 
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.runtime.context.Actor;
+import com.jabiz.runtime.security.RefreshTokenStore;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.runtime.storage.StorageEngine;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +29,97 @@ import static org.assertj.core.api.Assertions.assertThat;
     SessionItSupport.APP_ROLES, SessionItSupport.APP_TTL, SessionItSupport.APP_IDLE, SessionItSupport.SHOP_ROLES,
     SessionItSupport.SHOP_TTL, SessionItSupport.SHOP_IDLE})
 class SessionRevokeIT extends SessionItSupport {
+
+    @Autowired
+    StorageAdapterRegistry storages;
+
+    @Autowired
+    RefreshTokenStore refreshTokens;
+
+    private StorageEngine engine() {
+        return storages.getEngine("default");
+    }
+
+    /** The token store as it would be had the shop's idle timeout been switched off since. */
+    private RefreshTokenStore withoutIdleEnd() {
+        return new RefreshTokenStore(this::engine, entry -> new RefreshTokenStore.Policy(Duration.ofHours(2), null),
+            clock);
+    }
+
+    @Test
+    void anEndedSessionsAccessTokenNoLongerActsOnSessions() {
+        String name = unique("kim");
+        player(name);
+        Map<String, Object> mine = signInFrom(name, APP, "203.0.113.1", null);
+        Map<String, Object> other = signInFrom(name, APP, "203.0.113.2", null);
+        revoke(mine, sessionIdOf(other)).expectStatus().isNoContent();
+
+        // Its access token has not expired, but its session has: it neither lists nor ends sessions (nor signs the
+        // user out elsewhere).
+        get(ACCOUNT_SESSIONS, bearerOf(other)).expectStatus().isUnauthorized();
+        assertThat(problemCode(revoke(other, sessionIdOf(mine)), 401)).isEqualTo("UNAUTHENTICATED");
+        revokeOthers(bearerOf(other)).expectStatus().isUnauthorized();
+        refreshed(mine, APP, null);
+        // Signed out (its own revocation) the same.
+        post("/api/auth/logout", null, Map.of("refreshToken", mine.get("refreshToken"))).expectStatus().isNoContent();
+        get(ACCOUNT_SESSIONS, bearerOf(mine)).expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void endingTheOthersEndsIdleSessionsTooSoThatTheyStayEnded() {
+        String name = unique("lou");
+        player(name);
+        Map<String, Object> idle = signInFrom(name, SHOP, "203.0.113.1", null);
+        Map<String, Object> mine = signInFrom(name, SHOP, "203.0.113.2", null);
+        String stranger = unique("mo");
+        player(stranger);
+        Map<String, Object> theirs = signInFrom(stranger, SHOP, "203.0.113.3", null);
+        // Past the shop's idle window (its access token and an hour), not past its lifetime (two hours); the caller's
+        // own session was used meanwhile.
+        clock.advance(Duration.ofMinutes(70));
+        mine = refreshed(mine, SHOP, null);
+        clock.advance(Duration.ofMinutes(10));
+        assertThat(sessions(listOf(mine))).extracting(s -> s.get("id")).containsExactly(sessionIdOf(mine));
+
+        Map<String, Object> result = post(ACCOUNT_SESSIONS + "/revoke-others", bearerOf(mine), Map.of())
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(result).containsEntry("revoked", 1);
+        assertThat(revocations(sessionIdOf(idle))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("reason", "SELF_REVOKE"));
+
+        // Had the idle timeout been switched off since, the idle session would be renewed: ended, it is not.
+        RefreshTokenStore relaxed = withoutIdleEnd();
+        String idleToken = (String) idle.get("refreshToken");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> relaxed.rotate(idleToken, SHOP,
+                grant -> Mono.just(1)).block())
+            .isInstanceOf(RefreshTokenStore.InvalidRefreshTokenException.class).hasMessageContaining("revoked");
+        // Unlike an idle session that was not ended.
+        assertThat(relaxed.rotate((String) theirs.get("refreshToken"), SHOP, grant -> Mono.just(1)).block())
+            .isNotNull();
+    }
+
+    @Test
+    void aSecondRevocationOfTheSameSessionInsideAnOperationDoesNotAbortIt() {
+        String name = unique("ned");
+        player(name);
+        Map<String, Object> session = signInFrom(name, APP, "203.0.113.1", null);
+        java.util.UUID family = java.util.UUID.fromString(sessionIdOf(session));
+        long operation = ((Number) query("SELECT max(process_seq_id) AS seq FROM op_process").getFirst().get("seq"))
+            .longValue();
+
+        // Twice in one transaction, as two steps (or two concurrent processes) might: the second is ignored behind a
+        // savepoint, and the transaction goes on and commits.
+        Long after = engine().inTransaction(refreshTokens.revokeSession(family, "SELF_REVOKE", operation)
+                .then(refreshTokens.revokeSession(family, "ADMIN_REVOKE", operation))
+                .then(engine().select("SELECT count(*) AS n FROM sec_refresh_family_revocation WHERE family_id = :f",
+                    Map.of("f", com.jabiz.query.BoundValue.of(family))).next())
+                .map(row -> ((Number) row.get("n")).longValue()))
+            .block();
+        assertThat(after).isEqualTo(1L);
+        // The first revocation stands.
+        assertThat(revocations(family.toString())).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("reason", "SELF_REVOKE"));
+    }
 
     private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec revoke(
         Map<String, Object> caller, String id) {

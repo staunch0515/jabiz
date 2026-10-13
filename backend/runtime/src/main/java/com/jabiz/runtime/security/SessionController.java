@@ -28,7 +28,7 @@ import java.util.UUID;
  * one of them, or all but their own; an administrator lists a user's sessions at every entry
  * ({@link SecurityPermissions#SESSION_READ}) and ends them with {@value SessionProcesses#USER_REVOKE_NAME} through the
  * process API. Ending a session stops its refreshes at once; its access token lives on until it expires, at most
- * {@code effectiveWithinSeconds} (decision D12).
+ * {@code effectiveWithinSeconds} (decision D12), but it no longer lists or ends sessions here (401).
  */
 @RestController
 class SessionController {
@@ -82,7 +82,8 @@ class SessionController {
     /** The caller's live sessions at the entry of the one they use. */
     @GetMapping(ACCOUNT_SESSIONS)
     Mono<SessionList> mine() {
-        return RequestContexts.current().zipWith(CurrentSession.id()).flatMap(current -> {
+        return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
+            .map(session -> reactor.util.function.Tuples.of(context, session))).flatMap(current -> {
             UUID user = requireUser(current.getT1());
             return list(user, entryOf(current.getT1()), current.getT2().orElse(null));
         });
@@ -95,13 +96,15 @@ class SessionController {
     @PostMapping(ACCOUNT_SESSIONS + "/{id}/revoke")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     Mono<Void> revoke(@PathVariable("id") String id) {
-        return RequestContexts.current().flatMap(context -> {
-            UUID user = requireUser(context);
-            limits.sessionRevoke(user.toString());
-            UUID session = parse(id).orElseThrow(SessionNotFoundException::new);
-            return processes.executeAtEntry(SessionProcesses.SESSION_REVOKE,
-                new SessionProcesses.SessionInput(user.toString(), session)).then();
-        });
+        // An access token outliving its own session acts on no session (10 section 15.9).
+        return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
+            .then(Mono.defer(() -> {
+                UUID user = requireUser(context);
+                limits.sessionRevoke(user.toString());
+                UUID session = parse(id).orElseThrow(SessionNotFoundException::new);
+                return processes.executeAtEntry(SessionProcesses.SESSION_REVOKE,
+                    new SessionProcesses.SessionInput(user.toString(), session)).then();
+            })));
     }
 
     /**
@@ -110,7 +113,8 @@ class SessionController {
      */
     @PostMapping(ACCOUNT_SESSIONS + "/revoke-others")
     Mono<Revoked> revokeOthers() {
-        return RequestContexts.current().zipWith(CurrentSession.id()).flatMap(current -> {
+        return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
+            .map(session -> reactor.util.function.Tuples.of(context, session))).flatMap(current -> {
             UUID user = requireUser(current.getT1());
             limits.sessionRevoke(user.toString());
             UUID keep = current.getT2().orElseThrow(() -> new BusinessRuleViolationException(new Violation(null,

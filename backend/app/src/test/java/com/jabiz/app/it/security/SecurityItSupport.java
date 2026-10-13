@@ -126,6 +126,19 @@ public abstract class SecurityItSupport extends PostgresIntegrationTest {
         return "Bearer " + session.get("accessToken");
     }
 
+    /** The token family (session) of a sign-in's refresh token, from the table itself. */
+    protected static String familyOf(Map<String, Object> session) {
+        return String.valueOf(query("SELECT family_id::text AS id FROM sec_refresh_token "
+            + "WHERE token_hash = encode(sha256(convert_to(?, 'UTF8')), 'hex')", session.get("refreshToken"))
+            .getFirst().get("id"));
+    }
+
+    /** The session {@code /api/auth/me} names for the access token. */
+    protected Object sessionIdOfMe(String bearer) {
+        return get("/api/auth/me", bearer).expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody()
+            .get("sessionId");
+    }
+
     @SuppressWarnings("unchecked")
     protected static List<Map<String, Object>> violations(Map<String, Object> problem) {
         return (List<Map<String, Object>>) problem.get("violations");

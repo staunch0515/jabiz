@@ -42,7 +42,8 @@
 - `POST /api/auth/logout {refreshToken}` 吊销该令牌所在的族（原因 `LOGOUT`），204；未知令牌同样 204。
 - 改密码（`SEC_USER_SET_PASSWORD`）在同一事务中吊销该用户的全部令牌族（原因 `PASSWORD`）：旧密码建立的会话不能再刷新。
   本人改密码（§15.8）吊销本人的其他令牌族（原因 `PASSWORD_CHANGE`），请求中给出的、本人当前入口的有效刷新令牌所在的族保留。
-  "全部令牌族"只指**仍可刷新**的族（族内有未过期的令牌，经索引 `(user_id, expires_at)` 查找）：已过期的族本来就不能刷新，不再补写吊销行（16g）。
+  "全部令牌族"指**尚未结束**的族：未吊销、族内有未过期的令牌（经索引 `(user_id, expires_at)` 查找，留 5 分钟的时钟偏差余量，`CLOCK_SKEW`），闲置的也算——
+  入口的闲置时长以后放宽时它们不能复活；早已过期的族本来就不能刷新，不再补写吊销行（16g）。
 - 会话的列出与吊销（§15.9）：本人吊销记原因 `SELF_REVOKE`，管理员吊销记 `ADMIN_REVOKE`。由流程吊销时（这两种与改密码、找回密码、加入、接管）
   吊销行带 `process_seq_id`，指向那次操作；登出、重用、守卫拒绝不经流程，为空。同一族并发吊销时第一条为准（流程中的插入在保存点内进行，后来者不影响所在事务）。
 - 有效期与闲置窗口按令牌族的入口（`sec_refresh_token.entry`）取（§15.1，决策 D43 第 2 条）：签发时以入口的有效期写入 `expires_at`，
@@ -602,15 +603,18 @@ class PortalSignInGuard implements SignInGuard {
 |---|---|
 | `GET /api/auth/account/sessions` | `{sessions: [{id, entry, current, createdAt, lastUsedAt, expiresAt, clientIp, userAgent, device: {browser, os, deviceType}, mfa, oidc}], truncated, effectiveWithinSeconds}`；按 `lastUsedAt` 倒序，最多 50 条，更多时 `truncated` 为真；`current` 标出调用者自己的会话（令牌的 `sid`） |
 | `POST /api/auth/account/sessions/{id}/revoke` | 流程 `SEC_ACCOUNT_SESSION_REVOKE`，204。不是本人的、不在当前入口的、已失效的、不存在的、格式不对的编号一律 404 `SESSION_NOT_FOUND`，不泄露会话是否存在。可以吊销当前会话，等于登出：客户端随即清空本地令牌 |
-| `POST /api/auth/account/sessions/revoke-others` | 流程 `SEC_ACCOUNT_SESSIONS_REVOKE_OTHERS`：吊销本人在当前入口除当前会话外的全部会话，`{revoked, effectiveWithinSeconds}`。令牌没有 `sid`（升级前签发）时 422 `SESSION_UNKNOWN`：重新登录后再试 |
+| `POST /api/auth/account/sessions/revoke-others` | 流程 `SEC_ACCOUNT_SESSIONS_REVOKE_OTHERS`：吊销本人在当前入口除当前会话外**全部尚未结束的族**（未吊销、有未过期的令牌，含列表不显示的闲置会话，§2），`{revoked, effectiveWithinSeconds}`。令牌没有 `sid`（升级前签发）时 422 `SESSION_UNKNOWN`：重新登录后再试 |
 
   两个流程都是 `entryOnly()`、权限 `auth.account`（不授予任何角色），经流程接口调用即 403 `PROCESS_INTERNAL`；要保留的会话由控制器从令牌的 `sid` 填入，调用者伪造不了；
   流程内再确认操作的是调用者本人。不要求当前密码或二次验证（吊销只缩小访问范围）。吊销按用户限流（`jabiz.security.account.rate-limit.per-user`，与改密码同一上限、各自计数），超限 429；列表不限流。
 - **管理员**：`GET /api/security/sessions?userId=`（`security.user.session.read`）列出该用户在**全部入口**的有效会话，字段同上，`current` 恒为假。
   流程 `SEC_USER_SESSIONS_REVOKE {userId, sessionId?, reason}`（`security.user.session.revoke`，`requiresMfa(ADMINISTRATION)`，`actsOn(SecUser, userId)`：用户列表上自动出现行操作）：
-  给了 `sessionId` 只吊销这一个（不是该用户的有效会话即 404 `SESSION_NOT_FOUND`），否则吊销全部；`reason` 必填，最多 500 字，随输入记入操作记录。不发邮件。
+  给了 `sessionId` 只吊销这一个（不是该用户的有效会话即 404 `SESSION_NOT_FOUND`），否则吊销全部尚未结束的族（含闲置的，§2）；`reason` 必填，最多 500 字，随输入记入操作记录。不发邮件。
   读权限单独设立（列表含地址与 UA），不复用 `security.login-record.read`；管理员角色经 `*` 获得。
-- **流程中的吊销**：步骤 `RevokeSessionStep`（平台 I/O 步骤）在流程事务内确认该族属于该用户且仍有效（本人流程还要求在当前入口），再插入吊销行（原因 `SELF_REVOKE` / `ADMIN_REVOKE`，带 `process_seq_id`）。
+- **流程中的吊销**：步骤 `RevokeSessionStep`（平台 I/O 步骤）在流程事务内：吊销单个时确认该族属于该用户且是有效会话（本人流程还要求在当前入口）；吊销全部时取该用户（本人流程限当前入口）全部尚未结束的族（`RefreshTokenStore.revokeAll`，同 §2 改密码）。
+  吊销行带原因（`SELF_REVOKE` / `ADMIN_REVOKE`）与 `process_seq_id`。
+- **会话已结束的访问令牌**：step-up 与本人的会话接口（列出、吊销单个、吊销其他）先确认令牌的 `sid` 所指的族尚未结束（属于调用者、在调用者的入口、未吊销、有未过期的令牌），
+  否则 401 `UNAUTHENTICATED`：被吊销会话的访问令牌不能靠反复 step-up 续命，也不能在别处把用户登出。没有 `sid` 的令牌照旧。其他接口仍按访问令牌本身判断（D12）。
 - **生效**：被吊销的会话下一次刷新得到 401 `INVALID_REFRESH_TOKEN`，客户端回到登录页；已签发的访问令牌在到期前仍然有效，最长 `jabiz.security.jwt.access-token-ttl`（缺省 15 分钟）。
   不做拒绝名单（每个请求查库是 D12 放弃的做法；内存中轮询吊销表在多实例间不一致），这与禁用用户、改密码、守卫拒绝的生效窗口相同。接口给出 `effectiveWithinSeconds`（访问令牌有效期），
   页面据此提示"其他设备将在 N 分钟内退出"。访问令牌已带 `sid`，以后要做拒绝名单时不必再改令牌格式。

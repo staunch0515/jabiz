@@ -14,7 +14,8 @@ import java.util.UUID;
 /**
  * Ends sessions picked from the session list (docs/design/10-security.md section 15.9), in the process's transaction:
  * one live session of a user, or all of them but one (or all). Each revocation records the reason and the operation
- * ({@code process_seq_id}). Only live sessions count; a session that is not one of the user's live ones (at the
+ * ({@code process_seq_id}). Ending all ends every family of the user that has not ended (idle ones too); one named
+ * session must be live: a session that is not one of the user's live ones (at the
  * caller's entry, when limited to it) is 404 {@code SESSION_NOT_FOUND}, whatever the reason. A platform I/O step; the
  * access tokens already issued expire by themselves.
  */
@@ -81,11 +82,9 @@ public class RevokeSessionStep implements StepHandler<RevokeSessionStep.Metadata
                     }));
             }
             UUID keep = metadata.scope() == Scope.ALL_BUT ? session : null;
-            return refreshTokens.liveSessions(user, entry)
-                .filter(live -> !live.id().equals(keep))
-                .concatMap(live -> refreshTokens.revokeSession(live.id(), metadata.reason(), operation)
-                    .thenReturn(live.id()))
-                .count()
+            // Every family that has not ended, idle ones included: they must stay ended should the entry's idle
+            // timeout be raised later. The list shows live sessions only, so the count may exceed what it showed.
+            return refreshTokens.revokeAll(user, entry, metadata.reason(), keep, operation)
                 .doOnNext(count -> {
                     log.info("{} sessions of user {} ended ({})", count, user, metadata.reason());
                     ctx.put(metadata.countKey(), count.intValue());

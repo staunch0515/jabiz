@@ -110,6 +110,11 @@ public class RefreshTokenStore {
     public static final String REASON_ADMIN_REVOKE = "ADMIN_REVOKE";
 
     private static final int TOKEN_BYTES = 32;
+    /**
+     * How far another instance's clock may be ahead: ending every session of a user also ends families that expired
+     * this long ago, which an instance whose clock is behind would still refresh.
+     */
+    static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
     private static final int MAX_TOKEN_LENGTH = 128;
 
     /**
@@ -295,20 +300,54 @@ public class RefreshTokenStore {
     }
 
     /**
-     * As above, by the operation {@code processSeqId} (null: none). Only sessions that could still be renewed are
-     * revoked: a family whose tokens have all expired has ended already and gets no revocation (an expired token is
-     * refused whether its family is revoked or not).
+     * As above, by the operation {@code processSeqId} (null: none). Only families that have not ended are revoked:
+     * a family whose tokens have all expired (by more than {@link #CLOCK_SKEW}) gets no revocation, as an expired token
+     * is refused whether its family is revoked or not.
      */
     public Mono<Void> revokeUser(UUID userId, String reason, UUID keep, Long processSeqId) {
+        return revokeAll(userId, null, reason, keep, processSeqId).then();
+    }
+
+    /**
+     * Ends every session of a user that has not ended (at the entry {@code entry} only, or every entry: null) but the
+     * family {@code keep} (null: none), by the operation {@code processSeqId} (null: none); the number ended. Idleness
+     * does not spare a family: an idle family whose tokens have not expired is revoked as well, so that it stays ended
+     * if its entry's idle timeout is later raised or switched off (docs/design/10-security.md section 15.9). Runs in
+     * the caller's transaction when there is one.
+     */
+    public Mono<Long> revokeAll(UUID userId, String entry, String reason, UUID keep, Long processSeqId) {
         return Flux.defer(() -> engine.get().select("""
-                SELECT DISTINCT t.family_id FROM sec_refresh_token t
-                WHERE t.user_id = :user AND t.expires_at > :now AND NOT EXISTS (
+                SELECT DISTINCT t.family_id, t.entry FROM sec_refresh_token t
+                WHERE t.user_id = :user AND t.expires_at > :since AND NOT EXISTS (
                     SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
-                Map.of("user", BoundValue.of(userId), "now", BoundValue.of(now()))))
+                Map.of("user", BoundValue.of(userId), "since", BoundValue.of(now().minus(CLOCK_SKEW)))))
+            .filter(row -> entry == null || entry.equals(row.get("entry") == null ? RequestContext.DEFAULT_ENTRY
+                : String.valueOf(row.get("entry"))))
             .map(row -> Rows.uuid(row.get("family_id")))
+            .distinct()
             .filter(family -> !family.equals(keep))
-            .concatMap(family -> revokeSession(family, reason, processSeqId))
-            .then();
+            .concatMap(family -> revokeSession(family, reason, processSeqId).thenReturn(family))
+            .count();
+    }
+
+    /**
+     * Whether the family {@code familyId} is a session of {@code userId} at {@code entry} (null: the administration)
+     * that has not ended: not revoked, with a token not yet expired. Not idleness: that is the refresh's own concern.
+     * An access token naming an ended session is not honoured where the platform re-issues tokens or acts on sessions
+     * (step-up, the session endpoints; section 15.9).
+     */
+    public Mono<Boolean> sessionOpen(UUID userId, String entry, UUID familyId) {
+        String expected = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
+        return Mono.defer(() -> engine.get().select("""
+                SELECT t.entry FROM sec_refresh_token t
+                WHERE t.family_id = :family AND t.user_id = :user AND t.expires_at > :now AND NOT EXISTS (
+                    SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)
+                LIMIT 1""", Map.of("family", BoundValue.of(familyId), "user", BoundValue.of(userId),
+                "now", BoundValue.of(now())))
+            .next()
+            .map(row -> expected.equals(row.get("entry") == null ? RequestContext.DEFAULT_ENTRY
+                : String.valueOf(row.get("entry"))))
+            .defaultIfEmpty(false));
     }
 
     /**

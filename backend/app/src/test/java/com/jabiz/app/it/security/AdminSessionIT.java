@@ -102,6 +102,28 @@ class AdminSessionIT extends SessionItSupport {
     }
 
     @Test
+    void endingAllEndsIdleSessionsToo() {
+        String name = unique("eve");
+        String userId = player(name);
+        Map<String, Object> idle = signInFrom(name, SHOP, "203.0.113.1", null);
+        // Past the shop's idle window, not past its lifetime: not listed, but not ended either.
+        clock.advance(Duration.ofMinutes(80));
+        Map<String, Object> app = signInFrom(name, APP, "203.0.113.2", null);
+        assertThat(sessions(listFor(bearer(READ), userId))).extracting(s -> s.get("id"))
+            .containsExactly(sessionIdOf(app));
+
+        Map<String, Object> all = post(PROCESS, bearer(REVOKE), input(userId, null, "device lost"))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        assertThat(all.get("output")).isEqualTo(Map.of("revoked", 2));
+        assertThat(query("SELECT reason FROM sec_refresh_family_revocation WHERE family_id = ?::uuid",
+            sessionIdOf(idle))).singleElement().satisfies(row -> assertThat(row).containsEntry("reason",
+                "ADMIN_REVOKE"));
+        // The idle one cannot be named on its own: it is not a live session.
+        assertThat(problemCode(post(PROCESS, bearer(REVOKE), input(userId, sessionIdOf(idle), "again")), 404))
+            .isEqualTo("SESSION_NOT_FOUND");
+    }
+
+    @Test
     void endingSessionsNeedsThePermissionARecentSecondFactorAndAReason() {
         String name = unique("cy");
         String userId = player(name);
