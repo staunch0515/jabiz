@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { App } from 'antd'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/problem'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import ApprovalPanel from './ApprovalPanel'
 
 const runProcess = vi.fn()
@@ -10,11 +10,7 @@ const runProcess = vi.fn()
 vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
 
 function renderPanel(onDecided = vi.fn()) {
-  render(
-    <App>
-      <ApprovalPanel requestId="r-1" onDecided={onDecided} />
-    </App>,
-  )
+  render(<ApprovalPanel requestId="r-1" onDecided={onDecided} />)
   return onDecided
 }
 
@@ -53,5 +49,15 @@ describe('ApprovalPanel', () => {
     fireEvent.click(screen.getByTestId('approval-approve'))
     expect((await screen.findByTestId('approval-error')).textContent).toContain('You prepared this.')
     expect(onDecided).not.toHaveBeenCalled()
+    // The buttons can be used again.
+    expect((screen.getByTestId('approval-approve') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('has no accessibility violations, an error shown', async () => {
+    runProcess.mockRejectedValue(new ApiError(422, { violations: [{ ruleCode: 'X', message: 'No.' }] }))
+    renderPanel()
+    fireEvent.click(screen.getByTestId('approval-approve'))
+    await screen.findByTestId('approval-error')
+    await expectAccessible()
   })
 })

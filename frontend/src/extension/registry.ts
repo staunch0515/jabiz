@@ -91,6 +91,18 @@ export function extensionMenu(
   })
 }
 
+/**
+ * The extension's routes, marked as built with @jabiz/ui (`handle.ui`, phase 15c-2): extensions use no other
+ * components (decision D34), so their pages follow the appearance like the platform's. A handle of the extension's own
+ * is kept. Phase 15d removes the mark with Ant Design.
+ */
+export function extensionRoutes(extension: AdminExtension): RouteObject[] {
+  return (extension.routes ?? []).map((route) => ({
+    ...route,
+    handle: { ...(typeof route.handle === 'object' && route.handle !== null ? route.handle : {}), ui: 'jabiz' },
+  }))
+}
+
 /** Where a signed-in user lands. */
 export function homePath(extension: AdminExtension): string {
   return extension.home ?? '/data'

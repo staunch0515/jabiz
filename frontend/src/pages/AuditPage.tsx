@@ -1,20 +1,93 @@
-import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components'
-import { Space, Table, Tabs, Tag, Typography } from 'antd'
+import {
+  Badge,
+  CopyButton,
+  DataTable,
+  FilterBar,
+  filledFilters,
+  notify,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  UI_NAMESPACE,
+  type ColumnDef,
+  type FilterField,
+  type FilterRange,
+  type FilterValues,
+  type PaginationState,
+} from '@jabiz/ui'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
-import { AUDIT_FILTERS, type AuditRecord, type AuditFieldChange, type RevealRecord } from '../api/audit'
+import { AUDIT_FILTERS, type AuditFieldChange, type AuditRecord, type RevealRecord } from '../api/audit'
 import { api, unwrap } from '../api/client'
-import { expandIcon } from '../components/expandIcon'
-import { formatDateTime } from '../meta/format'
+import { ApiError } from '../api/problem'
 import UserName from '../components/UserName'
+import AdminPage from '../layout/AdminPage'
+import { formatDateTime } from '../meta/format'
 
-const ACTION_COLORS: Record<string, string> = { INSERT: 'green', UPDATE: 'blue', DELETE: 'red' }
+const ACTION_VARIANTS: Record<string, 'success' | 'default' | 'destructive'> = {
+  INSERT: 'success',
+  UPDATE: 'default',
+  DELETE: 'destructive',
+}
+const PAGE_SIZE = 50
 
-type Filters = Partial<Record<(typeof AUDIT_FILTERS)[number], string>> & { recordedTime?: [string, string] }
+type Query = Record<string, string | number | undefined>
 
 function show(value: unknown): string {
   if (value === null || value === undefined) return ''
   return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
+/** The text filters as query parameters, and a time range as `from` / `to`. */
+function toQuery(filters: FilterValues, names: readonly string[], range: string): Query {
+  const query: Query = {}
+  for (const name of names) {
+    const value = filters[name]
+    if (typeof value === 'string' && value.trim()) query[name] = value.trim()
+  }
+  const time = filters[range] as FilterRange | undefined
+  if (time?.from) query.from = time.from
+  if (time?.to) query.to = time.to
+  return query
+}
+
+/**
+ * A page of a list the server pages (offset and limit, with a total): the previous page stays, unusable, while the
+ * next loads; a new search starts at the first page.
+ */
+function usePagedList<Row>(key: string, filters: FilterValues, fetch: (query: Query) => Promise<{ items?: Row[]; total?: number }>) {
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
+  const offset = pagination.pageIndex * pagination.pageSize
+  const list = useQuery({
+    queryKey: ['audit', key, filters, offset, pagination.pageSize],
+    placeholderData: keepPreviousData,
+    queryFn: () => fetch({ offset, limit: pagination.pageSize }),
+  })
+  useEffect(() => {
+    if (list.error) notify.error(list.error instanceof ApiError ? list.error.display : String(list.error))
+  }, [list.error])
+  return {
+    list,
+    table: {
+      data: list.data?.items ?? [],
+      loading: list.isFetching,
+      stale: list.isPlaceholderData,
+      pagination,
+      onPaginationChange: setPagination,
+      rowCount: list.data?.total ?? 0,
+      pageSizeOptions: [20, 50, 100],
+    },
+    firstPage: () => setPagination((current) => ({ ...current, pageIndex: 0 })),
+  }
 }
 
 /** Each changed field of one record, before and after. Secrets arrive as *** from the server. */
@@ -22,22 +95,38 @@ export function ChangeTable({ record }: { record: AuditRecord }) {
   const { t } = useTranslation()
   const rows = Object.entries(record.changes ?? {}).map(([field, change]) => ({ field, ...(change as AuditFieldChange) }))
   return (
-    <Table
-      size="small"
-      rowKey="field"
-      pagination={false}
-      dataSource={rows}
-      data-testid={`audit-changes-${record.recordNo}`}
-      columns={[
-        { title: t('audit.field'), dataIndex: 'field', width: 200 },
-        {
-          title: t('audit.before'),
-          dataIndex: 'before',
-          render: (value: unknown) => <Typography.Text delete={record.action !== 'INSERT'}>{show(value)}</Typography.Text>,
-        },
-        { title: t('audit.after'), dataIndex: 'after', render: (value: unknown) => show(value) },
-      ]}
-    />
+    <Table data-testid={`audit-changes-${record.recordNo}`} aria-label={t('audit.changed')}>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-48">{t('audit.field')}</TableHead>
+          <TableHead>{t('audit.before')}</TableHead>
+          <TableHead>{t('audit.after')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.field}>
+            <TableCell className="font-mono text-xs">{row.field}</TableCell>
+            <TableCell className="whitespace-normal break-all">
+              {record.action !== 'INSERT' ? <del>{show(row.before)}</del> : show(row.before)}
+            </TableCell>
+            <TableCell className="whitespace-normal break-all">{show(row.after)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+/** An entry's id, with a button copying it. */
+function EntryId({ id, label }: { id?: string; label: string }) {
+  const { t } = useTranslation()
+  if (!id) return null
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="break-all">{id}</span>
+      <CopyButton value={id} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: label })} />
+    </span>
   )
 }
 
@@ -48,91 +137,130 @@ export function ChangeTable({ record }: { record: AuditRecord }) {
  */
 export default function AuditPage() {
   const { t } = useTranslation()
-  const [searchParams] = useSearchParams()
-  const initial = Object.fromEntries(
-    AUDIT_FILTERS.map((name) => [name, searchParams.get(name) ?? undefined]).filter(([, value]) => value),
-  )
-
-  const columns: ProColumns<AuditRecord>[] = [
-    {
-      title: t('audit.recorded'),
-      dataIndex: 'recordedTime',
-      valueType: 'dateTimeRange',
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <span>{record.recordedTime ? formatDateTime(record.recordedTime) : ''}</span>
-          <Typography.Text type="secondary"><UserName id={record.actorId} /></Typography.Text>
-        </Space>
-      ),
-    },
-    { title: t('audit.actor'), dataIndex: 'actorId', hideInTable: true },
-    { title: t('audit.entityType'), dataIndex: 'entityType' },
-    { title: t('audit.entityId'), dataIndex: 'entityId', copyable: true },
-    {
-      title: t('audit.action'),
-      dataIndex: 'action',
-      search: false,
-      render: (_, record) => <Tag color={ACTION_COLORS[record.action ?? '']}>{record.action}</Tag>,
-    },
-    {
-      title: t('audit.version'),
-      dataIndex: 'versionNo',
-      search: false,
-      align: 'right',
-    },
-    { title: t('audit.process'), dataIndex: 'processName', render: (_, record) => record.processName ?? '' },
-    { title: t('audit.field'), dataIndex: 'field', hideInTable: true },
-    {
-      title: t('audit.changed'),
-      key: 'changed',
-      search: false,
-      render: (_, record) => Object.keys(record.changes ?? {}).join(', '),
-    },
-    { title: t('audit.reason'), dataIndex: 'reason', search: false, ellipsis: true },
-  ]
-
-  const records = (
-      <ProTable<AuditRecord, Filters>
-        rowKey="recordNo"
-        columns={columns}
-        form={{ initialValues: initial, syncToUrl: false }}
-        pagination={{ defaultPageSize: 50 }}
-        expandable={{ expandedRowRender: (record) => <ChangeTable record={record} />, expandIcon: expandIcon(t) }}
-        data-testid="audit-records"
-        request={async ({ current = 1, pageSize = 50, recordedTime, ...filters }) => {
-          const query: Record<string, string | number | undefined> = {
-            offset: (current - 1) * pageSize,
-            limit: pageSize,
-          }
-          for (const name of AUDIT_FILTERS) {
-            const value = (filters as Filters)[name]
-            if (value) query[name] = value
-          }
-          // The approvals of an entry belong to its trail: who approved, what and why.
-          if (query.entityType && query.entityId) query.withApprovals = 'true'
-          if (recordedTime) {
-            query.from = new Date(recordedTime[0]).toISOString()
-            query.to = new Date(recordedTime[1]).toISOString()
-          }
-          const page = await unwrap(api.GET('/api/audit/records', { params: { query } }))
-          return { data: page.items ?? [], success: true, total: page.total ?? 0 }
-        }}
-      />
-  )
-
+  // A tab is read when first shown, then kept (hidden) with its filters and page while the other is shown.
+  const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set(['records']))
+  const kept = (tab: string) => (shown.has(tab) ? true : undefined)
   return (
-    <PageContainer title={t('audit.title')}>
+    <AdminPage title={t('audit.title')}>
       <Tabs
-        items={[
-          { key: 'records', label: t('audit.records'), children: records },
-          { key: 'reveals', label: t('audit.reveals'), children: <RevealRecords /> },
-        ]}
-      />
-    </PageContainer>
+        defaultValue="records"
+        className="gap-4"
+        onValueChange={(tab) => setShown((current) => (current.has(tab) ? current : new Set([...current, tab])))}
+      >
+        <TabsList>
+          <TabsTrigger value="records">{t('audit.records')}</TabsTrigger>
+          <TabsTrigger value="reveals">{t('audit.reveals')}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="records" forceMount={kept('records')} className="data-[state=inactive]:hidden">
+          <AuditRecords />
+        </TabsContent>
+        <TabsContent value="reveals" forceMount={kept('reveals')} className="data-[state=inactive]:hidden">
+          <RevealRecords />
+        </TabsContent>
+      </Tabs>
+    </AdminPage>
   )
 }
 
-type RevealFilters = { actorId?: string; entityType?: string; entityId?: string; revealedAt?: [string, string] }
+function AuditRecords() {
+  const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const [filters, setFilters] = useState<FilterValues>(() =>
+    filledFilters(Object.fromEntries(AUDIT_FILTERS.map((name) => [name, searchParams.get(name) ?? undefined]))),
+  )
+  const { table, firstPage } = usePagedList<AuditRecord>('records', filters, async (paging) => {
+    const query: Query = { ...paging, ...toQuery(filters, AUDIT_FILTERS, 'recordedTime') }
+    // The approvals of an entry belong to its trail: who approved, what and why.
+    if (query.entityType && query.entityId) query.withApprovals = 'true'
+    return unwrap(api.GET('/api/audit/records', { params: { query } }))
+  })
+
+  const fields = useMemo<FilterField[]>(
+    () => [
+      { kind: 'datetime-range', name: 'recordedTime', label: t('audit.recorded') },
+      { kind: 'text', name: 'actorId', label: t('audit.actor') },
+      { kind: 'text', name: 'entityType', label: t('audit.entityType') },
+      { kind: 'text', name: 'entityId', label: t('audit.entityId') },
+      { kind: 'text', name: 'processName', label: t('audit.process') },
+      { kind: 'text', name: 'field', label: t('audit.field') },
+    ],
+    [t],
+  )
+  const columns = useMemo<ColumnDef<AuditRecord, unknown>[]>(
+    () => [
+      {
+        id: 'recorded',
+        header: t('audit.recorded'),
+        cell: ({ row: { original: record } }) => (
+          <span className="flex flex-col">
+            <span>{record.recordedTime ? formatDateTime(record.recordedTime) : ''}</span>
+            <span className="text-muted-foreground text-xs">
+              <UserName id={record.actorId} />
+            </span>
+          </span>
+        ),
+      },
+      { id: 'entityType', header: t('audit.entityType'), cell: ({ row }) => row.original.entityType },
+      {
+        id: 'entityId',
+        header: t('audit.entityId'),
+        cell: ({ row }) => <EntryId id={row.original.entityId} label={t('audit.entityId')} />,
+      },
+      {
+        id: 'action',
+        header: t('audit.action'),
+        cell: ({ row }) => (
+          <Badge variant={ACTION_VARIANTS[row.original.action ?? ''] ?? 'secondary'}>{row.original.action}</Badge>
+        ),
+      },
+      {
+        id: 'version',
+        header: t('audit.version'),
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => row.original.versionNo,
+      },
+      { id: 'process', header: t('audit.process'), cell: ({ row }) => row.original.processName ?? '' },
+      {
+        id: 'changed',
+        header: t('audit.changed'),
+        cell: ({ row }) => Object.keys(row.original.changes ?? {}).join(', '),
+      },
+      {
+        id: 'reason',
+        header: t('audit.reason'),
+        meta: { className: 'max-w-xs' },
+        cell: ({ row }) => (
+          <span className="block truncate" title={row.original.reason ?? undefined}>
+            {row.original.reason}
+          </span>
+        ),
+      },
+    ],
+    [t],
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <FilterBar
+        fields={fields}
+        values={filters}
+        onSubmit={(values) => {
+          setFilters(values)
+          firstPage()
+        }}
+      />
+      <div data-testid="audit-records">
+        <DataTable
+          label={t('audit.records')}
+          columns={columns}
+          getRowId={(record) => String(record.recordNo)}
+          renderExpanded={(record) => <ChangeTable record={record} />}
+          {...table}
+        />
+      </div>
+    </div>
+  )
+}
 
 /**
  * Every display of masked values in plain text (docs/design/10-security.md section 13.1): one value on request, or
@@ -140,47 +268,75 @@ type RevealFilters = { actorId?: string; entityType?: string; entityId?: string;
  */
 function RevealRecords() {
   const { t } = useTranslation()
-  const columns: ProColumns<RevealRecord>[] = [
-    {
-      title: t('audit.revealedAt'),
-      dataIndex: 'revealedAt',
-      valueType: 'dateTimeRange',
-      render: (_, record) => (record.revealedAt ? formatDateTime(record.revealedAt) : ''),
-    },
-    { title: t('audit.actor'), dataIndex: 'actorId', render: (_, record) => <UserName id={record.actorId} /> },
-    {
-      title: t('audit.revealKind'),
-      dataIndex: 'kind',
-      search: false,
-      render: (_, record) => <Tag>{t(`audit.revealKinds.${record.kind}`)}</Tag>,
-    },
-    { title: t('audit.revealResource'), dataIndex: 'resource', search: false, ellipsis: true },
-    { title: t('audit.entityType'), dataIndex: 'entityType', render: (_, record) => record.entity ?? '' },
-    { title: t('audit.entityId'), dataIndex: 'entityId', copyable: true },
-    { title: t('audit.revealFields'), key: 'fields', search: false, render: (_, record) => (record.fields ?? []).join(', ') },
-    { title: t('audit.revealRows'), dataIndex: 'rowCount', search: false, align: 'right' },
-  ]
+  const [filters, setFilters] = useState<FilterValues>({})
+  const { table, firstPage } = usePagedList<RevealRecord>('reveals', filters, (paging) =>
+    unwrap(
+      api.GET('/api/audit/reveals', {
+        params: { query: { ...paging, ...toQuery(filters, ['actorId', 'entityType', 'entityId'], 'revealedAt') } },
+      }),
+    ),
+  )
+  const fields = useMemo<FilterField[]>(
+    () => [
+      { kind: 'datetime-range', name: 'revealedAt', label: t('audit.revealedAt') },
+      { kind: 'text', name: 'actorId', label: t('audit.actor') },
+      { kind: 'text', name: 'entityType', label: t('audit.entityType') },
+      { kind: 'text', name: 'entityId', label: t('audit.entityId') },
+    ],
+    [t],
+  )
+  const columns = useMemo<ColumnDef<RevealRecord, unknown>[]>(
+    () => [
+      {
+        id: 'revealedAt',
+        header: t('audit.revealedAt'),
+        cell: ({ row }) => (row.original.revealedAt ? formatDateTime(row.original.revealedAt) : ''),
+      },
+      { id: 'actor', header: t('audit.actor'), cell: ({ row }) => <UserName id={row.original.actorId} /> },
+      {
+        id: 'kind',
+        header: t('audit.revealKind'),
+        cell: ({ row }) => <Badge variant="secondary">{t(`audit.revealKinds.${row.original.kind}`)}</Badge>,
+      },
+      {
+        id: 'resource',
+        header: t('audit.revealResource'),
+        meta: { className: 'max-w-xs' },
+        cell: ({ row }) => (
+          <span className="block truncate" title={row.original.resource ?? undefined}>
+            {row.original.resource}
+          </span>
+        ),
+      },
+      { id: 'entityType', header: t('audit.entityType'), cell: ({ row }) => row.original.entity ?? '' },
+      {
+        id: 'entityId',
+        header: t('audit.entityId'),
+        cell: ({ row }) => <EntryId id={row.original.entityId} label={t('audit.entityId')} />,
+      },
+      { id: 'fields', header: t('audit.revealFields'), cell: ({ row }) => (row.original.fields ?? []).join(', ') },
+      {
+        id: 'rows',
+        header: t('audit.revealRows'),
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => row.original.rowCount,
+      },
+    ],
+    [t],
+  )
   return (
-    <ProTable<RevealRecord, RevealFilters>
-      rowKey="revealId"
-      columns={columns}
-      pagination={{ defaultPageSize: 50 }}
-      data-testid="audit-reveals"
-      request={async ({ current = 1, pageSize = 50, revealedAt, actorId, entityType, entityId }) => {
-        const query: Record<string, string | number | undefined> = {
-          offset: (current - 1) * pageSize,
-          limit: pageSize,
-          actorId: actorId || undefined,
-          entityType: entityType || undefined,
-          entityId: entityId || undefined,
-        }
-        if (revealedAt) {
-          query.from = new Date(revealedAt[0]).toISOString()
-          query.to = new Date(revealedAt[1]).toISOString()
-        }
-        const page = await unwrap(api.GET('/api/audit/reveals', { params: { query } }))
-        return { data: page.items ?? [], success: true, total: page.total ?? 0 }
-      }}
-    />
+    <div className="flex flex-col gap-4">
+      <FilterBar
+        fields={fields}
+        values={filters}
+        onSubmit={(values) => {
+          setFilters(values)
+          firstPage()
+        }}
+      />
+      <div data-testid="audit-reveals">
+        <DataTable label={t('audit.reveals')} columns={columns} getRowId={(r) => r.revealId ?? ''} {...table} />
+      </div>
+    </div>
   )
 }

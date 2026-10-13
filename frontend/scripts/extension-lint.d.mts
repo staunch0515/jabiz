@@ -1,5 +1,5 @@
 import type { Linter } from 'eslint'
 
 export declare const extensionRules: Linter.Config
-export declare const ANT_DESIGN_EXEMPT: string[]
+/** The rules for the extension in `dir` (the same for every extension). */
 export declare function extensionRulesFor(dir: string): Linter.Config

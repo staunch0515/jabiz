@@ -3,7 +3,7 @@
  * labels) come from the server in the language of the request; only the platform's own chrome is here.
  */
 const en = {
-  app: { title: 'jabiz', expandRow: 'Expand row', collapseRow: 'Collapse row', language: 'Language', logout: 'Sign out', loading: 'Loading…', error: 'Something went wrong', security: 'Security', dataPeriod: 'Data {{from}} – {{to}}', dataPeriodHint: 'Your roles limit you to the data of this period.' },
+  app: { title: 'jabiz', language: 'Language', logout: 'Sign out', loading: 'Loading…', error: 'Something went wrong', security: 'Security', dataPeriod: 'Data {{from}} – {{to}}', dataPeriodHint: 'Your roles limit you to the data of this period.' },
   nav: { datasets: 'Data', processes: 'Processes', home: 'Home', tasks: 'Tasks', reports: 'Reports', imports: 'Imports', audit: 'Audit', integrity: 'Integrity', retention: 'Retention', accessReview: 'Access review', sessions: 'Sessions', documents: 'Documents' },
   imports: {
     title: 'Imports',
@@ -148,7 +148,11 @@ const en = {
   accessReview: {
     title: 'Access review',
     period: 'Period',
+    periodFrom: 'First day',
+    periodTo: 'Last day',
     issue: 'Issue access report',
+    issueConfirm: 'Issue the access report as of {{time}}?',
+    issueConfirmHint: 'It is kept in the report archive and cannot be withdrawn.',
     issued: 'The access report was issued as of the end of the period.',
     openReport: 'Open in the report archive',
     notEnded: 'The period has not ended yet; it can be reviewed once it has.',
@@ -242,6 +246,10 @@ const en = {
     export: 'Open-format export',
     exportHint: 'A ZIP with a CSV per dataset, schema.json, manifest.json with hashes and, if chosen, the issued reports as PDF. Only what you may read is exported.',
     datasets: 'Datasets',
+    addDataset: 'Add a dataset',
+    datasetsRequired: 'Choose at least one dataset.',
+    reportsFrom: 'Issued from',
+    reportsTo: 'Issued until',
     exportAsOf: 'As of (optional)',
     withReports: 'Add the issued reports',
     reportsPeriod: 'Reports issued in',
@@ -250,9 +258,6 @@ const en = {
   },
   mfa: {
     title: 'Two-step verification',
-    enrolled: 'Two-step verification is on.',
-    notEnrolled: 'Two-step verification is off.',
-    recoveryLeft: '{{count}} recovery codes left.',
   },
   tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks' },
   approval: {
@@ -390,7 +395,7 @@ type Texts = typeof en
 
 const zh: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
-  app: { title: 'jabiz', expandRow: '展开行', collapseRow: '收起行', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了', security: '安全设置', dataPeriod: '数据期限 {{from}} – {{to}}', dataPeriodHint: '你的角色只允许查看这个期限内的数据。' },
+  app: { title: 'jabiz', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了', security: '安全设置', dataPeriod: '数据期限 {{from}} – {{to}}', dataPeriodHint: '你的角色只允许查看这个期限内的数据。' },
   nav: { datasets: '数据', processes: '流程', home: '首页', tasks: '待办', reports: '报表', imports: '导入', audit: '审计', integrity: '防篡改', retention: '保留与归档', accessReview: '访问审查', sessions: '会话', documents: '单据' },
   imports: {
     title: '导入',
@@ -535,7 +540,11 @@ const zh: Texts = {
   accessReview: {
     title: '访问审查',
     period: '期间',
+    periodFrom: '首日',
+    periodTo: '末日',
     issue: '签发访问权限报表',
+    issueConfirm: '按 {{time}} 签发访问权限报表？',
+    issueConfirmHint: '报表保存在报表存档中，签发后不能撤回。',
     issued: '已按期末时点签发访问权限报表。',
     openReport: '在报表存档中打开',
     notEnded: '期间尚未结束，结束后才能审查。',
@@ -629,6 +638,10 @@ const zh: Texts = {
     export: '开放格式导出',
     exportHint: 'ZIP 中包含每个数据视图一个 CSV、schema.json、带哈希的 manifest.json，以及（如选择）已签发报表的 PDF。只导出您有权读取的内容。',
     datasets: '数据视图',
+    addDataset: '添加数据视图',
+    datasetsRequired: '请至少选择一个数据视图。',
+    reportsFrom: '签发日起',
+    reportsTo: '签发日止',
     exportAsOf: '时点（可选）',
     withReports: '包含已签发的报表',
     reportsPeriod: '报表签发期间',
@@ -637,9 +650,6 @@ const zh: Texts = {
   },
   mfa: {
     title: '两步验证',
-    enrolled: '已开启两步验证。',
-    notEnrolled: '尚未开启两步验证。',
-    recoveryLeft: '剩余 {{count}} 个恢复码。',
   },
   tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办' },
   approval: {
@@ -774,7 +784,7 @@ const zh: Texts = {
 
 const ja: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
-  app: { title: 'jabiz', expandRow: '行を展開', collapseRow: '行を折りたたむ', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました', security: 'セキュリティ', dataPeriod: 'データ期間 {{from}} – {{to}}', dataPeriodHint: 'ロールにより、この期間のデータのみ閲覧できます。' },
+  app: { title: 'jabiz', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました', security: 'セキュリティ', dataPeriod: 'データ期間 {{from}} – {{to}}', dataPeriodHint: 'ロールにより、この期間のデータのみ閲覧できます。' },
   nav: { datasets: 'データ', processes: 'プロセス', home: 'ホーム', tasks: 'タスク', reports: 'レポート', imports: 'インポート', audit: '監査', integrity: '改ざん検知', retention: '保存とアーカイブ', accessReview: 'アクセスレビュー', sessions: 'セッション', documents: '帳票' },
   imports: {
     title: 'インポート',
@@ -919,7 +929,11 @@ const ja: Texts = {
   accessReview: {
     title: 'アクセスレビュー',
     period: '期間',
+    periodFrom: '初日',
+    periodTo: '最終日',
     issue: 'アクセス権レポートを発行',
+    issueConfirm: '{{time}} 時点のアクセス権レポートを発行しますか？',
+    issueConfirmHint: 'レポートアーカイブに保存され、取り消せません。',
     issued: '期末時点のアクセス権レポートを発行しました。',
     openReport: 'レポートアーカイブで開く',
     notEnded: '期間はまだ終了していません。終了後にレビューできます。',
@@ -1013,6 +1027,10 @@ const ja: Texts = {
     export: 'オープン形式エクスポート',
     exportHint: 'データビューごとの CSV、schema.json、ハッシュ付きの manifest.json、選択した場合は発行済みレポートの PDF を ZIP で出力します。閲覧できる内容だけが出力されます。',
     datasets: 'データビュー',
+    addDataset: 'データビューを追加',
+    datasetsRequired: 'データビューを 1 つ以上選んでください。',
+    reportsFrom: '発行日（から）',
+    reportsTo: '発行日（まで）',
     exportAsOf: '時点（任意）',
     withReports: '発行済みレポートを含める',
     reportsPeriod: 'レポートの発行期間',
@@ -1021,9 +1039,6 @@ const ja: Texts = {
   },
   mfa: {
     title: '2 段階認証',
-    enrolled: '2 段階認証は有効です。',
-    notEnrolled: '2 段階認証は無効です。',
-    recoveryLeft: 'リカバリーコードは残り {{count}} 個です。',
   },
   tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件' },
   approval: {
