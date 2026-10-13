@@ -177,13 +177,13 @@ export default function ImportPage() {
   }
 
   /**
-   * Runs through the parameters' form when there is one, so that its checks come first (a required parameter left
-   * empty is shown at its field, and nothing is sent).
+   * Commits through the parameters' form when there is one, so that its checks come first (a required parameter left
+   * empty is shown at its field, and nothing is sent); the Preview button submits the same form.
    */
-  const start = (commit: boolean) => {
-    nextRun.current = commit ? 'commit' : 'preview'
+  const commit = () => {
+    nextRun.current = 'commit'
     if (nodes.length === 0) {
-      void run(commit)
+      void run(true)
       return
     }
     ;(document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit()
@@ -490,7 +490,7 @@ export default function ImportPage() {
                   confirmLabel={t('imports.commit')}
                   cancelLabel={t('reports.cancel')}
                   destructive
-                  onConfirm={() => start(true)}
+                  onConfirm={commit}
                   trigger={
                     <Button
                       variant="destructive"
