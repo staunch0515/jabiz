@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
 import {
   checkInputs,
@@ -73,14 +72,14 @@ describe('process form', () => {
   it('turns the form values into the request body', () => {
     const nodes = inputNodes(schema)
     const body = toProcessInput(nodes, {
-      bookingTime: dayjs('2026-01-31T15:00:00Z'),
+      bookingTime: '2026-01-31T15:00:00.000Z',
       description: 'Rent',
       entries: [
         { accountCode: '5100', direction: 'DEBIT', amount: '1000.50' },
         { accountCode: '1110', direction: 'CREDIT', amount: 1000.5 },
       ],
       count: 3,
-      day: dayjs('2026-02-01T00:00:00'),
+      day: '2026-02-01',
       value: '{"x": [1, 2]}',
       address: { city: 'Tokyo' },
       mail: '',

@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { signIn, test } from './support'
+import { pageRendered, signIn, test } from './support'
 
 /** ROADMAP phase 14d-1: reports are listed and run from a form generated from their parameters. */
 test('a report runs from the reports page', async ({ page }) => {
@@ -11,16 +11,17 @@ test('a report runs from the reports page', async ({ page }) => {
   await page.getByTestId('report-commerce.stock_availability').click()
   await expect(page.getByTestId('page-title')).toHaveText('库存可用量')
   await expect(page.getByRole('columnheader', { name: '可用' })).toBeVisible()
+  await pageRendered(page)
 
   // The rows are exported as a file named after the report.
   const download = page.waitForEvent('download')
-  await page.getByTestId('report-export').hover()
-  await page.getByText('Excel（.xlsx）').click()
+  await page.getByTestId('report-export').click()
+  await page.getByRole('menuitem', { name: 'Excel（.xlsx）' }).click()
   expect((await download).suggestedFilename()).toMatch(/^commerce\.stock_availability-\d{8}-\d{6}\.xlsx$/)
 
   // Issued, the report is archived; the archive verifies it against the data.
   await page.getByTestId('report-issue').click()
-  await page.locator('.ant-popconfirm').getByRole('button', { name: /签\s*发/ }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: '签发' }).click()
   await expect(page).toHaveURL(/\/reports\/archive\?template=commerce\.stock_availability$/)
   const verify = page.locator('[data-testid^="run-verify-"]').first()
   await expect(verify).toBeVisible()

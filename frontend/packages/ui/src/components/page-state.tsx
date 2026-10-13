@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
-import { CircleAlertIcon, SearchXIcon, TriangleAlertIcon } from 'lucide-react'
+import { CircleAlertIcon, InboxIcon, SearchXIcon, TriangleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
 import { cn, UI_SCOPE } from '../lib/utils'
 import { Spinner } from './spinner'
 
-export type PageStateKind = 'loading' | 'notFound' | 'error' | 'warning'
+export type PageStateKind = 'loading' | 'empty' | 'notFound' | 'error' | 'warning'
 
 export interface PageStateProps {
   kind: PageStateKind
@@ -22,11 +22,13 @@ export interface PageStateProps {
   'data-testid'?: string
 }
 
-const ICONS = { notFound: SearchXIcon, error: CircleAlertIcon, warning: TriangleAlertIcon } as const
+const ICONS = { empty: InboxIcon, notFound: SearchXIcon, error: CircleAlertIcon, warning: TriangleAlertIcon } as const
 
 /**
- * A page that cannot show its content (yet): loading, not found, failed, or a warning with a way on. Replaces
- * antd's `Spin` and `Result`. Errors and warnings are announced (`role="alert"`); loading is a polite status.
+ * A page that cannot show its content (yet): loading, nothing there (an empty catalog), not found, failed, or a
+ * warning with a way on. Replaces antd's `Spin`, `Empty` and `Result`. Errors and warnings are announced
+ * (`role="alert"`); loading is a polite status. The kind is the element's `data-state` (`loading`, `empty`,
+ * `notFound`, `error`, `warning`), which end-to-end tests use to tell an empty page from one still loading.
  */
 export function PageState({ kind, title, titleAs: Title = 'p', description, action, className, ...rest }: PageStateProps) {
   const { t } = useTranslation(UI_NAMESPACE)
@@ -47,7 +49,7 @@ export function PageState({ kind, title, titleAs: Title = 'p', description, acti
     <div
       data-slot="page-state"
       data-state={kind}
-      role={kind === 'notFound' ? undefined : 'alert'}
+      role={kind === 'notFound' || kind === 'empty' ? undefined : 'alert'}
       className={cn(UI_SCOPE, 'flex flex-col items-center gap-3 p-8 text-center', className)}
       {...rest}
     >

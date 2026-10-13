@@ -1,7 +1,8 @@
 import { isValidElement, type ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import i18n from '../i18n'
-import { buildColumns, mayCompare, renderCell, toRow } from './columns'
+import { mayCompare, renderCell, toRow } from './cells'
+import { dataColumns, filterFields } from './dataColumns'
 import { formFieldsOf } from './entityForm'
 import type { EntityMeta, FieldMeta, ListViewMeta } from './types'
 
@@ -35,13 +36,12 @@ describe('masked fields (docs/design/10-security.md section 13.1)', () => {
     expect(mayCompare(account, holder)).toBe(true)
     expect(mayCompare(account)).toBe(false)
 
-    const without = Object.fromEntries(buildColumns(supplier, view, {}, i18n.t, 'en', { can: nobody })
-      .map((c) => [String(c.dataIndex), c]))
-    expect(without.bankAccount).toMatchObject({ sorter: false, hideInSearch: true })
-    expect(without.name).toMatchObject({ sorter: true, hideInSearch: false })
-    const withIt = Object.fromEntries(buildColumns(supplier, view, {}, i18n.t, 'en', { can: holder })
-      .map((c) => [String(c.dataIndex), c]))
-    expect(withIt.bankAccount).toMatchObject({ sorter: true, hideInSearch: false })
+    const sortable = (can: (p: string) => boolean) =>
+      Object.fromEntries(dataColumns(supplier, view, {}, i18n.t, 'en', { can }).map((c) => [c.id, c.enableSorting]))
+    expect(sortable(nobody)).toEqual({ name: true, bankAccount: false })
+    expect(sortable(holder)).toEqual({ name: true, bankAccount: true })
+    expect(filterFields(supplier, view, {}, i18n.t, nobody).map((f) => f.name)).toEqual(['name'])
+    expect(filterFields(supplier, view, {}, i18n.t, holder).map((f) => f.name)).toEqual(['name', 'bankAccount'])
   })
 
   it('show the masked form, with a button to show the value for holders in a dataset', () => {

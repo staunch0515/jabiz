@@ -121,21 +121,10 @@ export function buildFilters(
 export type SortingEntries = { id: string; desc: boolean }[]
 
 /**
- * Sorts of the dataset query from the table's sorting; only whitelisted fields (the server refuses others with
- * SORT_NOT_ALLOWED), otherwise none and the server applies the view's default. Takes a DataTable's sorting state
- * or, for the pages still on ProTable (until phase 15c), its sorter.
+ * Sorts of the dataset query from the table's sorting (a DataTable's `SortingState`); only whitelisted fields (the
+ * server refuses others with SORT_NOT_ALLOWED), otherwise none and the server applies the view's default.
  */
-export function buildSorts(view: ListViewMeta | undefined, sorting: SortingEntries): Sort[]
-export function buildSorts(view: ListViewMeta | undefined, sorter: Record<string, string | null | undefined>): Sort[]
-export function buildSorts(
-  view: ListViewMeta | undefined,
-  sorting: SortingEntries | Record<string, string | null | undefined>,
-): Sort[] {
+export function buildSorts(view: ListViewMeta | undefined, sorting: SortingEntries): Sort[] {
   const allowed = new Set(view?.sorts ?? [])
-  if (Array.isArray(sorting)) {
-    return sorting.filter((s) => allowed.has(s.id)).map((s) => ({ field: s.id, asc: !s.desc }))
-  }
-  return Object.entries(sorting)
-    .filter(([field, order]) => allowed.has(field) && (order === 'ascend' || order === 'descend'))
-    .map(([field, order]) => ({ field, asc: order === 'ascend' }))
+  return sorting.filter((s) => allowed.has(s.id)).map((s) => ({ field: s.id, asc: !s.desc }))
 }
