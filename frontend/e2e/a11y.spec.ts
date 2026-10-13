@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
+import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
 
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
@@ -143,7 +143,7 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/integrity', 'integrity', '[data-testid="integrity-verify"]'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
     ['/account/security', 'account security', '[data-testid="session-item"]'],
-    ['/security/sessions', 'sessions', '[data-testid="reference-select"]'],
+    ['/security/sessions', 'sessions', '[data-testid="session-user-select"]'],
   ] as const) {
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
@@ -155,8 +155,9 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
 
   // A user's sessions (phase 16g), and the dialog that ends them.
   await page.goto('/security/sessions')
-  await page.getByTestId('reference-select').click()
-  await page.getByRole('listbox').getByRole('option').first().click()
+  await page.getByTestId('session-user-select').click()
+  await page.keyboard.type(ADMIN.userName)
+  await page.getByRole('listbox').getByRole('option', { name: new RegExp(`^${ADMIN.userName}\\b`) }).first().click()
   await expect(dataRows(page).first()).toBeVisible()
   await expectAccessible(page, at('sessions of a user'))
   await page.getByTestId('admin-session-revoke-all').click()
