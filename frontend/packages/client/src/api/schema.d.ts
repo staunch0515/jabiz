@@ -84,6 +84,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/account/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mine_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/identities/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["callback_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/identities/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/account/identities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unlink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/account/locale": {
         parameters: {
             query?: never;
@@ -1897,6 +1961,15 @@ export interface components {
             value?: unknown;
             values?: unknown[];
         };
+        IdentityView: {
+            email?: string;
+            id?: string;
+            kind?: string;
+            label?: string;
+            /** Format: date-time */
+            linkedAt?: string;
+            provider?: string;
+        };
         ImportCommitRequest: {
             fileId?: string;
             mapping?: components["schemas"]["ImportMapping"];
@@ -2171,6 +2244,10 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LinkResult: {
+            provider?: string;
+            status?: string;
+        };
         LocaleRequest: {
             locale?: string;
         };
@@ -2292,6 +2369,7 @@ export interface components {
         };
         ProviderEntry: {
             id?: string;
+            kind?: string;
             label?: string;
         };
         QueryEntry: {
@@ -2534,6 +2612,10 @@ export interface components {
             asc?: boolean;
             field?: string;
         };
+        StartRequest: {
+            currentPassword?: string;
+            provider?: string;
+        };
         StartResponse: {
             authorizationUrl?: string;
             binder?: string;
@@ -2768,6 +2850,94 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RevealPage"];
                 };
+            };
+        };
+    };
+    mine_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityView"][];
+                };
+            };
+        };
+    };
+    callback_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResult"];
+                };
+            };
+        };
+    };
+    start_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartResponse"];
+                };
+            };
+        };
+    };
+    unlink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -19,13 +19,62 @@ export async function startProviderSignIn(providerId: string, returnTo: string):
   const started = await unwrap(api.POST('/api/auth/oidc/{id}/start', {
     params: { path: { id: providerId }, query: { entry: session.entry() } },
   }))
+  keep(returnTo, started.binder!, 'SIGN_IN')
+  window.location.assign(started.authorizationUrl!)
+}
+
+/**
+ * What the round trip is for: signing in, or linking a provider account to the signed-in user (phase 16f). The
+ * callback page reads it to know which server endpoint gets the code; the server checks the purpose of the state
+ * itself, so a wrong one here only fails.
+ */
+export type OidcPurpose = 'SIGN_IN' | 'LINK'
+const purposeKey = () => `jabiz.session.${session.entry()}.oidcPurpose`
+
+/** What {@link startIdentityLink} needs besides the provider. */
+export interface IdentityLinkOptions {
+  /**
+   * The current password; needed unless the session passed a second factor within the server's step-up age. Without
+   * either the server answers 422 `REAUTHENTICATION_REQUIRED`, and a wrong password 422 `PASSWORD_INCORRECT`.
+   */
+  currentPassword?: string
+}
+
+function keep(returnTo: string, binder: string, purpose: OidcPurpose) {
   try {
     window.sessionStorage.setItem(returnKey(), sitePath(returnTo))
-    window.sessionStorage.setItem(binderKey(), started.binder!)
+    window.sessionStorage.setItem(binderKey(), binder)
+    window.sessionStorage.setItem(purposeKey(), purpose)
   } catch {
     // Without storage the callback is refused: the binder cannot come back.
   }
+}
+
+/**
+ * Starts linking an account of an identity provider to the signed-in user (`POST /api/auth/account/identities/start`,
+ * phase 16f; decision D39 item 2). The provider sends the user back to the entry's callback page (`login/oidc`), which
+ * finishes the link (`finishIdentityLink`) and returns to `returnTo`. Throws the server's refusal (an
+ * `ApiError`) without leaving the page.
+ */
+export async function startIdentityLink(providerId: string, options: IdentityLinkOptions, returnTo: string):
+Promise<void> {
+  const started = await unwrap(api.POST('/api/auth/account/identities/start', {
+    body: { provider: providerId, currentPassword: options.currentPassword || undefined },
+  }))
+  keep(returnTo, started.binder!, 'LINK')
   window.location.assign(started.authorizationUrl!)
+}
+
+/**
+ * What the latest round trip this browser started is for; a sign-in when nothing was kept. Read, not taken: every
+ * start writes it anew (and the callback page may render more than once).
+ */
+export function pendingPurpose(): OidcPurpose {
+  try {
+    return window.sessionStorage.getItem(purposeKey()) === 'LINK' ? 'LINK' : 'SIGN_IN'
+  } catch {
+    return 'SIGN_IN'
+  }
 }
 
 function take(key: string): string | null {

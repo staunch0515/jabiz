@@ -40,8 +40,25 @@ export interface OidcButtonsProps {
 }
 
 /**
+ * Google's "G", drawn in the text colour: the platform's pages use theme colours only (decision D34), so the mark
+ * follows the light and dark appearance like the label beside it.
+ */
+export function GoogleMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className} fill="currentColor">
+      <path d="M21.35 11.1h-9.17v2.98h5.3c-.23 1.4-1.66 4.1-5.3 4.1-3.19 0-5.8-2.64-5.8-5.9s2.61-5.9 5.8-5.9c1.82 0 3.03.77 3.73 1.43l2.54-2.45C16.84 3.85 14.75 2.9 12.18 2.9 6.96 2.9 2.75 7.12 2.75 12.28s4.21 9.38 9.43 9.38c5.44 0 9.05-3.82 9.05-9.2 0-.62-.07-1.09-.15-1.56z" />
+    </svg>
+  )
+}
+
+/** The mark drawn before a provider's label, by its kind; none for a provider of no known brand. */
+export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | null; className?: string }) {
+  return kind === 'google' ? <GoogleMark className={className} /> : null
+}
+
+/**
  * Signing in through an identity provider (docs/design/10-security.md section 12): a button per provider, under an
- * "or" separator; nothing when none is offered.
+ * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label.
  */
 export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError }: OidcButtonsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
@@ -61,11 +78,13 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
             variant="outline"
             className="w-full"
             data-testid={`oidc-${provider.id}`}
+            data-kind={provider.kind ?? 'generic'}
             onClick={() => {
               onError?.(null)
               start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
             }}
           >
+            <ProviderMark kind={provider.kind} />
             {provider.label}
           </Button>
         ))}
