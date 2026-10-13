@@ -50,6 +50,23 @@ export function IssueTable({ entry, issues }: { entry?: ImportEntry; issues: Imp
   )
 }
 
+/** The records of a report with their outcome, 50 to a page. */
+function RecordsTable({ columns, results }: { columns: ColumnDef<Result, unknown>[]; results: Result[] }) {
+  const { t } = useTranslation()
+  const page = useLocalPage(results, 50)
+  return (
+    <div data-testid="import-rows">
+      <DataTable
+        label={t('imports.rowsTable')}
+        columns={columns}
+        getRowId={(result) => String(result.number)}
+        {...page.paging}
+        data={page.data}
+      />
+    </div>
+  )
+}
+
 /**
  * What a preview or a commit found (docs/design/20-imports.md section 5): the figures, the control totals, every
  * problem, and each record with its outcome.
@@ -61,7 +78,6 @@ export default function ImportReportView({ entry, report }: { entry?: ImportEntr
     () => (report.results ?? []).filter((r) => show === 'all' || r.status === show),
     [report.results, show],
   )
-  const page = useLocalPage(results, 50)
   const issues = report.issues ?? []
   const columns = useMemo<ColumnDef<Result, unknown>[]>(
     () => [
@@ -131,15 +147,8 @@ export default function ImportReportView({ entry, report }: { entry?: ImportEntr
           { value: 'duplicate', label: t('imports.show.duplicate') },
         ]}
       />
-      <div data-testid="import-rows">
-        <DataTable
-          label={t('imports.rowsTable')}
-          columns={columns}
-          getRowId={(result) => String(result.number)}
-          {...page.paging}
-          data={page.data}
-        />
-      </div>
+      {/* Another choice of what to show starts at its first page. */}
+      <RecordsTable key={show} columns={columns} results={results} />
     </div>
   )
 }

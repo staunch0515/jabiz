@@ -79,4 +79,16 @@ describe('ReportArchivePage', () => {
     expect(verdict.getAttribute('class')).toContain('bg-destructive')
     expect(within(screen.getByTestId('report-archive')).getByText('alice')).toBeInTheDocument()
   })
+
+  it('keeps focus on the Verify button when the verdict arrives', async () => {
+    get.mockResolvedValue([RUN, { ...RUN, runId: 'r-2', supersededBy: undefined }])
+    post.mockResolvedValue({ verdict: 'identical', recomputable: true })
+    show()
+    const verify = await screen.findByTestId('run-verify-r-1')
+    await userEvent.click(verify)
+    await screen.findByTestId('verdict-r-1')
+    // The same element, still in the page and focused: the cells were not mounted anew.
+    expect(screen.getByTestId('run-verify-r-1')).toBe(verify)
+    expect(verify).toHaveFocus()
+  })
 })

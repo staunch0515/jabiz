@@ -102,6 +102,11 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<{ name?: string; mapping?: ImportMapping }[]>([])
   const [chosenSaved, setChosenSaved] = useState<string | null>(null)
+  // What a number field of the layout holds while it is being typed into: empty for a moment ("1" → "" → "2")
+  // without the layout taking a fallback value until the field is left.
+  const [drafts, setDrafts] = useState<{ skipLines?: string; headerRow?: string }>({})
+  // The parameters the preview on screen ran with: a commit sends only what was previewed.
+  const [previewedParams, setPreviewedParams] = useState<string | null>(null)
   const [mappingName, setMappingName] = useState('')
 
   const sampleColumns = useMemo<ColumnDef<Sample, unknown>[]>(
@@ -115,6 +120,41 @@ export default function ImportPage() {
   )
 
   const fail = (e: unknown) => notify.error(e instanceof ApiError ? e.display : String(e))
+
+  /**
+   * The layout or the mapping changed: a preview made before no longer shows what a commit would import, so it goes
+   * (and with it the commit) until the file is previewed again. An import already committed stays shown.
+   */
+  const stale = () => {
+    if (outcome?.committed) return
+    setReport(null)
+    setOutcome(null)
+  }
+  const changeOptions = (next: ImportOptions) => {
+    setOptions(next)
+    stale()
+  }
+  const changeColumns = (next: Record<string, string | undefined>) => {
+    setColumns(next)
+    stale()
+  }
+  const changeConstants = (next: Record<string, string>) => {
+    setConstants(next)
+    stale()
+  }
+
+  /** A number field of the layout: typed as text, empty only while typing (its fallback when it is left so). */
+  const numberField = (name: 'skipLines' | 'headerRow', current: number | undefined, fallback: number) => ({
+    value: drafts[name] ?? String(current ?? ''),
+    onChange: (value: string) => {
+      setDrafts({ ...drafts, [name]: value })
+      if (value !== '') changeOptions({ ...options, [name]: Number(value) })
+    },
+    onBlur: () => {
+      if (drafts[name] === '') changeOptions({ ...options, [name]: fallback })
+      setDrafts({ ...drafts, [name]: undefined })
+    },
+  })
 
   const inspect = async (fileId: string, adjusted: ImportOptions) => {
     const result = await inspectFile(id, fileId, adjusted)
@@ -140,6 +180,7 @@ export default function ImportPage() {
       setColumns({})
       setConstants({})
       setOutcome(null)
+      setChosenSaved(null)
       await inspect(uploaded.fileId!, options)
       await loadSaved()
     } catch (e) {
@@ -162,11 +203,18 @@ export default function ImportPage() {
     try {
       const params = nodes.length === 0 ? undefined : toProcessInput(nodes, values ?? {})
       if (commit) {
+        if (JSON.stringify(params ?? null) !== previewedParams) {
+          // The parameters changed after the preview: preview what would be committed first.
+          setReport(null)
+          notify.warning(t('imports.previewAgain'))
+          return
+        }
         const result = await commitImport(id, file.fileId, mapping(), params, notes || undefined)
         setOutcome(result)
         setReport(result.report)
       } else {
         setReport(await previewImport(id, file.fileId, mapping(), params))
+        setPreviewedParams(JSON.stringify(params ?? null))
       }
     } catch (e) {
       if (e instanceof InvalidJson) notify.error(t('process.invalidJson'))
@@ -198,6 +246,7 @@ export default function ImportPage() {
       }))
       notify.success(t('imports.mappingSaved'))
       await loadSaved()
+      setChosenSaved(mappingName.trim())
     } catch (e) {
       fail(e)
     }
@@ -208,9 +257,9 @@ export default function ImportPage() {
     const found = saved.find((m) => m.name === name)?.mapping
     if (!name || !found || !file) return
     const adjusted = found.options ?? {}
-    setOptions(adjusted)
-    setColumns(found.columns ?? {})
-    setConstants(found.constants ?? {})
+    changeOptions(adjusted)
+    changeColumns(found.columns ?? {})
+    changeConstants(found.constants ?? {})
     setMappingName(name)
     try {
       await inspect(file.fileId, adjusted)
@@ -253,7 +302,7 @@ export default function ImportPage() {
         <FileUpload
           variant="dropzone"
           accept={(entry.extensions ?? []).join(',')}
-          label={file ? file.name : t('imports.drop')}
+          label={file ? t('imports.replace', { file: file.name }) : t('imports.drop')}
           hint={extensions || undefined}
           disabled={busy}
           onUpload={upload}
@@ -272,7 +321,7 @@ export default function ImportPage() {
                       id={fieldIds('delimiter')}
                       className="w-28"
                       value={options.delimiter ?? format.delimiter ?? null}
-                      onChange={(value) => setOptions({ ...options, delimiter: value ?? undefined })}
+                      onChange={(value) => changeOptions({ ...options, delimiter: value ?? undefined })}
                       options={DELIMITERS.map((d) => ({ value: d, label: d === '\t' ? 'TAB' : d }))}
                       data-testid="import-delimiter"
                     />
@@ -283,8 +332,7 @@ export default function ImportPage() {
                       className="w-24"
                       scale={0}
                       allowNegative={false}
-                      value={String(options.skipLines ?? format.skipLines ?? '')}
-                      onChange={(value) => setOptions({ ...options, skipLines: value === '' ? 0 : Number(value) })}
+                      {...numberField('skipLines', options.skipLines ?? format.skipLines, 0)}
                       data-testid="import-skip"
                     />
                   </LayoutField>
@@ -293,7 +341,7 @@ export default function ImportPage() {
                       id={fieldIds('charset')}
                       className="w-40"
                       value={options.charset ?? format.charset ?? null}
-                      onChange={(value) => setOptions({ ...options, charset: value ?? undefined })}
+                      onChange={(value) => changeOptions({ ...options, charset: value ?? undefined })}
                       options={(format.charsets ?? []).map((c) => ({ value: c, label: c }))}
                     />
                   </LayoutField>
@@ -306,7 +354,7 @@ export default function ImportPage() {
                       id={fieldIds('sheet')}
                       className="w-40"
                       value={options.sheet ?? format.sheet ?? ''}
-                      onChange={(e) => setOptions({ ...options, sheet: e.target.value || undefined })}
+                      onChange={(e) => changeOptions({ ...options, sheet: e.target.value || undefined })}
                     />
                   </LayoutField>
                   <LayoutField id={fieldIds('header-row')} label={t('imports.layout.headerRow')}>
@@ -315,8 +363,7 @@ export default function ImportPage() {
                       className="w-24"
                       scale={0}
                       allowNegative={false}
-                      value={String(options.headerRow ?? format.headerRow ?? '')}
-                      onChange={(value) => setOptions({ ...options, headerRow: value === '' ? 1 : Number(value) })}
+                      {...numberField('headerRow', options.headerRow ?? format.headerRow, 1)}
                     />
                   </LayoutField>
                 </>
@@ -325,7 +372,7 @@ export default function ImportPage() {
                 <Switch
                   id={fieldIds('header')}
                   checked={options.header ?? format.header ?? true}
-                  onCheckedChange={(value) => setOptions({ ...options, header: value })}
+                  onCheckedChange={(value) => changeOptions({ ...options, header: value })}
                 />
                 <Label htmlFor={fieldIds('header')}>{t('imports.layout.header')}</Label>
               </div>
@@ -377,7 +424,7 @@ export default function ImportPage() {
                       className="min-w-48"
                       clearable
                       value={columns[field.name!] ?? null}
-                      onChange={(value) => setColumns({ ...columns, [field.name!]: value ?? undefined })}
+                      onChange={(value) => changeColumns({ ...columns, [field.name!]: value ?? undefined })}
                       options={(inspection.columns ?? []).map((c) => ({ value: c, label: c }))}
                       data-testid={`import-column-${field.name}`}
                     />
@@ -387,7 +434,7 @@ export default function ImportPage() {
                       aria-label={t('imports.constantOf', { field: field.label })}
                       className="min-w-40"
                       value={constants[field.name!] ?? ''}
-                      onChange={(e) => setConstants({ ...constants, [field.name!]: e.target.value })}
+                      onChange={(e) => changeConstants({ ...constants, [field.name!]: e.target.value })}
                       data-testid={`import-constant-${field.name}`}
                     />
                   </TableCell>

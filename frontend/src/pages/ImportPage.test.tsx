@@ -86,7 +86,7 @@ async function choose(name: string | RegExp, option: string) {
 
 /** Uploads a file through the drop area's file input. */
 async function upload(name = 'stock.csv') {
-  const input = await screen.findByLabelText(/Click or drop a file here/)
+  const input = await screen.findByTestId('import-upload')
   fireEvent.change(input, { target: { files: [new File(['Item,Qty\nA,5\n'], name, { type: 'text/csv' })] } })
 }
 
@@ -141,7 +141,8 @@ describe('ImportPage', () => {
     expect(steps()).toEqual(['complete', 'current', 'upcoming', 'upcoming'])
     // The suggested column is taken; the drop area names the file.
     expect(screen.getByRole('combobox', { name: 'Source column of Quantity' })).toHaveTextContent('Qty')
-    expect(screen.getByLabelText(/stock\.csv/)).toHaveAttribute('type', 'file')
+    // The drop area names the file and what dropping another does.
+    expect(screen.getByTestId('import-upload')).toHaveAccessibleName('stock.csv — click or drop a file to replace it')
     await expectAccessible()
 
     await choose('Source column of SKU', 'Item')
@@ -273,6 +274,90 @@ describe('ImportPage', () => {
       { period: '2026-01' }, undefined))
   })
 
+  it('lets a number of the layout be retyped, taking its fallback only when left empty', async () => {
+    uploadFile.mockResolvedValue({ fileId: 'f-1' })
+    inspectFile.mockResolvedValue(INSPECTION)
+    get.mockResolvedValue([])
+    renderPage('/imports/run?id=commerce.stock', <ImportPage />)
+    await upload()
+    const skip = await screen.findByLabelText('Lines to skip')
+    await userEvent.clear(skip)
+    await userEvent.type(skip, '1')
+    await userEvent.clear(skip)
+    // Empty while typing: not the fallback 0, so the next digit does not become "02".
+    expect(skip).toHaveValue('')
+    await userEvent.type(skip, '2')
+    expect(skip).toHaveValue('2')
+    await userEvent.click(screen.getByTestId('import-reread'))
+    await waitFor(() => expect(inspectFile).toHaveBeenLastCalledWith('commerce.stock', 'f-1', { skipLines: 2 }))
+
+    await userEvent.clear(skip)
+    await userEvent.tab()
+    expect(skip).toHaveValue('0')
+    await userEvent.click(screen.getByTestId('import-reread'))
+    await waitFor(() => expect(inspectFile).toHaveBeenLastCalledWith('commerce.stock', 'f-1', { skipLines: 0 }))
+  })
+
+  it('shows the saved mapping in use: none for a new file, the new name after saving', async () => {
+    uploadFile.mockResolvedValue({ fileId: 'f-1' })
+    inspectFile.mockResolvedValue(INSPECTION)
+    const savedMapping = { columns: { sku: 'Item' }, constants: {}, options: {} }
+    get.mockResolvedValue([{ name: 'shop', mapping: savedMapping }, { name: 'shop 2', mapping: savedMapping }])
+    put.mockResolvedValue(undefined)
+    renderPage('/imports/run?id=commerce.stock', <ImportPage />)
+    await upload()
+    await choose('Saved mappings', 'shop')
+    expect(screen.getByRole('combobox', { name: 'Saved mappings' })).toHaveTextContent('shop')
+
+    await userEvent.clear(screen.getByTestId('import-mapping-name'))
+    await userEvent.type(screen.getByTestId('import-mapping-name'), 'shop 2')
+    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Saved mappings' })).toHaveTextContent('shop 2'))
+
+    await upload('next.csv')
+    await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Saved mappings' })).toHaveTextContent('Choose…'))
+  })
+
+  it('drops the preview when the mapping changes, so nothing unpreviewed can be committed', async () => {
+    uploadFile.mockResolvedValue({ fileId: 'f-1' })
+    inspectFile.mockResolvedValue({ ...INSPECTION, issues: [] })
+    get.mockResolvedValue([])
+    previewImport.mockResolvedValue(REPORT)
+    renderPage('/imports/run?id=commerce.stock', <ImportPage />)
+    await upload()
+    await userEvent.click(await screen.findByTestId('import-preview'))
+    expect(await screen.findByTestId('import-commit')).toBeEnabled()
+
+    await userEvent.type(screen.getByTestId('import-constant-sku'), 'X')
+    expect(screen.queryByTestId('import-commit')).toBeNull()
+    expect(screen.queryByTestId('import-report')).toBeNull()
+    expect(steps()).toEqual(['complete', 'current', 'upcoming', 'upcoming'])
+    await userEvent.click(screen.getByTestId('import-preview'))
+    expect(await screen.findByTestId('import-commit')).toBeEnabled()
+    expect(previewImport).toHaveBeenLastCalledWith('commerce.stock', 'f-1',
+      expect.objectContaining({ constants: { sku: 'X' } }), undefined)
+    expect(commitImport).not.toHaveBeenCalled()
+  })
+
+  it('does not commit parameters that were changed after the preview', async () => {
+    uploadFile.mockResolvedValue({ fileId: 'f-4' })
+    inspectFile.mockResolvedValue({ ...INSPECTION, issues: [] })
+    get.mockResolvedValue([])
+    previewImport.mockResolvedValue(REPORT)
+    renderPage('/imports/run?id=jabiz.opening', <ImportPage />)
+    await upload('opening.xlsx')
+    const parameters = await screen.findByRole('group', { name: 'Parameters' })
+    await userEvent.type(within(parameters).getByLabelText(/period/), '2026-01')
+    await userEvent.click(screen.getByTestId('import-preview'))
+    await userEvent.type(within(parameters).getByLabelText(/period/), 'X')
+    await userEvent.click(await screen.findByTestId('import-commit'))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(screen.queryByTestId('import-commit')).toBeNull())
+    expect(commitImport).not.toHaveBeenCalled()
+    expect(previewImport).toHaveBeenCalledTimes(1)
+  })
+
   it('shows "not found" for an unknown import', () => {
     renderPage('/imports/run?id=nope', <ImportPage />)
     expect(screen.getByRole('heading', { level: 1, name: 'nope' })).toBeInTheDocument()
@@ -300,6 +385,24 @@ describe('ImportReportView', () => {
     expect(rows()).toHaveLength(1)
     expect(rows()[0]).toHaveTextContent('Duplicate')
     await expectAccessible()
+  })
+})
+
+describe('ImportReportView paging', () => {
+  beforeEach(async () => {
+    await act(() => i18n.changeLanguage('en'))
+  })
+
+  it('starts another choice of what to show at its first page', async () => {
+    const results = Array.from({ length: 120 }, (_, i) => ({
+      number: i + 1, location: `line ${i + 2}`, status: i < 60 ? 'ok' : 'error', values: { sku: `S${i + 1}` },
+    }))
+    renderPage('/', <ImportReportView entry={ENTRY as never} report={{ ...REPORT, results } as never} />)
+    const firstRow = () => within(screen.getByTestId('import-rows')).getAllByRole('row')[1]
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(firstRow()).toHaveTextContent('S51')
+    await userEvent.click(screen.getByRole('radio', { name: 'Errors' }))
+    expect(firstRow()).toHaveTextContent('S61')
   })
 })
 

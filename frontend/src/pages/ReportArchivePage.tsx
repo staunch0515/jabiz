@@ -15,7 +15,7 @@ import {
   type ColumnDef,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { api, unwrap } from '../api/client'
@@ -30,6 +30,25 @@ type Verification = components['schemas']['Verification']
 
 const FORMATS: ExportFormat[] = ['pdf', 'xlsx', 'csv']
 const LINK = 'h-auto px-1'
+
+/**
+ * The verdicts of the runs verified on this page. A cell reads them from here rather than from the column
+ * definitions: the table mounts its cells anew when its columns change, which would take focus from the "Verify"
+ * button the user just pressed.
+ */
+const VerdictsContext = createContext<Record<string, Verification>>({})
+
+/** A run's verdict, once verified. */
+function VerdictBadge({ runId }: { runId: string }) {
+  const { t } = useTranslation()
+  const verdict = useContext(VerdictsContext)[runId]
+  if (!verdict) return null
+  return (
+    <Badge variant={verdict.verdict === 'identical' ? 'success' : 'destructive'} data-testid={`verdict-${runId}`}>
+      {t(`reports.archive.verdict.${verdict.verdict}`)}
+    </Badge>
+  )
+}
 
 /**
  * Issued reports (docs/design/19-reports.md section 5): newest first, optionally of one template (`?template=`).
@@ -49,7 +68,7 @@ export default function ReportArchivePage() {
     if (runs.error) notify.error(runs.error instanceof ApiError ? runs.error.display : String(runs.error))
   }, [runs.error])
 
-  // Built again only when a verdict arrives: the table mounts its cells anew whenever its columns change.
+  // Stable while verdicts arrive (they come through VerdictsContext), so no cell is mounted anew.
   const columns = useMemo<ColumnDef<RunSummary, unknown>[]>(() => {
     const verify = async (runId: string) => {
       try {
@@ -113,33 +132,23 @@ export default function ReportArchivePage() {
       {
         id: 'status',
         header: t('reports.archive.status'),
-        cell: ({ row: { original: run } }) => {
-          const verdict = verdicts[run.runId ?? '']
-          return (
-            <span className="flex flex-wrap items-center gap-1">
-              {run.supersededBy && <Badge variant="secondary">{t('reports.archive.superseded')}</Badge>}
-              {!run.recomputable && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {/* A button, so the hint is reached with the keyboard too (focus opens the tooltip). */}
-                    <button type="button" className="focus-visible:ring-ring/50 rounded-md outline-none focus-visible:ring-[3px]">
-                      <Badge variant="outline">{t('reports.archive.notRecomputable')}</Badge>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('reports.archive.notRecomputableHint')}</TooltipContent>
-                </Tooltip>
-              )}
-              {verdict && (
-                <Badge
-                  variant={verdict.verdict === 'identical' ? 'success' : 'destructive'}
-                  data-testid={`verdict-${run.runId}`}
-                >
-                  {t(`reports.archive.verdict.${verdict.verdict}`)}
-                </Badge>
-              )}
-            </span>
-          )
-        },
+        cell: ({ row: { original: run } }) => (
+          <span className="flex flex-wrap items-center gap-1">
+            {run.supersededBy && <Badge variant="secondary">{t('reports.archive.superseded')}</Badge>}
+            {!run.recomputable && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* A button, so the hint is reached with the keyboard too (focus opens the tooltip). */}
+                  <button type="button" className="focus-visible:ring-ring/50 rounded-md outline-none focus-visible:ring-[3px]">
+                    <Badge variant="outline">{t('reports.archive.notRecomputable')}</Badge>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{t('reports.archive.notRecomputableHint')}</TooltipContent>
+              </Tooltip>
+            )}
+            <VerdictBadge runId={run.runId ?? ''} />
+          </span>
+        ),
       },
       {
         id: 'actions',
@@ -174,7 +183,7 @@ export default function ReportArchivePage() {
         ),
       },
     ]
-  }, [t, verdicts])
+  }, [t])
 
   return (
     <AdminPage
@@ -183,13 +192,15 @@ export default function ReportArchivePage() {
       description={template && <code className="font-mono text-xs">{template}</code>}
     >
       <div data-testid="report-archive">
-        <DataTable
-          label={t('reports.archive.title')}
-          columns={columns}
-          data={runs.data ?? []}
-          getRowId={(run) => run.runId ?? ''}
-          loading={runs.isLoading}
-        />
+        <VerdictsContext.Provider value={verdicts}>
+          <DataTable
+            label={t('reports.archive.title')}
+            columns={columns}
+            data={runs.data ?? []}
+            getRowId={(run) => run.runId ?? ''}
+            loading={runs.isLoading}
+          />
+        </VerdictsContext.Provider>
       </div>
     </AdminPage>
   )
