@@ -165,12 +165,18 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
-- 以 `@jabiz/ui` 构建的页面（15b-1 起：登录、单点登录回调、两个目录、流程表单、历史；15b-2 起：列表及其表单）用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：
-  数据 › 实体（› 历史）、流程 › 流程名），路由带 `handle: { ui: 'jabiz' }`，外壳据此不再把它们固定为亮色。
+- 以 `@jabiz/ui` 构建的页面（15b-1 起：登录、单点登录回调、两个目录、流程表单、历史；15b-2 起：列表及其表单；15c-1 起：报表目录、报表、报表存档、
+  导入目录、导入向导、导入记录）用 `AdminPage`（页头、唯一的 `<h1>`、面包屑：数据 › 实体（› 历史）、流程 › 流程名、报表 › 报表名、导入 › 导入名），
+  路由带 `handle: { ui: 'jabiz' }`，外壳据此不再把它们固定为亮色。
   列表（`DatasetListPage`）：`DataTable` 远程分页（每页 10 / 20 / 50 / 100，缺省 20）、排序（列表视图的默认排序；只有白名单内、且遮蔽字段只对持有权限者可排序；
   每列先升序、再降序、再取消）与 `FilterBar`（白名单字段，按语义类型给文本、选项、数值 / 时间 / 日期区间；不含敏感字段，遮蔽字段只给持有权限者），
   新的查询或排序回到第 1 页；请求由 TanStack Query 发出，翻页时保留上一页；操作列固定在右侧。列与筛选由 `meta/dataColumns.tsx` 生成，单元格（`meta/cells.ts`
-  的 `renderCell`：引用显示名、多语言回退、文件缩略图、遮蔽值"显示"）与旧的 ProTable 列（`meta/columns.ts`，报表页用到 15c）共用。
+  的 `renderCell`：引用显示名、多语言回退、文件缩略图、遮蔽值"显示"）只有这一份。
+  报表（`ReportPage`）：参数由 `SchemaForm` 生成，模板接受请求时点时两个 `DateTimePicker` 放在表单的 `children` 中；结果与列表页同样是 `DataTable`（每页缺省 50）
+  加 `FilterBar`，列与筛选同样由 `dataColumns` / `filterFields` 生成、请求同样由 `buildFilters` / `buildSorts` 按模板的白名单组成（金额右对齐、负数加括号）；
+  导出是 `DropdownMenu`，签发先经 `ConfirmDialog`。导入向导（`ImportPage`）：`Steps` 标出当前步骤；上传是 `FileUpload` 的拖放区；版式用 `Combobox` / `DecimalInput` / `Switch`；
+  每个字段的来源列是一个以"字段名 的来源列"命名的 `Combobox`；参数是隐藏了自身按钮的 `SchemaForm`（`id` + `hideSubmit`，由"预览"按钮或确认后的提交来提交）；
+  预览与提交的报告用 `DescriptionList`（多列）、`SegmentedControl` 与 `DataTable`；提交先经 `ConfirmDialog`。导入记录的详情在 `Sheet` 中。
   表单（`EntityFormDrawer`）是右侧的模态 `Sheet`，值由 react-hook-form 保存（`toFormValue` 给出文本：时间为存储的 ISO 时刻、日期为 `YYYY-MM-DD`），
   校验仍只走 `meta/validation.ts`；字段的问题以 `aria-describedby` 关联到输入框。子实体在父实体的 `Sheet` 之上再开一个 `Sheet`。流程表单由 `SchemaForm`（react-hook-form）生成：
   前端只检查必填与 `pattern`（纯函数 `checkInputs`），数字输入以 JSON 数字发送，必填的布尔值默认"否"；历史页的时间点（`asOf` / `knownAt`）写在地址中。
@@ -206,7 +212,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
   `src/auth/useIdleLock.test.tsx`、`src/components/MfaEnrollment.test.tsx`、`src/pages/LoginPage.test.tsx`（含提供方按钮与单点登录后的第二步）、
   `src/pages/OidcCallbackPage.test.tsx`、`src/auth/oidc.test.ts`（阶段 14g-2）；端到端 `e2e/mfa.spec.ts`
   （安全设置中绑定、改价时按要求输入验证码、用恢复码登录；CI 以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 运行，共用的管理员没有二次验证；并以 `JABIZ_ADMIN_ROLES=*`、`JABIZ_PORTAL_SELF_REGISTRATION=false` 运行，测试以自己的角色登录后台）。
-- 按权限显示明文、数据期限、访问审查（阶段 14g-3）：`src/meta/columns.test.ts`（遮蔽字段的筛选与排序只对持有权限者开放、"显示"按钮）、
+- 按权限显示明文、数据期限、访问审查（阶段 14g-3）：`src/meta/masked.test.ts`、`src/meta/dataColumns.test.ts`（遮蔽字段的筛选与排序只对持有权限者开放、"显示"按钮）、
   `src/meta/entityForm.test.ts`（没有权限时只读）、`src/components/MaskedValue.test.tsx`、`src/pages/AccessReviewPage.test.tsx`、`src/pages/AuditPage.test.tsx`（明文显示页签）。
 - 语言与区域（第 10 节）：`src/i18n/languages.test.ts`、`src/meta/format.test.ts`、`scripts/app-settings.test.ts`；后端 `LanguageSubsetTest`、`LanguageSubsetIT`。
 - 应用扩展（第 9 节）：`src/extension/registry.test.ts`（问题一次报告全部、平台路径、相对路径、菜单按权限过滤与空组、首页）；
@@ -266,7 +272,7 @@ jabizApp {
 
 | 方面 | 做法 |
 |---|---|
-| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录与报表、导入目录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
+| 自动检查 | `e2e/a11y.spec.ts`：`@axe-core/playwright` 以 `wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`、`wcag22aa` 规则检查登录页（含必填提示与身份提供方的拒绝）、数据目录、列表（含删除确认与时间点的日历）、新建表单（含字典的选项、生效时间的日历）、引用的选择（展开的选项）、历史（含日历、操作详情、撤销对话框）、流程目录、流程表单（含必填的选择及其展开的选项）、待办、报表目录、报表（含导出菜单与签发确认）、报表存档、导入目录、导入向导（含映射步骤与展开的来源列选项）、导入记录、审计、封存、保留、安全设置；每页先等到其内容出现（不是加载或错误状态）再检查；任何违规即失败（列出规则与元素），不设排除项 |
 | 对比度 | `App.tsx` 的 `ACCESSIBLE_THEME`：主色 `#0958d9`、错误色 `#cf1322`、说明与三级文字（及随之的图标色）`rgba(0,0,0,0.65)`、成功色 `#237804`、警告色 `#874d00`（其浅色背景与边框保持 Ant Design 的默认值，否则成功、警告标签的文字只有 2.7:1）、表格的文字空状态 `rgba(0,0,0,0.65)`（Ant Design 默认分别为 4.1、3.3、3.4、2.3、1.8、1.8:1）；预置标签（green、orange、gold、red、blue）的文字在 `index.css` 中加深一档。都 ≥ 4.5:1 |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `components/expandIcon` 的展开按钮，带"展开行 / 收起行"的名称（Ant Design 的按钮在这些 ProTable 中没有名称）；只给有 `expandedRowRender` 的表格，否则表格会被当作树。表单项中直接使用的 antd `Select` 换成 `components/AccessibleSelect`（去掉表单项给的、被放在外层元素上的 `aria-required`）；ProForm 的选择字段没有这个问题 |
 | 扩展 | 扩展的页面在同一个 `ConfigProvider` 下，主题自动适用；扩展的 e2e 以平台前端的依赖运行时可直接引用 `@axe-core/playwright`，规则集与上表相同 |
@@ -279,7 +285,8 @@ jabizApp {
   `runQuery` / `runProcess`、i18n 初始化（各部分以 `addMessages(命名空间, …)` 加入文案）、金额 / 日期 / 数字格式化（`setAmountUnit(币种, 标签)` 让应用的账本币种显示为标签，如 JPY 显示为 "Kudos"；无币种的数字与其他币种不变）、`UserName`）；
   `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
   `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`，15b-1 起另有 `Combobox`、`FilterBar`、`FileUpload`、`Timeline`、`DescriptionList`、`TagsInput`、
-  `CopyButton`、`PageState`、`Spinner`，日期控件可键入并可限定范围；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
+  `CopyButton`、`PageState`、`Spinner`，日期控件可键入并可限定范围；15c-1 起另有 `Steps`、`SegmentedControl`（shadcn 的 toggle-group 之上的单选组）、
+  `FileUpload` 的拖放区（`variant="dropzone"`）、`PageState` 的空状态（`kind` 即 `data-state`）、`DescriptionList` 的多列与复制按钮；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节），扩展的 lint 不再允许 antd
   （示范扩展在 15c 前豁免）。shadcn 组件只在 `packages/ui` 中生成或修改。
 - **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
   亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
