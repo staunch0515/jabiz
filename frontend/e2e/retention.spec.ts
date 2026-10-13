@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { signIn, test } from './support'
+import { option, signIn, test } from './support'
 
 /**
  * ROADMAP phase 14f-3: the retention report and the open-format export from the admin UI
@@ -14,8 +14,8 @@ test.describe('retention', () => {
 
     await page.getByTestId('export-datasets').click()
     await page.keyboard.type('LedgerAccount')
-    await page.locator('.ant-select-item-option').filter({ hasText: 'urn:jabiz:dataset:platform:LedgerAccount' })
-      .first().click()
+    await option(page, /urn:jabiz:dataset:platform:LedgerAccount\b/).first().click()
+    await expect(page.getByTestId('export-chosen')).toContainText('urn:jabiz:dataset:platform:LedgerAccount')
     const download = page.waitForEvent('download')
     await page.getByTestId('export-submit').click()
     expect((await download).suggestedFilename()).toMatch(/^jabiz-export-.*\.zip$/)

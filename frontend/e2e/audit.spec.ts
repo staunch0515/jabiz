@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, CARRIERS, insert, signIn, test, unique, update } from './support'
+import { adminToken, CARRIERS, dataRows, insert, signIn, test, unique, update } from './support'
 
 /**
  * ROADMAP phase 14f-1: a change to a record shows on the audit page with its values before and after, reached from
@@ -24,11 +24,11 @@ test.describe('audit', () => {
     await expect(page).toHaveURL(/\/audit\?entityType=.+&entityId=/)
 
     const records = page.getByTestId('audit-records')
-    await expect(records.locator('tbody tr.ant-table-row')).toHaveCount(2)
-    const update1 = records.locator('tbody tr.ant-table-row').first()
+    await expect(dataRows(records)).toHaveCount(2)
+    const update1 = dataRows(records).first()
     await expect(update1).toContainText('UPDATE')
     await expect(update1).toContainText('carrierName')
-    await update1.locator('.ant-table-row-expand-icon').click()
+    await update1.getByRole('button', { name: '展开行' }).click()
     const changes = page.locator('[data-testid^="audit-changes-"]')
     await expect(changes).toContainText('Audit One')
     await expect(changes).toContainText('Audit Two')

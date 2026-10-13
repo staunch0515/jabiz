@@ -2,6 +2,9 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { ADMIN, adminToken, CARRIERS, dataRows, datasetPath, dialog, entityForm, insert, pageRendered, signIn, test, unique } from './support'
 
+const PRODUCTS = 'urn:jabiz:dataset:default:Product'
+const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
+
 const SUPPLIERS = 'urn:jabiz:dataset:default:Supplier'
 const CERTIFICATIONS = 'urn:jabiz:dataset:default:SupplierCertification'
 
@@ -39,9 +42,8 @@ async function expectAccessible(page: Page, name: string) {
 }
 
 /**
- * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and the
- * pages built with @jabiz/ui (sign-in, catalogs, list and form sheet, history, process form, reports, imports) are
- * dark; the Ant Design pages keep the light tokens until they move (phase 15c-2).
+ * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and every
+ * page are dark: since phase 15c-2 all of them are built with @jabiz/ui.
  */
 async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, appearance: 'light' | 'dark') {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
@@ -135,26 +137,72 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
     ['/processes', 'process catalog', '[data-testid="process-PRICE_ADJUST-1"]'],
     ['/processes/PRICE_ADJUST/1', 'process form', '[data-testid="process-run"]'],
     ['/processes/APPROVAL_DECIDE/1', 'process form with a required choice', '[data-testid="process-run"]'],
-    ['/tasks', 'tasks', '.ant-list, .ant-empty'],
+    ['/tasks', 'tasks', '[data-testid="tasks"], [data-testid="tasks-empty"]'],
     ['/reports', 'report catalog', '[data-testid="report-commerce.stock_availability"]'],
     ['/reports/run?id=jabiz.ledger.account_balances', 'report', '[data-testid="report-not-run"]'],
     ['/reports/run?id=commerce.stock_availability', 'report with rows', '[data-testid="report-table"] table'],
     ['/reports/archive', 'report archive', '[data-testid="report-archive"] table'],
     ['/imports', 'import catalog', '[data-testid="import-commerce.stock"]'],
     ['/imports/runs', 'import history', '[data-testid="import-runs"] table'],
-    ['/audit', 'audit', '[data-testid="audit-records"] .ant-table-row'],
-    ['/integrity', 'integrity', '[data-testid="integrity-verify"]'],
+    ['/audit', 'audit', '[data-testid="audit-records"] [data-slot="data-table-row"]'],
+    ['/documents', 'documents', '[data-testid="documents"] table'],
+    ['/access-review', 'access review', '[data-testid="access-review-list"] table'],
+    ['/integrity', 'integrity', '[data-testid="integrity-checks"] table'],
     ['/retention', 'retention', '[data-testid="export-form"]'],
-    ['/account/security', 'account security', '[data-testid="session-item"]'],
+    ['/account/security', 'account security', '[data-testid="account-section-mfa"] [data-testid="mfa-status"]'],
     ['/security/sessions', 'sessions', '[data-testid="session-user-select"]'],
   ] as const) {
     await page.goto(path)
     await expect(page.locator(ready).first(), `${name} rendered`).toBeVisible()
-    await expect(page.locator('.ant-spin-spinning')).toHaveCount(0)
     await pageRendered(page)
-    await expect(page.locator('.ant-result-error, .ant-result-404, .ant-result-403')).toHaveCount(0)
+    if (path === '/account/security') await expect(page.getByTestId('session-item').first()).toBeVisible()
     await expectAccessible(page, at(name))
   }
+
+  // An issued document (phase 15c-2): its deliveries opened under the row, and the dialog that sends it.
+  const orderId = await issuedOrderConfirmation(request, token)
+  await page.goto(`/documents?subject=${orderId}`)
+  await expect(dataRows(page.getByTestId('documents'))).toHaveCount(1)
+  await page.getByRole('button', { name: '展开行' }).first().click()
+  await expect(page.locator('[data-testid^="document-deliveries-"]')).toBeVisible()
+  await expectAccessible(page, at('document deliveries'))
+  await page.locator('[data-testid^="document-send-"]').first().click()
+  await expect(dialog(page, '以邮件发送')).toBeVisible()
+  await expectAccessible(page, at('send document dialog'))
+  await page.keyboard.press('Escape')
+  await expect(dialog(page, '以邮件发送')).toHaveCount(0)
+
+  // The access review's issue confirmation and, once issued, its sign-off dialog.
+  await page.goto('/access-review')
+  await pageRendered(page)
+  await page.getByTestId('access-review-issue').click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  await expectAccessible(page, at('access report issue confirmation'))
+  await page.getByRole('alertdialog').getByRole('button', { name: '签发', exact: true }).click()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect(page.getByTestId('access-review-report')).toBeVisible()
+  await page.getByTestId('access-review-sign').click()
+  await expect(dialog(page, '签核审查')).toBeVisible()
+  await expectAccessible(page, at('access review sign-off dialog'))
+  await page.keyboard.press('Escape')
+  await expect(dialog(page, '签核审查')).toHaveCount(0)
+
+  // A verification's details, in a sheet.
+  await page.goto('/integrity')
+  await page.getByTestId('integrity-verify').click()
+  await expect(dialog(page, /#\d+/)).toBeVisible()
+  await expectAccessible(page, at('verification details'))
+  await page.keyboard.press('Escape')
+  await expect(dialog(page, /#\d+/)).toHaveCount(0)
+
+  // An import's details, in a sheet: a rejected attempt is recorded as well.
+  const runId = await rejectedImport(request, token)
+  await page.goto('/imports/runs?import=commerce.stock')
+  await page.getByTestId(`run-open-${runId}`).click()
+  await expect(page.getByTestId('import-run-detail')).toBeVisible()
+  await expectAccessible(page, at('import run details'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('import-run-detail')).toHaveCount(0)
 
   // A user's sessions (phase 16g), and the dialog that ends them.
   await page.goto('/security/sessions')
@@ -217,6 +265,44 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   await expect(page.getByRole('menuitemradio').first()).toBeVisible()
   await expectAccessible(page, at('appearance menu'))
   await page.keyboard.press('Escape')
+}
+
+/** An order with an issued confirmation (the document lists it under its subject); the order's id. */
+async function issuedOrderConfirmation(request: APIRequestContext, token: string): Promise<string> {
+  const code = unique('Y')
+  await insert(request, token, WAREHOUSES, { warehouseCode: code, warehouseName: `Warehouse ${code}`, active: true })
+  await insert(request, token, PRODUCTS, { sku: code, productName: `Product ${code}`, unitPrice: 250, active: true })
+  const headers = { Authorization: `Bearer ${token}` }
+  const received = await request.post('/api/processes/STOCK_RECEIVE/latest', {
+    headers, data: { warehouseCode: code, sku: code, quantity: 5 },
+  })
+  expect(received.status(), await received.text()).toBe(200)
+  const placed = await request.post('/api/processes/ORDER_PLACE/latest', {
+    headers, data: { orderNo: code, customerCode: code, warehouseCode: code, lines: [{ sku: code, quantity: 1 }] },
+  })
+  expect(placed.status(), await placed.text()).toBe(200)
+  const orderId = (await placed.json()).output.orderId as string
+  const issued = await request.post('/api/processes/ORDER_CONFIRMATION_ISSUE/latest', { headers, data: { orderId } })
+  expect(issued.status(), await issued.text()).toBe(200)
+  return orderId
+}
+
+/** A stock import refused for its unknown warehouse: nothing is imported, the attempt is recorded. Its run's id. */
+async function rejectedImport(request: APIRequestContext, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}` }
+  const code = unique('Z')
+  const uploaded = await request.post('/api/files?policy=app.import', {
+    headers,
+    multipart: { file: { name: 'a11y.csv', mimeType: 'text/csv', buffer: Buffer.from(`Receipt,Warehouse,SKU,Quantity\n${code},${code},${code},1\n`) } },
+  })
+  expect(uploaded.status(), await uploaded.text()).toBe(201)
+  const fileId = (await uploaded.json()).fileId as string
+  const committed = await request.post('/api/imports/commerce.stock/commit', {
+    headers,
+    data: { fileId, mapping: { columns: { receipt: 'Receipt', warehouse: 'Warehouse', sku: 'SKU', quantity: 'Quantity' } } },
+  })
+  expect(committed.status(), await committed.text()).toBe(422)
+  return (await committed.json()).report.runId as string
 }
 
 test.describe('accessibility', () => {
