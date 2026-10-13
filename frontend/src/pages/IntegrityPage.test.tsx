@@ -58,6 +58,8 @@ describe('IntegrityPage', () => {
     // The details open in a sheet named by the verification's number.
     const sheet = await screen.findByRole('dialog', { name: 'Verification #3' })
     const problems = await within(sheet).findByTestId('integrity-problems')
+    // The problems' table is named by the verification, not by one of its columns.
+    expect(within(problems).getByRole('table', { name: 'Verification #3' })).toBeTruthy()
     expect(within(problems).getByText('Changed')).toBeTruthy()
     expect(within(problems).getByText('ledger_entry_version')).toBeTruthy()
     expect(get).toHaveBeenCalledWith('/api/integrity/checks/{checkNo}', { params: { path: { checkNo: 3 } } })

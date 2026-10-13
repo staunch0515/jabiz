@@ -40,7 +40,7 @@ const KIND_VARIANTS: Record<string, 'destructive' | 'warning'> = {
 const fail = (e: unknown) => notify.error(e instanceof ApiError ? e.display : String(e))
 
 /** The problems of one verification. */
-export function ProblemTable({ problems }: { problems: IntegrityProblem[] }) {
+export function ProblemTable({ problems, label }: { problems: IntegrityProblem[]; label: string }) {
   const { t } = useTranslation()
   const page = useLocalPage(problems, 50)
   const columns = useMemo<ColumnDef<IntegrityProblem, unknown>[]>(
@@ -69,7 +69,7 @@ export function ProblemTable({ problems }: { problems: IntegrityProblem[] }) {
   return (
     <div data-testid="integrity-problems">
       <DataTable
-        label={t('integrity.kind')}
+        label={label}
         columns={columns}
         getRowId={(p, index) => `${p.kind}-${p.sealNo}-${p.table}-${p.key}-${index}`}
         {...page.paging}
@@ -254,7 +254,7 @@ export default function IntegrityPage() {
           {shown && (
             <div className="flex flex-col gap-4 px-4 pb-6">
               {shown.problems?.length ? (
-                <ProblemTable problems={shown.problems} />
+                <ProblemTable problems={shown.problems} label={t('integrity.checkTitle', { no: shown.check?.checkNo })} />
               ) : (
                 <Alert variant="success">
                   <CircleCheck aria-hidden />

@@ -123,7 +123,10 @@ describe('DocumentPanel', () => {
     fireEvent.click(await screen.findByTestId('document-send-d-1'))
     const dialog = await screen.findByRole('dialog', { name: 'Send by e-mail' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove ap@customer.example' }))
-    expect((within(dialog).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+    // With no address, sending only puts the cursor in the field.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    expect(runProcess).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Addresses'))
     const field = within(dialog).getByLabelText('Addresses')
     fireEvent.change(field, { target: { value: 'a@x.example; b@x.example' } })
     fireEvent.blur(field)
@@ -131,5 +134,17 @@ describe('DocumentPanel', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
       { runId: 'd-1', to: ['a@x.example', 'b@x.example', 'ap@customer.example'] }))
+  })
+
+  it('sends to an address typed but not yet taken, with one click', async () => {
+    get.mockResolvedValue([RUN])
+    runProcess.mockResolvedValue({ addresses: ['ap@customer.example', 'cfo@customer.example'], deliveryIds: [] })
+    renderPanel()
+    fireEvent.click(await screen.findByTestId('document-send-d-1'))
+    const dialog = await screen.findByRole('dialog', { name: 'Send by e-mail' })
+    fireEvent.change(within(dialog).getByLabelText('Addresses'), { target: { value: 'cfo@customer.example' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(runProcess).toHaveBeenCalledWith('DOCUMENT_SEND',
+      { runId: 'd-1', to: ['ap@customer.example', 'cfo@customer.example'] }))
   })
 })

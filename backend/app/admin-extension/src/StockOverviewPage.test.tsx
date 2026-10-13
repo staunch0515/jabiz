@@ -68,6 +68,20 @@ describe('StockOverviewPage', () => {
     )
   })
 
+  it('lists every warehouse again once the filter is emptied', async () => {
+    renderPage()
+    await screen.findByText('Bolt')
+    const filter = screen.getByLabelText('Filter by warehouse')
+    await userEvent.type(filter, 'W1{Enter}')
+    await waitFor(() => expect(calls.runQuery).toHaveBeenLastCalledWith('commerce.stock_availability', {
+      params: { warehouseCode: 'W1' }, limit: 100,
+    }))
+    await userEvent.clear(filter)
+    await waitFor(() => expect(calls.runQuery).toHaveBeenLastCalledWith('commerce.stock_availability', {
+      params: { warehouseCode: null }, limit: 100,
+    }))
+  })
+
   it('links to the generated list of receipts', async () => {
     renderPage()
     expect(await screen.findByTestId('receipts-link')).toHaveAttribute(

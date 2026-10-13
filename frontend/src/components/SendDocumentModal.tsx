@@ -15,7 +15,7 @@ import {
   UI_NAMESPACE,
 } from '@jabiz/ui'
 import { CircleAlert, Plus } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/problem'
 import { runProcess } from '../lib/calls'
@@ -32,7 +32,7 @@ export interface SendDocumentModalProps {
 
 /** Several addresses typed at once: separated by commas (the field's own), semicolons or spaces. */
 function splitAddresses(addresses: string[]): string[] {
-  return [...new Set(addresses.flatMap((a) => a.split(/[;\s]+/)).filter((a) => a !== ''))]
+  return [...new Set(addresses.flatMap((a) => a.split(/[,，、;\s]+/)).filter((a) => a !== ''))]
 }
 
 /**
@@ -47,15 +47,23 @@ export default function SendDocumentModal({ runId, recipients, onClose, onSent }
   const [addresses, setAddresses] = useState<string[]>(recipients)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The text typed but not yet taken as an address (no Enter or comma yet): "Send" takes it too.
+  const typed = useRef<HTMLInputElement>(null)
   // The document's own addresses taken out of the list, offered back with a button each.
   const removed = recipients.filter((address) => !addresses.includes(address))
 
   const send = async () => {
-    if (!runId || addresses.length === 0) return
+    if (!runId) return
+    const to = splitAddresses([...addresses, typed.current?.value ?? ''])
+    if (to.length === 0) {
+      typed.current?.focus()
+      return
+    }
+    setAddresses(to)
     setBusy(true)
     setError(null)
     try {
-      const output = await runProcess<{ addresses: string[] }>('DOCUMENT_SEND', { runId, to: addresses })
+      const output = await runProcess<{ addresses: string[] }>('DOCUMENT_SEND', { runId, to })
       notify.success(t('documents.sentOk', { count: output.addresses.length }))
       onSent?.(output.addresses)
       onClose()
@@ -86,6 +94,7 @@ export default function SendDocumentModal({ runId, recipients, onClose, onSent }
             <div data-testid="document-send-to">
               <TagsInput
                 id={fieldId}
+                ref={typed}
                 value={addresses}
                 onChange={(next) => setAddresses(splitAddresses(next))}
                 autoComplete="email"
@@ -118,7 +127,7 @@ export default function SendDocumentModal({ runId, recipients, onClose, onSent }
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
               {t('confirm.cancel', { ns: UI_NAMESPACE })}
             </Button>
-            <Button type="submit" disabled={busy || addresses.length === 0} data-testid="document-send-submit">
+            <Button type="submit" disabled={busy} data-testid="document-send-submit">
               {busy && <Spinner className="text-current" />}
               {t('documents.send')}
             </Button>

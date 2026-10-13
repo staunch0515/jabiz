@@ -118,7 +118,11 @@ export default function StockOverviewPage() {
           id={filterId}
           type="search"
           value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+          onChange={(event) => {
+            setFilter(event.target.value)
+            // Emptied (by hand or the field's clear button): every warehouse again, as antd's allowClear did.
+            if (event.target.value.trim() === '') setWarehouse(undefined)
+          }}
           placeholder={t('stock.filter')}
           aria-label={t('stock.filter')}
         />
