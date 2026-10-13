@@ -1,9 +1,9 @@
-import { PageContainer } from '@ant-design/pro-components'
+import { Badge, Card, CardContent, PageState } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
-import { Card, Empty, List, Space, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import ApprovalPanel from '../components/ApprovalPanel'
+import AdminPage from '../layout/AdminPage'
 import { formatDateTime } from '../meta/format'
 import { useMyTasks, type MyTask } from '../meta/hooks'
 
@@ -16,35 +16,43 @@ export default function TasksPage() {
   const tasks = useMyTasks()
   const queries = useQueryClient()
   const refresh = () => void queries.invalidateQueries({ queryKey: ['tasks'] })
+  const items = tasks.data?.tasks ?? []
 
   const item = (task: MyTask) => (
-    <List.Item key={task.taskId} data-testid={`task-${task.taskId}`}>
-      <Card size="small" style={{ width: '100%' }}>
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Space wrap>
+    <li key={task.taskId} data-testid={`task-${task.taskId}`}>
+      <Card className="py-4">
+        <CardContent className="flex flex-col gap-3 px-4">
+          <div className="flex flex-wrap items-center gap-2">
             {task.link && task.type !== 'approval' ? (
-              <Link to={task.link}><Typography.Text strong>{task.title}</Typography.Text></Link>
+              <Link to={task.link} className="text-primary font-medium hover:underline">
+                {task.title}
+              </Link>
             ) : (
-              <Typography.Text strong>{task.title}</Typography.Text>
+              <span className="font-medium">{task.title}</span>
             )}
-            {task.dueTime && <Tag color="orange">{t('tasks.due', { time: formatDateTime(task.dueTime) })}</Tag>}
-          </Space>
+            {task.dueTime && (
+              <Badge variant="warning">{t('tasks.due', { time: formatDateTime(task.dueTime) })}</Badge>
+            )}
+          </div>
           {task.type === 'approval' && task.subjectId && (
             <ApprovalPanel requestId={task.subjectId} onDecided={refresh} />
           )}
-        </Space>
+        </CardContent>
       </Card>
-    </List.Item>
+    </li>
   )
 
   return (
-    <PageContainer title={t('tasks.title')}>
-      <List
-        loading={tasks.isLoading}
-        dataSource={tasks.data?.tasks ?? []}
-        renderItem={item}
-        locale={{ emptyText: <Empty description={t('tasks.empty')} /> }}
-      />
-    </PageContainer>
+    <AdminPage title={t('tasks.title')}>
+      {tasks.isLoading ? (
+        <PageState kind="loading" />
+      ) : items.length === 0 ? (
+        <PageState kind="empty" title={t('tasks.empty')} data-testid="tasks-empty" />
+      ) : (
+        <ul className="flex flex-col gap-3" data-testid="tasks">
+          {items.map(item)}
+        </ul>
+      )}
+    </AdminPage>
   )
 }

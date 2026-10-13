@@ -1,5 +1,21 @@
-import { Alert, App, Modal, Select, Typography } from 'antd'
-import { useState } from 'react'
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Label,
+  notify,
+  Spinner,
+  TagsInput,
+  UI_NAMESPACE,
+} from '@jabiz/ui'
+import { CircleAlert, Plus } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/problem'
 import { runProcess } from '../lib/calls'
@@ -14,6 +30,11 @@ export interface SendDocumentModalProps {
   onSent?: (addresses: string[]) => void
 }
 
+/** Several addresses typed at once: separated by commas (the field's own), semicolons or spaces. */
+function splitAddresses(addresses: string[]): string[] {
+  return [...new Set(addresses.flatMap((a) => a.split(/[,，、;\s]+/)).filter((a) => a !== ''))]
+}
+
 /**
  * Sends an issued document by e-mail through `DOCUMENT_SEND` (docs/design/22-documents.md section 5): its kept PDF
  * attached, one message per address. The addresses its data names are offered; whether another address is allowed
@@ -22,18 +43,28 @@ export interface SendDocumentModalProps {
  */
 export default function SendDocumentModal({ runId, recipients, onClose, onSent }: SendDocumentModalProps) {
   const { t } = useTranslation()
-  const { message } = App.useApp()
+  const fieldId = useId()
   const [addresses, setAddresses] = useState<string[]>(recipients)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The text typed but not yet taken as an address (no Enter or comma yet): "Send" takes it too.
+  const typed = useRef<HTMLInputElement>(null)
+  // The document's own addresses taken out of the list, offered back with a button each.
+  const removed = recipients.filter((address) => !addresses.includes(address))
 
   const send = async () => {
     if (!runId) return
+    const to = splitAddresses([...addresses, typed.current?.value ?? ''])
+    if (to.length === 0) {
+      typed.current?.focus()
+      return
+    }
+    setAddresses(to)
     setBusy(true)
     setError(null)
     try {
-      const output = await runProcess<{ addresses: string[] }>('DOCUMENT_SEND', { runId, to: addresses })
-      message.success(t('documents.sentOk', { count: output.addresses.length }))
+      const output = await runProcess<{ addresses: string[] }>('DOCUMENT_SEND', { runId, to })
+      notify.success(t('documents.sentOk', { count: output.addresses.length }))
       onSent?.(output.addresses)
       onClose()
     } catch (e) {
@@ -44,27 +75,65 @@ export default function SendDocumentModal({ runId, recipients, onClose, onSent }
   }
 
   return (
-    <Modal
-      open={runId !== undefined}
-      title={t('documents.sendTitle')}
-      okText={t('documents.send')}
-      onOk={() => void send()}
-      okButtonProps={{ disabled: addresses.length === 0, loading: busy }}
-      onCancel={onClose}
-      destroyOnHidden
-    >
-      <Typography.Paragraph type="secondary">{t('documents.recipientsHint')}</Typography.Paragraph>
-      <Select
-        mode="tags"
-        style={{ width: '100%' }}
-        value={addresses}
-        onChange={setAddresses}
-        tokenSeparators={[',', ';', ' ']}
-        options={recipients.map((address) => ({ value: address, label: address }))}
-        aria-label={t('documents.recipients')}
-        data-testid="document-send-to"
-      />
-      {error && <Alert style={{ marginTop: 12 }} type="error" showIcon message={error} data-testid="document-send-error" />}
-    </Modal>
+    <Dialog open={runId !== undefined} onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <form
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void send()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('documents.sendTitle')}</DialogTitle>
+            <DialogDescription>{t('documents.recipientsHint')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={fieldId}>{t('documents.recipients')}</Label>
+            <div data-testid="document-send-to">
+              <TagsInput
+                id={fieldId}
+                ref={typed}
+                value={addresses}
+                onChange={(next) => setAddresses(splitAddresses(next))}
+                autoComplete="email"
+              />
+            </div>
+            {removed.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {removed.map((address) => (
+                  <Button
+                    key={address}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddresses([...addresses, address])}
+                  >
+                    <Plus aria-hidden />
+                    {address}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+          {error && (
+            <Alert variant="destructive" data-testid="document-send-error">
+              <CircleAlert aria-hidden />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              {t('confirm.cancel', { ns: UI_NAMESPACE })}
+            </Button>
+            <Button type="submit" disabled={busy} data-testid="document-send-submit">
+              {busy && <Spinner className="text-current" />}
+              {t('documents.send')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,4 +1,5 @@
-import { Alert, App, Button, Input, Space } from 'antd'
+import { Alert, AlertDescription, Button, notify, Spinner, Textarea } from '@jabiz/ui'
+import { CircleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/problem'
@@ -18,7 +19,6 @@ export interface ApprovalPanelProps {
  */
 export default function ApprovalPanel({ requestId, onDecided }: ApprovalPanelProps) {
   const { t } = useTranslation()
-  const { message } = App.useApp()
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState<'APPROVE' | 'REJECT' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +32,7 @@ export default function ApprovalPanel({ requestId, onDecided }: ApprovalPanelPro
         decision,
         reason: reason.trim() || undefined,
       })
-      message.success(t(decision === 'APPROVE' ? 'approval.approved' : 'approval.rejected'))
+      notify.success(t(decision === 'APPROVE' ? 'approval.approved' : 'approval.rejected'))
       onDecided?.(output.status)
     } catch (e) {
       setError(e instanceof ApiError ? e.display : String(e))
@@ -42,26 +42,37 @@ export default function ApprovalPanel({ requestId, onDecided }: ApprovalPanelPro
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} data-testid={`approval-panel-${requestId}`}>
-      <Input.TextArea
+    <div className="flex w-full flex-col gap-2" data-testid={`approval-panel-${requestId}`}>
+      <Textarea
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder={t('approval.reason')}
         aria-label={t('approval.reason')}
         maxLength={500}
-        autoSize={{ minRows: 1, maxRows: 4 }}
+        rows={2}
+        className="min-h-9"
       />
-      {error && <Alert type="error" showIcon message={error} data-testid="approval-error" />}
-      <Space>
-        <Button type="primary" loading={busy === 'APPROVE'} disabled={busy !== null}
-          onClick={() => void decide('APPROVE')} data-testid="approval-approve">
+      {error && (
+        <Alert variant="destructive" data-testid="approval-error">
+          <CircleAlert aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy !== null} onClick={() => void decide('APPROVE')} data-testid="approval-approve">
+          {busy === 'APPROVE' && <Spinner className="text-current" />}
           {t('approval.approve')}
         </Button>
-        <Button danger loading={busy === 'REJECT'} disabled={busy !== null || !reason.trim()}
-          onClick={() => void decide('REJECT')} data-testid="approval-reject">
+        <Button
+          variant="destructive"
+          disabled={busy !== null || !reason.trim()}
+          onClick={() => void decide('REJECT')}
+          data-testid="approval-reject"
+        >
+          {busy === 'REJECT' && <Spinner className="text-current" />}
           {t('approval.reject')}
         </Button>
-      </Space>
-    </Space>
+      </div>
+    </div>
   )
 }

@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, confirm, dataRows, datasetPath, insert, signIn, test, unique } from './support'
+import { adminToken, confirm, dataRows, datasetPath, dialog, insert, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -37,7 +37,7 @@ test('an order confirmation is issued from its row, saved as issued and verified
   await page.getByRole('link', { name: '单据' }).first().click()
   await expect(page).toHaveURL(/\/documents$/)
   await page.goto(`/documents?subject=${orderId}`)
-  const row = page.locator('.ant-table-tbody tr.ant-table-row')
+  const row = dataRows(page.getByTestId('documents'))
   await expect(row).toHaveCount(1)
   await expect(row.first()).toContainText(code)
 
@@ -73,6 +73,6 @@ test('sending a document offers the address it names and shows the refusal of th
   await page.goto(`/documents?subject=${orderId}`)
   await page.locator('[data-testid^="document-send-"]').first().click()
   await expect(page.getByTestId('document-send-to')).toContainText(`${code.toLowerCase()}@customers.example.com`)
-  await page.locator('.ant-modal').getByRole('button', { name: /发\s*送/ }).click()
+  await dialog(page, '以邮件发送').getByRole('button', { name: '发送', exact: true }).click()
   await expect(page.getByTestId('document-send-error')).toContainText('邮件未启用')
 })

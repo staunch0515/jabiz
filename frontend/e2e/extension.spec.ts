@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { adminToken, insert, signIn, test, unique } from './support'
+import { adminToken, dataRows, insert, signIn, test, unique } from './support'
 
 const PRODUCTS = 'urn:jabiz:dataset:default:Product'
 const WAREHOUSES = 'urn:jabiz:dataset:default:Warehouse'
@@ -28,7 +28,7 @@ test('the application page lists stock and receives goods', async ({ page, reque
 
   await page.getByLabel('按仓库筛选').fill(code)
   await page.getByLabel('按仓库筛选').press('Enter')
-  const rows = page.getByTestId('stock-table').locator('tr.ant-table-row')
+  const rows = dataRows(page.getByTestId('stock-table'))
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`Product ${code}`)
   await expect(rows.first()).toContainText('5')
@@ -78,5 +78,5 @@ test('a user without the permission has no menu entry and the server refuses the
   await page.goto('/commerce/stock')
   expect((await refused).status()).toBe(403)
   await expect(page.getByTestId('receive-form')).toHaveCount(0)
-  await expect(page.getByTestId('stock-table').locator('tr.ant-table-row')).toHaveCount(0)
+  await expect(dataRows(page.getByTestId('stock-table'))).toHaveCount(0)
 })

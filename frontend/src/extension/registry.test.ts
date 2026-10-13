@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defineExtension } from './api'
-import { checkedExtension, extensionMenu, extensionProblems, homePath } from './registry'
+import { checkedExtension, extensionMenu, extensionProblems, extensionRoutes, homePath } from './registry'
 
 const label = (key: string) => `<${key}>`
 
@@ -110,5 +110,16 @@ describe('homePath', () => {
   it('is the data catalog unless the extension names a home', () => {
     expect(homePath({})).toBe('/data')
     expect(homePath({ home: '/gl' })).toBe('/gl')
+  })
+})
+
+describe('extensionRoutes', () => {
+  it('marks the routes as built with @jabiz/ui, keeping a handle of their own', () => {
+    const routes = extensionRoutes({
+      routes: [{ path: '/gl', handle: { crumb: 'GL' }, children: [{ path: 'journals' }] }, { path: '/stock' }],
+    })
+    expect(routes.map((r) => r.handle)).toEqual([{ crumb: 'GL', ui: 'jabiz' }, { ui: 'jabiz' }])
+    expect(routes[0].children).toEqual([{ path: 'journals' }])
+    expect(extensionRoutes({})).toEqual([])
   })
 })

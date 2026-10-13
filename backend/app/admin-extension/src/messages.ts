@@ -16,6 +16,9 @@ export const messages = {
       received: '已入库：{{sku}} 在 {{warehouse}} 现有 {{onHand}}',
       empty: '没有库存。',
       receipts: '入库记录',
+      search: '查询',
+      required: '请填写。',
+      atLeastOne: '至少为 1。',
     },
   },
   ja: {
@@ -34,6 +37,9 @@ export const messages = {
       received: '入庫しました：{{warehouse}} の {{sku}} は {{onHand}}',
       empty: '在庫がありません。',
       receipts: '入庫記録',
+      search: '検索',
+      required: '入力してください。',
+      atLeastOne: '1 以上にしてください。',
     },
   },
   en: {
@@ -52,6 +58,9 @@ export const messages = {
       received: 'Received: {{sku}} in {{warehouse}} now {{onHand}} on hand',
       empty: 'No stock.',
       receipts: 'Receipts',
+      search: 'Search',
+      required: 'Required.',
+      atLeastOne: 'At least 1.',
     },
   },
 }
