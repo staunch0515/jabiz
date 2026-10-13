@@ -20,7 +20,7 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c-1 已完成；15c-2、15d 计划中 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c-1、15c-2 已完成；15d 计划中 |
 | 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；16g 已完成（PR 待创建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
@@ -1268,11 +1268,11 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 15d 收紧 e2e 中 `/查\s*询/` 一类名称；`dayjs` 不删，只去掉 `processForm` 中为旧表单保留的 Dayjs 分支）。
 
 **验收标准**（15c，对应 D34 第 6 条）
-- [ ] 报表、导入、旧适配、待办与单据、治理、账户各组文件以及示范扩展都不再引用 antd 系包；`SchemaInputs`、`meta/columns.ts`、`expandIcon`、`AccessibleSelect` 已删除；antd 只剩 `App.tsx`、`main.tsx`、`index.css` 这些外壳部分。
-- [ ] 这些页面在暗色外观下为暗色，有 `AdminPage` 的面包屑和唯一的 `<h1>`。
-- [ ] 改写前后行为不变，逐条有 Vitest 覆盖；`ApprovalPanel`、`DocumentPanel` 的 props 不变；`pnpm ext:check` 在取消豁免后通过。
-- [ ] e2e 全部通过，涉及这些页面的地方不再使用 `.ant-*`；`a11y.spec` 对这些页面和弹出层在亮、暗两种外观下无违规。
-- [ ] 账户安全页由各节组成，`MfaSettings` 由后台与门户共用。
+- [x] 报表、导入、旧适配、待办与单据、治理、账户各组文件以及示范扩展都不再引用 antd 系包；`SchemaInputs`、`meta/columns.ts`、`expandIcon`、`AccessibleSelect` 已删除；antd 只剩 `App.tsx`、`main.tsx`、`index.css` 这些外壳部分。
+- [x] 这些页面在暗色外观下为暗色，有 `AdminPage` 的面包屑和唯一的 `<h1>`（示范扩展用 `PageHeader`）。
+- [x] 改写前后行为不变，逐条有 Vitest 覆盖；`ApprovalPanel`、`DocumentPanel` 的 props 不变；`pnpm ext:check` 在取消豁免后通过。
+- [x] e2e 全部通过，涉及这些页面的地方不再使用 `.ant-*`；`a11y.spec` 对这些页面和弹出层在亮、暗两种外观下无违规。
+- [x] 账户安全页由各节组成，`MfaSettings` 由后台与门户共用。
 
 #### 15c-1（3–3.5 天）：报表与导入
 
@@ -1318,13 +1318,62 @@ shadcn 组件是源码，升级需手工合入（记在 `packages/ui/README.md`�
 （ProComponents 的表单与表格、antd 的 `Steps`、`Upload`、`Segmented`、`Descriptions` 不再被引用；其余 antd 由 15c-2 的页面使用，15d 删除后回落）。
 
 **15c-1 已知问题**
-- 待办、单据、审计、访问审查、防篡改、保留、账户安全与示范扩展仍是 antd（15c-2），e2e 中这些页面仍用 `.ant-*`。
+- 待办、单据、审计、访问审查、防篡改、保留、账户安全与示范扩展仍是 antd（15c-2），e2e 中这些页面仍用 `.ant-*`。（15c-2 已解决）
 - 有参数的导入在确认提交时若参数已改为无效，问题显示在字段下，但焦点回到"导入"按钮（确认框关闭时还焦点），不在出错的字段上；
   改了参数而未重新预览时，提交被拒并提示，报告撤下（参数表单不报告每次键入，所以不能像映射那样在改动时立即撤下）。
 
 #### 15c-2（3–3.5 天）：其余页面与示范扩展
 
-计划中（见上表）。
+**要求**
+1. **待办与审批**：`TasksPage` 是 `Card` 列表（空状态 `PageState`）；`ApprovalPanel` 用 `Textarea` 加两个按钮，驳回必须填意见，props 不变。
+2. **单据**：`DocumentsPage` 用 `DataTable`，展开行用 `renderExpanded`（按钮名称"展开行 / 收起行"由 `DataTable` 给出）；`DocumentDeliveries` 用 `Table` / `Badge` / `Tooltip`；
+   `SendDocumentModal` 用 `Dialog`；`DocumentPanel` 的 props 不变；删除 `expandIcon.tsx`。
+3. **治理**：审计（`Tabs`、`FilterBar`、远程分页的 `DataTable` 加展开行，按记录筛选时一并列出审批）；访问审查（两个 `DatePicker`、签发确认、签核 `Dialog`）；
+   防篡改（`DescriptionList`，哈希带复制按钮；校验后刷新；详情在 `Sheet` 中，标题含 `#` 编号）；保留与导出（`DataTable`；导出表单 react-hook-form，
+   数据视图 `Combobox`、时点 `DateTimePicker`、"附报表 PDF"的 `Checkbox`）；删除 `AccessibleSelect.tsx`。
+4. **账户安全**：由 `ACCOUNT_SECTIONS` 声明的各节组成；两步验证一节是 `@jabiz/ui` 的 auth 积木 `MfaSettings`（后台与示范门户共用）；保留 16g 的会话一节。
+5. 上述 7 条路由加 `handle: JABIZ_UI`；扩展的路由由 `extension/registry.ts` 统一加上。
+6. **示范扩展**改用 `@jabiz/ui`，`extension-lint.mjs` 取消豁免。
+7. e2e：`audit`、`documents`、`integrity`、`retention`、`extension` 不再用 `.ant-*`；`a11y.spec` 中待办、审计、安全设置改用 testid，并新增单据（展开的发送记录、发送对话框）、
+   访问审查（签发确认、签核对话框）、防篡改的校验详情、导入记录的详情 `Sheet`。
+
+**15c-2 状态**：☑ 已完成（分支 `1.2/phase-15c2-admin-pages`，PR 待建）。
+`pnpm lint`、`typecheck`、`test`（94 个文件、690 个用例）、`build`、`check:api`、`ext:check`、`app:check ../backend/app/portal` 通过；
+e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`./gradlew :app:check` 通过（含前端构建与 `platformCheck`）。
+
+**15c-2 与计划的出入**
+- 发送单据的地址用 `TagsInput` 而不是 `Combobox`：原来的 antd `Select mode="tags"` 可以填多个、也可以填单据之外的地址，`Combobox` 只能单选且不能键入新值。
+  单据中的地址预填，移除的地址以按钮列出、一键加回；分号与空格分隔的多个地址（原来的 `tokenSeparators`）由页面拆开。
+- 保留页的导出：`Combobox` 每选一项即加入下方的已选列表（`Badge`，各带移除按钮），因为要选多个数据视图；至少一个（新文案）。报表的签发日是两个 `DatePicker`，
+  两端都可以不填（原来的 `RangePicker` 一旦使用两端必填）。
+- 单据页不分页（原来也是 `pagination={false}`，取最近 200 条）：`GET /api/documents/runs` 没有 `offset`，计划中的"远程分页"需要后端改动，不在本阶段。
+- 访问审查：期间是"首日 / 末日"两个 `DatePicker`（新文案），首日改到末日之后时末日随之移动，末日不能早于首日；签发前先确认（新文案：时点与"签发后不能撤回"）；
+  测试 id `access-review-sign` 现在是打开签核对话框的按钮，提交按钮是 `access-review-sign-submit`；意见必填的提示在提交时显示，并显示已输入的字数（原来的 `showCount`）。
+- 审计：筛选是 `FilterBar`（时间区间可只填一端，原来两端必填）；地址中的筛选值作为初值显示在筛选栏中；每页 20 / 50 / 100，缺省 50（与原来相同）。
+- `MfaSettings` 不用 TanStack Query（`@jabiz/ui` 不依赖它），与 `SessionList` 一样以 `useState` / `useEffect` 读状态；三个调用（状态、开始、确认）缺省走 `/api/auth/mfa*`，可经属性替换；
+  绑定完成后自己再读一次状态并调用 `onEnrolled`（后台据此让查询键 `['auth','mfa']` 失效）。状态文案移到命名空间 `auth`（`mfa.on` / `off` / `recoveryLeft`，三语）；
+  后台的 `mfa.enrolled` / `notEnrolled` / `recoveryLeft` 与门户的 `account.mfaOn` / `mfaOff` 删除（门户的状态句因此用平台的说法"两步验证"，节标题仍是门户的"二次验证"）。
+- `ACCOUNT_SECTIONS` 的每项是 `{ name, title(t), Content }`；每节的标题是 `<h2>`，节以它命名（`aria-labelledby`）。
+- 扩展路由的标记：`registry.ts` 新增 `extensionRoutes(extension)`，给顶层路由加 `handle.ui`（保留扩展自己的 `handle` 中的其他键；外壳按任一匹配的路由判断，所以子路由不必加）。
+  `extension-lint.mjs` 删除 `ANT_DESIGN_EXEMPT`，`extensionRulesFor` 保留（`ext.mjs` 用它），对任何扩展返回同一套规则。
+- 示范扩展：入库记录的链接放在页头的操作区（按钮样式）；筛选是 `role="search"` 的表单，加"查询"按钮（Enter 照常提交）；数量在前端检查必填且 ≥ 1（原来 `InputNumber` 的 `min`），
+  新增文案 `stock.search` / `required` / `atLeastOne`（三语）；页面根元素带 `UI_SCOPE`（15d 前自己写的元素也要 preflight，见扩展指南）。
+- 删除不再使用的文案 `app.expandRow` / `collapseRow`（`DataTable` 的展开按钮用命名空间 `ui` 的同名文案）。
+- 防篡改：校验记录与问题表在浏览器中分页（20 / 50 条，与原来相同）；"立即校验"后刷新记录并在 `Sheet` 中打开这次校验（原来是抽屉）。
+- e2e：`a11y.spec` 的循环不再检查 `.ant-spin-spinning` 与 `.ant-result-*`（循环中已没有 antd 页面，`pageRendered` 判断 `PageState`）；安全设置另等会话列表出现。
+  新增的检查自己准备数据：经 API 下单并签发确认书（单据页），以一个仓库不存在的 CSV 经 `POST /api/imports/commerce.stock/commit` 留下一条被拒的导入记录（详情 `Sheet`）；
+  访问审查每次运行会签发一份访问权限报表（测试只增不删数据，可重复运行）。
+
+**15c-2 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 3 047.7 kB / 935.8 kB、CSS 84.0 kB / 13.9 kB；之后 JS 1 572.7 kB / 484.1 kB、CSS 84.1 kB / 13.9 kB。
+页面不再引用 ProComponents 与 antd 的组件，只剩外壳中的 `ConfigProvider`、`App` 与语言包，其余都被摇树去掉，已低于 15a 之前（2 651.0 kB / 819.2 kB）；
+`chunkSizeWarningLimit: 3000` 留给 15d 与依赖一起处理。
+
+**15c-2 已知问题**
+- antd、ProComponents、icons、cssinjs 与 React 19 补丁仍在依赖与外壳中（`App.tsx` 的 provider、`main.tsx`、`index.css` 的层 `antd` 与 `.ant-tag` 规则），由 15d 删除；
+  路由的 `handle: JABIZ_UI` 现在标在全部页面上，15d 连同开关一起去掉。
+- preflight 仍是作用域的（`.jabiz-ui`）：扩展自己写的元素要放进 `UI_SCOPE` 容器才有重置（15d 改为全局）。
+- 账户设置中的邮件订阅与语言仍未加入（按确认不放进 15c），由单独的小项按 `ACCOUNT_SECTIONS` 加节。
+- e2e 中仍有为 antd 两字按钮写的 `/查\s*询/` 一类名称（15d 收紧）。
 
 ### 15d 删除 antd（2–2.5 天）
 
@@ -2065,7 +2114,7 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 **已知问题**
 - 每次刷新都记下地址与 UA，令牌表的受控清除尚未实现（10 §2）。
 - 吊销与轮换并发时，已签发的新访问令牌可能多活到期满（10 §15.9）。
-- 后台账户安全页仍是 antd（15c 迁移），会话卡片里的 `SessionList` 已是 `@jabiz/ui`。
+- 后台账户安全页仍是 antd（15c 迁移），会话卡片里的 `SessionList` 已是 `@jabiz/ui`。（15c-2 已迁移：会话是 `ACCOUNT_SECTIONS` 中的一节）
 
 **评审后的补充（同一分支）**
 - step-up 与本人的会话接口先确认令牌的 `sid` 所指的族尚未结束，否则 401 `UNAUTHENTICATED`：被吊销会话的访问令牌不能靠 step-up 续命，也不能吊销别的会话（`MfaIT`、`SessionRevokeIT`）。
