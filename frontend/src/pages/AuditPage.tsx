@@ -124,7 +124,7 @@ function EntryId({ id, label }: { id?: string; label: string }) {
   if (!id) return null
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="break-all">{id}</span>
+      <span className="min-w-0 break-all">{id}</span>
       <CopyButton value={id} label={t('copy.copyValue', { ns: UI_NAMESPACE, value: label })} />
     </span>
   )
