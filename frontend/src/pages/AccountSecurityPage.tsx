@@ -1,60 +1,66 @@
-import { PageContainer } from '@ant-design/pro-components'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Card, Spin, Typography } from 'antd'
+import { AUTH_NAMESPACE, Card, CardContent, CardHeader, CardTitle, ChangePasswordForm, MfaSettings, SessionList } from '@jabiz/ui'
+import { useQueryClient } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AUTH_NAMESPACE, ChangePasswordForm, SessionList } from '@jabiz/ui'
-import { api, unwrap } from '../api/client'
-import MfaEnrollment from '../components/MfaEnrollment'
+import AdminPage from '../layout/AdminPage'
+
+/** A section of the security page: its heading and content, and the `name` of its test id and heading id. */
+export interface AccountSection {
+  name: string
+  title: (t: (key: string, options?: Record<string, unknown>) => string) => string
+  Content: () => ReactNode
+}
+
+function MfaSection() {
+  const queryClient = useQueryClient()
+  // Other parts of the admin read the status too (step-up): they read it again once it is set up.
+  return <MfaSettings className="max-w-2xl" onEnrolled={() => void queryClient.invalidateQueries({ queryKey: ['auth', 'mfa'] })} />
+}
 
 /**
- * The signed-in user's two-step verification (docs/design/10-security.md section 9), own password (section 15.8,
- * decision D43 item 3) and sessions (section 15.9). Phase 15c moves the page itself to @jabiz/ui.
+ * The sections of the security page, in order (phase 15c-2): a new section of the user's own account (a mail
+ * preference, the language) is one more entry here, a building block of @jabiz/ui where an application's account page
+ * can use it too.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export const ACCOUNT_SECTIONS: AccountSection[] = [
+  { name: 'mfa', title: (t) => t('mfa.title'), Content: MfaSection },
+  {
+    name: 'password',
+    title: (t) => t('password.changeTitle', { ns: AUTH_NAMESPACE }),
+    Content: () => <ChangePasswordForm className="max-w-md" />,
+  },
+  {
+    name: 'sessions',
+    title: (t) => t('sessions.title', { ns: AUTH_NAMESPACE }),
+    Content: () => <SessionList className="max-w-3xl" />,
+  },
+]
+
+/**
+ * The signed-in user's own security (docs/design/10-security.md): two-step verification (section 9), the password
+ * (section 15.8, decision D43 item 3) and the sessions (section 15.9), each a section of {@link ACCOUNT_SECTIONS}.
  */
 export default function AccountSecurityPage() {
   const { t } = useTranslation()
-  const { t: tAuth } = useTranslation(AUTH_NAMESPACE)
-  const queryClient = useQueryClient()
-  const status = useQuery({
-    queryKey: ['auth', 'mfa'],
-    queryFn: () => unwrap(api.GET('/api/auth/mfa')),
-  })
-
   return (
-    <PageContainer title={t('app.security')}>
-      <Card title={t('mfa.title')}>
-        {status.isLoading && <Spin />}
-        {status.data?.enrolled ? (
-          <Alert
-            type="success"
-            showIcon
-            data-testid="mfa-status"
-            message={t('mfa.enrolled')}
-            description={t('mfa.recoveryLeft', { count: status.data.recoveryCodesLeft ?? 0 })}
-          />
-        ) : (
-          status.data && (
-            <>
-              <Typography.Paragraph data-testid="mfa-status">{t('mfa.notEnrolled')}</Typography.Paragraph>
-              <MfaEnrollment
-                begin={async () => {
-                  const answer = await unwrap(api.POST('/api/auth/mfa/enroll'))
-                  return { secret: answer.secret!, otpauthUri: answer.otpauthUri! }
-                }}
-                confirm={async (code) =>
-                  (await unwrap(api.POST('/api/auth/mfa/enroll/confirm', { body: { code } }))).recoveryCodes ?? []
-                }
-                onDone={() => void queryClient.invalidateQueries({ queryKey: ['auth', 'mfa'] })}
-              />
-            </>
-          )
-        )}
-      </Card>
-      <Card title={tAuth('password.changeTitle')} style={{ marginTop: 16 }}>
-        <ChangePasswordForm className="max-w-md" />
-      </Card>
-      <Card title={tAuth('sessions.title')} style={{ marginTop: 16 }}>
-        <SessionList className="max-w-3xl" />
-      </Card>
-    </PageContainer>
+    <AdminPage title={t('app.security')}>
+      {ACCOUNT_SECTIONS.map(({ name, title, Content }) => (
+        <section key={name} aria-labelledby={`account-section-${name}-title`} data-testid={`account-section-${name}`}>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id={`account-section-${name}-title`} className="text-base font-semibold">
+                  {title(t)}
+                </h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Content />
+            </CardContent>
+          </Card>
+        </section>
+      ))}
+    </AdminPage>
   )
 }

@@ -99,6 +99,9 @@ const en = {
     reload: 'Reload',
   },
   mfa: {
+    on: 'Two-step verification is on.',
+    off: 'Two-step verification is off.',
+    recoveryLeft: '{{count}} recovery codes left.',
     start: 'Set up',
     scan: 'Scan the QR code with an authenticator app (or enter the key by hand), then enter the code it shows.',
     key: 'Key',
@@ -250,6 +253,9 @@ const zh: Messages = {
     reload: '刷新',
   },
   mfa: {
+    on: '已开启两步验证。',
+    off: '尚未开启两步验证。',
+    recoveryLeft: '剩余 {{count}} 个恢复码。',
     start: '开始设置',
     scan: '请用认证器应用扫描二维码（或手动输入密钥），然后输入应用显示的验证码。',
     key: '密钥',
@@ -399,6 +405,9 @@ const ja: Messages = {
     reload: '再読み込み',
   },
   mfa: {
+    on: '2 段階認証は有効です。',
+    off: '2 段階認証は無効です。',
+    recoveryLeft: 'リカバリーコードは残り {{count}} 個です。',
     start: '設定する',
     scan: '認証アプリで QR コードを読み取り（またはキーを手入力し）、表示されたコードを入力してください。',
     key: 'キー',
