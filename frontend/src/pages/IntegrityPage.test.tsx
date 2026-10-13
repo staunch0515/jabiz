@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { App } from 'antd'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
+import { expectAccessible } from '../test/axe'
 import IntegrityPage from './IntegrityPage'
 
 const get = vi.fn()
@@ -44,11 +44,9 @@ describe('IntegrityPage', () => {
       unsealedCount: 2 })
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <App>
-          <MemoryRouter>
-            <IntegrityPage />
-          </MemoryRouter>
-        </App>
+        <MemoryRouter>
+          <IntegrityPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     )
 
@@ -57,10 +55,29 @@ describe('IntegrityPage', () => {
 
     fireEvent.click(screen.getByTestId('integrity-verify'))
     await waitFor(() => expect(runProcess).toHaveBeenCalledWith('INTEGRITY_VERIFY', {}))
-    const problems = await screen.findByTestId('integrity-problems')
+    // The details open in a sheet named by the verification's number.
+    const sheet = await screen.findByRole('dialog', { name: 'Verification #3' })
+    const problems = await within(sheet).findByTestId('integrity-problems')
     expect(within(problems).getByText('Changed')).toBeTruthy()
     expect(within(problems).getByText('ledger_entry_version')).toBeTruthy()
     expect(get).toHaveBeenCalledWith('/api/integrity/checks/{checkNo}', { params: { path: { checkNo: 3 } } })
+    // The verifications were asked for again.
+    expect(get.mock.calls.filter(([path]) => path === '/api/integrity/checks')).toHaveLength(2)
+    await expectAccessible()
+  })
+
+  it('offers the hash of the head to copy', async () => {
+    get.mockImplementation((path: string) => Promise.resolve(path === '/api/integrity/head'
+      ? HEAD : { items: [], offset: 0, limit: 50 }))
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <IntegrityPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await screen.findByTestId('integrity-head-hash')
+    expect(screen.getByRole('button', { name: /^Copy Hash/ })).toBeTruthy()
   })
 
   it('says when nothing is sealed yet', async () => {
@@ -68,11 +85,9 @@ describe('IntegrityPage', () => {
       ? { currentKeyId: 'k1' } : { items: [], offset: 0, limit: 50 }))
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <App>
-          <MemoryRouter>
-            <IntegrityPage />
-          </MemoryRouter>
-        </App>
+        <MemoryRouter>
+          <IntegrityPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     )
     expect(await screen.findByText('Nothing is sealed yet.')).toBeTruthy()
