@@ -72,7 +72,7 @@ describe('LinkedIdentities', () => {
     const unlink = vi.fn().mockRejectedValueOnce(refused(422, 'LAST_SIGN_IN_METHOD')).mockResolvedValueOnce(undefined)
     render(<LinkedIdentities returnTo="/account" providers={[google]} list={list} unlink={unlink} />)
     const item = await screen.findByTestId('linked-identity')
-    await user().click(within(item).getByTestId('linked-identity-remove'))
+    await user().click(within(item).getByRole('button', { name: 'Remove Google' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Remove Google?')
     await user().click(within(dialog).getByRole('button', { name: 'Remove' }))
@@ -84,6 +84,22 @@ describe('LinkedIdentities', () => {
     expect(await screen.findByTestId('linked-identities-state')).toHaveTextContent('Google has been removed.')
     await waitFor(() => expect(screen.getByTestId('linked-identities-none')).toBeInTheDocument())
     expect(screen.getByTestId('link-google')).toBeInTheDocument()
+  })
+
+  it('explains the ways to confirm to an account without a password', async () => {
+    const start = vi.fn().mockRejectedValueOnce(refused(422, 'REAUTHENTICATION_UNAVAILABLE'))
+    render(<LinkedIdentities returnTo="/account" providers={[corp]} list={async () => []} start={start} />)
+    await user().click(await screen.findByTestId('link-corp'))
+    expect(await screen.findByTestId('linked-identities-error')).toHaveTextContent('set up two-step verification')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('names each remove button by its provider', async () => {
+    const other = { ...linkedGoogle, id: 'i2', provider: 'corp', label: 'Corporate', kind: 'generic' }
+    render(<LinkedIdentities returnTo="/account" providers={[google, corp]} list={async () => [linkedGoogle, other]} />)
+    expect(await screen.findByRole('button', { name: 'Remove Google' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Corporate' })).toBeInTheDocument()
+    await expectAccessible()
   })
 
   it('shows nothing when no provider is offered and none is linked', async () => {

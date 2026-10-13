@@ -76,6 +76,10 @@ public class OidcProviders implements PlatformCheck {
             if (provider.id() != null && !ids.add(provider.id())) {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "id is used more than once"));
             }
+            if (!provider.google() && OidcProvider.GOOGLE_ISSUER.equals(provider.issuer())) {
+                problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "the issuer is Google's: set kind: "
+                    + "google (Google's rule for trusting addresses applies either way)"));
+            }
             SignInEntries known = entries.get();
             if (provider.autoProvision() && known != null && provisioningEntries(provider, known).isEmpty()) {
                 problems.add(CheckProblem.warning(SessionChecks.CATEGORY, location, "auto-provision is on, but none "
@@ -91,7 +95,7 @@ public class OidcProviders implements PlatformCheck {
      */
     static List<String> provisioningEntries(OidcProvider provider, SignInEntries entries) {
         return entries.all().stream()
-            .filter(entry -> entry.selfRegistration() && provider.offers(entry.name()))
+            .filter(entry -> OidcController.opensAccounts(entry) && provider.offers(entry.name()))
             .map(SignInEntries.Entry::name)
             .toList();
     }

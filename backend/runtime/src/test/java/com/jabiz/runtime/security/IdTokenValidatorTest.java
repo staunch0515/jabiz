@@ -77,6 +77,13 @@ class IdTokenValidatorTest {
             .trustedEmail(google)).isEqualTo("a@googlemail.com");
         assertThat(identity(c -> c.claim("email", "a@gmail.com").claim("email_verified", false))
             .trustedEmail(google)).isNull();
+        // A provider at Google's issuer gets Google's rule whatever its kind says.
+        OidcProvider legacy = new OidcProvider("p", OidcProvider.GOOGLE_ISSUER, "client", "s",
+            "https://erp.example.com/login/oidc", null, null, null, null, null, true);
+        assertThat(identity(c -> c.claim("email", "a@example.com").claim("email_verified", true))
+            .trustedEmail(legacy)).isNull();
+        assertThat(identity(c -> c.claim("email", "a@gmail.com").claim("email_verified", true))
+            .trustedEmail(legacy)).isEqualTo("a@gmail.com");
     }
 
     @Test

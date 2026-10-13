@@ -69,6 +69,15 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         return GOOGLE.equals(kind);
     }
 
+    /**
+     * Whether Google's rule for trusting addresses applies ({@link IdTokenValidator.Identity#trustedEmail}): for a
+     * {@value #GOOGLE} provider, and for any provider whose issuer is Google's, whatever its kind says (a provider
+     * configured before kinds existed must not trust every address Google once verified).
+     */
+    public boolean googleRules() {
+        return google() || GOOGLE_ISSUER.equals(issuer);
+    }
+
     /** A provider with the administration's callback only. */
     public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
         List<String> scopes, Map<String, String> labels, List<String> mfaAmr) {

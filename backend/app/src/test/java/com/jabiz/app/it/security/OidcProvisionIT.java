@@ -250,7 +250,7 @@ class OidcProvisionIT extends OidcItSupport {
         List<Map<String, Object>> offered = client.get().uri("/api/auth/oidc/providers?entry=" + PORTAL).exchange()
             .expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody();
         assertThat(offered).extracting(p -> p.get("id") + ":" + p.get("kind"))
-            .containsExactly("open:generic", "closed:generic", "google:google");
+            .containsExactly("open:generic", "closed:generic", "google:google", BLOCKED + ":generic");
     }
 
     @Test
@@ -296,6 +296,65 @@ class OidcProvisionIT extends OidcItSupport {
         anonymous("/api/auth/password-reset/confirm", Map.of("token", token(RESET_LINK, victim), "password",
             PASSWORD)).expectStatus().isNoContent();
         assertThat(linkedUser(CLOSED, subject)).isNull();
+    }
+
+    @Test
+    void takingOverARegisteredAccountByVerifyingWithANewPasswordRemovesItsProviderLinks() {
+        String victim = address("verify");
+        register(PORTAL, victim, "attacker horse battery").expectStatus().isAccepted();
+        String userId = (String) userOf(victim).get("user_id");
+        String subject = unique("sub");
+        insert(SecurityEntities.USER_IDENTITY_DATASET, Map.of("userId", userId, "provider", CLOSED,
+            "subject", subject), null);
+        deliver();
+        anonymous("/api/auth/verify-email", Map.of("token", token(VERIFY_LINK, victim), "newPassword", PASSWORD))
+            .expectStatus().isNoContent();
+        assertThat(linkedUser(CLOSED, subject)).isNull();
+    }
+
+    @Test
+    void aGuardRefusingTheNewAccountIsA403AndTheAccountStays() {
+        String email = address("guarded");
+        String subject = unique("sub");
+        Request request = start(BLOCKED, PORTAL);
+        assertThat(refusal(callback(request, verified(request, subject, email)), 403)).isEqualTo("SIGN_IN_REFUSED");
+        String userId = (String) userOf(email).get("user_id");
+        assertThat(linkedUser(BLOCKED, subject)).isEqualTo(userId);
+        assertThat(query("SELECT outcome FROM sec_login_record_version WHERE user_id = ?::uuid", userId))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("outcome", "REFUSED"));
+    }
+
+    @Test
+    void twoSubjectsOpeningOneAddressAtOnceGetOneAccount() throws Exception {
+        String email = address("race");
+        List<Request> requests = List.of(start(OPEN, PORTAL), start(OPEN, PORTAL));
+        List<String> tokens = List.of(verified(requests.get(0), unique("sub"), email),
+            verified(requests.get(1), unique("sub"), email));
+        CountDownLatch go = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Integer> statuses = new ArrayList<>();
+        try {
+            List<Future<Integer>> answers = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                Request request = requests.get(i);
+                String token = tokens.get(i);
+                answers.add(pool.submit(() -> {
+                    go.await();
+                    return callback(request, token).returnResult(Void.class).getStatus().value();
+                }));
+            }
+            go.countDown();
+            for (Future<Integer> answer : answers) {
+                statuses.add(answer.get());
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        // One opens the account; the other finds the address in use and is linked to nothing.
+        assertThat(statuses).containsExactlyInAnyOrder(200, 403);
+        assertThat(usersWith(email)).isEqualTo(1);
+        assertThat(query("SELECT count(*) AS n FROM sec_user_identity_version WHERE user_id = ?::uuid",
+            userOf(email).get("user_id")).getFirst().get("n")).isEqualTo(1L);
     }
 
     @Test

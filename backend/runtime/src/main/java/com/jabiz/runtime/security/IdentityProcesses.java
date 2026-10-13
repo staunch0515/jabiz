@@ -164,8 +164,13 @@ public class IdentityProcesses {
                     AuthMailTemplates.PROVIDER, ctx -> labelOf(linkInput(ctx))))));
     }
 
-    static final ProcessDefinition<UnlinkInput, UnlinkOutput, ProcessContext> UNLINK =
-        ProcessDefinition.define(UNLINK_SELF, 1, UnlinkInput.class, UnlinkOutput.class, ProcessContext.class,
+    /**
+     * @param signsIn whether a link of this provider can still sign in: the provider is configured and offered to some
+     *                entry. Links to providers that went away do not count as a way left to sign in.
+     */
+    static ProcessDefinition<UnlinkInput, UnlinkOutput, ProcessContext> unlink(
+        java.util.function.Predicate<String> signsIn) {
+        return ProcessDefinition.define(UNLINK_SELF, 1, UnlinkInput.class, UnlinkOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Removes a provider account from the signed-in user's own account.")
                 .permissions(SecurityPermissions.ACCOUNT)
@@ -183,7 +188,8 @@ public class IdentityProcesses {
                 .compute("Check the caller", (metadata, ctx) -> checkOwn(ctx))
                 .step("Load the user's links", QueryEntities.of(SecurityEntities.USER_IDENTITY_DATASET,
                     ctx -> Rbac.all(new QueryPredicate.Eq("userId", user(ctx).id()), "provider"), OWN))
-                .compute("Remove the link", (metadata, ctx) -> unlink(ctx)));
+                .compute("Remove the link", (metadata, ctx) -> unlink(ctx, signsIn)));
+    }
 
     // ---- checks and computations -----------------------------------------------------------------------------------
 
@@ -267,13 +273,18 @@ public class IdentityProcesses {
         ctx.put(LINKED, true);
     }
 
-    /** Removes the caller's link; 404 for none of theirs, 422 when it is the last way to sign in. */
-    static void unlink(ProcessContext ctx) {
+    /**
+     * Removes the caller's link; 404 for none of theirs, 422 when it is the last way to sign in: no password and no
+     * other link that can still sign in.
+     */
+    static void unlink(ProcessContext ctx, java.util.function.Predicate<String> signsIn) {
         String wanted = String.valueOf(ctx.get(IDENTITY_ID));
         List<EntityInstance> own = list(ctx, OWN);
         EntityInstance identity = own.stream().filter(link -> String.valueOf(link.id()).equals(wanted)).findFirst()
             .orElseThrow(() -> new EntityNotFoundException("No provider account " + wanted + " of the caller's"));
-        if (user(ctx).get("passwordHash") == null && own.size() == 1) {
+        boolean anotherWay = own.stream().anyMatch(link -> link != identity
+            && signsIn.test(String.valueOf(link.<Object>get("provider"))));
+        if (user(ctx).get("passwordHash") == null && !anotherWay) {
             ctx.reject(new Violation(null, PlatformErrorCodes.LAST_SIGN_IN_METHOD, "The account would have no way to "
                 + "sign in left"));
             return;
@@ -323,7 +334,10 @@ public class IdentityProcesses {
     }
 
     @Bean
-    ProcessDefinition<UnlinkInput, UnlinkOutput, ProcessContext> secIdentityUnlinkSelfProcess() {
-        return UNLINK;
+    ProcessDefinition<UnlinkInput, UnlinkOutput, ProcessContext> secIdentityUnlinkSelfProcess(
+        OidcProviders providers, SignInEntries entries) {
+        return unlink(id -> providers.find(id)
+            .map(provider -> entries.all().stream().anyMatch(entry -> provider.offers(entry.name())))
+            .orElse(false));
     }
 }

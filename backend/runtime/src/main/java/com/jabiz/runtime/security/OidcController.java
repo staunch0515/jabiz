@@ -227,7 +227,7 @@ class OidcController {
         return Mono.defer(() -> {
             String entry = source.entryOrDefault();
             String email = identity.trustedEmail(provider);
-            boolean registering = entries.find(entry).filter(SignInEntries.Entry::selfRegistration).isPresent();
+            boolean registering = entries.find(entry).filter(OidcController::opensAccounts).isPresent();
             if (!provider.autoProvision() || !registering || email == null) {
                 return Mono.error(AuthController.loginFailed("No user is linked to the subject (and none is opened: "
                     + (!provider.autoProvision() ? "the provider opens no accounts"
@@ -250,6 +250,15 @@ class OidcController {
                     "The entry " + entry + " takes no registrations"));
             }).onErrorResume(e -> !retried && raceLost(e), e -> open(provider, identity, source, http, true));
         });
+    }
+
+    /**
+     * Whether a provider may open accounts at the entry: it lets people register, and it is not the administration,
+     * which never opens accounts (decision D39 item 1) even if its settings said so (the startup check refuses that
+     * too, 10 section 15.7).
+     */
+    static boolean opensAccounts(SignInEntries.Entry entry) {
+        return entry.selfRegistration() && !com.jabiz.context.RequestContext.DEFAULT_ENTRY.equals(entry.name());
     }
 
     /** The unique violation of an account opened at the same time (the subject's link, the address or the name). */

@@ -73,14 +73,15 @@ public final class IdTokenValidator {
         /**
          * The address the provider vouches for, or null: verified by the provider, and for Google an address Google
          * itself owns (gmail) or one of a Workspace account ({@code hd}); Google verified other addresses once, when
-         * the account was made, and their mailbox may belong to someone else by now (docs/design/10-security.md
+         * the account was made, and their mailbox may belong to someone else by now. Google is told by kind or by
+         * issuer ({@link OidcProvider#googleRules}) (docs/design/10-security.md
          * section 12; decision D39 implementation note).
          */
         public String trustedEmail(OidcProvider provider) {
             if (email == null || !emailVerified) {
                 return null;
             }
-            if (provider.google()) {
+            if (provider.googleRules()) {
                 String domain = email.substring(email.lastIndexOf('@') + 1).toLowerCase(java.util.Locale.ROOT);
                 boolean google = domain.equals("gmail.com") || domain.equals("googlemail.com");
                 if (!google && (hostedDomain == null || hostedDomain.isBlank())) {

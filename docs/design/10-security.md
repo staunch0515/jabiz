@@ -317,7 +317,10 @@
 - **条件**（同时满足才开户）：提供方 `auto-provision: true`；状态记录的入口 `self-registration: true`（`admin` 入口不能允许注册，§15.7，所以后台从不开户）；
   提供方担保的邮箱（`IdTokenValidator.Identity.trustedEmail`）：ID 令牌有像样的 `email`（至多 320 字符）且 `email_verified` 为真（布尔，或不分大小写的文本 `"true"`）；
   `kind: google` 还要求邮箱是 `@gmail.com` / `@googlemail.com`，或令牌带 `hd`（Workspace 域）——Google 对其他域的邮箱只在建账号时验证过一次，账号的主人未必仍拥有该邮箱；
+  这条规则按 `kind` **或** issuer 适用：issuer 为 `https://accounts.google.com` 而 `kind` 不是 `google` 的提供方同样按它判断，启动检查另给警告（建议写 `kind: google`）；
+  只在其 `email_verified` 可靠（提供方确实验证并持续拥有邮箱，如企业自己的目录）的通用提供方上开启 `auto-provision`；
   该邮箱（不分大小写）没有被任何用户使用。
+- **后台从不开户**：除启动检查外，回调本身也不在 `admin` 入口开户（`OidcController.opensAccounts`）。
 - **开户**（流程 `SPONSOR_OIDC_SIGN_UP`，`entryOnly`，权限 `auth.sign-up`，只经回调运行）：用户名同注册（小写邮箱，被占用时加 `-` 与 6 位随机字符）；写 `email`、
   `verifiedEmail`、`emailVerifiedAt`，**不写 `registeredEmail`**（永不可预占）；没有密码；`displayName` 取 ID 令牌的 `name`（去掉控制与格式字符、合并空白、至多 200 字符）；
   `locale` 取请求的语言（平台语言之一，否则不写）；授予入口的注册角色（缺少或停用即不开户）；建 `SecUserIdentity`（带邮箱）。之后照常运行 `SPONSOR_OIDC_SIGN_IN`：
@@ -336,9 +339,9 @@
 | 方法与路径 | 说明 |
 |---|---|
 | `GET /api/auth/account/identities` | 本人的关联：`[{id, provider, label, kind, email, linkedAt}]`（`linkedAt` 为关联第一个版本的生效时间；提供方已不在配置中时 `label` 为其 `id`、`kind` 为空） |
-| `POST /api/auth/account/identities/start {provider, currentPassword?}` | 按用户限流（同改密码的 `jabiz.security.account.rate-limit.per-user`，各自计数）；提供方未知或不对该入口提供 404。访问令牌的 `mfa_at` 在 `step-up-max-age` 之内即开始；否则须有当前密码（流程 `SEC_IDENTITY_LINK_BEGIN`）：错误 422 `PASSWORD_INCORRECT`，两者都没有 422 `REAUTHENTICATION_REQUIRED`。写状态记录（`purpose = LINK`、`link_user_id`），回答 `{authorizationUrl, binder}`（同登录的 `start`） |
+| `POST /api/auth/account/identities/start {provider, currentPassword?}` | 按用户限流（同改密码的 `jabiz.security.account.rate-limit.per-user`，各自计数；解除与关联共用这个计数）；提供方未知或不对该入口提供 404。访问令牌的 `mfa_at` 在 `step-up-max-age` 之内即开始；否则须有当前密码（流程 `SEC_IDENTITY_LINK_BEGIN`）：错误 422 `PASSWORD_INCORRECT`，两者都没有 422 `REAUTHENTICATION_REQUIRED`；账号没有密码（如提供方开的账号）时 422 `REAUTHENTICATION_UNAVAILABLE`——先开启两步验证并以它登录或 step-up，或经找回密码设一个密码。写状态记录（`purpose = LINK`、`link_user_id`），回答 `{authorizationUrl, binder}`（同登录的 `start`） |
 | `POST /api/auth/account/identities/callback {state, code, binder}` | 消费状态（须是调用者本人、本入口的关联状态），换取并校验 ID 令牌，运行 `SEC_IDENTITY_LINK_SELF`：`{status: LINKED | ALREADY_LINKED, provider}`。往返本身的任何失败（状态、换令牌、ID 令牌）答 422 `IDENTITY_LINK_FAILED`（不是 401：调用者的会话没有问题，401 会让客户端登出） |
-| `DELETE /api/auth/account/identities/{id}` | `SEC_IDENTITY_UNLINK_SELF`，204；不是本人的关联 404；解除后既无密码又无其他关联时 422 `LAST_SIGN_IN_METHOD`。经该关联登录的会话在下一次刷新时结束（每次刷新都要求关联仍在） |
+| `DELETE /api/auth/account/identities/{id}` | `SEC_IDENTITY_UNLINK_SELF`，204（与关联共用按用户的限流）；不是本人的关联 404；解除后既无密码又无其他还能登录的关联（其提供方仍在配置中且对某个入口提供）时 422 `LAST_SIGN_IN_METHOD`。经该关联登录的会话在下一次刷新时结束（每次刷新都要求关联仍在） |
 
 - 流程都是 `entryOnly()`、权限 `auth.account`（不授予任何角色），经流程接口调用即 403 `PROCESS_INTERNAL`；流程内再确认操作的是调用者本人、账号已启用。
 - `SEC_IDENTITY_LINK_BEGIN`：与本人改密码（§15.8）共用同一把按用户的排他锁；锁定期间不比对密码（记 `LOCKED`），错误记 `BAD_CREDENTIALS`（计入失败次数与锁定），

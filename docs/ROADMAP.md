@@ -2143,6 +2143,15 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - 场景不含"可预占的账号不能关联"（场景取不到注册得到的用户编号），由 `OidcIdentityLinkIT` 覆盖。
 - 列表的 `linkedAt` 取关联第一个版本的生效时间。
 
+**评审后的补充（同一分支）**
+- Google 的邮箱规则按 `kind` 或 issuer 适用（issuer 为 Google 而 `kind` 是 `generic` 的旧配置不再信任任何邮箱），这种配置启动检查给警告；10 §12 写明只在 `email_verified` 可靠的通用提供方上开户。
+- `LAST_SIGN_IN_METHOD` 只把提供方仍在配置中、且对某个入口提供的关联算作还能登录的方式。
+- 没有密码又没有近期二次验证的账号开始关联时答 422 `REAUTHENTICATION_UNAVAILABLE`（不再弹出无法回答的密码框），`LinkedIdentities` 说明可开启两步验证或经找回密码设密码（三语）。
+- 回调本身也不在 `admin` 入口开户（`OidcController.opensAccounts`）；解除与关联共用按用户的限流（写入 10 §12）。
+- 解除按钮的可访问名称带提供方（"Remove Google"）。
+- 补测：验证邮件（新密码）接管时删除关联；开户后守卫拒绝（403，用户留下）；两个 subject 同时以同一邮箱开户（一个 200、一个 403，只一个用户）；
+  经 `SEC_IDENTITY_LINK_BEGIN` 达到锁定后正确的密码也被拒；`ProcessAccessIT` 列入四个新流程。
+
 **已知问题**
 - 后台账户安全页还没有 `LinkedIdentities`（15c-2 正在迁移该页，见上方待办）。
 - Google 的邮箱规则可能使少数非 gmail、非 Workspace 的 Google 用户不能自动开户（Q2 的取舍）；他们可以先注册，再在账户中关联。

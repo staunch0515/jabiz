@@ -257,6 +257,54 @@ class OidcIdentityLinkIT extends OidcItSupport {
             "entry", PORTAL)).expectStatus().isOk();
     }
 
+    /** An account a provider opened at the portal (no password, no second factor), signed in. */
+    private Map<String, Object> provisioned(String subject) {
+        Request opened = start(OPEN, PORTAL);
+        return callback(opened, verified(opened, subject, address("opened"))).expectStatus().isOk().expectBody(MAP)
+            .returnResult().getResponseBody();
+    }
+
+    @Test
+    void anAccountWithoutAPasswordIsToldHowToConfirmInstead() {
+        Map<String, Object> session = provisioned(unique("sub"));
+        assertThat(problem(startLink(bearerOf(session), CLOSED, null), 422)).isEqualTo("REAUTHENTICATION_UNAVAILABLE");
+        assertThat(problem(startLink(bearerOf(session), CLOSED, "any password"), 422))
+            .isEqualTo("REAUTHENTICATION_UNAVAILABLE");
+        // With a recent second factor it links.
+        String recent = TestTokens.bearer(tokens, (String) session.get("userId"), "x");
+        linkRequest(recent, CLOSED, null);
+    }
+
+    @Test
+    void aLinkToAProviderThatWentAwayIsNoWayToSignIn() {
+        Map<String, Object> session = provisioned(unique("sub"));
+        String userId = (String) session.get("userId");
+        insert(SecurityEntities.USER_IDENTITY_DATASET, Map.of("userId", userId, "provider", "gone",
+            "subject", unique("sub")), null);
+        String open = (String) identities(bearerOf(session)).stream().filter(i -> OPEN.equals(i.get("provider")))
+            .findFirst().orElseThrow().get("id");
+        assertThat(problem(authorized("DELETE", IDENTITIES + "/" + open, bearerOf(session), null), 422))
+            .isEqualTo("LAST_SIGN_IN_METHOD");
+        // The one that went away may go.
+        String gone = (String) identities(bearerOf(session)).stream().filter(i -> "gone".equals(i.get("provider")))
+            .findFirst().orElseThrow().get("id");
+        authorized("DELETE", IDENTITIES + "/" + gone, bearerOf(session), null).expectStatus().isNoContent();
+    }
+
+    @Test
+    void wrongPasswordsAtTheStartLockTheAccountAndThenEvenTheRightOneIsRefused() {
+        Customer customer = customer();
+        for (int i = 0; i < 5; i++) {
+            assertThat(problem(startLink(customer.bearer(), OPEN, "wrong horse battery"), 422))
+                .isEqualTo("PASSWORD_INCORRECT");
+        }
+        assertThat(problem(startLink(customer.bearer(), OPEN, PASSWORD), 422)).isEqualTo("PASSWORD_INCORRECT");
+        assertThat(query("SELECT outcome FROM sec_login_record_version WHERE user_id = ?::uuid ORDER BY attempt_no DESC "
+            + "LIMIT 1", customer.userId())).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("outcome", "LOCKED"));
+        assertThat(refusal(loginTo(customer.email(), PASSWORD, PORTAL), 401)).isEqualTo("LOGIN_FAILED");
+    }
+
     @Test
     void theProcessesRunOnlyFromTheirEndpoints() {
         Customer customer = customer();

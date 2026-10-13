@@ -15,7 +15,8 @@ import java.util.function.UnaryOperator;
 /**
  * Round trips through the test identity provider for the provisioning and linking tests (docs/design/10-security.md
  * section 12; decision D39; ROADMAP phase 16f): providers that open accounts at the portal ({@value #OPEN}), that do
- * not ({@value #CLOSED}), and Google's rule for addresses ({@value #GOOGLE}), each with a callback for the entries
+ * not ({@value #CLOSED}), Google's rule for addresses ({@value #GOOGLE}) and one whose accounts the test guard refuses
+ * ({@code it-blocked}), each with a callback for the entries
  * {@code admin}, {@code portal}, {@code loose} and {@value #STRICT} (a registering entry whose role requires a second
  * factor).
  */
@@ -25,6 +26,8 @@ abstract class OidcItSupport extends SignUpItSupport {
     static final String CLOSED = "closed";
     static final String GOOGLE = "google";
     static final String STRICT = "strict";
+    /** Opens accounts whose users the test guard then refuses (its link is to this provider). */
+    static final String BLOCKED = com.jabiz.app.it.fixture.ItSignInFixtures.BLOCKED;
     static final String STRICT_ROLE = "IT_STRICT";
 
     /** The entries of {@link SignUpItSupport}, and {@value #STRICT}. */
@@ -43,7 +46,7 @@ abstract class OidcItSupport extends SignUpItSupport {
 
     /** The three providers at the test provider. */
     static void providers(DynamicPropertyRegistry registry, TestOidcProvider idp) {
-        List<String> ids = List.of(OPEN, CLOSED, GOOGLE);
+        List<String> ids = List.of(OPEN, CLOSED, GOOGLE, BLOCKED);
         for (int i = 0; i < ids.size(); i++) {
             String prefix = "jabiz.security.oidc.providers[" + i + "].";
             String id = ids.get(i);

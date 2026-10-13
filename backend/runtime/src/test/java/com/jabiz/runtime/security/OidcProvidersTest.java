@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -145,6 +146,30 @@ class OidcProvidersTest {
         });
         assertThat(OidcProviders.provisioningEntries(portal, entries)).containsExactly("portal");
         assertThat(OidcProviders.provisioningEntries(adminOnly, entries)).isEmpty();
+    }
+
+    @Test
+    void theAdministrationNeverOpensAccountsWhateverItsSettingsSay() {
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("admin", Set.of("ADMIN"), true,
+            Set.of("ADMIN"), false, "/"))).isFalse();
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("portal", Set.of("CUSTOMER"), true,
+            Set.of("CUSTOMER"), false, "/portal/"))).isTrue();
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("shop", Set.of("CUSTOMER"), false,
+            Set.of(), false, "/shop/"))).isFalse();
+    }
+
+    @Test
+    void googlesIssuerGetsGooglesRuleWhateverTheKindAndAWarning() {
+        Map<String, String> portal = Map.of("portal", "https://shop.example.com/portal/login/oidc");
+        OidcProvider old = kind("legacy", null, OidcProvider.GOOGLE_ISSUER, true, null, portal);
+        assertThat(old.google()).isFalse();
+        assertThat(old.googleRules()).isTrue();
+        assertThat(kind("corp", null, "https://idp.example.com", true, null, portal).googleRules()).isFalse();
+        assertThat(new OidcProviders(List.of(old)).check()).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(problem.message()).contains("set kind: google");
+        });
+        assertThat(new OidcProviders(List.of(kind("google", "google", null, true, null, portal))).check()).isEmpty();
     }
 
     @Test

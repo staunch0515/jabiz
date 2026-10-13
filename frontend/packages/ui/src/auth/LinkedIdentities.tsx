@@ -109,7 +109,11 @@ export function LinkedIdentities({
     try {
       await start(provider.id!, { currentPassword }, sitePath(returnTo))
     } catch (e) {
-      if (isProblem(e, 'REAUTHENTICATION_REQUIRED', 422)) {
+      if (isProblem(e, 'REAUTHENTICATION_UNAVAILABLE', 422)) {
+        // No password to ask for: a second factor (once set up) or a password set through the reset.
+        setAsking(null)
+        setError(t('identities.reauthUnavailable'))
+      } else if (isProblem(e, 'REAUTHENTICATION_REQUIRED', 422)) {
         setPassword('')
         setPasswordError(null)
         setAsking(provider)
@@ -190,7 +194,8 @@ export function LinkedIdentities({
                 cancelLabel={t('identities.cancel')}
                 onConfirm={() => remove(identity)}
                 trigger={
-                  <Button variant="outline" size="sm" data-testid="linked-identity-remove">
+                  <Button variant="outline" size="sm" data-testid="linked-identity-remove"
+                    aria-label={t('identities.unlinkNamed', { provider: identity.label ?? identity.provider })}>
                     {t('identities.unlink')}
                   </Button>
                 }

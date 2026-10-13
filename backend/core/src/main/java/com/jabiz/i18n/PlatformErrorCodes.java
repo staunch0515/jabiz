@@ -157,6 +157,12 @@ public final class PlatformErrorCodes {
      * (docs/design/10-security.md section 12).
      */
     public static final String REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED";
+    /**
+     * 422: starting to link a provider account needs a recent second factor, and the account has no password to confirm
+     * with instead (an account a provider opened): set up a second factor and confirm with it, or set a password through
+     * the password reset (docs/design/10-security.md section 12).
+     */
+    public static final String REAUTHENTICATION_UNAVAILABLE = "REAUTHENTICATION_UNAVAILABLE";
     /** 422: the provider account is linked to another user already. */
     public static final String IDENTITY_IN_USE = "IDENTITY_IN_USE";
     /** 422: the user has linked another account of this provider already (one per provider). */
@@ -275,7 +281,7 @@ public final class PlatformErrorCodes {
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
-        OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
+        OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
         IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
