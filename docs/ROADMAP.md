@@ -1681,6 +1681,12 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 经容量为 1 的队列唤醒导出线程，与之争锁时 `Unsafe#park`，BlockHound 随机使请求 500（只在测试中；生产没有 BlockHound，这是线程交接而非 I/O）。
 `JabizBlockHoundIntegration` 容许该处的等待；回归测试 `TracingUnderBlockHoundTest`（runtime，2，修复前 1 个失败）。应用中的同一容许（`QbBlockHoundIntegration`）可随之删去。
 
+**修复（分支 `1.2/fix-message-bundles-preload`，CI 中 `ImportIT` 偶发 500）**：JDK 的 `ResourceBundle` 缓存只以软引用保存，GC 清掉后
+`MessageCatalog.find` 与 Hibernate Validator 的消息插值在事件循环上重新读 jar（BlockHound：`RandomAccessFile#readBytes`，400 变 500；生产中是阻塞读）。
+现在 `MessageCatalog` 构造时读入全部语言的全部资源并强引用持有；校验消息由 `PreloadedMessageInterpolator`（`ValidationConfig`，平台语言与 JVM 缺省语言预载，
+其他语言按语言或缺省回落，从不懒加载）。测试 JVM 加 `-XX:SoftRefLRUPolicyMSPerMB=0`（每次 GC 清软引用），此类问题每次必现。
+测试：core `MessageCatalogTest`、runtime `ValidationMessagesTest`（修复前各 1 个失败）。
+
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 
 ### 16c 应用 SPA 的接入（5.5–6.5 天，分 16c-1 / 16c-2 两个 PR）
