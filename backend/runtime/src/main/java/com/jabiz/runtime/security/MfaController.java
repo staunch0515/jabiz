@@ -102,8 +102,8 @@ class MfaController {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
             // The session belongs to the entry the challenge was issued for, never to one the request names.
-            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo(),
-                    AuthController.source(clients, http, challenge.entry()))
+            SignInSource source = AuthController.source(clients, http, challenge.entry());
+            return verifyCode(challenge.userId(), request.code(), challenge.attemptNo(), source)
                 .onErrorMap(MfaController::concurrentAttempt, e -> AuthController.loginFailed("Concurrent attempt"))
                 .flatMap(result -> {
                     if (result.outcome() != LoginOutcome.SUCCESS) {
@@ -115,7 +115,7 @@ class MfaController {
                     // A sign-in through an identity provider stays tied to its account link (section 12).
                     return AuthController.session(refreshTokens, tokens,
                         AuthController.actor(result, clock.instant()), UUID.fromString(result.userId()),
-                        challenge.identityId() == null ? null : UUID.fromString(challenge.identityId()));
+                        challenge.identityId() == null ? null : UUID.fromString(challenge.identityId()), source);
                 });
         });
     }
@@ -173,7 +173,8 @@ class MfaController {
      */
     @PostMapping("/api/auth/step-up")
     Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request, ServerHttpRequest http) {
-        return RequestContexts.current().flatMap(context -> {
+        return RequestContexts.current().zipWith(CurrentSession.id()).flatMap(current -> {
+            RequestContext context = current.getT1();
             UUID user = requireUser(context);
             if (request == null || blank(request.code())) {
                 return Mono.error(codeInvalid());
@@ -196,7 +197,9 @@ class MfaController {
                         throw codeInvalid();
                     }
                     Instant now = clock.instant();
-                    JwtService.Issued access = tokens.issue(AuthController.actor(result, now));
+                    // Still the caller's session: the session list keeps telling it apart (section 15.9).
+                    JwtService.Issued access = tokens.issue(AuthController.actor(result, now)
+                        .inSession(current.getT2().orElse(null)));
                     return new StepUpResponse(access.token(), access.expiresAt(), now);
                 });
         });

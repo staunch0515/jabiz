@@ -64,6 +64,11 @@ public final class JwtService {
     static final String ENTRY = "entry";
     /** Whether the user's e-mail address was verified when the token was issued (decision D36 item 3). */
     static final String EMAIL_VERIFIED = "email_verified";
+    /**
+     * The session (refresh token family) the token was issued for (docs/design/10-security.md section 15.9): absent in
+     * tokens of no session and in those issued before sessions were listed.
+     */
+    static final String SESSION = "sid";
     /** Type of challenge tokens: never accepted where an access token is expected, nor the other way round. */
     static final JOSEObjectType CHALLENGE_TYPE = new JOSEObjectType("jabiz-mfa+jwt");
     /**
@@ -154,6 +159,7 @@ public final class JwtService {
                 : actor.dataPeriod().to().toString())
             .claim(ENTRY, actor.entry() == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : actor.entry())
             .claim(EMAIL_VERIFIED, actor.emailVerified())
+            .claim(SESSION, actor.sessionId() == null ? null : actor.sessionId().toString())
             .build();
         return new Issued(sign(claims, JOSEObjectType.JWT), expires);
     }
@@ -269,7 +275,8 @@ public final class JwtService {
                 Set.copyOf(strings(claims.getStringListClaim(PERMISSIONS))),
                 mfaAt == null ? null : Instant.ofEpochSecond(mfaAt),
                 DataPeriod.of(instant(claims.getStringClaim(DATA_FROM)), instant(claims.getStringClaim(DATA_TO))),
-                entryOf(claims), Boolean.TRUE.equals(claims.getBooleanClaim(EMAIL_VERIFIED)));
+                entryOf(claims), Boolean.TRUE.equals(claims.getBooleanClaim(EMAIL_VERIFIED)),
+                sessionOf(claims.getStringClaim(SESSION)));
         } catch (ParseException | java.time.format.DateTimeParseException | IllegalArgumentException e) {
             throw new InvalidTokenException("Malformed token claims");
         }
@@ -279,6 +286,10 @@ public final class JwtService {
     private static String entryOf(JWTClaimsSet claims) throws ParseException {
         String entry = claims.getStringClaim(ENTRY);
         return entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
+    }
+
+    private static java.util.UUID sessionOf(String text) {
+        return text == null ? null : java.util.UUID.fromString(text);
     }
 
     private static Instant instant(String text) {

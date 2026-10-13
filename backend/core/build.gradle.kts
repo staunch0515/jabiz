@@ -106,6 +106,8 @@ val coverageGatedClasses = listOf(
     "com.jabiz.external.*",
     // Phase 16d
     "com.jabiz.inbound.*",
+    // Phase 16g
+    "com.jabiz.security.UserAgentLabels*",
 )
 
 dependencies {

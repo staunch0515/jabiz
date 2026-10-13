@@ -1,6 +1,7 @@
 package com.jabiz.runtime.security;
 
 import com.jabiz.context.RequestContext;
+import com.jabiz.runtime.process.sponsor.SignInSource;
 import com.jabiz.runtime.security.secret.SingleUseSecrets;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.storage.Rows;
@@ -8,6 +9,7 @@ import com.jabiz.runtime.storage.StorageEngine;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.ByteBuffer;
@@ -17,9 +19,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -61,6 +65,22 @@ public class RefreshTokenStore {
         }
     }
 
+    /**
+     * A live session of a user (docs/design/10-security.md section 15.9): a token family not revoked whose newest token
+     * is neither used nor expired, nor idle for longer than its entry allows.
+     *
+     * @param id         the family: the session's id, no credential
+     * @param createdAt  when it was signed in (its first token)
+     * @param lastUsedAt when it was last signed in or refreshed (its newest token)
+     * @param expiresAt  when its newest token expires, unless refreshed
+     * @param clientIp   where the newest token was issued to, or null
+     * @param userAgent  the user agent the newest token was issued to, or null
+     * @param mfaAt      when its sign-in passed a second factor, or null
+     * @param oidc       whether it was signed in through an identity provider
+     */
+    public record Session(UUID id, String entry, Instant createdAt, Instant lastUsedAt, Instant expiresAt,
+        String clientIp, String userAgent, Instant mfaAt, boolean oidc) {}
+
     /** The token is unknown, expired, consumed or of a revoked family. */
     public static final class InvalidRefreshTokenException extends RuntimeException {
         InvalidRefreshTokenException(String message) {
@@ -84,6 +104,10 @@ public class RefreshTokenStore {
     public static final String REASON_PASSWORD_CHANGE = "PASSWORD_CHANGE";
     /** Verifying an address with a new password took over an account somebody else may have registered. */
     public static final String REASON_CLAIM = "CLAIM";
+    /** The user ended one or all other sessions of theirs from the session list (section 15.9). */
+    public static final String REASON_SELF_REVOKE = "SELF_REVOKE";
+    /** An administrator ended sessions of the user (section 15.9). */
+    public static final String REASON_ADMIN_REVOKE = "ADMIN_REVOKE";
 
     private static final int TOKEN_BYTES = 32;
     private static final int MAX_TOKEN_LENGTH = 128;
@@ -152,9 +176,18 @@ public class RefreshTokenStore {
 
     /** As above, for a session of the sign-in entry {@code entry} (null: the administration). */
     public Mono<Issued> issue(UUID userId, Instant mfaAt, UUID identityId, String entry) {
+        return issue(userId, mfaAt, identityId, entry, SignInSource.NONE);
+    }
+
+    /**
+     * As above, recording where the sign-in came from: the address and user agent of {@code source} (its entry is not
+     * read; {@code entry} is the session's).
+     */
+    public Mono<Issued> issue(UUID userId, Instant mfaAt, UUID identityId, String entry, SignInSource source) {
         return randomBytes(16).flatMap(bytes -> {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
-            return issue(new Grant(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt, identityId, entry));
+            return issue(new Grant(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt, identityId, entry),
+                source);
         });
     }
 
@@ -177,9 +210,15 @@ public class RefreshTokenStore {
      * session is refused without being consumed (decision D36).
      */
     public <T> Mono<Rotated<T>> rotate(String token, String entry, Function<Grant, Mono<T>> check) {
+        return rotate(token, entry, SignInSource.NONE, check);
+    }
+
+    /** As above, recording the client's address and user agent with the next token (the source's entry is not read). */
+    public <T> Mono<Rotated<T>> rotate(String token, String entry, SignInSource source,
+        Function<Grant, Mono<T>> check) {
         String expected = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
         return inTransaction(token, hash -> use(hash, expected).flatMap(grant -> check.apply(grant)
-            .flatMap(value -> issue(grant).map(next -> new Rotated<>(grant, value, next)))));
+            .flatMap(value -> issue(grant, source).map(next -> new Rotated<>(grant, value, next)))));
     }
 
     /**
@@ -252,15 +291,81 @@ public class RefreshTokenStore {
      * that changed the password itself. Runs in the caller's transaction when there is one.
      */
     public Mono<Void> revokeUser(UUID userId, String reason, UUID keep) {
-        return engine.get().select("""
+        return revokeUser(userId, reason, keep, null);
+    }
+
+    /**
+     * As above, by the operation {@code processSeqId} (null: none). Only sessions that could still be renewed are
+     * revoked: a family whose tokens have all expired has ended already and gets no revocation (an expired token is
+     * refused whether its family is revoked or not).
+     */
+    public Mono<Void> revokeUser(UUID userId, String reason, UUID keep, Long processSeqId) {
+        return Flux.defer(() -> engine.get().select("""
                 SELECT DISTINCT t.family_id FROM sec_refresh_token t
-                WHERE t.user_id = :user AND NOT EXISTS (
+                WHERE t.user_id = :user AND t.expires_at > :now AND NOT EXISTS (
                     SELECT 1 FROM sec_refresh_family_revocation r WHERE r.family_id = t.family_id)""",
-                Map.of("user", BoundValue.of(userId)))
+                Map.of("user", BoundValue.of(userId), "now", BoundValue.of(now()))))
             .map(row -> Rows.uuid(row.get("family_id")))
             .filter(family -> !family.equals(keep))
-            .concatMap(family -> revokeSession(family, reason))
+            .concatMap(family -> revokeSession(family, reason, processSeqId))
             .then();
+    }
+
+    /**
+     * The live sessions of a user, the most recently used first: at the entry {@code entry} only, or at every entry
+     * (null). Live as at a refresh: not revoked, the newest token neither used nor expired, nor idle for longer than
+     * the policy of the session's entry allows. Runs in the caller's transaction when there is one.
+     */
+    public Flux<Session> liveSessions(UUID userId, String entry) {
+        return liveSessions(userId, entry, null);
+    }
+
+    /** The live session {@code familyId} of the user (at the entry {@code entry}; any: null), if there is one. */
+    public Mono<Session> liveSession(UUID userId, String entry, UUID familyId) {
+        return liveSessions(userId, entry, Objects.requireNonNull(familyId, "familyId must not be null")).next();
+    }
+
+    private Flux<Session> liveSessions(UUID userId, String entry, UUID familyId) {
+        return Flux.defer(() -> {
+            Instant now = now();
+            Map<String, BoundValue> params = new LinkedHashMap<>();
+            params.put("user", BoundValue.of(userId));
+            params.put("now", BoundValue.of(now));
+            String family = "";
+            if (familyId != null) {
+                params.put("family", BoundValue.of(familyId));
+                family = " AND t.family_id = :family";
+            }
+            // The newest token of a live family is its only unused one: every refresh uses the one before. Should a
+            // family ever show two, its newest counts.
+            Set<UUID> seen = new HashSet<>();
+            return engine.get().select("""
+                    SELECT t.family_id, t.issued_at, t.expires_at, t.mfa_at, t.identity_id, t.entry, t.client_ip,
+                        t.user_agent,
+                        (SELECT min(f.issued_at) FROM sec_refresh_token f WHERE f.family_id = t.family_id) AS created_at
+                    FROM sec_refresh_token t
+                    WHERE t.user_id = :user AND t.expires_at > :now%s
+                        AND NOT EXISTS (SELECT 1 FROM sec_refresh_token_use u WHERE u.token_hash = t.token_hash)
+                        AND NOT EXISTS (SELECT 1 FROM sec_refresh_family_revocation r
+                            WHERE r.family_id = t.family_id)
+                    ORDER BY t.issued_at DESC, t.family_id""".formatted(family), params)
+                .map(RefreshTokenStore::session)
+                .filter(session -> seen.add(session.id()))
+                .filter(session -> entry == null || entry.equals(session.entry()))
+                .filter(session -> {
+                    Duration idleWindow = policy(session.entry()).idleWindow();
+                    return idleWindow == null || now.isBefore(session.lastUsedAt().plus(idleWindow));
+                });
+        });
+    }
+
+    private static Session session(Map<String, Object> row) {
+        String entry = row.get("entry") == null ? RequestContext.DEFAULT_ENTRY : String.valueOf(row.get("entry"));
+        return new Session(Rows.uuid(row.get("family_id")), entry, Rows.instant(row.get("created_at")),
+            Rows.instant(row.get("issued_at")), Rows.instant(row.get("expires_at")),
+            row.get("client_ip") == null ? null : String.valueOf(row.get("client_ip")),
+            row.get("user_agent") == null ? null : String.valueOf(row.get("user_agent")),
+            row.get("mfa_at") == null ? null : Rows.instant(row.get("mfa_at")), row.get("identity_id") != null);
     }
 
     /**
@@ -290,8 +395,11 @@ public class RefreshTokenStore {
             .flatMap(found -> revokeSession(found.grant().familyId(), REASON_LOGOUT)));
     }
 
-    /** The next token of the grant's family, carrying its user, second factor, account link and entry. */
-    private Mono<Issued> issue(Grant grant) {
+    /**
+     * The next token of the grant's family, carrying its user, second factor, account link and entry, and where it
+     * was issued to.
+     */
+    private Mono<Issued> issue(Grant grant, SignInSource source) {
         return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Instant now = now();
@@ -305,6 +413,8 @@ public class RefreshTokenStore {
             row.put("mfa_at", grant.mfaAt());
             row.put("identity_id", grant.identityId());
             row.put("entry", grant.entry());
+            row.put("client_ip", source == null ? null : source.clientIp());
+            row.put("user_agent", source == null ? null : source.userAgent());
             return engine.get().insert("sec_refresh_token", row)
                 .thenReturn(new Issued(token, grant.familyId(), expires));
         });
@@ -315,13 +425,26 @@ public class RefreshTokenStore {
      * refresh. Revoked already: the first revocation stands.
      */
     public Mono<Void> revokeSession(UUID familyId, String reason) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("family_id", familyId);
-        row.put("revoked_at", now());
-        row.put("reason", reason);
-        return engine.get().insert("sec_refresh_family_revocation", row)
-            // Revoked already: the first revocation stands.
-            .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
+        return revokeSession(familyId, reason, null);
+    }
+
+    /**
+     * As above, by the operation {@code processSeqId} (null: none). By an operation, the insert runs behind a
+     * savepoint of the process's transaction: a concurrent revocation of the same family (which stands) must not
+     * abort the rest of the process.
+     */
+    public Mono<Void> revokeSession(UUID familyId, String reason, Long processSeqId) {
+        return Mono.defer(() -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("family_id", familyId);
+            row.put("revoked_at", now());
+            row.put("reason", reason);
+            row.put("process_seq_id", processSeqId);
+            Mono<Void> insert = engine.get().insert("sec_refresh_family_revocation", row);
+            return (processSeqId == null ? insert : engine.get().inSavepoint(insert))
+                // Revoked already: the first revocation stands.
+                .onErrorResume(UniqueKeyViolationException.class, e -> Mono.empty());
+        });
     }
 
     /** @param used whether the token was consumed already (presenting it again is reuse) */

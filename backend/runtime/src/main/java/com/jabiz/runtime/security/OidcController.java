@@ -189,7 +189,7 @@ class OidcController {
                 }
                 return AuthController.answer(result, mfaAt,
                     result.identityId() == null ? null : UUID.fromString(result.identityId()),
-                    source.entryOrDefault(), refreshTokens, tokens, mfa,
+                    source, refreshTokens, tokens, mfa,
                     "Sign-in through identity provider " + provider.id());
             });
     }
