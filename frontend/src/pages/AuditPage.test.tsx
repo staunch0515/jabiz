@@ -97,4 +97,46 @@ describe('AuditPage', () => {
     expect(within(table).getByText('bankAccount')).toBeTruthy()
     expect(get.mock.calls.some(([path]) => path === '/api/audit/reveals')).toBe(true)
   })
+
+  it('keeps the filters and page of each tab while the other is shown', async () => {
+    get.mockImplementation((path: string) =>
+      Promise.resolve(path === '/api/audit/reveals'
+        ? { items: [], total: 0, offset: 0, limit: 50 }
+        : { items: [RECORD], total: 500, offset: 0, limit: 50 }))
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/audit']}>
+          <AuditPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await screen.findByText('new bank')
+    const records = screen.getByTestId('audit-records').closest('[role="tabpanel"]') as HTMLElement
+    const operation = within(records).getByRole('textbox', { name: 'Operation' })
+    fireEvent.change(operation, { target: { value: 'VENDOR_UPDATE' } })
+    fireEvent.submit(operation.closest('form')!)
+    fireEvent.click(within(records).getByRole('button', { name: /next/i }))
+    await waitFor(() => expect(get.mock.calls.at(-1)![1].params.query).toMatchObject({ offset: 50 }))
+    fireEvent.click(within(records).getByRole('button', { name: /next/i }))
+    await waitFor(() => expect(get.mock.calls.at(-1)![1].params.query).toEqual({ offset: 100, limit: 50,
+      processName: 'VENDOR_UPDATE' }))
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plain-text displays' }))
+    const reveals = (await screen.findByTestId('audit-reveals')).closest('[role="tabpanel"]') as HTMLElement
+    const actor = within(reveals).getByRole('textbox', { name: 'By' })
+    fireEvent.change(actor, { target: { value: 'clerk' } })
+    fireEvent.submit(actor.closest('form')!)
+    await waitFor(() => expect(get.mock.calls.at(-1)).toEqual(['/api/audit/reveals',
+      { params: { query: { offset: 0, limit: 50, actorId: 'clerk' } } }]))
+
+    const calls = get.mock.calls.length
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Changes' }))
+    await waitFor(() => expect(screen.getByTestId('audit-records')).toBeVisible())
+    expect((within(records).getByRole('textbox', { name: 'Operation' }) as HTMLInputElement).value).toBe('VENDOR_UPDATE')
+    expect(within(records).getByText('Page 3 of 10')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Plain-text displays' }))
+    expect((within(reveals).getByRole('textbox', { name: 'By' }) as HTMLInputElement).value).toBe('clerk')
+    // Nothing was asked again: both tabs kept what they showed.
+    expect(get.mock.calls.length).toBe(calls)
+  })
 })

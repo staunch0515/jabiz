@@ -137,17 +137,24 @@ function EntryId({ id, label }: { id?: string; label: string }) {
  */
 export default function AuditPage() {
   const { t } = useTranslation()
+  // A tab is read when first shown, then kept (hidden) with its filters and page while the other is shown.
+  const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set(['records']))
+  const kept = (tab: string) => (shown.has(tab) ? true : undefined)
   return (
     <AdminPage title={t('audit.title')}>
-      <Tabs defaultValue="records" className="gap-4">
+      <Tabs
+        defaultValue="records"
+        className="gap-4"
+        onValueChange={(tab) => setShown((current) => (current.has(tab) ? current : new Set([...current, tab])))}
+      >
         <TabsList>
           <TabsTrigger value="records">{t('audit.records')}</TabsTrigger>
           <TabsTrigger value="reveals">{t('audit.reveals')}</TabsTrigger>
         </TabsList>
-        <TabsContent value="records">
+        <TabsContent value="records" forceMount={kept('records')} className="data-[state=inactive]:hidden">
           <AuditRecords />
         </TabsContent>
-        <TabsContent value="reveals">
+        <TabsContent value="reveals" forceMount={kept('reveals')} className="data-[state=inactive]:hidden">
           <RevealRecords />
         </TabsContent>
       </Tabs>
