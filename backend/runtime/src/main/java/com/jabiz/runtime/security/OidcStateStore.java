@@ -40,17 +40,30 @@ public class OidcStateStore {
      * in (decision D36; the callback cannot pick another one). States from before entries existed are of the
      * administration.
      */
-    public record Pending(String providerId, String nonceHash, String codeVerifier, String entry) {
+    public record Pending(String providerId, String nonceHash, String codeVerifier, String entry, Purpose purpose,
+        String linkUserId) {
 
         public Pending {
             entry = entry == null || entry.isBlank() ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry;
+            purpose = purpose == null ? Purpose.SIGN_IN : purpose;
+        }
+
+        public Pending(String providerId, String nonceHash, String codeVerifier, String entry) {
+            this(providerId, nonceHash, codeVerifier, entry, Purpose.SIGN_IN, null);
         }
 
         @Override
         public String toString() {
-            return "Pending[providerId=" + providerId + ", ***]";
+            return "Pending[providerId=" + providerId + ", purpose=" + purpose + ", ***]";
         }
     }
+
+    /**
+     * What an authorization request is for (docs/design/10-security.md section 12): signing in, or linking the
+     * provider's account to the signed-in user who started it (decision D39 item 2). Each callback accepts its own
+     * purpose only.
+     */
+    public enum Purpose { SIGN_IN, LINK }
 
     /** Unknown, expired or used state. */
     public static final class InvalidStateException extends RuntimeException {
@@ -81,6 +94,17 @@ public class OidcStateStore {
 
     /** As above, for a sign-in into the entry {@code entry} (null: the administration). */
     public Mono<Started> start(String providerId, String entry) {
+        return start(providerId, entry, Purpose.SIGN_IN, null);
+    }
+
+    /**
+     * As above, for {@code purpose}; a {@link Purpose#LINK} request names the signed-in user it links for
+     * ({@code linkUserId}), whose own callback alone may use it.
+     */
+    public Mono<Started> start(String providerId, String entry, Purpose purpose, String linkUserId) {
+        if ((purpose == Purpose.LINK) != (linkUserId != null)) {
+            return Mono.error(new IllegalArgumentException("A link request names its user; a sign-in names none"));
+        }
         return SingleUseSecrets.randomBytes(random, 128).flatMap(bytes -> {
             Base64.Encoder base64 = Base64.getUrlEncoder().withoutPadding();
             String state = base64.encodeToString(java.util.Arrays.copyOfRange(bytes, 0, 32));
@@ -97,6 +121,8 @@ public class OidcStateStore {
             row.put("created_at", now);
             row.put("expires_at", now.plus(LIFETIME));
             row.put("entry", entry == null ? com.jabiz.context.RequestContext.DEFAULT_ENTRY : entry);
+            row.put("purpose", purpose.name());
+            row.put("link_user_id", linkUserId == null ? null : java.util.UUID.fromString(linkUserId));
             return engine.get().select("DELETE FROM sec_oidc_state WHERE expires_at < :now RETURNING state_hash",
                     Map.of("now", BoundValue.of(now)))
                 .then(engine.get().insert("sec_oidc_state", row))
@@ -119,8 +145,9 @@ public class OidcStateStore {
             String hash = hash(state);
             Instant now = now();
             return engine.get().inTransaction(engine.get().select("""
-                    SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at, entry FROM sec_oidc_state
-                    WHERE state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
+                    SELECT provider_id, nonce_hash, binder_hash, code_verifier, expires_at, entry, purpose,
+                           link_user_id::text AS link_user_id
+                    FROM sec_oidc_state WHERE state_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
                 .next()
                 .switchIfEmpty(Mono.error(() -> new InvalidStateException("Unknown state")))
                 .flatMap(row -> {
@@ -136,7 +163,9 @@ public class OidcStateStore {
                     return engine.get().insert("sec_oidc_state_use", use).thenReturn(new Pending(
                         String.valueOf(row.get("provider_id")), String.valueOf(row.get("nonce_hash")),
                         String.valueOf(row.get("code_verifier")),
-                        row.get("entry") == null ? null : String.valueOf(row.get("entry"))));
+                        row.get("entry") == null ? null : String.valueOf(row.get("entry")),
+                        Purpose.valueOf(String.valueOf(row.get("purpose"))),
+                        row.get("link_user_id") == null ? null : String.valueOf(row.get("link_user_id"))));
                 }))
                 .onErrorMap(UniqueKeyViolationException.class, e -> new InvalidStateException("State used twice"));
         });

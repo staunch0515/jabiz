@@ -22,6 +22,7 @@ import { api, unwrap } from '../api/client'
 import { ApiError } from '../api/problem'
 import { exportRun, type ExportFormat } from '../api/reports'
 import type { components } from '@jabiz/client'
+import UserName from '../components/UserName'
 import AdminPage from '../layout/AdminPage'
 import { formatDateTime } from '../meta/format'
 
@@ -103,7 +104,10 @@ export default function ReportArchivePage() {
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
             <span>{run.issuedTime ? formatDateTime(run.issuedTime) : ''}</span>
-            <span className="text-muted-foreground text-xs">{run.issuedBy}</span>
+            {/* An issuer shown by id breaks at its hyphens rather than widen the table (see DocumentsPage). */}
+            <span className="text-muted-foreground inline-block max-w-44 text-xs whitespace-normal">
+              <UserName id={run.issuedBy} />
+            </span>
           </span>
         ),
       },
@@ -118,7 +122,7 @@ export default function ReportArchivePage() {
         header: t('reports.archive.hash'),
         cell: ({ row: { original: run } }) =>
           run.contentHash && (
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <code className="font-mono text-xs" title={run.contentHash}>
                 {run.contentHash.slice(0, 12)}
               </code>

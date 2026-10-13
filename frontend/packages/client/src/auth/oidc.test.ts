@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { configureSession } from '../api/session'
-import { startProviderSignIn, takeBinder, takeReturnPath } from './oidc'
+import { pendingPurpose, startIdentityLink, startProviderSignIn, takeBinder, takeReturnPath } from './oidc'
 
 afterEach(() => {
   window.sessionStorage.clear()
@@ -57,5 +57,31 @@ describe('startProviderSignIn', () => {
     // Only a path of this site is kept for the way back.
     await startProviderSignIn('corp', '/\t/evil.com')
     expect(window.sessionStorage.getItem('jabiz.session.portal.oidcReturnTo')).toBe('/')
+  })
+})
+
+describe('startIdentityLink', () => {
+  it('starts a link of the signed-in user and keeps its purpose, which a later sign-in replaces', async () => {
+    configureSession('portal')
+    const fetch = vi.fn<(request: Request) => Promise<Response>>(async () =>
+      new Response(JSON.stringify({ authorizationUrl: 'https://idp.example.com/authorize?x=2', binder: 'bind-2' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetch)
+    expect(pendingPurpose()).toBe('SIGN_IN')
+    await startIdentityLink('google', { currentPassword: 'secret' }, '/portal/account')
+
+    const request = fetch.mock.calls[0][0]
+    expect(new URL(request.url).pathname).toBe('/api/auth/account/identities/start')
+    expect(await request.json()).toEqual({ provider: 'google', currentPassword: 'secret' })
+    expect(window.sessionStorage.getItem('jabiz.session.portal.oidcBinder')).toBe('bind-2')
+    expect(window.sessionStorage.getItem('jabiz.session.portal.oidcReturnTo')).toBe('/portal/account')
+    expect(pendingPurpose()).toBe('LINK')
+    // Read, not taken: the callback page may render twice.
+    expect(pendingPurpose()).toBe('LINK')
+
+    await startProviderSignIn('google', '/portal/')
+    expect(pendingPurpose()).toBe('SIGN_IN')
   })
 })

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -99,6 +100,76 @@ class OidcProvidersTest {
             .isEqualTo("x");
         assertThat(corp.scopes()).containsExactly("openid", "profile", "email");
         assertThat(corp.toString()).doesNotContain("s,").contains("clientSecret=***");
+    }
+
+    private static OidcProvider kind(String id, String kind, String issuer, boolean autoProvision, List<String> scopes,
+        Map<String, String> callbacks) {
+        return new OidcProvider(id, issuer, "client", "s", null, scopes, null, null, callbacks, kind, autoProvision);
+    }
+
+    @Test
+    void kindsAndAutoProvisionAreChecked() {
+        Map<String, String> portal = Map.of("portal", "https://shop.example.com/portal/login/oidc");
+        OidcProvider google = kind("google", "Google", null, true, null, portal);
+        assertThat(google.kind()).isEqualTo("google");
+        assertThat(google.google()).isTrue();
+        // Google's issuer is the default one.
+        assertThat(google.issuer()).isEqualTo(OidcProvider.GOOGLE_ISSUER);
+        assertThat(kind("corp", null, "https://idp.example.com", false, null, portal).kind()).isEqualTo("generic");
+        assertThat(google.toString()).contains("kind=google", "autoProvision=true", "clientSecret=***");
+
+        OidcProviders providers = new OidcProviders(List.of(google,
+            kind("apple", "apple", "https://appleid.apple.com", false, null, portal),
+            kind("noemail", null, "https://idp.example.com", true, List.of("openid", "profile"), portal)));
+        assertThat(providers.check()).extracting(CheckProblem::message).containsExactly(
+            "kind must be one of generic, google",
+            "auto-provision needs the scope email");
+        assertThat(providers.all()).extracting(OidcProvider::id).containsExactly("google");
+    }
+
+    @Test
+    void aProviderThatCouldOpenAccountsNowhereIsWarnedAbout() {
+        SignInEntries entries = new SignInEntries(Map.of(
+            "portal", new SignInEntries.Config(List.of("CUSTOMER"), true, List.of("CUSTOMER"), null, null, null),
+            "admin", new SignInEntries.Config(List.of("ADMIN"), null, null, null, null, null)), true,
+            () -> List.of("CUSTOMER", "ADMIN"));
+        OidcProvider adminOnly = new OidcProvider("staff", "https://idp.example.com", "client", "s",
+            "https://erp.example.com/login/oidc", null, null, null, null, null, true);
+        OidcProvider portal = kind("shop", null, "https://idp.example.com", true, null,
+            Map.of("portal", "https://shop.example.com/portal/login/oidc"));
+        OidcProviders providers = new OidcProviders(List.of(adminOnly, portal), () -> entries);
+
+        assertThat(providers.check()).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(problem.location()).contains("staff");
+            assertThat(problem.message()).contains("opens no accounts");
+        });
+        assertThat(OidcProviders.provisioningEntries(portal, entries)).containsExactly("portal");
+        assertThat(OidcProviders.provisioningEntries(adminOnly, entries)).isEmpty();
+    }
+
+    @Test
+    void theAdministrationNeverOpensAccountsWhateverItsSettingsSay() {
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("admin", Set.of("ADMIN"), true,
+            Set.of("ADMIN"), false, "/"))).isFalse();
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("portal", Set.of("CUSTOMER"), true,
+            Set.of("CUSTOMER"), false, "/portal/"))).isTrue();
+        assertThat(OidcController.opensAccounts(new SignInEntries.Entry("shop", Set.of("CUSTOMER"), false,
+            Set.of(), false, "/shop/"))).isFalse();
+    }
+
+    @Test
+    void googlesIssuerGetsGooglesRuleWhateverTheKindAndAWarning() {
+        Map<String, String> portal = Map.of("portal", "https://shop.example.com/portal/login/oidc");
+        OidcProvider old = kind("legacy", null, OidcProvider.GOOGLE_ISSUER, true, null, portal);
+        assertThat(old.google()).isFalse();
+        assertThat(old.googleRules()).isTrue();
+        assertThat(kind("corp", null, "https://idp.example.com", true, null, portal).googleRules()).isFalse();
+        assertThat(new OidcProviders(List.of(old)).check()).singleElement().satisfies(problem -> {
+            assertThat(problem.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+            assertThat(problem.message()).contains("set kind: google");
+        });
+        assertThat(new OidcProviders(List.of(kind("google", "google", null, true, null, portal))).check()).isEmpty();
     }
 
     @Test

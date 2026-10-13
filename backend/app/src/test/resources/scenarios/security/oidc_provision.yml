@@ -1,0 +1,70 @@
+# Accounts opened by identity providers and provider accounts linked by their users (ROADMAP phase 16f-1;
+# docs/design/10-security.md section 12; decision D39). The sign-in callback runs SPONSOR_OIDC_SIGN_UP once it has
+# checked the ID token, the provider may open accounts, the entry takes registrations and the provider vouches for the
+# address: a new address gets a verified user without a password (never pre-claimable), the portal's role and the
+# link. The same subject again finds its link; an address in use, in other letters, is never linked; the administration
+# opens nothing. A signed-in user links an account of a provider once; an account linked to somebody else is refused.
+name: Provider accounts
+properties:
+  jabiz.security.entries.portal.self-registration: "true"
+  jabiz.security.entries.admin.accepted-roles: ADMIN
+clock: 2026-05-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"], mfa: true }
+steps:
+  - note: The portal grants the CUSTOMER role to whoever registers there; roles are data.
+    process: ADD_ENTITY@latest
+    input: { entityType: SecRole, attributes: { roleCode: CUSTOMER, labels: { en: Customer }, enabled: true } }
+
+  - note: Google vouches for a new address.
+    process: SPONSOR_OIDC_SIGN_UP@latest
+    input: { entry: portal, provider: google, subject: g-1001, email: Mei@example.com, displayName: Mei, locale: ja }
+    expectOutput: { outcome: CREATED }
+  - advanceClock: PT1H
+  - note: The same subject again (a sign-in that raced the first) finds its link.
+    process: SPONSOR_OIDC_SIGN_UP@latest
+    input: { entry: portal, provider: google, subject: g-1001, email: Mei@example.com }
+    expectOutput: { outcome: EXISTS }
+  - note: Another subject with the address in other letters is never linked to its account.
+    process: SPONSOR_OIDC_SIGN_UP@latest
+    input: { entry: portal, provider: corp, subject: c-1, email: mei@EXAMPLE.com }
+    expectOutput: { outcome: EMAIL_IN_USE }
+  - note: The administration takes no registrations.
+    process: SPONSOR_OIDC_SIGN_UP@latest
+    input: { entry: admin, provider: google, subject: g-3003, email: staff@example.com }
+    expectOutput: { outcome: DISABLED }
+
+  - note: Hana has an account an administrator made; she links her Google account to it herself.
+    process: SEC_USER_CREATE@latest
+    input: { userName: hana, displayName: Hana, email: hana@example.com }
+    save: { hana: $.userId }
+  - process: SEC_IDENTITY_LINK_SELF@latest
+    actor: { id: "${hana}", permissions: [] }
+    input: { userId: "${hana}", provider: google, subject: g-2002, email: hana@gmail.com, providerLabel: Google }
+    expectOutput: { status: LINKED }
+  - note: Linking it again changes nothing.
+    process: SEC_IDENTITY_LINK_SELF@latest
+    actor: { id: "${hana}", permissions: [] }
+    input: { userId: "${hana}", provider: google, subject: g-2002 }
+    expectOutput: { status: ALREADY_LINKED }
+  - note: Mei's Google account is Mei's; a second Google account of Hana's is one too many.
+    expectError:
+      process: SEC_IDENTITY_LINK_SELF@latest
+      actor: { id: "${hana}", permissions: [] }
+      input: { userId: "${hana}", provider: google, subject: g-1001 }
+      status: 422
+      ruleCode: IDENTITY_IN_USE
+  - expectError:
+      process: SEC_IDENTITY_LINK_SELF@latest
+      actor: { id: "${hana}", permissions: [] }
+      input: { userId: "${hana}", provider: google, subject: g-4004 }
+      status: 422
+      ruleCode: IDENTITY_PROVIDER_LINKED
+  - note: Nobody links for somebody else.
+    expectError:
+      process: SEC_IDENTITY_LINK_SELF@latest
+      input: { userId: "${hana}", provider: corp, subject: c-2 }
+      status: 403
+      ruleCode: PERMISSION_DENIED
+snapshot:
+  entities: [SecUser, SecUserRole, SecUserIdentity]
+  asOf: end

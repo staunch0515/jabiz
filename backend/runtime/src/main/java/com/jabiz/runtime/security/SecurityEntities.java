@@ -236,7 +236,9 @@ public class SecurityEntities {
 
     /**
      * The account of a user at an OpenID Connect provider (docs/design/10-security.md section 12): whom the provider's
-     * subject signs in as. Linked by administrators; nobody is signed up by a provider.
+     * subject signs in as. Linked by administrators, by the user themselves ({@code SEC_IDENTITY_LINK_SELF}) or when a
+     * provider opens the account ({@code SPONSOR_OIDC_SIGN_UP}, decision D39); the address the provider gave is kept
+     * for display only.
      */
     public static final EntityDefinition SEC_USER_IDENTITY = EntityDefinition.define(USER_IDENTITY, eb -> {
         eb.physicalTable("sec_user_identity_version");
@@ -246,6 +248,9 @@ public class SecurityEntities {
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asReference(USER));
         eb.field("provider", f -> f.physicalColumn("provider").immutable(true).required(true).asText(40));
         eb.field("subject", f -> f.physicalColumn("subject").immutable(true).required(true).asText(255));
+        // What the provider said the account's address was when it was linked by a process: shown beside the
+        // provider in the user's account settings, never used to sign in (phase 16f).
+        eb.field("email", f -> f.physicalColumn("email").asText(320).processOnly());
         eb.unique("uk_sec_user_identity", "provider", "subject");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

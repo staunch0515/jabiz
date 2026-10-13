@@ -8,13 +8,16 @@ import {
   confirmPasswordReset,
   entryInfo,
   forgetEntryInfo,
+  finishIdentityLink,
   isProblem,
+  listIdentities,
   listSessions,
   register,
   requestPasswordReset,
   resendVerification,
   revokeOtherSessions,
   revokeSession,
+  unlinkIdentity,
   useOnline,
 } from './account'
 import { parseMailLink, readMailLink, useMailLink } from './mailLink'
@@ -212,5 +215,39 @@ describe('session functions (phase 16g)', () => {
     await revokeSession('s1', true)
     expect(session.accessToken()).toBeNull()
     expect(session.refreshToken()).toBeNull()
+  })
+})
+
+describe('provider account functions (phase 16f)', () => {
+  beforeEach(() => configureSession('portal'))
+  afterEach(() => {
+    session.clear()
+    configureSession('admin')
+    vi.unstubAllGlobals()
+  })
+
+  it("list, finish linking and remove the signed-in user's provider accounts", async () => {
+    session.store('access', 'refresh-1')
+    const calls: { method: string; path: string; body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : null
+      const method = request?.method ?? init?.method ?? 'GET'
+      const path = new URL(urlOf(input), 'http://localhost').pathname
+      const text = request ? await request.text() : ''
+      calls.push({ method, path, body: text ? JSON.parse(text) : undefined })
+      if (method === 'GET') return json(200, [{ id: 'i1', provider: 'google', label: 'Google' }])
+      if (path.endsWith('/callback')) return json(200, { status: 'LINKED', provider: 'google' })
+      return new Response(null, { status: 204 })
+    }))
+    expect(await listIdentities()).toEqual([{ id: 'i1', provider: 'google', label: 'Google' }])
+    expect(await finishIdentityLink('s', 'c', 'b')).toEqual({ status: 'LINKED', provider: 'google' })
+    await unlinkIdentity('i1')
+    expect(calls).toEqual([
+      { method: 'GET', path: '/api/auth/account/identities', body: undefined },
+      { method: 'POST', path: '/api/auth/account/identities/callback', body: { state: 's', code: 'c', binder: 'b' } },
+      { method: 'DELETE', path: '/api/auth/account/identities/i1', body: undefined },
+    ])
+    // Linking leaves the session as it is.
+    expect(session.refreshToken()).toBe('refresh-1')
   })
 })

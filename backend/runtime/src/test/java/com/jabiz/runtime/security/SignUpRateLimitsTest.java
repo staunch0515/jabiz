@@ -71,6 +71,25 @@ class SignUpRateLimitsTest {
     }
 
     @Test
+    void startsThroughProvidersAndLinksHaveLimitsOfTheirOwn() {
+        SignUpRateLimits limits = new SignUpRateLimits(20, 3, 2, 2, Duration.ofHours(1), () -> 0L);
+        limits.oidcStart("192.0.2.1");
+        limits.oidcStart("192.0.2.1");
+        assertThatThrownBy(() -> limits.oidcStart("192.0.2.1")).isInstanceOf(RateLimitedException.class);
+        // The address's other requests count apart, and so do accounts opened by providers.
+        limits.client(SignUpRateLimits.Kind.REGISTER, "192.0.2.1");
+        limits.client(SignUpRateLimits.Kind.OIDC_SIGN_UP, "192.0.2.1");
+        limits.oidcStart("192.0.2.2");
+
+        limits.identityLink("u1");
+        limits.identityLink("u1");
+        assertThatThrownBy(() -> limits.identityLink("u1")).isInstanceOf(RateLimitedException.class);
+        limits.passwordChange("u1");
+        assertThatThrownBy(() -> new SignUpRateLimits(1, 1, 1, 0, Duration.ofHours(1), () -> 0L))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void limitsArePositive() {
         assertThatThrownBy(() -> new SignUpRateLimits(0, 1, Duration.ofHours(1)))
             .isInstanceOf(IllegalArgumentException.class);

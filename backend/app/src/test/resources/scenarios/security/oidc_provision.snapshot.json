@@ -1,0 +1,69 @@
+{
+  "scenario" : "Provider accounts",
+  "asOf" : "2026-05-01T01:00:00Z",
+  "entities" : {
+    "SecUser" : [ {
+      "userId" : "#uuid:1",
+      "userName" : "mei@example.com",
+      "displayName" : "Mei",
+      "tenantId" : null,
+      "enabled" : true,
+      "email" : "Mei@example.com",
+      "locale" : "ja",
+      "verifiedEmail" : "Mei@example.com",
+      "registeredEmail" : null,
+      "emailVerifiedAt" : "2026-05-01T00:00:00Z",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "userId" : "#uuid:2",
+      "userName" : "hana",
+      "displayName" : "Hana",
+      "tenantId" : null,
+      "enabled" : true,
+      "email" : "hana@example.com",
+      "locale" : null,
+      "verifiedEmail" : null,
+      "registeredEmail" : null,
+      "emailVerifiedAt" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T01:00:00Z",
+      "createdTime" : "2026-05-01T01:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "SecUserRole" : [ {
+      "userRoleId" : "#uuid:3",
+      "userId" : "#uuid:1",
+      "roleId" : "#uuid:4",
+      "dataFrom" : null,
+      "dataTo" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ],
+    "SecUserIdentity" : [ {
+      "userIdentityId" : "#uuid:5",
+      "userId" : "#uuid:1",
+      "provider" : "google",
+      "subject" : "g-1001",
+      "email" : "Mei@example.com",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
+      "userIdentityId" : "#uuid:6",
+      "userId" : "#uuid:2",
+      "provider" : "google",
+      "subject" : "g-2002",
+      "email" : "hana@gmail.com",
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T01:00:00Z",
+      "createdTime" : "2026-05-01T01:00:00Z",
+      "processSeqId" : "#op:3"
+    } ]
+  }
+}
