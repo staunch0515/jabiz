@@ -103,6 +103,35 @@ describe('linking a provider account (phase 16f)', () => {
   })
 })
 
+describe('the order page (phase 16n)', () => {
+  it('shows its notes as Markdown with MarkdownView of @jabiz/ui', async () => {
+    session.store('access', 'refresh')
+    window.history.replaceState(null, '', '/order')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      switch (url.pathname) {
+        case '/api/auth/me':
+          return json(200, { userId: 'u1', displayName: 'Mei', roles: ['CUSTOMER'], permissions: [], emailVerified: true,
+            idleTimeoutSeconds: 0 })
+        case '/api/auth/entries/portal':
+          return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
+            sessionPersistence: 'device' })
+        case '/api/queries/commerce.portal_products':
+          return json(200, { items: [{ warehouseCode: 'W1', sku: 'A-1', productName: 'Tea', unitPrice: 500 }] })
+        default:
+          return json(404, {})
+      }
+    })
+    render(<App />)
+    const notes = await screen.findByTestId('markdown-view')
+    expect(notes.querySelector('h2')).toHaveTextContent('How ordering works')
+    expect(notes.querySelectorAll('ol > li')).toHaveLength(3)
+    expect(notes.querySelector('strong')).toHaveTextContent('in stock')
+    expect(await screen.findByTestId('order-product')).toBeInTheDocument()
+  })
+})
+
 describe('the router', () => {
   it('maps the portal\'s paths onto the build\'s base and refuses other sites', () => {
     expect(hrefOf('/orders')).toBe('/orders')

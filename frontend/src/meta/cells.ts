@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import { createElement, type ReactNode } from 'react'
-import FilePreview from '../components/FilePreview'
+import { FilePreview } from '@jabiz/ui'
 import MaskedValue from '../components/MaskedValue'
 import { isI18nText, pickText } from './i18nText'
 import { formatValue } from './kinds'
