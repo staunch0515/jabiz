@@ -21,5 +21,13 @@ public final class JabizBlockHoundIntegration implements BlockHoundIntegration {
         // for the next batch. An event loop meeting the worker there parks for that thread hand-off, which is no I/O;
         // without this BlockHound failed random requests with a 500 (TracingUnderBlockHoundTest).
         builder.allowBlockingCallsInside("io.opentelemetry.sdk.trace.export.BatchSpanProcessor$Worker", "addSpan");
+        // Hibernate Validator caches bean metadata in maps whose segments are ReentrantLocks, held only to insert,
+        // replace or remove one entry (the metadata itself is built outside the lock). Two event loops validating the
+        // same process input on a cache miss wait for each other there, which is no I/O; without this BlockHound
+        // failed one of two concurrent submits with a 500 (QuizBuks PlayConcurrencyIT, ValidatorCacheUnderBlockHoundTest).
+        for (String method : new String[] {"put", "replace", "remove", "clear", "readValueUnderLock"}) {
+            builder.allowBlockingCallsInside("org.hibernate.validator.internal.util.ConcurrentReferenceHashMap$Segment",
+                method);
+        }
     }
 }
