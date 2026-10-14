@@ -1,0 +1,457 @@
+import { ApiError } from '@jabiz/client'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Checkbox,
+  Combobox,
+  ConfirmDialog,
+  DateTimePicker,
+  Input,
+  Label,
+  MoneyInput,
+  notify,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Steps,
+} from '@jabiz/ui'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, ArrowRight, CircleCheck, RefreshCw, Save, Send } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { readVersions, searchQuizzes } from '../content/api'
+import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
+import { SPONSOR } from '../messages'
+import { KUDOS } from '../qb/kudos'
+import { fieldProblem, problemText } from '../qb/problems'
+import { navigate } from '../qb/router'
+import {
+  formOf,
+  inputOf,
+  isStale,
+  PUBLISHING_LIMITS,
+  REGIONS,
+  savePublication,
+  submitPublication,
+  type FormErrors,
+  type Problem,
+  type PublicationDetail,
+  type PublicationForm,
+  type SaveInput,
+  type SaveOutput,
+} from './api'
+import { publicationPath, PUBLICATIONS_QUERY } from './paths'
+import { LabelledProblems, PublicationSummary, useDebounced, useRegionLabel, useVersionOf } from './shared'
+import { TiersEditor } from './TiersEditor'
+
+export const STEP_COUNT = 3
+
+/** A field with its label, hint and problem, the problem tied to it by `aria-describedby`. */
+function Field({ id, label, hint, problem, children }: {
+  id: string
+  label: ReactNode
+  hint?: ReactNode
+  problem?: string
+  children: (aria: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode
+}) {
+  const describedBy = [hint ? `${id}-hint` : undefined, problem ? `${id}-error` : undefined].filter(Boolean).join(' ')
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children({ id, 'aria-invalid': problem ? true : undefined, 'aria-describedby': describedBy || undefined })}
+      {hint && <p id={`${id}-hint`} className="text-muted-foreground text-sm">{hint}</p>}
+      {problem && <p id={`${id}-error`} className="text-destructive text-sm">{problem}</p>}
+    </div>
+  )
+}
+
+/** A refusal's violations as problems (field and message), or its one text. */
+function refusalProblems(error: unknown): Pick<Problem, 'field' | 'message'>[] {
+  if (error === undefined || error === null || isStale(error)) return []
+  if (error instanceof ApiError && error.violations.length > 0) {
+    return error.violations.map((v) => ({ field: v.field ?? null, message: v.message }))
+  }
+  return [{ field: null, message: problemText(error) }]
+}
+
+/**
+ * The three steps of a draft publication (M-30, M-32, M-33): the quiz version and name; the audience, time, marks,
+ * reward tiers and money; then everything at once with every problem submitting would be refused for (the save's
+ * output) and "Submit". Each "Save and continue" saves the whole draft (`QB_PUBLICATION_SAVE`, with the revision the
+ * page last saw); a draft may be incomplete. A new publication is created by its first save and opened at its address.
+ */
+export function PublicationWizard({ detail, initialStep, onStale, stale, header }: {
+  /** The draft as read; null for a new publication. */
+  detail: PublicationDetail | null
+  initialStep: number
+  /** The publication changed elsewhere: the page holds edits until reloaded. */
+  onStale: () => void
+  stale: boolean
+  /** The page's heading, given the revision the wizard last saw (for the actions). */
+  header: (revision: number) => ReactNode
+}) {
+  const { t } = useTranslation(SPONSOR)
+  const queryClient = useQueryClient()
+  const id = useId()
+  const regionLabel = useRegionLabel()
+  const publicationId = detail?.publication.publicationId ?? null
+  const [form, setForm] = useState<PublicationForm>(() => formOf(detail))
+  const [step, setStep] = useState(Math.min(Math.max(initialStep, 0), STEP_COUNT - 1))
+  const [typed, setTyped] = useState<FormErrors>({})
+  const [badTimes, setBadTimes] = useState({ startAt: false, endAt: false })
+  const [output, setOutput] = useState<SaveOutput | null>(null)
+  const [submitError, setSubmitError] = useState<unknown>(null)
+  // The revision the page knows: the one read, then each of its own saves'.
+  const [revision, setRevision] = useState<number | null>(detail?.publication.revision ?? null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const moved = useRef(false)
+
+  // After moving between steps, focus goes to the new step's heading (its content replaced what had focus).
+  useEffect(() => {
+    if (moved.current) headingRef.current?.focus()
+  }, [step])
+  const goTo = (next: number) => {
+    moved.current = true
+    setStep(next)
+  }
+
+  const [quizSearch, setQuizSearch] = useState('')
+  const q = useDebounced(quizSearch, 300)
+  const quizzes = useQuery({
+    queryKey: [...QUIZZES_QUERY, 'choices', q],
+    queryFn: () => searchQuizzes({ q, offset: 0, limit: 20 }),
+  })
+  const { versions, version } = useVersionOf(form.quizId, form.versionId)
+  const fullScore = version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
+  const quizTitle = version?.title ?? versions.data?.[0]?.title
+    ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.title ?? null
+
+  const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) =>
+    setForm((f) => ({ ...f, [field]: value }))
+
+  const chooseQuiz = async (quizId: string | null) => {
+    setForm((f) => ({ ...f, quizId, versionId: null }))
+    if (!quizId) return
+    // The newest version is the usual choice: chosen until the sponsor picks another.
+    const found = await queryClient.fetchQuery({ queryKey: versionsQuery(quizId), queryFn: () => readVersions(quizId) })
+    setForm((f) => (f.quizId === quizId && !f.versionId ? { ...f, versionId: found[0]?.versionId ?? null } : f))
+  }
+
+  const save = useMutation({
+    mutationFn: async ({ input }: { input: SaveInput; keys: string[]; then: 'stay' | 'next' }) =>
+      savePublication(input),
+    onMutate: () => setSubmitError(null),
+    onSuccess: async (saved, { keys, then }) => {
+      setRevision(saved.revision)
+      setOutput(saved)
+      // New tiers get their keys: the next save sends them as the same tiers.
+      const ids = new Map(keys.map((key, i) => [key, saved.tierIds[i]]))
+      setForm((f) => ({ ...f, tiers: f.tiers.map((tier) => ({ ...tier, tierId: ids.get(tier.key) ?? tier.tierId })) }))
+      await queryClient.invalidateQueries({ queryKey: PUBLICATIONS_QUERY })
+      const nextStep = then === 'next' ? step + 1 : step
+      if (!publicationId) {
+        notify.success(t('publishing.wizard.created'))
+        navigate(`${publicationPath(saved.publicationId)}?step=${nextStep}`, { replace: true })
+        return
+      }
+      if (then === 'next') goTo(nextStep)
+      else notify.success(t('publishing.wizard.saved'))
+    },
+    onError: (error) => {
+      if (isStale(error)) onStale()
+    },
+  })
+
+  /** Saves the whole draft when what is typed can be sent; marks what cannot. */
+  const run = (then: 'stay' | 'next') => {
+    const built = inputOf(form, publicationId, revision)
+    setTyped(built.errors ?? {})
+    if (built.errors || badTimes.startAt || badTimes.endAt) {
+      notify.error(t('publishing.wizard.fixTyping'))
+      return
+    }
+    save.mutate({ input: built.input, keys: form.tiers.map((tier) => tier.key), then })
+  }
+
+  const submit = () => {
+    setSubmitError(null)
+    return submitPublication(publicationId!, revision ?? 0).then(
+      async (out) => {
+        notify.success(out.status === 'PENDING_REVIEW' ? t('publishing.wizard.submitted') : t('publishing.wizard.published'))
+        await queryClient.invalidateQueries({ queryKey: PUBLICATIONS_QUERY })
+      },
+      (error: unknown) => {
+        if (isStale(error)) onStale()
+        else setSubmitError(error)
+      },
+    )
+  }
+
+  /** A field's problem: what is typed wrong, else the server's refusal of the last save. */
+  const problemOf = (field: string): string | undefined => {
+    const wrong = typed[field]
+    if (wrong) return t(`publishing.errors.${wrong}`)
+    return isStale(save.error) ? undefined : fieldProblem(save.error, field)
+  }
+
+  const locked = stale || save.isPending
+  const saveProblems = refusalProblems(save.error)
+  const problems = output?.problems ?? []
+  const stepTitles = [t('publishing.steps.content'), t('publishing.steps.policy'), t('publishing.steps.confirm')]
+
+  const steps: ReactNode[] = [
+    // 1. The quiz version and the name.
+    <div key="content" className="flex flex-col gap-4">
+      <Field id={`${id}-name`} label={t('publishing.field.name')} problem={problemOf('name')}
+        hint={t('publishing.field.nameHint', { max: PUBLISHING_LIMITS.name })}>
+        {(aria) => (
+          <Input {...aria} value={form.name} maxLength={PUBLISHING_LIMITS.name} autoComplete="off" required
+            disabled={locked} data-testid="publication-name" onChange={(event) => set('name', event.target.value)} />
+        )}
+      </Field>
+      <Field id={`${id}-quiz`} label={t('publishing.field.quiz')} hint={t('publishing.field.quizHint')}>
+        {(aria) => (
+          <Combobox {...aria} value={form.quizId} selectedLabel={quizTitle ?? undefined}
+            onChange={(quizId) => void chooseQuiz(quizId)} onSearch={setQuizSearch} loading={quizzes.isFetching}
+            options={(quizzes.data?.items ?? []).map((quiz) => ({
+              value: quiz.quizId,
+              label: quiz.title,
+              description: quiz.versionLabel ?? t('publishing.field.quizNoVersion'),
+              disabled: quiz.latestVersionNo === 0,
+            }))}
+            placeholder={t('publishing.field.quizPlaceholder')} searchPlaceholder={t('publishing.field.quizSearch')}
+            emptyText={t('publishing.field.quizNone')} disabled={locked} className="w-full max-w-md"
+            data-testid="publication-quiz" />
+        )}
+      </Field>
+      {form.quizId && (
+        <Field id={`${id}-version`} label={t('publishing.field.versionId')} problem={problemOf('versionId')}
+          hint={versions.data && versions.data.length === 0 ? t('publishing.field.noVersions') : undefined}>
+          {(aria) => (
+            <Select value={form.versionId ?? ''} disabled={locked || !versions.data?.length}
+              onValueChange={(value) => {
+                // Radix reports "" when the options change under a chosen value; only a real choice counts.
+                if (value) set('versionId', value)
+              }}>
+              <SelectTrigger {...aria} className="w-full max-w-md" data-testid="publication-version">
+                <SelectValue placeholder={t('publishing.field.versionPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {(versions.data ?? []).map((v) => (
+                  <SelectItem key={v.versionId} value={v.versionId}>
+                    {t('publishing.field.versionValue', { label: v.label, questions: v.questionCount,
+                      fullScore: v.fullScore })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
+      )}
+    </div>,
+
+    // 2. Who sees it and when, the marks, the rewards and the money.
+    <div key="policy" className="flex flex-col gap-6">
+      <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
+        problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
+        <legend className="text-sm font-medium">{t('publishing.field.regions')}</legend>
+        <p id={`${id}-regions-hint`} className="text-muted-foreground text-sm">{t('publishing.field.regionsHint')}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {REGIONS.map((region) => (
+            <div key={region} className="flex items-center gap-2">
+              <Checkbox id={`${id}-region-${region}`} checked={form.regions.includes(region)} disabled={locked}
+                data-testid="publication-region" data-region={region}
+                onCheckedChange={(checked) => set('regions', checked === true
+                  ? [...form.regions.filter((r) => r !== region), region]
+                  : form.regions.filter((r) => r !== region))} />
+              <Label htmlFor={`${id}-region-${region}`} className="font-normal">{regionLabel(region)}</Label>
+            </div>
+          ))}
+        </div>
+        {problemOf('regions') && (
+          <p id={`${id}-regions-error`} className="text-destructive text-sm">{problemOf('regions')}</p>
+        )}
+      </fieldset>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field id={`${id}-start`} label={t('publishing.field.startAt')} problem={problemOf('startAt')}
+          hint={t('publishing.field.periodHint')}>
+          {(aria) => (
+            <DateTimePicker {...aria} value={form.startAt} clearable disabled={locked} data-testid="publication-start"
+              onInvalidChange={(invalid) => setBadTimes((b) => ({ ...b, startAt: invalid }))}
+              onChange={(value) => set('startAt', value)} />
+          )}
+        </Field>
+        <Field id={`${id}-end`} label={t('publishing.field.endAt')} problem={problemOf('endAt')}>
+          {(aria) => (
+            <DateTimePicker {...aria} value={form.endAt} clearable disabled={locked} data-testid="publication-end"
+              onInvalidChange={(invalid) => setBadTimes((b) => ({ ...b, endAt: invalid }))}
+              onChange={(value) => set('endAt', value)} />
+          )}
+        </Field>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field id={`${id}-time-limit`} label={t('publishing.field.timeLimitSec')} problem={problemOf('timeLimitSec')}
+          hint={t('publishing.field.timeLimitHint', { min: PUBLISHING_LIMITS.minTimeLimitSec,
+            max: PUBLISHING_LIMITS.maxTimeLimitSec.toLocaleString() })}>
+          {(aria) => (
+            <Input {...aria} inputMode="numeric" value={form.timeLimitSec} autoComplete="off" disabled={locked}
+              data-testid="publication-time-limit" onChange={(event) => set('timeLimitSec', event.target.value)} />
+          )}
+        </Field>
+        <Field id={`${id}-pass`} label={t('publishing.field.passScore')} problem={problemOf('passScore')}
+          hint={fullScore === null ? t('publishing.field.passScoreHintNone')
+            : t('publishing.field.passScoreHint', { fullScore })}>
+          {(aria) => (
+            <Input {...aria} inputMode="numeric" value={form.passScore} autoComplete="off" disabled={locked}
+              data-testid="publication-pass-score" onChange={(event) => set('passScore', event.target.value)} />
+          )}
+        </Field>
+      </div>
+      <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
+        problemOf={problemOf} disabled={locked} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
+          hint={t('publishing.field.budgetHint')}>
+          {(aria) => (
+            <MoneyInput {...aria} value={form.budgetCap} scale={0} allowNegative={false} unit={KUDOS}
+              autoComplete="off" disabled={locked} data-testid="publication-budget"
+              onChange={(value) => set('budgetCap', value)} />
+          )}
+        </Field>
+        <Field id={`${id}-winners`} label={t('publishing.field.maxWinners')} problem={problemOf('maxWinners')}
+          hint={t('publishing.field.maxWinnersHint')}>
+          {(aria) => (
+            <Input {...aria} inputMode="numeric" value={form.maxWinners} autoComplete="off" disabled={locked}
+              data-testid="publication-max-winners" onChange={(event) => set('maxWinners', event.target.value)} />
+          )}
+        </Field>
+      </div>
+    </div>,
+
+    // 3. Everything at once, every problem, and submitting.
+    <div key="confirm" className="flex flex-col gap-4">
+      {problems.length > 0
+        ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">{t('publishing.wizard.cannotSubmit')}</p>
+            <LabelledProblems problems={problems} testId="publication-problems" />
+          </div>
+        )
+        : output && (
+          <p className="text-success flex items-center gap-2 text-sm" data-testid="publication-ready">
+            <CircleCheck aria-hidden className="size-4" />
+            {t('publishing.wizard.ready')}
+          </p>
+        )}
+      {refusalProblems(submitError).length > 0 && (
+        <div className="flex flex-col gap-2" role="alert">
+          <p className="text-sm font-medium">{t('publishing.wizard.submitRefused')}</p>
+          <LabelledProblems problems={refusalProblems(submitError)} testId="publication-submit-problems" />
+        </div>
+      )}
+      <PublicationSummary values={{
+        name: form.name,
+        quizTitle,
+        versionLabel: version?.label ?? detail?.publication.versionLabel ?? null,
+        regions: REGIONS.filter((region) => form.regions.includes(region)),
+        startAt: form.startAt,
+        endAt: form.endAt,
+        // Left empty, the time limit is the version's: the server wrote it with the last save.
+        timeLimitSec: form.timeLimitSec.trim() === '' ? detail?.publication.timeLimitSec ?? null
+          : Number(form.timeLimitSec),
+        passScore: form.passScore.trim() === '' ? null : Number(form.passScore),
+        fullScore,
+        budgetCap: form.budgetCap.trim() === '' ? null : form.budgetCap,
+        maxWinners: form.maxWinners.trim() === '' ? null : Number(form.maxWinners),
+        maxReward: output?.maxReward ?? null,
+        maxSpend: output?.maxSpend ?? null,
+        tiers: form.tiers.map((tier) => ({ fromScore: Number(tier.fromScore), toScore: Number(tier.toScore),
+          reward: tier.reward })),
+      }} />
+    </div>,
+  ]
+
+  return (
+    <section className="flex flex-col gap-4" data-testid="publication-wizard" data-step={step}>
+      {header(revision ?? 0)}
+      <Steps current={step} aria-label={t('publishing.steps.label')} data-testid="publication-steps" items={[
+        { key: 'content', title: stepTitles[0], description: t('publishing.steps.contentHint') },
+        { key: 'policy', title: stepTitles[1], description: t('publishing.steps.policyHint') },
+        { key: 'confirm', title: stepTitles[2], description: t('publishing.steps.confirmHint') },
+      ]} />
+      <form noValidate className="flex flex-col gap-6" aria-labelledby={`${id}-step`} onSubmit={(event) => {
+        event.preventDefault()
+        if (step < STEP_COUNT - 1) run('next')
+      }}>
+        <h2 id={`${id}-step`} ref={headingRef} tabIndex={-1} className="text-lg font-semibold outline-none"
+          data-testid="publication-step-title">
+          {stepTitles[step]}
+        </h2>
+        {steps[step]}
+        {saveProblems.length > 0 && (
+          <div className="flex flex-col gap-2" role="alert">
+            <p className="text-sm font-medium">{t('publishing.wizard.refused')}</p>
+            <LabelledProblems problems={saveProblems} testId="publication-save-problems" />
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2 border-t pt-4">
+          {step > 0 && (
+            <Button type="button" variant="outline" disabled={save.isPending} data-testid="publication-back"
+              onClick={() => goTo(step - 1)}>
+              <ArrowLeft aria-hidden />
+              {t('publishing.wizard.back')}
+            </Button>
+          )}
+          {step < STEP_COUNT - 1 && (
+            <>
+              <Button type="button" variant="outline" disabled={locked} aria-busy={save.isPending || undefined}
+                data-testid="publication-save" onClick={() => run('stay')}>
+                <Save aria-hidden />
+                {t('publishing.wizard.saveDraft')}
+              </Button>
+              <Button type="submit" disabled={locked} aria-busy={save.isPending || undefined}
+                data-testid="publication-next">
+                {t('publishing.wizard.next')}
+                <ArrowRight aria-hidden />
+              </Button>
+            </>
+          )}
+          {step === STEP_COUNT - 1 && publicationId && (
+            <ConfirmDialog title={t('publishing.wizard.submitTitle')} description={t('publishing.wizard.submitText')}
+              confirmLabel={t('publishing.wizard.submit')} cancelLabel={t('common.cancel')} onConfirm={submit}
+              trigger={
+                <Button type="button" disabled={stale || !output || problems.length > 0}
+                  data-testid="publication-submit">
+                  <Send aria-hidden />
+                  {t('publishing.wizard.submit')}
+                </Button>
+              } />
+          )}
+        </div>
+      </form>
+    </section>
+  )
+}
+
+/** The banner of a page out of date: edits wait until it is reloaded. */
+export function StaleBanner({ onReload }: { onReload: () => void }) {
+  const { t } = useTranslation(SPONSOR)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => ref.current?.focus(), [])
+  return (
+    <Alert variant="warning" ref={ref} tabIndex={-1} data-testid="publication-stale">
+      <AlertTitle>{t('publishing.stale.title')}</AlertTitle>
+      <AlertDescription className="flex flex-col items-start gap-3">
+        <span>{t('publishing.stale.text')}</span>
+        <Button size="sm" data-testid="publication-reload" onClick={onReload}>
+          <RefreshCw aria-hidden />
+          {t('publishing.stale.reload')}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
+}

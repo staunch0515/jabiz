@@ -118,6 +118,9 @@
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
+- **发布页**（`sponsor/src/publishing/`，QP3b）：向导每一步都以 `QB_PUBLICATION_SAVE` 保存**整个**草稿（档位给出即完整列表，带上次保存得到的 `tierId`；带 `baseRevision`），
+  提交前的问题与预计最大支出**只取保存的输出**（`problems`、`maxSpend`），页面不重算规则；`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即提示重新加载。
+  非草稿只显示、不编辑（提交即冻结），操作按状态给出且都先确认。e2e 的数据准备（已通过的商家、审核的决定、上架的发布）在 `e2e/tests/publishing.ts`。
 - **答题页**（App，QP2）：倒计时只按服务器时间（`deadline` 与 `serverTime` 的偏移，`play/countdown.ts`）；保存进度只经 `play/saver.ts`（防抖、一次一个、失败保留重发）；
   开始的输出（不含正误）存在 `sessionStorage`，只供刚完成的结果页显示题目文字（计划 A-3），之后只显示分数与逐题对错；退出登录时清除。
 - **支付页**（QP4，`sponsor/src/wallet/`、`app/src/wallet/`）：页面只读记录、从不入账；Stripe 的跳回（`?checkout=`、`?onboarding=`）只决定显示，结果一律等服务端的记录。

@@ -17,7 +17,7 @@ import {
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { FileQuestion, LayoutDashboard, Store, UserRound, Wallet } from 'lucide-react'
+import { FileQuestion, LayoutDashboard, Megaphone, Store, UserRound, Wallet } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QuizEditorPage } from './content/QuizEditorPage'
@@ -26,6 +26,9 @@ import { quizIdOf, QUIZZES_PATH } from './content/paths'
 import { SPONSOR } from './messages'
 import { ACCOUNT_PATH, AccountPage } from './pages/AccountPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { PublicationListPage } from './publishing/PublicationListPage'
+import { PublicationPage } from './publishing/PublicationPage'
+import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
@@ -54,9 +57,9 @@ function toSignIn() {
 }
 
 /**
- * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (QP3a; editing
- * content needs no approval, publishing will), the sponsor profile (onboarding) and the account; the publishing pages
- * come with QP3b, the wallet with QP4. The home page leads to the onboarding until the sponsor is approved.
+ * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (editing content
+ * needs no approval, publishing does), the publications, the wallet, the sponsor profile (onboarding) and the account.
+ * The home page leads to the onboarding until the sponsor is approved.
  */
 function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(SPONSOR)
@@ -78,6 +81,8 @@ function SignedIn({ path }: { path: string }) {
   if (path === DASHBOARD) page = <DashboardPage />
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
+  else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
+  else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
@@ -87,6 +92,7 @@ function SignedIn({ path }: { path: string }) {
   const items: ShellMenuItem[] = [
     { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
     { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
+    { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },

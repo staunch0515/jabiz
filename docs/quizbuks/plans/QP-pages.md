@@ -305,6 +305,43 @@
   题目与资料对话框、版本查看、被拒与冲突、390 px），亮、暗都无违规。
 - **未做**：发布（QP3b）；AI 生成（Q8，列表只显示标记）；音频不在页面中播放（默认 CSP 没有 `media-src blob:`，以下载代替）。
 
+## 实施记录（QP3b，2026-10-14）
+
+分支 `1.2/quizbuks-4p-publishing-pages`（从 `1.2/quizbuks` @ 8d2e42c 拉出，已含 QP1、QP2、QP3a）。只改 `.jabiz-app-paths` 中的路径，`tools/check-app-paths.sh` 通过；后端未改：
+所用的流程（`QB_PUBLICATION_SAVE` / `SUBMIT` / `WITHDRAW` / `PAUSE` / `RESUME` / `COPY` / `DELETE`）、模板（`qb.sponsor.publications`，以及 QP3a 的 `qb.sponsor.quizzes`、
+`qb.sponsor.quiz-versions`）、商家数据视图（`QbPublication`、`QbRewardTier`）与字典（`publication-status`、`publication-end-reason`、`region`）都已在 Q4 / Q5 中存在，逐一核对过。
+`src/qb/` 未改。
+
+- **页面**（`quizbuks-web/sponsor/src/publishing/`，名字在 `ids.ts`，手写类型与调用在 `api.ts`；左侧导航加"发布"）：
+  - `/publications`（M-34）：模板 `qb.sponsor.publications`，`DataTable` 由服务端分页、排序（修改时间、开始时间、名称），按名称搜索（防抖）、按状态筛选（`Select`，模板的 `status` 筛选）；
+    列：名称（链接；驳回的草稿另有"已驳回"标记）、Quiz 与版本、状态（字典的服务端文案，按时间另注"即将开始 / 即将结束"）与"钱包余额不足"（模板的 `fundsShort`）、地区（字典）、
+    参与人数、获奖人数 / 上限、已支付 / 预算（或预计最大支出）、投放期、最后修改。金额一律 `formatKudos`。
+  - `/publications/new` 与 `/publications/:id`：读取经商家数据视图（发布按主键，不是自己的即"不存在"；档位按 `publicationId` 与 `seq`）。草稿进入**三步向导**（`@jabiz/ui` 的 `Steps`，
+    当前步的标题取得焦点）：
+    1. **Quiz**：名称；Quiz 用远程搜索的 `Combobox`（没有版本的 Quiz 不可选）；选中即取其最新版本（`Select`，显示题数与满分）。
+    2. **对象与奖励**：地区（复选框，字典文案，按 `Regions.ALL` 的顺序发送）、开始与结束（`DateTimePicker`，浏览器时区）、时限（留空即版本的）、合格分、奖励档位
+       （`TiersEditor`：起始分、结束分、奖励（`MoneyInput`，单位 Kudos），添加时从上一档之后到满分，至多 20 档）、预算（可选）、最大获奖人数（可选）。
+    3. **检查并提交**：保存输出的**全部** `problems`（每条前加字段名：服务端的"提交前必填"不说是哪个字段）或"可以提交"；概要（含最高奖励与预计最大支出，后者为空即"不限"）；
+       有问题时"提交"不可用；提交先确认（"提交后不能再改，要改就复制"），被拒时一次列出全部原因。
+    每次"保存并继续"与"保存草稿"都以 `QB_PUBLICATION_SAVE` 保存整个草稿（带 `baseRevision`；档位带上次保存得到的 `tierId`）；新发布由第一次保存建立，并以 `?step=` 打开其地址。
+    页面只先挡"不是整数"与档位缺值（不发请求，字段标出原因），其余由服务端判断。驳回的草稿在页头显示审核人的理由（或"审核期间已过结束时间"）。
+  - **非草稿**只显示（提交即冻结，D-Q4-2）：概要、档位、提交 / 通过 / 暂停 / 结束时间与结束原因；按状态提供撤回（待审核）、暂停（待开始、进行中、预算不足）、恢复（已暂停）、
+    复制（任何状态，可改名，留空即服务端的"…（副本）"），草稿另有删除；每个操作都先确认（`ConfirmDialog`），之后重新读取。
+  - **并发**：`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即显示"已在别处修改"（取得焦点）并停用编辑，"重新加载"后从新内容开始（同 QP3a）。
+- **偏离计划**：
+  - 第三步的问题与预计最大支出只来自保存的输出，不另设检查流程（与 Q4 的 D-Q4-6 一致）；因此只能经"保存并继续"进入第三步，地址的 `?step=` 只在新建后打开第二步时使用。
+  - Radix `Select` 在选项变化时会以空值调用 `onValueChange`（e2e 中发现：选中 Quiz 后自动选的版本被清掉），版本选择只接受非空值（Vitest 覆盖）。
+  - `src/App.tsx` 的组件注释仍写着"发布页随 QP3b"：为了与并行的 QP4 少冲突，只加了路由与导航两处，注释留到合并时一起改。
+- **测试**：Vitest `publishing/api.test.ts`（路径、整个草稿的输入与地区顺序、不是整数与档位缺值、读回的表单、下一档、问题的位置、各状态的操作、时间注记）与
+  `publishing/publishing.test.tsx`（列表的状态与 Kudos 及搜索、第一次保存建立草稿并打开第二步、选 Quiz 即选最新版本、保存整个草稿后列出全部问题且不能提交、档位不是整数时不发请求、
+  无问题时提交并显示待审核、提交被拒时列出全部原因、别处修改 → 重新加载 → 以新 revision 保存、驳回理由、非草稿的冻结与确认后暂停、不存在），共 19 个（商家后台合计 65 个）。
+  e2e `sponsor.spec.ts`（已通过的商家与完整的 Quiz → 向导三步（选 Quiz、地区、时间、档位有缺口 → 第三步列出问题且不能提交 → 改正 → 预计最大支出 500 Kudos）→ 提交 → 管理员驳回并附理由 →
+  列表与草稿显示理由 → 修改再提交 → 撤回 → 再提交 → 管理员批准 → 进行中 → 暂停、恢复 → 列表的计数与 Kudos → 复制 → 删除副本），数据准备 `publishing.ts`（`approvedSponsor()`、
+  `decideReview()`、`livePublication()`、`typeTime()`）；`a11y.spec.ts` 加"发布页面"（列表、向导三步、Quiz 选择器展开、输错的字段、问题列表（另查 390 px）、删除确认、进行中的发布与暂停确认、
+  复制对话框、390 px），亮、暗都无违规。
+- **本机验证**：`./gradlew :quizbuks:check` 通过；商家后台的 lint / typecheck / test、两个 `app:check`、`diff -r src/qb`、e2e 类型检查通过；e2e 全部 24 项对打包的 jar、Mailpit 与 Stripe 桩通过。
+- **未做**：管理员审核扩展页（P-09 的版本内容预览，按 Q-5 推后；审核用通用后台的待办）；发布详情中的计数（只在列表中，模板没有按发布的筛选）。
+
 ## 实施记录（QP4，2026-10-14）
 
 分支 `1.2/quizbuks-6p-payment-pages`（从 `1.2/quizbuks` @ 8d2e42c 拉出，已含 QP1、QP2、QP3a）。只改 `.jabiz-app-paths` 中的路径；`src/qb/` 未改（两份仍相同）。
