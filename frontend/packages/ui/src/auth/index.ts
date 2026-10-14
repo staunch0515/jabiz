@@ -1,7 +1,7 @@
 /**
  * The sign-in and account building blocks (decision D43; docs/design/12-frontend.md section 12): whole pages and parts
  * of pages for signing in, signing up, the pages of mailed links, resetting and changing a password, two-step
- * verification and step-up, identity providers, the session list and the banners of a signed-in user. They act for the frontend's
+ * verification and step-up, identity providers and linked provider accounts, the session list and the banners of a signed-in user. They act for the frontend's
  * sign-in entry (`@jabiz/client`), depend on no router (navigation goes through `onNavigate` / `hrefOf` and callbacks)
  * and speak the namespace `auth` in every platform language.
  */
@@ -31,7 +31,7 @@ export { MfaSettings } from './MfaSettings'
 export type { MfaSettingsProps, MfaStatus } from './MfaSettings'
 export { StepUpProvider } from './StepUpProvider'
 export type { StepUpProviderProps } from './StepUpProvider'
-export { OidcButtons, useOidcProviders } from './OidcButtons'
+export { OidcButtons, useOidcProviders, GoogleMark, ProviderMark } from './OidcButtons'
 export type { OidcButtonsProps, OidcProvider } from './OidcButtons'
 export { OidcCallback } from './OidcCallback'
 export type { OidcCallbackProps } from './OidcCallback'
@@ -39,6 +39,8 @@ export { ChangePasswordForm } from './ChangePasswordForm'
 export type { ChangePasswordFormProps } from './ChangePasswordForm'
 export { SessionList, SessionDeviceIcon, sessionDeviceName, effectiveMinutes } from './SessionList'
 export type { SessionListProps } from './SessionList'
+export { LinkedIdentities } from './LinkedIdentities'
+export type { LinkedIdentitiesProps } from './LinkedIdentities'
 export { VerifyEmailBanner, OfflineBanner, PwaUpdatePrompt } from './banners'
 export type { VerifyEmailBannerProps, PwaUpdatePromptProps } from './banners'
 export { invalidLink, passwordProblems, passwordRequired } from './problems'

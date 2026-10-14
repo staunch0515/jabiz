@@ -122,12 +122,33 @@ export default defineConfig({
   `AuthProvider`、`QueryClientProvider`、`AppearanceProvider` 包住页面，`registerServiceWorker()` 在启动时调用一次。
 - **页面积木**（`@jabiz/ui`，不依赖路由，导航经 `onNavigate` / `hrefOf`）：`SignInForm`（`signUpPath`、`passwordResetPath`）、`SignUpForm`、
   `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
-  `OidcCallback`（路径 `login/oidc`）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
+  `OidcCallback`（路径 `login/oidc`；登录与本人关联共用，关联完成后调用 `onLinked`）、`LinkedIdentities`（本人的外部账号：列表、关联、解除，16f-1）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
   `VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
   示范门户用一个几十行的小路由（`src/router.ts`）；也可以用任何版本的 react-router。
 - **邮件链接**：平台的邮件链接是 `{entryUrl}auth/<页>?entry=…&token=…`，即入口自己的前端；应用自己的邮件模板可以写 `{entryUrl.<入口>}`（18 §5.6）。
   升级说明：曾把 `jabiz.mail.base-url` 设为后台子路径（如 `https://<主机>/admin`）以绕行的应用，改回 `https://<主机>`；已发出的旧链接经后台的 `/auth/*` 照常可用。
 - **单点登录**：提供方配置 `redirect-uris.<入口>`（该前端的 `login/oidc` 的绝对地址，在身份提供方登记）；没有的提供方不对该入口提供（10 §12）。
+  本人关联的往返也回到这个地址（`OidcCallback` 按 `startIdentityLink` 记下的用途完成关联），不需要另外登记。
+- **Google 登录与自动开户**（决策 D39，阶段 16f-1）：在 Google Cloud 控制台建 OAuth 客户端（Web 应用），把每个入口的 `login/oidc` 登记为已授权的重定向 URI，然后：
+
+  ```yaml
+  jabiz:
+    security:
+      oidc:
+        providers:
+          - id: google
+            kind: google                    # issuer 缺省 https://accounts.google.com；按钮显示 Google 的标志
+            client-id: ${JABIZ_OIDC_GOOGLE_CLIENT_ID}
+            client-secret: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET}   # 只来自环境变量
+            redirect-uris:
+              portal: https://shop.example.com/portal/login/oidc
+            labels: { en: Google, zh: Google, ja: Google }
+            auto-provision: true            # 缺省 false；只在允许注册的入口开户
+  ```
+
+  开户只在入口 `self-registration: true` 时发生，邮箱须是 Google 担保的（`@gmail.com`、`@googlemail.com` 或 Workspace 账号）且没有被使用；已有账号的邮箱答 403
+  `OIDC_ACCOUNT_EXISTS`，`OidcCallback` 提示用原来的方式登录、再在账户页用 `LinkedIdentities` 关联。账户页放 `<LinkedIdentities returnTo="/account" />`，
+  并在 `OidcCallback` 的 `onLinked` 中回到它（示范门户的 `AccountPage`）。Apple 登录在 16f-2（推后）。
 - **接口类型**：平台接口用 `api`；应用自己的接口以 `createApiClient<paths>()`（与 `api` 共用令牌、刷新与 step-up）配合应用自己快照生成的类型：
 
   ```json

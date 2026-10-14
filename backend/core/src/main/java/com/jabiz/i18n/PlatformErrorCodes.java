@@ -146,6 +146,36 @@ public final class PlatformErrorCodes {
      * sessions" cannot be told apart; signing in again gives one that does (section 15.9).
      */
     public static final String SESSION_UNKNOWN = "SESSION_UNKNOWN";
+    /**
+     * 403: an identity provider vouched for an address that belongs to an account already, so no account is opened and
+     * nothing is linked (decision D39 item 2): the user signs in as before and links the provider in their account
+     * settings. Told only to whom the provider has just proven the address (docs/design/10-security.md section 12).
+     */
+    public static final String OIDC_ACCOUNT_EXISTS = "OIDC_ACCOUNT_EXISTS";
+    /**
+     * 422: starting to link a provider account needs a recent second factor or the current password
+     * (docs/design/10-security.md section 12).
+     */
+    public static final String REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED";
+    /**
+     * 422: starting to link a provider account needs a recent second factor, and the account has no password to confirm
+     * with instead (an account a provider opened): set up a second factor and confirm with it, or set a password through
+     * the password reset (docs/design/10-security.md section 12).
+     */
+    public static final String REAUTHENTICATION_UNAVAILABLE = "REAUTHENTICATION_UNAVAILABLE";
+    /** 422: the provider account is linked to another user already. */
+    public static final String IDENTITY_IN_USE = "IDENTITY_IN_USE";
+    /** 422: the user has linked another account of this provider already (one per provider). */
+    public static final String IDENTITY_PROVIDER_LINKED = "IDENTITY_PROVIDER_LINKED";
+    /**
+     * 422: the account registered itself and its address was never verified, so whoever owns the mailbox may still
+     * take it over: it cannot be linked to a provider until the address is verified (section 15.7).
+     */
+    public static final String IDENTITY_LINK_UNAVAILABLE = "IDENTITY_LINK_UNAVAILABLE";
+    /** 422: the round trip of a link through the provider failed (state, code or ID token not accepted). */
+    public static final String IDENTITY_LINK_FAILED = "IDENTITY_LINK_FAILED";
+    /** 422: removing the link would leave the account without a way to sign in (no password, no other link). */
+    public static final String LAST_SIGN_IN_METHOD = "LAST_SIGN_IN_METHOD";
     /** A mail parameter's value is a secret ({@code @Sensitive}); a mail carries no secret but its tokens. */
     public static final String MAIL_PARAM_SECRET = "MAIL_PARAM_SECRET";
     /** The parameters of a mail are larger than {limit} characters as JSON. */
@@ -250,7 +280,9 @@ public final class PlatformErrorCodes {
         LEDGER_UNBALANCED_IN_CURRENCY, REPORT_TOO_LARGE, PROCESS_READ_TOO_LARGE, QUERY_TIMEOUT, REPORT_SUPERSEDE_MISMATCH,
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
+        OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
+        IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         APPROVAL_NOT_PENDING, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
         CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,

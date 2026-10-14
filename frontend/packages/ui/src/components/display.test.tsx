@@ -124,6 +124,13 @@ describe('CopyButton', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(screen.getByRole('status')).toHaveTextContent('Could not copy')
   })
+
+  it('keeps its whole target beside a long text', () => {
+    // jsdom lays nothing out: what keeps the 32px button whole in a flex row is that it does not shrink.
+    render(<CopyButton value="x" className="ml-1" />)
+    const slot = screen.getByRole('button', { name: 'Copy' }).closest('[data-slot="copy-button"]')
+    expect(slot).toHaveClass('shrink-0', 'ml-1')
+  })
 })
 
 describe('TagsInput', () => {

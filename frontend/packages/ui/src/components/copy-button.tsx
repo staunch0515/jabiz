@@ -41,7 +41,8 @@ export function CopyButton({ value, label, className, ...rest }: CopyButtonProps
 
   const Icon = state === 'copied' ? CheckIcon : state === 'failed' ? XIcon : CopyIcon
   return (
-    <span data-slot="copy-button" className={cn(UI_SCOPE, 'inline-flex items-center', className)}>
+    // Never narrower than its button: beside a long text in a flex row it would otherwise shrink below a usable target.
+    <span data-slot="copy-button" className={cn(UI_SCOPE, 'inline-flex shrink-0 items-center', className)}>
       <Button
         variant="ghost"
         size="icon-sm"

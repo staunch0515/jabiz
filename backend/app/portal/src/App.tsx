@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PORTAL } from './messages'
-import { AccountPage } from './pages/AccountPage'
+import { ACCOUNT_PATH, AccountPage, rememberLinked } from './pages/AccountPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { PlaceOrderPage } from './pages/PlaceOrderPage'
 import { hrefOf, navigate, navigation, useLocation } from './router'
@@ -63,7 +63,7 @@ function Shell({ path }: { path: string }) {
   let page: ReactNode
   if (path === '/orders') page = <OrdersPage />
   else if (path === '/order') page = <PlaceOrderPage />
-  else if (path === '/account') page = <AccountPage />
+  else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   return (
     <div className="flex min-h-full flex-col">
@@ -122,6 +122,10 @@ function Routes() {
   if (path === '/login/oidc') {
     return frame(<OidcCallback fallbackPath={HOME}
       onSignedIn={(to) => navigate(to, { replace: true })}
+      onLinked={(to, linked) => {
+        rememberLinked(linked)
+        navigate(to || ACCOUNT_PATH, { replace: true })
+      }}
       onSecondStep={(step) => {
         pendingStep = step
         navigate('/login', { replace: true })

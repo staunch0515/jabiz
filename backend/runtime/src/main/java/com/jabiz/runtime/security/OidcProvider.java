@@ -19,14 +19,29 @@ import java.util.regex.Pattern;
  * item 5): {@code redirect-uris.<entry>}, the frontend's {@code login/oidc}; {@code redirect-uri} is the
  * administration's. An entry without a callback is not offered the provider.
  *
- * @param redirectUri  the administration's callback ({@code admin}), as before entries had their own
- * @param mfaAmr       values of the ID token's {@code amr} claim that count as a second factor; empty trusts none
- * @param redirectUris the callbacks of other entries (or the administration's), by entry name
+ * <p>A provider may open accounts at the first sign-in ({@code auto-provision}, decision D39): only at entries that
+ * let people register, for a verified address nobody uses ({@link IdTokenValidator.Identity#trustedEmail}).
+ *
+ * @param redirectUri   the administration's callback ({@code admin}), as before entries had their own
+ * @param mfaAmr        values of the ID token's {@code amr} claim that count as a second factor; empty trusts none
+ * @param redirectUris  the callbacks of other entries (or the administration's), by entry name
+ * @param kind          {@value #GENERIC} (the default) or {@value #GOOGLE}: Google's issuer is the default one, and its
+ *                      addresses count as verified only where Google vouches for them (gmail, or a Workspace domain)
+ * @param autoProvision whether an unknown subject with a verified, unused address gets an account (default false)
  */
 public record OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
-    List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris) {
+    List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris,
+    String kind, boolean autoProvision) {
 
     public static final List<String> DEFAULT_SCOPES = List.of("openid", "profile", "email");
+
+    /** A provider following OpenID Connect as is. */
+    public static final String GENERIC = "generic";
+    /** Google (standard OpenID Connect, its own rule for trusting addresses). */
+    public static final String GOOGLE = "google";
+    /** Google's issuer, the default of a {@value #GOOGLE} provider. */
+    public static final String GOOGLE_ISSUER = "https://accounts.google.com";
+    private static final List<String> KINDS = List.of(GENERIC, GOOGLE);
 
     private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,39}");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
@@ -37,6 +52,30 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         labels = labels == null ? Map.of() : Map.copyOf(labels);
         mfaAmr = mfaAmr == null ? List.of() : List.copyOf(mfaAmr);
         redirectUris = redirectUris == null ? Map.of() : Map.copyOf(redirectUris);
+        kind = kind == null || kind.isBlank() ? GENERIC : kind.strip().toLowerCase(Locale.ROOT);
+        if (GOOGLE.equals(kind) && (issuer == null || issuer.isBlank())) {
+            issuer = GOOGLE_ISSUER;
+        }
+    }
+
+    /** A generic provider that opens no accounts. */
+    public OidcProvider(String id, String issuer, String clientId, String clientSecret, String redirectUri,
+        List<String> scopes, Map<String, String> labels, List<String> mfaAmr, Map<String, String> redirectUris) {
+        this(id, issuer, clientId, clientSecret, redirectUri, scopes, labels, mfaAmr, redirectUris, null, false);
+    }
+
+    /** Whether this is Google ({@value #GOOGLE}). */
+    public boolean google() {
+        return GOOGLE.equals(kind);
+    }
+
+    /**
+     * Whether Google's rule for trusting addresses applies ({@link IdTokenValidator.Identity#trustedEmail}): for a
+     * {@value #GOOGLE} provider, and for any provider whose issuer is Google's, whatever its kind says (a provider
+     * configured before kinds existed must not trust every address Google once verified).
+     */
+    public boolean googleRules() {
+        return google() || GOOGLE_ISSUER.equals(issuer);
     }
 
     /** A provider with the administration's callback only. */
@@ -95,6 +134,13 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
         if (!scopes.contains("openid")) {
             problems.add("scopes must include openid");
         }
+        if (!KINDS.contains(kind)) {
+            problems.add("kind must be one of " + String.join(", ", KINDS));
+        }
+        if (autoProvision && !scopes.contains("email")) {
+            // Without the address there is nothing to open an account with (decision D39 item 1).
+            problems.add("auto-provision needs the scope email");
+        }
         return problems;
     }
 
@@ -148,6 +194,7 @@ public record OidcProvider(String id, String issuer, String clientId, String cli
 
     @Override
     public String toString() {
-        return "OidcProvider[id=" + id + ", issuer=" + issuer + ", clientId=" + clientId + ", clientSecret=***]";
+        return "OidcProvider[id=" + id + ", kind=" + kind + ", issuer=" + issuer + ", clientId=" + clientId
+            + ", clientSecret=***, autoProvision=" + autoProvision + "]";
     }
 }

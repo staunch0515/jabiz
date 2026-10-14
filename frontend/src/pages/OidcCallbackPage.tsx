@@ -7,7 +7,8 @@ import { homePath } from '../extension/registry'
 
 /**
  * Where an identity provider sends the user back (docs/design/10-security.md section 12): @jabiz/ui's OidcCallback
- * (decision D43) on the admin's router; a second step continues on the sign-in page.
+ * (decision D43) on the admin's router; a second step continues on the sign-in page, and a link of a provider account
+ * goes back to the page it started from (the security page), which says what was linked.
  */
 export default function OidcCallbackPage() {
   const { signInWithProvider } = useAuth()
@@ -21,6 +22,7 @@ export default function OidcCallbackPage() {
       takeBinder={takeBinder}
       takeReturnPath={takeReturnPath}
       onSignedIn={(path) => void navigate(path, { replace: true })}
+      onLinked={(path, linked) => void navigate(path, { replace: true, state: { linked } })}
       onSecondStep={(step, path) => void navigate('/login', { replace: true, state: { from: path, step } })}
       onBack={() => void navigate('/login', { replace: true })}
     />
