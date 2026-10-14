@@ -406,12 +406,15 @@ describe('OidcCallback', () => {
 })
 
 describe('OidcButtons', () => {
-  it('draws the mark of a known kind in the text colour', async () => {
+  it("draws the mark of a known kind in the brand's own colours", async () => {
     render(<OidcButtons returnTo="/portal/" providers={[{ id: 'google', label: 'Google', kind: 'google' },
       { id: 'corp', label: 'Corporate', kind: 'generic' }]} start={vi.fn(async () => undefined)} />)
     const google = screen.getByTestId('oidc-google')
     expect(google).toHaveAttribute('data-kind', 'google')
-    expect(google.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
+    const mark = google.querySelector('svg')
+    expect(mark).toHaveAttribute('aria-hidden', 'true')
+    expect([...mark!.querySelectorAll('path')].map((path) => path.getAttribute('fill')))
+      .toEqual(['#EA4335', '#4285F4', '#FBBC05', '#34A853'])
     expect(screen.getByTestId('oidc-corp').querySelector('svg')).toBeNull()
     await expectAccessible()
   })
