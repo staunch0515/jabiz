@@ -186,3 +186,33 @@
 ## 确认：2026-10-14，待确认项全部按缺省
 
 2026-10-14：计划与待确认问题 Q-1 – Q-9 全部按缺省处理。先做 QP1（本分支 `1.2/quizbuks-2p-spa-accounts`）；平台 PG-1 在 `1.2/platform` 上并行（QP1 不需要它）。
+
+## 实施记录（QP1，2026-10-14）
+
+分支 `1.2/quizbuks-2p-spa-accounts`（从 `1.2/quizbuks` @ 5f02c8d 拉出）。只改 `.jabiz-app-paths` 中的路径（`quizbuks-web/**`、`backend/quizbuks/**`、`docs/quizbuks/**`、
+`deploy/quizbuks/**`、`.github/workflows/quizbuks.yml`），`tools/check-app-paths.sh origin/1.2/platform` 通过。
+
+- **两个 SPA**：`quizbuks-web/app`（`/`，入口 `app`，PWA，图标为生成的 PNG）与 `quizbuks-web/sponsor`（`/sponsor/`，入口 `sponsor`），各自的 `package.json` 与 lockfile，
+  依赖版本照抄示范门户（`pnpm app:check` 通过）。共用的 `src/qb/`：`ids.ts`、`api.ts`（手写的流程类型与调用）、`kudos.ts`、`router.tsx`、`messages.ts`（命名空间 `qb`）、
+  `problems.ts`、`device.ts`、`session.ts`（闲置锁定）、`AccountSections.tsx`、`FileImage.tsx`、`LanguageSelect.tsx`、`messageKeys.ts`，两份相同。
+- **App**：登录、注册、邮件链接页、找回密码、OIDC 回调、step-up 都是平台积木；登录后先读本人资料，没有国家即到 `/welcome`（资料表单：名字取注册时的显示名，
+  国家按浏览器语言区域与时区预填（`country.ts`），参考币种按国家预填），保存后到首页；首页在 QP2 之前只是问候与空状态。账户页：资料、邮箱（不可改）、改密码、两步验证、
+  （有提供方时）外部账号、会话、最近登录（`qb.me.sign-ins`，设备由 User-Agent 解析）、界面语言。底部导航只有首页与账户（历史、钱包随 QP2、QP4）。
+- **商家后台**：`AppShell` 与左侧导航（概览、商家资料、账户）；`/` 按入驻状态到 `/onboarding` 或 `/dashboard`；入驻页显示状态（含驳回原因），未通过时 `QB_SPONSOR_APPLY`
+  （须勾选条款），通过后 `QB_SPONSOR_PROFILE_SAVE`；头像经 `uploadFile('qb.sponsor-avatar')` 上传、以 `FileImage` 显示。闲置锁定后登录页提示原因。
+- **A-1**：`build.gradle.kts` 加两行 `spa(...)`（`/admin` 补 `entry = "admin"`）；`application.yml` 删去 `jabiz.web.spa`，入口加 `session.*`。`QuizbuksAppIT` 断言三个 SPA 来自 jar 与两个入口的会话保存方式。
+- **A-2**：商家邮件改为 `[…]({entryUrl.sponsor})`，模板去掉参数 `link`；`AccountLinksCheck` 删除（平台的 `MAIL` 检查已要求有链接的模板配置 `jabiz.mail.base-url`）；
+  `AccountLinks` 只留给 Stripe 的返回地址。`application-google.yml`（profile `google`）只给入口 `app` 回调，`GoogleProfileIT` 断言只对 App 提供。
+- **CI**：`quizbuks.yml` 新增 `web`（平台前端安装、两个 `app:check`、`diff -r src/qb`、两个 SPA 的 lint / typecheck / test、e2e 工程的类型检查）与 `e2e`（postgres、mailpit、
+  Stripe 桩、打包的 jar、`pnpm e2e`）；`package` 作业另以 curl 检查三个前端、路由回退、manifest 与 `sw.js`。
+- **e2e**（`quizbuks-web/e2e`）：`auth.spec`（App 注册 → 邮件 → 验证（自助注册的账号验证时要输入密码）→ 资料 → 欢迎邮件 → 设备上的会话；找回密码；商家注册 → 未验证不能登录 →
+  验证 → 入驻 → 管理员批准 → 通过邮件链接到 `/sponsor/`；后台不接受答题人）、`pwa.spec`（manifest 与唯一的 `sw.js`、根 worker 放过 `/sponsor/`、`/admin/`、`/api/`，离线外壳，更新提示）、
+  `a11y.spec`（两个前端的全部页面，亮 / 暗，App 另查 390 px 与 1280 px）。准备数据：管理员执行 `QB_SETUP`，测试自己的角色 `QB_E2E_PUBLISHER`（只有 `control.publish`）发布其提案。
+- **偏离计划**：
+  - 产品名在 SPA 文案中另写一份（`qb.brand`、manifest）：登录前的页面读不到服务端的 `app.name`。
+  - 国家字典按页读取（数据视图每次至多 100 行）。
+  - 资料表单在邮箱验证之前不能保存（按钮禁用并说明，可"我已验证"重新取令牌），而不是提交后显示 403。
+  - 页面在身份（`/api/auth/me`）返回之前显示加载中：表单以注册时的名字预填，避免竞争。
+  - e2e 作业已启动 Stripe 桩（QP1 的测试不用，QP4 用）。
+- **未做**（按计划属后续阶段）：QP2 – QP4 的页面；PG-1。
+
