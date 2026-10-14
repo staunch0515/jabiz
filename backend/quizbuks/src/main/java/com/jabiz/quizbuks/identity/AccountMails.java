@@ -8,9 +8,9 @@ import com.jabiz.mail.MailTemplate;
  * the messages {@code mail.<name>.subject|body} in the three languages. The verification, "you already have an
  * account" and password reset mails are the platform's.
  *
- * <p>The platform's {@code {baseUrl}} is the administration's address, so a sponsor's mail names the sponsor console
- * by the parameter {@code link} ({@code quizbuks.links.sponsor}). It stands in the text, not in a Markdown link: the
- * platform percent-encodes parameters in link targets, which would break a whole address.
+ * <p>A sponsor's mail links to the sponsor console by the platform's {@code {entryUrl.sponsor}} (decision D43 item 4):
+ * {@code jabiz.mail.base-url} with the entry's app-path, {@code /sponsor/}, taken from configuration as it is (only
+ * parameters are percent-encoded in link targets, so a whole address is never passed as one).
  */
 public final class AccountMails {
 
@@ -20,11 +20,11 @@ public final class AccountMails {
 
     /** The sponsor's onboarding was approved, by a reviewer or at once. */
     public static final MailTemplate SPONSOR_APPROVED = MailTemplate.define("qb.sponsor.approved", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("company", "link"));
+        .category(MailCategory.TRANSACTIONAL).param("company"));
 
     /** The sponsor's onboarding was sent back, with the reviewer's reason. */
     public static final MailTemplate SPONSOR_REJECTED = MailTemplate.define("qb.sponsor.rejected", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("company", "reason", "link"));
+        .category(MailCategory.TRANSACTIONAL).param("company", "reason"));
 
     private AccountMails() {}
 }

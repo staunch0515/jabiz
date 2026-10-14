@@ -109,7 +109,7 @@ public final class SponsorProcesses {
 
     // ---- apply -----------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<ApplyInput, SponsorOutput, ProcessContext> apply(AccountLinks links) {
+    public static ProcessDefinition<ApplyInput, SponsorOutput, ProcessContext> apply() {
         return ProcessDefinition.define(APPLY, 1, ApplyInput.class, SponsorOutput.class, ProcessContext.class, pb -> {
             pb.description("Applies for sponsor onboarding: name, company, introduction and avatar, with the terms "
                     + "accepted; reviewed unless reviews are switched off.")
@@ -137,7 +137,7 @@ public final class SponsorProcesses {
             pb.step("Close the request to submit again", CloseTasks.<ProcessContext>done(
                 ctx -> QbAccounts.taskSource(AccountEditing.userId(ctx))));
             releaseOldAvatar(pb);
-            approvedMail(pb, links);
+            approvedMail(pb);
         });
     }
 
@@ -285,12 +285,11 @@ public final class SponsorProcesses {
         ctx.put(OUTPUT, new SponsorOutput(userId, id, status, revision, approval, requestId));
     }
 
-    private static <I, O> void approvedMail(com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb,
-        AccountLinks links) {
+    private static <I, O> void approvedMail(com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Tell the sponsor they are approved", SendMail.<ProcessContext>when(ctx -> !ctx.hasViolations()
                 && Boolean.TRUE.equals(ctx.get(APPROVED_NOW)) && AccountEditing.hasAddress(ctx),
             AccountMails.SPONSOR_APPROVED, ctx -> MailRecipient.user(AccountEditing.userId(ctx)),
-            Map.of("company", SponsorProcesses::company, "link", ctx -> links.sponsor())));
+            Map.of("company", SponsorProcesses::company)));
     }
 
     /** The company of the onboarding the process wrote or found. */
@@ -366,8 +365,7 @@ public final class SponsorProcesses {
      * request is rejected, and the reason is the reviewer's decision's, not the event's. Anything else (another
      * subject, a stale event, a forged call) changes nothing.
      */
-    public static ProcessDefinition<ApprovalResultInput, SponsorOutput, ProcessContext> approvalResult(
-        AccountLinks links) {
+    public static ProcessDefinition<ApprovalResultInput, SponsorOutput, ProcessContext> approvalResult() {
         return ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class, SponsorOutput.class,
             ProcessContext.class, pb -> {
                 pb.description("Approves or rejects a sponsor's onboarding after its review is decided.")
@@ -409,12 +407,11 @@ public final class SponsorProcesses {
                         QbAccounts.RESUBMIT_TASK_TITLE, Map.of("company", company(ctx)), owner(ctx))
                         .about(QbAccounts.SPONSOR, first(ctx, FOUND).id())
                         .source(QbAccounts.taskSource(owner(ctx)))));
-                approvedMail(pb, links);
+                approvedMail(pb);
                 pb.step("Tell the sponsor they are sent back", SendMail.<ProcessContext>when(
                     ctx -> Boolean.TRUE.equals(ctx.get(REJECTED_NOW)) && AccountEditing.hasAddress(ctx),
                     AccountMails.SPONSOR_REJECTED, ctx -> MailRecipient.user(owner(ctx)),
-                    Map.of("company", SponsorProcesses::company, "reason", SponsorProcesses::reason,
-                        "link", ctx -> links.sponsor())));
+                    Map.of("company", SponsorProcesses::company, "reason", SponsorProcesses::reason)));
             });
     }
 

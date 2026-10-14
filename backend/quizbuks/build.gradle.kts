@@ -1,13 +1,19 @@
-// QuizBuks (docs/quizbuks/02-design.md): the runtime with the QuizBuks declarations in one jar. For now it serves
-// only the platform's admin frontend under /admin/; the answering app (/) and the sponsor console (/sponsor/) are
-// added once the platform's application frontend library is in (docs/quizbuks/03-plan.md, phases Q2 and Q3).
+import com.jabiz.gradle.Pwa
+
+// QuizBuks (docs/quizbuks/02-design.md): the runtime with the QuizBuks declarations in one jar, serving three front
+// ends (docs/quizbuks/plans/QP-pages.md): the takers' app at / (a PWA), the sponsor console at /sponsor/ and the
+// platform's admin frontend at /admin/, each signing in to its own entry. The two QuizBuks SPAs are pnpm projects of
+// their own linking the platform's packages; spaCheckRoot and spaCheckSponsor (part of check) keep their versions the
+// platform's.
 plugins {
     id("jabiz.boot-app")
 }
 
 jabizApp {
     mainClass = "com.jabiz.quizbuks.QuizbuksApp"
-    spa("/admin", "../../frontend")
+    spa("/", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)
+    spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")
+    spa("/admin", "../../frontend", entry = "admin")
     languages("en", "zh", "ja")
     // The snapshots stay in the application's directory: the platform's own (frontend/openapi) are not ours to write.
     openApiSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/openapi.json")
