@@ -25,8 +25,13 @@ import reactor.netty.http.server.HttpServer;
  *
  * <p>This handler sits right behind Reactor Netty's {@code HttpTrafficHandler} and asks for the next read whenever
  * request content (part of a body or its end) goes past with no exchange left on the connection, which is exactly
- * where the read is missing; Reactor Netty itself reads again for content it drops when nothing is pending. A read
- * asked for twice is one read, so where Reactor Netty asks too nothing changes. Remove it once Reactor Netty resumes
+ * where the read is missing; Reactor Netty itself reads again for content it drops when nothing is pending. The
+ * drained content can also reach the exchange it belongs to after that exchange has written its whole answer but
+ * before it has ended (Reactor Netty ends it only once the last write completes): the exchange drops the content
+ * without reading and then ends, again with nothing asking to read. So content that goes past while an exchange is
+ * still bound has that exchange watched, and once it ends, a read is asked for if no other exchange has started by
+ * then. A read asked for twice is one read, so where Reactor Netty asks too nothing changes. Remove it once Reactor
+ * Netty resumes
  * reading after such a drain itself ({@code PipelinedReadResumerTest} says when).
  *
  * <p>Limits: the handler is added when the channel is initialised and only where the HTTP/1.1 traffic handler is
@@ -55,14 +60,39 @@ class PipelinedReadResumer implements NettyServerCustomizer {
 
     static final class Handler extends ChannelInboundHandlerAdapter {
 
+        /** The last exchange content went past while it was bound; watched until it ends. Event loop only. */
+        private ChannelOperations<?, ?> watched;
+
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             // Checked before passing it on: the message may be released downstream.
             boolean content = msg instanceof HttpContent;
             ctx.fireChannelRead(msg);
-            if (content && ChannelOperations.get(ctx.channel()) == null && !ctx.channel().config().isAutoRead()) {
+            if (!content || ctx.channel().config().isAutoRead()) {
+                return;
+            }
+            ChannelOperations<?, ?> exchange = ChannelOperations.get(ctx.channel());
+            if (exchange == null) {
                 ctx.read();
             }
+            else if (exchange != watched) {
+                // Once per exchange, not per chunk of a body.
+                watched = exchange;
+                exchange.onTerminate().subscribe(null, error -> resumeIfIdle(ctx), () -> resumeIfIdle(ctx));
+            }
+        }
+
+        /**
+         * Asks for a read on the event loop, after Reactor Netty has finished ending the exchange (it may start a
+         * buffered request next, which then reads for itself).
+         */
+        private static void resumeIfIdle(ChannelHandlerContext ctx) {
+            ctx.executor().execute(() -> {
+                if (ctx.channel().isActive() && ChannelOperations.get(ctx.channel()) == null
+                    && !ctx.channel().config().isAutoRead()) {
+                    ctx.read();
+                }
+            });
         }
     }
 }

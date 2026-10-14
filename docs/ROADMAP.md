@@ -1686,6 +1686,8 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 现在 `MessageCatalog` 构造时读入全部语言的全部资源并强引用持有；校验消息由 `PreloadedMessageInterpolator`（`ValidationConfig`，平台语言与 JVM 缺省语言预载，
 其他语言按语言或缺省回落，从不懒加载）。测试 JVM 加 `-XX:SoftRefLRUPolicyMSPerMB=0`（每次 GC 清软引用），此类问题每次必现。
 测试：core `MessageCatalogTest`、runtime `ValidationMessagesTest`（修复前各 1 个失败）。
+同一分支另修 `PipelinedReadResumer` 的竞争：排出的部分请求体到达时交换已写完回答但尚未结束，内容被丢弃而无人再读（负载高时 `PipelinedReadResumerTest` 常失败）；
+现在对此类交换在其结束后补一次读取（`PipelinedReadResumerTest` 新增 2 个确定性用例，修复前 1 个失败）。
 
 **不在本阶段**：注册表单与应用 SPA 的页面积木（16c）、OIDC 自动开户（16f）、会话列表（16g）、按 IP 的大致位置、图形验证码。
 
