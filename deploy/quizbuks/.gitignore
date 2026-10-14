@@ -1,1 +1,3 @@
 .env
+# tools/quizbuks/local-demo.sh: secrets, logs and files of the local demo
+.local-demo/
