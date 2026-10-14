@@ -57,6 +57,7 @@ const en = {
   tags: { remove: 'Remove {{tag}}', placeholder: 'Type and press Enter' },
   pageState: { empty: 'No data', notFound: 'Not found', error: 'Something went wrong', warning: 'Attention' },
   steps: { label: 'Progress', completed: 'completed' },
+  file: { preview: 'Preview', previewFailed: 'Preview not available', enlarge: 'Enlarge the preview', download: 'Download' },
 }
 
 type Messages = typeof en
@@ -106,6 +107,7 @@ const zh: Messages = {
   tags: { remove: '移除 {{tag}}', placeholder: '输入后按 Enter' },
   pageState: { empty: '暂无数据', notFound: '不存在', error: '出错了', warning: '请注意' },
   steps: { label: '进度', completed: '已完成' },
+  file: { preview: '预览', previewFailed: '无法预览', enlarge: '放大预览', download: '下载' },
 }
 
 const ja: Messages = {
@@ -162,6 +164,7 @@ const ja: Messages = {
   tags: { remove: '{{tag}} を削除', placeholder: '入力して Enter' },
   pageState: { empty: 'データがありません', notFound: '見つかりません', error: 'エラーが発生しました', warning: '注意' },
   steps: { label: '進捗', completed: '完了' },
+  file: { preview: 'プレビュー', previewFailed: 'プレビューできません', enlarge: 'プレビューを拡大', download: 'ダウンロード' },
 }
 
 export const uiMessages = { zh, ja, en }

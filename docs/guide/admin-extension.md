@@ -103,7 +103,7 @@ export default function StockOverviewPage() {
   `EntityFormDrawer` 是右侧的 Radix 模态 `Sheet`，表单值由 react-hook-form 保存，校验仍只走元数据的规则；
   `ReferenceSelect` 是远程 `Combobox`（`role="combobox"`，选项 `role="option"`），新增 `id`、`aria-label` / `aria-labelledby` / `aria-describedby` /
   `aria-invalid` / `aria-required` 与 `placeholder`（以 `<Label htmlFor={id}>` 命名）；`FieldErrors` 新增可选的 `id`（输入框以 `aria-describedby` 指向它），
-  每条违规仍带 `data-rule-code`，不再借用 antd 的类名；`FilePreview` 的图片点击（或旁边"放大预览"按钮）在 `Dialog` 中放大，非图片为下载按钮。
+  每条违规仍带 `data-rule-code`，不再借用 antd 的类名；`FilePreview` 的图片点击（或旁边"放大预览"按钮）在 `Dialog` 中放大，非图片为下载按钮。`FilePreview` 与 `MarkdownView` 16n 起在 `@jabiz/ui` 中（应用 SPA 也可用），`@jabiz/admin` 照旧以同名、同属性导出，扩展不用改。
   e2e 中原来按 antd 类名找的，改为 `getByTestId('entity-form')`（表单）、`getByRole('option')`（引用的选项）、`getByRole('alertdialog')`（确认）。
   `ApprovalPanel`、`DocumentPanel` 的 props 与 antd 时期相同；`DocumentPanel` 的发送对话框是 Radix `Dialog`（名称"以邮件发送"），地址是 `TagsInput`。
 - `@jabiz/ui` 的组合组件（阶段 15b-1 起，经 `@jabiz/admin` 一并导出）：`Combobox`（可搜索的选择，静态或远程）、`FilterBar`（列表上方的筛选：文本、选项、数值 / 时间 / 日期区间）、

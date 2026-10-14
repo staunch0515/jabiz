@@ -19,7 +19,7 @@ backend/<应用>/
 ```
 
 - **共享的包版本必须与平台前端一致**：`react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`，以及两个包的运行时依赖
-  （`dayjs`、`openapi-fetch`、`radix-ui`、`react-hook-form`、`lucide-react`、`qrcode` 等）都写成平台前端 lockfile 中的确切版本。
+  （`dayjs`、`openapi-fetch`、`radix-ui`、`react-hook-form`、`lucide-react`、`qrcode`、`react-markdown`（16n 起）等）都写成平台前端 lockfile 中的确切版本。
   `pnpm app:check <目录>`（在 `frontend/` 下）逐项比对；Gradle 构建中它是 `spaCheck<名>`，挂在 `check` 上，不一致即构建失败。
 - 平台前端须先 `pnpm install`（被 `link:` 的包从它们自己的 `node_modules` 解析依赖）；Gradle 构建自动安排（`pnpmInstallPlatformFrontend`）。
 - 应用分支上，应用目录列入 `.jabiz-app-paths`；`node_modules/` 不提交。
@@ -125,6 +125,10 @@ export default defineConfig({
   `MailLinkPage`（路径 `auth/verify-email`、`auth/join`、`auth/password-reset`；不要传 `search`，它自己读一次地址并立即去掉令牌）、`PasswordResetRequest`、
   `OidcCallback`（路径 `login/oidc`；登录与本人关联共用，关联完成后调用 `onLinked`）、`LinkedIdentities`（本人的外部账号：列表、关联、解除，16f-1）、`StepUpProvider`、`MfaEnrollment`、`ChangePasswordForm`、`SessionList`（本人在该入口的会话，结束本机会话后调用 `onSignedOut`，10 §15.9）、
   `VerifyEmailBanner`、`OfflineBanner`、`PwaUpdatePrompt`。
+- **内容显示积木**（`@jabiz/ui`，16n）：`MarkdownView`（`text`、可选 `lang`；原始 HTML 一律不渲染，`javascript:` 等链接被去掉，样式随 `theme.css`）、
+  `FilePreview`（`fileId`、`field`（`{ image, variants }`）、`width`：以会话取文件，图片为缩略图、可放大，其余为下载按钮），以及自己画图片时用的
+  `useFileUrl(fileId, variant)`（对象 URL，卸载时释放；变体用 `@jabiz/client` 的 `previewVariant`）与 `downloadFile(fileId)`。不要从 `@jabiz/admin` 引用（它只给后台扩展）。
+  示范门户的下单页以 `MarkdownView` 显示文案中的下单说明。
   示范门户用一个几十行的小路由（`src/router.ts`）；也可以用任何版本的 react-router。
 - **邮件链接**：平台的邮件链接是 `{entryUrl}auth/<页>?entry=…&token=…`，即入口自己的前端；应用自己的邮件模板可以写 `{entryUrl.<入口>}`（18 §5.6）。
   升级说明：曾把 `jabiz.mail.base-url` 设为后台子路径（如 `https://<主机>/admin`）以绕行的应用，改回 `https://<主机>`；已发出的旧链接经后台的 `/auth/*` 照常可用。

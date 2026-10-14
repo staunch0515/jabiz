@@ -1,8 +1,7 @@
-import { cn, Input, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from '@jabiz/ui'
+import { cn, Input, MarkdownView, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from '@jabiz/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { I18nTextParams, Texts } from '../meta/i18nText'
-import MarkdownView from './MarkdownView'
 
 interface Props {
   /** The field's name, which scopes the test ids of the inputs. */

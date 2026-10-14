@@ -3,7 +3,9 @@
 The components of jabiz frontends (decision D34): shadcn/ui's components, the platform's composite components
 (`DataTable`, `ConfirmDialog`, `notify`, `DatePicker` / `DateTimePicker` (typeable), `DecimalInput` / `MoneyInput`,
 `ThemeToggle`, `PageHeader`, `AppShell` / `ShellNav`, `Combobox`, `FilterBar`, `FileUpload`, `Timeline`,
-`DescriptionList`, `TagsInput`, `CopyButton`, `PageState`, `Spinner`, `Steps`, `SegmentedControl`), react-hook-form's form state re-exported
+`DescriptionList`, `TagsInput`, `CopyButton`, `PageState`, `Spinner`, `Steps`, `SegmentedControl`), the content views
+(`MarkdownView`, which never renders raw HTML, and `FilePreview` with `useFileUrl` / `downloadFile`, which fetch files
+with the session; phase 16n), react-hook-form's form state re-exported
 (`useForm`, `useFieldArray`, `useWatch`, `Controller`; `src/form-state.ts`), the sign-in and account building blocks
 (`src/auth/`: `AuthFrame`, `SignInForm`, `SignUpForm`, `MailLinkPage`, `StepUpProvider`, `ChangePasswordForm`, … —
 decision D43; they know no router and take navigation as callbacks) and the theme (`@jabiz/ui/theme.css`). It builds on
