@@ -43,7 +43,7 @@ async function expectAccessible(page: Page, name: string) {
 
 /**
  * The same pages in each appearance (decision D34 item 3). In the dark appearance the shell, menus, dialogs and every
- * page are dark: since phase 15c-2 all of them are built with @jabiz/ui.
+ * page are dark: all of them are built with @jabiz/ui.
  */
 async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, appearance: 'light' | 'dark') {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
@@ -58,14 +58,13 @@ async function checkPagesAfterSignIn(page: Page, request: APIRequestContext, app
   })
   await signIn(page)
   await expect(page.getByTestId('dataset-Carrier')).toBeVisible()
-  // A page built with @jabiz/ui follows the appearance (phase 15b).
-  await expect(page.locator('[data-slot="app-shell-content"]')).not.toHaveClass(/(^|\s)light(\s|$)/)
+  // Every page follows the appearance: nothing is pinned to the light tokens any more (phase 15d).
+  await expect(page.locator('.light')).toHaveCount(0)
   await expectAccessible(page, at('dataset catalog'))
 
   await page.goto(datasetPath(CARRIERS))
   await expect(dataRows(page).first()).toBeVisible()
   await pageRendered(page)
-  await expect(page.locator('[data-slot="app-shell-content"]')).not.toHaveClass(/(^|\s)light(\s|$)/)
   await expectAccessible(page, at('dataset list'))
 
   // The pop-ups of the list: the delete confirmation, the calendar of the point in time.
@@ -319,7 +318,7 @@ test.describe('accessibility', () => {
       await expect(page.locator('html')).toHaveClass(appearance === 'dark' ? /dark/ : /^(?!.*dark)/)
       await expectAccessible(page, `sign-in (${appearance})`)
       // With the requirements shown after an empty submission.
-      await page.getByRole('button', { name: /登\s*录/ }).click()
+      await page.getByRole('button', { name: '登录', exact: true }).click()
       await expect(page.getByText('请输入用户名。')).toBeVisible()
       await expectAccessible(page, `sign-in with errors (${appearance})`)
       // A refusal from an identity provider.

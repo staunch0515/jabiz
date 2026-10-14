@@ -28,7 +28,7 @@ test('an order confirmation is issued from its row, saved as issued and verified
   await signIn(page)
   await page.goto(datasetPath(ORDERS))
   await page.getByLabel('订单号').first().fill(code)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(dataRows(page)).toHaveCount(1)
   await page.getByTestId('row-action-ORDER_CONFIRMATION_ISSUE').first().click()
   await confirm(page)

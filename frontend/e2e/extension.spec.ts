@@ -23,7 +23,7 @@ test('the application page lists stock and receives goods', async ({ page, reque
   await form.getByLabel('仓库').fill(code)
   await form.getByLabel('SKU').fill(code)
   await form.getByLabel('数量').fill('5')
-  await form.getByRole('button', { name: /入\s*库/ }).click()
+  await form.getByRole('button', { name: '入库', exact: true }).click()
   await expect(page.getByText(`已入库：${code} 在 ${code} 现有 5`)).toBeVisible()
 
   await page.getByLabel('按仓库筛选').fill(code)
