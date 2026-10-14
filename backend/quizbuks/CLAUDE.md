@@ -151,3 +151,4 @@
   或只起数据库（`… up -d db`）后在 `backend/` 下 `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`，前端开发时在 `quizbuks-web/app` 或 `sponsor` 下 `pnpm dev`
   （端口 5175 / 5176，`/api` 代理到 8080）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。
+- 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。

@@ -18,6 +18,25 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
   作为受控变更**提出**，须由另一位持有 `control.publish` 的管理员（财务管理员）在后台发布（`CONTROL_CHANGE_PUBLISH`）。**发布之前，商家的入驻申请与提交发布一律被拒**
   （`PARAM_NOT_FOUND` 或 `QB_REVIEW_NOT_CONFIGURED`），不会未经审核通过。新版本部署后再执行一次 `QB_SETUP`，并发布新的提案（Q2 部署后：新权限、第二条规则）。
 
+## 本机演示（一条命令）
+
+只为在本机试用：`tools/quizbuks/local-demo.sh` 构建并启动打包的 jar（三个前端在其中），附 Stripe 桩与 Mailpit（不连 Stripe，邮件不出本机），
+并完成首次设置（`QB_SETUP`，再由演示用的第二位管理员发布它提出的受控变更）。需要 JDK 21、python3、curl、openssl；
+PostgreSQL 与 Mailpit 没有在运行时用 Docker 启动（数据库缺省为 compose 的 `localhost:5440`，`QB_DEMO_DB_*` 可改）。
+
+```sh
+tools/quizbuks/local-demo.sh start --seed   # 首次构建要几分钟；--seed 加演示数据
+tools/quizbuks/local-demo.sh stop           # 停止它启动的进程与容器（数据保留）
+tools/quizbuks/local-demo.sh status | logs | seed
+```
+
+- 结束时打印地址与账号：后台 `admin`（密码随机生成，存在 `deploy/quizbuks/.local-demo/env`）；`--seed` 另建已通过并充值 10 000 Kudos、
+  上架了 Quiz "World capitals" 的商家 `sponsor@quizbuks.local`，与在日本的答题人 `taker@quizbuks.local`（密码都是 `quizbuks-demo-1`）。
+  在 Stripe 桩的支付页上点 Pay 即完成充值；邮件在 <http://localhost:8025>。
+- 可重复执行：已有的设置与数据保持不变。密钥只生成一次（完整性与二次验证的密钥必须与数据库一起保留）。
+- **只用于本机**：管理操作不要求二次验证，演示用的第二位管理员（角色 `QB_DEMO_PUBLISHER`，只有 `control.publish`）没有二次验证，账号密码固定。
+  不要让它对外可达，也不要把这些设置用于任何部署。CI 作业 `local-demo` 照此运行一遍。
+
 ## 前端（QP1）
 
 - **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/`（`quizbuks-web/app`，PWA，入口 `app`）、商家后台在 `/sponsor/`
