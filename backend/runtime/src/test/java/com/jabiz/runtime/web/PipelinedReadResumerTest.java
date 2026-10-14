@@ -130,10 +130,13 @@ class PipelinedReadResumerTest {
         channel.pipeline().fireChannelRead(content("678"));
         channel.runPendingTasks();
         assertThat(reads).as("while the exchange is bound").hasValue(0);
+        PipelinedReadResumer.Handler handler = channel.pipeline().get(PipelinedReadResumer.Handler.class);
+        assertThat(handler.watched()).isSameAs(exchange);
 
         exchange.end();
         channel.runPendingTasks();
         assertThat(reads).as("once it has ended: one read, however many chunks went past").hasValue(1);
+        assertThat(handler.watched()).as("the ended exchange is not kept").isNull();
         channel.finishAndReleaseAll();
     }
 
