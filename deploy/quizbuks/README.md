@@ -1,6 +1,6 @@
 # QuizBuks — 部署
 
-一个镜像（`Dockerfile`，两段式：构建 jar 并打包平台通用后台，再放进 JRE 镜像）加 PostgreSQL 16（`docker-compose.yml`）。
+一个镜像（`Dockerfile`，两段式：构建 jar 并打包三个前端，再放进 JRE 镜像）加 PostgreSQL 16（`docker-compose.yml`）。
 命令都在仓库根目录执行。
 
 ```sh
@@ -11,23 +11,39 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - 管理员密码只在首次启动时打印一次；之后在仓库根目录用
   `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取
   （入口脚本提示中的 `docker compose exec app …` 省略了 `-f`；应用服务因此命名为 `app`）。
-- 管理员后台：<http://localhost:8080/admin/>。答题 App（`/`）与商家后台（`/sponsor/`）在后续阶段加入。
+- 三个前端（见下节"前端"）：答题 App <http://localhost:8080/>、商家后台 <http://localhost:8080/sponsor/>、管理员后台 <http://localhost:8080/admin/>。
 - 首次登录后执行一次流程 `QB_SETUP`（建角色、账本科目、国家、业务参数；可重复执行，只补从未存在过的，不加回已删除的）。它要求二次验证：
   先在后台的"安全设置"中开启两步验证（TOTP）；只在本机演示时可设 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 跳过。
 - `QB_SETUP` 把受控参数（金额、免审核开关）与审批规则（发布审核 `qb.publication.review`，Q4 起；商家入驻审核 `qb.sponsor.review`，Q2 起）
   作为受控变更**提出**，须由另一位持有 `control.publish` 的管理员（财务管理员）在后台发布（`CONTROL_CHANGE_PUBLISH`）。**发布之前，商家的入驻申请与提交发布一律被拒**
   （`PARAM_NOT_FOUND` 或 `QB_REVIEW_NOT_CONFIGURED`），不会未经审核通过。新版本部署后再执行一次 `QB_SETUP`，并发布新的提案（Q2 部署后：新权限、第二条规则）。
 
+## 前端（QP1）
+
+- **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/`（`quizbuks-web/app`，PWA，入口 `app`）、商家后台在 `/sponsor/`
+  （`quizbuks-web/sponsor`，入口 `sponsor`）、管理员后台在 `/admin/`（平台通用后台，入口 `admin`）。三者分开登录：一个入口的会话不会登录另一个。
+- **会话**：App 的会话保存在设备上（关闭浏览器后仍登录，30 天，不按闲置锁定）；商家后台与管理员后台只在当前标签页中，闲置 30 分钟锁定。
+- **生产必须是 HTTPS**：PWA（Service Worker、安装到主屏幕）只在安全来源上工作（本机 `localhost` 除外）；Stripe 支付与开通后跳回的地址（`QB_SPONSOR_LINK`、`QB_APP_LINK`）同样用 HTTPS。
+- **PWA 的作用域是整个主机**（`/`）：App 的 Service Worker 只缓存 App 的外壳，放过 `/sponsor/`、`/admin/`、`/api/`；要撤下 PWA，先以 `Pwa.REMOVE` 发布一个版本
+  （注销已安装的 Service Worker），至少一个发布周期后再改为 `OFF`（平台指南 `docs/guide/app-spa.md` 第 3 节）。
+- **邮件链接**按入口指向各自的前端：App 的验证、找回密码链接在 `/auth/…`，商家后台的在 `/sponsor/auth/…`。`JABIZ_MAIL_BASE_URL` 必须是主机的根地址。
+- **Google 登录（只给 App）**：在 Google Cloud 控制台建 OAuth 客户端（Web 应用），把 `https://<主机>/login/oidc` 登记为已授权的重定向 URI，然后设置
+  `SPRING_PROFILES_ACTIVE=google`、`JABIZ_OIDC_GOOGLE_CLIENT_ID`、`JABIZ_OIDC_GOOGLE_CLIENT_SECRET` 与 `QB_OIDC_REDIRECT_APP`（同一地址）。
+  首次用 Google 登录且邮箱未被使用时自动开户（答题人）；邮箱已被使用的人先用原来的方式登录，再在 App 的账户页关联 Google。商家后台不提供 Google 登录。
+- **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
+- **本机注册**：`docker compose -f deploy/quizbuks/docker-compose.yml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
+  在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
+
 ## 账户（Q2）
 
 - **三个登录入口**：后台 `admin`（只接受管理员角色，`QB_ADMIN_ROLES`）、答题 App `app`（`QB_TAKER`，允许自助注册，未验证邮箱也能登录浏览）、商家后台 `sponsor`
   （`QB_SPONSOR`，允许自助注册，**要求已验证邮箱**）。注册的角色由 `QB_SETUP` 建立：执行之前注册一律 422 `SIGN_UP_DISABLED`。
-  升级说明：此前在后台登录的商家、答题人的测试账号改用各自的入口（页面随 16c 加入之前用 API，`POST /api/auth/login` 带 `entry`）。
+  升级说明：此前在后台登录的商家、答题人的测试账号改用各自的入口（App `/login`、商家后台 `/sponsor/login`）。
 - **邮件必须开启**才能激活：`JABIZ_MAIL_ENABLED=true` 并配置发件人与邮件服务器（`JABIZ_MAIL_FROM`、`SPRING_MAIL_*`）；
   否则注册的用户收不到验证邮件，永远"待激活"（启动告警）。`JABIZ_MAIL_BASE_URL` 是**主机的根地址**（如 `https://quizbuks.example.com`，不带 `/admin`）：
   平台 16c 之后，验证、找回密码等链接指向各入口自己的前端（App `/auth/…`、商家后台 `/sponsor/auth/…`、后台 `/admin/auth/…`，D43），
-  退订页在后台（`/admin/mail/unsubscribe`）。App 与商家后台的页面随 QuizBuks 的页面阶段加入；在那之前，这两个入口的链接页面尚不存在，
-  此前发出的 `/admin/auth/…` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。商家邮件中的商家后台地址取 `QB_SPONSOR_LINK`，缺省为该主机上的 `/sponsor/`。
+  退订页在后台（`/admin/mail/unsubscribe`）；此前发出的 `/admin/auth/…` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
+  商家邮件（入驻通过、驳回）中的商家后台链接同样取自它（`{entryUrl.sponsor}`，即该主机上的 `/sponsor/`），不再取 `QB_SPONSOR_LINK`。
 - **在反向代理之后**运行时设置 `JABIZ_TRUSTED_PROXIES`（代理的地址或网段），否则登录记录中的 IP 都是代理的地址。不要同时设置 `server.forward-headers-strategy`（启动错误）。
 - **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
   Q2 之前由管理员手工建的商家账号没有入驻记录，须申请一次（`QB_SPONSOR_APPLY`）。
@@ -132,7 +148,10 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `JABIZ_MAIL_FROM` | 开启邮件时 | 发件人地址 |
 | `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页在 `/admin/`） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
-| `QB_SPONSOR_LINK` | 否 | 商家邮件中的商家后台地址；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
+| `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 的 Google 登录（`application-google.yml`，见"前端"） |
+| `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
+| `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/login/oidc`，与 Google 控制台中登记的完全相同 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录据此取客户端地址 |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：
