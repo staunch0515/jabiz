@@ -1,0 +1,296 @@
+import { ApiError } from '@jabiz/client'
+import { Alert, AlertDescription, Button, Checkbox, ConfirmDialog, PageState, cn } from '@jabiz/ui'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { APP } from '../messages'
+import { clockOffset, formatRemaining, threshold, useCountdown } from '../play/countdown'
+import { AnswerSaver } from '../play/saver'
+import { markAutoSubmitted, storedStart, storeResult, storeStart, takeHandedOver, type Started } from '../play/storage'
+import { FileImage } from '../qb/FileImage'
+import { CODE } from '../qb/ids'
+import { QB } from '../qb/messages'
+import { readAttempt, saveAttempt, startAttempt, submitAttempt, type Given } from '../qb/play'
+import { problemText } from '../qb/problems'
+import { Link, navigate, Redirect } from '../qb/router'
+import { refusedWith } from '../play/useStartAttempt'
+
+/** An option's letter in the order shown (A, B, C…). */
+export const letter = (index: number) => String.fromCharCode(65 + index)
+
+/** Where the play page goes instead of playing: the attempt's result, or nothing (it plays). */
+type Resolved = { started: Started } | { result: string } | { expired: string }
+
+/**
+ * The attempt to play: handed over by the page that started it, else continued from the server (`QB_ATTEMPT_START`
+ * returns the attempt in progress with its answers and current question: a reload resumes it). The publication comes
+ * from this tab's copy of the start, else from the caller's attempt record. A finished attempt goes to its result.
+ */
+async function resolve(attemptId: string): Promise<Resolved> {
+  const handed = takeHandedOver(attemptId)
+  if (handed) return { started: handed }
+  let publicationId = storedStart(attemptId)?.publicationId
+  if (!publicationId) {
+    const record = await readAttempt(attemptId)
+    if (record.status !== 'IN_PROGRESS') return { result: attemptId }
+    publicationId = record.publicationId
+  }
+  try {
+    const output = await startAttempt(publicationId)
+    storeStart(output)
+    return { started: { output, offset: clockOffset(output.serverTime) } }
+  } catch (error) {
+    if (refusedWith(error, CODE.attemptAlreadyTaken)) return { result: attemptId }
+    if (refusedWith(error, CODE.attemptExpired)) return { expired: attemptId }
+    throw error
+  }
+}
+
+/** The answers as the server gives them, by question number. */
+function answerMap(answers: Given[]): Map<number, number[]> {
+  return new Map(answers.map((a) => [a.questionNo, [...a.selected]]))
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'failed'
+
+/** The countdown, always on screen; screen readers hear it only at its thresholds (a minute, ten seconds). */
+function Timer({ left }: { left: number }) {
+  const { t } = useTranslation(APP)
+  const reached = threshold(left)
+  const low = reached !== null
+  return (
+    <>
+      <span role="timer" aria-label={t('play.timeLeft')} data-testid="play-timer"
+        className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-sm font-semibold tabular-nums',
+          low ? 'bg-destructive text-destructive-foreground' : 'bg-muted')}>
+        <Clock aria-hidden className="size-4" />
+        {formatRemaining(left)}
+      </span>
+      <span className="sr-only" aria-live="polite" data-testid="play-timer-announcement">
+        {reached === 60_000 ? t('play.oneMinuteLeft') : reached === 10_000 ? t('play.tenSecondsLeft') : ''}
+      </span>
+    </>
+  )
+}
+
+function Player({ started }: { started: Started }) {
+  const { t } = useTranslation(APP)
+  const { output, offset } = started
+  const questions = output.questions
+  const total = questions.length
+  const [index, setIndex] = useState(() => Math.min(Math.max(output.currentIndex, 0), Math.max(total - 1, 0)))
+  const [answers, setAnswers] = useState(() => answerMap(output.answers))
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [submitting, setSubmitting] = useState<'manual' | 'auto' | null>(null)
+  const [submitError, setSubmitError] = useState<unknown>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const firstRender = useRef(true)
+  // One key for this attempt's submission, whoever retries it: a lost answer's retry returns the first one.
+  const [submitKey] = useState(() => crypto.randomUUID())
+  const attemptId = output.attemptId
+  // The player is keyed by the attempt: one saver for its life.
+  const [saver] = useState(() => new AnswerSaver({
+    attemptId,
+    save: (input) => {
+      setSaveState('saving')
+      return saveAttempt(input)
+    },
+    onSaved: () => setSaveState('saved'),
+    onError: () => setSaveState('failed'),
+    // The attempt is over: its time ran out (the countdown submits) or it was submitted elsewhere (its result).
+    isFatal: (error) => refusedWith(error, CODE.attemptExpired, CODE.attemptNotInProgress),
+    onFatal: (error) => {
+      setSaveState('idle')
+      if (refusedWith(error, CODE.attemptNotInProgress)) navigate(`/result/${attemptId}`, { replace: true })
+    },
+  }))
+  // Leaving the page saves what is pending (the server keeps it for continuing).
+  useEffect(() => () => void saver.flush(), [saver])
+
+  // Each move to another question puts focus on its heading, so screen readers read where they are.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    heading.current?.focus()
+  }, [index])
+
+  const allAnswers = (): Given[] =>
+    [...answers].filter(([, selected]) => selected.length > 0).map(([questionNo, selected]) => ({ questionNo, selected }))
+
+  const submit = useCallback(async (how: 'manual' | 'auto') => {
+    if (submitting) return
+    setSubmitting(how)
+    setSubmitError(null)
+    if (how === 'auto') markAutoSubmitted(attemptId)
+    await saver.stop()
+    try {
+      const result = await submitAttempt({ attemptId, currentIndex: index, answers: allAnswers() }, submitKey)
+      storeResult(result)
+      navigate(`/result/${attemptId}`, { replace: true })
+    } catch (error) {
+      // Too late, or finished meanwhile: the server finishes it with the saved answers; the result page waits for it.
+      if (how === 'auto' || refusedWith(error, CODE.attemptExpired, CODE.attemptFinished, CODE.attemptNotInProgress)) {
+        if (refusedWith(error, CODE.attemptExpired)) markAutoSubmitted(attemptId)
+        navigate(`/result/${attemptId}`, { replace: true })
+        return
+      }
+      // Still in progress (offline, a refusal to read): answering, and saving, go on; submitting can be tried again.
+      // What stopping dropped is saved again: every answer as the page has it.
+      saver.resume()
+      answers.forEach((selected, questionNo) => saver.answer(questionNo, selected))
+      setSubmitError(error)
+      setSubmitting(null)
+    }
+    // allAnswers reads the current answers; the callback is rebuilt when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitting, attemptId, index, answers, saver, submitKey])
+
+  const left = useCountdown(output.deadline, offset, () => void submit('auto'))
+
+  if (total === 0) return <PageState kind="empty" description={t('play.noQuestions')} />
+  const question = questions[index]
+  const chosen = answers.get(question.no) ?? []
+  const unanswered = questions.filter((q) => (answers.get(q.no) ?? []).length === 0).length
+  const last = index === total - 1
+
+  const toggle = (option: number, on: boolean) => {
+    const next = on ? [...new Set([...chosen, option])] : chosen.filter((o) => o !== option)
+    setAnswers((current) => new Map(current).set(question.no, next))
+    setSaveState('idle')
+    saver.answer(question.no, next)
+  }
+  const go = (to: number) => {
+    setIndex(to)
+    void saver.move(to)
+  }
+
+  if (submitting) {
+    return (
+      <PageState kind="loading" title={submitting === 'auto' ? t('play.timeUp') : t('play.submitting')}
+        data-testid="play-submitting" />
+    )
+  }
+
+  return (
+    <section className="flex flex-col gap-4" data-testid="play" aria-labelledby="play-question">
+      <div className="bg-background sticky top-12 z-[5] -mx-4 flex flex-col gap-2 border-b px-4 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium" data-testid="play-progress">
+            {t('play.progress', { n: index + 1, total })}
+          </span>
+          <Timer left={left} />
+        </div>
+        <div aria-hidden className="bg-muted h-1.5 overflow-hidden rounded-full">
+          <div className="bg-primary h-full transition-[width]" style={{ width: `${((index + 1) / total) * 100}%` }} />
+        </div>
+      </div>
+      <fieldset className="flex flex-col gap-3" aria-describedby="play-hint">
+        <legend className="contents">
+          <h1 id="play-question" ref={heading} tabIndex={-1} className="text-lg font-semibold outline-none"
+            data-testid="play-question">
+            <span className="sr-only">{t('play.progress', { n: index + 1, total })}: </span>
+            {question.stem}
+          </h1>
+        </legend>
+        <p id="play-hint" className="text-muted-foreground text-sm">
+          {t('play.points', { count: question.points })} · {t('play.chooseAll')}
+        </p>
+        {question.image && (
+          <FileImage fileId={question.image} variant="w640" alt={t('play.questionImage')}
+            className="max-h-64 w-full rounded-md object-contain" />
+        )}
+        <ul className="flex flex-col gap-2" data-testid="play-options">
+          {question.options.map((option, i) => {
+            const id = `option-${question.no}-${option.no}`
+            const checked = chosen.includes(option.no)
+            return (
+              <li key={option.no}>
+                <label htmlFor={id} data-testid="play-option" data-checked={checked || undefined}
+                  className={cn('flex cursor-pointer items-center gap-3 rounded-lg border p-3',
+                    checked ? 'border-primary bg-accent' : 'hover:bg-accent')}>
+                  <Checkbox id={id} checked={checked} onCheckedChange={(value) => toggle(option.no, value === true)} />
+                  <span aria-hidden className="text-muted-foreground w-4 text-sm font-semibold">{letter(i)}</span>
+                  <span className="flex flex-1 flex-col gap-2">
+                    {option.text && <span>{option.text}</span>}
+                    {option.image && (
+                      <FileImage fileId={option.image} variant="w320" alt={option.text ? '' : t('play.optionImage',
+                        { letter: letter(i) })} className="max-h-40 w-full rounded-md object-contain" />
+                    )}
+                  </span>
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      </fieldset>
+      <p className="text-muted-foreground min-h-5 text-xs" role="status" data-testid="play-save-state">
+        {saveState === 'saving' ? t('play.saving') : saveState === 'saved' ? t('play.saved')
+          : saveState === 'failed' ? t('play.saveFailed') : ''}
+      </p>
+      {submitError !== null && (
+        <Alert variant="destructive" data-testid="play-submit-error">
+          <AlertDescription>{problemText(submitError)}</AlertDescription>
+        </Alert>
+      )}
+      <nav aria-label={t('play.navigation')} className="flex items-center gap-2">
+        <Button variant="outline" disabled={index === 0} onClick={() => go(index - 1)} data-testid="play-previous">
+          <ChevronLeft aria-hidden />
+          {t('play.previous')}
+        </Button>
+        <span className="flex-1" />
+        {last ? (
+          <Button onClick={() => setConfirmOpen(true)} data-testid="play-submit">
+            <Send aria-hidden />
+            {t('play.submit')}
+          </Button>
+        ) : (
+          <Button onClick={() => go(index + 1)} data-testid="play-next">
+            {t('play.next')}
+            <ChevronRight aria-hidden />
+          </Button>
+        )}
+      </nav>
+      <ConfirmDialog open={confirmOpen} onOpenChange={setConfirmOpen} title={t('play.confirmTitle')}
+        description={unanswered > 0 ? t('play.confirmUnanswered', { count: unanswered }) : t('play.confirmAll')}
+        confirmLabel={t('play.submit')} cancelLabel={t('play.keepAnswering')}
+        onConfirm={() => void submit('manual')} />
+    </section>
+  )
+}
+
+/**
+ * One question per page (U-30 – U-32, U-41; docs/quizbuks/plans/QP-pages.md): the progress, the countdown by the
+ * server's clock, the options as check boxes (the start never says which questions have several correct options, so
+ * any number may be chosen), previous and next; answers saved as they change, the current question on every move.
+ * Submitting asks first; when the time runs out the answers are submitted without asking.
+ */
+export function PlayPage({ attemptId }: { attemptId: string }) {
+  const { t } = useTranslation(APP)
+  const { t: tQb } = useTranslation(QB)
+  const resolved = useQuery({ queryKey: ['qb', 'play', attemptId], queryFn: () => resolve(attemptId),
+    staleTime: Infinity, gcTime: 0 })
+  if (resolved.isPending) return <PageState kind="loading" />
+  if (resolved.isError) {
+    if (resolved.error instanceof ApiError && resolved.error.status === 404) {
+      return <PageState kind="notFound" titleAs="h1" description={tQb('notFound')}
+        action={<Button asChild variant="outline"><Link to="/history">{t('nav.history')}</Link></Button>} />
+    }
+    return <PageState kind="error" description={problemText(resolved.error)}
+      action={<Button variant="outline" onClick={() => void resolved.refetch()}>{tQb('retry')}</Button>} />
+  }
+  const data = resolved.data
+  if ('result' in data) return <Redirect to={`/result/${data.result}`} />
+  if ('expired' in data) {
+    return (
+      <PageState kind="warning" titleAs="h1" title={t('play.expiredTitle')} description={t('play.expired')}
+        data-testid="play-expired"
+        action={<Button asChild><Link to={`/result/${data.expired}`}>{t('play.toResult')}</Link></Button>} />
+    )
+  }
+  return <Player key={attemptId} started={data.started} />
+}
+

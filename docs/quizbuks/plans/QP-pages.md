@@ -226,6 +226,47 @@
 - CI：工作流只读权限（`permissions: contents: read`）；`package` 作业检查 `/`、`/welcome`、`/sponsor/`、`/admin/` 的 CSP 头。部署说明写明设备上的刷新令牌对同源页面可读（D43 的已知限制）。
 
 
+## 实施记录（QP2，2026-10-14）
+
+分支 `1.2/quizbuks-5p-play-pages`（从 `1.2/quizbuks` @ d6cb5b0 拉出，已含 PG-1）。只改 `.jabiz-app-paths` 中的路径（`quizbuks-web/**`、`backend/quizbuks/CLAUDE.md`、`docs/quizbuks/**`），
+后端行为不变：第 4 节 "App /" 表中的流程、模板与数据视图都已存在并照用（`QB_VIEW`、`QB_ATTEMPT_START` / `SAVE` / `SUBMIT`、`qb.app.feed`、`qb.app.publication`、
+`qb.app.publication-tiers`、`qb.app.history`、`urn:jabiz:dataset:taker:QbAttempt`）。
+
+- **共用目录 `src/qb/`**（两份相同）：`ids.ts` 加答题的名字（`PLAY`、`CONTENT_IMAGE_VARIANTS`、`CODE` 的四个答题错误码）；新文件 `play.ts`（对照 `AttemptProcesses`、`AttemptFinishing`
+  与 `queries/qb/app/*.sql` 手写的类型与调用，模板的数值列按数字或十进制文本读取）与 `play.test.ts`。商家后台不用它们，只为保持两份相同。
+- **首页 `/`**：`qb.app.feed`（`at` 为打开页面的时刻、国家取自资料）；紧凑卡片（封面缩略图 `w320` 与商家头像按 IntersectionObserver 懒加载、名称、发布人、最高奖励、完成人数），
+  一屏多于 6 张（390 × 844）；按名称与标题搜索，六种排序（U-14），底部抽屉中的筛选：发布人（公司名，按原文包含）、发布人国家、最高奖励区间、最少完成人数（U-13）；"显示更多"分页。
+- **详情 `/p/:id`**：标题下方是资料（文章以 `MarkdownView`，链接与视频链接在新标签页打开（Q-3），PDF 以 `FilePreview` 下载，图片组以 `FilePreview` 缩略图与说明，音频以
+  `useFileUrl` 的 `<audio>`），然后是简介（Markdown）、概要、奖励档位表、完成人数（1 小时 / 24 小时 / 7 天 / 30 天 / 累计与统计时刻）、商家简介；底部固定的大按钮：
+  开始、继续（剩 N 分钟）、已参加即"查看结果"、未验证邮箱即说明、否则不可用。已验证的答题人打开时 `QB_VIEW`（失败不影响页面）。
+- **答题 `/play/:attemptId`**：开始或继续的输出由详情、历史页交给答题页（不再调用）；重新加载时以本标签页保存的开始输出、否则以本人的会话记录找到发布，再以 `QB_ATTEMPT_START`
+  继续（恢复题号与已选答案）；已结束即到结果页，时间已过即说明正在提交。一页一题，进度"第 n / N 题"，选项按会话的顺序显示为 A、B、C…；**选项一律为复选框**（偏离计划第 6 节的
+  "radio-group / checkbox"：开始的输出不说哪些题有多个正确选项，说了即泄露答案的一部分；提示"选出所有正确的选项"）。作答后 0.8 秒、翻页时立即 `QB_ATTEMPT_SAVE`
+  （`play/saver.ts`：一次一个、只发自上次成功以来改过的题、失败保留并 5 秒后重试、会话结束即停止）。倒计时按 `deadline` 与 `serverTime` 的偏移（`play/countdown.ts`），
+  `role="timer"`，只在剩 1 分钟与 10 秒时由礼貌的 live 区域朗读；翻页后焦点移到题目标题。最后一题"提交答案"先确认（说明未答的题数）；到 0:00 不确认即提交；
+  提交超时或已被系统结束即到结果页；提交因其他原因失败时留在本页、重新保存全部答案、可再次提交（同一个 `Idempotency-Key`）。答题时不显示底部导航。
+- **结果 `/result/:attemptId`**（A-3 按缺省）：刚提交时用提交的输出与本标签页的开始输出，显示得分、合格分、是否合格、奖励（已到账 / 待支付及服务端的说明 / 无）与逐题的
+  "我的答案 vs 正确答案"（选项字母与文字）；之后（其他标签页、关闭后）读本人的会话记录（`result` 列）与 `qb.app.publication`（名称、合格分），只显示分数与逐题对错并说明题目内容
+  只在刚完成时显示。超时自动提交（本页提交或状态 `EXPIRED`）另有说明；时间已过而尚未结束的会话每 5 秒再读，直到系统以已保存的答案结束它。退出登录时清除本标签页保存的答题数据。
+- **历史 `/history`**：`qb.app.history`（`at` 为打开的时刻），搜索与"全部 / 已完成 / 未完成"（`category` 筛选）；每行：名称、类别（合格、不合格、进行中、已超时）、开始时间、
+  得分与奖励（已获得 / 待支付）；进行中且在时限内为"继续答题（剩 N 分钟）"→ `QB_ATTEMPT_START`（恢复）；已完成与已超时链接到结果页。
+- **底部导航**：首页、记录、账户（钱包随 QP4）；详情页属于首页，答题与结果属于记录。
+- **文案**：`app` 命名空间加 `feed`、`detail`、`play`、`result`、`history` 与 `nav.history`，三语齐全；计数一律写成各数通用的形式（"已完成：3"），因为键一致的测试要求三种语言键相同
+  而中文、日文没有复数形式。金额只经 `formatKudos`。
+- **测试**：Vitest 新增 `play/countdown.test.tsx`（服务器时间偏移、格式、阈值、假定时器下的到期一次）、`play/saver.test.ts`（防抖、翻页立即保存、串行、失败保留重发、致命错误停止、
+  提交前停止）、`qb/play.test.ts`、`routes.test.ts`、`Play.test.tsx`（首页、详情的 Markdown 与链接与 `QB_VIEW`、未验证不能开始、完整答题与确认提交与结果、提交失败后重试、
+  重新加载恢复、只有会话编号时恢复、到时自动提交、服务端说时间已过、之后读到的结果、等待系统结束、历史的筛选与继续）。e2e `play.spec.ts`：经接口准备（商家入驻并经 Stripe 桩充值、
+  内容与版本、发布与管理员审批），亮、暗两种外观各一次的完整流程（首页搜索、详情、开始的输出不含 `correct`、重新加载恢复、另一答题人用完预算后本人提交得"待支付"、
+  历史、不能再次开始），以及 30 秒时限的一次（从历史继续，到时自动提交并说明）；每个新页面都过 axe。
+- **未做**：首页的"发布日期区间"筛选与历史的日期、金额区间筛选（U-13、U-42 的一部分，P1）；发布人筛选只按公司名、区分大小写（模板的外层 `LIKE`）。
+- **CI**：`quizbuks.yml` 的 `e2e` 作业加 `QUIZBUKS_STRIPE_CHECKOUTURLPREFIX`：`application.yml` 没有把 `QB_STRIPE_CHECKOUT_URL_PREFIX` 映射到
+  `quizbuks.stripe.checkout-url-prefix`（只有 `application-dev.yml` 映射），打包的 jar 因此只接受 Stripe 自己的地址、桩的 Checkout 被判 `OPEN_MISMATCH`；
+  `play.spec` 经桩充值，所以以 Spring 的宽松绑定直接设置该属性。是否在 `application.yml` 中补上映射（与 `connect-url-prefix` 一致）留给 QP4 决定，本阶段不改后端。
+- **发现**：平台的 `ProblemDetail` 违规只带 `field`、`ruleCode`、`message`，不带 `params`，所以 `QB_ATTEMPT_ALREADY_TAKEN` 的 `attemptId` 到不了前端：答题页对它转到本会话的结果页，
+  详情与历史页收到它（或 `QB_ATTEMPT_EXPIRED`）时重新读取，再提供"查看结果"。
+- **本机验证**：`./gradlew :quizbuks:check` 通过；两个 SPA 的 lint / typecheck / test、`app:check`、`diff -r src/qb`、e2e 类型检查通过；e2e 全部 16 项（含 `play.spec` 的 3 项）
+  对打包的 jar、Mailpit 与 Stripe 桩通过。
+
 ## 实施记录（QP3a，2026-10-14）
 
 分支 `1.2/quizbuks-3p-content-pages`（从 `1.2/quizbuks` @ d6cb5b0 拉出，已含 QP1 与 PG-1）。只改 `.jabiz-app-paths` 中的路径，`tools/check-app-paths.sh` 通过；后端未改（所用的

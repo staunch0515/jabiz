@@ -16,14 +16,20 @@ import {
   cn,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { House, UserRound, type LucideIcon } from 'lucide-react'
+import { History, House, UserRound, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { ACCOUNT_PATH, AccountPage, rememberLinked } from './pages/AccountPage'
-import { HomePage } from './pages/HomePage'
+import { FeedPage } from './pages/FeedPage'
+import { HistoryPage } from './pages/HistoryPage'
+import { PlayPage } from './pages/PlayPage'
+import { PublicationPage } from './pages/PublicationPage'
 import { PROFILE_QUERY } from './pages/ProfileForm'
+import { ResultPage } from './pages/ResultPage'
 import { WelcomePage } from './pages/WelcomePage'
+import { forgetAttempts } from './play/storage'
+import { itemPage } from './routes'
 import { readMyProfile } from './qb/api'
 import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
@@ -32,15 +38,17 @@ import { useSessionLock } from './qb/session'
 /** Where a signed-in taker starts. */
 const HOME = '/'
 const WELCOME = '/welcome'
+const HISTORY = '/history'
 
 /** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
 
-/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; history and wallet come with QP2, QP4). */
+/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; the wallet comes with QP4). */
 const NAV: { path: string; key: string; icon: LucideIcon }[] = [
   { path: HOME, key: 'nav.home', icon: House },
+  { path: HISTORY, key: 'nav.history', icon: History },
   { path: ACCOUNT_PATH, key: 'nav.account', icon: UserRound },
 ]
 
@@ -59,7 +67,10 @@ function Header() {
         <span className="mr-auto font-semibold">{t('brand')}</span>
         <ThemeToggle />
         <Button variant="ghost" size="sm" data-testid="sign-out"
-          onClick={() => void signOut().then(toSignIn)}>
+          onClick={() => void signOut().then(() => {
+            forgetAttempts()
+            toSignIn()
+          })}>
           {t('signOut')}
         </Button>
       </div>
@@ -70,13 +81,16 @@ function Header() {
 /** The bottom navigation of a phone app, kept on screen; the current page is marked for assistive technology. */
 function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
+  // A publication's page belongs to home, an attempt's to the history.
+  const item = itemPage(path)
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-background fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-md">
         {NAV.map((item) => {
           const Icon = item.icon
-          const current = path === item.path
+          const current = section === item.path
           return (
             <li key={item.path} className="flex-1">
               <Link to={item.path} current={current} data-testid={`nav-${item.path.replace('/', '') || 'home'}`}
@@ -115,13 +129,19 @@ function SignedIn({ path }: { path: string }) {
   if (!complete && emailVerified && path !== WELCOME && path !== ACCOUNT_PATH) return <Redirect to={WELCOME} />
   if (complete && path === WELCOME) return <Redirect to={HOME} />
 
+  const country = complete?.countryCode ?? null
+  const item = itemPage(path)
   let page: ReactNode
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
-  else if (path === HOME) page = <HomePage name={complete?.displayName || displayName || ''} />
+  else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
+  else if (path === HISTORY) page = <HistoryPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
+  else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
+  else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />
+  else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} country={country} />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
-  // The navigation is the app's; the welcome step stands alone.
-  const nav = path !== WELCOME
+  // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
+  const nav = path !== WELCOME && item?.page !== 'play'
   return (
     <div className="flex min-h-full flex-col">
       <Header />
