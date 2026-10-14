@@ -32,7 +32,7 @@ test('the list page of a new entity is generated from its metadata', async ({ pa
 
   // Search by code (the list view whitelists it; text allows LIKE).
   await page.getByLabel('代码').first().fill(prefix)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   const rows = dataRows(page)
   await expect(rows).toHaveCount(3)
   // Default sort of the list view: code ascending. Dictionary codes show their labels, amounts their currency.
@@ -51,7 +51,7 @@ test('the list page of a new entity is generated from its metadata', async ({ pa
   await page.getByLabel('代码').first().fill(prefix)
   await rangeEnd(page, '信用额度', 'from').fill('1500')
   await rangeEnd(page, '信用额度', 'to').fill('2500')
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`${prefix}C`)
 })

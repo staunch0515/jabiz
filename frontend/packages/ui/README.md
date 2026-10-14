@@ -27,7 +27,6 @@ single-page applications.
 | Change | Where |
 | --- | --- |
 | Imports are relative (`../../lib/utils`), not `@/…` | all |
-| Every element drawn with `cn(…)` carries `UI_SCOPE` (`.jabiz-ui`), the scope of the preflight (see below), so a component is reset wherever a page puts it; the sidebar's wrapper and inset, which hold the page, do not | all but sonner |
 | Collapsed with `offcanvas`, the sidebar container is `inert` | sidebar |
 | Fixed texts ("Close", "Toggle sidebar", "Previous page", …) come from the `ui` namespace | dialog, sheet, sidebar, pagination, breadcrumb |
 | The overlay is the `overlay` token, not `bg-black/50`; the destructive button's text is `destructive-foreground` | dialog, sheet, alert dialog, button, badge |
@@ -49,18 +48,12 @@ cd frontend/packages/ui && pnpm dlx shadcn@<version> add <component> --overwrite
 then re-apply the changes in the table (git diff shows them), rewrite `@/` imports to relative ones, and run
 `pnpm lint`, `pnpm typecheck` and `pnpm test` in `frontend/`.
 
-## The scoped preflight (phase 15 only)
+## The preflight
 
-While Ant Design pages remain, Tailwind's preflight (its CSS reset) would restyle them. `theme.css` therefore imports
-`src/styles/preflight.scoped.css`, Tailwind's preflight with every selector limited to elements that are `.jabiz-ui`
-or inside one (specificity unchanged). It is generated:
-
-```sh
-node packages/ui/scripts/scoped-preflight.mjs   # in frontend/, after upgrading Tailwind
-```
-
-`theme.test.ts` fails when the file no longer matches the installed Tailwind. Phase 15d removes Ant Design, imports
-`tailwindcss/preflight.css` globally and drops the scope.
+`theme.css` imports Tailwind's preflight (its CSS reset) globally into the layer `base`, sets the page's background
+and text from the tokens on `body`, and turns native controls dark under `.dark`. Until phase 15d it was scoped to
+`.jabiz-ui` while Ant Design pages remained; `UI_SCOPE` is still exported (for extensions that name it) but has no
+styles and is not needed. An application's own SPA gets the same reset on every element of its pages.
 
 ## Using it in an application's own SPA
 

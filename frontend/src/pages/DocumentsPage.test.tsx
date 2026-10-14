@@ -10,15 +10,15 @@ const get = vi.fn()
 const post = vi.fn()
 const downloadDocument = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args), POST: (...args: unknown[]) => post(...args) },
   unwrap: (value: unknown) => value,
+  useAuth: () => ({ can: () => true }),
+  runProcess: (...args: unknown[]) => runProcess(...args),
 }))
 vi.mock('../api/documents', () => ({ downloadDocument: (...args: unknown[]) => downloadDocument(...args) }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: () => true }) }))
 const runProcess = vi.fn()
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
 
 const RUN = {
   runId: 'd-1', layoutId: 'commerce.order_confirmation', title: 'Order confirmation', documentNo: 'SO-1',

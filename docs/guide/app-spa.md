@@ -96,8 +96,9 @@ export default defineConfig({
   }
   ```
 - `tsconfig.node.json` 检查 `vite.config.ts`（`"module": "nodenext"`、`"types": ["node"]`）。预设是纯 JavaScript（带类型声明），任何 Node 版本都能加载。
-- 样式表：`@import '@jabiz/ui/theme.css';`（它已 `@source` 了 `@jabiz/ui` 的源码；Tailwind 自动扫描本工程）。preflight 只作用于带 `.jabiz-ui` 的元素：
-  页面的根元素加 `UI_SCOPE`（`className={cn(UI_SCOPE, …)}`）。颜色只用主题 token（D34）。
+- 样式表：`@import '@jabiz/ui/theme.css';`（它已 `@source` 了 `@jabiz/ui` 的源码；Tailwind 自动扫描本工程）。Tailwind 的 preflight 是全局的（阶段 15d 起）：
+  页面上的每个元素都没有浏览器的默认样式（标题、列表、链接、按钮），样式全用工具类写；`body` 的背景与文字取主题 token。颜色只用主题 token（D34）。
+  15d 之前写的应用页面若依赖浏览器的默认样式（未写工具类的标题、列表、链接），合并后请自查；`UI_SCOPE` 已不需要。
 - 测试：Vitest + Testing Library，`setup.ts` 补上 jsdom 缺少的 `matchMedia`、`ResizeObserver` 与指针捕获（示范门户的 `src/test/setup.ts`）。
   示范门户的 CI：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`，以及 `pnpm app:check ../backend/app/portal`。
 

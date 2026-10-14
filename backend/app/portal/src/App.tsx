@@ -12,7 +12,6 @@ import {
   SignUpForm,
   StepUpProvider,
   ThemeToggle,
-  UI_SCOPE,
   VerifyEmailBanner,
   cn,
 } from '@jabiz/ui'
@@ -164,7 +163,7 @@ export default function App() {
     <AppearanceProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <div className={cn(UI_SCOPE, 'bg-background text-foreground min-h-full')}>
+          <div className="bg-background text-foreground min-h-full">
             <Routes />
           </div>
         </AuthProvider>

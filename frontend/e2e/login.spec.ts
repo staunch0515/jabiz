@@ -8,7 +8,7 @@ test.describe('sign-in and navigation', () => {
     await expect(page).toHaveURL(/\/login$/)
     await page.getByPlaceholder('用户名').fill(ADMIN.userName)
     await page.getByPlaceholder('密码').fill('not-the-password')
-    await page.getByRole('button', { name: /登\s*录/ }).click()
+    await page.getByRole('button', { name: '登录', exact: true }).click()
     await expect(page.getByTestId('login-error')).toBeVisible()
     await expect(page).toHaveURL(/\/login$/)
   })

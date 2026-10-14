@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError, useAuth, formatDateTime } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -19,16 +20,12 @@ import { History, Info, Plus, ScrollText } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
 import EntityFormDrawer from '../components/EntityFormDrawer'
 import RowActions from '../components/RowActions'
 import AdminPage from '../layout/AdminPage'
 import { actionsFor } from '../meta/actions'
 import { toRow, type Row } from '../meta/cells'
 import { dataColumns, defaultSorting, filterFields } from '../meta/dataColumns'
-import { formatDateTime } from '../meta/format'
 import { useDataset, useDatasets, useDictionaries, useEntityMeta, useProcesses } from '../meta/hooks'
 import { buildFilters, buildSorts, listViewOf } from '../meta/listQuery'
 import { useEntityMetas, useReferenceLabels } from '../meta/references'

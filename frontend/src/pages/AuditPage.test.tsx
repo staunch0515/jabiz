@@ -8,8 +8,8 @@ import AuditPage from './AuditPage'
 
 const get = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args) },
   unwrap: (value: unknown) => value,
 }))

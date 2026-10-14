@@ -2,7 +2,6 @@ import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon
 import { useTranslation } from 'react-i18next'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
-import { UI_SCOPE } from '../../lib/utils'
 import { UI_NAMESPACE } from '../../i18n'
 import { useAppearance } from '../appearance'
 
@@ -14,7 +13,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={resolved}
-      className={`${UI_SCOPE} toaster group`}
+      className="toaster group"
       containerAriaLabel={t('notify.notifications')}
       icons={{
         success: <CircleCheckIcon className="size-4" />,

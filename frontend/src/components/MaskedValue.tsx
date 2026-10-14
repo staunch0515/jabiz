@@ -1,8 +1,8 @@
-import { Button, CopyButton, notify, Spinner, UI_NAMESPACE, UI_SCOPE } from '@jabiz/ui'
+import { api, ApiError, unwrap } from '@jabiz/client'
+import { Button, CopyButton, notify, Spinner, UI_NAMESPACE } from '@jabiz/ui'
 import { Eye } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, ApiError, unwrap } from '../api/client'
 
 interface Props {
   datasetId: string
@@ -31,7 +31,7 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
 
   if (plain !== null) {
     return (
-      <span className={`${UI_SCOPE} inline-flex items-center gap-1`}>
+      <span className="inline-flex items-center gap-1">
         <span data-testid={`revealed-${field}`}>{plain}</span>
         <CopyButton value={plain} label={t('copy.copy', { ns: UI_NAMESPACE })} />
       </span>
@@ -54,7 +54,7 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
     }
   }
   return (
-    <span className={`${UI_SCOPE} inline-flex items-center gap-1`}>
+    <span className="inline-flex items-center gap-1">
       <span>{masked}</span>
       <Button
         variant="link"

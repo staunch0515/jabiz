@@ -3,7 +3,7 @@ import { CheckIcon, ChevronsUpDownIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
@@ -91,7 +91,7 @@ export function Combobox({
   }
 
   return (
-    <div data-slot="combobox" className={cn(UI_SCOPE, 'relative flex w-full items-center', className)}>
+    <div data-slot="combobox" className={cn('relative flex w-full items-center', className)}>
       <Popover open={open} onOpenChange={setOpenAndReset}>
         <PopoverTrigger asChild>
           <Button
@@ -107,7 +107,6 @@ export function Combobox({
             disabled={disabled}
             data-testid={testId}
             className={cn(
-              UI_SCOPE,
               // On the outline button's dark tint the muted placeholder would fall below 4.5:1.
               'w-full min-w-40 justify-between font-normal dark:bg-transparent',
               clearable && shown !== undefined && !disabled && 'pr-16',
@@ -150,7 +149,7 @@ export function Combobox({
                         setOpenAndReset(false)
                       }}
                     >
-                      <CheckIcon aria-hidden className={cn(UI_SCOPE, option.value === value ? 'opacity-100' : 'opacity-0')} />
+                      <CheckIcon aria-hidden className={cn(option.value === value ? 'opacity-100' : 'opacity-0')} />
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate">{option.label}</span>
                         {option.description && (

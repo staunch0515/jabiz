@@ -35,3 +35,26 @@ describe('extension lint rules (decisions D22, D34)', () => {
     expect(await lint("import { Button } from 'antd'\nexport const x = Button\n", other)).toBe(1)
   })
 })
+
+describe('platform lint rules against Ant Design coming back (phase 15d)', () => {
+  async function messages(code: string, filePath: string) {
+    const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: platformConfig })
+    const [result] = await eslint.lintText(code, { filePath })
+    return result.messages.map((m) => m.ruleId)
+  }
+
+  it('refuses Ant Design in the admin frontend and its packages', async () => {
+    expect(await messages("import { Button } from 'antd'\nexport const x = Button\n", 'src/page.ts'))
+      .toEqual(['no-restricted-imports'])
+    expect(await messages("import { ProTable } from '@ant-design/pro-components'\nexport const x = ProTable\n", 'packages/ui/src/x.ts'))
+      .toEqual(['no-restricted-imports'])
+    expect(await messages("import { Button } from '@jabiz/ui'\nexport const x = Button\n", 'src/page.ts')).toEqual([])
+  })
+
+  it('refuses .ant-* class selectors in the end-to-end tests', async () => {
+    expect(await messages("export const a = '.ant-table-row'\n", 'e2e/a.spec.ts')).toEqual(['no-restricted-syntax'])
+    expect(await messages('export const a = (n: number) => `.ant-tag:nth-child(${n})`\n', 'e2e/a.spec.ts'))
+      .toEqual(['no-restricted-syntax'])
+    expect(await messages("export const a = '[data-testid=\"order-row\"]'\n", 'e2e/a.spec.ts')).toEqual([])
+  })
+})

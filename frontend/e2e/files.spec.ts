@@ -35,7 +35,7 @@ test('a product photo is uploaded from the generated form and shown in the list'
   await signIn(page)
   await page.goto(datasetPath(PRODUCTS))
   await page.getByLabel('SKU').first().fill(code)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   const row = await searchedRow(page, code)
   await expect(row).toContainText(`Product ${code}`)
   await row.getByTestId('row-edit').click()
@@ -47,7 +47,7 @@ test('a product photo is uploaded from the generated form and shown in the list'
   const preview = drawer.getByRole('img', { name: '预览' })
   await expect(preview).toBeVisible()
   await expect(preview).toHaveAttribute('src', /^blob:/)
-  await drawer.getByRole('button', { name: /保\s*存/ }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(drawer).toBeHidden()
 
   // The list shows the photo as a thumbnail.
@@ -64,7 +64,7 @@ test('a file the policy does not accept is refused with the server message', asy
   await signIn(page)
   await page.goto(datasetPath(PRODUCTS))
   await page.getByLabel('SKU').first().fill(code)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await (await searchedRow(page, code)).getByTestId('row-edit').click()
   const drawer = entityForm(page)
   // Named like a photo, but markup: the server recognises the content.

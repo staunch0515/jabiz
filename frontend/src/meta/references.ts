@@ -1,6 +1,6 @@
+import { api, unwrap } from '@jabiz/client'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { api, unwrap } from '../api/client'
 import { dataOf, useLanguage } from './hooks'
 import { listViewOf } from './listQuery'
 import type { DatasetEntry, EntityMeta, FieldMeta } from './types'

@@ -10,6 +10,8 @@ import reactor.netty.NettyPipeline;
 import reactor.netty.channel.ChannelOperations;
 import reactor.netty.http.server.HttpServer;
 
+import java.util.concurrent.RejectedExecutionException;
+
 /**
  * Keeps reading a keep-alive HTTP/1.1 connection after Reactor Netty drained a request it had buffered as pipelined.
  *
@@ -25,9 +27,13 @@ import reactor.netty.http.server.HttpServer;
  *
  * <p>This handler sits right behind Reactor Netty's {@code HttpTrafficHandler} and asks for the next read whenever
  * request content (part of a body or its end) goes past with no exchange left on the connection, which is exactly
- * where the read is missing; Reactor Netty itself reads again for content it drops when nothing is pending. A read
- * asked for twice is one read, so where Reactor Netty asks too nothing changes. Remove it once Reactor Netty resumes
- * reading after such a drain itself ({@code PipelinedReadResumerTest} says when).
+ * where the read is missing; Reactor Netty itself reads again for content it drops when nothing is pending. The
+ * drained content can also reach the exchange it belongs to after that exchange has written its whole answer but
+ * before it has ended (Reactor Netty ends it only once the last write completes): the exchange drops the content
+ * without reading and then ends, again with nothing asking to read. So content that goes past while an exchange is
+ * still bound has that exchange watched, and once it ends, a read is asked for if no other exchange has started by
+ * then. A read asked for twice is one read, so where Reactor Netty asks too nothing changes. Remove it once Reactor
+ * Netty resumes reading after such a drain itself ({@code PipelinedReadResumerTest} says when).
  *
  * <p>Limits: the handler is added when the channel is initialised and only where the HTTP/1.1 traffic handler is
  * already in place, so HTTP/1.1 negotiated later (TLS with ALPN, where Reactor Netty adds that handler after the
@@ -55,13 +61,55 @@ class PipelinedReadResumer implements NettyServerCustomizer {
 
     static final class Handler extends ChannelInboundHandlerAdapter {
 
+        /**
+         * The exchange content last went past while it was bound, until it has ended (then cleared, so that a finished
+         * exchange and its request are not kept). Event loop only.
+         */
+        private ChannelOperations<?, ?> watched;
+
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             // Checked before passing it on: the message may be released downstream.
             boolean content = msg instanceof HttpContent;
             ctx.fireChannelRead(msg);
-            if (content && ChannelOperations.get(ctx.channel()) == null && !ctx.channel().config().isAutoRead()) {
+            if (!content || ctx.channel().config().isAutoRead()) {
+                return;
+            }
+            ChannelOperations<?, ?> exchange = ChannelOperations.get(ctx.channel());
+            if (exchange == null) {
                 ctx.read();
+            }
+            else if (exchange != watched) {
+                // Once per exchange, not per chunk of a body.
+                watched = exchange;
+                exchange.onTerminate()
+                    .subscribe(null, error -> resumeIfIdle(ctx, exchange), () -> resumeIfIdle(ctx, exchange));
+            }
+        }
+
+        /**
+         * Asks for a read on the event loop, after Reactor Netty has finished ending the exchange (it may start a
+         * buffered request next, which then reads for itself).
+         */
+        /** The exchange being watched, if any (for tests). */
+        ChannelOperations<?, ?> watched() {
+            return watched;
+        }
+
+        private void resumeIfIdle(ChannelHandlerContext ctx, ChannelOperations<?, ?> ended) {
+            try {
+                ctx.executor().execute(() -> {
+                    if (watched == ended) {
+                        watched = null;
+                    }
+                    if (ctx.channel().isActive() && ChannelOperations.get(ctx.channel()) == null
+                        && !ctx.channel().config().isAutoRead()) {
+                        ctx.read();
+                    }
+                });
+            }
+            catch (RejectedExecutionException e) {
+                // The event loop is shutting down, and the connection with it: nothing left to read.
             }
         }
     }

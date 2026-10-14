@@ -15,7 +15,7 @@ import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRi
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Skeleton } from './ui/skeleton'
@@ -198,7 +198,7 @@ export function DataTable<Row>({
       : (hasNextPage ?? data.length >= pagination.pageSize)
 
   return (
-    <div data-slot="data-table" className={cn(UI_SCOPE, 'flex flex-col gap-3', className)}>
+    <div data-slot="data-table" className={cn('flex flex-col gap-3', className)}>
       <div className="rounded-md border">
         {/* shadcn's Table with its container here: a container that scrolls is a named, focusable region. */}
         <div
@@ -211,7 +211,7 @@ export function DataTable<Row>({
             ref={tableRef}
             tabIndex={-1}
             data-slot="table"
-            className={cn(UI_SCOPE, 'w-full caption-bottom text-sm outline-none')}
+            className="w-full caption-bottom text-sm outline-none"
             aria-label={label}
             aria-busy={loading || stale || undefined}
           >
@@ -315,7 +315,7 @@ export function DataTable<Row>({
                               aria-label={open ? t('dataTable.collapseRow') : t('dataTable.expandRow')}
                               onClick={row.getToggleExpandedHandler()}
                             >
-                              <ChevronRightIcon aria-hidden className={cn(UI_SCOPE, 'transition-transform', open && 'rotate-90')} />
+                              <ChevronRightIcon aria-hidden className={cn('transition-transform', open && 'rotate-90')} />
                             </Button>
                           </TableCell>
                         )}

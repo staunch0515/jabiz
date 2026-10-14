@@ -1,4 +1,4 @@
-import { sessionFetch } from './client'
+import { sessionFetch } from '@jabiz/client'
 import { saveResponse } from './reports'
 import type { components } from '@jabiz/client'
 

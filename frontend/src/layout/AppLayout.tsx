@@ -1,3 +1,4 @@
+import { refreshSession, useAuth, useIdleLock, LANGUAGE_NAMES } from '@jabiz/client'
 import {
   AppShell,
   Badge,
@@ -37,16 +38,12 @@ import {
 } from 'lucide-react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useLocation, useMatches, useNavigate } from 'react-router'
-import { refreshSession } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { StepUpProvider } from '../auth/StepUp'
-import { useIdleLock } from '../auth/useIdleLock'
 import { extension } from '../extension'
 import { EXTENSION_NAMESPACE } from '../extension/api'
 import { extensionMenu } from '../extension/registry'
 import { changeLanguage, languages, type Language } from '../i18n'
-import { LANGUAGE_NAMES } from '../i18n/languages'
 import { useImportCatalog, useMenus, useMyTasks, useQueryCatalog } from '../meta/hooks'
 import type { MenuItem } from '../meta/types'
 
@@ -60,14 +57,6 @@ function serverMenu(items: MenuItem[] | undefined): ShellMenuItem[] {
   }))
 }
 
-/**
- * Whether the page shown is built with @jabiz/ui (its route has `handle: { ui: 'jabiz' }`, phases 15b–15c): it follows
- * the appearance. Ant Design pages are kept in the light tokens. Phase 15d removes the distinction.
- */
-function isJabizPage(matches: { handle?: unknown }[]): boolean {
-  return matches.some((match) => (match.handle as { ui?: string } | undefined)?.ui === 'jabiz')
-}
-
 /** Whether `path` is the current page or a page under it. */
 function activeIn(pathname: string) {
   return (path: string) => pathname === path || pathname.startsWith(`${path}/`)
@@ -78,9 +67,7 @@ function activeIn(pathname: string) {
  * menu entries (decision D22), the user's tasks (with their count in the header), the reports, the imports and the
  * two catalogs, which list only what the user may use. Hiding is navigation, not access: every call is checked again.
  *
- * Built with @jabiz/ui (decision D34). Pages still built with Ant Design (until phases 15b and 15c) stay in the
- * light appearance (`light`) whatever the user chose, for Ant Design's colours assume a light background; pages
- * whose route says `handle: { ui: 'jabiz' }` follow the appearance.
+ * Built with @jabiz/ui (decision D34); every page follows the appearance the user chose.
  */
 export default function AppLayout() {
   const { t, i18n } = useTranslation()
@@ -93,7 +80,6 @@ export default function AppLayout() {
   const openTasks = tasks.data?.total ?? 0
   const location = useLocation()
   const navigate = useNavigate()
-  const jabizPage = isJabizPage(useMatches())
 
   // Locked after inactivity (docs/design/10-security.md section 11): signed out, back to the sign-in page.
   const lockIdle = useCallback(() => {
@@ -225,7 +211,9 @@ export default function AppLayout() {
         />
       }
       header={header}
-      contentClassName={jabizPage ? 'bg-background text-foreground' : 'light bg-muted text-foreground'}
+      // The admin's pages (and the extensions' routes) read at 14px, as they did under Ant Design's App wrapper; the
+      // sign-in and mail pages outside the shell, the portal and the applications' SPAs keep the browser's 16px.
+      contentClassName="bg-background text-foreground text-sm"
     >
       <StepUpProvider>
         <Outlet />

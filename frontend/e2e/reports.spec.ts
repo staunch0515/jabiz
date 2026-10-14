@@ -31,11 +31,11 @@ test('a report runs from the reports page', async ({ page }) => {
   // The trial balance needs its date first.
   await page.goto('/reports/run?id=jabiz.ledger.account_balances')
   await expect(page.getByTestId('report-not-run')).toBeVisible()
-  await page.getByRole('button', { name: /运\s*行/ }).click()
+  await page.getByRole('button', { name: '运行', exact: true }).click()
   await expect(page.getByText('asOf: REQUIRED')).toBeVisible()
   await page.getByLabel('asOf').fill('2099-12-31 23:59:59')
   await page.getByLabel('asOf').press('Enter')
-  await page.getByRole('button', { name: /运\s*行/ }).click()
+  await page.getByRole('button', { name: '运行', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: '余额' })).toBeVisible()
   await expect(page.getByTestId('report-not-run')).toHaveCount(0)
 })

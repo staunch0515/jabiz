@@ -3,7 +3,7 @@ import { CheckIcon, CopyIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 
 export interface CopyButtonProps {
@@ -42,7 +42,7 @@ export function CopyButton({ value, label, className, ...rest }: CopyButtonProps
   const Icon = state === 'copied' ? CheckIcon : state === 'failed' ? XIcon : CopyIcon
   return (
     // Never narrower than its button: beside a long text in a flex row it would otherwise shrink below a usable target.
-    <span data-slot="copy-button" className={cn(UI_SCOPE, 'inline-flex shrink-0 items-center', className)}>
+    <span data-slot="copy-button" className={cn('inline-flex shrink-0 items-center', className)}>
       <Button
         variant="ghost"
         size="icon-sm"
@@ -51,7 +51,7 @@ export function CopyButton({ value, label, className, ...rest }: CopyButtonProps
         onClick={() => void copy()}
         {...rest}
       >
-        <Icon aria-hidden className={cn(UI_SCOPE, state === 'failed' && 'text-destructive')} />
+        <Icon aria-hidden className={cn(state === 'failed' && 'text-destructive')} />
       </Button>
       <span role="status" className="sr-only">
         {state === 'copied' ? t('copy.copied') : state === 'failed' ? t('copy.failed') : ''}

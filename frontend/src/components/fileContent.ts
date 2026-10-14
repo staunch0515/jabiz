@@ -1,5 +1,5 @@
+import { fetchFileContent, fetchFileDownload } from '@jabiz/client'
 import { useEffect, useState } from 'react'
-import { fetchFileContent, fetchFileDownload } from '../api/files'
 
 /**
  * An object URL of a file's content, fetched with the session (the token cannot go into an <img src>), and revoked

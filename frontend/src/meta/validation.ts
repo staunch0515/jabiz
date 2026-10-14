@@ -7,7 +7,7 @@ import {
   stripTrailingZeros,
   toDecimal,
   type Decimal,
-} from './decimal'
+} from '@jabiz/client'
 import { i18nParams, InvalidTexts, isI18nText, normalizeTexts, textsViolation } from './i18nText'
 import type { EntityMeta, FieldMeta, RuleSpec, Violation } from './types'
 

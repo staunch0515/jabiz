@@ -1,9 +1,9 @@
+import { ApiError } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import { expectAccessible } from '../test/axe'
 import { carrier, version } from '../test/fixtures'
@@ -16,7 +16,8 @@ const server = vi.hoisted(() => ({
   post: vi.fn<(path: string, options: unknown) => unknown>(),
 }))
 
-vi.mock('../api/client', () => ({
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: {
     GET: (path: string, options: never) => server.get(path, options),
     POST: (path: string, options: never) => server.post(path, options),
@@ -26,9 +27,9 @@ vi.mock('../api/client', () => ({
     if (result instanceof ApiError) throw result
     return result
   },
+  useAuth: () => ({ can: (p: string) => permissions.value.has(p) }),
+  UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: (p: string) => permissions.value.has(p) }) }))
-vi.mock('../components/UserName', () => ({ default: ({ id }: { id: string }) => <span>{id}</span> }))
 vi.mock('../meta/hooks', () => ({
   useDataset: (id: string) => ({
     isLoading: false,

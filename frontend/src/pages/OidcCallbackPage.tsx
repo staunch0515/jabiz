@@ -1,7 +1,6 @@
+import { useAuth, takeBinder, takeReturnPath } from '@jabiz/client'
 import { OidcCallback } from '@jabiz/ui'
 import { useLocation, useNavigate } from 'react-router'
-import { useAuth } from '../auth/AuthContext'
-import { takeBinder, takeReturnPath } from '../auth/oidc'
 import { extension } from '../extension'
 import { homePath } from '../extension/registry'
 

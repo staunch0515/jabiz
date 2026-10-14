@@ -15,7 +15,7 @@ golden 的业务领域不作为本平台的示例领域、测试场景或演示�
 | `AppClient` 是接口，Web、Job、测试各有实现 | 同一业务可被网页、定时任务、测试调用 | `ProcessExecutor` 与传输方式无关 | 06 §8 |
 | 错误码 `err.*` + 多语言，错误累积后返回 | 前端一次拿到全部错误；多语言 | `Violation.ruleCode` + 多语言资源；业务规则阶段也累积 | 02 §3.1 |
 | dataset：按名字配置的列表查询 | 新增列表页只需一段配置 | 数据视图 + SQL 模板 + 列表视图元数据 | 03、05、02 §7 |
-| 页面 `columnList` 配置 | 列表页改列不动后端 | 元数据导出 → ProTable 适配层 | ROADMAP 阶段 10 |
+| 页面 `columnList` 配置 | 列表页改列不动后端 | 元数据导出 → `DataTable` 适配层（`meta/dataColumns`） | ROADMAP 阶段 10 |
 | applist：静态或 SQL 的下拉列表 | 统一的选项来源 | 字典注册表 | 02 §5 |
 | 菜单 XML（`DirectViewPage`） | 菜单与页面统一配置 | 菜单元数据 + 权限码 | ROADMAP 阶段 7、10 |
 | 成对记账，同一 `actionid`，每条记余额 | 资金可追溯 | 通用复式记账模块，分录只追加 | ROADMAP 阶段 9 |

@@ -70,7 +70,7 @@ test.describe('history', () => {
     // The list shows the current state (the scheduled name is not in effect yet).
     await page.goto(`/data/${encodeURIComponent(CARRIERS)}`)
     await page.getByLabel('代码').first().fill(code)
-    await page.getByRole('button', { name: /查\s*询/ }).click()
+    await page.getByRole('button', { name: '查询', exact: true }).click()
     const row = await searchedRow(page, code)
     await expect(row).toContainText('Hotel Two')
     await expect(row).toContainText('1,000')
@@ -92,7 +92,7 @@ test.describe('history', () => {
     await signIn(page)
     await page.goto(`/data/${encodeURIComponent(CARRIERS)}?asOf=${encodeURIComponent(asOf)}`)
     await page.getByLabel('代码').first().fill(code)
-    await page.getByRole('button', { name: /查\s*询/ }).click()
+    await page.getByRole('button', { name: '查询', exact: true }).click()
     const row = await searchedRow(page, code)
     await expect(row).toContainText('Tango Before')
     // Only the current data can be edited.
@@ -109,7 +109,7 @@ test.describe('history', () => {
     await signIn(page)
     await page.goto(`/data/${encodeURIComponent(PRICES)}`)
     await page.getByLabel('SKU').first().fill(sku)
-    await page.getByRole('button', { name: /查\s*询/ }).click()
+    await page.getByRole('button', { name: '查询', exact: true }).click()
     await (await searchedRow(page, sku)).getByTestId('row-history').click()
     await expect(page.getByTestId('history-timeline').locator('[data-testid^="version-"]')).toHaveCount(2)
     await page.getByTestId('version-1').getByTestId('view-at').click()

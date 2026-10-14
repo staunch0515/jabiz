@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -13,8 +14,6 @@ import { TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams } from 'react-router'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
 import SchemaForm from '../components/SchemaForm'
 import AdminPage from '../layout/AdminPage'
 import { useProcesses } from '../meta/hooks'

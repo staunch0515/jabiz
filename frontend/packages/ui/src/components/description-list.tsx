@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { CopyButton } from './copy-button'
 
 export interface DescriptionItem {
@@ -45,7 +45,6 @@ export function DescriptionList({ items, layout = 'horizontal', columns, classNa
       data-slot="description-list"
       data-columns={grid ? columns : undefined}
       className={cn(
-        UI_SCOPE,
         'grid rounded-md border text-sm',
         grid ? cn('gap-x-6 gap-y-1 p-1', COLUMNS[columns]) : 'divide-border divide-y',
         horizontal && 'sm:grid-cols-[minmax(8rem,auto)_1fr]',

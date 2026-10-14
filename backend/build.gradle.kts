@@ -57,6 +57,10 @@ subprojects {
         systemProperty("reactor.schedulers.defaultBoundedElasticOnVirtualThreads", "true")
         // BlockHound instruments JDK classes; JDK 13+ requires this flag for it.
         jvmArgs("-XX:+AllowRedefinitionToAddDeleteMethods")
+        // Every GC clears soft references: what the JDK and libraries cache softly (resource bundles) is reloaded at
+        // once instead of only under memory pressure, so a reload on an event loop fails under BlockHound every run
+        // rather than now and then.
+        jvmArgs("-XX:SoftRefLRUPolicyMSPerMB=0")
         testLogging {
             events("failed", "skipped")
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
