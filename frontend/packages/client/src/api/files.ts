@@ -50,7 +50,10 @@ export function fileNameOf(header: string | null): string | undefined {
   return plain ? plain[1] : undefined
 }
 
-/** The narrowest variant at least `width` pixels wide, else the original (undefined). */
+/**
+ * The narrowest of the policy's variants at least `width` pixels wide, else the original (undefined). The server
+ * serves every variant of the policy, answering a width the image is not wider than with the original.
+ */
 export function previewVariant(variants: readonly string[] | undefined, width: number): string | undefined {
   const widths = (variants ?? [])
     .map((name) => ({ name, width: Number(/^w(\d+)$/.exec(name)?.[1]) }))

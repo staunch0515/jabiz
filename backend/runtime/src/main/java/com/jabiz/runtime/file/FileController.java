@@ -33,7 +33,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -98,11 +97,12 @@ class FileController {
         return observations.mono(PlatformObservations.FILE_SERVE, "serve file", KeyValues.of("channel", "admin"),
             readable(fileId).flatMap(file -> {
                 FileMeta meta = meta(file);
-                if (!FileKeys.ORIGINAL.equals(variant) && !meta.variants().contains(variant)) {
+                String stored = FileVariants.stored(file, variant, policies).orElse(null);
+                if (stored == null) {
                     return Mono.error(new ResourceNotFoundException("File " + fileId + " has no variant " + variant));
                 }
                 String name = downloadName(meta, variant);
-                return FileContent.serve(store, FileKeys.key(meta.fileId(), variant), meta.contentType(), name, range,
+                return FileContent.serve(store, FileKeys.key(meta.fileId(), stored), meta.contentType(), name, range,
                         NO_STORE)
                     .switchIfEmpty(Mono.defer(() -> {
                         log.warn("File {} has a row but no stored object {}", meta.fileId(), variant);
@@ -145,11 +145,9 @@ class FileController {
     }
 
     private static FileMeta meta(EntityInstance file) {
-        String variants = file.get(FileEntities.VARIANTS);
         return new FileMeta((UUID) file.id(), file.get(FileEntities.POLICY), file.get(FileEntities.CONTENT_TYPE),
             ((BigDecimal) file.get(FileEntities.SIZE_BYTES)).longValueExact(), intOrNull(file.get(FileEntities.WIDTH)),
-            intOrNull(file.get(FileEntities.HEIGHT)),
-            variants == null || variants.isBlank() ? List.of() : Arrays.asList(variants.split(",")),
+            intOrNull(file.get(FileEntities.HEIGHT)), FileVariants.produced(file),
             file.get(FileEntities.ORIGINAL_NAME), file.get(FileEntities.UPLOADED_BY),
             file.get(FileEntities.UPLOADED_TIME));
     }

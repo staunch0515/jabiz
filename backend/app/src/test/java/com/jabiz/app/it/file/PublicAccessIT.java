@@ -265,7 +265,19 @@ class PublicAccessIT extends FileItSupport {
                 .contains(shown + "-w160.jpg"));
         client.get().uri("/api/public/files/" + shown).header(HttpHeaders.RANGE, "bytes=0-9").exchange()
             .expectStatus().isEqualTo(206);
-        anonymous("/api/public/files/" + shown + "/w1280").expectStatus().isNotFound();
+        // The image (400 wide) is narrower than w640 and w1280, and never enlarged: at those widths it is the original.
+        for (String variant : List.of("w640", "w1280")) {
+            byte[] wide = anonymous("/api/public/files/" + shown + "/" + variant).expectStatus().isOk()
+                .expectHeader().contentType("image/jpeg")
+                .expectHeader().valueEquals(HttpHeaders.CACHE_CONTROL, "public, max-age=300")
+                .expectHeader().value(HttpHeaders.CONTENT_DISPOSITION, value -> assertThat(value)
+                    .contains(shown + "-" + variant + ".jpg"))
+                .expectBody(byte[].class).returnResult().getResponseBody();
+            assertThat(wide).isEqualTo(original);
+        }
+        anonymous("/api/public/files/" + shown + "/w1000").expectStatus().isNotFound();
+        anonymous("/api/public/files/" + hidden + "/w1280").expectStatus().isNotFound();
+        anonymous("/api/public/files/" + loose + "/w640").expectStatus().isNotFound();
         anonymous("/api/public/files/" + shown + "/..").expectStatus().is4xxClientError();
 
         // Only a product off sale refers to it, or nothing does: as if it did not exist.

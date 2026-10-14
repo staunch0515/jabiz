@@ -103,7 +103,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `version` | 整数 | 原样 | 区间 |
 | `semanticIdentity` | 文本框 | 原样 | 等于 |
 | `reference` | 可搜索下拉（目标实体声明了 `display` 且默认视图可读时，`lookup`；否则文本框） | 标签（`labels`，按页批量；取不到时主键） | 等于 |
-| `custom`：`jabiz.file` | 上传按钮（`accept` 与大小提示来自导出的策略）+ 预览；移除即清空 | 图片缩略图（最窄的合适变体）/ 下载按钮 | 不提供 |
+| `custom`：`jabiz.file` | 上传按钮（`accept` 与大小提示来自导出的策略）+ 预览；移除即清空 | 图片缩略图（策略中最窄的合适变体；图片比它窄时服务端返回原件，14 §5）/ 下载按钮 | 不提供 |
 | `jabiz.i18n-text` | 每种语言一个标签页（必填语言带标记，`requiredLanguages`）；`markdown` 附预览 | 按语言回退选择，回退时带 `lang` 属性；Markdown 不渲染原始 HTML | —（只有 `isNull`） |
 | 其他 `custom` / `none` | JSON 文本 | JSON | 等于 |
 

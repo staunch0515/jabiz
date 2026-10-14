@@ -74,11 +74,49 @@ class FileContentIT extends FileItSupport {
             .expectHeader().contentType("image/jpeg")
             .expectHeader().value(HttpHeaders.CONTENT_DISPOSITION, value -> assertThat(value)
                 .startsWith("inline;").contains("shelf-w160.jpg"));
-        get("/api/files/" + id + "/content/original", photographer).expectStatus().isOk();
-        get("/api/files/" + id + "/content/w1280", photographer).expectStatus().isNotFound();
+        byte[] original = get("/api/files/" + id + "/content/original", photographer).expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody();
+        // The policy's w1280 is wider than the image, which is never enlarged: at that width it is the original.
+        byte[] wide = get("/api/files/" + id + "/content/w1280", photographer).expectStatus().isOk()
+            .expectHeader().contentType("image/jpeg")
+            .expectHeader().valueEquals(HttpHeaders.CACHE_CONTROL, "private, no-store")
+            .expectHeader().value(HttpHeaders.CONTENT_DISPOSITION, value -> assertThat(value)
+                .startsWith("inline;").contains("shelf-w1280.jpg"))
+            .expectBody(byte[].class).returnResult().getResponseBody();
+        assertThat(wide).isEqualTo(original);
+        // A width the policy does not declare is no variant of the file.
+        get("/api/files/" + id + "/content/w1000", photographer).expectStatus().isNotFound();
+        get("/api/files/" + id + "/content/w9999", photographer).expectStatus().isNotFound();
         // Never a path: refused by the firewall or as an unknown variant.
         get("/api/files/" + id + "/content/..%2F..%2Fetc", photographer).expectStatus().is4xxClientError();
         get("/api/files/" + id + "/content/.part", photographer).expectStatus().isNotFound();
+    }
+
+    @Test
+    void anImageNarrowerThanEveryVariantIsServedAtEachOfThePolicysWidths() {
+        String photographer = photographer();
+        Map<String, Object> info = uploaded(CommerceFiles.IMAGE, FileSamples.jpeg(120, 90), "icon.jpg",
+            "image/jpeg", photographer);
+        String id = (String) info.get("fileId");
+        // Nothing is produced: every variant would be wider than the image.
+        assertThat(info.get("variants")).isEqualTo(List.of());
+        byte[] original = get("/api/files/" + id + "/content", photographer).expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody();
+        for (String variant : List.of("w160", "w640", "w1280")) {
+            byte[] body = get("/api/files/" + id + "/content/" + variant, photographer).expectStatus().isOk()
+                .expectHeader().contentType("image/jpeg")
+                .expectHeader().valueEquals("X-Content-Type-Options", "nosniff")
+                .expectBody(byte[].class).returnResult().getResponseBody();
+            assertThat(body).isEqualTo(original);
+        }
+        client.get().uri("/api/files/" + id + "/content/w160").header(HttpHeaders.AUTHORIZATION, photographer)
+            .header(HttpHeaders.RANGE, "bytes=0-9").exchange().expectStatus().isEqualTo(206)
+            .expectHeader().contentLength(10);
+        // Read as the original is: another policy's reader does not see it, nor does a caller without permission.
+        get("/api/files/" + id + "/content/w160", bearer("it-docs", "commerce.document.read"))
+            .expectStatus().isNotFound();
+        get("/api/files/" + id + "/content/w160", bearer("it-nobody")).expectStatus().isForbidden();
+        get("/api/files/" + id + "/content/w320", photographer).expectStatus().isNotFound();
     }
 
     @Test
