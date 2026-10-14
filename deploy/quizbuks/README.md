@@ -167,6 +167,7 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 支付页的有效期，缺省 `PT1H`（40 分钟到 23 小时） |
 | `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | Stripe 账户余额的币种（手续费与净额的币种），缺省 `jpy`；收款与退款始终是日元，非日元的结算手续费不自动过账，开待办 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
+| `QB_STRIPE_CHECKOUT_URL_PREFIX` | 否 | 支付页地址必须的前缀，缺省 `https://checkout.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值） |
 | `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | 是（Q6b） | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥（`whsec_…`）；缺少即启动失败 |
 | `QB_APP_LINK` | 收款时 | App 的地址，Stripe 开通收款账户后跳回（缺省空：开通被拒） |

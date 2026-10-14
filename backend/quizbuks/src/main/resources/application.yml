@@ -150,4 +150,8 @@ quizbuks:
     # Payout accounts (Q6b): opened in this country only (no transfers across borders, Q18); Stripe's onboarding links
     # start with this address.
     connect-country: ${QB_STRIPE_CONNECT_COUNTRY:JP}
+    # What a checkout's address must start with (the top-up page sends the sponsor there): Stripe's Checkout. Only a
+    # test-mode deployment against a local stub changes it (an https address, or http on localhost / 127.0.0.1);
+    # live mode refuses anything but Stripe's (startup check).
+    checkout-url-prefix: ${QB_STRIPE_CHECKOUT_URL_PREFIX:https://checkout.stripe.com/}
     connect-url-prefix: ${QB_STRIPE_CONNECT_URL_PREFIX:https://connect.stripe.com/}
