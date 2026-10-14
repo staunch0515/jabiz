@@ -37,8 +37,32 @@ export const FILE_POLICY = {
   sponsorAvatar: 'qb.sponsor-avatar',
 } as const
 
+/**
+ * Answering (`play.AttemptProcesses`, `play.AttemptFinishing`, `play.PlayConfig`; templates `queries/qb/app`): what
+ * the app's feed, detail, play, result and history pages call (docs/quizbuks/plans/QP-pages.md, QP2).
+ */
+export const PLAY = {
+  view: 'QB_VIEW',
+  start: 'QB_ATTEMPT_START',
+  save: 'QB_ATTEMPT_SAVE',
+  submit: 'QB_ATTEMPT_SUBMIT',
+  feed: 'qb.app.feed',
+  publication: 'qb.app.publication',
+  publicationTiers: 'qb.app.publication-tiers',
+  history: 'qb.app.history',
+  /** The taker's own attempts, read only; a finished one's `result` holds every question's right answer. */
+  myAttempts: 'urn:jabiz:dataset:taker:QbAttempt',
+} as const
+
+/** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
+export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
+
 /** Error codes the pages react to (the server translates every `QB_*` message itself). */
 export const CODE = {
   userBanned: 'QB_USER_BANNED',
   emailNotVerified: 'EMAIL_NOT_VERIFIED',
+  attemptAlreadyTaken: 'QB_ATTEMPT_ALREADY_TAKEN',
+  attemptExpired: 'QB_ATTEMPT_EXPIRED',
+  attemptNotInProgress: 'QB_ATTEMPT_NOT_IN_PROGRESS',
+  attemptFinished: 'QB_ATTEMPT_FINISHED',
 } as const

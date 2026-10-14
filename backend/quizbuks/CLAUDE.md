@@ -113,7 +113,9 @@
   `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们，`application.yml` 不写 `jabiz.web.spa`。
   共享依赖的版本必须与平台前端相同（`pnpm app:check`，Gradle 中 `spaCheckRoot` / `spaCheckSponsor`，在 `check` 中）。指南：平台 `docs/guide/app-spa.md`。
 - **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
-  流程的输入输出对照 Java record 手写在 `qb/api.ts`（QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
+  流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
+- **答题页**（App，QP2）：倒计时只按服务器时间（`deadline` 与 `serverTime` 的偏移，`play/countdown.ts`）；保存进度只经 `play/saver.ts`（防抖、一次一个、失败保留重发）；
+  开始的输出（不含正误）存在 `sessionStorage`，只供刚完成的结果页显示题目文字（计划 A-3），之后只显示分数与逐题对错；退出登录时清除。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
