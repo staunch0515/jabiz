@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
  *                          and the job creating it may start a few minutes late, so {@link #MIN_TTL} to
  *                          {@link #MAX_TTL}
  * @param checkoutUrlPrefix what the address of a checkout must start with: Stripe's, or the local stub's in development
+ *                          (one origin and a path ending in {@code /}, {@link StripeUrls#prefixProblem})
  * @param sponsorLink       the sponsor console's address ({@code quizbuks.links.sponsor}), where Stripe sends the
  *                          sponsor back; empty when not configured (top-ups are then refused)
  * @param settlementCurrency the currency of the Stripe account's balance, in which a payment's balance transaction
@@ -64,9 +65,9 @@ public record StripeSettings(boolean livemode, String apiVersion, Duration check
             problems.add("quizbuks.stripe.checkout-url-prefix: live mode accepts Stripe's checkout ("
                 + STRIPE_CHECKOUT + ") only");
         }
-        if (!checkoutUrlPrefix.startsWith("https://") && !checkoutUrlPrefix.startsWith("http://localhost:")
-            && !checkoutUrlPrefix.startsWith("http://127.0.0.1:")) {
-            problems.add("quizbuks.stripe.checkout-url-prefix: must be an https address (or a local stub's)");
+        String prefixProblem = StripeUrls.prefixProblem(checkoutUrlPrefix);
+        if (prefixProblem != null) {
+            problems.add("quizbuks.stripe.checkout-url-prefix: " + prefixProblem);
         }
         if (!CURRENCY.matcher(settlementCurrency).matches()) {
             problems.add("quizbuks.stripe.settlement-currency: '" + settlementCurrency

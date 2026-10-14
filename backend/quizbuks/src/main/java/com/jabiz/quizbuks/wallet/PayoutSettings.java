@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * @param appLink          the app's address ({@code quizbuks.links.app}), where Stripe sends the taker back after
  *                         onboarding; empty when not configured (onboarding is then refused)
  * @param connectUrlPrefix what an onboarding link must start with: Stripe's Connect host, or a local stub's in
- *                         development
+ *                         development (one origin and a path ending in {@code /}, {@link StripeUrls#prefixProblem})
  */
 public record PayoutSettings(String connectCountry, String appLink, String connectUrlPrefix) {
 
@@ -43,9 +43,9 @@ public record PayoutSettings(String connectCountry, String appLink, String conne
             problems.add("quizbuks.stripe.connect-url-prefix: live mode accepts Stripe's Connect (" + STRIPE_CONNECT
                 + ") only");
         }
-        if (!connectUrlPrefix.startsWith("https://") && !connectUrlPrefix.startsWith("http://localhost:")
-            && !connectUrlPrefix.startsWith("http://127.0.0.1:")) {
-            problems.add("quizbuks.stripe.connect-url-prefix: must be an https address (or a local stub's)");
+        String prefixProblem = StripeUrls.prefixProblem(connectUrlPrefix);
+        if (prefixProblem != null) {
+            problems.add("quizbuks.stripe.connect-url-prefix: " + prefixProblem);
         }
         if (!appLink.isEmpty() && !appLink.startsWith("https://") && !appLink.startsWith("http://localhost")
             && !appLink.startsWith("http://127.0.0.1")) {

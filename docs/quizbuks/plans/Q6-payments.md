@@ -163,7 +163,7 @@
   浏览器跳回只用于显示，从不据此入账。
 - **外币**【缺省 Q6-5】：会话币种固定 JPY，账本照旧只有 JPY。顾客若经 Stripe 的本地货币显示（Adaptive Pricing）付外币，只把会话中的原币金额、币种与汇率记到充值行（F-04），不入外币分录。
 - **完成流程 `QB_TOPUP_OPENED`**：
-  - 核对结果：会话号符合 `cs_(test|live)_…`；地址以 `https://checkout.stripe.com/` 开头（桩服务的地址由 dev 配置的前缀放行）；`livemode` 与配置相同；
+  - 核对结果：会话号符合 `cs_(test|live)_…`；地址以 `https://checkout.stripe.com/` 开头（桩服务的地址由 dev 配置的前缀放行；测试模式的前缀须为以 `/` 结尾的 `https://主机[:端口]/…/`，`http` 只给本机桩，见 `StripeUrls`），不含空白或控制字符；`livemode` 与配置相同；
   - 核对通过：写 `checkoutSessionId`、`checkoutUrl`、`expiresAt`，状态 `OPENING → OPEN`；不符即 `FAILED` 并开待办。
 - **失败流程 `QB_TOPUP_OPEN_FAILED`**：`OPENING → FAILED`，记错误码，商家可以重新发起。
 - **支付页地址**只有本人能读（商家数据视图 `urn:jabiz:dataset:sponsor:QbTopUp`，`fromContext("sponsorId", actorId)`），只在 `OPEN` 且未过期时给出。
@@ -987,7 +987,7 @@ Q6b：
 - `qb.admin.wallets` 加可选参数 `kind`（SPONSOR / TAKER）：加入用户行后，场景按种类断言。
 - `QB_TRANSFER_CREATE` 的输出带 `approvalRequestId`，跳过（`OPEN_TRANSFER`）时给出那笔未结束的转账，供场景与运维引用。
 - 收款账户的配置：`quizbuks.links.app`（`QB_APP_LINK`）、`quizbuks.stripe.connect-country`（缺省 JP）、`quizbuks.stripe.connect-url-prefix`
-  （缺省 `https://connect.stripe.com/`，正式模式只能是它），由 `StripeModeCheck` 检查；没有 App 地址只告警，开通被拒（`QB_PAYOUT_UNAVAILABLE`）。
+  （缺省 `https://connect.stripe.com/`，正式模式只能是它；测试模式的格式同支付页前缀），由 `StripeModeCheck` 检查；开通链接同样不得含空白或控制字符；没有 App 地址只告警，开通被拒（`QB_PAYOUT_UNAVAILABLE`）。
   已解除关联的账户再开通被拒（`QB_PAYOUT_ACCOUNT_CLOSED`，由财务处理）。
 - 本地桩服务加了 Connect（账户、开通页、`account.updated`）与转账端点；dev 配置给 `stripe-connect` 固定的开发密钥。
 
