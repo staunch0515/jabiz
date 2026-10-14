@@ -825,6 +825,30 @@
         },
         "type" : "object"
       },
+      "IdentityView" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "linkedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ImportCommitRequest" : {
         "properties" : {
           "fileId" : {
@@ -1521,6 +1545,17 @@
         },
         "type" : "object"
       },
+      "LinkResult" : {
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "LocaleRequest" : {
         "properties" : {
           "locale" : {
@@ -1849,6 +1884,9 @@
       "ProviderEntry" : {
         "properties" : {
           "id" : {
+            "type" : "string"
+          },
+          "kind" : {
             "type" : "string"
           },
           "label" : {
@@ -2489,6 +2527,17 @@
         },
         "type" : "object"
       },
+      "StartRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "StartResponse" : {
         "properties" : {
           "authorizationUrl" : {
@@ -3024,6 +3073,100 @@
           }
         },
         "tags" : [ "audit-controller" ]
+      }
+    },
+    "/api/auth/account/identities" : {
+      "get" : {
+        "operationId" : "mine_2",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/IdentityView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "identity-link-controller" ]
+      }
+    },
+    "/api/auth/account/identities/callback" : {
+      "post" : {
+        "operationId" : "callback_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CallbackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LinkResult"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "identity-link-controller" ]
+      }
+    },
+    "/api/auth/account/identities/start" : {
+      "post" : {
+        "operationId" : "start_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/StartRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StartResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "identity-link-controller" ]
+      }
+    },
+    "/api/auth/account/identities/{id}" : {
+      "delete" : {
+        "operationId" : "unlink",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "identity-link-controller" ]
       }
     },
     "/api/auth/account/locale" : {

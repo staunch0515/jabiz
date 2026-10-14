@@ -126,6 +126,34 @@ export async function revokeOtherSessions(): Promise<SessionsRevoked> {
   return unwrap(api.POST('/api/auth/account/sessions/revoke-others')) as Promise<SessionsRevoked>
 }
 
+/** One provider account linked to the signed-in user (`GET /api/auth/account/identities`, phase 16f). */
+export type LinkedIdentity = components['schemas']['IdentityView']
+/** The account linked by {@link finishIdentityLink}: `LINKED`, or `ALREADY_LINKED` when it was linked before. */
+export type IdentityLinked = components['schemas']['LinkResult']
+
+/** The provider accounts linked to the signed-in user, by provider. */
+export async function listIdentities(): Promise<LinkedIdentity[]> {
+  return unwrap(api.GET('/api/auth/account/identities')) as Promise<LinkedIdentity[]>
+}
+
+/**
+ * Hands the provider's state and code back to the server to link the account the round trip of `startIdentityLink`
+ * proved (decision D39 item 2); the session stays as it is. Refusals are 422 (`IDENTITY_IN_USE`,
+ * `IDENTITY_PROVIDER_LINKED`, `IDENTITY_LINK_UNAVAILABLE`, `IDENTITY_LINK_FAILED`).
+ */
+export async function finishIdentityLink(state: string, code: string, binder: string): Promise<IdentityLinked> {
+  return unwrap(api.POST('/api/auth/account/identities/callback', { body: { state, code, binder } })) as
+    Promise<IdentityLinked>
+}
+
+/**
+ * Removes a linked provider account; refused (422 `LAST_SIGN_IN_METHOD`) when it is the only way left to sign in.
+ * Sessions signed in through it end at their next refresh.
+ */
+export async function unlinkIdentity(id: string): Promise<void> {
+  await unwrap(api.DELETE('/api/auth/account/identities/{id}', { params: { path: { id } } }))
+}
+
 /** Whether a failure is the server's refusal with this rule code (and, when given, this status). */
 export function isProblem(error: unknown, code: string, status?: number): error is ApiError {
   return error instanceof ApiError && (status === undefined || error.status === status)

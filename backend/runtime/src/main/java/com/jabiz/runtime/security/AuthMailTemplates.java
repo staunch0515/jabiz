@@ -22,6 +22,8 @@ import java.time.Duration;
  *   <li>{@value #PASSWORD_RESET}: token {@value #RESET}, valid {@code jabiz.security.password-reset.ttl} (1 hour);</li>
  *   <li>{@value #PASSWORD_CHANGED}: no token; tells the user that their password was changed (section 15.8), with a
  *       link to the password reset (no token: whoever did not change it asks for one).</li>
+ *   <li>{@value #IDENTITY_LINKED}: no token; tells the user that a provider account was linked to theirs (section 12),
+ *       naming the provider, with the same link to the password reset.</li>
  * </ul>
  */
 @Configuration
@@ -31,10 +33,11 @@ public class AuthMailTemplates {
     public static final String ACCOUNT_EXISTS = "jabiz.auth.account-exists";
     public static final String PASSWORD_RESET = "jabiz.auth.password-reset";
     public static final String PASSWORD_CHANGED = "jabiz.auth.password-changed";
+    public static final String IDENTITY_LINKED = "jabiz.auth.identity-linked";
 
     /** The platform's templates, by name; applications declare none under {@code jabiz.} ({@code MailChecks}). */
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
-        PASSWORD_CHANGED);
+        PASSWORD_CHANGED, IDENTITY_LINKED);
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application
@@ -69,9 +72,24 @@ public class AuthMailTemplates {
     public static final MailTemplate PASSWORD_CHANGED_MAIL = MailTemplate.define(PASSWORD_CHANGED,
         t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY));
 
+    /** The parameter naming the provider of {@value #IDENTITY_LINKED} (its label). */
+    public static final String PROVIDER = "provider";
+
+    /**
+     * Tells a user that a provider account was linked to theirs (section 12; decision D39 item 2): no token; the entry
+     * and the provider's label are its parameters.
+     */
+    public static final MailTemplate IDENTITY_LINKED_MAIL = MailTemplate.define(IDENTITY_LINKED,
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PROVIDER));
+
     @Bean
     MailTemplate authPasswordChangedMail() {
         return PASSWORD_CHANGED_MAIL;
+    }
+
+    @Bean
+    MailTemplate authIdentityLinkedMail() {
+        return IDENTITY_LINKED_MAIL;
     }
 
     @Bean

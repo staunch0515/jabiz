@@ -41,7 +41,8 @@ export type { QueryPage, QueryOptions, ProcessOptions, Filter, Sort } from './li
 export { AuthProvider, useAuth, useOptionalAuth, lastUserName } from './auth/AuthContext'
 export type { AuthState, SignInStep, DataPeriod } from './auth/AuthContext'
 export { useIdleLock } from './auth/useIdleLock'
-export { startProviderSignIn, takeBinder, takeReturnPath } from './auth/oidc'
+export { startProviderSignIn, startIdentityLink, takeBinder, pendingPurpose, takeReturnPath } from './auth/oidc'
+export type { IdentityLinkOptions, OidcPurpose } from './auth/oidc'
 export {
   entryInfo,
   register,
@@ -52,10 +53,21 @@ export {
   listSessions,
   revokeSession,
   revokeOtherSessions,
+  listIdentities,
+  finishIdentityLink,
+  unlinkIdentity,
   isProblem,
   useOnline,
 } from './auth/account'
-export type { EntryInfo, Registration, SessionList, SessionInfo, SessionsRevoked } from './auth/account'
+export type {
+  EntryInfo,
+  Registration,
+  SessionList,
+  SessionInfo,
+  SessionsRevoked,
+  LinkedIdentity,
+  IdentityLinked,
+} from './auth/account'
 export { readMailLink, parseMailLink, useMailLink, useNoReferrer, sitePath } from './auth/mailLink'
 export type { MailLink } from './auth/mailLink'
 export { default as UserName, useUserName } from './components/UserName'

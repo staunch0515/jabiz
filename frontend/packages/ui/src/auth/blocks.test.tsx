@@ -10,6 +10,7 @@ import {
   ChangePasswordForm,
   MailLinkPage,
   OfflineBanner,
+  OidcButtons,
   OidcCallback,
   PwaUpdatePrompt,
   SignInForm,
@@ -66,6 +67,7 @@ afterEach(() => {
   session.clear()
   configureClient({ entry: 'admin' })
   window.history.replaceState(null, '', '/')
+  window.sessionStorage.removeItem('jabiz.session.portal.oidcPurpose')
   vi.unstubAllGlobals()
 })
 
@@ -372,6 +374,46 @@ describe('OidcCallback', () => {
     await expectAccessible()
     await user().click(screen.getByRole('button', { name: 'Back to sign in' }))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('finishes a link instead when the round trip was started to link an account', async () => {
+    window.history.replaceState(null, '', '/portal/login/oidc?state=s2&code=c2')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcBinder', 'b2')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcReturnTo', '/portal/account')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcPurpose', 'LINK')
+    const signInWithProvider = vi.fn()
+    const finishLink = vi.fn(async () => ({ status: 'LINKED', provider: 'google' }))
+    const onLinked = vi.fn()
+    render(
+      <OidcCallback fallbackPath="/portal/" auth={{ signInWithProvider }} finishLink={finishLink} onLinked={onLinked}
+        onSignedIn={vi.fn()} onSecondStep={vi.fn()} onBack={vi.fn()} />,
+    )
+    await waitFor(() => expect(onLinked).toHaveBeenCalledWith('/portal/account', { status: 'LINKED', provider: 'google' }))
+    expect(finishLink).toHaveBeenCalledExactlyOnceWith('s2', 'c2', 'b2')
+    expect(signInWithProvider).not.toHaveBeenCalled()
+  })
+
+  it('says how to go on when the address belongs to an account already', async () => {
+    window.history.replaceState(null, '', '/portal/login/oidc?state=s3&code=c3')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcPurpose', 'SIGN_IN')
+    const signInWithProvider = vi.fn(async () => {
+      throw new ApiError(403, { status: 403, violations: [{ field: null, ruleCode: 'OIDC_ACCOUNT_EXISTS', message: 'x' }] })
+    })
+    render(<OidcCallback fallbackPath="/portal/" auth={{ signInWithProvider }} onSignedIn={vi.fn()} onSecondStep={vi.fn()} onBack={vi.fn()} />)
+    expect(await screen.findByTestId('oidc-error')).toHaveTextContent('Sign in the way you did before')
+    await expectAccessible()
+  })
+})
+
+describe('OidcButtons', () => {
+  it('draws the mark of a known kind in the text colour', async () => {
+    render(<OidcButtons returnTo="/portal/" providers={[{ id: 'google', label: 'Google', kind: 'google' },
+      { id: 'corp', label: 'Corporate', kind: 'generic' }]} start={vi.fn(async () => undefined)} />)
+    const google = screen.getByTestId('oidc-google')
+    expect(google).toHaveAttribute('data-kind', 'google')
+    expect(google.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
+    expect(screen.getByTestId('oidc-corp').querySelector('svg')).toBeNull()
+    await expectAccessible()
   })
 })
 

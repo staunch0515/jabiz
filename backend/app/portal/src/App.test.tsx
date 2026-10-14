@@ -60,6 +60,49 @@ describe('the portal', () => {
   })
 })
 
+describe('linking a provider account (phase 16f)', () => {
+  it('finishes the link where the provider sends the customer back and says so on the account page', async () => {
+    session.store('access', 'refresh')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcPurpose', 'LINK')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcBinder', 'b1')
+    window.sessionStorage.setItem('jabiz.session.portal.oidcReturnTo', '/account')
+    window.history.replaceState(null, '', '/login/oidc?state=s1&code=c1')
+    const posted: { path: string; body: unknown }[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      if (request.method === 'POST') posted.push({ path: url.pathname, body: await request.json() })
+      switch (url.pathname) {
+        case '/api/auth/account/identities/callback':
+          return json(200, { status: 'LINKED', provider: 'google' })
+        case '/api/auth/me':
+          return json(200, { userId: 'u1', displayName: 'Mei', roles: ['CUSTOMER'], permissions: [], emailVerified: true,
+            idleTimeoutSeconds: 0 })
+        case '/api/auth/oidc/providers':
+          return json(200, [{ id: 'google', label: 'Google', kind: 'google' }])
+        case '/api/auth/account/identities':
+          return json(200, [{ id: 'i1', provider: 'google', label: 'Google', kind: 'google', email: 'mei@gmail.com',
+            linkedAt: '2026-10-13T09:00:00Z' }])
+        case '/api/auth/mfa':
+          return json(200, { enrolled: false, pending: false })
+        case '/api/auth/account/sessions':
+          return json(200, { sessions: [], truncated: false, effectiveWithinSeconds: 900 })
+        case '/api/auth/entries/portal':
+          return json(200, { name: 'portal', selfRegistration: true, requireVerifiedEmail: true, appPath: '/portal/',
+            sessionPersistence: 'device' })
+        default:
+          return json(404, {})
+      }
+    })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/account'))
+    expect(await screen.findByTestId('linked-identities-linked')).toHaveTextContent('Google')
+    expect(posted).toContainEqual({ path: '/api/auth/account/identities/callback',
+      body: { state: 's1', code: 'c1', binder: 'b1' } })
+    expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
+  })
+})
+
 describe('the router', () => {
   it('maps the portal\'s paths onto the build\'s base and refuses other sites', () => {
     expect(hrefOf('/orders')).toBe('/orders')

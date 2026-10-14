@@ -162,7 +162,7 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；点击后才先问 `check`、再提交（可预占的账号要当前密码或新密码），成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答），其他失败可重试 |
 | `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
 | `/auth/password-reset[?entry=&token=]` | 找回密码（10 §15.7）：无令牌时输入邮箱申请（对任何邮箱同样回答）；有令牌时设置新密码，完成后到入口的 `app-path` 登录。登录页有"忘记密码"链接。三个 `/auth/*` 页读出令牌后即从地址栏去掉它，打开期间不发送 referrer |
-| `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）；新的一节（邮件订阅、语言）只需往数组里加一项；从页头用户菜单进入 |
+| `/account/security` | 安全设置：由各节组成，节的顺序由页面中的数组 `ACCOUNT_SECTIONS` 声明（每节一个 `<section aria-labelledby>` 加 `Card`，测试 id `account-section-<名>`）：两步验证（`@jabiz/ui` 的 `MfaSettings`，10 §9：状态、剩余恢复码数、未绑定时绑定，二维码用 `qrcode` 绘制在 canvas 上，另显示密钥；示范门户的账户页也用它）、改密码（`ChangePasswordForm`，10 §15.8）、本人当前入口的会话（`SessionList`，10 §15.9）、关联的外部账号（`LinkedIdentities`，10 §12，16f-1；只在后台入口提供了身份提供方时显示——与登录页同一个 `/api/auth/oidc/providers` 查询——节可声明 `shown`；关联完成后 OIDC 回调页经路由状态把结果带回本页）；新的一节（邮件订阅、语言）只需往数组里加一项；从页头用户菜单进入 |
 | `/processes`、`/processes/:name/:version` | 流程目录与由输入 Schema 生成的表单（嵌套 record → 分组，record 列表 → 可增减的行）；每次打开表单生成一个 `Idempotency-Key`，成功后更换 |
 
 - 布局（`@jabiz/ui` 的侧栏外壳，15a）：服务端菜单（`SecMenu`，已按权限过滤、按语言命名）在前，其后是应用扩展的菜单项（第 9 节），再后是两个目录与"报表"（有报表时）；语言切换记在 `localStorage`（仅本机偏好）。
@@ -303,14 +303,17 @@ jabizApp {
   绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
-  `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、`OidcButtons`、`OidcCallback`、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
+  `OidcButtons`（按提供方的 `kind` 画标志，Google 为文字颜色的单色"G"，16f-1）、`OidcCallback`（登录与本人关联共用：按
+  `startIdentityLink` 记下的用途完成关联后调用 `onLinked`；403 `OIDC_ACCOUNT_EXISTS` 时说明用原方式登录后关联）、`LinkedIdentities`（本人的外部账号：列表、关联（需要时先问当前密码）、
+  确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `VerifyEmailBanner`、`OfflineBanner`。积木**不依赖路由**：导航经属性 `onNavigate(path)` / `hrefOf(path)` 与回调（`onSignedIn(path)` 等）交出，
   没有时为普通链接与整页跳转；邮件链接的入口与令牌从 `window.location` 读（有路由时传 `search`）。后台的登录页、OIDC 回调页、三个落地页与 step-up
   是这些积木外的 React Router 适配（`src/auth/routerNavigation.ts`），测试 id 与行为不变，后台不显示外观切换。
 - **`@jabiz/client` 的无界面函数**（D43，16c-1）：`configureClient({ entry })`、`entryInfo()`、`register()`、`requestPasswordReset()`、
-  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
+  `confirmPasswordReset()`、`resendVerification()`、`changePassword()`、`listSessions()`、`revokeSession(id, current)`（结束本机会话时清空本地令牌）、`revokeOtherSessions()`、`startIdentityLink(provider, {currentPassword?}, returnTo)`、`finishIdentityLink()`、`listIdentities()`、`unlinkIdentity(id)`（16f-1）、`readMailLink()` / `useMailLink()`（读出入口与令牌，以 `replaceState` 去掉令牌，
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；

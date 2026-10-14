@@ -81,7 +81,9 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   需要二次验证的操作只声明：流程 `requiresMfa(…)`、数据视图 `writeRequiresMfa(…)`（平台管理为 `ADMINISTRATION`），由入口与权限一起检查；
   角色可要求二次验证（`SecRole.requireMfa`）。`@Sensitive` 组件名在整个 JSON 中遮蔽，不要用 `code` 这类通用名字（用 `mfaCode`）。
 - **单点登录**（见 10 §12 与决策 D28 第 6 条）：只做 OIDC（授权码 + PKCE + nonce，`jabiz.security.oidc.providers[i]`，客户端密钥只来自环境变量），
-  平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 关联（管理员关联，或本人登录后 `SEC_IDENTITY_LINK_SELF`）；缺省不自动开户，提供方开启 `auto-provision` 且入口允许注册时才为已验证、未被占用的邮箱开户（决策 D39）；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。
+  平台自己校验 ID 令牌后签发自己的令牌；外部账号只经 `SecUserIdentity` 关联（管理员关联，或本人登录后经 `/api/auth/account/identities` 关联与解除：近期二次验证或当前密码，`SEC_IDENTITY_LINK_SELF` / `SEC_IDENTITY_UNLINK_SELF`，前端积木 `LinkedIdentities`）；
+  缺省不自动开户，提供方开启 `auto-provision` 且入口允许注册时才为提供方担保（`kind: google` 只认 gmail 或 Workspace）、未被占用的邮箱开户（`SPONSOR_OIDC_SIGN_UP`，决策 D39），邮箱已被使用即 403 `OIDC_ACCOUNT_EXISTS`、绝不自动关联；
+  接管可预占的账号时删除其关联；登录照常是写登录记录的流程（`SPONSOR_OIDC_SIGN_IN`）。不自己写关联或开户。
 - **登录入口与登录前检查**（见 10 §15 与决策 D36）：不同前端接受哪些角色只在 `jabiz.security.entries.<名>` 声明（缺省入口 `admin` 接受全部角色）；令牌只含该入口所接受角色的权限，
   不在前端或业务代码里另做"这个前端不给某角色用"。应用要在登录与刷新时拒绝某些用户（封禁等）只实现 `SignInGuard`（core，同步，所需数据以 `loads()` 声明），不自己拦截登录接口。
   需要已验证邮箱的操作只声明：流程 `requiresVerifiedEmail()`、数据视图 `policy(p -> p.requiresVerifiedEmail())`（只管写）。客户端地址只经 `ClientAddresses`（可信代理 `jabiz.security.trusted-proxies`），不自己读转发头。

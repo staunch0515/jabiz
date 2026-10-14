@@ -49,6 +49,20 @@ jabiz:
           persistence: device
           refresh-token-ttl: P30D
           idle-timeout: 0
+    # Signing in with Google at the portal, which may open a customer's account at the first sign-in (decision D39;
+    # docs/design/10-security.md section 12; guide app-spa.md). Off in the sample: no client is registered for it.
+    # To turn it on, register an OAuth client at Google with the portal's callback and uncomment (the secret comes from
+    # the environment only):
+    # oidc:
+    #   providers:
+    #     - id: google
+    #       kind: google
+    #       client-id: ${JABIZ_OIDC_GOOGLE_CLIENT_ID}
+    #       client-secret: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET}
+    #       redirect-uris:
+    #         portal: ${JABIZ_PUBLIC_URL:https://shop.example.com}/portal/login/oidc
+    #       labels: { en: Google, zh: Google, ja: Google }
+    #       auto-provision: true
     # The first administrator, created at startup when both are set and no user exists yet.
     bootstrap-admin:
       user-name: ${JABIZ_BOOTSTRAP_ADMIN_USER:}

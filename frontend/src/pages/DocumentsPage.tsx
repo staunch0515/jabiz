@@ -1,6 +1,7 @@
 import {
   Badge,
   Button,
+  cn,
   CopyButton,
   DataTable,
   notify,
@@ -18,6 +19,7 @@ import type { components } from '@jabiz/client'
 import { useAuth } from '../auth/AuthContext'
 import DocumentDeliveries from '../components/DocumentDeliveries'
 import SendDocumentModal from '../components/SendDocumentModal'
+import UserName from '../components/UserName'
 import AdminPage from '../layout/AdminPage'
 import { formatDateTime } from '../meta/format'
 
@@ -97,6 +99,10 @@ export default function DocumentsPage() {
       }
     }
     const secondary = 'text-muted-foreground text-xs'
+    // Ids (the subject's, an issuer shown by id) break at their hyphens rather than widen the table: cells do not
+    // wrap, and a table wider than the page slides its last columns under the pinned actions, the hash's copy
+    // button among them (covered, it is no target one can use).
+    const wrapping = 'inline-block max-w-44 whitespace-normal'
     return [
       {
         id: 'title',
@@ -114,7 +120,9 @@ export default function DocumentsPage() {
         id: 'subject',
         header: t('documents.subject'),
         cell: ({ row: { original: run } }) =>
-          run.subjectId ? <span className={secondary}>{`${run.subjectEntity} ${run.subjectId}`}</span> : null,
+          run.subjectId ? (
+            <span className={cn(secondary, wrapping)}>{`${run.subjectEntity} ${run.subjectId}`}</span>
+          ) : null,
       },
       {
         id: 'issued',
@@ -122,7 +130,9 @@ export default function DocumentsPage() {
         cell: ({ row: { original: run } }) => (
           <span className="flex flex-col">
             <span>{run.issuedTime ? formatDateTime(run.issuedTime) : ''}</span>
-            <span className={secondary}>{run.issuedBy}</span>
+            <span className={cn(secondary, wrapping)}>
+              <UserName id={run.issuedBy} />
+            </span>
           </span>
         ),
       },
@@ -137,7 +147,7 @@ export default function DocumentsPage() {
         header: t('documents.hash'),
         cell: ({ row: { original: run } }) =>
           run.pdfHash && (
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <code className="font-mono text-xs" title={run.pdfHash}>
                 {run.pdfHash.slice(0, 12)}
               </code>

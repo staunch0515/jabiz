@@ -1404,7 +1404,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
 | 16m | 本人改密码与按入口的会话设置（QuizBuks Q2 平台缺口 1、2；计划已确认；☑ 已完成，PR 待创建） | D43 | 1–1.5 天 | 16b |
 | 16d | 入站 Webhook（先实现 Stripe 签名）（☑ 已完成，PR 待创建） | D37 | 3.5–4 天 | — |
 | 16e | 外部服务声明与异步外部作业（分 16e-1 / 16e-2；16e-1 ☑ 已完成；16e-2 ☑ 已完成，PR 待建） | D38 | 4.5–6 天 | — |
-| 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联 | D39 | 3–4 天 | 16b |
+| 16f | OIDC 自动开户（Google、Apple）。要求：有了自助关联外部身份后，接管可预占的账号（10 §15.7）也须删除其 `SecUserIdentity` 关联（分 16f-1 / 16f-2；计划已确认；16f-1 ☑ 已完成，PR 待创建；16f-2（Apple）推后） | D39 | 5–6 天（16f-1 3–3.5 天） | 16b、16g |
 | 16g | 会话列表与吊销（计划已确认；☑ 已完成，PR 待创建） | D12（实现说明） | 1–2 天（实际 2–2.5 天） | 16b |
 | 16k | 定时任务逐项独立事务（`JobDefinition.forEach`、`HoldLock` 的最长等待、`BUSY`）；D42（☑ 已完成，PR 待建） | D42 | 2.5–3 天 | — |
 | 16h | 账本维度接受身份与引用字段（QuizBuks 以用户编号为维度）；✅ 已完成 | D24 | 0.5 天 | — |
@@ -1419,6 +1419,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
 
 **待办**
 - [ ] 16f-2（Apple 登录）：取得 Apple 开发者账号后，用真实的 Services ID 核对后实现。
+- [x] 后台账户安全页加 `<LinkedIdentities/>`：15c-2 合入后作为 `ACCOUNT_SECTIONS` 的一节 `identities`（会话之后，只在后台入口提供了身份提供方时显示），在 16f-1 的分支上完成。
 - [ ] Reactor Netty 1.3.1 受 CVE-2026-47874 影响（HTTP/1.1 管道化导致内存耗尽，1.3.7 修复）；2026-10-13 决定暂不升级，以后升级。
 
 ### 16a 事务邮件（3–4 天）
@@ -2139,6 +2140,91 @@ runtime `SignInEntriesTest`、`ClientAddressesTest`、`SignInGuardsTest`，`JwtS
 - step-up 与本人的会话接口先确认令牌的 `sid` 所指的族尚未结束，否则 401 `UNAUTHENTICATED`：被吊销会话的访问令牌不能靠 step-up 续命，也不能吊销别的会话（`MfaIT`、`SessionRevokeIT`）。
 - 吊销全部（吊销其他、管理员吊销全部、改密码等）取全部尚未结束的族，含闲置的：入口的闲置时长以后放宽时它们不会复活（`SessionRevokeIT`、`AdminSessionIT`）；吊销单个仍只认有效会话。
 - 吊销全部的查询留 5 分钟时钟偏差余量。补测：二次验证、step-up、OIDC 登录后 `/api/auth/me` 的 `sessionId` 即令牌族；流程中同一族的第二次吊销不中止事务。
+
+### 16f OIDC 自动开户、本人关联外部身份（5–6 天，分 16f-1 / 16f-2）
+
+分支 `1.2/phase-16f1-oidc-provisioning`，从 `1.2/platform`（已含 16g）拉出。依据：10 §12、§15.6、§15.7、§15.9；决策 D28 第 6 条、D36、D39、D43。详见 10 §12。
+
+**计划摘要**
+1. **开户**（D39 第 1、4 条）：提供方 `auto-provision`、状态记录的入口允许注册、提供方担保的邮箱（`email_verified` 为真，布尔或文本 `"true"`；Google 见第 3 条）、
+   该邮箱（不分大小写）没有被任何用户使用，四者同时满足才由 `SPONSOR_OIDC_SIGN_UP` 开户：用户名同注册、邮箱即已验证、不写 `registeredEmail`（永不可预占）、没有密码、
+   显示名取 ID 令牌的 `name`（清理、截断 200）、授予入口的注册角色、建关联；随后照常运行 `SPONSOR_OIDC_SIGN_IN`（登录记录、守卫、锁定、二次验证）。
+   邮箱已被使用 → 403 `OIDC_ACCOUNT_EXISTS`，不关联；其他不满足 → 401 `LOGIN_FAILED`，不建用户。`admin` 入口不能允许注册，所以后台从不开户。
+2. **本人关联**（D39 第 2 条）：`/api/auth/account/identities`（列表、`start`、`callback`、`DELETE /{id}`），限会话的入口；开始前须近期二次验证或当前密码
+   （`SEC_IDENTITY_LINK_BEGIN`，错误计入锁定）；`SEC_IDENTITY_LINK_SELF` 拒绝可预占的账号、已关联到别人的外部账号、同一提供方的第二个账号；
+   `SEC_IDENTITY_UNLINK_SELF` 拒绝解除最后一种登录方式；状态记录带用途（`SIGN_IN` / `LINK`）与关联的用户，两个回调互不接受。
+3. **Google**：`kind: google`（issuer 缺省 `https://accounts.google.com`，标准 OIDC）；只有 `@gmail.com` / `@googlemail.com` 或带 `hd`（Workspace）的邮箱才算担保。
+4. **接管**：加入、验证（新密码）、找回密码接管可预占的账号时删除其全部 `SecUserIdentity`（10 §15.6、§15.7）。
+5. **限流**：开户按地址（`OIDC_SIGN_UP`，沿用注册的 20 次）；匿名的 `start` 按地址（`jabiz.security.oidc.rate-limit.per-address`，缺省 60）；关联按用户（同改密码的 10 次）。
+6. **前端**：`@jabiz/client` 的 `startIdentityLink` / `finishIdentityLink` / `listIdentities` / `unlinkIdentity`；`@jabiz/ui` 的 `OidcCallback` 处理关联与
+   `OIDC_ACCOUNT_EXISTS`、`OidcButtons` 按 `kind` 显示 Google 标志、新积木 `LinkedIdentities`；示范门户的账户页；`GET /api/auth/oidc/providers` 每项加 `kind`。
+7. **16f-2（推后）**：Apple（`kind: apple`、ES256 客户端密钥、`client_secret_post`、form_post 回调、首次授权的姓名、`sec_oidc_state_profile`）。
+
+**待确认**（Q1–Q8）：邮箱被占用答 403 `OIDC_ACCOUNT_EXISTS`；Google 只信 gmail 或带 `hd` 的；本人关联凭近期二次验证或当前密码；`response-mode` 与客户端认证方式由 `kind` 决定，不单独配置；
+本阶段做列表与解除；关联时发邮件、开户时不发；每个用户每个提供方一个外部账号；`SecUserIdentity` 加 `email`（只用于显示）。
+
+**确认**：2026-10-13，待确认项全部按缺省；Apple（16f-2）推后。
+
+**16f-1 的实现**（☑ 已完成，PR 待创建）
+- 迁移 `V39__oidc_provisioning.sql`（V38 已被 16g 占用）：`sec_oidc_state.purpose`（`SIGN_IN` / `LINK`，带检查约束）与 `link_user_id`；`sec_user_identity_version.email`；
+  索引 `sec_user_identity_version (user_id)`（按不可变字段查询本人的关联、接管时删除全部关联）。
+- runtime：`OidcProvider`（`kind`、`autoProvision`，启动检查：未知 `kind`、开户而范围无 `email` 为错误；开户而它服务的入口都不允许注册为警告）、`IdTokenValidator.Identity`
+  （`email`、`emailVerified`、`name`、`hostedDomain`、`trustedEmail`）、`OidcStateStore`（用途）、`OidcExchange`（两个回调共用的换令牌与校验）、`OidcController`（开户分支、`start` 限流）、
+  `OidcSignUpProcess`（`SPONSOR_OIDC_SIGN_UP`）、`IdentityProcesses`、`IdentityLinkController`、`SignUpProcesses.claim`、`SignUpRateLimits`、`OidcAccountExistsException`、
+  邮件 `jabiz.auth.identity-linked`（三语）、错误码 `OIDC_ACCOUNT_EXISTS`、`REAUTHENTICATION_REQUIRED`、`IDENTITY_IN_USE`、`IDENTITY_PROVIDER_LINKED`、
+  `IDENTITY_LINK_UNAVAILABLE`、`IDENTITY_LINK_FAILED`、`LAST_SIGN_IN_METHOD`（三语）。
+
+**测试**
+- runtime：`IdTokenValidatorTest`（`email_verified` 的布尔、文本与缺失；Google 的 gmail 与 `hd`；姓名的清理与截断；`toString` 遮蔽）、`OidcProvidersTest`（`kind`、开户的检查与警告）、
+  `SignUpRateLimitsTest`（新的三种）。
+- `OidcProvisionIT`：开户（已验证、无密码、不可预占、注册角色、关联与邮箱、登录记录、审计、再次登录不再开户、刷新）；文本 `"true"`；四个条件缺一不开户（含 `admin` 与不允许注册的入口、
+  未验证、无邮箱）；Google 的规则；邮箱被可预占的（换大小写）或已验证的账号占用 → 403 且不关联；角色要求二次验证 → `MFA_ENROLLMENT_REQUIRED`；同一 subject 并发回调只建一个用户；
+  开户与 `start` 的限流 429；`providers` 的 `kind`；加入与找回密码接管时删除关联、经它的会话刷新 401；只追加。
+- `OidcIdentityLinkIT`：未登录 401；当前密码（缺少 422 `REAUTHENTICATION_REQUIRED`、错误 422 `PASSWORD_INCORRECT` 并写 `BAD_CREDENTIALS`）、近期二次验证；未提供的提供方 404；
+  关联、列表、邮件，之后经提供方登录；别人的、另一用途的、另一入口的状态 → 422 `IDENTITY_LINK_FAILED` / 401；`IDENTITY_IN_USE`、`ALREADY_LINKED`、`IDENTITY_PROVIDER_LINKED`；
+  可预占的账号 422 `IDENTITY_LINK_UNAVAILABLE`；`LAST_SIGN_IN_METHOD`、解除后经该关联的刷新 401、别人的关联 404；四个流程经流程接口 403 `PROCESS_INTERNAL`。
+- 回归：`OidcIT`（`providers` 多了 `kind`）、`OidcEntryIT`、`OpenApiSnapshotIT`、`platformCheck`；场景 `scenarios/security/oidc_provision.yml`（开户、`EXISTS`、`EMAIL_IN_USE`、`DISABLED`、
+  本人关联、重复关联、`IDENTITY_IN_USE`、`IDENTITY_PROVIDER_LINKED`、替别人关联 403），快照已提交。
+- 前端：Vitest `oidc.test`（`startIdentityLink`、用途）、`account.test`（三个函数）、`blocks.test`（`OidcCallback` 的关联与 `OIDC_ACCOUNT_EXISTS`、`OidcButtons` 的 `kind`，axe 亮暗）、
+  `LinkedIdentities.test`（列表、按需问密码、错误密码、解除与最后一种登录方式、三语、axe 亮暗）；门户 `App.test`（关联回来后账户页显示结果）。e2e 不访问真实的提供方，不加。
+
+**验收标准（16f-1）**
+- [x] 只有提供方开启、入口允许注册、邮箱已验证（Google 按 Q2）且没有被使用，四者同时满足才开户；开户的用户已验证、无密码、带注册角色和关联，并写登录记录；其他情况不建用户（`OidcProvisionIT`）。
+- [x] 邮箱被占用时答 403 `OIDC_ACCOUNT_EXISTS`，绝不自动关联；`admin` 入口从不开户（`OidcProvisionIT`、场景）。
+- [x] 本人关联要求已登录，并且有近期二次验证或当前密码；可预占的账号不能关联；外部身份不能关联到两个用户；可以列出和解除，解除后经该关联的会话在下一次刷新时结束（`OidcIdentityLinkIT`）。
+- [x] 加入、验证、找回密码接管可预占的账号时，删除其全部 `SecUserIdentity`（`OidcProvisionIT` 测了加入与找回密码；三个流程共用 `claim`）。
+- [ ] Apple（16f-2，推后）。Google 按标准 OIDC 走通（夹具，`kind: google`）。
+- [x] 限流和启动检查按计划生效；秘密不出现在日志、`input_summary` 与 `toString` 中（`BeginInput`、请求与 `Identity` 遮蔽）。
+- [x] `./gradlew check`、`platformCheck`、`pnpm lint`、`typecheck`、`test`、`check:api`、门户的 `app:check` 全部通过，场景快照已提交。
+
+**与计划的出入**
+- 迁移号 V39（不是 V38）；没有 `sec_oidc_state_profile`（属于 Apple）；另加 `sec_user_identity_version (user_id)` 索引。
+- `SPONSOR_OIDC_SIGN_UP` 放在 runtime 的 `security` 包（`OidcSignUpProcess`），与注册共用用户名与角色的辅助函数，而不是 `process/sponsor`。
+- 关联回调的一切失败（状态、换令牌、ID 令牌）答 422 `IDENTITY_LINK_FAILED` 而不是 401：这是已登录的接口，401 会让客户端以为会话结束而登出。
+- `SEC_IDENTITY_LINK_BEGIN` 只为错误密码与锁定写登录记录（正确时不写：没有"重新认证"的结果），与本人改密码共用同一把排他锁。
+- 关联与解除按用户以排他锁逐个进行（计划未写）：否则并发的两次可关联同一提供方的两个账号，或同时解除最后两个关联。解除与关联共用按用户的限流。
+- 同一用户两个 OIDC 登录并发时，后者在登录记录的唯一约束上失败后再登录一次（不猜密码，没有计数的问题）。
+- 提供方的 `kind` 是文本、由启动检查核对（`apple` 在 16f-2 之前是未知的种类，报错而不是绑定失败）；关联时提供方未知或不对该入口提供答 404。
+- Google 按钮的标志用文字颜色（`currentColor`）画单色"G"：颜色只用主题 token（D34）；是否需要 Google 的彩色标志，按其品牌规范另议。
+- 前端记下的用途只读不取（`pendingPurpose`），每次发起都会重写；回调页可能渲染两次。
+- 邮件 `jabiz.auth.identity-linked` 除入口外还带参数 `provider`（调用者语言的标签）。
+- 场景不含"可预占的账号不能关联"（场景取不到注册得到的用户编号），由 `OidcIdentityLinkIT` 覆盖。
+- 列表的 `linkedAt` 取关联第一个版本的生效时间。
+
+**评审后的补充（同一分支）**
+- Google 的邮箱规则按 `kind` 或 issuer 适用（issuer 为 Google 而 `kind` 是 `generic` 的旧配置不再信任任何邮箱），这种配置启动检查给警告；10 §12 写明只在 `email_verified` 可靠的通用提供方上开户。
+- `LAST_SIGN_IN_METHOD` 只把提供方仍在配置中、且对某个入口提供的关联算作还能登录的方式。
+- 没有密码又没有近期二次验证的账号开始关联时答 422 `REAUTHENTICATION_UNAVAILABLE`（不再弹出无法回答的密码框），`LinkedIdentities` 说明可开启两步验证或经找回密码设密码（三语）。
+- 回调本身也不在 `admin` 入口开户（`OidcController.opensAccounts`）；解除与关联共用按用户的限流（写入 10 §12）。
+- 解除按钮的可访问名称带提供方（"Remove Google"）。
+- 合入 15c-2 后：后台安全设置页的 `ACCOUNT_SECTIONS` 加一节 `identities`（`LinkedIdentities`，会话之后；节可声明 `shown`，只在后台入口提供了身份提供方时显示，与登录页同一查询）；
+  OIDC 回调页关联完成后经路由状态回到本页并显示结果。Vitest 测显示与隐藏、axe；e2e 的应用没有配置身份提供方，所以 `a11y.spec` 不覆盖这一节。
+- 补测：验证邮件（新密码）接管时删除关联；开户后守卫拒绝（403，用户留下）；两个 subject 同时以同一邮箱开户（一个 200、一个 403，只一个用户）；
+  经 `SEC_IDENTITY_LINK_BEGIN` 达到锁定后正确的密码也被拒；`ProcessAccessIT` 列入四个新流程。
+
+**已知问题**
+- Google 的邮箱规则可能使少数非 gmail、非 Workspace 的 Google 用户不能自动开户（Q2 的取舍）；他们可以先注册，再在账户中关联。
+- 自动开户可被用来批量建账号：靠限流与提供方本身的门槛缓解，以后可加 `SignUpGuard`。
 
 ### 16d 入站 Webhook（3.5–4 天）
 
