@@ -20,6 +20,10 @@ import java.util.ResourceBundle;
  * <p>Bundles are searched in the given order, so business bundles can be listed after the platform's.
  * A language only ever uses its own bundle: there is no fallback to the JVM default locale, which would
  * silently answer a Japanese client in whatever language the server happens to run in.
+ *
+ * <p>Every bundle of every supported language is read once, when the catalog is built, and kept: lookups happen on
+ * event loops, and {@code ResourceBundle.getBundle} would read the jar again whenever a GC has cleared the JDK's
+ * bundle cache, which holds bundles only through soft references.
  */
 public final class MessageCatalog {
 
@@ -29,10 +33,10 @@ public final class MessageCatalog {
     private static final ResourceBundle.Control NO_FALLBACK =
         ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES);
 
-    private final List<String> baseNames;
     private final List<Locale> supportedLocales;
     private final Locale defaultLocale;
-    private final ClassLoader classLoader;
+    /** Per supported language, its bundles in search order (base names without a bundle in it are left out). */
+    private final Map<Locale, List<ResourceBundle>> bundles;
 
     /**
      * @param baseNames        bundle base names, searched in order
@@ -48,14 +52,25 @@ public final class MessageCatalog {
         if (supportedLocales == null || supportedLocales.isEmpty()) {
             throw new IllegalArgumentException("At least one supported locale is required");
         }
-        this.baseNames = List.copyOf(baseNames);
         this.supportedLocales = supportedLocales.stream().map(MessageCatalog::language).toList();
         this.defaultLocale = language(Objects.requireNonNull(defaultLocale, "defaultLocale must not be null"));
         if (!this.supportedLocales.contains(this.defaultLocale)) {
             throw new IllegalArgumentException(
                 "Default locale " + defaultLocale + " is not among the supported locales " + supportedLocales);
         }
-        this.classLoader = Objects.requireNonNull(classLoader, "classLoader must not be null");
+        Objects.requireNonNull(classLoader, "classLoader must not be null");
+        Map<Locale, List<ResourceBundle>> loaded = new HashMap<>();
+        for (Locale language : this.supportedLocales) {
+            List<ResourceBundle> inOrder = new ArrayList<>();
+            for (String baseName : baseNames) {
+                ResourceBundle bundle = load(baseName, language, classLoader);
+                if (bundle != null) {
+                    inOrder.add(bundle);
+                }
+            }
+            loaded.put(language, List.copyOf(inOrder));
+        }
+        this.bundles = Map.copyOf(loaded);
     }
 
     public List<Locale> supportedLocales() {
@@ -79,10 +94,8 @@ public final class MessageCatalog {
 
     /** The raw text of a code in one language, if any bundle defines it. */
     public Optional<String> find(String code, Locale locale) {
-        Locale language = supported(locale);
-        for (String baseName : baseNames) {
-            ResourceBundle bundle = bundle(baseName, language);
-            if (bundle != null && bundle.containsKey(code)) {
+        for (ResourceBundle bundle : bundles.get(supported(locale))) {
+            if (bundle.containsKey(code)) {
                 return Optional.of(bundle.getString(code));
             }
         }
@@ -124,7 +137,7 @@ public final class MessageCatalog {
         return missing;
     }
 
-    private ResourceBundle bundle(String baseName, Locale language) {
+    private static ResourceBundle load(String baseName, Locale language, ClassLoader classLoader) {
         try {
             return ResourceBundle.getBundle(baseName, language, classLoader, NO_FALLBACK);
         } catch (MissingResourceException e) {

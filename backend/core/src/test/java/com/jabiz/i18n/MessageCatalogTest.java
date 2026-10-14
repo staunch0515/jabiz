@@ -98,4 +98,63 @@ class MessageCatalogTest {
         assertThatThrownBy(() -> new MessageCatalog(List.of("x"), SUPPORTED, Locale.GERMAN, loader))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("not among");
     }
+
+    /**
+     * The JDK caches bundles only softly, so after a GC {@code ResourceBundle.getBundle} reads the jar again; on an
+     * event loop that is a blocking read (BlockHound: 500 instead of 400). The catalog reads every bundle once, when it
+     * is built, and keeps it.
+     */
+    @Test
+    void lookupsNeverReadBundlesAgainAfterTheJdkCacheIsCleared() {
+        CountingLoader loader = new CountingLoader(MessageCatalogTest.class.getClassLoader());
+        MessageCatalog counted = new MessageCatalog(List.of(MessageCatalog.PLATFORM_BUNDLE, "i18ntest/messages"),
+            SUPPORTED, Locale.ENGLISH, loader);
+        lookUpInEveryLanguage(counted);
+        assertThat(loader.reads.get()).as("bundles were read from the class loader").isPositive();
+
+        // What a GC does to the JDK's soft cache.
+        java.util.ResourceBundle.clearCache(loader);
+        loader.reads.set(0);
+        lookUpInEveryLanguage(counted);
+
+        assertThat(loader.reads.get()).as("resource reads after the JDK cache was cleared").isZero();
+    }
+
+    private static void lookUpInEveryLanguage(MessageCatalog catalog) {
+        for (Locale locale : List.of(Locale.CHINESE, Locale.JAPANESE, Locale.ENGLISH, Locale.GERMAN, Locale.US)) {
+            assertThat(catalog.find("REQUIRED", locale)).isPresent();
+            assertThat(catalog.find("NO_SUCH_CODE", locale)).isEmpty();
+            assertThat(catalog.message(new Violation("title", "REQUIRED", "x"), locale)).contains("title");
+        }
+    }
+
+    /** Counts every resource lookup, i.e. every time a bundle would be read from the class path. */
+    private static final class CountingLoader extends ClassLoader {
+
+        final java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger();
+
+        CountingLoader(ClassLoader parent) {
+            super(parent);
+        }
+
+        @Override
+        public java.net.URL getResource(String name) {
+            reads.incrementAndGet();
+            return super.getResource(name);
+        }
+
+        @Override
+        public java.io.InputStream getResourceAsStream(String name) {
+            reads.incrementAndGet();
+            return super.getResourceAsStream(name);
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (name.startsWith("jabiz.") || name.startsWith("i18ntest.")) {
+                reads.incrementAndGet();
+            }
+            return super.loadClass(name, resolve);
+        }
+    }
 }

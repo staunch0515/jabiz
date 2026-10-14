@@ -29,7 +29,9 @@ public class ProcessInputs {
     public ProcessInputs(Validator validator, JsonMapper json) {
         this.validator = validator;
         this.json = json;
-        // The first validation loads message bundles from the classpath; do it here rather than on an event loop.
+        // The first validation initializes the validator's metadata and expression support; do it here rather than on
+        // an event loop. Message bundles are preloaded and held by PreloadedMessageInterpolator (ValidationConfig): a
+        // warm-up alone would not keep them, since the JDK's bundle cache drops them at any GC.
         validator.validate(new Warmup(null));
     }
 
