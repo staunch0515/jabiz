@@ -1,0 +1,186 @@
+import { api, runProcess, runQuery, unwrap } from '@jabiz/client'
+import { DATASET, DICTIONARY, PROCESS, TEMPLATE } from './ids'
+
+/*
+ * The calls the QuizBuks front ends make, typed by hand after the Java records of backend/quizbuks (processes have no
+ * OpenAPI types of their own). The end-to-end tests run every one of them against the server, which keeps the two
+ * in step.
+ */
+
+/** A taker's own profile (`QbProfile`; a sponsor's carries only the name). */
+export interface Profile {
+  displayName: string
+  countryCode: string | null
+  city: string | null
+  preferredCurrency: string | null
+  revision: number
+}
+
+/** `ProfileProcesses.ProfileInput`. */
+export interface ProfileInput {
+  displayName: string
+  countryCode: string
+  city?: string | null
+  preferredCurrency: string
+  /** The revision edited; a newer one on the server is refused (`QB_PROFILE_CHANGED`). */
+  baseRevision?: number | null
+}
+
+/** `ProfileProcesses.ProfileOutput`. */
+export interface ProfileOutput {
+  userId: string
+  profileId: string
+  revision: number
+  editedAt: string
+  /** This save completed the profile (registration's second step). */
+  created: boolean
+}
+
+export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** A sponsor's own onboarding (`QbSponsor`). */
+export interface Sponsor {
+  contactName: string
+  company: string
+  intro: string | null
+  /** A file of the policy `qb.sponsor-avatar`. */
+  avatar: string | null
+  reviewStatus: ReviewStatus
+  submittedAt: string | null
+  approvedAt: string | null
+  rejectReason: string | null
+  rejectedAt: string | null
+  revision: number
+}
+
+/** `SponsorProcesses.ApplyInput` (and, without `acceptTerms`, `ProfileInput`). */
+export interface SponsorInput {
+  displayName: string
+  company: string
+  intro?: string | null
+  avatar?: string | null
+  acceptTerms?: boolean
+  baseRevision?: number | null
+}
+
+/** `SponsorProcesses.SponsorOutput`. */
+export interface SponsorOutput {
+  userId: string
+  onboardingId: string
+  reviewStatus: ReviewStatus
+  revision: number
+  /** `PENDING`, `APPROVED` or `NOT_REQUIRED` when the process asked for a review. */
+  approval: string | null
+  approvalRequestId: string | null
+}
+
+/** A country of the dictionary `QbCountry`: its name in each language. */
+export interface Country {
+  code: string
+  name: Record<string, string>
+}
+
+/** An item of a static dictionary. */
+export interface DictionaryItem {
+  code: string
+  label: string
+}
+
+/** A row of `qb.me.sign-ins`. */
+export interface SignInRow {
+  loginRecordId: string
+  attemptTime: string
+  outcome: string
+  entry: string | null
+  factor: string | null
+  clientIp: string | null
+  userAgent: string | null
+}
+
+function numberOf(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** The caller's one row of a dataset scoped to them (their profile, their onboarding); null when there is none. */
+async function ownRow(dataset: string): Promise<Record<string, unknown> | null> {
+  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: dataset } },
+    body: { limit: 1 },
+  }))
+  const first = (page.items ?? [])[0]
+  return first ? ((first.attributes ?? {}) as Record<string, unknown>) : null
+}
+
+/** The caller's profile, or null before the first save. */
+export async function readMyProfile(): Promise<Profile | null> {
+  const row = await ownRow(DATASET.myProfile)
+  if (!row) return null
+  return {
+    displayName: String(row.displayName ?? ''),
+    countryCode: (row.countryCode as string | null) ?? null,
+    city: (row.city as string | null) ?? null,
+    preferredCurrency: (row.preferredCurrency as string | null) ?? null,
+    revision: numberOf(row.revision),
+  }
+}
+
+/** The caller's onboarding as a sponsor, or null before they applied. */
+export async function readMySponsor(): Promise<Sponsor | null> {
+  const row = await ownRow(DATASET.mySponsor)
+  if (!row) return null
+  return {
+    contactName: String(row.contactName ?? ''),
+    company: String(row.company ?? ''),
+    intro: (row.intro as string | null) ?? null,
+    avatar: row.avatar == null ? null : String(row.avatar),
+    reviewStatus: row.reviewStatus as ReviewStatus,
+    submittedAt: (row.submittedAt as string | null) ?? null,
+    approvedAt: (row.approvedAt as string | null) ?? null,
+    rejectReason: (row.rejectReason as string | null) ?? null,
+    rejectedAt: (row.rejectedAt as string | null) ?? null,
+    revision: numberOf(row.revision),
+  }
+}
+
+/** Every country, by code. */
+export async function readCountries(): Promise<Country[]> {
+  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: DATASET.countries } },
+    body: { limit: 300, sorts: [{ field: 'code', asc: true }] },
+  }))
+  return (page.items ?? []).map((item) => {
+    const row = (item.attributes ?? {}) as Record<string, unknown>
+    return { code: String(row.code), name: (row.name ?? {}) as Record<string, string> }
+  })
+}
+
+/** A static dictionary's items in the request's language. */
+export async function readDictionary(urn: string): Promise<DictionaryItem[]> {
+  const items = await unwrap(api.GET('/api/dictionaries/{urn}', { params: { path: { urn } } }))
+  return (items ?? []).filter((item) => item.enabled !== false)
+    .map((item) => ({ code: String(item.code), label: String(item.label ?? item.code) }))
+}
+
+export const readCurrencies = () => readDictionary(DICTIONARY.currency)
+
+/** The caller's latest sign-ins, newest first. */
+export async function readMySignIns(limit = 10): Promise<SignInRow[]> {
+  return (await runQuery<SignInRow>(TEMPLATE.mySignIns, { limit })).items
+}
+
+export const saveProfile = (input: ProfileInput) =>
+  runProcess<ProfileOutput>(PROCESS.profileSave, { ...input })
+
+export const applyAsSponsor = (input: SponsorInput) =>
+  runProcess<SponsorOutput>(PROCESS.sponsorApply, { ...input })
+
+/** An approved sponsor's change of the same (no review; the terms are not asked again). */
+export const saveSponsorProfile = (input: SponsorInput) =>
+  runProcess<SponsorOutput>(PROCESS.sponsorProfileSave, {
+    displayName: input.displayName,
+    company: input.company,
+    intro: input.intro,
+    avatar: input.avatar,
+    baseRevision: input.baseRevision,
+  })
