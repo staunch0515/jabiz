@@ -133,6 +133,13 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
     save.mutate()
   }
   const problem = (field: string) => fieldProblem(save.error, field)
+  // A field's refusal is tied to it (aria-describedby, with its hint when it has one) and marks it invalid.
+  const errorId = (field: string) => `${id}-${field}-error`
+  const describedBy = (field: string, hint?: string) =>
+    [hint, problem(field) ? errorId(field) : undefined].filter(Boolean).join(' ') || undefined
+  const invalid = (field: string) => (problem(field) ? true : undefined)
+  const errorOf = (field: string) => problem(field)
+    && <p id={errorId(field)} className="text-destructive text-sm">{problem(field)}</p>
   const general = generalProblem(save.error, FIELDS)
   const label = approved ? t('onboarding.save') : sponsor ? t('onboarding.applyAgain') : t('onboarding.apply')
 
@@ -141,24 +148,24 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-name`}>{t('onboarding.displayName')}</Label>
         <Input id={`${id}-name`} value={displayName} required maxLength={100} autoComplete="name"
-          aria-invalid={problem('displayName') ? true : undefined} data-testid="onboarding-name"
-          onChange={(event) => setDisplayName(event.target.value)} />
-        {problem('displayName') && <p className="text-destructive text-sm">{problem('displayName')}</p>}
+          aria-invalid={invalid('displayName')} aria-describedby={describedBy('displayName')}
+          data-testid="onboarding-name" onChange={(event) => setDisplayName(event.target.value)} />
+        {errorOf('displayName')}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-company`}>{t('onboarding.company')}</Label>
         <Input id={`${id}-company`} value={company} required maxLength={100} autoComplete="organization"
-          aria-invalid={problem('company') ? true : undefined} data-testid="onboarding-company"
-          onChange={(event) => setCompany(event.target.value)} />
-        {problem('company') && <p className="text-destructive text-sm">{problem('company')}</p>}
+          aria-invalid={invalid('company')} aria-describedby={describedBy('company')}
+          data-testid="onboarding-company" onChange={(event) => setCompany(event.target.value)} />
+        {errorOf('company')}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-intro`}>{t('onboarding.intro2')}</Label>
         <Textarea id={`${id}-intro`} value={intro} rows={6} maxLength={INTRO_LENGTH}
-          aria-describedby={`${id}-intro-hint`} aria-invalid={problem('intro') ? true : undefined}
+          aria-describedby={describedBy('intro', `${id}-intro-hint`)} aria-invalid={invalid('intro')}
           data-testid="onboarding-intro" onChange={(event) => setIntro(event.target.value)} />
         <p id={`${id}-intro-hint`} className="text-muted-foreground text-sm">{t('onboarding.introHint')}</p>
-        {problem('intro') && <p className="text-destructive text-sm">{problem('intro')}</p>}
+        {errorOf('intro')}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-avatar`}>{t('onboarding.avatar')}</Label>
@@ -174,22 +181,22 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
         )}
         <FileUpload id={`${id}-avatar`} accept={AVATAR_TYPES} maxSize={AVATAR_BYTES} maxSizeText="2 MB"
           label={t('onboarding.uploadAvatar')} hint={t('onboarding.avatarHint')}
-          aria-invalid={problem('avatar') ? true : undefined} data-testid="onboarding-avatar"
+          aria-invalid={invalid('avatar')} aria-describedby={describedBy('avatar')} data-testid="onboarding-avatar"
           onUpload={async (file) => {
             const uploaded = await uploadFile(FILE_POLICY.sponsorAvatar, file, file.name)
             setAvatar(uploaded.fileId ?? null)
           }} />
-        {problem('avatar') && <p className="text-destructive text-sm">{problem('avatar')}</p>}
+        {errorOf('avatar')}
       </div>
       {!approved && (
         <div className="flex flex-col gap-2">
           <div className="flex items-start gap-2">
             <Checkbox id={`${id}-terms`} checked={acceptTerms} data-testid="onboarding-terms"
-              aria-invalid={problem('acceptTerms') ? true : undefined}
+              aria-invalid={invalid('acceptTerms')} aria-describedby={describedBy('acceptTerms')}
               onCheckedChange={(checked) => setAcceptTerms(checked === true)} />
             <Label htmlFor={`${id}-terms`} className="leading-snug">{t('onboarding.terms')}</Label>
           </div>
-          {problem('acceptTerms') && <p className="text-destructive text-sm">{problem('acceptTerms')}</p>}
+          {errorOf('acceptTerms')}
         </div>
       )}
       {general && (

@@ -66,6 +66,18 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await expect(again.getByTestId('login-error')).toBeVisible()
 })
 
+test('a taker who has not verified the address yet browses the app and is told to verify', async ({ page }) => {
+  const email = address('unverified')
+  await signUp(page, '/', email, 'Yui')
+  await signIn(page, '/', email)
+  // Not held at the welcome page: the app lets unverified takers browse (D-Q2-1); every write waits for the address.
+  await expect(page.getByTestId('home')).toContainText('Yui')
+  await expect(page.getByTestId('verify-email-banner')).toContainText(email)
+  await page.goto('/welcome')
+  await expect(page.getByTestId('profile-verify-first')).toBeVisible()
+  await expect(page.getByTestId('profile-save')).toBeDisabled()
+})
+
 test('a taker who forgot the password gets a link to the app\'s own page and signs in with a new one', async ({
   page,
 }) => {

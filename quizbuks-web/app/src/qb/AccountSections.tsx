@@ -1,4 +1,4 @@
-import { formatDateTime, useAuth, type IdentityLinked } from '@jabiz/client'
+import { formatDateTime, listIdentities, useAuth, type IdentityLinked } from '@jabiz/client'
 import {
   AUTH_NAMESPACE,
   Badge,
@@ -74,7 +74,8 @@ export function SignInHistory() {
 
 /**
  * The parts of an account page both front ends share (docs/quizbuks/plans/QP-pages.md section 3): the address, the
- * password, two-step verification (optional, Q-7), the accounts of identity providers when the entry offers one, the
+ * password, two-step verification (optional, Q-7), the accounts of identity providers when the entry offers one or
+ * some are linked already, the
  * sessions at this entry and the latest sign-ins. All of them are the platform's blocks but the last.
  */
 export function AccountSections({ returnTo, linked, onSignedOut }: {
@@ -89,6 +90,9 @@ export function AccountSections({ returnTo, linked, onSignedOut }: {
   const { t: tAuth } = useTranslation(AUTH_NAMESPACE)
   const { email } = useAuth()
   const providers = useOidcProviders()
+  // Accounts linked earlier stay visible (and removable) when the entry no longer offers their provider.
+  const identities = useQuery({ queryKey: ['qb', 'identities'], queryFn: listIdentities })
+  const hasLinked = (identities.data?.length ?? 0) > 0
   return (
     <>
       <AccountSection title={t('account.email')} testId="account-email">
@@ -101,7 +105,7 @@ export function AccountSections({ returnTo, linked, onSignedOut }: {
       <AccountSection title={t('account.mfa')}>
         <MfaSettings />
       </AccountSection>
-      {(providers.length > 0 || linked) && (
+      {(providers.length > 0 || linked || hasLinked) && (
         <AccountSection title={tAuth('identities.title')}>
           <LinkedIdentities returnTo={returnTo} linked={linked} providers={providers} />
         </AccountSection>

@@ -142,20 +142,27 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
         <Label htmlFor={`${id}-country`}>{t('profile.country')}</Label>
         <Combobox id={`${id}-country`} value={countryCode} onChange={setCountryCode} options={options} required
           placeholder={t('profile.chooseCountry')} searchPlaceholder={t('profile.searchCountry')}
-          emptyText={t('profile.noCountry')} invalid={!!problem('countryCode')} data-testid="profile-country" />
-        {problem('countryCode') && <p className="text-destructive text-sm">{problem('countryCode')}</p>}
+          emptyText={t('profile.noCountry')} invalid={!!problem('countryCode')}
+          aria-describedby={problem('countryCode') ? `${id}-country-error` : undefined} data-testid="profile-country" />
+        {problem('countryCode') && (
+          <p id={`${id}-country-error`} className="text-destructive text-sm">{problem('countryCode')}</p>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-city`}>{t('profile.city')}</Label>
         <Input id={`${id}-city`} value={city} maxLength={100} autoComplete="address-level2"
-          aria-invalid={problem('city') ? true : undefined} data-testid="profile-city"
+          aria-invalid={problem('city') ? true : undefined}
+          aria-describedby={problem('city') ? `${id}-city-error` : undefined} data-testid="profile-city"
           onChange={(event) => setCity(event.target.value)} />
-        {problem('city') && <p className="text-destructive text-sm">{problem('city')}</p>}
+        {problem('city') && <p id={`${id}-city-error`} className="text-destructive text-sm">{problem('city')}</p>}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-currency`}>{t('profile.currency')}</Label>
         <Select value={currency} onValueChange={setCurrency}>
-          <SelectTrigger id={`${id}-currency`} aria-describedby={`${id}-currency-hint`} data-testid="profile-currency">
+          <SelectTrigger id={`${id}-currency`} data-testid="profile-currency"
+            aria-invalid={problem('preferredCurrency') ? true : undefined}
+            aria-describedby={problem('preferredCurrency') ? `${id}-currency-hint ${id}-currency-error`
+              : `${id}-currency-hint`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +172,9 @@ function ProfileFields({ profile, countries, currencies, submitLabel, onSaved }:
           </SelectContent>
         </Select>
         <p id={`${id}-currency-hint`} className="text-muted-foreground text-sm">{t('profile.currencyHint')}</p>
-        {problem('preferredCurrency') && <p className="text-destructive text-sm">{problem('preferredCurrency')}</p>}
+        {problem('preferredCurrency') && (
+          <p id={`${id}-currency-error`} className="text-destructive text-sm">{problem('preferredCurrency')}</p>
+        )}
       </div>
       {general && (
         <Alert variant="destructive" data-testid="profile-error">

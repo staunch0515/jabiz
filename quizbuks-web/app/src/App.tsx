@@ -94,14 +94,16 @@ function BottomNav({ path }: { path: string }) {
 }
 
 /**
- * The pages of a signed-in taker. Without a complete profile (no country yet) the taker completes it first
- * (`/welcome`, registration's second step); the account page stays open meanwhile.
+ * The pages of a signed-in taker. A verified taker without a complete profile (no country yet) completes it first
+ * (`/welcome`, registration's second step); the account page stays open meanwhile. A taker whose address is not
+ * verified yet browses (the app's entry lets them sign in, D-Q2-1) with the banner offering the mail again: the
+ * profile cannot be saved before verifying, so they are not held at the welcome page, which stays reachable.
  */
 function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(QB)
   // The app's entry never locks for idleness (idle-timeout 0); the hook follows whatever the server says.
   useSessionLock()
-  const { userId } = useAuth()
+  const { userId, emailVerified, displayName } = useAuth()
   const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
   // The pages start from who is signed in (the sign-up name prefills the profile): wait until the server said so.
   if (profile.isPending || !userId) return <PageState kind="loading" />
@@ -110,15 +112,16 @@ function SignedIn({ path }: { path: string }) {
       action={<Button variant="outline" onClick={() => void profile.refetch()}>{t('retry')}</Button>} />
   }
   const complete = profile.data?.countryCode ? profile.data : null
-  if (!complete && path !== WELCOME && path !== ACCOUNT_PATH) return <Redirect to={WELCOME} />
+  if (!complete && emailVerified && path !== WELCOME && path !== ACCOUNT_PATH) return <Redirect to={WELCOME} />
   if (complete && path === WELCOME) return <Redirect to={HOME} />
 
   let page: ReactNode
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
-  else if (path === HOME && complete) page = <HomePage profile={complete} />
+  else if (path === HOME) page = <HomePage name={complete?.displayName || displayName || ''} />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
-  const nav = complete !== null
+  // The navigation is the app's; the welcome step stands alone.
+  const nav = path !== WELCOME
   return (
     <div className="flex min-h-full flex-col">
       <Header />
@@ -169,6 +172,8 @@ function Routes() {
       onBack={() => navigate('/login', { replace: true })} />)
   }
   if (!ready) return <PageState kind="loading" />
+  // Signed in, the pages of signing up and asking for a new password lead home.
+  if (signedIn && (path === '/signup' || path === '/password-reset')) return <Redirect to={HOME} />
   if (path === '/password-reset') {
     return frame(<PasswordResetRequest {...navigation} brand={brand} signInPath="/login" />)
   }

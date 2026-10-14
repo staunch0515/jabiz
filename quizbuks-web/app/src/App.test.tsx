@@ -15,6 +15,10 @@ const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false
 interface Me {
   emailVerified?: boolean
   profile?: Record<string, unknown> | null
+  /** The accounts at identity providers linked already. */
+  identities?: Record<string, unknown>[]
+  /** The answer to saving the profile when it is refused. */
+  refusal?: Record<string, unknown>
 }
 
 /**
@@ -51,7 +55,10 @@ function server(me?: Me) {
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:currency':
         return json(200, [{ code: 'USD', label: 'US dollar' }, { code: 'EUR', label: 'Euro' },
           { code: 'JPY', label: 'Japanese yen' }])
+      case '/api/auth/account/identities':
+        return json(200, me?.identities ?? [])
       case '/api/processes/QB_PROFILE_SAVE/latest':
+        if (me?.refusal) return json(422, me.refusal)
         profile = { displayName: (body as { displayName: string }).displayName, countryCode: 'JP', city: null,
           preferredCurrency: 'JPY', revision: 1 }
         return json(200, { output: { userId: 'u1', profileId: 'p1', revision: 1, editedAt: '2026-10-14T00:00:00Z',
@@ -124,10 +131,21 @@ describe('a signed-in taker', () => {
     expect(screen.getByTestId('nav-home')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('cannot save before the address is verified, and is told why', async () => {
+  it('unverified, browses the app with the banner rather than being held at the welcome page', async () => {
     server({ profile: null, emailVerified: false })
     render(<App />)
+    expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
+    expect(window.location.pathname).toBe('/')
+    expect(screen.getByTestId('verify-email-banner')).toHaveTextContent('mei@example.com')
+    expect(screen.getByRole('navigation', { name: 'App' })).toBeInTheDocument()
+  })
+
+  it('unverified, can open the welcome page but not save it, and is told why', async () => {
+    server({ profile: null, emailVerified: false })
+    window.history.replaceState(null, '', '/welcome')
+    render(<App />)
     expect(await screen.findByTestId('profile-verify-first')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/welcome')
     expect(screen.getByTestId('verify-email-banner')).toHaveTextContent('mei@example.com')
     expect(screen.getByTestId('profile-save')).toBeDisabled()
   })
@@ -153,5 +171,36 @@ describe('a signed-in taker', () => {
     expect(await screen.findByTestId('profile-saved')).toBeInTheDocument()
     expect(posted).toContainEqual({ path: '/api/processes/QB_PROFILE_SAVE/latest', body: {
       displayName: 'Mei', countryCode: 'JP', city: 'Kyoto', preferredCurrency: 'EUR', baseRevision: 3 } })
+  })
+
+  it('ties a refusal to the field it names', async () => {
+    server({ profile: null, refusal: { detail: 'Refused', violations: [
+      { field: 'countryCode', ruleCode: 'QB_COUNTRY_UNKNOWN', message: 'There is no such country.' },
+      { field: 'city', ruleCode: 'X', message: 'The city is too long.' },
+    ] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('profile-save'))
+    const country = screen.getByTestId('profile-country')
+    await waitFor(() => expect(country).toHaveAttribute('aria-invalid', 'true'))
+    expect(country).toHaveAccessibleDescription('There is no such country.')
+    expect(screen.getByTestId('profile-city')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByTestId('profile-city')).toHaveAccessibleDescription('The city is too long.')
+  })
+
+  it('sees accounts linked earlier even when the app offers no provider', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 },
+      identities: [{ id: 'i1', provider: 'google', label: 'Google', kind: 'google', email: 'mei@gmail.com',
+        linkedAt: '2026-10-13T09:00:00Z' }] })
+    window.history.replaceState(null, '', '/account')
+    render(<App />)
+    expect(await screen.findByTestId('linked-identity')).toHaveTextContent('mei@gmail.com')
+  })
+
+  it('is sent home from the sign-up and password reset pages', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+    window.history.replaceState(null, '', '/signup')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(await screen.findByTestId('home')).toBeInTheDocument()
   })
 })

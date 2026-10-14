@@ -195,7 +195,7 @@
 - **两个 SPA**：`quizbuks-web/app`（`/`，入口 `app`，PWA，图标为生成的 PNG）与 `quizbuks-web/sponsor`（`/sponsor/`，入口 `sponsor`），各自的 `package.json` 与 lockfile，
   依赖版本照抄示范门户（`pnpm app:check` 通过）。共用的 `src/qb/`：`ids.ts`、`api.ts`（手写的流程类型与调用）、`kudos.ts`、`router.tsx`、`messages.ts`（命名空间 `qb`）、
   `problems.ts`、`device.ts`、`session.ts`（闲置锁定）、`AccountSections.tsx`、`FileImage.tsx`、`LanguageSelect.tsx`、`messageKeys.ts`，两份相同。
-- **App**：登录、注册、邮件链接页、找回密码、OIDC 回调、step-up 都是平台积木；登录后先读本人资料，没有国家即到 `/welcome`（资料表单：名字取注册时的显示名，
+- **App**：登录、注册、邮件链接页、找回密码、OIDC 回调、step-up 都是平台积木；登录后先读本人资料，**邮箱已验证**且没有国家即到 `/welcome`（资料表单：名字取注册时的显示名，
   国家按浏览器语言区域与时区预填（`country.ts`），参考币种按国家预填），保存后到首页；首页在 QP2 之前只是问候与空状态。账户页：资料、邮箱（不可改）、改密码、两步验证、
   （有提供方时）外部账号、会话、最近登录（`qb.me.sign-ins`，设备由 User-Agent 解析）、界面语言。底部导航只有首页与账户（历史、钱包随 QP2、QP4）。
 - **商家后台**：`AppShell` 与左侧导航（概览、商家资料、账户）；`/` 按入驻状态到 `/onboarding` 或 `/dashboard`；入驻页显示状态（含驳回原因），未通过时 `QB_SPONSOR_APPLY`
@@ -215,4 +215,13 @@
   - 页面在身份（`/api/auth/me`）返回之前显示加载中：表单以注册时的名字预填，避免竞争。
   - e2e 作业已启动 Stripe 桩（QP1 的测试不用，QP4 用）。
 - **未做**（按计划属后续阶段）：QP2 – QP4 的页面；PG-1。
+
+### 评审后的修正（2026-10-14）
+
+- **未验证的答题人照常浏览**（设计 D-Q2-1：App 接受未验证的用户登录浏览）：只有**邮箱已验证且资料没有国家**时才进 `/welcome`；未验证的人留在首页等页面并看到
+  `VerifyEmailBanner`（底部导航照常），`/welcome` 仍可打开，但验证之前不能保存。首页以资料的名字、否则注册的名字问候。
+- 表单字段的服务端错误以 `aria-describedby` 关联到字段（与提示一起）并设 `aria-invalid`：资料的全部字段、入驻的全部字段（名字、公司、简介、头像、条款）。
+- 账户页在入口不再提供身份提供方、但本人已关联外部账号时也显示"外部账号"一节，可查看与解除。
+- 已登录时打开 `/signup`、`/password-reset` 即回首页（两个 SPA）。
+- CI：工作流只读权限（`permissions: contents: read`）；`package` 作业检查 `/`、`/welcome`、`/sponsor/`、`/admin/` 的 CSP 头。部署说明写明设备上的刷新令牌对同源页面可读（D43 的已知限制）。
 

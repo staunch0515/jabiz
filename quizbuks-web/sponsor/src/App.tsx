@@ -142,6 +142,8 @@ function Routes() {
       onBack={() => navigate('/login', { replace: true })} />)
   }
   if (!ready) return <PageState kind="loading" />
+  // Signed in, the pages of signing up and asking for a new password lead home.
+  if (signedIn && (path === '/signup' || path === '/password-reset')) return <Redirect to="/" />
   if (path === '/password-reset') {
     return frame(<PasswordResetRequest {...navigation} brand={brand} signInPath="/login" />)
   }

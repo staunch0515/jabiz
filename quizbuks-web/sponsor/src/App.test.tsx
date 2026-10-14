@@ -116,6 +116,10 @@ describe('a signed-in sponsor', () => {
     await userEvent.click(screen.getByTestId('onboarding-submit'))
     expect(await screen.findByText('Accept the terms to apply.')).toBeInTheDocument()
     expect(screen.getByTestId('onboarding-error')).toHaveTextContent('Your account is banned.')
+    // Tied to its field for assistive technology.
+    expect(screen.getByTestId('onboarding-terms')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByTestId('onboarding-terms')).toHaveAccessibleDescription('Accept the terms to apply.')
+    expect(screen.getByTestId('onboarding-company')).not.toHaveAttribute('aria-invalid')
   })
 
   it('sent back, sees why and applies again', async () => {
@@ -151,5 +155,33 @@ describe('a signed-in sponsor', () => {
     })
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByTestId('idle-locked')).toBeInTheDocument()
+  })
+
+  it('is sent home from the sign-up and password reset pages', async () => {
+    server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
+      revision: 3 } })
+    window.history.replaceState(null, '', '/password-reset')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/dashboard'))
+  })
+
+  it('has every field\'s refusal described on the field', async () => {
+    server({ sponsor: null, applied: { status: 400, body: { violations: [
+      { field: 'displayName', ruleCode: 'QB_PROFILE_NAME_BLANK', message: 'Enter a name.' },
+      { field: 'company', ruleCode: 'QB_SPONSOR_COMPANY_BLANK', message: 'Enter the company.' },
+      { field: 'intro', ruleCode: 'X', message: 'Too long.' },
+      { field: 'avatar', ruleCode: 'QB_FILE_NOT_OWN', message: 'Upload your own image.' },
+    ] } } })
+    window.history.replaceState(null, '', '/onboarding')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('onboarding-submit'))
+    await screen.findByText('Enter a name.')
+    expect(screen.getByTestId('onboarding-name')).toHaveAccessibleDescription('Enter a name.')
+    expect(screen.getByTestId('onboarding-company')).toHaveAccessibleDescription('Enter the company.')
+    expect(screen.getByTestId('onboarding-intro')).toHaveAccessibleDescription(/Markdown.*Too long\./)
+    expect(screen.getByTestId('onboarding-avatar')).toHaveAccessibleDescription(/Upload your own image\./)
+    for (const id of ['onboarding-name', 'onboarding-company', 'onboarding-intro', 'onboarding-avatar']) {
+      expect(screen.getByTestId(id)).toHaveAttribute('aria-invalid', 'true')
+    }
   })
 })
