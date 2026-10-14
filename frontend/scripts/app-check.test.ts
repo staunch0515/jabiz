@@ -102,6 +102,19 @@ describe('app:check (decision D34 item 5)', () => {
     ])
   })
 
+  it('pins react-markdown, which MarkdownView of @jabiz/ui renders with (phase 16n)', () => {
+    expect(platform.ui.get('react-markdown')).toMatch(/^\d+\.\d+\.\d+$/)
+    const versions = { ...platformDeps(true), 'react-markdown': '9.0.0' }
+    expect(checkApp(spa({ ...versions, '@jabiz/ui': 'link:x' }, { pnpm: versions }), frontend)).toEqual([
+      `react-markdown: 9.0.0, the platform has ${platform.ui.get('react-markdown')}`,
+    ])
+    const without = platformDeps(true)
+    delete without['react-markdown']
+    expect(checkApp(spa({ ...without, '@jabiz/ui': 'link:x' }, { pnpm: without }), frontend)).toEqual([
+      `react-markdown: not a dependency; add "react-markdown": "${platform.ui.get('react-markdown')}"`,
+    ])
+  })
+
   it('reads npm lockfiles, and exact versions when there is no lockfile', () => {
     const shared = platformDeps(false)
     expect(checkApp(spa(shared, { npm: shared }), frontend)).toEqual([])

@@ -21,7 +21,7 @@
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
 | 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ☑ 已完成（15a PR #105；15b-1、15b-2、15c-1、15c-2、15d 已完成） |
-| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；16g 已完成（PR 待创建）；决策 D35–D39 已确认 |
+| 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；16g 已完成（PR 待创建）；16n 已完成（PR 待建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
 
@@ -1460,6 +1460,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16i | 业务参数的四眼修改：受控的参数只经 `CONTROL_CHANGE_*` 修改；✅ 已完成 | D40 | 1 天 | — |
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 | 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
+| 16n | 内容显示积木进入 @jabiz/ui（QuizBuks 页面阶段 PG-1；2026-10-14 确认）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`，`@jabiz/admin` 照旧导出；✅ 已完成（PR 待建） | D20、D22、D34 | 1 天 | 15d |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -3163,3 +3164,26 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 **升级说明**（应用合并 16l 时）：重新归类应用的 `internal()` 流程——事件消费、定时任务、回调保留 `internal()`；被用户运行的流程以子流程调用的改为 `subProcessOnly()`；
 事件与任务的普通流程改为 `internal()` 或声明 `manualToo()`；业务代码去掉对上述流程机制的引用（见 `docs/guide/version-lines.md`）。
 已知：`1.2/quizbuks` 的 `QB_QUIZ_RELEASE_FILES`（`internal()`，由用户运行的 `QB_QUIZ_DELETE` 调用）须改为 `subProcessOnly()`，在合并到应用分支时修改。
+
+### 16n 内容显示积木进入 @jabiz/ui（QuizBuks 页面阶段 PG-1；2026-10-14 确认，1 天）
+
+分支 `1.2/phase-16n-ui-content-view`，从 `1.2/platform` 拉出。**状态**：✅ 已完成（PR 待建）。
+
+缘由：QuizBuks 的应用 SPA（详情页的 Markdown 介绍、出题页的资料）要显示 Markdown 与会话保护的文件，但 `MarkdownView`、`FilePreview` 只在后台
+`frontend/src/components` 中、经 `@jabiz/admin` 导出，而应用 SPA 不能引用 `@jabiz/admin`（12 §12）。
+
+- `@jabiz/ui` 新增 `MarkdownView`（`text`、`lang`；`skipHtml`、不启用 `rehype-raw`，原始 HTML 一律不渲染，D20）、`FilePreview`（`fileId`、`field`、`width`；
+  `field` 只需 `{ image, variants }`，后台的文件字段元数据即是）与 `useFileUrl` / `downloadFile`（只用 `@jabiz/client` 的 `fetchFileContent` / `fetchFileDownload`）；
+  文案移到命名空间 `ui` 的 `file.*`（三语），后台不再有 `file.preview`、`file.previewFailed`、`file.enlarge`、`file.download`。
+- `react-markdown`（10.1.0，未用 remark / rehype 插件）由后台的依赖改为 `@jabiz/ui` 的运行时依赖；`app:check` 从包的 `package.json` 读运行时依赖，
+  因此自动要求使用 `@jabiz/ui` 的 SPA 写同一版本（`app-check.test.ts` 加用例）。
+- `@jabiz/admin` 以同名、同属性再导出两者（D22 的约定不变）；后台的 `I18nTextInput`、`FileField`、`meta/cells.ts` 改从 `@jabiz/ui` 引用。
+- 示范门户：下单页以 `MarkdownView` 显示文案中的下单说明（三语），`package.json` 与 lockfile 加 `react-markdown`；`App.test.tsx` 加用例。
+- 测试随组件移到 `packages/ui`：`markdown-view.test.tsx`（不渲染原始 HTML、去掉 `javascript:` 链接、样式只在视图内、axe 亮暗）、
+  `file-preview.test.tsx`（放大与释放对象 URL、axe 亮暗、非图片下载取服务端文件名、加载失败的提示）。
+- 文档：12 §12（组件清单、应用 SPA）、`docs/guide/app-spa.md`（可用的积木、版本清单）、`docs/guide/admin-extension.md`、`packages/ui/README.md`。
+
+**验收标准**
+- [x] 应用 SPA 只经 `@jabiz/ui` 即可使用 `MarkdownView`、`FilePreview`（示范门户 `pnpm lint / typecheck / test / build` 与 `pnpm app:check ../backend/app/portal` 通过）。
+- [x] `@jabiz/admin` 照旧导出两者，`JABIZ_ADMIN_EXTENSION=../backend/app/admin-extension pnpm ext:check` 通过；原始 HTML 仍不渲染（单元测试与 e2e `content.spec.ts`）。
+- [x] 平台前端 `pnpm lint / typecheck / test / build / check:api`、`./gradlew :app:check` 与 e2e 通过。

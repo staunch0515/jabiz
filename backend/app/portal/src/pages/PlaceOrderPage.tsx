@@ -1,5 +1,5 @@
 import { formatAmount, isProblem, runProcess, runQuery, useAuth } from '@jabiz/client'
-import { Alert, AlertDescription, Button, Input, Label, PageState, VerifyEmailBanner } from '@jabiz/ui'
+import { Alert, AlertDescription, Button, Input, Label, MarkdownView, PageState, VerifyEmailBanner } from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -113,6 +113,8 @@ export function PlaceOrderPage() {
           </Button>
         </form>
       )}
+      {/* The notes are Markdown in the portal's texts; MarkdownView drops any raw HTML (decision D20). */}
+      <MarkdownView text={t('order.howTo')} />
     </section>
   )
 }
