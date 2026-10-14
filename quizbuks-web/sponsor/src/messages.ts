@@ -1,5 +1,6 @@
 import { addMessages } from '@jabiz/client'
 import { contentEn, contentJa, contentZh } from './content/messages'
+import { publishingEn, publishingJa, publishingZh } from './publishing/messages'
 import './qb/messages'
 
 /**
@@ -10,6 +11,7 @@ export const SPONSOR = 'sponsor'
 
 const en = {
   ...contentEn,
+  ...publishingEn,
   brand: 'QuizBuks Sponsor',
   nav: { label: 'Sponsor console', dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account' },
   dashboard: {
@@ -54,6 +56,7 @@ const en = {
 
 const zh: typeof en = {
   ...contentZh,
+  ...publishingZh,
   brand: 'QuizBuks 商家后台',
   nav: { label: '商家后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '商家资料', account: '账户' },
   dashboard: {
@@ -98,6 +101,7 @@ const zh: typeof en = {
 
 const ja: typeof en = {
   ...contentJa,
+  ...publishingJa,
   brand: 'QuizBuks スポンサー',
   nav: { label: 'スポンサー管理画面', dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: 'スポンサー情報', account: 'アカウント' },
   dashboard: {
