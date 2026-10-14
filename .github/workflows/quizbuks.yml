@@ -16,6 +16,10 @@ concurrency:
   group: quizbuks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only: the jobs only check out the repository and upload reports.
+permissions:
+  contents: read
+
 # The application's own checks (docs/quizbuks/plans/Q1-skeleton.md item 9); the backend (./gradlew check, which
 # includes :quizbuks:check with platformCheck and the SPAs' version checks spaCheckRoot / spaCheckSponsor) and the
 # application-path check run in the platform's ci.yml.
@@ -133,6 +137,16 @@ jobs:
           curl -sf localhost:8080/manifest.webmanifest | grep -q '"start_url": "/"'
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/sw.js)" = 200
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Service-Worker: script' localhost:8080/sponsor/sw.js)" = 404
+      - name: Each front end carries the content security policy
+        run: |
+          # The platform's default policy (docs/design/17-apps-and-branches.md section 3.2) on every SPA's pages,
+          # client routes included: everything from this origin only (no inline scripts), workers too.
+          for path in / /welcome /sponsor/ /admin/; do
+            policy=$(curl -sI "localhost:8080$path" | tr -d '\r' | grep -i '^content-security-policy:')
+            echo "$path: $policy"
+            echo "$policy" | grep -q "default-src 'self'"
+            echo "$policy" | grep -q "worker-src 'self'"
+          done
       - name: The API still needs a token
         run: test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/meta/datasets)" = 401
       - if: failure()

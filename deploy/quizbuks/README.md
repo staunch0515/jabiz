@@ -23,6 +23,8 @@ docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次
 - **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/`（`quizbuks-web/app`，PWA，入口 `app`）、商家后台在 `/sponsor/`
   （`quizbuks-web/sponsor`，入口 `sponsor`）、管理员后台在 `/admin/`（平台通用后台，入口 `admin`）。三者分开登录：一个入口的会话不会登录另一个。
 - **会话**：App 的会话保存在设备上（关闭浏览器后仍登录，30 天，不按闲置锁定）；商家后台与管理员后台只在当前标签页中，闲置 30 分钟锁定。
+- **已知限制（D43）**：App 的刷新令牌存在设备上（`localStorage` 与 IndexedDB），而三个前端同源：同源的任何页面（含被注入的脚本）都能读到它；
+  它只能刷新入口 `app` 的会话（只有 `QB_TAKER` 的权限），缓解是轮换与重用即吊销、不允许内联脚本的 CSP，以及后台与商家后台不用设备保存。
 - **生产必须是 HTTPS**：PWA（Service Worker、安装到主屏幕）只在安全来源上工作（本机 `localhost` 除外）；Stripe 支付与开通后跳回的地址（`QB_SPONSOR_LINK`、`QB_APP_LINK`）同样用 HTTPS。
 - **PWA 的作用域是整个主机**（`/`）：App 的 Service Worker 只缓存 App 的外壳，放过 `/sponsor/`、`/admin/`、`/api/`；要撤下 PWA，先以 `Pwa.REMOVE` 发布一个版本
   （注销已安装的 Service Worker），至少一个发布周期后再改为 `OFF`（平台指南 `docs/guide/app-spa.md` 第 3 节）。
