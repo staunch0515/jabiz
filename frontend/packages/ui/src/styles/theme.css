@@ -12,6 +12,8 @@
 @import 'tailwindcss/theme.css' layer(theme);
 /* Tailwind's preflight (its CSS reset), global: every page of an application using this theme is reset. */
 @import 'tailwindcss/preflight.css' layer(base);
+/* Rendered Markdown (.markdown-view), which the preflight would leave unstyled. */
+@import './markdown.css' layer(components);
 @import 'tailwindcss/utilities.css' layer(utilities);
 @import 'tw-animate-css';
 

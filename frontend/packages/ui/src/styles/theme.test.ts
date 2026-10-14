@@ -96,8 +96,13 @@ describe('the dark variant', () => {
     expect(selector).not.toContain('.light')
   })
 
-  it('turns native controls and scroll bars dark with the appearance', () => {
+  it('turns native controls and scroll bars dark with the appearance, light otherwise', () => {
+    expect(css).toMatch(/:root \{\s*color-scheme: light;\s*\}/)
     expect(css).toMatch(/\.dark \{\s*color-scheme: dark;/)
+  })
+
+  it('paints the page canvas with the tokens, so no light margin shows around a dark page', () => {
+    expect(css).toMatch(/body \{\s*background-color: var\(--color-background\);\s*color: var\(--color-foreground\);\s*\}/)
   })
 })
 
@@ -105,5 +110,9 @@ describe('the preflight (phase 15d)', () => {
   it("is Tailwind's own, global, in the base layer", () => {
     expect(css).toContain("@import 'tailwindcss/preflight.css' layer(base);")
     expect(css).not.toContain('jabiz-ui')
+  })
+
+  it('leaves rendered Markdown styled, in the components layer', () => {
+    expect(css).toContain("@import './markdown.css' layer(components);")
   })
 })
