@@ -2,7 +2,6 @@ package com.jabiz.runtime.file;
 
 import com.jabiz.file.MediaTypes;
 import com.jabiz.resource.ResourceNotFoundException;
-import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.DatasetEntityManager;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.observability.PlatformObservations;
@@ -23,7 +22,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,15 +38,18 @@ class PublicFileController {
     private static final Logger log = LoggerFactory.getLogger(PublicFileController.class);
 
     private final PublicFileAccess access;
+    private final FilePolicyRegistry policies;
     private final FileStore store;
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final PublicProperties properties;
     private final PlatformObservations observations;
 
-    PublicFileController(PublicFileAccess access, FileStore store, DatasetEntityManager entities,
-        DatasetRegistry datasets, PublicProperties properties, PlatformObservations observations) {
+    PublicFileController(PublicFileAccess access, FilePolicyRegistry policies, FileStore store,
+        DatasetEntityManager entities, DatasetRegistry datasets, PublicProperties properties,
+        PlatformObservations observations) {
         this.access = access;
+        this.policies = policies;
         this.store = store;
         this.entities = entities;
         this.datasets = datasets;
@@ -85,13 +86,14 @@ class PublicFileController {
                 // The file's row lives in a platform table; anonymous visitors never read it through an API.
                 .flatMap(allowed -> entities.findById(datasets.findById(FileEntities.DATASET).orElseThrow(),
                     FileEntities.SYS_FILE, id))
-                .filter(file -> FileKeys.ORIGINAL.equals(variant) || variants(file).contains(variant))
+                .filter(file -> FileVariants.stored(file, variant, policies).isPresent())
                 // Import files are never public, whatever a public row refers to (decision D26).
                 .filter(file -> !importOnly(file.get(FileEntities.CONTENT_TYPE)))
                 .switchIfEmpty(Mono.error(() -> notFound(rawId)))
                 .flatMap(file -> {
                     String contentType = file.get(FileEntities.CONTENT_TYPE);
-                    return FileContent.serve(store, FileKeys.key(id, variant), contentType,
+                    String stored = FileVariants.stored(file, variant, policies).orElseThrow();
+                    return FileContent.serve(store, FileKeys.key(id, stored), contentType,
                             downloadName(id, variant, contentType),
                             range, "public, max-age=" + properties.fileCacheSeconds())
                         .switchIfEmpty(Mono.defer(() -> {
@@ -104,11 +106,6 @@ class PublicFileController {
     private static boolean importOnly(String contentType) {
         return Arrays.stream(MediaTypes.values())
             .anyMatch(type -> type.isImportOnly() && type.contentType().equals(contentType));
-    }
-
-    private static List<String> variants(EntityInstance file) {
-        String variants = file.get(FileEntities.VARIANTS);
-        return variants == null || variants.isBlank() ? List.of() : Arrays.asList(variants.split(","));
     }
 
     private static String downloadName(UUID id, String variant, String contentType) {

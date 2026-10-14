@@ -3187,3 +3187,9 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 - [x] 应用 SPA 只经 `@jabiz/ui` 即可使用 `MarkdownView`、`FilePreview`（示范门户 `pnpm lint / typecheck / test / build` 与 `pnpm app:check ../backend/app/portal` 通过）。
 - [x] `@jabiz/admin` 照旧导出两者，`JABIZ_ADMIN_EXTENSION=../backend/app/admin-extension pnpm ext:check` 通过；原始 HTML 仍不渲染（单元测试与 e2e `content.spec.ts`）。
 - [x] 平台前端 `pnpm lint / typecheck / test / build / check:api`、`./gradlew :app:check` 与 e2e 通过。
+
+**修复（分支 `1.2/fix-file-preview-variants`，QuizBuks QP3a 的变通）**：`FilePreview` / `useFileUrl` 按策略的宽度（如 `w160`）取图，而图片比该宽度窄时
+不生成变体（从不放大），请求 404、界面显示"无法预览"。现在由服务端处理（14 §5）：策略声明的宽度不小于图片宽度时，`/api/files/{id}/content/{变体}`
+与 `/api/public/files/{id}/{变体}` 返回处理后的原件（`FileVariants`，两个入口共用）；权限、公开判定与缓存头不变，元数据中的 `variants` 仍只列生成的变体，
+策略未声明的宽度仍 404。所有调用方（后台、应用 SPA、公开页面）无需改动，也不多一次请求。测试：`FileContentIT`（新增 1，改 1）、`PublicAccessIT`（改 1），
+修复前 3 个失败（原测试断言了 404）。QuizBuks 的 `ContentImage` 先读元数据的变通在同步平台后可去掉。

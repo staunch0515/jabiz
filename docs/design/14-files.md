@@ -110,7 +110,11 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
 - 请求体大小由 `jabiz.files.max-request-bytes`（默认 100 MB，且不小于各策略上限）限制：声明的 `Content-Length` 超过它立即 413，
   否则边读边计数；只接受一个名为 `file` 的部分（多余的部分或缺少它 → 400 `FILE_INVALID`）；文件名按
   NFC 规范化（macOS 发送分解形式）后按 `[\p{L}\p{M}\p{N} ._()-]{1,255}` 清洗，其余字符替换为 `_`。
-- 响应总是带 `X-Content-Type-Options: nosniff` 与判定出的 `Content-Type`；变体不存在时 404。
+- 响应总是带 `X-Content-Type-Options: nosniff` 与判定出的 `Content-Type`。
+- **变体 `w<N>` 即"宽度不超过 N 的图片"**：图片从不放大，不比原图窄的宽度不生成对象（§3），对这样的宽度（须是文件所属策略声明的宽度，且图片宽度 ≤ N）
+  返回处理后的原件（下载名照常带变体名）。因此调用方（后台缩略图、应用页面、公开页面）只按策略导出的变体名取图，不必先读文件的元数据；
+  元数据中的 `variants` 仍只列实际生成的变体。策略未声明的宽度、非图片、以及策略在上传后新增而图片比它宽的变体（变体只在上传时生成）→ 404。
+  权限、公开判定与缓存头与请求原件时完全相同（判定在选对象之前；同一 URL 的内容不变，可照常缓存）。
 - 上传按操作人限流（`jabiz.files.upload-rate-per-minute`，默认 30，进程内令牌桶）→ 429 `RATE_LIMITED`，带 `Retry-After`。
 - 后台前端的图片预览：访问令牌只在内存中（D15），`<img>` 不能带 `Authorization`，因此预览以 `fetch` 取得 blob 再用 `URL.createObjectURL` 显示。
 
@@ -159,7 +163,7 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
 
 - core 单元测试：`FilePolicy` 构建期校验；魔数判定（每种类型、伪装的扩展名、SVG/HTML 被拒）；文件名清洗。
 - runtime 集成测试（真实 PostgreSQL + 临时目录）：上传各类型；超限中止（未读完请求体即返回 413）；解压炸弹被拒；
-  **重新编码后不含 EXIF/GPS**（用带 GPS 的样例图断言）；方向转正；变体尺寸；`jabiz.file` 字段写入检查（不存在 / 策略不符）；
+  **重新编码后不含 EXIF/GPS**（用带 GPS 的样例图断言）；方向转正；变体尺寸；比策略宽度窄的图片按该宽度取得原件（后台与公开，`FileContentIT`、`PublicAccessIT`）；`jabiz.file` 字段写入检查（不存在 / 策略不符）；
   权限（无上传权限 403、无读取权限 403）；`Range`；删除时被引用 → 422；清扫删除孤儿行与孤儿对象、不删除被引用的；
   插入失败时对象被删除；`input_summary` 中没有文件名；BlockHound（图片处理不在事件循环上）。
 - 前端：上传控件（策略导出 → `accept`、大小提示）、blob 预览、失败提示（Vitest）；Playwright：在示范实体上上传并保存。

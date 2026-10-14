@@ -10,8 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { Spinner } from './spinner'
 
 /**
- * What the preview needs of a file field: whether it holds images, and the names of their variants (narrowest first,
- * for example `w160`). The admin's file field metadata (`FieldMeta` of kind `jabiz.file`) is one.
+ * What the preview needs of a file field: whether it holds images, and the names of the policy's variants (narrowest
+ * first, for example `w160`). The admin's file field metadata (`FieldMeta` of kind `jabiz.file`) is one. Any of
+ * these can be asked for whatever the image's size: for a width the image does not exceed the server answers with
+ * the original (14 section 5).
  */
 export interface FilePreviewField {
   image?: boolean
