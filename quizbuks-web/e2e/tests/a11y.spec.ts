@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { completeQuiz, sponsor } from './content'
+import { approvedSponsor, livePublication } from './publishing'
 import {
   expect,
   expectAccessible,
@@ -162,5 +163,69 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor quiz refused'))
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor quiz editor 390px'))
+  })
+
+  test(`the sponsor console's publishing pages pass axe (${appearance})`, async ({ page, request }) => {
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const { email, token } = await approvedSponsor(request, 'Ada')
+    const quiz = await completeQuiz(request, token)
+    const live = await livePublication(request, token, quiz.quizId, `Access run ${quiz.title}`)
+    await signIn(page, '/sponsor/', email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+
+    await page.goto('/sponsor/publications')
+    await expect(page.getByTestId('publication-row').first()).toBeVisible()
+    await expect(page.getByTestId('publication-status').first()).toContainText('Live')
+    await expectAccessible(page, at('sponsor publications'))
+
+    // The wizard's three steps, the quiz chooser open, and the problems of an incomplete draft.
+    await page.getByTestId('new-publication').click()
+    await expect(page.getByTestId('publication-name')).toBeVisible()
+    await expectAccessible(page, at('sponsor new publication'))
+    await page.getByTestId('publication-name').fill('Access draft')
+    await page.getByTestId('publication-quiz').click()
+    await page.getByPlaceholder('Search your quizzes').fill(quiz.title)
+    await expect(page.getByRole('option', { name: new RegExp(quiz.title) })).toBeVisible()
+    await expectAccessible(page, at('sponsor publication quiz chooser'))
+    await page.getByRole('option', { name: new RegExp(quiz.title) }).click()
+    await expect(page.getByTestId('publication-version')).toContainText(quiz.label)
+    await page.getByTestId('publication-next').click()
+    await expect(page.getByTestId('publication-step-title')).toHaveText('Audience and rewards')
+    await page.getByTestId('tier-add').click()
+    await page.getByTestId('tier-reward').fill('10')
+    await expectAccessible(page, at('sponsor publication audience and rewards'))
+    // Typed wrong: the field is marked and says why.
+    await page.getByTestId('publication-pass-score').fill('1.5')
+    await page.getByTestId('publication-next').click()
+    await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
+    await expectAccessible(page, at('sponsor publication typed wrong'))
+    await page.getByTestId('publication-pass-score').fill('')
+    await page.getByTestId('publication-next').click()
+    await expect(page.getByTestId('publication-problems')).toBeVisible()
+    await expectAccessible(page, at('sponsor publication problems'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor publication problems 390px'))
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.getByTestId('publication-delete').click()
+    await expect(page.getByRole('alertdialog')).toBeVisible()
+    await expectAccessible(page, at('sponsor publication delete'))
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
+    await expect(page.getByTestId('publication-list')).toBeVisible()
+
+    // A live publication: frozen, with its actions and their confirmations.
+    await page.goto(`/sponsor/publications/${live}`)
+    await expect(page.getByTestId('publication-view')).toHaveAttribute('data-status', 'LIVE')
+    await expectAccessible(page, at('sponsor live publication'))
+    await page.getByTestId('publication-pause').click()
+    await expect(page.getByRole('alertdialog')).toBeVisible()
+    await expectAccessible(page, at('sponsor publication pause'))
+    await page.keyboard.press('Escape')
+    await page.getByTestId('publication-copy').click()
+    await expect(page.getByTestId('publication-copy-dialog')).toBeVisible()
+    await expectAccessible(page, at('sponsor publication copy'))
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor live publication 390px'))
   })
 }
