@@ -1,0 +1,18 @@
+{
+  "name": "quizbuks-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "QuizBuks end-to-end tests against the packaged jar: the app, the sponsor console and the mail they send (docs/quizbuks/plans/QP-pages.md section 7).",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.56.1",
+    "@types/node": "26.6.3",
+    "typescript": "6.0.3"
+  }
+}

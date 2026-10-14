@@ -101,8 +101,10 @@ function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(QB)
   // The app's entry never locks for idleness (idle-timeout 0); the hook follows whatever the server says.
   useSessionLock()
+  const { userId } = useAuth()
   const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
-  if (profile.isPending) return <PageState kind="loading" />
+  // The pages start from who is signed in (the sign-up name prefills the profile): wait until the server said so.
+  if (profile.isPending || !userId) return <PageState kind="loading" />
   if (profile.isError) {
     return <PageState kind="error" description={t('failed')}
       action={<Button variant="outline" onClick={() => void profile.refetch()}>{t('retry')}</Button>} />

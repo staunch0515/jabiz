@@ -54,9 +54,11 @@ function toSignIn() {
 function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
-  const { displayName, signOut } = useAuth()
+  const { displayName, signOut, userId } = useAuth()
   useSessionLock(lockIdle)
   const sponsor = useMySponsor()
+  // The pages start from who is signed in (the sign-up name prefills the onboarding): wait until the server said so.
+  if (!userId) return <PageState kind="loading" />
 
   if (path === '/' || path === '') {
     if (sponsor.isPending) return <PageState kind="loading" />

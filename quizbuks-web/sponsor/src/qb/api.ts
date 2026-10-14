@@ -143,16 +143,24 @@ export async function readMySponsor(): Promise<Sponsor | null> {
   }
 }
 
-/** Every country, by code. */
+/** The most rows a dataset answers at once (the platform's page limit). */
+const PAGE = 100
+
+/** Every country, by code, page by page (there are about 250). */
 export async function readCountries(): Promise<Country[]> {
-  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
-    params: { path: { resourceId: DATASET.countries } },
-    body: { limit: 300, sorts: [{ field: 'code', asc: true }] },
-  }))
-  return (page.items ?? []).map((item) => {
-    const row = (item.attributes ?? {}) as Record<string, unknown>
-    return { code: String(row.code), name: (row.name ?? {}) as Record<string, string> }
-  })
+  const countries: Country[] = []
+  for (let offset = 0; ; offset += PAGE) {
+    const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+      params: { path: { resourceId: DATASET.countries } },
+      body: { offset, limit: PAGE, sorts: [{ field: 'code', asc: true }] },
+    }))
+    const items = page.items ?? []
+    for (const item of items) {
+      const row = (item.attributes ?? {}) as Record<string, unknown>
+      countries.push({ code: String(row.code), name: (row.name ?? {}) as Record<string, string> })
+    }
+    if (items.length < PAGE) return countries
+  }
 }
 
 /** A static dictionary's items in the request's language. */
