@@ -36,9 +36,11 @@ backend/quizbuks/            Gradle 模块（jabiz.boot-app 插件），com.jabi
   src/main/resources/queries/qb/**.sql      SQL 模板与报表
   src/main/resources/db/migration/          应用迁移（`V<n>__quizbuks_<名>.sql`，自 V1 起；平台迁移有自己的历史表，互不冲突）
   src/test/resources/scenarios/qb/**.yml    场景回放
-quizbuks-web/                应用前端（pnpm 工作区，`@jabiz/ui` 与 `@jabiz/client`，与平台同一工具链，D34）
-  app/                       答题人 PWA（挂在 /）
-  sponsor/                   商家后台（挂在 /sponsor/）
+quizbuks-web/                应用前端（`@jabiz/ui` 与 `@jabiz/client` 经 `link:`，与平台同一工具链，D34、D43；`plans/QP-pages.md`）
+  app/                       答题人 PWA（挂在 /，入口 app）：独立的 pnpm 工程，自己的 lockfile
+  sponsor/                   商家后台（挂在 /sponsor/，入口 sponsor）：同上
+  */src/qb/                  两个 SPA 共用的代码（Kudos 格式化、流程与模板编号、手写的流程类型、共用组件与文案），两份相同（CI 比对）
+  e2e/                       Playwright 端到端测试（对打包的 jar；Mailpit 收信、Stripe 桩）
 deploy/quizbuks/             docker-compose 与部署说明
 docs/quizbuks/               本文件等
 ```
@@ -50,6 +52,10 @@ docs/quizbuks/               本文件等
 | `/` | `quizbuks-web/app`（PWA） | `app` | `QB_TAKER` | 是（`QB_TAKER`，`QB_APP_SELF_REGISTRATION`） | 否：未验证可登录浏览，QuizBuks 的写入一律要求已验证 |
 | `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） | 是（`QB_SPONSOR`，`QB_SPONSOR_SELF_REGISTRATION`） | 是 |
 | `/admin/` | 平台通用后台 + QuizBuks 扩展页 | `admin` | `ADMIN`（首个管理员）/ `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE`（`QB_ADMIN_ROLES` 可改） | 否 | 否 |
+
+不用 pnpm 工作区：`pnpm app:check` 读每个 SPA 目录自己的 lockfile，Gradle 只把 SPA 自己的目录与平台的包作为构建输入（`plans/QP-pages.md` 第 1 节）。
+`jabizApp` 以 `spa("/", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)`、`spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")`
+与 `spa("/admin", "../../frontend", entry = "admin")` 构建三者；`application.yml` 不写 `jabiz.web.spa`（用 jar 中的缺省）。
 
 三个入口**分开登录**：入口决定接受哪些角色，签发的令牌只带这些角色的权限（同一邮箱既是答题人又是商家时，在 App 中拿不到商家权限，反之亦然）。
 入口的机制属于平台（G1），本应用只声明三个入口与各自的角色（`application.yml`，Q2 D-Q2-1）。"待激活"即邮箱未验证（不另设状态）。
@@ -301,14 +307,21 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ### 7.1 答题人 PWA（`quizbuks-web/app`）
 
-- React 19 + TypeScript + Vite + `@jabiz/ui`（shadcn/ui + Tailwind CSS v4，与平台阶段 15 相同，决策 D34）+ TanStack Query + React Router + i18next；类型由 OpenAPI 生成。
-- PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送）。
-- 宽度 ≤ 430px 设计，底部 5 个导航；卡片紧凑，一屏 ≥ 6 张（U-10）。
-- 认证、令牌刷新、API 客户端来自平台提供的应用前端库（G12）。
+- React 19 + TypeScript + Vite + `@jabiz/ui`（shadcn/ui + Tailwind CSS v4，与平台阶段 15 相同，决策 D34）+ TanStack Query + i18next；
+  路由是示范门户那样的几十行小路由（`src/qb/router.tsx`，平台的登录积木不依赖路由）。QuizBuks 没有自己的接口（全部经平台的流程、模板、数据视图与文件接口），
+  所以没有 OpenAPI 生成的类型：流程的输入输出对照 Java record 手写在 `src/qb/api.ts`，由 e2e 覆盖。
+- PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送），由平台预设 `jabizSpa({ pwa })` 生成；放过 `/sponsor/`、`/admin/`。
+- 会话保存在设备上（入口 `app`：`persistence: device`、30 天、不按闲置锁定，缺省 Q12）。
+- 宽度 ≤ 430px 设计，底部导航（QP1：首页、账户；QP2 加历史，QP4 加钱包，Q7 加收件箱，Q-8）；卡片紧凑，一屏 ≥ 6 张（U-10）。
+- 登录、注册、邮件链接（`/auth/…`）、找回密码、Google 登录的回调（`/login/oidc`）、step-up、账户页的改密码、两步验证、会话与外部账号都用平台的积木（G12）；
+  注册的第二步是 `/welcome`（资料，国家按浏览器的语言区域与时区预填，Q2-9）。
+- 页面分阶段：QP1 账户与欢迎页，QP2 首页、详情、答题、结果、历史，QP4 钱包与开通收款（`plans/QP-pages.md`）。
 
 ### 7.2 商家后台（`quizbuks-web/sponsor`）
 
-- 同一工具链与 `@jabiz/ui`；左侧 7 项导航；中 / 英；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
+- 同一工具链与 `@jabiz/ui`；`AppShell` 的左侧导航（QP1：概览、商家资料、账户；QP3 加 Quiz 与发布，QP4 加钱包，Q9 的分析在概览中）；
+  英 / 中 / 日（设计缺省 Q16 是中 / 英，按 Q-4 照常提供三种，平台不支持按 SPA 的语言）；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
+- 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；不提供 Google 登录（Q2-16）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
 
 ### 7.3 管理员后台（`/admin/`）

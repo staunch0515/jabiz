@@ -1,14 +1,16 @@
 # syntax=docker/dockerfile:1
-# QuizBuks in one image: the backend jar with the platform's admin frontend packaged in under /admin/
-# (docs/design/17-apps-and-branches.md section 3). Built from the repository root:
+# QuizBuks in one image: the backend jar with its three front ends packaged in: the app at / (a PWA), the sponsor
+# console at /sponsor/ (both from quizbuks-web/) and the platform's admin frontend at /admin/
+# (docs/design/17-apps-and-branches.md section 3; docs/quizbuks/plans/QP-pages.md). Built from the repository root:
 #   docker build -f deploy/quizbuks/Dockerfile .
 
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
 COPY backend backend
 COPY frontend frontend
+COPY quizbuks-web quizbuks-web
 COPY spec spec
-# node-gradle downloads Node and pnpm and builds the single-page application before packaging it.
+# node-gradle downloads Node and pnpm and builds the single-page applications before packaging them.
 RUN --mount=type=cache,target=/root/.gradle \
     cd backend && ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
     && cp quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar /src/app.jar

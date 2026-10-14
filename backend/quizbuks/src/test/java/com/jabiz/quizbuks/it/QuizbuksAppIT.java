@@ -6,6 +6,7 @@ import com.jabiz.ledger.LedgerDimension;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.ledger.LedgerDimensionRegistry;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
+import com.jabiz.runtime.web.JabizWebProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,9 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
 
     @Autowired
     LedgerDimensionRegistry dimensions;
+
+    @Autowired
+    JabizWebProperties web;
 
     private WebTestClient client;
 
@@ -63,13 +67,29 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
         java.util.Map<String, Object> app = client.get().uri("/api/auth/entries/app").exchange().expectStatus().isOk()
             .expectBody(java.util.Map.class).returnResult().getResponseBody();
         assertThat(app).containsEntry("requireVerifiedEmail", false).containsEntry("selfRegistration", false)
-            .containsEntry("appPath", "/");
+            .containsEntry("appPath", "/").containsEntry("sessionPersistence", "device");
         java.util.Map<String, Object> sponsor = client.get().uri("/api/auth/entries/sponsor").exchange().expectStatus()
             .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
-        assertThat(sponsor).containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/sponsor/");
+        assertThat(sponsor).containsEntry("requireVerifiedEmail", true).containsEntry("appPath", "/sponsor/")
+            .containsEntry("sessionPersistence", "tab");
         java.util.Map<String, Object> admin = client.get().uri("/api/auth/entries/admin").exchange().expectStatus()
             .isOk().expectBody(java.util.Map.class).returnResult().getResponseBody();
         assertThat(admin).containsEntry("selfRegistration", false).containsEntry("appPath", "/admin/");
         client.get().uri("/api/auth/entries/portal").exchange().expectStatus().isNotFound();
+    }
+
+    /**
+     * The three front ends come from the jar (jabizApp writes them as the defaults of jabiz.web.spa;
+     * docs/quizbuks/plans/QP-pages.md section 2): the app at / as a PWA signing in to "app", the sponsor console at
+     * /sponsor and the administration at /admin, each with its own entry. application.yml no longer replaces the list.
+     */
+    @Test
+    void servesTheThreeFrontEndsOfTheJar() {
+        assertThat(web.spa()).extracting(JabizWebProperties.Spa::path, JabizWebProperties.Spa::entry,
+                JabizWebProperties.Spa::pwa)
+            .containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple("/", "app", JabizWebProperties.Pwa.ON),
+                org.assertj.core.groups.Tuple.tuple("/sponsor", "sponsor", JabizWebProperties.Pwa.OFF),
+                org.assertj.core.groups.Tuple.tuple("/admin", "admin", JabizWebProperties.Pwa.OFF));
     }
 }

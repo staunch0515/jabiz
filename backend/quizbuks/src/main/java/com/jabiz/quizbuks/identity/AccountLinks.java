@@ -3,11 +3,11 @@ package com.jabiz.quizbuks.identity;
 import java.net.URI;
 
 /**
- * The addresses QuizBuks's mail links to (D-Q2-7). The platform's {@code {baseUrl}} is the administration's
- * ({@code jabiz.mail.base-url}); the sponsor console is {@code quizbuks.links.sponsor}, or {@code /sponsor/} on the
- * host of {@code jabiz.mail.base-url} when that is not set.
+ * The sponsor console's absolute address (D-Q2-7), where Stripe sends a sponsor back from Checkout (Q6a):
+ * {@code quizbuks.links.sponsor}, or {@code /sponsor/} on the host of {@code jabiz.mail.base-url} when that is not set.
+ * Mail no longer uses it: the sponsor mails link to {@code {entryUrl.sponsor}} (docs/quizbuks/plans/QP-pages.md, A-2).
  *
- * @param sponsor the sponsor console's address; empty when neither setting gives one (mail is then off)
+ * @param sponsor the sponsor console's address; empty when neither setting gives one (top-ups are then refused)
  */
 public record AccountLinks(String sponsor) {
 

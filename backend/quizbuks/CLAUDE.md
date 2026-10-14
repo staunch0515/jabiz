@@ -81,7 +81,7 @@
   **只能由子流程运行的流程**（如 `QB_QUIZ_RELEASE_FILES`）声明 `subProcessOnly()`（D41），权限不授予任何角色（`qb.content.system`），流程内照样再查自己的前提。
   **谁能启动流程**（D41）：QuizBuks 的事件消费者、定时任务、回调接续点与审批结果（发布与入驻）一律 `internal()`，只作子流程的用 `subProcessOnly()`，由人发起的照常开放；
   事件与定时任务只运行 `internal()` 流程（启动检查），不用 `.manualToo()`，除非该开放流程确实也由人手工运行。测试中以系统身份运行内部流程用 `ContentItSupport.runAsSystem`，场景中用 `actor: {id: system}`。
-  事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；商家后台的地址是参数 `link`（`quizbuks.links.sponsor`），写在正文里而不是 Markdown 链接中（平台对链接中的参数做百分号编码）。
+  事务邮件模板在 `identity.AccountMails`（文案 `mail.<名>.subject|body`）；链接到某个前端用平台的 `{entryUrl.<入口>}`（商家邮件为 `[…]({entryUrl.sponsor})`，D43 第 4 条），不用参数传地址。`quizbuks.links.sponsor` / `quizbuks.links.app` 只给 Stripe 的返回地址。
 - **支付**（`wallet`，`docs/quizbuks/plans/Q6-payments.md`）：
   - **全部 Stripe 调用都是异步外部作业**（`wallet.TopUpJobs`，处理器只经外部服务 `stripe` 与 `StripeApi`：自写表单编码与解析，不用 SDK；以 `Stripe-Version` 固定版本），
     不在事务中等外部调用，不放在提交后步骤（其重试不持久化）。作业的完成与失败流程、入站事件的消费流程一律 `internal()`，权限 `qb.wallet.system` 不授予任何角色。
@@ -107,14 +107,32 @@
     开通链接只由本人的数据视图读取（默认数据视图的读权限是不授予任何角色的 `qb.payout.system`）。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 
-## 5. 测试与命令（在 `backend/` 下）
+## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
+
+- **两个 SPA，各是独立的 pnpm 工程**（自己的 `package.json` 与 `pnpm-lock.yaml`，经 `link:../../frontend/packages/{client,ui}` 用平台的包；不用 pnpm 工作区）：
+  `app`（答题 App，`/`，入口 `app`，PWA）与 `sponsor`（商家后台，`/sponsor/`，入口 `sponsor`）；`build.gradle.kts` 的 `spa(...)` 构建它们，`application.yml` 不写 `jabiz.web.spa`。
+  共享依赖的版本必须与平台前端相同（`pnpm app:check`，Gradle 中 `spaCheckRoot` / `spaCheckSponsor`，在 `check` 中）。指南：平台 `docs/guide/app-spa.md`。
+- **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
+  流程的输入输出对照 Java record 手写在 `qb/api.ts`（QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
+- **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
+  `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
+- **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
+- **文案**：SPA 自己的在 `src/messages.ts`（命名空间 `app` / `sponsor`），共用的在 `qb/messages.ts`（`qb`），三语齐全，测试检查键一致且非空。
+- **界面**只用 `@jabiz/ui` 的组件与主题 token（不写颜色值）；亮、暗两种外观都过 axe（e2e `a11y.spec.ts`）。App 按 ≤ 430 px 设计，也检查 1280 px。
+- **检查**（每个 SPA 目录下）：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`；平台前端目录下 `pnpm app:check ../quizbuks-web/app`（`sponsor` 同）。
+- **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
+  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案）。
+  启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
+
+## 6. 测试与命令（在 `backend/` 下）
 
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
 
-## 6. 运行
+## 7. 运行
 
-- 本地：`docker compose -f deploy/quizbuks/docker-compose.yml up -d --build`（数据库端口 5440、应用 8080，后台在 `/admin/`）；
-  或只起数据库（`… up -d db`）后在 `backend/` 下 `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`。
+- 本地：`docker compose -f deploy/quizbuks/docker-compose.yml up -d --build`（数据库端口 5440、应用 8080：App 在 `/`、商家后台在 `/sponsor/`、后台在 `/admin/`）；
+  或只起数据库（`… up -d db`）后在 `backend/` 下 `./gradlew :quizbuks:bootRun --args='--spring.profiles.active=dev'`，前端开发时在 `quizbuks-web/app` 或 `sponsor` 下 `pnpm dev`
+  （端口 5175 / 5176，`/api` 代理到 8080）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。

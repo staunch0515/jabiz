@@ -2,7 +2,8 @@
 #
 #   docker compose -f deploy/quizbuks/docker-compose.yml up -d --build
 #
-# then open http://localhost:8080/admin/; the first administrator's password is printed by
+# then open http://localhost:8080/ (the app), /sponsor/ (the sponsor console) or /admin/ (the administration); the
+# first administrator's password is printed by
 # `docker compose -f deploy/quizbuks/docker-compose.yml logs app`. The application's service is named "app", as the
 # platform's entrypoint (docker/app-entrypoint.sh) names it in its hint for reading the password again. Settings come
 # from deploy/quizbuks/.env (never committed); the variables are listed in README.md beside this file.
@@ -51,8 +52,22 @@ services:
       JABIZ_MAIL_FROM: ${JABIZ_MAIL_FROM:-}
       JABIZ_MAIL_BASE_URL: ${JABIZ_MAIL_BASE_URL:-http://localhost:8080}
       QB_SPONSOR_LINK: ${QB_SPONSOR_LINK:-}
+      QB_APP_LINK: ${QB_APP_LINK:-}
       JABIZ_TRUSTED_PROXIES: ${JABIZ_TRUSTED_PROXIES:-}
+      # Google sign-in for the app (README.md, "前端"): SPRING_PROFILES_ACTIVE=google with the client from .env.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      QB_OIDC_REDIRECT_APP: ${QB_OIDC_REDIRECT_APP:-}
+      JABIZ_OIDC_GOOGLE_CLIENT_ID: ${JABIZ_OIDC_GOOGLE_CLIENT_ID:-}
+      JABIZ_OIDC_GOOGLE_CLIENT_SECRET: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET:-}
     volumes: [quizbuks-secrets:/var/lib/jabiz/secrets, quizbuks-files:/var/lib/jabiz/files]
+
+  # Catches the mail of a local installation, so that sign-ups can be verified on this machine (--profile tools):
+  # JABIZ_MAIL_ENABLED=true, JABIZ_MAIL_FROM=noreply@quizbuks.local, SPRING_MAIL_HOST=mailpit, SPRING_MAIL_PORT=1025
+  # in .env; the mail is read at http://localhost:8025. Never for a reachable installation.
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    profiles: [tools]
+    ports: ["127.0.0.1:${QUIZBUKS_MAILPIT_PORT:-8025}:8025"]
 
 volumes:
   quizbuks-db:

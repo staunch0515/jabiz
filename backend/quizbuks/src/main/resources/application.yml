@@ -36,22 +36,35 @@ jabiz:
     # verifying their address (to browse; every QuizBuks write needs it verified). The sponsor console (/sponsor/)
     # takes sponsors with a verified address only. Registration needs QB_SETUP to have run (the roles) and mail to be
     # on (jabiz.mail.*), or nobody can verify their address.
+    # Sessions per entry (design default Q12; docs/quizbuks/plans/QP-pages.md section 2): the app keeps its taker
+    # signed in on the device for 30 days and never locks for idleness (an attempt has its own time limit); the
+    # sponsor console and the administration lock after 30 minutes without activity and keep the session in the tab
+    # (the administration cannot keep it on the device).
     entries:
       admin:
         accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
         app-path: /admin/
+        session:
+          idle-timeout: PT30M
       app:
         accepted-roles: QB_TAKER
         self-registration: ${QB_APP_SELF_REGISTRATION:true}
         registration-roles: QB_TAKER
         require-verified-email: false
         app-path: /
+        session:
+          persistence: device
+          refresh-token-ttl: P30D
+          idle-timeout: 0
       sponsor:
         accepted-roles: QB_SPONSOR
         self-registration: ${QB_SPONSOR_SELF_REGISTRATION:true}
         registration-roles: QB_SPONSOR
         require-verified-email: true
         app-path: /sponsor/
+        session:
+          persistence: tab
+          idle-timeout: PT30M
     # Behind a reverse proxy, its addresses (or CIDR ranges), so that sign-in records keep the client's address.
     trusted-proxies: ${JABIZ_TRUSTED_PROXIES:}
     # The first administrator, created at startup when both are set and no user exists yet.
@@ -97,11 +110,10 @@ jabiz:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
     bundles: messages
-  web:
-    # The platform's admin frontend under /admin/ (docs/quizbuks/02-design.md section 1); the app (/) and the
-    # sponsor console (/sponsor/) come in later phases.
-    spa:
-      - path: /admin
+  # The three front ends (/, /sponsor/, /admin/) and their entries and PWA settings come from the jar
+  # (jabizApp in build.gradle.kts writes them as the defaults of jabiz.web.spa). Setting jabiz.web.spa here would
+  # replace that list as a whole: only do it with all three, for example to give the app a content security policy of
+  # its own (docs/guide/app-spa.md section 2).
 
 logging:
   pattern:
@@ -113,8 +125,9 @@ management:
       exposure:
         include: health,info
 
-# QuizBuks's own settings. The sponsor console's address in mail; /sponsor/ on the host of jabiz.mail.base-url when
-# not set (docs/quizbuks/plans/Q2-accounts.md, D-Q2-7).
+# QuizBuks's own settings. The sponsor console's absolute address, where Stripe sends a sponsor back from Checkout;
+# /sponsor/ on the host of jabiz.mail.base-url when not set (docs/quizbuks/plans/Q2-accounts.md, D-Q2-7). Mail links
+# to each entry's front end by {entryUrl.<entry>} instead (jabiz.mail.base-url and the entry's app-path).
 quizbuks:
   links:
     sponsor: ${QB_SPONSOR_LINK:}

@@ -44,14 +44,6 @@ class QbAccountsTest {
     }
 
     @Test
-    void mailWithoutTheConsolesAddressIsWarnedOf() {
-        assertThat(AccountLinksCheck.problems(true, new AccountLinks(""))).singleElement()
-            .satisfies(problem -> assertThat(problem.isError()).isFalse());
-        assertThat(AccountLinksCheck.problems(true, new AccountLinks("https://q.example.com/sponsor/"))).isEmpty();
-        assertThat(AccountLinksCheck.problems(false, new AccountLinks(""))).isEmpty();
-    }
-
-    @Test
     void administratorsAreTheAdministrationsRoles() {
         assertThat(BanProcesses.administrative(java.util.Set.of("ADMIN", "QB_ADMIN_SUPER"), "QB_ADMIN_SUPER")).isTrue();
         assertThat(BanProcesses.administrative(java.util.Set.of("ADMIN", "QB_ADMIN_SUPER"), "QB_TAKER")).isFalse();

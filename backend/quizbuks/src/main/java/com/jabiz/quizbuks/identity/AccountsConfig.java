@@ -183,9 +183,8 @@ public class AccountsConfig {
     }
 
     @Bean
-    ProcessDefinition<SponsorProcesses.ApplyInput, SponsorProcesses.SponsorOutput, ProcessContext> qbSponsorApply(
-        AccountLinks links) {
-        return SponsorProcesses.apply(links);
+    ProcessDefinition<SponsorProcesses.ApplyInput, SponsorProcesses.SponsorOutput, ProcessContext> qbSponsorApply() {
+        return SponsorProcesses.apply();
     }
 
     @Bean
@@ -196,8 +195,8 @@ public class AccountsConfig {
 
     @Bean
     ProcessDefinition<SponsorProcesses.ApprovalResultInput, SponsorProcesses.SponsorOutput, ProcessContext>
-        qbSponsorApprovalResult(AccountLinks links) {
-        return SponsorProcesses.approvalResult(links);
+        qbSponsorApprovalResult() {
+        return SponsorProcesses.approvalResult();
     }
 
     /** Administrators are not banned: they are the roles the administration's entry accepts (review S4). */
