@@ -36,11 +36,39 @@ export function waitAfter(reads: number): number {
 
 function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => {
+    const done = () => {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
       resolve()
-    }, { once: true })
+    }
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
+
+/**
+ * The read's answer, or a rejection once `ms` passed or the caller gave up: a read that hangs (a stalled connection)
+ * must not keep the page waiting past its deadline.
+ */
+export function within<T>(read: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const settle = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', stop)
+    }
+    const stop = () => {
+      settle()
+      reject(new Error('The read took too long'))
+    }
+    const timer = setTimeout(stop, Math.max(0, ms))
+    signal?.addEventListener('abort', stop, { once: true })
+    read.then((value) => {
+      settle()
+      resolve(value)
+    }, (error: unknown) => {
+      settle()
+      reject(error)
+    })
   })
 }
 
@@ -53,13 +81,13 @@ export async function pollUntil<T>(options: PollOptions<T>): Promise<PollOutcome
   for (let reads = 1; ; reads++) {
     if (options.signal?.aborted) return { kind: 'aborted' }
     try {
-      const value = await options.read()
+      const value = await within(options.read(), until - now(), options.signal)
       if (options.signal?.aborted) return { kind: 'aborted' }
       latest = value
       options.onValue?.(value)
       if (options.done(value)) return { kind: 'done', value }
     } catch {
-      // Offline for a moment, or the server busy: ask again until the time is up.
+      // Offline for a moment, the server busy or a read that hangs: ask again until the time is up.
       if (options.signal?.aborted) return { kind: 'aborted' }
     }
     const wait = waitAfter(reads)

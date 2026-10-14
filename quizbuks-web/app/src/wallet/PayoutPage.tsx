@@ -79,14 +79,19 @@ export function PayoutPage() {
 
   useEffect(() => () => leave.current?.abort(), [])
 
-  // Back from Stripe through the browser's page cache: the page is as it was left, so it offers the step again.
+  // Back from Stripe through the browser's page cache: the page is as it was left, so it reads again and offers the
+  // step again.
   useEffect(() => {
     const shown = (event: PageTransitionEvent) => {
-      if (event.persisted) setStep({ kind: 'idle' })
+      if (!event.persisted) return
+      setStep({ kind: 'idle' })
+      // The page may be minutes old: read the account again (and Stripe's report, when back from it).
+      setRound((n) => n + 1)
+      void queryClient.invalidateQueries({ queryKey: PAYOUT_QUERY })
     }
     window.addEventListener('pageshow', shown)
     return () => window.removeEventListener('pageshow', shown)
-  }, [])
+  }, [queryClient])
 
   /** Asks for a fresh link and follows it once it is there. */
   const onboard = async () => {

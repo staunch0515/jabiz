@@ -50,7 +50,10 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
   const queryClient = useQueryClient()
   const { search } = useLocation()
   const back = checkoutReturn(search)
+  // The mark of a top-up just started here is read once and removed at once, whatever happens next (left while
+  // opening, not found, timed out): opened again later, the page offers a button instead of leaving by itself.
   const [goOn] = useState(() => back === null && wasJustStarted(topUpId))
+  useEffect(() => forgetJustStarted(), [])
   const [topUp, setTopUp] = useState<TopUp | null | undefined>(undefined)
   const [round, setRound] = useState(0)
   // How the latest round of reads ended; a new round (or another return) is watching until it ends.
@@ -68,7 +71,6 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
     const goOnWith = (value: TopUp | null) => {
       if (!goOn || went.current || !value || value.status === 'OPENING') return
       went.current = true
-      forgetJustStarted()
       const url = payableUrl(value)
       if (!url) return
       const safe = stripePageUrl(url)
@@ -99,10 +101,14 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
     return () => controller.abort()
   }, [topUpId, back, watch, goOn, queryClient])
 
-  // Back from Stripe through the browser's page cache: the page is as it was left, so it offers the checkout again.
+  // Back from Stripe through the browser's page cache: the page is as it was left, so it reads the top-up again and
+  // offers the checkout rather than saying it is leaving.
   useEffect(() => {
     const shown = (event: PageTransitionEvent) => {
-      if (event.persisted) setLeaving(false)
+      if (!event.persisted) return
+      setLeaving(false)
+      // The page may be minutes old: read the top-up again.
+      setRound((n) => n + 1)
     }
     window.addEventListener('pageshow', shown)
     return () => window.removeEventListener('pageshow', shown)

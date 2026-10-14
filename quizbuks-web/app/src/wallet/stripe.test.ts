@@ -93,4 +93,33 @@ describe('polling', () => {
     expect(outcome).toEqual({ kind: 'aborted' })
     expect(onValue).not.toHaveBeenCalled()
   })
+
+  it('does not wait for a read that hangs past the deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      const read = vi.fn(() => new Promise<string>(() => {}))
+      const outcome = pollUntil({ read, done: () => true, timeoutMs: 5_000 })
+      await vi.advanceTimersByTimeAsync(5_000)
+      await expect(outcome).resolves.toEqual({ kind: 'timeout', value: undefined })
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops at once when the page goes away during a read that hangs', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      const outcome = pollUntil({ read: () => new Promise<string>(() => {}), done: () => true, timeoutMs: 60_000,
+        signal: controller.signal })
+      await vi.advanceTimersByTimeAsync(100)
+      controller.abort()
+      await expect(outcome).resolves.toEqual({ kind: 'aborted' })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

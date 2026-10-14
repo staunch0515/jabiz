@@ -114,7 +114,7 @@ describe('the wallet', () => {
   })
 
   it('starts a top-up, waits for its checkout and goes there once', async () => {
-    const { processCalls } = server({ topUps: [topUp('OPENING', { checkoutUrl: null }), topUp('OPEN')] })
+    const { processCalls, reads } = server({ topUps: [topUp('OPENING', { checkoutUrl: null }), topUp('OPEN')] })
     window.history.replaceState(null, '', '/wallet')
     const user = userEvent.setup()
     render(<App />)
@@ -136,7 +136,9 @@ describe('the wallet', () => {
     expect(goToStripe).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('topup-state')).toHaveAttribute('data-state', 'leaving')
     expect(window.sessionStorage.length).toBe(0)
-    // Back from Stripe through the browser's page cache: the checkout is offered again, not left for by itself.
+    // Back from Stripe through the browser's page cache: the top-up is read again and the checkout offered, not left
+    // for by itself.
+    const before = reads()
     const shown = new Event('pageshow')
     Object.defineProperty(shown, 'persisted', { value: true })
     act(() => {
@@ -144,11 +146,36 @@ describe('the wallet', () => {
     })
     expect(await screen.findByTestId('topup-pay')).toBeInTheDocument()
     expect(screen.getByTestId('topup-state')).toHaveAttribute('data-state', 'open')
+    await waitFor(() => expect(reads()).toBeGreaterThan(before))
     expect(goToStripe).toHaveBeenCalledTimes(1)
   })
 
+  it('forgets the mark of a just-started top-up at once, even when it never opened', async () => {
+    window.sessionStorage.setItem('qb.topup.just-started', 't1')
+    server({ topUps: [null] })
+    window.history.replaceState(null, '', '/wallet/topups/t1')
+    render(<App />)
+    expect(await screen.findByTestId('topup-missing')).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('qb.topup.just-started')).toBeNull()
+  })
+
+  it('a top-up left while its checkout was opening does not leave by itself when opened again', async () => {
+    window.sessionStorage.setItem('qb.topup.just-started', 't1')
+    server({ topUps: [topUp('OPENING', { checkoutUrl: null }), topUp('OPEN')] })
+    window.history.replaceState(null, '', '/wallet/topups/t1')
+    const first = render(<App />)
+    expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'opening')
+    first.unmount()
+    expect(window.sessionStorage.getItem('qb.topup.just-started')).toBeNull()
+    // Opened later from the list: the checkout is open, and the page offers it.
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('topup-state')).toHaveAttribute('data-state', 'open'))
+    expect(screen.getByTestId('topup-pay')).toBeInTheDocument()
+    expect(goToStripe).not.toHaveBeenCalled()
+  })
+
   it('shows the server\'s refusal of an amount next to the field', async () => {
-    server({ start: { status: 422, body: { status: 422, code: 'QB_TOPUP_AMOUNT_RANGE', detail: 'Refused',
+    const { processCalls } = server({ start: { status: 422, body: { status: 422, code: 'QB_TOPUP_AMOUNT_RANGE', detail: 'Refused',
       violations: [{ field: 'amount', ruleCode: 'QB_TOPUP_AMOUNT_RANGE',
         message: 'A top-up is a whole number of Kudos from 1000 to 1000000.' }] } } })
     window.history.replaceState(null, '', '/wallet')
@@ -159,6 +186,16 @@ describe('the wallet', () => {
     await user.click(screen.getByTestId('topup-submit'))
     expect(await screen.findByText('A top-up is a whole number of Kudos from 1000 to 1000000.')).toBeInTheDocument()
     expect(window.location.pathname).toBe('/wallet')
+    // Cancel starts the next opening afresh: no amount, no refusal, a new idempotency key.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByTestId('topup-dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByTestId('topup-open'))
+    expect(screen.getByTestId('topup-amount')).toHaveValue('')
+    expect(screen.queryByText('A top-up is a whole number of Kudos from 1000 to 1000000.')).not.toBeInTheDocument()
+    await user.type(screen.getByTestId('topup-amount'), '10')
+    await user.click(screen.getByTestId('topup-submit'))
+    await waitFor(() => expect(processCalls()).toHaveLength(2))
+    expect(processCalls()[1].key).not.toBe(processCalls()[0].key)
   })
 })
 

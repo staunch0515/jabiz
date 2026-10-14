@@ -74,7 +74,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
     mutationFn: (amount: number) => startTopUp(amount, key),
     onSuccess: (output) => {
       rememberJustStarted(output.topUpId)
-      onOpenChange(false)
+      close()
       navigate(topUpPath(output.topUpId))
     },
   })
@@ -84,18 +84,18 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
     setInvalid(amount === null)
     if (amount !== null && !start.isPending) start.mutate(amount)
   }
+  /** Every way of closing (Cancel, Escape, the overlay, a started top-up) starts the next opening afresh. */
+  function close() {
+    setText('')
+    setInvalid(false)
+    setKey(crypto.randomUUID())
+    start.reset()
+    onOpenChange(false)
+  }
   const problem = invalid ? t('wallet.dialog.invalid') : fieldProblem(start.error, 'amount')
   const general = generalProblem(start.error, ['amount'])
   return (
-    <Dialog open={open} onOpenChange={(next) => {
-      if (!next) {
-        setText('')
-        setInvalid(false)
-        setKey(crypto.randomUUID())
-        start.reset()
-      }
-      onOpenChange(next)
-    }}>
+    <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent data-testid="topup-dialog">
         <form noValidate onSubmit={submit} className="flex flex-col gap-4">
           <DialogHeader>
@@ -121,7 +121,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
             <Alert variant="destructive" data-testid="topup-problem"><AlertDescription>{general}</AlertDescription></Alert>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={close}>
               {t('wallet.dialog.cancel')}
             </Button>
             <Button type="submit" disabled={start.isPending} aria-busy={start.isPending || undefined}

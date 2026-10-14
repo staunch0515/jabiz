@@ -1,5 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -217,6 +217,21 @@ describe('the payout account', () => {
     expect(await screen.findByTestId('payout-state')).toHaveAttribute('data-state', 'refresh')
     expect(screen.getByTestId('payout-onboard')).toHaveTextContent('Continue with Stripe')
     expect(goToStripe).not.toHaveBeenCalled()
+  })
+
+  it('back through the browser\'s page cache, reads the account again and offers the step again', async () => {
+    const { queryBodies } = server({ accounts: [account('PENDING'), account('ENABLED')] })
+    window.history.replaceState(null, '', '/wallet/payout')
+    render(<App />)
+    expect(await screen.findByTestId('payout-state')).toHaveAttribute('data-state', 'unfinished')
+    const before = queryBodies('qb.app.payout-account').length
+    const shown = new Event('pageshow')
+    Object.defineProperty(shown, 'persisted', { value: true })
+    act(() => {
+      window.dispatchEvent(shown)
+    })
+    await waitFor(() => expect(queryBodies('qb.app.payout-account').length).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'enabled'))
   })
 
   it('a disconnected account cannot be set up again here', async () => {
