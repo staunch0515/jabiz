@@ -291,7 +291,9 @@ jabizApp {
 - **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
   亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
 - **preflight 与外框**：`theme.css` 把 Tailwind 的 preflight 全局引入层 `base`（层顺序 `theme, base, components, utilities`，`src/index.css`），
-  `body` 的背景与文字取 token，原生控件与滚动条随 `.dark` 变暗；应用自有 SPA 经同一 `theme.css` 也是全局 preflight。侧栏收起时整体移出屏幕并设为 `inert`
+  `body` 的背景与文字取 token，原生控件与滚动条随 `.dark` 变暗；应用自有 SPA 经同一 `theme.css` 也是全局 preflight。后台外壳的内容区是 `text-sm`（14px，
+  与 antd 时期相同；登录、邮件链接页、门户与应用 SPA 仍是浏览器缺省的 16px）。渲染出的 Markdown（`.markdown-view`）的标题、列表、链接、代码与引用
+  由 `@jabiz/ui` 的 `markdown.css`（层 `components`，只用 token）给出样式，不用 `@tailwindcss/typography`。侧栏收起时整体移出屏幕并设为 `inert`
   （不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。
 - **迁移的历史**（15a–15d）：迁移期间 antd 页面与新组件共存，preflight 只作用于 `.jabiz-ui`（`UI_SCOPE`）之内，antd 的样式在 CSS 层 `antd` 中，
   antd 页面所在的内容区固定为亮色。15d 删除 antd、ProComponents、icons 与 React 19 补丁，preflight 改为全局，去掉层 `antd`、亮色固定与路由标记；

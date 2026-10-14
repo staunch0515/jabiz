@@ -30,7 +30,7 @@ finance-web/
 （线 1.2 起，决策 D34；Ant Design 已从平台删除（阶段 15d），扩展的 lint 拒绝引用 antd 与 `@ant-design/*`）。
 页面随亮、暗外观变化：颜色只用主题 token（`bg-card`、`text-muted-foreground` …），不要写死，写死的颜色在暗色外观下会显得不对。
 Tailwind 的 preflight 是全局的（阶段 15d 起）：扩展自己写的 HTML 元素（`<h2>`、`<ul>`、`<a>` …）没有浏览器的默认样式（标题不加粗放大、列表没有符号、链接不变色），
-样式全用工具类写。正文的字号是浏览器的缺省（16px），需要小字时写 `text-sm`。`UI_SCOPE` 仍由 `@jabiz/admin` 导出，但已不需要，新代码不要再用。
+样式全用工具类写。后台的内容区（平台页面与扩展的路由）是 `text-sm`（14px，与 antd 时期相同），没有写字号的文字都是这个大小。`UI_SCOPE` 仍由 `@jabiz/admin` 导出，但已不需要，新代码不要再用。
 
 ## 2. 写入口
 

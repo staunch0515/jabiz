@@ -1405,7 +1405,7 @@ e2e 与 a11y 不再按 `.ant-*` 找元素，并由 lint 守住；文档改写。
 6. 记录产物大小；文档（12、`guide/admin-extension.md`、功能清单、CLAUDE.md §2、README、00、08、17）。
 
 **15d 状态**：☑ 已完成（分支 `1.2/phase-15d-remove-antd`，PR 待建）。
-`pnpm lint`、`typecheck`、`test`（95 个文件、706 个用例）、`build`、`check:api`、`ext:check`、`app:check ../backend/app/portal` 通过，示范门户自己的 `lint`、`typecheck`、`test` 通过；
+`pnpm lint`、`typecheck`、`test`（95 个文件、711 个用例，评审修正之后）、`build`、`check:api`、`ext:check`、`app:check ../backend/app/portal` 通过，示范门户自己的 `lint`、`typecheck`、`test` 通过；
 e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用例全部通过，在同一数据库上再运行一次也全部通过；`./gradlew check` 通过（含前端构建与 `platformCheck`）。
 
 **15d 与计划的出入**
@@ -1415,15 +1415,20 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 - `theme.css` 在 `base` 层另给 `body` 背景与文字（token），并在 `:root` / `.dark` 上设 `color-scheme`：暗色外观下页面以外的画布（整页截图中侧栏下方、滚动越界处）原来是白的。
   减少动画的规则改为作用于全部元素（原来只作用于 `.jabiz-ui`）。
 - `chunkSizeWarningLimit` 没有删除，而是由 3 000 降到 1 500 kB：后台是一个 1 316 kB 的块（不分块），删除后每次构建都会出现 Vite 500 kB 的提示；1 500 kB 在体积重新明显增长时才提示。
+- 评审后的修正（同一分支，各有测试）：外壳内容区 `text-sm`（见下）；`MarkdownView` 在全局 preflight 下没有样式，`@jabiz/ui` 新增 `styles/markdown.css`
+  （`.markdown-view` 内的标题、列表、链接、代码、引用与表格，层 `components`，只用 token，不加 `@tailwindcss/typography`）；退订页去掉内联样式，改用工具类；
+  `theme.test.ts` 另查 `:root` 的 `color-scheme: light` 与 `body` 的背景与文字 token；`AdminPage` 的过时注释与 `className={'…'}` 的残留。
 - 测试的 `setup.ts` 删除只为 antd 准备的 `getComputedStyle` 包装（没有它全部测试照常通过，也没有 jsdom 的"未实现"提示）；`matchMedia` 等桩照留。
 - `App.test.tsx` 改为检查哪些路由不需要登录（登录与邮件链接），其余页面都在登录后的外壳内；`AppLayout.test.tsx` 改为断言暗色时外壳内没有 `.light`；
   `a11y.spec` 改为断言页面上没有 `.light`。
 - 门户与示范扩展的截图对比（删除前后，亮、暗两种外观，Playwright 整页截图，像素比较）：门户的登录、注册、订单、下单、账户页只有数据不同（订单号、时间、用户名）。
-  后台：antd 的全局样式曾把 `body` 设为 14px，现在是浏览器的缺省 16px（与门户相同），没有写字号的文字因此变大：报表目录中报表的名称、安全设置中两步验证的状态句与会话列表的设备名，
-  页面相应变高十几像素；其余页面（列表、流程、待办、库存概览、防篡改）只有 1 px 以内的偏移与数据差异；暗色外观下长页面在视口以下的画布由白变暗。
+  后台：14px 原来来自 antd 的 `App` 包裹层（`.ant-app`），不是 `body`；删除后没有写字号的文字变成浏览器缺省的 16px（报表目录中报表的名称、安全设置中两步验证的状态句与会话列表的设备名）。
+  评审后外壳的内容区加上 `text-sm`（平台页面与扩展的路由仍是 14px；登录与邮件链接页、门户与应用 SPA 是 16px），这些页面回到 15c 的字号，只因行高从 antd 的 1.5715 变为
+  Tailwind `text-sm` 的 1.43 而矮几个像素（报表目录 9 px、安全设置 3–6 px）；其余页面（列表、流程、待办、库存概览、防篡改）只有 1 px 以内的偏移与数据差异；
+  暗色外观下长页面在视口以下的画布由白变暗。
   应用 SPA 合并 15d 后请自查依赖浏览器默认样式的元素（`guide/app-spa.md`）。
 
-**15d 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 1 584.4 kB / 487.1 kB、CSS 84.3 kB / 14.0 kB；之后 JS 1 316.1 kB / 401.4 kB、CSS 81.2 kB / 13.8 kB
+**15d 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 1 584.4 kB / 487.1 kB、CSS 84.3 kB / 14.0 kB；之后 JS 1 316.1 kB / 401.4 kB、CSS 83.0 kB / 14.2 kB（评审后加上 Markdown 的样式；之前为 81.2 kB / 13.8 kB）
 （15a 之前：JS 2 651.0 kB / 819.2 kB、CSS 0.3 kB）。
 
 **验收标准**（15d）
