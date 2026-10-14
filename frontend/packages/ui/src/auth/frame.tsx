@@ -11,7 +11,7 @@ import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { AUTH_NAMESPACE } from './messages'
 
 /**
@@ -70,7 +70,7 @@ export function AuthFrame({ brand, title, children, testId, appearance = true, c
   const { t, i18n } = useTranslation(AUTH_NAMESPACE)
   const offerAppearance = useHasAppearance() && appearance
   return (
-    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20', className)}>
+    <main className={cn('bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20', className)}>
       <Card className="w-full max-w-sm" data-testid={testId}>
         <CardHeader className="text-center">
           <CardTitle>

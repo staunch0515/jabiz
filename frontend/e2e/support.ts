@@ -86,7 +86,7 @@ export async function signIn(page: Page, user = ADMIN) {
   await page.goto('/login')
   await page.getByPlaceholder('用户名').fill(user.userName)
   await page.getByPlaceholder('密码').fill(user.password)
-  await page.getByRole('button', { name: /登\s*录/ }).click()
+  await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL('**/data')
 }
 
@@ -102,8 +102,8 @@ export async function chooseLanguage(page: Page, name: string, code: string) {
 }
 
 /*
- * Finding things on pages built with @jabiz/ui by role, name or a stable data-* attribute (phase 15b), rather than
- * by Ant Design's class names.
+ * Finding things on pages built with @jabiz/ui by role, name or a stable data-* attribute, never by a component
+ * library's class names (eslint.config.js refuses Ant Design's `.ant-*` here, phase 15d).
  */
 
 /** A dialog or sheet (Radix, role "dialog"), by its title. */

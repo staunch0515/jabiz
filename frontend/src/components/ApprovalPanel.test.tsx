@@ -1,13 +1,16 @@
+import { ApiError } from '@jabiz/client'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import { expectAccessible } from '../test/axe'
 import ApprovalPanel from './ApprovalPanel'
 
 const runProcess = vi.fn()
 
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
+  runProcess: (...args: unknown[]) => runProcess(...args),
+}))
 
 function renderPanel(onDecided = vi.fn()) {
   render(<ApprovalPanel requestId="r-1" onDecided={onDecided} />)

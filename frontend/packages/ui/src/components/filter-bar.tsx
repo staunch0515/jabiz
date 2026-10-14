@@ -2,7 +2,7 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Combobox, type ComboboxOption } from './combobox'
 import { DatePicker, DateTimePicker } from './date-picker'
 import { DecimalInput } from './decimal-input'
@@ -125,7 +125,7 @@ export function FilterBar({ fields, values = NO_VALUES, onSubmit, onReset, label
       role="search"
       aria-label={label ?? t('filter.label')}
       data-slot="filter-bar"
-      className={cn(UI_SCOPE, 'flex flex-wrap items-end gap-x-4 gap-y-3', className)}
+      className={cn('flex flex-wrap items-end gap-x-4 gap-y-3', className)}
       onSubmit={submit}
     >
       {fields.map((field) => {

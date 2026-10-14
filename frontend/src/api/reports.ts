@@ -1,6 +1,4 @@
-import { fileNameOf } from './files'
-import { sessionFetch } from './client'
-import { toApiError } from './problem'
+import { fileNameOf, sessionFetch, toApiError } from '@jabiz/client'
 import type { components } from '@jabiz/client'
 
 /** An export format of POST /api/queries/{id}/export (docs/design/19-reports.md section 4). */

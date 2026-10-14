@@ -1,5 +1,4 @@
 import {
-  cn,
   Combobox,
   DatePicker,
   DateTimePicker,
@@ -9,7 +8,6 @@ import {
   MoneyInput,
   Switch,
   Textarea,
-  UI_SCOPE,
 } from '@jabiz/ui'
 import type { TFunction } from 'i18next'
 import { useId, type ReactNode } from 'react'
@@ -218,7 +216,7 @@ export default function EntityField({
     </>
   )
   return (
-    <div data-slot="form-item" data-field={field.name} className={cn(UI_SCOPE, 'flex flex-col gap-1.5')}>
+    <div data-slot="form-item" data-field={field.name} className="flex flex-col gap-1.5">
       {control === 'i18n' ? (
         // Several inputs, one per language: the label names the group, each input its language.
         <div role="group" aria-labelledby={`${id}-label`} className="flex flex-col gap-1.5">

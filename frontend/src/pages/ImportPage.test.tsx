@@ -19,12 +19,12 @@ const previewImport = vi.fn()
 const commitImport = vi.fn()
 const exportImportRun = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args), PUT: (...args: unknown[]) => put(...args) },
   unwrap: (value: unknown) => value,
+  uploadFile: (...args: unknown[]) => uploadFile(...args),
 }))
-vi.mock('../api/files', () => ({ uploadFile: (...args: unknown[]) => uploadFile(...args) }))
 vi.mock('../api/imports', () => ({
   inspectFile: (...args: unknown[]) => inspectFile(...args),
   previewImport: (...args: unknown[]) => previewImport(...args),

@@ -1,9 +1,8 @@
+import { ApiError, runProcess } from '@jabiz/client'
 import { Alert, AlertDescription, Button, notify, Spinner, Textarea } from '@jabiz/ui'
 import { CircleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/problem'
-import { runProcess } from '../lib/calls'
 
 export interface ApprovalPanelProps {
   /** The approval request to decide (a task's `subjectId`). */

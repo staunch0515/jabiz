@@ -78,15 +78,6 @@ describe('AppShell and ShellNav', () => {
     expect(document.querySelector('[data-slot="sidebar-container"]')).not.toHaveAttribute('inert')
   })
 
-  it('puts the preflight scope on the components, not on the page around them', () => {
-    renderShell('/tasks')
-    expect(screen.getByRole('heading', { level: 1, name: 'Carriers' }).closest('.jabiz-ui')).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'New' })).toHaveClass('jabiz-ui')
-    expect(document.querySelector('[data-slot="app-shell-content"]')).not.toHaveClass('jabiz-ui')
-    expect(document.querySelector('[data-slot="sidebar-inset"]')).not.toHaveClass('jabiz-ui')
-    expect(document.querySelector('[data-slot="sidebar-wrapper"]')).not.toHaveClass('jabiz-ui')
-  })
-
   it('uses the router link it is given', () => {
     render(
       <ShellNav

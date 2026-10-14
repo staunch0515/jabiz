@@ -10,7 +10,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  cn,
   DataTable,
   DecimalInput,
   EXTENSION_NAMESPACE,
@@ -27,7 +26,6 @@ import {
   runProcess,
   runQuery,
   Spinner,
-  UI_SCOPE,
   useAuth,
   useForm,
   type ColumnDef,
@@ -90,8 +88,7 @@ export default function StockOverviewPage() {
   }, [t])
 
   return (
-    // UI_SCOPE: the page's own elements (form, heading) get the reset @jabiz/ui's components have (until phase 15d).
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-4')}>
+    <div className="flex flex-col gap-4">
       <PageHeader
         title={t('stock.title')}
         className="pb-0"

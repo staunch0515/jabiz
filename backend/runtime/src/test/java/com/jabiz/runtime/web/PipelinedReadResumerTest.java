@@ -1,17 +1,28 @@
 package com.jabiz.runtime.web;
 
 import com.jabiz.runtime.test.PipelinedRequests;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.netty.Connection;
+import reactor.netty.ConnectionObserver;
 import reactor.netty.DisposableServer;
+import reactor.netty.NettyInbound;
+import reactor.netty.NettyOutbound;
 import reactor.netty.NettyPipeline;
+import reactor.netty.channel.ChannelOperations;
 import reactor.netty.http.server.HttpServer;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.UnaryOperator;
 
 import static com.jabiz.runtime.test.PipelinedRequests.get;
@@ -102,6 +113,79 @@ class PipelinedReadResumerTest {
             .containsSubsequence(NettyPipeline.HttpTrafficHandler, PipelinedReadResumer.NAME);
         assertThat(channel.pipeline().names().stream().filter(PipelinedReadResumer.NAME::equals)).hasSize(1);
         channel.finishAndReleaseAll();
+    }
+
+    /**
+     * What makes {@link #theNextRequestIsAnsweredAfterARequestWithPartOfItsBody} fail now and then (often under load):
+     * the drained part of a body reaches its exchange after the answer was written but before the exchange ended, so
+     * the exchange is still bound when the content goes past. The read must then follow once the exchange ends.
+     */
+    @Test
+    void contentThatReachesAnExchangeBeforeItEndsIsFollowedByAReadWhenItEnds() {
+        var reads = new AtomicInteger();
+        EmbeddedChannel channel = channelCountingReads(reads);
+        var exchange = new EndableExchange(channel);
+
+        channel.pipeline().fireChannelRead(content("12345"));
+        channel.pipeline().fireChannelRead(content("678"));
+        channel.runPendingTasks();
+        assertThat(reads).as("while the exchange is bound").hasValue(0);
+        PipelinedReadResumer.Handler handler = channel.pipeline().get(PipelinedReadResumer.Handler.class);
+        assertThat(handler.watched()).isSameAs(exchange);
+
+        exchange.end();
+        channel.runPendingTasks();
+        assertThat(reads).as("once it has ended: one read, however many chunks went past").hasValue(1);
+        assertThat(handler.watched()).as("the ended exchange is not kept").isNull();
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void noReadWhenTheNextExchangeHasStartedByTheTimeTheWatchedOneEnds() {
+        var reads = new AtomicInteger();
+        EmbeddedChannel channel = channelCountingReads(reads);
+        var exchange = new EndableExchange(channel);
+        channel.pipeline().fireChannelRead(content("12345"));
+
+        exchange.end();
+        new EndableExchange(channel);
+        channel.runPendingTasks();
+
+        assertThat(reads).hasValue(0);
+        channel.finishAndReleaseAll();
+    }
+
+    /** An HTTP/1.1-like pipeline with the handler, not reading by itself, counting the reads asked for. */
+    private static EmbeddedChannel channelCountingReads(AtomicInteger reads) {
+        var channel = new EmbeddedChannel();
+        channel.config().setAutoRead(false);
+        channel.pipeline().addLast(new ChannelOutboundHandlerAdapter() {
+            @Override
+            public void read(ChannelHandlerContext ctx) {
+                reads.incrementAndGet();
+                ctx.read();
+            }
+        });
+        channel.pipeline().addLast(NettyPipeline.HttpTrafficHandler, new ChannelInboundHandlerAdapter());
+        PipelinedReadResumer.install(channel.pipeline());
+        return channel;
+    }
+
+    private static DefaultHttpContent content(String text) {
+        return new DefaultHttpContent(Unpooled.copiedBuffer(text, StandardCharsets.US_ASCII));
+    }
+
+    /** An exchange bound to the channel on creation, ended the way Reactor Netty ends one. */
+    private static final class EndableExchange extends ChannelOperations<NettyInbound, NettyOutbound> {
+
+        EndableExchange(EmbeddedChannel channel) {
+            super(Connection.from(channel), ConnectionObserver.emptyListener());
+            bind();
+        }
+
+        void end() {
+            terminate();
+        }
     }
 
     /** {@code /slow} answers a little later, so that a request behind it is buffered; anything else is 404 at once. */

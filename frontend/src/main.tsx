@@ -1,4 +1,3 @@
-import '@ant-design/v5-patch-for-react-19'
 import { applyAppearance } from '@jabiz/ui'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

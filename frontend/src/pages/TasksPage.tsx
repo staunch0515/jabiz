@@ -1,10 +1,10 @@
+import { formatDateTime } from '@jabiz/client'
 import { Badge, Card, CardContent, PageState } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import ApprovalPanel from '../components/ApprovalPanel'
 import AdminPage from '../layout/AdminPage'
-import { formatDateTime } from '../meta/format'
 import { useMyTasks, type MyTask } from '../meta/hooks'
 
 /**

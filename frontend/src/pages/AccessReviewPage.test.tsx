@@ -10,13 +10,11 @@ const get = vi.fn()
 const run = vi.fn()
 const permissions = new Set<string>()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args) },
   unwrap: async (value: unknown) => value,
-}))
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => run(...args) }))
-vi.mock('../auth/AuthContext', () => ({
+  runProcess: (...args: unknown[]) => run(...args),
   useAuth: () => ({ can: (p: string) => permissions.has(p) }),
 }))
 

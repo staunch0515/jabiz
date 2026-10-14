@@ -19,7 +19,7 @@ import { Button } from '../components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { AuthError, Outcome } from './frame'
 import { AUTH_NAMESPACE } from './messages'
 import { ProviderMark, useOidcProviders, type OidcProvider } from './OidcButtons'
@@ -144,7 +144,7 @@ export function LinkedIdentities({
   if (identities && items.length === 0 && offered.length === 0) return null
 
   return (
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-4', className)} data-testid="linked-identities">
+    <div className={cn('flex flex-col gap-4', className)} data-testid="linked-identities">
       <p className="text-muted-foreground text-sm">{t('identities.hint')}</p>
       {linkedNotice && !done && (
         <Outcome ok testId="linked-identities-linked">

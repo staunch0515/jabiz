@@ -3,7 +3,7 @@ import { InboxIcon, UploadIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { buttonVariants } from './ui/button'
 import { Spinner } from './spinner'
 
@@ -130,13 +130,12 @@ export function FileUpload({
 
   if (variant === 'dropzone') {
     return (
-      <div data-slot="file-upload" data-variant="dropzone" className={cn(UI_SCOPE, 'flex flex-col gap-1.5', className)}>
+      <div data-slot="file-upload" data-variant="dropzone" className={cn('flex flex-col gap-1.5', className)}>
         {inputElement}
         <label
           htmlFor={inputId}
           data-dragging={dragging || undefined}
           className={cn(
-            UI_SCOPE,
             'border-input bg-background hover:bg-muted/50 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center text-sm transition-colors',
             'data-[dragging]:border-primary data-[dragging]:bg-muted',
             focusRing,
@@ -175,13 +174,12 @@ export function FileUpload({
   }
 
   return (
-    <div data-slot="file-upload" className={cn(UI_SCOPE, 'flex flex-col gap-1.5', className)}>
+    <div data-slot="file-upload" className={cn('flex flex-col gap-1.5', className)}>
       <div className="flex items-center gap-2">
         {inputElement}
         <label
           htmlFor={inputId}
           className={cn(
-            UI_SCOPE,
             buttonVariants({ variant: 'outline' }),
             'cursor-pointer',
             focusRing,

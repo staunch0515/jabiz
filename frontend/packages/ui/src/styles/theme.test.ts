@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { compile } from 'tailwindcss'
 import { describe, expect, it } from 'vitest'
-import { generate, OUTPUT, scopeSelector } from '../../scripts/scoped-preflight.mjs'
 
 const css = readFileSync(resolve(import.meta.dirname, 'theme.css'), 'utf8')
 
@@ -88,35 +87,32 @@ describe('theme tokens (WCAG 2.2 AA, docs/design/12-frontend.md section 11)', ()
 })
 
 describe('the dark variant', () => {
-  it('does not reach an area pinned to the light tokens (.light inside .dark)', async () => {
+  it('reaches everything under .dark: no area is pinned to the light tokens any more (phase 15d)', async () => {
     const variant = /@custom-variant dark [^;]+;/.exec(css)![0]
     const compiler = await compile(`${variant}\n@tailwind utilities;`)
     const out = compiler.build(['dark:underline'])
     const selector = /([^{}]*)\{[^{}]*text-decoration-line: underline/.exec(out)![1].replace(/\s+/g, ' ').trim()
-    // A light subtree is excluded however deep the element is.
     expect(selector).toContain(':where(.dark, .dark *)')
-    expect(selector).toContain(':not(:where(.light, .light *))')
+    expect(selector).not.toContain('.light')
   })
 
-  it('leaves color-scheme light inside the pinned area', () => {
-    expect(css).toMatch(/:where\(\.dark \.jabiz-ui, \.dark\.jabiz-ui\):not\(:where\(\.light, \.light \*\)\)\s*\{\s*color-scheme: dark;/)
+  it('turns native controls and scroll bars dark with the appearance, light otherwise', () => {
+    expect(css).toMatch(/:root \{\s*color-scheme: light;\s*\}/)
+    expect(css).toMatch(/\.dark \{\s*color-scheme: dark;/)
+  })
+
+  it('paints the page canvas with the tokens, so no light margin shows around a dark page', () => {
+    expect(css).toMatch(/body \{\s*background-color: var\(--color-background\);\s*color: var\(--color-foreground\);\s*\}/)
   })
 })
 
-describe('the scoped preflight (phase 15a)', () => {
-  it('is what the installed Tailwind generates (run packages/ui/scripts/scoped-preflight.mjs after an upgrade)', () => {
-    expect(readFileSync(OUTPUT, 'utf8')).toBe(generate())
+describe('the preflight (phase 15d)', () => {
+  it("is Tailwind's own, global, in the base layer", () => {
+    expect(css).toContain("@import 'tailwindcss/preflight.css' layer(base);")
+    expect(css).not.toContain('jabiz-ui')
   })
 
-  it('scopes selectors without changing their specificity', () => {
-    expect(scopeSelector('*')).toBe(':where(.jabiz-ui, .jabiz-ui *)')
-    expect(scopeSelector('::after')).toBe(':where(.jabiz-ui, .jabiz-ui *)::after')
-    expect(scopeSelector('html')).toBe(':where(.jabiz-ui)')
-    expect(scopeSelector('abbr:where([title])')).toBe('abbr:where([title]):where(.jabiz-ui, .jabiz-ui *)')
-    expect(scopeSelector('input::placeholder')).toBe('input:where(.jabiz-ui, .jabiz-ui *)::placeholder')
-    // A component's own root is reset too (a <button class="jabiz-ui …">), not only what is inside it.
-    expect(scopeSelector('button')).toBe('button:where(.jabiz-ui, .jabiz-ui *)')
-    expect(scopeSelector(':where(select:is([multiple], [size])) optgroup'))
-      .toBe(':where(select:is([multiple], [size])) optgroup:where(.jabiz-ui, .jabiz-ui *)')
+  it('leaves rendered Markdown styled, in the components layer', () => {
+    expect(css).toContain("@import './markdown.css' layer(components);")
   })
 })

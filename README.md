@@ -19,5 +19,5 @@ open http://localhost:8080                   # 登录；Grafana: http://localhos
 | [CLAUDE.md](CLAUDE.md) | 在本仓库工作的规则（技术栈、分层、编码约定、命令） |
 
 仓库结构：`backend/`（Gradle：`core` 纯 Java 核心、`runtime` 响应式运行时、`ext-geo` 扩展语义类型、`app` 启动模块与示范业务）、
-`frontend/`（React 19 + Ant Design ProComponents，由元数据生成页面）、`docker/`（镜像入口脚本与 Grafana 仪表盘）、
+`frontend/`（React 19 + shadcn/ui（`@jabiz/ui`）与 `@jabiz/client`，由元数据生成页面）、`docker/`（镜像入口脚本与 Grafana 仪表盘）、
 `spec/`（前后端共享校验用例）、`tools/demo/`（演示数据脚本）。

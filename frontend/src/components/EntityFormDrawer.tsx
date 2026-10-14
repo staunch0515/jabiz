@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError, useAuth } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -19,9 +20,6 @@ import {
 import { CircleAlert } from 'lucide-react'
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
 import { actionsFor } from '../meta/actions'
 import { changedAttributes, formFieldsOf, wireAttributes, type FormField } from '../meta/entityForm'
 import { useDatasets, useProcesses } from '../meta/hooks'

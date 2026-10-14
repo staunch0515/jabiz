@@ -1,3 +1,4 @@
+import { api, unwrap, uploadFile, ApiError } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -32,13 +33,10 @@ import { CircleCheck, History, TriangleAlert } from 'lucide-react'
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
-import { api, unwrap } from '../api/client'
-import { uploadFile } from '../api/files'
 import {
   commitImport, inspectFile, previewImport, type ImportInspection, type ImportMapping, type ImportOptions,
   type ImportReport,
 } from '../api/imports'
-import { ApiError } from '../api/problem'
 import SchemaForm from '../components/SchemaForm'
 import AdminPage from '../layout/AdminPage'
 import { useImportCatalog } from '../meta/hooks'

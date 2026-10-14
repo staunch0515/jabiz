@@ -11,8 +11,8 @@ const get = vi.fn()
 const post = vi.fn()
 const exportRun = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args), POST: (...args: unknown[]) => post(...args) },
   unwrap: (value: unknown) => value,
 }))

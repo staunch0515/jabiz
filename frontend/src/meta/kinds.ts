@@ -1,7 +1,6 @@
+import { formatDecimal, toDecimal, displayLocale, formatDate, formatDateTime } from '@jabiz/client'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
-import { formatDecimal, toDecimal } from './decimal'
-import { displayLocale, formatDate, formatDateTime } from './format'
 import { isI18nText, pickText, textsToWire } from './i18nText'
 import { isFileField, type DictItem, type EntityMeta, type FieldMeta } from './types'
 

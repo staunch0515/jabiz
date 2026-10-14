@@ -1,3 +1,4 @@
+import { api, unwrap, formatDateTime } from '@jabiz/client'
 import {
   Badge,
   Spinner,
@@ -13,9 +14,7 @@ import {
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
 import type { components } from '@jabiz/client'
-import { formatDateTime } from '../meta/format'
 
 type Delivery = components['schemas']['DocumentDeliveryEntry']
 

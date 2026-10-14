@@ -4,7 +4,8 @@ import { cleanup } from '@testing-library/react'
 
 afterEach(() => cleanup())
 
-// antd and Radix UI read these browser APIs, which jsdom does not provide. (Tests of build scripts run without a DOM.)
+// The appearance (prefers-color-scheme) and Radix UI read these browser APIs, which jsdom does not provide. (Tests of
+// build scripts run without a DOM.)
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -19,7 +20,6 @@ if (typeof window !== 'undefined') {
       dispatchEvent: () => false,
     }),
   })
-  window.getComputedStyle = ((original) => (element: Element) => original(element))(window.getComputedStyle)
 
   // Radix UI (the @jabiz/ui components) measures and captures the pointer with APIs jsdom does not have.
   window.ResizeObserver ??= class {

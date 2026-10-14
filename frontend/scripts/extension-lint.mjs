@@ -3,9 +3,13 @@ const PLATFORM_ONLY_THROUGH_ADMIN = {
   message: 'An extension uses the platform only through @jabiz/admin (decision D22).',
 }
 
-const NO_ANT_DESIGN = {
+/**
+ * Ant Design left the platform (decision D34, phase 15d). The admin frontend refuses it with this same pattern
+ * (eslint.config.js); the message names the replacement, clearer than a module that cannot be found.
+ */
+export const NO_ANT_DESIGN = {
   group: ['antd', 'antd/*', '@ant-design/*'],
-  message: 'Ant Design leaves the platform (decision D34): use the components @jabiz/admin exports (@jabiz/ui).',
+  message: 'Ant Design left the platform (decision D34): use @jabiz/ui (in an extension, through @jabiz/admin).',
 }
 
 function rules(patterns) {
@@ -22,8 +26,8 @@ function rules(patterns) {
 export const extensionRules = rules([PLATFORM_ONLY_THROUGH_ADMIN, NO_ANT_DESIGN])
 
 /**
- * The rules for an extension (called with its directory): the same for every extension (the demo extension's exemption from the Ant
- * Design rule ended when it moved to @jabiz/ui, phase 15c-2).
+ * The rules for an extension (called with its directory): the same for every extension (the demo extension's
+ * exemption from the Ant Design rule ended when it moved to @jabiz/ui, phase 15c-2).
  */
 export function extensionRulesFor() {
   return extensionRules
