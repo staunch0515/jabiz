@@ -1,3 +1,4 @@
+import { UserName } from '@jabiz/client'
 import {
   Badge,
   Button,
@@ -16,7 +17,6 @@ import { useTranslation } from 'react-i18next'
 import { changesOf, isScheduled, newestFirst } from '../meta/history'
 import { fieldLabel, findField, formatValue } from '../meta/kinds'
 import type { DictItem, EntityMeta, HistoryVersion } from '../meta/types'
-import UserName from './UserName'
 
 interface Props {
   entity: EntityMeta

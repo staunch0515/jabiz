@@ -1,8 +1,7 @@
+import { sessionFetch, session } from '@jabiz/client'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sessionFetch } from '../api/client'
-import { session } from '../api/session'
 import i18n from '../i18n'
 import { StepUpProvider } from './StepUp'
 

@@ -7,7 +7,6 @@ import {
   BreadcrumbSeparator,
   cn,
   PageHeader,
-  UI_SCOPE,
 } from '@jabiz/ui'
 import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -35,7 +34,7 @@ export interface AdminPageProps {
  */
 export default function AdminPage({ title, description, actions, breadcrumb, children, className }: AdminPageProps) {
   return (
-    <div data-slot="admin-page" className={cn(UI_SCOPE, 'text-foreground flex flex-col gap-4', className)}>
+    <div data-slot="admin-page" className={cn('text-foreground flex flex-col gap-4', className)}>
       <PageHeader
         title={title}
         description={description}

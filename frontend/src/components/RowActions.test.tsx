@@ -9,8 +9,8 @@ import RowActions from './RowActions'
 
 const post = vi.hoisted(() => vi.fn())
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { POST: (...args: unknown[]) => post(...args) },
   unwrap: async (value: unknown) => value,
 }))

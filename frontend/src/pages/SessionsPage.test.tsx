@@ -12,13 +12,13 @@ const post = vi.fn()
 const runProcess = vi.fn()
 const permissions = { value: new Set<string>() }
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args), POST: (...args: unknown[]) => post(...args) },
   unwrap: (value: unknown) => value,
+  runProcess: (...args: unknown[]) => runProcess(...args),
+  useAuth: () => ({ can: (p: string) => permissions.value.has(p) }),
 }))
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: (p: string) => permissions.value.has(p) }) }))
 
 const USER = '0190a6b2-0000-7000-8000-0000000000aa'
 const SESSION = {

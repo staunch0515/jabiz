@@ -15,7 +15,7 @@ import { ConfirmDialog } from '../components/confirm-dialog'
 import { Spinner } from '../components/spinner'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { AuthError, Outcome } from './frame'
 import { AUTH_NAMESPACE } from './messages'
 import { failure } from './problems'
@@ -129,7 +129,7 @@ export function SessionList({
   }
 
   return (
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-4', className)} data-testid="session-list">
+    <div className={cn('flex flex-col gap-4', className)} data-testid="session-list">
       <p className="text-muted-foreground text-sm">{t('sessions.hint')}</p>
       {done && (
         <Outcome ok testId="session-list-state">

@@ -12,7 +12,6 @@ import {
   Switch,
   TagsInput,
   Textarea,
-  UI_SCOPE,
   useFieldArray,
   useForm,
   useWatch,
@@ -317,7 +316,7 @@ export default function SchemaForm({
       <form
         id={id}
         noValidate
-        className={cn(UI_SCOPE, 'flex flex-col gap-4', className)}
+        className={cn('flex flex-col gap-4', className)}
         onSubmit={(event) =>
           // react-hook-form's handler made within the event: it reads the date fields' state as of now.
           form.handleSubmit(async (current) => {

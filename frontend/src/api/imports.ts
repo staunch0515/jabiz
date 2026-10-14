@@ -1,5 +1,4 @@
-import { api, sessionFetch, unwrap } from './client'
-import { ApiError, toApiError } from './problem'
+import { api, sessionFetch, unwrap, ApiError, toApiError } from '@jabiz/client'
 import { saveResponse } from './reports'
 import type { components } from '@jabiz/client'
 

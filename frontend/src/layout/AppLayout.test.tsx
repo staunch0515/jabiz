@@ -16,15 +16,16 @@ const auth = {
   idleTimeoutSeconds: 900 as number | null,
   dataPeriod: null as { from: string | null; to: string | null } | null,
 }
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => auth }))
-
-const idle = vi.hoisted(() => ({ onIdle: null as null | (() => void), seconds: null as number | null }))
-vi.mock('../auth/useIdleLock', () => ({
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
+  useAuth: () => auth,
   useIdleLock: (seconds: number | null, onIdle: () => void) => {
     idle.seconds = seconds
     idle.onIdle = onIdle
   },
 }))
+
+const idle = vi.hoisted(() => ({ onIdle: null as null | (() => void), seconds: null as number | null }))
 
 vi.mock('../meta/hooks', () => ({
   useMenus: () => ({
@@ -51,13 +52,12 @@ vi.mock('../extension', () => ({
 }))
 
 function renderLayout(path = '/data/carriers') {
-  // A data router, as in the application: the shell reads the routes' handles.
+  // A data router, as in the application.
   const router = createMemoryRouter(
     [
       {
         element: <AppLayout />,
         children: [
-          { path: '/migrated', handle: { ui: 'jabiz' }, element: <p>migrated page</p> },
           { path: '*', element: <p>page</p> },
         ],
       },
@@ -115,16 +115,11 @@ describe('AppLayout (the shell, decision D34)', () => {
     await userEvent.click(screen.getByRole('button', { name: /Appearance/ }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }))
     expect(document.documentElement).toHaveClass('dark')
-    // The Ant Design pages keep the light tokens whatever the choice.
-    expect(screen.getByText('page').closest('.light')).not.toBeNull()
+    // Every page follows it: nothing in the shell is pinned to the light tokens (phase 15d).
+    expect(document.querySelector('.light')).toBeNull()
+    expect(screen.getByText('page').closest('[data-slot="app-shell-content"]')).toHaveClass('bg-background')
     await userEvent.click(screen.getByRole('button', { name: /Appearance/ }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Light' }))
-  })
-
-  it('lets the pages built with @jabiz/ui follow the appearance', () => {
-    renderLayout('/migrated')
-    expect(screen.getByText('migrated page').closest('.light')).toBeNull()
-    expect(screen.getByText('migrated page').closest('[data-slot="app-shell-content"]')).toHaveClass('bg-background')
   })
 
   it('shows a session limited to a period', () => {

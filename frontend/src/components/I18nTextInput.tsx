@@ -1,4 +1,4 @@
-import { cn, Input, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, UI_SCOPE } from '@jabiz/ui'
+import { cn, Input, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from '@jabiz/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { I18nTextParams, Texts } from '../meta/i18nText'
@@ -41,7 +41,7 @@ export default function I18nTextInput({
   const set = (language: string, text: string) => onChange?.({ ...texts, [language]: text })
 
   return (
-    <Tabs value={active} onValueChange={setActive} data-testid={`i18n-${name}`} className={cn(UI_SCOPE, 'gap-2')}>
+    <Tabs value={active} onValueChange={setActive} data-testid={`i18n-${name}`} className="gap-2">
       <TabsList>
         {params.locales.map((language) => {
           const required = params.required.includes(language)

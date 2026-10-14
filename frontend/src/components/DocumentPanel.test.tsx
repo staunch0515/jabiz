@@ -1,7 +1,7 @@
+import { ApiError } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import { expectAccessible } from '../test/axe'
 import DocumentPanel from './DocumentPanel'
@@ -12,18 +12,16 @@ const downloadDocument = vi.fn()
 const previewDocument = vi.fn()
 let permissions = new Set<string>()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args) },
   unwrap: (value: unknown) => value,
+  runProcess: (...args: unknown[]) => runProcess(...args),
+  useAuth: () => ({ can: (p: string) => permissions.has('*') || permissions.has(p) }),
 }))
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
 vi.mock('../api/documents', () => ({
   downloadDocument: (...args: unknown[]) => downloadDocument(...args),
   previewDocument: (...args: unknown[]) => previewDocument(...args),
-}))
-vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ can: (p: string) => permissions.has('*') || permissions.has(p) }),
 }))
 
 const RUN = { runId: 'd-1', layoutId: 'commerce.order_confirmation', title: 'Order confirmation',

@@ -1,4 +1,4 @@
-import { compareDecimal, toDecimal } from './decimal'
+import { compareDecimal, toDecimal } from '@jabiz/client'
 import { controlOf, toWireValue } from './kinds'
 import { parseInstant } from './validation'
 import type { EntityMeta, FieldMeta } from './types'

@@ -1,14 +1,10 @@
+import { api, unwrap, ApiError, useAuth, runProcess, formatDateTime } from '@jabiz/client'
 import { Alert, AlertDescription, Button, notify, Spinner } from '@jabiz/ui'
 import { CircleAlert } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
 import { downloadDocument, previewDocument } from '../api/documents'
-import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
-import { runProcess } from '../lib/calls'
-import { formatDateTime } from '../meta/format'
 import SendDocumentModal from './SendDocumentModal'
 
 export interface DocumentPanelProps {

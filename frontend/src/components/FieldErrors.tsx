@@ -1,4 +1,4 @@
-import { cn, UI_SCOPE } from '@jabiz/ui'
+import { cn } from '@jabiz/ui'
 import type { Violation } from '../meta/types'
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
 export default function FieldErrors({ violations, id, className }: Props) {
   if (violations.length === 0) return null
   return (
-    <div id={id} data-slot="field-errors" className={cn(UI_SCOPE, 'flex flex-col gap-0.5', className)}>
+    <div id={id} data-slot="field-errors" className={cn('flex flex-col gap-0.5', className)}>
       {violations.map((v) => (
         <p
           key={v.ruleCode + v.message}

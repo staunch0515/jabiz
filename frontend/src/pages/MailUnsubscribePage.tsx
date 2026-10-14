@@ -1,7 +1,7 @@
+import { api } from '@jabiz/client'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
-import { api } from '../api/client'
 
 /**
  * Where the unsubscribe link of a notification mail leads (docs/design/18-numbering-approvals-tasks.md section 5.6):

@@ -1,7 +1,6 @@
-import { Button, FileUpload, UI_SCOPE } from '@jabiz/ui'
+import { formatBytes, uploadFile, ApiError } from '@jabiz/client'
+import { Button, FileUpload } from '@jabiz/ui'
 import type { TFunction } from 'i18next'
-import { formatBytes, uploadFile } from '../api/files'
-import { ApiError } from '../api/problem'
 import type { FileFieldMeta } from '../meta/types'
 import FilePreview from './FilePreview'
 
@@ -43,7 +42,7 @@ export function FileInput({
       ? t('file.accepted', { types: types || '—', max: formatBytes(field.maxBytes) })
       : undefined
   return (
-    <div className={`${UI_SCOPE} flex flex-col gap-2`}>
+    <div className={'flex flex-col gap-2'}>
       {value ? <FilePreview fileId={value} field={field} width={320} /> : null}
       <div className="flex flex-wrap items-start gap-2">
         <FileUpload

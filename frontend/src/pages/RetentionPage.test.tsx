@@ -12,16 +12,16 @@ const user = () => userEvent.setup()
 const get = vi.fn()
 const exportData = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args) },
   unwrap: (value: unknown) => value,
+  useAuth: () => ({ can: () => true }),
 }))
 vi.mock('../api/retention', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/retention')>()),
   exportData: (...args: unknown[]) => exportData(...args),
 }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: () => true }) }))
 vi.mock('../meta/hooks', () => ({
   useDatasets: () => ({ data: [{ id: 'urn:jabiz:dataset:platform:LedgerEntry', label: 'Entries' }] }),
 }))

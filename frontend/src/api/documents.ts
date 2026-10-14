@@ -1,4 +1,4 @@
-import { sessionFetch } from './client'
+import { sessionFetch } from '@jabiz/client'
 import { saveResponse } from './reports'
 
 /** What a preview reads: the layout's parameters, the point in time and the language (docs/design/22-documents.md). */

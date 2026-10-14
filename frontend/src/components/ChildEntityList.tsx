@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError } from '@jabiz/client'
 import {
   Button,
   Card,
@@ -14,8 +15,6 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
 import { actionsFor } from '../meta/actions'
 import { toRow, type Row } from '../meta/cells'
 import { dataColumns } from '../meta/dataColumns'

@@ -3,7 +3,7 @@ import { CheckIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 
 export interface StepItem {
   /** Distinguishes the step among its siblings; its position when absent. */
@@ -30,7 +30,7 @@ export function Steps({ items, current, className, ...rest }: StepsProps) {
     <ol
       data-slot="steps"
       aria-label={rest['aria-labelledby'] ? undefined : t('steps.label')}
-      className={cn(UI_SCOPE, 'flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-2', className)}
+      className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-2', className)}
       {...rest}
     >
       {items.map((item, index) => {
@@ -46,7 +46,6 @@ export function Steps({ items, current, className, ...rest }: StepsProps) {
             <span
               aria-hidden
               className={cn(
-                UI_SCOPE,
                 'flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-medium',
                 state === 'complete' && 'border-primary text-primary',
                 state === 'current' && 'border-primary bg-primary text-primary-foreground',

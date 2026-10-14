@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError, UserName } from '@jabiz/client'
 import {
   DataTable,
   DescriptionList,
@@ -12,9 +13,6 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
-import UserName from './UserName'
 
 interface Operation {
   processSeqId: number
