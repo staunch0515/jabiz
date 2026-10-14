@@ -60,7 +60,7 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | PG-1（平台） | `1.2/phase-16n-ui-content-view` | `MarkdownView`、`FilePreview` 移入 `@jabiz/ui` | 1 天 | 平台并行进行 |
 | QP1 | `1.2/quizbuks-2p-spa-accounts` | 两个 SPA（`quizbuks-web/app`、`quizbuks-web/sponsor`）、全部认证流程、App 的欢迎与账户页、商家的入驻与账户页、CI 与 e2e 骨架、部署 | 5 天 | 已完成（待评审，实施记录见计划） |
 | QP2 | `1.2/quizbuks-5p-play-pages` | 首页、详情、答题、结果、历史 | 4 天 | 待 QP1、PG-1 |
-| QP3a | `1.2/quizbuks-3p-content-pages` | 商家的 Quiz 列表与编辑 | 3.5 天 | 待 QP1、PG-1 |
+| QP3a | `1.2/quizbuks-3p-content-pages` | 商家的 Quiz 列表与编辑 | 3.5 天 | 已完成（待评审，实施记录见计划） |
 | QP3b | `1.2/quizbuks-4p-publishing-pages` | 发布列表、向导与操作 | 2.5 天 | 待 QP3a |
 | QP4 | `1.2/quizbuks-6p-payment-pages` | 商家钱包与充值、App 钱包与开通收款 | 3.5 天 | 待 QP1 |
 

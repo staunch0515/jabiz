@@ -13,12 +13,16 @@ import {
   SignUpForm,
   StepUpProvider,
   ThemeToggle,
+  Toaster,
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { LayoutDashboard, Store, UserRound } from 'lucide-react'
+import { FileQuestion, LayoutDashboard, Store, UserRound } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { QuizEditorPage } from './content/QuizEditorPage'
+import { QuizListPage } from './content/QuizListPage'
+import { quizIdOf, QUIZZES_PATH } from './content/paths'
 import { SPONSOR } from './messages'
 import { ACCOUNT_PATH, AccountPage } from './pages/AccountPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -47,9 +51,9 @@ function toSignIn() {
 }
 
 /**
- * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the sponsor profile
- * (onboarding) and the account; the content and publishing pages come with QP3, the wallet with QP4. The home page
- * leads to the onboarding until the sponsor is approved.
+ * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (QP3a; editing
+ * content needs no approval, publishing will), the sponsor profile (onboarding) and the account; the publishing pages
+ * come with QP3b, the wallet with QP4. The home page leads to the onboarding until the sponsor is approved.
  */
 function SignedIn({ path }: { path: string }) {
   const { t } = useTranslation(SPONSOR)
@@ -66,13 +70,17 @@ function SignedIn({ path }: { path: string }) {
   }
 
   let page: ReactNode
+  const quizId = quizIdOf(path)
   if (path === DASHBOARD) page = <DashboardPage />
+  else if (path === QUIZZES_PATH) page = <QuizListPage />
+  else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
   const items: ShellMenuItem[] = [
     { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
+    { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
   ]
@@ -182,6 +190,7 @@ export default function App() {
           <div className="bg-background text-foreground min-h-full">
             <Routes />
           </div>
+          <Toaster />
         </AuthProvider>
       </QueryClientProvider>
     </AppearanceProvider>

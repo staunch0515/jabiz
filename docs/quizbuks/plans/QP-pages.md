@@ -225,3 +225,41 @@
 - 已登录时打开 `/signup`、`/password-reset` 即回首页（两个 SPA）。
 - CI：工作流只读权限（`permissions: contents: read`）；`package` 作业检查 `/`、`/welcome`、`/sponsor/`、`/admin/` 的 CSP 头。部署说明写明设备上的刷新令牌对同源页面可读（D43 的已知限制）。
 
+
+## 实施记录（QP3a，2026-10-14）
+
+分支 `1.2/quizbuks-3p-content-pages`（从 `1.2/quizbuks` @ d6cb5b0 拉出，已含 QP1 与 PG-1）。只改 `.jabiz-app-paths` 中的路径，`tools/check-app-paths.sh` 通过；后端未改（所用的
+流程、模板、数据视图、字典与文件策略都已在 Q3 / Q4 中存在，逐一核对过），`src/qb/` 未改。
+
+- **页面**（`quizbuks-web/sponsor/src/content/`，左侧导航加"Quiz"）：
+  - `/quizzes`（M-20）：模板 `qb.sponsor.quizzes`，`DataTable` 由服务端分页、排序（修改时间、标题、题数），按标题搜索（防抖）；列：封面缩略图、标题（链接到编辑页）、
+    版本号与"之后有修改"、状态（字典 `quiz-status` 的服务端文案）与"已发布"、题数、资料数、最后修改；"新建 Quiz"只要标题（`QB_QUIZ_SAVE`），建好即进入编辑页。
+  - `/quizzes/:id`：读取经商家数据视图（模版按主键 `GET …/entities/{id}`，不是本人的或已移除即 404，页面显示"不存在"；子项按 `quizId` 分页读全），四个标签页：
+    - **Quiz**（M-21、M-22）：标题、简介（Markdown，`MarkdownView` 预览）、封面（`qb.content.image`）、时限（30–7 200 秒，非整数先在页面拒绝），一起 `QB_QUIZ_SAVE`。
+    - **题目**（M-24）：按顺序的卡片（题干、配图、分值、选项与正确标记）；对话框中编辑一道题连同全部选项（2–6 个的提示、文字、配图、正确、上下移、移除），`QB_QUESTION_SAVE`；
+      上移 / 下移以完整顺序 `QB_QUESTION_REORDER`，读回服务端的顺序后焦点回到被移动的题、`role="status"` 报告新位置；删除经确认 `QB_QUESTION_DELETE`。
+    - **资料**（M-23）：同样的卡片与操作；新建时以单选组选类型（字典 `material-kind`，以后不可改），只发送该类型的内容字段：文章（Markdown 与预览）、链接与视频链接
+      （只把 http(s) 地址做成链接，新标签页、`noopener noreferrer`；Q-3 不内嵌）、PDF（`qb.content.pdf`）、音频（`qb.content.audio`，下载）、图片组（`qb.content.image`，
+      每张一条说明即替代文本，可排序，≤ 20）。
+    - **版本**（M-27、M-28）：模板 `qb.sponsor.quiz-versions`（分页读全）；"查看"以 `qb.sponsor.quiz-version` 只读显示快照（含正确标记）；"复制"以 `QB_QUIZ_CLONE`
+      （带 `versionNo`）生成新草稿并进入其编辑页（即"恢复旧版本"）。
+    - 页头：状态、版本号、修改时间；"保存版本"（`QB_QUIZ_PUBLISH_VERSION`，被拒时一次列出服务端给出的全部原因，之后任何编辑都清除这份列表）、"复制"（草稿，可改标题）、
+      "删除"（确认后 `QB_QUIZ_DELETE`，回到列表）。
+  - **并发**：每次编辑都发送页面所见的 `revision` 作 `baseRevision`。`QB_QUIZ_CHANGED`、`QB_ORDER_MISMATCH`，或读回的 revision 比本页自己的编辑更新（别处改过、本页的表单没有它），
+    都显示"已在别处修改"（取得焦点）并停用全部编辑按钮，"重新加载"后表单从新内容重新开始。
+  - **文件**：上传只经 `@jabiz/client` 的 `uploadFile(策略)`；`FileUpload` 先按类型与大小挡一次（只为省往返），服务端按内容判断并重新编码图片；服务端的拒绝显示在该字段下。
+    图片经 `FilePreview` 显示（缩略图、放大），PDF 与音频为下载按钮。
+- **偏离计划**：
+  - 内容工坊的名字与手写类型放在 `sponsor/src/content/ids.ts`、`api.ts`，不放共用的 `src/qb/`（只有商家后台用；也避免与 QP2 同时改共用目录）。
+    `backend/quizbuks/CLAUDE.md` 第 5 节随之写明"只有一个 SPA 用到的功能"的放法。文案仍在命名空间 `sponsor` 中（`content/messages.ts` 由 `src/messages.ts` 合入）。
+  - **图片的变体按文件自己的列表选**（`ContentImage`，先读 `GET /api/files/{id}`）：平台不生成比原图宽的变体，按策略声明的宽度取 `w320` 会对小图得 404。
+    这是平台 `FilePreview` 的一般问题（`FilePreviewField.variants` 来自字段元数据而不是文件），可以以后在平台上改为按文件的变体；QuizBuks 现在自己先读一次。
+  - 页面加了 `Toaster`（`notify` 的成功与失败提示）。
+- **测试**：Vitest `content/api.test.ts`（草稿按顺序组装、移动、只接受 http(s) 的链接、过期判断、类型对应的内容字段、路径）与 `content/content.test.tsx`（列表与搜索、新建、
+  标题保存带 `baseRevision`、Markdown 预览、时限的本地检查、冲突 → 重新加载 → 以新 revision 继续、题目顺序与移动、新题连同选项的顺序、资料只发送其类型的字段与安全链接、
+  保存版本被拒的全部原因、不存在的 Quiz），共 16 个（商家后台合计 42 个）。
+  e2e `content.spec.ts`（3 个：建 Quiz、简介预览、封面、被内容拒绝的假 PNG、两道带图题目、移动与焦点、四类资料（文章、图片组、PDF、链接）、v1.0 / v1.1、
+  未改动再保存被拒、查看 v1.0、列表搜索；复制版本 → 删除副本 → 不存在、复制草稿；别处修改 → 提示 → 重新加载 → 继续保存、别人的 Quiz 不存在），
+  数据准备 `content.ts`（`png()`、`PDF`、`sponsor()`、`upload()`、`query()`、`completeQuiz()`，QP3b 复用）；`a11y.spec.ts` 加"Quiz 页面"（列表、新建、编辑页四个标签、
+  题目与资料对话框、版本查看、被拒与冲突、390 px），亮、暗都无违规。
+- **未做**：发布（QP3b）；AI 生成（Q8，列表只显示标记）；音频不在页面中播放（默认 CSP 没有 `media-src blob:`，以下载代替）。
