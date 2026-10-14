@@ -1,0 +1,26 @@
+/**
+ * The names the sponsor console's wallet calls on the server (backend/quizbuks, package `wallet`;
+ * docs/quizbuks/plans/Q6-payments.md). Only the sponsor console tops up, so they live here rather than in the shared
+ * `src/qb/ids.ts` (backend/quizbuks/CLAUDE.md section 5).
+ */
+
+/** Processes (`wallet.TopUpProcesses`). */
+export const WALLET_PROCESS = {
+  topUpStart: 'QB_TOPUP_START',
+} as const
+
+/** SQL templates (`queries/qb/sponsor`). */
+export const WALLET_TEMPLATE = {
+  wallet: 'qb.sponsor.wallet',
+  topUps: 'qb.sponsor.topups',
+} as const
+
+/** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */
+export const WALLET_DATASET = {
+  topUps: 'urn:jabiz:dataset:sponsor:QbTopUp',
+} as const
+
+/** Dictionaries, labelled by the server in the request's language. */
+export const WALLET_DICTIONARY = {
+  topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
+} as const

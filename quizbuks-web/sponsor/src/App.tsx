@@ -17,7 +17,7 @@ import {
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { FileQuestion, LayoutDashboard, Store, UserRound } from 'lucide-react'
+import { FileQuestion, LayoutDashboard, Store, UserRound, Wallet } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QuizEditorPage } from './content/QuizEditorPage'
@@ -30,6 +30,9 @@ import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
+import { topUpIdOf, WALLET_PATH } from './wallet/api'
+import { TopUpPage } from './wallet/TopUpPage'
+import { WalletPage } from './wallet/WalletPage'
 
 const DASHBOARD = '/dashboard'
 const ONBOARDING = '/onboarding'
@@ -71,10 +74,13 @@ function SignedIn({ path }: { path: string }) {
 
   let page: ReactNode
   const quizId = quizIdOf(path)
+  const topUpId = topUpIdOf(path)
   if (path === DASHBOARD) page = <DashboardPage />
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === ONBOARDING) page = <OnboardingPage />
+  else if (path === WALLET_PATH) page = <WalletPage />
+  else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
@@ -82,6 +88,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
     { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
+    { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
   ]
   return (

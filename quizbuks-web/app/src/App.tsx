@@ -16,7 +16,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { History, House, UserRound, type LucideIcon } from 'lucide-react'
+import { History, House, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
@@ -34,6 +34,9 @@ import { readMyProfile } from './qb/api'
 import { QB } from './qb/messages'
 import { Link, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
+import { PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { PayoutPage } from './wallet/PayoutPage'
+import { WalletPage } from './wallet/WalletPage'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -45,10 +48,11 @@ let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
 
-/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; the wallet comes with QP4). */
+/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1). */
 const NAV: { path: string; key: string; icon: LucideIcon }[] = [
   { path: HOME, key: 'nav.home', icon: House },
   { path: HISTORY, key: 'nav.history', icon: History },
+  { path: WALLET_PATH, key: 'wallet.nav', icon: Wallet },
   { path: ACCOUNT_PATH, key: 'nav.account', icon: UserRound },
 ]
 
@@ -81,9 +85,9 @@ function Header() {
 /** The bottom navigation of a phone app, kept on screen; the current page is marked for assistive technology. */
 function BottomNav({ path }: { path: string }) {
   const { t } = useTranslation(APP)
-  // A publication's page belongs to home, an attempt's to the history.
+  // A publication's page belongs to home, an attempt's to the history, the payout account to the wallet.
   const item = itemPage(path)
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path
+  const section = item ? (item.page === 'p' ? HOME : HISTORY) : path === PAYOUT_PATH ? WALLET_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-background fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)]">
@@ -135,6 +139,8 @@ function SignedIn({ path }: { path: string }) {
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
   else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
   else if (path === HISTORY) page = <HistoryPage />
+  else if (path === WALLET_PATH) page = <WalletPage />
+  else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else if (item?.page === 'p') page = <PublicationPage key={item.id} publicationId={item.id} country={country} />
   else if (item?.page === 'play') page = <PlayPage key={item.id} attemptId={item.id} />

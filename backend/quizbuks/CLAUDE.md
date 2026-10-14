@@ -120,6 +120,9 @@
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
 - **答题页**（App，QP2）：倒计时只按服务器时间（`deadline` 与 `serverTime` 的偏移，`play/countdown.ts`）；保存进度只经 `play/saver.ts`（防抖、一次一个、失败保留重发）；
   开始的输出（不含正误）存在 `sessionStorage`，只供刚完成的结果页显示题目文字（计划 A-3），之后只显示分数与逐题对错；退出登录时清除。
+- **支付页**（QP4，`sponsor/src/wallet/`、`app/src/wallet/`）：页面只读记录、从不入账；Stripe 的跳回（`?checkout=`、`?onboarding=`）只决定显示，结果一律等服务端的记录。
+  轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
+  刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。

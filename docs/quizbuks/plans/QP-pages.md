@@ -304,3 +304,45 @@
   数据准备 `content.ts`（`png()`、`PDF`、`sponsor()`、`upload()`、`query()`、`completeQuiz()`，QP3b 复用）；`a11y.spec.ts` 加"Quiz 页面"（列表、新建、编辑页四个标签、
   题目与资料对话框、版本查看、被拒与冲突、390 px），亮、暗都无违规。
 - **未做**：发布（QP3b）；AI 生成（Q8，列表只显示标记）；音频不在页面中播放（默认 CSP 没有 `media-src blob:`，以下载代替）。
+
+## 实施记录（QP4，2026-10-14）
+
+分支 `1.2/quizbuks-6p-payment-pages`（从 `1.2/quizbuks` @ 8d2e42c 拉出，已含 QP1、QP2、QP3a）。只改 `.jabiz-app-paths` 中的路径；`src/qb/` 未改（两份仍相同）。
+第 4 节 QP4 各行所用的流程、模板、数据视图与字典都已存在并照用：`QB_TOPUP_START`、`qb.sponsor.wallet`、`qb.sponsor.topups`、`urn:jabiz:dataset:sponsor:QbTopUp`、
+字典 `topup-status`；`QB_PAYOUT_ONBOARD`、`qb.app.wallet`、`qb.app.ledger`、`qb.app.payout-account`、字典 `payout-account-status`。
+
+- **功能目录**（照 QP3a 的放法，不进 `qb/`）：`sponsor/src/wallet/` 与 `app/src/wallet/`，各有 `ids.ts`、`api.ts`（手写类型与调用）、`messages.ts`（并入各自的命名空间
+  `sponsor` / `app`，由页面自己引入，`src/messages.ts` 不改）；两处相同的 `poll.ts`（有界轮询）与 `stripePage.ts`（跳转前检查地址）各一份。
+- **商家 `/wallet`**（M-04）：可用于奖励的金额（余额 − 争议冻结，同 `QbWallets.available`）、等待充值的奖励（提示按顺序补发）、余额、累计充值、已付奖励、退款与扣回；
+  充值记录 `DataTable`（服务端分页，按开始时间、金额、到账时间排序；状态用服务端字典；可支付的一行为"继续支付"）。"充值"对话框只收 Kudos 的正整数，
+  范围等由服务端检查并把 `QB_TOPUP_AMOUNT_RANGE` 等文案显示在字段下；同一金额的重试用同一个 `Idempotency-Key`。成功后进入充值页。左侧导航加"钱包"（在"商家资料"之后）。
+- **商家 `/wallet/topups/:id`**：按主键读商家自己的 `QbTopUp`（`GET …/entities/{id}`；不是自己的即"不存在"）。
+  - 刚在本标签页发起的（`sessionStorage` 中的一次性标记）：读到 `OPEN` 即跳转 Checkout，只一次；从列表或浏览器"后退"打开时显示"继续支付"按钮，不自动离开（避免后退循环）。
+  - `?checkout=paid`：读到 `PAID` / `EXPIRED` / `FAILED` 为止，期间说明"等待 Stripe 确认"，不显示再次支付；**浏览器跳回不入账、不调用任何流程**。
+  - `?checkout=cancelled`：Checkout 在到期前仍可支付，显示期限与"继续支付"；桩的"过期"在服务端记下 `EXPIRED` 后显示"已过期，未扣款"。
+  - 轮询有界（`poll.ts`：等待 1、1、2、2、3 秒后每 5 秒；创建 60 秒、确认 90 秒、取消 30 秒），超时说明"稍后自动更新"并提供"再次查看"；离开页面即停止。
+- **App `/wallet`**（U-50 – U-52）：Kudos、累计获得、等待商家支付（笔数与金额，说明扣除手续费）、转出中；收款账户的状态与入口；交易明细（`qb.app.ledger`，按 Quiz 搜索，
+  全部 / 奖励 / 转出，分页"显示更多"，失败或撤回的转出说明金额已退回）。底部导航加回"钱包"（首页、记录、钱包、账户），收款页属于钱包。
+- **App `/wallet/payout`**（U-53）：状态用服务端字典；"在 Stripe 开通 / 继续"先读当前的链接，再 `QB_PAYOUT_ONBOARD`，读到**新的**链接（与之前的地址或期限不同：
+  Stripe 的链接只能用一次）后跳转；`?onboarding=done` 读到 Stripe 的报告（`ENABLED` / `RESTRICTED` / `DEAUTHORIZED`）为止，返回本身不改变任何状态；
+  `?onboarding=refresh` 说明链接已过期或已用并提供新的；已解除关联的不能在此重新开通。
+- **跳转地址的检查**（`stripePage.ts`）：只跟随绝对的 `https:` 地址（不含用户信息，≤ 2048 字符）；本地桩（开发与 e2e）的 `http:` 只在页面本身也在本机（`localhost`、
+  `127.0.0.1`、`[::1]`）时接受，与服务端 `StripeSettings` / `PayoutSettings` 对前缀的规则一致。地址本来只来自本人的记录，且服务端写入前已按前缀核对；
+  页面再查一次，任何读到的值都不能使它成为开放重定向或执行脚本。客户端没有任何密钥或桩的配置。
+- **后端（唯一改动）**：`application.yml` 加 `quizbuks.stripe.checkout-url-prefix: ${QB_STRIPE_CHECKOUT_URL_PREFIX:https://checkout.stripe.com/}`，与 `connect-url-prefix`
+  一致（QP2 记下的缺口）。缺省即 Stripe 自己的地址，行为不变；正式模式下 `StripeSettings.problems()` 仍拒绝 Stripe 以外的前缀，测试模式只接受 https 或本机地址。
+  测试 `StripeAddressesConfigTest` 读 `application.yml`，断言两个前缀缺省为 Stripe、可由环境变量改指桩。`quizbuks.yml` 的 e2e 作业因此删去
+  `QUIZBUKS_STRIPE_CHECKOUTURLPREFIX`（只留 `QB_STRIPE_CHECKOUT_URL_PREFIX`）；`deploy/quizbuks/README.md` 的变量表加上该变量。
+- **测试**：Vitest 商家后台新增 `wallet/api.test.ts`（地址检查、金额解析、返回参数、可支付判断、轮询的退避、超时、失败重读与中止）、`wallet/wallet.test.tsx`
+  （钱包的金额与列表、对话框的本地与服务端拒绝、发起 → 等待打开 → 只跳转一次、不安全的地址不跳转、再次打开只给按钮、返回"paid"只读不调用流程、超时后停止轮询、
+  取消后可再支付、经浏览器缓存返回时重新给出按钮、过期、别人的充值）与 `wallet/messages.test.ts`，共 22 个（商家后台合计 68 个）；App 新增 `wallet/stripe.test.ts` 与 `wallet/wallet.test.tsx`
+  （钱包与交易、筛选与搜索的请求、等待新的开通链接再跳转、不安全的链接、服务端拒绝、返回"done"等 Stripe 的报告、refresh、已解除），共 17 个（App 合计 82 个）。
+  e2e `topup.spec.ts`（亮、暗各一次：钱包 → 充值对话框 → 桩的 Checkout → 支付 → 返回页显示已到账 → 钱包 1,500 Kudos；另一项：服务端拒绝金额、
+  未支付即以"paid"返回不入账、从列表再次打开只给按钮、桩的"过期"→ 返回显示已过期、余额仍为 0）与 `payout.spec.ts`（亮、暗各一次：经接口得到一笔奖励 →
+  钱包与交易 → 收款页 → 桩的开通页 → 启用 → 返回显示已开通；另一项：refresh → 新链接、未完成 → 再取新链接），数据准备在 `e2e/tests/wallet.ts`；每个新页面都过 axe（App 另查 1280 px）。
+- **偏离计划**：
+  - 充值页按主键读取（`GET …/entities/{id}`），不按 `topUpId` 筛选：`QbTopUp` 的列表视图不允许按主键筛选（平台 `FILTER_NOT_ALLOWED`），按主键读同样只给本人的记录。
+  - "已配置的桩前缀"在客户端不另设配置：本机地址只在页面也在本机时接受（见上），生产构建与 e2e 构建相同。
+  - 交易明细的金额以 +/− 区分奖励与转出；商家的交易明细（A-4）仍属 Q9。
+- **本机验证**：`./gradlew :quizbuks:check` 通过；两个 SPA 的 lint / typecheck / test、`app:check`、`diff -r src/qb`、e2e 类型检查通过；e2e 全部 27 项
+  （含 `topup.spec` 3 项、`payout.spec` 3 项）对打包的 jar、Mailpit 与 Stripe 桩通过，环境中不再设置 `QUIZBUKS_STRIPE_CHECKOUTURLPREFIX`。
