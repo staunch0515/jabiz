@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Collapsible } from 'radix-ui'
 import { ChevronRightIcon, type LucideIcon } from 'lucide-react'
 
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Separator } from './ui/separator'
 import {
   Sidebar,
@@ -51,16 +51,14 @@ export interface AppShellProps {
   /** The page. */
   children: ReactNode
   /**
-   * Classes of the page's container. While Ant Design pages remain (phase 15) the admin keeps their area in the
-   * light theme (`light`), which the scoped preflight does not reach.
+   * Classes of the page's container (its background, for one).
    */
   contentClassName?: string
 }
 
 /**
  * The frame of a signed-in application (decision D34 item 4): a collapsible sidebar (a sheet on narrow screens,
- * Ctrl/⌘+B toggles it), a header bar and the page. The sidebar and header carry `.jabiz-ui`; the page area does
- * not, so pages built with Ant Design keep their own styles until they move.
+ * Ctrl/⌘+B toggles it), a header bar and the page.
  */
 export function AppShell({ brand, navigation, sidebarFooter, header, children, contentClassName }: AppShellProps) {
   return (
@@ -79,7 +77,6 @@ export function AppShell({ brand, navigation, sidebarFooter, header, children, c
         <header
           data-slot="app-shell-header"
           className={cn(
-            UI_SCOPE,
             'bg-background text-foreground sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b px-3',
           )}
         >

@@ -1,10 +1,10 @@
+import { ApiError } from '@jabiz/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import LoginPage from './LoginPage'
-import { ApiError } from '../api/problem'
 import { expectAccessible } from '../test/axe'
 
 const signIn = vi.fn()
@@ -12,17 +12,15 @@ const verify = vi.fn()
 const providers = vi.fn()
 const startProviderSignIn = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => providers(...args) },
   unwrap: (value: unknown) => value,
-}))
-vi.mock('../auth/oidc', () => ({ startProviderSignIn: (...args: unknown[]) => startProviderSignIn(...args) }))
-
-vi.mock('../auth/AuthContext', () => ({
+  startProviderSignIn: (...args: unknown[]) => startProviderSignIn(...args),
   useAuth: () => ({ signIn, verify, signedIn: false, ready: true }),
   lastUserName: () => 'amy',
 }))
+
 let home: string | undefined
 vi.mock('../extension', () => ({
   get extension() {

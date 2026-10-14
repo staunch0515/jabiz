@@ -10,11 +10,11 @@ test('a process runs from its generated form', async ({ page }) => {
   await page.getByLabel('accountCode').fill(code)
   await page.getByLabel('accountName').fill(`E2E account ${code}`)
   await page.getByLabel('accountType').fill('ASSET')
-  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await page.getByRole('button', { name: '执行', exact: true }).click()
   await expect(page.getByTestId('process-result')).toContainText(code)
 
   // A missing required value is refused before sending.
   await page.reload()
-  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await page.getByRole('button', { name: '执行', exact: true }).click()
   await expect(page.getByText('accountCode: REQUIRED')).toBeVisible()
 })

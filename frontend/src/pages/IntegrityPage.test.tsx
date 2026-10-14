@@ -9,13 +9,13 @@ import IntegrityPage from './IntegrityPage'
 const get = vi.fn()
 const runProcess = vi.fn()
 
-vi.mock('../api/client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api/client')>()),
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: { GET: (...args: unknown[]) => get(...args) },
   unwrap: (value: unknown) => value,
+  runProcess: (...args: unknown[]) => runProcess(...args),
+  useAuth: () => ({ can: () => true }),
 }))
-vi.mock('../lib/calls', () => ({ runProcess: (...args: unknown[]) => runProcess(...args) }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ can: () => true }) }))
 
 const HEAD = {
   sealNo: 12, sealedTime: '2026-02-05T15:00:00Z', rowCount: 40, keyId: 'k1', currentKeyId: 'k1',

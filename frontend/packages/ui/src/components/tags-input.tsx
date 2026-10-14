@@ -3,7 +3,7 @@ import { XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Badge } from './ui/badge'
 
 type InputAttributes = Omit<
@@ -52,7 +52,6 @@ export function TagsInput({
     <div
       data-slot="tags-input"
       className={cn(
-        UI_SCOPE,
         'border-input dark:bg-input/30 flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border bg-transparent px-2 py-1 shadow-xs',
         'focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]',
         'has-aria-invalid:border-destructive',
@@ -69,7 +68,7 @@ export function TagsInput({
                 {!locked && (
                   <button
                     type="button"
-                    className={cn(UI_SCOPE, 'hover:bg-accent focus-visible:ring-ring/50 rounded-sm p-0.5 outline-none focus-visible:ring-[3px]')}
+                    className="hover:bg-accent focus-visible:ring-ring/50 rounded-sm p-0.5 outline-none focus-visible:ring-[3px]"
                     aria-label={t('tags.remove', { tag })}
                     onClick={() => onChange(value.filter((other) => other !== tag))}
                   >
@@ -88,7 +87,7 @@ export function TagsInput({
         disabled={disabled}
         readOnly={readOnly}
         placeholder={value.length === 0 ? (placeholder ?? t('tags.placeholder')) : undefined}
-        className={cn(UI_SCOPE, 'placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent py-1 text-base outline-none md:text-sm')}
+        className="placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent py-1 text-base outline-none md:text-sm"
         onChange={(event) => {
           const next = event.target.value
           // While an input method composes, the text is not final: separators are taken once it is committed.

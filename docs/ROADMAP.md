@@ -20,7 +20,7 @@
 | 12 | 对 AI 友好（以后） | — | ☐ 未开始 |
 | 13 | 平台与应用分开、文件、公开访问、内容编辑、版本线 | 15–20 天 | ☑ 13a–13e 已完成；13f PR 待合并 |
 | 14 | 应用所需的通用业务能力（由 finance 提出，14a–14r） | 45–58 天 | ☑ 已合入（线 1.1） |
-| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ◐ 15a 已完成（PR #105）；15b-1、15b-2 已完成；15c-1、15c-2 已完成；15d 计划中 |
+| 15 | 后台前端改用 shadcn/ui（线 1.2，不兼容，15a–15d，决策 D34） | 17–24 天 | ☑ 已完成（15a PR #105；15b-1、15b-2、15c-1、15c-2、15d 已完成） |
 | 16 | 应用所需的通用能力（由 QuizBuks 提出，16a–16g：事务邮件、登录入口与自助注册、应用前端库与 PWA、入站 Webhook、异步外部作业、OIDC 自动开户、会话列表） | 20–28 天 | ◐ 进行中：16h 已合入；16a 已合入；16i 已完成；16l 已完成；16d 已完成（PR 待创建）；16e-1 已完成（PR #113）；16e-2 已完成（PR #119）；16g 已完成（PR 待创建）；决策 D35–D39 已确认 |
 
 **版本线**（决策 D21、17 §1）：平台按不兼容版本分线，线号在 `.jabiz-platform-line`；各阶段在其所在线的平台分支上进行。
@@ -1381,16 +1381,65 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业）44 个用例全部通过；`.
 
 **15c-2 已知问题**
 - antd、ProComponents、icons、cssinjs 与 React 19 补丁仍在依赖与外壳中（`App.tsx` 的 provider、`main.tsx`、`index.css` 的层 `antd` 与 `.ant-tag` 规则），由 15d 删除；
-  路由的 `handle: JABIZ_UI` 现在标在全部页面上，15d 连同开关一起去掉。
-- preflight 仍是作用域的（`.jabiz-ui`）：扩展自己写的元素要放进 `UI_SCOPE` 容器才有重置（15d 改为全局）。
+  路由的 `handle: JABIZ_UI` 现在标在全部页面上，15d 连同开关一起去掉。（15d 已解决）
+- preflight 仍是作用域的（`.jabiz-ui`）：扩展自己写的元素要放进 `UI_SCOPE` 容器才有重置（15d 改为全局）。（15d 已解决）
 - 账户设置中的邮件订阅与语言仍未加入（按确认不放进 15c），由单独的小项按 `ACCOUNT_SECTIONS` 加节。
-- e2e 中仍有为 antd 两字按钮写的 `/查\s*询/` 一类名称（15d 收紧）。
+- e2e 中仍有为 antd 两字按钮写的 `/查\s*询/` 一类名称（15d 收紧）。（15d 已解决）
 
 ### 15d 删除 antd（2–2.5 天）
 
-计划中：删除 antd、`@ant-design/*` 与 React 19 补丁；`App.tsx` 去掉 antd 的 provider、语言包、`ACCESSIBLE_THEME` 与 `JABIZ_UI`；preflight 改为全局；
-删除 11 个只做重新导出的文件；平台前端与 e2e 的 lint 禁止 antd 与 `.ant-*`；文档（12、`guide/admin-extension.md`、功能清单、CLAUDE.md §2、README、00、08、17）。
-验收：`frontend/package.json` 中没有 antd 系依赖；e2e 与 a11y 不再使用 `.ant-*` 选择器；12 与扩展指南改写完毕；ROADMAP 记录产物大小（低于 15a 之前）。
+依据：决策 D22、D34；12 §1、§9、§11、§12；15c-1、15c-2 的出入与已知问题。目标：平台前端不再依赖 Ant Design；preflight 改为全局；
+e2e 与 a11y 不再按 `.ant-*` 找元素，并由 lint 守住；文档改写。**无后端改动，无新表、无迁移，无新依赖**（只删依赖）。
+
+**确认**：2026-10-13，待确认项全部按缺省（15d 后保留 `UI_SCOPE` 的导出与扩展 lint 的 `NO_ANT_DESIGN`，平台前端也用同一条；preflight 改为全局、不给应用 SPA 留作用域版本；
+收紧 e2e 中 `/查\s*询/` 一类名称；`dayjs` 不删）。
+
+**要求**
+1. 依赖：`frontend/package.json` 与 lockfile 删除 `antd`、`@ant-design/pro-components`、`@ant-design/icons`、`@ant-design/cssinjs`、`@ant-design/v5-patch-for-react-19`；`dayjs` 保留。
+2. 外壳：`main.tsx` 删除 React 19 补丁；`App.tsx` 删除 `StyleProvider`、`ConfigProvider`、antd 的 `App` 与语言包、`ACCESSIBLE_THEME`、`JABIZ_UI`（`appRoutes` 仍导出）；
+   `AppLayout` 删除 `isJabizPage` 与内容区的亮色固定；`extension/registry.ts` 的 `extensionRoutes` 随标记删除。
+3. 样式：`index.css` 的层为 `theme, base, components, utilities`，删除 `.ant-tag` 规则；`theme.css` 全局引入 `tailwindcss/preflight.css`，`dark` 变体与 `color-scheme`
+   不再排除 `.light`；删除作用域 preflight 的脚本、生成的 CSS 与测试；`UI_SCOPE` 保留导出，是没有样式的类名。
+4. 删除只做重新导出的文件，页面与测试（含 `vi.mock`）改为引用 `@jabiz/client` / `@jabiz/ui`。
+5. 防回退：平台前端的 eslint 以与扩展同一条 `NO_ANT_DESIGN` 禁止 antd 与 `@ant-design/*`；e2e 的 eslint 拒绝含 `.ant-` 的字符串与模板；e2e 的按钮名称改为精确的文字。
+6. 记录产物大小；文档（12、`guide/admin-extension.md`、功能清单、CLAUDE.md §2、README、00、08、17）。
+
+**15d 状态**：☑ 已完成（分支 `1.2/phase-15d-remove-antd`，PR 待建）。
+`pnpm lint`、`typecheck`、`test`（95 个文件、711 个用例，评审修正之后）、`build`、`check:api`、`ext:check`、`app:check ../backend/app/portal` 通过，示范门户自己的 `lint`、`typecheck`、`test` 通过；
+e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用例全部通过，在同一数据库上再运行一次也全部通过；`./gradlew check` 通过（含前端构建与 `platformCheck`）。
+
+**15d 与计划的出入**
+- 只做重新导出的文件实为 13 个：计划的 11 个之外还有 `api/client.ts` 与 `meta/decimal.ts`，一并删除。原来分别 mock 几个重新导出模块的测试，
+  改为一个 `vi.mock('@jabiz/client', importOriginal)`，保留其余导出、只替换用到的函数。
+- `UI_SCOPE` 不只保留导出：组件与页面上近 300 处用法一并去掉（shadcn 组件回到上游的写法），它只剩一个带 `@deprecated` 的常量；`app-shell` 测试中查作用域类的用例删除。
+- `theme.css` 在 `base` 层另给 `body` 背景与文字（token），并在 `:root` / `.dark` 上设 `color-scheme`：暗色外观下页面以外的画布（整页截图中侧栏下方、滚动越界处）原来是白的。
+  减少动画的规则改为作用于全部元素（原来只作用于 `.jabiz-ui`）。
+- `chunkSizeWarningLimit` 没有删除，而是由 3 000 降到 1 500 kB：后台是一个 1 316 kB 的块（不分块），删除后每次构建都会出现 Vite 500 kB 的提示；1 500 kB 在体积重新明显增长时才提示。
+- 评审后的修正（同一分支，各有测试）：外壳内容区 `text-sm`（见下）；`MarkdownView` 在全局 preflight 下没有样式，`@jabiz/ui` 新增 `styles/markdown.css`
+  （`.markdown-view` 内的标题、列表、链接、代码、引用与表格，层 `components`，只用 token，不加 `@tailwindcss/typography`）；退订页去掉内联样式，改用工具类；
+  `theme.test.ts` 另查 `:root` 的 `color-scheme: light` 与 `body` 的背景与文字 token；`AdminPage` 的过时注释与 `className={'…'}` 的残留。
+- 测试的 `setup.ts` 删除只为 antd 准备的 `getComputedStyle` 包装（没有它全部测试照常通过，也没有 jsdom 的"未实现"提示）；`matchMedia` 等桩照留。
+- `App.test.tsx` 改为检查哪些路由不需要登录（登录与邮件链接），其余页面都在登录后的外壳内；`AppLayout.test.tsx` 改为断言暗色时外壳内没有 `.light`；
+  `a11y.spec` 改为断言页面上没有 `.light`。
+- 门户与示范扩展的截图对比（删除前后，亮、暗两种外观，Playwright 整页截图，像素比较）：门户的登录、注册、订单、下单、账户页只有数据不同（订单号、时间、用户名）。
+  后台：14px 原来来自 antd 的 `App` 包裹层（`.ant-app`），不是 `body`；删除后没有写字号的文字变成浏览器缺省的 16px（报表目录中报表的名称、安全设置中两步验证的状态句与会话列表的设备名）。
+  评审后外壳的内容区加上 `text-sm`（平台页面与扩展的路由仍是 14px；登录与邮件链接页、门户与应用 SPA 是 16px），这些页面回到 15c 的字号，只因行高从 antd 的 1.5715 变为
+  Tailwind `text-sm` 的 1.43 而矮几个像素（报表目录 9 px、安全设置 3–6 px）；其余页面（列表、流程、待办、库存概览、防篡改）只有 1 px 以内的偏移与数据差异；
+  暗色外观下长页面在视口以下的画布由白变暗。
+  应用 SPA 合并 15d 后请自查依赖浏览器默认样式的元素（`guide/app-spa.md`）。
+
+**15d 产物大小**（`vite build`，未压缩 / gzip）：之前 JS 1 584.4 kB / 487.1 kB、CSS 84.3 kB / 14.0 kB；之后 JS 1 316.1 kB / 401.4 kB、CSS 83.0 kB / 14.2 kB（评审后加上 Markdown 的样式；之前为 81.2 kB / 13.8 kB）
+（15a 之前：JS 2 651.0 kB / 819.2 kB、CSS 0.3 kB）。
+
+**验收标准**（15d）
+- [x] `frontend/package.json` 中没有 antd 系依赖，React 19 补丁已删除；lint 禁止今后再引用（平台前端、两个包与扩展同一条规则，有测试）。
+- [x] e2e 与 a11y 不再使用 `.ant-*`，并由 lint 守住（有测试）；按钮名称是精确的文字。
+- [x] 12、`guide/admin-extension.md`、功能清单改写完毕；CLAUDE.md §2、README、00、08、17 已同步（另有 `guide/app-spa.md`）。
+- [x] 前端全部检查与 `./gradlew check` 通过；产物大小已记录，低于 15a 之前。
+
+**15d 已知问题**
+- 后台仍是一个 JS 块（1 316 kB），没有按路由分块。
+- 账户设置中的邮件订阅与语言仍未加入（15c 起的未完成项）。
 
 ## 阶段 16：应用所需的通用能力（由 QuizBuks 提出，线 1.2）
 

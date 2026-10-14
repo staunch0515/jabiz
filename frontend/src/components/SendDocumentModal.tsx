@@ -1,3 +1,4 @@
+import { ApiError, runProcess } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -17,8 +18,6 @@ import {
 import { CircleAlert, Plus } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/problem'
-import { runProcess } from '../lib/calls'
 
 export interface SendDocumentModalProps {
   /** The issued document to send; the dialog is closed when absent. */

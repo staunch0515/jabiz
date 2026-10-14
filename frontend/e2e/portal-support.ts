@@ -85,7 +85,7 @@ export async function signInToPortal(page: Page, customer: Customer) {
   await page.goto(`${PORTAL}login`)
   await page.getByPlaceholder('用户名').fill(customer.userName)
   await page.getByPlaceholder('密码').fill(customer.password)
-  await page.getByRole('button', { name: /登\s*录/ }).click()
+  await page.getByRole('button', { name: '登录', exact: true }).click()
   await page.waitForURL(`**${PORTAL}orders`)
   await expect(page.getByRole('heading', { name: '我的订单' })).toBeVisible()
 }

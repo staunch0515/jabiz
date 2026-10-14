@@ -7,7 +7,6 @@ import {
   BreadcrumbSeparator,
   cn,
   PageHeader,
-  UI_SCOPE,
 } from '@jabiz/ui'
 import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -30,12 +29,11 @@ export interface AdminPageProps {
 
 /**
  * A page of the admin built with @jabiz/ui (decision D34): its header (breadcrumb, the one <h1>, actions) and
- * content, within the preflight's scope. Replaces ProComponents' `PageContainer`; the route that shows it carries
- * `handle: { ui: 'jabiz' }`, so the shell does not pin it to the light appearance.
+ * content. Replaces ProComponents' `PageContainer`.
  */
 export default function AdminPage({ title, description, actions, breadcrumb, children, className }: AdminPageProps) {
   return (
-    <div data-slot="admin-page" className={cn(UI_SCOPE, 'text-foreground flex flex-col gap-4', className)}>
+    <div data-slot="admin-page" className={cn('text-foreground flex flex-col gap-4', className)}>
       <PageHeader
         title={title}
         description={description}

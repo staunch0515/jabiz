@@ -19,11 +19,11 @@ test.describe('the generated form', () => {
     await drawer.getByLabel('信用额度').fill('500000')
     await drawer.getByLabel('联系邮箱').fill('ops@echo.example')
     await drawer.getByRole('switch').click()
-    await drawer.getByRole('button', { name: /保\s*存/ }).click()
+    await drawer.getByRole('button', { name: '保存', exact: true }).click()
     await expect(drawer).toBeHidden()
 
     await page.getByLabel('代码').first().fill(code)
-    await page.getByRole('button', { name: /查\s*询/ }).click()
+    await page.getByRole('button', { name: '查询', exact: true }).click()
     const row = await searchedRow(page, code)
     await expect(row).toContainText('Echo Express')
     await expect(row).toContainText('德国')
@@ -31,7 +31,7 @@ test.describe('the generated form', () => {
     await row.getByTestId('row-edit').click()
     await expect(drawer.getByLabel('代码')).toBeDisabled() // immutable
     await drawer.getByLabel('名称').fill('Echo Express Ltd')
-    await drawer.getByRole('button', { name: /保\s*存/ }).click()
+    await drawer.getByRole('button', { name: '保存', exact: true }).click()
     await expect(drawer).toBeHidden()
     await expect(row).toContainText('Echo Express Ltd')
 
@@ -55,14 +55,14 @@ test.describe('the generated form', () => {
     await signIn(page)
     await page.goto(datasetPath(CARRIERS))
     await page.getByLabel('代码').first().fill(code)
-    await page.getByRole('button', { name: /查\s*询/ }).click()
+    await page.getByRole('button', { name: '查询', exact: true }).click()
     const row = await searchedRow(page, code)
     await row.getByTestId('row-edit').click()
     const drawer = entityForm(page)
     await drawer.getByLabel('名称').fill('Sierra Shipping 2031')
     await drawer.getByLabel('生效时间').fill('2031-01-01 09:00:00')
     await drawer.getByLabel('生效时间').press('Enter')
-    await drawer.getByRole('button', { name: /保\s*存/ }).click()
+    await drawer.getByRole('button', { name: '保存', exact: true }).click()
     await expect(drawer).toBeHidden()
 
     // Scheduled, not current: the list still shows the old name, the history has the version at that time.

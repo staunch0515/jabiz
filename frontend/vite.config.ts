@@ -43,17 +43,19 @@ export default defineConfig({
       { find: 'virtual:jabiz-extension', replacement: extensionEntry(extension, root) },
       { find: /^@jabiz\/admin$/, replacement: resolve(root, 'src/lib/index.ts') },
     ],
-    // The extension lies outside this project and has no node_modules of its own: its imports of React, antd and
-    // the rest (and its tests' of Testing Library) resolve to this project's copies: one React and one antd. The
-    // workspace packages (@jabiz/client, @jabiz/ui) resolve their own dependencies; those shared with this project
-    // (React, i18next, TanStack Query, lucide) are listed here and so stay one copy too.
+    // The extension lies outside this project and has no node_modules of its own: its imports of React and the rest
+    // (and its tests' of Testing Library) resolve to this project's copies: one React. The workspace packages
+    // (@jabiz/client, @jabiz/ui) resolve their own dependencies; those shared with this project (React, i18next,
+    // TanStack Query, lucide) are listed here and so stay one copy too.
     dedupe: [...Object.keys(packageJson.dependencies), ...Object.keys(packageJson.devDependencies)],
   },
   server: {
     proxy: { '/api': 'http://localhost:8080' },
     fs: { allow: extension ? [root, extension] : [root] },
   },
-  build: { chunkSizeWarningLimit: 3000 },
+  // One chunk (no code splitting): about 1 320 kB since Ant Design left (phase 15d). Warn when it grows well past that,
+  // not at Vite's 500 kB, which it always exceeds.
+  build: { chunkSizeWarningLimit: 1500 },
   test: {
     environment: 'jsdom',
     // Page tests drive whole forms through jsdom; with the packages' tests alongside, the slowest come near the

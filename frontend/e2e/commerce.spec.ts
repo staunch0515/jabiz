@@ -29,7 +29,7 @@ test('the commerce sample has generated pages and an order is placed from its ge
     await expect(page.getByRole('columnheader', { name: title }).first()).toBeVisible()
   }
   await page.getByLabel('SKU').first().fill(code)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(dataRows(page)).toHaveCount(1)
   await expect(dataRows(page).first()).toContainText('250')
 
@@ -40,7 +40,7 @@ test('the commerce sample has generated pages and an order is placed from its ge
   await page.getByLabel('warehouseCode').fill(code)
   await page.getByLabel('sku').fill(code)
   await page.getByLabel('quantity').fill('2')
-  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await page.getByRole('button', { name: '执行', exact: true }).click()
   await expect(page.getByTestId('process-result')).toContainText(code)
   await expect(page.getByTestId('process-result')).toContainText('500')
 })
@@ -58,7 +58,7 @@ test('a price change is scheduled from the generated process form', async ({ pag
   await page.getByLabel('unitPrice').fill('120')
   await page.getByLabel('effectiveTime').fill('2031-04-01 00:00:00')
   await page.getByLabel('effectiveTime').press('Enter')
-  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await page.getByRole('button', { name: '执行', exact: true }).click()
   await expect(page.getByTestId('process-result')).toContainText(code)
   const expected = await page.evaluate(() => new Date(2031, 3, 1, 0, 0, 0).toISOString())
   await expect(page.getByTestId('process-result')).toContainText(expected.replace('.000Z', 'Z'))

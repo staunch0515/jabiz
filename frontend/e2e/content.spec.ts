@@ -40,7 +40,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await page.getByTestId('i18n-title-en').fill(`Organic ${code}`)
   await page.getByTestId('i18n-body-zh').fill('由**关东**认证机构颁发。')
   await expect(page.getByTestId('i18n-body').getByTestId('markdown-view').locator('strong')).toHaveText('关东')
-  await drawer.getByRole('button', { name: /保\s*存/ }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('已保存。').or(page.getByText('Saved.'))).toBeVisible()
 
   const row = dataRows(page).filter({ hasText: `有机认证 ${code}` })
@@ -58,13 +58,13 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await row.getByTestId('row-action-CERTIFICATION_REJECT').click()
   await expect(page.getByLabel('certificationId')).not.toBeEditable()
   await page.getByLabel('comment').fill('The certificate copy is missing.')
-  await page.getByRole('button', { name: /执\s*行/ }).click()
+  await page.getByRole('button', { name: '执行', exact: true }).click()
   await expect(page.getByTestId('process-result')).toContainText('REJECTED')
 
   // Under the supplier, its certifications are listed.
   await page.goto(datasetPath(SUPPLIERS))
   await page.getByLabel('代码').first().fill(code)
-  await page.getByRole('button', { name: /查\s*询/ }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await (await searchedRow(page, code)).getByTestId('row-edit').click()
   const children = page.getByTestId('child-list-SupplierCertification')
   await expect(children).toContainText(`有机认证 ${code}`)
@@ -82,7 +82,7 @@ test('a certification is written, picked for its supplier and moved on by its ro
   await expect(children.getByTestId('child-open').first()).toBeFocused()
   await children.getByTestId('child-open').first().click()
   await child.getByTestId('i18n-title-zh').fill(`有机认证 ${code}（更新）`)
-  await child.getByRole('button', { name: /保\s*存/ }).click()
+  await child.getByRole('button', { name: '保存', exact: true }).click()
   await expect(child).toHaveCount(0)
   await expect(supplierForm).toBeVisible()
   await expect(children).toContainText(`有机认证 ${code}（更新）`)

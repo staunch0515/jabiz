@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError, useAuth } from '@jabiz/client'
 import {
   Badge,
   Button,
@@ -30,12 +31,9 @@ import { XIcon } from 'lucide-react'
 import { useId, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
 import {
   exportData, LEGAL_HOLD_DATASET, LEGAL_HOLD_PLACE, LEGAL_HOLD_RELEASE, type RetentionPolicyStatus,
 } from '../api/retention'
-import { useAuth } from '../auth/AuthContext'
 import AdminPage from '../layout/AdminPage'
 import { useDatasets } from '../meta/hooks'
 import { paths } from './paths'

@@ -15,7 +15,7 @@ import {
   regionalPattern,
   toDateValue,
 } from '../lib/date-text'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 import { Calendar } from './ui/calendar'
 import { Input } from './ui/input'
@@ -266,7 +266,7 @@ export function DatePicker({
   const locked = disabled || readOnly
 
   return (
-    <div data-slot="date-picker" className={cn(UI_SCOPE, 'flex flex-wrap items-center gap-1', className)}>
+    <div data-slot="date-picker" className={cn('flex flex-wrap items-center gap-1', className)}>
       <TypedInput
         typed={typed}
         format={format}
@@ -394,7 +394,7 @@ export function DateTimePicker({
   const locked = disabled || readOnly
 
   return (
-    <div data-slot="date-time-picker" className={cn(UI_SCOPE, 'flex flex-wrap items-center gap-1', className)}>
+    <div data-slot="date-time-picker" className={cn('flex flex-wrap items-center gap-1', className)}>
       <TypedInput
         typed={typed}
         format={format}

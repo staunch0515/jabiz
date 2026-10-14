@@ -15,7 +15,10 @@ const TASKS = [
 const answer = vi.hoisted(() => ({ value: { isLoading: false, data: { total: 0, tasks: [] as unknown[] } } }))
 
 vi.mock('../meta/hooks', () => ({ useMyTasks: () => answer.value }))
-vi.mock('../lib/calls', () => ({ runProcess: vi.fn() }))
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
+  runProcess: vi.fn(),
+}))
 
 function show() {
   render(

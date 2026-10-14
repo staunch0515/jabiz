@@ -104,7 +104,7 @@ jabizApp {
 - 每个 SPA 可配置内容安全策略 `jabiz.web.spa[i].content-security-policy`，写入该前缀下全部响应（`/api`、`/actuator` 除外）的响应头；
   未配置时用平台的缺省值（`JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY`，阶段 16c-2 对所有 SPA 收紧，决策 D43 第 7 条）
   `default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'`
-  （Radix 的滚动锁与通知、antd 的 CSS-in-JS 需要内联样式；脚本一律不允许内联）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
+  （Radix 的定位、滚动锁与通知仍需要内联样式，所以 `'unsafe-inline'` 保留在 `style-src`；脚本一律不允许内联）。公开网站在应用中配置自己的策略（例如允许嵌入视频的 `frame-src`）。
 - `jabiz.web.spa[i].entry` 是该 SPA 登录的入口，`.pwa` 为 `off` / `on` / `remove`（16c-2）。jar 中由 `jabizApp` 写入的 SPA 是缺省；
   应用配置中的 `jabiz.web.spa` 整体替换它（Spring 的列表覆盖规则）。
 - **缓存与类型**（16c-2，`SpaFallbackFilter`）：成功的 `index.html`（含客户端路由的回退）、`<前缀>/sw.js`、`<前缀>/manifest.webmanifest` 为
@@ -130,7 +130,7 @@ jabizApp {
 公开网站（面向匿名访客、以内容与视觉为主）与通用后台是不同的产品：
 
 - 工具链与后台相同：pnpm、React 19、TypeScript、Vite、React Router、TanStack Query、i18next、Vitest、Playwright。
-- **不使用 Ant Design / ProComponents**：视觉由应用自己设计（CSS Modules + CSS 自定义属性），以减小体积并满足编辑风格的设计要求。
+- **不用后台的页面外观**：视觉由应用自己设计（可用 `@jabiz/ui` 的组件与主题 token，或 CSS Modules + CSS 自定义属性），以减小体积并满足编辑风格的设计要求。
 - 数据只来自公开接口（15），类型由公开模板目录快照生成（15 §7）；不登录、不存令牌。
 - 无障碍（WCAG 2.2 AA）与移动端适配是公开前端的验收项（axe 自动检查纳入 Playwright）。
 

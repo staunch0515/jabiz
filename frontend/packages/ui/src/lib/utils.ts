@@ -7,8 +7,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * The class that scopes Tailwind's preflight (theme.css) while Ant Design pages remain: on the roots of the shell and
- * of every portal (dialogs, menus, popovers, tooltips, toasts), which render outside the shell. Phase 15d makes the
- * preflight global and removes it.
+ * A class with no styles. It scoped Tailwind's preflight while Ant Design pages remained (phases 15a–15c); since phase
+ * 15d the preflight is global and nothing carries or needs it. Still exported because extensions may name it
+ * (`@jabiz/admin`, decision D22).
+ *
+ * @deprecated Not needed: every element is reset.
  */
 export const UI_SCOPE = 'jabiz-ui'

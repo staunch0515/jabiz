@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '../components/spinner'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { AuthError } from './frame'
 import { AUTH_NAMESPACE } from './messages'
 import { MfaEnrollment, type Enrollment } from './MfaEnrollment'
@@ -87,7 +87,7 @@ export function MfaSettings({
   }, [status, version, refreshKey, t])
 
   return (
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-4', className)} data-testid="mfa-settings">
+    <div className={cn('flex flex-col gap-4', className)} data-testid="mfa-settings">
       {error && <AuthError message={error} testId="mfa-settings-error" />}
       {!current && !error && <Spinner />}
       {current?.enrolled && (

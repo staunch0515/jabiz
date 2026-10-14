@@ -1,15 +1,18 @@
+import { ApiError } from '@jabiz/client'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/problem'
 import i18n from '../i18n'
 import OidcCallbackPage from './OidcCallbackPage'
 import { expectAccessible } from '../test/axe'
 
 const signInWithProvider = vi.fn()
 
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ signInWithProvider }) }))
-vi.mock('../auth/oidc', () => ({ takeReturnPath: () => '/tasks', takeBinder: () => 'b1' }))
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
+  useAuth: () => ({ signInWithProvider }),
+  takeReturnPath: () => '/tasks', takeBinder: () => 'b1',
+}))
 
 function LoginProbe() {
   const location = useLocation()

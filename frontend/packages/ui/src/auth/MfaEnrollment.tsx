@@ -8,7 +8,6 @@ import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
 import { AuthError } from './frame'
 import { AUTH_NAMESPACE } from './messages'
 import { refusal } from './problems'
@@ -66,7 +65,7 @@ export function MfaEnrollment({ begin, confirm, onDone }: MfaEnrollmentProps) {
 
   if (recovery) {
     return (
-      <div className={cn(UI_SCOPE, 'flex flex-col gap-3')}>
+      <div className="flex flex-col gap-3">
         <h2 className="text-base font-semibold">{t('mfa.recoveryTitle')}</h2>
         <Alert variant="warning">
           <TriangleAlert aria-hidden />
@@ -91,7 +90,7 @@ export function MfaEnrollment({ begin, confirm, onDone }: MfaEnrollmentProps) {
 
   if (!enrollment) {
     return (
-      <div className={cn(UI_SCOPE, 'flex flex-col items-start gap-3')}>
+      <div className="flex flex-col items-start gap-3">
         {error && <AuthError message={error} />}
         <Button
           disabled={busy}
@@ -107,7 +106,7 @@ export function MfaEnrollment({ begin, confirm, onDone }: MfaEnrollmentProps) {
   }
 
   return (
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-3')}>
+    <div className="flex flex-col gap-3">
       <p className="text-sm">{t('mfa.scan')}</p>
       <div className="w-fit rounded-md bg-white p-2">
         <QrCode value={enrollment.otpauthUri} />

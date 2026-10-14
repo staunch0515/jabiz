@@ -16,7 +16,6 @@ import { useTranslation } from 'react-i18next'
 import { PageState } from '../components/page-state'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
-import { cn, UI_SCOPE } from '../lib/utils'
 import { AUTH_NAMESPACE } from './messages'
 import { refusal } from './problems'
 
@@ -106,7 +105,7 @@ export function OidcCallback({
     onLinked, onSecondStep, t])
 
   return (
-    <main className={cn(UI_SCOPE, 'bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20')}>
+    <main className="bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20">
       {!error ? (
         <PageState kind="loading" title={t('common.loading')} />
       ) : (

@@ -20,7 +20,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 | 数据访问 | **R2DBC**（请求路径）；Flyway 迁移和 `platformCheck` 静态校验允许使用 JDBC（不在请求路径上） |
 | 数据库 | PostgreSQL 16 |
 | 阻塞调用兜底 | Reactor `boundedElastic`，开启 `reactor.schedulers.defaultBoundedElasticOnVirtualThreads=true` |
-| 前端 | 通用后台：pnpm、React 19、TypeScript、Vite、shadcn/ui（Radix Primitives + Tailwind CSS v4，组件源码只在平台的 `@jabiz/ui`）、TanStack Table、react-hook-form、Recharts、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12 与决策 D34；阶段 15 迁移完成前与 Ant Design 5 共存）。应用自有前端（公开网站、需登录的应用前端）工具链相同，经 `@jabiz/client` / `@jabiz/ui` 复用平台（见 17 §4 与决策 D19、D34） |
+| 前端 | 通用后台：pnpm、React 19、TypeScript、Vite、shadcn/ui（Radix Primitives + Tailwind CSS v4，组件源码只在平台的 `@jabiz/ui`）、TanStack Table、react-hook-form、Recharts、TanStack Query、React Router、i18next；类型由 OpenAPI 生成（见 12 与决策 D34）。应用自有前端（公开网站、需登录的应用前端）工具链相同，经 `@jabiz/client` / `@jabiz/ui` 复用平台（见 17 §4 与决策 D19、D34） |
 | 测试 | JUnit 5、Reactor Test、ArchUnit、BlockHound、jqwik、PostgreSQL（Testcontainers 或本地实例）；前端 Vitest、Playwright |
 
 选择 WebFlux 的前提是：**业务开发者不写响应式代码**。所有业务扩展点必须是同步接口（见第 3 节）。

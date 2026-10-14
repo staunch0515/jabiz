@@ -3,7 +3,7 @@ import { CircleAlertIcon, InboxIcon, SearchXIcon, TriangleAlertIcon } from 'luci
 import { useTranslation } from 'react-i18next'
 
 import { UI_NAMESPACE } from '../i18n'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { Spinner } from './spinner'
 
 export type PageStateKind = 'loading' | 'empty' | 'notFound' | 'error' | 'warning'
@@ -37,7 +37,7 @@ export function PageState({ kind, title, titleAs: Title = 'p', description, acti
       <div
         data-slot="page-state"
         data-state="loading"
-        className={cn(UI_SCOPE, 'flex min-h-40 items-center justify-center p-8', className)}
+        className={cn('flex min-h-40 items-center justify-center p-8', className)}
         {...rest}
       >
         <Spinner label={typeof title === 'string' ? title : undefined} showLabel={title !== undefined} />
@@ -50,13 +50,12 @@ export function PageState({ kind, title, titleAs: Title = 'p', description, acti
       data-slot="page-state"
       data-state={kind}
       role={kind === 'notFound' || kind === 'empty' ? undefined : 'alert'}
-      className={cn(UI_SCOPE, 'flex flex-col items-center gap-3 p-8 text-center', className)}
+      className={cn('flex flex-col items-center gap-3 p-8 text-center', className)}
       {...rest}
     >
       <Icon
         aria-hidden
         className={cn(
-          UI_SCOPE,
           'size-10',
           kind === 'error' ? 'text-destructive' : kind === 'warning' ? 'text-warning' : 'text-muted-foreground',
         )}

@@ -75,7 +75,7 @@ test('the portal accepts its own customers only, and its mailed links open at it
   await page.goto(`${PORTAL}login`)
   await page.getByPlaceholder('用户名').fill(process.env.E2E_ADMIN_USER ?? 'admin')
   await page.getByPlaceholder('密码').fill(process.env.E2E_ADMIN_PASSWORD ?? 'admin-password-1')
-  await page.getByRole('button', { name: /登\s*录/ }).click()
+  await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByTestId('login-error')).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`${PORTAL}login$`))
   // A mailed link's page opens without a session, at the portal's own address.

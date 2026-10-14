@@ -3,7 +3,7 @@ import { LockKeyhole } from 'lucide-react'
 import { useState } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 import { AuthError, AuthField, AuthSubmit, Outcome } from './frame'
 import { NewPasswordFields, type NewPassword } from './MailLinkPage'
 import { AUTH_NAMESPACE } from './messages'
@@ -32,7 +32,7 @@ export function ChangePasswordForm({ change = changePassword, onChanged, classNa
   const [newError, setNewError] = useState<string | null>(null)
   const form = useForm<Values>({ defaultValues: { current: '', password: '', confirm: '' } })
   return (
-    <div className={cn(UI_SCOPE, 'flex flex-col gap-4', className)} data-testid="change-password">
+    <div className={cn('flex flex-col gap-4', className)} data-testid="change-password">
       {done && (
         <Outcome ok testId="change-password-state">
           {t('password.changed')}

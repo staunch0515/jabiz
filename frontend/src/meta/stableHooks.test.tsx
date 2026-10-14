@@ -7,7 +7,8 @@ import { useDictionaries } from './hooks'
 import { useReferenceLabels } from './references'
 import type { DatasetEntry, EntityMeta, FieldMeta } from './types'
 
-vi.mock('../api/client', () => ({
+vi.mock('@jabiz/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@jabiz/client')>()),
   api: {
     GET: async () => [{ code: 'JP', label: 'Japan', sortOrder: 1, enabled: true }],
     POST: async () => ({ s1: 'Kanto Tea' }),

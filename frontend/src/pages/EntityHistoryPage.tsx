@@ -1,3 +1,4 @@
+import { api, unwrap, ApiError, useAuth } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -27,9 +28,6 @@ import { Info, TriangleAlert } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
 import HistoryTimeline from '../components/HistoryTimeline'
 import OperationDrawer from '../components/OperationDrawer'
 import AdminPage from '../layout/AdminPage'

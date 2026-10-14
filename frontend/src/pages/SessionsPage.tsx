@@ -18,14 +18,10 @@ import {
   Textarea,
   type ColumnDef,
 } from '@jabiz/ui'
-import { formatDateTime, type SessionInfo } from '@jabiz/client'
+import { formatDateTime, type SessionInfo, api, unwrap, ApiError, useAuth, runProcess } from '@jabiz/client'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, unwrap } from '../api/client'
-import { ApiError } from '../api/problem'
-import { useAuth } from '../auth/AuthContext'
-import { runProcess } from '../lib/calls'
 import AdminPage from '../layout/AdminPage'
 
 /** The users, searched by user name through their default dataset (`security.user.read`). */

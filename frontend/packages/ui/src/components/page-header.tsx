@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { cn, UI_SCOPE } from '../lib/utils'
+import { cn } from '../lib/utils'
 
 export interface PageHeaderProps {
   /** The page's one <h1>. */
@@ -16,7 +16,7 @@ export interface PageHeaderProps {
 /** The head of a page: breadcrumb, title (the page's heading for screen readers), description and actions. */
 export function PageHeader({ title, description, actions, breadcrumb, className }: PageHeaderProps) {
   return (
-    <header data-slot="page-header" className={cn(UI_SCOPE, 'flex flex-col gap-2 bg-transparent pb-4', className)}>
+    <header data-slot="page-header" className={cn('flex flex-col gap-2 bg-transparent pb-4', className)}>
       {breadcrumb}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">

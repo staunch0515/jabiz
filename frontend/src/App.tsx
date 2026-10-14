@@ -1,17 +1,10 @@
-import { StyleProvider } from '@ant-design/cssinjs'
+import { ApiError, AuthProvider, useAuth } from '@jabiz/client'
 import { AppearanceProvider, PageState, Toaster } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { App as AntApp, ConfigProvider, type ThemeConfig } from 'antd'
-import enUS from 'antd/locale/en_US'
-import jaJP from 'antd/locale/ja_JP'
-import zhCN from 'antd/locale/zh_CN'
-import { useTranslation } from 'react-i18next'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, type RouteObject } from 'react-router'
-import { ApiError } from './api/problem'
 import { routerBasename } from './base'
-import { AuthProvider, useAuth } from './auth/AuthContext'
 import { extension } from './extension'
-import { extensionRoutes, homePath } from './extension/registry'
+import { homePath } from './extension/registry'
 import AppLayout from './layout/AppLayout'
 import AccountSecurityPage from './pages/AccountSecurityPage'
 import AccessReviewPage from './pages/AccessReviewPage'
@@ -51,13 +44,6 @@ const queryClient = new QueryClient({
   },
 })
 
-/**
- * Marks a route whose page is built with @jabiz/ui (phases 15b–15c; since 15c-2 every page of the admin): the shell
- * lets it follow the appearance instead of pinning it to the light tokens Ant Design pages needed. Phase 15d removes
- * the mark with Ant Design.
- */
-const JABIZ_UI = { ui: 'jabiz' } as const
-
 function RequireSignIn() {
   const { ready, signedIn } = useAuth()
   const location = useLocation()
@@ -66,7 +52,7 @@ function RequireSignIn() {
   return <Outlet />
 }
 
-/** The routes of the admin; exported for the test of which pages are marked as built with @jabiz/ui. */
+/** The routes of the admin; exported for the test of which pages require signing in. */
 // eslint-disable-next-line react-refresh/only-export-components
 export const appRoutes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
@@ -85,28 +71,27 @@ export const appRoutes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <Navigate to={homePath(extension)} replace /> },
-          { path: '/data', element: <DatasetCatalogPage />, handle: JABIZ_UI },
-          { path: '/data/:datasetId', element: <DatasetListPage />, handle: JABIZ_UI },
-          { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage />, handle: JABIZ_UI },
-          { path: '/processes', element: <ProcessCatalogPage />, handle: JABIZ_UI },
-          { path: '/processes/:name/:version', element: <ProcessFormPage />, handle: JABIZ_UI },
-          { path: '/tasks', element: <TasksPage />, handle: JABIZ_UI },
-          { path: '/imports', element: <ImportCatalogPage />, handle: JABIZ_UI },
-          { path: '/imports/run', element: <ImportPage />, handle: JABIZ_UI },
-          { path: '/imports/runs', element: <ImportRunsPage />, handle: JABIZ_UI },
-          { path: '/reports', element: <ReportCatalogPage />, handle: JABIZ_UI },
-          { path: '/reports/run', element: <ReportPage />, handle: JABIZ_UI },
-          { path: '/reports/archive', element: <ReportArchivePage />, handle: JABIZ_UI },
-          { path: '/documents', element: <DocumentsPage />, handle: JABIZ_UI },
-          { path: '/audit', element: <AuditPage />, handle: JABIZ_UI },
-          { path: '/access-review', element: <AccessReviewPage />, handle: JABIZ_UI },
-          { path: '/security/sessions', element: <SessionsPage />, handle: JABIZ_UI },
-          { path: '/integrity', element: <IntegrityPage />, handle: JABIZ_UI },
-          { path: '/retention', element: <RetentionPage />, handle: JABIZ_UI },
-          { path: '/account/security', element: <AccountSecurityPage />, handle: JABIZ_UI },
-          // The application's own pages (decision D22), checked at startup not to take a platform path, and built with
-          // @jabiz/ui (decision D34): they follow the appearance.
-          ...extensionRoutes(extension),
+          { path: '/data', element: <DatasetCatalogPage /> },
+          { path: '/data/:datasetId', element: <DatasetListPage /> },
+          { path: '/data/:datasetId/:entityId/history', element: <EntityHistoryPage /> },
+          { path: '/processes', element: <ProcessCatalogPage /> },
+          { path: '/processes/:name/:version', element: <ProcessFormPage /> },
+          { path: '/tasks', element: <TasksPage /> },
+          { path: '/imports', element: <ImportCatalogPage /> },
+          { path: '/imports/run', element: <ImportPage /> },
+          { path: '/imports/runs', element: <ImportRunsPage /> },
+          { path: '/reports', element: <ReportCatalogPage /> },
+          { path: '/reports/run', element: <ReportPage /> },
+          { path: '/reports/archive', element: <ReportArchivePage /> },
+          { path: '/documents', element: <DocumentsPage /> },
+          { path: '/audit', element: <AuditPage /> },
+          { path: '/access-review', element: <AccessReviewPage /> },
+          { path: '/security/sessions', element: <SessionsPage /> },
+          { path: '/integrity', element: <IntegrityPage /> },
+          { path: '/retention', element: <RetentionPage /> },
+          { path: '/account/security', element: <AccountSecurityPage /> },
+          // The application's own pages (decision D22), checked at startup not to take a platform path.
+          ...(extension.routes ?? []),
           { path: '*', element: <Navigate to={homePath(extension)} replace /> },
         ],
       },
@@ -116,66 +101,15 @@ export const appRoutes: RouteObject[] = [
 
 const router = createBrowserRouter(appRoutes, { basename: routerBasename(import.meta.env.BASE_URL) })
 
-const antdLocales = { zh: zhCN, ja: jaJP, en: enUS } as const
-
-/**
- * Colours with a contrast of at least 4.5:1 against their backgrounds (WCAG 2.2 AA 1.4.3; docs/design/12-frontend.md
- * section 11): Ant Design's defaults fall short — the primary blue on white and white on it 4.1, description and
- * tertiary text (and with it icons) 3.4, the red of danger 3.3, success and warning text 2.3 and 1.8, a table's text
- * placeholder 1.8. The text of green, orange and gold tags (about 3) is darkened in index.css: their palettes
- * are generated, and darker seeds would darken the backgrounds with them.
- */
-const ACCESSIBLE_THEME: ThemeConfig = {
-  token: {
-    colorPrimary: '#0958d9',
-    colorInfo: '#0958d9',
-    colorLink: '#0958d9',
-    colorError: '#cf1322',
-    colorTextDescription: 'rgba(0, 0, 0, 0.65)',
-    colorTextTertiary: 'rgba(0, 0, 0, 0.65)',
-    // Success and warning text (Typography type="success" / "warning") 2.3 and 1.8:1 by default; the warning colour
-    // is a shade darker still, for warning tags on their pale background (4.2:1 with #ad6800).
-    colorSuccess: '#237804',
-    colorWarning: '#874d00',
-    // Their pale backgrounds and borders stay Ant Design's: derived from the darker colours they would darken too,
-    // and the text of success and warning tags (drawn on them) would fall to 2.7:1.
-    colorSuccessBg: '#f6ffed',
-    colorSuccessBorder: '#b7eb8f',
-    colorWarningBg: '#fffbe6',
-    colorWarningBorder: '#ffe58f',
-  },
-  components: {
-    // A table's text placeholder (emptyText given as text) is drawn in the disabled colour, 1.8:1.
-    Table: { colorTextDisabled: 'rgba(0, 0, 0, 0.65)' },
-  },
-}
-
-/**
- * The expand button of table rows, named for screen readers (WCAG 4.1.2): ProTable replaces the table's texts, so
- * Ant Design's own button lost its name. Same classes, so it looks the same. A render function, not a component: the
- * table calls it per row, so it takes the texts from its caller instead of a hook.
- */
-
 export default function App() {
-  const { i18n } = useTranslation()
-  const locale = antdLocales[i18n.language as keyof typeof antdLocales] ?? zhCN
-  // The appearance and the toasts are @jabiz/ui's (decision D34); Ant Design's provider stays for the pages that
-  // still use it (until phase 15d).
-  // Ant Design's styles go into the CSS layer "antd", ordered before Tailwind's base and utilities (index.css), so
-  // its global rules (the colour of every link, for one) yield to the new components' styles.
+  // The appearance and the toasts are @jabiz/ui's (decision D34).
   return (
     <AppearanceProvider>
-      <StyleProvider layer>
-        <ConfigProvider locale={locale} theme={ACCESSIBLE_THEME}>
-          <AntApp>
-            <QueryClientProvider client={queryClient}>
-              <AuthProvider>
-                <RouterProvider router={router} />
-              </AuthProvider>
-            </QueryClientProvider>
-          </AntApp>
-        </ConfigProvider>
-      </StyleProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </QueryClientProvider>
       <Toaster />
     </AppearanceProvider>
   )
