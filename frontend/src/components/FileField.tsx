@@ -1,8 +1,7 @@
 import { formatBytes, uploadFile, ApiError } from '@jabiz/client'
-import { Button, FileUpload } from '@jabiz/ui'
+import { Button, FilePreview, FileUpload } from '@jabiz/ui'
 import type { TFunction } from 'i18next'
 import type { FileFieldMeta } from '../meta/types'
-import FilePreview from './FilePreview'
 
 interface InputProps {
   field: FileFieldMeta

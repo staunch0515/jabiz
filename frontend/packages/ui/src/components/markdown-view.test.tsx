@@ -3,10 +3,10 @@ import { resolve } from 'node:path'
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '../test/axe'
-import MarkdownView from './MarkdownView'
+import { MarkdownView } from './markdown-view'
 
 // Read from disk: with css: false, Vite hands tests an empty string for style sheets, even with ?raw.
-const markdownCss = readFileSync(resolve(import.meta.dirname, '../../packages/ui/src/styles/markdown.css'), 'utf8')
+const markdownCss = readFileSync(resolve(import.meta.dirname, '../styles/markdown.css'), 'utf8')
 
 const SAMPLE = [
   '# Title', '## Section', '### Part', '#### Point', '',

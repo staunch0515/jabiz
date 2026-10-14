@@ -111,6 +111,12 @@ export { Steps } from './components/steps'
 export type { StepItem, StepsProps } from './components/steps'
 export { SegmentedControl } from './components/segmented-control'
 export type { SegmentedControlProps, SegmentedOption } from './components/segmented-control'
+// Showing content (phase 16n): Markdown without raw HTML, and a file fetched with the session.
+export { MarkdownView } from './components/markdown-view'
+export type { MarkdownViewProps } from './components/markdown-view'
+export { FilePreview } from './components/file-preview'
+export type { FilePreviewField, FilePreviewProps } from './components/file-preview'
+export { downloadFile, useFileUrl } from './lib/file-content'
 export type { AppShellProps, ShellMenuItem, ShellNavProps, LinkProps as ShellLinkProps } from './components/app-shell'
 
 // Signing in and the account (decision D43): pages and parts of pages, without a router, texts in namespace `auth`.

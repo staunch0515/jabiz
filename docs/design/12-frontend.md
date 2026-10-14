@@ -286,7 +286,7 @@ jabizApp {
   `@jabiz/ui`（shadcn 组件与组合组件 `DataTable`、`ConfirmDialog`、`notify`、`DatePicker` / `DateTimePicker`、`DecimalInput` / `MoneyInput`、
   `ThemeToggle`、`PageHeader`、`AppShell` / `ShellNav`，15b-1 起另有 `Combobox`、`FilterBar`、`FileUpload`、`Timeline`、`DescriptionList`、`TagsInput`、
   `CopyButton`、`PageState`、`Spinner`，日期控件可键入并可限定范围；15c-1 起另有 `Steps`、`SegmentedControl`（shadcn 的 toggle-group 之上的单选组）、
-  `FileUpload` 的拖放区（`variant="dropzone"`）、`PageState` 的空状态（`kind` 即 `data-state`）、`DescriptionList` 的多列与复制按钮；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节）。平台前端、两个包与扩展的 lint 都不允许 antd 与 `@ant-design/*`
+  `FileUpload` 的拖放区（`variant="dropzone"`）、`PageState` 的空状态（`kind` 即 `data-state`）、`DescriptionList` 的多列与复制按钮；16n 起另有内容显示的 `MarkdownView`（`react-markdown`，`skipHtml`、不启用 `rehype-raw`：原始 HTML 一律不渲染，D20；样式为 `markdown.css`）与 `FilePreview`（以会话取文件内容（`@jabiz/client` 的 `fetchFileContent` / `fetchFileDownload`）：图片为缩略图、点击在 `Dialog` 中放大，其余为下载按钮，`blob:` 卸载时释放；`field` 只需 `image` 与 `variants`），以及其下的 `useFileUrl` / `downloadFile`，原在后台 `src/components`，`@jabiz/admin` 照旧以同名、同属性再导出；表单状态 react-hook-form 由该包再导出；文案命名空间 `ui`）。`@jabiz/admin` 在两者之上导出（第 9 节）。平台前端、两个包与扩展的 lint 都不允许 antd 与 `@ant-design/*`
   （同一条规则 `NO_ANT_DESIGN`）。shadcn 组件只在 `packages/ui` 中生成或修改。
 - **外观**：`theme.css` 的语义 token（亮色在 `:root`，暗色在 `.dark`，挂在 `<html>`），对比度由 `theme.test.ts` 按 WCAG 2.2 AA 检查；
   亮 / 暗 / 跟随系统存于 `localStorage`（`jabiz.appearance`，不可用时跟随系统）。组件只用工具类与 token。
@@ -317,8 +317,8 @@ jabizApp {
   页面打开期间 `<meta name="referrer" content="no-referrer">`）、`isProblem(error, code)`、`useOnline()`；`createApiClient<Paths>()` 以应用自己快照生成的类型
   调用应用的接口，与 `api` 共用令牌、刷新与 step-up（流程与模板仍经 `runProcess` / `runQuery`）。
 - **应用自有 SPA**（D34 第 5 条，D43）：以 `link:` 引用两个包，样式表 `@import '@jabiz/ui/theme.css'`（它 `@source` 了该包的源码）；
-  `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`（以及使用两个包时其运行时依赖）
-  的版本与平台前端一致，不一致即失败。写法见指南 `docs/guide/app-spa.md`。
+  `pnpm app:check <目录>` 比对 `react`、`react-dom`、`tailwindcss`、`@tanstack/react-query`、`i18next`、`react-i18next`、`vite`（以及使用两个包时其运行时依赖，
+  逐项读自包的 `package.json`，16n 起含 `react-markdown`）的版本与平台前端一致，不一致即失败。应用 SPA 不引用 `@jabiz/admin`，后台与 SPA 共用的显示积木都在 `@jabiz/ui`。写法见指南 `docs/guide/app-spa.md`。
 - **构建预设 `@jabiz/client/vite`**（16c-2，只在 Node 中运行，纯 JavaScript `vite.mjs` 加类型 `vite.d.mts`，任何 Node 版本都能从应用的 `vite.config.ts` 加载）：
   `jabizSpa({ pwa })` 取并校验构建变量（`VITE_BASE`、`VITE_JABIZ_ENTRY`、`VITE_JABIZ_PWA`、`VITE_JABIZ_SPA_PREFIXES`），设 `base`，以 `resolve.dedupe`
   统一 React、i18next、TanStack Query 的副本（Vitest 中另把平台前端的依赖交给 Vite、取其 ES 模块版本并指向 SPA 自己的副本：否则经 `link:` 的包会带来第二个 React）；

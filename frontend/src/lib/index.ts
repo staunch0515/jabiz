@@ -43,8 +43,9 @@ export { paths } from '../pages/paths'
 export { default as EntityFormDrawer } from '../components/EntityFormDrawer'
 export { default as ReferenceSelect } from '../components/ReferenceSelect'
 export { default as FieldErrors } from '../components/FieldErrors'
-export { default as FilePreview } from '../components/FilePreview'
-export { default as MarkdownView } from '../components/MarkdownView'
+// FilePreview and MarkdownView live in @jabiz/ui since phase 16n (same names and props), so applications' own SPAs
+// can use them too.
+export { FilePreview, MarkdownView } from '@jabiz/ui'
 export { default as ApprovalPanel } from '../components/ApprovalPanel'
 export type { ApprovalPanelProps } from '../components/ApprovalPanel'
 export { default as DocumentPanel } from '../components/DocumentPanel'

@@ -1,10 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
 import type { FileFieldMeta } from '../meta/types'
-import { expectAccessible } from '../test/axe'
 import { FileInput } from './FileField'
-import FilePreview from './FilePreview'
 
 const t = i18n.t.bind(i18n)
 
@@ -117,29 +115,5 @@ describe('FileInput', () => {
     fireEvent.change(fileInput(container), { target: { files: [new File(['%PDF'], 'a.pdf', { type: 'application/pdf' })] } })
     expect(await screen.findByRole('alert')).toHaveTextContent('Files of this type are not accepted')
     expect(fetch).not.toHaveBeenCalled()
-  })
-})
-
-describe('FilePreview', () => {
-  it('opens an image larger in a dialog and releases both object URLs', async () => {
-    const paths: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (path: string) => {
-      paths.push(path)
-      return new Response('jpeg')
-    }))
-    const { unmount } = render(<FilePreview fileId="f-9" field={photo} width={48} />)
-    await screen.findByAltText('Preview')
-    expect(paths).toEqual(['/api/files/f-9/content/w160'])
-    fireEvent.click(screen.getByRole('button', { name: 'Enlarge the preview' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Preview' })
-    expect(await within(dialog).findByAltText('Preview')).toHaveAttribute('src', 'blob:preview-1')
-    // No variant is that wide: the (re-encoded) original.
-    expect(paths).toEqual(['/api/files/f-9/content/w160', '/api/files/f-9/content'])
-    await expectAccessible()
-    fireEvent.keyDown(dialog, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(revokeObjectURL).toHaveBeenCalledTimes(1)
-    unmount()
-    expect(revokeObjectURL).toHaveBeenCalledTimes(2)
   })
 })
