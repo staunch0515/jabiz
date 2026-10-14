@@ -113,7 +113,7 @@ async function publisherToken(request: APIRequestContext, admin: string): Promis
 let prepared = false
 
 /**
- * QuizBuks's initial data, as an operator sets it up (backend/quizbuks/CLAUDE.md section 6): the administrator runs
+ * QuizBuks's initial data, as an operator sets it up (backend/quizbuks/CLAUDE.md section 7): the administrator runs
  * QB_SETUP (it adds only what never existed, so every run may do it), and a second administrator publishes what it
  * proposed (the business parameters and review rules). Once per test run.
  */

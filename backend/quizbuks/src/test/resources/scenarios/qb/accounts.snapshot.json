@@ -139,7 +139,7 @@
       "userId" : "#uuid:4",
       "address" : "sara@example.com",
       "locale" : "en",
-      "params" : "{\"company\":\"Acme\",\"link\":\"\",\"reason\":\"Tell us more about your company.\"}",
+      "params" : "{\"company\":\"Acme\",\"reason\":\"Tell us more about your company.\"}",
       "createdTime" : "2026-10-01T03:00:00Z",
       "processSeqId" : "#op:10",
       "version" : 1
@@ -150,7 +150,7 @@
       "userId" : "#uuid:4",
       "address" : "sara@example.com",
       "locale" : "en",
-      "params" : "{\"company\":\"Acme Quizzes\",\"link\":\"\"}",
+      "params" : "{\"company\":\"Acme Quizzes\"}",
       "createdTime" : "2026-10-01T04:00:00Z",
       "processSeqId" : "#op:13",
       "version" : 1
