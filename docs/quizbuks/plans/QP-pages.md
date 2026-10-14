@@ -367,7 +367,7 @@
   `127.0.0.1`、`[::1]`）时接受，与服务端 `StripeSettings` / `PayoutSettings` 对前缀的规则一致。地址本来只来自本人的记录，且服务端写入前已按前缀核对；
   页面再查一次，任何读到的值都不能使它成为开放重定向或执行脚本。客户端没有任何密钥或桩的配置。
 - **后端（唯一改动）**：`application.yml` 加 `quizbuks.stripe.checkout-url-prefix: ${QB_STRIPE_CHECKOUT_URL_PREFIX:https://checkout.stripe.com/}`，与 `connect-url-prefix`
-  一致（QP2 记下的缺口）。缺省即 Stripe 自己的地址，行为不变；正式模式下 `StripeSettings.problems()` 仍拒绝 Stripe 以外的前缀，测试模式只接受 https 或本机地址。
+  一致（QP2 记下的缺口）。缺省即 Stripe 自己的地址，行为不变；正式模式下 `StripeSettings.problems()` 仍拒绝 Stripe 以外的前缀，测试模式只接受 https 或本机地址（后来收紧为以 `/` 结尾、不含用户信息、查询与片段的 `scheme://主机[:端口]/…/`，本机为 `localhost`、`127.0.0.1`、`[::1]`，见 `StripeUrls`）。
   测试 `StripeAddressesConfigTest` 读 `application.yml`，断言两个前缀缺省为 Stripe、可由环境变量改指桩。`quizbuks.yml` 的 e2e 作业因此删去
   `QUIZBUKS_STRIPE_CHECKOUTURLPREFIX`（只留 `QB_STRIPE_CHECKOUT_URL_PREFIX`）；`deploy/quizbuks/README.md` 的变量表加上该变量。
 - **测试**：Vitest 商家后台新增 `wallet/api.test.ts`（地址检查、金额解析、返回参数、可支付判断、轮询的退避、超时、失败重读与中止）、`wallet/wallet.test.tsx`

@@ -72,6 +72,7 @@ public final class PayoutChecks {
         if (result == null || !StripeIds.is(StripeIds.ACCOUNT, result.accountId())
             || !Boolean.valueOf(expectedLivemode).equals(result.livemode())
             || result.url() == null || result.url().length() > 2048 || !result.url().startsWith(linkPrefix)
+            || !StripeUrls.plain(result.url())
             || result.expiresAt() == null || result.expiresAt() <= 0 || result.expiresAt() > TopUpChecks.LAST_EXPIRY) {
             return ONBOARD_MISMATCH;
         }

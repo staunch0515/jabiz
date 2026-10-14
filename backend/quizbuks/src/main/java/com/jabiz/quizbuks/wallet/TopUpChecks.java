@@ -151,7 +151,7 @@ public final class TopUpChecks {
         }
         String url = created.url();
         boolean urlFits = url != null && url.length() <= QbTopUps.URL_LENGTH && url.startsWith(urlPrefix)
-            && url.chars().noneMatch(c -> c <= ' ' || c == 0x7f);
+            && StripeUrls.plain(url);
         if (!StripeIds.is(StripeIds.CHECKOUT_SESSION, created.id()) || !urlFits
             || !topUp.topUpId().equals(created.clientReferenceId())
             || !topUp.topUpId().equals(created.metadataTopUpId())

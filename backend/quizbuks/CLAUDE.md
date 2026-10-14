@@ -93,6 +93,9 @@
     持有它的流程不取其他锁；重算多人时按用户编号排序依次取）。
     充值、到账、过期、核实、手续费、退款与争议只取商家钱包锁（先在锁外按编号或付款找到充值，锁内重读）；每日核对不取业务锁。
   - **模式**：`quizbuks.stripe.livemode`（缺省 false）、密钥前缀、开发入账由 `StripeModeCheck` 一起检查；事件模式不同即待办。
+    支付页与开通页的地址前缀（`checkout-url-prefix` / `connect-url-prefix`）在正式模式只能是 Stripe 自己的地址；测试模式只经 `wallet.StripeUrls.prefixProblem`：
+    以 `/` 结尾的 `https://主机[:端口]/…/`，`http` 只给本机桩（`localhost`、`127.0.0.1`、`[::1]`），不含用户信息、查询与片段（否则 `https://checkout.stripe.com`
+    会放过 `https://checkout.stripe.com.evil.example/`）。Stripe 给出的地址不得含空白或控制字符（`StripeUrls.plain`，充值与开通都查）。
     **开发入账** `QB_WALLET_DEV_CREDIT` 只留在 `dev` 与测试中，与正式模式或正式密钥同时开启即启动失败。
   - 入站提供方 `stripe` 的密钥只来自 `STRIPE_WEBHOOK_SECRET`（`platformCheck` 用一次性的值，见 `build.gradle.kts`）；白名单只列各阶段订阅的类型。
   - 核对模板（`qb.system.recon-*`）每项比较是一条语句、只返回差异行；结果 `QbReconRun` / `QbReconItem` 只写一次。

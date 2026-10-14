@@ -62,6 +62,11 @@ class PayoutChecksTest {
         assertThat(PayoutChecks.onboardingProblem(new PayoutObjects.Onboarding("acct_1", "JP", false,
             PREFIX + "x", null), false, PREFIX)).isEqualTo(PayoutChecks.ONBOARD_MISMATCH);
         assertThat(PayoutChecks.onboardingProblem(null, false, PREFIX)).isEqualTo(PayoutChecks.ONBOARD_MISMATCH);
+        // As for a checkout's address: a link with whitespace or control characters is not followed.
+        for (String bad : List.of("setup/e/x y", "setup/e/x\ty", "setup/e/x\n", "setup/e/\u0000", "setup/e/\u007f")) {
+            assertThat(PayoutChecks.onboardingProblem(new PayoutObjects.Onboarding("acct_1", "JP", false,
+                PREFIX + bad, 1_800_000_000L), false, PREFIX)).as(bad).isEqualTo(PayoutChecks.ONBOARD_MISMATCH);
+        }
         // The link is the user's: never in a log line.
         assertThat(ok.toString()).doesNotContain("setup");
     }
