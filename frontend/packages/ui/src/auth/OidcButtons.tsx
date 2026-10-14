@@ -40,13 +40,16 @@ export interface OidcButtonsProps {
 }
 
 /**
- * Google's "G", drawn in the text colour: the platform's pages use theme colours only (decision D34), so the mark
- * follows the light and dark appearance like the label beside it.
+ * Google's four-colour "G", as Google's sign-in branding guidelines require. A third-party brand mark keeps its own
+ * colours (decision D44, amending D34): only the mark's shapes are fixed, the label and the button use theme colours.
  */
 export function GoogleMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className} fill="currentColor">
-      <path d="M21.35 11.1h-9.17v2.98h5.3c-.23 1.4-1.66 4.1-5.3 4.1-3.19 0-5.8-2.64-5.8-5.9s2.61-5.9 5.8-5.9c1.82 0 3.03.77 3.73 1.43l2.54-2.45C16.84 3.85 14.75 2.9 12.18 2.9 6.96 2.9 2.75 7.12 2.75 12.28s4.21 9.38 9.43 9.38c5.44 0 9.05-3.82 9.05-9.2 0-.62-.07-1.09-.15-1.56z" />
+    <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" className={className}>
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
     </svg>
   )
 }
