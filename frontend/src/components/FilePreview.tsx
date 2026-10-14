@@ -49,12 +49,12 @@ export default function FilePreview({ fileId, field, width }: Props) {
       </Button>
     )
   }
-  if (failed) return <span className={'text-muted-foreground text-sm'}>{t('file.previewFailed')}</span>
-  if (!url) return <span className={'text-muted-foreground text-sm'}>{t('app.loading')}</span>
+  if (failed) return <span className="text-muted-foreground text-sm">{t('file.previewFailed')}</span>
+  if (!url) return <span className="text-muted-foreground text-sm">{t('app.loading')}</span>
   return (
     <>
       {/* The image is not inside the button: a button's content is not exposed as an image. */}
-      <span className={'inline-flex items-end gap-1'}>
+      <span className="inline-flex items-end gap-1">
         <img
           src={url}
           width={width}

@@ -53,8 +53,8 @@ export default function MailUnsubscribePage() {
   }, [token])
 
   return (
-    <main style={{ maxWidth: 480, margin: '15vh auto', padding: '0 16px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ fontSize: 24 }}>{texts.title}</h1>
+    <main className="bg-background text-foreground mx-auto mt-[15vh] flex max-w-[480px] flex-col gap-4 px-4">
+      <h1 className="text-2xl font-semibold">{texts.title}</h1>
       <p role={state === 'working' ? 'status' : 'alert'} data-testid="unsubscribe-state" data-state={state}>
         {texts[state]}
       </p>

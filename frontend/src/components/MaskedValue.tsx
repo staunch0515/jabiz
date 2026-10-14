@@ -31,7 +31,7 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
 
   if (plain !== null) {
     return (
-      <span className={'inline-flex items-center gap-1'}>
+      <span className="inline-flex items-center gap-1">
         <span data-testid={`revealed-${field}`}>{plain}</span>
         <CopyButton value={plain} label={t('copy.copy', { ns: UI_NAMESPACE })} />
       </span>
@@ -54,7 +54,7 @@ export default function MaskedValue({ datasetId, id, field, masked }: Props) {
     }
   }
   return (
-    <span className={'inline-flex items-center gap-1'}>
+    <span className="inline-flex items-center gap-1">
       <span>{masked}</span>
       <Button
         variant="link"

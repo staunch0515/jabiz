@@ -29,8 +29,7 @@ export interface AdminPageProps {
 
 /**
  * A page of the admin built with @jabiz/ui (decision D34): its header (breadcrumb, the one <h1>, actions) and
- * content, within the preflight's scope. Replaces ProComponents' `PageContainer`; the route that shows it carries
- * `handle: { ui: 'jabiz' }`, so the shell does not pin it to the light appearance.
+ * content. Replaces ProComponents' `PageContainer`.
  */
 export default function AdminPage({ title, description, actions, breadcrumb, children, className }: AdminPageProps) {
   return (

@@ -122,6 +122,11 @@ describe('AppLayout (the shell, decision D34)', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Light' }))
   })
 
+  it('sets the pages in the content area at 14px (text-sm), as under Ant Design', () => {
+    renderLayout()
+    expect(screen.getByText('page').closest('[data-slot="app-shell-content"]')).toHaveClass('text-sm')
+  })
+
   it('shows a session limited to a period', () => {
     auth.dataPeriod = { from: '2025-01-01T00:00:00Z', to: null }
     renderLayout()

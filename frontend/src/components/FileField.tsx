@@ -42,7 +42,7 @@ export function FileInput({
       ? t('file.accepted', { types: types || '—', max: formatBytes(field.maxBytes) })
       : undefined
   return (
-    <div className={'flex flex-col gap-2'}>
+    <div className="flex flex-col gap-2">
       {value ? <FilePreview fileId={value} field={field} width={320} /> : null}
       <div className="flex flex-wrap items-start gap-2">
         <FileUpload

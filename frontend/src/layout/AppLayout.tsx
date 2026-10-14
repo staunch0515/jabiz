@@ -211,7 +211,9 @@ export default function AppLayout() {
         />
       }
       header={header}
-      contentClassName="bg-background text-foreground"
+      // The admin's pages (and the extensions' routes) read at 14px, as they did under Ant Design's App wrapper; the
+      // sign-in and mail pages outside the shell, the portal and the applications' SPAs keep the browser's 16px.
+      contentClassName="bg-background text-foreground text-sm"
     >
       <StepUpProvider>
         <Outlet />
