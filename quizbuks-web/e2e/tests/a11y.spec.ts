@@ -1,4 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test'
+import { completeQuiz, sponsor } from './content'
 import {
   expect,
   expectAccessible,
@@ -107,5 +108,59 @@ for (const appearance of ['light', 'dark'] as const) {
     // The console at a phone's width: the menu is a sheet.
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor account 390px'))
+  })
+
+  test(`the sponsor console's quiz pages pass axe (${appearance})`, async ({ page, request }) => {
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const { email, token } = await sponsor(request, 'Cleo')
+    const quiz = await completeQuiz(request, token)
+    await signIn(page, '/sponsor/', email)
+    await expect(page.getByTestId('onboarding-form')).toBeVisible()
+
+    await page.goto('/sponsor/quizzes')
+    await expect(page.getByTestId('quiz-row').first()).toBeVisible()
+    await expectAccessible(page, at('sponsor quizzes'))
+    await page.getByTestId('new-quiz').click()
+    await expect(page.getByTestId('new-quiz-dialog')).toBeVisible()
+    await expectAccessible(page, at('sponsor new quiz'))
+    await page.keyboard.press('Escape')
+
+    await page.getByRole('link', { name: quiz.title }).click()
+    await expect(page.getByTestId('heading-cover-current').getByRole('img')).toBeVisible()
+    await page.getByTestId('heading-intro-preview-toggle').click()
+    await expectAccessible(page, at('sponsor quiz editor'))
+    await page.getByTestId('tab-questions').click()
+    await expect(page.getByTestId('question')).toHaveCount(2)
+    await expectAccessible(page, at('sponsor questions'))
+    await page.getByTestId('question-edit').first().click()
+    await expect(page.getByTestId('option-text')).toHaveCount(2)
+    await expectAccessible(page, at('sponsor question dialog'))
+    await page.keyboard.press('Escape')
+    await page.getByTestId('tab-materials').click()
+    await page.getByTestId('material').first().locator('summary').click()
+    await expectAccessible(page, at('sponsor materials'))
+    await page.getByTestId('material-add').click()
+    await page.getByTestId('material-dialog').getByRole('radio', { name: 'Images' }).click()
+    await expectAccessible(page, at('sponsor material dialog'))
+    await page.keyboard.press('Escape')
+    await page.getByTestId('tab-versions').click()
+    await expect(page.getByTestId('version-row')).toHaveCount(1)
+    await expectAccessible(page, at('sponsor versions'))
+    await page.getByTestId('version-view').click()
+    await expect(page.getByTestId('version-question')).toHaveCount(2)
+    await expectAccessible(page, at('sponsor version'))
+    await page.keyboard.press('Escape')
+
+    // Refused: a version that did not change, and an edit of a quiz changed elsewhere.
+    await page.getByTestId('save-version').click()
+    await expect(page.getByTestId('version-problems')).toBeVisible()
+    await run(request, token, 'QB_QUIZ_SAVE', { quizId: quiz.quizId, title: `${quiz.title} 2` })
+    await page.getByTestId('tab-quiz').click()
+    await page.getByTestId('heading-save').click()
+    await expect(page.getByTestId('stale')).toBeVisible()
+    await expectAccessible(page, at('sponsor quiz refused'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor quiz editor 390px'))
   })
 }
