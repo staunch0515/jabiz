@@ -8,6 +8,8 @@ import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
 import { readPublication, type Publication, type PublicationDetail } from './api'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
+import { transactionsOf } from '../transactions/api'
+import '../transactions/messages'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
@@ -73,6 +75,12 @@ function PublicationView({ detail, stale, onStale }: {
       <p className="text-muted-foreground text-sm">
         {publication.status === 'PENDING_REVIEW' ? t('publishing.detail.inReview') : t('publishing.detail.frozen')}
       </p>
+      {publication.status !== 'PENDING_REVIEW' && (
+        <Link to={transactionsOf(publication.publicationId)} className="w-fit text-sm underline underline-offset-4"
+          data-testid="publication-transactions">
+          {t('transactions.publicationLink')}
+        </Link>
+      )}
       {publication.status === 'FUNDS_SHORT' && (
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}

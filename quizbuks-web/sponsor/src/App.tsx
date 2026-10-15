@@ -17,7 +17,7 @@ import {
   type ShellMenuItem,
 } from '@jabiz/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { FileQuestion, LayoutDashboard, Megaphone, Store, UserRound, Wallet } from 'lucide-react'
+import { FileQuestion, LayoutDashboard, Megaphone, ReceiptText, Store, UserRound, Wallet } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QuizEditorPage } from './content/QuizEditorPage'
@@ -33,6 +33,8 @@ import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
+import { TRANSACTIONS_PATH } from './transactions/api'
+import { TransactionsPage } from './transactions/TransactionsPage'
 import { topUpIdOf, WALLET_PATH } from './wallet/api'
 import { TopUpPage } from './wallet/TopUpPage'
 import { WalletPage } from './wallet/WalletPage'
@@ -58,7 +60,8 @@ function toSignIn() {
 
 /**
  * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (editing content
- * needs no approval, publishing does), the publications, the wallet, the sponsor profile (onboarding) and the account.
+ * needs no approval, publishing does), the publications, the wallet and the transactions, the sponsor profile
+ * (onboarding) and the account.
  * The home page leads to the onboarding until the sponsor is approved.
  */
 function SignedIn({ path }: { path: string }) {
@@ -86,6 +89,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
+  else if (path === TRANSACTIONS_PATH) page = <TransactionsPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
@@ -95,6 +99,7 @@ function SignedIn({ path }: { path: string }) {
     { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
     { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
     { key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet },
+    { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
     { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
   ]
   return (

@@ -1,0 +1,167 @@
+import { addMessages } from '@jabiz/client'
+import { SPONSOR } from '../messages'
+
+/**
+ * The transactions page's texts, part of the console's namespace `sponsor` (added here, next to the page that uses
+ * them). Amounts are filled in by `formatKudos`; no text names another currency. The server words its own refusals
+ * (`REPORT_TOO_LARGE` among them).
+ */
+const en = {
+  transactions: {
+    nav: 'Transactions',
+    title: 'Transactions',
+    intro: 'The rewards your publications paid or owe, and your top-ups. Filter them, and export what you see.',
+    summary: {
+      label: 'Totals of the transactions shown',
+      total: 'Transactions',
+      completed: 'Completed',
+      processing: 'Processing',
+      failed: 'Failed',
+      value: '{{amount}} ({{count}})',
+    },
+    filters: {
+      label: 'Filter the transactions',
+      type: 'Type',
+      status: 'Status',
+      period: 'Period',
+      publication: 'Publication',
+      search: 'Publication or user',
+      searchHint: 'Name of a publication or a user',
+    },
+    types: { REWARD: 'Reward', TOPUP: 'Top-up' },
+    statuses: { COMPLETED: 'Completed', PROCESSING: 'Processing', FAILED: 'Failed' },
+    table: 'Your transactions',
+    occurredAt: 'Date',
+    type: 'Type',
+    user: 'User',
+    publication: 'Publication',
+    amount: 'Amount',
+    score: 'Score',
+    scoreValue: '{{score}} / {{full}}',
+    status: 'Status',
+    refunded: 'Refunded: {{amount}}',
+    noUser: 'Unnamed user',
+    onlyUser: 'Only this user',
+    onlyUserLabel: 'Only the transactions of {{name}}',
+    userFilter: 'User: {{name}}',
+    clearUser: 'Show every user',
+    none: 'No transactions yet.',
+    noMatch: 'No transactions match these filters.',
+    export: {
+      csv: 'Export CSV',
+      xlsx: 'Export Excel',
+      hint: 'The export has the transactions the filters show, in the order shown.',
+      failed: 'The export failed.',
+    },
+    walletLink: 'See all transactions',
+    publicationLink: 'Transactions of this publication',
+  },
+}
+
+const zh: typeof en = {
+  transactions: {
+    nav: '交易',
+    title: '交易',
+    intro: '您的发布已支付或待支付的奖励，以及您的充值。可以筛选，并导出所见的内容。',
+    summary: {
+      label: '所示交易的汇总',
+      total: '交易笔数',
+      completed: '已完成',
+      processing: '处理中',
+      failed: '失败',
+      value: '{{amount}}（{{count}} 笔）',
+    },
+    filters: {
+      label: '筛选交易',
+      type: '类型',
+      status: '状态',
+      period: '期间',
+      publication: '发布',
+      search: '发布或用户',
+      searchHint: '发布或用户的名称',
+    },
+    types: { REWARD: '奖励', TOPUP: '充值' },
+    statuses: { COMPLETED: '已完成', PROCESSING: '处理中', FAILED: '失败' },
+    table: '您的交易',
+    occurredAt: '时间',
+    type: '类型',
+    user: '用户',
+    publication: '发布',
+    amount: '金额',
+    score: '得分',
+    scoreValue: '{{score}} / {{full}}',
+    status: '状态',
+    refunded: '已退款：{{amount}}',
+    noUser: '未命名的用户',
+    onlyUser: '只看此用户',
+    onlyUserLabel: '只看 {{name}} 的交易',
+    userFilter: '用户：{{name}}',
+    clearUser: '显示全部用户',
+    none: '还没有交易。',
+    noMatch: '没有符合筛选条件的交易。',
+    export: {
+      csv: '导出 CSV',
+      xlsx: '导出 Excel',
+      hint: '导出筛选所示的交易，顺序与所示相同。',
+      failed: '导出失败。',
+    },
+    walletLink: '查看全部交易',
+    publicationLink: '此发布的交易',
+  },
+}
+
+const ja: typeof en = {
+  transactions: {
+    nav: '取引',
+    title: '取引',
+    intro: '公開が支払った、または支払い待ちの報酬と、あなたのチャージです。絞り込んで、表示中の内容をエクスポートできます。',
+    summary: {
+      label: '表示中の取引の集計',
+      total: '取引数',
+      completed: '完了',
+      processing: '処理中',
+      failed: '失敗',
+      value: '{{amount}}（{{count}} 件）',
+    },
+    filters: {
+      label: '取引を絞り込む',
+      type: '種類',
+      status: '状態',
+      period: '期間',
+      publication: '公開',
+      search: '公開またはユーザー',
+      searchHint: '公開またはユーザーの名前',
+    },
+    types: { REWARD: '報酬', TOPUP: 'チャージ' },
+    statuses: { COMPLETED: '完了', PROCESSING: '処理中', FAILED: '失敗' },
+    table: 'あなたの取引',
+    occurredAt: '日時',
+    type: '種類',
+    user: 'ユーザー',
+    publication: '公開',
+    amount: '金額',
+    score: '得点',
+    scoreValue: '{{score}} / {{full}}',
+    status: '状態',
+    refunded: '返金済み：{{amount}}',
+    noUser: '名前のないユーザー',
+    onlyUser: 'このユーザーのみ',
+    onlyUserLabel: '{{name}} の取引のみ',
+    userFilter: 'ユーザー：{{name}}',
+    clearUser: 'すべてのユーザーを表示',
+    none: 'まだ取引はありません。',
+    noMatch: '条件に合う取引はありません。',
+    export: {
+      csv: 'CSV をエクスポート',
+      xlsx: 'Excel をエクスポート',
+      hint: '絞り込みで表示中の取引を、表示順にエクスポートします。',
+      failed: 'エクスポートできませんでした。',
+    },
+    walletLink: 'すべての取引を見る',
+    publicationLink: 'この公開の取引',
+  },
+}
+
+export const transactionsMessages = { en, zh, ja }
+
+addMessages(SPONSOR, transactionsMessages)

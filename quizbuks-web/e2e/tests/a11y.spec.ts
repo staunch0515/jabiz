@@ -1,6 +1,8 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
+import { rewardingPublication, startAttempt, submitRight } from './transactions'
+import { fundedSponsor, takerInJapan } from './wallet'
 import {
   expect,
   expectAccessible,
@@ -227,5 +229,38 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor live publication 390px'))
+  })
+}
+
+// Q9b: the transactions page with a reward and a top-up, the filters open and one user chosen, at both widths.
+for (const appearance of ['light', 'dark'] as const) {
+  const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
+
+  test(`the sponsor console's transactions page passes axe (${appearance})`, async ({ page, request }) => {
+    test.setTimeout(180_000)
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const sponsor = await fundedSponsor(request, 1000)
+    const taker = await takerInJapan(request, 'Iris')
+    const { publicationId } = await rewardingPublication(request, sponsor.token, 100, taker.token)
+    expect(await submitRight(request, taker.token, await startAttempt(request, taker.token, publicationId)))
+      .toBe('PAID')
+    await signIn(page, '/sponsor/', sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+
+    await page.goto('/sponsor/transactions')
+    await expect(page.getByTestId('transaction-row')).toHaveCount(2)
+    await expect(page.getByTestId('summary-total')).toHaveText('2')
+    await expectAccessible(page, at('sponsor transactions'))
+    await page.getByRole('combobox', { name: 'Status' }).click()
+    await expect(page.getByRole('option', { name: 'Completed' })).toBeVisible()
+    await expectAccessible(page, at('sponsor transactions status chooser'))
+    await page.keyboard.press('Escape')
+    await page.getByTestId('transaction-only-user').click()
+    await expect(page.getByTestId('transactions-user-filter')).toBeVisible()
+    await expect(page.getByTestId('transaction-row')).toHaveCount(1)
+    await expectAccessible(page, at('sponsor transactions of one user'))
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectAccessible(page, at('sponsor transactions 390px'))
   })
 }

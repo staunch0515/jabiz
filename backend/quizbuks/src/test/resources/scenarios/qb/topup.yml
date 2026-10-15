@@ -264,6 +264,17 @@ steps:
   - expect:
       query: qb.admin.topups
       rows: 2
+  - note: >-
+      The sponsor's transactions and their totals (Q9b) are scoped to the caller, and an expectation runs as the
+      scenario's actor: the installer, with neither publications nor top-ups, sees none of A's rewards and top-ups
+      (SponsorTransactionsIT reads A's own).
+    expect:
+      query: qb.sponsor.transactions
+      rows: 0
+  - expect:
+      query: qb.sponsor.transaction-summary
+      rows: 1
+      values: [{ totalCount: 0, completedCount: 0, completedAmount: 0, processingCount: 0, failedCount: 0 }]
 snapshot:
   entities: [QbTopUp, QbWallet, QbAttempt, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry]
   asOf: end
