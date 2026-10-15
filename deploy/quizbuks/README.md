@@ -8,6 +8,8 @@ docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据
 docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次启动打印管理员密码
 ```
 
+- 没有 `deploy/quizbuks/.env` 也能在本机启动，但 Stripe 未配置（占位，日志中有 `quizbuks: WARNING`），充值与转账不能使用；邮件缺省关闭，注册的用户不能验证邮箱
+  （见下文"充值与核对"中"本机的 compose"与"前端"中"本机注册"）。服务器上设 `QB_STRIPE_PLACEHOLDERS=false`。
 - 管理员密码只在首次启动时打印一次；之后在仓库根目录用
   `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password` 读取
   （入口脚本提示中的 `docker compose exec app …` 省略了 `-f`；应用服务因此命名为 `app`）。
@@ -54,6 +56,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
 - **本机注册**：`docker compose -f deploy/quizbuks/docker-compose.yml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
   在 `.env` 中设 `JABIZ_MAIL_ENABLED=true`、`JABIZ_MAIL_FROM=noreply@quizbuks.local`、`SPRING_MAIL_HOST=mailpit`、`SPRING_MAIL_PORT=1025`。
+  邮件不随 `--profile tools` 自动开启：compose 中的应用不知道启用了哪些 profile，不起 Mailpit 时开着邮件只会投递失败，所以仍由 `.env` 显式设置。
 
 ## 账户（Q2）
 
@@ -123,8 +126,15 @@ tools/quizbuks/local-demo.sh status | logs | seed
   支付页上的按钮把签名的事件发回 `http://localhost:8080/api/inbound/stripe`。改用 Stripe 的真实测试模式：设置 `STRIPE_API_KEY`、
   `QB_STRIPE_API_URL=https://api.stripe.com`、`QB_STRIPE_API_HOSTS=api.stripe.com`、`QB_STRIPE_CHECKOUT_URL_PREFIX=https://checkout.stripe.com/`，
   并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
-- **本机的 compose** 不再缺省可启动：先在 `deploy/quizbuks/.env` 中放 `STRIPE_API_KEY`（测试密钥）、`STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET`
-  （Q6b；只在本机：`echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`，Connect 的同样）。仓库中不放任何签名密钥：
+- **本机的 compose** 没有 `.env` 也能启动，但 **Stripe 未配置**：compose 设 `QB_STRIPE_PLACEHOLDERS=true`，镜像的入口脚本（`deploy/quizbuks/entrypoint.sh`，
+  之后交给平台的入口脚本）只为**没有设置**的值填占位：`STRIPE_API_KEY` 为明显是假的测试密钥（`sk_test_quizbuks_local_placeholder_…`，调用 Stripe 一律被拒），
+  `STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET` 在首次启动时随机生成（`whsec_` + 48 位十六进制）到 secrets 卷（`stripe-webhook-secret`、
+  `stripe-connect-webhook-secret`）并在之后沿用；Stripe 后台没有这两个密钥，任何人都不能用它签名事件。每个占位在每次启动时打印一行
+  `quizbuks: WARNING: …`：**充值与转账不能使用**，直到在 `deploy/quizbuks/.env` 中放上真实的值（测试密钥与两个端点的签名密钥；只想在本机签名事件时
+  `echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`，Connect 的同样），设置的值总是优先。
+  占位**只在测试模式**：`QB_STRIPE_LIVEMODE`（或 `QUIZBUKS_STRIPE_LIVEMODE`）不是 `false` 时不填任何占位，缺少的值照旧在启动检查中失败；
+  镜像单独运行（不经这个 compose）时也不填。**服务器上**用这个 compose 时设 `QB_STRIPE_PLACEHOLDERS=false`，缺少的值即启动失败。
+  入口脚本的测试：`tools/quizbuks/test/entrypoint.test.sh`；CI 作业 `deploy` 运行它，并在没有 `.env` 时以 compose 构建、启动整套系统直到健康。仓库中不放任何签名密钥：
   知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
   也不能在任何可访问的环境中使用该密钥。
 
@@ -179,8 +189,9 @@ tools/quizbuks/local-demo.sh status | logs | seed
 
 | 变量 | 必需 | 说明 |
 |---|---|---|
-| `STRIPE_API_KEY` | 是 | Stripe 密钥，模式须与 `QB_STRIPE_LIVEMODE` 相同（测试模式 `sk_test_…` / `rk_test_…`，建议受限密钥）；每个部署（美国、日本）用本国的 Stripe 账户 |
-| `STRIPE_WEBHOOK_SECRET` | 是 | 账户端点 `/api/inbound/stripe` 的签名密钥（`whsec_…`，至少 32 字符）；缺少即启动失败 |
+| `STRIPE_API_KEY` | 是 | Stripe 密钥，模式须与 `QB_STRIPE_LIVEMODE` 相同（测试模式 `sk_test_…` / `rk_test_…`，建议受限密钥）；每个部署（美国、日本）用本国的 Stripe 账户。本机 compose 未设置时填假的占位（Stripe 不可用） |
+| `STRIPE_WEBHOOK_SECRET` | 是 | 账户端点 `/api/inbound/stripe` 的签名密钥（`whsec_…`，至少 32 字符）；缺少即启动失败。本机 compose 未设置时生成占位到 secrets 卷 |
+| `QB_STRIPE_PLACEHOLDERS` | 否 | compose 缺省 `true`：测试模式下为未设置的 `STRIPE_API_KEY` 与两个签名密钥填占位（见"充值与核对"中"本机的 compose"）；**服务器上设为 `false`**。镜像单独运行时不填 |
 | `QB_STRIPE_LIVEMODE` | 否 | 缺省 `false`（测试模式）；`true` 时须正式密钥、开发入账关闭 |
 | `QB_STRIPE_API_VERSION` | 否 | 缺省 `2025-03-31.basil`，须与 Stripe 后台端点的 API 版本相同 |
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 支付页的有效期，缺省 `PT1H`（40 分钟到 23 小时） |
@@ -188,7 +199,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | 否 | 缺省 `false`；`true` 时允许在留有测试模式数据的数据库上以正式模式启动（只告警），只在有意为之时设置 |
 | `QB_STRIPE_CHECKOUT_URL_PREFIX` | 否 | 支付页地址必须的前缀，缺省 `https://checkout.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值）；须为以 `/` 结尾的完整地址 `https://主机[:端口]/…/`（不含用户信息、查询与片段；本机桩 `localhost`、`127.0.0.1`、`[::1]` 可用 `http`） |
 | `QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS` | 否 | Stripe API 的地址与允许的主机，缺省 `https://api.stripe.com` / `api.stripe.com`（只在开发中改指桩服务） |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | 是（Q6b） | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥（`whsec_…`）；缺少即启动失败 |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | 是（Q6b） | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥（`whsec_…`）；缺少即启动失败。本机 compose 未设置时生成占位到 secrets 卷 |
 | `QB_APP_LINK` | 收款时 | App 的地址，Stripe 开通收款账户后跳回（缺省空：开通被拒） |
 | `QB_STRIPE_CONNECT_COUNTRY` | 否 | 收款账户的国家，缺省 `JP` |
 | `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值）；格式同上 |
