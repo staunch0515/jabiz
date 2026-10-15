@@ -135,6 +135,10 @@
 - **文案**：SPA 自己的在 `src/messages.ts`（命名空间 `app` / `sponsor`），共用的在 `qb/messages.ts`（`qb`），三语齐全，测试检查键一致且非空。
 - **界面**只用 `@jabiz/ui` 的组件与主题 token（不写颜色值）；亮、暗两种外观都过 axe（e2e `a11y.spec.ts`）。App 按 ≤ 430 px 设计，也检查 1280 px。
 - **检查**（每个 SPA 目录下）：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`；平台前端目录下 `pnpm app:check ../quizbuks-web/app`（`sponsor` 同）。
+- **后台扩展**（`backend/quizbuks/admin-extension`，Q9a，平台 12 §9 与决策 D22）：只经 `@jabiz/admin` 引用平台，没有 `package.json`；路由在 `/qb/**`；名字在 `ids.ts`，
+  手写类型与读取在 `api.ts`（快照类型 `snapshot.ts` 抄自商家后台，随 `QuizSnapshots` 一起改）。只读默认数据视图与 `qb.admin.*` 模板，决定只经平台的 `ApprovalPanel`；
+  发布的决定面板只在版本内容显示出来之后给出。资金部分只在 `qb.admin.finance.read` 时显示与请求；金额按 JPY（`formatAmount`），用户编号用 `UserName`。
+  检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
   服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案）。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。

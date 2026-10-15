@@ -50,6 +50,9 @@ jobs:
           pnpm app:check ../quizbuks-web/app
           pnpm app:check ../quizbuks-web/sponsor
         working-directory: frontend
+      # The admin extension (backend/quizbuks/admin-extension, Q9a): types, lint and tests with the platform's tools.
+      - run: JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check
+        working-directory: frontend
       - name: The shared folder is the same in both SPAs
         run: diff -r quizbuks-web/app/src/qb quizbuks-web/sponsor/src/qb
       - name: App

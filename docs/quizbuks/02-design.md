@@ -327,7 +327,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 ### 7.3 管理员后台（`/admin/`）
 
 - 平台通用后台：用户与资料、商家、字典、内容页、业务参数、审批与待办、审计、账本、报表都由元数据生成。
-- QuizBuks 扩展页（`backend/quizbuks/admin-extension`）：用户详情汇总（资料 + 答题历史 + 资金流水，P-01）、转账监控、对账结果。
+- QuizBuks 扩展页（`backend/quizbuks/admin-extension`，`plans/Q9a-admin-extension.md`）：
+  - Q9a：审核（`/qb/reviews`：待审的商家入驻与发布；发布页显示全部设置、档位、商家资金与冻结版本的完整内容（含正确答案、资料、图片），入驻页显示审批绑定的内容与邮箱验证状态；
+    决定用平台的 `ApprovalPanel`）与用户汇总（`/qb/users/:userId`，资料 + 答题历史，资金流水只给财务，P-01）。
+  - 以后（财务 PR）：转账监控、对账结果。
 
 ### 7.4 "Kudos"
 

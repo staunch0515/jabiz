@@ -63,6 +63,7 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | QP3a | `1.2/quizbuks-3p-content-pages` | 商家的 Quiz 列表与编辑 | 3.5 天 | 已合并（#147，实施记录见计划） |
 | QP3b | `1.2/quizbuks-4p-publishing-pages` | 发布列表、向导与操作 | 2.5 天 | 已合并（#148，实施记录见计划） |
 | QP4 | `1.2/quizbuks-6p-payment-pages` | 商家钱包与充值、App 钱包与开通收款 | 3.5 天 | 已完成（待评审，实施记录见计划） |
+| Q9a | `1.2/quizbuks-9a-admin-extension` | 后台扩展：审核（入驻与发布的完整内容）与用户汇总 P-01（`plans/Q9a-admin-extension.md`） | 2 天 | 已完成（待评审，实施记录见计划） |
 
 **MVP（P0 闭环）= Q1 – Q6（Q6a、Q6b）**（加 Q7 中的邮件通知）：商家充值 → 编辑 → 发布 → 用户答题 → 结算 → 自动转账。
 

@@ -4,7 +4,8 @@ import com.jabiz.gradle.Pwa
 // ends (docs/quizbuks/plans/QP-pages.md): the takers' app at / (a PWA), the sponsor console at /sponsor/ and the
 // platform's admin frontend at /admin/, each signing in to its own entry. The two QuizBuks SPAs are pnpm projects of
 // their own linking the platform's packages; spaCheckRoot and spaCheckSponsor (part of check) keep their versions the
-// platform's.
+// platform's. The admin frontend carries QuizBuks's own pages (admin-extension: reviews and the user summary,
+// docs/quizbuks/plans/Q9a-admin-extension.md), type-checked and compiled in when the jar is built.
 plugins {
     id("jabiz.boot-app")
 }
@@ -13,7 +14,7 @@ jabizApp {
     mainClass = "com.jabiz.quizbuks.QuizbuksApp"
     spa("/", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)
     spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")
-    spa("/admin", "../../frontend", entry = "admin")
+    spa("/admin", "../../frontend", extension = "admin-extension", entry = "admin")
     languages("en", "zh", "ja")
     // The snapshots stay in the application's directory: the platform's own (frontend/openapi) are not ours to write.
     openApiSnapshot = rootProject.layout.projectDirectory.file("quizbuks/src/test/resources/openapi.json")

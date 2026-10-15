@@ -1,0 +1,340 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
+import type { ReactNode } from 'react'
+import { initReactI18next } from 'react-i18next'
+import { MemoryRouter, Route, Routes } from 'react-router'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
+import { COVER, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
+import { DATASET, TEMPLATE } from './ids'
+import { messages } from './messages'
+import PublicationReviewPage from './PublicationReviewPage'
+import ReviewsPage from './ReviewsPage'
+import SponsorReviewPage from './SponsorReviewPage'
+import UserSummaryPage from './UserSummaryPage'
+
+type Row = Record<string, unknown>
+
+/** The server as the pages see it through `@jabiz/admin`: datasets, templates and dictionaries. */
+const server = vi.hoisted(() => ({
+  permissions: new Set<string>(),
+  entities: new Map<string, Row | Error | (() => Row | Error)>(),
+  datasets: new Map<string, Row[]>(),
+  templates: new Map<string, Row[] | Error>(),
+  runQuery: vi.fn(),
+  get: vi.fn(),
+  post: vi.fn(),
+  decided: vi.fn(),
+}))
+
+vi.mock('@jabiz/admin', async (original) => {
+  const actual = await original<typeof import('@jabiz/admin')>()
+  return {
+    ...actual,
+    api: { GET: server.get, POST: server.post },
+    unwrap: async (call: Promise<unknown>) => call,
+    runQuery: server.runQuery,
+    useAuth: () => ({ can: (p: string) => server.permissions.has('*') || server.permissions.has(p) }),
+    // The platform's own parts that call the server themselves stand in by what they were given.
+    FilePreview: ({ fileId, field }: { fileId: string; field: { image?: boolean } }) => (
+      <span data-testid="file" data-file={fileId} data-image={field.image === true} />
+    ),
+    UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
+    ApprovalPanel: ({ requestId, onDecided }: { requestId: string; onDecided?: (status: string) => void }) => (
+      <button type="button" data-testid="approval-panel" data-request={requestId}
+        onClick={() => {
+          server.decided(requestId)
+          onDecided?.('APPROVED')
+        }}>
+        decide
+      </button>
+    ),
+  }
+})
+
+const SPONSOR_ID = '0192f0a0-0000-7000-8000-0000000005a1'
+const PUBLICATION_ID = '0192f0a0-0000-7000-8000-0000000000b1'
+const VERSION_ID = '0192f0a0-0000-7000-8000-0000000000e1'
+const REQUEST_ID = '0192f0a0-0000-7000-8000-0000000000a1'
+
+function publication(status = 'PENDING_REVIEW'): Row {
+  return {
+    publicationId: PUBLICATION_ID, sponsorId: SPONSOR_ID, quizId: 'quiz-1', versionId: VERSION_ID, versionLabel: 'v1',
+    name: 'Spring run', regions: 'JP,ASIA', startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z',
+    timeLimitSec: 300, passScore: 3, fullScore: 5, budgetCap: 10000, maxReward: 100, maxSpend: 5000, maxWinners: 50,
+    status, approvalRequestId: REQUEST_ID, submittedAt: '2026-10-15T01:00:00Z',
+    rejectReason: status === 'DRAFT' ? 'Too easy.' : null,
+  }
+}
+
+const SPONSOR: Row = {
+  userId: SPONSOR_ID, contactName: 'Rhea', company: 'Rhea Co', intro: 'We ask **questions**.', avatar: 'avatar-1',
+  reviewStatus: 'PENDING', termsAcceptedAt: '2026-10-14T00:00:00Z', approvalRequestId: 'sponsor-request',
+  submittedAt: '2026-10-14T00:00:00Z',
+}
+
+const USER: Row = {
+  userId: SPONSOR_ID, userName: 'rhea@example.com', email: 'rhea@example.com', emailVerified: true, enabled: true,
+  displayName: 'Rhea', countryCode: 'JP', countryName: 'Japan', city: 'Kyoto', registeredAt: '2026-10-01T00:00:00Z',
+  sponsorStatus: 'APPROVED', company: 'Rhea Co', banned: false,
+}
+
+beforeAll(async () => {
+  await i18next.use(initReactI18next).init({ lng: 'en', resources: { en: { [EXTENSION_NAMESPACE]: messages.en } } })
+})
+
+beforeEach(() => {
+  server.permissions = new Set(['qb.review.publication', 'qb.review.sponsor', 'qb.admin.quiz.read',
+    'qb.admin.users.read', 'qb.admin.publication.read'])
+  server.entities = new Map<string, Row | Error | (() => Row | Error)>([
+    [`${DATASET.publication}/${PUBLICATION_ID}`, publication()],
+    [`${DATASET.version}/${VERSION_ID}`, { versionId: VERSION_ID, label: 'v1', title: 'World capitals',
+      contentHash: 'a'.repeat(64), versionedAt: '2026-10-14T00:00:00Z', content: SNAPSHOT_JSON }],
+  ])
+  server.datasets = new Map([
+    [DATASET.tier, [{ seq: 1, fromScore: 3, toScore: 4, reward: 10 }, { seq: 0, fromScore: 0, toScore: 2, reward: 0 },
+      { seq: 2, fromScore: 5, toScore: 5, reward: 100 }]],
+    [DATASET.sponsor, [SPONSOR]],
+    [DATASET.ban, []],
+  ])
+  server.templates = new Map<string, Row[] | Error>([
+    [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals', fundsShort: false, pendingCount: 0,
+      pendingAmount: 0 }]],
+    [TEMPLATE.sponsors, [{ onboardingId: 'o1', ...SPONSOR, email: 'rhea@example.com' }]],
+    [TEMPLATE.users, [USER]],
+    [TEMPLATE.attempts, [{ attemptId: 'a1', publicationId: PUBLICATION_ID, name: 'Spring run', status: 'SUBMITTED',
+      startedAt: '2026-10-15T00:00:00Z', score: 4, fullScore: 5, passed: true, reward: 10, rewardStatus: 'PAID' }]],
+    [TEMPLATE.transfers, [{ transferId: 't1', amount: 1200, fee: 0, net: 1200, status: 'PAID',
+      createdAt: '2026-10-15T00:00:00Z' }]],
+    [TEMPLATE.payoutAccounts, [{ status: 'ENABLED', payoutsEnabled: true, externalAccountId: 'acct_1234567890WXYZ' }]],
+    [TEMPLATE.topUps, [{ topUpId: 'u1', amount: 5000, status: 'PAID', createdAt: '2026-10-10T00:00:00Z' }]],
+  ])
+  server.get.mockReset().mockImplementation(async (path: string, options: { params: { path: Record<string, string> } }) => {
+    if (path === '/api/dictionaries/{urn}') return []
+    const { resourceId, id } = options.params.path
+    const found = server.entities.get(`${resourceId}/${id}`)
+    const value = typeof found === 'function' ? found() : found
+    if (value === undefined) throw new ApiError(404, { detail: 'Not found' })
+    if (value instanceof Error) throw value
+    return { id, attributes: value }
+  })
+  server.post.mockReset().mockImplementation(async (_path: string,
+    options: { params: { path: { resourceId: string } }; body: { filters?: { field: string; value: unknown }[] } }) => {
+    const rows = server.datasets.get(options.params.path.resourceId)
+    if (!rows) throw new ApiError(403, { detail: 'Forbidden' })
+    const matching = rows.filter((row) => (options.body.filters ?? []).every((f) => row[f.field] === undefined
+      || row[f.field] === f.value))
+    return { items: matching.map((attributes) => ({ attributes })) }
+  })
+  server.runQuery.mockReset().mockImplementation(async (id: string) => {
+    const rows = server.templates.get(id)
+    if (rows instanceof Error) throw rows
+    return { items: rows ?? [], offset: 0, limit: 100 }
+  })
+  server.decided.mockReset()
+})
+
+function renderAt(path: string, route: string, element: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <AppearanceProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path={route} element={element} />
+            <Route path="*" element={<p data-testid="elsewhere">elsewhere</p>} />
+          </Routes>
+        </MemoryRouter>
+        <Toaster />
+      </AppearanceProvider>
+    </QueryClientProvider>,
+  )
+}
+
+const renderPublication = () =>
+  renderAt(`/qb/reviews/publications/${PUBLICATION_ID}`, '/qb/reviews/publications/:publicationId', <PublicationReviewPage />)
+
+describe('ReviewsPage', () => {
+  it('lists the publications waiting for review, the longest waiting first, linking to their review', async () => {
+    renderAt('/qb/reviews', '/qb/reviews', <ReviewsPage />)
+    const link = await screen.findByTestId('queue-publication-link')
+    expect(link).toHaveTextContent('Spring run')
+    expect(link).toHaveAttribute('href', `/qb/reviews/publications/${PUBLICATION_ID}`)
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, {
+      filters: [{ field: 'status', op: 'eq', value: 'PENDING_REVIEW' }],
+      sorts: [{ field: 'submittedAt', asc: true }],
+      limit: 100,
+    })
+    expect(screen.getByTestId('tab-publications')).toHaveTextContent('Publications (1)')
+    await userEvent.click(screen.getByTestId('tab-sponsors'))
+    const sponsor = await screen.findByTestId('queue-sponsor-link')
+    expect(sponsor).toHaveTextContent('Rhea Co')
+    expect(sponsor).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR_ID}`)
+  })
+
+  it('offers only the queues the user may review', async () => {
+    server.permissions = new Set(['qb.review.publication'])
+    renderAt('/qb/reviews?tab=sponsors', '/qb/reviews', <ReviewsPage />)
+    expect(await screen.findByTestId('queue-publication-link')).toBeInTheDocument()
+    expect(screen.queryByTestId('tab-sponsors')).not.toBeInTheDocument()
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.sponsors, expect.anything())
+  })
+})
+
+describe('PublicationReviewPage', () => {
+  it('shows the settings, the tiers and the whole frozen version with the correct answers', async () => {
+    renderPublication()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Spring run' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('publication-sponsor')).toHaveTextContent('Rhea Co'))
+    expect(screen.getByTestId('publication-sponsor')).toHaveAttribute('href', `/qb/users/${SPONSOR_ID}`)
+    const settings = screen.getByTestId('publication-settings')
+    expect(settings).toHaveTextContent('3 of 5')
+    expect(settings).toHaveTextContent('300 s')
+    // The administration shows the ledger's real currency.
+    expect(settings).toHaveTextContent(/10,000/)
+    expect(settings).toHaveTextContent(/JPY|¥|￥/)
+    expect(within(screen.getByTestId('publication-tiers')).getAllByTestId('publication-tier').map((r) => r.textContent))
+      .toEqual([expect.stringMatching(/^0 – 2/), expect.stringMatching(/^3 – 4/), expect.stringMatching(/^5 – 5/)])
+
+    const preview = await screen.findByTestId('version-preview')
+    expect(within(preview).getByTestId('preview-title')).toHaveTextContent('World capitals')
+    const questions = within(preview).getAllByTestId('preview-question')
+    expect(questions).toHaveLength(2)
+    expect(questions[0]).toHaveTextContent('Capital of France?')
+    expect(questions[1]).toHaveTextContent('Capital of Japan?')
+    const options = within(preview).getAllByTestId('preview-option')
+    expect(options.map((o) => o.getAttribute('data-correct'))).toEqual(['true', 'false', 'false', 'true'])
+    expect(options[0]).toHaveTextContent('Paris')
+    expect(within(options[0]).getByText('Correct answer')).toBeInTheDocument()
+    expect(within(options[1]).queryByText('Correct answer')).not.toBeInTheDocument()
+    expect(options[3]).toHaveTextContent('(image only)')
+    // Every file is shown by its own preview: the cover, the pictures, and PDFs and sounds as downloads.
+    const files = within(preview).getAllByTestId('file')
+    expect(files.map((f) => f.getAttribute('data-file'))).toEqual(expect.arrayContaining([COVER, PICTURE, PDF]))
+    expect(files.find((f) => f.getAttribute('data-file') === PDF)).toHaveAttribute('data-image', 'false')
+    expect(within(preview).getAllByTestId('preview-material')).toHaveLength(6)
+  })
+
+  it('opens web links in a new tab and makes no other link live', async () => {
+    renderPublication()
+    const preview = await screen.findByTestId('version-preview')
+    const links = within(preview).getAllByTestId('material-link')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', 'https://video.example/watch?v=1')
+    expect(links[0]).toHaveAttribute('target', '_blank')
+    expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(preview).toHaveTextContent('javascript:alert(3)')
+    // The introduction's Markdown: no script, no javascript: link.
+    const intro = within(preview).getByTestId('preview-intro')
+    expect(intro.querySelector('script')).toBeNull()
+    for (const anchor of preview.querySelectorAll('a')) {
+      expect(anchor.getAttribute('href') ?? '').not.toMatch(/^javascript:/i)
+    }
+    expect(within(intro).getByText('notes').tagName).toBe('STRONG')
+  })
+
+  it('offers the decision while the publication waits, and reads again until its state follows', async () => {
+    let reads = 0
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, () => {
+      reads += 1
+      return publication(reads <= 2 ? 'PENDING_REVIEW' : 'SCHEDULED')
+    })
+    renderPublication()
+    const panel = await screen.findByTestId('approval-panel')
+    expect(panel).toHaveAttribute('data-request', REQUEST_ID)
+    await userEvent.click(panel)
+    expect(server.decided).toHaveBeenCalledWith(REQUEST_ID)
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('publication-review')).toHaveAttribute('data-status', 'SCHEDULED'),
+      { timeout: 5_000 })
+    expect(screen.getByTestId('publication-not-pending')).toBeInTheDocument()
+    const settled = reads
+    await new Promise((resolve) => setTimeout(resolve, 2_500))
+    expect(reads).toBe(settled)
+  }, 15_000)
+
+  it('offers no decision once the publication left the review, and shows why it was sent back', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('DRAFT'))
+    renderPublication()
+    expect(await screen.findByTestId('publication-not-pending')).toHaveTextContent('Too easy.')
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+  })
+
+  it('shows no content and no decision to whom the version is refused', async () => {
+    server.permissions = new Set(['qb.admin.publication.read', 'qb.admin.finance.read'])
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, new ApiError(403, { detail: 'Forbidden' }))
+    renderPublication()
+    expect(await screen.findByText(/do not include the quiz content/)).toBeInTheDocument()
+    expect(screen.queryByTestId('version-preview')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+  })
+
+  it('says when there is no such publication', async () => {
+    server.entities.delete(`${DATASET.publication}/${PUBLICATION_ID}`)
+    renderPublication()
+    expect(await screen.findByText('There is no such publication.')).toBeInTheDocument()
+  })
+})
+
+describe('SponsorReviewPage', () => {
+  it('shows the application with the address and offers the decision while it waits', async () => {
+    renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rhea Co' })).toBeInTheDocument()
+    const application = screen.getByTestId('sponsor-application')
+    expect(application).toHaveTextContent('Rhea')
+    expect(await screen.findByTestId('sponsor-email')).toHaveTextContent('rhea@example.com (verified)')
+    expect(within(screen.getByTestId('sponsor-intro')).getByText('questions').tagName).toBe('STRONG')
+    expect(within(application).getByTestId('file')).toHaveAttribute('data-file', 'avatar-1')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.users, { params: { userId: SPONSOR_ID }, limit: 1 })
+    expect(screen.getByTestId('approval-panel')).toHaveAttribute('data-request', 'sponsor-request')
+  })
+
+  it('offers no decision without the permission to review sponsors', async () => {
+    server.permissions = new Set(['qb.admin.users.read'])
+    renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
+    expect(await screen.findByText('Deciding needs the permission to review sponsors.')).toBeInTheDocument()
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+  })
+})
+
+describe('UserSummaryPage', () => {
+  const renderUser = () => renderAt(`/qb/users/${SPONSOR_ID}`, '/qb/users/:userId', <UserSummaryPage />)
+
+  it('shows the profile and attempts, and no money without finance', async () => {
+    renderUser()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rhea' })).toBeInTheDocument()
+    expect(screen.getByTestId('user-profile')).toHaveTextContent('Japan, Kyoto')
+    expect(screen.getByTestId('user-ban')).toHaveTextContent('Not banned')
+    expect(screen.getByTestId('user-application')).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR_ID}`)
+    expect(await within(screen.getByTestId('user-attempts')).findByText('Spring run')).toBeInTheDocument()
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.attempts,
+      { filters: [{ field: 'userId', op: 'eq', value: SPONSOR_ID }], limit: 100 })
+    expect(screen.queryByTestId('user-finance')).not.toBeInTheDocument()
+    for (const template of [TEMPLATE.transfers, TEMPLATE.topUps, TEMPLATE.payoutAccounts]) {
+      expect(server.runQuery).not.toHaveBeenCalledWith(template, expect.anything())
+    }
+  })
+
+  it('shows transfers, the payout account by its last four characters and top-ups to finance', async () => {
+    server.permissions.add('qb.admin.finance.read')
+    renderUser()
+    const finance = await screen.findByTestId('user-finance')
+    expect(await within(finance).findByText('WXYZ')).toBeInTheDocument()
+    expect(finance).not.toHaveTextContent('acct_1234567890WXYZ')
+    expect(finance).toHaveTextContent(/1,200/)
+    expect(finance).toHaveTextContent(/5,000/)
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.topUps,
+      { filters: [{ field: 'sponsorId', op: 'eq', value: SPONSOR_ID }], limit: 100 })
+  })
+
+  it('shows the ban with its reason', async () => {
+    server.templates.set(TEMPLATE.users, [{ ...USER, banned: true }])
+    server.datasets.set(DATASET.ban, [{ userId: SPONSOR_ID, banned: true, reason: 'Shared answers.',
+      bannedAt: '2026-10-12T00:00:00Z', bannedBy: 'boss' }])
+    renderUser()
+    expect(await screen.findByText('Shared answers.')).toBeInTheDocument()
+    expect(screen.getByTestId('user-ban')).toHaveAttribute('data-banned', 'true')
+  })
+})
