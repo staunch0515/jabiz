@@ -134,7 +134,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
   `echo "STRIPE_WEBHOOK_SECRET=whsec_$(openssl rand -hex 24)" >> deploy/quizbuks/.env`，Connect 的同样），设置的值总是优先。
   占位**只在测试模式**：`QB_STRIPE_LIVEMODE`（或 `QUIZBUKS_STRIPE_LIVEMODE`）不是 `false` 时不填任何占位，缺少的值照旧在启动检查中失败；
   镜像单独运行（不经这个 compose）时也不填。**服务器上**用这个 compose 时设 `QB_STRIPE_PLACEHOLDERS=false`，缺少的值即启动失败。
-  入口脚本的测试：`tools/quizbuks/test/entrypoint.test.sh`（CI 作业 `deploy`）。仓库中不放任何签名密钥：
+  入口脚本的测试：`tools/quizbuks/test/entrypoint.test.sh`；CI 作业 `deploy` 运行它，并在没有 `.env` 时以 compose 构建、启动整套系统直到健康。仓库中不放任何签名密钥：
   知道签名密钥的人可以伪造到账通知。`dev` 配置中固定的开发用签名密钥是公开的：**绝不能**让以 `dev` 配置启动的实例对外可达，
   也不能在任何可访问的环境中使用该密钥。
 
