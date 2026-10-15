@@ -21,7 +21,9 @@ RUN useradd --system --uid 10001 --home-dir /app jabiz \
     && chown jabiz /var/lib/jabiz/secrets /var/lib/jabiz/files && chmod 700 /var/lib/jabiz/secrets /var/lib/jabiz/files
 COPY --from=build /src/app.jar /app/app.jar
 # The platform's entrypoint: secrets of a first local start are generated once (docs/design/10-security.md section 7).
-COPY docker/app-entrypoint.sh /app/entrypoint.sh
+# QuizBuks's own runs first: Stripe placeholders for a plain local compose only (entrypoint.sh beside this file).
+COPY --chmod=755 docker/app-entrypoint.sh /app/platform-entrypoint.sh
+COPY --chmod=755 deploy/quizbuks/entrypoint.sh /app/entrypoint.sh
 USER jabiz
 WORKDIR /app
 EXPOSE 8080

@@ -72,6 +72,17 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm typecheck
 
+  # The image's entrypoint (deploy/quizbuks/entrypoint.sh): Stripe placeholders for a plain local compose only, never
+  # over a set value or in live mode; and the Dockerfile passes BuildKit's checks (the image itself is not built here).
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: tools/quizbuks/test/entrypoint.test.sh
+      - run: docker build --check -f deploy/quizbuks/Dockerfile .
+      - run: docker compose -f deploy/quizbuks/docker-compose.yml config --quiet
+
   # The packaged application starts on an empty database, migrates, passes its startup checks, reports healthy and
   # serves its three front ends.
   package:

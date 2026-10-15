@@ -42,6 +42,10 @@ services:
       SPRING_FLYWAY_USER: quizbuks
       SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD:-quizbuks}
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # Stripe (README.md, "本机的 compose"): without STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET and
+      # STRIPE_CONNECT_WEBHOOK_SECRET in .env, the image's entrypoint fills placeholders in test mode (loud warnings;
+      # top-ups and payouts do not work). false on a server, so that a missing value fails the startup check.
+      QB_STRIPE_PLACEHOLDERS: ${QB_STRIPE_PLACEHOLDERS:-true}
       # Sign-in entries and mail (README.md, "账户"): registration is on at the app and the sponsor console; mail is
       # off unless switched on, and then registered users cannot verify their address. The mail server (SPRING_MAIL_*)
       # comes from .env as it is.
