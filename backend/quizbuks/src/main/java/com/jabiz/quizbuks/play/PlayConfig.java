@@ -23,8 +23,9 @@ import java.util.Map;
  * Registers answering (docs/quizbuks/plans/Q5-answering.md): the three entities, their datasets, the two
  * dictionaries, the processes, the statistics job and the subscription that continues paying pending rewards.
  *
- * <p>Each entity has a default dataset, read only by administrators and written by the processes only
- * ({@code processOnlyWrites}; its write permission is one no role holds). A taker reads their own attempts through the
+ * <p>Each entity has a default dataset, read only by administrators (attempts: by finance, through a dataset of its
+ * own) and written by the processes only ({@code processOnlyWrites}; its write permission is one no role holds). A
+ * taker reads their own attempts through the
  * taker dataset ({@code userId} = the caller), read only; cards, counters, statistics and wallets only through the
  * templates.
  */
@@ -66,10 +67,25 @@ public class PlayConfig {
         return QbPlay.STATS_ENTITY;
     }
 
-    /** Support reads every attempt with the users (P-01). */
+    /**
+     * The processes' and the templates' dataset of attempts. Nobody reads it through the generic API (its read
+     * permission is one no role holds): an attempt carries its reward and commission, which are finance's, and a
+     * dataset cannot leave fields out (Q9c, C-2). Support reads attempts without amounts through
+     * {@code qb.admin.attempts}; finance reads them whole through {@link #qbFinanceAttemptDataset()}.
+     */
     @Bean
     DatasetDefinition qbAttemptDataset() {
-        return defaultDataset(QbPlay.ATTEMPT, QbPermissions.ADMIN_USERS_READ, 100);
+        return defaultDataset(QbPlay.ATTEMPT, QbPermissions.PLAY_SYSTEM, 100);
+    }
+
+    /** Every attempt with its amounts, read only and without history, for finance (Q9c). */
+    @Bean
+    DatasetDefinition qbFinanceAttemptDataset() {
+        return DatasetDefinition.define(QbPlay.FINANCE_ATTEMPTS, d -> d
+            .targetEntityType(QbPlay.ATTEMPT)
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
     @Bean

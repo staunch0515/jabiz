@@ -98,6 +98,13 @@ class MessagesTest {
             "query.qb.admin.publication-funds.fundsShort", "query.qb.admin.attempt-rewards",
             "query.qb.admin.attempt-rewards.reward")
             .doesNotContain("query.qb.admin.publications.fundsShort", "query.qb.admin.attempts.reward");
+        // Q9c: finance's pages and the monthly reports (titles and every column: the exports' headings).
+        assertThat(en.stringPropertyNames()).contains("query.qb.admin.monthly", "query.qb.admin.monthly.category",
+            "query.qb.admin.monthly.transactionCount", "query.qb.admin.monthly.sponsorWallets",
+            "query.qb.admin.balances", "query.qb.admin.balances.opening", "query.qb.admin.balances.closing",
+            "query.qb.admin.balances.matches", "query.qb.admin.finance-summary",
+            "query.qb.admin.finance-summary.transfersInReview", "query.qb.admin.transfers.stale",
+            "query.qb.admin.transfers.held");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

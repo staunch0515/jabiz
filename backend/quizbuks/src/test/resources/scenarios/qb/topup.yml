@@ -3,7 +3,7 @@
 # reward waits (the publication underfunded). A tops up 5,000 Kudos: the job's result (written here, without Stripe)
 # opens the checkout; Stripe's signed completion credits it once (the same event again is a duplicate), pays U2 and puts
 # the publication back on; the fee's job records Stripe's fee. A second top-up expires. The daily reconciliation finds
-# nothing; the wallets and the top-ups are read.
+# nothing; the wallets, the top-ups and October's monthly reports (Q9c) are read.
 name: Top-ups
 # The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
 properties:
@@ -264,6 +264,41 @@ steps:
   - expect:
       query: qb.admin.topups
       rows: 2
+  - note: >-
+      October's reports (F-08, Q9c), from the ledger alone: the top-up, Stripe's fee and the two rewards by kind (the
+      development credit is of no known kind), every kind on its row; the balances with their checks.
+    expect:
+      query: qb.admin.monthly
+      params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
+      rows: 12
+      values:
+        - { category: TOPUP, transactionCount: 1, amount: 5000, stripeBalance: 5000, sponsorWallets: -5000 }
+        - { category: REFUND, transactionCount: 0, amount: 0 }
+        - { category: DISPUTE, transactionCount: 0, amount: 0 }
+        - { category: STRIPE_FEE, transactionCount: 1, amount: 180, stripeBalance: -180, paymentFees: 180 }
+        - { category: REWARD, transactionCount: 2, amount: 200, sponsorWallets: 200, takerWallets: -200, revenue: 0 }
+        - { category: TRANSFER_SENT, transactionCount: 0 }
+        - { category: TRANSFER_SETTLED, transactionCount: 0 }
+        - { category: TRANSFER_FAILED, transactionCount: 0 }
+        - { category: TRANSFER_REVERSED, transactionCount: 0 }
+        - { category: PAYOUT, transactionCount: 0 }
+        - { category: PAYOUT_FAILED, transactionCount: 0 }
+        - { category: OTHER, transactionCount: 1, amount: 100, stripeBalance: 100, sponsorWallets: -100 }
+  - expect:
+      query: qb.admin.balances
+      params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
+      rows: 10
+      values:
+        - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
+        - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
+        - { rowKind: ACCOUNT, code: "2110", opening: 0, debit: 200, credit: 5100, closing: -4900 }
+        - { rowKind: ACCOUNT, code: "2120", opening: 0, debit: 0, credit: 200, closing: -200 }
+        - { rowKind: ACCOUNT, code: "2130", closing: 0 }
+        - { rowKind: ACCOUNT, code: "4110", closing: 0 }
+        - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
+        - { rowKind: CHECK, code: SPONSOR_WALLETS, closing: -4900, partyTotal: -4900, matches: true }
+        - { rowKind: CHECK, code: TAKER_WALLETS, closing: -200, partyTotal: -200, matches: true }
+        - { rowKind: CHECK, code: BALANCED, debit: 5480, credit: 5480, closing: 0, matches: true }
   - note: >-
       The sponsor's transactions and their totals (Q9b) are scoped to the caller, and an expectation runs as the
       scenario's actor: the installer, with neither publications nor top-ups, sees none of A's rewards and top-ups

@@ -367,13 +367,15 @@ class PayoutConfig {
 
     /**
      * Every day at 01:07 UTC (10:07 in Tokyo; D-Q6-12): the takers to transfer to, each in a transaction of its own
-     * under their wallet lock (platform decision D42). With transfers off nothing is selected.
+     * under their wallet lock (platform decision D42). With transfers off nothing is selected. The schedule is
+     * {@code quizbuks.transfers.run-cron}: only the end-to-end tests change it (every minute, Q9c).
      */
     @Bean
     JobDefinition<TransferProcesses.UserRef> qbTransferRunJob(
         ProcessDefinition<TransferProcesses.UserRef, TransferProcesses.TransferOutput, ProcessContext>
-            qbTransferCreate) {
-        return JobDefinition.forEach(TransferProcesses.RUN_JOB, "0 7 1 * * *", ZoneOffset.UTC,
+            qbTransferCreate,
+        @Value("${quizbuks.transfers.run-cron:0 7 1 * * *}") String cron) {
+        return JobDefinition.forEach(TransferProcesses.RUN_JOB, cron, ZoneOffset.UTC,
                 JobItems.template(TransferProcesses.DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
                     "userId"),
                 qbTransferCreate,

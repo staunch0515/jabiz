@@ -155,3 +155,7 @@ quizbuks:
     # live mode refuses anything but Stripe's (startup check).
     checkout-url-prefix: ${QB_STRIPE_CHECKOUT_URL_PREFIX:https://checkout.stripe.com/}
     connect-url-prefix: ${QB_STRIPE_CONNECT_URL_PREFIX:https://connect.stripe.com/}
+  # The daily automatic transfers (Q6b, D-Q6-12): 01:07 UTC, 10:07 in Tokyo; a six-field cron in UTC. Only the
+  # end-to-end tests change it (every minute: a large transfer waits for review within a test, Q9c).
+  transfers:
+    run-cron: ${QB_TRANSFER_RUN_CRON:0 7 1 * * *}

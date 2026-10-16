@@ -41,7 +41,9 @@ public final class QbRoles {
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
         QbPermissions.RECONCILE, QbPermissions.SPONSOR_AVATAR_READ, "ledger.read", "ledger.account.read", "report.issue", "approval.decide", "task.read",
         // Q6a: the jobs that call Stripe (their state and errors, never their secrets).
-        "external-job.read");
+        "external-job.read",
+        // Q9c (C-4): finance issues the monthly reports (report.issue above) and reads what was issued.
+        "report.archive.read");
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
