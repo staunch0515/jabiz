@@ -1300,7 +1300,7 @@ Google 的品牌指南要求登录按钮用四色"G"；单色"G"不易被认出�
    队列有长度上限、等待有时限，所有键合计至多半个连接池。队满或超时即 503 `PROCESS_BUSY`（带 `Retry-After`），不借连接。准入只作用于根流程：子流程从不排队。
 2. **正确性只由咨询锁保证**：准入只是进程内的准入控制，多实例时各自排队；流程照旧以 `HoldLock` 取锁并在锁内检查。键算错、实例重启只影响排队的效果，不影响结果。
 3. **事先不知道的锁不排队**：只声明最外层的锁；锁内才知道的锁受外层准入与全局上限约束。
-4. **任务与事件**：逐项任务的项被准入拒绝记为 `BUSY`（同 D42 第 3 条）；事件消费者被拒按投递的退避重试。
+4. **任务与事件**：逐项任务的项被准入拒绝记为 `BUSY`（同 D42 第 3 条）；事件消费者被拒按投递的退避重试，这样的尝试照常记录、照常退避，但不计入投递的最大尝试次数（`max-attempts`），热门的锁不会使事件被放弃。
 5. **入口限流只在配置中**：`jabiz.process.rate-limits.<流程>` 的按用户、按客户端地址（`ClientAddresses`）、按实例的令牌桶，只作用于流程接口，超限 429 `RATE_LIMITED`（按实例计数，同 15 §6）。
 
 **理由**：等锁本身不可避免，但等锁不必占连接；把排队移到事务之前，热门锁只影响要这把锁的请求。留着咨询锁作为唯一的互斥，多实例与重启都不需要共享的队列。
@@ -1313,10 +1313,13 @@ Google 的品牌指南要求登录按钮用四色"G"；单色"G"不易被认出�
 `ProcessDefinition.admission()` 未声明时为 null（与 `actsOn` 相同的写法，而不是计划中的 `Optional`），另有 `withAdmission(…)`。
 ②闸门：runtime `process.admission.AdmissionGate`（每键 `concurrency` 个许可、全局 `max-active` 个许可，先取键的再取全局的，各自先进先出；`synchronized` 的短临界区，许可在 `Schedulers.parallel()` 上交给等待者；
 等待者取消时退出队列，许可已在交付途中则归还；空闲的键即删除，键数与等待者数各有上限）；`ProcessAdmission`（Spring Bean）在 `ProcessExecutor.run` 中幂等重放之后、`executeRoot` 之前以 `Mono.usingWhen` 取许可，
-根事务结束（提交、回滚、失败、取消、试运行）即释放；`executeChild` 不取。等待时限为 min(族的 `max-wait`, 执行选项 `lockWait`)。`Retry-After` 的估计用该**族**最近 50 次的持有时间（键空闲即删除，按键保存不了）。
+根事务真正结束（提交、回滚、失败、试运行）才释放；`executeChild` 不取。**取得许可之后，根流程不再随调用方的取消而中止**（以 `Mono.fromFuture(…, true)` 与调用方分离，
+调用方的 Reactor 上下文照常传入）：被取消的事务要等当前语句结束才能回滚，而在咨询锁上等待的语句要等到取得锁或 `lock_timeout`，其间一直占着连接；若取消时就归还许可，
+断开的客户端会把整个池占满（评审 H1，`ProcessAdmissionIT.callersGoingAwayLeaveTheConnectionsBoundedByThePermits` 在修正前复现了 5 个等锁的连接）。所以许可的数量始终约束着占用的连接。
+排队中的请求被取消时照常立即退出队列。等待时限为 min(族的 `max-wait`, 执行选项 `lockWait`)。`Retry-After` 的估计用该**族**最近 50 次的持有时间（键空闲即删除，按键保存不了）。
 ③错误：`ProcessBusyException`（不继承 `ConcurrentUpdateException`，无堆栈）→ 503 `PROCESS_BUSY` + `Retry-After`，`violations[0].params` 为 `reason`、`retryAfter`；
-响应的 `violations[]` 不带参数（平台的写法），所以 `reason` 与 `retryAfter` 另作 ProblemDetail 的顶层属性。`JobRunner` 记为 `BUSY`；事件投递照常记一次失败并退避。
-④限流：`ProcessRateLimits`（`jabiz.process.rate-limits`，`ProcessRateLimitProperties`）在流程接口中权限检查之后、二次验证与已验证邮箱、职责分离与一切数据库访问之前；流程名作映射键时写方括号（`"[PORTAL_ORDER_PLACE]"`）以保留大小写。
+响应的 `violations[]` 不带参数（平台的写法），所以 `reason` 与 `retryAfter` 另作 ProblemDetail 的顶层属性。`JobRunner` 记为 `BUSY`；事件投递记一次"忙"的尝试并退避，不计入 `max-attempts`。
+④限流：先查全部的桶再取令牌（一个桶拒绝时不消耗其他桶）；幂等键的重放同样计数（区分重放要读数据库，而被限流的请求不应访问数据库）。`ProcessRateLimits`（`jabiz.process.rate-limits`，`ProcessRateLimitProperties`）在流程接口中权限检查之后、二次验证与已验证邮箱、职责分离与一切数据库访问之前；流程名作映射键时写方括号（`"[PORTAL_ORDER_PLACE]"`）以保留大小写。
 ⑤启动检查（`ProcessAdmissionChecks`，类别 `PROCESS`）：族名、`subProcessOnly()` 声明准入、配置了却无人声明的族（告警）、数值范围、限流的流程未知或不进目录（`internal()` / `entryOnly()` / `subProcessOnly()`）、限流未声明任何桶。
 ⑥`HoldLock` 取到与准入键同族而不同名的锁时，每个流程记一次 warn（只有流程名与族名）。
 ⑦503 `QUERY_TIMEOUT` 的来源已由 `QueryTimeoutCauseIT` 确认：流程接口入口的职责分离规则读取（`SodService.rules`，事务外的数据视图查询，5 s + 1 s，计时包括等池中的连接）；幂等重放的查询没有时限，池耗尽时一直等（03 §1）。

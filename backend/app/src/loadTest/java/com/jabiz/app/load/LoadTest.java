@@ -39,7 +39,8 @@ import java.util.function.Supplier;
  * Configuration by environment: {@code LOAD_BASE_URL} (default http://localhost:8080), {@code LOAD_USER},
  * {@code LOAD_PASSWORD}, {@code LOAD_PRODUCTS} (2000), {@code LOAD_WAREHOUSES} (5), {@code LOAD_ORDERS} (50000),
  * {@code LOAD_CONCURRENCY} (32), {@code LOAD_DURATION} (60s), {@code LOAD_WARMUP} (10s), {@code LOAD_REPORT}
- * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset), {@code LOAD_HOT_ORDER} ({@code yes}:
+ * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset), {@code LOAD_TIMEOUT} (60s; a request
+ * not answered by then counts as 599, its client gone), {@code LOAD_HOT_ORDER} ({@code yes}:
  * also the hot-order mode of phase 16o, decision D45 - many requests crowding one order's lock while others read).
  */
 public final class LoadTest {
@@ -49,6 +50,8 @@ public final class LoadTest {
     private static final String WAREHOUSES = "urn:jabiz:dataset:default:Warehouse";
 
     private final String baseUrl = env("LOAD_BASE_URL", "http://localhost:8080");
+    /** How long a client waits for an answer ({@code LOAD_TIMEOUT}, default 60s): shorter ones give up and go away. */
+    private final Duration requestTimeout = Duration.parse("PT" + env("LOAD_TIMEOUT", "60s").toUpperCase(Locale.ROOT));
     private final HttpClient http = HttpClient.newBuilder()
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .connectTimeout(Duration.ofSeconds(10))
@@ -305,6 +308,8 @@ public final class LoadTest {
             line("Hot order: could not place the order: " + e);
             return;
         }
+        line(measure("hot order: product list alone, before (dataset API)", concurrency, Duration.ZERO,
+            duration.dividedBy(3), () -> post("/api/datasets/" + PRODUCTS + "/query", Map.of("limit", 20))).row());
         CompletableFuture<Stats> writers = CompletableFuture.supplyAsync(
             () -> measure("hot order: ORDER_CANCEL of one order (queue before its lock)", concurrency, Duration.ZERO,
                 duration, () -> post("/api/processes/ORDER_CANCEL/latest", Map.of("orderId", orderId))),
@@ -382,7 +387,7 @@ public final class LoadTest {
         throws IOException, InterruptedException {
         refreshTokenIfOld();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
-            .timeout(Duration.ofSeconds(60))
+            .timeout(requestTimeout)
             .header("Authorization", "Bearer " + token)
             .header("Accept-Language", "en");
         if (body == null) {

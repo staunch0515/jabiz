@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -87,10 +88,6 @@ final class AdmissionGate {
             }
         }
 
-        Mono<Void> releaseLater() {
-            return Mono.fromRunnable(this::release);
-        }
-
         String family() {
             return key.family;
         }
@@ -144,6 +141,8 @@ final class AdmissionGate {
         final Key key;
         final MonoSink<Permit> sink;
         final AtomicBoolean handedOver = new AtomicBoolean();
+        /** Set by whichever ends the wait first, the subscriber cancelling or the time running out. */
+        final AtomicBoolean terminated = new AtomicBoolean();
         Stage stage;
         Permit permit;
         volatile Disposable timer;
@@ -201,8 +200,13 @@ final class AdmissionGate {
             } else {
                 Waiter queued = waiter;
                 sink.onCancel(() -> cancelled(queued));
-                queued.timer = scheduler.get().schedule(() -> timedOut(queued), Math.max(1, maxWait.toNanos()),
-                    TimeUnit.NANOSECONDS);
+                try {
+                    queued.timer = scheduler.get().schedule(() -> timedOut(queued), Math.max(1, maxWait.toNanos()),
+                        TimeUnit.NANOSECONDS);
+                } catch (RejectedExecutionException shuttingDown) {
+                    // No timer (the scheduler is shutting down): leave the queue at once rather than wait for ever.
+                    abandon(queued, shuttingDown);
+                }
             }
         })
             // A permit handed over just as its subscriber went away is not lost.
@@ -339,6 +343,8 @@ final class AdmissionGate {
     }
 
     private void cancelled(Waiter waiter) {
+        // From now on a timeout of this waiter does nothing: its subscriber has gone.
+        waiter.terminated.set(true);
         List<Waiter> handOver = new ArrayList<>();
         boolean admitted;
         synchronized (this) {
@@ -360,8 +366,25 @@ final class AdmissionGate {
                 refusal = busy(waiter.key.family, waiter.key, ProcessBusyException.Reason.WAIT_TIMEOUT);
             }
         }
-        if (refusal != null) {
+        if (refusal != null && waiter.terminated.compareAndSet(false, true)) {
             waiter.sink.error(refusal);
+        }
+        handOver(handOver);
+    }
+
+    /** Takes a waiter out, whatever its stage, and fails it with {@code error}: nothing it held stays held. */
+    private void abandon(Waiter waiter, RuntimeException error) {
+        List<Waiter> handOver = new ArrayList<>();
+        boolean admitted;
+        synchronized (this) {
+            admitted = !leave(waiter, handOver) && waiter.stage == Stage.ADMITTED;
+        }
+        dispose(waiter);
+        if (admitted && waiter.handedOver.compareAndSet(false, true)) {
+            waiter.permit.release();
+        }
+        if (waiter.terminated.compareAndSet(false, true)) {
+            waiter.sink.error(error);
         }
         handOver(handOver);
     }
@@ -369,12 +392,17 @@ final class AdmissionGate {
     private void handOver(List<Waiter> waiters) {
         for (Waiter waiter : waiters) {
             dispose(waiter);
-            scheduler.get().schedule(() -> {
-                if (waiter.handedOver.compareAndSet(false, true)) {
-                    // Discarded, and so released, if the subscriber has just gone away.
-                    waiter.sink.success(waiter.permit);
-                }
-            });
+            try {
+                scheduler.get().schedule(() -> {
+                    if (waiter.handedOver.compareAndSet(false, true)) {
+                        // Discarded, and so released, if the subscriber has just gone away.
+                        waiter.sink.success(waiter.permit);
+                    }
+                });
+            } catch (RejectedExecutionException shuttingDown) {
+                // The permit cannot be handed over: it goes back, and the waiter fails.
+                abandon(waiter, shuttingDown);
+            }
         }
     }
 

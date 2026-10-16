@@ -81,9 +81,29 @@ class ProcessAdmissionTest {
         assertThatThrownBy(() -> admission.admit(HOT, new In("k"), null, Mono.error(new IllegalStateException("no")))
             .block()).isInstanceOf(IllegalStateException.class);
         assertThat(admission.active()).isZero();
-        admission.admit(HOT, new In("k"), null, Mono.never()).subscribe().dispose();
+        // A caller going away does not end an admitted run: the permit stays until the run itself has ended (its
+        // transaction may still hold a connection, waiting for a lock).
+        Sinks.One<String> detached = Sinks.one();
+        AtomicReference<String> context = new AtomicReference<>();
+        admission.admit(HOT, new In("k"), null, Mono.deferContextual(view -> {
+            context.set(view.getOrDefault("caller", "none"));
+            return detached.asMono();
+        })).contextWrite(Context.of("caller", "kept")).subscribe().dispose();
+        assertThat(admission.active()).isEqualTo(1);
+        assertThat(context.get()).as("the caller's context reaches the run").isEqualTo("kept");
+        detached.tryEmitValue("done");
         assertThat(admission.active()).isZero();
+        // Going away while queued leaves the queue at once.
+        ProcessAdmission queueing = admission(new AdmissionSettings(true, null, null, null, null,
+            Map.of("test.hot", new AdmissionSettings.Family(1, 5, Duration.ofSeconds(10), Duration.ofSeconds(1)))));
+        Sinks.One<String> first = Sinks.one();
+        queueing.admit(HOT, new In("k"), null, first.asMono()).subscribe();
+        queueing.admit(HOT, new In("k"), null, Mono.just("x")).subscribe().dispose();
+        assertThat(queueing.waiting()).isZero();
+        first.tryEmitValue("done");
+        assertThat(queueing.active()).isZero();
         assertThat(admission.keys()).isZero();
+        assertThat(queueing.keys()).isZero();
     }
 
     @Test

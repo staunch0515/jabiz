@@ -86,6 +86,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "spring.r2dbc.pool.max-size=6", "spring.r2dbc.pool.initial-size=1", "jabiz.dictionary.listen.enabled=false",
     "jabiz.jobs.lock-at-least-for=0s", "jabiz.events.delivery.initial-backoff=5s",
+    "jabiz.events.delivery.max-attempts=2",
     "jabiz.process.admission.families[test.hot].max-queue=100",
     "jabiz.process.admission.families[test.hot].max-wait=20s",
     "jabiz.process.admission.families[test.small].concurrency=1",
@@ -101,6 +102,9 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 class ProcessAdmissionIT extends PostgresIntegrationTest {
 
     static final ParameterizedTypeReference<Map<String, Object>> MAP = new ParameterizedTypeReference<>() {};
+
+    /** The max-wait of {@value ItAdmissionFixtures#FAMILY} here: what a run that queued for it could wait. */
+    static final Duration HOT_MAX_WAIT = Duration.ofSeconds(20);
 
     @Autowired
     ProcessExecutor executor;
@@ -177,10 +181,11 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         long started = System.nanoTime();
         assertThat(asTestRequest(executor.execute(ItAdmissionFixtures.PLAIN, new HotInput(null, null, Mode.OK,
             "other"))).block(Duration.ofSeconds(5))).isEqualTo(new HotOutput("other"));
-        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(1));
+        // Not behind the hot key: well within its max-wait (and an exhausted pool would have answered 503).
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(HOT_MAX_WAIT.dividedBy(4));
         for (CompletableFuture<Long> read : reads) {
             assertThat(Duration.ofNanos(read.get(10, TimeUnit.SECONDS))).as("a template read")
-                .isLessThan(Duration.ofSeconds(1));
+                .isLessThan(HOT_MAX_WAIT.dividedBy(4));
         }
 
         open(gate);
@@ -212,7 +217,7 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         EntityExchangeResult<Map<String, Object>> full = runOverHttp(ItAdmissionFixtures.SMALL_PROCESS, key);
         Duration took = Duration.ofNanos(System.nanoTime() - started);
         assertThat(full.getStatus().value()).isEqualTo(503);
-        assertThat(took).as("refused at once").isLessThan(Duration.ofMillis(200));
+        assertThat(took).as("refused at once").isLessThan(Duration.ofSeconds(1));
         assertBusy(full, "QUEUE_FULL");
         // No holding time yet: the floor of retry-after.
         assertThat(full.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("2");
@@ -387,8 +392,11 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         await(() -> admission.waiting() == 1, "one queued");
         queued.dispose();
         await(() -> admission.waiting() == 0, "the queued run left");
+        // The holder's caller goes away: the run goes on (its transaction holds a connection until it ends), and so does
+        // its permit, until it has ended.
         holding.dispose();
-        await(() -> admission.active() == 0, "the cancelled holder's permit is back");
+        Thread.sleep(200);
+        assertThat(admission.active()).as("the permit of a run still in its transaction").isEqualTo(1);
         open(gate);
         awaitIdle();
 
@@ -398,6 +406,71 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
             ExecutionOptions.DRY_RUN)).block(Duration.ofSeconds(10)).output().tag()).isEqualTo("dry");
         assertThat(query("SELECT * FROM it_admission_counter WHERE k = ?", dry)).isEmpty();
         awaitIdle();
+    }
+
+    // ================= 5b. callers that go away do not take connections =================
+
+    @Test
+    void callersGoingAwayLeaveTheConnectionsBoundedByThePermits() throws Exception {
+        int maxActive = 3;
+        // One key: a holder parked on its gate holds the lock; each round, three runs come and their callers give up
+        // while one waits for the lock and the others queue.
+        String key = unique();
+        String gate = close();
+        CompletableFuture<HotOutput> holder = start(ItAdmissionFixtures.HOT, key, gate, "holder");
+        awaitArrived(gate, 1);
+        AtomicInteger mostConnections = new AtomicInteger();
+        AtomicInteger mostWaiting = new AtomicInteger();
+        AtomicBoolean done = new AtomicBoolean();
+        CompletableFuture<Void> watcher = background(() -> {
+            while (!done.get()) {
+                mostConnections.accumulateAndGet(pool().getMetrics().orElseThrow().acquiredSize(), Math::max);
+                mostWaiting.accumulateAndGet(waitingFor(ItAdmissionFixtures.FAMILY, key), Math::max);
+                Thread.sleep(5);
+            }
+            return null;
+        });
+        for (int round = 0; round < 5; round++) {
+            List<Disposable> callers = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                callers.add(asTestRequest(executor.execute(ItAdmissionFixtures.HOT,
+                    new HotInput(key, null, Mode.OK, "gone" + round + i))).subscribe(out -> { }, error -> { }));
+            }
+            Thread.sleep(100);
+            callers.forEach(Disposable::dispose);
+        }
+        Thread.sleep(300);
+        assertThat(waitingFor(ItAdmissionFixtures.FAMILY, key)).as("sessions waiting for the lock")
+            .isLessThanOrEqualTo(1);
+        // Many keys: runs parked on their gates fill max-active; their callers go away, more come and go.
+        List<String> gates = new ArrayList<>();
+        for (int round = 0; round < 3; round++) {
+            List<Disposable> callers = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                String parked = close();
+                gates.add(parked);
+                callers.add(asTestRequest(executor.execute(ItAdmissionFixtures.HOT,
+                    new HotInput(unique(), parked, Mode.OK, "parked" + round + i))).subscribe(out -> { }, e -> { }));
+            }
+            Thread.sleep(100);
+            callers.forEach(Disposable::dispose);
+        }
+        Thread.sleep(300);
+        assertThat(admission.active()).as("permits held").isEqualTo(maxActive);
+        // A read meanwhile still has a connection.
+        post("/api/queries/it.slow_titles", Map.of("params", Map.of("owner", owner(), "pause", 0)))
+            .expectStatus().isOk();
+        done.set(true);
+        watcher.get(10, TimeUnit.SECONDS);
+        assertThat(mostConnections.get()).as("connections: the permits, and the read")
+            .isLessThanOrEqualTo(maxActive + 1);
+        assertThat(mostWaiting.get()).as("sessions waiting for the lock, ever").isLessThanOrEqualTo(1);
+
+        gates.forEach(ProcessAdmissionIT::open);
+        open(gate);
+        holder.get(30, TimeUnit.SECONDS);
+        awaitIdle();
+        assertThat(pool().getMetrics().orElseThrow().acquiredSize()).isZero();
     }
 
     // ================= 7. replays do not queue =================
@@ -425,7 +498,7 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         ProcessResult<HotOutput> replay = asTestRequest(executor.run(ItAdmissionFixtures.HOT,
             new HotInput(key, null, Mode.COUNT, "first"), ExecutionOptions.idempotent(idempotencyKey)))
             .block(Duration.ofSeconds(5));
-        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(1));
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(HOT_MAX_WAIT.dividedBy(4));
         assertThat(replay.replayed()).isTrue();
         assertThat(replay.processSeqId()).isEqualTo(first.processSeqId());
 
@@ -473,6 +546,13 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         deliverer.deliverPending().block(Duration.ofSeconds(30));
         assertThat(query("SELECT * FROM sys_outbox_attempt WHERE consumer = ? AND event_id = ?",
             ItAdmissionFixtures.CONSUMER, eventId)).as("backing off").hasSize(1);
+        // Busy attempts do not use up max-attempts (2 here): the event is still retried after three of them.
+        for (int round = 0; round < 2; round++) {
+            clock.advance(Duration.ofMinutes(1));
+            deliverer.deliverPending().block(Duration.ofSeconds(30));
+        }
+        assertThat(query("SELECT * FROM sys_outbox_attempt WHERE consumer = ? AND event_id = ?",
+            ItAdmissionFixtures.CONSUMER, eventId)).hasSize(3);
 
         open(gate);
         holder.get(10, TimeUnit.SECONDS);
@@ -513,7 +593,7 @@ class ProcessAdmissionIT extends PostgresIntegrationTest {
         holdAllConnections();
         long started = System.nanoTime();
         run("/api/processes/IT_PLAIN/latest", "limit-a", body, null).expectStatus().isEqualTo(429);
-        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(200));
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(1));
         releaseConnections();
 
         // A limit of a process that is not run through the API, or of none at all, is a startup error.

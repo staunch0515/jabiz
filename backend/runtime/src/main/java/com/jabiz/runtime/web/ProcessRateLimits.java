@@ -10,7 +10,9 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +25,9 @@ import java.util.function.LongSupplier;
  * (a request without them is a 403 and takes nothing of anyone's bucket) and before anything reads the database, so a
  * caller flooding a process holds neither connections nor its lock. Sub-processes, jobs, event consumers and the
  * platform's own entry points are not limited here.
+ *
+ * <p>A request is counted before anything is read, so a replay of an {@code Idempotency-Key} counts as well: telling a
+ * replay apart needs the database, which a refused request must not touch.
  *
  * <p>Kept in memory, per instance, as the other limits (docs/design/15-public-access.md section 6); the buckets are the
  * same {@link TokenBucketLimiter} as those of the account endpoints ({@code SignUpRateLimits}). Not admission: a limit
@@ -87,22 +92,32 @@ public class ProcessRateLimits {
             return;
         }
         String process = definition.name();
+        List<Counted> counted = new ArrayList<>(3);
         if (limits.perUser() != null) {
-            take(limits.perUser(), process, Scope.USER,
-                "user:" + Objects.requireNonNullElse(request.actorId(), "anonymous"));
+            counted.add(new Counted(limits.perUser(), Scope.USER,
+                "user:" + Objects.requireNonNullElse(request.actorId(), "anonymous")));
         }
         if (limits.perAddress() != null) {
             String client = http == null || addresses == null ? null : addresses.clientOf(http);
-            take(limits.perAddress(), process, Scope.ADDRESS, "address:" + Objects.requireNonNullElse(client,
-                "unknown"));
+            counted.add(new Counted(limits.perAddress(), Scope.ADDRESS,
+                "address:" + Objects.requireNonNullElse(client, "unknown")));
         }
         if (limits.perInstance() != null) {
-            take(limits.perInstance(), process, Scope.INSTANCE, "instance");
+            counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
+        }
+        // Every bucket first: a request one of them refuses takes nothing from the others.
+        for (Counted bucket : counted) {
+            refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
+        }
+        // Then the tokens; a bucket emptied meanwhile by a concurrent request still refuses.
+        for (Counted bucket : counted) {
+            refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
         }
     }
 
-    private void take(TokenBucketLimiter limiter, String process, Scope scope, String key) {
-        TokenBucketLimiter.Decision decision = limiter.tryAcquire(key);
+    private record Counted(TokenBucketLimiter limiter, Scope scope, String key) {}
+
+    private void refuseUnless(TokenBucketLimiter.Decision decision, String process, Scope scope) {
         if (!decision.allowed()) {
             observations.event(PlatformObservations.PROCESS_RATE_LIMITED,
                 KeyValues.of("process", process, "scope", scope.name().toLowerCase(Locale.ROOT)));

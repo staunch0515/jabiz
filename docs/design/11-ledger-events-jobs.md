@@ -139,6 +139,8 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
 - 每个消费者的一轮在其第一次失败处结束（失败的事件等待退避，其余的由下一轮取出），一个持续失败的消费者不拖住其他消费者。
 - 失败重试：每次失败在独立事务中追加 `sys_outbox_attempt`；第 n 次失败后等待 `initial-backoff × 2^(n-1)`（默认 5 s 起，上限 `max-backoff` 1 h）；
   `max-attempts`（默认 10）次后不再重试，记 error 日志，由运维处理。
+  消费者的流程未被准入（`ProcessBusyException`，06 §4.2、D45 第 4 条）的尝试同样追加一行并按全部尝试的次数退避，但**不计入** `max-attempts`
+  （`error` 以该异常的类名开头，计数时排除；info 日志）：一把长时间热门的锁不会使事件被放弃。
 - 不保证顺序；新增的订阅会收到该类型的历史事件（按 `event_seq`）。
 - 启动检查（类别 `EVENT`）：消费者名唯一；订阅的流程是已注册的 Bean；流程应为 `internal()`（D41，06 §8）：`entryOnly()` / `subProcessOnly()` 为错误，普通流程为警告，
   除非订阅声明 `manualToo()`（该流程也供人经流程接口运行）。
@@ -317,7 +319,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
   每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
   每项流程可以声明准入（与在线请求同一族，06 §4.2）：它是根流程，照样排队；被拒即 `BUSY`。它调用的子流程从不排队。
-  事件消费者的流程同样排队，被拒是一次失败的投递（`sys_outbox_attempt`），按投递的退避重试（§2）。单流程任务被拒即该次运行 `FAILED`（这类任务通常不声明准入）。
+  事件消费者的流程同样排队，被拒是一次"忙"的投递（记入 `sys_outbox_attempt`），按投递的退避重试，不计入 `max-attempts`（§2）。单流程任务被拒即该次运行 `FAILED`（这类任务通常不声明准入）。
 - **D41**：每项流程必须是 `internal()`（启动检查 `JOB`：`entryOnly()`、`subProcessOnly()` 与普通流程一律报错，逐项任务没有 `manualToo()`）：
   其输入来自系统的选取，人不应能直接调用；执行时 `ProcessExecutor.requireStartable` 只允许系统身份启动它（403 `PROCESS_INTERNAL`）。
   单流程任务按 §4 的规则（`internal()`，或普通流程加 `manualToo()`）。

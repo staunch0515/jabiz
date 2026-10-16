@@ -3516,8 +3516,8 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
   `application.yml` 的族配置与 `PORTAL_ORDER_PLACE` 的限流（每人每分钟 20 次），`loadTest` 的 `LOAD_HOT_ORDER=yes`。没有迁移（测试迁移 `V1012__it_admission_counter.sql` 只在测试中），OpenAPI 不变。
 - **503 的来源（A-12，已确认）**：`QueryTimeoutCauseIT`（池 2 个连接，全被占用）：声明权限的流程经流程接口约 6 秒后 503 `QUERY_TIMEOUT`，超时的读取是入口的职责分离规则查询
   （观测 `jabiz.dataset.query`，数据视图 `SysSodRule`，status 503），流程本身没有开始；带幂等键的重放查询 8 秒后仍在等连接、放开连接后照常完成。写入 03 §1。
-- **测试**：core `AdmissionTest`、`ProcessDefinitionBuilderTest`（+3）；runtime `AdmissionGateTest`（11）、`AdmissionGatePropertyTest`（jqwik，300 次）、`ProcessAdmissionTest`（4）、
-  `ProcessAdmissionChecksTest`（3）、`ProcessRateLimitsTest`（4）、`ProblemStatusesTest`（+1 段）；app `ProcessAdmissionIT`（8，计划中的 1–5、7–9）、`ProcessAdmissionControlIT`（关闭准入的对照：503 `QUERY_TIMEOUT`）、
+- **测试**：core `AdmissionTest`、`ProcessDefinitionBuilderTest`（+3）；runtime `AdmissionGateTest`（11）、`AdmissionGatePropertyTest`（jqwik，300 次）、`AdmissionGateStressTest`（1）、`ProcessAdmissionTest`（4）、
+  `ProcessAdmissionChecksTest`（3）、`ProcessRateLimitsTest`（4）、`ProblemStatusesTest`（+1 段）；app `ProcessAdmissionIT`（9，计划中的 1–5、7–9 与评审 H1）、`ProcessAdmissionControlIT`（关闭准入的对照：503 `QUERY_TIMEOUT`）、
   `QueryTimeoutCauseIT`（2，计划中的 10）、`CommerceAdmissionIT`（2，计划中的 6 与示范的声明）、`ObservabilityIT`（+准入的观测与仪表）。
 - **与计划的偏差**：
   1. `ProcessDefinition.admission()` 返回可为 null 的 `Admission`（同 `actsOn`），不是 `Optional`：记录的访问器不能改类型。
@@ -3527,11 +3527,29 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
   5. 先进先出的 IT 用 `concurrency = 1` 的族（`test.one`）：`concurrency = 2` 时许可按到达顺序发放，但第 2、3 个取得许可的请求谁先到达咨询锁不确定（锁前的语句有快慢），只有许可的顺序是保证的。
   6. "两个实例"的 IT 用第二个 `ProcessExecutor` 与它自己的 `ProcessAdmission`，与第一个共用同一个连接池（正确性只取决于各自排队与咨询锁）；按客户端地址经可信代理的情形在 `ProcessRateLimitsTest` 中验证
      （`WebTestClient` 的模拟请求没有远端地址，IT 中只验证伪造的转发头不起作用）。
-  7. 准入的观测断言放在 `ObservabilityIT` 的 `ORDER_SHIP` 用例中；"被限流的请求在 50 ms 内 429"在 IT 中放宽到 200 ms（避免在 CI 上偶发失败）。
+  7. 准入的观测断言放在 `ObservabilityIT` 的 `ORDER_SHIP` 用例中；IT 中的时间界限放宽（评审 L3）："立即"的拒绝与被限流的 429 以 1 秒为界，
+     "不受热门键影响"的读取以 `max-wait` 的四分之一为界（真正的证据是状态码：池被耗尽时它们是 503）。
   8. 示范的 `ORDER_EXPIRE` 不声明准入（它的子流程 `ORDER_CANCEL` 示范"子流程从不排队"）；QuizBuks 的声明与 `SubmitInput.publicationId` 在 Q10 的应用分支上做。
-  9. 压测报告未写入 `docs/perf/`：本环境中没有对打包的应用跑热门订单模式（见已知问题）。
+  9. 已取得许可的根流程与调用方分离（评审 H1，见下），这是计划中没有的语义：客户端断开不再中止它。
 - **已知问题**：
   - 多实例时队列与限流都按实例（D45 第 2、5 条的已知限制）；有效队列为实例数 × `max-queue`。
-  - 被取消的、已持有许可的请求在取消时即释放许可，不等它的事务回滚结束（回滚很快，影响至多是短暂地多一个连接）。
+  - 已取得许可的根流程不随客户端断开而中止（H1 的修正）：断开的请求照常运行到结束（可能提交），客户端须以 `Idempotency-Key` 重试来得知结果。未声明准入的流程不变。
   - 首个请求体的 Jackson 反序列化器在锁下构建：冷启动时大量并发的同类请求会在 BlockHound 下报阻塞（测试先预热一次），与本阶段无关，已有的现象。
   - 职责分离规则的缓存、幂等重放查询的时限、`spring.r2dbc.pool.max-acquire-time` 的缺省仍未改（A-12）。
+- **评审修正（2026-10-16，同一 PR）**：
+  - **H1**（高）：取消已持有许可的运行时，`usingWhen` 立即归还许可，而事务要等在咨询锁上的语句结束（至多 `lock_timeout`）才回滚，其间一直占着连接——断开的客户端能占满连接池。
+    修正：取得许可之后，根流程以 `Mono.fromFuture(…, true)` 与调用方分离（调用方的 Reactor 上下文照传），工作真正结束才归还许可。
+    新 IT `ProcessAdmissionIT.callersGoingAwayLeaveTheConnectionsBoundedByThePermits`（池 6、`max-active` 3，同一键与许多键各反复取消）：池中借出的连接始终 ≤ `max-active` + 1 次读取，
+    在锁上等待的会话 ≤ 1；修正前该测试失败（5 个等锁的连接）。原 IT 中"取消持有者即归还"的断言改为"运行结束才归还"。
+  - **M1**：事件消费者被准入拒绝的尝试照常记录、照常退避，但不计入 `max-attempts`（`sys_outbox_attempt.error` 以 `ProcessBusyException` 的类名开头者计数时排除，没有迁移）；
+    D45 第 4 条与 11 §2、§4.1 已补写。IT：`max-attempts=2` 时三次"忙"的尝试之后事件仍被投递。
+  - **M2**：`AdmissionGateStressTest`（8 个线程、12 000 次取得，真实的 `Schedulers.parallel()`，0–3 ms 的随机等待，随机取消，与生产相同的"分离的工作 + 结束时归还"）：
+    每键与全局的同时运行数从不超限，结束后持有、等待、键都归零；jqwik 测试改为手动执行交接，并加入"释放后、交接前取消"的操作。
+  - **L1**：超时与取消并发时只有先到的一方结束等待者（共用的 `terminated` 标志），不再对已取消的订阅调用 `error`（`onErrorDropped`）。
+  - **L2**：调度器拒绝计时或交接（停机）时，等待者退出队列、许可归还，等待者以该异常失败。
+  - **L3**：IT 的时间界限见偏差 7。
+  - **L4**：限流先查全部桶再取令牌（`TokenBucketLimiter.peek`），一个桶拒绝时不消耗其他桶；幂等重放照样计数（区分重放要读数据库），已写入 10 §15.10。
+  - **L5**：13 写明哪些观测没有 `outcome` / `status`；10 §15.10 把 `jabiz.process.rate_limited` 称为观测。
+  - **e2e**：对打包的应用（自己的端口与数据库）44 个用例全部通过（门户每人每分钟 20 次的下单限流不影响）。
+  - **压测**：热门订单模式，准入开与关、客户端 2 秒超时，报告 `docs/perf/phase-16o-admission.md`：开时在咨询锁上等待的会话至多 1 个，关时平均 3、至多 7 个（池 10），
+    同时的产品列表 p50 为基线的约 1.9 倍（开，主要是同机 CPU）对约 3.5 倍（关）。

@@ -121,6 +121,35 @@ class ProcessRateLimitsTest {
     }
 
     @Test
+    void aRequestOneBucketRefusesTakesNothingFromTheOthers() {
+        // Per user 5, per instance 1: the instance's bucket refuses the second request, which leaves alice's alone.
+        ProcessRateLimits limits = limits(new ProcessRateLimitProperties.Limit(5, null, 1, Duration.ofMinutes(1)));
+        limits.check(LIMITED, actor("bob"), null);
+        for (int i = 0; i < 10; i++) {
+            catchThrowableOfType(RateLimitedException.class, () -> limits.check(LIMITED, actor("alice"), null));
+        }
+        now.addAndGet(Duration.ofMinutes(1).toNanos());
+        // A minute later the instance has a token again; alice has all 5 of hers, so 1 more is the instance's limit.
+        assertThatCode(() -> limits.check(LIMITED, actor("alice"), null)).doesNotThrowAnyException();
+        TestObservationRegistryAssert.assertThat(registry)
+            .hasObservationWithNameEqualTo(PlatformObservations.PROCESS_RATE_LIMITED)
+            .that().hasLowCardinalityKeyValue("scope", "instance");
+
+        // Per user 1, per instance 3: alice's second is refused by her own bucket and takes nothing of the instance.
+        ProcessRateLimits user = limits(new ProcessRateLimitProperties.Limit(1, null, 3, Duration.ofMinutes(1)));
+        user.check(LIMITED, actor("alice"), null);
+        for (int i = 0; i < 10; i++) {
+            catchThrowableOfType(RateLimitedException.class, () -> user.check(LIMITED, actor("alice"), null));
+        }
+        assertThatCode(() -> {
+            user.check(LIMITED, actor("bob"), null);
+            user.check(LIMITED, actor("carol"), null);
+        }).doesNotThrowAnyException();
+        assertThat(catchThrowableOfType(RateLimitedException.class, () -> user.check(LIMITED, actor("dave"), null)))
+            .as("the instance's three: alice, bob, carol").isNotNull();
+    }
+
+    @Test
     void valuesOutOfRangeLimitNothing() {
         ProcessRateLimits zero = limits(new ProcessRateLimitProperties.Limit(0, -1, null, Duration.ofMinutes(1)));
         ProcessRateLimits noPeriod = limits(new ProcessRateLimitProperties.Limit(1, null, null, Duration.ZERO));

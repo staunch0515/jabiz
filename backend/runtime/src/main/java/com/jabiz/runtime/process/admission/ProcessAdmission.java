@@ -20,6 +20,7 @@ import reactor.util.context.ContextView;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -29,7 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * cancelled. At most {@code concurrency} runs of one key are in their transaction at once on this instance, and at
  * most {@code max-active} of all keys together; the others wait here, holding no connection, in order of arrival, at
  * most {@code max-wait}. A full queue or a wait that long ends the run with {@link ProcessBusyException} (503
- * {@code PROCESS_BUSY}) before it has read anything.
+ * {@code PROCESS_BUSY}) before it has read anything. An admitted run is detached from its caller: a caller that goes
+ * away no longer cancels it, it ends on its own (bounded by {@code lock_timeout}) and only then gives its permit back.
  *
  * <p>Admission is not mutual exclusion: each instance queues on its own, and the process's {@code HoldLock} still
  * keeps the runs apart (decision D45 item 2). A wrong key, a restart or several instances change how well the queue
@@ -99,11 +101,23 @@ public class ProcessAdmission {
                 admitted -> "ADMITTED",
                 error -> error instanceof ProcessBusyException busy ? busy.reason().name() : "error");
             Admitted admitted = new Admitted(definition.name(), family, key);
-            return Mono.usingWhen(permit,
-                held -> work.contextWrite(context -> context.put(Admitted.class, admitted)),
-                AdmissionGate.Permit::releaseLater,
-                (held, error) -> held.releaseLater(),
-                AdmissionGate.Permit::releaseLater);
+            // Once admitted, the run is not cut short by its caller going away: a cancelled transaction rolls back
+            // only once its statement ends, and a statement waiting for the lock waits up to lock_timeout, holding
+            // its connection. The permit goes back when the transaction has really ended, so the permits still
+            // bound the connections taken.
+            return permit.flatMap(held -> Mono.deferContextual(view -> {
+                CompletableFuture<T> run;
+                try {
+                    run = work.contextWrite(context -> context.put(Admitted.class, admitted))
+                        .doFinally(signal -> held.release())
+                        .contextWrite(view)
+                        .toFuture();
+                } catch (RuntimeException e) {
+                    held.release();
+                    return Mono.error(e);
+                }
+                return Mono.fromFuture(run, true);
+            }));
         });
     }
 

@@ -8,6 +8,8 @@ import net.jqwik.api.Property;
 import net.jqwik.api.Provide;
 import net.jqwik.api.constraints.IntRange;
 import reactor.core.Disposable;
+import reactor.core.Disposables;
+import reactor.core.scheduler.Scheduler;
 import reactor.test.scheduler.VirtualTimeScheduler;
 
 import java.time.Duration;
@@ -34,7 +36,7 @@ class AdmissionGatePropertyTest {
 
     @Provide
     Arbitrary<List<Op>> operations() {
-        Arbitrary<Op> op = Combinators.combine(Arbitraries.integers().between(0, 3), Arbitraries.integers()
+        Arbitrary<Op> op = Combinators.combine(Arbitraries.integers().between(0, 5), Arbitraries.integers()
                 .between(0, KEYS.length - 1), Arbitraries.integers().between(0, 50), Arbitraries.integers()
                 .between(1, 400))
             .as(Op::new);
@@ -61,9 +63,36 @@ class AdmissionGatePropertyTest {
         @ForAll @IntRange(min = 1, max = 3) int concurrency, @ForAll @IntRange(min = 1, max = 4) int maxActive,
         @ForAll @IntRange(min = 0, max = 4) int maxQueue) {
         VirtualTimeScheduler time = VirtualTimeScheduler.create();
+        // Hand-overs wait until an operation runs them, so that cancellations and releases land between a permit
+        // being handed over and its subscriber receiving it; timers run in virtual time.
+        List<Runnable> handOvers = new ArrayList<>();
+        Scheduler scheduler = new Scheduler() {
+            @Override
+            public Disposable schedule(Runnable task) {
+                handOvers.add(task);
+                return Disposables.single();
+            }
+
+            @Override
+            public Disposable schedule(Runnable task, long delay, TimeUnit unit) {
+                return time.schedule(task, delay, unit);
+            }
+
+            @Override
+            public Worker createWorker() {
+                return time.createWorker();
+            }
+        };
+        Runnable drain = () -> {
+            while (!handOvers.isEmpty()) {
+                List<Runnable> due = List.copyOf(handOvers);
+                handOvers.clear();
+                due.forEach(Runnable::run);
+            }
+        };
         AdmissionGate gate = new AdmissionGate(maxActive, 100, 1000,
             family -> new AdmissionGate.Limits(concurrency, maxQueue, Duration.ofSeconds(1)),
-            () -> time.now(TimeUnit.NANOSECONDS), () -> time);
+            () -> time.now(TimeUnit.NANOSECONDS), () -> scheduler);
         List<Run> runs = new ArrayList<>();
         Map<String, List<Integer>> admittedOrder = new HashMap<>();
         for (Op op : ops) {
@@ -95,9 +124,22 @@ class AdmissionGatePropertyTest {
                         waiting.get(op.pick() % waiting.size()).subscription.dispose();
                     }
                 }
-                default -> time.advanceTimeBy(Duration.ofMillis(op.millis()));
+                case 3 -> time.advanceTimeBy(Duration.ofMillis(op.millis()));
+                case 4 -> drain.run();
+                default -> {
+                    // A holder ends and, before its permit reaches the next waiter, a waiter goes away.
+                    List<Run> holding = runs.stream().filter(r -> r.permit != null && !r.released).toList();
+                    if (!holding.isEmpty()) {
+                        Run run = holding.get(op.pick() % holding.size());
+                        run.released = true;
+                        run.permit.release();
+                    }
+                    List<Run> waiting = runs.stream().filter(r -> r.signals.get() == 0).toList();
+                    if (!waiting.isEmpty()) {
+                        waiting.get((op.pick() + op.millis()) % waiting.size()).subscription.dispose();
+                    }
+                }
             }
-            time.advanceTime();
             check(gate, runs, concurrency, maxActive);
         }
         for (List<Integer> order : admittedOrder.values()) {
@@ -111,6 +153,7 @@ class AdmissionGatePropertyTest {
                 r.released = true;
                 r.permit.release();
             });
+            drain.run();
             time.advanceTime();
         }
         assertThat(gate.active()).isZero();
@@ -130,7 +173,7 @@ class AdmissionGatePropertyTest {
         }
         assertThat(holding).isLessThanOrEqualTo(maxActive);
         perKey.values().forEach(count -> assertThat(count).isLessThanOrEqualTo(concurrency));
-        // Permits handed over but not yet received do not happen here: the virtual scheduler runs them at once.
-        assertThat(gate.active()).as("permits counted as held").isEqualTo(holding);
+        // Permits on their way to a waiter are counted as held too.
+        assertThat(gate.active()).as("permits counted as held").isBetween(holding, maxActive);
     }
 }
