@@ -26,9 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Finance's pages and the monthly reports (docs/quizbuks/plans/Q9c-admin-finance.md, F-08). A month of every kind of
- * posting QuizBuks makes, through its processes (a top-up with Stripe's fee and a refund, a reward with a commission,
- * a transfer sent and settled then partly reversed, a transfer Stripe refused, a payout to the bank and one that
- * failed, and postings of no known kind), between a posting before the month and one after it: the monthly report
+ * posting QuizBuks makes, through its processes (a top-up with Stripe's fee and a refund, one lost to a dispute, a
+ * reward with a commission, a transfer sent and settled then partly reversed, a transfer Stripe refused, a payout to
+ * the bank and one that failed, and postings of no known kind), between a posting before the month and one after it: the monthly report
  * has every kind on its row with what it moved on each account, the balance sheet opens and closes on the platform's
  * account balances and its checks hold; an issued report is archived and issued again with the same hash. Only
  * finance reads the reports, the finance templates and the attempts' amounts.
@@ -85,6 +85,20 @@ class AdminFinanceIT extends PayoutItSupport {
         return event(eventId(), "transfer.reversed", transfer);
     }
 
+    /** A dispute of a top-up's charge, as Stripe reports it. */
+    static Map<String, Object> dispute(String topUpId, long amount, String status) {
+        Map<String, Object> dispute = new LinkedHashMap<>();
+        dispute.put("id", "dp_f08");
+        dispute.put("object", "dispute");
+        dispute.put("charge", "ch_" + topUpId.replace("-", ""));
+        dispute.put("payment_intent", paymentOf(topUpId));
+        dispute.put("amount", amount);
+        dispute.put("currency", "jpy");
+        dispute.put("status", status);
+        dispute.put("livemode", false);
+        return dispute;
+    }
+
     static Map<String, Object> payout(String id, long amount, String status) {
         Map<String, Object> payout = new LinkedHashMap<>();
         payout.put("id", id);
@@ -130,6 +144,12 @@ class AdminFinanceIT extends PayoutItSupport {
         deliver(event(eventId(), "charge.refunded", Map.of("id", "ch_f08", "payment_intent", paymentOf(topUpId),
             "amount", 10_000, "amount_refunded", 1_000, "currency", "jpy", "livemode", false)));
         assertThat(money(topUp(topUpId).get("refunded_amount"))).isEqualByComparingTo("1000");
+        // A second top-up of 2,000 whose dispute is lost: taken back.
+        String disputed = openTopUp(sponsor, 2_000);
+        deliver(event(eventId(), "checkout.session.completed", completed(disputed)));
+        deliver(event(eventId(), "charge.dispute.created", dispute(disputed, 2_000, "needs_response")));
+        deliver(event(eventId(), "charge.dispute.closed", dispute(disputed, 2_000, "lost")));
+        assertThat(money(topUp(disputed).get("dispute_clawback"))).isEqualByComparingTo("2000");
         // The development credit: no source, so of no known kind.
         credit(sponsor, 300);
 
@@ -169,9 +189,9 @@ class AdminFinanceIT extends PayoutItSupport {
         credit(sponsor, 50);
 
         List<Expected> expected = List.of(
-            row("TOPUP", 1, 10_000, "1110", 10_000, "2110", -10_000),
+            row("TOPUP", 2, 12_000, "1110", 12_000, "2110", -12_000),
             row("REFUND", 1, 1_000, "1110", -1_000, "2110", 1_000),
-            row("DISPUTE", 0, 0),
+            row("DISPUTE", 1, 2_000, "1110", -2_000, "2110", 2_000),
             row("STRIPE_FEE", 1, 360, "1110", -360, "5110", 360),
             row("REWARD", 1, 100, "2110", 100, "2120", -80, "4110", -20),
             row("TRANSFER_SENT", 2, 3_500, "2120", 3_500, "2130", -3_300, "4110", -200),
@@ -206,9 +226,9 @@ class AdminFinanceIT extends PayoutItSupport {
         Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000));
         Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000));
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
-        Map<String, Long> debits = Map.of("1110", 15_300L, "1120", 6_000L, "2110", 1_100L, "2120", 3_500L,
+        Map<String, Long> debits = Map.of("1110", 17_300L, "1120", 6_000L, "2110", 3_100L, "2120", 3_500L,
             "2130", 3_300L, "4110", 100L, "5110", 360L);
-        Map<String, Long> credits = Map.of("1110", 9_260L, "1120", 1_000L, "2110", 10_300L, "2120", 5_580L,
+        Map<String, Long> credits = Map.of("1110", 11_260L, "1120", 1_000L, "2110", 12_300L, "2120", 5_580L,
             "2130", 3_300L, "4110", 220L, "5110", 0L);
         List<Map<String, Object>> balances = report(BALANCES, from, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))

@@ -41,6 +41,7 @@
 - **受控参数**（平台决策 D40）：金额与免审核开关列在 `QbParams.CONTROLLED`（`ControlledParams` Bean），只经受控变更修改；`QB_SETUP` 提出它们的首个值，由另一位管理员发布。
   不把 `platform.param.write` 授予任何角色。
 - **账本**只经流程的子流程 `LEDGER_POST` / `LEDGER_REVERSE` 写入；`ledger.post`、`ledger.reverse`、`ledger.account.write` 不授予任何角色。
+  月报 `qb.admin.monthly`（Q9c）按分录的来源单据（`sourceEntity`）、是否冲正与所动科目归类（退款与争议扣回只差在描述 `Refund` / `Lost dispute`）：新增一种过账时同步改它的分类与 `AdminFinanceIT` 的逐行期望，否则它落在 `OTHER`。
 - **国家数据**在 `quizbuks/countries.txt`（`code|en|zh|ja|regions`，无引号）；文件问题由启动检查（类别 `QUIZBUKS`）一次报告。
 - **地区**：国家的 `regions` 是按 `country.Regions.ALL` 顺序、以逗号连接的地区代码，总含 `GLOBAL`（平台没有多值字段）；规则 `QB_COUNTRY_REGIONS_FORMAT` 只接受这一种写法。
 - **内容（模版、题目、资料、版本）**（`content`，`docs/quizbuks/plans/Q3-content.md`）：写入只经 `QB_QUIZ_*` / `QB_QUESTION_*` / `QB_MATERIAL_*` 流程
@@ -59,7 +60,7 @@
   上架时随计数行插入**卡片** `QbPublicationCard`（普通表：除状态外全部在提交时冻结，含档位的 JSON `CardTiers`），`PublicationEditing.write` 在发布锁内随状态同步它；
   答题人的首页、详情、档位与答题流程只读卡片，不读时态的发布与档位。答题只经 `publishing.PublicationMoves` 改变发布（结束、预算不足）。
 - **答题**（`play`，`docs/quizbuks/plans/Q5-answering.md`）：会话 `QbAttempt`、首次浏览、完成人数都是普通表，只经 `QB_VIEW` / `QB_ATTEMPT_*` /
-  `QB_PENDING_*` / `QB_PUBLICATION_STATS_REFRESH` 写入（默认数据视图 `processOnlyWrites`，答题人视图只读、限本人）。**一人一次**由 `(user_id, publication_id)` 唯一约束兜底，
+  `QB_PENDING_*` / `QB_PUBLICATION_STATS_REFRESH` 写入（默认数据视图 `processOnlyWrites`，答题人视图只读、限本人）。会话带奖励与抽成，而数据视图不能去掉字段：`QbAttempt` 的默认数据视图不给任何角色读取（读权限 `qb.play.system`），财务读只读视图 `finance:QbAttempt`，支持人员只经不含金额的 `qb.admin.attempts`（Q9c，C-2）。**一人一次**由 `(user_id, publication_id)` 唯一约束兜底，
   开始在发布锁内再读本人会话。**锁的顺序**：`qb.pub:<发布>` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；持钱包锁的流程（补发、开发入账）从不再取发布锁，
   恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）只取发布锁、不取钱包锁。**晚取锁**：版本、参数在锁外读，锁内只重读会话、计数、发布与钱包再写入；继续答题与保存进度不取锁。
   **超时自动提交**只由逐项任务 `qb.attempt-expire`（每分钟，模板 `qb.system.attempts-due`）对每个会话运行 `QB_ATTEMPT_EXPIRE`。**逐项取锁或可能逐项失败的批量系统工作写成逐项任务**
@@ -141,9 +142,13 @@
   手写类型与读取在 `api.ts`（快照类型 `snapshot.ts` 抄自商家后台，随 `QuizSnapshots` 一起改）。只读默认数据视图与 `qb.admin.*` 模板，决定只经平台的 `ApprovalPanel`；
   发布的决定面板只在发布、档位与版本（审批绑定的三者）都为当前 `approvalRequestId` 读好、无错误、不在重读时给出。资金部分只在 `qb.admin.finance.read` 时显示与请求，
   内容管理员读的模板也不带金额（金额在 `qb.admin.publication-funds`、`qb.admin.attempt-rewards` 等财务模板中）；列表按页读取；金额按 JPY（`formatAmount`），用户编号用 `UserName`。
+  **财务页**（Q9c，`/qb/finance/**`，菜单"QuizBuks 财务"，`docs/quizbuks/plans/Q9c-admin-finance.md`）：名字与读取在 `finance-api.ts`、非组件的辅助（地址中的筛选、分组、报错）在 `finance.ts`、文案在 `finance-messages.ts`。
+  列表的筛选写在地址中（总览与核对页链到筛选后的列表），只认编号、状态与日期；大额转账的决定面板只在转账与收款人的全部读取都为当前 `approvalRequestId` 读好、无错误、不在重读时给出（同发布审核）。
+  月报只经平台：模板 `qb.admin.monthly` / `qb.admin.balances`（`from`、`to` 为 UTC 的月初与下月初，`timeSlice` 只映射 `knownAt`）、导出 `POST /api/queries/{id}/export`、签发 `REPORT_ISSUE`、存档 `GET /api/reports/runs`；页面不自己汇总或保存报表。核对差异只读（C-3）。
   检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
-  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案）。
+  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案），
+  并以 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 每分钟运行每日转账（Q9c：财务的测试打开转账、把审核线设为 1,000 并等待大额转账进入审批；其他测试的奖励都低于转账门槛 1,000）。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
 ## 6. 测试与命令（在 `backend/` 下）

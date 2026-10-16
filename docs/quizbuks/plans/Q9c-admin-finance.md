@@ -84,3 +84,48 @@
 ## 9. 预估
 
 约 3.5 天：模板与 IT 1.5 天，页面与 Vitest 1.5 天，e2e 与文档 0.5 天。
+
+## 实施记录（Q9c，2026-10-16）
+
+分支 `1.2/quizbuks-9c-admin-finance`（计划提交 f06036e 之上）。只改 `.jabiz-app-paths` 中的路径，不改平台；没有迁移。
+
+- **后端**：模板 `qb.admin.monthly`、`qb.admin.balances`（报表，`queries/qb/admin`）、`qb.admin.finance-summary`；`qb.admin.transfers` 加筛选 `transferId`、
+  列 `stale`、`held`、`releasedAt`、`releasedBy`（参数 `staleBefore`）；`qb.admin.topups` 加筛选 `topUpId`（核对页链到一笔充值）。三语的标题与列名（`MessagesTest`）。
+  `QbAttempt` 的数据视图按 C-2 拆开（见偏离）；`QB_ADMIN_FINANCE` 加 `report.archive.read`（`report.issue` 已有，C-4）。不加流程。
+- **前端**（扩展）：菜单"QuizBuks 财务"，`/qb/finance`（总览）、`/qb/finance/transfers`（转账）、`/qb/finance/transfers/:transferId/review`（大额审批）、
+  `/qb/finance/topups`（充值）、`/qb/finance/reconciliation`（核对）、`/qb/finance/reports`（月报）。读取在 `finance-api.ts`，地址中的筛选、分组与报错在 `finance.ts`，
+  文案在 `finance-messages.ts`（三语，并入 `messages.ts`）。`usePaged` 在列表（筛选）改变时回到第一页。
+- **测试**：
+  - IT `AdminFinanceIT` 3 个：一个月里经流程做出每一种过账（充值与 Stripe 手续费、退款、争议败诉扣回、奖励含抽成、转账发出并成功后部分被撤回、Stripe 拒绝的转账（冲正）、
+    两笔打款其一失败、开发入账与测试的直接过账），月前与月后各一笔：月报 12 行逐行核对笔数、金额与七个科目的变动（每行合计 0）；余额表的期初、期末与平台
+    `jabiz.ledger.account_balances` 相同，借贷逐科目核对，各科目的变动等于月报的列和，三项核对为真；`REPORT_ISSUE` 签发两次（中间在月外再过账）得到同一哈希，
+    存档核对 `identical`，存档列表含两次；导出的 CSV 13 行。权限矩阵：内容管理员与商家对两个报表、总览、转账、充值、奖励模板与导出 403，财务 200；
+    `finance:QbAttempt` 只给财务，缺省视图对三者都 403；内容管理员不能签发、不能读存档。总览的待审批数与按编号读转账、驳回后 `held`、放行后不再 `held`。
+  - `PlayOwnerIT`、`QbRolesTest` 随 C-2、C-4 更新；场景 `topup.yml` 末尾加十月两个报表的期望（新权限多了一条授权，五个场景的快照只有生成编号的移位）。
+  - Vitest `finance.test.tsx` 16 个：总览的链接与无 `ledger.read` 时不读科目；转账页的地址筛选、待核实标记、放行按权限显示并先确认；审批页的前提（收款人读取出错时不给面板）、
+    非待审、非编号地址不请求；核对页的分组与链接；月报的模板参数、导出参数与签发、无权限时不给签发与存档；月份、地址筛选与分组的纯函数。
+  - e2e `finance.spec.ts`（总览 → 待审批的转账 → 审批页批准 → 桩收到转账 → 本月月报、CSV 与 PDF 导出、签发）；`a11y.spec.ts` 加财务页（总览、转账、充值、核对、月报，亮、暗）。
+- **EXPLAIN**：EXPLAIN_RESULT
+- **偏离计划**：
+  - **C-2 的做法**：平台的数据视图不能去掉字段（只有公开读取有白名单，`f.masked` 只用于文本），所以"缺省视图去掉两列"做不到。缺省视图改为不给任何角色读取
+    （读权限 `qb.play.system`；流程与模板照常经它），财务读只读视图 `finance:QbAttempt`，支持人员只经不含金额的 `qb.admin.attempts`（用户汇总的答题历史）。
+    影响比计划大：内容管理员在通用后台不再有 `QbAttempt` 的生成页面（不止是少两列）。平台缺口：数据视图按权限收窄字段（或数值字段的遮蔽），记在此处，不改平台。
+  - **报表参数**：不是计划的 `month` 参数，而是 `from`、`to`（月初与下月初）与可选的 `knownAt`；`timeSlice` 只映射 `knownAt`（平台 19 §2.2：账本的过账时间是筛选条件，
+    若以月末为生效时点，月末记账、次月才记录的分录会两头都不在）。月份按 UTC（平台报表时区 `jabiz.reports.zone` 的缺省；QuizBuks 未设）：页面按 UTC 计算月初。
+  - **余额表的核对只读账本**：计划的"2110 = 商家钱包合计、2120 + 2130 = 用户钱包合计"在报表中是各科目与其各户（维度 `party`）之和的核对；钱包缓存（普通表、只有现在）
+    与账本的核对是每日核对（核对页）。这样报表只读时态实体，签发后可按数据核对（`recomputable`）。
+  - **月报的分类**：12 类（充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款、打款失败、其他），按来源单据、是否冲正与所动科目；
+    退款与争议扣回所动科目相同，只按流程写的描述 `Refund` / `Lost dispute` 区分（`AdminFinanceIT` 两者都覆盖）。开发入账与没有来源的过账归"其他"。
+  - **金额**按 JPY（`formatAmount`），同 Q9a 与 `CLAUDE.md` §4（管理员看真实币种），不是计划写的 `formatKudos`。
+  - **核对差异的链接**：`qb.admin.recon-items` 不改；引用的种类由检查项推出（`TOPUP_*` → 充值，`TRANSFER_*` → 转账，`partyId` → 用户汇总）。`qb.admin.topups` 加 `topUpId` 筛选。
+  - **资金待办**按指派的权限（`qb.reconcile`）计数，链到平台的待办页，不按来源键。
+  - **每日转账的时间可配置**（`quizbuks.transfers.run-cron`，环境变量 `QB_TRANSFER_RUN_CRON`，缺省不变）：平台没有"立即运行任务"的接口，e2e 要在测试中等到一笔大额转账进入审批，
+    所以 CI 的 e2e 以每分钟运行；测试打开转账并把审核线设为 1,000（e2e 数据库中保留，其他测试的奖励都低于门槛）。
+  - **e2e 以首个管理员登录**（持有全部权限），不是建一个财务角色的用户：财务角色要求二次验证（`SecRole.requireMfa`），e2e 的管理入口不做二次验证。
+  - **a11y** 查五个财务页（总览、转账、充值、核对、月报）；审批页在 `finance.spec.ts` 中走过，但不做 axe（它要等一笔大额转账进入审批，约一分钟）。
+- **已知限制**：
+  - 导出与签发的报表中，类型与核对项是代码（`TOPUP`、`SPONSOR_WALLETS`）：平台的导出不翻译文本列；页面中照常显示三语的名称。PDF 中的中文、日文需要
+    `jabiz.reports.pdf.fonts`（QuizBuks 尚未配置，否则为 `?`；CSV 与 Excel 不受影响）。
+  - 核对页一次显示一次运行的前 100 项差异（更多时说明总数）。
+  - 打开状态下拉框时（Radix 的 Select 把页面其余部分设为 `aria-hidden`）axe 报 `aria-hidden-focus`，是平台后台布局与 Select 的组合，财务页的 a11y 不查这个状态。
+  - 报表按过账时间：奖励按结算时计入，与商家交易页（按状态的时间）对不上是预期的（计划第 7 节）。

@@ -67,7 +67,7 @@ docs/quizbuks/               本文件等
 | `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户）、`qb.account.read`（本人资料与登录记录，Q2）、`qb.sponsor.avatar.read`（发布人头像，Q2） |
 | `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read` |
 | `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
-| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）|
+| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）|
 | `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
@@ -116,7 +116,7 @@ docs/quizbuks/               本文件等
 | `QbPublicationSchedule` | P | `publicationId`（主键）、`quizId`、`versionId`、`nextDueAt` | 已提交且未退回草稿的发布：定时任务按 `nextDueAt` 取到期的，移除模版时按 `quizId` 找出要保留文件的版本（都是普通索引；时态表上按可变字段查找要扫全部历史） |
 | `QbPublicationCounter` | P | `publicationId`（主键）、`starts`、`completions`、`passes`、`winners`、`reserved`、`spent` | 高频计数与预算占用，上架时插入全 0 的一行（Q4），只在发布锁内更新（4.3，Q5）；不进时态（否则每次答题都给发布追加一个版本） |
 | `QbPublicationCard` | P | `publicationId`（主键）、`sponsorId`、`status`、`regions`、`startAt`、`endAt`、`name`、`quizTitle`、`cover`、`versionId`、`maxReward`、`fullScore`、`passScore`、`timeLimitSec`、`questionCount`、`budgetCap`、`maxWinners`、`tiers`（档位的规范 JSON）、`sponsorCountry`、`wentOnAt` | 上架时随计数行插入（Q5）。除状态外全部在提交时冻结，状态由发布的流程在发布锁内同步。答题人的首页、详情、档位与答题流程只读它（时态表上按状态、时间、地区筛选要读全部版本） |
-| `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认） |
+| `QbAttempt` | P → 结束后流程拒绝修改 | `userId`、`publicationId`（二者唯一，一人一次）、`sponsorId`、`versionId`、`startedAt`、`deadline`、`status`（IN_PROGRESS / SUBMITTED / EXPIRED）、`currentIndex`、`optionOrder`、`answers`、`result`（三者都是规范 JSON 文本）、`submittedAt`、`score`、`fullScore`、`passed`、`tierId`、`reward`、`fee`、`rewardStatus`（NONE / PAID / PENDING）、`rewardPaidAt`、`ledgerTransactionId` | 答题会话（Q5）。进行中只有 `answers`、`currentIndex` 会变（保存进度，U-41）；`result`（含每题正确选项）在完成时才写。不建逐题答案表：每次保存只写一行，题目分析（Q9）用 `jsonb_array_elements` 展开。一人一次按发布：版本是模板，发布定义范围，用户可参加满足条件的任何发布，不论是否参加过同一版本的其他发布（需求方 2026-10-11 确认）。数据视图（Q9c，C-2）：缺省视图不给任何角色读取（数据视图不能去掉字段，而会话带奖励与抽成），财务读只读视图 `finance:QbAttempt`，支持人员经不含金额的 `qb.admin.attempts` 读取 |
 | `QbPublicationView` | P | `userId`、`publicationId`（唯一）、`firstViewedAt` | 漏斗的"浏览"：每人每发布只记第一次（`QB_VIEW`） |
 | `QbPublicationStats` | P | `publicationId`（主键）、`last1h`、`last24h`、`last7d`、`last30d`、`refreshedAt` | 近期完成人数，由任务 `qb.publication-stats` 每 10 分钟分块写入（只写变化的行；运行时间记在 `QbStatsRun`）；已认证的模板没有缓存；累计完成数取计数行，实时 |
 | `QbPublicationOwner` | 视图 | `publicationId`、`sponsorId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
@@ -300,7 +300,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` | M-10 – M-11、M-34、M-40 – M-43 | 各自权限 |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
-| `qb.admin.users` / `qb.admin.transfers` / `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表）/ `qb.admin.journal-export` | P-01、P-03、F-06、F-08、F-02 – F-03（CSV 汇总凭证） | 管理权限 |
+| `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
+| `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表） | F-08（Q9c，`plans/Q9c-admin-finance.md`）：只读账本、按过账时间，参数 `from`、`to`（月初与下月初，UTC）与可选的 `knownAt`（`timeSlice` 只映射它，平台 19 §2.2）。月报按交易类型（来源单据与所动科目：充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款到银行 / 失败、其他）给出笔数、金额与七个科目各自的借减贷，每类都有一行；余额表给出各科目的期初、借、贷、期末，以及三项核对（2110 与各商家之和、2120 + 2130 与各用户之和、借贷相等）。导出只经平台 `POST /api/queries/{id}/export`，签发只经 `REPORT_ISSUE`（只读时态实体：可重算） | `qb.admin.finance.read` |
+| `qb.admin.finance-summary` | 财务总览的一行（Q9c）：钱包合计、待审批 / 待核实的转账、暂停的用户、最近一次核对、未处理的资金待办（指派给 `qb.reconcile` 的平台待办） | `qb.admin.finance.read` |
+| `qb.admin.journal-export` | F-02 – F-03（CSV 汇总凭证，Q9d） | `qb.admin.finance.read` |
 
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。
 - 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；商家后台提供 CSV 与 XLSX。
