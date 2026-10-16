@@ -17,7 +17,7 @@
 
 | 对象 | 约定 | 例 |
 |---|---|---|
-| 包 | `com.jabiz.quizbuks.<模块>`（`identity`、`content`、`publishing`、`play`、`wallet`、`messaging`、`stats`；公用的在 `setup`、`country`） | `com.jabiz.quizbuks.wallet` |
+| 包 | `com.jabiz.quizbuks.<模块>`（`identity`、`content`、`publishing`、`play`、`wallet`、`journal`、`messaging`、`stats`；公用的在 `setup`、`country`） | `com.jabiz.quizbuks.wallet` |
 | 启动类 | `QuizbuksApp` | |
 | 表 | 前缀 `qb_`，时态表 `qb_<名>_version` | `qb_country_version` |
 | 实体 | 前缀 `Qb` | `QbCountry` |
@@ -39,7 +39,8 @@
 - **初始数据只经 `QB_SETUP`**：角色、账本科目、国家、业务参数由它建立；它可重复执行，只补**从未存在过**的（`QbSetupRecord` 记下它建过或见过的每一项），不改已有的，也不加回管理员删除的角色、收回的权限。新阶段的新权限、科目、参数加到
   `QbRoles` / `QbLedger` / `QbParams`，部署后再执行一次 `QB_SETUP`。从代码中去掉的授权不会被收回：由管理员在已有安装中收回一次。
 - **受控参数**（平台决策 D40）：金额与免审核开关列在 `QbParams.CONTROLLED`（`ControlledParams` Bean），只经受控变更修改；`QB_SETUP` 提出它们的首个值，由另一位管理员发布。
-  不把 `platform.param.write` 授予任何角色。
+  不把 `platform.param.write` 授予任何角色。Q9d 的科目映射 `qb.journal.account.<科目>` 与收据开具方 `qb.issuer.*` 同样受控（首个值为空）：应用不能自定义受控变更的目标
+  （`ControlTarget` 是平台的响应式接口），所以"只经受控变更修改的数据"一律写成受控参数，不另建实体。
 - **账本**只经流程的子流程 `LEDGER_POST` / `LEDGER_REVERSE` 写入；`ledger.post`、`ledger.reverse`、`ledger.account.write` 不授予任何角色。
   月报 `qb.admin.monthly`（Q9c）只在来源单据（`sourceEntity`）、是否冲正、所动科目的集合与各科目的方向全都符合时才归入一类（退款与争议扣回所动科目相同，按引用的 Stripe 对象区分：`ch_` / `py_` 与 `dp_` / `du_`，`StripeIds`），其余一律 `OTHER`：新增一种过账时同步改它的分类与 `AdminFinanceIT` 的逐行期望。
 - **国家数据**在 `quizbuks/countries.txt`（`code|en|zh|ja|regions`，无引号）；文件问题由启动检查（类别 `QUIZBUKS`）一次报告。
@@ -109,6 +110,22 @@
     同一键重试余额不足或 5xx 永远得到同样的回答：这两者立即结束作业（`StripeTransferHandler.kept`），次日的新转账用新键。
     被驳回或被撤回（含部分）的转账使用户暂停，直到财务以 `QB_TRANSFER_HOLD_RELEASE` 放行；审核人的意见不写进用户可读的字段。
     开通链接只由本人的数据视图读取（默认数据视图的读权限是不授予任何角色的 `qb.payout.system`）。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
+- **分录导出与收据**（`journal`、`wallet.TopUpReceipts`，`docs/quizbuks/plans/Q9d-journal-receipts.md`）：
+  - 平台账本本身是复式总账，导出只把平台科目映射到会计系统的科目代码（`QbParams.JOURNAL_ACCOUNTS`，每个 `QbLedger` 科目一个，启动检查 `JournalMappingCheck`）；新增科目时同时加映射参数。
+  - 一期 = 一个**日本日期**的月（`JournalPeriods`，D-1；Q9c 的月报仍按 UTC），按顺序导出（`QB_JOURNAL_EXPORT`，命名锁 `qb.journal`，`(periodFrom, granularity)` 唯一），
+    第一期为最早过账的月份。每笔分录恰在一次导出中：本次取"过账于期末之前、记录于截止时刻之前、且不在以前的导出中"的（模板 `qb.system.journal-*`；上一期末取导出记录的 `periodEnd`；截止 = 导出时刻 − `JournalPeriods.SETTLE`，
+    使导出时尚未提交的过账进入下一次；同一数据库另有事务已打开超过 `quizbuks.journal.max-open-transaction`（≤ `SETTLE` 的一半）即拒绝，`QB_JOURNAL_TRANSACTION_OPEN`）。迟到的分录进入下一次导出，已导出的凭证从不改变；冲正照常是新分录。
+  - **规模**（评审 H1）：凭证行由数据库汇总（`qb.system.journal-summary`）；明细按交易区间分段（`qb.system.journal-parts`，每段在 `jabiz.process.max-read-rows` 与 `jabiz.files.generated.max-bytes` 的一半之内，`JournalLimits`），
+    每段由子流程 `QB_JOURNAL_DETAIL_PART`（`subProcessOnly`）读一次、存一个文件 `<凭证号>-detail-<n>.csv`，记在 `QbJournalExportPart`。读取上限是按次的，不是按流程累计；一笔交易超过半段即 `QB_JOURNAL_TOO_LARGE`。不在导出中一次读全部分录。
+  - 导出前一次报告全部问题：月未结束、月末之后的最近一次核对不是 `OK`、所动科目未映射或代码不合格（`[A-Za-z0-9][A-Za-z0-9._-]{0,19}`）、借贷不等、超过上限、有打开已久的事务；凭证号只在这些检查之后取（`AssignNumber`，`QBJ-<年>-00001`）。
+    凭证 CSV（只含汇总行，供导入）与明细 CSV（时刻按日本时间）只经 `FILE_ARCHIVE` 原样存档（读取要 `qb.admin.finance.read`），单元格全部加引号、以 `= + - @`、制表、回车开头的加 `'`，UTF-8 带 BOM（`JournalLines`）。
+    预览 `QB_JOURNAL_PREVIEW` 是同一套读取与汇总、不写入（平台的流程接口没有试运行，见计划的实施记录），同样先查封禁，并给出明细的行数、文件数与是否接近上限。外部凭证号只记一次（`QB_JOURNAL_EXPORT_CONFIRM`）。
+  - 收据是平台单据（版式 `qb.topup_receipt`）：`QB_TOPUP_RECEIPT_ISSUE` 只给本人已到账、未退款、无未结或已败争议的充值（`QB_RECEIPT_REFUNDED`）、开具方名称已设时签发，每笔至多一张（`QbTopUpReceipt`，`topUpId` 唯一），再次请求返回同一张；
+    按签发时刻读取，语言为商家所选（en / zh / ja）。中文、日文需要 `jabiz.reports.pdf.fonts`（镜像已设）。收据是收款凭证，收款金额写日元（JPY，"Kudos 以外不写币种名"
+    的唯一例外，同一张上另写存入钱包的 Kudos 与卡片实际扣款的币种和金额）。收据不声称是适格请求书；登记号与税的表述待财务、法务确认。
+  - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
+    或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
+  - 导出文件与收据还没有 `RetentionPolicy`（会计保存 7 – 10 年），记为后续。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）
@@ -130,6 +147,7 @@
 - **支付页**（QP4，`sponsor/src/wallet/`、`app/src/wallet/`）：页面只读记录、从不入账；Stripe 的跳回（`?checkout=`、`?onboarding=`）只决定显示，结果一律等服务端的记录。
   轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
   刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
+- **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
   导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
@@ -146,9 +164,12 @@
   列表的筛选写在地址中（总览与核对页链到筛选后的列表），只认编号、状态与日期；大额转账的决定面板只在转账与收款人的全部读取都为当前 `approvalRequestId` 读好、无错误、不在重读时给出（同发布审核）。
   月报只经平台：模板 `qb.admin.monthly` / `qb.admin.balances`（`from`、`to` 为 UTC 的月初与下月初，`timeSlice` 只映射 `knownAt`）、导出 `POST /api/queries/{id}/export`、签发 `REPORT_ISSUE`（同一期间再签发即取代该期最近的一次）、存档 `GET /api/reports/runs`；月份在地址中（`?month=`）；页面不自己汇总或保存报表。核对差异只读（C-3）。
   核对结果与资金待办只给 `qb.reconcile`（模板 `qb.admin.recon-summary`，另要 `task.read`），不放进只要 `qb.admin.finance.read` 的模板。
+  **分录导出页**（Q9d，`/qb/finance/journal`、`/qb/finance/journal/mapping`）：名字与读取在 `journal-api.ts`；页面只显示预览给出的行与问题、从不自己汇总或编号，导出只在预览 `ready` 时给出并先确认；
+  下载只经 `GET /api/generated-files/{id}`（有 `file.generated.read` 时给出）；科目映射页只读，修改链到平台的受控变更（提出、发布）。
   检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
-  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案），
+  服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER`、`QB_E2E_FINANCE` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案；
+  Q9d 的导出要已验证的邮箱，首个管理员没有，测试另建一个已验证的用户并给它不要求二次验证的测试角色 `QB_E2E_FINANCE`），并以 `QB_RECONCILE_RUN_CRON='30 * * * * *'` 每分钟核对（导出等月末之后的一次干净的核对），
   并以 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 每分钟运行每日转账（Q9c：财务的测试打开转账、把审核线设为 1,000 并等待大额转账进入审批；其他测试的奖励都低于转账门槛 1,000）。
   这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。

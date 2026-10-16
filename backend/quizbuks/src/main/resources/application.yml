@@ -106,6 +106,14 @@ jabiz:
         scheme: stripe
         secrets: ["${STRIPE_CONNECT_WEBHOOK_SECRET:}"]
         event-types: [account.updated, account.application.deauthorized]
+  # PDF reports and documents (the monthly reports, the top-up receipts in the sponsor's language; Q9d, D-5): Noto Sans
+  # comes with the platform, Chinese and Japanese need TrueType fonts of the host, tried in order (comma-separated).
+  # The image sets IPA Gothic (Japanese) and Droid Sans Fallback (Chinese) (deploy/quizbuks/Dockerfile); elsewhere
+  # empty, and those characters print as "?" (CSV and Excel are not affected). A configured file that cannot be read
+  # fails the startup.
+  reports:
+    pdf:
+      fonts: ${JABIZ_REPORTS_PDF_FONTS:}
   i18n:
     # Error messages in English when Accept-Language names none of the application's languages.
     default-locale: en
@@ -159,3 +167,11 @@ quizbuks:
   # end-to-end tests change it (every minute: a large transfer waits for review within a test, Q9c).
   transfers:
     run-cron: ${QB_TRANSFER_RUN_CRON:0 7 1 * * *}
+  # The daily reconciliation (F-06): 18:37 UTC, 03:37 in Tokyo. Only the end-to-end tests change it (every minute: the
+  # journal export waits for a clean reconciliation after the month's end, Q9d); refused next to live mode.
+  reconcile:
+    run-cron: ${QB_RECONCILE_RUN_CRON:0 37 18 * * *}
+  # The journal export (Q9d review M1): another database transaction open this long stops it, since a posting it began
+  # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
+  journal:
+    max-open-transaction: PT5M

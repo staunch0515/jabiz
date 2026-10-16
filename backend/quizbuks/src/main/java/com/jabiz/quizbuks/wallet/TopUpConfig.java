@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.wallet;
 import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.external.ExternalJobCompletion;
@@ -30,7 +31,7 @@ import java.util.Map;
 /**
  * Registers top-ups and the daily reconciliation (docs/quizbuks/plans/Q6-payments.md, Q6a): Stripe's service and
  * settings, the top-up and reconciliation entities with their datasets and dictionaries, the jobs that call Stripe,
- * the processes, the consumers of Stripe's events and the two scheduled jobs.
+ * the processes, the consumers of Stripe's events and the two scheduled jobs; and the top-up receipts (Q9d).
  */
 @Configuration
 class TopUpConfig {
@@ -79,6 +80,28 @@ class TopUpConfig {
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    /** The receipts issued (Q9d): read by finance, written by {@code QB_TOPUP_RECEIPT_ISSUE} only. */
+    @Bean
+    EntityDefinition qbTopUpReceiptEntity() {
+        return TopUpReceipts.RECEIPT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbTopUpReceiptDataset() {
+        return processOnly(QbTopUps.defaultDataset(TopUpReceipts.RECEIPT), TopUpReceipts.RECEIPT,
+            QbPermissions.ADMIN_FINANCE_READ, 10);
+    }
+
+    @Bean
+    DocumentLayout qbTopUpReceiptLayout() {
+        return TopUpReceipts.LAYOUT;
+    }
+
+    @Bean
+    ProcessDefinition<TopUpReceipts.IssueInput, TopUpReceipts.IssueOutput, ProcessContext> qbTopUpReceiptIssue() {
+        return TopUpReceipts.issue();
     }
 
     @Bean
@@ -311,12 +334,17 @@ class TopUpConfig {
             .maxItems(WalletLimits.STALE_BATCH);
     }
 
-    /** Every day at 18:37 UTC (03:37 in Tokyo), F-06. */
+    /**
+     * Every day at 18:37 UTC (03:37 in Tokyo), F-06. Only the end-to-end tests run it more often
+     * ({@code QB_RECONCILE_RUN_CRON}: the journal export waits for a clean run; refused next to live mode,
+     * {@link TransferScheduleCheck}).
+     */
     @Bean
     JobDefinition<Reconciliation.ReconcileInput> qbReconcileJob(
         ProcessDefinition<Reconciliation.ReconcileInput, Reconciliation.ReconcileOutput, ProcessContext>
-            qbReconcileRun) {
-        return JobDefinition.cron(Reconciliation.JOB, "0 37 18 * * *", ZoneOffset.UTC, qbReconcileRun,
+            qbReconcileRun,
+        @Value("${" + Reconciliation.RUN_CRON_SETTING + ":" + Reconciliation.RUN_CRON + "}") String cron) {
+        return JobDefinition.cron(Reconciliation.JOB, cron.strip(), ZoneOffset.UTC, qbReconcileRun,
             Reconciliation.ReconcileInput::new);
     }
 }

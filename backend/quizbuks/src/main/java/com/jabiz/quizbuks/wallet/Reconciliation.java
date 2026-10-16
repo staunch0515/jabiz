@@ -34,6 +34,9 @@ public final class Reconciliation {
     public static final String RUN = "QB_RECONCILE_RUN";
     public static final String JOB = "qb.reconcile";
     public static final String DIFF_EVENT = "qb.reconcile.diff";
+    /** Every day at 18:37 UTC (03:37 in Tokyo); a six-field cron in UTC. Only the end-to-end tests change it (Q9d). */
+    public static final String RUN_CRON = "0 37 18 * * *";
+    public static final String RUN_CRON_SETTING = "quizbuks.reconcile.run-cron";
 
     public static final String RUN_ENTITY_NAME = "QbReconRun";
     public static final String ITEM_ENTITY_NAME = "QbReconItem";

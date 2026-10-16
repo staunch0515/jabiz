@@ -31,6 +31,7 @@ interface Server {
   /** The top-up's states, read in turn (the last one repeats); null for none. */
   topUps?: (Record<string, unknown> | null)[]
   start?: { status: number; body: unknown }
+  receipt?: { status: number; body: unknown }
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -70,6 +71,12 @@ function server(options: Server = {}) {
       case '/api/processes/QB_TOPUP_START/latest':
         return json(options.start?.status ?? 200, options.start?.body
           ?? { output: { topUpId: 't1', status: 'OPENING', jobId: 'j1' } })
+      case '/api/processes/QB_TOPUP_RECEIPT_ISSUE/latest':
+        return json(options.receipt?.status ?? 200, options.receipt?.body
+          ?? { output: { runId: 'r1', documentNo: 't0', issued: true } })
+      case '/api/documents/runs/r1/pdf':
+        return new Response('%PDF-1.7', { status: 200, headers: { 'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="t0.pdf"' } })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbTopUp/entities/t1': {
         const state = states[Math.min(reads++, states.length - 1)]
         return state ? json(200, { id: 't1', version: 1, attributes: state }) : json(404, { detail: 'Not found' })
@@ -196,6 +203,46 @@ describe('the wallet', () => {
     await user.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(processCalls()).toHaveLength(2))
     expect(processCalls()[1].key).not.toBe(processCalls()[0].key)
+  })
+})
+
+describe('the receipts', () => {
+  it('offers the receipt of a paid top-up only, issued in the sponsor\'s language and downloaded as kept', async () => {
+    const { processCalls } = server()
+    URL.createObjectURL = vi.fn(() => 'blob:receipt')
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    const rows = await screen.findAllByTestId('topup-row')
+    expect(within(rows[0]).queryByTestId('topup-row-receipt')).not.toBeInTheDocument()
+    await user.click(within(rows[1]).getByTestId('topup-row-receipt'))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    expect(processCalls()).toHaveLength(1)
+    expect(processCalls()[0]).toMatchObject({ path: '/api/processes/QB_TOPUP_RECEIPT_ISSUE/latest',
+      body: { topUpId: 't0', language: 'en' } })
+    expect(click.mock.contexts[0]).toHaveProperty('download', 't0.pdf')
+    expect(screen.queryByTestId('topup-receipt-problem')).not.toBeInTheDocument()
+  })
+
+  it('shows the server\'s refusal', async () => {
+    server({ receipt: { status: 422, body: { status: 422, detail: 'Refused', violations: [{
+      ruleCode: 'QB_RECEIPT_NO_ISSUER', message: 'Receipts cannot be issued yet.' }] } } })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    const rows = await screen.findAllByTestId('topup-row')
+    await user.click(within(rows[1]).getByTestId('topup-row-receipt'))
+    expect(await screen.findByTestId('topup-receipt-problem')).toHaveTextContent('Receipts cannot be issued yet.')
+  })
+
+  it('issues receipts in the application\'s languages only', async () => {
+    const { receiptLanguage } = await import('./api')
+    expect(receiptLanguage('ja')).toBe('ja')
+    expect(receiptLanguage('zh-CN')).toBe('zh')
+    expect(receiptLanguage('fr')).toBe('en')
+    expect(receiptLanguage(undefined)).toBe('en')
   })
 })
 

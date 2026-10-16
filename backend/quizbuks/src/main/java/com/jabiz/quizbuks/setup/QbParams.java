@@ -38,13 +38,39 @@ public final class QbParams {
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
 
+    /*
+     * The account mapping of the journal export (Q9d, F-01): for each postable account of the ledger (QbLedger), the
+     * account code of the accounting system the summary voucher posts it to. Empty until finance sets it; an export
+     * moving an account without one is refused. The startup check JournalMappingCheck keeps this list complete.
+     */
+    public static final String JOURNAL_ACCOUNT_PREFIX = "qb.journal.account.";
+    public static final String JOURNAL_ACCOUNT_1110 = JOURNAL_ACCOUNT_PREFIX + "1110";
+    public static final String JOURNAL_ACCOUNT_1120 = JOURNAL_ACCOUNT_PREFIX + "1120";
+    public static final String JOURNAL_ACCOUNT_2110 = JOURNAL_ACCOUNT_PREFIX + "2110";
+    public static final String JOURNAL_ACCOUNT_2120 = JOURNAL_ACCOUNT_PREFIX + "2120";
+    public static final String JOURNAL_ACCOUNT_2130 = JOURNAL_ACCOUNT_PREFIX + "2130";
+    public static final String JOURNAL_ACCOUNT_4110 = JOURNAL_ACCOUNT_PREFIX + "4110";
+    public static final String JOURNAL_ACCOUNT_5110 = JOURNAL_ACCOUNT_PREFIX + "5110";
+    public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
+        JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110);
+
+    /*
+     * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
+     * receipts show them. Data, not configuration, so that each receipt keeps them as issued; empty until set, and no
+     * receipt is issued without a name.
+     */
+    public static final String ISSUER_NAME = "qb.issuer.name";
+    public static final String ISSUER_ADDRESS = "qb.issuer.address";
+    public static final String ISSUER_REGISTRATION_NO = "qb.issuer.registration-no";
+    public static final List<String> ISSUER = List.of(ISSUER_NAME, ISSUER_ADDRESS, ISSUER_REGISTRATION_NO);
+
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
-    public static final List<String> CONTROLLED = List.of(CREATOR_FEE_RATE, TRANSFER_THRESHOLD,
-        TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO, TOPUP_MIN, TOPUP_MAX,
-        TRANSFER_FEE);
+    public static final List<String> CONTROLLED = java.util.stream.Stream.of(List.of(CREATOR_FEE_RATE,
+        TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
+        TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE), JOURNAL_ACCOUNTS, ISSUER).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -55,6 +81,8 @@ public final class QbParams {
 
     private static final Map<String, Object> KUDOS = Map.of("type", "monetary", "currency", "JPY", "scale", 0);
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
+    /** An account code of the accounting system: at most 20 characters (letters, digits, {@code . _ -}). */
+    private static final Map<String, Object> ACCOUNT_CODE = Map.of("type", "text", "maxLength", 20);
 
     public static final List<Param> ALL = List.of(
         // numeric(4, 4): below 1 (a taker always keeps part of a reward), refused at the proposal otherwise. Parameters
@@ -73,7 +101,25 @@ public final class QbParams {
             "Oldest app version that may still be used"),
         new Param(TOPUP_MIN, KUDOS, "1000", "The smallest top-up a sponsor may make, in Kudos"),
         new Param(TOPUP_MAX, KUDOS, "1000000", "The largest top-up a sponsor may make, in Kudos"),
-        new Param(TRANSFER_FEE, KUDOS, "0", "The platform's fee on each transfer, in Kudos (0: none)"));
+        new Param(TRANSFER_FEE, KUDOS, "0", "The platform's fee on each transfer, in Kudos (0: none)"),
+        journal(JOURNAL_ACCOUNT_1110, "1110 Stripe balance"),
+        journal(JOURNAL_ACCOUNT_1120, "1120 Bank deposits"),
+        journal(JOURNAL_ACCOUNT_2110, "2110 Sponsor prepayments"),
+        journal(JOURNAL_ACCOUNT_2120, "2120 Rewards payable"),
+        journal(JOURNAL_ACCOUNT_2130, "2130 Transfers in transit"),
+        journal(JOURNAL_ACCOUNT_4110, "4110 Service revenue"),
+        journal(JOURNAL_ACCOUNT_5110, "5110 Payment fees"),
+        new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
+            "Name of the operator issuing the top-up receipts"),
+        new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
+            "Address of the operator, as the top-up receipts show it"),
+        new Param(ISSUER_REGISTRATION_NO, Map.of("type", "text", "maxLength", 50), "",
+            "Registration number of the operator (such as the qualified invoice issuer number), on the receipts"));
+
+    private static Param journal(String key, String account) {
+        return new Param(key, ACCOUNT_CODE, "", "Accounting system's account code for " + account
+            + " in the journal export (empty: not mapped)");
+    }
 
     private QbParams() {}
 }

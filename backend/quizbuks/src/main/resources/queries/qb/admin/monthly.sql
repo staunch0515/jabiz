@@ -2,7 +2,9 @@
 id: qb.admin.monthly
 description: >-
   The month's transactions by kind (F-08): how many and how much, and what they moved on each account (debit less
-  credit); from the ledger alone, by booking time, as recorded up to a time (if given)
+  credit); from the ledger alone, by booking time, as recorded up to a time (if given). Its months are UTC months
+  (from, to); the journal export to the accounting system (qb.admin.journal-exports, Q9d) is by Japanese months, nine
+  hours earlier, and takes late postings in its next export: the two differ by the postings near a month's edge
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   from:    { like: LedgerTransaction.bookingTime, required: true, description: "The month's first instant: transactions booked at or after it count" }

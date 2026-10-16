@@ -65,9 +65,9 @@ docs/quizbuks/               本文件等
 | 角色 | 权限（应用自定义的权限码，前缀 `qb.`） |
 |---|---|
 | `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户）、`qb.account.read`（本人资料与登录记录，Q2）、`qb.sponsor.avatar.read`（发布人头像，Q2） |
-| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read` |
+| `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read`、`document.archive.read`（Q9d：下载本人签发的充值收据） |
 | `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
-| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）|
+| `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）、`qb.journal.export`、`qb.journal.confirm`、`file.generated.read`（Q9d：分录导出、记录外部凭证号、下载存档的 CSV）|
 | `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
@@ -76,7 +76,7 @@ docs/quizbuks/               本文件等
 - 文件策略只能声明一个读取权限，所以商家头像的读取（商家本人、答题人、管理员）共用 `qb.sponsor.avatar.read`（Q2）。
 - 行范围：答题人的数据视图以 `userId = 当前用户` 限定；商家的以 `sponsorId = 当前用户` 限定（平台 `fromContext("…", actorId)`）。
 - 职责分离：大额转账的审核人不能是被转账人本人（平台 SoD 规则）；修改抽成比例、转账门槛等参数走四眼（`CONTROL_CHANGE_*`）：
-  平台决策 D40，`QbParams.CONTROLLED`（抽成比例、转账门槛、人工审核额、转账开关、两个免审核开关）以 `ControlledParams` 声明，一切直接写入 422 `PARAM_CONTROLLED`。
+  平台决策 D40，`QbParams.CONTROLLED`（抽成比例、转账门槛、人工审核额、转账开关、两个免审核开关；Q9d 加科目映射 `qb.journal.account.<科目>` 与收据开具方 `qb.issuer.*`）以 `ControlledParams` 声明，一切直接写入 422 `PARAM_CONTROLLED`。
   `QB_SETUP` 以受控变更提出它们的首个值，由另一位管理员发布。没有角色持有 `platform.param.write`；`control.publish` 只授予 `QB_ADMIN_FINANCE`（2026-10-10 确认）：超级管理员提议、财务管理员发布，没有角色同时持有两者。新装系统只有一位管理员时，受控参数在第二位（财务）管理员发布前没有值（已接受）。
 - 二次验证：管理员角色要求二次验证（`SecRole.requireMfa`）；商家可自行开启。
 
@@ -130,6 +130,8 @@ docs/quizbuks/               本文件等
 | `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b）、`held`（开立中的争议冻结，`0 ≤ held ≤ balance`，Q6a；不是账本分录，可用余额 = 余额 − 冻结） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
 | `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`amount`（`> 0`）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`、`disputeShortfall`、`disputeHeld`（开立中的争议冻结的部分）；`checkReason`、`checkRequestedAt` | 充值（`plans/Q6-payments.md` D-Q6-2）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
 | `QbReconRun` / `QbReconItem` | W（Q6a） | 运行：`scheduledTime`（唯一）、`status`（OK / DIFF）、`checkedAt`、`itemCount`、`summary`（各项差异数的规范 JSON）；差异：`runId`、`check`（字典 `recon-check`）、`partyId`、`reference`、`expected`、`actual`、`difference` | 每日核对（F-06）的结果，只写一次 |
+| `QbJournalExport` / `QbJournalExportConfirmation` | W（Q9d） | 导出：`periodFrom`、`periodTo`（日本日期，含两端）、`granularity`（MONTH）、`voucherNo`（`QBJ-<年>-00001`，唯一）、`periodEnd`（期末时刻，下一次导出以它为上一期末）、`knownAt`（截止的记录时刻）、`previousExportId`（唯一：导出成链）、`lineCount`、`transactionCount`、`debitTotal` = `creditTotal`、`fileId` / `fileSha256`（导入用的凭证 CSV）、`detailPartCount`（明细的文件数；各文件为 `QbJournalExportPart`：`exportId`、`partNo`、`fileId`、`sha256`、`rowCount`）、`exportedBy`；确认：`exportId`（唯一）、`externalVoucherNo`、`confirmedBy` | 分录导出（F-01 – F-03，`plans/Q9d-journal-receipts.md`）：一月一张汇总凭证，`(periodFrom, granularity)` 唯一，CSV 原样存于平台 `sys_generated_file`；只写一次、只插入 |
+| `QbTopUpReceipt` | W（Q9d） | `topUpId`（唯一）、`sponsorId`、`runId`（平台单据 `sys_document_run`）、`documentNo`、`language` | 充值收据（F-09）：每笔已到账的充值至多一张，PDF 原样存于平台单据存档 |
 | `QbTransfer` | P（Q6b） | `userId`、`externalAccountId`（遮蔽）、`amount`、`fee`、`net`（`amount = fee + net`、`net > 0`）、`status`（REVIEW / SENDING / SENT / FAILED / CHECK / REJECTED / REVERSED）、`approvalRequestId`、`stripeTransferId`（唯一）、`sendTransactionId`（唯一）、`settleTransactionId`、`reversalTransactionId`、`reversedAmount`、`failureCode`、`failureMessage`（只有系统的说明，审核人的意见留在审批中）、`sendEndedAt`、`releasedBy` / `releasedAt`、时间 | 自动转账（4.7）。每人至多一笔未结束的（REVIEW / SENDING / CHECK，部分唯一索引）。大额先进 REVIEW 走审批（准备人 = 收款人）。被驳回或被 Stripe 撤回（含部分）的转账使用户暂停，直到财务放行（`QB_TRANSFER_HOLD_RELEASE`）。`QbStripePayout`（P）记平台余额打款到银行（`payoutId` 唯一） |
 | `QbFxRate` | T | `currency`、`rateDate`、`perJpy`、`source`（ECB / MANUAL） | 显示用参考汇率（"约合 X USD"），可手动覆盖；不参与记账 |
 | `QbStripeEvent` | — | — | 不建：Stripe 通知由平台入站 Webhook（G9）原样存档与去重 |
@@ -271,6 +273,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_TAKER_WALLET_SYNC` / `_RESYNC` | 系统（`qb.reward.settled`、`qb.transfer.changed`、`qb.taker-wallet.resync`） | 用户钱包锁：按账本重算 2120 / 2130 并覆盖写入缓存（重复、乱序收敛） |
 | `QB_TRANSFER_CREATE`（逐项任务 `qb.transfer-run`，每日 UTC 01:07） | 系统（`qb.payout.system`） | 用户钱包锁：开关开、余额（账本）≥ 门槛、账户 `ENABLED`、未封禁、无未结束转账、未暂停、最近未因账户连续 3 次失败（平台自身的失败不计）→ 全额转账；超过审核额进 `REVIEW`（审批，准备人 = 收款人；没有生效的规则即跳过、不写任何记录，每天一个待办），否则发出：分录、作业 `qb.stripe.transfer`（先按 `transfer_group` 查询再创建，幂等键 `qb-transfer-<转账号>`） |
 | `QB_TRANSFER_APPROVAL_RESULT` | 系统（审批事件） | 只认转账自己的请求：批准后重查开关、封禁、账户与余额再发出，否则驳回并待办；驳回即 `REJECTED`（未过账，`REVIEW_REJECTED`，意见不写入用户可读的记录） |
+| `QB_JOURNAL_PREVIEW` | `qb.journal.export`（财务） | 下一次导出现在会是什么：月份、凭证行（带外部科目代码）、阻止导出的原因（月未结束、月末之后的核对未通过、未映射或代码不合格的科目、借贷不平）；不写入（Q9d） |
+| `QB_JOURNAL_EXPORT` | `qb.journal.export`（财务），二次验证（`ADMINISTRATION`），要求已验证 | 命名锁 `qb.journal` → 下一期（上一期之后的月份，第一次为最早过账的月份；输入的月份必须是它）→ 检查（月已结束、最近一次核对在月末之后且 OK、所动科目都已映射、借贷相等，一次报告全部）→ `AssignNumber`（`qb.journal`，按年）→ 两个 CSV（凭证与明细；UTF-8 带 BOM，单元格全部加引号、以 `= + - @` 开头的加 `'`）→ 子流程 `FILE_ARCHIVE` 两次 → 记 `QbJournalExport`。截止时刻 = 导出时刻 − 10 分钟（`JournalPeriods.SETTLE`） |
+| `QB_JOURNAL_EXPORT_CONFIRM` | `qb.journal.confirm`（财务），要求已验证 | 记外部系统的凭证号，每次导出一次（`QB_JOURNAL_ALREADY_CONFIRMED`） |
+| `QB_TOPUP_RECEIPT_ISSUE` | `qb.topup`（本人），要求已验证 | 锁 `qb.receipt:<充值>` → 经本人数据视图读充值（他人的 404）→ 已有收据即返回它；否则须 `PAID`（`QB_RECEIPT_NOT_PAID`）且开具方名称已设（`QB_RECEIPT_NO_ISSUER`）→ 子流程 `DOCUMENT_ISSUE`（版式 `qb.topup_receipt`，按签发时刻读取，商家所选语言）→ 记 `QbTopUpReceipt` |
 | `QB_TRANSFER_HOLD_RELEASE` | `qb.payout.review`（财务），要求已验证 | 用户钱包锁：放行因转账被驳回或撤回而暂停的用户（记下放行人与时间）；没有暂停即 `QB_TRANSFER_NOT_HELD`；不能放行自己（`QB_TRANSFER_RELEASE_OWN`） |
 | `QB_TRANSFER_SENT` / `QB_TRANSFER_SEND_FAILED` | 系统（作业） | 结果与记录相符即 `SENT`（2130 → 1110）；Stripe 拒绝创建（确定：400、401、404、余额不足，Stripe 把拒绝保存在幂等键下）即冲正 `FAILED`；其他（不确定：超时、429、5xx——5xx 同样保存在键下，不再重试）`CHECK` 并待办，不冲回；记下发送结束的时间 |
 | `QB_TRANSFER_CHECK` / `QB_TRANSFER_CHECKED` / `QB_TRANSFER_CHECK_FAILED`（逐项任务 `qb.transfer-stale`，每小时） | 系统 | `CHECK` 至少 10 分钟、或 `SENDING` 超过 1 小时的转账按 `transfer_group` 查询：有即 `SENT`；`CHECK` 而没有、且查询晚于发送结束至少 10 分钟（作业结果带查询时刻的下界）才冲正，否则留待下次；仍在发送的不动 |
@@ -303,7 +309,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表） | F-08（Q9c，`plans/Q9c-admin-finance.md`）：只读账本、按过账时间，参数 `from`、`to`（月初与下月初，UTC）与可选的 `knownAt`（`timeSlice` 只映射它，平台 19 §2.2）。月报按交易类型（来源单据与所动科目：充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款到银行 / 失败、其他）给出笔数、金额与七个科目各自的借减贷，每类都有一行；余额表给出各科目的期初、借、贷、期末，以及四项账本对自身的核对（2110、2120 + 2130 的每一行都记有户、没有任何户的钱包科目余额为借方、借贷相等）。月报的每一类须来源、冲正、所动科目与方向全都符合，否则为"其他"导出只经平台 `POST /api/queries/{id}/export`，签发只经 `REPORT_ISSUE`（只读时态实体：可重算） | `qb.admin.finance.read` |
 | `qb.admin.finance-summary` / `qb.admin.recon-summary` | 财务总览的一行（Q9c）：钱包合计、待审批 / 待核实的转账、暂停的用户；另一模板为最近一次核对与未处理的资金待办（指派给 `qb.reconcile` 的平台待办） | `qb.admin.finance.read` / `qb.reconcile` + `task.read` |
-| `qb.admin.journal-export` | F-02 – F-03（CSV 汇总凭证，Q9d） | `qb.admin.finance.read` |
+| `qb.admin.journal-exports` / `qb.admin.journal-mapping` | 分录导出的列表（期间、凭证号、行数、借贷合计、文件、外部凭证号）；科目映射（每个可过账科目与现行的外部科目代码，参数是否已发布）（Q9d） | `qb.admin.finance.read` |
+| `qb.system.journal-first` / `qb.system.journal-summary` / `qb.system.journal-parts` / `qb.system.journal-detail` | 导出的取数（Q9d，D-Q9d-3）：最早的过账时间（第一期）；本次所取的分录（过账于期末之前、记录于截止时刻之前、且不在以前的导出中：`bookingTime < to AND createdTime <= knownAt AND (bookingTime >= previousTo OR createdTime > previousKnownAt)`）——凭证行由数据库按科目、借贷（2110 加商家）汇总；明细按交易区间分段（每段在平台读取与文件上限的一半之内），逐段按交易、科目、借贷读取 | `qb.journal.export` |
+| `qb.system.journal-open-transactions` | 导出前检查同一数据库中打开已久的事务（`pg_stat_activity`，评审 M1） | `qb.journal.export` |
+| `qb.sponsor.topup-receipt` / `qb.sponsor.receipt-issuer` | 收据（Q9d，F-09）的两个区块：本人一笔已到账的充值（公司、联系人、到账时间、支付号末尾、金额）；开具方（受控参数 `qb.issuer.*`，总是一行） | `qb.topup` |
 
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。
 - 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；商家后台提供 CSV 与 XLSX。
@@ -328,6 +337,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   英 / 中 / 日（设计缺省 Q16 是中 / 英，按 Q-4 照常提供三种，平台不支持按 SPA 的语言）；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
 - 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；不提供 Google 登录（Q2-16）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
+- 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
 
 ### 7.3 管理员后台（`/admin/`）
 
@@ -335,7 +345,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - QuizBuks 扩展页（`backend/quizbuks/admin-extension`，`plans/Q9a-admin-extension.md`）：
   - Q9a：审核（`/qb/reviews`：待审的商家入驻与发布；发布页显示全部设置、档位、商家资金与冻结版本的完整内容（含正确答案、资料、图片），入驻页显示审批绑定的内容与邮箱验证状态；
     决定用平台的 `ApprovalPanel`）与用户汇总（`/qb/users/:userId`，资料 + 答题历史，资金流水只给财务，P-01）。
-  - 以后（财务 PR）：转账监控、对账结果。
+  - Q9c：财务（`/qb/finance/**`）：总览、转账与大额审批、充值、核对、月报。
+  - Q9d：分录导出（`/qb/finance/journal`：预览下一期、导出、下载存档的 CSV、记录外部凭证号）与科目映射（`/qb/finance/journal/mapping`：只读，修改链到平台的受控变更）。
 
 ### 7.4 "Kudos"
 

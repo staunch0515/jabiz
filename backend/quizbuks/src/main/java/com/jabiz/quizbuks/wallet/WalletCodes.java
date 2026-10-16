@@ -23,8 +23,19 @@ public final class WalletCodes {
     /** A finance administrator releasing transfers to themselves (four eyes, as with the review). */
     public static final String TRANSFER_RELEASE_OWN = "QB_TRANSFER_RELEASE_OWN";
 
+    /** A receipt is only for a paid top-up (Q9d, F-09). */
+    public static final String RECEIPT_NOT_PAID = "QB_RECEIPT_NOT_PAID";
+    /** The receipts' issuer (the operator's name, {@code qb.issuer.name}) is not set yet (Q9d, F-09). */
+    public static final String RECEIPT_NO_ISSUER = "QB_RECEIPT_NO_ISSUER";
+    /**
+     * No first receipt for a top-up refunded (in part) or disputed (open or lost): the money was not, or may not stay,
+     * received (Q9d review M2). A receipt issued before stays as issued.
+     */
+    public static final String RECEIPT_REFUNDED = "QB_RECEIPT_REFUNDED";
+
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
-        PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN);
+        PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
+        RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 
     private WalletCodes() {}
 }

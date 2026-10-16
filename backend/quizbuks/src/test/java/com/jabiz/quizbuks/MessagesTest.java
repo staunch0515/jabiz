@@ -105,6 +105,24 @@ class MessagesTest {
             "query.qb.admin.balances.matches", "query.qb.admin.finance-summary",
             "query.qb.admin.finance-summary.transfersInReview", "query.qb.admin.transfers.stale",
             "query.qb.admin.transfers.held");
+        // Q9d: the journal export, the mapping and issuer parameters, the receipt (its title, blocks and labels).
+        assertThat(en.stringPropertyNames()).containsAll(com.jabiz.quizbuks.journal.JournalCodes.ALL)
+            .containsAll(com.jabiz.quizbuks.setup.QbParams.JOURNAL_ACCOUNTS.stream().map(k -> "param." + k).toList())
+            .containsAll(com.jabiz.quizbuks.setup.QbParams.ISSUER.stream().map(k -> "param." + k).toList())
+            .contains("process.QB_JOURNAL_PREVIEW", "process.QB_JOURNAL_EXPORT", "process.QB_JOURNAL_EXPORT_CONFIRM",
+                "process.QB_TOPUP_RECEIPT_ISSUE", "entity.QbJournalExport", "entity.QbJournalExport.voucherNo",
+                "entity.QbJournalExportConfirmation", "entity.QbTopUpReceipt", "query.qb.admin.journal-exports",
+                "query.qb.admin.journal-exports.externalVoucherNo", "query.qb.admin.journal-mapping",
+                "query.qb.admin.journal-mapping.externalCode", "query.qb.system.journal-detail",
+                "query.qb.system.journal-summary", "query.qb.system.journal-parts",
+                "query.qb.system.journal-open-transactions", "query.qb.admin.journal-export-parts",
+                "query.qb.admin.journal-exports.exportedAt", "process.QB_JOURNAL_DETAIL_PART",
+                "entity.QbJournalExportPart", "entity.QbJournalExport.periodEnd", "document.qb.topup_receipt.paidIn",
+                "QB_RECEIPT_REFUNDED",
+                "query.qb.sponsor.topup-receipt", "query.qb.sponsor.receipt-issuer", "document.qb.topup_receipt",
+                "document.qb.topup_receipt.issuer", "document.qb.topup_receipt.sponsor",
+                "document.qb.topup_receipt.note", "document.qb.topup_receipt.amount", "QB_RECEIPT_NOT_PAID",
+                "QB_RECEIPT_NO_ISSUER");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

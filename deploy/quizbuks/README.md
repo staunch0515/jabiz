@@ -157,6 +157,15 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **Stripe 的可用余额**：充值几天后才变为可用余额，余额不足时 Stripe 拒绝创建并把拒绝保存在幂等键下：该转账立即冲正，次日以新的转账（新键）再试，不计入用户的连续失败。上线前要定资金调度。
 - 被 Stripe 撤回的转账（`transfer.reversed`）按累计金额退回用户余额（手续费不退），并开待办。打款到银行（`payout.paid`）记借 1120 / 贷 1110，失败冲正。
 
+## 分录导出与充值收据（Q9d）
+
+- **部署后再执行一次 `QB_SETUP`，并由另一位管理员发布新的提案**：科目映射 `qb.journal.account.<1110 … 5110>`（每个账本科目在会计系统中的科目代码）与收据开具方
+  `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`，首个值都是空。随后由超级管理员提出实际的值（受控变更 `CONTROL_CHANGE_PROPOSE`，
+  `targetEntity: SysParam`），财务管理员发布。新权限：财务 `qb.journal.export`、`qb.journal.confirm`、`file.generated.read`；商家 `document.archive.read`。
+- **分录导出**（后台"QuizBuks 财务 → 分录导出"）：一月（按日本日期）一张汇总凭证，按顺序导出；要求该月已结束、月末之后的每日核对通过、所动的科目都已映射；
+  导入用的凭证 CSV 与明细 CSV 原样存档（`sys_generated_file`，下载记入显示记录）。月份导出后才记录的分录（退款、冲正）进入下一次导出，已导出的凭证不再改变。
+- **收据**：开具方名称未设置时商家开不出收据（`QB_RECEIPT_NO_ISSUER`）。镜像已装中文与日文字体（`JABIZ_REPORTS_PDF_FONTS`），镜像外运行时自行设置。
+
 ## 环境变量
 
 放在 `deploy/quizbuks/.env`（不提交，已在 `.gitignore` 中）或部署平台的密钥库中。密钥都是 Base64、至少 32 字节（`openssl rand -base64 48`）。
@@ -204,6 +213,8 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_STRIPE_CONNECT_COUNTRY` | 否 | 收款账户的国家，缺省 `JP` |
 | `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值）；格式同上 |
 | `QB_TRANSFER_RUN_CRON` | **不设** | **只给端到端测试**：每日自动转账的时间（六段 cron，UTC），缺省 `0 7 1 * * *`。CI 的 e2e 设为每分钟，好在测试中等到大额转账进入审批。生产中不要设置：每分钟运行会每次收手续费、几分钟内就达到“连续 3 次失败”（本意是 3 天）并多次调用 Stripe；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
+| `QB_RECONCILE_RUN_CRON` | **不设** | **只给端到端测试**（Q9d）：每日核对的时间（六段 cron，UTC），缺省 `0 37 18 * * *`。CI 的 e2e 设为每分钟，好在测试中等到月末之后的一次核对（分录导出要求它通过）。生产中不要设置：每分钟有差异就每分钟建待办；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
+| `JABIZ_REPORTS_PDF_FONTS` | 否 | PDF（充值收据、月报）中中文与日文的 TrueType 字体文件，逗号分隔、按顺序尝试；镜像已装 IPA Gothic 与 Droid Sans Fallback 并设好（`Dockerfile`），镜像外缺省为空（这些字为 `?`）。设了读不到的文件即启动失败 |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

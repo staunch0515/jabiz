@@ -21,18 +21,19 @@ import {
   type SortingState,
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { FileDown, Plus } from 'lucide-react'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { fieldProblem, generalProblem } from '../qb/problems'
+import { fieldProblem, generalProblem, problemText } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
 import { TRANSACTIONS_PATH } from '../transactions/api'
 import '../transactions/messages'
 import {
   available,
+  downloadReceipt,
   parseKudos,
   readTopUpStatuses,
   readWallet,
@@ -140,6 +141,27 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
 const PAGE_SIZE = 20
 
 /**
+ * The receipt of a paid top-up (F-09): issued by the server the first time (in the language the sponsor uses now),
+ * then downloaded as kept. The page makes nothing of its own.
+ */
+function ReceiptButton({ row, onError }: { row: TopUpRow; onError: (error: unknown) => void }) {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const receipt = useMutation({
+    mutationFn: () => downloadReceipt(row.topUpId, i18n.language),
+    onMutate: () => onError(null),
+    onError,
+  })
+  return (
+    <Button size="sm" variant="outline" disabled={receipt.isPending} aria-busy={receipt.isPending || undefined}
+      data-testid="topup-row-receipt" onClick={() => receipt.mutate()}>
+      <FileDown aria-hidden />
+      {t('wallet.receipt')}
+      <span className="sr-only">: {formatDateTime(row.createdAt)}</span>
+    </Button>
+  )
+}
+
+/**
  * The sponsor's wallet (M-04): what is available for rewards, rewards waiting for a top-up, the totals
  * (`qb.sponsor.wallet`) and the top-ups (`qb.sponsor.topups`), with "Top up". Everything is read from the server's
  * records; the page never changes a balance.
@@ -149,6 +171,7 @@ export function WalletPage() {
   const { t: tQb } = useTranslation(QB)
   const statusLabel = useTopUpStatusLabel()
   const [topping, setTopping] = useState(false)
+  const [receiptError, setReceiptError] = useState<unknown>(null)
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }])
   const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
@@ -200,12 +223,15 @@ export function WalletPage() {
       header: () => <span className="sr-only">{t('wallet.view')}</span>,
       enableSorting: false,
       cell: ({ row }) => (
-        <Button asChild size="sm" variant={row.original.checkoutUrl ? 'default' : 'outline'}>
-          <Link to={topUpPath(row.original.topUpId)} data-testid="topup-row-open">
-            {row.original.checkoutUrl ? t('wallet.pay') : t('wallet.view')}
-            <span className="sr-only">: {formatDateTime(row.original.createdAt)}</span>
-          </Link>
-        </Button>
+        <span className="flex flex-wrap justify-end gap-2">
+          {row.original.status === 'PAID' && <ReceiptButton row={row.original} onError={setReceiptError} />}
+          <Button asChild size="sm" variant={row.original.checkoutUrl ? 'default' : 'outline'}>
+            <Link to={topUpPath(row.original.topUpId)} data-testid="topup-row-open">
+              {row.original.checkoutUrl ? t('wallet.pay') : t('wallet.view')}
+              <span className="sr-only">: {formatDateTime(row.original.createdAt)}</span>
+            </Link>
+          </Button>
+        </span>
       ),
     },
   ], [t, statusLabel])
@@ -258,6 +284,12 @@ export function WalletPage() {
             {t('transactions.walletLink')}
           </Link>
         </div>
+        <p className="text-muted-foreground text-sm">{t('wallet.receiptHint')}</p>
+        {receiptError !== null && (
+          <Alert variant="destructive" data-testid="topup-receipt-problem">
+            <AlertDescription>{problemText(receiptError)}</AlertDescription>
+          </Alert>
+        )}
         {topUps.isError
           ? <PageState kind="error" description={tQb('failed')}
             action={<Button variant="outline" onClick={() => void topUps.refetch()}>{tQb('retry')}</Button>} />

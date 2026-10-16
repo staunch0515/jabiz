@@ -46,7 +46,7 @@
 | Q6 页面 | 商家后台的充值与钱包、App 的余额与流水与开通收款、管理列表 | 同上 | 3–4 天 | 15a、16c |
 | Q7 | 消息与内容：站内信、公告与商家通知、已读 / 点击、FAQ、隐私与条款、邮件通知 | U-60 – U-63、U-72 – U-74、M-60 – M-61、P-04 – P-05 | 4–5 天 | 16a |
 | Q8 | AI：生成题目与封面、候选校对、用量 | M-25 – M-26、M-10（用量） | 3–4 天 | 16e |
-| Q9 | 分析与财务报表：仪表盘、漏斗、题目分析、趋势、交易汇总与导出、月报、CSV 汇总凭证。Q9c 财务后台页面与月报 F-08（`plans/Q9c-admin-finance.md`，已完成，待评审）；F-01 – F-03 与 F-09 为 Q9d。Q9b 商家交易明细、汇总与导出（M-50 – M-52）已合并（#157，`plans/Q9b-sponsor-transactions.md`） | M-10 – M-11、M-40 – M-43、M-50 – M-52、F-01 – F-03、F-08 – F-09 | 5–6 天 | 15a（图表） |
+| Q9 | 分析与财务报表：仪表盘、漏斗、题目分析、趋势、交易汇总与导出、月报、CSV 汇总凭证。Q9c 财务后台页面与月报 F-08（`plans/Q9c-admin-finance.md`，已完成，待评审）；F-01 – F-03 与 F-09 为 Q9d（`plans/Q9d-journal-receipts.md`，已完成，待评审）。Q9b 商家交易明细、汇总与导出（M-50 – M-52）已合并（#157，`plans/Q9b-sponsor-transactions.md`） | M-10 – M-11、M-40 – M-43、M-50 – M-52、F-01 – F-03、F-08 – F-09 | 5–6 天 | 15a（图表） |
 | Q10 | 上线准备：发布锁压测（4.3）、安全审查、e2e 全流程（充值 → 答题 → 转账，Stripe 测试模式）、部署文档 | 6.1 | 4–5 天 | 全部 |
 
 应用合计约 51–64 天。
@@ -65,6 +65,7 @@ Q2、Q5、Q6 的页面合为下列阶段（另含平台的 PG-1）；各阶段�
 | QP4 | `1.2/quizbuks-6p-payment-pages` | 商家钱包与充值、App 钱包与开通收款 | 3.5 天 | 已完成（待评审，实施记录见计划） |
 | Q9a | `1.2/quizbuks-9a-admin-extension` | 后台扩展：审核（入驻与发布的完整内容）与用户汇总 P-01（`plans/Q9a-admin-extension.md`） | 2 天 | 已完成（待评审，实施记录见计划） |
 | Q9c | `1.2/quizbuks-9c-admin-finance` | 后台财务页面（总览、转账与大额审批、充值、核对）与月报 F-08（`qb.admin.monthly`、`qb.admin.balances`，`plans/Q9c-admin-finance.md`） | 3.5 天 | 已完成（待评审，实施记录见计划） |
+| Q9d | `1.2/quizbuks-9d-journal-export` | 科目映射 F-01、按月（日本日期）的汇总凭证与 CSV 导出 F-02 – F-03（`QB_JOURNAL_EXPORT`，凭证号不缺不重，CSV 原样存档）、充值收据 F-09（平台单据 `qb.topup_receipt`）（`plans/Q9d-journal-receipts.md`） | 4 天 | 已完成（待评审，实施记录见计划） |
 
 **MVP（P0 闭环）= Q1 – Q6（Q6a、Q6b）**（加 Q7 中的邮件通知）：商家充值 → 编辑 → 发布 → 用户答题 → 结算 → 自动转账。
 

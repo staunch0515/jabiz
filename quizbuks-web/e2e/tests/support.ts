@@ -75,7 +75,7 @@ export async function rows(request: APIRequestContext, token: string, dataset: s
   return ((await response.json()).items ?? []) as { id: string; version: number; attributes: Record<string, unknown> }[]
 }
 
-async function insert(request: APIRequestContext, token: string, dataset: string, attributes: Record<string, unknown>) {
+export async function insert(request: APIRequestContext, token: string, dataset: string, attributes: Record<string, unknown>) {
   const response = await request.post(`/api/datasets/${encodeURIComponent(dataset)}/commit`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { changes: [{ action: 'INSERT', attributes }] },

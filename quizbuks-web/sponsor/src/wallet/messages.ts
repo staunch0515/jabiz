@@ -33,6 +33,8 @@ const en = {
     noTopUps: 'No top-ups yet.',
     view: 'Details',
     pay: 'Continue to payment',
+    receipt: 'Receipt',
+    receiptHint: 'Download the receipt (PDF) of a paid top-up. It is issued once, in the language you use now, and later downloads give the same document.',
     dialog: {
       title: 'Top up your wallet',
       hint: 'You pay on Stripe\'s secure page. Your wallet is credited once Stripe confirms the payment.',
@@ -95,6 +97,8 @@ const zh: typeof en = {
     noTopUps: '还没有充值。',
     view: '详情',
     pay: '继续支付',
+    receipt: '收据',
+    receiptHint: '下载已到账充值的收据（PDF）。收据只开具一次，使用您当前的语言，以后下载的都是同一份。',
     dialog: {
       title: '为钱包充值',
       hint: '在 Stripe 的安全页面上支付。Stripe 确认付款后才计入钱包。',
@@ -157,6 +161,8 @@ const ja: typeof en = {
     noTopUps: 'まだチャージはありません。',
     view: '詳細',
     pay: '支払いへ進む',
+    receipt: '領収書',
+    receiptHint: '入金済みのチャージの領収書（PDF）をダウンロードできます。領収書は現在の言語で一度だけ発行され、以後のダウンロードは同じものです。',
     dialog: {
       title: 'ウォレットにチャージ',
       hint: 'Stripe の安全なページでお支払いください。Stripe が支払いを確認してからウォレットに反映されます。',
