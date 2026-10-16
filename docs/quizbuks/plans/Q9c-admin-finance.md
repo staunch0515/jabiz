@@ -105,7 +105,8 @@
   - Vitest `finance.test.tsx` 16 个：总览的链接与无 `ledger.read` 时不读科目；转账页的地址筛选、待核实标记、放行按权限显示并先确认；审批页的前提（收款人读取出错时不给面板）、
     非待审、非编号地址不请求；核对页的分组与链接；月报的模板参数、导出参数与签发、无权限时不给签发与存档；月份、地址筛选与分组的纯函数。
   - e2e `finance.spec.ts`（总览 → 待审批的转账 → 审批页批准 → 桩收到转账 → 本月月报、CSV 与 PDF 导出、签发）；`a11y.spec.ts` 加财务页（总览、转账、充值、核对、月报，亮、暗）。
-- **EXPLAIN**：EXPLAIN_RESULT
+- **结果**：`:quizbuks:check` 444 个测试全部通过（含 `AdminFinanceIT` 3 个）与 `platformCheck`（0 错误）；扩展 Vitest 47 个（新增 16 个）；`ext:check`、两个 SPA 的 `app:check` 通过；e2e 全部 39 项对打包的 jar、Mailpit 与 Stripe 桩通过（新增 `finance.spec.ts` 1 项、`a11y.spec.ts` 财务页 2 项）；`tools/check-app-paths.sh origin/1.2/platform` 通过。
+- **EXPLAIN**：在 e2e 数据库的副本上加 10 万笔交易（20 万条分录，均匀分布在 12 个月）后，按平台编译后的形式（只写一次的账本表直接读、科目 `DISTINCT ON`）`EXPLAIN ANALYZE`：月报取一个月（约 8,200 笔）约 68 ms：交易按 `booking_time` 的索引取出，分录对其哈希连接，但分录表是顺序扫描（按交易编号的索引在这个比例下不划算）；余额表要期初，读月末以前的全部分录（约 10 万条）约 68 ms。规模再大十倍时仍在秒以内，暂不加索引；需要时按科目与过账时间的汇总表是平台账本的事（记为后续）。
 - **偏离计划**：
   - **C-2 的做法**：平台的数据视图不能去掉字段（只有公开读取有白名单，`f.masked` 只用于文本），所以"缺省视图去掉两列"做不到。缺省视图改为不给任何角色读取
     （读权限 `qb.play.system`；流程与模板照常经它），财务读只读视图 `finance:QbAttempt`，支持人员只经不含金额的 `qb.admin.attempts`（用户汇总的答题历史）。
