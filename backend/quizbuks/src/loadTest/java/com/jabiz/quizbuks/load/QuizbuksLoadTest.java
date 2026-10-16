@@ -76,7 +76,8 @@ import java.util.regex.Pattern;
  * / {@code LOAD_DB_PASSWORD} / {@code LOAD_DB_NAME} (JDBC, optional), {@code LOAD_TIMEOUT} (60s: how long a client of
  * the load waits; one not answered by then is 599 {@code TIMEOUT}), {@code LOAD_RETRY_BUSY} ({@code yes}: a 503
  * {@code PROCESS_BUSY} or a timeout is tried again as the App does, with the same {@code Idempotency-Key}, after the
- * doubling back-off and never sooner than {@code Retry-After}; {@code no} gives up at once).
+ * doubling back-off and never sooner than {@code Retry-After}; {@code no} gives up at once), {@code LOAD_READ_RATE}
+ * (rounds a second of each reader; back to back when absent).
  *
  * <p>As the App, every start and submission carries an {@code Idempotency-Key} of its own (kept for its retries) and
  * the submission names its publication (the key of the queue before the publication's lock, platform decision D45).
@@ -117,6 +118,11 @@ public final class QuizbuksLoadTest {
      * loadTest): one not answered by then counts as {@link #TIMED_OUT}, its client gone. Setup calls wait 120 s.
      */
     private final Duration requestTimeout = Duration.parse("PT" + env("LOAD_TIMEOUT", "60s").toUpperCase(Locale.ROOT));
+    /**
+     * Rounds a second of each reader ({@code LOAD_READ_RATE}; a round reads the feed, the page and the tiers); 0 or
+     * absent: back to back, as fast as the answers come.
+     */
+    private final double readRate = Double.parseDouble(env("LOAD_READ_RATE", "0"));
     /** Whether a busy answer is tried again as the App does ({@code LOAD_RETRY_BUSY}, default yes). */
     private final boolean retryBusy = !"no".equals(env("LOAD_RETRY_BUSY", "yes"));
     private final HttpClient http = HttpClient.newBuilder()
@@ -304,8 +310,9 @@ public final class QuizbuksLoadTest {
         long done = submits.count("200 OK");
         line("### Under load (" + String.format(Locale.ROOT, "%.1f", seconds) + " s)");
         line("");
-        line(String.format(Locale.ROOT, "**%.1f completions/s** (%d submissions accepted of %d takers in %.1f s).",
-            done / seconds, done, takers, seconds));
+        line(String.format(Locale.ROOT, "**%.1f completions/s** (%d submissions accepted of %d takers in %.1f s); "
+            + "steady (between the 10th and the 90th percentile of the completions) **%.1f / s**.", done / seconds, done,
+            takers, seconds, load.steadyRate()));
         line("");
         line(HEADER);
         line(starts.row(seconds));
@@ -354,13 +361,32 @@ public final class QuizbuksLoadTest {
 
     /** The calls of the load: each HTTP answer, and each operation as the taker sees it (with its retries). */
     record Load(Stats starts, Stats submits, Stats startsSeen, Stats submitsSeen, Stats completions,
-        Map<String, LongAdder> rewards, LongAdder retries, List<String> unfinished) {
+        Map<String, LongAdder> rewards, LongAdder retries, List<String> unfinished, List<Long> finishedAt) {
 
         static Load of() {
             return new Load(new Stats("start (QB_ATTEMPT_START), each call"),
                 new Stats("submit (QB_ATTEMPT_SUBMIT), each call"), new Stats("start as the taker sees it"),
                 new Stats("submit as the taker sees it"), new Stats("start + submit, one taker"),
-                new ConcurrentHashMap<>(), new LongAdder(), java.util.Collections.synchronizedList(new ArrayList<>()));
+                new ConcurrentHashMap<>(), new LongAdder(), java.util.Collections.synchronizedList(new ArrayList<>()),
+                java.util.Collections.synchronizedList(new ArrayList<>()));
+        }
+
+        /**
+         * Completions a second between the 10th and the 90th percentile of the accepted submissions' times: the
+         * steady rate, without the ramp and the tail (the last takers waiting out their back-off).
+         */
+        double steadyRate() {
+            List<Long> times;
+            synchronized (finishedAt) {
+                times = new ArrayList<>(finishedAt);
+            }
+            java.util.Collections.sort(times);
+            if (times.size() < 20) {
+                return Double.NaN;
+            }
+            int from = times.size() / 10;
+            int to = times.size() * 9 / 10;
+            return (to - from) / ((times.get(to) - times.get(from)) / 1e9);
         }
     }
 
@@ -439,6 +465,9 @@ public final class QuizbuksLoadTest {
             drain ? null : load.submitsSeen(), retries, load.rewards());
         if (!drain) {
             load.completions().record(new Answer(submitted.status(), submitted.body(), System.nanoTime() - t0));
+            if (submitted.status() == 200) {
+                load.finishedAt().add(System.nanoTime());
+            }
         }
         if (submitted.status() == 200 || submitted.status() == 422) {
             return true;
@@ -488,7 +517,19 @@ public final class QuizbuksLoadTest {
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             for (String token : tokens) {
                 pool.submit(() -> {
+                    long round = 0;
+                    long first = System.nanoTime();
                     while (go.getAsBoolean() && System.nanoTime() < end) {
+                        if (readRate > 0) {
+                            // Paced: round n of this reader at n / rate seconds (late rounds are not made up).
+                            long due = first + (long) (round++ * 1e9 / readRate) - System.nanoTime();
+                            if (due > 0) {
+                                Thread.sleep(Duration.ofNanos(due));
+                            } else if (due < -1_000_000_000L) {
+                                first = System.nanoTime();
+                                round = 1;
+                            }
+                        }
                         String at = Instant.now().toString();
                         Map<String, Object> feedParams = new LinkedHashMap<>();
                         feedParams.put("at", at);

@@ -92,3 +92,30 @@ Q5 的吞吐基线（`PlayThroughputIT`，本机、进程内）：**同一发布
     模型的省略、R1 的提升在噪声之内、移动那次完成的额外成本约 7–8 条语句。
 - **决定（需求方）：做 R3（取锁前在进程内排队 + 入口限流，平台）、R2（降低 `LEDGER_POST` 的成本，连同平台的通用开销：`HoldLock` 一条语句、提交前不重读、引用检查合并）与锁拆分（应用）；不做 R4。**
   三者各自另写计划，不在本分支实施。
+
+## 实施记录（Q10a2，2026-10-16，分支 `1.2/quizbuks-10a2-admission`）
+
+R3 的应用部分：合并 `1.2/platform`（平台 16o，PR #162，决策 D45；无冲突，平台目录不变），答题流程声明取锁前排队并重测。需求方 2026-10-16 确认的 A-6、A-7 与键、族名、忙的处理、限流照下面实施。
+
+- **声明**：`QB_ATTEMPT_START` `.admission("qb.pub", PublicationRef::publicationId)`（继续答题也排队，A-7）；`QB_ATTEMPT_SUBMIT` 的 `SubmitInput` 新增可空的 `publicationId`，
+  `.admission("qb.pub", SubmitInput::publicationId)`，在读到会话后、取锁之前核对与会话的发布一致，否则 422 `QB_ATTEMPT_PUBLICATION_MISMATCH`（三语，A-6）；不带的旧客户端不排队、照旧可用；
+  `QB_ATTEMPT_EXPIRE` 的 `ExpireInput` 新增 `publicationId`，取自选取模板 `qb.system.attempts-due` 新加的发布列，同样声明与核对。逐项任务的项是根流程，照样排队（D45 第 4 条）：被准入拒绝即 `BUSY`，
+  下一分钟的运行再选到它（与等锁超时相同，`AttemptExpireIT` 的忙的用例照旧通过）。族名常量 `PublicationMoves.LOCK_FAMILY = "qb.pub"`，`lockName` 用它拼接，准入键与锁名是同一段文字，平台不告警（IT 断言三个流程的键等于锁名）。
+- **配置**（`application.yml`）：`jabiz.process.admission.families[qb.pub]` 写出平台缺省（`concurrency` 2、`max-queue` 50、`max-wait` 2s）；
+  `jabiz.process.rate-limits` 中 `QB_ATTEMPT_START`、`QB_ATTEMPT_SUBMIT` 各每人每分钟 60 次（真人每个 Quiz 各一次，App 的重试每次操作至多 6 次，远在其下，只限制脚本）。
+- **App**：`play/busy.ts`（`retryWhenBusy`：503 `PROCESS_BUSY` 时按 `Retry-After` 与 1/2/4/8 秒的加倍退避、加至多 1/4 的随机，至多 6 次，其他错误立即交回）；
+  开始（`useStartAttempt`、答题页的继续）每次操作生成一个 `Idempotency-Key`，重试用同一个（原来每次调用都是平台生成的新键）；提交原本就是每个会话一个键，照旧，现带上 `publicationId`。
+  忙时显示"人多，正在重试…"（详情页与历史页的开始按钮下、答题页的加载与提交中），重试用尽显示"请稍后再试"。只结算一次不变：会话只结束一次，同键重试得到第一次的回答。
+- **测试**：`PlayAdmissionIT`（4）：三个流程的键等于锁名、配置绑定；持有发布锁时两次提交与三次开始中两个在事务中等锁、三个在队列中，不带 `publicationId` 的提交不排队而在锁上等，
+  发布不一致的提交立即 422 且不取热门锁，其他发布的开始不受影响，放开后全部 200、账平；队列 6 时 20 个开始中 2 个等锁、6 个排队、12 个立即 503 `QUEUE_FULL`（带 `Retry-After`），
+  其间首页 10 次读取各在 2 秒内 200；超时任务的项带上发布（操作记录的输入）。App：`busy.test.ts`（7）、`Play.test.tsx`（+2：开始与提交忙一次后以同一个键成功、提交连续忙 6 次后提示并以同一个键再提交）；
+  原有用例的提交输入加上 `publicationId`。e2e 的直接调用（`transactions.ts`、`wallet.ts`、`play.spec.ts`）照 App 带上 `publicationId`。
+- **压测工具**：`LOAD_TIMEOUT`（照平台）、`LOAD_RETRY_BUSY`（照 App 重试）、`LOAD_READ_RATE`（读者限速）、提交带发布、"每次调用"与"答题人看到的"分开、稳定吞吐（第 10–90 百分位）、
+  忙与超时的计数、等锁连接的最大值；重试用尽仍忙的答题人在压测后补完（否则其会话十分钟后超时结算，扰乱后来运行的钱包核对）。
+- **重测**（报告 `perf/Q10a-load-test.md` §8）：首页 p95 在一切负载下 0.8–1.5 倍（Q10a 27–110 倍），等锁的连接平均约 0.5 个（Q10a 6.9），没有 503 `QUERY_TIMEOUT`，过载以 503 `PROCESS_BUSY` 在 2 秒内结束；
+  读者限速时吞吐不变（闭环稳定 20.8、每秒 50 人时 20.1 次 / 秒），每秒 15、18 人时提交 p95 81 / 75 ms（Q10a 415 / 545 ms）。
+- **与预期的偏差**：读者连续全速时（Q10a 的设置）吞吐降到约 7–10 次 / 秒：读者不再被饿住，以每秒约 200 次读取与锁内的工作争同一台 4 vCPU（CPU 约 90 %）；同机的准入关对照为 15 次 / 秒但首页 2.4 倍。
+  `concurrency` 改 4 无效，保持 2。这是本机三者同在 4 vCPU 的结果，也说明容量须按 CPU 估算，上线前在目标规格上重测。
+- **未做 / 已知问题**：发布的状态流程（暂停、恢复、到期上下架、预算恢复、完成时的移动子流程）不声明准入（少而短；子流程从不排队）；多实例时队列与限流按实例（D45 的已知限制）；
+  过载时答题人看到的时间是排队加退避（每秒 50 人时 p95 约 30 秒），只有 R2 与锁拆分能缩短；R2、锁拆分仍待各自的计划。
+- 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部、`tools/check-app-paths.sh origin/1.2/platform` 通过。
