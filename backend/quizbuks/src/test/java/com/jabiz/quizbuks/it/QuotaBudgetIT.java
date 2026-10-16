@@ -32,6 +32,16 @@ class QuotaBudgetIT extends PlayItSupport {
         return submit(taker((String) attempt(attemptId).get("user_id")), attemptId, answers(first, second));
     }
 
+    /**
+     * How many completions moved the publication: a completion reads the card only, and calls the move (which reads
+     * the publication) only when it ends or underfunds it (Q10a).
+     */
+    long moves(String publicationId) {
+        return ((Number) query("SELECT count(*) AS n FROM op_process WHERE process_name = ? "
+            + "AND input_summary ->> 'publicationId' = ?", "QB_PUBLICATION_COMPLETION_MOVE", publicationId).getFirst()
+            .get("n")).longValue();
+    }
+
     Map<String, Object> refusedStart(String publicationId, String name) {
         return refused("QB_ATTEMPT_START", taker(newTaker(name, null)), body("publicationId", publicationId), 422);
     }
@@ -50,8 +60,10 @@ class QuotaBudgetIT extends PlayItSupport {
         String c = startFor(publicationId, "t-quota-c");
         finish(b, true, true);
         assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertThat(moves(publicationId)).isZero();
         finish(c, false, true);
         assertThat(status(publicationId)).isEqualTo("ENDED");
+        assertThat(moves(publicationId)).isEqualTo(1);
         assertThat(row(publicationId)).containsEntry("end_reason", "QUOTA");
         assertThat(card(publicationId)).containsEntry("status", "ENDED");
         assertThat(counter(publicationId)).containsEntry("starts", new BigDecimal("3"))
@@ -72,11 +84,13 @@ class QuotaBudgetIT extends PlayItSupport {
         assertThat(codes(refusedStart(publicationId, "t-budget-c"))).containsExactly(PlayCodes.BUDGET_FULL);
         finish(a, true, true);
         assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertThat(moves(publicationId)).isZero();
         assertThat(codes(refusedStart(publicationId, "t-budget-d"))).containsExactly(PlayCodes.BUDGET_FULL);
         // In progress when the budget runs low, b still completes and is paid.
         assertThat(finish(b, true, true)).containsEntry("rewardStatus", "PAID");
         assertThat(status(publicationId)).isEqualTo("ENDED");
         assertThat(row(publicationId)).containsEntry("end_reason", "BUDGET");
+        assertThat(moves(publicationId)).isEqualTo(1);
         assertThat(counter(publicationId)).containsEntry("spent", new BigDecimal("200"))
             .containsEntry("reserved", BigDecimal.ZERO);
         assertBooksBalance();

@@ -50,9 +50,10 @@ import static com.jabiz.quizbuks.play.PlaySteps.ids;
  *       for one finished already or not due yet.</li>
  * </ul>
  * Both share these steps: outside any lock, the attempt, its version and the commission rate; then the publication's
- * lock, the attempt again, the counters, the publication and its card; scoring and the tier; for a reward above 0 the
- * sponsor's wallet lock and wallet; the reward paid (posted with the attempt as its source document, in this
- * transaction) or pending; the attempt, counters, wallet and publication written; an event for the messages.
+ * lock, the attempt again, the counters and the card; scoring and the tier; for a reward above 0 the sponsor's wallet
+ * lock and wallet; the reward paid (posted with the attempt as its source document, in this transaction) or pending;
+ * the attempt, counters and wallet written; only when its winners or budget are used up or the reward is pending, the
+ * publication moved ({@link PublicationMoves#MOVE}, which reads it then: Q10a); an event for the messages.
  */
 public final class AttemptFinishing {
 
@@ -105,6 +106,8 @@ public final class AttemptFinishing {
     static final String WALLET = "play.wallet";
     static final String SETTLEMENT = "play.settlement";
     static final String POSTING = "play.posting";
+    static final String MOVE = "play.move";
+    static final String MOVED = "play.moved";
 
     /** What the finishing decided before the wallet: the attempt in its new state, without the money's outcome. */
     record Plan(EntityInstance attempt, EntityInstance card, EntityInstance counter, String status,
@@ -221,7 +224,8 @@ public final class AttemptFinishing {
             .step("Load the attempt again", QueryEntities.<ProcessContext>of(QbPlay.defaultDataset(QbPlay.ATTEMPT),
                 ctx -> byId(active(ctx) ? ctx.get(ATTEMPT_KEY) : null), CURRENT))
             .steps(b -> PlaySteps.loadCounter(b, AttemptFinishing::publicationOf, COUNTER))
-            .steps(b -> PublicationMoves.load(b, AttemptFinishing::publicationOf))
+            // The card only: its state is the publication's, its limits the publication's frozen ones (Q10a).
+            .steps(b -> PublicationMoves.loadCard(b, AttemptFinishing::publicationOf))
             .compute("Score the attempt", (metadata, ctx) -> score(ctx, expire))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);
@@ -239,6 +243,10 @@ public final class AttemptFinishing {
                 ctx -> !ctx.hasViolations() && settlement(ctx) != null && settlement(ctx).posting() != null,
                 LedgerProcesses.POST, 1, ctx -> settlement(ctx).posting(), POSTING))
             .compute("Record the result", (metadata, ctx) -> record(ctx, messages))
+            // Only when its winners or budget are used up, or a reward is pending: the publication and its schedule.
+            .step("Move the publication", CallProcess.<ProcessContext>when(
+                ctx -> !ctx.hasViolations() && ctx.contains(MOVE), PublicationMoves.MOVE, 1,
+                ctx -> ctx.get(MOVE), MOVED))
             .step("Announce a paid reward", PublishEvent.<ProcessContext>when(
                 ctx -> announced(ctx, RewardStatus.PAID), SETTLED_EVENT, AttemptFinishing::payload))
             .step("Announce a pending reward", PublishEvent.<ProcessContext>when(
@@ -316,7 +324,7 @@ public final class AttemptFinishing {
         }
         EntityInstance card = PublicationMoves.card(ctx);
         EntityInstance counter = first(ctx, COUNTER);
-        if (card == null || counter == null || PublicationMoves.publication(ctx) == null) {
+        if (card == null || counter == null) {
             throw new IllegalStateException("A publication that went on has a card and counters");
         }
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
@@ -408,7 +416,11 @@ public final class AttemptFinishing {
             .subtract(PlaySteps.money(plan.card().get("maxReward"))));
         counts.put("spent", spent);
         ctx.changes().update(QbPublications.COUNTER, counter.id(), counter.version(), counts);
-        PublicationMoves.afterCompletion(ctx, winners, spent, RewardStatus.PENDING.equals(settlement.rewardStatus()));
+        boolean pending = RewardStatus.PENDING.equals(settlement.rewardStatus());
+        if (PublicationMoves.moveAfter(plan.card(), winners, spent, pending) != null) {
+            ctx.put(MOVE, new PublicationMoves.MoveInput(PlaySteps.uuid(attempt.get("publicationId")), winners, spent,
+                pending));
+        }
 
         String message = RewardStatus.PENDING.equals(settlement.rewardStatus())
             ? messages.find(PlayCodes.REWARD_PENDING,
