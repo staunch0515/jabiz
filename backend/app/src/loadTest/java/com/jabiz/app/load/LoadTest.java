@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,7 +39,9 @@ import java.util.function.Supplier;
  * Configuration by environment: {@code LOAD_BASE_URL} (default http://localhost:8080), {@code LOAD_USER},
  * {@code LOAD_PASSWORD}, {@code LOAD_PRODUCTS} (2000), {@code LOAD_WAREHOUSES} (5), {@code LOAD_ORDERS} (50000),
  * {@code LOAD_CONCURRENCY} (32), {@code LOAD_DURATION} (60s), {@code LOAD_WARMUP} (10s), {@code LOAD_REPORT}
- * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset).
+ * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset), {@code LOAD_TIMEOUT} (60s; a request
+ * not answered by then counts as 599, its client gone), {@code LOAD_HOT_ORDER} ({@code yes}:
+ * also the hot-order mode of phase 16o, decision D45 - many requests crowding one order's lock while others read).
  */
 public final class LoadTest {
 
@@ -47,6 +50,8 @@ public final class LoadTest {
     private static final String WAREHOUSES = "urn:jabiz:dataset:default:Warehouse";
 
     private final String baseUrl = env("LOAD_BASE_URL", "http://localhost:8080");
+    /** How long a client waits for an answer ({@code LOAD_TIMEOUT}, default 60s): shorter ones give up and go away. */
+    private final Duration requestTimeout = Duration.parse("PT" + env("LOAD_TIMEOUT", "60s").toUpperCase(Locale.ROOT));
     private final HttpClient http = HttpClient.newBuilder()
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .connectTimeout(Duration.ofSeconds(10))
@@ -150,6 +155,9 @@ public final class LoadTest {
         }
         if (only.isEmpty() || only.stream().anyMatch("contention"::equals)) {
             contention(concurrency);
+        }
+        if ("yes".equalsIgnoreCase(env("LOAD_HOT_ORDER", "no"))) {
+            hotOrder(concurrency, duration);
         }
         String path = System.getenv("LOAD_REPORT");
         if (path != null && !path.isBlank()) {
@@ -282,6 +290,36 @@ public final class LoadTest {
         }
     }
 
+    /**
+     * The hot-order mode (phase 16o, decision D45): {@code concurrency} workers cancel one and the same order over and
+     * over - every request takes that order's lock ({@code ORDER_CANCEL} queues for it before its transaction), the
+     * first one cancels and the others find it cancelled (422) or are turned away by its queue (503
+     * {@code PROCESS_BUSY}) - while as many others read the product list. With the queue (the default) the readers
+     * keep their speed; with {@code JABIZ_PROCESS_ADMISSION_ENABLED=false} on the server the waiters hold the pool's
+     * connections and the readers slow down or time out (503 {@code QUERY_TIMEOUT}).
+     */
+    private void hotOrder(int concurrency, Duration duration) {
+        String orderNo = "HOTORDER" + run;
+        String orderId;
+        try {
+            HttpResponse<String> placed = send("POST", "/api/processes/ORDER_PLACE/latest", orderInput(orderNo));
+            orderId = JSON.readTree(placed.body()).get("output").get("orderId").asString();
+        } catch (Exception e) {
+            line("Hot order: could not place the order: " + e);
+            return;
+        }
+        line(measure("hot order: product list alone, before (dataset API)", concurrency, Duration.ZERO,
+            duration.dividedBy(3), () -> post("/api/datasets/" + PRODUCTS + "/query", Map.of("limit", 20))).row());
+        CompletableFuture<Stats> writers = CompletableFuture.supplyAsync(
+            () -> measure("hot order: ORDER_CANCEL of one order (queue before its lock)", concurrency, Duration.ZERO,
+                duration, () -> post("/api/processes/ORDER_CANCEL/latest", Map.of("orderId", orderId))),
+            Executors.newVirtualThreadPerTaskExecutor());
+        Stats readers = measure("hot order: product list meanwhile (dataset API)", concurrency, Duration.ZERO,
+            duration, () -> post("/api/datasets/" + PRODUCTS + "/query", Map.of("limit", 20)));
+        line(writers.join().row());
+        line(readers.row());
+    }
+
     /** Runs {@code call} on {@code concurrency} virtual threads; records only after the warm-up. */
     private Stats measure(String name, int concurrency, Duration warmup, Duration duration, Supplier<Integer> call) {
         Stats stats = new Stats(name, concurrency);
@@ -349,7 +387,7 @@ public final class LoadTest {
         throws IOException, InterruptedException {
         refreshTokenIfOld();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
-            .timeout(Duration.ofSeconds(60))
+            .timeout(requestTimeout)
             .header("Authorization", "Bearer " + token)
             .header("Accept-Language", "en");
         if (body == null) {

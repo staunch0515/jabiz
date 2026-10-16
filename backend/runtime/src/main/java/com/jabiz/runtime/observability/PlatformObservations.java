@@ -73,6 +73,17 @@ public class PlatformObservations {
      */
     public static final String INBOUND = "jabiz.inbound.receive";
     public static final String INBOUND_RATE_LIMITED = "jabiz.inbound.rate_limited";
+    /**
+     * The wait of a top-level process in the queue before its hot named lock (decision D45), nested in
+     * {@link #PROCESS}: tags {@code family}, {@code process} and {@code result} ({@code ADMITTED}, {@code QUEUE_FULL},
+     * {@code WAIT_TIMEOUT}, {@code CANCELLED}) only, never the key.
+     */
+    public static final String PROCESS_ADMISSION = "jabiz.process.admission";
+    /** Gauges of the waiters and of the permits held now, by {@code family} (decision D45). */
+    public static final String PROCESS_ADMISSION_WAITING = "jabiz.process.admission.waiting";
+    public static final String PROCESS_ADMISSION_ACTIVE = "jabiz.process.admission.active";
+    /** A request of the process API refused by its rate limit (decision D45): tags {@code process} and {@code scope}. */
+    public static final String PROCESS_RATE_LIMITED = "jabiz.process.rate_limited";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";
@@ -183,6 +194,15 @@ public class PlatformObservations {
      */
     public <T> Mono<T> monoOutcome(String name, String contextualName, KeyValues tags, Mono<T> source,
         Function<? super T, String> outcome, Function<Throwable, String> failure) {
+        return monoTagged(name, contextualName, tags, OUTCOME, "cancelled", source, outcome, failure);
+    }
+
+    /**
+     * As {@link #monoOutcome}, with the result under {@code key} and {@code cancelled} as the result of a
+     * cancellation (the admission of a process: {@value #RESULT}, {@code CANCELLED}).
+     */
+    public <T> Mono<T> monoTagged(String name, String contextualName, KeyValues tags, String key, String cancelled,
+        Mono<T> source, Function<? super T, String> outcome, Function<Throwable, String> failure) {
         if (registry.isNoop()) {
             return source;
         }
@@ -193,20 +213,20 @@ public class PlatformObservations {
                 .contextWrite(context -> context.put(ObservationThreadLocalAccessor.KEY, observation))
                 .doOnSuccess(value -> {
                     if (ended.compareAndSet(false, true)) {
-                        observation.lowCardinalityKeyValue(OUTCOME, value == null ? "none" : outcome.apply(value));
+                        observation.lowCardinalityKeyValue(key, value == null ? "none" : outcome.apply(value));
                         observation.stop();
                     }
                 })
                 .doOnError(error -> {
                     if (ended.compareAndSet(false, true)) {
-                        observation.lowCardinalityKeyValue(OUTCOME, failure.apply(error));
+                        observation.lowCardinalityKeyValue(key, failure.apply(error));
                         observation.error(error);
                         observation.stop();
                     }
                 })
                 .doOnCancel(() -> {
                     if (ended.compareAndSet(false, true)) {
-                        observation.lowCardinalityKeyValue(OUTCOME, "cancelled");
+                        observation.lowCardinalityKeyValue(key, cancelled);
                         observation.stop();
                     }
                 });
@@ -216,6 +236,11 @@ public class PlatformObservations {
     /** Records that something happened (a counter without tags), such as a request refused by a rate limit. */
     public void event(String name) {
         Observation.createNotStarted(name, registry).start().stop();
+    }
+
+    /** Records that something happened, with low-cardinality {@code tags} (names only, never keys or values). */
+    public void event(String name, KeyValues tags) {
+        Observation.createNotStarted(name, registry).lowCardinalityKeyValues(tags).start().stop();
     }
 
     /** Adds a tag to the observation of the current unit, once its value is known (e.g. a job's result). */

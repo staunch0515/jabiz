@@ -14,6 +14,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.inbound.InboundRejectedException;
@@ -58,6 +59,8 @@ public final class ProblemStatuses {
             case RateLimitedException e -> 429;
             // Too much asked of the database just now: not the caller's mistake, and not a defect.
             case QueryTimeoutException e -> 503;
+            // The queue before a hot lock is full (decision D45): try again later.
+            case ProcessBusyException e -> 503;
             // Another system did not answer usably (decision D38).
             case ExternalCallException e -> 502;
             default -> 500;
@@ -94,6 +97,7 @@ public final class ProblemStatuses {
             case PayloadTooLargeException e -> e.violations();
             case InboundRejectedException e -> e.violations();
             case RateLimitedException e -> e.violations();
+            case ProcessBusyException e -> e.violations();
             case ExternalCallException e -> List.of(new Violation(null, PlatformErrorCodes.EXTERNAL_CALL_FAILED,
                 e.getMessage(), Map.of("service", e.service(), "kind", e.kind().name())));
             case QueryTimeoutException e -> List.of(new Violation(null, PlatformErrorCodes.QUERY_TIMEOUT,

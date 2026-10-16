@@ -5,6 +5,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -109,6 +110,7 @@ public class HoldLock<C extends ProcessContext> implements StepHandler<HoldLock.
             if (name == null || name.isBlank()) {
                 return Mono.empty();
             }
+            ProcessAdmission.checkLock(view, name);
             ExecutionOptions.LockWait execution = view.getOrDefault(ExecutionOptions.LockWait.class, null);
             String wait = timeout(timeout, metadata.waitAtMost(), execution == null ? null : execution.atMost());
             // The wait is bounded for this statement only: the transaction's own lock_timeout is put back after it.

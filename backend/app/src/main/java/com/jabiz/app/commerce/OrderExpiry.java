@@ -56,9 +56,32 @@ class OrderExpiry {
     private static final String ORDER = "order";
     private static final String CANCEL = "cancel";
 
+    /**
+     * The family of the order lock: also the admission family of {@code ORDER_CANCEL} and {@code ORDER_SHIP}, which
+     * queue for it before their transaction (decision D45).
+     */
+    static final String LOCK_FAMILY = "commerce.order";
+
     /** The lock of one order, taken by the processes that must not interleave on it. */
     static String lockName(Object orderId) {
-        return "commerce.order:" + orderId;
+        return LOCK_FAMILY + ":" + orderKey(orderId);
+    }
+
+    /**
+     * An order's id as the lock and the admission queue name it: a UUID in its canonical form, however the caller
+     * wrote it, so that every process takes the same lock for the same order.
+     */
+    static String orderKey(Object orderId) {
+        if (orderId == null) {
+            return null;
+        }
+        String text = orderId.toString().trim();
+        try {
+            return UUID.fromString(text).toString();
+        } catch (IllegalArgumentException notAUuid) {
+            // Not an order's id: the process finds no order, and the lock protects nothing anyone else takes.
+            return text;
+        }
     }
 
     /**

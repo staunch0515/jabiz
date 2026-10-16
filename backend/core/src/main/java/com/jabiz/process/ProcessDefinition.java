@@ -39,6 +39,7 @@ import java.util.function.Function;
  * @param mfa         whether callers need a recent second factor (docs/design/10-security.md section 10)
  * @param verifiedEmail whether callers need a verified e-mail address (docs/design/10-security.md section 15;
  *                    decision D36 item 3); checked at the entry points like the permissions
+ * @param admission   where top-level runs queue before their transaction (decision D45); null for no queue
  */
 public record ProcessDefinition<I, O, C extends ProcessContext>(
     String name,
@@ -55,8 +56,18 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     ProcessAccess access,
     ActsOn actsOn,
     MfaRequirement mfa,
-    boolean verifiedEmail
+    boolean verifiedEmail,
+    Admission<I> admission
 ) {
+
+    /** A definition that does not queue before its transaction. */
+    public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
+        Class<C> contextType, ContextFactory<I, C> contextFactory, Function<C, O> outputMapper,
+        List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, ProcessAccess access,
+        ActsOn actsOn, MfaRequirement mfa, boolean verifiedEmail) {
+        this(name, version, description, inputType, outputType, contextType, contextFactory, outputMapper, steps,
+            permissions, deprecated, access, actsOn, mfa, verifiedEmail, null);
+    }
 
     /** A definition whose callers need no verified e-mail address. */
     public ProcessDefinition(String name, int version, String description, Class<I> inputType, Class<O> outputType,
@@ -64,7 +75,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
         List<StepDefinition<?, C>> steps, Set<String> permissions, boolean deprecated, ProcessAccess access,
         ActsOn actsOn, MfaRequirement mfa) {
         this(name, version, description, inputType, outputType, contextType, contextFactory, outputMapper, steps,
-            permissions, deprecated, access, actsOn, mfa, false);
+            permissions, deprecated, access, actsOn, mfa, false, null);
     }
 
     /** Context key under which {@link #single} processes keep their input and output. */
@@ -147,7 +158,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> withPermissions(String... codes) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, new LinkedHashSet<>(Arrays.asList(codes)), deprecated, access,
-            actsOn, mfa, verifiedEmail);
+            actsOn, mfa, verifiedEmail, admission);
     }
 
     /** This definition acting on {@code entity}, whose primary key is the input component {@code input}. */
@@ -162,7 +173,7 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     public ProcessDefinition<I, O, C> actsOn(String entity, String input, Consumer<ActsOn.Builder> condition) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
             contextFactory, outputMapper, steps, permissions, deprecated, access,
-            ActsOn.of(entity, input, condition), mfa, verifiedEmail);
+            ActsOn.of(entity, input, condition), mfa, verifiedEmail, admission);
     }
 
     /** This definition run as the system only (decision D41; {@link ProcessAccess#INTERNAL}). */
@@ -173,7 +184,8 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** This definition started only as the given kind allows (decision D41). */
     public ProcessDefinition<I, O, C> withAccess(ProcessAccess kind) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, kind, actsOn, mfa, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, kind, actsOn, mfa, verifiedEmail,
+            admission);
     }
 
     /** Whether the process runs as the system only ({@link ProcessAccess#INTERNAL}, decision D41). */
@@ -189,12 +201,23 @@ public record ProcessDefinition<I, O, C extends ProcessContext>(
     /** This definition requiring a recent second factor of its callers as given. */
     public ProcessDefinition<I, O, C> withMfa(MfaRequirement requirement) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, requirement, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, requirement, verifiedEmail,
+            admission);
     }
 
     /** This definition requiring (or not) a verified e-mail address of its callers (decision D36 item 3). */
     public ProcessDefinition<I, O, C> withVerifiedEmail(boolean required) {
         return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, required);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, required, admission);
+    }
+
+    /**
+     * This definition queueing its top-level runs before their transaction under {@code family} and the key computed
+     * from the input (decision D45; {@link ProcessDefinitionBuilder#admission}).
+     */
+    public ProcessDefinition<I, O, C> withAdmission(String family, Function<I, ?> key) {
+        return new ProcessDefinition<>(name, version, description, inputType, outputType, contextType,
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail,
+            new Admission<>(family, key));
     }
 }
