@@ -12,6 +12,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.context.RequestContextWebFilter;
@@ -87,6 +88,19 @@ class ProblemStatusesTest {
             .satisfies(v -> assertThat(v.params()).isEqualTo(Map.of("retryAfter", 7L)));
         assertThat(ProblemStatuses.violations(tooLarge)).extracting(Violation::ruleCode)
             .containsExactly("FILE_TOO_LARGE");
+        // A full queue before a hot lock (decision D45): 503 with Retry-After and the reason.
+        ProcessBusyException busy = new ProcessBusyException("qb.pub", ProcessBusyException.Reason.QUEUE_FULL, 3);
+        var busyResponse = handler.handleProcessBusy(busy, exchange);
+        assertThat(ProblemStatuses.status(busy)).isEqualTo(busyResponse.getStatusCode().value()).isEqualTo(503);
+        assertThat(busyResponse.getHeaders().getFirst("Retry-After")).isEqualTo("3");
+        assertThat(busyResponse.getBody().getProperties()).containsEntry("reason", "QUEUE_FULL")
+            .containsEntry("retryAfter", 3L).containsKey("violations");
+        assertThat(ProblemStatuses.violations(busy)).singleElement().satisfies(v -> {
+            assertThat(v.ruleCode()).isEqualTo("PROCESS_BUSY");
+            assertThat(v.params()).isEqualTo(Map.of("reason", "QUEUE_FULL", "retryAfter", 3L));
+        });
+        assertThat(new ProcessBusyException("qb.pub", ProcessBusyException.Reason.WAIT_TIMEOUT, 0)
+            .retryAfterSeconds()).isEqualTo(1);
         assertThat(ProblemStatuses.status(new IllegalStateException())).isEqualTo(500);
     }
 

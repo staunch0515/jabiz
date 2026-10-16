@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,7 +39,8 @@ import java.util.function.Supplier;
  * Configuration by environment: {@code LOAD_BASE_URL} (default http://localhost:8080), {@code LOAD_USER},
  * {@code LOAD_PASSWORD}, {@code LOAD_PRODUCTS} (2000), {@code LOAD_WAREHOUSES} (5), {@code LOAD_ORDERS} (50000),
  * {@code LOAD_CONCURRENCY} (32), {@code LOAD_DURATION} (60s), {@code LOAD_WARMUP} (10s), {@code LOAD_REPORT}
- * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset).
+ * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset), {@code LOAD_HOT_ORDER} ({@code yes}:
+ * also the hot-order mode of phase 16o, decision D45 - many requests crowding one order's lock while others read).
  */
 public final class LoadTest {
 
@@ -150,6 +152,9 @@ public final class LoadTest {
         }
         if (only.isEmpty() || only.stream().anyMatch("contention"::equals)) {
             contention(concurrency);
+        }
+        if ("yes".equalsIgnoreCase(env("LOAD_HOT_ORDER", "no"))) {
+            hotOrder(concurrency, duration);
         }
         String path = System.getenv("LOAD_REPORT");
         if (path != null && !path.isBlank()) {
@@ -280,6 +285,34 @@ public final class LoadTest {
         } catch (Exception e) {
             line("Contention check failed: " + e);
         }
+    }
+
+    /**
+     * The hot-order mode (phase 16o, decision D45): {@code concurrency} workers cancel one and the same order over and
+     * over - every request takes that order's lock ({@code ORDER_CANCEL} queues for it before its transaction), the
+     * first one cancels and the others find it cancelled (422) or are turned away by its queue (503
+     * {@code PROCESS_BUSY}) - while as many others read the product list. With the queue (the default) the readers
+     * keep their speed; with {@code JABIZ_PROCESS_ADMISSION_ENABLED=false} on the server the waiters hold the pool's
+     * connections and the readers slow down or time out (503 {@code QUERY_TIMEOUT}).
+     */
+    private void hotOrder(int concurrency, Duration duration) {
+        String orderNo = "HOTORDER" + run;
+        String orderId;
+        try {
+            HttpResponse<String> placed = send("POST", "/api/processes/ORDER_PLACE/latest", orderInput(orderNo));
+            orderId = JSON.readTree(placed.body()).get("output").get("orderId").asString();
+        } catch (Exception e) {
+            line("Hot order: could not place the order: " + e);
+            return;
+        }
+        CompletableFuture<Stats> writers = CompletableFuture.supplyAsync(
+            () -> measure("hot order: ORDER_CANCEL of one order (queue before its lock)", concurrency, Duration.ZERO,
+                duration, () -> post("/api/processes/ORDER_CANCEL/latest", Map.of("orderId", orderId))),
+            Executors.newVirtualThreadPerTaskExecutor());
+        Stats readers = measure("hot order: product list meanwhile (dataset API)", concurrency, Duration.ZERO,
+            duration, () -> post("/api/datasets/" + PRODUCTS + "/query", Map.of("limit", 20)));
+        line(writers.join().row());
+        line(readers.row());
     }
 
     /** Runs {@code call} on {@code concurrency} virtual threads; records only after the warm-up. */

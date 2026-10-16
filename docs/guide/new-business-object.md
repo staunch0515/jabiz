@@ -230,6 +230,22 @@ public static final ProcessDefinition<ReceiveInput, ReceiveOutput, ProcessContex
 5. 测试：集成测试调用 `ExternalJobExecutor.runPending()` 与 `OutboxDeliverer.deliverPending()`；场景用 `completeExternalJob` 写入结果，不依赖外部服务。
 例子：`ProductCopy`、`ProductCopyHandler`、测试 `ExternalJobIT`、场景 `scenarios/commerce/product_copy.yml`。
 
+**命名锁**（06 §4.1）：两个流程各自读了对方要改的状态再提交时（过账与关账、支付与过期），以 `HoldLock.exclusive|shared(ctx -> 名称)` 取同名的锁，
+**先取锁、再读取**；名称由一个辅助方法生成（例子：`OrderExpiry.lockName`）。锁内的等待最长 `jabiz.process.lock-timeout`，超时 409。
+**热门的锁**（许多人同时操作同一个对象，压测或运行中看到等这把锁的请求占满连接、无关的读取变慢）再在流程上声明**准入**（06 §4.2，D45）：
+
+```java
+.admission(OrderExpiry.LOCK_FAMILY, input -> OrderExpiry.orderKey(input.orderId()))   // 与锁名同一个辅助方法
+.step("Lock the order", HoldLock.<ProcessContext>exclusive(ctx -> OrderExpiry.lockName(ctx.get(ORDER_ID))))
+```
+
+- 族名是常量，键只从输入算出（事务之前，不能读数据）；算不出时返回 null，即不排队（照旧可用，只是等锁时占连接）。只为流程**最外层**的锁声明；锁内读了数据才知道的锁不声明。
+- 子流程从不排队；正确性仍只靠 `HoldLock`：键算错或多实例只影响排队的效果，不影响结果。
+- 过载时客户端收到 503 `PROCESS_BUSY`（带 `Retry-After`），按它稍后再试；不要自动连续重试。
+- 队列的大小与等待按族配置：`jabiz.process.admission.families."[族名]".{concurrency, max-queue, max-wait}`；按用户或地址刷请求的流程另配 `jabiz.process.rate-limits."[流程]"`（10 §15.10）。
+- 例子：`ORDER_CANCEL`、`ORDER_SHIP`（声明准入），`ORDER_EXPIRE`（任务项，不声明；其子流程 `ORDER_CANCEL` 不排队），`ORDER_RECORD_PAYMENT`（锁名在读了支付之后才知道，不声明）；
+  测试 `CommerceAdmissionIT`；压测的热门订单模式 `LOAD_HOT_ORDER=yes ./gradlew :app:loadTest`。
+
 跨天、跨月的业务写成**场景回放**（07 §3）：`src/test/resources/scenarios/**/*.yml`，可控时钟 + 快照对比。
 例子：`scenarios/commerce/order_lifecycle.yml`（预定调价在月初生效、取消释放库存、发货过账）。
 

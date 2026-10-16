@@ -83,6 +83,15 @@ jabiz:
     demo-ai:
       base-url: ${JABIZ_DEMO_AI_URL:https://ai.example.com/v1}
       allowed-hosts: ${JABIZ_DEMO_AI_HOSTS:ai.example.com}
+  process:
+    # The queue before the order lock (decision D45; ORDER_CANCEL and ORDER_SHIP declare it): the defaults are
+    # 2 per order at once, 50 waiting, 2 s. Process names as map keys in brackets keep their case.
+    admission:
+      families:
+        "[commerce.order]": { concurrency: 2, max-queue: 20, max-wait: 2s }
+    # Rate limits of the process API, per process (decision D45): a customer places at most 20 orders a minute.
+    rate-limits:
+      "[PORTAL_ORDER_PLACE]": { per-user: 20, period: 1m }
   i18n:
     # Language of error messages when Accept-Language names none of zh, ja, en.
     default-locale: en

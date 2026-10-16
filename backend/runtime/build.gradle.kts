@@ -70,4 +70,6 @@ dependencies {
     testImplementation("io.micrometer:micrometer-observation-test")
     // TracingUnderBlockHoundTest drives the span exporter directly (version from the Spring Boot BOM).
     testImplementation("io.opentelemetry:opentelemetry-sdk-trace")
+    // Property tests of the admission gates (decision D45).
+    testImplementation("net.jqwik:jqwik:1.9.3")
 }

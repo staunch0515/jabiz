@@ -47,6 +47,7 @@
 | D40 | 受控的业务参数：应用以 Bean 声明受控的键，其写入只经受控变更（四眼）（补充 D13、D23，不取代） | 已确认（用户 2026-10-10 选定；线 1.2，阶段 16i） | 04 §9.1、18 §3.5 |
 | D41 | 谁能启动流程：`internal()` 只由系统身份、`entryOnly()` 只经平台入口、`subProcessOnly()` 只作子流程（补充 D15、D31，不取代） | 已确认（2026-10-11，修订为三种声明）；已实施（阶段 16l） | 06 §8 |
 | D42 | 逐项的定时任务：`JobDefinition.forEach` 每项独立的根流程与事务、每项至多一次、`HoldLock` 的最长等待（补充 D14 第 5、6 条，不取代） | 计划中（线 1.2，阶段 16k） | 11 §4 |
+| D45 | 热门命名锁的准入与流程入口限流：取锁前在进程内排队（不占连接）、队满或超时 503 `PROCESS_BUSY`、正确性只靠咨询锁、流程接口按配置限流（补充 14o 与 D42 第 3 条，不取代） | 已确认（2026-10-16）；已实施（阶段 16o） | 06 §4.2、§8、03 §1、10 §15.10、11 §4.1、13 |
 
 ---
 
@@ -1287,3 +1288,36 @@ Google 的品牌指南要求登录按钮用四色"G"；单色"G"不易被认出�
 **理由**：品牌标志的颜色属于该品牌而不是界面主题，按指南显示才易于识别；把例外限定在标志图形内，主题与无障碍的约束不受影响。
 
 **放弃的方案**：①继续用单色"G"（不符合 Google 的指南）；②为标志新增主题 token（品牌色不应随主题或应用改变）。
+
+## D45 热门命名锁的准入与流程入口限流
+
+**背景**：命名锁（14o，`HoldLock`）是流程事务中的咨询锁。等锁的请求已借了连接、开了事务，热门的锁（QuizBuks 单个热门发布的开始与提交）使连接池中大部分连接都在等锁，
+无关的读取被拖慢 30–60 倍；到达率高于锁的容量时队列无限增长，最后以零星的 503 `QUERY_TIMEOUT` 失败（Q10a）。流程接口也没有按用户的限流（Q5 平台缺口 13、15）。
+本条补充 14o 与 D42 第 3 条，不取代任何决策（2026-10-16 确认，阶段 16o）。
+
+**决策**
+1. **准入在事务之前**：流程以 `admission(族名, 输入 -> 键)` 声明它的最外层热门锁；平台在借连接、开事务之前按准入键在进程内排队：先进先出，每键每实例同时至多 `concurrency` 个（缺省 2），
+   队列有长度上限、等待有时限，所有键合计至多半个连接池。队满或超时即 503 `PROCESS_BUSY`（带 `Retry-After`），不借连接。准入只作用于根流程：子流程从不排队。
+2. **正确性只由咨询锁保证**：准入只是进程内的准入控制，多实例时各自排队；流程照旧以 `HoldLock` 取锁并在锁内检查。键算错、实例重启只影响排队的效果，不影响结果。
+3. **事先不知道的锁不排队**：只声明最外层的锁；锁内才知道的锁受外层准入与全局上限约束。
+4. **任务与事件**：逐项任务的项被准入拒绝记为 `BUSY`（同 D42 第 3 条）；事件消费者被拒按投递的退避重试。
+5. **入口限流只在配置中**：`jabiz.process.rate-limits.<流程>` 的按用户、按客户端地址（`ClientAddresses`）、按实例的令牌桶，只作用于流程接口，超限 429 `RATE_LIMITED`（按实例计数，同 15 §6）。
+
+**理由**：等锁本身不可避免，但等锁不必占连接；把排队移到事务之前，热门锁只影响要这把锁的请求。留着咨询锁作为唯一的互斥，多实例与重启都不需要共享的队列。
+
+**放弃的方案**：①加大连接池（Q10a 实测：池 30 时 25.8 个连接在等锁，首页 p95 仍 0.6 s）；②为锁流程另建连接池（要改执行器与所有平台步骤的引擎选择，且一个热门键仍拖住同池的其他锁流程）；
+③以数据库表或 Redis 实现跨实例的队列（多一套状态与故障方式，MVP 不引入 Redis）；④在 `HoldLock` 步骤中排队（那时已在事务中、已占连接）；⑤队满用 429（429 表示调用者自己请求过多，与共享资源过载不同）。
+
+**实现说明（16o）**：
+①声明：core `Admission<I>(family, key)`（族名 `[a-z][a-z0-9._-]{0,47}`，键为 `族名:String.valueOf(键)`，null 或空白不排队），`ProcessDefinitionBuilder.admission(…)` 至多一次（再次声明即构建失败），
+`ProcessDefinition.admission()` 未声明时为 null（与 `actsOn` 相同的写法，而不是计划中的 `Optional`），另有 `withAdmission(…)`。
+②闸门：runtime `process.admission.AdmissionGate`（每键 `concurrency` 个许可、全局 `max-active` 个许可，先取键的再取全局的，各自先进先出；`synchronized` 的短临界区，许可在 `Schedulers.parallel()` 上交给等待者；
+等待者取消时退出队列，许可已在交付途中则归还；空闲的键即删除，键数与等待者数各有上限）；`ProcessAdmission`（Spring Bean）在 `ProcessExecutor.run` 中幂等重放之后、`executeRoot` 之前以 `Mono.usingWhen` 取许可，
+根事务结束（提交、回滚、失败、取消、试运行）即释放；`executeChild` 不取。等待时限为 min(族的 `max-wait`, 执行选项 `lockWait`)。`Retry-After` 的估计用该**族**最近 50 次的持有时间（键空闲即删除，按键保存不了）。
+③错误：`ProcessBusyException`（不继承 `ConcurrentUpdateException`，无堆栈）→ 503 `PROCESS_BUSY` + `Retry-After`，`violations[0].params` 为 `reason`、`retryAfter`；
+响应的 `violations[]` 不带参数（平台的写法），所以 `reason` 与 `retryAfter` 另作 ProblemDetail 的顶层属性。`JobRunner` 记为 `BUSY`；事件投递照常记一次失败并退避。
+④限流：`ProcessRateLimits`（`jabiz.process.rate-limits`，`ProcessRateLimitProperties`）在流程接口中权限检查之后、二次验证与已验证邮箱、职责分离与一切数据库访问之前；流程名作映射键时写方括号（`"[PORTAL_ORDER_PLACE]"`）以保留大小写。
+⑤启动检查（`ProcessAdmissionChecks`，类别 `PROCESS`）：族名、`subProcessOnly()` 声明准入、配置了却无人声明的族（告警）、数值范围、限流的流程未知或不进目录（`internal()` / `entryOnly()` / `subProcessOnly()`）、限流未声明任何桶。
+⑥`HoldLock` 取到与准入键同族而不同名的锁时，每个流程记一次 warn（只有流程名与族名）。
+⑦503 `QUERY_TIMEOUT` 的来源已由 `QueryTimeoutCauseIT` 确认：流程接口入口的职责分离规则读取（`SodService.rules`，事务外的数据视图查询，5 s + 1 s，计时包括等池中的连接）；幂等重放的查询没有时限，池耗尽时一直等（03 §1）。
+职责分离规则的缓存、重放查询的时限与 `spring.r2dbc.pool.max-acquire-time` 的缺省不在本阶段（A-12）。没有迁移，OpenAPI 不变。

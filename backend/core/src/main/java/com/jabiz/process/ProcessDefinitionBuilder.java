@@ -28,6 +28,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     private com.jabiz.security.MfaRequirement mfa = com.jabiz.security.MfaRequirement.NONE;
     private boolean verifiedEmail;
     private ActsOn actsOn;
+    private Admission<I> admission;
 
     ProcessDefinitionBuilder(String name, int version, Class<I> inputType, Class<O> outputType, Class<C> contextType) {
         this.name = Objects.requireNonNull(name, "name must not be null");
@@ -123,6 +124,26 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
         return this;
     }
 
+    /**
+     * Top-level runs queue in the process before their transaction, at most a few of one key at a time per instance
+     * (docs/design/06-process.md section 4.1; decision D45). Declare it for the process's outermost hot
+     * {@code HoldLock}, with the same name: {@code family + ":" + key(input)}, built by the same helper as the lock's
+     * name. The key comes from the input alone; null or blank does not queue. Sub-processes never queue. At most one
+     * per process.
+     *
+     * <pre>
+     * .admission("qb.pub", SubmitInput::publicationId)
+     * .step("Lock the publication", HoldLock.exclusive(ctx -&gt; "qb.pub:" + publicationId(ctx)))
+     * </pre>
+     */
+    public ProcessDefinitionBuilder<I, O, C> admission(String family, Function<I, ?> key) {
+        if (admission != null) {
+            throw new IllegalArgumentException("Process " + name + ": admission is declared once (decision D45)");
+        }
+        this.admission = new Admission<>(family, key);
+        return this;
+    }
+
     /** Marks this version as superseded: it still runs, but processes calling it are reported at startup. */
     public ProcessDefinitionBuilder<I, O, C> deprecated() {
         this.deprecated = true;
@@ -189,6 +210,7 @@ public final class ProcessDefinitionBuilder<I, O, C extends ProcessContext> {
     ProcessDefinition<I, O, C> build() {
         return new ProcessDefinition<>(
             name, version, description, inputType, outputType, contextType,
-            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail);
+            contextFactory, outputMapper, steps, permissions, deprecated, access, actsOn, mfa, verifiedEmail,
+            admission);
     }
 }

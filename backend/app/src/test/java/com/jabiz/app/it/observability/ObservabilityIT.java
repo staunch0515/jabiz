@@ -195,5 +195,21 @@ class ObservabilityIT extends PostgresIntegrationTest {
             });
         assertThat(seen(PlatformObservations.DATASET_COMMIT)).isNotEmpty()
             .allSatisfy(s -> assertThat(s.parent()).isEqualTo(PlatformObservations.PROCESS));
+
+        // ORDER_SHIP queued for the order's lock (decision D45): the family, the process and the result only, in the
+        // process's observation; the gauges are back at zero once it is over.
+        assertThat(seen(PlatformObservations.PROCESS_ADMISSION)).singleElement().satisfies(s -> {
+            assertThat(s.tags()).isEqualTo(Map.of("family", "commerce.order", "process", "ORDER_SHIP",
+                "result", "ADMITTED"));
+            assertThat(s.parent()).isEqualTo(PlatformObservations.PROCESS);
+        });
+        assertThat(meters.find(PlatformObservations.PROCESS_ADMISSION_WAITING).tag("family", "commerce.order")
+            .gauge().value()).isZero();
+        assertThat(meters.find(PlatformObservations.PROCESS_ADMISSION_ACTIVE).tag("family", "commerce.order")
+            .gauge().value()).isZero();
+        assertThat(SEEN).filteredOn(s -> s.name().startsWith("jabiz."))
+            .flatExtracting(s -> List.copyOf(s.tags().values()))
+            .doesNotContain(String.valueOf(((Map<?, ?>) placed.get("output")).get("orderId")),
+                "commerce.order:" + ((Map<?, ?>) placed.get("output")).get("orderId"));
     }
 }

@@ -36,6 +36,9 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.inbound.receive` | 入站 Webhook 的一次请求（11 §2.5；未知提供方不观测，嵌套其中的 `INBOUND_RECEIVE` 即 `jabiz.process`） | `provider` `result`（`ACCEPTED` / `DUPLICATE` / `IGNORED` / `REJECTED` / `FAILED`）`reason`（`none`、拒绝原因如 `no_match`、`too_old`、`too_large`，或意外错误的 `error`） |
 | `jabiz.inbound.rate_limited` | 入站 Webhook 的限流拒绝（只计数，不记客户端地址） | 无 |
 | `jabiz.file.sweep` | 清扫的存储部分（`FILE_PURGE_ORPHANS` 提交后，14 §6；删除数量记入日志） | `result` |
+| `jabiz.process.admission` | 根流程在热门命名锁之前的排队（06 §4.2，D45；`ProcessAdmission`，嵌在 `jabiz.process` 之内，计时即排队的时间） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`），没有 `outcome` 与 `status`；不放准入键、主键、操作人 |
+| `jabiz.process.admission.waiting` / `.active`（仪表，不是观测） | 当前在队列中等待的、已取得许可的根流程数，按族合计 | `family` |
+| `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
 
 另外每个都有 `outcome`（`success`、`rejected`＝映射为 4xx 的领域异常、`error`＝其他、`cancelled`）与 `status`（映射的 HTTP 状态，成功为 `none`）。
 同一观测名的标签键集合固定（指标后端的要求）。映射沿用 `ProblemStatuses`，与 API 响应一致。

@@ -300,7 +300,7 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   |---|---|---|
   | `SUCCEEDED` | 提交 | 计数；该项此前有未恢复的失败时追加一行 `RECOVERED` |
   | `REPLAYED` | 同一计划时刻已处理过（幂等键重放） | 计数 |
-  | `BUSY` | 只有"忙"的冲突（`ConcurrentUpdateException.busy()`）：锁等待超时（`55P03`）与死锁（`40P01`）译为 `LockNotAvailableException`，版本过期为 `ConcurrentUpdateException.stale` | 计数，不算失败、不退避；info 日志，同一项连续 5 次起 warn（实例内计数）；仍然到期的项由下次运行重新选取 |
+  | `BUSY` | 只有"忙"的冲突（`ConcurrentUpdateException.busy()`）：锁等待超时（`55P03`）与死锁（`40P01`）译为 `LockNotAvailableException`，版本过期为 `ConcurrentUpdateException.stale`；以及每项流程声明了准入（06 §4.2）而未被准入（`ProcessBusyException`：队满，或在队列中等过 min(族的 `max-wait`, `itemLockWait`)，D45 第 4 条） | 计数，不算失败、不退避；info 日志，同一项连续 5 次起 warn（实例内计数）；仍然到期的项由下次运行重新选取 |
   | `FAILED` | 其他异常（422、404、500 …），包括不是"忙"的冲突（实体已存在、撤销与变基冲突等）；事务已回滚，不留任何效果 | 追加 `sys_job_item_failure`（`FAILED`，`attempt` = 连续次数）；warn 日志，连续第 5 次起 error |
   | `DEFERRED` | 退避中（选取后滤掉），或超过 `maxRunTime`、停机后未开始；停机开始后才出错的项 | 计数 |
 
@@ -316,6 +316,8 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
   `maxRunTime` 与锁时间一样是真实时间（基础设施时间）；退避与失败记录的时刻来自注入的 `Clock`。
 - **项的语义由应用保证**：平台只保证"同一计划时刻同一项至多一次"。选取与执行之间状态可能已变，跨计划时刻也可能再次选中已处理的项：
   每项流程须**先取锁、再读取、已不到期即什么也不做**（示范 `ORDER_EXPIRE`）。同一次运行中两项争同一把锁时（`parallelism > 1`），后者可能 `BUSY`，下次运行再处理。
+  每项流程可以声明准入（与在线请求同一族，06 §4.2）：它是根流程，照样排队；被拒即 `BUSY`。它调用的子流程从不排队。
+  事件消费者的流程同样排队，被拒是一次失败的投递（`sys_outbox_attempt`），按投递的退避重试（§2）。单流程任务被拒即该次运行 `FAILED`（这类任务通常不声明准入）。
 - **D41**：每项流程必须是 `internal()`（启动检查 `JOB`：`entryOnly()`、`subProcessOnly()` 与普通流程一律报错，逐项任务没有 `manualToo()`）：
   其输入来自系统的选取，人不应能直接调用；执行时 `ProcessExecutor.requireStartable` 只允许系统身份启动它（403 `PROCESS_INTERNAL`）。
   单流程任务按 §4 的规则（`internal()`，或普通流程加 `manualToo()`）。

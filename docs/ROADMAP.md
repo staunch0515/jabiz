@@ -1461,7 +1461,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 | 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
 | 16n | 内容显示积木进入 @jabiz/ui（QuizBuks 页面阶段 PG-1；2026-10-14 确认）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`，`@jabiz/admin` 照旧导出；✅ 已完成（PR 待建） | D20、D22、D34 | 1 天 | 15d |
-| 16o | 取锁前在进程内排队（准入）与流程入口限流（QuizBuks Q10a 的 R3；Q5 平台缺口 13、15）：热门命名锁的等待者不占数据库连接，过载时快速失败；⏳ 计划待确认 | D45（新，待确认） | 3.5–4.5 天 | 14o、16k |
+| 16o | 取锁前在进程内排队（准入）与流程入口限流（QuizBuks Q10a 的 R3；Q5 平台缺口 13、15）：热门命名锁的等待者不占数据库连接，过载时快速失败；2026-10-16 确认（A-1–A-12 全按建议）；✅ 已完成（PR 待建） | D45 | 3.5–4.5 天 | 14o、16k |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -3202,7 +3202,7 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 补充 14o（命名锁）与 D42 第 3 条（忙即跳过），需新增决策 **D45**（见"待确认 A-1"，草稿在本节末尾），不取代任何决策。线 1.2 内兼容：只有新增的声明、配置与错误码，不声明的流程行为不变，不开新线、不加迁移。
 分支 `1.2/phase-16o-process-admission`，从 `1.2/platform` 拉出。
 
-**16o 状态**：⏳ 计划待确认（本节只是计划，未写代码）。
+**16o 状态**：✅ 已完成（PR 待建）。2026-10-16 需求方确认"待确认"表中 A-1–A-12 全部按建议（A-1 新增 D45；A-6 的 `publicationId` 是 QuizBuks 的改动，不在本阶段，平台的键函数已支持；一个 PR）。实施与偏差见本节末尾"实施记录"。
 
 **目标**：本阶段**不提高吞吐**（锁内时间不变）。目标是：
 1. 热门命名锁的排队**不再耗尽连接池**：等锁的请求在进程内排队，不借连接、不开事务，首页等无关请求照常；
@@ -3443,15 +3443,15 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
 
 **验收标准**
 
-- [ ] 声明准入的流程在取得许可之前不借连接、不开事务；热门键上 60 个并发请求时，等咨询锁的连接 ≤ `concurrency − 1`，无关的读取与流程在 1 s 内完成；关闭准入的对照组出现 503 `QUERY_TIMEOUT`（`ProcessAdmissionIT` 1）。
-- [ ] 队满立即、等待超时在 `max-wait` 后不久以 503 `PROCESS_BUSY` 失败，带 `Retry-After` 与 `reason`；过载时没有 `QUERY_TIMEOUT`（2）。
-- [ ] 同一键先进先出；许可在成功、失败、取消、试运行后都释放（3、5；`AdmissionGatePropertyTest`）。
-- [ ] 两个实例下结果正确，键算错也正确（4）。
-- [ ] 子流程从不排队、不死锁；幂等重放不排队；任务项被拒为 `BUSY`；事件消费者被拒按退避重试（6、7、8）。
-- [ ] 流程入口限流按用户、地址、实例生效，429 带 `Retry-After`，在数据库访问之前（9）。
-- [ ] 503 `QUERY_TIMEOUT` 的来源已用测试确认并写入 03 §1（10）。
-- [ ] 启动检查覆盖要求 5；观测只带族名、流程名与结果（D16）。
-- [ ] 示范（commerce 的订单锁与限流）、文档（D45、06、03、10、11、13、指南、CLAUDE.md、ROADMAP）已更新；不声明的流程行为不变；`./gradlew check` 通过。
+- [x] 声明准入的流程在取得许可之前不借连接、不开事务；热门键上 60 个并发请求时，等咨询锁的连接 ≤ `concurrency − 1`，无关的读取与流程在 1 s 内完成；关闭准入的对照组出现 503 `QUERY_TIMEOUT`（`ProcessAdmissionIT` 1）。
+- [x] 队满立即、等待超时在 `max-wait` 后不久以 503 `PROCESS_BUSY` 失败，带 `Retry-After` 与 `reason`；过载时没有 `QUERY_TIMEOUT`（2）。
+- [x] 同一键先进先出；许可在成功、失败、取消、试运行后都释放（3、5；`AdmissionGatePropertyTest`）。
+- [x] 两个实例下结果正确，键算错也正确（4）。
+- [x] 子流程从不排队、不死锁；幂等重放不排队；任务项被拒为 `BUSY`；事件消费者被拒按退避重试（6、7、8）。
+- [x] 流程入口限流按用户、地址、实例生效，429 带 `Retry-After`，在数据库访问之前（9）。
+- [x] 503 `QUERY_TIMEOUT` 的来源已用测试确认并写入 03 §1（10）。
+- [x] 启动检查覆盖要求 5；观测只带族名、流程名与结果（D16）。
+- [x] 示范（commerce 的订单锁与限流）、文档（D45、06、03、10、11、13、指南、CLAUDE.md、ROADMAP）已更新；不声明的流程行为不变；`./gradlew check` 通过。
 
 **预估**
 
@@ -3486,7 +3486,7 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
 | A-11 | 键与 `HoldLock` 名称不一致时怎么办？ | 只记 warn（每个流程一次，不记键与主键）；不拒绝（正确性不受影响） |
 | A-12 | 顺带修正职责分离规则的读取（缓存）、幂等重放查询的时限、`spring.r2dbc.pool.max-acquire-time` 的缺省？ | **本阶段不改**，只确认 503 的来源并写入文档；三者各有语义影响（规则修改后的生效时间、重放的失败方式、借连接失败的错误码），另行决定 |
 
-**D45 草稿**（确认后写入 `docs/design/09-decisions.md`）
+**D45**（已写入 `docs/design/09-decisions.md`，并加了实施说明；以下为确认时的文字）
 
 > ## D45 热门命名锁的准入与流程入口限流
 >
@@ -3505,3 +3505,33 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
 >
 > **放弃的方案**：①加大连接池（Q10a 实测：池 30 时 25.8 个连接在等锁，首页 p95 仍 0.6 s）；②为锁流程另建连接池（要改执行器与所有平台步骤的引擎选择，且一个热门键仍拖住同池的其他锁流程）；
 > ③以数据库表或 Redis 实现跨实例的队列（多一套状态与故障方式，MVP 不引入 Redis）；④在 `HoldLock` 步骤中排队（那时已在事务中、已占连接）；⑤队满用 429（429 表示调用者自己请求过多，与共享资源过载不同）。
+
+**实施记录（16o）**
+
+- **代码**：core `process.Admission`、`ProcessDefinitionBuilder.admission`、`ProcessDefinition.admission()` / `withAdmission`、`PlatformErrorCodes.PROCESS_BUSY`（三语）；
+  runtime `process.admission.{AdmissionGate, ProcessAdmission, AdmissionSettings, ProcessAdmissionChecks}`、`ProcessBusyException`（`ProblemStatuses` / `GlobalExceptionHandler`）、
+  `ProcessExecutor`（重放之后、`executeRoot` 之前以 `Mono.usingWhen` 取放许可）、`JobRunner`（记 `BUSY`）、`HoldLock`（A-11 的 warn）、`web.ProcessRateLimits` / `ProcessRateLimitProperties`、
+  `ProcessController`（权限之后限流）、`PlatformObservations`（`PROCESS_ADMISSION`、仪表、`PROCESS_RATE_LIMITED`，`monoTagged`、带标签的 `event`）；
+  app：`ORDER_CANCEL`、`ORDER_SHIP` 先取订单锁 `commerce.order:<id>` 并声明准入（`OrderExpiry.LOCK_FAMILY` / `lockName` / `orderKey`：订单号统一为 UUID 的规范写法），
+  `application.yml` 的族配置与 `PORTAL_ORDER_PLACE` 的限流（每人每分钟 20 次），`loadTest` 的 `LOAD_HOT_ORDER=yes`。没有迁移（测试迁移 `V1012__it_admission_counter.sql` 只在测试中），OpenAPI 不变。
+- **503 的来源（A-12，已确认）**：`QueryTimeoutCauseIT`（池 2 个连接，全被占用）：声明权限的流程经流程接口约 6 秒后 503 `QUERY_TIMEOUT`，超时的读取是入口的职责分离规则查询
+  （观测 `jabiz.dataset.query`，数据视图 `SysSodRule`，status 503），流程本身没有开始；带幂等键的重放查询 8 秒后仍在等连接、放开连接后照常完成。写入 03 §1。
+- **测试**：core `AdmissionTest`、`ProcessDefinitionBuilderTest`（+3）；runtime `AdmissionGateTest`（11）、`AdmissionGatePropertyTest`（jqwik，300 次）、`ProcessAdmissionTest`（4）、
+  `ProcessAdmissionChecksTest`（3）、`ProcessRateLimitsTest`（4）、`ProblemStatusesTest`（+1 段）；app `ProcessAdmissionIT`（8，计划中的 1–5、7–9）、`ProcessAdmissionControlIT`（关闭准入的对照：503 `QUERY_TIMEOUT`）、
+  `QueryTimeoutCauseIT`（2，计划中的 10）、`CommerceAdmissionIT`（2，计划中的 6 与示范的声明）、`ObservabilityIT`（+准入的观测与仪表）。
+- **与计划的偏差**：
+  1. `ProcessDefinition.admission()` 返回可为 null 的 `Admission`（同 `actsOn`），不是 `Optional`：记录的访问器不能改类型。
+  2. 响应的 `violations[]` 不带参数（平台一贯如此），`reason` 与 `retryAfter` 另作 ProblemDetail 的顶层属性；`violations[0].params` 仍有两者（场景回放、消息插值）。
+  3. `Retry-After` 的估计按**族**最近 50 次的持有时间（键空闲即删除，按键记不住）。
+  4. 族名的校验在启动检查中（一次报全），不在构造时抛出；重复声明 `admission` 在构建时抛出。
+  5. 先进先出的 IT 用 `concurrency = 1` 的族（`test.one`）：`concurrency = 2` 时许可按到达顺序发放，但第 2、3 个取得许可的请求谁先到达咨询锁不确定（锁前的语句有快慢），只有许可的顺序是保证的。
+  6. "两个实例"的 IT 用第二个 `ProcessExecutor` 与它自己的 `ProcessAdmission`，与第一个共用同一个连接池（正确性只取决于各自排队与咨询锁）；按客户端地址经可信代理的情形在 `ProcessRateLimitsTest` 中验证
+     （`WebTestClient` 的模拟请求没有远端地址，IT 中只验证伪造的转发头不起作用）。
+  7. 准入的观测断言放在 `ObservabilityIT` 的 `ORDER_SHIP` 用例中；"被限流的请求在 50 ms 内 429"在 IT 中放宽到 200 ms（避免在 CI 上偶发失败）。
+  8. 示范的 `ORDER_EXPIRE` 不声明准入（它的子流程 `ORDER_CANCEL` 示范"子流程从不排队"）；QuizBuks 的声明与 `SubmitInput.publicationId` 在 Q10 的应用分支上做。
+  9. 压测报告未写入 `docs/perf/`：本环境中没有对打包的应用跑热门订单模式（见已知问题）。
+- **已知问题**：
+  - 多实例时队列与限流都按实例（D45 第 2、5 条的已知限制）；有效队列为实例数 × `max-queue`。
+  - 被取消的、已持有许可的请求在取消时即释放许可，不等它的事务回滚结束（回滚很快，影响至多是短暂地多一个连接）。
+  - 首个请求体的 Jackson 反序列化器在锁下构建：冷启动时大量并发的同类请求会在 BlockHound 下报阻塞（测试先预热一次），与本阶段无关，已有的现象。
+  - 职责分离规则的缓存、幂等重放查询的时限、`spring.r2dbc.pool.max-acquire-time` 的缺省仍未改（A-12）。
