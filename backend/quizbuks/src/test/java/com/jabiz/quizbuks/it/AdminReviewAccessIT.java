@@ -154,11 +154,63 @@ class AdminReviewAccessIT extends AccountItSupport {
         for (String file : List.of(pending.cover(), pending.picture(), pending.pdf(), pending.avatar())) {
             assertThat(fileStatus(file, admin)).as(file).isEqualTo(200);
         }
-        // The queue and the funds come from the template, found by the publication's key.
+        // The queue's row, found by the publication's key: without the sponsor's money.
         assertThat(items("qb.admin.publications", admin, body("filters", List.of(body("field", "publicationId",
             "op", "eq", "value", pending.publicationId())), "limit", 10))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("approvalRequestId", pending.requestId())
-                .containsEntry("fundsShort", false));
+                .doesNotContainKeys(MONEY_OF_PUBLICATIONS));
+    }
+
+    /** The sponsor's funds, which only the finance administrators' template carries. */
+    private static final String[] MONEY_OF_PUBLICATIONS = {"fundsShort", "pendingCount", "pendingAmount"};
+    /** The amounts of an attempt, likewise. */
+    private static final String[] MONEY_OF_ATTEMPTS = {"reward", "fee", "ledgerTransactionId"};
+
+    /** The result columns of a template as the catalog lists them to the caller; empty when it is not listed. */
+    @SuppressWarnings("unchecked")
+    private List<String> columns(String template, String token) {
+        List<Map<String, Object>> catalog = client.get().uri("/api/meta/queries")
+            .header(HttpHeaders.AUTHORIZATION, token).exchange().expectStatus().isOk()
+            .expectBodyList(Map.class).returnResult().getResponseBody().stream()
+            .map(entry -> (Map<String, Object>) entry).toList();
+        return catalog.stream().filter(entry -> template.equals(entry.get("id"))).findFirst()
+            .map(entry -> {
+                Object results = entry.get("results");
+                if (results instanceof Map<?, ?> map) {
+                    return map.keySet().stream().map(String::valueOf).toList();
+                }
+                return ((List<Object>) results).stream()
+                    .map(r -> r instanceof Map<?, ?> m ? String.valueOf(m.get("name")) : String.valueOf(r)).toList();
+            })
+            .orElse(List.of());
+    }
+
+    private int templateStatus(String template, String token, Map<String, Object> request) {
+        return client.post().uri("/api/queries/" + template).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, token).bodyValue(request).exchange().expectBody(MAP).returnResult()
+            .getStatus().value();
+    }
+
+    @Test
+    void aContentAdministratorGetsNoMoneyByEitherPath() {
+        Pending pending = pendingPublication("Vida");
+        String admin = contentAdministrator();
+        String finance = financeAdministrator();
+        // The templates content administrators read carry no money; their columns say so whatever the rows.
+        assertThat(columns("qb.admin.publications", admin)).contains("publicationId", "status")
+            .doesNotContain(MONEY_OF_PUBLICATIONS);
+        assertThat(columns("qb.admin.attempts", admin)).contains("attemptId", "rewardStatus")
+            .doesNotContain(MONEY_OF_ATTEMPTS);
+        // The money is in finance-only templates.
+        Map<String, Object> byPublication = body("filters", List.of(body("field", "publicationId", "op", "eq",
+            "value", pending.publicationId())), "limit", 10);
+        assertThat(templateStatus("qb.admin.publication-funds", admin, byPublication)).isEqualTo(403);
+        assertThat(templateStatus("qb.admin.attempt-rewards", admin, body())).isEqualTo(403);
+        assertThat(items("qb.admin.publication-funds", finance, byPublication)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("fundsShort", false).containsEntry("pendingCount", 0));
+        assertThat(templateStatus("qb.admin.attempt-rewards", finance, body("filters", List.of(body("field",
+            "userId", "op", "eq", "value", pending.sponsorId()))))).isEqualTo(200);
+        assertThat(columns("qb.admin.attempt-rewards", finance)).contains(MONEY_OF_ATTEMPTS);
     }
 
     @Test
@@ -235,7 +287,8 @@ class AdminReviewAccessIT extends AccountItSupport {
             .header(HttpHeaders.AUTHORIZATION, reader).bodyValue(body("params", body("userId", "not-a-key")))
             .exchange().expectStatus().isBadRequest();
         // The finance sections of the summary are the finance administrator's only.
-        for (String template : List.of("qb.admin.transfers", "qb.admin.topups", "qb.admin.payout-accounts")) {
+        for (String template : List.of("qb.admin.transfers", "qb.admin.topups", "qb.admin.payout-accounts",
+            "qb.admin.attempt-rewards")) {
             client.post().uri("/api/queries/" + template).contentType(MediaType.APPLICATION_JSON)
                 .header(HttpHeaders.AUTHORIZATION, reader).bodyValue(body()).exchange().expectStatus()
                 .isForbidden();

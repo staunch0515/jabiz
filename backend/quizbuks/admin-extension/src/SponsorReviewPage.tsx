@@ -3,8 +3,6 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
-  Alert,
-  AlertDescription,
   ApprovalPanel,
   Badge,
   Button,
@@ -14,12 +12,13 @@ import {
   MarkdownView,
   PageHeader,
   PageState,
+  UserName,
   useAuth,
   type DescriptionItem,
 } from '@jabiz/admin'
 import { readSponsor, readUser } from './api'
-import { AVATAR_VARIANTS, DICTIONARY, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
-import { LoadFailed, Section } from './components'
+import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
+import { AfterDecision, LoadFailed, Section } from './components'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 
 const AVATAR = { image: true, variants: AVATAR_VARIANTS }
@@ -42,8 +41,9 @@ export default function SponsorReviewPage() {
     queryKey: ['qb-ext', 'sponsor', userId],
     queryFn: () => readSponsor(userId),
     refetchInterval: (query) => after.interval(query.state.data?.reviewStatus === SPONSOR_PENDING),
+    refetchOnWindowFocus: false,
   })
-  const user = useQuery({ queryKey: ['qb-ext', 'user', userId], queryFn: () => readUser(userId) })
+  const user = useQuery({ queryKey: ['qb-ext', 'user', userId], queryFn: () => readUser(userId), enabled: isUserId(userId) })
 
   const back = (
     <Button variant="ghost" size="sm" asChild>
@@ -71,16 +71,19 @@ export default function SponsorReviewPage() {
     ...(s.rejectReason ? [{ key: 'reason', label: t('sponsor.rejectReason'), value: s.rejectReason }] : []),
   ]
 
-  const decided = () => {
-    after.decide()
+  const decided = (status: string) => {
+    after.decide(status)
     void sponsor.refetch()
     void queryClient.invalidateQueries({ queryKey: QUEUE.sponsors })
   }
   let decision
-  if (!pending) {
+  if (after.decided && (pending || after.levelOnly)) {
+    decision = <AfterDecision after={after} onRetry={() => {
+      after.retry()
+      void sponsor.refetch()
+    }} />
+  } else if (!pending) {
     decision = <p data-testid="sponsor-not-pending">{t('sponsor.notPending', { status: statusLabel(s.reviewStatus) })}</p>
-  } else if (after.decided) {
-    decision = <Alert data-testid="sponsor-updating"><AlertDescription>{t('sponsor.updating')}</AlertDescription></Alert>
   } else if (!can(PERMISSION.reviewSponsor)) {
     decision = <p className="text-muted-foreground text-sm">{t('sponsor.notAllowed')}</p>
   } else {
@@ -91,7 +94,7 @@ export default function SponsorReviewPage() {
     <div className="flex flex-col gap-4" data-testid="sponsor-review" data-status={s.reviewStatus}>
       <div>{back}</div>
       <PageHeader
-        title={s.company ?? s.contactName ?? userId}
+        title={s.company ?? s.contactName ?? <UserName id={userId} />}
         className="pb-0"
         description={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">

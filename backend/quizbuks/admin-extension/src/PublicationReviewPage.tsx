@@ -1,10 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
-  Alert,
-  AlertDescription,
   ApprovalPanel,
   Badge,
   Button,
@@ -24,26 +22,55 @@ import {
 } from '@jabiz/admin'
 import {
   readPublication,
+  readPublicationFunds,
   readPublicationRow,
   readSponsor,
   readTiers,
   readVersion,
   type Publication,
-  type PublicationRow,
   type Tier,
+  type Version,
 } from './api'
-import { DICTIONARY, PATH, PENDING_REVIEW, PERMISSION } from './ids'
-import { LoadFailed, Section } from './components'
+import { AfterDecision, LoadFailed, Section } from './components'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
+import { DICTIONARY, PATH, PENDING_REVIEW, PERMISSION } from './ids'
 import { VersionPreview } from './VersionPreview'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
-function Settings({ publication, row, tiers, quiz }: {
+/** What a read was made for: the review request the publication waited for when it was read. */
+interface ForRequest<T> {
+  requestId: string | null
+  value: T
+}
+
+/** The sponsor's funds as far as finance sees them; not shown, nor asked for, to anyone else. */
+function Funds({ publicationId }: { publicationId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const funds = useQuery({
+    queryKey: ['qb-ext', 'funds', publicationId],
+    queryFn: () => readPublicationFunds(publicationId),
+  })
+  if (funds.isError) return <LoadFailed error={funds.error} onRetry={() => void funds.refetch()} />
+  if (!funds.data) return null
+  return (
+    <div className="flex flex-col gap-2" data-testid="publication-funds">
+      <h3 className="font-semibold">{t('publication.funds')}</h3>
+      <DescriptionList columns={3} items={[
+        { key: 'fundsShort', label: t('publication.fundsShort'),
+          value: funds.data.fundsShort ? t('common.yes') : t('common.no') },
+        { key: 'pendingCount', label: t('publication.pendingCount'), value: funds.data.pendingCount.toLocaleString() },
+        { key: 'pendingAmount', label: t('publication.pendingAmount'), value: money(funds.data.pendingAmount ?? '0') },
+      ]} />
+    </div>
+  )
+}
+
+function Settings({ publication, tiers, quiz, finance }: {
   publication: Publication
-  row: PublicationRow | null
-  tiers: Tier[] | undefined
+  tiers: UseQueryResult<ForRequest<Tier[]>>
   quiz: string | null
+  finance: boolean
 }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const region = useLabels(DICTIONARY.region)
@@ -82,65 +109,58 @@ function Settings({ publication, row, tiers, quiz }: {
       value: publication.maxWinners == null ? notSet : publication.maxWinners.toLocaleString(),
     },
   ]
+  let tierTable
+  if (tiers.isError) tierTable = <LoadFailed error={tiers.error} onRetry={() => void tiers.refetch()} />
+  else if (tiers.isPending) tierTable = <PageState kind="loading" />
+  else {
+    tierTable = (
+      <Table aria-label={t('publication.tiers')} data-testid="publication-tiers">
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('publication.tierScores')}</TableHead>
+            <TableHead className="text-right">{t('publication.tierReward')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {tiers.data.value.map((tier) => (
+            <TableRow key={`${tier.fromScore}-${tier.toScore}`} data-testid="publication-tier">
+              <TableCell>{t('publication.tierScoresValue', { from: tier.fromScore, to: tier.toScore })}</TableCell>
+              <TableCell className="text-right tabular-nums">{money(tier.reward)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
   return (
     <Section title={t('publication.settings')} testId="publication-settings">
       <DescriptionList items={items} columns={3} />
       <div className="flex flex-col gap-2">
         <h3 className="font-semibold">{t('publication.tiers')}</h3>
-        <Table aria-label={t('publication.tiers')} data-testid="publication-tiers">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('publication.tierScores')}</TableHead>
-              <TableHead className="text-right">{t('publication.tierReward')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(tiers ?? []).map((tier) => (
-              <TableRow key={`${tier.fromScore}-${tier.toScore}`} data-testid="publication-tier">
-                <TableCell>{t('publication.tierScoresValue', { from: tier.fromScore, to: tier.toScore })}</TableCell>
-                <TableCell className="text-right tabular-nums">{money(tier.reward)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {tierTable}
       </div>
-      {row && (
-        <div className="flex flex-col gap-2" data-testid="publication-funds">
-          <h3 className="font-semibold">{t('publication.funds')}</h3>
-          <DescriptionList columns={3} items={[
-            { key: 'fundsShort', label: t('publication.fundsShort'), value: row.fundsShort ? t('common.yes') : t('common.no') },
-            { key: 'pendingCount', label: t('publication.pendingCount'), value: row.pendingCount.toLocaleString() },
-            { key: 'pendingAmount', label: t('publication.pendingAmount'), value: money(row.pendingAmount ?? '0') },
-          ]} />
-          <p className="text-muted-foreground text-sm">{t('publication.fundsHint')}</p>
-        </div>
-      )}
+      {finance && <Funds publicationId={publication.publicationId} />}
     </Section>
   )
 }
 
 /** The frozen version, or why it is not shown (no permission: the finance administrators; no version; unreadable). */
-function Content({ versionId }: { versionId: string | null }) {
+function Content({ versionId, version }: { versionId: string | null; version: UseQueryResult<ForRequest<Version | null>> }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const version = useQuery({
-    queryKey: ['qb-ext', 'version', versionId],
-    queryFn: () => readVersion(versionId!),
-    enabled: !!versionId,
-    staleTime: Infinity,
-    retry: (count, error) => !forbidden(error) && count < 2,
-  })
   let body
   if (!versionId) body = <PageState kind="warning" description={t('publication.noVersion')} />
   else if (version.isPending) body = <PageState kind="loading" />
   else if (forbidden(version.error)) body = <PageState kind="warning" description={t('publication.contentHidden')} />
   else if (version.isError) body = <LoadFailed error={version.error} onRetry={() => void version.refetch()} />
-  else if (!version.data?.content) body = <PageState kind="warning" description={t('publication.contentUnreadable')} />
-  else {
+  else if (!version.data.value?.content) {
+    body = <PageState kind="warning" description={t('publication.contentUnreadable')} />
+  } else {
+    const shown = version.data.value
     body = (
       <>
         <DescriptionList items={[{ key: 'hash', label: t('publication.contentHash'), value:
-          <code className="break-all text-xs">{version.data.contentHash}</code>, copy: version.data.contentHash }]} />
-        <VersionPreview content={version.data.content} />
+          <code className="break-all text-xs">{shown.contentHash}</code>, copy: shown.contentHash }]} />
+        <VersionPreview content={shown.content!} />
       </>
     )
   }
@@ -149,10 +169,12 @@ function Content({ versionId }: { versionId: string | null }) {
 
 /**
  * A submitted publication as the reviewer decides it (02-design §7.3, P-09): who submitted it and when, every setting
- * and tier (frozen at submission), the sponsor's funds as far as the queue shows them, and the whole frozen version
- * with the correct answers. The decision is the platform's `ApprovalPanel` (`APPROVAL_DECIDE`): offered while the
- * publication waits for review and the version could be shown. After it, the page reads the publication again until
- * its state follows the decision (the approval's event is delivered a moment later).
+ * and tier (frozen at submission), the sponsor's funds (finance only) and the whole frozen version with the correct
+ * answers. The approval is bound to the version's hash, the settings and the tiers together, so the decision (the
+ * platform's `ApprovalPanel`, `APPROVAL_DECIDE`) is offered only while all three are shown as read for the request the
+ * publication waits for: none failed or is being read again. The tiers and the version are read per request
+ * (`[publicationId, approvalRequestId]`). After the decision the page reads the publication again until its state
+ * follows (the approval's event is delivered a moment later).
  */
 export default function PublicationReviewPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -161,30 +183,42 @@ export default function PublicationReviewPage() {
   const queryClient = useQueryClient()
   const after = useAfterDecision()
   const statusLabel = useLabels(DICTIONARY.publicationStatus)
+  const finance = can(PERMISSION.financeRead)
 
   const publication = useQuery({
     queryKey: ['qb-ext', 'publication', publicationId],
     queryFn: () => readPublication(publicationId),
     refetchInterval: (query) => after.interval(query.state.data?.status === PENDING_REVIEW),
+    // A refetch on focus would take the decision away while it is typed (it waits for every read to settle).
+    refetchOnWindowFocus: false,
   })
+  const requestId = publication.data?.approvalRequestId ?? null
+  const versionId = publication.data?.versionId ?? null
   const row = useQuery({
     queryKey: ['qb-ext', 'publication-row', publicationId],
     queryFn: () => readPublicationRow(publicationId),
+    refetchOnWindowFocus: false,
   })
-  const tiers = useQuery({ queryKey: ['qb-ext', 'tiers', publicationId], queryFn: () => readTiers(publicationId) })
+  const tiers = useQuery({
+    queryKey: ['qb-ext', 'tiers', publicationId, requestId],
+    queryFn: async (): Promise<ForRequest<Tier[]>> => ({ requestId, value: await readTiers(publicationId) }),
+    enabled: publication.isSuccess && !!publication.data,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  })
+  const version = useQuery({
+    queryKey: ['qb-ext', 'version', publicationId, requestId],
+    queryFn: async (): Promise<ForRequest<Version | null>> => ({ requestId, value: await readVersion(versionId!) }),
+    enabled: !!versionId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: (count, error) => !forbidden(error) && count < 2,
+  })
   const sponsorId = publication.data?.sponsorId
   const sponsor = useQuery({
     queryKey: ['qb-ext', 'sponsor', sponsorId],
     queryFn: () => readSponsor(sponsorId!),
     enabled: !!sponsorId,
-  })
-  const versionId = publication.data?.versionId ?? null
-  const version = useQuery({
-    queryKey: ['qb-ext', 'version', versionId],
-    queryFn: () => readVersion(versionId!),
-    enabled: !!versionId,
-    staleTime: Infinity,
-    retry: (count, error) => !forbidden(error) && count < 2,
   })
 
   const back = (
@@ -199,19 +233,30 @@ export default function PublicationReviewPage() {
   }
   const p = publication.data
   const pending = p.status === PENDING_REVIEW && !!p.approvalRequestId
-  const quiz = version.data ? t('publication.quizValue', { title: version.data.title, label: version.data.label })
+  const shownVersion = version.data?.value
+  const quiz = shownVersion ? t('publication.quizValue', { title: shownVersion.title, label: shownVersion.label })
     : row.data?.quizTitle ? t('publication.quizValue', { title: row.data.quizTitle, label: p.versionLabel ?? '' })
       : p.versionLabel
   const company = sponsor.data?.company ?? sponsor.data?.contactName
+  // Everything the approval is bound to, settled and read for the request the publication waits for.
+  const everythingShown = publication.isSuccess && !publication.isFetching
+    && tiers.isSuccess && !tiers.isFetching && tiers.data.requestId === p.approvalRequestId
+    && version.isSuccess && !version.isFetching && version.data.requestId === p.approvalRequestId
+    && !!shownVersion?.content
 
-  const decided = () => {
-    after.decide()
+  const decided = (status: string) => {
+    after.decide(status)
     void publication.refetch()
     void queryClient.invalidateQueries({ queryKey: QUEUE.publications })
   }
 
   let decision
-  if (!pending) {
+  if (after.decided && (pending || after.levelOnly)) {
+    decision = <AfterDecision after={after} onRetry={() => {
+      after.retry()
+      void publication.refetch()
+    }} />
+  } else if (!pending) {
     decision = (
       <div className="flex flex-col gap-2" data-testid="publication-not-pending">
         <p>{t('publication.notPending', { status: statusLabel(p.status) })}</p>
@@ -220,13 +265,11 @@ export default function PublicationReviewPage() {
         )}
       </div>
     )
-  } else if (after.decided) {
-    decision = <Alert data-testid="publication-updating"><AlertDescription>{t('publication.updating')}</AlertDescription></Alert>
   } else if (!can(PERMISSION.reviewPublication)) {
     decision = <p className="text-muted-foreground text-sm">{t('publication.notAllowed')}</p>
-  } else if (!version.data?.content) {
-    // Nothing is decided unseen: the panel waits for the content (and is not offered without it).
-    decision = <p className="text-muted-foreground text-sm">{t('publication.needsContent')}</p>
+  } else if (!everythingShown) {
+    // Nothing is decided unseen: the panel waits for the settings, the tiers and the content.
+    decision = <p className="text-muted-foreground text-sm" data-testid="publication-needs-content">{t('publication.needsContent')}</p>
   } else {
     decision = (
       <>
@@ -257,8 +300,8 @@ export default function PublicationReviewPage() {
           </span>
         }
       />
-      <Settings publication={p} row={row.data ?? null} tiers={tiers.data} quiz={quiz} />
-      <Content versionId={versionId} />
+      <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
+      <Content versionId={versionId} version={version} />
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
     </div>
   )

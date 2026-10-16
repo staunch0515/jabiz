@@ -15,15 +15,15 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { readPendingPublications, readPendingSponsors, type PublicationRow, type SponsorRow } from './api'
-import { PATH, PERMISSION } from './ids'
 import { LoadFailed } from './components'
-import { money, QUEUE, when } from './hooks'
+import { money, QUEUE, usePaged, when } from './hooks'
+import { PATH, PERMISSION } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
 function PublicationQueue() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const queue = useQuery({ queryKey: QUEUE.publications, queryFn: readPendingPublications })
+  const { query, table } = usePaged(QUEUE.publications, readPendingPublications)
   const columns = useMemo<ColumnDef<PublicationRow, unknown>[]>(() => [
     {
       id: 'name',
@@ -49,27 +49,28 @@ function PublicationQueue() {
       cell: ({ row }) => money(row.original.budgetCap),
     },
   ], [t])
-  if (queue.isError) return <LoadFailed error={queue.error} onRetry={() => void queue.refetch()} />
+  if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
-    <DataTable label={t('reviews.publicationsTable')} columns={columns} data={queue.data ?? []}
-      loading={queue.isPending} getRowId={(row) => row.publicationId} empty={t('reviews.nonePublications')}
+    <DataTable label={t('reviews.publicationsTable')} columns={columns} {...table}
+      getRowId={(row) => row.publicationId} empty={t('reviews.nonePublications')}
       rowProps={(row) => ({ 'data-testid': 'queue-publication', 'data-id': row.publicationId })} />
   )
 }
 
 function SponsorQueue() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const queue = useQuery({ queryKey: QUEUE.sponsors, queryFn: readPendingSponsors })
+  const { query, table } = usePaged(QUEUE.sponsors, readPendingSponsors)
   const columns = useMemo<ColumnDef<SponsorRow, unknown>[]>(() => [
     {
       id: 'company',
       header: t('reviews.company'),
       cell: ({ row }) => {
-        const name = row.original.company ?? row.original.contactName ?? row.original.userId
+        const name = row.original.company ?? row.original.contactName
         return (
           <Link to={PATH.sponsor(row.original.userId)} className={linkClass}
-            aria-label={t('reviews.openSponsor', { name })} data-testid="queue-sponsor-link">
-            {name}
+            aria-label={t('reviews.openSponsor', { name: name ?? row.original.email ?? '' })}
+            data-testid="queue-sponsor-link">
+            {name ?? <UserName id={row.original.userId} />}
           </Link>
         )
       },
@@ -78,24 +79,26 @@ function SponsorQueue() {
     { id: 'email', header: t('reviews.email'), cell: ({ row }) => row.original.email ?? '' },
     { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) },
   ], [t])
-  if (queue.isError) return <LoadFailed error={queue.error} onRetry={() => void queue.refetch()} />
+  if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
-    <DataTable label={t('reviews.sponsorsTable')} columns={columns} data={queue.data ?? []}
-      loading={queue.isPending} getRowId={(row) => row.onboardingId} empty={t('reviews.noneSponsors')}
+    <DataTable label={t('reviews.sponsorsTable')} columns={columns} {...table}
+      getRowId={(row) => row.onboardingId} empty={t('reviews.noneSponsors')}
       rowProps={(row) => ({ 'data-testid': 'queue-sponsor', 'data-id': row.userId })} />
   )
 }
 
-/** The count of a queue for its tab, once known (shares the queue's query). */
-function useCount(key: readonly string[], read: () => Promise<unknown[]>, enabled: boolean) {
-  const queue = useQuery({ queryKey: key, queryFn: read, enabled })
-  return queue.data ? String(queue.data.length) : '…'
+/** How many wait in a queue, as the server counted them (a request of one row). */
+function useCount(key: readonly string[], read: (offset: number, limit: number) => Promise<{ total?: number }>,
+  enabled: boolean) {
+  const count = useQuery({ queryKey: [...key, 'count'], queryFn: () => read(0, 1), enabled })
+  return count.data?.total == null ? '…' : count.data.total.toLocaleString()
 }
 
 /**
  * The review queue (02-design §7.3, P-09): submitted publications and sponsor applications that wait for a decision,
- * the longest waiting first. Each opens on a page that shows everything the decision is about; the decision itself is
- * taken there. A tab is offered to those who may review its kind; the server decides either way.
+ * the longest waiting first, page by page with their counts. Each opens on a page that shows everything the decision
+ * is about; the decision itself is taken there. A tab is offered to those who may review its kind; the server decides
+ * either way.
  */
 export default function ReviewsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)

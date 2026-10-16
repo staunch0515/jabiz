@@ -1,5 +1,5 @@
 import { api, ApiError, runQuery, unwrap, type Filter } from '@jabiz/admin'
-import { DATASET, TEMPLATE } from './ids'
+import { DATASET, PAGE_LIMIT, TEMPLATE } from './ids'
 import { parseSnapshot, type Snapshot } from './snapshot'
 
 /*
@@ -21,7 +21,25 @@ const amount = (value: unknown): string | null => (value == null || value === ''
 const bool = (value: unknown): boolean => value === true || value === 'true'
 
 /** The most rows the pages ask for at once (the platform's page limit). */
-export const PAGE = 100
+export const PAGE = PAGE_LIMIT
+
+/** One page of a list; `total` when the server counted all rows. */
+export interface Page<Row> {
+  items: Row[]
+  total?: number
+}
+
+/** One page of a template's rows, mapped, counting all of them when `count`. */
+async function page<T>(template: string, map: (row: Row) => T, options: {
+  filters?: Filter[]
+  sorts?: { field: string; asc: boolean }[]
+  offset: number
+  limit: number
+  count?: boolean
+}): Promise<Page<T>> {
+  const answer = await runQuery<Row>(template, options)
+  return { items: answer.items.map(map), total: answer.total }
+}
 
 /** A row of `qb.admin.publications`: the review queue, and a publication's counts and its sponsor's funds. */
 export interface PublicationRow {
@@ -40,9 +58,6 @@ export interface PublicationRow {
   approvalRequestId: string | null
   submittedAt: string | null
   rejectReason: string | null
-  fundsShort: boolean
-  pendingCount: number
-  pendingAmount: string | null
 }
 
 export function toPublicationRow(row: Row): PublicationRow {
@@ -62,29 +77,42 @@ export function toPublicationRow(row: Row): PublicationRow {
     approvalRequestId: str(row.approvalRequestId),
     submittedAt: str(row.submittedAt),
     rejectReason: str(row.rejectReason),
-    fundsShort: bool(row.fundsShort),
-    pendingCount: num(row.pendingCount) ?? 0,
-    pendingAmount: amount(row.pendingAmount),
   }
 }
 
-/** The publications waiting for review, the longest waiting first. */
-export async function readPendingPublications(): Promise<PublicationRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.publications, {
+/** A page of the publications waiting for review, the longest waiting first, with their count. */
+export const readPendingPublications = (offset: number, limit: number) =>
+  page(TEMPLATE.publications, toPublicationRow, {
     filters: [{ field: 'status', op: 'eq', value: 'PENDING_REVIEW' }],
     sorts: [{ field: 'submittedAt', asc: true }],
-    limit: PAGE,
+    offset,
+    limit,
+    count: true,
   })
-  return page.items.map(toPublicationRow)
-}
 
 /** One publication's row of the queue template (its counts and its sponsor's funds); null when there is none. */
 export async function readPublicationRow(publicationId: string): Promise<PublicationRow | null> {
-  const page = await runQuery<Row>(TEMPLATE.publications, {
+  const answer = await runQuery<Row>(TEMPLATE.publications, {
     filters: [{ field: 'publicationId', op: 'eq', value: publicationId }],
     limit: 1,
   })
-  return page.items[0] ? toPublicationRow(page.items[0]) : null
+  return answer.items[0] ? toPublicationRow(answer.items[0]) : null
+}
+
+/** A publication's sponsor's funds (`qb.admin.publication-funds`, finance only). */
+export interface PublicationFunds {
+  fundsShort: boolean
+  pendingCount: number
+  pendingAmount: string | null
+}
+
+export async function readPublicationFunds(publicationId: string): Promise<PublicationFunds | null> {
+  const answer = await runQuery<Row>(TEMPLATE.publicationFunds, {
+    filters: [{ field: 'publicationId', op: 'eq', value: publicationId }], limit: 1 })
+  const row = answer.items[0]
+  if (!row) return null
+  return { fundsShort: bool(row.fundsShort), pendingCount: num(row.pendingCount) ?? 0,
+    pendingAmount: amount(row.pendingAmount) }
 }
 
 /** A row of `qb.admin.sponsors`. */
@@ -99,14 +127,9 @@ export interface SponsorRow {
   approvalRequestId: string | null
 }
 
-/** The sponsor applications waiting for review, the longest waiting first. */
-export async function readPendingSponsors(): Promise<SponsorRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.sponsors, {
-    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
-    sorts: [{ field: 'submittedAt', asc: true }],
-    limit: PAGE,
-  })
-  return page.items.map((row) => ({
+/** A page of the sponsor applications waiting for review, the longest waiting first, with their count. */
+export const readPendingSponsors = (offset: number, limit: number) =>
+  page(TEMPLATE.sponsors, (row): SponsorRow => ({
     onboardingId: String(row.onboardingId),
     userId: String(row.userId ?? ''),
     company: str(row.company),
@@ -115,8 +138,13 @@ export async function readPendingSponsors(): Promise<SponsorRow[]> {
     reviewStatus: String(row.reviewStatus ?? ''),
     submittedAt: str(row.submittedAt),
     approvalRequestId: str(row.approvalRequestId),
-  }))
-}
+  }), {
+    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
+    sorts: [{ field: 'submittedAt', asc: true }],
+    offset,
+    limit,
+    count: true,
+  })
 
 /** One instance of an administrators' dataset; null when there is none (404). */
 async function readEntity(dataset: string, id: string): Promise<Row | null> {
@@ -133,11 +161,11 @@ async function readEntity(dataset: string, id: string): Promise<Row | null> {
 
 /** The rows of an administrators' dataset that match, in the dataset's order (at most {@link PAGE}). */
 async function readRows(dataset: string, filters: Filter[]): Promise<Row[]> {
-  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+  const answer = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
     params: { path: { resourceId: dataset } },
     body: { offset: 0, limit: PAGE, filters },
   }))
-  return (page.items ?? []).map((item) => (item.attributes ?? {}) as Row)
+  return (answer.items ?? []).map((item) => (item.attributes ?? {}) as Row)
 }
 
 /** A publication as it was submitted (frozen from then on), with the facts of its review. */
@@ -322,14 +350,14 @@ function toUserRow(row: Row): UserRow {
 
 /** One user by key; null when there is none. */
 export async function readUser(userId: string): Promise<UserRow | null> {
-  const page = await runQuery<Row>(TEMPLATE.users, { params: { userId }, limit: 1 })
-  return page.items[0] ? toUserRow(page.items[0]) : null
+  const answer = await runQuery<Row>(TEMPLATE.users, { params: { userId }, limit: 1 })
+  return answer.items[0] ? toUserRow(answer.items[0]) : null
 }
 
 /** One page of users whose user name, address, name or company contains `q` (all users without it). */
 export async function searchUsers(q: string, offset: number, limit: number): Promise<UserRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, offset, limit })
-  return page.items.map(toUserRow)
+  const answer = await runQuery<Row>(TEMPLATE.users, { params: { q: q.trim() || null }, offset, limit })
+  return answer.items.map(toUserRow)
 }
 
 /** A row of `qb.admin.attempts`. */
@@ -343,15 +371,12 @@ export interface AttemptRow {
   score: number | null
   fullScore: number | null
   passed: boolean
-  reward: string | null
   rewardStatus: string | null
 }
 
-/** The user's attempts, newest first. */
-export async function readAttempts(userId: string): Promise<AttemptRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.attempts, {
-    filters: [{ field: 'userId', op: 'eq', value: userId }], limit: PAGE })
-  return page.items.map((row) => ({
+/** A page of the user's attempts, newest first (no amounts: those are finance's, {@link readAttemptRewards}). */
+export const readAttempts = (userId: string, offset: number, limit: number) =>
+  page(TEMPLATE.attempts, (row): AttemptRow => ({
     attemptId: String(row.attemptId),
     publicationId: String(row.publicationId ?? ''),
     name: str(row.name),
@@ -361,10 +386,30 @@ export async function readAttempts(userId: string): Promise<AttemptRow[]> {
     score: num(row.score),
     fullScore: num(row.fullScore),
     passed: bool(row.passed),
-    reward: amount(row.reward),
     rewardStatus: str(row.rewardStatus),
-  }))
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
+
+/** A row of `qb.admin.attempt-rewards` (finance only): the money of a submitted attempt. */
+export interface AttemptRewardRow {
+  attemptId: string
+  name: string | null
+  submittedAt: string | null
+  reward: string | null
+  fee: string | null
+  rewardStatus: string | null
+  rewardPaidAt: string | null
 }
+
+export const readAttemptRewards = (userId: string, offset: number, limit: number) =>
+  page(TEMPLATE.attemptRewards, (row): AttemptRewardRow => ({
+    attemptId: String(row.attemptId),
+    name: str(row.name),
+    submittedAt: str(row.submittedAt),
+    reward: amount(row.reward),
+    fee: amount(row.fee),
+    rewardStatus: str(row.rewardStatus),
+    rewardPaidAt: str(row.rewardPaidAt),
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
 
 /** A row of `qb.admin.transfers` (finance only). */
 export interface TransferRow {
@@ -378,10 +423,8 @@ export interface TransferRow {
   reversedAmount: string | null
 }
 
-export async function readTransfers(userId: string): Promise<TransferRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.transfers, {
-    filters: [{ field: 'userId', op: 'eq', value: userId }], limit: PAGE })
-  return page.items.map((row) => ({
+export const readTransfers = (userId: string, offset: number, limit: number) =>
+  page(TEMPLATE.transfers, (row): TransferRow => ({
     transferId: String(row.transferId),
     amount: amount(row.amount),
     fee: amount(row.fee),
@@ -390,8 +433,7 @@ export async function readTransfers(userId: string): Promise<TransferRow[]> {
     createdAt: str(row.createdAt),
     sentAt: str(row.sentAt),
     reversedAmount: amount(row.reversedAmount),
-  }))
-}
+  }), { filters: [{ field: 'userId', op: 'eq', value: userId }], offset, limit })
 
 /** A row of `qb.admin.topups` (finance only): a sponsor's top-ups. */
 export interface TopUpRow {
@@ -403,18 +445,15 @@ export interface TopUpRow {
   refundedAmount: string | null
 }
 
-export async function readTopUps(sponsorId: string): Promise<TopUpRow[]> {
-  const page = await runQuery<Row>(TEMPLATE.topUps, {
-    filters: [{ field: 'sponsorId', op: 'eq', value: sponsorId }], limit: PAGE })
-  return page.items.map((row) => ({
+export const readTopUps = (sponsorId: string, offset: number, limit: number) =>
+  page(TEMPLATE.topUps, (row): TopUpRow => ({
     topUpId: String(row.topUpId),
     amount: amount(row.amount),
     status: String(row.status ?? ''),
     createdAt: str(row.createdAt),
     paidAt: str(row.paidAt),
     refundedAmount: amount(row.refundedAmount),
-  }))
-}
+  }), { filters: [{ field: 'sponsorId', op: 'eq', value: sponsorId }], offset, limit })
 
 /** The user's payout account (finance only); only the last four characters of Stripe's account are shown. */
 export interface PayoutAccount {
@@ -426,9 +465,9 @@ export interface PayoutAccount {
 }
 
 export async function readPayoutAccount(userId: string): Promise<PayoutAccount | null> {
-  const page = await runQuery<Row>(TEMPLATE.payoutAccounts, {
+  const answer = await runQuery<Row>(TEMPLATE.payoutAccounts, {
     filters: [{ field: 'userId', op: 'eq', value: userId }], limit: 1 })
-  const row = page.items[0]
+  const row = answer.items[0]
   if (!row) return null
   const account = str(row.externalAccountId)
   return {

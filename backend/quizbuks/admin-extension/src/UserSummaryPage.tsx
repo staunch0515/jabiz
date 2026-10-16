@@ -16,20 +16,22 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import {
+  readAttemptRewards,
   readAttempts,
   readBan,
   readPayoutAccount,
   readTopUps,
   readTransfers,
   readUser,
+  type AttemptRewardRow,
   type AttemptRow,
   type TopUpRow,
   type TransferRow,
   type UserRow,
 } from './api'
-import { DICTIONARY, PATH, PERMISSION } from './ids'
+import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 import { LoadFailed, Section } from './components'
-import { money, useLabels, when } from './hooks'
+import { money, useLabels, usePaged, when } from './hooks'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -96,7 +98,8 @@ function Attempts({ userId }: { userId: string }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const attemptStatus = useLabels(DICTIONARY.attemptStatus)
   const rewardStatus = useLabels(DICTIONARY.rewardStatus)
-  const attempts = useQuery({ queryKey: ['qb-ext', 'attempts', userId], queryFn: () => readAttempts(userId) })
+  const { query: attempts, table } = usePaged(['qb-ext', 'attempts', userId],
+    (offset, limit) => readAttempts(userId, offset, limit))
   const columns = useMemo<ColumnDef<AttemptRow, unknown>[]>(() => [
     { id: 'name', header: t('user.publication'), cell: ({ row }) => row.original.name ?? row.original.publicationId },
     { id: 'status', header: t('user.attemptStatus'), cell: ({ row }) => attemptStatus(row.original.status) },
@@ -108,28 +111,40 @@ function Attempts({ userId }: { userId: string }) {
       cell: ({ row }) => (row.original.score == null ? ''
         : t('user.scoreValue', { score: row.original.score, full: row.original.fullScore ?? '?' })),
     },
-    { id: 'reward', header: t('user.reward'), meta: right, cell: ({ row }) => money(row.original.reward) },
     { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => rewardStatus(row.original.rewardStatus) },
   ], [t, attemptStatus, rewardStatus])
   return (
     <Section title={t('user.attempts')} testId="user-attempts">
       {attempts.isError ? <LoadFailed error={attempts.error} onRetry={() => void attempts.refetch()} /> : (
-        <DataTable label={t('user.attemptsTable')} columns={columns} data={attempts.data ?? []}
-          loading={attempts.isPending} getRowId={(row) => row.attemptId} empty={t('user.noAttempts')} />
+        <DataTable label={t('user.attemptsTable')} columns={columns} {...table}
+          getRowId={(row) => row.attemptId} empty={t('user.noAttempts')} />
       )}
     </Section>
   )
 }
 
-/** The money of a user: transfers to them, their payout account and (as a sponsor) their top-ups. Finance only. */
+/**
+ * The money of a user: their attempts' rewards, transfers to them, their payout account and (as a sponsor) their
+ * top-ups. Finance only: the templates are `qb.admin.finance.read`'s.
+ */
 function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const transferStatus = useLabels(DICTIONARY.transferStatus)
   const topUpStatus = useLabels(DICTIONARY.topUpStatus)
   const accountStatus = useLabels(DICTIONARY.payoutAccountStatus)
-  const transfers = useQuery({ queryKey: ['qb-ext', 'transfers', userId], queryFn: () => readTransfers(userId) })
+  const rewardStatus = useLabels(DICTIONARY.rewardStatus)
+  const rewards = usePaged(['qb-ext', 'rewards', userId], (offset, limit) => readAttemptRewards(userId, offset, limit))
+  const transfers = usePaged(['qb-ext', 'transfers', userId], (offset, limit) => readTransfers(userId, offset, limit))
   const account = useQuery({ queryKey: ['qb-ext', 'payout', userId], queryFn: () => readPayoutAccount(userId) })
-  const topUps = useQuery({ queryKey: ['qb-ext', 'topups', userId], queryFn: () => readTopUps(userId), enabled: sponsor })
+  const topUps = usePaged(['qb-ext', 'topups', userId], (offset, limit) => readTopUps(userId, offset, limit), sponsor)
+  const rewardColumns = useMemo<ColumnDef<AttemptRewardRow, unknown>[]>(() => [
+    { id: 'name', header: t('user.publication'), cell: ({ row }) => row.original.name ?? '' },
+    { id: 'submittedAt', header: t('user.createdAt'), cell: ({ row }) => when(row.original.submittedAt) },
+    { id: 'reward', header: t('user.reward'), meta: right, cell: ({ row }) => money(row.original.reward) },
+    { id: 'fee', header: t('user.fee'), meta: right, cell: ({ row }) => money(row.original.fee) },
+    { id: 'rewardStatus', header: t('user.rewardStatus'), cell: ({ row }) => rewardStatus(row.original.rewardStatus) },
+    { id: 'paidAt', header: t('user.paidAt'), cell: ({ row }) => when(row.original.rewardPaidAt) },
+  ], [t, rewardStatus])
   const transferColumns = useMemo<ColumnDef<TransferRow, unknown>[]>(() => [
     { id: 'createdAt', header: t('user.createdAt'), cell: ({ row }) => when(row.original.createdAt) },
     { id: 'amount', header: t('user.amount'), meta: right, cell: ({ row }) => money(row.original.amount) },
@@ -163,12 +178,23 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
   }
   return (
     <Section title={t('user.finance')} testId="user-finance">
+      <div className="flex flex-col gap-2" data-testid="user-rewards">
+        <h3 className="font-semibold">{t('user.rewards')}</h3>
+        {rewards.query.isError
+          ? <LoadFailed error={rewards.query.error} onRetry={() => void rewards.query.refetch()} />
+          : (
+            <DataTable label={t('user.rewardsTable')} columns={rewardColumns} {...rewards.table}
+              getRowId={(row) => row.attemptId} empty={t('user.noRewards')} />
+          )}
+      </div>
       <div className="flex flex-col gap-2">
         <h3 className="font-semibold">{t('user.transfers')}</h3>
-        {transfers.isError ? <LoadFailed error={transfers.error} onRetry={() => void transfers.refetch()} /> : (
-          <DataTable label={t('user.transfersTable')} columns={transferColumns} data={transfers.data ?? []}
-            loading={transfers.isPending} getRowId={(row) => row.transferId} empty={t('user.noTransfers')} />
-        )}
+        {transfers.query.isError
+          ? <LoadFailed error={transfers.query.error} onRetry={() => void transfers.query.refetch()} />
+          : (
+            <DataTable label={t('user.transfersTable')} columns={transferColumns} {...transfers.table}
+              getRowId={(row) => row.transferId} empty={t('user.noTransfers')} />
+          )}
       </div>
       <div className="flex flex-col gap-2" data-testid="user-payout">
         <h3 className="font-semibold">{t('user.payout')}</h3>
@@ -177,10 +203,12 @@ function Finance({ userId, sponsor }: { userId: string; sponsor: boolean }) {
       {sponsor && (
         <div className="flex flex-col gap-2">
           <h3 className="font-semibold">{t('user.topUps')}</h3>
-          {topUps.isError ? <LoadFailed error={topUps.error} onRetry={() => void topUps.refetch()} /> : (
-            <DataTable label={t('user.topUpsTable')} columns={topUpColumns} data={topUps.data ?? []}
-              loading={topUps.isPending} getRowId={(row) => row.topUpId} empty={t('user.noTopUps')} />
-          )}
+          {topUps.query.isError
+            ? <LoadFailed error={topUps.query.error} onRetry={() => void topUps.query.refetch()} />
+            : (
+              <DataTable label={t('user.topUpsTable')} columns={topUpColumns} {...topUps.table}
+                getRowId={(row) => row.topUpId} empty={t('user.noTopUps')} />
+            )}
         </div>
       )}
     </Section>
@@ -196,15 +224,17 @@ export default function UserSummaryPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { userId = '' } = useParams()
   const { can } = useAuth()
-  const user = useQuery({ queryKey: ['qb-ext', 'user', userId], queryFn: () => readUser(userId) })
+  // An address that names no user id is not asked about (the server would refuse the parameter).
+  const known = isUserId(userId)
+  const user = useQuery({ queryKey: ['qb-ext', 'user', userId], queryFn: () => readUser(userId), enabled: known })
   const back = (
     <Button variant="ghost" size="sm" asChild>
       <Link to={PATH.users}><ArrowLeft aria-hidden />{t('user.back')}</Link>
     </Button>
   )
-  if (user.isPending) return <PageState kind="loading" />
+  if (known && user.isPending) return <PageState kind="loading" />
   if (user.isError) return <LoadFailed error={user.error} onRetry={() => void user.refetch()} />
-  if (!user.data) {
+  if (!known || !user.data) {
     return <div className="flex flex-col gap-4">{back}<PageState kind="notFound" description={t('user.notFound')} /></div>
   }
   return (

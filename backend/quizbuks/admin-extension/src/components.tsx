@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  Alert,
+  AlertDescription,
   ApiError,
   Button,
   Card,
@@ -41,4 +43,28 @@ export function LoadFailed({ error, onRetry }: { error: unknown; onRetry?: () =>
       action={onRetry && <Button variant="outline" onClick={onRetry}>{t('common.retry')}</Button>}
     />
   )
+}
+
+/** What follows a decision: waiting for the state, not updated after the wait (read again), or only a level approved. */
+export function AfterDecision({ after, onRetry }: {
+  after: { levelOnly: boolean; expired: boolean }
+  onRetry: () => void
+}) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  if (after.levelOnly) {
+    return <Alert data-testid="decision-level"><AlertDescription>{t('decision.levelApproved')}</AlertDescription></Alert>
+  }
+  if (after.expired) {
+    return (
+      <Alert variant="warning" data-testid="decision-not-updated">
+        <AlertDescription className="flex flex-wrap items-center gap-2">
+          {t('decision.notUpdated')}
+          <Button variant="outline" size="sm" onClick={onRetry} data-testid="decision-reload">
+            {t('decision.reload')}
+          </Button>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  return <Alert data-testid="decision-updating"><AlertDescription>{t('decision.updating')}</AlertDescription></Alert>
 }

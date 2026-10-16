@@ -89,6 +89,11 @@ class MessagesTest {
                 "process.QB_TRANSFER_REVERSED", "process.QB_STRIPE_PAYOUT_RECORD", "process.QB_STRIPE_PAYOUT_FAILED",
                 "query.qb.app.payout-account", "query.qb.admin.transfers", "query.qb.admin.payout-accounts",
                 "task.qb.topup-check.FEE_CURRENCY");
+        // Q9a: the money of the admin pages, in templates of their own (finance only).
+        assertThat(en.stringPropertyNames()).contains("query.qb.admin.publication-funds",
+            "query.qb.admin.publication-funds.fundsShort", "query.qb.admin.attempt-rewards",
+            "query.qb.admin.attempt-rewards.reward")
+            .doesNotContain("query.qb.admin.publications.fundsShort", "query.qb.admin.attempts.reward");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

@@ -16,11 +16,16 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** A publication's sponsor's funds; `qb.admin.finance.read`. */
+  publicationFunds: 'qb.admin.publication-funds',
   sponsors: 'qb.admin.sponsors',
   users: 'qb.admin.users',
+  /** Attempts without their amounts. */
   attempts: 'qb.admin.attempts',
-  /** The three below need `qb.admin.finance.read`. */
+  /** The four below need `qb.admin.finance.read`. */
+  attemptRewards: 'qb.admin.attempt-rewards',
   transfers: 'qb.admin.transfers',
   topUps: 'qb.admin.topups',
   payoutAccounts: 'qb.admin.payout-accounts',
@@ -52,6 +57,12 @@ export const PERMISSION = {
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280']
 /** The widths the policy `qb.sponsor-avatar` keeps. */
 export const AVATAR_VARIANTS = ['w128', 'w256']
+
+/** The most rows one request asks for (the platform's page limit). */
+export const PAGE_LIMIT = 100
+
+/** A user id as the platform makes them (a UUID); anything else in an address is no user. */
+export const isUserId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 
 /** The ledger's currency: the administration shows the real one (backend/quizbuks/CLAUDE.md section 4). */
 export const CURRENCY = 'JPY'

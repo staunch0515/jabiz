@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import type { ReactNode } from 'react'
 import { initReactI18next } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { COVER, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
 import { DATASET, TEMPLATE } from './ids'
@@ -27,6 +27,8 @@ const server = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   decided: vi.fn(),
+  /** The request's state APPROVAL_DECIDE answers with: APPROVED closes it, PENDING leaves it to the next level. */
+  decision: 'APPROVED',
 }))
 
 vi.mock('@jabiz/admin', async (original) => {
@@ -46,7 +48,7 @@ vi.mock('@jabiz/admin', async (original) => {
       <button type="button" data-testid="approval-panel" data-request={requestId}
         onClick={() => {
           server.decided(requestId)
-          onDecided?.('APPROVED')
+          onDecided?.(server.decision)
         }}>
         decide
       </button>
@@ -100,12 +102,15 @@ beforeEach(() => {
     [DATASET.ban, []],
   ])
   server.templates = new Map<string, Row[] | Error>([
-    [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals', fundsShort: false, pendingCount: 0,
-      pendingAmount: 0 }]],
+    [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals' }]],
+    [TEMPLATE.publicationFunds, [{ publicationId: PUBLICATION_ID, fundsShort: true, pendingCount: 2,
+      pendingAmount: 300 }]],
     [TEMPLATE.sponsors, [{ onboardingId: 'o1', ...SPONSOR, email: 'rhea@example.com' }]],
     [TEMPLATE.users, [USER]],
     [TEMPLATE.attempts, [{ attemptId: 'a1', publicationId: PUBLICATION_ID, name: 'Spring run', status: 'SUBMITTED',
-      startedAt: '2026-10-15T00:00:00Z', score: 4, fullScore: 5, passed: true, reward: 10, rewardStatus: 'PAID' }]],
+      startedAt: '2026-10-15T00:00:00Z', score: 4, fullScore: 5, passed: true, rewardStatus: 'PAID' }]],
+    [TEMPLATE.attemptRewards, [{ attemptId: 'a1', name: 'Spring run', submittedAt: '2026-10-15T00:05:00Z',
+      reward: 7777, fee: 0, rewardStatus: 'PAID' }]],
     [TEMPLATE.transfers, [{ transferId: 't1', amount: 1200, fee: 0, net: 1200, status: 'PAID',
       createdAt: '2026-10-15T00:00:00Z' }]],
     [TEMPLATE.payoutAccounts, [{ status: 'ENABLED', payoutsEnabled: true, externalAccountId: 'acct_1234567890WXYZ' }]],
@@ -128,12 +133,17 @@ beforeEach(() => {
       || row[f.field] === f.value))
     return { items: matching.map((attributes) => ({ attributes })) }
   })
-  server.runQuery.mockReset().mockImplementation(async (id: string) => {
+  server.runQuery.mockReset().mockImplementation(async (id: string,
+    options: { offset?: number; limit?: number; count?: boolean } = {}) => {
     const rows = server.templates.get(id)
     if (rows instanceof Error) throw rows
-    return { items: rows ?? [], offset: 0, limit: 100 }
+    const all = rows ?? []
+    const offset = options.offset ?? 0
+    const limit = options.limit ?? 100
+    return { items: all.slice(offset, offset + limit), offset, limit, ...(options.count ? { total: all.length } : {}) }
   })
   server.decided.mockReset()
+  server.decision = 'APPROVED'
 })
 
 function renderAt(path: string, route: string, element: ReactNode) {
@@ -165,7 +175,9 @@ describe('ReviewsPage', () => {
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, {
       filters: [{ field: 'status', op: 'eq', value: 'PENDING_REVIEW' }],
       sorts: [{ field: 'submittedAt', asc: true }],
-      limit: 100,
+      offset: 0,
+      limit: 20,
+      count: true,
     })
     expect(screen.getByTestId('tab-publications')).toHaveTextContent('Publications (1)')
     await userEvent.click(screen.getByTestId('tab-sponsors'))
@@ -278,6 +290,85 @@ describe('PublicationReviewPage', () => {
   })
 })
 
+describe('PublicationReviewPage, what the decision waits for', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('offers no decision while the tiers cannot be read, and says so', async () => {
+    server.datasets.delete(DATASET.tier)
+    renderPublication()
+    expect(await screen.findByTestId('version-preview')).toBeInTheDocument()
+    const settings = screen.getByTestId('publication-settings')
+    expect(await within(settings).findByRole('alert')).toHaveTextContent('Forbidden')
+    expect(screen.queryByTestId('publication-tiers')).not.toBeInTheDocument()
+    expect(screen.getByTestId('publication-needs-content')).toBeInTheDocument()
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+  })
+
+  it('reads the tiers and the version for the request the publication waits for', async () => {
+    renderPublication()
+    await screen.findByTestId('approval-panel')
+    const tierCalls = server.post.mock.calls.filter(([, o]) => o.params.path.resourceId === DATASET.tier)
+    expect(tierCalls).toHaveLength(1)
+    expect(server.get.mock.calls.filter(([, o]) => o?.params?.path?.resourceId === DATASET.version)).toHaveLength(1)
+  })
+
+  it('shows the sponsor\'s funds to finance only', async () => {
+    renderPublication()
+    await screen.findByTestId('version-preview')
+    expect(screen.queryByTestId('publication-funds')).not.toBeInTheDocument()
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.publicationFunds, expect.anything())
+  })
+
+  it('shows the funds to finance', async () => {
+    server.permissions.add('qb.admin.finance.read')
+    renderPublication()
+    const funds = await screen.findByTestId('publication-funds')
+    expect(funds).toHaveTextContent('Yes')
+    expect(funds).toHaveTextContent(/300/)
+  })
+
+  it('says when only this level was approved, without waiting for a state', async () => {
+    server.decision = 'PENDING'
+    renderPublication()
+    await userEvent.click(await screen.findByTestId('approval-panel'))
+    expect(await screen.findByTestId('decision-level')).toBeInTheDocument()
+    expect(screen.queryByTestId('decision-updating')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
+  })
+
+  it('stops waiting after a while, says the state has not updated, and reads again on request', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    renderPublication()
+    const panel = await screen.findByTestId('approval-panel')
+    await act(async () => panel.click())
+    expect(await screen.findByTestId('decision-updating')).toBeInTheDocument()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000)
+    })
+    expect(await screen.findByTestId('decision-not-updated')).toBeInTheDocument()
+    const reads = server.get.mock.calls.filter(([, o]) => o?.params?.path?.resourceId === DATASET.publication).length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    expect(server.get.mock.calls.filter(([, o]) => o?.params?.path?.resourceId === DATASET.publication))
+      .toHaveLength(reads)
+    await act(async () => screen.getByTestId('decision-reload').click())
+    expect(await screen.findByTestId('decision-updating')).toBeInTheDocument()
+  })
+})
+
+describe('ReviewsPage paging', () => {
+  it('pages the queue and counts all of it', async () => {
+    server.templates.set(TEMPLATE.publications, Array.from({ length: 25 }, (_, i) => ({
+      ...publication(), publicationId: `p-${i}`, name: `Run ${i}` })))
+    renderAt('/qb/reviews', '/qb/reviews', <ReviewsPage />)
+    expect(await screen.findAllByTestId('queue-publication')).toHaveLength(20)
+    await waitFor(() => expect(screen.getByTestId('tab-publications')).toHaveTextContent('Publications (25)'))
+  })
+})
+
 describe('SponsorReviewPage', () => {
   it('shows the application with the address and offers the decision while it waits', async () => {
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
@@ -302,6 +393,12 @@ describe('SponsorReviewPage', () => {
 describe('UserSummaryPage', () => {
   const renderUser = () => renderAt(`/qb/users/${SPONSOR_ID}`, '/qb/users/:userId', <UserSummaryPage />)
 
+  it('asks nothing about an address that names no user id', async () => {
+    renderAt('/qb/users/not-a-user', '/qb/users/:userId', <UserSummaryPage />)
+    expect(await screen.findByText('There is no such user.')).toBeInTheDocument()
+    expect(server.runQuery).not.toHaveBeenCalled()
+  })
+
   it('shows the profile and attempts, and no money without finance', async () => {
     renderUser()
     expect(await screen.findByRole('heading', { level: 1, name: 'Rhea' })).toBeInTheDocument()
@@ -310,9 +407,10 @@ describe('UserSummaryPage', () => {
     expect(screen.getByTestId('user-application')).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR_ID}`)
     expect(await within(screen.getByTestId('user-attempts')).findByText('Spring run')).toBeInTheDocument()
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.attempts,
-      { filters: [{ field: 'userId', op: 'eq', value: SPONSOR_ID }], limit: 100 })
+      { filters: [{ field: 'userId', op: 'eq', value: SPONSOR_ID }], offset: 0, limit: 20 })
     expect(screen.queryByTestId('user-finance')).not.toBeInTheDocument()
-    for (const template of [TEMPLATE.transfers, TEMPLATE.topUps, TEMPLATE.payoutAccounts]) {
+    expect(screen.getByTestId('user-attempts')).not.toHaveTextContent(/7,777/)
+    for (const template of [TEMPLATE.transfers, TEMPLATE.topUps, TEMPLATE.payoutAccounts, TEMPLATE.attemptRewards]) {
       expect(server.runQuery).not.toHaveBeenCalledWith(template, expect.anything())
     }
   })
@@ -326,7 +424,8 @@ describe('UserSummaryPage', () => {
     expect(finance).toHaveTextContent(/1,200/)
     expect(finance).toHaveTextContent(/5,000/)
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.topUps,
-      { filters: [{ field: 'sponsorId', op: 'eq', value: SPONSOR_ID }], limit: 100 })
+      { filters: [{ field: 'sponsorId', op: 'eq', value: SPONSOR_ID }], offset: 0, limit: 20 })
+    expect(await within(screen.getByTestId('user-rewards')).findByText(/7,777/)).toBeInTheDocument()
   })
 
   it('shows the ban with its reason', async () => {

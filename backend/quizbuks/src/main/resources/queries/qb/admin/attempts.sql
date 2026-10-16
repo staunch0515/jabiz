@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.attempts
-description: Every attempt with its publication, result and reward (P-01 answering history, support), newest first
+description: Every attempt with its publication, result and reward state (P-01 answering history, support), newest first; the amounts are in qb.admin.attempt-rewards (finance)
 entities: [QbAttempt, QbPublicationCard]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
@@ -18,14 +18,11 @@ results:
   score:               { from: QbAttempt.score }
   fullScore:           { from: QbAttempt.fullScore }
   passed:              { from: QbAttempt.passed }
-  reward:              { from: QbAttempt.reward }
-  fee:                 { from: QbAttempt.fee }
   rewardStatus:        { from: QbAttempt.rewardStatus }
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
-  ledgerTransactionId: { from: QbAttempt.ledgerTransactionId }
 list:
   filters: [userId, publicationId, sponsorId, status, rewardStatus, startedAt, submittedAt]
-  sorts:   [startedAt, submittedAt, reward]
+  sorts:   [startedAt, submittedAt]
   defaultSort: { field: startedAt, asc: false }
   key: [attemptId]
 permissions: [qb.admin.users.read]
@@ -44,10 +41,7 @@ SELECT
     m.{{QbAttempt.score}}               AS score,
     m.{{QbAttempt.fullScore}}           AS fullScore,
     m.{{QbAttempt.passed}}              AS passed,
-    m.{{QbAttempt.reward}}              AS reward,
-    m.{{QbAttempt.fee}}                 AS fee,
     m.{{QbAttempt.rewardStatus}}        AS rewardStatus,
-    m.{{QbAttempt.rewardPaidAt}}        AS rewardPaidAt,
-    m.{{QbAttempt.ledgerTransactionId}} AS ledgerTransactionId
+    m.{{QbAttempt.rewardPaidAt}}        AS rewardPaidAt
 FROM {{QbAttempt}} m
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}
