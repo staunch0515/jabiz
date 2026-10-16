@@ -75,6 +75,40 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm typecheck
 
+  # The image's entrypoint (deploy/quizbuks/entrypoint.sh): Stripe placeholders for a plain local compose only, never
+  # over a set value or in live mode. Then the stack as a person starts it on this machine: built and started with
+  # compose and no .env, it must become healthy with the placeholders' warnings (deploy/quizbuks/README.md).
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE: docker compose -f deploy/quizbuks/docker-compose.yml
+    steps:
+      - uses: actions/checkout@v5
+      - run: tools/quizbuks/test/entrypoint.test.sh
+      - run: $COMPOSE config --quiet
+      - name: No .env
+        run: test ! -e deploy/quizbuks/.env
+      - name: Build and start the stack
+        run: $COMPOSE up -d --build
+      - name: Healthy, with the placeholders' warnings and no failed platform check
+        run: |
+          healthy=false
+          for i in $(seq 1 72); do
+            if curl -sf localhost:8080/actuator/health; then healthy=true; break; fi
+            sleep 5
+          done
+          $COMPOSE logs app > quizbuks-compose.log 2>&1
+          $healthy || { echo "not healthy after 6 minutes"; exit 1; }
+          if grep -q 'Platform check failed' quizbuks-compose.log; then echo "platform check failed"; exit 1; fi
+          for name in STRIPE_API_KEY STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
+            grep -q "quizbuks: WARNING: $name is not set" quizbuks-compose.log || { echo "no warning for $name"; exit 1; }
+          done
+      - if: failure()
+        run: $COMPOSE logs app
+      - if: always()
+        run: $COMPOSE down -v
+
   # The packaged application starts on an empty database, migrates, passes its startup checks, reports healthy and
   # serves its three front ends.
   package:

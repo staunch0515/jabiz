@@ -29,6 +29,8 @@ import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
+import { TRANSACTIONS_PATH } from '../transactions/api'
+import '../transactions/messages'
 import {
   available,
   parseKudos,
@@ -250,7 +252,12 @@ export function WalletPage() {
         </section>
       )}
       <section aria-labelledby="wallet-topups" className="flex flex-col gap-3">
-        <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
+          <Link to={TRANSACTIONS_PATH} className="text-sm underline underline-offset-4" data-testid="wallet-transactions">
+            {t('transactions.walletLink')}
+          </Link>
+        </div>
         {topUps.isError
           ? <PageState kind="error" description={tQb('failed')}
             action={<Button variant="outline" onClick={() => void topUps.refetch()}>{tQb('retry')}</Button>} />
