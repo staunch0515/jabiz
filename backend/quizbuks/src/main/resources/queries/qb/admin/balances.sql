@@ -2,8 +2,8 @@
 id: qb.admin.balances
 description: >-
   The month's balance sheet (F-08): each account's opening balance, debits, credits and closing balance, then the
-  checks that the wallet accounts add up to their parties and the ledger balances; from the ledger alone, by booking
-  time, as recorded up to a time (if given)
+  ledger's own checks (every wallet line carries its party, no party's wallet is overdrawn, debits equal credits);
+  from the ledger alone, by booking time, as recorded up to a time (if given)
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   from:    { like: LedgerTransaction.bookingTime, required: true, description: "The month's first instant: the opening balance is everything booked before it" }
@@ -37,10 +37,15 @@ report:
 -- ACCOUNT rows, by code: every postable account, its balance being debit less credit as in
 -- jabiz.ledger.account_balances (whose balance at the month's last instant is the closing here). CHECK rows, which
 -- read the ledger only (its wallet caches are the daily reconciliation's, qb.admin.recon-runs):
---   SPONSOR_WALLETS: 2110 against the sum of its sponsors' balances (the party, dimension 1, of every line);
---   TAKER_WALLETS:   2120 + 2130 (the takers' balances and what is on its way to them) against the sum of their parties;
---   BALANCED:        the month's debits against its credits, and every closing balance adding up to 0.
--- partyTotal is what the lines with a party add up to; a line without one shows as a difference (matches false).
+--   SPONSOR_WALLETS:     every 2110 line carries its sponsor (the party, dimension 1): 2110 against what its lines
+--                        with a party add up to (partyTotal); a line without one is a difference;
+--   TAKER_WALLETS:       the same for 2120 + 2130 (the takers' balances and what is on its way to them);
+--   NO_OVERDRAWN_WALLET: no party's balance on 2110, 2120 or 2130 is a debit (a wallet below 0); closing is what the
+--                        overdrawn ones add up to;
+--   BALANCED:            the month's debits against its credits, every closing adding up to 0: the ledger's own
+--                        invariant (LEDGER_POST refuses an unbalanced transaction), shown for completeness.
+-- These read the ledger alone: they show that the ledger is consistent with itself, not that the wallets' caches or
+-- Stripe agree with it (the daily reconciliation, qb.admin.recon-runs).
 WITH moves AS (
     SELECT e.{{LedgerEntry.accountId}}   AS acct,
            e.{{LedgerEntry.dimension1}}  AS party,
@@ -65,6 +70,13 @@ accounts AS (
     LEFT JOIN moves m ON m.acct = a.{{LedgerAccount.accountId}}
     WHERE NOT coalesce(a.{{LedgerAccount.summary}}, false)
     GROUP BY a.{{LedgerAccount.accountCode}}, a.{{LedgerAccount.accountName}}, a.{{LedgerAccount.accountType}}
+),
+parties AS (
+    SELECT w.{{LedgerAccount.accountCode}} AS code, m.party, sum(m.debit - m.credit) AS party_balance
+    FROM moves m
+    JOIN {{LedgerAccount}} w ON w.{{LedgerAccount.accountId}} = m.acct
+    WHERE w.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130') AND m.party IS NOT NULL
+    GROUP BY w.{{LedgerAccount.accountCode}}, m.party
 )
 SELECT CAST(row_number() OVER (ORDER BY code) AS integer) AS seq,
        CAST('ACCOUNT' AS varchar(10)) AS rowKind,
@@ -76,19 +88,25 @@ SELECT CAST(row_number() OVER (ORDER BY code) AS integer) AS seq,
        CAST(NULL AS boolean)          AS matches
 FROM accounts
 UNION ALL
-SELECT 901, 'CHECK', 'SPONSOR_WALLETS', 'Sponsor wallets (2110)', NULL,
+SELECT 901, 'CHECK', 'SPONSOR_WALLETS', 'Every sponsor wallet line (2110) carries its sponsor', NULL,
        coalesce(sum(opening), 0), coalesce(sum(debit_total), 0), coalesce(sum(credit_total), 0),
        coalesce(sum(closing), 0), coalesce(sum(party_total), 0),
        coalesce(sum(closing), 0) = coalesce(sum(party_total), 0)
 FROM accounts WHERE code = '2110'
 UNION ALL
-SELECT 902, 'CHECK', 'TAKER_WALLETS', 'User wallets (2120 + 2130)', NULL,
+SELECT 902, 'CHECK', 'TAKER_WALLETS', 'Every user wallet line (2120, 2130) carries its user', NULL,
        coalesce(sum(opening), 0), coalesce(sum(debit_total), 0), coalesce(sum(credit_total), 0),
        coalesce(sum(closing), 0), coalesce(sum(party_total), 0),
        coalesce(sum(closing), 0) = coalesce(sum(party_total), 0)
 FROM accounts WHERE code IN ('2120', '2130')
 UNION ALL
-SELECT 903, 'CHECK', 'BALANCED', 'Debits equal credits', NULL,
+SELECT 903, 'CHECK', 'NO_OVERDRAWN_WALLET', 'No wallet (2110, 2120, 2130) below 0', NULL,
+       NULL, NULL, NULL,
+       coalesce(sum(party_balance) FILTER (WHERE party_balance > 0), 0), NULL,
+       count(*) FILTER (WHERE party_balance > 0) = 0
+FROM parties
+UNION ALL
+SELECT 904, 'CHECK', 'BALANCED', 'Debits equal credits (the ledger''s own invariant)', NULL,
        coalesce(sum(opening), 0), coalesce(sum(debit_total), 0), coalesce(sum(credit_total), 0),
        coalesce(sum(closing), 0), NULL,
        coalesce(sum(debit_total), 0) = coalesce(sum(credit_total), 0) AND coalesce(sum(closing), 0) = 0

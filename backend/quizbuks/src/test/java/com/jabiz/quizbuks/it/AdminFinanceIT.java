@@ -4,6 +4,7 @@ import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.test.StubHttpServer;
+import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -67,15 +68,49 @@ class AdminFinanceIT extends PayoutItSupport {
         return Map.of("from", from.toString(), "to", to.toString());
     }
 
+    Map<String, Object> period(Instant from, Instant to, Instant knownAt) {
+        return Map.of("from", from.toString(), "to", to.toString(), "knownAt", knownAt.toString());
+    }
+
     List<Map<String, Object>> report(String id, Instant from, Instant to) {
         return items(id, finance(), Map.of("params", period(from, to), "limit", 100));
     }
 
-    /** The platform's account balances of everything booked up to {@code asOf}, by account code. */
-    Map<String, BigDecimal> accountBalances(Instant asOf) {
-        return items("jabiz.ledger.account_balances", admin(), Map.of("params", Map.of("asOf", asOf.toString()),
-            "limit", 100)).stream().collect(Collectors.toMap(row -> (String) row.get("accountCode"),
-            row -> money(row.get("balance"))));
+    List<Map<String, Object>> report(String id, Instant from, Instant to, Instant knownAt) {
+        return items(id, finance(), Map.of("params", period(from, to, knownAt), "limit", 100));
+    }
+
+    /** The platform's account balances of everything booked up to {@code asOf}, as recorded at {@code knownAt}. */
+    Map<String, BigDecimal> accountBalances(Instant asOf, Instant knownAt) {
+        return items("jabiz.ledger.account_balances", admin(), Map.of("params", Map.of("asOf", asOf.toString(),
+            "knownAt", knownAt.toString()), "limit", 100)).stream().collect(Collectors.toMap(
+            row -> (String) row.get("accountCode"), row -> money(row.get("balance"))));
+    }
+
+    /** Posts straight in the ledger, as no process does (no source): debit one account, credit another. */
+    void post(Instant bookingTime, String debit, String credit, long amount, String debitParty, String creditParty) {
+        Map<String, Object> debitLine = body("accountCode", debit, "direction", "DEBIT", "amount", amount);
+        if (debitParty != null) {
+            debitLine.put("dimensions", Map.of("party", debitParty));
+        }
+        Map<String, Object> creditLine = body("accountCode", credit, "direction", "CREDIT", "amount", amount);
+        if (creditParty != null) {
+            creditLine.put("dimensions", Map.of("party", creditParty));
+        }
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            bookingTime.toString(), "description", "Posted by hand (test)", "entries", List.of(debitLine, creditLine)));
+    }
+
+    /** The CSV line of a kind in a monthly report's export. */
+    static String line(String csv, String category) {
+        return csv.lines().filter(l -> l.contains("," + category + ",")).findFirst().orElseThrow();
+    }
+
+    String exportCsv(String id, Map<String, Object> params) {
+        return new String(client.post().uri("/api/queries/" + id + "/export?format=csv")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, finance())
+            .bodyValue(Map.of("params", params)).exchange().expectStatus().isOk()
+            .expectBody(byte[].class).returnResult().getResponseBody(), StandardCharsets.UTF_8);
     }
 
     Map<String, Object> reversed(String transferId, long amountReversed) {
@@ -150,8 +185,9 @@ class AdminFinanceIT extends PayoutItSupport {
         deliver(event(eventId(), "charge.dispute.created", dispute(disputed, 2_000, "needs_response")));
         deliver(event(eventId(), "charge.dispute.closed", dispute(disputed, 2_000, "lost")));
         assertThat(money(topUp(disputed).get("dispute_clawback"))).isEqualByComparingTo("2000");
-        // The development credit: no source, so of no known kind.
+        // The development credit: no source, so of no known kind; as is a posting booked exactly at the month's start.
         credit(sponsor, 300);
+        post(from, "1120", "1110", 70, null, null);
 
         // A reward of 100 with a commission of 20.
         String publicationId = livePublication(sponsor, "F08 capitals", Map.of("regions", List.of("GLOBAL")));
@@ -184,9 +220,12 @@ class AdminFinanceIT extends PayoutItSupport {
         deliver(event(eventId(), "payout.paid", payout("po_f08b", 1_000, "paid")));
         deliver(event(eventId(), "payout.failed", payout("po_f08b", 1_000, "failed")));
 
-        // After the month: not in it.
+        // After the month: not in it, nor is a posting booked exactly at its end. A posting booked in the month
+        // but recorded after it is in it as the ledger is now, not as it was known at the month's end.
         clock.set(to.plus(Duration.ofHours(1)));
         credit(sponsor, 50);
+        post(to, "1120", "1110", 90, null, null);
+        post(from.plus(Duration.ofHours(2)), "1120", "1110", 40, null, null);
 
         List<Expected> expected = List.of(
             row("TOPUP", 2, 12_000, "1110", 12_000, "2110", -12_000),
@@ -200,8 +239,9 @@ class AdminFinanceIT extends PayoutItSupport {
             row("TRANSFER_REVERSED", 1, 500, "1110", 500, "2120", -500),
             row("PAYOUT", 2, 6_000, "1110", -6_000, "1120", 6_000),
             row("PAYOUT_FAILED", 1, 1_000, "1110", 1_000, "1120", -1_000),
-            row("OTHER", 3, 3_800, "1110", 3_800, "2110", -300, "2120", -3_500));
-        List<Map<String, Object>> monthly = report(MONTHLY, from, to);
+            row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
+        // As recorded at the month's end: the late posting is not in it.
+        List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);
         assertThat(monthly).extracting(r -> r.get("category"))
             .containsExactlyElementsOf(expected.stream().map(Expected::category).toList());
         for (int i = 0; i < expected.size(); i++) {
@@ -220,17 +260,27 @@ class AdminFinanceIT extends PayoutItSupport {
             }
             assertThat(sum).as(want.category() + " balances").isEqualByComparingTo(BigDecimal.ZERO);
         }
+        // OTHER holds the postings of no source only: every posting of a process is of its kind.
+        assertThat(((Number) query("SELECT count(*) AS n FROM ledger_transaction_version WHERE booking_time >= ? "
+            + "AND booking_time < ? AND created_time <= ? AND source_entity IS NULL", java.sql.Timestamp.from(from),
+            java.sql.Timestamp.from(to), java.sql.Timestamp.from(to)).getFirst().get("n")).longValue())
+            .isEqualTo(4);
+        // As the ledger is now: the late posting is in the month.
+        Map<String, Object> otherNow = report(MONTHLY, from, to).getLast();
+        assertThat(otherNow).containsEntry("category", "OTHER");
+        assertThat(((Number) otherNow.get("transactionCount")).longValue()).isEqualTo(5);
+        assertThat(money(otherNow.get("amount"))).isEqualByComparingTo("3910");
 
         // The balance sheet: opening and closing are the platform's balances, the month's movement is the monthly
         // report's column; the checks hold.
-        Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000));
-        Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000));
+        Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000), to);
+        Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000), to);
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
-        Map<String, Long> debits = Map.of("1110", 17_300L, "1120", 6_000L, "2110", 3_100L, "2120", 3_500L,
+        Map<String, Long> debits = Map.of("1110", 17_300L, "1120", 6_070L, "2110", 3_100L, "2120", 3_500L,
             "2130", 3_300L, "4110", 100L, "5110", 360L);
-        Map<String, Long> credits = Map.of("1110", 11_260L, "1120", 1_000L, "2110", 12_300L, "2120", 5_580L,
+        Map<String, Long> credits = Map.of("1110", 11_330L, "1120", 1_000L, "2110", 12_300L, "2120", 5_580L,
             "2130", 3_300L, "4110", 220L, "5110", 0L);
-        List<Map<String, Object>> balances = report(BALANCES, from, to);
+        List<Map<String, Object>> balances = report(BALANCES, from, to, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))
             .collect(Collectors.toMap(r -> (String) r.get("code"), Function.identity()));
         assertThat(accounts).containsOnlyKeys(COLUMNS.keySet());
@@ -251,6 +301,7 @@ class AdminFinanceIT extends PayoutItSupport {
             .extracting(r -> r.get("code"), r -> r.get("matches"))
             .containsExactly(org.assertj.core.groups.Tuple.tuple("SPONSOR_WALLETS", true),
                 org.assertj.core.groups.Tuple.tuple("TAKER_WALLETS", true),
+                org.assertj.core.groups.Tuple.tuple("NO_OVERDRAWN_WALLET", true),
                 org.assertj.core.groups.Tuple.tuple("BALANCED", true));
         Map<String, Object> sponsors = balances.stream().filter(r -> "SPONSOR_WALLETS".equals(r.get("code")))
             .findFirst().orElseThrow();
@@ -277,16 +328,37 @@ class AdminFinanceIT extends PayoutItSupport {
             .expectBodyList(MAP).returnResult().getResponseBody();
         assertThat(runs).extracting(r -> r.get("runId")).contains(issued.get("runId"), again.get("runId"));
         assertThat(run("REPORT_ISSUE", finance(), body("templateId", BALANCES, "params", period(from, to))))
-            .containsEntry("rowCount", 10);
+            .containsEntry("rowCount", 11);
 
-        // The export is the platform's, of the same rows.
-        String csv = new String(client.post().uri("/api/queries/" + MONTHLY + "/export?format=csv")
-            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, finance())
-            .bodyValue(Map.of("params", period(from, to))).exchange().expectStatus().isOk()
-            .expectBody(byte[].class).returnResult().getResponseBody(), StandardCharsets.UTF_8);
+        // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
+        // and so is the run issued as known then (its archived rows, not run again).
+        String csv = exportCsv(MONTHLY, period(from, to));
         assertThat(csv.lines().count()).isEqualTo(13);
         assertThat(csv).contains("TRANSFER_REVERSED");
+        String known = exportCsv(MONTHLY, period(from, to, to));
+        assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");
+        Map<String, Object> asKnown = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
+            period(from, to, to)));
+        String archived = new String(client.get().uri("/api/reports/runs/{id}/export?format=csv", asKnown.get("runId"))
+            .header(HttpHeaders.AUTHORIZATION, finance()).exchange().expectStatus().isOk().expectBody(byte[].class)
+            .returnResult().getResponseBody(), StandardCharsets.UTF_8);
+        assertThat(line(archived, "OTHER")).isEqualTo(line(known, "OTHER"));
         assertBooksBalance();
+
+        // The checks fail when the ledger is not consistent with itself: in the next month, a sponsor wallet line
+        // without its sponsor, and a user overdrawn (debits on 2120). The ledger still balances.
+        Instant next = to.atZone(ZoneOffset.UTC).plusMonths(1).toInstant();
+        clock.set(to.plus(Duration.ofHours(3)));
+        post(to.plus(Duration.ofHours(2)), "1110", "2110", 20, null, null);
+        post(to.plus(Duration.ofHours(2)), "2120", "1110", 30, user("t-f08-overdrawn"), null);
+        assertThat(report(BALANCES, to, next)).filteredOn(r -> "CHECK".equals(r.get("rowKind")))
+            .extracting(r -> r.get("code"), r -> r.get("matches"))
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("SPONSOR_WALLETS", false),
+                org.assertj.core.groups.Tuple.tuple("TAKER_WALLETS", true),
+                org.assertj.core.groups.Tuple.tuple("NO_OVERDRAWN_WALLET", false),
+                org.assertj.core.groups.Tuple.tuple("BALANCED", true));
+        assertThat(report(BALANCES, to, next)).filteredOn(r -> "NO_OVERDRAWN_WALLET".equals(r.get("code")))
+            .singleElement().satisfies(r -> assertThat(money(r.get("closing"))).isEqualByComparingTo("30"));
     }
 
     @Test
@@ -323,11 +395,27 @@ class AdminFinanceIT extends PayoutItSupport {
         client.get().uri("/api/reports/runs?template=" + MONTHLY).header(HttpHeaders.AUTHORIZATION, content)
             .exchange().expectStatus().isForbidden();
 
-        // The overview's numbers: one row, the transfers' new columns.
+        // The overview's numbers: one row, the transfers' new columns. The reconciliation and the money tasks are
+        // qb.reconcile's (and the tasks task.read's): finance-read alone is refused them, and the release too.
         Map<String, Object> summary = items(SUMMARY, finance, Map.of("params", Map.of("staleBefore",
             now().minus(Duration.ofHours(1)).toString()))).getFirst();
-        assertThat(summary).containsKeys("sponsorBalance", "transfersInReview", "transfersInDoubt", "heldTakers",
-            "lastRunStatus", "openTasks");
+        assertThat(summary).containsKeys("sponsorBalance", "transfersInReview", "transfersInDoubt", "heldTakers")
+            .doesNotContainKeys("lastRunStatus", "openTasks");
+        assertThat(items("qb.admin.recon-summary", finance, Map.of())).singleElement()
+            .satisfies(r -> assertThat(r).containsKeys("lastRunStatus", "openTasks"));
+        String readOnly = TestTokens.bearer(tokens, "f-read-only", "qb.admin.finance.read", "qb.admin.users.read");
+        template(SUMMARY, readOnly, Map.of());
+        for (String id : List.of("qb.admin.recon-summary", "qb.admin.recon-runs", "qb.admin.recon-items")) {
+            for (String refused : List.of(readOnly, content)) {
+                client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, refused).bodyValue(Map.of()).exchange()
+                    .expectStatus().isForbidden();
+            }
+        }
+        assertThat(client.post().uri("/api/processes/QB_TRANSFER_HOLD_RELEASE/latest")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, readOnly)
+            .bodyValue(body("userId", user("t-f08-matrix"))).exchange().returnResult(String.class).getStatus()
+            .value()).isEqualTo(403);
         assertThat(items("qb.admin.transfers", finance, Map.of("filters", List.of(Map.of("field", "held", "op", "eq",
             "value", true))))).allSatisfy(r -> assertThat(r).containsEntry("held", true));
     }

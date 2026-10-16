@@ -1,5 +1,5 @@
 import { signInAdmin } from './admin'
-import { transferInReview, transfersOf } from './finance'
+import { bookingMonthOf, transferInReview, transfersOf } from './finance'
 import { expect, prepareQuizbuks, test } from './support'
 
 /*
@@ -41,16 +41,16 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expect.poll(async () => (await transfersOf(request, payee.userId))[0]?.status,
     { message: 'the transfer is sent', timeout: 60_000 }).toBe('SENT')
 
-  // This month's reports (UTC): the transfer sent and settled are in them.
-  const month = new Date().toISOString().slice(0, 7)
-  await page.goto('/admin/qb/finance/reports')
-  await page.getByTestId('report-month').fill(month)
+  // The reports of the month the transfer's sending was booked in (not the clock's: a run may cross a month's end).
+  const month = await bookingMonthOf(request, 'QbTransfer', transferId)
+  await page.goto(`/admin/qb/finance/reports?month=${month}`)
+  await expect(page.getByTestId('report-month')).toHaveValue(month)
   const monthly = page.getByTestId('report-monthly')
   const sent = monthly.locator('[data-testid="monthly-row"][data-category="TRANSFER_SENT"]')
   await expect(sent).toBeVisible()
   expect(Number(await sent.getAttribute('data-count'))).toBeGreaterThanOrEqual(1)
   const balances = page.getByTestId('report-balances')
-  await expect(balances.locator('[data-testid="balance-row"][data-kind="CHECK"]')).toHaveCount(3)
+  await expect(balances.locator('[data-testid="balance-row"][data-kind="CHECK"]')).toHaveCount(4)
   await expect(balances.locator('[data-testid="balance-row"][data-code="BALANCED"]'))
     .toHaveAttribute('data-matches', 'true')
 

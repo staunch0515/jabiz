@@ -31,6 +31,8 @@ export const TEMPLATE = {
   payoutAccounts: 'qb.admin.payout-accounts',
   /** Finance (Q9c): the overview's numbers, the wallets, the reconciliation and the two monthly reports (F-08). */
   financeSummary: 'qb.admin.finance-summary',
+  /** The latest reconciliation and the open money tasks (`qb.reconcile` and `task.read`). */
+  reconSummary: 'qb.admin.recon-summary',
   wallets: 'qb.admin.wallets',
   reconRuns: 'qb.admin.recon-runs',
   reconItems: 'qb.admin.recon-items',
@@ -94,6 +96,7 @@ export const PERMISSION = {
   ledgerRead: 'ledger.read',
   reportIssue: 'report.issue',
   reportArchiveRead: 'report.archive.read',
+  taskRead: 'task.read',
 } as const
 
 /** The widths the policy `qb.content.image` keeps (a smaller image is answered with the original). */
@@ -130,6 +133,7 @@ export const PATH = {
   reconciliation: '/qb/finance/reconciliation',
   reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
   reports: '/qb/finance/reports',
+  reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

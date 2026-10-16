@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { signInAdmin, submittedPublication } from './admin'
+import { bookingMonthOf } from './finance'
 import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
@@ -285,8 +286,9 @@ for (const appearance of ['light', 'dark'] as const) {
     const sponsor = await fundedSponsor(request, 1000)
     const taker = await takerInJapan(request, 'Ida')
     const { publicationId } = await rewardingPublication(request, sponsor.token, 100, taker.token)
-    expect(await submitRight(request, taker.token, await startAttempt(request, taker.token, publicationId)))
-      .toBe('PAID')
+    const started = await startAttempt(request, taker.token, publicationId)
+    expect(await submitRight(request, taker.token, started)).toBe('PAID')
+    const month = await bookingMonthOf(request, 'QbAttempt', started.attemptId)
     await signInAdmin(page)
 
     await page.goto('/admin/qb/finance')
@@ -304,8 +306,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto('/admin/qb/finance/reconciliation')
     await expect(page.getByTestId('recon-runs')).toBeVisible()
     await expectAccessible(page, at('admin finance reconciliation'))
-    await page.goto('/admin/qb/finance/reports')
-    await page.getByTestId('report-month').fill(new Date().toISOString().slice(0, 7))
+    await page.goto(`/admin/qb/finance/reports?month=${month}`)
     await expect(page.locator('[data-testid="monthly-row"][data-category="REWARD"]')).toBeVisible()
     await expect(page.getByTestId('balance-row').first()).toBeVisible()
     await expectAccessible(page, at('admin finance reports'))

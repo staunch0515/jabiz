@@ -14,8 +14,9 @@ import {
   TableHeader,
   TableRow,
   useAuth,
+  type DescriptionItem,
 } from '@jabiz/admin'
-import { readAccountBalances, readFinanceSummary } from './finance-api'
+import { readAccountBalances, readFinanceSummary, readReconSummary } from './finance-api'
 import { LoadFailed, Section } from './components'
 import { money, when } from './hooks'
 import { ACCOUNTS, PATH, PERMISSION } from './ids'
@@ -76,6 +77,32 @@ export default function FinanceOverviewPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const summary = useQuery({ queryKey: ['qb-ext', 'finance', 'summary'], queryFn: readFinanceSummary })
+  // The reconciliation and the money tasks are qb.reconcile's (and the tasks task.read's): asked for only then.
+  const reconciles = can(PERMISSION.reconcile) && can(PERMISSION.taskRead)
+  const recon = useQuery({ queryKey: ['qb-ext', 'finance', 'recon-summary'], queryFn: readReconSummary,
+    enabled: reconciles })
+  let reconItems: DescriptionItem[] = []
+  if (reconciles && recon.isError) {
+    reconItems = [{ key: 'recon', label: t('finance.overview.lastRun'),
+      value: <LoadFailed error={recon.error} onRetry={() => void recon.refetch()} /> }]
+  } else if (reconciles && recon.data) {
+    const r = recon.data
+    reconItems = [
+      { key: 'recon', label: t('finance.overview.lastRun'), value: r.lastRunId
+        ? (
+          <Link to={PATH.reconRun(r.lastRunId)} className={linkClass} data-testid="finance-last-run"
+            data-status={r.lastRunStatus ?? ''}>
+            {t('finance.overview.lastRunValue', { time: when(r.lastRunAt),
+              status: t(`finance.recon.status.${r.lastRunStatus === 'DIFF' ? 'DIFF' : 'OK'}`),
+              n: r.lastRunItems })}
+          </Link>
+        )
+        : t('finance.overview.noRun') },
+      { key: 'tasks', label: t('finance.overview.openTasks'), value: (
+        <CountLink to={PATH.tasks} count={r.openTasks}
+          label={t('finance.overview.openTasksLink', { n: r.openTasks })} testId="finance-tasks" />) },
+    ]
+  }
   let numbers: ReactNode
   if (summary.isError) numbers = <LoadFailed error={summary.error} onRetry={() => void summary.refetch()} />
   else if (summary.isPending) numbers = <PageState kind="loading" />
@@ -96,19 +123,7 @@ export default function FinanceOverviewPage() {
             { key: 'held', label: t('finance.overview.heldTakers'), value: (
               <CountLink to={PATH.transfersWhere({ held: '1' })} count={s.heldTakers}
                 label={t('finance.overview.heldTakersLink', { n: s.heldTakers })} testId="finance-held" />) },
-            { key: 'recon', label: t('finance.overview.lastRun'), value: s.lastRunId
-              ? (
-                <Link to={PATH.reconRun(s.lastRunId)} className={linkClass} data-testid="finance-last-run"
-                  data-status={s.lastRunStatus ?? ''}>
-                  {t('finance.overview.lastRunValue', { time: when(s.lastRunAt),
-                    status: t(`finance.recon.status.${s.lastRunStatus === 'DIFF' ? 'DIFF' : 'OK'}`),
-                    n: s.lastRunItems })}
-                </Link>
-              )
-              : t('finance.overview.noRun') },
-            { key: 'tasks', label: t('finance.overview.openTasks'), value: (
-              <CountLink to={PATH.tasks} count={s.openTasks}
-                label={t('finance.overview.openTasksLink', { n: s.openTasks })} testId="finance-tasks" />) },
+            ...reconItems,
           ]} />
         </Section>
         <Section title={t('finance.overview.wallets')} testId="finance-wallets">

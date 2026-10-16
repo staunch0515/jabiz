@@ -27,7 +27,7 @@ export interface Page<T> {
 /** The time before which a transfer still sending is in doubt. */
 export const staleBefore = (now: number = Date.now()) => new Date(now - STALE_AFTER_MS).toISOString()
 
-/** The row of `qb.admin.finance-summary`: the wallets' totals and what waits for finance. */
+/** The row of `qb.admin.finance-summary`: the wallets' totals and the transfers that wait for finance. */
 export interface FinanceSummary {
   sponsorBalance: string
   sponsorHeld: string
@@ -38,11 +38,6 @@ export interface FinanceSummary {
   transfersInReview: number
   transfersInDoubt: number
   heldTakers: number
-  lastRunId: string | null
-  lastRunAt: string | null
-  lastRunStatus: string | null
-  lastRunItems: number
-  openTasks: number
 }
 
 export async function readFinanceSummary(): Promise<FinanceSummary> {
@@ -58,6 +53,21 @@ export async function readFinanceSummary(): Promise<FinanceSummary> {
     transfersInReview: num(row.transfersInReview),
     transfersInDoubt: num(row.transfersInDoubt),
     heldTakers: num(row.heldTakers),
+  }
+}
+
+/** The row of `qb.admin.recon-summary` (`qb.reconcile` and `task.read`): the latest run and the open money tasks. */
+export interface ReconSummary {
+  lastRunId: string | null
+  lastRunAt: string | null
+  lastRunStatus: string | null
+  lastRunItems: number
+  openTasks: number
+}
+
+export async function readReconSummary(): Promise<ReconSummary> {
+  const row = (await runQuery<Row>(TEMPLATE.reconSummary, { limit: 1 })).items[0] ?? {}
+  return {
     lastRunId: str(row.lastRunId),
     lastRunAt: str(row.lastRunAt),
     lastRunStatus: str(row.lastRunStatus),
@@ -85,6 +95,8 @@ export async function readAccountBalances(): Promise<AccountBalance[]> {
 export interface FinanceTransfer {
   transferId: string
   userId: string
+  /** The Stripe account the transfer is bound to (only compared, never shown). */
+  accountId: string | null
   /** The last four characters of the Stripe account: the page never shows more. */
   accountLast4: string | null
   amount: string
@@ -107,6 +119,7 @@ function toTransfer(row: Row): FinanceTransfer {
   return {
     transferId: String(row.transferId),
     userId: String(row.userId ?? ''),
+    accountId: account,
     accountLast4: account ? account.slice(-4) : null,
     amount: amount(row.amount),
     fee: amount(row.fee),
@@ -434,8 +447,9 @@ export interface Issued {
 }
 
 /** Issues a report for a period: the platform archives every row with the content hash (only appended to). */
-export async function issueReport(id: ReportId, period: Period): Promise<Issued> {
-  const output = await runProcess<Row>(PROCESS.reportIssue, { templateId: id, params: { ...period } })
+export async function issueReport(id: ReportId, period: Period, supersedes?: string | null): Promise<Issued> {
+  const output = await runProcess<Row>(PROCESS.reportIssue, { templateId: id, params: { ...period },
+    ...(supersedes ? { supersedes } : {}) })
   return { runId: String(output.runId), contentHash: String(output.contentHash ?? ''),
     rowCount: num(output.rowCount) }
 }
@@ -444,6 +458,9 @@ export async function issueReport(id: ReportId, period: Period): Promise<Issued>
 export interface IssuedRun {
   runId: string
   period: string | null
+  /** The period it was issued for (its parameters). */
+  from: string | null
+  to: string | null
   rowCount: number
   contentHash: string
   issuedBy: string | null
@@ -451,12 +468,25 @@ export interface IssuedRun {
   supersededBy: string | null
 }
 
-/** The latest issued runs of a report the caller may read (`report.archive.read`). */
-export async function readIssuedRuns(id: ReportId): Promise<IssuedRun[]> {
-  const runs = await unwrap(api.GET('/api/reports/runs', { params: { query: { template: id, limit: 20 } } }))
-  return (runs ?? []).map((run) => ({
+/** Whether two instants are the same (the archive may write them in another form). */
+const sameInstant = (a: string | null, b: string) => a != null && Date.parse(a) === Date.parse(b)
+
+/**
+ * The latest issued runs of a report the caller may read (`report.archive.read`) that were issued for the period,
+ * newest first: the archive lists the latest runs of the template, each run's own parameters say its period.
+ */
+export async function readIssuedRuns(id: ReportId, period: Period): Promise<IssuedRun[]> {
+  const runs = await unwrap(api.GET('/api/reports/runs', { params: { query: { template: id, limit: 50 } } }))
+  const all = await Promise.all((runs ?? []).map(async (run) => {
+    const detail = await unwrap(api.GET('/api/reports/runs/{runId}', { params: { path: { runId: String(run.runId) } } }))
+    const params = (detail?.params ?? {}) as Row
+    return { run, from: str(params.from), to: str(params.to) }
+  }))
+  return all.filter(({ from, to }) => sameInstant(from, period.from) && sameInstant(to, period.to)).map(({ run, from, to }) => ({
     runId: String(run.runId),
     period: str(run.period),
+    from,
+    to,
     rowCount: num(run.rowCount),
     contentHash: String(run.contentHash ?? ''),
     issuedBy: str(run.issuedBy),

@@ -301,8 +301,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
-| `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表） | F-08（Q9c，`plans/Q9c-admin-finance.md`）：只读账本、按过账时间，参数 `from`、`to`（月初与下月初，UTC）与可选的 `knownAt`（`timeSlice` 只映射它，平台 19 §2.2）。月报按交易类型（来源单据与所动科目：充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款到银行 / 失败、其他）给出笔数、金额与七个科目各自的借减贷，每类都有一行；余额表给出各科目的期初、借、贷、期末，以及三项核对（2110 与各商家之和、2120 + 2130 与各用户之和、借贷相等）。导出只经平台 `POST /api/queries/{id}/export`，签发只经 `REPORT_ISSUE`（只读时态实体：可重算） | `qb.admin.finance.read` |
-| `qb.admin.finance-summary` | 财务总览的一行（Q9c）：钱包合计、待审批 / 待核实的转账、暂停的用户、最近一次核对、未处理的资金待办（指派给 `qb.reconcile` 的平台待办） | `qb.admin.finance.read` |
+| `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表） | F-08（Q9c，`plans/Q9c-admin-finance.md`）：只读账本、按过账时间，参数 `from`、`to`（月初与下月初，UTC）与可选的 `knownAt`（`timeSlice` 只映射它，平台 19 §2.2）。月报按交易类型（来源单据与所动科目：充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款到银行 / 失败、其他）给出笔数、金额与七个科目各自的借减贷，每类都有一行；余额表给出各科目的期初、借、贷、期末，以及四项账本对自身的核对（2110、2120 + 2130 的每一行都记有户、没有任何户的钱包科目余额为借方、借贷相等）。月报的每一类须来源、冲正、所动科目与方向全都符合，否则为"其他"导出只经平台 `POST /api/queries/{id}/export`，签发只经 `REPORT_ISSUE`（只读时态实体：可重算） | `qb.admin.finance.read` |
+| `qb.admin.finance-summary` / `qb.admin.recon-summary` | 财务总览的一行（Q9c）：钱包合计、待审批 / 待核实的转账、暂停的用户；另一模板为最近一次核对与未处理的资金待办（指派给 `qb.reconcile` 的平台待办） | `qb.admin.finance.read` / `qb.reconcile` + `task.read` |
 | `qb.admin.journal-export` | F-02 – F-03（CSV 汇总凭证，Q9d） | `qb.admin.finance.read` |
 
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。

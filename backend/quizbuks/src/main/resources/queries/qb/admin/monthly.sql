@@ -33,11 +33,13 @@ report:
   period: { from: from, to: to }
   landscape: true
 ---*/
--- Every kind is a row, in a fixed order, also when the month has none of it. A transaction's kind follows from where it
--- was posted from (its source document) and what it moved: QuizBuks posts each kind from one place (QbLedger and the
--- wallet processes; AdminFinanceIT checks every kind). A refund and a lost dispute move the same accounts and differ
--- only in the description their processes give. A reversal keeps its original's source: a transfer's is the failed
--- sending, a payout's the failed payout; any other kind of posting is OTHER (the development credit among them).
+-- Every kind is a row, in a fixed order, also when the month has none of it. A transaction is of a kind only when
+-- everything about it matches: where it was posted from (its source document), whether it reverses another, the exact
+-- set of accounts it moved and the direction of each (QbLedger and the wallet processes post each kind from one place;
+-- AdminFinanceIT checks every kind). Anything else is OTHER: the development credit, a posting of no source, and any
+-- new kind of posting until it is added here. A refund and a lost dispute move the same accounts; they differ in their
+-- reference, the Stripe object they were posted for (a charge ch_ / py_, a dispute dp_ / du_: StripeIds). A reversal
+-- keeps its original's source and reference: a transfer's is the failed sending, a payout's the failed payout.
 -- amount is what the transactions moved (the sum of their debits); the account columns are each account's debit less
 -- credit, as in jabiz.ledger.account_balances (an asset grows positive, a liability or revenue negative), so that a
 -- row adds up to 0 and a column to the account's movement in the month (qb.admin.balances: debit less credit).
@@ -45,15 +47,15 @@ report:
 WITH tx AS (
     SELECT t.{{LedgerTransaction.transactionId}}         AS tx_key,
            t.{{LedgerTransaction.sourceEntity}}          AS src,
-           t.{{LedgerTransaction.description}}           AS descr,
-           t.{{LedgerTransaction.reversesTransactionId}} AS reverses
+           left(coalesce(t.{{LedgerTransaction.reference}}, ''), 3) AS ref_kind,
+           t.{{LedgerTransaction.reversesTransactionId}} IS NOT NULL AS reversal
     FROM {{LedgerTransaction}} t
     WHERE t.{{LedgerTransaction.bookingTime}} >= :from
       AND t.{{LedgerTransaction.bookingTime}} < :to
       AND (CAST(:knownAt AS timestamptz) IS NULL OR t.{{LedgerTransaction.createdTime}} <= :knownAt)
 ),
 moves AS (
-    SELECT tx.tx_key, tx.src, tx.descr, tx.reverses,
+    SELECT tx.tx_key, tx.src, tx.ref_kind, tx.reversal,
            a.{{LedgerAccount.accountCode}} AS code,
            CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT' THEN e.{{LedgerEntry.amount}}
                 ELSE -e.{{LedgerEntry.amount}} END AS net,
@@ -63,8 +65,9 @@ moves AS (
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
 ),
 per_tx AS (
-    SELECT tx_key, src, descr, reverses,
+    SELECT tx_key, src, ref_kind, reversal,
            sum(debit) AS gross,
+           string_agg(DISTINCT code, ',' ORDER BY code) AS accts,
            coalesce(sum(net) FILTER (WHERE code = '1110'), 0) AS a1110,
            coalesce(sum(net) FILTER (WHERE code = '1120'), 0) AS a1120,
            coalesce(sum(net) FILTER (WHERE code = '2110'), 0) AS a2110,
@@ -73,23 +76,33 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '4110'), 0) AS a4110,
            coalesce(sum(net) FILTER (WHERE code = '5110'), 0) AS a5110
     FROM moves
-    GROUP BY tx_key, src, descr, reverses
+    GROUP BY tx_key, src, ref_kind, reversal
 ),
 kinds AS (
     SELECT p.*,
            CASE
-               WHEN p.src = 'QbTransfer' AND p.reverses IS NOT NULL THEN 'TRANSFER_FAILED'
-               WHEN p.src = 'QbStripePayout' AND p.reverses IS NOT NULL THEN 'PAYOUT_FAILED'
-               WHEN p.reverses IS NOT NULL THEN 'OTHER'
-               WHEN p.src = 'QbTopUp' AND p.a2110 < 0 THEN 'TOPUP'
-               WHEN p.src = 'QbTopUp' AND p.a2110 > 0 AND p.descr = 'Lost dispute' THEN 'DISPUTE'
-               WHEN p.src = 'QbTopUp' AND p.a2110 > 0 THEN 'REFUND'
-               WHEN p.src = 'QbTopUp' AND p.a5110 <> 0 THEN 'STRIPE_FEE'
-               WHEN p.src = 'QbAttempt' THEN 'REWARD'
-               WHEN p.src = 'QbTransfer' AND p.a2130 < 0 THEN 'TRANSFER_SENT'
-               WHEN p.src = 'QbTransfer' AND p.a2130 > 0 THEN 'TRANSFER_SETTLED'
-               WHEN p.src = 'QbTransfer' AND p.a2120 < 0 THEN 'TRANSFER_REVERSED'
-               WHEN p.src = 'QbStripePayout' THEN 'PAYOUT'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
+                    AND p.a1110 > 0 AND p.a2110 < 0 THEN 'TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
+                    AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('ch_', 'py_') THEN 'REFUND'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
+                    AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'DISPUTE'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,5110'
+                    AND p.a1110 < 0 AND p.a5110 > 0 THEN 'STRIPE_FEE'
+               WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts IN ('2110,2120', '2110,2120,4110', '2110,4110')
+                    AND p.a2110 > 0 AND p.a2120 <= 0 AND p.a4110 <= 0 THEN 'REWARD'
+               WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts IN ('2120,2130', '2120,2130,4110')
+                    AND p.a2120 > 0 AND p.a2130 < 0 AND p.a4110 <= 0 THEN 'TRANSFER_SENT'
+               WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1110,2130'
+                    AND p.a1110 < 0 AND p.a2130 > 0 THEN 'TRANSFER_SETTLED'
+               WHEN p.src = 'QbTransfer' AND p.reversal AND p.accts IN ('2120,2130', '2120,2130,4110')
+                    AND p.a2120 < 0 AND p.a2130 > 0 AND p.a4110 >= 0 THEN 'TRANSFER_FAILED'
+               WHEN p.src = 'QbTransfer' AND NOT p.reversal AND p.accts = '1110,2120'
+                    AND p.a1110 > 0 AND p.a2120 < 0 THEN 'TRANSFER_REVERSED'
+               WHEN p.src = 'QbStripePayout' AND NOT p.reversal AND p.accts = '1110,1120'
+                    AND p.a1120 > 0 AND p.a1110 < 0 THEN 'PAYOUT'
+               WHEN p.src = 'QbStripePayout' AND p.reversal AND p.accts = '1110,1120'
+                    AND p.a1120 < 0 AND p.a1110 > 0 THEN 'PAYOUT_FAILED'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p

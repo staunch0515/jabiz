@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Stamp } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   Badge,
   Button,
@@ -42,11 +42,24 @@ import { ACCOUNTS, PERMISSION, TEMPLATE, type ReportId } from './ids'
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = 'text-right tabular-nums'
 
-/** The export, issue and archive of one report for the period; each through the platform. */
+/** The runs of a report issued for the period, newest first (`report.archive.read`; none asked for without it). */
+function useIssued(id: ReportId, period: Period) {
+  const { can } = useAuth()
+  return useQuery({ queryKey: ['qb-ext', 'finance', 'issued', id, period.from, period.to],
+    queryFn: () => readIssuedRuns(id, period), enabled: can(PERMISSION.reportArchiveRead) })
+}
+
+/**
+ * The export, issue and archive of one report for the period; each through the platform. Issuing a period that was
+ * issued before supersedes its latest run (the platform's `supersedes`), so the archive keeps one current run per
+ * period; without `report.archive.read` the page cannot know the earlier run and issues a new one beside it.
+ */
 function ReportActions({ id, period }: { id: ReportId; period: Period }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const queryClient = useQueryClient()
+  const issuedRuns = useIssued(id, period)
+  const current = issuedRuns.data?.find((run) => !run.supersededBy)?.runId ?? null
   const [busy, setBusy] = useState<ExportFormat | null>(null)
   const download = async (format: ExportFormat) => {
     setBusy(format)
@@ -74,7 +87,7 @@ function ReportActions({ id, period }: { id: ReportId; period: Period }) {
           confirmLabel={t('finance.reports.issue')}
           onConfirm={async () => {
             try {
-              const issued = await issueReport(id, period)
+              const issued = await issueReport(id, period, current)
               notify.success(t('finance.reports.issued', { hash: issued.contentHash.slice(0, 12) }))
             } catch (error) {
               failed(error, t('common.failed'))
@@ -88,10 +101,10 @@ function ReportActions({ id, period }: { id: ReportId; period: Period }) {
   )
 }
 
-/** The latest issued runs of a report (the platform's archive; `report.archive.read`). */
-function Issued({ id }: { id: ReportId }) {
+/** The issued runs of a report for the period (the platform's archive; `report.archive.read`). */
+function Issued({ id, period }: { id: ReportId; period: Period }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const runs = useQuery({ queryKey: ['qb-ext', 'finance', 'issued', id], queryFn: () => readIssuedRuns(id) })
+  const runs = useIssued(id, period)
   let body: ReactNode
   if (runs.isError) body = <LoadFailed error={runs.error} onRetry={() => void runs.refetch()} />
   else if (runs.isPending) body = <PageState kind="loading" />
@@ -173,7 +186,7 @@ function Monthly({ period }: { period: Period }) {
       actions={<ReportActions id={TEMPLATE.monthly} period={period} />}>
       <p className="text-muted-foreground text-sm">{t('finance.reports.monthlyHint')}</p>
       {body}
-      {can(PERMISSION.reportArchiveRead) && <Issued id={TEMPLATE.monthly} />}
+      {can(PERMISSION.reportArchiveRead) && <Issued id={TEMPLATE.monthly} period={period} />}
     </Section>
   )
 }
@@ -229,7 +242,7 @@ function Balances({ period }: { period: Period }) {
       actions={<ReportActions id={TEMPLATE.balances} period={period} />}>
       <p className="text-muted-foreground text-sm">{t('finance.reports.balancesHint')}</p>
       {body}
-      {can(PERMISSION.reportArchiveRead) && <Issued id={TEMPLATE.balances} />}
+      {can(PERMISSION.reportArchiveRead) && <Issued id={TEMPLATE.balances} period={period} />}
     </Section>
   )
 }
@@ -242,7 +255,10 @@ function Balances({ period }: { period: Period }) {
 export default function ReportsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const monthId = useId()
-  const [month, setMonth] = useState(previousMonth)
+  // The month is in the address (`?month=YYYY-MM`), the previous one when there is none.
+  const [search, setSearch] = useSearchParams()
+  const month = search.get('month') ?? previousMonth()
+  const setMonth = (value: string) => setSearch(value ? { month: value } : {}, { replace: true })
   const period = monthPeriod(month)
   return (
     <div className="flex flex-col gap-4" data-testid="finance-reports">

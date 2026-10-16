@@ -41,7 +41,7 @@
 - **受控参数**（平台决策 D40）：金额与免审核开关列在 `QbParams.CONTROLLED`（`ControlledParams` Bean），只经受控变更修改；`QB_SETUP` 提出它们的首个值，由另一位管理员发布。
   不把 `platform.param.write` 授予任何角色。
 - **账本**只经流程的子流程 `LEDGER_POST` / `LEDGER_REVERSE` 写入；`ledger.post`、`ledger.reverse`、`ledger.account.write` 不授予任何角色。
-  月报 `qb.admin.monthly`（Q9c）按分录的来源单据（`sourceEntity`）、是否冲正与所动科目归类（退款与争议扣回只差在描述 `Refund` / `Lost dispute`）：新增一种过账时同步改它的分类与 `AdminFinanceIT` 的逐行期望，否则它落在 `OTHER`。
+  月报 `qb.admin.monthly`（Q9c）只在来源单据（`sourceEntity`）、是否冲正、所动科目的集合与各科目的方向全都符合时才归入一类（退款与争议扣回所动科目相同，按引用的 Stripe 对象区分：`ch_` / `py_` 与 `dp_` / `du_`，`StripeIds`），其余一律 `OTHER`：新增一种过账时同步改它的分类与 `AdminFinanceIT` 的逐行期望。
 - **国家数据**在 `quizbuks/countries.txt`（`code|en|zh|ja|regions`，无引号）；文件问题由启动检查（类别 `QUIZBUKS`）一次报告。
 - **地区**：国家的 `regions` 是按 `country.Regions.ALL` 顺序、以逗号连接的地区代码，总含 `GLOBAL`（平台没有多值字段）；规则 `QB_COUNTRY_REGIONS_FORMAT` 只接受这一种写法。
 - **内容（模版、题目、资料、版本）**（`content`，`docs/quizbuks/plans/Q3-content.md`）：写入只经 `QB_QUIZ_*` / `QB_QUESTION_*` / `QB_MATERIAL_*` 流程
@@ -144,11 +144,13 @@
   内容管理员读的模板也不带金额（金额在 `qb.admin.publication-funds`、`qb.admin.attempt-rewards` 等财务模板中）；列表按页读取；金额按 JPY（`formatAmount`），用户编号用 `UserName`。
   **财务页**（Q9c，`/qb/finance/**`，菜单"QuizBuks 财务"，`docs/quizbuks/plans/Q9c-admin-finance.md`）：名字与读取在 `finance-api.ts`、非组件的辅助（地址中的筛选、分组、报错）在 `finance.ts`、文案在 `finance-messages.ts`。
   列表的筛选写在地址中（总览与核对页链到筛选后的列表），只认编号、状态与日期；大额转账的决定面板只在转账与收款人的全部读取都为当前 `approvalRequestId` 读好、无错误、不在重读时给出（同发布审核）。
-  月报只经平台：模板 `qb.admin.monthly` / `qb.admin.balances`（`from`、`to` 为 UTC 的月初与下月初，`timeSlice` 只映射 `knownAt`）、导出 `POST /api/queries/{id}/export`、签发 `REPORT_ISSUE`、存档 `GET /api/reports/runs`；页面不自己汇总或保存报表。核对差异只读（C-3）。
+  月报只经平台：模板 `qb.admin.monthly` / `qb.admin.balances`（`from`、`to` 为 UTC 的月初与下月初，`timeSlice` 只映射 `knownAt`）、导出 `POST /api/queries/{id}/export`、签发 `REPORT_ISSUE`（同一期间再签发即取代该期最近的一次）、存档 `GET /api/reports/runs`；月份在地址中（`?month=`）；页面不自己汇总或保存报表。核对差异只读（C-3）。
+  核对结果与资金待办只给 `qb.reconcile`（模板 `qb.admin.recon-summary`，另要 `task.read`），不放进只要 `qb.admin.finance.read` 的模板。
   检查：平台前端目录下 `JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`（CI `web`）。
 - **端到端**（`quizbuks-web/e2e`，Playwright）：对打包的 jar（`./gradlew :quizbuks:bootJar`），邮件由 Mailpit 接收（`E2E_MAILPIT_URL`），Stripe 由本地桩回答；
   服务端以 `JABIZ_SECURITY_MFA_ADMINISTRATION=false` 与含 `QB_E2E_PUBLISHER` 的 `QB_ADMIN_ROLES` 启动（测试自己建一个只有 `control.publish` 的角色，发布 `QB_SETUP` 的提案），
   并以 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 每分钟运行每日转账（Q9c：财务的测试打开转账、把审核线设为 1,000 并等待大额转账进入审批；其他测试的奖励都低于转账门槛 1,000）。
+  这个变量只给 e2e：正式模式或正式密钥下设成每日以外的值即启动失败（`wallet.TransferScheduleCheck`，同开发入账）。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
 ## 6. 测试与命令（在 `backend/` 下）

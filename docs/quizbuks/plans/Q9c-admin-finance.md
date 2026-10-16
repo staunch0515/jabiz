@@ -116,7 +116,7 @@
   - **余额表的核对只读账本**：计划的"2110 = 商家钱包合计、2120 + 2130 = 用户钱包合计"在报表中是各科目与其各户（维度 `party`）之和的核对；钱包缓存（普通表、只有现在）
     与账本的核对是每日核对（核对页）。这样报表只读时态实体，签发后可按数据核对（`recomputable`）。
   - **月报的分类**：12 类（充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款、打款失败、其他），按来源单据、是否冲正与所动科目；
-    退款与争议扣回所动科目相同，只按流程写的描述 `Refund` / `Lost dispute` 区分（`AdminFinanceIT` 两者都覆盖）。开发入账与没有来源的过账归"其他"。
+    退款与争议扣回所动科目相同（评审后按引用的 Stripe 对象区分，见下）。开发入账与没有来源的过账归"其他"。
   - **金额**按 JPY（`formatAmount`），同 Q9a 与 `CLAUDE.md` §4（管理员看真实币种），不是计划写的 `formatKudos`。
   - **核对差异的链接**：`qb.admin.recon-items` 不改；引用的种类由检查项推出（`TOPUP_*` → 充值，`TRANSFER_*` → 转账，`partyId` → 用户汇总）。`qb.admin.topups` 加 `topUpId` 筛选。
   - **资金待办**按指派的权限（`qb.reconcile`）计数，链到平台的待办页，不按来源键。
@@ -130,3 +130,32 @@
   - 核对页一次显示一次运行的前 100 项差异（更多时说明总数）。
   - 打开状态下拉框时（Radix 的 Select 把页面其余部分设为 `aria-hidden`）axe 报 `aria-hidden-focus`，是平台后台布局与 Select 的组合，财务页的 a11y 不查这个状态。
   - 报表按过账时间：奖励按结算时计入，与商家交易页（按状态的时间）对不上是预期的（计划第 7 节）。
+
+### 评审后的修正（Q9c，2026-10-16）
+
+独立评审没有严重或高的问题；改了以下各项：
+- **M1 转账时间的覆盖**：新启动检查 `wallet.TransferScheduleCheck`（`PlatformCheck`，类别 `QUIZBUKS`，与 `StripeModeCheck` 并列）：`quizbuks.transfers.run-cron`
+  不是每日的 `0 7 1 * * *` 而又是正式模式或正式密钥时报错（同开发入账）；`TransferScheduleCheckTest`。`deploy/quizbuks/README.md` 的环境变量表写明 `QB_TRANSFER_RUN_CRON` 只给 e2e。
+- **M2 月报的分类**：每一类都要求来源、是否冲正、所动科目的集合（`string_agg`）与各科目的方向全都符合，其余一律 `OTHER`（例：奖励只能是 2110 借、2120 / 4110 贷；
+  打款只能是 1120 借、1110 贷；失败的转账只能是转账的冲正、2120 贷、2130 借）。退款与争议扣回改按引用（流程写入的 Stripe 对象：收费 `ch_` / `py_`、争议 `dp_` / `du_`，
+  其形状由 `StripeIds` 检查）区分，不再按描述。IT 断言 `OTHER` 的笔数等于该月（按 `knownAt`）没有来源的分录笔数。
+- **L1 总览**：核对与待办移到新模板 `qb.admin.recon-summary`（`[qb.reconcile, task.read]`；平台待办的数据视图读权限是 `task.read`，模板另要求它），
+  `qb.admin.finance-summary` 只剩钱包与转账；总览只在 `qb.reconcile` 与 `task.read` 都有时请求并显示核对与待办（Vitest）。IT：只有 `qb.admin.finance.read` 的令牌
+  读 `qb.admin.recon-summary`、`qb.admin.recon-runs`、`qb.admin.recon-items` 与运行 `QB_TRANSFER_HOLD_RELEASE` 都是 403。
+- **L2 `report.archive.read`**：超级管理员由财务的列表组成，也持有它与 `report.issue`（有意为之），`QbRolesTest` 断言两个角色。注意它们在平台范围内的含义：
+  `report.issue` 可签发持有人有权运行的任何模板，`report.archive.read` 可读持有人有权运行其模板的任何已签发运行（平台 19 §5.3：签发时模板的全部权限与相同的数据范围）；
+  对这两个角色即包括 `qb.admin.users` 等带邮箱的模板的存档。存档只追加，签发的个人数据随存档保留。
+- **L3 余额表的核对**：加 `NO_OVERDRAWN_WALLET`（2110、2120、2130 上按户（维度 `party`）求和，没有任何户为借方余额；期末列为透支之和）；其余核对改名为它们实际证明的
+  （"钱包科目的每一行都记有户"、"借贷相等（账本自身的规则）"），说明写明它们只是账本对自身的核对，与钱包缓存、Stripe 的比较是每日核对。失败的路径：IT 在下一个月以
+  `LEDGER_POST` 直接过一笔不带商家的 2110 行与一笔使用户 2120 透支的分录（账本仍平衡），余额表的 `SPONSOR_WALLETS` 与 `NO_OVERDRAWN_WALLET` 为 `false`、
+  `TAKER_WALLETS` 与 `BALANCED` 为 `true`。`BALANCED` 的失败路径做不出：`LEDGER_POST` 拒绝不平衡的交易，账本表只追加且受触发器保护。
+- **L4 审批页的账户**：转账绑定的 Stripe 账户与收款人现在的收款账户不同时（或已没有收款账户）显示警告（只显示末 4 位），面板照常给出（Vitest）。
+- **L5 测试**：IT 加月初时刻（含）与下月初时刻（不含）的分录、月内过账而月后才记录的分录（按 `knownAt` = 月末不在内、现在的账本在内，签发的存档按存档的行同样不在内）、
+  只有财务读权限的令牌被拒于核对与放行；Vitest 加"转账重读中不显示面板""另一审批请求在其收款人读好之前不显示面板"；e2e 的月份取自测试自己的数据（转账发出、奖励分录的
+  过账时间），不取当前的 UTC 月份。
+- **L6 月份在地址中**（`?month=YYYY-MM`）；已签发的列表只列该期间的运行（逐个读运行的参数比较 `from`、`to`）；同一期间再签发时以 `supersedes` 取代该期最近一次
+  未被取代的运行（平台 `REPORT_ISSUE` 支持）；没有 `report.archive.read` 时页面不知道早先的运行，只能另签一次（不取代）。
+- **已知（不改）**：`finance:QbAttempt` 也给财务会话的作答与结果（含正确答案的结果列，同改动前缺省视图给内容管理员的）；转账页与总览的 `staleBefore` 取自浏览器时钟，
+  只影响显示的"待核实"；通用后台中指向 `QbAttempt` 缺省视图的链接（如审计、引用）对财务也是 403，经 `finance:QbAttempt` 的生成页面读取。
+- **评审修正后的结果**：`:quizbuks:check` 446 个测试全部通过与 `platformCheck`（0 错误）；扩展 Vitest 50 个；`ext:check`、两个 SPA 的 `app:check` 通过；
+  e2e 全部 39 项通过；`tools/check-app-paths.sh origin/1.2/platform` 通过。

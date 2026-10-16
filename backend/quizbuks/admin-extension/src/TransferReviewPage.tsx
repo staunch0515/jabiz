@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
+  Alert,
+  AlertDescription,
   ApprovalPanel,
   Badge,
   Button,
@@ -183,6 +185,8 @@ export default function TransferReviewPage() {
   }
   const tr = transfer.data
   const pending = tr.status === TRANSFER_REVIEW && !!tr.approvalRequestId
+  // The approval is bound to the account the transfer was made for; the payee may have another one by now.
+  const accountChanged = payee.isSuccess && (payee.data.account?.accountId ?? null) !== tr.accountId
   // Everything the reviewer decides on, settled and read for the request the transfer waits for.
   const everythingShown = transfer.isSuccess && !transfer.isFetching
     && payee.isSuccess && !payee.isFetching && payee.data.requestId === tr.approvalRequestId
@@ -231,6 +235,13 @@ export default function TransferReviewPage() {
         }
       />
       <TransferFacts transfer={tr} />
+      {accountChanged && (
+        <Alert variant="warning" data-testid="review-account-changed">
+          <AlertDescription>{t('finance.review.accountChanged', {
+            bound: tr.accountLast4 ?? '?', current: payee.data?.account?.accountLast4 ?? t('common.none') })}
+          </AlertDescription>
+        </Alert>
+      )}
       <PayeeFacts userId={tr.userId} payee={payee} />
       <Section title={t('finance.review.decision')} testId="review-decision">{decision}</Section>
     </div>

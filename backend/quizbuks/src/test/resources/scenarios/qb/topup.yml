@@ -287,7 +287,7 @@ steps:
   - expect:
       query: qb.admin.balances
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 10
+      rows: 11
       values:
         - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
         - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
@@ -298,6 +298,7 @@ steps:
         - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
         - { rowKind: CHECK, code: SPONSOR_WALLETS, closing: -4900, partyTotal: -4900, matches: true }
         - { rowKind: CHECK, code: TAKER_WALLETS, closing: -200, partyTotal: -200, matches: true }
+        - { rowKind: CHECK, code: NO_OVERDRAWN_WALLET, closing: 0, matches: true }
         - { rowKind: CHECK, code: BALANCED, debit: 5480, credit: 5480, closing: 0, matches: true }
   - note: >-
       The sponsor's transactions and their totals (Q9b) are scoped to the caller, and an expectation runs as the

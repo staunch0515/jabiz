@@ -78,3 +78,15 @@ export async function transferInReview(request: APIRequestContext, reward = 2000
     .toBe('REVIEW')
   return { ...taker, userId, publication, transfer: transfer! }
 }
+
+/**
+ * The month (`YYYY-MM`, UTC: the reports' zone) the first posting of a document was booked in, so that a test reads
+ * the month its own data is in, whatever the clock says by then.
+ */
+export async function bookingMonthOf(request: APIRequestContext, sourceEntity: string, sourceId: string) {
+  const postings = await rows(request, await adminToken(request), 'urn:jabiz:dataset:platform:LedgerTransaction', [
+    { field: 'sourceEntity', op: 'eq', value: sourceEntity }, { field: 'sourceId', op: 'eq', value: sourceId }])
+  const times = postings.map((p) => String(p.attributes.bookingTime)).sort()
+  expect(times.length, `a posting of ${sourceEntity} ${sourceId}`).toBeGreaterThan(0)
+  return new Date(times[0]).toISOString().slice(0, 7)
+}

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import type { ReactNode } from 'react'
@@ -54,8 +54,8 @@ const REQUEST = '0192f0a0-0000-7000-8000-00000000cc01'
 const RUN = '0192f0a0-0000-7000-8000-00000000dd01'
 const TOPUP = '0192f0a0-0000-7000-8000-00000000ee01'
 
-const FINANCE = ['qb.admin.finance.read', 'qb.admin.users.read', 'qb.reconcile', 'ledger.read', 'report.issue',
-  'report.archive.read']
+const FINANCE = ['qb.admin.finance.read', 'qb.admin.users.read', 'qb.reconcile', 'task.read', 'ledger.read',
+  'report.issue', 'report.archive.read']
 
 function transfer(change: Row = {}): Row {
   return { transferId: TRANSFER, userId: TAKER, externalAccountId: 'acct_1234567890WXYZ', amount: 60000, fee: 100,
@@ -71,8 +71,9 @@ beforeEach(() => {
   server.permissions = new Set(FINANCE)
   server.templates = new Map<string, Row[] | Error>([
     [TEMPLATE.financeSummary, [{ sponsorBalance: 9000, sponsorHeld: 0, sponsorPendingCount: 2, sponsorPendingAmount: 200,
-      takerBalance: 1500, takerPendingOut: 0, transfersInReview: 3, transfersInDoubt: 1, heldTakers: 2,
-      lastRunId: RUN, lastRunAt: '2026-10-15T18:37:00Z', lastRunStatus: 'DIFF', lastRunItems: 4, openTasks: 5 }]],
+      takerBalance: 1500, takerPendingOut: 0, transfersInReview: 3, transfersInDoubt: 1, heldTakers: 2 }]],
+    [TEMPLATE.reconSummary, [{ lastRunId: RUN, lastRunAt: '2026-10-15T18:37:00Z', lastRunStatus: 'DIFF',
+      lastRunItems: 4, openTasks: 5 }]],
     [TEMPLATE.accountBalances, [{ accountCode: '2110', accountName: 'Sponsor prepayments', balance: -9000 },
       { accountCode: '1110', accountName: 'Stripe balance', balance: 10500 }]],
     [TEMPLATE.transfers, [transfer()]],
@@ -112,10 +113,19 @@ beforeEach(() => {
   server.runProcess.mockReset().mockResolvedValue({ runId: 'run-1', contentHash: 'f'.repeat(64), rowCount: 12 })
   server.sessionFetch.mockReset().mockResolvedValue(new Response('kind,count\r\n', {
     status: 200, headers: { 'Content-Disposition': 'attachment; filename="qb.admin.monthly-20261101.csv"' } }))
-  server.get.mockReset().mockImplementation(async (path: string) => {
+  server.get.mockReset().mockImplementation(async (path: string, options?: { params?: { path?: { runId?: string } } }) => {
     if (path === '/api/dictionaries/{urn}') return []
-    if (path === '/api/reports/runs') return [{ runId: 'run-0', period: '2026-10-01 – 2026-11-01', rowCount: 12,
-      contentHash: 'a'.repeat(64), issuedTime: '2026-11-01T02:00:00Z' }]
+    // Two runs of the monthly report: October's (current) and September's; only the period shown is listed.
+    if (path === '/api/reports/runs') return [
+      { runId: 'run-0', period: '2026-10-01 – 2026-11-01', rowCount: 12, contentHash: 'a'.repeat(64),
+        issuedTime: '2026-11-01T02:00:00Z' },
+      { runId: 'run-9', period: '2026-09-01 – 2026-10-01', rowCount: 12, contentHash: 'b'.repeat(64),
+        issuedTime: '2026-10-01T02:00:00Z' }]
+    if (path === '/api/reports/runs/{runId}') {
+      const october = options?.params?.path?.runId === 'run-0'
+      return { params: october ? { from: '2026-10-01T00:00:00Z', to: '2026-11-01T00:00:00Z' }
+        : { from: '2026-09-01T00:00:00Z', to: '2026-10-01T00:00:00Z' } }
+    }
     throw new ApiError(404, { detail: 'Not found' })
   })
   server.post.mockReset().mockImplementation(async (_path: string,
@@ -130,8 +140,8 @@ beforeEach(() => {
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 })
 
-function renderAt(path: string, route: string, element: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderAt(path: string, route: string, element: ReactNode,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <AppearanceProvider>
@@ -166,12 +176,15 @@ describe('FinanceOverviewPage', () => {
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
   })
 
-  it('does not ask for the ledger without the permission to read it', async () => {
+  it('does not ask for the ledger, the reconciliation or the tasks without the permissions to read them', async () => {
     server.permissions = new Set(['qb.admin.finance.read'])
     renderAt('/qb/finance', '/qb/finance', <FinanceOverviewPage />)
     await screen.findByTestId('finance-in-review')
     expect(screen.queryByTestId('finance-accounts')).not.toBeInTheDocument()
     expect(calledWith(TEMPLATE.accountBalances)).toHaveLength(0)
+    expect(screen.queryByTestId('finance-last-run')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('finance-tasks')).not.toBeInTheDocument()
+    expect(calledWith(TEMPLATE.reconSummary)).toHaveLength(0)
   })
 })
 
@@ -237,6 +250,42 @@ describe('TransferReviewPage', () => {
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
   })
 
+  it('warns when the transfer goes to another account than the payee has now', async () => {
+    server.permissions = new Set([...FINANCE, 'qb.payout.review'])
+    renderReview()
+    await screen.findByTestId('approval-panel')
+    expect(screen.queryByTestId('review-account-changed')).not.toBeInTheDocument()
+    cleanup()
+    server.templates.set(TEMPLATE.payoutAccounts, [{ status: 'ENABLED', payoutsEnabled: true,
+      externalAccountId: 'acct_0000000000ABCD' }])
+    renderReview()
+    expect(await screen.findByTestId('review-account-changed')).toHaveTextContent('WXYZ')
+    expect(screen.getByTestId('review-account-changed')).toHaveTextContent('ABCD')
+  })
+
+  it('hides the decision while the transfer is read again, and for another request until its payee is read',
+    async () => {
+      server.permissions = new Set([...FINANCE, 'qb.payout.review'])
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      renderAt(`/qb/finance/transfers/${TRANSFER}/review`, '/qb/finance/transfers/:transferId/review',
+        <TransferReviewPage />, client)
+      await screen.findByTestId('approval-panel')
+      const key = ['qb-ext', 'finance', 'transfer', TRANSFER]
+      // Read again: the panel goes while the read is under way.
+      let answer: (value: unknown) => void = () => {}
+      server.runQuery.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+      act(() => void client.refetchQueries({ queryKey: key }))
+      await waitFor(() => expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument())
+      expect(screen.getByTestId('review-needs-data')).toBeInTheDocument()
+      await act(async () => answer({ items: [transfer()], offset: 0, limit: 1 }))
+      expect(await screen.findByTestId('approval-panel')).toHaveAttribute('data-request', REQUEST)
+      // Another request (the transfer was submitted again): the payee read for the old one does not count.
+      server.runQuery.mockImplementation(() => new Promise(() => {}))
+      act(() => client.setQueryData(key, { ...(client.getQueryData(key) as Row), approvalRequestId: 'request-2' }))
+      await waitFor(() => expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument())
+      expect(screen.getByTestId('review-needs-data')).toBeInTheDocument()
+    })
+
   it('says a decided transfer waits no more', async () => {
     server.permissions = new Set([...FINANCE, 'qb.payout.review'])
     server.templates.set(TEMPLATE.transfers, [transfer({ status: 'SENT' })])
@@ -269,10 +318,9 @@ describe('ReconciliationPage', () => {
 })
 
 describe('ReportsPage', () => {
-  it('exports and issues the chosen month through the platform', async () => {
-    renderAt('/qb/finance/reports', '/qb/finance/reports', <ReportsPage />)
-    const month = await screen.findByTestId('report-month')
-    fireEvent.change(month, { target: { value: '2026-10' } })
+  it('exports and issues the month of the address through the platform', async () => {
+    renderAt('/qb/finance/reports?month=2026-10', '/qb/finance/reports', <ReportsPage />)
+    expect(await screen.findByTestId('report-month')).toHaveValue('2026-10')
     const monthly = screen.getByTestId('report-monthly')
     expect(await within(monthly).findByTestId('monthly-row')).toHaveAttribute('data-category', 'TOPUP')
     expect(calledWith(TEMPLATE.monthly).at(-1)![1].params).toEqual({ from: '2026-10-01T00:00:00.000Z',
@@ -287,13 +335,24 @@ describe('ReportsPage', () => {
 
     await userEvent.click(within(monthly).getByTestId('report-issue'))
     await userEvent.click(await screen.findByRole('button', { name: 'Issue' }))
+    // October was issued before: the new run supersedes it. Only October's runs are listed.
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith('REPORT_ISSUE', { templateId: TEMPLATE.monthly,
-      params: { from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' } }))
-    expect(within(monthly).getAllByTestId('issued-run')[0]).toHaveAttribute('data-hash', 'a'.repeat(64))
+      params: { from: '2026-10-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }, supersedes: 'run-0' }))
+    expect(within(monthly).getAllByTestId('issued-run').map((run) => run.dataset.hash)).toEqual(['a'.repeat(64)])
 
     const balances = screen.getByTestId('report-balances')
-    const check = await within(balances).findByText('Sponsor wallets (2110)')
+    const check = await within(balances).findByText('Every sponsor wallet line (2110) names its sponsor')
     expect(check.closest('tr')).toHaveAttribute('data-matches', 'true')
+  })
+
+  it('puts the chosen month in the address', async () => {
+    renderAt('/qb/finance/reports?month=2026-10', '/qb/finance/reports', <ReportsPage />)
+    fireEvent.change(await screen.findByTestId('report-month'), { target: { value: '2026-09' } })
+    await waitFor(() => expect(calledWith(TEMPLATE.monthly).at(-1)![1].params).toEqual({
+      from: '2026-09-01T00:00:00.000Z', to: '2026-10-01T00:00:00.000Z' }))
+    expect(screen.getByTestId('report-month')).toHaveValue('2026-09')
+    expect(await within(screen.getByTestId('report-monthly')).findAllByTestId('issued-run'))
+      .toHaveLength(1)
   })
 
   it('offers no issue without the permission, and no archive without its own', async () => {
