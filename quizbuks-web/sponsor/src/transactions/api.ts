@@ -33,15 +33,20 @@ export interface TransactionRow {
   fullScore: number | null
 }
 
-/** The row of `qb.sponsor.transaction-summary`. */
+/** A count and the sum of its amounts. */
+export interface Total {
+  count: number
+  amount: string
+}
+
+/**
+ * The row of `qb.sponsor.transaction-summary`: the number of rows, then rewards (money out) and top-ups (money in)
+ * apart, never added together. Completed top-ups are net of what was refunded or taken back, which is given apart.
+ */
 export interface TransactionSummary {
   totalCount: number
-  completedCount: number
-  completedAmount: string
-  processingCount: number
-  processingAmount: string
-  failedCount: number
-  failedAmount: string
+  reward: { completed: Total; processing: Total }
+  topUp: { completed: Total; refunded: string; processing: Total; failed: Total }
 }
 
 /** What the page filters by; the period is whole days (`YYYY-MM-DD`) in the browser's time zone, both included. */
@@ -127,14 +132,13 @@ export async function searchTransactions({ params, sorts, offset, limit }: Trans
 /** The totals of the rows the same parameters list. */
 export async function readSummary(params: Record<string, string>): Promise<TransactionSummary> {
   const row = (await runQuery<Row>(TRANSACTIONS_TEMPLATE.summary, { params, limit: 1 })).items[0] ?? {}
+  const total = (name: string): Total => ({ count: num(row[`${name}Count`]),
+    amount: String(row[`${name}Amount`] ?? '0') })
   return {
     totalCount: num(row.totalCount),
-    completedCount: num(row.completedCount),
-    completedAmount: String(row.completedAmount ?? '0'),
-    processingCount: num(row.processingCount),
-    processingAmount: String(row.processingAmount ?? '0'),
-    failedCount: num(row.failedCount),
-    failedAmount: String(row.failedAmount ?? '0'),
+    reward: { completed: total('rewardCompleted'), processing: total('rewardProcessing') },
+    topUp: { completed: total('topUpCompleted'), refunded: String(row.topUpRefundedAmount ?? '0'),
+      processing: total('topUpProcessing'), failed: total('topUpFailed') },
   }
 }
 
@@ -190,10 +194,13 @@ export const TRANSACTIONS_PATH = '/transactions'
 export const transactionsOf = (publicationId: string) =>
   `${TRANSACTIONS_PATH}?publication=${encodeURIComponent(publicationId)}`
 
-/** The filters an address asks for: only the publication can be given (from its page). */
+/** The filters an address asks for: only the publication can be given (from its page), as its key. */
 export function filtersOf(search: string): TransactionFilters {
-  const publicationId = new URLSearchParams(search).get('publication')
-  return { ...NO_FILTERS, publicationId: publicationId?.trim() || null }
+  const publicationId = new URLSearchParams(search).get('publication')?.trim() ?? ''
+  return { ...NO_FILTERS, publicationId: UUID.test(publicationId) ? publicationId.toLowerCase() : null }
 }
+
+/** A publication's key: a UUID; anything else in the address is ignored. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const TRANSACTIONS_QUERY = ['qb', 'sponsor-transactions'] as const

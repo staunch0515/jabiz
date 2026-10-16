@@ -31,7 +31,7 @@
   - **全部筛选都是参数**（`type`、`status`、`publicationId`、`userKey`、`from`、`to`、`q`），不是列表筛选：汇总模板因此能用完全相同的条件，列表、汇总与导出一致。
     `q` 在发布名与答题人显示名中按原文查找（`strpos`）；`from` 含、`to` 不含。排序 `occurredAt`、`amount`，缺省按时间倒序；键 `entryId`（答题或充值的主键）。
 - `queries/qb/sponsor/transaction-summary.sql`（`qb.sponsor.transaction-summary`）：同样的参数、内层查询与条件（复制：模板不能互相引用），外层聚合为一行：
-  `totalCount` 与已完成、处理中、失败各自的笔数与金额（`count(*) FILTER …`、`coalesce(sum(…) FILTER …, 0)`）。
+  `totalCount` 与按类型分开的笔数与金额（奖励：已支付、待支付；充值：已到账（扣除退款）、退款或扣回、处理中、失败；评审后修正，见记录）。
 - 消息：`query.qb.sponsor.transactions[.<列>]`、`query.qb.sponsor.transaction-summary[.<列>]` 三语（金额列 "Amount (Kudos)" / "金额（Kudos）" / "金額（Kudos）"），
   导出的列名即这些消息；`MessagesTest` 加上它们。
 - 不加迁移：奖励一侧经发布（每个商家的发布不多）按 `qb_attempt_completed_idx (publication_id, submitted_at)` 找到会话；充值有 `qb_topup_sponsor_idx`；资料有 `qb_profile_version_user_idx`。
@@ -40,7 +40,7 @@
 
 - `ids.ts`（两个模板名；发布的选项用 `publishing/ids.ts` 的 `qb.sponsor.publications`）、`api.ts`（手写类型；`paramsOf` 把筛选变为模板参数，期间按浏览器时区的整日、末日含在内；
   `exportTransactions(format, params, sorts)` 经 `sessionFetch`，失败经 `toApiError`，文件名取 `fileNameOf(Content-Disposition)`）、`messages.ts`（命名空间 `sponsor`）、`TransactionsPage.tsx`。
-- 页面：汇总（总笔数，已完成 / 处理中 / 失败的金额与笔数）；平台的 `FilterBar`（类型、状态、期间、发布（草稿不列出）、"发布或用户"关键字）；
+- 页面：汇总（总笔数；奖励与充值分组的金额与笔数）；平台的 `FilterBar`（类型、状态、期间、发布（草稿不列出）、"发布或用户"关键字）；
   行操作"只看此用户"设定用户筛选，显示为可移除的标签；服务端分页与排序的 `DataTable`；"导出 CSV" / "导出 Excel" 带当前的参数与排序；
   拒绝（如 `REPORT_TOO_LARGE`）的服务端文案经 `qb/problems.ts` 显示。金额只经 `formatKudos`。
 - 入口：左侧导航"交易"（钱包之后）；钱包页"查看全部交易"；已提交的发布页"此发布的交易"（`/transactions?publication=<id>`，地址只接受这一个参数）。
@@ -71,9 +71,25 @@
   e2e 新增 `transactions.spec.ts` 1 项与 `a11y.spec.ts` 的交易页 2 项（亮、暗），全部 33 项对打包的 jar、Mailpit 与 Stripe 桩通过。
 - **偏离计划**：
   - **用户筛选键不是用户编号**：计划写"`userId` 只作不透明的筛选键"。实现时改为模板计算的 `userKey` = `md5(商家编号 : 用户编号)`：同样只作筛选键、页面不显示，
-    但不把平台的用户编号交给商家（导出中也只有这个键），同一答题人在不同商家处的键不同，商家之间不能据此对上同一个人。参数与列因此叫 `userKey`。
+    不是用户编号（导出中也只有这个键），同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出（没有密钥，不加迁移）。参数与列因此叫 `userKey`。
   - **场景只能检查调用者自己的范围**：场景的期望以场景的操作人运行（`ScenarioRunner` 不支持期望的 `actor`，平台目录不在本分支修改），而两个模板都限调用者本人，
     `topup.yml` 中的操作人是安装者，所以末尾的期望是"安装者读不到 A 的任何交易、汇总为 0"（同该场景对 `qb.sponsor.wallet` 的说明）；A 自己的行由 `SponsorTransactionsIT` 覆盖。快照不变。
   - 发布名取自限本人的发布视图（与卡片上冻结的名字相同，少连一张表），不连卡片。
-- **已知限制**：发布筛选的选项最多取 200 个发布（按名称）；更多时其余的发布仍可经关键字或发布页的链接筛选。汇总在"全部类型"下把奖励与充值的金额相加，
-  需要分开时用类型筛选（计划缺省）。
+- **已知限制**：发布筛选的选项最多取 200 个发布（按名称）；更多时其余的发布仍可经关键字或发布页的链接筛选。
+  奖励的时间随状态而变：待支付时是提交时间，补发后是支付时间，所以按期间筛选时，一笔奖励可能在支付后移到另一个期间。
+
+### 评审后的修正（Q9b，2026-10-15）
+
+独立评审没有严重或高的问题；改了以下各项：
+- **`userKey` 的说明**（中）：不再说"商家之间对不上"；改为"不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出"（02-design、CLAUDE.md、本记录、模板注释）。键本身不变，不加盐、不加迁移。
+- **汇总按类型分开**（低）：原来"全部类型"下把充值（收入）与奖励（支出）的金额相加，且已退款的充值按全额计。现在 `qb.sponsor.transaction-summary` 给出
+  总笔数，奖励的已支付 / 待支付（笔数与金额），充值的已到账（扣除退款的净额）、退款或扣回、处理中、失败（笔数与金额）；页面分"奖励（支出）""充值（收入）"两组显示，
+  类型筛选时只显示该组，不再有混合的金额总计。IT 按类型、按状态比较汇总与列表（已到账的充值比较净额与退款）。
+- **地址变化时重新开始**（低）：页面只在挂载时读 `?publication=`；经导航、后退、前进到另一地址时保留旧的筛选。`App.tsx` 以 `key={search}` 使交易页随地址重新开始（Vitest）。
+- **只接受 UUID 的发布**（低）：`?publication=` 不是 UUID 即忽略（Vitest）。
+- **资料连接的性能**（低）：以 10 万个资料版本 `EXPLAIN ANALYZE` 奖励一侧：`{{QbProfile}}` 是对全部资料的 `DISTINCT ON (profile_id)` 子查询，
+  `user_id` 的条件不下推（PostgreSQL 不把不在 `DISTINCT ON` 键上的条件推进这种子查询），每次调用要读全部当前资料（约 120–185 ms）。
+  改为 `LEFT JOIN LATERAL (… WHERE user_id = m.user_id)` 或相关子查询同样不下推（计划相同：仍是全部资料的 `Unique`，LATERAL 约 129 ms、子查询约 120 ms），
+  所以模板保持普通的 `LEFT JOIN`。真正的改进需要平台让模板的占位符把不可变字段的条件推进内层（D29 已对实体查询这样做，模板没有），或在会话上保存答题时的名字（需迁移）；
+  记为平台缺口，商家规模大时再做。
+- 未改：类型与状态参数是自由文本（不合法的值只是查不到行）；奖励的时间在支付后变化（见上，已知限制）。

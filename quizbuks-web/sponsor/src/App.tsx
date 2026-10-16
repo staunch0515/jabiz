@@ -70,6 +70,8 @@ function SignedIn({ path }: { path: string }) {
   const { displayName, signOut, userId } = useAuth()
   useSessionLock(lockIdle)
   const sponsor = useMySponsor()
+  // The transactions page starts from its address's filters: another address (the nav, back, forward) starts it anew.
+  const { search } = useLocation()
   // The pages start from who is signed in (the sign-up name prefills the onboarding): wait until the server said so.
   if (!userId) return <PageState kind="loading" />
 
@@ -89,7 +91,7 @@ function SignedIn({ path }: { path: string }) {
   else if (path === ONBOARDING) page = <OnboardingPage />
   else if (path === WALLET_PATH) page = <WalletPage />
   else if (topUpId) page = <TopUpPage key={topUpId} topUpId={topUpId} />
-  else if (path === TRANSACTIONS_PATH) page = <TransactionsPage />
+  else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 

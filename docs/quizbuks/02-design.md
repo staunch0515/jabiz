@@ -296,7 +296,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.sponsor.wallet` / `qb.sponsor.topups` | 商家钱包概览（余额、待支付、累计充值与退款、累计支出）与本人充值记录（支付页地址只在 `OPEN` 且未过期时给出）（M-04，Q6a） | `qb.sponsor.finance.read` |
 | `qb.admin.topups` / `qb.admin.recon-runs` / `qb.admin.recon-items` | 全部充值（不含支付页地址）；核对结果与差异（F-06，Q6a） | `qb.admin.finance.read` / `qb.reconcile` |
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
-| `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用商家自己的键 `userKey` = md5(商家 : 用户)，商家之间对不上同一个人）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致 | `qb.sponsor.finance.read` |
+| `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` | M-10 – M-11、M-34、M-40 – M-43 | 各自权限 |
 | `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` / `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表）/ `qb.admin.journal-export` | P-01、P-03、F-06、F-08、F-02 – F-03（CSV 汇总凭证） | 管理权限 |

@@ -69,6 +69,8 @@ class SponsorTransactionsIT extends TopUpItSupport {
         })));
         failedTopUp = openTopUp(sponsor, 4000);
         execute("UPDATE qb_topup SET status = 'FAILED', failure_code = 'test' WHERE topup_id = ?", failedTopUp);
+        // Part of the paid one refunded (as Stripe's refund would record it): the totals count it net.
+        execute("UPDATE qb_topup SET refunded_amount = 300 WHERE topup_id = ?", paidTopUp);
         assertThat(topUp(paidTopUp)).containsEntry("status", "PAID");
         assertThat(topUp(expiredTopUp)).containsEntry("status", "EXPIRED");
 
@@ -156,7 +158,7 @@ class SponsorTransactionsIT extends TopUpItSupport {
             .isSortedAccordingTo(java.util.Comparator.reverseOrder());
         assertThat(rowOf(rows, paidTopUp)).containsEntry("type", "TOPUP").containsEntry("status", "COMPLETED");
         assertThat(money(rowOf(rows, paidTopUp).get("amount"))).isEqualByComparingTo("1000");
-        assertThat(money(rowOf(rows, paidTopUp).get("refunded"))).isEqualByComparingTo("0");
+        assertThat(money(rowOf(rows, paidTopUp).get("refunded"))).isEqualByComparingTo("300");
         assertThat(rowOf(rows, openTopUp)).containsEntry("status", "PROCESSING");
         assertThat(rowOf(rows, expiredTopUp)).containsEntry("status", "FAILED");
         assertThat(rowOf(rows, failedTopUp)).containsEntry("status", "FAILED");
@@ -188,7 +190,7 @@ class SponsorTransactionsIT extends TopUpItSupport {
         // Asking for the other sponsor's publication or taker finds nothing.
         assertThat(list(token, Map.of("publicationId", otherPublication))).isEmpty();
         assertThat(list(token, Map.of("userKey", keyOf(theirs, "Stranger ")))).isEmpty();
-        // The same taker has another key with each sponsor: sponsors cannot match their takers.
+        // The same taker has another key with each sponsor (a hash, not a secret: not the user id either).
         String miaHere = keyOf(list(token, Map.of()), "Mia ");
         String miaThere = keyOf(theirs, "Mia ");
         assertThat(miaHere).isNotEqualTo(miaThere);
@@ -246,22 +248,46 @@ class SponsorTransactionsIT extends TopUpItSupport {
             List<Map<String, Object>> rows = list(token, params);
             Map<String, Object> summary = summary(token, params);
             assertThat(((Number) summary.get("totalCount")).intValue()).as("count %s", params).isEqualTo(rows.size());
-            for (String status : List.of("COMPLETED", "PROCESSING", "FAILED")) {
-                String prefix = status.toLowerCase();
-                List<Map<String, Object>> of = rows.stream().filter(row -> status.equals(row.get("status"))).toList();
-                assertThat(((Number) summary.get(prefix + "Count")).intValue()).as("%s %s", status, params)
-                    .isEqualTo(of.size());
-                BigDecimal sum = of.stream().map(row -> money(row.get("amount"))).reduce(BigDecimal.ZERO,
-                    BigDecimal::add);
-                assertThat(money(summary.get(prefix + "Amount"))).as("%s %s", status, params)
-                    .isEqualByComparingTo(sum);
+            // Type by type: rewards and top-ups are never added together.
+            for (String type : List.of("REWARD", "TOPUP")) {
+                String prefix = "REWARD".equals(type) ? "reward" : "topUp";
+                for (String status : List.of("COMPLETED", "PROCESSING", "FAILED")) {
+                    String name = prefix + status.charAt(0) + status.substring(1).toLowerCase();
+                    List<Map<String, Object>> of = rows.stream()
+                        .filter(row -> type.equals(row.get("type")) && status.equals(row.get("status"))).toList();
+                    if (!summary.containsKey(name + "Count")) {
+                        assertThat(of).as("%s %s %s", type, status, params).isEmpty();
+                        continue;
+                    }
+                    assertThat(((Number) summary.get(name + "Count")).intValue()).as("%s %s", name, params)
+                        .isEqualTo(of.size());
+                    BigDecimal amount = sum(of, "amount");
+                    BigDecimal refunded = sum(of, "refunded");
+                    boolean net = "TOPUP".equals(type) && "COMPLETED".equals(status);
+                    assertThat(money(summary.get(name + "Amount"))).as("%s %s", name, params)
+                        .isEqualByComparingTo(net ? amount.subtract(refunded) : amount);
+                    if (net) {
+                        assertThat(money(summary.get("topUpRefundedAmount"))).as("refunded %s", params)
+                            .isEqualByComparingTo(refunded);
+                    }
+                }
             }
         }
         Map<String, Object> all = summary(token, Map.of());
         assertThat(((Number) all.get("totalCount")).intValue()).isEqualTo(7);
-        assertThat(money(all.get("completedAmount"))).isEqualByComparingTo("1610");
-        assertThat(money(all.get("processingAmount"))).isEqualByComparingTo("2600");
-        assertThat(money(all.get("failedAmount"))).isEqualByComparingTo("7000");
+        assertThat(money(all.get("rewardCompletedAmount"))).isEqualByComparingTo("610");
+        assertThat(money(all.get("rewardProcessingAmount"))).isEqualByComparingTo("600");
+        assertThat(money(all.get("topUpCompletedAmount"))).isEqualByComparingTo("700");
+        assertThat(money(all.get("topUpRefundedAmount"))).isEqualByComparingTo("300");
+        assertThat(money(all.get("topUpProcessingAmount"))).isEqualByComparingTo("2000");
+        assertThat(money(all.get("topUpFailedAmount"))).isEqualByComparingTo("7000");
+        // No mixed total of money in and money out.
+        assertThat(all).doesNotContainKeys("completedAmount", "processingAmount", "failedAmount");
+    }
+
+    static BigDecimal sum(List<Map<String, Object>> rows, String column) {
+        return rows.stream().map(row -> row.get(column) == null ? BigDecimal.ZERO : money(row.get(column)))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Test

@@ -130,7 +130,7 @@
   轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
   刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
 - **交易页**（Q9b，`sponsor/src/transactions/`）：列表、汇总与导出用同一组模板参数（`transactions/api.ts` 的 `paramsOf`；筛选写成模板参数而不是列表筛选，汇总模板才能用同样的条件），
-  导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey`（商家与用户编号的 MD5，每个商家各不相同，商家之间不能据此对上同一个人）筛选，页面不显示它。
+  导出只经平台的 `POST /api/queries/{id}/export`（`sessionFetch`，CSV 与 XLSX）。答题人只以资料的显示名出现，不给邮箱，也不给用户编号："只看此用户"按模板给出的 `userKey` 筛选，页面不显示它。`userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。

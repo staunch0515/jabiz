@@ -9,15 +9,17 @@ function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
+const P1 = '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'
+
 const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: true, appPath: '/',
   sessionPersistence: 'tab' }
 
 const ROWS = [
   { entryId: 'a1', type: 'REWARD', status: 'PROCESSING', amount: '600', refunded: null,
-    occurredAt: '2026-10-14T02:00:00Z', publicationId: 'p1', publicationName: 'Big prize', userKey: 'k1',
+    occurredAt: '2026-10-14T02:00:00Z', publicationId: P1, publicationName: 'Big prize', userKey: 'k1',
     userName: 'Mia', score: 5, fullScore: 5 },
   { entryId: 'a2', type: 'REWARD', status: 'COMPLETED', amount: '10', refunded: null,
-    occurredAt: '2026-10-14T01:30:00Z', publicationId: 'p1', publicationName: 'Big prize', userKey: 'k2',
+    occurredAt: '2026-10-14T01:30:00Z', publicationId: P1, publicationName: 'Big prize', userKey: 'k2',
     userName: null, score: 3, fullScore: 5 },
   { entryId: 't1', type: 'TOPUP', status: 'COMPLETED', amount: '1000', refunded: '200',
     occurredAt: '2026-10-14T01:00:00Z', publicationId: null, publicationName: null, userKey: null, userName: null,
@@ -49,13 +51,15 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: [{ id: 's', version: 1, attributes: { reviewStatus: 'APPROVED' } }] })
       case '/api/queries/qb.sponsor.publications':
-        return json(200, { items: [{ publicationId: 'p1', name: 'Big prize', status: 'LIVE' },
+        return json(200, { items: [{ publicationId: P1, name: 'Big prize', status: 'LIVE' },
           { publicationId: 'p2', name: 'Still a draft', status: 'DRAFT' }], offset: 0, limit: 200 })
       case '/api/queries/qb.sponsor.transactions':
         return json(200, { items: ROWS, offset: 0, limit: 20, total: 3 })
       case '/api/queries/qb.sponsor.transaction-summary':
-        return json(200, { items: [{ totalCount: 3, completedCount: 2, completedAmount: '1010', processingCount: 1,
-          processingAmount: '600', failedCount: 0, failedAmount: '0' }], offset: 0, limit: 1 })
+        return json(200, { items: [{ totalCount: 3, rewardCompletedCount: 1, rewardCompletedAmount: '10',
+          rewardProcessingCount: 1, rewardProcessingAmount: '600', topUpCompletedCount: 1, topUpCompletedAmount: '800',
+          topUpRefundedAmount: '200', topUpProcessingCount: 0, topUpProcessingAmount: '0', topUpFailedCount: 0,
+          topUpFailedAmount: '0' }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.transactions/export?format=csv':
       case '/api/queries/qb.sponsor.transactions/export?format=xlsx':
         if (options.export) return json(options.export.status, options.export.body)
@@ -94,9 +98,13 @@ describe('the transactions page', () => {
     window.history.replaceState(null, '', '/transactions')
     render(<App />)
     expect(await screen.findByTestId('summary-total')).toHaveTextContent('3')
-    expect(screen.getByTestId('summary-completed')).toHaveTextContent('1,010 Kudos (2)')
-    expect(screen.getByTestId('summary-processing')).toHaveTextContent('600 Kudos (1)')
-    expect(screen.getByTestId('summary-failed')).toHaveTextContent('0 Kudos (0)')
+    // Rewards (paid out) and top-ups (paid in) apart; a top-up net of its refund, the refund apart.
+    expect(screen.getByTestId('summary-reward-completed')).toHaveTextContent('10 Kudos (1)')
+    expect(screen.getByTestId('summary-reward-processing')).toHaveTextContent('600 Kudos (1)')
+    expect(screen.getByTestId('summary-topup-completed')).toHaveTextContent('800 Kudos (1)')
+    expect(screen.getByTestId('summary-topup-refunded')).toHaveTextContent('200 Kudos')
+    expect(screen.getByTestId('summary-topup-failed')).toHaveTextContent('0 Kudos (0)')
+    expect(screen.queryByText(/1,010|1,410/)).toBeNull()
     const rows = await screen.findAllByTestId('transaction-row')
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByTestId('transaction-user')).toHaveTextContent('Mia')
@@ -130,7 +138,9 @@ describe('the transactions page', () => {
     await user.click(await screen.findByRole('option', { name: 'Big prize' }))
     await user.type(screen.getByLabelText('Publication or user'), ' Mia ')
     await user.click(screen.getByRole('button', { name: 'Query' }))
-    const expected = { type: 'REWARD', status: 'COMPLETED', publicationId: 'p1', q: 'Mia' }
+    const expected = { type: 'REWARD', status: 'COMPLETED', publicationId: P1, q: 'Mia' }
+    await waitFor(() => expect(screen.queryByTestId('summary-topup-completed')).toBeNull())
+    expect(screen.getByTestId('summary-reward-completed')).toBeInTheDocument()
     await waitFor(() => expect(list().at(-1)).toMatchObject({ params: expected, offset: 0 }))
     await waitFor(() => expect(summary().at(-1)).toEqual({ params: expected, limit: 1 }))
     // Reset asks for everything again.
@@ -160,12 +170,36 @@ describe('the transactions page', () => {
 
   it('opens for one publication from its address', async () => {
     const { list, summary } = server()
-    window.history.replaceState(null, '', '/transactions?publication=p1')
+    window.history.replaceState(null, '', `/transactions?publication=${P1}`)
     render(<App />)
     await screen.findAllByTestId('transaction-row')
-    expect(list()[0]).toMatchObject({ params: { publicationId: 'p1' } })
-    expect(summary()[0]).toMatchObject({ params: { publicationId: 'p1' } })
+    expect(list()[0]).toMatchObject({ params: { publicationId: P1 } })
+    expect(summary()[0]).toMatchObject({ params: { publicationId: P1 } })
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Publication' })).toHaveTextContent('Big prize'))
+  })
+
+  it('starts afresh when the address changes (the nav, back and forward)', async () => {
+    const { list } = server()
+    window.history.replaceState(null, '', `/transactions?publication=${P1}`)
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findAllByTestId('transaction-row')
+    expect(list().at(-1)).toMatchObject({ params: { publicationId: P1 } })
+    await user.click(screen.getByRole('link', { name: 'Transactions' }))
+    await waitFor(() => expect(list().at(-1)).toMatchObject({ params: {} }))
+    expect(list().at(-1)?.params).not.toHaveProperty('publicationId')
+    expect(screen.getByRole('combobox', { name: 'Publication' })).not.toHaveTextContent('Big prize')
+    // Back to the publication's address: its filter again.
+    window.history.back()
+    await waitFor(() => expect(list().at(-1)).toMatchObject({ params: { publicationId: P1 } }))
+  })
+
+  it('ignores a publication in the address that is no key', async () => {
+    const { list } = server()
+    window.history.replaceState(null, '', '/transactions?publication=not-a-key')
+    render(<App />)
+    await screen.findAllByTestId('transaction-row')
+    expect(list()[0]).toMatchObject({ params: {} })
   })
 
   it('exports the rows shown, with the session, the same parameters and order', async () => {
@@ -173,7 +207,7 @@ describe('the transactions page', () => {
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:export')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
     const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    window.history.replaceState(null, '', '/transactions?publication=p1')
+    window.history.replaceState(null, '', `/transactions?publication=${P1}`)
     const user = userEvent.setup()
     render(<App />)
     const rows = await screen.findAllByTestId('transaction-row')
@@ -181,7 +215,7 @@ describe('the transactions page', () => {
     await user.click(screen.getByTestId('transactions-export-csv'))
     await waitFor(() => expect(exports()).toHaveLength(1))
     expect(exports()[0]).toEqual({ path: '/api/queries/qb.sponsor.transactions/export?format=csv',
-      body: { params: { publicationId: 'p1', userKey: 'k1' }, sorts: [{ field: 'occurredAt', asc: false }] },
+      body: { params: { publicationId: P1, userKey: 'k1' }, sorts: [{ field: 'occurredAt', asc: false }] },
       authorization: 'Bearer access' })
     await waitFor(() => expect(clicked).toHaveBeenCalled())
     expect(created).toHaveBeenCalled()

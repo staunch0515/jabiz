@@ -40,8 +40,8 @@ permissions: [qb.sponsor.finance.read]
 -- A top-up is COMPLETED once paid, PROCESSING while its checkout is opening or open, FAILED when it expired or failed
 -- (nothing was charged); refunded is what was refunded or taken back by a lost dispute. The taker is shown by the
 -- name of their profile only, never their address; neither the answers nor the result are read. "Only this user"
--- filters by userKey, a key of the taker that is the sponsor's own (a hash of the sponsor and the user): it is not
--- the platform's user id, and two sponsors cannot match their takers by it. Every filter is a
+-- filters by userKey, md5(sponsor : user): not the user id, and the same taker gets a different key with each
+-- sponsor; it is no secret (anyone who knows both ids can compute it). Every filter is a
 -- parameter, so that the list, the summary (qb.sponsor.transaction-summary, the same rows) and the export agree; the
 -- text is found as written: strpos takes it literally.
 SELECT x.*

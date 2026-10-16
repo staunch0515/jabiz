@@ -274,7 +274,8 @@ steps:
   - expect:
       query: qb.sponsor.transaction-summary
       rows: 1
-      values: [{ totalCount: 0, completedCount: 0, completedAmount: 0, processingCount: 0, failedCount: 0 }]
+      values: [{ totalCount: 0, rewardCompletedAmount: 0, rewardProcessingAmount: 0, topUpCompletedAmount: 0,
+        topUpRefundedAmount: 0, topUpFailedCount: 0 }]
 snapshot:
   entities: [QbTopUp, QbWallet, QbAttempt, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry]
   asOf: end

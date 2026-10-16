@@ -92,7 +92,7 @@ class MessagesTest {
         // Q9b: the sponsor's transactions and their totals.
         assertThat(en.stringPropertyNames()).contains("query.qb.sponsor.transactions",
             "query.qb.sponsor.transactions.amount", "query.qb.sponsor.transactions.userName",
-            "query.qb.sponsor.transaction-summary", "query.qb.sponsor.transaction-summary.completedAmount");
+            "query.qb.sponsor.transaction-summary", "query.qb.sponsor.transaction-summary.topUpRefundedAmount");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

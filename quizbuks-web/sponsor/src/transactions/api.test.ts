@@ -23,7 +23,11 @@ describe('the transactions parameters', () => {
   })
 
   it('come from the address for one publication only', () => {
-    expect(filtersOf('?publication=p%201')).toEqual({ ...NO_FILTERS, publicationId: 'p 1' })
+    expect(filtersOf('?publication=0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b')).toEqual({ ...NO_FILTERS, publicationId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b' })
+    expect(filtersOf('?publication=0190A1B2-C3D4-7E5F-8A9B-0C1D2E3F4A5B')).toEqual({ ...NO_FILTERS, publicationId: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b' })
+    // Only a publication's key (a UUID) is taken; anything else in the address is ignored.
+    expect(filtersOf('?publication=p%201')).toEqual(NO_FILTERS)
+    expect(filtersOf('?publication=0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b%27%20OR%201%3D1')).toEqual(NO_FILTERS)
     expect(filtersOf('?publication=&user=u1&type=TOPUP')).toEqual(NO_FILTERS)
     expect(transactionsOf('p 1')).toBe('/transactions?publication=p%201')
   })

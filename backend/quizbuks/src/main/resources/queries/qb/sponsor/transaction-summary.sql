@@ -1,6 +1,6 @@
 /*---
 id: qb.sponsor.transaction-summary
-description: The totals of the sponsor's transactions (M-51) - how many, and how many and how much completed, processing and failed
+description: The totals of the sponsor's transactions (M-51) - how many, then the rewards (paid out) and the top-ups (paid in) apart, by state
 entities: [QbAttempt, QbPublication, QbProfile, QbTopUp]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
@@ -16,26 +16,44 @@ params:
   to:            { kind: { type: temporal, role: EVENT_TIME }, description: Only rows that occurred before this time }
   q:             { kind: { type: text, maxLength: 100 }, description: "Only rewards whose publication's name or taker's name contains this text" }
 results:
-  totalCount:       { kind: { type: numeric, precision: 12, scale: 0 } }
-  completedCount:   { kind: { type: numeric, precision: 12, scale: 0 } }
-  completedAmount:  { kind: { type: monetary, currency: JPY, scale: 0 } }
-  processingCount:  { kind: { type: numeric, precision: 12, scale: 0 } }
-  processingAmount: { kind: { type: monetary, currency: JPY, scale: 0 } }
-  failedCount:      { kind: { type: numeric, precision: 12, scale: 0 } }
-  failedAmount:     { kind: { type: monetary, currency: JPY, scale: 0 } }
+  totalCount:             { kind: { type: numeric, precision: 12, scale: 0 } }
+  rewardCompletedCount:   { kind: { type: numeric, precision: 12, scale: 0 } }
+  rewardCompletedAmount:  { kind: { type: monetary, currency: JPY, scale: 0 } }
+  rewardProcessingCount:  { kind: { type: numeric, precision: 12, scale: 0 } }
+  rewardProcessingAmount: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  topUpCompletedCount:    { kind: { type: numeric, precision: 12, scale: 0 } }
+  topUpCompletedAmount:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  topUpRefundedAmount:    { kind: { type: monetary, currency: JPY, scale: 0 } }
+  topUpProcessingCount:   { kind: { type: numeric, precision: 12, scale: 0 } }
+  topUpProcessingAmount:  { kind: { type: monetary, currency: JPY, scale: 0 } }
+  topUpFailedCount:       { kind: { type: numeric, precision: 12, scale: 0 } }
+  topUpFailedAmount:      { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- One row over exactly the rows of qb.sponsor.transactions with the same parameters: the inner query and the
 -- conditions are that template's, copied (a template cannot include another); SponsorTransactionsIT checks that the
--- totals equal the sums of the list. Amounts are the rows' amounts as listed.
+-- totals equal the sums of the list, type by type. Rewards (money out) and top-ups (money in) are never added
+-- together: only the number of rows is a total. A completed top-up counts net of what was refunded or taken back by a
+-- dispute, which is given apart; a failed top-up charged nothing (its amount is what was asked).
 SELECT
-    count(*)                                                                AS totalCount,
-    count(*) FILTER (WHERE x.status = 'COMPLETED')                          AS completedCount,
-    coalesce(sum(x.amount) FILTER (WHERE x.status = 'COMPLETED'), 0)        AS completedAmount,
-    count(*) FILTER (WHERE x.status = 'PROCESSING')                         AS processingCount,
-    coalesce(sum(x.amount) FILTER (WHERE x.status = 'PROCESSING'), 0)       AS processingAmount,
-    count(*) FILTER (WHERE x.status = 'FAILED')                             AS failedCount,
-    coalesce(sum(x.amount) FILTER (WHERE x.status = 'FAILED'), 0)           AS failedAmount
+    count(*)                                                                         AS totalCount,
+    count(*) FILTER (WHERE x.type = 'REWARD' AND x.status = 'COMPLETED')             AS rewardCompletedCount,
+    coalesce(sum(x.amount) FILTER (WHERE x.type = 'REWARD' AND x.status = 'COMPLETED'), 0)
+                                                                                     AS rewardCompletedAmount,
+    count(*) FILTER (WHERE x.type = 'REWARD' AND x.status = 'PROCESSING')            AS rewardProcessingCount,
+    coalesce(sum(x.amount) FILTER (WHERE x.type = 'REWARD' AND x.status = 'PROCESSING'), 0)
+                                                                                     AS rewardProcessingAmount,
+    count(*) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'COMPLETED')              AS topUpCompletedCount,
+    coalesce(sum(x.amount - x.refunded) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'COMPLETED'), 0)
+                                                                                     AS topUpCompletedAmount,
+    coalesce(sum(x.refunded) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'COMPLETED'), 0)
+                                                                                     AS topUpRefundedAmount,
+    count(*) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'PROCESSING')             AS topUpProcessingCount,
+    coalesce(sum(x.amount) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'PROCESSING'), 0)
+                                                                                     AS topUpProcessingAmount,
+    count(*) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'FAILED')                 AS topUpFailedCount,
+    coalesce(sum(x.amount) FILTER (WHERE x.type = 'TOPUP' AND x.status = 'FAILED'), 0)
+                                                                                     AS topUpFailedAmount
 FROM (
     SELECT
         CAST(m.{{QbAttempt.attemptId}} AS varchar(64))  AS entryId,

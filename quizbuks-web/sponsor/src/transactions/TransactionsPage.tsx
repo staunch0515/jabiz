@@ -38,6 +38,7 @@ import {
   type ExportFormat,
   type TransactionFilters,
   type TransactionRow,
+  type Total,
   type TransactionStatus,
   type TransactionType,
 } from './api'
@@ -64,6 +65,36 @@ function barValues(filters: TransactionFilters): FilterValues {
 
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[]): T | null =>
   typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null
+
+interface SummaryItem {
+  key: string
+  label: string
+  /** A count and its amount, or an amount alone. */
+  total?: Total
+  amount?: string
+}
+
+/** One kind of money in the totals: rewards (paid out) or top-ups (paid in), never added to each other. */
+function SummaryGroup({ title, items }: { title: string; items: SummaryItem[] }) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{title}</h3>
+      <DescriptionList columns={4} items={items.map((item) => ({
+        key: item.key,
+        label: item.label,
+        value: (
+          <span data-testid={`summary-${item.key}`} data-count={item.total?.count}>
+            {item.total
+              ? t('transactions.summary.value', { amount: formatKudos(item.total.amount),
+                count: item.total.count.toLocaleString() })
+              : formatKudos(item.amount)}
+          </span>
+        ),
+      }))} />
+    </div>
+  )
+}
 
 /**
  * The sponsor's transactions (M-50 – M-52): the totals of the rows shown (`qb.sponsor.transaction-summary`), the
@@ -228,20 +259,28 @@ export function TransactionsPage() {
         ) : !totals ? (
           <PageState kind="loading" />
         ) : (
-          <DescriptionList columns={4} data-testid="transactions-summary" items={[
-            { key: 'total', label: t('transactions.summary.total'),
-              value: <span data-testid="summary-total">{totals.totalCount.toLocaleString()}</span> },
-            ...(['completed', 'processing', 'failed'] as const).map((status) => ({
-              key: status,
-              label: t(`transactions.summary.${status}`),
-              value: (
-                <span data-testid={`summary-${status}`} data-count={totals[`${status}Count`]}>
-                  {t('transactions.summary.value', { amount: formatKudos(totals[`${status}Amount`]),
-                    count: totals[`${status}Count`].toLocaleString() })}
-                </span>
-              ),
-            })),
-          ]} />
+          <div className="flex flex-col gap-4" data-testid="transactions-summary">
+            <p className="text-sm">
+              {t('transactions.summary.total')}:{' '}
+              <span className="font-semibold" data-testid="summary-total">{totals.totalCount.toLocaleString()}</span>
+            </p>
+            {filters.type !== 'TOPUP' && (
+              <SummaryGroup title={t('transactions.summary.rewards')} items={[
+                { key: 'reward-completed', label: t('transactions.summary.rewardCompleted'), total: totals.reward.completed },
+                { key: 'reward-processing', label: t('transactions.summary.rewardProcessing'),
+                  total: totals.reward.processing },
+              ]} />
+            )}
+            {filters.type !== 'REWARD' && (
+              <SummaryGroup title={t('transactions.summary.topUps')} items={[
+                { key: 'topup-completed', label: t('transactions.summary.topUpCompleted'), total: totals.topUp.completed },
+                { key: 'topup-refunded', label: t('transactions.summary.topUpRefunded'), amount: totals.topUp.refunded },
+                { key: 'topup-processing', label: t('transactions.summary.topUpProcessing'),
+                  total: totals.topUp.processing },
+                { key: 'topup-failed', label: t('transactions.summary.topUpFailed'), total: totals.topUp.failed },
+              ]} />
+            )}
+          </div>
         )}
       </section>
 
