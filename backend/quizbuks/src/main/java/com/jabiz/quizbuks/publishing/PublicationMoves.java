@@ -41,11 +41,13 @@ public final class PublicationMoves {
     public static final String MOVE = "QB_PUBLICATION_COMPLETION_MOVE";
 
     /**
-     * The publication's counters after a completion.
+     * The publication's counters after a completion, and the move the completion decided on the card.
      *
      * @param pending whether the completion's reward is pending (the sponsor could not pay it)
+     * @param status  the state {@link #moveAfter} gave on the card: the publication must move to the same
      */
-    public record MoveInput(@NotNull UUID publicationId, long winners, @NotNull BigDecimal spent, boolean pending) {}
+    public record MoveInput(@NotNull UUID publicationId, long winners, @NotNull BigDecimal spent, boolean pending,
+        @NotNull String status) {}
 
     /** @param status the publication's state afterwards; null when it stayed as it was */
     public record MoveOutput(UUID publicationId, String status) {}
@@ -135,7 +137,9 @@ public final class PublicationMoves {
     /**
      * {@link #MOVE}: only as a sub-process of finishing an attempt (platform decision D41), which holds the
      * publication's lock already; it takes it again (at once: the transaction holds it) rather than rely on that, reads
-     * the publication, and moves it as {@link #afterCompletion} decides on the publication itself.
+     * the publication, and moves it as {@link #afterCompletion} decides on the publication itself. A missing
+     * publication, or a publication that would not move as its card said, is a defect (the card's state and limits are
+     * the publication's): it fails, and the completion with it, rather than leave the two apart.
      */
     public static ProcessDefinition<MoveInput, MoveOutput, ProcessContext> move() {
         return ProcessDefinition.define(MOVE, 1, MoveInput.class, MoveOutput.class, ProcessContext.class, pb -> pb
@@ -143,15 +147,21 @@ public final class PublicationMoves {
             .permissions(QbPermissions.PUBLICATION_SYSTEM)
             .subProcessOnly()
             .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
-            .outputMapper(ctx -> new MoveOutput(ctx.get(PUB_ID, UUID.class), ctx.contains(MOVED) ? ctx.get(MOVED, String.class) : null))
+            .outputMapper(ctx -> new MoveOutput(ctx.get(PUB_ID, UUID.class), ctx.get(MOVED, String.class)))
             .step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))))
             .steps(b -> load(b, ctx -> ctx.get(PUB_ID)))
             .compute("Move the publication", (metadata, ctx) -> {
                 MoveInput input = ctx.get(PublicationEditing.INPUT, MoveInput.class);
-                String status = afterCompletion(ctx, input.winners(), input.spent(), input.pending());
-                if (status != null) {
-                    ctx.put(MOVED, status);
+                EntityInstance publication = publication(ctx);
+                if (publication == null) {
+                    throw new IllegalStateException("Publication " + input.publicationId() + " to move is missing");
                 }
+                String expected = moveAfter(publication, input.winners(), input.spent(), input.pending());
+                if (!input.status().equals(expected)) {
+                    throw new IllegalStateException("Publication " + input.publicationId() + " would move to "
+                        + expected + ", its card to " + input.status());
+                }
+                ctx.put(MOVED, afterCompletion(ctx, input.winners(), input.spent(), input.pending()));
             }));
     }
 

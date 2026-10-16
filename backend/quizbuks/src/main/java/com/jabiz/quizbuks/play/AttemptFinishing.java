@@ -417,9 +417,10 @@ public final class AttemptFinishing {
         counts.put("spent", spent);
         ctx.changes().update(QbPublications.COUNTER, counter.id(), counter.version(), counts);
         boolean pending = RewardStatus.PENDING.equals(settlement.rewardStatus());
-        if (PublicationMoves.moveAfter(plan.card(), winners, spent, pending) != null) {
+        String move = PublicationMoves.moveAfter(plan.card(), winners, spent, pending);
+        if (move != null) {
             ctx.put(MOVE, new PublicationMoves.MoveInput(PlaySteps.uuid(attempt.get("publicationId")), winners, spent,
-                pending));
+                pending, move));
         }
 
         String message = RewardStatus.PENDING.equals(settlement.rewardStatus())

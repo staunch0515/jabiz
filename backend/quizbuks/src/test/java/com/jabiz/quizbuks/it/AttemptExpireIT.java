@@ -69,6 +69,30 @@ class AttemptExpireIT extends PlayItSupport {
             + "AND source_id = ?", attemptId).getFirst().get("n");
     }
 
+    /**
+     * An expiry that uses up the budget ends the publication through the move (Q10a), run by the system as the
+     * expiry's sub-process.
+     */
+    @Test
+    void anExpiryThatUsesUpTheBudgetEndsThePublicationThroughTheMove() {
+        String sponsor = newSponsor("s-expire-move");
+        String publicationId = livePublication(sponsor, "Expiry move", Map.of("regions", List.of("GLOBAL"),
+            "timeLimitSec", (int) LIMIT.toSeconds(), "budgetCap", 150));
+        credit(sponsor, 1_000);
+        String attemptId = started(publicationId, "t-expire-move", true);
+        pastTheTime(Duration.ZERO);
+        systemRun(AttemptFinishing.EXPIRE, body("attemptId", attemptId));
+        assertThat(attempt(attemptId)).containsEntry("status", "EXPIRED").containsEntry("reward_status", "PAID");
+        assertThat(status(publicationId)).isEqualTo("ENDED");
+        assertThat(row(publicationId)).containsEntry("end_reason", "BUDGET");
+        assertThat(moves(publicationId)).isEqualTo(1);
+        assertThat(query("SELECT p.process_name, c.actor_id FROM op_process c JOIN op_process p "
+            + "ON p.process_seq_id = c.parent_seq_id WHERE c.process_name = ? "
+            + "AND c.input_summary ->> 'publicationId' = ?", PublicationMoves.MOVE, publicationId).getFirst())
+            .containsEntry("process_name", AttemptFinishing.EXPIRE).containsEntry("actor_id", "system");
+        assertBooksBalance();
+    }
+
     @Test
     void dueAttemptsAreFinishedWithTheirSavedAnswersAndSettled() {
         String sponsor = newSponsor("s-expire");

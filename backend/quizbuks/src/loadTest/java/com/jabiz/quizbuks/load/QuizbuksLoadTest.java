@@ -61,13 +61,19 @@ import java.util.regex.Pattern;
  * resets and reads {@code pg_stat_statements} around the load and samples {@code pg_stat_activity} (JDBC, outside the
  * application).
  *
- * <p>Configuration by environment: {@code LOAD_BASE_URL} (http://localhost:8080), {@code LOAD_MAILPIT_URL}
- * (http://localhost:8025), {@code LOAD_ADMIN_USER} (admin), {@code LOAD_ADMIN_PASSWORD}, {@code LOAD_PUBLISHER_ROLE}
- * (QB_LOAD_PUBLISHER: must be among the administration's accepted roles, {@code QB_ADMIN_ROLES}), {@code LOAD_PASSWORD}
- * (the test users' password), {@code LOAD_TAKERS} (1000), {@code LOAD_CONCURRENCY} (64), {@code LOAD_READERS} (8),
+ * <p>Safety: it drives only this machine ({@code LOAD_BASE_URL} must be a loopback address unless
+ * {@code LOAD_ALLOW_REMOTE=yes}); it pays only checkouts on the application's own host (the Stripe stub beside it)
+ * and stops at a top-up in live mode; it publishes only the controlled changes this run's {@code QB_SETUP} proposed.
+ *
+ * <p>Configuration by environment: {@code LOAD_BASE_URL} (http://localhost:8080), {@code LOAD_ALLOW_REMOTE},
+ * {@code LOAD_MAILPIT_URL} (http://localhost:8025), {@code LOAD_ADMIN_USER} (admin), {@code LOAD_ADMIN_PASSWORD},
+ * {@code LOAD_PUBLISHER_ROLE} (QB_LOAD_PUBLISHER: must be among the administration's accepted roles,
+ * {@code QB_ADMIN_ROLES}), {@code LOAD_PASSWORD} (the test users' password, required), {@code LOAD_TAKERS} (1000),
+ * {@code LOAD_CONCURRENCY} (64: the closed loop's takers at a time), {@code LOAD_RATE} (arrivals a second: an open
+ * loop instead, every taker starting at its time whatever the others' answers took), {@code LOAD_READERS} (8),
  * {@code LOAD_BASELINE} (15s), {@code LOAD_SETUP_CONCURRENCY} (8), {@code LOAD_REWARD} (10), {@code LOAD_LABEL}
  * (a heading for the run), {@code LOAD_REPORT} (a Markdown file to write), {@code LOAD_DB_URL} / {@code LOAD_DB_USER}
- * / {@code LOAD_DB_PASSWORD} (JDBC, optional).
+ * / {@code LOAD_DB_PASSWORD} / {@code LOAD_DB_NAME} (JDBC, optional).
  */
 public final class QuizbuksLoadTest {
 
@@ -88,7 +94,8 @@ public final class QuizbuksLoadTest {
 
     private final String baseUrl = env("LOAD_BASE_URL", "http://localhost:8080");
     private final String mailpit = env("LOAD_MAILPIT_URL", "http://localhost:8025");
-    private final String password = env("LOAD_PASSWORD", "quizbuks-load-1");
+    /** The test users' password: required, never a default in the repository. */
+    private final String password = required("LOAD_PASSWORD");
     private final HttpClient http = HttpClient.newBuilder()
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .connectTimeout(Duration.ofSeconds(10))
@@ -179,11 +186,15 @@ public final class QuizbuksLoadTest {
         int setupConcurrency = Integer.parseInt(env("LOAD_SETUP_CONCURRENCY", "8"));
         long reward = Long.parseLong(env("LOAD_REWARD", "10"));
         Duration baseline = Duration.parse("PT" + env("LOAD_BASELINE", "15s").toUpperCase(Locale.ROOT));
+        double rate = Double.parseDouble(env("LOAD_RATE", "0"));
+        refuseRemote();
+        Instant runStarted = Instant.now().truncatedTo(ChronoUnit.SECONDS).minusSeconds(1);
 
         line("## " + env("LOAD_LABEL", "QuizBuks load test") + " (run " + run + ", " + Instant.now()
             .truncatedTo(ChronoUnit.SECONDS) + ")");
         line("");
-        line("Target " + baseUrl + "; " + takers + " takers, " + concurrency + " at a time, each starting and "
+        line("Target " + baseUrl + "; " + takers + " takers, " + (rate > 0 ? String.format(Locale.ROOT,
+            "arriving at %.1f a second (open loop)", rate) : concurrency + " at a time") + ", each starting and "
             + "submitting one attempt of one publication (all answers right, reward " + reward + " each); " + readers
             + " readers of the feed and the publication's page; baseline of the readers alone " + baseline.toSeconds()
             + " s.");
@@ -191,7 +202,7 @@ public final class QuizbuksLoadTest {
 
         long setupStart = System.nanoTime();
         String admin = login(env("LOAD_ADMIN_USER", "admin"), required("LOAD_ADMIN_PASSWORD"), "admin");
-        setup(admin);
+        setup(admin, runStarted);
         String sponsor = verifiedUser("sponsor", "load-sponsor@quizbuks.load", "Load Sponsor");
         approveSponsor(admin, sponsor);
         fund(sponsor, reward * takers + 10 * reward);
@@ -228,7 +239,19 @@ public final class QuizbuksLoadTest {
             Future<Map<String, Stats>> reading = readerPool.submit(() -> readers(readerTokens, publicationId,
                 playing::get, null));
             try (ExecutorService players = Executors.newVirtualThreadPerTaskExecutor()) {
-                for (int i = 0; i < concurrency; i++) {
+                if (rate > 0) {
+                    // Open loop: taker n arrives at n / rate seconds, whatever the answers before it took.
+                    long t0 = System.nanoTime();
+                    for (int n = 0; n < takerTokens.size(); n++) {
+                        long wait = t0 + (long) (n * 1e9 / rate) - System.nanoTime();
+                        if (wait > 0) {
+                            Thread.sleep(Duration.ofNanos(wait));
+                        }
+                        String token = takerTokens.get(n);
+                        players.submit(() -> play(token, publicationId, starts, submits, completions, rewards));
+                    }
+                }
+                for (int i = 0; rate <= 0 && i < concurrency; i++) {
                     players.submit(() -> {
                         for (int n = next.getAndIncrement(); n < takerTokens.size(); n = next.getAndIncrement()) {
                             play(takerTokens.get(n), publicationId, starts, submits, completions, rewards);
@@ -355,18 +378,72 @@ public final class QuizbuksLoadTest {
     // ---- setup --------------------------------------------------------------------------------------------------
 
     /** {@code QB_SETUP}, and its proposals published by the second administrator (four eyes, decision D40). */
-    private void setup(String admin) throws Exception {
-        run(admin, "QB_SETUP", Map.of());
-        List<JsonNode> proposed = rows(admin, CONTROL_CHANGES, List.of(Map.of("field", "status", "op", "eq",
-            "value", "PROPOSED")), 100);
-        if (proposed.isEmpty()) {
+    private void setup(String admin, Instant runStarted) throws Exception {
+        JsonNode made = run(admin, "QB_SETUP", Map.of());
+        // Only what this run's QB_SETUP proposed: never anybody else's pending changes.
+        List<String> ours = new ArrayList<>();
+        made.path("proposals").forEach(id -> ours.add(id.asString()));
+        if (ours.isEmpty()) {
             return;
         }
-        String publisher = publisher(admin);
-        for (JsonNode change : proposed) {
-            run(publisher, "CONTROL_CHANGE_PUBLISH", Map.of("changeId", change.get("id").asString()));
+        String adminId = subject(admin);
+        List<String> publishable = new ArrayList<>();
+        for (JsonNode change : rows(admin, CONTROL_CHANGES, List.of(Map.of("field", "status", "op", "eq", "value",
+            "PROPOSED"), Map.of("field", "proposedBy", "op", "eq", "value", adminId)), 1000)) {
+            String id = change.get("id").asString();
+            Instant created = createdAt(change);
+            if (ours.contains(id) && created != null && !created.isBefore(runStarted)) {
+                publishable.add(id);
+            }
         }
-        log("published " + proposed.size() + " proposals of QB_SETUP");
+        if (publishable.size() != ours.size()) {
+            throw new IllegalStateException("QB_SETUP proposed " + ours + " but only " + publishable
+                + " are pending, by " + adminId + ", since " + runStarted + ": refusing to publish anything");
+        }
+        String publisher = publisher(admin);
+        for (String id : publishable) {
+            run(publisher, "CONTROL_CHANGE_PUBLISH", Map.of("changeId", id));
+        }
+        log("published the " + publishable.size() + " proposals of this run's QB_SETUP");
+    }
+
+    /** When a row of a temporal dataset was written: its version's start, as the dataset API gives it. */
+    static Instant createdAt(JsonNode row) {
+        for (String name : List.of("effectStartTime", "validFrom", "createdAt")) {
+            JsonNode value = row.path(name);
+            if (value.isMissingNode() || value.isNull()) {
+                value = row.path("attributes").path(name);
+            }
+            if (!value.isMissingNode() && !value.isNull()) {
+                return Instant.parse(value.asString());
+            }
+        }
+        return null;
+    }
+
+    /** The subject (user id) of an access token. */
+    static String subject(String token) {
+        String[] parts = token.split("[.]");
+        JsonNode claims = JSON.readTree(java.util.Base64.getUrlDecoder().decode(parts[1]));
+        return claims.get("sub").asString();
+    }
+
+    /**
+     * Refuses to drive anything but this machine (the tool creates users, top-ups and payments through the stub)
+     * unless {@code LOAD_ALLOW_REMOTE=yes}.
+     */
+    private void refuseRemote() {
+        String host = URI.create(baseUrl).getHost();
+        boolean loopback;
+        try {
+            loopback = host != null && java.net.InetAddress.getByName(host).isLoopbackAddress();
+        } catch (java.net.UnknownHostException e) {
+            loopback = false;
+        }
+        if (!loopback && !"yes".equals(System.getenv("LOAD_ALLOW_REMOTE"))) {
+            throw new IllegalStateException("LOAD_BASE_URL " + baseUrl + " is not this machine; set "
+                + "LOAD_ALLOW_REMOTE=yes to load a remote installation (never a production one)");
+        }
     }
 
     private String publisher(String admin) throws Exception {
@@ -408,6 +485,14 @@ public final class QuizbuksLoadTest {
 
     /** Tops the sponsor's wallet up through the stub's checkout until it holds {@code needed}. */
     private void fund(String sponsor, long needed) throws Exception {
+        if (balance(sponsor).compareTo(BigDecimal.valueOf(needed)) >= 0) {
+            return;
+        }
+        // Before a new top-up asks the application for a Checkout: an earlier one that went anywhere but this
+        // application's host (the Stripe stub runs beside it), or in live mode, means real Stripe is configured.
+        for (JsonNode row : rows(sponsor, TOPUPS, List.of(), 100)) {
+            requireStub(row.path("attributes"));
+        }
         while (balance(sponsor).compareTo(BigDecimal.valueOf(needed)) < 0) {
             BigDecimal before = balance(sponsor);
             long amount = Math.min(TOPUP_MAX, Math.max(1000, needed - before.longValue()));
@@ -416,6 +501,7 @@ public final class QuizbuksLoadTest {
             waitFor("the checkout", () -> {
                 for (JsonNode row : rows(sponsor, TOPUPS, List.of(), 100)) {
                     if (topUp.equals(row.get("id").asString()) && row.path("attributes").hasNonNull("checkoutUrl")) {
+                        requireStub(row.path("attributes"));
                         checkout[0] = row.path("attributes").get("checkoutUrl").asString();
                         return true;
                     }
@@ -430,6 +516,24 @@ public final class QuizbuksLoadTest {
             waitFor("the top-up to be credited", () -> balance(sponsor).compareTo(before.add(BigDecimal.valueOf(
                 amount))) >= 0);
             log("topped up " + amount);
+        }
+    }
+
+    /**
+     * Refuses a top-up whose checkout is not the Stripe stub beside the application (the same host as
+     * {@code LOAD_BASE_URL}) or that Stripe reported in live mode: the tool pays only the stub's checkouts.
+     */
+    private void requireStub(JsonNode topUp) {
+        if (topUp.path("livemode").asBoolean(false)) {
+            throw new IllegalStateException("a top-up is in Stripe's live mode: refusing to go on");
+        }
+        JsonNode url = topUp.get("checkoutUrl");
+        if (url != null && !url.isNull()) {
+            String host = URI.create(url.asString()).getHost();
+            if (host == null || !host.equalsIgnoreCase(URI.create(baseUrl).getHost())) {
+                throw new IllegalStateException("the checkout " + url.asString() + " is not on " + baseUrl
+                    + "'s host (the Stripe stub): refusing to pay it");
+            }
         }
     }
 
@@ -657,7 +761,9 @@ public final class QuizbuksLoadTest {
 
         void reset() throws SQLException {
             try (Statement statement = connection.createStatement()) {
-                statement.execute("SELECT pg_stat_statements_reset()");
+                // This database's statements only (PostgreSQL 16: user, database, query id; 0 = any).
+                statement.execute("SELECT pg_stat_statements_reset(0, (SELECT oid FROM pg_database WHERE datname = '"
+                    + name + "'), 0)");
             }
         }
 

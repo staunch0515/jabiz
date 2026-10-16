@@ -80,3 +80,8 @@ tasks.register<JavaExec>("loadTest") {
     mainClass.set("com.jabiz.quizbuks.load.QuizbuksLoadTest")
     outputs.upToDateWhen { false }
 }
+
+// The load test is not run by check, but it is compiled there: it cannot break unnoticed.
+tasks.named("check") {
+    dependsOn("compileLoadTestJava")
+}
