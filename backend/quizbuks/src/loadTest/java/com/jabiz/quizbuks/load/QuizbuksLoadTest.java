@@ -73,7 +73,15 @@ import java.util.regex.Pattern;
  * loop instead, every taker starting at its time whatever the others' answers took), {@code LOAD_READERS} (8),
  * {@code LOAD_BASELINE} (15s), {@code LOAD_SETUP_CONCURRENCY} (8), {@code LOAD_REWARD} (10), {@code LOAD_LABEL}
  * (a heading for the run), {@code LOAD_REPORT} (a Markdown file to write), {@code LOAD_DB_URL} / {@code LOAD_DB_USER}
- * / {@code LOAD_DB_PASSWORD} / {@code LOAD_DB_NAME} (JDBC, optional).
+ * / {@code LOAD_DB_PASSWORD} / {@code LOAD_DB_NAME} (JDBC, optional), {@code LOAD_TIMEOUT} (60s: how long a client of
+ * the load waits; one not answered by then is 599 {@code TIMEOUT}), {@code LOAD_RETRY_BUSY} ({@code yes}: a 503
+ * {@code PROCESS_BUSY} or a timeout is tried again as the App does, with the same {@code Idempotency-Key}, after the
+ * doubling back-off and never sooner than {@code Retry-After}; {@code no} gives up at once).
+ *
+ * <p>As the App, every start and submission carries an {@code Idempotency-Key} of its own (kept for its retries) and
+ * the submission names its publication (the key of the queue before the publication's lock, platform decision D45).
+ * Takers still busy after their retries are finished after the load, unrecorded, so that no attempt is left to expire
+ * and pay from the sponsor's wallet during a later run.
  */
 public final class QuizbuksLoadTest {
 
@@ -90,12 +98,27 @@ public final class QuizbuksLoadTest {
     /** The 422s of a full publication or a sponsor who cannot pay: the answers the load is expected to meet. */
     private static final List<String> EXPECTED = List.of("QB_PUBLICATION_BUDGET_FULL", "QB_PUBLICATION_QUOTA_FULL",
         "QB_SPONSOR_FUNDS_SHORT", "QB_PUBLICATION_NOT_OPEN");
+    /** The queue before the publication's lock turned the call away (platform decision D45): retried as the App does. */
+    static final String BUSY = "503 PROCESS_BUSY";
+    /** A load call not answered within {@code LOAD_TIMEOUT}: its client gave up (as in the platform's loadTest). */
+    static final int TIMED_OUT = 599;
+    /** As the App (quizbuks-web/app/src/play/busy.ts): tries in all, the first delay and the longest. */
+    static final int BUSY_ATTEMPTS = 6;
+    static final long BUSY_FIRST_DELAY_MS = 1_000;
+    static final long BUSY_LONGEST_DELAY_MS = 8_000;
     private static final Pattern LINK = Pattern.compile("https?://[^\\s<>\"')\\]]+");
 
     private final String baseUrl = env("LOAD_BASE_URL", "http://localhost:8080");
     private final String mailpit = env("LOAD_MAILPIT_URL", "http://localhost:8025");
     /** The test users' password: required, never a default in the repository. */
     private final String password = required("LOAD_PASSWORD");
+    /**
+     * How long a client of the load waits for an answer ({@code LOAD_TIMEOUT}, default 60s, as the platform's
+     * loadTest): one not answered by then counts as {@link #TIMED_OUT}, its client gone. Setup calls wait 120 s.
+     */
+    private final Duration requestTimeout = Duration.parse("PT" + env("LOAD_TIMEOUT", "60s").toUpperCase(Locale.ROOT));
+    /** Whether a busy answer is tried again as the App does ({@code LOAD_RETRY_BUSY}, default yes). */
+    private final boolean retryBusy = !"no".equals(env("LOAD_RETRY_BUSY", "yes"));
     private final HttpClient http = HttpClient.newBuilder()
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .connectTimeout(Duration.ofSeconds(10))
@@ -113,6 +136,9 @@ public final class QuizbuksLoadTest {
         String code() {
             if (status / 100 == 2) {
                 return "OK";
+            }
+            if (status == TIMED_OUT) {
+                return body == null ? "CONNECTION" : body;
             }
             try {
                 JsonNode problem = json();
@@ -157,9 +183,16 @@ public final class QuizbuksLoadTest {
             return latency.getTotalCount();
         }
 
+        /** Neither 2xx nor an expected 422, a busy answer (retried) or a client's timeout (both counted apart). */
         long errors() {
-            return codes.entrySet().stream().filter(e -> !e.getKey().startsWith("2") && EXPECTED.stream()
+            return codes.entrySet().stream().filter(e -> !e.getKey().startsWith("2") && !e.getKey().equals(BUSY)
+                && !e.getKey().equals(TIMED_OUT + " TIMEOUT") && EXPECTED.stream()
                 .noneMatch(code -> e.getKey().equals("422 " + code))).mapToLong(e -> e.getValue().sum()).sum();
+        }
+
+        long count(String code) {
+            LongAdder n = codes.get(code);
+            return n == null ? 0 : n.sum();
         }
 
         String row(double seconds) {
@@ -226,12 +259,9 @@ public final class QuizbuksLoadTest {
         if (db != null) {
             db.reset();
         }
-        Stats starts = new Stats("start (QB_ATTEMPT_START)");
-        Stats submits = new Stats("submit (QB_ATTEMPT_SUBMIT)");
-        Stats completions = new Stats("start + submit, one taker");
+        Load load = Load.of();
         AtomicInteger next = new AtomicInteger();
         AtomicBoolean playing = new AtomicBoolean(true);
-        Map<String, LongAdder> rewards = new ConcurrentHashMap<>();
         Database.Sampler sampler = db == null ? null : db.sample();
         long began = System.nanoTime();
         Map<String, Stats> busy;
@@ -248,13 +278,13 @@ public final class QuizbuksLoadTest {
                             Thread.sleep(Duration.ofNanos(wait));
                         }
                         String token = takerTokens.get(n);
-                        players.submit(() -> play(token, publicationId, starts, submits, completions, rewards));
+                        players.submit(() -> play(token, publicationId, load));
                     }
                 }
                 for (int i = 0; rate <= 0 && i < concurrency; i++) {
                     players.submit(() -> {
                         for (int n = next.getAndIncrement(); n < takerTokens.size(); n = next.getAndIncrement()) {
-                            play(takerTokens.get(n), publicationId, starts, submits, completions, rewards);
+                            play(takerTokens.get(n), publicationId, load);
                         }
                     });
                 }
@@ -266,7 +296,12 @@ public final class QuizbuksLoadTest {
         if (sampler != null) {
             sampler.stop();
         }
-        long done = submits.codes.getOrDefault("200 OK", new LongAdder()).sum();
+        // The takers whose start never got through finish now (unrecorded), so that no attempt is left to expire.
+        drain(publicationId, load);
+        Stats starts = load.starts();
+        Stats submits = load.submits();
+        Map<String, LongAdder> rewards = load.rewards();
+        long done = submits.count("200 OK");
         line("### Under load (" + String.format(Locale.ROOT, "%.1f", seconds) + " s)");
         line("");
         line(String.format(Locale.ROOT, "**%.1f completions/s** (%d submissions accepted of %d takers in %.1f s).",
@@ -275,7 +310,9 @@ public final class QuizbuksLoadTest {
         line(HEADER);
         line(starts.row(seconds));
         line(submits.row(seconds));
-        line(completions.row(seconds));
+        line(load.startsSeen().row(seconds));
+        line(load.submitsSeen().row(seconds));
+        line(load.completions().row(seconds));
         busy.values().forEach(stats -> line(stats.row(seconds)));
         line("");
         Stats quietFeed = quiet.get("feed");
@@ -283,6 +320,13 @@ public final class QuizbuksLoadTest {
         line(String.format(Locale.ROOT, "Home feed p95: %.0f ms alone, %.0f ms under load (%.1f x).",
             ms(quietFeed.latency.getValueAtPercentile(95)), ms(busyFeed.latency.getValueAtPercentile(95)),
             (double) busyFeed.latency.getValueAtPercentile(95) / Math.max(1, quietFeed.latency.getValueAtPercentile(95))));
+        line(String.format(Locale.ROOT, "Busy answers (503 PROCESS_BUSY): %d of the starts, %d of the submissions; "
+            + "client timeouts (%d s): %d and %d; %d retries (as the App: same key, Retry-After); "
+            + "takers still busy after their retries: %d starts, %d submissions (finished afterwards, unrecorded).",
+            starts.count(BUSY), submits.count(BUSY), requestTimeout.toSeconds(), starts.count(TIMED_OUT + " TIMEOUT"),
+            submits.count(TIMED_OUT + " TIMEOUT"), load.retries().sum(), load.unfinished().size(),
+            load.submitsSeen().count() - load.submitsSeen().count("200 OK") - load.submitsSeen().codes.entrySet()
+                .stream().filter(e -> e.getKey().startsWith("422")).mapToLong(e -> e.getValue().sum()).sum()));
 
         // The money: the sponsor's wallet went down by exactly the rewards paid.
         BigDecimal paid = BigDecimal.valueOf(rewards.getOrDefault("PAID", new LongAdder()).sum());
@@ -308,14 +352,73 @@ public final class QuizbuksLoadTest {
 
     // ---- the load -----------------------------------------------------------------------------------------------
 
-    private void play(String token, String publicationId, Stats starts, Stats submits, Stats completions,
-        Map<String, LongAdder> rewards) {
+    /** The calls of the load: each HTTP answer, and each operation as the taker sees it (with its retries). */
+    record Load(Stats starts, Stats submits, Stats startsSeen, Stats submitsSeen, Stats completions,
+        Map<String, LongAdder> rewards, LongAdder retries, List<String> unfinished) {
+
+        static Load of() {
+            return new Load(new Stats("start (QB_ATTEMPT_START), each call"),
+                new Stats("submit (QB_ATTEMPT_SUBMIT), each call"), new Stats("start as the taker sees it"),
+                new Stats("submit as the taker sees it"), new Stats("start + submit, one taker"),
+                new ConcurrentHashMap<>(), new LongAdder(), java.util.Collections.synchronizedList(new ArrayList<>()));
+        }
+    }
+
+    /**
+     * One call of the load as the App makes it (play/busy.ts): a busy answer (503 {@code PROCESS_BUSY}) or a timeout
+     * is tried again with the same {@code Idempotency-Key} after the doubling back-off and never sooner than
+     * {@code Retry-After}, at most {@link #BUSY_ATTEMPTS} times in all. Every answer goes to {@code each}, the last one
+     * (with the whole time) to {@code seen}.
+     */
+    private Answer retried(Stats each, Stats seen, LongAdder retries, java.util.function.Supplier<Answer> call) {
         long t0 = System.nanoTime();
-        Answer started = call("POST", "/api/processes/QB_ATTEMPT_START/latest", Map.of("publicationId",
-            publicationId), token);
-        starts.record(started);
+        for (int attempt = 1; ; attempt++) {
+            Answer answer = call.get();
+            each.record(answer);
+            boolean busy = BUSY.equals(answer.status() + " " + answer.code());
+            if (!retryBusy || !(busy || answer.status() == TIMED_OUT) || attempt >= BUSY_ATTEMPTS) {
+                Answer whole = new Answer(answer.status(), answer.body(), System.nanoTime() - t0);
+                if (seen != null) {
+                    seen.record(whole);
+                }
+                return whole;
+            }
+            retries.increment();
+            long after = busy ? answer.json().path("retryAfter").asLong(0) * 1000 : 0;
+            long wait = Math.max(after, Math.min(BUSY_LONGEST_DELAY_MS, BUSY_FIRST_DELAY_MS << (attempt - 1)));
+            double jitter = 1 + 0.25 * ThreadLocalRandom.current().nextDouble();
+            try {
+                Thread.sleep(Duration.ofMillis((long) (wait * jitter)));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return answer;
+            }
+        }
+    }
+
+    /**
+     * A taker's start and submission. One that did not finish (busy or timed out after the retries) is noted, and
+     * finished after the load ({@link #drain}): otherwise its attempt would expire minutes later and pay its reward
+     * from the sponsor's wallet during a later run.
+     */
+    private void play(String token, String publicationId, Load load) {
+        if (!play(token, publicationId, load, false)) {
+            load.unfinished().add(token);
+        }
+    }
+
+    /** Returns whether the taker's attempt finished (or was refused); {@code drain} records nothing but the reward. */
+    private boolean play(String token, String publicationId, Load load, boolean drain) {
+        long t0 = System.nanoTime();
+        Stats ignored = new Stats("ignored");
+        LongAdder retries = drain ? new LongAdder() : load.retries();
+        // As the App starts (useStartAttempt): one key for the start and its retries.
+        String startKey = UUID.randomUUID().toString();
+        Answer started = retried(drain ? ignored : load.starts(), drain ? null : load.startsSeen(), retries,
+            () -> call("POST", "/api/processes/QB_ATTEMPT_START/latest", Map.of("publicationId", publicationId),
+                token, "Idempotency-Key", startKey));
         if (started.status() != 200) {
-            return;
+            return started.status() == 422;
         }
         JsonNode output = started.json().get("output");
         List<Map<String, Object>> answers = new ArrayList<>();
@@ -327,16 +430,50 @@ public final class QuizbuksLoadTest {
                 }
             }
         }
-        // As the app submits (PlayPage): the last question, every answer, and a key of its own.
-        Answer submitted = call("POST", "/api/processes/QB_ATTEMPT_SUBMIT/latest", Map.of("attemptId",
-            output.get("attemptId").asString(), "currentIndex", answers.size() - 1, "answers", answers), token,
-            "Idempotency-Key", UUID.randomUUID().toString());
-        submits.record(submitted);
-        completions.record(new Answer(submitted.status(), submitted.body(), System.nanoTime() - t0));
+        // As the App submits (PlayPage): the publication (the queue's key), the last question, every answer, and a key
+        // of its own for the submission and its retries.
+        Map<String, Object> input = Map.of("attemptId", output.get("attemptId").asString(), "publicationId",
+            publicationId, "currentIndex", answers.size() - 1, "answers", answers);
+        String submitKey = UUID.randomUUID().toString();
+        Answer submitted = submit(token, input, submitKey, drain ? ignored : load.submits(),
+            drain ? null : load.submitsSeen(), retries, load.rewards());
+        if (!drain) {
+            load.completions().record(new Answer(submitted.status(), submitted.body(), System.nanoTime() - t0));
+        }
+        if (submitted.status() == 200 || submitted.status() == 422) {
+            return true;
+        }
+        // Finished by the drain with the same key: a submission that went through is answered again, not repeated.
+        for (int i = 0; i < 20; i++) {
+            if (finishedAgain(submit(token, input, submitKey, ignored, null, retries, load.rewards()))) {
+                return true;
+            }
+        }
+        throw new IllegalStateException("a submission did not finish: " + submitted.status());
+    }
+
+    private static boolean finishedAgain(Answer answer) {
+        return answer.status() == 200 || answer.status() == 422;
+    }
+
+    private Answer submit(String token, Map<String, Object> input, String key, Stats each, Stats seen,
+        LongAdder retries, Map<String, LongAdder> rewards) {
+        Answer submitted = retried(each, seen, retries, () -> call("POST", "/api/processes/QB_ATTEMPT_SUBMIT/latest",
+            input, token, "Idempotency-Key", key));
         if (submitted.status() == 200) {
             JsonNode result = submitted.json().get("output");
             rewards.computeIfAbsent(result.get("rewardStatus").asString(), s -> new LongAdder())
                 .add(result.get("reward").decimalValue().longValueExact());
+        }
+        return submitted;
+    }
+
+    /** After the load: the takers whose start never got through start (or continue) and submit now, unrecorded. */
+    private void drain(String publicationId, Load load) {
+        for (String token : List.copyOf(load.unfinished())) {
+            for (int i = 0; i < 20 && !play(token, publicationId, load, true); i++) {
+                // busy or timed out again: once more
+            }
         }
     }
 
@@ -688,23 +825,35 @@ public final class QuizbuksLoadTest {
         return token;
     }
 
-    /** A call of the load, timed; a connection failure is status 599. */
+    /**
+     * A call of the load, timed, waiting at most {@code LOAD_TIMEOUT}: not answered by then is 599 {@code TIMEOUT}
+     * (the client went away; the server may still finish it), another connection failure 599 {@code CONNECTION}.
+     */
     private Answer call(String method, String path, Object body, String token, String... headers) {
+        long started = System.nanoTime();
         try {
-            return send(method, path, JSON.writeValueAsString(body), token, "application/json", headers);
+            return send(requestTimeout, method, path, JSON.writeValueAsString(body), token, "application/json",
+                headers);
+        } catch (java.net.http.HttpTimeoutException e) {
+            return new Answer(TIMED_OUT, "TIMEOUT", System.nanoTime() - started);
         } catch (IOException e) {
-            return new Answer(599, null, 0);
+            return new Answer(TIMED_OUT, null, System.nanoTime() - started);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new Answer(599, null, 0);
+            return new Answer(TIMED_OUT, null, System.nanoTime() - started);
         }
     }
 
     private Answer send(String method, String path, String body, String token, String contentType,
         String... headers) throws IOException, InterruptedException {
+        return send(Duration.ofSeconds(120), method, path, body, token, contentType, headers);
+    }
+
+    private Answer send(Duration timeout, String method, String path, String body, String token, String contentType,
+        String... headers) throws IOException, InterruptedException {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(path.startsWith("http") ? path
                 : baseUrl + path))
-            .timeout(Duration.ofSeconds(120))
+            .timeout(timeout)
             .header("Accept-Language", "en");
         if (token != null) {
             request.header("Authorization", "Bearer " + token);
@@ -857,9 +1006,10 @@ public final class QuizbuksLoadTest {
                     double locked = samples.stream().mapToInt(s -> s[1]).average().orElse(0);
                     double open = samples.stream().mapToInt(s -> s[2]).average().orElse(0);
                     int maxBusy = samples.stream().mapToInt(s -> s[0]).max().orElse(0);
+                    int maxLocked = samples.stream().mapToInt(s -> s[1]).max().orElse(0);
                     line(String.format(Locale.ROOT, "Connections during the load (pg_stat_activity every 100 ms, %d "
-                        + "samples): %.1f open, %.1f busy (at most %d), %.1f of them waiting for an advisory lock.",
-                        samples.size(), open, busy, maxBusy, locked));
+                        + "samples): %.1f open, %.1f busy (at most %d), %.1f of them waiting for an advisory lock "
+                        + "(at most %d).", samples.size(), open, busy, maxBusy, locked, maxLocked));
                     line("");
                 }
             }

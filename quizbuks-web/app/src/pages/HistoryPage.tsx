@@ -5,6 +5,7 @@ import { Play, Search } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -118,9 +119,12 @@ export function HistoryPage() {
           { value: 'finished', label: t('history.finished') },
           { value: 'unfinished', label: t('history.unfinished') },
         ]} />
+      <p className="text-muted-foreground text-sm empty:hidden" role="status" data-testid="history-continue-busy">
+        {start.busy ? t('play.busy') : ''}
+      </p>
       {start.isError && (
         <Alert variant="destructive" data-testid="history-continue-error">
-          <AlertDescription>{problemText(start.error)}</AlertDescription>
+          <AlertDescription>{playProblemText(start.error)}</AlertDescription>
         </Alert>
       )}
       {history.isPending ? (

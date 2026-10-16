@@ -24,6 +24,12 @@ public final class PlayCodes {
     public static final String FINISHED = "QB_ATTEMPT_FINISHED";
     public static final String ANSWER_INVALID = "QB_ANSWER_INVALID";
 
+    /**
+     * A submission (or expiry) names another publication than its attempt's: the publication is its queue's key
+     * (platform decision D45), checked before the lock.
+     */
+    public static final String PUBLICATION_MISMATCH = "QB_ATTEMPT_PUBLICATION_MISMATCH";
+
     /** Paying a reward: the commission rate in effect is not from 0 to below 1 (a misconfigured parameter). */
     public static final String FEE_RATE_INVALID = "QB_FEE_RATE_INVALID";
 
@@ -31,8 +37,8 @@ public final class PlayCodes {
     public static final String REWARD_PENDING = "QB_REWARD_PENDING";
 
     public static final List<String> ALL = List.of(NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
-        ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, FEE_RATE_INVALID,
-        REWARD_PENDING);
+        ALREADY_TAKEN, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, PUBLICATION_MISMATCH,
+        FEE_RATE_INVALID, REWARD_PENDING);
 
     private PlayCodes() {}
 }

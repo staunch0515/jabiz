@@ -70,13 +70,13 @@ interface Options {
 
 /** The server as the play pages see it; records every call (path and body). */
 function server(options: Options = {}) {
-  const calls: { path: string; body: unknown }[] = []
+  const calls: { path: string; body: unknown; key: string | null }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
-    calls.push({ path, body })
+    calls.push({ path, body, key: request.headers.get('Idempotency-Key') })
     switch (path) {
       case '/api/auth/entries/app':
         return json(200, ENTRY)
@@ -117,6 +117,7 @@ function server(options: Options = {}) {
   return {
     calls,
     posted: (name: string) => calls.filter((c) => c.path === `/api/processes/${name}/latest`).map((c) => c.body),
+    keys: (name: string) => calls.filter((c) => c.path === `/api/processes/${name}/latest`).map((c) => c.key),
   }
 }
 
@@ -223,7 +224,7 @@ describe('answering', () => {
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Submit answers' }))
 
     await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
-    expect(posted('QB_ATTEMPT_SUBMIT')).toEqual([{ attemptId: ATTEMPT, currentIndex: 1,
+    expect(posted('QB_ATTEMPT_SUBMIT')).toEqual([{ attemptId: ATTEMPT, publicationId: PUB, currentIndex: 1,
       answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }])
     expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
     expect(screen.getByTestId('result-pass-score')).toHaveTextContent('3')
@@ -262,6 +263,74 @@ describe('answering', () => {
     await submitOnce()
     await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
     expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+  })
+
+  it('says a busy quiz is busy, starts it on the retry with the same key, and submits the same way', async () => {
+    const busy = () => json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+      violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+    let startBusy = 1
+    let submitBusy = 1
+    const { posted, keys } = server({
+      start: () => (startBusy-- > 0 ? busy() : json(200, { output: started() })),
+      submit: () => (submitBusy-- > 0 ? busy() : json(200, { output: SUBMITTED })),
+    })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('detail-start'))
+    expect(await screen.findByTestId('detail-start-busy')).toHaveTextContent('Many people are answering this quiz')
+    await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`), { timeout: 4000 })
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(2)
+    const [firstStart, secondStart] = keys('QB_ATTEMPT_START')
+    expect(firstStart).toBeTruthy()
+    expect(secondStart).toBe(firstStart)
+
+    await screen.findByTestId('play-progress')
+    await userEvent.click(screen.getByTestId('play-next'))
+    await userEvent.click(screen.getByTestId('play-submit'))
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Submit answers' }))
+    await waitFor(() => expect(screen.getByTestId('play-submitting')).toHaveAttribute('data-busy', 'true'))
+    expect(screen.getByTestId('play-submitting')).toHaveTextContent('trying again')
+    await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`), { timeout: 4000 })
+    // Exactly once: the retry is the same submission (same key, same input), and nothing else was sent.
+    expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+    expect(posted('QB_ATTEMPT_SUBMIT')[1]).toEqual(posted('QB_ATTEMPT_SUBMIT')[0])
+    expect(posted('QB_ATTEMPT_SUBMIT')[0]).toMatchObject({ attemptId: ATTEMPT, publicationId: PUB })
+    const [firstSubmit, secondSubmit] = keys('QB_ATTEMPT_SUBMIT')
+    expect(secondSubmit).toBe(firstSubmit)
+    expect(firstSubmit).not.toBe(firstStart)
+  })
+
+  it('stops retrying a quiz that stays busy, says so, and submits again with the same key', async () => {
+    let busyFor = 6
+    const { keys } = server({ submit: () => (busyFor-- > 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'WAIT_TIMEOUT', retryAfter: 0,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(200, { output: SUBMITTED })) })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      storeStart(started())
+      window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+      render(<App />)
+      await screen.findByTestId('play-progress')
+      await userEvent.click(screen.getByTestId('play-next'))
+      await userEvent.click(screen.getByTestId('play-submit'))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',
+        { name: 'Submit answers' }))
+      for (let i = 0; i < 6 && !screen.queryByTestId('play-submit-error'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10_000)
+        })
+      }
+      expect(await screen.findByTestId('play-submit-error')).toHaveTextContent('Please try again in a moment')
+      expect(keys('QB_ATTEMPT_SUBMIT')).toHaveLength(6)
+      await userEvent.click(screen.getByTestId('play-submit'))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',
+        { name: 'Submit answers' }))
+      await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
+      expect(new Set(keys('QB_ATTEMPT_SUBMIT')).size).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('continues an attempt after a reload at the question and with the answers saved', async () => {

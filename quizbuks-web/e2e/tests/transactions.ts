@@ -49,6 +49,7 @@ export async function rewardingPublication(request: APIRequestContext, sponsorTo
 export async function startAttempt(request: APIRequestContext, takerToken: string, publicationId: string) {
   return await run(request, takerToken, 'QB_ATTEMPT_START', { publicationId }) as {
     attemptId: string
+    publicationId: string
     questions: { no: number; options: { no: number; text: string }[] }[]
   }
 }
@@ -58,6 +59,8 @@ export async function submitRight(request: APIRequestContext, takerToken: string
   started: Awaited<ReturnType<typeof startAttempt>>): Promise<string> {
   const answers = started.questions.map((q) => ({ questionNo: q.no,
     selected: q.options.filter((o) => o.text === 'Paris').map((o) => o.no) }))
-  const result = await run(request, takerToken, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, answers })
+  // As the App submits: with the attempt's publication (the server's queue key, decision D45).
+  const result = await run(request, takerToken, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId,
+    publicationId: started.publicationId, answers })
   return result.rewardStatus as string
 }
