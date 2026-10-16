@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.jabiz.quizbuks.play.PlaySteps.INPUT;
 import static com.jabiz.quizbuks.play.PlaySteps.OUTPUT;
@@ -53,7 +54,9 @@ import static com.jabiz.quizbuks.play.PlaySteps.ids;
  * lock, the attempt again, the counters and the card; scoring and the tier; for a reward above 0 the sponsor's wallet
  * lock and wallet; the reward paid (posted with the attempt as its source document, in this transaction) or pending;
  * the attempt, counters and wallet written; only when its winners or budget are used up or the reward is pending, the
- * publication moved ({@link PublicationMoves#MOVE}, which reads it then: Q10a); an event for the messages.
+ * publication moved ({@link PublicationMoves#MOVE}, which reads it then: Q10a); an event for the messages. Both queue
+ * for the publication's lock before their transaction when their input names the publication (platform decision D45),
+ * and refuse one that is not the attempt's before the lock.
  */
 public final class AttemptFinishing {
 
@@ -74,13 +77,23 @@ public final class AttemptFinishing {
     public static final String PENDING_EVENT = "qb.reward.pending";
 
     /**
-     * @param answers      last answers, each replacing that question's; applied only in time
-     * @param currentIndex the question the taker was on
+     * @param answers       last answers, each replacing that question's; applied only in time
+     * @param currentIndex  the question the taker was on
+     * @param publicationId the attempt's publication, as the App knows it: the key of the queue before the
+     *                      publication's lock (platform decision D45), refused when it is not the attempt's
+     *                      ({@link PlayCodes#PUBLICATION_MISMATCH}); required, so that no submission skips the queue
+     *                      and waits for the lock on a connection (Q10a2 review M2)
      */
     public record SubmitInput(@NotBlank @Size(max = 36) String attemptId, Integer currentIndex,
-        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers) {}
+        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers,
+        @NotNull UUID publicationId) {}
 
-    public record ExpireInput(@NotBlank @Size(max = 36) String attemptId) {}
+    /**
+     * @param publicationId the attempt's publication from the job's selection ({@link #DUE_TEMPLATE}): the key of
+     *                      the queue before the publication's lock, as for a submission. The job always gives it;
+     *                      only the system runs this process (null, as tests running it by hand do, does not queue)
+     */
+    public record ExpireInput(@NotBlank @Size(max = 36) String attemptId, UUID publicationId) {}
 
     /** One question of the result page: the options chosen and the correct ones, its points and what it earned. */
     public record QuestionOutput(int no, List<Integer> selected, List<Integer> correct, int points, int earned) {}
@@ -97,6 +110,8 @@ public final class AttemptFinishing {
     public record ExpireOutput(String attemptId, String status, boolean finished) {}
 
     static final String ATTEMPT_KEY = "play.attemptId";
+    /** The publication the input names (its queue's key), when it names one. */
+    static final String GIVEN_PUBLICATION = "play.givenPublicationId";
     static final String FOUND = "play.found";
     static final String ACTIVE = "play.active";
     static final String CURRENT = "play.current";
@@ -130,11 +145,17 @@ public final class AttemptFinishing {
                 pb.description("Submits the caller's attempt: scores it and pays or records its reward.")
                     .permissions(QbPermissions.PLAY)
                     .requiresVerifiedEmail()
+                    // Queues for the publication's lock before the transaction (platform decision D45, 16o A-6):
+                    // the publication as the App sends it, checked against the attempt's before the lock.
+                    .admission(PublicationMoves.LOCK_FAMILY, SubmitInput::publicationId)
                     .steps(CallerChecks::refuseBanned)
                     .contextFactory((start, input) -> {
                         ProcessContext ctx = new ProcessContext(start);
                         ctx.put(INPUT, input);
                         ctx.put(ATTEMPT_KEY, input.attemptId());
+                        if (input.publicationId() != null) {
+                            ctx.put(GIVEN_PUBLICATION, input.publicationId());
+                        }
                         return ctx;
                     })
                     .outputMapper(ctx -> ctx.get(OUTPUT, SubmitOutput.class))
@@ -145,6 +166,9 @@ public final class AttemptFinishing {
                         if (attempt == null) {
                             throw new EntityNotFoundException(QbPlay.ATTEMPT + " " + ctx.get(ATTEMPT_KEY)
                                 + " not found");
+                        }
+                        if (mismatched(ctx, attempt)) {
+                            return;
                         }
                         if (AttemptStatus.finished(attempt.get("status"))) {
                             ctx.reject(finished(attempt));
@@ -164,10 +188,16 @@ public final class AttemptFinishing {
                 pb.description("Finishes an attempt whose time ran out with its saved answers.")
                     .permissions(QbPermissions.PLAY_SYSTEM)
                     .internal()
+                    // A job's item queues too (platform decision D45 item 4): the publication from the selection;
+                    // refused by the queue, the item is busy and the next minute's run selects it again.
+                    .admission(PublicationMoves.LOCK_FAMILY, ExpireInput::publicationId)
                     .contextFactory((start, input) -> {
                         ProcessContext ctx = new ProcessContext(start);
                         ctx.put(INPUT, input);
                         ctx.put(ATTEMPT_KEY, input.attemptId());
+                        if (input.publicationId() != null) {
+                            ctx.put(GIVEN_PUBLICATION, input.publicationId());
+                        }
                         return ctx;
                     })
                     .outputMapper(ctx -> {
@@ -183,12 +213,27 @@ public final class AttemptFinishing {
                     .compute("Check the attempt", (metadata, ctx) -> {
                         // A finished attempt, or one still in time, is left as it is: the call is idempotent.
                         EntityInstance attempt = first(ctx, FOUND);
-                        if (attempt != null && due(attempt, ctx.opTime())) {
+                        if (attempt != null && !mismatched(ctx, attempt) && due(attempt, ctx.opTime())) {
                             ctx.put(ACTIVE, true);
                         }
                     });
                 steps(pb, true, messages);
             });
+    }
+
+    /**
+     * Whether the input names another publication than the attempt's (refused): the input's publication chose the
+     * queue (platform decision D45), so a wrong one would have queued for one lock and then taken another. Checked
+     * before the lock. (A submission always names one; an expiry run by hand without one queued for nothing.)
+     */
+    static boolean mismatched(ProcessContext ctx, EntityInstance attempt) {
+        Object given = ctx.get(GIVEN_PUBLICATION);
+        if (given == null || given.equals(PlaySteps.uuid(attempt.get("publicationId")))) {
+            return false;
+        }
+        ctx.reject(new Violation("publicationId", PlayCodes.PUBLICATION_MISMATCH, "The attempt is not of "
+            + "publication " + given, Map.of("publicationId", String.valueOf(given))));
+        return true;
     }
 
     private static boolean due(EntityInstance attempt, Instant now) {

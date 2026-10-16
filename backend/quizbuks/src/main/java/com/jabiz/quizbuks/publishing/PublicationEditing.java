@@ -55,8 +55,15 @@ final class PublicationEditing {
     static final String CARD = "card";
     static final String SPONSOR_PROFILE = "sponsorProfile";
 
+    /**
+     * The family of the publication's lock {@code qb.pub:<publicationId>}: also the admission family of the processes
+     * that queue for it before their transaction (platform decision D45), so that the queue's key and the lock's name
+     * are the same text.
+     */
+    static final String LOCK_FAMILY = "qb.pub";
+
     static String lockName(Object publicationId) {
-        return publicationId == null ? null : "qb.pub:" + publicationId;
+        return publicationId == null ? null : LOCK_FAMILY + ":" + publicationId;
     }
 
     static ProcessContext start(ProcessStart start, Object input, UUID publicationId) {

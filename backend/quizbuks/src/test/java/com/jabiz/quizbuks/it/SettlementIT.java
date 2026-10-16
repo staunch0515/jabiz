@@ -116,7 +116,7 @@ class SettlementIT extends PlayItSupport {
         String attemptId = (String) start(taker, publicationId).get("attemptId");
         feeRate("-0.1");
         try {
-            assertThat(codes(refused("QB_ATTEMPT_SUBMIT", taker, body("attemptId", attemptId, "answers",
+            assertThat(codes(refused("QB_ATTEMPT_SUBMIT", taker, submission(attemptId, "answers",
                 answers(true, true)), 422))).containsExactly("QB_FEE_RATE_INVALID");
             assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS");
             assertThat(balance(sponsor)).isEqualByComparingTo("1000");

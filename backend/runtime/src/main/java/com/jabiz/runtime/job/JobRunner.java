@@ -7,6 +7,7 @@ import com.jabiz.query.custom.AdvancedQueryDefinition;
 import com.jabiz.query.custom.ProjectedField;
 import com.jabiz.query.custom.SemanticRow;
 import com.jabiz.runtime.ConcurrentUpdateException;
+import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.process.ExecutionOptions;
@@ -58,8 +59,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *       with a transaction of its own, {@code parallelism} at a time, with the key
  *       {@code job:<name>:<scheduled time in ms>:<item key>} and the item's {@code HoldLock} waits bounded by
  *       {@code itemLockWait}. An item that commits {@code SUCCEEDED}, one that ran before at this time
- *       {@code REPLAYED}, one that met a held lock, a deadlock or a stale version is {@code BUSY} (left to the next
- *       run, not a failure), one that fails otherwise {@code FAILED} (rolled back, recorded in
+ *       {@code REPLAYED}, one that met a held lock, a deadlock, a stale version or a full queue before a hot lock
+ *       (decision D45) is {@code BUSY} (left to the next run, not a failure), one that fails otherwise {@code FAILED} (rolled back, recorded in
  *       {@code sys_job_item_failure} and backed off); an item not started is {@code DEFERRED}. No item's result
  *       affects another's. After {@code maxRunTime}, or once the application stops, no new item starts.</li>
  * </ul>
@@ -399,9 +400,11 @@ public class JobRunner {
                     .thenReturn(ItemOutcome.SUCCEEDED);
             })
             .onErrorResume(error -> {
-                // A held lock, a deadlock or a stale version: busy, not failed; the next run selects it again.
-                // Other conflicts (an entity that already exists...) will not go away by waiting: failed.
-                if (error instanceof ConcurrentUpdateException conflict && conflict.busy()) {
+                // A held lock, a deadlock, a stale version or a full queue before a hot lock (decision D45): busy, not
+                // failed; the next run selects it again. Other conflicts (an entity that already exists...) will not
+                // go away by waiting: failed.
+                if (error instanceof ConcurrentUpdateException conflict && conflict.busy()
+                    || error instanceof ProcessBusyException) {
                     busy(job, scheduledTime, key, error);
                     return Mono.just(ItemOutcome.BUSY);
                 }

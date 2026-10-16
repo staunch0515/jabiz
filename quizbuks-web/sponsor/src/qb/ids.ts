@@ -65,4 +65,6 @@ export const CODE = {
   attemptExpired: 'QB_ATTEMPT_EXPIRED',
   attemptNotInProgress: 'QB_ATTEMPT_NOT_IN_PROGRESS',
   attemptFinished: 'QB_ATTEMPT_FINISHED',
+  /** 503: the queue before a hot quiz's lock is full or its wait ran out (platform decision D45); try again later. */
+  processBusy: 'PROCESS_BUSY',
 } as const

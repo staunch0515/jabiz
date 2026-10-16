@@ -52,6 +52,12 @@ public final class PublicationMoves {
     /** @param status the publication's state afterwards; null when it stayed as it was */
     public record MoveOutput(UUID publicationId, String status) {}
 
+    /**
+     * The family of a publication's lock and of the queue before it (platform decision D45): a process that declares
+     * {@code .admission(LOCK_FAMILY, input -> publicationId)} queues under the text of {@link #lockName}.
+     */
+    public static final String LOCK_FAMILY = PublicationEditing.LOCK_FAMILY;
+
     /** The name of a publication's lock; null without one. */
     public static String lockName(Object publicationId) {
         return PublicationEditing.lockName(publicationId);

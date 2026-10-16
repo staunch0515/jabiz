@@ -204,8 +204,9 @@ public class PlayConfig {
      * with its saved answers by {@code QB_ATTEMPT_EXPIRE}, one transaction per attempt (platform decision D42), at most
      * {@link PlayLimits#EXPIRE_BATCH} by deadline per run. The selection only proposes: the process locks the
      * publication, reads the attempt again and does nothing to one submitted meanwhile. An attempt whose publication
-     * is locked longer than the item's lock wait is left to the next minute (busy); minutes missed while the system
-     * was down are made up by the next run, which selects by deadline, not by minute.
+     * is locked longer than the item's lock wait, or whose queue before the lock (the publication from the selection,
+     * platform decision D45) does not admit it in that time, is left to the next minute (busy); minutes missed while
+     * the system was down are made up by the next run, which selects by deadline, not by minute.
      *
      * @param maxItems attempts one run finishes ({@code quizbuks.attempt-expire.max-items}, default
      *                 {@link PlayLimits#EXPIRE_BATCH}; lowered in tests)
@@ -219,7 +220,9 @@ public class PlayConfig {
                 JobItems.template(AttemptFinishing.DUE_TEMPLATE,
                     scheduledTime -> Map.of("cutoff", scheduledTime.minus(PlayLimits.SUBMIT_GRACE)), "attemptId"),
                 qbAttemptExpire,
-                (scheduledTime, row) -> new AttemptFinishing.ExpireInput(String.valueOf(row.get("attemptId"))))
+                // The publication from the selection: the item's queue (platform decision D45).
+                (scheduledTime, row) -> new AttemptFinishing.ExpireInput(String.valueOf(row.get("attemptId")),
+                    PlaySteps.uuid(PlaySteps.column(row, "publicationId"))))
             .maxItems(maxItems);
     }
 

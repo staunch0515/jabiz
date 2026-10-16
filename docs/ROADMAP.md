@@ -1461,6 +1461,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16j | 应用的快照路径设置生效（`jabizApp` 的 `openApiSnapshot` / `publicQueriesSnapshot`）；✅ 已完成 | — | 0.5 天 | — |
 | 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
 | 16n | 内容显示积木进入 @jabiz/ui（QuizBuks 页面阶段 PG-1；2026-10-14 确认）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`，`@jabiz/admin` 照旧导出；✅ 已完成（PR 待建） | D20、D22、D34 | 1 天 | 15d |
+| 16o | 取锁前在进程内排队（准入）与流程入口限流（QuizBuks Q10a 的 R3；Q5 平台缺口 13、15）：热门命名锁的等待者不占数据库连接，过载时快速失败；2026-10-16 确认（A-1–A-12 全按建议）；✅ 已完成（PR 待建） | D45 | 3.5–4.5 天 | 14o、16k |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -3193,3 +3194,362 @@ QuizBuks 的创作者分成比例、提现门槛等要求只经受控变更修�
 与 `/api/public/files/{id}/{变体}` 返回处理后的原件（`FileVariants`，两个入口共用）；权限、公开判定与缓存头不变，元数据中的 `variants` 仍只列生成的变体，
 策略未声明的宽度仍 404。所有调用方（后台、应用 SPA、公开页面）无需改动，也不多一次请求。测试：`FileContentIT`（新增 1，改 1）、`PublicAccessIT`（改 1），
 修复前 3 个失败（原测试断言了 404）。QuizBuks 的 `ContentImage` 先读元数据的变通在同步平台后可去掉。
+
+### 16o 取锁前在进程内排队（准入）与流程入口限流（3.5–4.5 天）
+
+由 QuizBuks 提出：Q10a 压测（`1.2/quizbuks-10a-perf` 的 `docs/quizbuks/perf/Q10a-load-test.md`，PR #161）的退路 R3，即 Q5 平台缺口 13（没有按用户、按流程的入口限流）与 15（命名锁的等待占用数据库连接）。
+2026-10-16 需求方决定做 R3（另有 R2 与应用内的锁拆分，各自另写计划，不在本阶段）。
+补充 14o（命名锁）与 D42 第 3 条（忙即跳过），需新增决策 **D45**（见"待确认 A-1"，草稿在本节末尾），不取代任何决策。线 1.2 内兼容：只有新增的声明、配置与错误码，不声明的流程行为不变，不开新线、不加迁移。
+分支 `1.2/phase-16o-process-admission`，从 `1.2/platform` 拉出。
+
+**16o 状态**：✅ 已完成（PR 待建）。2026-10-16 需求方确认"待确认"表中 A-1–A-12 全部按建议（A-1 新增 D45；A-6 的 `publicationId` 是 QuizBuks 的改动，不在本阶段，平台的键函数已支持；一个 PR）。实施与偏差见本节末尾"实施记录"。
+
+**目标**：本阶段**不提高吞吐**（锁内时间不变）。目标是：
+1. 热门命名锁的排队**不再耗尽连接池**：等锁的请求在进程内排队，不借连接、不开事务，首页等无关请求照常；
+2. 过载时**快速、可预期地失败**：队列有长度上限、等待有时限，超过即 503 `PROCESS_BUSY`（带 `Retry-After`），不再无限排队、几秒后以 503 `QUERY_TIMEOUT` 零星失败；
+3. 流程入口可按流程、按用户、按客户端地址**限流**（配置声明），刷请求的人不能独占锁与连接。
+
+**现状（`origin/1.2/platform`，`832411f`）**
+- **命名锁**（06 §4.1，14o、16k）：`HoldLock.exclusive|shared(ctx -> 名称[, 最长等待])` 在流程事务中执行 `pg_advisory_xact_lock[_shared]`（名称加前缀 `jabiz.app-lock:`），
+  前后各一条读、设、恢复 `lock_timeout` 的语句（共 4 条）；等待上限 min(步骤, 执行选项 `lockWait`, `jabiz.process.lock-timeout` 30 s)，超时或死锁为 `LockNotAvailableException`（409，`busy()`）。
+- **执行**（`ProcessExecutor.run`）：带幂等键时先在事务外查重放（`OperationRecorder.findByIdempotencyKey`，`engine.select`，**没有时限**），
+  再 `executeRoot`：`engine.inTransaction(…)`——**事务一开始就从池中借连接**（`R2dbcTransactionManager`），第一条语句设 `lock_timeout`，然后取序号、写 `op_process`、依次执行步骤。
+  所以一个请求在 `HoldLock` 处等锁时，已占着一个连接与一个打开的事务；子流程（`CallProcess`）在同一事务中。
+- **入口**（`ProcessController.execute`）：权限 → 已验证邮箱 → 职责分离 `SodGuard.check`（`SodService.rules()`：**事务外的数据视图查询**，调用者不持有 `*` 时每次都读）→ `executor.run`。
+- **事务外读取的时限**（14q）：`R2dbcStorageEngine.run` 在事务外以 `tx.transactional(SET LOCAL statement_timeout; 查询).timeout(时限 + 1 s)` 执行——客户端时限**包括等池中连接的时间**；
+  数据视图缺省时限 5 s（`DatasetDefinition.PolicyBuilder`），即约 6 s 后 503 `QUERY_TIMEOUT`。
+- **连接池**：Spring Boot 缺省 `spring.r2dbc.pool.max-size` = 10，`max-acquire-time` 未设（借连接无限等待）。16k 的启动检查 `JOB` 已读 `max-size`（`parallelism` 不超过一半，告警）。
+- **限流**：只有 `TokenBucketLimiter`（进程内、按键、LRU 上限 100 000）与它的使用者：`SignUpRateLimits`（匿名账户接口与本人账户操作，种类写死在代码中）、
+  `PublicAccessWebFilter`、`InboundWebhookWebFilter`、上传；都按实例计数，超限 `RateLimitedException` → 429 `RATE_LIMITED` + `Retry-After`。客户端地址只经 `ClientAddresses`。
+  `/api/processes/**` 没有任何限流。
+- **任务与事件**：`JobRunner` 把 `ConcurrentUpdateException.busy()` 记为 `BUSY`（D42）；`OutboxDeliverer` 把任何失败记一行 `sys_outbox_attempt` 并按指数退避重试。
+- **QuizBuks 的锁**：`QB_ATTEMPT_START`（输入 `PublicationRef{publicationId}`）只在"新开始"时取 `qb.pub:<发布>`（读过本人会话之后才知道）；
+  `QB_ATTEMPT_SUBMIT`（输入 `SubmitInput{attemptId, …}`，**没有发布编号**）读会话后取 `qb.pub:<发布>`，判分后视需要再取钱包锁 `QbWallets.lockName(…)`；
+  自动提交 `QB_ATTEMPT_EXPIRE`（逐项任务的项，输入 `{attemptId}`）同样。
+- **Q10a 的测量**：池 10 个连接中平均 8.4 个忙、6.9 个在等发布锁；首页 p95 21–30 ms → 0.8–1.2 s（30–60 倍）；池加到 30，等锁的变成 25.8 个，首页 p95 仍 0.6 s。
+  每秒到达 50 人时 88 次提交在约 6 秒时 503 `QUERY_TIMEOUT`。
+
+**设计**
+
+1. **准入（admission）的声明**（core `com.jabiz.process`，同步、无 I/O）：
+   ```java
+   ProcessDefinition.define(QB_ATTEMPT_SUBMIT, 1, SubmitInput.class, …, pb -> pb
+       .permissions(QbPermissions.PLAY)
+       .admission("qb.pub", input -> input.publicationId())   // 族名（静态）+ 从输入算出的键；null 即不排队
+       .step("Lock the publication", HoldLock.exclusive(ctx -> PublicationMoves.lockName(…)))  // 照旧
+       …);
+   ```
+   - 准入键 = `族名 + ":" + 键函数的值`。族名是声明时的常量（`[a-z][a-z0-9._-]{0,47}`，启动检查），也是配置与观测标签用的名字（D16：只放名称，不放主键）；键函数在**事务之前**由输入算出，
+     不能读数据（与 `JobDefinition` 的 `input` 同样的约束）。约定：族名与键取得和该流程最外层的 `HoldLock` 名称一致（QuizBuks 的 `qb.pub:<发布>`），由应用用同一个辅助方法生成两者。
+   - 每个流程至多一个准入键（只排最外层的那把热门锁，见第 4 点）；同一族名可被多个流程声明（`QB_ATTEMPT_START`、`QB_ATTEMPT_SUBMIT`、`QB_ATTEMPT_EXPIRE`、发布的移动），它们共用同一个队列。
+   - 不声明即不排队：现有流程与 `HoldLock` 的使用者不需要改动。
+
+2. **队列本身**（runtime `com.jabiz.runtime.process.admission`）：每个准入键一个**公平的计数闸门**：
+   - **并发数** `concurrency`（每键每实例同时"在事务中"的请求数，缺省 2）：持有许可的请求才借连接、开事务。缺省 2 而不是 1：第 2 个请求在持锁者提交前做完锁前的工作（序号、操作记录、锁外的读取）并在咨询锁上等，
+     持锁者一提交它就接上，锁不空转；代价是每个热门键每实例最多 1 个连接在等咨询锁（原来是全部等待者）。
+   - **公平**：先进先出；释放许可时直接交给队首（不让新来的插队）。
+   - **队列长度上限** `max-queue`（缺省 50）：队满即**立即**失败（`QUEUE_FULL`），不借连接。
+   - **等待时限** `max-wait`（缺省 2 s，不超过 `jabiz.process.lock-timeout`）：只计在进程内排队的时间，到时从队列中移除并失败（`WAIT_TIMEOUT`）。之后在咨询锁上的等待照旧由 `lock_timeout` 约束，
+     并且至多排在 `concurrency − 1` 个请求之后。
+   - **许可的持有期**：从借连接之前（`executeRoot` 之前）到根事务提交或回滚完成（`doFinally`：成功、422、409、500、取消都释放）；提交后步骤不持有许可。
+     客户端断开（订阅取消）时排队者被移出队列，已持有许可的照常在事务结束时释放。
+   - **全局上限** `max-active`（所有准入键合计同时持有的许可数，缺省 `spring.r2dbc.pool.max-size` 的一半，向下取整、至少 1）：许多不同的热门键同时出现时，排队的流程合计也只用一半的池，
+     其余连接总是留给读取与不排队的流程（第 5 点）。全局上限也是先进先出，与每键的闸门一起取（先取键的许可，再取全局许可；只有排队者等待，持有者不会再等任何闸门，所以闸门之间不形成环）。
+   - **内存有界**：没有持有者与等待者的键即删除；同时存在的键与等待者合计各有上限（`max-keys` 10 000、`max-waiting` 5 000），超过即 `QUEUE_FULL`。
+   - **实现**：纯非阻塞（Reactor `Mono.create` 的回调 + `synchronized` 的短临界区，同 `TokenBucketLimiter`；交接许可时在 `Schedulers.parallel()` 上唤醒，避免长链递归）。
+     不借连接、不阻塞线程，BlockHound 照常开启。时限用单调时钟（这是节流，不是业务时间；同 `TokenBucketLimiter`）。
+   - **顺序**：`ProcessExecutor.run` 中，**幂等重放查询在准入之前**（已完成的请求重放时不排队），准入之后才进入 `executeRoot`；并发重复请求的竞争（`isIdempotencyRace`）后的再次重放不重新排队。
+
+3. **多实例下的正确性**：进程内的队列**只是准入控制，不是互斥**。正确性仍只由咨询锁保证（D45 第 2 条）：
+   - N 个实例各有自己的队列：同一键同时在事务中的请求合计至多 N × `concurrency`，在咨询锁上等待的至多 N × `concurrency` − 1（PostgreSQL 按到达顺序授予）；
+     每个实例的队列长度与等待各自计算，系统的有效队列为 N × `max-queue`。负载均衡不需要按键粘滞。
+   - 实例重启、队列丢失、键函数算错（例如客户端给了错误的发布编号）都只影响**排队的效果**，不影响结果：该请求照旧在咨询锁上等待（即今天的行为），并由流程在锁内的检查拒绝。
+   - 不同实例之间不保证先来先得（只在一个实例内公平）；跨实例的顺序本来就不是业务约定。
+
+4. **事先不知道的锁**：只声明**最外层的热门锁**。锁内才知道的锁（读会话后才知道的钱包锁 `qb.wallet:<商家>`、`START` 中"新开始"才取的发布锁）不排队。理由：
+   - 内层锁只在外层锁之内取（锁序），所以内层锁的等待者都已持有某个外层键的许可：同一商家钱包的等待者至多为"该商家的热门发布数 × N × `concurrency`"，并且全部受全局上限 `max-active` 约束；
+   - 不经外层锁取内层锁的流程（充值的入站事件、补发等）本来就少；需要时它们可以声明自己的准入键（族名 `qb.wallet`）。
+   - 只在锁内才知道是否要取锁的流程（`START` 的"继续答题"不取发布锁）照样排队：在热门发布上继续答题的请求要排在开始的队列中（每个约 12 ms，见 A-7）。
+
+5. **连接池的分隔**（作为替代或补充）：
+   - **不建第二个连接池**。原因：流程的步骤、提交、审计都经 `storages.getEngine(poolRef)` 的同一个 `TransactionalOperator`，按流程改用另一个池要改执行器、事务管理器与所有平台步骤的引擎选择；
+     而且单独的池也只是把"一个热门键耗尽整个池"变成"一个热门键耗尽锁流程的池"（同一应用的其他锁流程照样被拖住），Q10a 已证明加大池不解决问题。
+   - **补充**：用上面的全局上限 `max-active`（池的一半）达到同样的效果——排队的流程合计不超过半个池，读取与其他流程至少有一半连接。
+   - 文档建议（不改缺省）：运维可设 `spring.r2dbc.pool.max-acquire-time`（借连接的上限），使极端情况下借不到连接的请求失败而不是无限等待（见 A-12）。
+
+6. **过载时的 503 `QUERY_TIMEOUT`**：
+   - **原因的推断**（代码阅读，须实测确认）：约 6 秒 = 数据视图缺省时限 5 s + 客户端后备 1 s；事务外的读取连同**等待池中连接**的时间一起计时。
+     提交路径上事务外有时限的读取是入口的 `SodGuard.check` → `SodService.rules()`（数据视图查询，玩家不持有 `*`，每次都读）；
+     而 Q10a 怀疑的幂等重放查询走 `engine.select`，**没有时限**——它在池耗尽时会一直等，不会 503。所以更可能是职责分离规则的读取等不到连接。
+   - **确认的办法**（实施的第一步，写入 03 §1）：① IT：把测试池设为 2，用两个打开的事务占住连接，调用一个声明了权限的流程，断言约 6 s 后 503 `QUERY_TIMEOUT`，并断言异常链来自 `SodService.rules`
+     （测试中给 `GlobalExceptionHandler` 的 debug 日志加上首个平台栈帧）；同样占住连接时带 `Idempotency-Key` 的重放查询一直挂起（证明它不是来源）；
+     ② QuizBuks 的 `loadTest` 中打开 r2dbc-pool 的 `pending` 指标（`r2dbc.pool.pending`）与 `org.springframework.dao` 的 debug 日志，在每秒 50 人时重测。
+   - **防止**：有了准入，等锁的请求不占连接，池不再被耗尽，这些事务外的读取随即拿得到连接（IT 断言：50 个热门键请求在排队时，入口的职责分离读取与首页模板都在 1 s 内完成，没有任何 `QUERY_TIMEOUT`）；
+     过载以 503 `PROCESS_BUSY` 在 `max-wait` 内结束。职责分离规则的缓存与幂等重放查询的时限是另外的问题（见 A-12），本阶段只确认与记录。
+
+7. **与平台其他部分的关系**：
+   | 情形 | 行为 |
+   |---|---|
+   | 子流程（`CallProcess`、`CallProcess.forEach`） | **从不排队**：子流程在根流程的事务中，已占着连接；在事务中等闸门会重新造成占连接的等待，还可能与持有该键许可、正在等本事务的咨询锁的请求形成环。子流程声明的准入键被忽略；`subProcessOnly()` 流程声明准入即启动错误 |
+   | 咨询锁的重入 | 不变：同一事务中再次取同名咨询锁（子流程、`QB_PUBLICATION_COMPLETION_MOVE`）由 PostgreSQL 计数；闸门只在根流程入口取一次，不需要重入 |
+   | 逐项任务（`JobDefinition.forEach`，D42） | 每项是根流程，照样排队；排队时限取 min(族的 `max-wait`, 执行选项 `lockWait` 即 `itemLockWait`)；被拒（`QUEUE_FULL` / `WAIT_TIMEOUT`）记为 `BUSY`（不失败、不退避，下次运行再处理）。`QB_ATTEMPT_EXPIRE` 的选取模板带上发布编号即可声明同一族 |
+   | 单流程任务 | 照样排队；被拒即该次运行 `FAILED`（与今天的 409 相同，这类任务通常不声明准入） |
+   | 事件消费者（`EventSubscription`） | 照样排队；被拒是一次失败的投递（`sys_outbox_attempt`），按现有退避重试，与今天的 409 相同 |
+   | 试运行（`DRY_RUN`，导入预览） | 照样排队（它同样借连接、取咨询锁），回滚后释放 |
+   | 导入 | 每行或每组以子流程运行，不排队（导入的根流程不声明准入） |
+   | 提交后步骤 | 不持有许可（事务已结束） |
+   | 幂等重放 | 在准入之前，不排队；并发的重复请求中后到的一个照常排队，取得许可后在幂等键上等前一个（今天的行为）再重放 |
+   | 入口限流（第 8 点） | 在一切数据库访问之前（职责分离的读取之前），被限流的请求不借连接 |
+   | 观测 | 见"观测"；标签只有族名、流程名与结果（D16），不放准入键、主键、操作人 |
+
+8. **入口限流**（同一阶段，见 A-8）：runtime `ProcessRateLimits`，只作用于流程接口 `/api/processes/{码}`（行操作也经它），不作用于子流程、任务、事件与平台入口：
+   ```yaml
+   jabiz:
+     process:
+       rate-limits:
+         QB_ATTEMPT_START:  { per-user: 30, per-address: 300, period: 1m }
+         QB_ATTEMPT_SUBMIT: { per-user: 30, per-address: 300, period: 1m }
+   ```
+   - 三种桶，各自可选：`per-user`（按操作人）、`per-address`（按 `ClientAddresses` 的客户端地址，转发头只在来自可信代理时采用）、`per-instance`（该流程在本实例的总量）；`period` 缺省 1 分钟。
+     桶用现有的 `TokenBucketLimiter`（进程内、LRU 上限、单调时钟），超限 `RateLimitedException` → 429 `RATE_LIMITED` + `Retry-After`（已有错误码与三语消息），按实例计数（同 15 §6、10 §15 的已知限制）。
+   - 顺序：认证 → 权限 → **限流** → 已验证邮箱 → 职责分离 → 幂等重放 → 准入 → 事务。限流放在权限之后：没有权限的请求本来就 403，不消耗他人的地址桶。
+   - 与 `SignUpRateLimits` 的关系：后者限的是平台自己的匿名账户接口（种类写死），本阶段不改；两者共用 `TokenBucketLimiter` 与 `ClientAddresses`。限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁。
+   - 只在配置中声明（运维可调，不需要重新构建）；启动检查：配置的流程必须已注册、不是 `internal()` / `subProcessOnly()`（它们不经流程接口），数值为正。
+
+9. **应用的接口与迁移路径**（线 1.2 内兼容）：
+   - 新增 `ProcessDefinitionBuilder.admission(String family, Function<I, Object> key)`；`ProcessDefinition.admission()` 返回 `Optional<Admission<I>>`。不声明的流程不变。
+   - **QuizBuks**（在 Q10 的应用分支上做，不在本阶段）：
+     - `QB_ATTEMPT_START`：`.admission("qb.pub", PublicationRef::publicationId)`，与 `PublicationEditing.lockName` 同一族名（建议把族名常量化为 `"qb.pub"`，`lockName` 用它拼接）；
+     - `QB_ATTEMPT_SUBMIT`：`SubmitInput` 加 `publicationId`（App 本来就知道；旧客户端不带时为 null，即不排队，照旧可用）；`.admission("qb.pub", SubmitInput::publicationId)`；
+       流程在读到会话后、取锁之前检查会话的发布与输入一致，否则 422（新码，例如 `QB_ATTEMPT_PUBLICATION_MISMATCH`）——错误的编号只会让请求排错队，不影响正确性（第 3 点）；
+     - `QB_ATTEMPT_EXPIRE`：选取模板加发布编号列，`ExpireInput` 加 `publicationId`，同样声明；发布的状态移动流程（`QB_PUBLICATION_*`，输入带发布编号）也可声明；
+     - 配置：`jabiz.process.admission.families[qb.pub]` 与 `jabiz.process.rate-limits.QB_ATTEMPT_*`；App 收到 503 `PROCESS_BUSY` 时按 `Retry-After` 显示"人太多，稍后再试"。
+   - **其他 `HoldLock` 使用者**（finance 的期间锁、commerce 的订单锁、QuizBuks 的模版与账户锁）：不需要改；只有压测或运行中看到热门锁占满连接时才加准入声明。指南写入 `docs/guide/new-business-object.md` 的"命名锁"一节。
+
+**要求**
+
+1. **core**：`com.jabiz.process.Admission<I>(String family, Function<I, Object> key)`（族名校验、键值转为文本、null 或空白即不排队）；`ProcessDefinitionBuilder.admission(…)`、`ProcessDefinition.admission()`；
+   单元测试（族名规则、重复声明报错、键为 null 不排队、键的文本形式）。
+2. **runtime 准入**：`ProcessAdmission`（Spring Bean，配置见下）与 `AdmissionGate`（每键闸门，纯 Java + Reactor）；`ProcessExecutor.run` 在重放之后、`executeRoot` 之前取许可，在根事务结束时释放；
+   `executeChild` 不取；执行选项 `lockWait` 缩短排队时限；`jabiz.process.admission.enabled=false` 时全部放行（应急开关，缺省开启）。
+3. **错误**：新异常 `ProcessBusyException`（runtime，不继承 `ConcurrentUpdateException`）→ **503** `PROCESS_BUSY` + `Retry-After`（`ProblemStatuses` 与 `GlobalExceptionHandler`，同 `RateLimitedException` 的写法），
+   `violations[0].params`：`reason`（`QUEUE_FULL` / `WAIT_TIMEOUT`）、`retryAfter`（秒）；不记错误日志（同 `QUERY_TIMEOUT`）；消息三种语言。`JobRunner` 把它记为 `BUSY`。通用后台与 `@jabiz/client` 不自动重试 503（14q 已如此），显示消息。
+4. **入口限流**：`ProcessRateLimits`（配置见下），在 `ProcessController.execute` 中按第 8 点的顺序调用。
+5. **启动检查 `PROCESS`**（一次报全）：族名规则；`subProcessOnly()` 流程声明准入为错误；`jabiz.process.admission.families` 中未被任何流程声明的族名为告警；数值范围（`concurrency` 1–16，`max-queue` 0–10 000，
+   `max-wait` 大于 0 且不超过 `jabiz.process.lock-timeout`，`max-active` 1 到池大小 − 1）为错误；`rate-limits` 中未知的、`internal()` 或 `subProcessOnly()` 的流程为错误。
+6. **观测**（13，D16）：见下表；不放准入键、主键、操作人。
+7. **示范**（`app`，commerce）：`ORDER_CANCEL` 与 `ORDER_SHIP` 取订单锁 `commerce.order:<id>`（与 `ORDER_EXPIRE`、`ORDER_RECORD_PAYMENT` 同一把）并声明 `.admission("commerce.order", CancelInput::orderId)`；
+   `ORDER_EXPIRE` 的子流程 `ORDER_CANCEL` 不排队（示范"子流程从不排队"）；`ORDER_RECORD_PAYMENT`（输入只有入站事件编号，锁名在锁内才知道）不声明（示范"事先不知道的锁靠咨询锁"）。
+   `PORTAL_ORDER_PLACE` 配置按用户限流（`per-user: 20 / 1m`）。`app` 的 `loadTest` 增加可选的热门键模式（`LOAD_HOT_ORDER=yes`：许多并发请求挤同一订单，同时读列表），报告写入 `docs/perf/`。
+8. **文档**：09 新增 D45；06 §2.1 表（`admission`）、§4.1（准入与咨询锁的分工、子流程不排队）、§8（声明）；03 §1（事务外读取的时限包括等连接，`QUERY_TIMEOUT` 的来源）；
+   10 §15（流程入口限流与 `SignUpRateLimits` 的关系）；11 §4.1（任务项被准入拒绝即 `BUSY`）；13 观测表；`docs/guide/new-business-object.md`（何时声明准入）；
+   CLAUDE.md 第 3 节第 3 条加一句："热门的命名锁在流程上以 `admission(族, 输入 -> 键)` 声明取锁前的排队（06 §4.1、D45），正确性仍由 `HoldLock` 保证；流程入口的限流只在 `jabiz.process.rate-limits` 配置"；ROADMAP 阶段表与本节。
+
+**配置**
+
+```yaml
+jabiz:
+  process:
+    admission:
+      enabled: true            # 应急开关；false 时所有声明都放行
+      max-active: 0            # 所有键合计同时持有的许可；0 = spring.r2dbc.pool.max-size / 2（至少 1）
+      max-keys: 10000
+      max-waiting: 5000        # 所有键合计的排队者
+      defaults:                # 未单独配置的族
+        concurrency: 2
+        max-queue: 50
+        max-wait: 2s
+        retry-after: 1s        # 被拒时 Retry-After 的下限；实际取 max(下限, 估计)，上限 30 s
+      families:
+        "[qb.pub]": { concurrency: 2, max-queue: 100, max-wait: 1s }   # 族名带点时用方括号（Spring 的映射键）
+    rate-limits:
+      PORTAL_ORDER_PLACE: { per-user: 20, period: 1m }
+```
+
+`Retry-After` 的估计：该键的排队数 × 最近 50 次许可持有时间的平均 ÷ `concurrency`，向上取整到秒，夹在 [`retry-after`, 30 s] 之间。
+
+**错误码**
+
+| 码 | 状态 | 何时 | 参数 |
+|---|---|---|---|
+| `PROCESS_BUSY`（新，三语） | 503 + `Retry-After` | 准入的队列已满、等待超时、或全局上限下的排队超时 | `reason`（`QUEUE_FULL` / `WAIT_TIMEOUT`）、`retryAfter` |
+| `RATE_LIMITED`（已有） | 429 + `Retry-After` | 流程入口限流 | `retryAfter` |
+| `QUERY_TIMEOUT`（已有） | 503 | 不变；有了准入，热门锁的排队不再导致它 | — |
+
+**观测**（13 的表增加三行）
+
+| 观测名 | 位置 | 标签 |
+|---|---|---|
+| `jabiz.process.admission`（观测，计时为排队时间） | `ProcessAdmission.acquire`（嵌在 `jabiz.process` 之内） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`） |
+| `jabiz.process.admission.waiting` / `.active`（仪表） | 当前排队数与持有许可数，按族合计 | `family` |
+| `jabiz.process.rate_limited`（计数器） | `ProcessRateLimits` 的拒绝 | `process` `scope`（`user` / `address` / `instance`） |
+
+r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中列为压测时查看的项目，不新增。
+
+**模块与类**
+
+| 模块 | 类 / 文件 | 改动 |
+|---|---|---|
+| core | `process.Admission`（新）、`ProcessDefinitionBuilder`、`ProcessDefinition` | 声明 |
+| core 测试 | `AdmissionTest`、`ProcessDefinitionBuilderTest` | 声明的单元测试 |
+| runtime | `process.admission.ProcessAdmission`、`AdmissionGate`、`AdmissionSettings`（`@ConfigurationProperties`）（新） | 闸门与配置 |
+| runtime | `ProcessExecutor` | 重放之后、事务之前取许可，`doFinally` 释放；子流程不取 |
+| runtime | `ProcessBusyException`（新）、`ProblemStatuses`、`GlobalExceptionHandler`、`PlatformErrorCodes.PROCESS_BUSY`、消息（三语） | 503 + `Retry-After` |
+| runtime | `job.JobRunner` | `ProcessBusyException` 记为 `BUSY` |
+| runtime | `web.ProcessRateLimits`（新）、`ProcessController` | 入口限流 |
+| runtime | `process.ProcessChecks`（或现有的 `PROCESS` 检查类） | 要求 5 |
+| runtime | `observability.PlatformObservations` | `PROCESS_ADMISSION`、`PROCESS_RATE_LIMITED`、仪表 |
+| app | `commerce.CommerceProcesses`（`ORDER_CANCEL`、`ORDER_SHIP` 取订单锁并声明准入）、`application.yml`（限流示范）、`loadTest` | 示范 |
+| docs | 09、06、03、10、11、13、`docs/guide/new-business-object.md`、CLAUDE.md、ROADMAP | 要求 8 |
+
+不改的：`HoldLock`（语句数的减少属于 R2 的"平台通用开销"，另写计划）、`SignUpRateLimits`、表结构（**没有迁移**）、OpenAPI 的路径与模式（错误响应仍是 `ProblemDetail`；若快照中列出了错误状态则补 503，`pnpm gen:api`）。
+
+**测试**
+
+- **core**：`AdmissionTest`（族名规则、键的文本形式、null 与空白不排队）；`ProcessDefinitionBuilderTest`（重复声明报错、`subProcessOnly()` 的声明保留以便启动检查报告）。覆盖率门禁照常。
+- **runtime 单元**：`AdmissionGateTest`（`StepVerifier` + 虚拟时间）：先进先出；`concurrency` 个同时持有；队满立即 `QUEUE_FULL`；超时移出队列且不泄漏许可；取消（排队中、已持有）；
+  错误与取消时释放；空闲的键被删除；全局上限与 `max-waiting`；`Retry-After` 的估计与夹取。
+  `AdmissionGatePropertyTest`（jqwik）：随机的到达、释放、取消、超时序列下，持有数从不超过 `concurrency` 与全局上限、许可不丢失不重复、同一键内按到达顺序取得。
+  `ProcessRateLimitsTest`：三种桶、`Retry-After`、未配置的流程不限。
+- **集成测试（真实 PostgreSQL，BlockHound 开启）**，`app` 的 `it/process/ProcessAdmissionIT`（测试源中的测试流程：声明准入族 `test.hot`、`HoldLock` 同名、持锁时在一个 `BlockingStep` 中等待测试给的信号；测试池 `max-size` 6）：
+  1. **不耗尽连接池**：60 个并发请求挤同一个键，持锁者被挡住期间，`pg_stat_activity` 中等咨询锁的后端 ≤ `concurrency − 1`、本应用占用的连接 ≤ `concurrency`；
+     同时 20 次模板读取（`jabiz.query.template`）与另一个不排队的流程都在 1 s 内完成。**对照**：`jabiz.process.admission.enabled=false` 时同样的负载使读取得到 503 `QUERY_TIMEOUT`（证明测试能发现耗尽）。
+     等待以 `pg_locks` 中未授予的咨询锁判断，不靠时间猜测（同 `HoldLockIT`）。
+  2. **快速失败**：`max-queue: 5` 时第 7 个起立即 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`、带 `Retry-After`，响应 < 200 ms）；`max-wait: 500ms` 时排队者在 0.5–1.5 s 内 503 `WAIT_TIMEOUT`；全程没有 `QUERY_TIMEOUT`。
+  3. **公平**：逐个放行持锁者，取得许可的顺序与到达顺序一致。
+  4. **两个实例**：两套执行器（各自的连接池与 `ProcessAdmission`，同 `JobItemsIT` 的"两个实例"）对同一键各 100 个"读计数、加一、写回"的请求：结果恰好 200；等咨询锁的后端 ≤ 2 × `concurrency` − 1。
+     另一组让实例 B 的键函数故意算错（不排队），结果仍恰好 200（正确性只靠咨询锁）。
+  5. **释放**：422、409（`HoldLock` 超时）、500、客户端取消（排队中与持有中）之后，下一个排队者立即取得许可；试运行回滚后释放。
+  6. **子流程不排队**：`ORDER_EXPIRE`（任务项）→ 子流程 `ORDER_CANCEL`：即使 `commerce.order:<id>` 的队列已满、许可都被占用，子流程也不等闸门，不死锁（只在咨询锁上等，按 `itemLockWait` 结束为 `BUSY`）。
+  7. **幂等**：已完成的请求以同一 `Idempotency-Key` 重放时，即使该键队满也立即返回原结果。
+  8. **任务**：逐项任务的项被准入拒绝记为 `BUSY`，无失败行、不退避；事件消费者被拒记一次失败的投递并退避。
+  9. **入口限流**：按用户、按地址（经可信代理的转发头与伪造的转发头）、按实例；429 带 `Retry-After`；连接池被占满时被限流的请求仍在 50 ms 内 429（证明限流在数据库访问之前）；配置未知流程时启动失败（`PlatformCheck`）。
+  10. **503 的来源**（设计第 6 点的确认）：`QueryTimeoutCauseIT`：池 2、两个事务占住连接，声明权限的流程约 6 s 后 503 `QUERY_TIMEOUT`，来源是 `SodService.rules`；带幂等键的重放查询挂起而不是 503。结果写入 03 §1。
+- `ObservabilityIT`：`jabiz.process.admission` 的标签只有 `family`、`process`、`result`；仪表随排队变化后归零。
+- `HoldLockIT`、`JobItemsIT`、`JobIT`、场景回放（`ScenarioTest`）照常；`OpenApiSnapshotIT` 若有变化更新快照与 `pnpm gen:api`。
+- `./gradlew check`（含 `platformCheck`、ArchUnit、BlockHound）通过；涉及权限入口与限流，完成后 `/code-review` 与 `/security-review`。
+- 示范压测（不在 `check` 中）：`app` 的 `loadTest` 热门订单模式，开准入与关准入各一次，报告列表读取的 p95 与 503 的分布。QuizBuks 在 Q10 的应用分支上照 Q10a 重测（每秒 15、18、50 人），验收"首页 p95 ≤ 平时 2 倍"在那里判定。
+
+**风险**
+
+- **吞吐可能略降**：`concurrency = 1` 会让锁空转（锁前的工作不能与持锁者重叠）；缺省 2 应与现状持平，须在 `PlayThroughputIT` / Q10 重测中确认（`concurrency` 可按族调）。
+- **键算错**：键函数与 `HoldLock` 名称不一致时排队无效（但正确）。缓解：约定用同一个辅助方法；运行时在 `HoldLock` 取到与准入键同族但不同名的锁时每个流程记一次 warn（只记族名与流程名，见 A-11）。
+- **继续答题也排队**：`START` 在键上排队后才知道是不是新开始；热门发布上继续答题的人要排在开始之后（每个约 12 ms，队列 50 时最多约 0.6 s）。见 A-7。
+- **多实例的有效队列放大**：N 个实例即 N 倍的队列与在咨询锁上的等待（N × (`concurrency` − 1)）；文档说明按实例数调 `max-queue`。
+- **全局上限饿死**：许多不同的热门键时，所有排队流程合计只用半个池，可能比现在慢（现在它们会占满整个池）；这是有意的取舍：读取优先。`max-active` 可调。
+- **内存**：每个等待者一个回调与定时器；`max-waiting` 限总量。
+- **503 的来源推断有误**：若实测不是职责分离的读取，准入仍防止池被耗尽（来源只是"谁先等不到连接"）；结论写入 03 §1。
+- **限流按实例**：多实例时近似（与公开接口、注册相同的已知限制）。
+
+**验收标准**
+
+- [x] 声明准入的流程在取得许可之前不借连接、不开事务；热门键上 60 个并发请求时，等咨询锁的连接 ≤ `concurrency − 1`，无关的读取与流程在 1 s 内完成；关闭准入的对照组出现 503 `QUERY_TIMEOUT`（`ProcessAdmissionIT` 1）。
+- [x] 队满立即、等待超时在 `max-wait` 后不久以 503 `PROCESS_BUSY` 失败，带 `Retry-After` 与 `reason`；过载时没有 `QUERY_TIMEOUT`（2）。
+- [x] 同一键先进先出；许可在成功、失败、取消、试运行后都释放（3、5；`AdmissionGatePropertyTest`）。
+- [x] 两个实例下结果正确，键算错也正确（4）。
+- [x] 子流程从不排队、不死锁；幂等重放不排队；任务项被拒为 `BUSY`；事件消费者被拒按退避重试（6、7、8）。
+- [x] 流程入口限流按用户、地址、实例生效，429 带 `Retry-After`，在数据库访问之前（9）。
+- [x] 503 `QUERY_TIMEOUT` 的来源已用测试确认并写入 03 §1（10）。
+- [x] 启动检查覆盖要求 5；观测只带族名、流程名与结果（D16）。
+- [x] 示范（commerce 的订单锁与限流）、文档（D45、06、03、10、11、13、指南、CLAUDE.md、ROADMAP）已更新；不声明的流程行为不变；`./gradlew check` 通过。
+
+**预估**
+
+| 部分 | 天 |
+|---|---|
+| core 声明、启动检查、配置 | 0.5 |
+| 闸门（公平、上限、时限、取消、全局上限）、执行器接入、错误与观测 | 1.5 |
+| 入口限流 | 0.5 |
+| 集成测试（耗尽、快速失败、两个实例、任务、503 的来源） | 1 |
+| 示范、压测模式、文档 | 0.5–1 |
+| **合计** | **3.5–4.5** |
+
+可拆为两个 PR：16o-1 准入（3–3.5 天）、16o-2 入口限流（0.5–1 天）；建议一个 PR（同一目标、同一组测试）。
+
+**不在本阶段**：降低 `HoldLock` 与 `LEDGER_POST` 的语句数（R2 与平台通用开销，另写计划）；QuizBuks 的锁拆分与它自己的准入声明（Q10 的应用分支）；跨实例的共享队列（需要 Redis 或数据库表，MVP 不引入）；
+按键的限流（"每个发布每秒至多 N 次"，准入的 `max-queue` 已给出上限）；职责分离规则的缓存与幂等重放查询的时限（见 A-12）。
+
+**待确认**
+
+| 编号 | 问题 | 缺省（建议） |
+|---|---|---|
+| A-1 | 新增决策 D45（补充 14o 与 D42 第 3 条，不取代任何决策；草稿见下） | 新增 |
+| A-2 | 队满与超时用 503 还是 429？ | **503 `PROCESS_BUSY` + `Retry-After`**：不是这个调用者请求太多，而是共享的资源过载；429 留给按调用者的限流（`RATE_LIMITED`），两者在 App 中的提示也不同。Q10a 报告写的 429 随之改 |
+| A-3 | 键怎么声明？ | 族名（常量）+ 从输入算出的键，每个流程至多一个；不支持在事务前读数据算键。另一做法：平台在准入前以一个 SQL 模板查键（多借一次连接、多一次往返），等确有需要再加 |
+| A-4 | 每键每实例的并发数缺省 | **2**（让锁不空转）；1 更省连接但可能降吞吐 |
+| A-5 | 其他缺省值 | `max-queue` 50、`max-wait` 2 s、`retry-after` 下限 1 s（估计值上限 30 s）、`max-active` = 池的一半 |
+| A-6 | `QB_ATTEMPT_SUBMIT` 的键从哪里来？ | **App 在输入中带上发布编号**，流程在锁前核对（不一致 422）；旧客户端不带即不排队。另一做法见 A-3 |
+| A-7 | `START` 的"继续答题"也要排队，可以吗？ | 可以（每个约 12 ms）；若不可接受，QuizBuks 把"继续"拆成不声明准入的另一个流程，或 App 已知有进行中的会话时调用 `QB_ATTEMPT_RESUME` |
+| A-8 | 入口限流是否同一阶段？ | **是**（0.5 天，同一目标），只在配置中声明，只作用于 `/api/processes`；按用户、地址、实例三种桶 |
+| A-9 | 是否另建连接池？ | **不建**；以全局上限 `max-active`（池的一半）达到"读取总有连接" |
+| A-10 | 任务与事件是否排队？ | **排队**（它们同样占连接）；任务项被拒即 `BUSY`，事件被拒按退避重试 |
+| A-11 | 键与 `HoldLock` 名称不一致时怎么办？ | 只记 warn（每个流程一次，不记键与主键）；不拒绝（正确性不受影响） |
+| A-12 | 顺带修正职责分离规则的读取（缓存）、幂等重放查询的时限、`spring.r2dbc.pool.max-acquire-time` 的缺省？ | **本阶段不改**，只确认 503 的来源并写入文档；三者各有语义影响（规则修改后的生效时间、重放的失败方式、借连接失败的错误码），另行决定 |
+
+**D45**（已写入 `docs/design/09-decisions.md`，并加了实施说明；以下为确认时的文字）
+
+> ## D45 热门命名锁的准入与流程入口限流
+>
+> **背景**：命名锁（14o，`HoldLock`）是流程事务中的咨询锁。等锁的请求已借了连接、开了事务，热门的锁（QuizBuks 单个热门发布的开始与提交）使连接池中大部分连接都在等锁，
+> 无关的读取被拖慢 30–60 倍；到达率高于锁的容量时队列无限增长，最后以零星的 503 `QUERY_TIMEOUT` 失败（Q10a）。流程接口也没有按用户的限流（Q5 平台缺口 13、15）。本条补充 14o 与 D42 第 3 条，不取代任何决策。
+>
+> **决策**
+> 1. **准入在事务之前**：流程以 `admission(族名, 输入 -> 键)` 声明它的最外层热门锁；平台在借连接、开事务之前按准入键在进程内排队：先进先出，每键每实例同时至多 `concurrency` 个（缺省 2），
+>    队列有长度上限、等待有时限，所有键合计至多半个连接池。队满或超时即 503 `PROCESS_BUSY`（带 `Retry-After`），不借连接。准入只作用于根流程：子流程从不排队。
+> 2. **正确性只由咨询锁保证**：准入只是进程内的准入控制，多实例时各自排队；流程照旧以 `HoldLock` 取锁并在锁内检查。键算错、实例重启只影响排队的效果，不影响结果。
+> 3. **事先不知道的锁不排队**：只声明最外层的锁；锁内才知道的锁受外层准入与全局上限约束。
+> 4. **任务与事件**：逐项任务的项被准入拒绝记为 `BUSY`（同 D42 第 3 条）；事件消费者被拒按投递的退避重试。
+> 5. **入口限流只在配置中**：`jabiz.process.rate-limits.<流程>` 的按用户、按客户端地址（`ClientAddresses`）、按实例的令牌桶，只作用于流程接口，超限 429 `RATE_LIMITED`（按实例计数，同 15 §6）。
+>
+> **理由**：等锁本身不可避免，但等锁不必占连接；把排队移到事务之前，热门锁只影响要这把锁的请求。留着咨询锁作为唯一的互斥，多实例与重启都不需要共享的队列。
+>
+> **放弃的方案**：①加大连接池（Q10a 实测：池 30 时 25.8 个连接在等锁，首页 p95 仍 0.6 s）；②为锁流程另建连接池（要改执行器与所有平台步骤的引擎选择，且一个热门键仍拖住同池的其他锁流程）；
+> ③以数据库表或 Redis 实现跨实例的队列（多一套状态与故障方式，MVP 不引入 Redis）；④在 `HoldLock` 步骤中排队（那时已在事务中、已占连接）；⑤队满用 429（429 表示调用者自己请求过多，与共享资源过载不同）。
+
+**实施记录（16o）**
+
+- **代码**：core `process.Admission`、`ProcessDefinitionBuilder.admission`、`ProcessDefinition.admission()` / `withAdmission`、`PlatformErrorCodes.PROCESS_BUSY`（三语）；
+  runtime `process.admission.{AdmissionGate, ProcessAdmission, AdmissionSettings, ProcessAdmissionChecks}`、`ProcessBusyException`（`ProblemStatuses` / `GlobalExceptionHandler`）、
+  `ProcessExecutor`（重放之后、`executeRoot` 之前以 `Mono.usingWhen` 取放许可）、`JobRunner`（记 `BUSY`）、`HoldLock`（A-11 的 warn）、`web.ProcessRateLimits` / `ProcessRateLimitProperties`、
+  `ProcessController`（权限之后限流）、`PlatformObservations`（`PROCESS_ADMISSION`、仪表、`PROCESS_RATE_LIMITED`，`monoTagged`、带标签的 `event`）；
+  app：`ORDER_CANCEL`、`ORDER_SHIP` 先取订单锁 `commerce.order:<id>` 并声明准入（`OrderExpiry.LOCK_FAMILY` / `lockName` / `orderKey`：订单号统一为 UUID 的规范写法），
+  `application.yml` 的族配置与 `PORTAL_ORDER_PLACE` 的限流（每人每分钟 20 次），`loadTest` 的 `LOAD_HOT_ORDER=yes`。没有迁移（测试迁移 `V1012__it_admission_counter.sql` 只在测试中），OpenAPI 不变。
+- **503 的来源（A-12，已确认）**：`QueryTimeoutCauseIT`（池 2 个连接，全被占用）：声明权限的流程经流程接口约 6 秒后 503 `QUERY_TIMEOUT`，超时的读取是入口的职责分离规则查询
+  （观测 `jabiz.dataset.query`，数据视图 `SysSodRule`，status 503），流程本身没有开始；带幂等键的重放查询 8 秒后仍在等连接、放开连接后照常完成。写入 03 §1。
+- **测试**：core `AdmissionTest`、`ProcessDefinitionBuilderTest`（+3）；runtime `AdmissionGateTest`（11）、`AdmissionGatePropertyTest`（jqwik，300 次）、`AdmissionGateStressTest`（1）、`ProcessAdmissionTest`（4）、
+  `ProcessAdmissionChecksTest`（3）、`ProcessRateLimitsTest`（4）、`ProblemStatusesTest`（+1 段）；app `ProcessAdmissionIT`（9，计划中的 1–5、7–9 与评审 H1）、`ProcessAdmissionControlIT`（关闭准入的对照：503 `QUERY_TIMEOUT`）、
+  `QueryTimeoutCauseIT`（2，计划中的 10）、`CommerceAdmissionIT`（2，计划中的 6 与示范的声明）、`ObservabilityIT`（+准入的观测与仪表）。
+- **与计划的偏差**：
+  1. `ProcessDefinition.admission()` 返回可为 null 的 `Admission`（同 `actsOn`），不是 `Optional`：记录的访问器不能改类型。
+  2. 响应的 `violations[]` 不带参数（平台一贯如此），`reason` 与 `retryAfter` 另作 ProblemDetail 的顶层属性；`violations[0].params` 仍有两者（场景回放、消息插值）。
+  3. `Retry-After` 的估计按**族**最近 50 次的持有时间（键空闲即删除，按键记不住）。
+  4. 族名的校验在启动检查中（一次报全），不在构造时抛出；重复声明 `admission` 在构建时抛出。
+  5. 先进先出的 IT 用 `concurrency = 1` 的族（`test.one`）：`concurrency = 2` 时许可按到达顺序发放，但第 2、3 个取得许可的请求谁先到达咨询锁不确定（锁前的语句有快慢），只有许可的顺序是保证的。
+  6. "两个实例"的 IT 用第二个 `ProcessExecutor` 与它自己的 `ProcessAdmission`，与第一个共用同一个连接池（正确性只取决于各自排队与咨询锁）；按客户端地址经可信代理的情形在 `ProcessRateLimitsTest` 中验证
+     （`WebTestClient` 的模拟请求没有远端地址，IT 中只验证伪造的转发头不起作用）。
+  7. 准入的观测断言放在 `ObservabilityIT` 的 `ORDER_SHIP` 用例中；IT 中的时间界限放宽（评审 L3）："立即"的拒绝与被限流的 429 以 1 秒为界，
+     "不受热门键影响"的读取以 `max-wait` 的四分之一为界（真正的证据是状态码：池被耗尽时它们是 503）。
+  8. 示范的 `ORDER_EXPIRE` 不声明准入（它的子流程 `ORDER_CANCEL` 示范"子流程从不排队"）；QuizBuks 的声明与 `SubmitInput.publicationId` 在 Q10 的应用分支上做。
+  9. 已取得许可的根流程与调用方分离（评审 H1，见下），这是计划中没有的语义：客户端断开不再中止它。
+- **已知问题**：
+  - 多实例时队列与限流都按实例（D45 第 2、5 条的已知限制）；有效队列为实例数 × `max-queue`。
+  - 已取得许可的根流程不随客户端断开而中止（H1 的修正）：断开的请求照常运行到结束（可能提交），客户端须以 `Idempotency-Key` 重试来得知结果。未声明准入的流程不变。
+  - 首个请求体的 Jackson 反序列化器在锁下构建：冷启动时大量并发的同类请求会在 BlockHound 下报阻塞（测试先预热一次），与本阶段无关，已有的现象。
+  - 职责分离规则的缓存、幂等重放查询的时限、`spring.r2dbc.pool.max-acquire-time` 的缺省仍未改（A-12）。
+- **评审修正（2026-10-16，同一 PR）**：
+  - **H1**（高）：取消已持有许可的运行时，`usingWhen` 立即归还许可，而事务要等在咨询锁上的语句结束（至多 `lock_timeout`）才回滚，其间一直占着连接——断开的客户端能占满连接池。
+    修正：取得许可之后，根流程以 `Mono.fromFuture(…, true)` 与调用方分离（调用方的 Reactor 上下文照传），工作真正结束才归还许可。
+    新 IT `ProcessAdmissionIT.callersGoingAwayLeaveTheConnectionsBoundedByThePermits`（池 6、`max-active` 3，同一键与许多键各反复取消）：池中借出的连接始终 ≤ `max-active` + 1 次读取，
+    在锁上等待的会话 ≤ 1；修正前该测试失败（5 个等锁的连接）。原 IT 中"取消持有者即归还"的断言改为"运行结束才归还"。
+  - **M1**：事件消费者被准入拒绝的尝试照常记录、照常退避，但不计入 `max-attempts`（`sys_outbox_attempt.error` 以 `ProcessBusyException` 的类名开头者计数时排除，没有迁移）；
+    D45 第 4 条与 11 §2、§4.1 已补写。IT：`max-attempts=2` 时三次"忙"的尝试之后事件仍被投递。
+  - **M2**：`AdmissionGateStressTest`（8 个线程、12 000 次取得，真实的 `Schedulers.parallel()`，0–3 ms 的随机等待，随机取消，与生产相同的"分离的工作 + 结束时归还"）：
+    每键与全局的同时运行数从不超限，结束后持有、等待、键都归零；jqwik 测试改为手动执行交接，并加入"释放后、交接前取消"的操作。
+  - **L1**：超时与取消并发时只有先到的一方结束等待者（共用的 `terminated` 标志），不再对已取消的订阅调用 `error`（`onErrorDropped`）。
+  - **L2**：调度器拒绝计时或交接（停机）时，等待者退出队列、许可归还，等待者以该异常失败。
+  - **L3**：IT 的时间界限见偏差 7。
+  - **L4**：限流先查全部桶再取令牌（`TokenBucketLimiter.peek`），一个桶拒绝时不消耗其他桶；幂等重放照样计数（区分重放要读数据库），已写入 10 §15.10。
+  - **L5**：13 写明哪些观测没有 `outcome` / `status`；10 §15.10 把 `jabiz.process.rate_limited` 称为观测。
+  - **e2e**：对打包的应用（自己的端口与数据库）44 个用例全部通过（门户每人每分钟 20 次的下单限流不影响）。
+  - **压测**：热门订单模式，准入开与关、客户端 2 秒超时，报告 `docs/perf/phase-16o-admission.md`：开时在咨询锁上等待的会话至多 1 个，关时平均 3、至多 7 个（池 10），
+    同时的产品列表 p50 为基线的约 1.9 倍（开，主要是同机 CPU）对约 3.5 倍（关）。

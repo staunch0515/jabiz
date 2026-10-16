@@ -46,7 +46,8 @@ import static com.jabiz.quizbuks.play.PlaySteps.ids;
  *   <li>{@code QB_ATTEMPT_SAVE}: saves the current question and some answers, before the deadline.</li>
  * </ul>
  * Every one is the caller's own (the user is the caller, never the input), needs a verified address and refuses a
- * banned caller first. Only a new start takes a lock: the publication's, around the counters it reserves.
+ * banned caller first. Only a new start takes a lock: the publication's, around the counters it reserves; every start
+ * queues for it before its transaction (platform decision D45).
  */
 public final class AttemptProcesses {
 
@@ -164,6 +165,10 @@ public final class AttemptProcesses {
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
                 .permissions(QbPermissions.PLAY)
                 .requiresVerifiedEmail()
+                // Queues for the publication's lock before the transaction (platform decision D45, Q10a): a hot
+                // publication's waiters hold no connection. A continuing start queues too (16o A-7): it learns
+                // only from its reads that it takes no lock.
+                .admission(PublicationMoves.LOCK_FAMILY, PublicationRef::publicationId)
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);

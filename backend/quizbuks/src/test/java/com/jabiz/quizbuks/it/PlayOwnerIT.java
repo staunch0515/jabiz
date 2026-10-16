@@ -30,7 +30,7 @@ class PlayOwnerIT extends PlayItSupport {
         String attemptId = (String) start(taker(u1()), publicationId).get("attemptId");
         String other = taker(u2());
         refused("QB_ATTEMPT_SAVE", other, body("attemptId", attemptId, "currentIndex", 1), 404);
-        refused("QB_ATTEMPT_SUBMIT", other, body("attemptId", attemptId, "answers", answers(true, true)), 404);
+        refused("QB_ATTEMPT_SUBMIT", other, submission(attemptId, "answers", answers(true, true)), 404);
         assertThat(items("qb.app.history", other, Map.of())).noneMatch(row -> attemptId.equals(row.get("attemptId")));
         assertThat(rows(QbPlay.TAKER_ATTEMPTS, other)).noneMatch(row -> attemptId.equals(row.get("attemptId")));
         assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS").containsEntry("current_index",

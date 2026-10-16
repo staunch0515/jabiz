@@ -19,6 +19,7 @@ import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.external.ExternalCallScope;
 import com.jabiz.runtime.observability.PlatformObservations;
 import com.jabiz.runtime.operation.Operation;
+import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
@@ -91,13 +92,15 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     private final String poolRef;
     private final PlatformObservations observations;
     private final Duration lockTimeout;
+    private final ProcessAdmission admission;
     /** Readers of the registered processes' outputs, for replays, built at startup (see below). */
     private final Map<Class<?>, ObjectReader> outputReaders = new ConcurrentHashMap<>();
 
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations,
-        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout) {
+        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout, ProcessAdmission admission) {
+        this.admission = Objects.requireNonNull(admission, "admission must not be null");
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.lockTimeout = Objects.requireNonNull(lockTimeout, "lockTimeout must not be null");
         this.masker = masker;
@@ -156,7 +159,8 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                 requireStartable(definition, request, options);
                 String key = options.idempotencyKey();
                 if (key == null) {
-                    return executeRoot(definition, input, request, null, options);
+                    return admitted(definition, input, options,
+                        Mono.defer(() -> executeRoot(definition, input, request, null, options)));
                 }
                 if (!ExecutionOptions.KEY_PATTERN.matcher(key).matches()) {
                     return Mono.error(new ValidationException(List.of(new Violation("Idempotency-Key",
@@ -164,10 +168,21 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                             + "letters, digits, '.', '_', ':' and '-'"))));
                 }
                 Mono<ProcessResult<O>> replay = replay(definition, request, key);
-                return replay.switchIfEmpty(Mono.defer(() -> executeRoot(definition, input, request, key, options)
+                // A request already answered replays without queueing; the replay after a race does not queue again.
+                return replay.switchIfEmpty(Mono.defer(() -> admitted(definition, input, options,
+                        Mono.defer(() -> executeRoot(definition, input, request, key, options)))
                     .onErrorResume(ProcessExecutor::isIdempotencyRace,
                         race -> replay.switchIfEmpty(Mono.error(race)))));
             }));
+    }
+
+    /**
+     * {@code transaction} once the process is admitted past the queue before its hot lock, if it declares one
+     * (decision D45): before it borrows a connection, until it has ended. Only top-level runs queue.
+     */
+    private <I, T> Mono<T> admitted(ProcessDefinition<I, ?, ?> definition, I input, ExecutionOptions options,
+        Mono<T> transaction) {
+        return admission.admit(definition, input, options.lockWait(), transaction);
     }
 
     /**

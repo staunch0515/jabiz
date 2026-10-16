@@ -1,5 +1,6 @@
 package com.jabiz.runtime.event;
 
+import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.context.RequestContext;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
@@ -50,7 +51,10 @@ import java.util.Objects;
  *       (processed once).</li>
  * </ul>
  * Failures are recorded one row per attempt ({@code sys_outbox_attempt}) and retried with exponential backoff until
- * the maximum number of attempts, after which the event is left for an operator (error log). Delivery order is not
+ * the maximum number of attempts, after which the event is left for an operator (error log). An attempt whose
+ * process was not admitted past the queue before its hot lock ({@link ProcessBusyException}, decision D45 item 4) is
+ * recorded and backed off like a failure but does not count towards the maximum: a lock that stays hot for long does
+ * not make the event be given up. Delivery order is not
  * guaranteed. Instances poll on their own; no coordination beyond the database is needed.
  */
 @Component
@@ -140,14 +144,22 @@ public class OutboxDeliverer {
             // A consumer's batch ends at its first failure: the failed event waits for its backoff, the others are
             // taken by the next poll, and a receiver that is down does not hold up every other consumer.
             .concatMap(subscription -> pending(subscription)
-                .concatMap(pending -> deliver(subscription, pending.event(), pending.failures() + 1))
+                .concatMap(pending -> deliver(subscription, pending.event(), pending.attempts() + 1,
+                    pending.failures()))
                 .takeUntil(outcome -> outcome == Outcome.FAILED)
                 .count())
             .reduce(0L, Long::sum)
             .map(Math::toIntExact);
     }
 
-    record Pending(DomainEvent event, int failures) {}
+    /**
+     * @param attempts every attempt recorded so far (they number the next one and its backoff)
+     * @param failures the attempts that count towards {@code max-attempts}: those not refused as busy
+     */
+    record Pending(DomainEvent event, int attempts, int failures) {}
+
+    /** How a busy attempt's {@code error} begins: the class of the exception ({@link #describe}). */
+    static final String BUSY_PREFIX = ProcessBusyException.class.getName() + "%";
 
     /** Events of the subscription's type that its consumer has not consumed and that are due for an attempt. */
     private Flux<Pending> pending(EventSubscription<?> subscription) {
@@ -159,11 +171,15 @@ public class OutboxDeliverer {
         params.put("initial", BoundValue.of(seconds(initialBackoff)));
         params.put("cap", BoundValue.of(seconds(maxBackoff)));
         params.put("batch", BoundValue.of((long) batchSize));
+        params.put("busy", BoundValue.of(BUSY_PREFIX));
         return engine().select("""
                 SELECT * FROM (
                     SELECT e.event_seq, e.event_id, e.event_type, e.payload, e.process_seq_id, e.created_time,
                            (SELECT count(*) FROM sys_outbox_attempt a
-                             WHERE a.consumer = :consumer AND a.event_id = e.event_id) AS failures,
+                             WHERE a.consumer = :consumer AND a.event_id = e.event_id) AS attempts,
+                           (SELECT count(*) FROM sys_outbox_attempt a
+                             WHERE a.consumer = :consumer AND a.event_id = e.event_id
+                               AND a.error NOT LIKE :busy) AS failures,
                            (SELECT max(a.attempted_at) FROM sys_outbox_attempt a
                              WHERE a.consumer = :consumer AND a.event_id = e.event_id) AS last_failure
                     FROM sys_outbox_event e
@@ -172,11 +188,12 @@ public class OutboxDeliverer {
                                        WHERE c.consumer = :consumer AND c.event_id = e.event_id)
                 ) p
                 WHERE p.failures < :max
-                  AND (p.failures = 0 OR p.last_failure
-                       + make_interval(secs => LEAST(:cap, :initial * power(2, p.failures - 1))) <= :now)
+                  AND (p.attempts = 0 OR p.last_failure
+                       + make_interval(secs => LEAST(:cap, :initial * power(2, LEAST(p.attempts - 1, 30)))) <= :now)
                 ORDER BY p.event_seq
                 LIMIT :batch""", params)
-            .map(row -> new Pending(toEvent(row), Math.toIntExact(Rows.longValue(row.get("failures")))));
+            .map(row -> new Pending(toEvent(row), Math.toIntExact(Rows.longValue(row.get("attempts"))),
+                Math.toIntExact(Rows.longValue(row.get("failures")))));
     }
 
     private static double seconds(Duration duration) {
@@ -199,6 +216,14 @@ public class OutboxDeliverer {
      * @param attempt number of this attempt, counting earlier failures
      */
     public <I> Mono<Outcome> deliver(EventSubscription<I> subscription, DomainEvent event, int attempt) {
+        return deliver(subscription, event, attempt, attempt - 1);
+    }
+
+    /**
+     * As {@link #deliver(EventSubscription, DomainEvent, int)}, knowing how many earlier attempts count towards
+     * {@code max-attempts} (busy ones do not).
+     */
+    <I> Mono<Outcome> deliver(EventSubscription<I> subscription, DomainEvent event, int attempt, int failures) {
         RequestContext system = RequestContext.system(Locale.ENGLISH, "evt-" + event.eventId());
         return observations.mono(PlatformObservations.DELIVERY, "deliver " + event.eventType(),
             KeyValues.of("consumer", subscription.consumer(), "event", event.eventType()),
@@ -212,7 +237,7 @@ public class OutboxDeliverer {
                     log.debug("Event {} was consumed by {} meanwhile", event.eventId(), subscription.consumer());
                     return Mono.just(Outcome.DUPLICATE);
                 }
-                return recordFailure(subscription, event, attempt, error).thenReturn(Outcome.FAILED);
+                return recordFailure(subscription, event, attempt, failures, error).thenReturn(Outcome.FAILED);
             })
             // Failures are recorded and retried, not errors of the delivery: the result tells them apart.
             .flatMap(outcome -> PlatformObservations.tag(PlatformObservations.RESULT, outcome.name()).thenReturn(outcome)))
@@ -228,11 +253,16 @@ public class OutboxDeliverer {
         return engine().insert(CONSUMPTION_TABLE, row);
     }
 
-    private Mono<Void> recordFailure(EventSubscription<?> subscription, DomainEvent event, int attempt,
+    private Mono<Void> recordFailure(EventSubscription<?> subscription, DomainEvent event, int attempt, int failures,
         Throwable error) {
-        if (attempt >= maxAttempts) {
+        if (error instanceof ProcessBusyException) {
+            // Not a failure of the consumer: the queue before its hot lock was full. Retried after the backoff,
+            // without counting towards max-attempts (decision D45 item 4).
+            log.info("Delivering event {} ({}) to {} was refused as busy (attempt {}): {}", event.eventId(),
+                event.eventType(), subscription.consumer(), attempt, error.getMessage());
+        } else if (failures + 1 >= maxAttempts) {
             log.error("Event {} ({}) could not be delivered to {} after {} attempts; it is no longer retried",
-                event.eventId(), event.eventType(), subscription.consumer(), attempt, error);
+                event.eventId(), event.eventType(), subscription.consumer(), failures + 1, error);
         } else {
             log.warn("Delivering event {} ({}) to {} failed (attempt {}): {}", event.eventId(), event.eventType(),
                 subscription.consumer(), attempt, error.toString());

@@ -43,6 +43,7 @@
 | `RequireApproval.of(审批对象, ctx -> ApprovalCase, targetKey)` / `RequireApproval.when(条件, …)` | 该单据是否需要审批：`ApprovalOutcome`（`NOT_REQUIRED` / `PENDING` / `APPROVED`）；需要时建请求，批准绑定内容哈希（18 §3.3、D23） |
 | `WithdrawApproval.of(审批对象, ctx -> 单据标识)` / `WithdrawApproval.when(ctx -> 条件, 审批对象, ctx -> 单据标识)` | 撤回该单据待审批的请求（18 §3.3）；`when` 的条件不成立时什么也不做（阶段 16k） |
 | `HoldLock.shared(ctx -> 名称[, 最长等待])` / `HoldLock.exclusive(ctx -> 名称[, 最长等待])` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取；`最长等待`（`Duration`，阶段 16k）短于全局时限时以它为准 |
+| `pb.admission(族名, 输入 -> 键)`（不是步骤，流程的声明） | —；根流程在借连接之前按准入键排队，为最外层的热门 `HoldLock` 声明（§4.2，D45）；子流程从不排队 |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
@@ -178,6 +179,54 @@ public class ProcessContext {
   至少 1 毫秒；只对这一条语句生效，之后恢复为事务的设置。执行选项由平台设置（逐项任务），经 Reactor 上下文传给子流程，不对业务开放。超时仍是 409：
   请求中即"快速失败"，任务项中即 `BUSY`（跳过到下一次运行，11 §4.1）。
 - 只用于事务内的步骤：提交后步骤没有事务，锁取得即释放。试运行同样取锁，在回滚时释放；导入的单元在保存点中回滚时，其中取的锁随之释放。
+- 热门的锁：等待者各占一个连接。为它声明准入（§4.2），等待者在借连接之前排队。
+
+### 4.2 取锁前的排队（准入，阶段 16o，决策 D45）
+
+命名锁的等待者已借了连接、开了事务：一把热门的锁（许多人同时提交同一个发布、同一张订单）会让连接池的大部分连接都在等锁，无关的读取随之变慢，最后以 503 `QUERY_TIMEOUT` 零星失败（03 §1）。
+流程以**准入**声明它最外层的热门锁，平台在借连接、开事务**之前**按准入键在进程内排队：
+
+```java
+ProcessDefinition.define(ORDER_CANCEL, 1, CancelInput.class, …, pb -> pb
+    .permissions("commerce.order.cancel")
+    .admission("commerce.order", input -> orderKey(input.orderId()))   // 族名（常量）+ 从输入算出的键；null 不排队
+    .step("Lock the order", HoldLock.exclusive(ctx -> lockName(ctx.get(ORDER_ID))))   // 照旧：正确性只靠它
+    …);
+```
+
+- **准入键** = `族名 + ":" + 键`（键以 `String.valueOf` 成文；null 或空白即不排队）。族名是声明时的常量（`[a-z][a-z0-9._-]{0,47}`，启动检查），也是配置与观测用的名字（D16：观测只放族名）；
+  键函数在事务之前只从输入算出，不读数据。约定：族名与键取得和该流程最外层的 `HoldLock` 名称一致（示范 `commerce.order:<订单>`），由同一个辅助方法生成两者；
+  `HoldLock` 取到与准入键同族而不同名的锁时每个流程记一次 warn（只记族名与流程名）。每个流程至多一个准入；同一族可被多个流程声明，它们共用队列。不声明即不排队。
+- **闸门**（每键、每实例）：同时持有许可（在事务中）的至多 `concurrency` 个（缺省 2：第 2 个在持锁者提交前做完锁前的工作并在咨询锁上等，持锁者一提交它就接上，锁不空转）；
+  先进先出，释放的许可直接交给队首；队列至多 `max-queue` 个（缺省 50），队满即**立即** 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`），不借连接；
+  在队列中至多等 `max-wait`（缺省 2 秒，不超过 `jabiz.process.lock-timeout`），到时 503 `PROCESS_BUSY`（`WAIT_TIMEOUT`）。之后在咨询锁上的等待照旧由 `lock_timeout` 约束，且至多排在 `concurrency − 1` 个之后。
+  `Retry-After` = 该键排队数 × 该族最近 50 次持有时间的平均 ÷ `concurrency`，向上取整，夹在 [`retry-after`（缺省 1 秒）, 30 秒] 之间。
+- **全局上限** `max-active`：所有键合计同时持有的许可，缺省 `spring.r2dbc.pool.max-size` 的一半（至少 1）；排队的流程合计至多用半个池，其余连接总是留给读取与不排队的流程。
+  先取键的许可再取全局的，两处都先进先出；只有排队者等待，持有者不再等任何闸门，所以不形成环。键与排队者的总数有上限（`max-keys` 10 000、`max-waiting` 5 000），空闲的键即删除。
+- **持有期**：从借连接之前到根事务真正结束（成功、422、409、500、试运行都释放）；提交后步骤不持有。客户端断开时排队者退出队列；
+  **已取得许可的根流程不再随客户端断开而中止**，它自己运行到结束（受 `lock_timeout` 约束）后才归还许可：被取消的事务要等当前语句（例如在咨询锁上的等待）结束才能回滚，
+  其间仍占着连接，提前归还许可会让断开的客户端占满连接池。
+- **顺序**：流程接口的检查（§8）→ 幂等重放（已完成的请求重放时**不排队**）→ 准入 → 事务。并发的重复请求中后到的一个照常排队，取得许可后在幂等键上等前一个再重放。
+- **多实例**：准入只是准入控制，**不是互斥**，正确性只由咨询锁保证（D45 第 2 条）。N 个实例各自排队：同一键同时在事务中的至多 N × `concurrency`，有效队列为 N × `max-queue`（按实例数调）；
+  不同实例之间不保证先来先得。实例重启、键算错只影响排队的效果，不影响结果：该请求照旧在咨询锁上等待，并由流程在锁内检查。
+- **事先不知道的锁不排队**：只声明最外层的锁。锁内才知道的锁（读了数据才知道的钱包锁、`ORDER_RECORD_PAYMENT` 读了支付事件才知道的订单锁）不声明；它们的等待者都已持有外层键的许可，受全局上限约束。
+- **与其他部分**：
+
+  | 情形 | 行为 |
+  |---|---|
+  | 子流程（`CallProcess`、`CallProcess.forEach`） | **从不排队**：子流程在根流程的事务中，已占着连接；在事务中等闸门会重新造成占连接的等待，还可能与持有该键许可、正在等本事务咨询锁的请求形成环。子流程声明的准入被忽略；`subProcessOnly()` 流程声明准入即启动错误（示范：`ORDER_EXPIRE` 的子流程 `ORDER_CANCEL`） |
+  | 咨询锁的重入 | 不变（同一事务中再次取同名锁由 PostgreSQL 计数）；闸门只在根流程入口取一次 |
+  | 逐项任务的项 | 根流程，照样排队，排队时限 min(`max-wait`, `itemLockWait`)；被拒即 `BUSY`（11 §4.1） |
+  | 事件消费者 | 照样排队；被拒是一次失败的投递，按投递的退避重试（11 §2） |
+  | 试运行（导入预览） | 照样排队（同样借连接、取咨询锁），回滚后释放 |
+  | 导入 | 每行或每组以子流程运行，不排队 |
+  | 流程接口的限流（§8、10 §15.10） | 在一切数据库访问之前，被限流的请求不借连接 |
+
+- **配置**（`jabiz.process.admission.*`，`AdmissionSettings`）：`enabled`（应急开关，缺省开；关闭即全部放行）、`max-active`（0 = 池的一半）、`max-keys`、`max-waiting`、
+  `defaults.{concurrency, max-queue, max-wait, retry-after}`、`families."[族名]".{…}`（族名带点时写方括号）。数值范围由启动检查报告（§9）。
+- 实现：core `Admission`、`ProcessDefinitionBuilder.admission`；runtime `process.admission.ProcessAdmission`（Bean）与 `AdmissionGate`（纯 Java + Reactor，非阻塞：短 `synchronized` 临界区，
+  许可在 `Schedulers.parallel()` 上交给等待者；时限用单调时钟，这是节流不是业务时间），`ProcessExecutor.run` 以 `Mono.usingWhen` 取放许可；`executeChild` 不取。观测见 13。
+- **何时声明**：只有压测或运行中看到某把命名锁的等待者占满连接时才声明（指南 `new-business-object.md` 的"命名锁"一节）。其他 `HoldLock` 的使用者不需要改。
 
 ## 5. 流程组合
 
@@ -242,6 +291,10 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
   名字 `system`、`anonymous` 保留：开发请求头与访问令牌都不能以它们为操作人。业务代码不引用 `ProcessExecutor`、`ExecutionOptions`、`ActingUser`、`RequestContext.system`（`PlatformArchRules.noProcessMachinery`）。
   操作记录与审计中的操作人总是根流程的操作人：`entryOnly()` 流程保留真实的调用者，子流程沿用根流程的身份。
   新的平台流程按用途选择其一；应用的事件、定时任务、回调接续点用 `internal()`。
+- **过载与限流**（阶段 16o，D45）：声明了准入（§4.2）的流程，队满或排队超时即 503 `PROCESS_BUSY`（`Retry-After`，`violations[0]` 的参数与 ProblemDetail 的顶层属性 `reason`
+  = `QUEUE_FULL` / `WAIT_TIMEOUT`、`retryAfter`，三语消息；不记错误日志），请求未读写任何数据，可以重试；通用后台与 `@jabiz/client` 不自动重试 503，显示消息。
+  流程接口可按 `jabiz.process.rate-limits.<流程>` 按用户、地址、实例限流（10 §15.10），超限 429 `RATE_LIMITED`。入口的检查顺序：
+  进目录 → 权限 → 限流 → 二次验证 → 已验证邮箱 → 职责分离 → （执行器）幂等重放 → 准入 → 事务。
 - `ExecutionOptions`（平台内部）：`idempotencyKey`，`beforeSteps`——在流程事务内、记录操作之后、第一个步骤之前执行的平台工作
   （事件投递用它写消费标记，与消费效果同一事务）【D14】，`dryRun`（导入预览，20 §5），以及 `entry`——平台入口声明自己是哪个 `entryOnly()` 流程的入口（`atEntryOf`）【D41】；流程接口从不传它。
 
@@ -255,6 +308,9 @@ ProcessDefinition<In, Out, Ctx> p = ProcessDefinition.single("ORDER_CANCEL", 1, 
   不是 `internal()` 的流程（普通、`entryOnly()`、`subProcessOnly()`）不能调用 `internal()` 流程——静态不知道普通流程的根是否以系统身份运行，只认 `internal()` 的调用方【D41】。
   事件消费者与定时任务的流程、导入的目标流程的声明分别由 `EVENT` / `JOB`（11）与 `IMPORT`（20 §6）检查。
 - 进目录的流程的输入能被表单 Schema 完整描述（否则警告：该部分以原始 JSON 输入）。
+- 准入与限流（D45，`ProcessAdmissionChecks`，同为类别 `PROCESS`）：族名合法；`subProcessOnly()` 流程不能声明准入；配置了而没有流程声明的族告警；
+  `concurrency` 1–16、`max-queue` 0–10 000、`max-wait` 大于 0 且不超过 `jabiz.process.lock-timeout`、`retry-after` 0–30 秒、`max-active` 0 或 1 到池大小 − 1、`max-keys` 与 `max-waiting` 为正；
+  `jabiz.process.rate-limits` 中的流程须已注册且进目录、数值为正、至少一种桶。
 - 实现：`ProcessChecks`（`PlatformCheck`，类别 `PROCESS`）。
 
 ## 10. 与现有代码的衔接

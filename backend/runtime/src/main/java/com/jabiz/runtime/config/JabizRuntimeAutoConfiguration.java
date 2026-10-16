@@ -5,6 +5,8 @@ import com.jabiz.runtime.JabizApplication;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.file.FileProperties;
 import com.jabiz.runtime.inbound.InboundWebhookProperties;
+import com.jabiz.runtime.process.admission.AdmissionSettings;
+import com.jabiz.runtime.web.ProcessRateLimitProperties;
 import com.jabiz.runtime.webhook.WebhookProperties;
 import com.jabiz.runtime.publicread.PublicProperties;
 import com.jabiz.runtime.web.JabizWebProperties;
@@ -25,7 +27,7 @@ import reactor.core.scheduler.Schedulers;
 @AutoConfiguration
 @ComponentScan("com.jabiz.runtime")
 @EnableConfigurationProperties({JabizWebProperties.class, FileProperties.class, PublicProperties.class,
-    WebhookProperties.class, InboundWebhookProperties.class})
+    WebhookProperties.class, InboundWebhookProperties.class, AdmissionSettings.class, ProcessRateLimitProperties.class})
 public class JabizRuntimeAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(JabizRuntimeAutoConfiguration.class);

@@ -222,7 +222,7 @@ class AttemptExpireIT extends PlayItSupport {
     private Callable<Object> submission(String token, String attemptId) {
         return () -> client.post().uri("/api/processes/QB_ATTEMPT_SUBMIT/latest")
             .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
-            .bodyValue(body("attemptId", attemptId, "answers", answers(true, true))).exchange().expectBody(MAP)
+            .bodyValue(submission(attemptId, "answers", answers(true, true))).exchange().expectBody(MAP)
             .returnResult().getStatus().value();
     }
 

@@ -43,6 +43,22 @@ public final class TokenBucketLimiter {
         };
     }
 
+    /**
+     * Whether {@code key}'s bucket has a token now, without taking it (so that a request counted by several buckets
+     * takes from none when one of them refuses). A key not seen yet has a full bucket and is not remembered.
+     */
+    public synchronized Decision peek(String key) {
+        double[] bucket = buckets.get(key);
+        if (bucket == null) {
+            return new Decision(true, 0);
+        }
+        double tokens = Math.min(capacity, bucket[0] + (nanoTime.getAsLong() - bucket[1]) * tokensPerNano);
+        if (tokens >= 1) {
+            return new Decision(true, 0);
+        }
+        return new Decision(false, (long) Math.ceil((1 - tokens) / tokensPerNano / 1_000_000_000d));
+    }
+
     /** Takes one token of {@code key}'s bucket if there is one. */
     public synchronized Decision tryAcquire(String key) {
         long now = nanoTime.getAsLong();

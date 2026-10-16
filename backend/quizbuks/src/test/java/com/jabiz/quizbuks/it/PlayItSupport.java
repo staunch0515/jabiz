@@ -204,8 +204,19 @@ abstract class PlayItSupport extends AccountItSupport {
             body("questionNo", 2, "selected", List.of(second ? 1 : 2)));
     }
 
+    /**
+     * A submission's input as the App sends it: the attempt and its publication (the queue's key, required; platform
+     * decision D45), then {@code more} pairs.
+     */
+    static Map<String, Object> submission(String attemptId, Object... more) {
+        Map<String, Object> input = body("attemptId", attemptId, "publicationId", String.valueOf(query(
+            "SELECT publication_id FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst().get("publication_id")));
+        input.putAll(body(more));
+        return input;
+    }
+
     Map<String, Object> submit(String token, String attemptId, List<Object> answers) {
-        Map<String, Object> input = body("attemptId", attemptId);
+        Map<String, Object> input = submission(attemptId);
         if (answers != null) {
             input.put("answers", answers);
         }

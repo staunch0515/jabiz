@@ -18,6 +18,7 @@ import { ArrowLeft, MailWarning, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { FileImage } from '../qb/FileImage'
 import { formatKudos } from '../qb/kudos'
@@ -95,9 +96,12 @@ function Action({ publication }: { publication: PublicationView }) {
   return (
     <div className="flex flex-col gap-2">
       {action}
+      <p className="text-muted-foreground text-sm empty:hidden" role="status" data-testid="detail-start-busy">
+        {start.busy ? t('play.busy') : ''}
+      </p>
       {start.isError && (
         <Alert variant="destructive" data-testid="detail-start-error">
-          <AlertDescription>{problemText(start.error) || tQb('failed')}</AlertDescription>
+          <AlertDescription>{playProblemText(start.error) || tQb('failed')}</AlertDescription>
         </Alert>
       )}
     </div>

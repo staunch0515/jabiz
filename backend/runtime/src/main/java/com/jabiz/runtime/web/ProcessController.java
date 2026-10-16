@@ -19,6 +19,7 @@ import com.jabiz.runtime.sod.SodGuard;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,6 +40,10 @@ import java.util.Map;
  * refused with 403 {@code PROCESS_INTERNAL} whoever asks, before the input is read; the message says how the process
  * runs instead (decision D41). 403 rather than 404: the process exists, and the catalog already hides it.
  *
+ * <p>Requests beyond a rate limit of {@code jabiz.process.rate-limits.<process>} are answered 429 {@code RATE_LIMITED}
+ * after the permissions and before any read ({@link ProcessRateLimits}); a process declaring an admission queue may be
+ * answered 503 {@code PROCESS_BUSY} with {@code Retry-After} when its queue is full (decision D45).
+ *
  * <p>With an {@code Idempotency-Key} header, a repeated request of the same actor returns the first result without
  * running again, flagged by the response header {@code Idempotency-Replayed: true} (decision D4).
  */
@@ -58,10 +63,13 @@ class ProcessController {
     private final SensitiveDataMasker masker;
     private final SodGuard sod;
     private final MfaPolicy mfa;
+    private final ProcessRateLimits rateLimits;
 
     ProcessController(ProcessRegistry registry, ProcessExecutor executor, ProcessInputs inputs,
-        Environment environment, SensitiveDataMasker masker, SodGuard sod, MfaPolicy mfa) {
+        Environment environment, SensitiveDataMasker masker, SodGuard sod, MfaPolicy mfa,
+        ProcessRateLimits rateLimits) {
         this.mfa = mfa;
+        this.rateLimits = rateLimits;
         this.masker = masker;
         this.sod = sod;
         this.registry = registry;
@@ -75,7 +83,8 @@ class ProcessController {
         @PathVariable String name,
         @PathVariable String version,
         @RequestBody(required = false) Map<String, Object> body,
-        @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey
+        @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+        ServerHttpRequest http
     ) {
         return RequestContexts.current().flatMap(context -> {
             ProcessDefinition<?, ?, ?> definition = find(name, version);
@@ -87,6 +96,8 @@ class ProcessController {
                     + ProcessInternalException.howItRuns(definition.access()));
             }
             requirePermissions(definition, context, development);
+            // Before anything reads the database (decision D45): a caller beyond its limit holds no connection.
+            rateLimits.check(definition, context, http);
             mfa.require(context, definition.mfa(), "Running process " + definition.name());
             com.jabiz.runtime.security.VerifiedEmailPolicy.require(context, definition.verifiedEmail(),
                 "Running process " + definition.name());

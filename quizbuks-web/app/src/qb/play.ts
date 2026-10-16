@@ -295,8 +295,12 @@ export interface StartOutput {
   answers: Given[]
 }
 
-/** Starts the caller's attempt of a publication, or continues the one in progress (U-23, U-41). */
-export const startAttempt = (publicationId: string) => runProcess<StartOutput>(PLAY.start, { publicationId })
+/**
+ * Starts the caller's attempt of a publication, or continues the one in progress (U-23, U-41). Pass the same key when
+ * retrying the same start (a busy answer, a lost one): the retry of one that went through returns its answer.
+ */
+export const startAttempt = (publicationId: string, idempotencyKey?: string) =>
+  runProcess<StartOutput>(PLAY.start, { publicationId }, { idempotencyKey })
 
 /** `AttemptProcesses.SaveInput`. */
 export interface SaveInput {
@@ -344,10 +348,18 @@ export interface SubmitOutput {
 }
 
 /**
+ * `AttemptFinishing.SubmitInput`: the publication is the attempt's (the start's output gives it); the server queues the
+ * submission by it before the publication's lock and refuses another one (`QB_ATTEMPT_PUBLICATION_MISMATCH`).
+ */
+export interface SubmitInput extends SaveInput {
+  publicationId: string
+}
+
+/**
  * Submits the caller's attempt with its last answers (U-32). Pass the same key when retrying the same submission: the
  * server finishes an attempt once whatever the key, and the key makes a lost answer's retry return the first one.
  */
-export const submitAttempt = (input: SaveInput, idempotencyKey?: string) =>
+export const submitAttempt = (input: SubmitInput, idempotencyKey?: string) =>
   runProcess<SubmitOutput>(PLAY.submit, { ...input }, { idempotencyKey })
 
 // ---- the caller's attempts ---------------------------------------------------------------------------------------

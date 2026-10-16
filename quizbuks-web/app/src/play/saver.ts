@@ -102,7 +102,18 @@ export class AnswerSaver {
     return this.chain
   }
 
-  /** Saves again after {@link stop} (a submission that failed and can be tried again). */
+  /**
+   * Saves what is pending once more, then stops (the attempt is being submitted): a submission that ends EXPIRED
+   * after queueing before a hot quiz's lock is finished by the server with every answer saved, none dropped. A failed
+   * last save is not tried again (the submission carries the same answers).
+   */
+  async settle(): Promise<void> {
+    await this.flush()
+    this.halt()
+    await this.chain
+  }
+
+  /** Saves again after {@link stop} or {@link settle} (a submission that failed and can be tried again). */
   resume() {
     this.stopped = false
   }

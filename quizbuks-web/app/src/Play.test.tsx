@@ -70,13 +70,13 @@ interface Options {
 
 /** The server as the play pages see it; records every call (path and body). */
 function server(options: Options = {}) {
-  const calls: { path: string; body: unknown }[] = []
+  const calls: { path: string; body: unknown; key: string | null }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
     const url = new URL(request.url, window.location.origin)
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
-    calls.push({ path, body })
+    calls.push({ path, body, key: request.headers.get('Idempotency-Key') })
     switch (path) {
       case '/api/auth/entries/app':
         return json(200, ENTRY)
@@ -117,6 +117,7 @@ function server(options: Options = {}) {
   return {
     calls,
     posted: (name: string) => calls.filter((c) => c.path === `/api/processes/${name}/latest`).map((c) => c.body),
+    keys: (name: string) => calls.filter((c) => c.path === `/api/processes/${name}/latest`).map((c) => c.key),
   }
 }
 
@@ -223,7 +224,7 @@ describe('answering', () => {
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Submit answers' }))
 
     await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
-    expect(posted('QB_ATTEMPT_SUBMIT')).toEqual([{ attemptId: ATTEMPT, currentIndex: 1,
+    expect(posted('QB_ATTEMPT_SUBMIT')).toEqual([{ attemptId: ATTEMPT, publicationId: PUB, currentIndex: 1,
       answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }])
     expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
     expect(screen.getByTestId('result-pass-score')).toHaveTextContent('3')
@@ -262,6 +263,125 @@ describe('answering', () => {
     await submitOnce()
     await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
     expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+  })
+
+  it('says a busy quiz is busy, starts it on the retry with the same key, and submits the same way', async () => {
+    const busy = () => json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+      violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+    let startBusy = 1
+    let submitBusy = 1
+    const { posted, keys } = server({
+      start: () => (startBusy-- > 0 ? busy() : json(200, { output: started() })),
+      submit: () => (submitBusy-- > 0 ? busy() : json(200, { output: SUBMITTED })),
+    })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('detail-start'))
+    expect(await screen.findByTestId('detail-start-busy')).toHaveTextContent('Many people are answering this quiz')
+    await waitFor(() => expect(window.location.pathname).toBe(`/play/${ATTEMPT}`), { timeout: 4000 })
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(2)
+    const [firstStart, secondStart] = keys('QB_ATTEMPT_START')
+    expect(firstStart).toBeTruthy()
+    expect(secondStart).toBe(firstStart)
+
+    await screen.findByTestId('play-progress')
+    await userEvent.click(screen.getByTestId('play-next'))
+    await userEvent.click(screen.getByTestId('play-submit'))
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Submit answers' }))
+    await waitFor(() => expect(screen.getByTestId('play-submitting')).toHaveAttribute('data-busy', 'true'))
+    expect(screen.getByTestId('play-submitting')).toHaveTextContent('trying again')
+    await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`), { timeout: 4000 })
+    // Exactly once: the retry is the same submission (same key, same input), and nothing else was sent.
+    expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+    expect(posted('QB_ATTEMPT_SUBMIT')[1]).toEqual(posted('QB_ATTEMPT_SUBMIT')[0])
+    expect(posted('QB_ATTEMPT_SUBMIT')[0]).toMatchObject({ attemptId: ATTEMPT, publicationId: PUB })
+    const [firstSubmit, secondSubmit] = keys('QB_ATTEMPT_SUBMIT')
+    expect(secondSubmit).toBe(firstSubmit)
+    expect(firstSubmit).not.toBe(firstStart)
+  })
+
+  it('stops retrying a quiz that stays busy, says so, and submits again with the same key', async () => {
+    let busyFor = 6
+    const { keys } = server({ submit: () => (busyFor-- > 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'WAIT_TIMEOUT', retryAfter: 0,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(200, { output: SUBMITTED })) })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      storeStart(started())
+      window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+      render(<App />)
+      await screen.findByTestId('play-progress')
+      await userEvent.click(screen.getByTestId('play-next'))
+      await userEvent.click(screen.getByTestId('play-submit'))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',
+        { name: 'Submit answers' }))
+      for (let i = 0; i < 6 && !screen.queryByTestId('play-submit-error'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10_000)
+        })
+      }
+      expect(await screen.findByTestId('play-submit-error')).toHaveTextContent('Please try again in a moment')
+      expect(keys('QB_ATTEMPT_SUBMIT')).toHaveLength(6)
+      await userEvent.click(screen.getByTestId('play-submit'))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button',
+        { name: 'Submit answers' }))
+      await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`))
+      expect(new Set(keys('QB_ATTEMPT_SUBMIT')).size).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('saves the last answer before an automatic submission that queues past its time ends EXPIRED', async () => {
+    let submits = 0
+    const begun = Date.now()
+    const late = started({ deadline: new Date(begun + 2_500).toISOString(), currentIndex: 1 })
+    const { posted } = server({ start: () => json(200, { output: late }), submit: () => (submits++ === 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'WAIT_TIMEOUT', retryAfter: 1,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(422, { status: 422, violations: [{ field: 'attemptId', ruleCode: 'QB_ATTEMPT_EXPIRED',
+        message: 'Over' }] })) })
+    storeStart(late)
+    window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+    render(<App />)
+    await screen.findByTestId('play-progress')
+    // An answer within the last moment: its save would come after the deadline, when the submission starts.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, begun + 2_000 - Date.now())))
+    })
+    await userEvent.click(screen.getByRole('checkbox', { name: /Tokyo/ }))
+    await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`), { timeout: 6_000 })
+    expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+    // Saved before submitting, not dropped: the server's expiry finishes the attempt with it.
+    expect(posted('QB_ATTEMPT_SAVE').at(-1)).toMatchObject({ answers: [{ questionNo: 2, selected: [1] }] })
+    expect(posted('QB_ATTEMPT_SAVE').length).toBeGreaterThan(0)
+  }, 15_000)
+
+  it('continues an attempt through a busy quiz on the play page, saying so', async () => {
+    let busyFor = 1
+    const { keys } = server({ start: () => (busyFor-- > 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(200, { output: started({ resumed: true }) })) })
+    storeStart(started())
+    window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('play-loading')).toHaveTextContent('trying again'))
+    expect(await screen.findByTestId('play-progress', {}, { timeout: 4_000 })).toHaveTextContent('Question 1 of 2')
+    expect(keys('QB_ATTEMPT_START')).toHaveLength(2)
+    expect(new Set(keys('QB_ATTEMPT_START')).size).toBe(1)
+  })
+
+  it('shows a rate limit\'s own text and does not retry it', async () => {
+    const { posted } = server({ start: () => json(429, { status: 429, title: 'Too many requests',
+      violations: [{ field: null, ruleCode: 'RATE_LIMITED', message: 'Too many tries: wait a minute.' }] }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('detail-start'))
+    expect(await screen.findByTestId('detail-start-error')).toHaveTextContent('Too many tries: wait a minute.')
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(1)
+    expect(screen.getByTestId('detail-start-busy')).toBeEmptyDOMElement()
   })
 
   it('continues an attempt after a reload at the question and with the answers saved', async () => {
@@ -386,5 +506,26 @@ describe('the history', () => {
     expect(await screen.findByTestId('play-progress')).toHaveTextContent('Question 2 of 2')
     // The play page took the started attempt as handed over: one start only.
     expect(posted('QB_ATTEMPT_START')).toHaveLength(1)
+  })
+
+  it('says a busy quiz is busy when continuing, and stops trying once the user leaves', async () => {
+    const deadline = new Date(Date.now() + 120_000).toISOString()
+    const { posted } = server({ history: [row({ status: 'IN_PROGRESS', category: 'IN_PROGRESS', passed: null,
+      score: null, reward: null, rewardStatus: null, submittedAt: null, deadline })],
+    start: () => json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+      violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] }) })
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    await act(async () => userEvent.click(await screen.findByTestId('history-continue')))
+    expect(await screen.findByTestId('history-continue-busy')).toHaveTextContent('Many people are answering')
+    // Away to the home page: no more tries, and no late start takes the user back to the quiz.
+    await userEvent.click(screen.getByTestId('nav-home'))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    const tries = posted('QB_ATTEMPT_START').length
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2_600))
+    })
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(tries)
+    expect(window.location.pathname).toBe('/')
   })
 })

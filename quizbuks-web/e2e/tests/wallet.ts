@@ -96,7 +96,8 @@ export async function earnReward(request: APIRequestContext, takerToken: string,
   const questions = started.questions as { no: number; options: { no: number; text: string }[] }[]
   const answers = questions.map((q) => ({ questionNo: q.no,
     selected: q.options.filter((o) => o.text === 'Paris').map((o) => o.no) }))
-  const result = await run(request, takerToken, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, answers })
+  const result = await run(request, takerToken, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
+    answers })
   expect(result.rewardStatus).toBe('PAID')
   return name
 }

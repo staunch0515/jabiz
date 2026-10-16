@@ -17,6 +17,19 @@ jabiz:
     currency: JPY
     scale: 0
   fiscal-year-end: 12
+  process:
+    # The queue before a publication's lock (platform decision D45; QB_ATTEMPT_START, QB_ATTEMPT_SUBMIT with the
+    # publication and the expiry job's QB_ATTEMPT_EXPIRE declare it, Q10a): per publication and instance two in their
+    # transaction at once, 50 waiting at most 2 s (the platform's defaults, written out here); beyond that 503
+    # PROCESS_BUSY with Retry-After, which the App retries. The family's name in brackets keeps its dot.
+    admission:
+      families:
+        "[qb.pub]": { concurrency: 2, max-queue: 50, max-wait: 2s }
+    # Per player and instance (decision D45 item 5): far above a person's pace (one start and one submission a quiz),
+    # so that only scripts are limited (429 RATE_LIMITED). The App's retries of a busy answer stay below it.
+    rate-limits:
+      "[QB_ATTEMPT_START]": { per-user: 60, period: 1m }
+      "[QB_ATTEMPT_SUBMIT]": { per-user: 60, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:

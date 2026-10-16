@@ -200,7 +200,7 @@ for (const appearance of ['light', 'dark'] as const) {
     const right = (q: { options: { no: number; text: string }[] }) =>
       q.options.filter((o) => o.text === 'Paris' || o.text === 'Tokyo').map((o) => o.no)
     const paid = await run(request, other.token, 'QB_ATTEMPT_SUBMIT', { attemptId: theirs.attemptId,
-      answers: questions.map((q) => ({ questionNo: q.no, selected: right(q) })) })
+      publicationId: seeded.publicationId, answers: questions.map((q) => ({ questionNo: q.no, selected: right(q) })) })
     expect(paid.rewardStatus).toBe('PAID')
 
     await page.getByTestId('play-submit').click()

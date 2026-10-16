@@ -12,9 +12,12 @@ import { FileImage } from '../qb/FileImage'
 import { CODE } from '../qb/ids'
 import { QB } from '../qb/messages'
 import { readAttempt, saveAttempt, startAttempt, submitAttempt, type Given } from '../qb/play'
-import { problemText } from '../qb/problems'
 import { Link, navigate, Redirect } from '../qb/router'
+import { isBusy, playProblemText, retryWhenBusy } from '../play/busy'
 import { refusedWith } from '../play/useStartAttempt'
+
+/** The grace after the deadline in which a submission is still taken (`PlayLimits.SUBMIT_GRACE`). */
+export const SUBMIT_GRACE_MS = 5_000
 
 /** An option's letter in the order shown (A, B, C…). */
 export const letter = (index: number) => String.fromCharCode(65 + index)
@@ -27,7 +30,8 @@ type Resolved = { started: Started } | { result: string } | { expired: string }
  * returns the attempt in progress with its answers and current question: a reload resumes it). The publication comes
  * from this tab's copy of the start, else from the caller's attempt record. A finished attempt goes to its result.
  */
-async function resolve(attemptId: string): Promise<Resolved> {
+async function resolve(attemptId: string, onBusy: (busy: boolean) => void, signal?: AbortSignal):
+  Promise<Resolved> {
   const handed = takeHandedOver(attemptId)
   if (handed) return { started: handed }
   let publicationId = storedStart(attemptId)?.publicationId
@@ -37,7 +41,10 @@ async function resolve(attemptId: string): Promise<Resolved> {
     publicationId = record.publicationId
   }
   try {
-    const output = await startAttempt(publicationId)
+    // A hot quiz may answer busy (its queue is full): try again with the same key (play/busy.ts).
+    const key = crypto.randomUUID()
+    const from = publicationId
+    const output = await retryWhenBusy(() => startAttempt(from, key), { onBusy, signal })
     storeStart(output)
     return { started: { output, offset: clockOffset(output.serverTime) } }
   } catch (error) {
@@ -83,12 +90,20 @@ function Player({ started }: { started: Started }) {
   const [answers, setAnswers] = useState(() => answerMap(output.answers))
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [submitting, setSubmitting] = useState<'manual' | 'auto' | null>(null)
+  const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState<unknown>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
   const firstRender = useRef(true)
   // One key for this attempt's submission, whoever retries it: a lost answer's retry returns the first one.
   const [submitKey] = useState(() => crypto.randomUUID())
+  // Aborted when the player goes away: a busy submission stops trying (the server finishes it when its time is up).
+  const page = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    page.current = controller
+    return () => controller.abort()
+  }, [])
   const attemptId = output.attemptId
   // The player is keyed by the attempt: one saver for its life.
   const [saver] = useState(() => new AnswerSaver({
@@ -126,14 +141,27 @@ function Player({ started }: { started: Started }) {
     setSubmitting(how)
     setSubmitError(null)
     if (how === 'auto') markAutoSubmitted(attemptId)
-    await saver.stop()
+    // Saves what is still pending first (saving is not queued): a submission that queues past the deadline and its
+    // grace ends EXPIRED, and the server then finishes the attempt with the saved answers - all of them.
+    await saver.settle()
+    const signal = page.current?.signal
+    // By the server's clock: past the deadline and the grace a submission is refused, retrying is no use.
+    const inTime = () => Date.now() + offset < Date.parse(output.deadline) + SUBMIT_GRACE_MS
     try {
-      const result = await submitAttempt({ attemptId, currentIndex: index, answers: allAnswers() }, submitKey)
+      // The publication is the queue's key before its lock; a busy answer is tried again with the same key.
+      const input = { attemptId, publicationId: output.publicationId, currentIndex: index, answers: allAnswers() }
+      const result = await retryWhenBusy(() => submitAttempt(input, submitKey), { onBusy: setBusy, signal,
+        shouldRetry: inTime })
+      if (signal?.aborted) return
       storeResult(result)
       navigate(`/result/${attemptId}`, { replace: true })
     } catch (error) {
-      // Too late, or finished meanwhile: the server finishes it with the saved answers; the result page waits for it.
-      if (how === 'auto' || refusedWith(error, CODE.attemptExpired, CODE.attemptFinished, CODE.attemptNotInProgress)) {
+      if (signal?.aborted) return
+      // Too late, or finished meanwhile, or still busy when its time ran out: the server finishes it with the saved
+      // answers; the result page waits for it.
+      if (how === 'auto' || refusedWith(error, CODE.attemptExpired, CODE.attemptFinished, CODE.attemptNotInProgress)
+        || (isBusy(error) && !inTime())) {
+        if (refusedWith(error, CODE.attemptExpired) || isBusy(error)) markAutoSubmitted(attemptId)
         if (refusedWith(error, CODE.attemptExpired)) markAutoSubmitted(attemptId)
         navigate(`/result/${attemptId}`, { replace: true })
         return
@@ -147,9 +175,15 @@ function Player({ started }: { started: Started }) {
     }
     // allAnswers reads the current answers; the callback is rebuilt when they change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitting, attemptId, index, answers, saver, submitKey])
+  }, [submitting, attemptId, output.publicationId, output.deadline, offset, index, answers, saver, submitKey])
 
   const left = useCountdown(output.deadline, offset, () => void submit('auto'))
+  // Shortly before the deadline what is pending is saved (saving is refused after it): should the automatic
+  // submission then queue past its grace, the server finishes the attempt with these answers.
+  const closing = left > 0 && left <= 2_000
+  useEffect(() => {
+    if (closing) void saver.flush()
+  }, [closing, saver])
 
   if (total === 0) return <PageState kind="empty" description={t('play.noQuestions')} />
   const question = questions[index]
@@ -170,8 +204,8 @@ function Player({ started }: { started: Started }) {
 
   if (submitting) {
     return (
-      <PageState kind="loading" title={submitting === 'auto' ? t('play.timeUp') : t('play.submitting')}
-        data-testid="play-submitting" />
+      <PageState kind="loading" title={busy ? t('play.busy') : submitting === 'auto' ? t('play.timeUp')
+        : t('play.submitting')} data-testid="play-submitting" data-busy={busy || undefined} />
     )
   }
 
@@ -233,7 +267,7 @@ function Player({ started }: { started: Started }) {
       </p>
       {submitError !== null && (
         <Alert variant="destructive" data-testid="play-submit-error">
-          <AlertDescription>{problemText(submitError)}</AlertDescription>
+          <AlertDescription>{playProblemText(submitError)}</AlertDescription>
         </Alert>
       )}
       <nav aria-label={t('play.navigation')} className="flex items-center gap-2">
@@ -271,15 +305,18 @@ function Player({ started }: { started: Started }) {
 export function PlayPage({ attemptId }: { attemptId: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const resolved = useQuery({ queryKey: ['qb', 'play', attemptId], queryFn: () => resolve(attemptId),
+  const [busy, setBusy] = useState(false)
+  const resolved = useQuery({ queryKey: ['qb', 'play', attemptId], queryFn: ({ signal }) => resolve(attemptId, setBusy, signal),
     staleTime: Infinity, gcTime: 0 })
-  if (resolved.isPending) return <PageState kind="loading" />
+  if (resolved.isPending) {
+    return <PageState kind="loading" title={busy ? t('play.busy') : undefined} data-testid="play-loading" />
+  }
   if (resolved.isError) {
     if (resolved.error instanceof ApiError && resolved.error.status === 404) {
       return <PageState kind="notFound" titleAs="h1" description={tQb('notFound')}
         action={<Button asChild variant="outline"><Link to="/history">{t('nav.history')}</Link></Button>} />
     }
-    return <PageState kind="error" description={problemText(resolved.error)}
+    return <PageState kind="error" description={playProblemText(resolved.error)}
       action={<Button variant="outline" onClick={() => void resolved.refetch()}>{tQb('retry')}</Button>} />
   }
   const data = resolved.data

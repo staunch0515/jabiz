@@ -15,6 +15,7 @@ import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.IdempotencyConflictException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.PermissionDeniedException;
+import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.inbound.InboundRejectedException;
 import com.jabiz.runtime.RebaseConflictException;
@@ -199,6 +200,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.RETRY_AFTER,
                 String.valueOf(ex.retryAfterSeconds()))
             .body(withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange));
+    }
+
+    /**
+     * The queue before a hot named lock did not admit the process (decision D45): 503 with {@code Retry-After} and the
+     * {@code reason} ({@code QUEUE_FULL} / {@code WAIT_TIMEOUT}); nothing logged as an error, as for
+     * {@code QUERY_TIMEOUT}.
+     */
+    @ExceptionHandler(ProcessBusyException.class)
+    ResponseEntity<ProblemDetail> handleProcessBusy(ProcessBusyException ex, ServerWebExchange exchange) {
+        ProblemDetail problem = withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
+        problem.setProperty("reason", ex.reason().name());
+        problem.setProperty("retryAfter", ex.retryAfterSeconds());
+        return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.RETRY_AFTER,
+                String.valueOf(ex.retryAfterSeconds()))
+            .body(problem);
     }
 
     /**
