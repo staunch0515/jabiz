@@ -246,4 +246,40 @@ class ProcessDefinitionBuilderTest {
         assertThatThrownBy(() -> new RetryPolicy(0, Duration.ZERO)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new RetryPolicy(1, Duration.ofMillis(-1))).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void admissionIsDeclaredOnceAndKeptOnEveryCopy() {
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .admission("test.hot", In::value)
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE));
+
+        assertThat(def.admission().family()).isEqualTo("test.hot");
+        assertThat(def.admission().keyOf(new In("k"))).isEqualTo("test.hot:k");
+        assertThat(def.withPermissions("p").withMfa(com.jabiz.security.MfaRequirement.ALWAYS)
+            .withVerifiedEmail(true).asInternal().actsOn("E", "value").admission()).isEqualTo(def.admission());
+        assertThatThrownBy(() -> define(pb -> complete(pb)
+            .admission("test.hot", In::value)
+            .admission("test.other", In::value)
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("admission is declared once");
+    }
+
+    @Test
+    void withoutADeclarationNothingQueues() {
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE));
+        assertThat(def.admission()).isNull();
+        assertThat(def.withAdmission("test.hot", In::value).admission().family()).isEqualTo("test.hot");
+    }
+
+    @Test
+    void anAdmissionOfASubProcessOnlyProcessIsKeptForTheStartupCheckToReport() {
+        ProcessDefinition<In, Out, ProcessContext> def = define(pb -> complete(pb)
+            .subProcessOnly()
+            .admission("Not Valid", In::value)
+            .step("Only", NoopStep.class, NoMetadata.INSTANCE));
+        assertThat(def.access()).isEqualTo(ProcessAccess.SUB_PROCESS_ONLY);
+        assertThat(def.admission().validFamily()).isFalse();
+    }
 }

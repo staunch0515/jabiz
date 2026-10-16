@@ -14,6 +14,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.publicread.FileAccess;
@@ -66,6 +67,9 @@ import static com.jabiz.app.commerce.CommerceEntities.WAREHOUSE_DATASET;
  *   <li>{@code ORDER_SHIP}: takes the reserved goods out of the warehouse and posts the sale to the ledger
  *       (accounts receivable {@value #RECEIVABLE_ACCOUNT} to sales revenue {@value #SALES_REVENUE_ACCOUNT}).</li>
  * </ul>
+ * Cancelling and shipping take the order's lock ({@code commerce.order:<id>}, as the payment and the expiry of the
+ * order do) and queue for it before their transaction (decision D45): many requests for one order wait in the
+ * application, not on database connections.
  * Every stock change is an update of the stock row under its version (decision D9, rule 1): two orders racing for
  * the last units read the same version, one commits and the other gets 409, so stock is never oversold. The entity
  * check {@link CommerceEntities#STOCK_LEVEL_INVALID} guards the counts on every write as well.
@@ -236,12 +240,17 @@ public final class CommerceProcesses {
             pb -> pb
                 .description("Cancels a placed sales order and releases its stock.")
                 .permissions("commerce.order.cancel")
+                // Before the transaction, queue for the order's lock (decision D45); as a sub-process of
+                // ORDER_EXPIRE it does not queue, and takes the lock its parent already holds.
+                .admission(OrderExpiry.LOCK_FAMILY, input -> OrderExpiry.orderKey(input.orderId()))
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = withInput(start, input);
                     ctx.put(ORDER_ID, input.orderId());
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, CancelOutput.class))
+                .step("Lock the order", HoldLock.<ProcessContext>exclusive(
+                    ctx -> OrderExpiry.lockName(ctx.get(ORDER_ID))))
                 .step("Load the order", LoadEntity.by(ORDER_DATASET, ORDER_ID, ORDER_KEY))
                 .step("Load its lines", QueryEntities.of(ORDER_LINE_DATASET, CommerceProcesses::linesQuery, LINES))
                 .step("Load the stock", QueryEntities.of(STOCK_LEVEL_DATASET, CommerceProcesses::orderStockQuery,
@@ -253,12 +262,16 @@ public final class CommerceProcesses {
             pb -> pb
                 .description("Ships a placed sales order and posts the sale to the ledger.")
                 .permissions("commerce.order.ship")
+                .admission(OrderExpiry.LOCK_FAMILY, input -> OrderExpiry.orderKey(input.orderId()))
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = withInput(start, input);
                     ctx.put(ORDER_ID, input.orderId());
                     return ctx;
                 })
                 .outputMapper(CommerceProcesses::shipOutput)
+                // Not while a payment is recorded or the order expires (they take the same lock).
+                .step("Lock the order", HoldLock.<ProcessContext>exclusive(
+                    ctx -> OrderExpiry.lockName(ctx.get(ORDER_ID))))
                 .step("Load the order", LoadEntity.by(ORDER_DATASET, ORDER_ID, ORDER_KEY))
                 .step("Load its lines", QueryEntities.of(ORDER_LINE_DATASET, CommerceProcesses::linesQuery, LINES))
                 .step("Load the stock", QueryEntities.of(STOCK_LEVEL_DATASET, CommerceProcesses::orderStockQuery,

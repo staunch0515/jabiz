@@ -261,6 +261,12 @@ public final class PlatformErrorCodes {
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
 
+    /**
+     * 503: the queue before a hot named lock is full, or the wait in it ran out (decision D45); params {@code reason}
+     * ({@code QUEUE_FULL} / {@code WAIT_TIMEOUT}) and {@code retryAfter} (seconds).
+     */
+    public static final String PROCESS_BUSY = "PROCESS_BUSY";
+
     public static final List<String> ALL = List.of(
         UNKNOWN_FIELD, INVALID_VALUE, REQUIRED, RULE_EVALUATION_FAILED, REFERENCE_NOT_FOUND, ID_MISMATCH,
         TOO_LONG, NUMERIC_PRECISION, MONETARY_SCALE, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
@@ -291,7 +297,7 @@ public final class PlatformErrorCodes {
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
-        INBOUND_REJECTED, RATE_LIMITED);
+        INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY);
 
     private PlatformErrorCodes() {}
 }

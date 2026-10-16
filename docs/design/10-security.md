@@ -675,3 +675,25 @@ class PortalSignInGuard implements SignInGuard {
   流程照常由 `PlatformObservations` 按流程名与结果记录；标签与日志不放地址与 UA（info 日志只记用户编号与会话编号）。
 - **已知限制**：吊销与轮换并发时（轮换先读到族未吊销，吊销随后提交），已签发的新刷新令牌在下一次刷新时被拒，只有其访问令牌可能多活到期满。
   每次刷新都记下地址与 UA，个人数据随令牌行累积，令牌表的受控清除尚未实现（§2）。列表的设备名称来自客户端自报的 UA。
+
+### 15.10 流程接口的限流（阶段 16o，决策 D45 第 5 条）
+
+`POST /api/processes/{码}/…`（行操作也经它）可按流程限流，只在配置中声明（运维可调，不需要重新构建）：
+
+```yaml
+jabiz:
+  process:
+    rate-limits:
+      "[PORTAL_ORDER_PLACE]": { per-user: 20, period: 1m }      # 流程名作映射键时写方括号，保留大小写
+      "[QB_ATTEMPT_SUBMIT]":  { per-user: 30, per-address: 300, period: 1m }
+```
+
+- 三种桶，各自可选：`per-user`（按操作人）、`per-address`（按 `ClientAddresses` 的客户端地址，转发头只在来自可信代理时采用，§15.5）、`per-instance`（该流程在本实例的总量）；`period` 缺省 1 分钟。
+  桶是 `TokenBucketLimiter`（进程内、每桶至多 100 000 个键、单调时钟），超限 429 `RATE_LIMITED` + `Retry-After`，按实例计数（同 15 §6 与 §15.6 的已知限制）。
+- 先查请求涉及的全部桶，都有令牌才各取一个：一个桶拒绝时不消耗其他桶。幂等键的重放同样计数：区分重放要读数据库，而被限流的请求不访问数据库。
+- 顺序：认证 → 权限 → **限流**（`ProcessRateLimits`）→ 二次验证 → 已验证邮箱 → 职责分离 → 幂等重放 → 准入（06 §4.2）→ 事务。没有权限的请求本来就 403，不消耗他人的桶；
+  被限流的请求不读数据库、不借连接（`ProcessAdmissionIT` 在连接全被占用时确认）。
+- 只作用于流程接口：子流程、定时任务、事件消费者与平台自己的入口（登录、实体接口、上传等）不经它。启动检查（`PROCESS`）：配置的流程须已注册且进目录（不是 `internal()` / `entryOnly()` / `subProcessOnly()`），
+  数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
+- 与 `SignUpRateLimits`（§15.7）的关系：后者限的是平台自己的匿名账户接口与本人账户操作（种类写死在代码中），不变；两者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
+  限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
