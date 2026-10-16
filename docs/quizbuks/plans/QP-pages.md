@@ -95,7 +95,7 @@
 
 - **应用**（`1.2/quizbuks-*`，都不阻塞 QP1）：A-1 删 `jabiz.web.spa`、加入口的 `session.*`（QP1）；A-2 商家邮件改 `{entryUrl.sponsor}` 与 `application-google.yml`（QP1，可选）；
   A-3 完成后的回看没有题目文字（`result` 只有数字），缺省以 `sessionStorage` 保存开始的输出（不含答案）供刚完成的结果页用，历史只显示分数与逐题对错（Q-2）；
-  A-4 商家交易明细（`qb.sponsor.transactions`，M-50 – M-52）属 Q9；A-5 `deploy/quizbuks` 的改动（第 8 节）。
+  A-4 商家交易明细（`qb.sponsor.transactions`，M-50 – M-52）属 Q9（已由 Q9b 完成，`plans/Q9b-sponsor-transactions.md`）；A-5 `deploy/quizbuks` 的改动（第 8 节）。
 - **平台**（先在 `1.2/platform` 上做，带平台自己的测试与 `backend/app` 中的示范，再合并到 `1.2/quizbuks`）：
   - **PG-1**（阻塞 QP2 的详情与 QP3a 的资料）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`（现在只在 `frontend/src/components`，经 `@jabiz/admin` 导出，应用 SPA 不得引用 `@jabiz/admin`）；
     `react-markdown` 成为 `@jabiz/ui` 的运行时依赖；`@jabiz/admin` 照旧再导出；门户示范 `MarkdownView`。分支 `1.2/phase-16n-ui-content-view`，约 1 天。
