@@ -83,7 +83,7 @@ class PlayIT extends PlayItSupport {
         // U2 is in the United States: a publication for everyone.
         String global = livePublication(sponsorA(), "Everyone", Map.of("regions", List.of("GLOBAL")));
         String attemptId = (String) start(token, global).get("attemptId");
-        Map<String, Object> input = body("attemptId", attemptId, "answers", answers(true, true));
+        Map<String, Object> input = submission(attemptId, "answers", answers(true, true));
         Map<String, Object> first = runWithKey("QB_ATTEMPT_SUBMIT", token, input, "submit-" + attemptId);
         Map<String, Object> replay = runWithKey("QB_ATTEMPT_SUBMIT", token, input, "submit-" + attemptId);
         assertThat(replay.get("output")).isEqualTo(first.get("output"));
@@ -112,7 +112,7 @@ class PlayIT extends PlayItSupport {
         assertThat(submit(token, inTime, answers(true, false))).containsEntry("score", 2);
 
         clock.advance(Duration.ofMillis(1));
-        Map<String, Object> refused = refused("QB_ATTEMPT_SUBMIT", taker(late), body("attemptId", lateAttempt,
+        Map<String, Object> refused = refused("QB_ATTEMPT_SUBMIT", taker(late), submission(lateAttempt,
             "answers", answers(true, true)), 422);
         assertThat(codes(refused)).containsExactly(PlayCodes.EXPIRED);
         assertThat(attempt(lateAttempt)).containsEntry("status", "IN_PROGRESS")
@@ -155,7 +155,7 @@ class PlayIT extends PlayItSupport {
         assertThat(violations(problem)).extracting(v -> v.get("field")).containsExactly("currentIndex",
             "answers[0].questionNo", "answers[1].selected[1]");
         assertThat(codes(problem)).containsOnly(PlayCodes.ANSWER_INVALID);
-        assertThat(codes(refused("QB_ATTEMPT_SUBMIT", token, body("attemptId", attemptId, "answers",
+        assertThat(codes(refused("QB_ATTEMPT_SUBMIT", token, submission(attemptId, "answers",
             List.of(body("questionNo", 2, "selected", List.of(9)))), 422))).containsExactly(PlayCodes.ANSWER_INVALID);
         assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS");
     }

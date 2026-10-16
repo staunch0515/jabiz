@@ -56,7 +56,7 @@ class PlayConcurrencyIT extends PlayItSupport {
         for (int i = 0; i < 40; i++) {
             String token = taker(newTaker("t-race-" + i, null));
             String attemptId = (String) start(token, i % 2 == 0 ? first : second).get("attemptId");
-            submissions.add(call("QB_ATTEMPT_SUBMIT", token, body("attemptId", attemptId, "answers",
+            submissions.add(call("QB_ATTEMPT_SUBMIT", token, submission(attemptId, "answers",
                 answers(true, true))));
         }
         assertThat(atOnce(submissions)).containsOnly(200);

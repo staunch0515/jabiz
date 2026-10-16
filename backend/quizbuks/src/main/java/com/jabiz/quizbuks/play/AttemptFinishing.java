@@ -81,15 +81,17 @@ public final class AttemptFinishing {
      * @param currentIndex  the question the taker was on
      * @param publicationId the attempt's publication, as the App knows it: the key of the queue before the
      *                      publication's lock (platform decision D45), refused when it is not the attempt's
-     *                      ({@link PlayCodes#PUBLICATION_MISMATCH}); without it (an older client) the submission does
-     *                      not queue and waits for the lock as before
+     *                      ({@link PlayCodes#PUBLICATION_MISMATCH}); required, so that no submission skips the queue
+     *                      and waits for the lock on a connection (Q10a2 review M2)
      */
     public record SubmitInput(@NotBlank @Size(max = 36) String attemptId, Integer currentIndex,
-        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers, UUID publicationId) {}
+        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers,
+        @NotNull UUID publicationId) {}
 
     /**
      * @param publicationId the attempt's publication from the job's selection ({@link #DUE_TEMPLATE}): the key of
-     *                      the queue before the publication's lock, as for a submission; null does not queue
+     *                      the queue before the publication's lock, as for a submission. The job always gives it;
+     *                      only the system runs this process (null, as tests running it by hand do, does not queue)
      */
     public record ExpireInput(@NotBlank @Size(max = 36) String attemptId, UUID publicationId) {}
 
@@ -222,7 +224,7 @@ public final class AttemptFinishing {
     /**
      * Whether the input names another publication than the attempt's (refused): the input's publication chose the
      * queue (platform decision D45), so a wrong one would have queued for one lock and then taken another. Checked
-     * before the lock; an input without one queued for nothing and passes.
+     * before the lock. (A submission always names one; an expiry run by hand without one queued for nothing.)
      */
     static boolean mismatched(ProcessContext ctx, EntityInstance attempt) {
         Object given = ctx.get(GIVEN_PUBLICATION);

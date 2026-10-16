@@ -8,14 +8,20 @@ import { problemText } from '../qb/problems'
  * queues them before the quiz's lock and answers the overflow at once with 503 `PROCESS_BUSY` and `Retry-After`. The
  * App then says it is busy and tries again by itself, never sooner than the server asked, with the same
  * `Idempotency-Key` (the caller's closure keeps it): a retry of a call that went through returns its answer, and an
- * attempt is finished once whatever the key.
+ * attempt is finished once whatever the key. It stops when the page goes away (the signal), when the caller says a
+ * retry is no use any more (a submission past its time), and when the waits would pass a minute in all.
  */
 
-/** Tries in all (the first and the retries); with the delays below about half a minute at most. */
+/** Tries in all (the first and the retries). */
 export const BUSY_ATTEMPTS = 6
 /** The back-off doubles from the first delay up to the longest. */
 export const BUSY_FIRST_DELAY_MS = 1_000
 export const BUSY_LONGEST_DELAY_MS = 8_000
+/**
+ * The waits of one call's retries together at most (the server's `Retry-After` can be up to 30 s): without it six
+ * tries could wait about three minutes. With the back-off alone the waits come to about 20–25 s.
+ */
+export const BUSY_TOTAL_WAIT_MS = 60_000
 
 /** Whether the server's queue before a hot quiz turned the call away (worth trying again soon). */
 export function isBusy(error: unknown): error is ApiError {
@@ -45,30 +51,65 @@ export function busyDelay(error: ApiError, attempt: number, random: () => number
 }
 
 export interface BusyRetryOptions {
-  /** Told `true` before each wait for a retry and `false` once the call is over (answered or given up). */
+  /** Told `true` before each wait for a retry and `false` once the call is over (answered, given up or aborted). */
   onBusy?: (busy: boolean) => void
+  /** Aborted (the page went away): no further try, the wait ends at once, and the abort's reason is thrown. */
+  signal?: AbortSignal
+  /** Asked before each retry: false gives the busy answer back (for example a submission past its time). */
+  shouldRetry?: () => boolean
   attempts?: number
-  sleep?: (ms: number) => Promise<void>
+  totalWaitMs?: number
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   random?: () => number
 }
 
-const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+function aborted(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('Aborted', 'AbortError')
+}
+
+/** Waits `ms`, or less when the signal aborts (then rejects with its reason). */
+export function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(aborted(signal))
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(aborted(signal!))
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
 
 /**
- * Runs `call` and, while the server answers busy, waits and runs it again (at most `attempts` times in all). Any other
- * failure, and the last busy answer, are the caller's. `call` must send the same `Idempotency-Key` every time.
+ * Runs `call` and, while the server answers busy, waits and runs it again (at most `attempts` times in all and
+ * `totalWaitMs` of waiting). Any other failure, and the last busy answer, are the caller's; an abort throws its reason.
+ * `call` must send the same `Idempotency-Key` every time.
  */
 export async function retryWhenBusy<T>(call: () => Promise<T>, options: BusyRetryOptions = {}): Promise<T> {
   const attempts = options.attempts ?? BUSY_ATTEMPTS
+  const totalWaitMs = options.totalWaitMs ?? BUSY_TOTAL_WAIT_MS
   const sleep = options.sleep ?? pause
+  const { signal } = options
+  let waited = 0
   try {
     for (let attempt = 1; ; attempt++) {
+      if (signal?.aborted) throw aborted(signal)
       try {
         return await call()
       } catch (error) {
-        if (!isBusy(error) || attempt >= attempts) throw error
+        if (!isBusy(error) || attempt >= attempts || signal?.aborted) throw error
+        if (options.shouldRetry && !options.shouldRetry()) throw error
+        const delay = busyDelay(error, attempt, options.random)
+        if (waited + delay > totalWaitMs) throw error
+        waited += delay
         options.onBusy?.(true)
-        await sleep(busyDelay(error, attempt, options.random))
+        await sleep(delay, signal)
       }
     }
   } finally {

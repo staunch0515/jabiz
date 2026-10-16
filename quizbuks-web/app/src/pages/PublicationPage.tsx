@@ -96,7 +96,7 @@ function Action({ publication }: { publication: PublicationView }) {
   return (
     <div className="flex flex-col gap-2">
       {action}
-      <p className="text-muted-foreground text-sm" role="status" data-testid="detail-start-busy">
+      <p className="text-muted-foreground text-sm empty:hidden" role="status" data-testid="detail-start-busy">
         {start.busy ? t('play.busy') : ''}
       </p>
       {start.isError && (

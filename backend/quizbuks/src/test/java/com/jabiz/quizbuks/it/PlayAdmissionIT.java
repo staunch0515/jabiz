@@ -39,8 +39,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The queue before a publication's lock (platform decision D45; docs/quizbuks/plans/Q10-launch.md, Q10a2):
  * {@code QB_ATTEMPT_START} and {@code QB_ATTEMPT_SUBMIT} with its publication queue for {@code qb.pub:<publication>}
  * before their transaction, so that a hot publication's waiters hold no database connection; a submission naming
- * another publication than its attempt's is refused before the lock; one naming none (an older App) does not queue and
- * waits for the lock as before; and the home feed keeps its connections while a hot publication overflows its queue.
+ * another publication than its attempt's is refused before the lock, one naming none is 400 (the publication is
+ * required: nothing skips the queue); the home feed keeps its connections while a hot publication overflows its queue;
+ * a retry with the same key after a refusal runs once, after a commit replays; and an expiry turned away by a full
+ * queue does not let a late submission in.
  * Here the queue waits long (20 s) and holds 6, so that what is queued, waiting and refused is exact.
  */
 @SpringBootTest(properties = {
@@ -78,8 +80,6 @@ class PlayAdmissionIT extends PlayItSupport {
             .findLatest(AttemptFinishing.SUBMIT).orElseThrow();
         assertThat(submit.admission().keyOf(new AttemptFinishing.SubmitInput("a", null, null, publicationId)))
             .isEqualTo(lock);
-        assertThat(submit.admission().keyOf(new AttemptFinishing.SubmitInput("a", null, null, null)))
-            .as("an older App's submission does not queue").isNull();
         var expire = (ProcessDefinition<AttemptFinishing.ExpireInput, ?, ProcessContext>) processes
             .findLatest(AttemptFinishing.EXPIRE).orElseThrow();
         assertThat(expire.admission().keyOf(new AttemptFinishing.ExpireInput("a", publicationId))).isEqualTo(lock);
@@ -118,11 +118,12 @@ class PlayAdmissionIT extends PlayItSupport {
             }
             awaitThat(() -> admission.waiting() == 3 && waiters(lock) == 2, "3 queued, 2 waiting for the lock");
 
-            // An older App: no publication, no queue; it waits for the lock in its transaction, as before.
-            CompletableFuture<EntityExchangeResult<Map<String, Object>>> unqueued = background(() ->
-                submission(tokens.get(2), attempts.get(2), null));
-            awaitThat(() -> waiters(lock) == 3, "the unqueued submission waits for the lock");
+            // Without the publication: 400 at once (required, so that nothing waits for the lock on a connection).
+            EntityExchangeResult<Map<String, Object>> missing = submission(tokens.get(2), attempts.get(2), null);
+            assertThat(missing.getStatus().value()).isEqualTo(400);
+            assertThat(missing.getResponseBody().toString()).contains("publicationId");
             assertThat(admission.waiting()).isEqualTo(3);
+            assertThat(waiters(lock)).isEqualTo(2);
 
             // Another publication than the attempt's: queued there (free), refused before the hot lock.
             long began = System.nanoTime();
@@ -130,21 +131,22 @@ class PlayAdmissionIT extends PlayItSupport {
             assertThat(wrong.getStatus().value()).isEqualTo(422);
             assertThat(wrong.getResponseBody().toString()).contains(PlayCodes.PUBLICATION_MISMATCH);
             assertThat(Duration.ofNanos(System.nanoTime() - began)).isLessThan(Duration.ofSeconds(5));
-            assertThat(waiters(lock)).isEqualTo(3);
+            assertThat(waiters(lock)).isEqualTo(2);
             // Other publications are not held up by the hot one.
             assertThat(startCall(taker(newTaker("t-admit-elsewhere", null)), other).getStatus().value())
                 .isEqualTo(200);
             assertThat(queued).noneMatch(CompletableFuture::isDone);
             holder.rollback();
-            queued.add(unqueued);
         }
         for (CompletableFuture<EntityExchangeResult<Map<String, Object>>> call : queued) {
             EntityExchangeResult<Map<String, Object>> result = call.get(30, TimeUnit.SECONDS);
             assertThat(result.getStatus().value()).as(String.valueOf(result.getResponseBody())).isEqualTo(200);
         }
         assertThat(attempt(attempts.get(3))).containsEntry("status", "IN_PROGRESS");
-        // The refused one, sent again with its own publication, goes through.
+        assertThat(attempt(attempts.get(2))).containsEntry("status", "IN_PROGRESS");
+        // The refused ones, sent again with their own publication, go through.
         assertThat(submission(tokens.get(3), attempts.get(3), hot).getStatus().value()).isEqualTo(200);
+        assertThat(submission(tokens.get(2), attempts.get(2), hot).getStatus().value()).isEqualTo(200);
         awaitThat(() -> admission.active() == 0 && admission.waiting() == 0 && admission.keys() == 0,
             "nothing held or queued");
         assertBooksBalance();
@@ -219,29 +221,146 @@ class PlayAdmissionIT extends PlayItSupport {
         String attemptId = (String) start(token, publication).get("attemptId");
         clock.advance(Duration.ofMinutes(5));
         JobRunner.JobRun run = runExpire(clock.instant());
-        assertThat(run.items().succeeded()).isEqualTo(1);
+        assertThat(run.items().succeeded()).isPositive();
         assertThat(attempt(attemptId)).containsEntry("status", "EXPIRED");
         assertThat(query("SELECT input_summary ->> 'publicationId' AS p FROM op_process WHERE process_name = ? "
             + "AND input_summary ->> 'attemptId' = ?", AttemptFinishing.EXPIRE, attemptId).getFirst())
             .containsEntry("p", publication);
     }
 
+    /** Another taker's attempt is not found, whichever publication the submission names (before any queue's check). */
+    @Test
+    void anotherTakersAttemptIsNotFoundWhateverThePublication() {
+        String sponsor = newSponsor("s-admit-owner");
+        String publication = livePublication(sponsor, "Admit owner", Map.of("regions", List.of("GLOBAL")));
+        String other = livePublication(sponsor, "Admit owner other", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 1_000);
+        String attemptId = (String) start(taker(newTaker("t-admit-owner-a", null)), publication).get("attemptId");
+        String intruder = taker(newTaker("t-admit-owner-b", null));
+        assertThat(submission(intruder, attemptId, publication).getStatus().value()).isEqualTo(404);
+        assertThat(submission(intruder, attemptId, other).getStatus().value()).isEqualTo(404);
+        assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS");
+    }
+
+    /**
+     * The App's retries keep their key: a start refused by the full queue never ran, so the same key runs it (one
+     * attempt); a submission that committed is answered again from its key (one reward, the wallet debited once).
+     */
+    @Test
+    void theSameKeyRunsARefusedCallOnceAndReplaysACommittedOne() throws Exception {
+        warmUp();
+        String sponsor = newSponsor("s-admit-key");
+        String hot = livePublication(sponsor, "Admit key", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 10_000);
+        String lock = PublicationMoves.lockName(hot);
+        String userId = newTaker("t-admit-key", null);
+        String token = taker(userId);
+        String key = "start-" + UUID.randomUUID();
+        List<CompletableFuture<EntityExchangeResult<Map<String, Object>>>> filling = new ArrayList<>();
+        try (Connection holder = DB.connect(schema())) {
+            holdLock(holder, lock);
+            for (int i = 0; i < 8; i++) {
+                String other = taker(newTaker("t-admit-key-fill-" + i, null));
+                filling.add(background(() -> startCall(other, hot)));
+            }
+            awaitThat(() -> admission.waiting() == 6 && waiters(lock) == 2, "the queue full");
+            EntityExchangeResult<Map<String, Object>> refused = startCall(token, hot, key);
+            assertThat(refused.getStatus().value()).isEqualTo(503);
+            assertThat(refused.getResponseBody().toString()).contains(PlatformErrorCodes.PROCESS_BUSY);
+            holder.rollback();
+        }
+        for (CompletableFuture<EntityExchangeResult<Map<String, Object>>> call : filling) {
+            assertThat(call.get(30, TimeUnit.SECONDS).getStatus().value()).isEqualTo(200);
+        }
+        EntityExchangeResult<Map<String, Object>> retried = startCall(token, hot, key);
+        assertThat(retried.getStatus().value()).isEqualTo(200);
+        assertThat(query("SELECT count(*) AS n FROM qb_attempt WHERE user_id = ? AND publication_id = ?::uuid",
+            userId, hot).getFirst().get("n")).isEqualTo(1L);
+        @SuppressWarnings("unchecked")
+        String attemptId = (String) ((Map<String, Object>) retried.getResponseBody().get("output")).get("attemptId");
+
+        java.math.BigDecimal before = balance(sponsor);
+        String submitKey = "submit-" + UUID.randomUUID();
+        EntityExchangeResult<Map<String, Object>> first = submission(token, attemptId, hot, submitKey);
+        EntityExchangeResult<Map<String, Object>> again = submission(token, attemptId, hot, submitKey);
+        assertThat(first.getStatus().value()).isEqualTo(200);
+        assertThat(again.getStatus().value()).isEqualTo(200);
+        assertThat(again.getResponseBody().get("output")).isEqualTo(first.getResponseBody().get("output"));
+        assertThat(postingOf(attemptId).stream().map(row -> row.get("transaction_id")).distinct()).hasSize(1);
+        assertThat(before.subtract(balance(sponsor))).isEqualByComparingTo("100");
+        assertBooksBalance();
+    }
+
+    /**
+     * An expiry item turned away by the full queue is busy, and stays to the next minute; a submission arriving late
+     * meanwhile is EXPIRED (the deadline and the grace count, not who reaches the lock first), and the next run
+     * finishes the attempt with its saved answers.
+     */
+    @Test
+    void anExpiryTurnedAwayByAFullQueueLetsNoLateSubmissionIn() throws Exception {
+        warmUp();
+        String sponsor = newSponsor("s-admit-late");
+        String hot = livePublication(sponsor, "Admit late", Map.of("regions", List.of("GLOBAL"), "timeLimitSec", 60));
+        credit(sponsor, 10_000);
+        String token = taker(newTaker("t-admit-late", null));
+        String attemptId = (String) start(token, hot).get("attemptId");
+        run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1, "answers", answers(true, true)));
+        List<String> fillers = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            fillers.add(taker(newTaker("t-admit-late-fill-" + i, null)));
+        }
+        clock.advance(Duration.ofMinutes(2));
+        String lock = PublicationMoves.lockName(hot);
+        List<CompletableFuture<EntityExchangeResult<Map<String, Object>>>> filling = new ArrayList<>();
+        try (Connection holder = DB.connect(schema())) {
+            holdLock(holder, lock);
+            for (String filler : fillers) {
+                filling.add(background(() -> startCall(filler, hot)));
+            }
+            awaitThat(() -> admission.waiting() == 6 && waiters(lock) == 2, "the queue full");
+            JobRunner.JobRun run = runExpire(clock.instant());
+            assertThat(run.items().busy()).isEqualTo(1);
+            assertThat(attempt(attemptId)).containsEntry("status", "IN_PROGRESS");
+            holder.rollback();
+        }
+        for (CompletableFuture<EntityExchangeResult<Map<String, Object>>> call : filling) {
+            assertThat(call.get(30, TimeUnit.SECONDS).getStatus().value()).isEqualTo(200);
+        }
+        EntityExchangeResult<Map<String, Object>> late = submission(token, attemptId, hot);
+        assertThat(late.getStatus().value()).isEqualTo(422);
+        assertThat(late.getResponseBody().toString()).contains(PlayCodes.EXPIRED);
+        clock.advance(Duration.ofMinutes(1));
+        assertThat(runExpire(clock.instant()).items().succeeded()).isPositive();
+        assertThat(attempt(attemptId)).containsEntry("status", "EXPIRED").containsEntry("reward_status", "PAID");
+        assertBooksBalance();
+    }
+
     // ================= helpers =================
 
     private EntityExchangeResult<Map<String, Object>> submission(String token, String attemptId, String publicationId) {
+        return submission(token, attemptId, publicationId, UUID.randomUUID().toString());
+    }
+
+    private EntityExchangeResult<Map<String, Object>> submission(String token, String attemptId, String publicationId,
+        String key) {
         Map<String, Object> body = body("attemptId", attemptId, "answers", answers(true, true));
         if (publicationId != null) {
             body.put("publicationId", publicationId);
         }
         return client.post().uri("/api/processes/" + AttemptFinishing.SUBMIT + "/latest")
             .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
-            .header("Idempotency-Key", UUID.randomUUID().toString()).bodyValue(body).exchange().expectBody(MAP)
+            .header("Idempotency-Key", key).bodyValue(body).exchange().expectBody(MAP)
             .returnResult();
     }
 
     private EntityExchangeResult<Map<String, Object>> startCall(String token, String publicationId) {
+        return startCall(token, publicationId, UUID.randomUUID().toString());
+    }
+
+    private EntityExchangeResult<Map<String, Object>> startCall(String token, String publicationId, String key) {
         return client.post().uri("/api/processes/" + AttemptProcesses.START + "/latest")
             .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
+            .header("Idempotency-Key", key)
             .bodyValue(body("publicationId", publicationId)).exchange().expectBody(MAP).returnResult();
     }
 

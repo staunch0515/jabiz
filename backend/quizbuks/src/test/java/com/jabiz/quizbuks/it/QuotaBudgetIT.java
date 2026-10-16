@@ -98,7 +98,7 @@ class QuotaBudgetIT extends PlayItSupport {
         String a = startFor(publicationId, "t-drift-a");
         execute("UPDATE qb_publication_card SET max_winners = 1 WHERE publication_id = ?::uuid", publicationId);
         clock.advance(Duration.ofSeconds(1));
-        refused("QB_ATTEMPT_SUBMIT", taker((String) attempt(a).get("user_id")), body("attemptId", a, "answers",
+        refused("QB_ATTEMPT_SUBMIT", taker((String) attempt(a).get("user_id")), submission(a, "answers",
             answers(true, true)), 500);
         assertThat(attempt(a)).containsEntry("status", "IN_PROGRESS");
         assertThat(status(publicationId)).isEqualTo("LIVE");
@@ -138,7 +138,7 @@ class QuotaBudgetIT extends PlayItSupport {
                         .get("attemptId");
                     var submitted = client.post().uri("/api/processes/QB_ATTEMPT_SUBMIT/latest")
                         .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
-                        .bodyValue(body("attemptId", attemptId, "answers", answers(true, true))).exchange()
+                        .bodyValue(submission(attemptId, "answers", answers(true, true))).exchange()
                         .expectBody(MAP).returnResult();
                     assertThat(submitted.getStatus().value()).as(String.valueOf(submitted.getResponseBody()))
                         .isEqualTo(200);

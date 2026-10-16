@@ -333,6 +333,57 @@ describe('answering', () => {
     }
   })
 
+  it('saves the last answer before an automatic submission that queues past its time ends EXPIRED', async () => {
+    let submits = 0
+    const begun = Date.now()
+    const late = started({ deadline: new Date(begun + 2_500).toISOString(), currentIndex: 1 })
+    const { posted } = server({ start: () => json(200, { output: late }), submit: () => (submits++ === 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'WAIT_TIMEOUT', retryAfter: 1,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(422, { status: 422, violations: [{ field: 'attemptId', ruleCode: 'QB_ATTEMPT_EXPIRED',
+        message: 'Over' }] })) })
+    storeStart(late)
+    window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+    render(<App />)
+    await screen.findByTestId('play-progress')
+    // An answer within the last moment: its save would come after the deadline, when the submission starts.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, begun + 2_000 - Date.now())))
+    })
+    await userEvent.click(screen.getByRole('checkbox', { name: /Tokyo/ }))
+    await waitFor(() => expect(window.location.pathname).toBe(`/result/${ATTEMPT}`), { timeout: 6_000 })
+    expect(posted('QB_ATTEMPT_SUBMIT')).toHaveLength(2)
+    // Saved before submitting, not dropped: the server's expiry finishes the attempt with it.
+    expect(posted('QB_ATTEMPT_SAVE').at(-1)).toMatchObject({ answers: [{ questionNo: 2, selected: [1] }] })
+    expect(posted('QB_ATTEMPT_SAVE').length).toBeGreaterThan(0)
+  }, 15_000)
+
+  it('continues an attempt through a busy quiz on the play page, saying so', async () => {
+    let busyFor = 1
+    const { keys } = server({ start: () => (busyFor-- > 0
+      ? json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+        violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] })
+      : json(200, { output: started({ resumed: true }) })) })
+    storeStart(started())
+    window.history.replaceState(null, '', `/play/${ATTEMPT}`)
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('play-loading')).toHaveTextContent('trying again'))
+    expect(await screen.findByTestId('play-progress', {}, { timeout: 4_000 })).toHaveTextContent('Question 1 of 2')
+    expect(keys('QB_ATTEMPT_START')).toHaveLength(2)
+    expect(new Set(keys('QB_ATTEMPT_START')).size).toBe(1)
+  })
+
+  it('shows a rate limit\'s own text and does not retry it', async () => {
+    const { posted } = server({ start: () => json(429, { status: 429, title: 'Too many requests',
+      violations: [{ field: null, ruleCode: 'RATE_LIMITED', message: 'Too many tries: wait a minute.' }] }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('detail-start'))
+    expect(await screen.findByTestId('detail-start-error')).toHaveTextContent('Too many tries: wait a minute.')
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(1)
+    expect(screen.getByTestId('detail-start-busy')).toBeEmptyDOMElement()
+  })
+
   it('continues an attempt after a reload at the question and with the answers saved', async () => {
     const { posted } = server({ start: () => json(200, { output: started({ resumed: true, currentIndex: 1,
       answers: [{ questionNo: 1, selected: [1] }, { questionNo: 2, selected: [2] }] }) }) })
@@ -455,5 +506,26 @@ describe('the history', () => {
     expect(await screen.findByTestId('play-progress')).toHaveTextContent('Question 2 of 2')
     // The play page took the started attempt as handed over: one start only.
     expect(posted('QB_ATTEMPT_START')).toHaveLength(1)
+  })
+
+  it('says a busy quiz is busy when continuing, and stops trying once the user leaves', async () => {
+    const deadline = new Date(Date.now() + 120_000).toISOString()
+    const { posted } = server({ history: [row({ status: 'IN_PROGRESS', category: 'IN_PROGRESS', passed: null,
+      score: null, reward: null, rewardStatus: null, submittedAt: null, deadline })],
+    start: () => json(503, { status: 503, title: 'Busy', reason: 'QUEUE_FULL', retryAfter: 1,
+      violations: [{ field: null, ruleCode: 'PROCESS_BUSY', message: 'Busy' }] }) })
+    window.history.replaceState(null, '', '/history')
+    render(<App />)
+    await act(async () => userEvent.click(await screen.findByTestId('history-continue')))
+    expect(await screen.findByTestId('history-continue-busy')).toHaveTextContent('Many people are answering')
+    // Away to the home page: no more tries, and no late start takes the user back to the quiz.
+    await userEvent.click(screen.getByTestId('nav-home'))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    const tries = posted('QB_ATTEMPT_START').length
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2_600))
+    })
+    expect(posted('QB_ATTEMPT_START')).toHaveLength(tries)
+    expect(window.location.pathname).toBe('/')
   })
 })

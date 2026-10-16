@@ -58,7 +58,7 @@ class PlayThroughputIT extends PlayItSupport {
                         .get("attemptId");
                     var submitted = client.post().uri("/api/processes/QB_ATTEMPT_SUBMIT/latest")
                         .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token)
-                        .bodyValue(body("attemptId", attemptId, "answers", answers(true, true))).exchange()
+                        .bodyValue(submission(attemptId, "answers", answers(true, true))).exchange()
                         .expectBody(MAP).returnResult();
                     submits.add(System.nanoTime() - t1);
                     return submitted.getStatus().value() == 200;

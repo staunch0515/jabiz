@@ -107,6 +107,8 @@ public final class QuizbuksLoadTest {
     static final int BUSY_ATTEMPTS = 6;
     static final long BUSY_FIRST_DELAY_MS = 1_000;
     static final long BUSY_LONGEST_DELAY_MS = 8_000;
+    /** As the App: the waits of one call's retries together at most a minute. */
+    static final long BUSY_TOTAL_WAIT_MS = 60_000;
     private static final Pattern LINK = Pattern.compile("https?://[^\\s<>\"')\\]]+");
 
     private final String baseUrl = env("LOAD_BASE_URL", "http://localhost:8080");
@@ -271,6 +273,7 @@ public final class QuizbuksLoadTest {
         Database.Sampler sampler = db == null ? null : db.sample();
         long began = System.nanoTime();
         Map<String, Stats> busy;
+        List<Future<?>> playersDone = new ArrayList<>();
         try (ExecutorService readerPool = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<Map<String, Stats>> reading = readerPool.submit(() -> readers(readerTokens, publicationId,
                 playing::get, null));
@@ -284,19 +287,23 @@ public final class QuizbuksLoadTest {
                             Thread.sleep(Duration.ofNanos(wait));
                         }
                         String token = takerTokens.get(n);
-                        players.submit(() -> play(token, publicationId, load));
+                        playersDone.add(players.submit(() -> play(token, publicationId, load)));
                     }
                 }
                 for (int i = 0; rate <= 0 && i < concurrency; i++) {
-                    players.submit(() -> {
+                    playersDone.add(players.submit(() -> {
                         for (int n = next.getAndIncrement(); n < takerTokens.size(); n = next.getAndIncrement()) {
                             play(takerTokens.get(n), publicationId, load);
                         }
-                    });
+                    }));
                 }
             }
             playing.set(false);
             busy = reading.get();
+        }
+        // A taker that failed (an unexpected answer, a submission that never finished) fails the run.
+        for (Future<?> player : playersDone) {
+            player.get();
         }
         double seconds = (System.nanoTime() - began) / 1e9;
         if (sampler != null) {
@@ -398,6 +405,7 @@ public final class QuizbuksLoadTest {
      */
     private Answer retried(Stats each, Stats seen, LongAdder retries, java.util.function.Supplier<Answer> call) {
         long t0 = System.nanoTime();
+        long waited = 0;
         for (int attempt = 1; ; attempt++) {
             Answer answer = call.get();
             each.record(answer);
@@ -409,12 +417,20 @@ public final class QuizbuksLoadTest {
                 }
                 return whole;
             }
-            retries.increment();
             long after = busy ? answer.json().path("retryAfter").asLong(0) * 1000 : 0;
             long wait = Math.max(after, Math.min(BUSY_LONGEST_DELAY_MS, BUSY_FIRST_DELAY_MS << (attempt - 1)));
-            double jitter = 1 + 0.25 * ThreadLocalRandom.current().nextDouble();
+            long delay = (long) (wait * (1 + 0.25 * ThreadLocalRandom.current().nextDouble()));
+            if (waited + delay > BUSY_TOTAL_WAIT_MS) {
+                Answer whole = new Answer(answer.status(), answer.body(), System.nanoTime() - t0);
+                if (seen != null) {
+                    seen.record(whole);
+                }
+                return whole;
+            }
+            waited += delay;
+            retries.increment();
             try {
-                Thread.sleep(Duration.ofMillis((long) (wait * jitter)));
+                Thread.sleep(Duration.ofMillis(delay));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return answer;
@@ -461,24 +477,38 @@ public final class QuizbuksLoadTest {
         Map<String, Object> input = Map.of("attemptId", output.get("attemptId").asString(), "publicationId",
             publicationId, "currentIndex", answers.size() - 1, "answers", answers);
         String submitKey = UUID.randomUUID().toString();
-        Answer submitted = submit(token, input, submitKey, drain ? ignored : load.submits(),
-            drain ? null : load.submitsSeen(), retries, load.rewards());
+        Stats each = drain ? ignored : load.submits();
+        Answer submitted = submit(token, input, submitKey, each, drain ? null : load.submitsSeen(), retries,
+            load.rewards());
+        // Still busy after the retries: the taker presses again, with the same key (a submission that went through is
+        // answered again, not repeated). Counted as calls and in the completion's time; "as the taker sees it" keeps
+        // the first round.
+        for (int i = 0; i < 20 && !finishedAgain(submitted); i++) {
+            pauseBeforeAgain();
+            submitted = submit(token, input, submitKey, each, null, retries, load.rewards());
+        }
+        if (!finishedAgain(submitted)) {
+            throw new IllegalStateException("a submission did not finish: " + submitted.status());
+        }
         if (!drain) {
             load.completions().record(new Answer(submitted.status(), submitted.body(), System.nanoTime() - t0));
             if (submitted.status() == 200) {
                 load.finishedAt().add(System.nanoTime());
             }
         }
-        if (submitted.status() == 200 || submitted.status() == 422) {
-            return true;
+        return true;
+    }
+
+    /** Between rounds of a taker pressing again: without the App's own waits ({@code LOAD_RETRY_BUSY=no}) a second. */
+    private void pauseBeforeAgain() {
+        if (retryBusy) {
+            return;
         }
-        // Finished by the drain with the same key: a submission that went through is answered again, not repeated.
-        for (int i = 0; i < 20; i++) {
-            if (finishedAgain(submit(token, input, submitKey, ignored, null, retries, load.rewards()))) {
-                return true;
-            }
+        try {
+            Thread.sleep(Duration.ofSeconds(1));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-        throw new IllegalStateException("a submission did not finish: " + submitted.status());
     }
 
     private static boolean finishedAgain(Answer answer) {
@@ -501,7 +531,7 @@ public final class QuizbuksLoadTest {
     private void drain(String publicationId, Load load) {
         for (String token : List.copyOf(load.unfinished())) {
             for (int i = 0; i < 20 && !play(token, publicationId, load, true); i++) {
-                // busy or timed out again: once more
+                pauseBeforeAgain();
             }
         }
     }

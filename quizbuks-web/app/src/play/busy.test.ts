@@ -1,7 +1,8 @@
 import { ApiError } from '@jabiz/client'
 import { describe, expect, it, vi } from 'vitest'
 import '../messages'
-import { BUSY_ATTEMPTS, busyDelay, isBusy, playProblemText, retryAfterMs, retryWhenBusy } from './busy'
+import { BUSY_ATTEMPTS, BUSY_TOTAL_WAIT_MS, busyDelay, isBusy, pause, playProblemText, retryAfterMs, retryWhenBusy }
+  from './busy'
 
 /** The server's answer when a hot quiz's queue is full (platform decision D45). */
 const busy = (retryAfter: number | null = 1) => new ApiError(503, { status: 503, title: 'Busy',
@@ -46,7 +47,7 @@ describe('retrying while busy', () => {
     const onBusy = vi.fn()
     await expect(retryWhenBusy(call, { sleep, onBusy, random: () => 0 })).resolves.toBe('started')
     expect(call).toHaveBeenCalledTimes(3)
-    expect(sleep.mock.calls).toEqual([[2_000], [2_000]])
+    expect(sleep.mock.calls).toEqual([[2_000, undefined], [2_000, undefined]])
     expect(onBusy.mock.calls).toEqual([[true], [true], [false]])
   })
 
@@ -68,5 +69,53 @@ describe('retrying while busy', () => {
     expect(call).toHaveBeenCalledTimes(BUSY_ATTEMPTS)
     expect(sleep).toHaveBeenCalledTimes(BUSY_ATTEMPTS - 1)
     expect(onBusy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('caps the waits of one call at a minute, however long Retry-After asks', async () => {
+    const call = vi.fn<() => Promise<string>>().mockRejectedValue(busy(30))
+    const sleep = vi.fn(async () => {})
+    await expect(retryWhenBusy(call, { sleep, random: () => 0 })).rejects.toMatchObject({ status: 503 })
+    // 30 s + 30 s is the minute; a third wait would pass it.
+    expect(sleep.mock.calls).toEqual([[30_000, undefined], [30_000, undefined]])
+    expect(call).toHaveBeenCalledTimes(3)
+    expect(BUSY_TOTAL_WAIT_MS).toBe(60_000)
+  })
+
+  it('stops when the caller says retrying is no use (a submission past its time)', async () => {
+    const call = vi.fn<() => Promise<string>>().mockRejectedValue(busy())
+    const sleep = vi.fn(async () => {})
+    await expect(retryWhenBusy(call, { sleep, shouldRetry: () => false })).rejects.toMatchObject({ status: 503 })
+    expect(call).toHaveBeenCalledTimes(1)
+    expect(sleep).not.toHaveBeenCalled()
+  })
+
+  it('stops at once when aborted: before a try, and during a wait', async () => {
+    const before = new AbortController()
+    before.abort()
+    const never = vi.fn<() => Promise<string>>()
+    await expect(retryWhenBusy(never, { signal: before.signal })).rejects.toBeDefined()
+    expect(never).not.toHaveBeenCalled()
+
+    const during = new AbortController()
+    const call = vi.fn<() => Promise<string>>().mockRejectedValue(busy(20))
+    const onBusy = vi.fn()
+    const started = Date.now()
+    const retrying = retryWhenBusy(call, { signal: during.signal, onBusy })
+    await vi.waitFor(() => expect(onBusy).toHaveBeenCalledWith(true))
+    during.abort()
+    await expect(retrying).rejects.toBeDefined()
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(call).toHaveBeenCalledTimes(1)
+    expect(onBusy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('pauses for the time asked unless aborted', async () => {
+    const started = Date.now()
+    await pause(20)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(15)
+    const controller = new AbortController()
+    const waiting = pause(10_000, controller.signal)
+    controller.abort()
+    await expect(waiting).rejects.toBeDefined()
   })
 })
