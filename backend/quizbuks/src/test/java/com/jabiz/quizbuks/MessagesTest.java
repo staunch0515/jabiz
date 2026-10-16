@@ -93,6 +93,11 @@ class MessagesTest {
         assertThat(en.stringPropertyNames()).contains("query.qb.sponsor.transactions",
             "query.qb.sponsor.transactions.amount", "query.qb.sponsor.transactions.userName",
             "query.qb.sponsor.transaction-summary", "query.qb.sponsor.transaction-summary.topUpRefundedAmount");
+        // Q9a: the money of the admin pages, in templates of their own (finance only).
+        assertThat(en.stringPropertyNames()).contains("query.qb.admin.publication-funds",
+            "query.qb.admin.publication-funds.fundsShort", "query.qb.admin.attempt-rewards",
+            "query.qb.admin.attempt-rewards.reward")
+            .doesNotContain("query.qb.admin.publications.fundsShort", "query.qb.admin.attempts.reward");
         assertThat(en.stringPropertyNames()).allSatisfy(key -> assertThat(en.getProperty(key)).as(key).isNotBlank());
     }
 }

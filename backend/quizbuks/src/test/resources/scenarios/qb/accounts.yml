@@ -129,6 +129,13 @@ steps:
       rows: 1
       values: [{ userName: sara, displayName: Sara, sponsorStatus: APPROVED, company: Acme Quizzes,
         banned: false }]
+  - note: The admin extension's user summary (P-01, Q9a) looks one user up by key.
+    expect:
+      query: qb.admin.users
+      params: { userId: "${sara}" }
+      rows: 1
+      values: [{ userId: "${sara}", userName: sara, emailVerified: false, sponsorStatus: APPROVED,
+        company: Acme Quizzes }]
 
   - note: The super administrator bans the taker, then lifts the ban.
     advanceClock: PT1H

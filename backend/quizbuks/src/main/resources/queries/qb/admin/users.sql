@@ -10,6 +10,7 @@ datasets:
 params:
   q:      { kind: { type: text, maxLength: 100 }, description: "Only users whose user name, address, name or company contains this text" }
   region: { kind: { type: text, maxLength: 20 }, description: Only users whose country is in this region (country.Regions) }
+  userId: { like: SecUser.userId, description: "Only this user (the user summary of the admin extension, P-01)" }
 results:
   userId:            { from: SecUser.userId }
   userName:          { from: SecUser.userName }
@@ -35,7 +36,8 @@ permissions: [qb.admin.users.read]
 -- The text is found as written: strpos takes it literally, so % _ and \ match themselves. An address is verified
 -- while it is the one verified, in any case (docs/design/10-security.md section 15.4). The registration time is the
 -- profile's first save (registration's second step, D-Q2-2): users without a profile have none. A region matches a
--- whole code of the country's comma-separated regions.
+-- whole code of the country's comma-separated regions. One user is looked up by the key (a parameter, so it is a
+-- condition on SecUser rather than on the joined result).
 SELECT
     u.{{SecUser.userId}}                AS userId,
     u.{{SecUser.userName}}              AS userName,
@@ -63,3 +65,4 @@ WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(coalesce(s.{{QbSponsor.company}}, '')), lower(CAST(:q AS text))) > 0)
   AND (CAST(:region AS text) IS NULL
        OR strpos(',' || coalesce(c.{{QbCountry.regions}}, '') || ',', ',' || CAST(:region AS text) || ',') > 0)
+  AND (CAST(:userId AS uuid) IS NULL OR u.{{SecUser.userId}} = CAST(:userId AS uuid))

@@ -298,7 +298,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
 | `qb.sponsor.dashboard` / `qb.sponsor.publications` / `qb.sponsor.analytics.*` | M-10 – M-11、M-34、M-40 – M-43 | 各自权限 |
-| `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
+| `qb.admin.attempts` / `qb.admin.wallets` | 全部会话（P-01 的答题历史、支持查询，不含金额）；商家钱包的余额与待支付（Q5） | `qb.admin.users.read` / `qb.admin.finance.read` |
+| `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` / `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表）/ `qb.admin.journal-export` | P-01、P-03、F-06、F-08、F-02 – F-03（CSV 汇总凭证） | 管理权限 |
 
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9）同样按索引统计。
@@ -328,7 +329,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 ### 7.3 管理员后台（`/admin/`）
 
 - 平台通用后台：用户与资料、商家、字典、内容页、业务参数、审批与待办、审计、账本、报表都由元数据生成。
-- QuizBuks 扩展页（`backend/quizbuks/admin-extension`）：用户详情汇总（资料 + 答题历史 + 资金流水，P-01）、转账监控、对账结果。
+- QuizBuks 扩展页（`backend/quizbuks/admin-extension`，`plans/Q9a-admin-extension.md`）：
+  - Q9a：审核（`/qb/reviews`：待审的商家入驻与发布；发布页显示全部设置、档位、商家资金与冻结版本的完整内容（含正确答案、资料、图片），入驻页显示审批绑定的内容与邮箱验证状态；
+    决定用平台的 `ApprovalPanel`）与用户汇总（`/qb/users/:userId`，资料 + 答题历史，资金流水只给财务，P-01）。
+  - 以后（财务 PR）：转账监控、对账结果。
 
 ### 7.4 "Kudos"
 

@@ -1,4 +1,5 @@
 import type { APIRequestContext, Page } from '@playwright/test'
+import { signInAdmin, submittedPublication } from './admin'
 import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
@@ -8,6 +9,7 @@ import {
   expectAccessible,
   PASSWORD,
   prepareQuizbuks,
+  rows,
   run,
   signIn,
   test,
@@ -229,6 +231,45 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
     await expectAccessible(page, at('sponsor live publication 390px'))
+  })
+
+  test(`the administration's QuizBuks pages pass axe (${appearance})`, async ({ page, request }) => {
+    test.setTimeout(150_000)
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const { token } = await approvedSponsor(request, 'Ines')
+    const quiz = await completeQuiz(request, token)
+    const publicationId = await submittedPublication(request, token, quiz.quizId, `Access review ${quiz.title}`)
+    const applicant = await sponsor(request, 'Jonas')
+    await run(request, applicant.token, 'QB_SPONSOR_APPLY', { displayName: 'Jonas', company: 'Jonas Co',
+      intro: 'We **ask**.', acceptTerms: true })
+    const userId = (await rows(request, applicant.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0]
+      .attributes.userId as string
+    await signInAdmin(page)
+
+    await page.goto('/admin/qb/reviews')
+    await expect(page.getByTestId('queue-publication').first()).toBeVisible()
+    if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
+    else await expect(page.locator('html')).not.toHaveClass(/dark/)
+    await expectAccessible(page, at('admin review queue'))
+    await page.getByTestId('tab-sponsors').click()
+    await expect(page.getByTestId('queue-sponsor').first()).toBeVisible()
+    await expectAccessible(page, at('admin sponsor queue'))
+    await page.goto(`/admin/qb/reviews/publications/${publicationId}`)
+    await expect(page.getByTestId('preview-question')).toHaveCount(2)
+    await expect(page.getByTestId('version-preview').getByRole('img').first()).toBeVisible()
+    await expect(page.getByTestId('approval-approve')).toBeVisible()
+    await expectAccessible(page, at('admin publication review'))
+    await page.goto(`/admin/qb/reviews/sponsors/${userId}`)
+    await expect(page.getByTestId('approval-approve')).toBeVisible()
+    await expectAccessible(page, at('admin sponsor review'))
+    await page.goto('/admin/qb/users')
+    await expect(page.getByTestId('user-row').first()).toBeVisible()
+    await expectAccessible(page, at('admin users'))
+    await page.goto(`/admin/qb/users/${userId}`)
+    await expect(page.getByTestId('user-attempts')).toBeVisible()
+    await expect(page.getByTestId('user-payout')).toBeVisible()
+    await expectAccessible(page, at('admin user summary'))
   })
 }
 
