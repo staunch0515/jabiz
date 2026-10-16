@@ -40,6 +40,7 @@ const SPONSOR = '0192f0a0-0000-7000-8000-00000000aa01'
 const EXPORT = '0192f0a0-0000-7000-8000-00000000ee01'
 const FILE = '0192f0a0-0000-7000-8000-00000000f001'
 const DETAIL = '0192f0a0-0000-7000-8000-00000000f002'
+const DETAIL_2 = '0192f0a0-0000-7000-8000-00000000f003'
 
 const FINANCE = ['qb.admin.finance.read', 'qb.journal.export', 'qb.journal.confirm', 'file.generated.read']
 
@@ -54,15 +55,20 @@ function preview(change: Row = {}): Row {
     periodEnd: '2026-10-31T15:00:00Z', previousVoucher: 'QBJ-2026-00009', knownAt: '2026-11-02T00:50:00Z',
     reconStatus: 'OK', reconTime: '2026-11-01T18:37:00Z', reconOk: true, unmapped: [], invalid: [],
     lines: [line(1, '1110', 'DEBIT', 5000), line(2, '2110', 'CREDIT', 5000, { sponsorId: SPONSOR })],
-    transactionCount: 1, debitTotal: 5000, creditTotal: 5000, balanced: true, ready: true, ...change,
+    transactionCount: 1, detailRows: 2, detailParts: 1, withinLimits: true, nearLimit: false, openTransactions: 0,
+    debitTotal: 5000, creditTotal: 5000, balanced: true, ready: true, ...change,
   }
 }
 
 function exported(change: Row = {}): Row {
   return { exportId: EXPORT, periodFrom: '2026-09-01', periodTo: '2026-09-30', voucherNo: 'QBJ-2026-00009',
     lineCount: 4, transactionCount: 3, debitTotal: 7000, creditTotal: 7000, knownAt: '2026-10-02T00:50:00Z',
-    exportedBy: SPONSOR, fileId: FILE, fileSha256: 'a'.repeat(64), detailFileId: DETAIL,
-    detailSha256: 'b'.repeat(64), externalVoucherNo: null, confirmedBy: null, ...change }
+    exportedAt: '2026-10-02T01:00:00Z', exportedBy: SPONSOR, fileId: FILE, fileSha256: 'a'.repeat(64),
+    detailPartCount: 2, externalVoucherNo: null, confirmedBy: null, ...change }
+}
+
+function part(partNo: number, fileId: string): Row {
+  return { exportId: EXPORT, voucherNo: 'QBJ-2026-00009', partNo, rowCount: 10, fileId, sha256: 'b'.repeat(64) }
 }
 
 beforeAll(async () => {
@@ -74,6 +80,8 @@ beforeEach(() => {
   server.preview = preview()
   server.templates = new Map<string, Row[]>([
     [TEMPLATE.journalExports, [exported()]],
+    // Out of order: the page sorts them.
+    [TEMPLATE.journalExportParts, [part(2, DETAIL_2), part(1, DETAIL)]],
     [TEMPLATE.journalMapping, [
       { accountCode: '1110', accountName: 'Stripe balance', paramKey: 'qb.journal.account.1110', externalCode: '111',
         paramExists: true },
@@ -129,6 +137,8 @@ describe('JournalPage', () => {
       row.dataset.amount])).toEqual([['1110', 'DEBIT', '5000'], ['2110', 'CREDIT', '5000']])
     expect(within(result).getByTestId('user-name')).toHaveTextContent(SPONSOR)
     expect(screen.queryByTestId('journal-blockers')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('journal-near-limit')).not.toBeInTheDocument()
+    expect(within(result).getByTestId('journal-detail-size')).toHaveTextContent('2 rows in 1 files')
 
     await userEvent.click(screen.getByTestId('journal-export'))
     await userEvent.click(await screen.findByRole('button', { name: 'Export' }))
@@ -150,6 +160,27 @@ describe('JournalPage', () => {
     expect(screen.queryByTestId('journal-export')).not.toBeInTheDocument()
   })
 
+  it('warns of the platform’s limits and of long open transactions', async () => {
+    server.preview = preview({ withinLimits: false, nearLimit: true, openTransactions: 1, ready: false })
+    renderAt('/qb/finance/journal', '/qb/finance/journal', <JournalPage />)
+    await userEvent.click(await screen.findByTestId('journal-preview'))
+    const blockers = await screen.findByTestId('journal-blockers')
+    expect(within(blockers).getByTestId('journal-blocker-tooLarge')).toBeInTheDocument()
+    expect(within(blockers).getByTestId('journal-blocker-transactionOpen')).toBeInTheDocument()
+    // Over a limit is a blocker already, not a warning besides.
+    expect(screen.queryByTestId('journal-near-limit')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('journal-export')).not.toBeInTheDocument()
+  })
+
+  it('warns before a limit is reached and still offers the export', async () => {
+    server.preview = preview({ nearLimit: true, detailRows: 180000, detailParts: 4 })
+    renderAt('/qb/finance/journal', '/qb/finance/journal', <JournalPage />)
+    await userEvent.click(await screen.findByTestId('journal-preview'))
+    expect(await screen.findByTestId('journal-near-limit')).toBeInTheDocument()
+    expect(screen.getByTestId('journal-detail-size')).toHaveTextContent('180,000 rows in 4 files')
+    expect(screen.getByTestId('journal-export')).toBeInTheDocument()
+  })
+
   it('tells why the preview was refused', async () => {
     server.runProcess.mockRejectedValueOnce(new ApiError(422, { detail: 'Nothing has been posted yet',
       violations: [{ ruleCode: 'QB_JOURNAL_NOTHING_POSTED', message: 'Nothing has been posted yet' }] }))
@@ -162,10 +193,22 @@ describe('JournalPage', () => {
   it('downloads the kept files and records the accounting system’s number', async () => {
     renderAt('/qb/finance/journal', '/qb/finance/journal', <JournalPage />)
     const row = await screen.findByTestId('journal-export-row')
-    await userEvent.click(within(row).getByTestId('journal-download'))
+    // When it ran, not the cut-off; each button names its voucher.
+    expect(within(row).getByTestId('journal-exported-at')).not.toHaveTextContent('00:50')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.journalExportParts, { params: { exportIds: [EXPORT] },
+      limit: 1000 })
+    const voucher = within(row).getByTestId('journal-download')
+    expect(voucher).toHaveAccessibleName('Download the voucher CSV of QBJ-2026-00009')
+    await userEvent.click(voucher)
     await waitFor(() => expect(server.sessionFetch).toHaveBeenCalledWith(`/api/generated-files/${FILE}`))
-    await userEvent.click(within(row).getByTestId('journal-download-detail'))
+    const details = await within(row).findAllByTestId('journal-download-detail')
+    expect(details.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Download the detail CSV of QBJ-2026-00009 (file 1 of 2)',
+      'Download the detail CSV of QBJ-2026-00009 (file 2 of 2)'])
+    await userEvent.click(details[0])
     await waitFor(() => expect(server.sessionFetch).toHaveBeenCalledWith(`/api/generated-files/${DETAIL}`))
+    await userEvent.click(details[1])
+    await waitFor(() => expect(server.sessionFetch).toHaveBeenCalledWith(`/api/generated-files/${DETAIL_2}`))
 
     await userEvent.type(within(row).getByTestId('journal-confirm-input'), ' MF-1001 ')
     await userEvent.click(within(row).getByTestId('journal-confirm-submit'))

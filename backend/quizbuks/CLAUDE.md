@@ -113,14 +113,19 @@
 - **分录导出与收据**（`journal`、`wallet.TopUpReceipts`，`docs/quizbuks/plans/Q9d-journal-receipts.md`）：
   - 平台账本本身是复式总账，导出只把平台科目映射到会计系统的科目代码（`QbParams.JOURNAL_ACCOUNTS`，每个 `QbLedger` 科目一个，启动检查 `JournalMappingCheck`）；新增科目时同时加映射参数。
   - 一期 = 一个**日本日期**的月（`JournalPeriods`，D-1；Q9c 的月报仍按 UTC），按顺序导出（`QB_JOURNAL_EXPORT`，命名锁 `qb.journal`，`(periodFrom, granularity)` 唯一），
-    第一期为最早过账的月份。每笔分录恰在一次导出中：本次取"过账于期末之前、记录于截止时刻之前、且不在以前的导出中"的（模板 `qb.system.journal-lines`；截止 = 导出时刻 − `JournalPeriods.SETTLE`，
-    使导出时尚未提交的过账进入下一次）。迟到的分录进入下一次导出，已导出的凭证从不改变；冲正照常是新分录。
-  - 导出前一次报告全部问题：月未结束、月末之后的最近一次核对不是 `OK`、所动科目未映射或代码不合格、借贷不等；凭证号只在这些检查之后取（`AssignNumber`，`QBJ-<年>-00001`）。
-    凭证 CSV（只含汇总行，供导入）与明细 CSV 只经 `FILE_ARCHIVE` 原样存档（读取要 `qb.admin.finance.read`），单元格全部加引号、以 `= + - @`、制表、回车开头的加 `'`，UTF-8 带 BOM（`JournalLines`）。
-    预览 `QB_JOURNAL_PREVIEW` 是同一套读取与汇总、不写入（平台的流程接口没有试运行，见计划的实施记录）。外部凭证号只记一次（`QB_JOURNAL_EXPORT_CONFIRM`）。
-  - 收据是平台单据（版式 `qb.topup_receipt`）：`QB_TOPUP_RECEIPT_ISSUE` 只给本人已到账的充值、开具方名称已设时签发，每笔至多一张（`QbTopUpReceipt`，`topUpId` 唯一），再次请求返回同一张；
+    第一期为最早过账的月份。每笔分录恰在一次导出中：本次取"过账于期末之前、记录于截止时刻之前、且不在以前的导出中"的（模板 `qb.system.journal-*`；上一期末取导出记录的 `periodEnd`；截止 = 导出时刻 − `JournalPeriods.SETTLE`，
+    使导出时尚未提交的过账进入下一次；同一数据库另有事务已打开超过 `quizbuks.journal.max-open-transaction`（≤ `SETTLE` 的一半）即拒绝，`QB_JOURNAL_TRANSACTION_OPEN`）。迟到的分录进入下一次导出，已导出的凭证从不改变；冲正照常是新分录。
+  - **规模**（评审 H1）：凭证行由数据库汇总（`qb.system.journal-summary`）；明细按交易区间分段（`qb.system.journal-parts`，每段在 `jabiz.process.max-read-rows` 与 `jabiz.files.generated.max-bytes` 的一半之内，`JournalLimits`），
+    每段由子流程 `QB_JOURNAL_DETAIL_PART`（`subProcessOnly`）读一次、存一个文件 `<凭证号>-detail-<n>.csv`，记在 `QbJournalExportPart`。读取上限是按次的，不是按流程累计；一笔交易超过半段即 `QB_JOURNAL_TOO_LARGE`。不在导出中一次读全部分录。
+  - 导出前一次报告全部问题：月未结束、月末之后的最近一次核对不是 `OK`、所动科目未映射或代码不合格（`[A-Za-z0-9][A-Za-z0-9._-]{0,19}`）、借贷不等、超过上限、有打开已久的事务；凭证号只在这些检查之后取（`AssignNumber`，`QBJ-<年>-00001`）。
+    凭证 CSV（只含汇总行，供导入）与明细 CSV（时刻按日本时间）只经 `FILE_ARCHIVE` 原样存档（读取要 `qb.admin.finance.read`），单元格全部加引号、以 `= + - @`、制表、回车开头的加 `'`，UTF-8 带 BOM（`JournalLines`）。
+    预览 `QB_JOURNAL_PREVIEW` 是同一套读取与汇总、不写入（平台的流程接口没有试运行，见计划的实施记录），同样先查封禁，并给出明细的行数、文件数与是否接近上限。外部凭证号只记一次（`QB_JOURNAL_EXPORT_CONFIRM`）。
+  - 收据是平台单据（版式 `qb.topup_receipt`）：`QB_TOPUP_RECEIPT_ISSUE` 只给本人已到账、未退款、无未结或已败争议的充值（`QB_RECEIPT_REFUNDED`）、开具方名称已设时签发，每笔至多一张（`QbTopUpReceipt`，`topUpId` 唯一），再次请求返回同一张；
     按签发时刻读取，语言为商家所选（en / zh / ja）。中文、日文需要 `jabiz.reports.pdf.fonts`（镜像已设）。收据是收款凭证，收款金额写日元（JPY，"Kudos 以外不写币种名"
-    的唯一例外，同一张上另写存入钱包的 Kudos）。
+    的唯一例外，同一张上另写存入钱包的 Kudos 与卡片实际扣款的币种和金额）。收据不声称是适格请求书；登记号与税的表述待财务、法务确认。
+  - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
+    或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
+  - 导出文件与收据还没有 `RetentionPolicy`（会计保存 7 – 10 年），记为后续。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）

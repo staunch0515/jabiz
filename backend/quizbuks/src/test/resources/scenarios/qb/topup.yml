@@ -423,5 +423,5 @@ steps:
       values: [{ voucherNo: QBJ-2026-00001, lineCount: 6, debitTotal: 5480, externalVoucherNo: MF-2026-10 }]
 snapshot:
   entities: [QbTopUp, QbWallet, QbAttempt, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry, QbJournalExport,
-    QbJournalExportConfirmation]
+    QbJournalExportPart, QbJournalExportConfirmation]
   asOf: end

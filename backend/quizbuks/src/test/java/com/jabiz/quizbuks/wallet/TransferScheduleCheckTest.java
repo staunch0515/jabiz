@@ -3,6 +3,8 @@ package com.jabiz.quizbuks.wallet;
 import com.jabiz.runtime.check.CheckProblem;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The end-to-end tests' transfer schedule never meets live mode or a live key (Q9c review M1). */
@@ -37,5 +39,17 @@ class TransferScheduleCheckTest {
         assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, true, null)).singleElement()
             .satisfies(p -> assertThat(p.toString()).contains(Reconciliation.RUN_CRON_SETTING));
         assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, false, "sk_live_abc")).hasSize(1);
+    }
+
+    @Test
+    void theTestsRolesAreNotAdministratorsInLiveMode() {
+        List<String> production = List.of("ADMIN", "QB_ADMIN_SUPER", "QB_ADMIN_CONTENT", "QB_ADMIN_FINANCE");
+        List<String> e2e = List.of("ADMIN", "QB_ADMIN_FINANCE", " QB_E2E_PUBLISHER", "qb_e2e_finance");
+        assertThat(TransferScheduleCheck.e2eRoleProblems(production, true, "sk_live_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.e2eRoleProblems(e2e, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.e2eRoleProblems(e2e, true, null)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains(TransferScheduleCheck.ADMIN_ROLES_SETTING)
+                .contains("QB_E2E_PUBLISHER").contains("qb_e2e_finance"));
+        assertThat(TransferScheduleCheck.e2eRoleProblems(e2e, false, "sk_live_abc")).hasSize(1);
     }
 }

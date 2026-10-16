@@ -22,6 +22,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,7 +33,8 @@ import java.util.Map;
  * ({@value #LAYOUT_ID}) the sponsor issues from the wallet page and downloads, kept exactly as issued
  * ({@code DOCUMENT_ISSUE}); asking again gives the receipt already issued. It shows the operator as the issuer (the
  * controlled parameters {@code qb.issuer.*}: data, kept with each receipt), the sponsor, the payment and its amount,
- * in the sponsor's language. Refunds do not change it: the transactions page shows them.
+ * in the sponsor's language, with what the customer paid in their own currency when Stripe converted. A top-up refunded
+ * or disputed gets no first receipt; refunds after the receipt do not change it: the transactions page shows them.
  */
 public final class TopUpReceipts {
 
@@ -49,7 +51,7 @@ public final class TopUpReceipts {
         .number(RECEIPT_TEMPLATE, "receiptNo")
         .party("issuer", ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("sponsor", RECEIPT_TEMPLATE, "company", "contactName")
-        .facts(RECEIPT_TEMPLATE, "paidAt", "paymentReference", "kudos")
+        .facts(RECEIPT_TEMPLATE, "paidAt", "paymentReference", "paidIn", "kudos")
         .totals(RECEIPT_TEMPLATE, "amount")
         .note("note"));
 
@@ -76,11 +78,14 @@ public final class TopUpReceipts {
      * @param language the receipt's language, the sponsor's ({@code en}, {@code zh}, {@code ja}; D-5). Used only the
      *                 first time: asking again gives the receipt as issued.
      */
-    public record IssueInput(@NotBlank @Size(max = 36) String topUpId,
+    public record IssueInput(@NotBlank @Pattern(regexp = UUID) String topUpId,
         @NotBlank @Pattern(regexp = "en|zh|ja") String language) {}
 
     /** @param issued whether this call issued it (false: it was issued before) */
     public record IssueOutput(String runId, String documentNo, boolean issued) {}
+
+    /** A top-up's key (review L6): anything else is refused before it reaches a lock name or a query. */
+    static final String UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
     static final String INPUT = "input";
     static final String TOPUP_ID = "topUpId";
@@ -133,6 +138,9 @@ public final class TopUpReceipts {
         if (!TopUpStatus.PAID.equals(topUp.get("status"))) {
             problems.add(new Violation(null, WalletCodes.RECEIPT_NOT_PAID, "A receipt is only for a paid top-up",
                 Map.of()));
+        } else if (refundedOrDisputed(topUp)) {
+            problems.add(new Violation(null, WalletCodes.RECEIPT_REFUNDED, "The top-up has been refunded or disputed",
+                Map.of()));
         }
         boolean named = TopUpCrediting.list(ctx, ISSUER).stream()
             .anyMatch(param -> QbParams.ISSUER_NAME.equals(param.get(ParamEntities.KEY))
@@ -144,6 +152,19 @@ public final class TopUpReceipts {
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
+    }
+
+    /** Refunded in whole or in part, or with a dispute open or lost (what a won or closed one held is back). */
+    static boolean refundedOrDisputed(EntityInstance topUp) {
+        Object refunded = topUp.get("refundedAmount");
+        Object clawback = topUp.get("disputeClawback");
+        String dispute = topUp.get("disputeStatus");
+        return positive(refunded) || positive(clawback) || TopUpStatus.DISPUTE_OPEN.equals(dispute)
+            || TopUpStatus.DISPUTE_LOST.equals(dispute);
+    }
+
+    private static boolean positive(Object amount) {
+        return amount != null && new BigDecimal(amount.toString()).signum() > 0;
     }
 
     static void record(ProcessContext ctx) {

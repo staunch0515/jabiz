@@ -42,6 +42,8 @@ export const TEMPLATE = {
   accountBalances: 'jabiz.ledger.account_balances',
   /** The journal exports with their files and confirmations (Q9d; `qb.admin.finance.read`). */
   journalExports: 'qb.admin.journal-exports',
+  /** The detail files of journal exports, one per part (Q9d review H1; `qb.admin.finance.read`). */
+  journalExportParts: 'qb.admin.journal-export-parts',
   /** The account mapping now in effect (Q9d; `qb.admin.finance.read`). */
   journalMapping: 'qb.admin.journal-mapping',
 } as const

@@ -89,5 +89,5 @@ export async function postingLastMonth(request: APIRequestContext) {
 /** What the next export would be, as the accountant previews it. */
 export async function previewOf(request: APIRequestContext, token: string) {
   return run(request, token, 'QB_JOURNAL_PREVIEW', {}) as Promise<{ month: string; periodEnded: boolean;
-    reconOk: boolean; ready: boolean; unmapped: string[] }>
+    reconOk: boolean; ready: boolean; unmapped: string[]; detailParts: number }>
 }

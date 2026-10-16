@@ -35,6 +35,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_ADVANCE", ProcessAccess.INTERNAL),
         Map.entry("QB_QUIZ_RELEASE_FILES", ProcessAccess.SUB_PROCESS_ONLY),
+        // A part of a journal export's detail (Q9d review H1): only the export runs it, in its transaction.
+        Map.entry("QB_JOURNAL_DETAIL_PART", ProcessAccess.SUB_PROCESS_ONLY),
         // Answering (Q5): the expiry of an attempt (the items of a job), the settlement of pending rewards (an
         // event; Q6's top-up confirmation as the system), underfunded publications back on (an event), the
         // statistics (a job).

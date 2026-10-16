@@ -117,6 +117,7 @@
   - 包 `journal`：`QbJournal`（实体 `QbJournalExport`、`QbJournalExportConfirmation`，只写一次 W）、`JournalPeriods`（日本日期的月、截止时刻）、`JournalLines`（汇总行、映射检查、两个 CSV，纯 Java）、
     `JournalProcesses`（`QB_JOURNAL_PREVIEW`、`QB_JOURNAL_EXPORT`、`QB_JOURNAL_EXPORT_CONFIRM`）、`JournalCodes`、启动检查 `JournalMappingCheck`、序列 `qb.journal`（`QBJ-{年}-{n:5}`，按年）。
   - 模板 `qb.system.journal-first`、`qb.system.journal-lines`（取数规则见 D-Q9d-3 与 CLAUDE.md）、`qb.admin.journal-exports`、`qb.admin.journal-mapping`。
+    （评审修正后 `journal-lines` 换成 `journal-summary`、`journal-parts`、`journal-detail` 与 `journal-open-transactions`，见下面的"评审修正"。）
   - 收据：`wallet.TopUpReceipts`（版式 `qb.topup_receipt`、流程 `QB_TOPUP_RECEIPT_ISSUE`、实体 `QbTopUpReceipt`），模板 `qb.sponsor.topup-receipt`、`qb.sponsor.receipt-issuer`；错误码 `QB_RECEIPT_NOT_PAID`、`QB_RECEIPT_NO_ISSUER`（`WalletCodes`）。
   - 参数：科目映射 7 个 `qb.journal.account.<科目>`、开具方 `qb.issuer.name|address|registration-no`，都受控、首个值为空，由 `QB_SETUP` 提出。
   - 权限：`qb.journal.export`、`qb.journal.confirm`、`file.generated.read` 给财务（超级管理员随之）；`document.archive.read` 给商家。
@@ -161,9 +162,49 @@
     并以每分钟核对（`QB_RECONCILE_RUN_CRON`）等到一次干净的核对。e2e 先以 `LEDGER_POST` 补记一笔上个月（日本时间）的银行与 Stripe 余额之间的分录，新库的第一期因此是已结束的上个月；
     同一数据库再次运行时已导出到本月，测试改为检查页面说明"本月未结束"并下载最近一次导出。
 - **已知限制**：
-  - 一次导出所取的分录（按交易、科目、借贷合并后）超过平台流程读取上限（`jabiz.process.max-read-rows`，缺省 10 万行）即 422 整体拒绝；明细 CSV 超过 `jabiz.files.generated.max-bytes`（缺省 10 MiB，约 8 万行）同样拒绝。
-    规模变大时需要分次导出或提高上限（记为后续）。
+  - （评审 H1 已修正，见下）~~一次导出所取的分录超过平台流程读取上限即 422 整体拒绝；明细 CSV 超过 10 MiB 同样拒绝~~。剩下的上限见"评审修正"的平台缺口。
   - 只有按月（`granularity` = MONTH）；按天以后加（D-2）。通用 CSV 未必能直接导入 freee / Money Forward（计划第 7 节）。
   - 收据金额写日元（JPY）：收款凭证必须写实际收的币种，这是"不写 Kudos 以外的币种名"的例外，同一张上另写存入钱包的 Kudos。
   - 字体只在镜像中配置；镜像外未设 `JABIZ_REPORTS_PDF_FONTS` 时中、日文字仍为 `?`。IPA Gothic 不含部分简体字，由 Droid Sans Fallback 补上。
   - 退款不改收据（D-Q9d-7）；收据不能作废或重开。
+
+## 评审修正（2026-10-16，自 05e40b8 起）
+
+- **H1 规模**：导出不再随分录数量停住。
+  - 凭证行由数据库汇总（模板 `qb.system.journal-summary`，`GROUP BY` 科目、借贷与 2110 的商家）：几百行，与分录数量无关。
+  - 明细分段（模板 `qb.system.journal-parts`）：按交易编号顺序把本次所取的交易切成连续区间，每段以平台上限的一半为预算（`JournalLimits`：行数 `max-read-rows / 2`，字节数 `(max-bytes − 512) / 2`；
+    每笔交易的字节数取 CSV 行的上界）。每段由子流程 `QB_JOURNAL_DETAIL_PART`（`subProcessOnly`，权限 `qb.journal.system` 不授予任何角色）经 `CallProcess.forEach` 在导出的事务中读取一次（`qb.system.journal-detail`，按交易区间）、
+    写一个 CSV 并以 `FILE_ARCHIVE` 存为 `<凭证号>-detail-<n>.csv`；段数与各段的文件记在只写一次的 `QbJournalExportPart`（`qb_journal_export_part_version`），列表经 `qb.admin.journal-export-parts`。
+    一段的行数与字节数都小于"一个预算加一笔交易"，所以只要没有一笔交易超过预算（即上限的一半），每段都在上限之内；超过的、以及凭证文件本身超过文件上限的，一次报告 422 `QB_JOURNAL_TOO_LARGE`（不丢分录）。
+    子流程核对读到的行数与分段时数的一致（同一事务），不一致即缺陷。
+  - **`max-read-rows` 是按次的**：平台在每次 `RunTemplate` / `QueryEntities` 读取时检查（取 `上限 + 1` 行），不是按流程累计；所以分段读取在不提高平台上限时可行。
+  - 预览给出明细行数与文件数（`detailRows`、`detailParts`）、是否在上限内（`withinLimits`）与是否接近（`nearLimit`：凭证行数到一次读取的 4/5、凭证文件到文件上限的 4/5、或最大的一笔交易到一段预算的 4/5），页面在超过时列为阻止原因、接近时警告。
+  - 规模（缺省上限 10 万行、10 MiB）：一段约 1 万余行（由字节预算 5 MiB 与每行约 400 – 500 字节的上界决定），100 万笔过账（约 200 万明细行）约 170 个文件，都在一个事务中；没有提高平台上限。
+  - 测试 `JournalLimitsIT`（`max-read-rows=1000`、`max-bytes=20000`）：一个月 30 笔交易、600 行明细分成十几个文件，每个文件不超过两项上限、交易不跨文件、合起来每笔恰好一次、金额与凭证一致；
+    一笔 40 行（约 1.2 万字节，超过半个文件）的交易使下一期 `QB_JOURNAL_TOO_LARGE`、不取号。
+  - **剩下的平台缺口**（记为后续）：凭证行数（≈ 科目 × 借贷 + 2110 的商家数 × 借贷）须不超过一次读取的上限；凭证 CSV 须不超过一个文件（10 MiB，约 7 万行）；单笔交易的明细须不超过半个文件；
+    整个导出是一个数据库事务（行数大时事务长、占用内存的是逐段的读取）。超过时的出路是平台提供分批提交的导出或提高上限。
+- **M1 截止边距**：导出在取锁之后读平台的 `pg_stat_activity`（模板 `qb.system.journal-open-transactions`），同一数据库中另有客户端事务已打开超过 `quizbuks.journal.max-open-transaction`（缺省 5 分钟，
+  `JournalLimits` 要求不超过 `SETTLE` 的一半）即 422 `QB_JOURNAL_TRANSACTION_OPEN`（预览给出 `openTransactions`）。为什么安全：过账的记录时刻是其流程开始的时刻，其事务不早于此开始；
+  截止 = 导出时刻 − 10 分钟。一笔记录于截止之前、导出读取时尚未提交的过账，其事务此时已打开超过 10 分钟（减去应用与数据库的时钟偏差），因此只要偏差小于 5 分钟就会被看到并拒绝；
+  反之，打开不到 5 分钟的事务开始于截止之后，它的过账记录时刻晚于截止，归下一次导出。年龄以数据库自己的时钟计（不是业务时间），只比较事务的长度。应用的数据库角色只看得到同一角色的会话（正是应用自己的）。
+  测试：`JournalLimitsIT` 以 2 秒为限，另开一个 JDBC 事务保持 3 秒，预览给出 `openTransactions`、导出被拒且不取号；事务结束后照常导出。
+- **M2 退款与争议**：首次签发时，充值已退款（`refundedAmount > 0`）、争议未结（`OPEN`）或已败（`LOST`，或已扣回 `disputeClawback > 0`）即 422 `QB_RECEIPT_REFUNDED`（三语）；已签发的收据照旧返回。`TopUpReceiptIT` 覆盖部分退款与未结争议。
+- **M3 测试**（`JournalExportIT`）：(a) 过账于第二个月、记录于第一次导出截止之前的分录只在第二次导出；(b) 冲正：第三个月冲正已导出的第一个月与第二次导出中的分录（一笔按当前时刻、一笔过账回第一个月），都只在第三次导出；
+  (c) 两个导出同时发出：一个成功、另一个等锁后 422 `QB_JOURNAL_PERIOD_NOT_NEXT`，只取一个号；(d)（`JournalLimitsIT`）以测试触发器让 `sys_generated_file` 的插入失败：导出 5xx、不留号也不留记录，去掉触发器后得到 `00001`；
+  (e) 过账于第一期之前、在第一次导出之后记录的分录进入第二次导出；(f)（`TopUpReceiptIT`）其他商家的 `GET /api/documents/runs`（全部与按版式）为空，本人的有两张；退款与争议见 M2。
+- **L1**：导出记录期末时刻 `periodEnd`（`period_end`），下一次以它为上一期的期末，不再由 `periodTo` 推算。
+- **L2**：启动检查（`TransferScheduleCheck`，与 e2e 的计划时间并列）：正式模式或正式密钥下，后台入口接受的角色含 `QB_E2E_*` 即启动失败；`TransferScheduleCheckTest` 覆盖。
+- **L3**：科目代码 `[A-Za-z0-9][A-Za-z0-9._-]{0,19}`（不以 `-`、`.`、`_` 开头）。
+- **L4**：明细的时刻按日本时间（`+09:00`）写出。
+- **L5**：收据加一项"卡片扣款"（`paidIn`）：有展示币种时写该币种与金额（按 Stripe 的最小单位换算：零位小数币种不变、三位小数币种除以 1000、其余除以 100），否则写日元。
+- **L6**：`IssueInput.topUpId` 以 UUID 的 `@Pattern` 校验（400）。
+- **L7**：导出列表的"导出"列显示导出时刻（`exportedAt`，即记录的 `createdTime`），不再显示截止时刻；下载按钮的 `aria-label` 含凭证号（明细另含"第 n 个，共 m 个"）。
+- **其他**：预览也先查封禁（`refuseBanned`）；`backend/quizbuks/CLAUDE.md` 记下商家持有 `document.archive.read`：以后的单据版式必须按商家限定对象，或其权限不能是商家权限的子集。
+- **测试与结果**：`:quizbuks:check` 460 个测试全部通过（新增 `JournalLimitsIT` 1 个；`JournalExportIT`、`TopUpReceiptIT` 扩充；`JournalLinesTest` 7 个；`TransferScheduleCheckTest` 4 个；`ProcessAccessIT` 加 `QB_JOURNAL_DETAIL_PART`）与 `platformCheck`（0 错误）；
+  场景 `topup.yml` 的快照加 `QbJournalExportPart` 与 `periodEnd`（明细的哈希因日本时间而变）；扩展 Vitest 59 个与 `ext:check`；商家后台 lint、typecheck 与 Vitest 108 个；两个 SPA 的 `app:check`；
+  e2e 全部 41 项（`journal.spec.ts` 改为下载 `<凭证号>-detail-1.csv` 并核对预览的文件数）；`tools/check-app-paths.sh origin/1.2/platform`。
+- **已知问题**（新增）：
+  - 收据不是适格请求书（インボイス）：文字只写"收据 / 領収書 / Receipt"，不声称适格请求书；登记号与税的表述须由财务、法务确认后再定（开具方的登记号目前只是显示）。
+  - **后续**：导出文件（`sys_generated_file`）与收据（单据存档）还没有 `RetentionPolicy`（会计凭证一般须保存 7 – 10 年）；本次不加，记为后续。
+

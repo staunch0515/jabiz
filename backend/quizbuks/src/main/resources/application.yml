@@ -171,3 +171,7 @@ quizbuks:
   # journal export waits for a clean reconciliation after the month's end, Q9d); refused next to live mode.
   reconcile:
     run-cron: ${QB_RECONCILE_RUN_CRON:0 37 18 * * *}
+  # The journal export (Q9d review M1): another database transaction open this long stops it, since a posting it began
+  # before the export's cut-off could commit after the export's reads. At most half of JournalPeriods.SETTLE (10 min).
+  journal:
+    max-open-transaction: PT5M

@@ -31,6 +31,7 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
   await page.getByTestId('journal-preview').click()
   const preview = page.getByTestId('journal-preview-result')
   await expect(preview).toHaveAttribute('data-month', next.month)
+  await expect(preview.getByTestId('journal-detail-size')).toHaveAttribute('data-parts', String(next.detailParts))
 
   if (next.ready) {
     // The voucher's lines, or none: a posting recorded within the last ten minutes waits for the next export.
@@ -62,9 +63,10 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
     expect(line.startsWith(`"${voucher}",`)).toBe(true)
     expect(line).toMatch(/,"E2E-\d{4}",/)
   }
+  // The detail, in as many files as the platform's limits need (one here), each named by its part.
   const detail = page.waitForEvent('download')
-  await row.getByTestId('journal-download-detail').click()
-  expect((await detail).suggestedFilename()).toBe(`${voucher}-detail.csv`)
+  await row.getByTestId('journal-download-detail').first().click()
+  expect((await detail).suggestedFilename()).toBe(`${voucher}-detail-1.csv`)
 
   // The accounting system's voucher number, once.
   const confirm = row.getByTestId('journal-confirm-input')

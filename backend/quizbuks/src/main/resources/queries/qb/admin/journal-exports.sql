@@ -1,6 +1,8 @@
 /*---
 id: qb.admin.journal-exports
-description: The journal exports (Q9d, F-02 / F-03), newest period first, with their files and the accounting system's voucher number once recorded
+description: >-
+  The journal exports (Q9d, F-02 / F-03), newest period first, with the voucher's file, how many files the detail
+  takes (qb.admin.journal-export-parts lists them) and the accounting system's voucher number once recorded
 entities: [QbJournalExport, QbJournalExportConfirmation]
 datasets:
   QbJournalExport: urn:jabiz:dataset:default:QbJournalExport
@@ -15,11 +17,11 @@ results:
   debitTotal:        { from: QbJournalExport.debitTotal }
   creditTotal:       { from: QbJournalExport.creditTotal }
   knownAt:           { from: QbJournalExport.knownAt }
+  exportedAt:        { from: QbJournalExport.createdTime }
   exportedBy:        { from: QbJournalExport.exportedBy }
   fileId:            { from: QbJournalExport.fileId }
   fileSha256:        { from: QbJournalExport.fileSha256 }
-  detailFileId:      { from: QbJournalExport.detailFileId }
-  detailSha256:      { from: QbJournalExport.detailSha256 }
+  detailPartCount:   { from: QbJournalExport.detailPartCount }
   externalVoucherNo: { from: QbJournalExportConfirmation.externalVoucherNo }
   confirmedBy:       { from: QbJournalExportConfirmation.confirmedBy }
 list:
@@ -39,11 +41,11 @@ SELECT
     x.{{QbJournalExport.debitTotal}}       AS debitTotal,
     x.{{QbJournalExport.creditTotal}}      AS creditTotal,
     x.{{QbJournalExport.knownAt}}          AS knownAt,
+    x.{{QbJournalExport.createdTime}}      AS exportedAt,
     x.{{QbJournalExport.exportedBy}}       AS exportedBy,
     x.{{QbJournalExport.fileId}}           AS fileId,
     x.{{QbJournalExport.fileSha256}}       AS fileSha256,
-    x.{{QbJournalExport.detailFileId}}     AS detailFileId,
-    x.{{QbJournalExport.detailSha256}}     AS detailSha256,
+    x.{{QbJournalExport.detailPartCount}}  AS detailPartCount,
     c.{{QbJournalExportConfirmation.externalVoucherNo}} AS externalVoucherNo,
     c.{{QbJournalExportConfirmation.confirmedBy}}       AS confirmedBy
 FROM {{QbJournalExport}} x

@@ -7,9 +7,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,22 +18,36 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * The summary voucher of an export (Q9d, D-Q9d-2, D-Q9d-4, D-Q9d-6), from the postings it takes: one line per
- * account and side, the sponsor prepayments (2110) one per sponsor besides (the accounting system's customer
- * sub-ledger); the takers' accounts only per account (D-2). Its two CSV files: the voucher for the accounting system to
- * import (summary lines only) and the detail, each posting of each line, for the audit trail (D-3).
+ * The summary voucher of an export (Q9d, D-Q9d-2, D-Q9d-4, D-Q9d-6): one line per account and side, the sponsor
+ * prepayments (2110) one per sponsor besides (the accounting system's customer sub-ledger); the takers' accounts only
+ * per account (D-2). The database sums the lines (template {@code qb.system.journal-summary}); this numbers them and
+ * writes the files: the voucher for the accounting system to import (summary lines only) and the detail, each posting
+ * of each line, in parts (D-3; review H1).
  */
 public final class JournalLines {
 
     public static final String DEBIT = "DEBIT";
     public static final String CREDIT = "CREDIT";
 
-    /** An account code of the accounting system (the mapping's value). */
-    public static final Pattern ACCOUNT_CODE = Pattern.compile("[A-Za-z0-9._-]{1,20}");
+    /** An account code of the accounting system (the mapping's value): a letter or digit first. */
+    public static final Pattern ACCOUNT_CODE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,19}");
     public static final int EXTERNAL_VOUCHER_LENGTH = 50;
 
     /** The accounts carrying a line per sponsor. */
     private static final String PER_SPONSOR = QbLedger.SPONSOR_PREPAYMENTS;
+
+    /** The detail's times, in Japan's time as the periods are. */
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
+    /** A sum of the summary template: an account, a side and (2110) a sponsor. */
+    public record Group(String accountCode, String side, String sponsorId, BigDecimal amount, int transactions) {
+
+        public Group {
+            Objects.requireNonNull(accountCode, "accountCode");
+            Objects.requireNonNull(side, "side");
+            Objects.requireNonNull(amount, "amount");
+        }
+    }
 
     /** One posting of an account in one transaction, on one side (and for 2110 one sponsor), as the template sums it. */
     public record Entry(String transactionId, Instant bookingTime, Instant recordedAt, String accountCode,
@@ -61,26 +76,43 @@ public final class JournalLines {
     public record Line(int lineNo, String side, String accountCode, String externalCode, String sponsorId,
         BigDecimal amount, int transactions) {}
 
-    /**
-     * @param lines            the voucher's lines, by account, debit before credit, then by sponsor
-     * @param lineOfEntry      each entry's line number, in the order of {@code entries}
-     * @param transactionCount the ledger transactions taken
-     */
-    public record Summary(List<Line> lines, List<Entry> entries, List<Integer> lineOfEntry, int transactionCount,
-        BigDecimal debitTotal, BigDecimal creditTotal, List<String> accounts) {
+    /** @param lines the voucher's lines, by account, debit before credit, then by sponsor */
+    public record Summary(List<Line> lines, BigDecimal debitTotal, BigDecimal creditTotal, List<String> accounts) {
 
         public boolean balanced() {
             return debitTotal.compareTo(creditTotal) == 0;
         }
+
+        /** Each line's number by its key ({@link #key}), for the detail. */
+        public Map<String, Integer> lineNumbers() {
+            Map<String, Integer> numbers = new HashMap<>();
+            lines.forEach(line -> numbers.put(key(line.accountCode(), line.side(), line.sponsorId()), line.lineNo()));
+            return numbers;
+        }
     }
 
-    private record Key(String accountCode, String side, String sponsorId) {}
+    /** The key of a line: account, side and sponsor. */
+    public static String key(String accountCode, String side, String sponsorId) {
+        return accountCode + "|" + side + "|" + (sponsorId == null ? "" : sponsorId);
+    }
 
-    private static final Comparator<Key> ORDER = Comparator.comparing(Key::accountCode)
-        .thenComparing(key -> DEBIT.equals(key.side()) ? 0 : 1)
-        .thenComparing(Key::sponsorId, Comparator.nullsFirst(Comparator.naturalOrder()));
+    private static final Comparator<Group> ORDER = Comparator.comparing(Group::accountCode)
+        .thenComparing(group -> DEBIT.equals(group.side()) ? 0 : 1)
+        .thenComparing(Group::sponsorId, Comparator.nullsFirst(Comparator.naturalOrder()));
 
-    /** The entries of the template's rows. */
+    /** The groups of the summary template's rows. */
+    public static List<Group> groups(List<Map<String, Object>> rows) {
+        List<Group> groups = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            String account = text(row.get("accountCode"));
+            groups.add(new Group(account, text(row.get("direction")),
+                PER_SPONSOR.equals(account) ? text(row.get("party")) : null, decimal(row.get("amount")),
+                decimal(row.get("transactions")).intValue()));
+        }
+        return groups;
+    }
+
+    /** The entries of the detail template's rows. */
     public static List<Entry> entries(List<Map<String, Object>> rows) {
         List<Entry> entries = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
@@ -92,39 +124,26 @@ public final class JournalLines {
         return entries;
     }
 
-    /** The voucher of {@code entries}, with each account's code of the accounting system from {@code mapping}. */
-    public static Summary summarize(List<Entry> entries, Map<String, String> mapping) {
-        Map<Key, BigDecimal> amounts = new java.util.TreeMap<>(ORDER);
-        Map<Key, java.util.Set<String>> transactions = new java.util.HashMap<>();
-        java.util.Set<String> allTransactions = new java.util.HashSet<>();
+    /** The voucher of the summed {@code groups}, with each account's code of the accounting system from {@code mapping}. */
+    public static Summary summarize(List<Group> groups, Map<String, String> mapping) {
+        List<Group> ordered = new ArrayList<>(groups);
+        ordered.sort(ORDER);
+        List<Line> lines = new ArrayList<>();
         TreeSet<String> accounts = new TreeSet<>();
         BigDecimal debit = BigDecimal.ZERO;
         BigDecimal credit = BigDecimal.ZERO;
-        for (Entry entry : entries) {
-            Key key = new Key(entry.accountCode(), entry.direction(), entry.sponsor());
-            amounts.merge(key, entry.amount(), BigDecimal::add);
-            transactions.computeIfAbsent(key, k -> new java.util.HashSet<>()).add(entry.transactionId());
-            allTransactions.add(entry.transactionId());
-            accounts.add(entry.accountCode());
-            if (DEBIT.equals(entry.direction())) {
-                debit = debit.add(entry.amount());
+        for (Group group : ordered) {
+            lines.add(new Line(lines.size() + 1, group.side(), group.accountCode(),
+                blankToNull(mapping.get(group.accountCode())), group.sponsorId(), group.amount(),
+                group.transactions()));
+            accounts.add(group.accountCode());
+            if (DEBIT.equals(group.side())) {
+                debit = debit.add(group.amount());
             } else {
-                credit = credit.add(entry.amount());
+                credit = credit.add(group.amount());
             }
         }
-        List<Line> lines = new ArrayList<>();
-        Map<Key, Integer> numbers = new LinkedHashMap<>();
-        for (Map.Entry<Key, BigDecimal> line : amounts.entrySet()) {
-            Key key = line.getKey();
-            int lineNo = lines.size() + 1;
-            numbers.put(key, lineNo);
-            lines.add(new Line(lineNo, key.side(), key.accountCode(), blankToNull(mapping.get(key.accountCode())),
-                key.sponsorId(), line.getValue(), transactions.get(key).size()));
-        }
-        List<Integer> lineOfEntry = entries.stream()
-            .map(entry -> numbers.get(new Key(entry.accountCode(), entry.direction(), entry.sponsor()))).toList();
-        return new Summary(List.copyOf(lines), List.copyOf(entries), lineOfEntry, allTransactions.size(), debit,
-            credit, List.copyOf(accounts));
+        return new Summary(List.copyOf(lines), debit, credit, List.copyOf(accounts));
     }
 
     /** The accounts the voucher moves that have no code of the accounting system. */
@@ -160,26 +179,37 @@ public final class JournalLines {
         return bytes(csv);
     }
 
-    /** The detail: every posting of every line. */
-    public static byte[] detailCsv(String voucherNo, Summary summary) {
+    /**
+     * One part of the detail: every posting of the part's transactions with the number of its voucher line, by line,
+     * then by booking time and transaction.
+     */
+    public static byte[] detailCsv(String voucherNo, List<Entry> entries, Map<String, Integer> lineNumbers) {
+        List<Entry> ordered = new ArrayList<>(entries);
+        ordered.sort(Comparator.<Entry, Integer>comparing(entry -> lineOf(entry, lineNumbers))
+            .thenComparing(Entry::bookingTime, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(Entry::transactionId));
         StringBuilder csv = new StringBuilder();
         row(csv, DETAIL_COLUMNS);
-        List<Entry> entries = summary.entries();
-        List<Integer> order = new ArrayList<>();
-        for (int i = 0; i < entries.size(); i++) {
-            order.add(i);
-        }
-        order.sort(Comparator.<Integer, Integer>comparing(summary.lineOfEntry()::get)
-            .thenComparing(i -> entries.get(i).bookingTime(), Comparator.nullsFirst(Comparator.naturalOrder()))
-            .thenComparing(i -> entries.get(i).transactionId()));
-        for (int i : order) {
-            Entry entry = entries.get(i);
-            row(csv, List.of(voucherNo, String.valueOf(summary.lineOfEntry().get(i)), entry.transactionId(),
-                String.valueOf(entry.bookingTime()), String.valueOf(entry.recordedAt()), entry.accountCode(),
-                entry.direction(), nullToEmpty(entry.sponsor()), entry.amount().toPlainString(),
-                nullToEmpty(entry.sourceEntity()), nullToEmpty(entry.sourceId()), nullToEmpty(entry.reference())));
+        for (Entry entry : ordered) {
+            row(csv, List.of(voucherNo, String.valueOf(lineOf(entry, lineNumbers)), entry.transactionId(),
+                time(entry.bookingTime()), time(entry.recordedAt()), entry.accountCode(), entry.direction(),
+                nullToEmpty(entry.sponsor()), entry.amount().toPlainString(), nullToEmpty(entry.sourceEntity()),
+                nullToEmpty(entry.sourceId()), nullToEmpty(entry.reference())));
         }
         return bytes(csv);
+    }
+
+    private static int lineOf(Entry entry, Map<String, Integer> lineNumbers) {
+        Integer lineNo = lineNumbers.get(key(entry.accountCode(), entry.direction(), entry.sponsor()));
+        if (lineNo == null) {
+            // The summary and the detail read the same postings in one transaction: a posting of no line is a defect.
+            throw new IllegalStateException("No voucher line for " + entry.accountCode() + " " + entry.direction());
+        }
+        return lineNo;
+    }
+
+    private static String time(Instant time) {
+        return time == null ? "" : TIME.format(time.atZone(JournalPeriods.ZONE));
     }
 
     /**
@@ -213,11 +243,11 @@ public final class JournalLines {
         return value == null || value.isBlank() ? null : value;
     }
 
-    private static String text(Object value) {
+    static String text(Object value) {
         return value == null ? null : value.toString();
     }
 
-    private static BigDecimal decimal(Object value) {
+    static BigDecimal decimal(Object value) {
         return switch (value) {
             case null -> BigDecimal.ZERO;
             case BigDecimal decimal -> decimal;

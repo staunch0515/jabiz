@@ -34,125 +34,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * not run cleanly after it or an account has no code of the accounting system; the voucher agrees with the ledger's
  * balances and the monthly report; its CSV files are kept exactly as made, quoted throughout and safe from formulas; a
  * posting recorded late (booked in an exported month) and one recorded within the cut-off's margin each come in the
- * next export, once. Only finance previews, exports (with a second factor) and records the accounting system's
- * voucher number, once.
+ * next export, once; so do one booked in the next month before the export (review M3 a), one backdated before the
+ * first exported month (M3 e) and reversals, late ones of exported months included (M3 b). Of two exports at once,
+ * one exports and the other draws no number (M3 c). Only finance previews, exports (with a second factor) and records
+ * the accounting system's voucher number, once. The detail in several parts: {@link JournalLimitsIT}.
  */
-class JournalExportIT extends PayoutItSupport {
+class JournalExportIT extends JournalItSupport {
 
     static final String FORMULA = "=HYPERLINK(\"http://evil.example\",\"x\")";
-
-    String finance() {
-        return tokenOf(user("j-finance"), QbRoles.ADMIN_FINANCE);
-    }
-
-    Map<String, Object> preview() {
-        return run("QB_JOURNAL_PREVIEW", finance(), Map.of());
-    }
-
-    Map<String, Object> export(String month) {
-        return run("QB_JOURNAL_EXPORT", finance(), body("month", month));
-    }
-
-    List<Object> refusedExport(String month) {
-        return codes(refused("QB_JOURNAL_EXPORT", finance(), body("month", month), 422));
-    }
-
-    /** Runs the daily reconciliation at {@code at}, after delivering what events are pending; its status. */
-    String reconcile(Instant at) {
-        deliverEvents();
-        Reconciliation.ReconcileOutput output = (Reconciliation.ReconcileOutput) systemRun("QB_RECONCILE_RUN",
-            body("scheduledTime", at.toString()));
-        return output.status();
-    }
-
-    /** Posts straight in the ledger, as finance's corrections would: between the Stripe balance and the bank. */
-    String post(Instant bookingTime, String debit, String credit, long amount, String party, String reference) {
-        Map<String, Object> debitLine = body("accountCode", debit, "direction", "DEBIT", "amount", amount);
-        Map<String, Object> creditLine = body("accountCode", credit, "direction", "CREDIT", "amount", amount);
-        if (party != null) {
-            (debit.equals("2110") ? debitLine : creditLine).put("dimensions", Map.of("party", party));
-        }
-        Map<String, Object> input = body("bookingTime", bookingTime.toString(), "description", "Posted by hand (test)",
-            "entries", List.of(debitLine, creditLine));
-        if (reference != null) {
-            input.put("reference", reference);
-        }
-        return (String) run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), input)
-            .get("transactionId");
-    }
-
-    byte[] download(String fileId, String token) {
-        return client.get().uri("/api/generated-files/{id}", fileId).header(HttpHeaders.AUTHORIZATION, token)
-            .exchange().expectStatus().isOk().expectBody(byte[].class).returnResult().getResponseBody();
-    }
-
-    static String sha256(byte[] bytes) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-    }
-
-    /** The rows of a CSV whose every cell is quoted (as the export writes it), without the byte order mark. */
-    static List<List<String>> csv(byte[] bytes) {
-        assertThat(bytes).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
-        String text = new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8);
-        List<List<String>> rows = new ArrayList<>();
-        for (String line : text.split("\r\n")) {
-            List<String> cells = new ArrayList<>();
-            int i = 0;
-            while (i < line.length()) {
-                assertThat(line.charAt(i)).as("every cell is quoted: " + line).isEqualTo('"');
-                StringBuilder cell = new StringBuilder();
-                i++;
-                while (true) {
-                    char c = line.charAt(i);
-                    if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                        cell.append('"');
-                        i += 2;
-                    } else if (c == '"') {
-                        i++;
-                        break;
-                    } else {
-                        cell.append(c);
-                        i++;
-                    }
-                }
-                cells.add(cell.toString());
-                if (i < line.length()) {
-                    assertThat(line.charAt(i)).isEqualTo(',');
-                    i++;
-                }
-            }
-            rows.add(cells);
-        }
-        return rows;
-    }
-
-    /** Each account's debit less credit on the voucher, from its lines. */
-    @SuppressWarnings("unchecked")
-    static Map<String, BigDecimal> net(Map<String, Object> preview) {
-        Map<String, BigDecimal> net = new java.util.TreeMap<>();
-        for (Map<String, Object> line : (List<Map<String, Object>>) preview.get("lines")) {
-            BigDecimal amount = money(line.get("amount"));
-            net.merge((String) line.get("accountCode"), "DEBIT".equals(line.get("side")) ? amount : amount.negate(),
-                BigDecimal::add);
-        }
-        return net;
-    }
-
-    Map<String, BigDecimal> accountBalances(Instant asOf, Instant knownAt) {
-        return items("jabiz.ledger.account_balances", admin(), Map.of("params", Map.of("asOf", asOf.toString(),
-            "knownAt", knownAt.toString()), "limit", 100)).stream()
-            .filter(row -> money(row.get("balance")).signum() != 0)
-            .collect(Collectors.toMap(row -> (String) row.get("accountCode"), row -> money(row.get("balance")),
-                (a, b) -> a, java.util.TreeMap::new));
-    }
-
-    void mapAll(String... except) {
-        for (String key : QbParams.JOURNAL_ACCOUNTS) {
-            if (!List.of(except).contains(key)) {
-                param(key, "X" + key.substring(QbParams.JOURNAL_ACCOUNT_PREFIX.length()));
-            }
-        }
-    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -193,8 +82,12 @@ class JournalExportIT extends PayoutItSupport {
         mapAll(QbParams.JOURNAL_ACCOUNT_2120);
         assertThat(refusedExport(first.toString())).containsExactly(JournalCodes.RECON_NOT_OK,
             JournalCodes.ACCOUNT_UNMAPPED);
-        Instant reconciled = one.end().plus(Duration.ofHours(4));
+        Instant reconciled = one.end().plus(Duration.ofHours(10));
         clock.set(reconciled);
+        // Booked in the second month (on its first UTC day too, for the monthly report below), recorded before the
+        // first export's cut-off: the second export's (M3 a).
+        String earlyTwo = post(two.start().plus(Duration.ofMinutes(9 * 60 + 30)), "1120", "1110", 11, null,
+            "early two");
         assertThat(reconcile(reconciled)).isEqualTo("OK");
         param(QbParams.JOURNAL_ACCOUNT_2120, "bad code");
         assertThat(refusedExport(first.toString())).containsExactly(JournalCodes.ACCOUNT_INVALID);
@@ -202,8 +95,12 @@ class JournalExportIT extends PayoutItSupport {
         // Only the next month, and its number is drawn only for a voucher kept (none was drawn by the refusals).
         assertThat(refusedExport(first.plusMonths(1).toString())).containsExactly(JournalCodes.PERIOD_NOT_NEXT);
 
+        advance(JournalPeriods.SETTLE.plusMinutes(1));
         Map<String, Object> ready = preview();
-        assertThat(ready).containsEntry("ready", true).containsEntry("reconOk", true).containsEntry("balanced", true);
+        assertThat(ready).containsEntry("ready", true).containsEntry("reconOk", true).containsEntry("balanced", true)
+            .containsEntry("periodEnd", one.end().toString()).containsEntry("detailParts", 1)
+            .containsEntry("withinLimits", true).containsEntry("nearLimit", false)
+            .containsEntry("openTransactions", 0);
         assertThat((List<Object>) ready.get("unmapped")).isEmpty();
         Instant exportedAt = clock.instant();
         Map<String, Object> exported = export(first.toString());
@@ -212,6 +109,8 @@ class JournalExportIT extends PayoutItSupport {
             .containsEntry("periodFrom", one.from().toString()).containsEntry("periodTo", one.to().toString());
         assertThat(Instant.parse((String) exported.get("knownAt"))).isEqualTo(exportedAt.minus(JournalPeriods.SETTLE));
         assertThat(money(exported.get("debitTotal"))).isEqualByComparingTo(money(exported.get("creditTotal")));
+        assertThat(detailFiles(exported)).singleElement().satisfies(part -> assertThat(part)
+            .containsEntry("partNo", 1).containsEntry("rows", ready.get("detailRows")));
 
         // The voucher is the ledger: each account's net is its balance at the month's end, as recorded at the
         // cut-off (the first export takes everything before), and the monthly report's movement in the same month.
@@ -247,14 +146,14 @@ class JournalExportIT extends PayoutItSupport {
         assertThat(rows).hasSize(lines.size() + 1);
         assertThat(rows.subList(1, rows.size())).allSatisfy(row -> assertThat(row.subList(0, 2))
             .containsExactly("QBJ-" + year + "-00001", one.to().toString()));
-        byte[] detail = download((String) exported.get("detailFileId"), finance());
-        assertThat(sha256(detail)).isEqualTo(exported.get("detailSha256"));
-        String detailText = new String(detail, StandardCharsets.UTF_8);
-        assertThat(detailText).contains("\"'" + FORMULA.replace("\"", "\"\"") + "\"").contains(formula);
-        List<List<String>> details = csv(detail);
-        assertThat(details.stream().skip(1).map(r -> new BigDecimal(r.get(8)))
+        String detail = detailText(exported);
+        assertThat(detail).contains("\"'" + FORMULA.replace("\"", "\"\"") + "\"").contains(formula)
+            .doesNotContain(earlyTwo);
+        assertThat(detailRows(exported).stream().map(r -> new BigDecimal(r.get(8)))
             .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(money(exported.get("debitTotal"))
             .add(money(exported.get("creditTotal"))));
+        // In Japan's time (review L4).
+        assertThat(detailRows(exported)).allSatisfy(r -> assertThat(r.get(3)).endsWith("+09:00"));
         // Only finance reads the files: the content administrator may not read generated files at all, and one who
         // may but without finance's permission does not find them.
         client.get().uri("/api/generated-files/{id}", exported.get("fileId"))
@@ -271,6 +170,8 @@ class JournalExportIT extends PayoutItSupport {
         // one recorded within the cut-off's margin before the export.
         clock.set(two.start().plus(Duration.ofDays(3)));
         String late = post(one.start().plus(Duration.ofDays(5)), "1120", "1110", 40, null, "late");
+        // Backdated before the first exported month, recorded after its export (M3 e).
+        String backdated = post(one.start().minus(Duration.ofDays(3)), "1120", "1110", 9, null, "backdated");
         credit(other, 500);
         // A difference: the reconciliation finds it after the month, and the export waits until it is gone.
         String unbalancing = post(two.start().plus(Duration.ofDays(3)), "1110", "2110", 25, other, "diff");
@@ -286,19 +187,53 @@ class JournalExportIT extends PayoutItSupport {
         String secondNo = first.plusMonths(1).getYear() == first.getYear() ? "QBJ-" + year + "-00002"
             : "QBJ-" + first.plusMonths(1).getYear() + "-00001";
         assertThat(second).containsEntry("voucherNo", secondNo);
-        String secondDetail = new String(download((String) second.get("detailFileId"), finance()),
-            StandardCharsets.UTF_8);
-        assertThat(secondDetail).contains(late, unbalancing, correcting).doesNotContain(withinMargin, formula);
-        assertThat(new String(detail, StandardCharsets.UTF_8)).doesNotContain(late);
+        assertThat(detailText(second)).contains(late, unbalancing, correcting, earlyTwo, backdated)
+            .doesNotContain(withinMargin, formula);
+        assertThat(detail).doesNotContain(late).doesNotContain(backdated);
 
-        // The third month: nothing of its own; the posting recorded within the margin, once.
+        // The third month: the posting recorded within the margin, once, and reversals (M3 b) of postings exported
+        // before: one booked now, one booked back in the first month - both recorded after its export.
+        clock.set(three.start().plus(Duration.ofDays(2)));
+        String lateReversal = reverse(late, null);
+        String backReversal = reverse(formula, one.start().plus(Duration.ofDays(6)));
         clock.set(three.end().plus(Duration.ofHours(4)));
         assertThat(reconcile(clock.instant())).isEqualTo("OK");
-        Map<String, Object> third = export(three.label());
-        String thirdDetail = new String(download((String) third.get("detailFileId"), finance()),
-            StandardCharsets.UTF_8);
-        assertThat(thirdDetail).contains(withinMargin).doesNotContain(late, formula);
-        assertThat(third).containsEntry("lineCount", 2).containsEntry("transactionCount", 1);
+        advance(Duration.ofMinutes(1));
+        // Two exports at once (M3 c): one waits for the other's lock, then finds the month exported; no number is
+        // drawn for it.
+        long drawn = vouchersDrawn();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        List<java.util.concurrent.Future<org.springframework.test.web.reactive.server.EntityExchangeResult<
+            Map<String, Object>>>> both = new ArrayList<>();
+        String token = finance();
+        try {
+            for (int i = 0; i < 2; i++) {
+                both.add(pool.submit(() -> call("QB_JOURNAL_EXPORT", token, body("month", three.label()))
+                    .expectBody(MAP).returnResult()));
+            }
+            List<org.springframework.test.web.reactive.server.EntityExchangeResult<Map<String, Object>>> results =
+                new ArrayList<>();
+            for (var future : both) {
+                results.add(future.get(60, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            assertThat(results).extracting(r -> r.getStatus().value()).containsExactlyInAnyOrder(200, 422);
+            assertThat(results).filteredOn(r -> r.getStatus().value() == 422).singleElement()
+                .satisfies(r -> assertThat(codes(r.getResponseBody())).startsWith(JournalCodes.PERIOD_NOT_NEXT));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(vouchersDrawn()).isEqualTo(drawn + 1);
+        Map<String, Object> third = items("qb.admin.journal-exports", finance(), Map.of()).getFirst();
+        assertThat(third).containsEntry("periodFrom", three.from().toString());
+        third = new LinkedHashMap<>(third);
+        third.put("detailFiles", items("qb.admin.journal-export-parts", finance(), Map.of("params",
+            Map.of("exportIds", List.of(third.get("exportId"))))).stream().map(part -> Map.<String, Object>of(
+                "partNo", ((Number) part.get("partNo")).intValue(), "fileId", part.get("fileId"),
+                "sha256", part.get("sha256"), "rows", part.get("rowCount"))).toList());
+        assertThat(detailRows(third).stream().map(r -> r.get(2)).distinct().toList())
+            .containsExactlyInAnyOrder(withinMargin, lateReversal, backReversal);
+        // 1110 and 1120 each on both sides: the posting within the margin and the two reversals.
+        assertThat(third).containsEntry("lineCount", 4).containsEntry("transactionCount", 3);
         // The fourth month has not ended: nothing more.
         assertThat(preview()).containsEntry("month", first.plusMonths(3).toString()).containsEntry("periodEnded",
             false).containsEntry("previousVoucher", third.get("voucherNo"));
@@ -306,8 +241,7 @@ class JournalExportIT extends PayoutItSupport {
         // Every posting so far is in exactly one export: the details together hold each transaction once.
         List<String> taken = new ArrayList<>();
         for (Map<String, Object> each : List.of(exported, second, third)) {
-            csv(download((String) each.get("detailFileId"), finance())).stream().skip(1)
-                .map(r -> r.get(2)).distinct().forEach(taken::add);
+            detailRows(each).stream().map(r -> r.get(2)).distinct().forEach(taken::add);
         }
         List<Object> booked = query("SELECT DISTINCT transaction_id FROM ledger_transaction_version WHERE "
             + "booking_time < ?", java.sql.Timestamp.from(three.end())).stream().map(r -> r.get("transaction_id"))
@@ -319,6 +253,8 @@ class JournalExportIT extends PayoutItSupport {
         List<Map<String, Object>> listed = items("qb.admin.journal-exports", finance(), Map.of());
         assertThat(listed).extracting(r -> r.get("voucherNo")).containsExactly(third.get("voucherNo"),
             second.get("voucherNo"), exported.get("voucherNo"));
+        assertThat(Instant.parse((String) listed.getLast().get("exportedAt"))).isEqualTo(exportedAt);
+        assertThat(listed).allSatisfy(r -> assertThat(r).containsEntry("detailPartCount", 1));
         Map<String, Object> confirmed = run("QB_JOURNAL_EXPORT_CONFIRM", finance(), body("exportId",
             exported.get("exportId"), "externalVoucherNo", " MF-1001 "));
         assertThat(confirmed).containsEntry("externalVoucherNo", "MF-1001");
@@ -333,17 +269,13 @@ class JournalExportIT extends PayoutItSupport {
         assertThat(query("SELECT voucher_no FROM qb_journal_export_version ORDER BY period_from").stream()
             .map(r -> r.get("voucher_no")).toList()).containsExactly(exported.get("voucherNo"),
             second.get("voucherNo"), third.get("voucherNo"));
-        assertThat(query("SELECT count(*) AS n FROM sys_number_assignment WHERE sequence_name = 'qb.journal'")
-            .getFirst().get("n")).isEqualTo(3L);
-        for (String table : List.of("qb_journal_export_version", "qb_journal_export_confirmation_version")) {
-            assertThat(query("SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_del, 0) AS changed "
-                + "FROM pg_stat_user_tables WHERE schemaname = current_schema() AND relname = ?", table))
-                .as(table).singleElement()
-                .satisfies(row -> assertThat(((Number) row.get("changed")).longValue()).as(table).isZero());
-            assertThat(query("SELECT 1 AS guarded FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
-                + "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = current_schema() "
-                + "AND c.relname = ? AND NOT t.tgisinternal", table)).as(table).isNotEmpty();
-        }
+        assertThat(vouchersDrawn()).isEqualTo(3L);
+        // The previous period's end is the one each export kept (review L1).
+        assertThat(query("SELECT period_end FROM qb_journal_export_version ORDER BY period_from").stream()
+            .map(r -> ((java.sql.Timestamp) r.get("period_end")).toInstant()).toList())
+            .containsExactly(one.end(), two.end(), three.end());
+        onlyInserted(List.of("qb_journal_export_version", "qb_journal_export_part_version",
+            "qb_journal_export_confirmation_version"));
         assertBooksBalance();
     }
 
@@ -356,7 +288,8 @@ class JournalExportIT extends PayoutItSupport {
             call("QB_JOURNAL_EXPORT", refused, body("month", "2026-01")).expectStatus().isForbidden();
             call("QB_JOURNAL_EXPORT_CONFIRM", refused, body("exportId", java.util.UUID.randomUUID().toString(),
                 "externalVoucherNo", "X")).expectStatus().isForbidden();
-            for (String id : List.of("qb.admin.journal-exports", "qb.admin.journal-mapping")) {
+            for (String id : List.of("qb.admin.journal-exports", "qb.admin.journal-mapping",
+                "qb.admin.journal-export-parts")) {
                 client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION, refused).bodyValue(Map.of()).exchange()
                     .expectStatus().isForbidden();

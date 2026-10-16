@@ -30,15 +30,28 @@ class JournalLinesTest {
 
     static final Map<String, String> MAPPED = Map.of("1110", "111", "2110", "211", "2120", "212", "4110", "411");
 
+    static JournalLines.Group group(String account, String side, String sponsor, long amount, int transactions) {
+        return new JournalLines.Group(account, side, sponsor, BigDecimal.valueOf(amount), transactions);
+    }
+
+    static Map<String, Object> summaryRow(String account, String side, String party, long amount, int transactions) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("accountCode", account);
+        row.put("direction", side);
+        row.put("party", party);
+        row.put("amount", BigDecimal.valueOf(amount));
+        row.put("transactions", BigDecimal.valueOf(transactions));
+        return row;
+    }
+
     @Test
-    void aLinePerAccountAndSideAndPerSponsorOn2110Only() {
-        List<JournalLines.Entry> entries = List.of(
-            entry("t1", "1110", "DEBIT", null, 1_000), entry("t1", "2110", "CREDIT", "s-b", 1_000),
-            entry("t2", "1110", "DEBIT", null, 500), entry("t2", "2110", "CREDIT", "s-a", 500),
-            entry("t3", "2110", "DEBIT", "s-a", 100), entry("t3", "2120", "CREDIT", "u-1", 80),
-            entry("t3", "4110", "CREDIT", null, 20),
-            entry("t4", "2110", "DEBIT", "s-a", 50), entry("t4", "2120", "CREDIT", "u-2", 50));
-        JournalLines.Summary summary = JournalLines.summarize(entries, MAPPED);
+    void theDatabasesSumsAreNumberedByAccountSideAndSponsor() {
+        // As the summary template gives them, in any order; a party on another account than 2110 is not kept.
+        List<JournalLines.Group> groups = JournalLines.groups(List.of(
+            summaryRow("4110", "CREDIT", null, 20, 1), summaryRow("2120", "CREDIT", "u-1", 130, 2),
+            summaryRow("2110", "CREDIT", "s-b", 1_000, 1), summaryRow("2110", "CREDIT", "s-a", 500, 1),
+            summaryRow("2110", "DEBIT", "s-a", 150, 2), summaryRow("1110", "DEBIT", null, 1_500, 2)));
+        JournalLines.Summary summary = JournalLines.summarize(groups, MAPPED);
         assertThat(summary.lines()).extracting(JournalLines.Line::lineNo, JournalLines.Line::accountCode,
                 JournalLines.Line::side, JournalLines.Line::sponsorId, l -> l.amount().longValue(),
                 JournalLines.Line::transactions, JournalLines.Line::externalCode)
@@ -52,9 +65,9 @@ class JournalLinesTest {
                 org.assertj.core.groups.Tuple.tuple(6, "4110", "CREDIT", null, 20L, 1, "411"));
         assertThat(summary.balanced()).isTrue();
         assertThat(summary.debitTotal()).isEqualByComparingTo("1650");
-        assertThat(summary.transactionCount()).isEqualTo(4);
         assertThat(summary.accounts()).containsExactly("1110", "2110", "2120", "4110");
-        assertThat(summary.lineOfEntry()).containsExactly(1, 4, 1, 3, 2, 5, 6, 2, 5);
+        assertThat(summary.lineNumbers()).containsEntry(JournalLines.key("2110", "CREDIT", "s-b"), 4)
+            .containsEntry(JournalLines.key("2120", "CREDIT", null), 5).hasSize(6);
     }
 
     @Test
@@ -66,10 +79,16 @@ class JournalLinesTest {
         List<String> accounts = List.of("1110", "2110", "2120", "4110");
         assertThat(JournalLines.unmapped(accounts, mapping)).containsExactly("1110", "2120");
         assertThat(JournalLines.invalid(accounts, mapping)).containsExactly("4110");
-        assertThat(JournalLines.summarize(List.of(entry("t", "1110", "DEBIT", null, 2)), mapping).balanced())
+        assertThat(JournalLines.summarize(List.of(group("1110", "DEBIT", null, 2, 1)), mapping).balanced())
             .isFalse();
         assertThat(JournalLines.ACCOUNT_CODE.matcher("A-1.b_2").matches()).isTrue();
+        assertThat(JournalLines.ACCOUNT_CODE.matcher("7").matches()).isTrue();
+        assertThat(JournalLines.ACCOUNT_CODE.matcher("x".repeat(20)).matches()).isTrue();
         assertThat(JournalLines.ACCOUNT_CODE.matcher("x".repeat(21)).matches()).isFalse();
+        // A letter or digit first (review L3): nothing a spreadsheet or the accounting system could take otherwise.
+        for (String bad : List.of("-1", ".1", "_1", "", " 1", "1 2")) {
+            assertThat(JournalLines.ACCOUNT_CODE.matcher(bad).matches()).as(bad).isFalse();
+        }
     }
 
     @Test
@@ -87,7 +106,7 @@ class JournalLinesTest {
     void theVoucherFileHasTheSummaryLinesAndTheDetailEveryPosting() {
         JournalPeriods.Period october = JournalPeriods.month(YearMonth.of(2026, 10));
         JournalLines.Summary summary = JournalLines.summarize(List.of(
-            entry("t1", "1110", "DEBIT", null, 1_000), entry("t1", "2110", "CREDIT", "=s", 1_000)), MAPPED);
+            group("1110", "DEBIT", null, 1_000, 1), group("2110", "CREDIT", "=s", 1_000, 1)), MAPPED);
         byte[] voucher = JournalLines.voucherCsv("QBJ-2026-00001", october, summary);
         assertThat(voucher).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
         String text = new String(voucher, 3, voucher.length - 3, StandardCharsets.UTF_8);
@@ -98,9 +117,45 @@ class JournalLinesTest {
                 + "\"QuizBuks 2026-10 1110 DEBIT\"",
             "\"QBJ-2026-00001\",\"2026-10-31\",\"2\",\"CREDIT\",\"211\",\"2110\",\"'=s\",\"1000\","
                 + "\"QuizBuks 2026-10 2110 CREDIT\"");
-        String detail = new String(JournalLines.detailCsv("QBJ-2026-00001", summary), StandardCharsets.UTF_8);
-        assertThat(detail.split("\r\n")).hasSize(3);
-        assertThat(detail).contains("\"QBJ-2026-00001\",\"2\",\"t1\",\"2026-10-10T01:00:00Z\"");
+        // A part of the detail: by line, the times in Japan's (review L4), the sponsor only on 2110.
+        List<JournalLines.Entry> entries = List.of(entry("t2", "1110", "DEBIT", null, 400),
+            entry("t1", "2110", "CREDIT", "=s", 1_000), entry("t1", "1110", "DEBIT", null, 600));
+        String detail = new String(JournalLines.detailCsv("QBJ-2026-00001", entries, summary.lineNumbers()),
+            StandardCharsets.UTF_8);
+        assertThat(detail.substring(1).split("\r\n")).containsExactly(
+            "\"voucher_no\",\"line_no\",\"transaction_id\",\"booking_time\",\"recorded_at\",\"platform_account\","
+                + "\"side\",\"sponsor_id\",\"amount\",\"source\",\"source_id\",\"reference\"",
+            "\"QBJ-2026-00001\",\"1\",\"t1\",\"2026-10-10T10:00:00+09:00\",\"2026-10-10T10:00:00+09:00\",\"1110\","
+                + "\"DEBIT\",\"\",\"600\",\"QbTopUp\",\"s-1\",\"\"",
+            "\"QBJ-2026-00001\",\"1\",\"t2\",\"2026-10-10T10:00:00+09:00\",\"2026-10-10T10:00:00+09:00\",\"1110\","
+                + "\"DEBIT\",\"\",\"400\",\"QbTopUp\",\"s-1\",\"\"",
+            "\"QBJ-2026-00001\",\"2\",\"t1\",\"2026-10-10T10:00:00+09:00\",\"2026-10-10T10:00:00+09:00\",\"2110\","
+                + "\"CREDIT\",\"'=s\",\"1000\",\"QbTopUp\",\"s-1\",\"\"");
+        // A posting of no line of the voucher is a defect, never a silent row.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> JournalLines.detailCsv("QBJ-2026-00001",
+                List.of(entry("t3", "4110", "CREDIT", null, 1)), summary.lineNumbers()))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void theLimitsCutPartsAtHalfAndRefuseWhatCannotFit() {
+        JournalLimits limits = new JournalLimits(800, 4_000, Duration.ofMinutes(5));
+        assertThat(limits.partRows()).isEqualTo(400);
+        assertThat(limits.partBytes()).isEqualTo((4_000 - JournalLimits.HEADER_BYTES) / 2);
+        assertThat(limits.fits(400, limits.partBytes())).isTrue();
+        assertThat(limits.fits(401, 1)).isFalse();
+        assertThat(limits.fits(1, limits.partBytes() + 1)).isFalse();
+        // Near: four fifths of a read in voucher lines, of a file in the voucher, or of a part in one transaction.
+        assertThat(limits.near(639, 100, 319, 1)).isFalse();
+        assertThat(limits.near(640, 100, 1, 1)).isTrue();
+        assertThat(limits.near(1, 3_200, 1, 1)).isTrue();
+        assertThat(limits.near(1, 100, 320, 1)).isTrue();
+        assertThat(limits.near(1, 100, 1, limits.partBytes() * 4 / 5 + 1)).isTrue();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new JournalLimits(1, 4_000, Duration.ZERO))
+            .isInstanceOf(IllegalArgumentException.class);
+        // The open transactions' limit stays within half the margin: see JournalPeriods.SETTLE.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new JournalLimits(800, 4_000,
+            JournalPeriods.SETTLE.dividedBy(2).plusSeconds(1))).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

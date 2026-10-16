@@ -47,6 +47,15 @@ export interface JournalPreview {
   invalid: string[]
   lines: JournalLine[]
   transactionCount: number
+  /** The detail's rows (postings by transaction, account and side) and how many files they take. */
+  detailRows: number
+  detailParts: number
+  /** Whether every part and the voucher stay within the platform's limits of a read and of a file. */
+  withinLimits: boolean
+  /** Whether the export comes near those limits (the platform's operators should raise them). */
+  nearLimit: boolean
+  /** Other database transactions open for long: none for an export. */
+  openTransactions: number
   debitTotal: string
   creditTotal: string
   balanced: boolean
@@ -79,6 +88,11 @@ export async function previewJournal(): Promise<JournalPreview> {
       transactions: num(line.transactions),
     })),
     transactionCount: num(output.transactionCount),
+    detailRows: num(output.detailRows),
+    detailParts: num(output.detailParts),
+    withinLimits: output.withinLimits === true,
+    nearLimit: output.nearLimit === true,
+    openTransactions: num(output.openTransactions),
     debitTotal: amount(output.debitTotal),
     creditTotal: amount(output.creditTotal),
     balanced: output.balanced === true,
@@ -105,7 +119,15 @@ export async function confirmJournal(exportId: string, externalVoucherNo: string
   return runProcess(PROCESS.journalConfirm, { exportId, externalVoucherNo })
 }
 
-/** A row of `qb.admin.journal-exports`. */
+/** A file of an export's detail (`qb.admin.journal-export-parts`). */
+export interface DetailPart {
+  partNo: number
+  rowCount: number
+  fileId: string
+  sha256: string
+}
+
+/** A row of `qb.admin.journal-exports`, with its detail's files. */
 export interface JournalExport {
   exportId: string
   periodFrom: string
@@ -116,18 +138,37 @@ export interface JournalExport {
   debitTotal: string
   creditTotal: string
   knownAt: string | null
+  /** When the export ran. */
+  exportedAt: string | null
   exportedBy: string | null
   fileId: string
   fileSha256: string
-  detailFileId: string
-  detailSha256: string
+  detailPartCount: number
+  detailParts: DetailPart[]
   externalVoucherNo: string | null
   confirmedBy: string | null
 }
 
-/** A page of the exports, the newest period first, counted. */
+/** The detail files of some exports, by export, in order. */
+export async function readDetailParts(exportIds: string[]): Promise<Map<string, DetailPart[]>> {
+  const parts = new Map<string, DetailPart[]>()
+  if (exportIds.length === 0) return parts
+  const page = await runQuery<Row>(TEMPLATE.journalExportParts, { params: { exportIds }, limit: 1000 })
+  for (const row of page.items) {
+    const exportId = String(row.exportId)
+    const list = parts.get(exportId) ?? []
+    list.push({ partNo: num(row.partNo), rowCount: num(row.rowCount), fileId: String(row.fileId ?? ''),
+      sha256: String(row.sha256 ?? '') })
+    parts.set(exportId, list)
+  }
+  parts.forEach((list) => list.sort((a, b) => a.partNo - b.partNo))
+  return parts
+}
+
+/** A page of the exports, the newest period first, counted, with their detail's files. */
 export async function readJournalExports(offset: number, limit: number): Promise<Page<JournalExport>> {
   const page = await runQuery<Row>(TEMPLATE.journalExports, { offset, limit, count: true })
+  const parts = await readDetailParts(page.items.map((row) => String(row.exportId)))
   return {
     total: page.total,
     items: page.items.map((row) => ({
@@ -140,11 +181,12 @@ export async function readJournalExports(offset: number, limit: number): Promise
       debitTotal: amount(row.debitTotal),
       creditTotal: amount(row.creditTotal),
       knownAt: str(row.knownAt),
+      exportedAt: str(row.exportedAt),
       exportedBy: str(row.exportedBy),
       fileId: String(row.fileId ?? ''),
       fileSha256: String(row.fileSha256 ?? ''),
-      detailFileId: String(row.detailFileId ?? ''),
-      detailSha256: String(row.detailSha256 ?? ''),
+      detailPartCount: num(row.detailPartCount),
+      detailParts: parts.get(String(row.exportId)) ?? [],
       externalVoucherNo: str(row.externalVoucherNo),
       confirmedBy: str(row.confirmedBy),
     })),

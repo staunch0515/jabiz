@@ -10,17 +10,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 /**
  * Registers the journal export (docs/quizbuks/plans/Q9d-journal-receipts.md): its two entities, read by finance and
- * written by the processes only, the voucher numbers and the three processes.
+ * written by the processes only, the voucher numbers and the processes, within the platform's limits of a read and of
+ * a generated file ({@link JournalLimits}).
  */
 @Configuration
 class JournalConfig {
 
     private final String poolRef;
+    private final JournalLimits limits;
 
-    JournalConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    JournalConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.process.max-read-rows:100000}") int maxReadRows,
+        @Value("${jabiz.files.generated.max-bytes:10485760}") long maxFileBytes,
+        @Value("${quizbuks.journal.max-open-transaction:PT5M}") Duration maxOpenTransaction) {
         this.poolRef = poolRef;
+        this.limits = new JournalLimits(maxReadRows, maxFileBytes, maxOpenTransaction);
     }
 
     @Bean
@@ -34,21 +42,32 @@ class JournalConfig {
     }
 
     @Bean
+    EntityDefinition qbJournalExportPartEntity() {
+        return QbJournal.PART_ENTITY;
+    }
+
+    @Bean
     DatasetDefinition qbJournalExportDataset() {
-        return processOnly(QbJournal.EXPORT);
+        return processOnly(QbJournal.EXPORT, 10);
+    }
+
+    /** One row per part of the detail, all written by one export. */
+    @Bean
+    DatasetDefinition qbJournalExportPartDataset() {
+        return processOnly(QbJournal.PART, 10_000);
     }
 
     @Bean
     DatasetDefinition qbJournalExportConfirmationDataset() {
-        return processOnly(QbJournal.CONFIRMATION);
+        return processOnly(QbJournal.CONFIRMATION, 10);
     }
 
-    private DatasetDefinition processOnly(String entity) {
+    private DatasetDefinition processOnly(String entity, int maxWriteBatchSize) {
         return DatasetDefinition.define(QbJournal.defaultDataset(entity), d -> d
             .targetEntityType(entity)
             .asDefault()
             .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(maxWriteBatchSize))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
@@ -61,13 +80,18 @@ class JournalConfig {
     @Bean
     ProcessDefinition<JournalProcesses.PreviewInput, JournalProcesses.PreviewOutput, ProcessContext>
         qbJournalPreview() {
-        return JournalProcesses.preview();
+        return JournalProcesses.preview(limits);
     }
 
     @Bean
     ProcessDefinition<JournalProcesses.ExportInput, JournalProcesses.ExportOutput, ProcessContext>
         qbJournalExport() {
-        return JournalProcesses.export();
+        return JournalProcesses.export(limits);
+    }
+
+    @Bean
+    ProcessDefinition<JournalProcesses.PartInput, JournalProcesses.DetailFile, ProcessContext> qbJournalDetailPart() {
+        return JournalProcesses.detailPart(limits);
     }
 
     @Bean

@@ -25,8 +25,19 @@ public final class JournalCodes {
     /** The export already has the accounting system's voucher number (param {@code externalVoucherNo}). */
     public static final String ALREADY_CONFIRMED = "QB_JOURNAL_ALREADY_CONFIRMED";
 
+    /**
+     * A single transaction is over half of the platform's read limit or of a generated file's (params {@code rows},
+     * {@code bytes}): the detail cannot be cut into parts within them (review H1).
+     */
+    public static final String TOO_LARGE = "QB_JOURNAL_TOO_LARGE";
+    /**
+     * Another database transaction has been open for long (param {@code seconds}): a posting it began before the
+     * cut-off could commit after the export and be in no export (review M1). Try again once it has ended.
+     */
+    public static final String TRANSACTION_OPEN = "QB_JOURNAL_TRANSACTION_OPEN";
+
     public static final List<String> ALL = List.of(ACCOUNT_UNMAPPED, ACCOUNT_INVALID, RECON_NOT_OK, PERIOD_OPEN,
-        PERIOD_NOT_NEXT, NOTHING_POSTED, UNBALANCED, ALREADY_CONFIRMED);
+        PERIOD_NOT_NEXT, NOTHING_POSTED, UNBALANCED, ALREADY_CONFIRMED, TOO_LARGE, TRANSACTION_OPEN);
 
     private JournalCodes() {}
 }

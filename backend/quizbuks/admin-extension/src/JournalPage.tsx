@@ -62,6 +62,10 @@ function Blockers({ preview }: { preview: JournalPreview }) {
     problems.push({ key: 'invalid', text: t('finance.journal.invalid', { accounts: preview.invalid.join(', ') }) })
   }
   if (!preview.balanced) problems.push({ key: 'unbalanced', text: t('finance.journal.unbalanced') })
+  if (!preview.withinLimits) problems.push({ key: 'tooLarge', text: t('finance.journal.tooLarge') })
+  if (preview.openTransactions > 0) {
+    problems.push({ key: 'transactionOpen', text: t('finance.journal.transactionOpen') })
+  }
   if (problems.length === 0) return null
   return (
     <Alert variant="warning" data-testid="journal-blockers">
@@ -166,8 +170,18 @@ function NextExport() {
             <dd>{preview.previousVoucher ?? t('finance.journal.none')}</dd>
             <dt className="text-muted-foreground">{t('finance.journal.knownAt')}</dt>
             <dd>{when(preview.knownAt)}</dd>
+            <dt className="text-muted-foreground">{t('finance.journal.detail')}</dt>
+            <dd data-testid="journal-detail-size" data-rows={preview.detailRows} data-parts={preview.detailParts}>
+              {t('finance.journal.detailSize', { rows: preview.detailRows.toLocaleString(),
+                parts: preview.detailParts.toLocaleString() })}
+            </dd>
           </dl>
           <Blockers preview={preview} />
+          {preview.withinLimits && preview.nearLimit && (
+            <Alert variant="warning" data-testid="journal-near-limit">
+              <AlertDescription>{t('finance.journal.nearLimit')}</AlertDescription>
+            </Alert>
+          )}
           <PreviewLines preview={preview} />
           {preview.ready && (
             <div>
@@ -233,12 +247,12 @@ function ConfirmForm({ row }: { row: JournalExport }) {
   )
 }
 
-function DownloadButton({ fileId, name, label, testId }: { fileId: string; name: string; label: string;
-  testId: string }) {
+function DownloadButton({ fileId, name, label, ariaLabel, testId }: { fileId: string; name: string; label: string;
+  ariaLabel: string; testId: string }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const [busy, setBusy] = useState(false)
   return (
-    <Button variant="ghost" size="sm" disabled={busy} data-testid={testId} aria-label={label}
+    <Button variant="ghost" size="sm" disabled={busy} data-testid={testId} aria-label={ariaLabel}
       onClick={async () => {
         setBusy(true)
         try {
@@ -258,7 +272,7 @@ function DownloadButton({ fileId, name, label, testId }: { fileId: string; name:
 /**
  * The journal export to the accounting system (F-01 – F-03): one summary voucher per Japanese month, exported in
  * order, numbered without gaps and kept as CSV exactly as made (the voucher for the accounting system to import, and
- * its detail). A posting recorded after its month was exported comes in the next export; exported vouchers never
+ * its detail, in as many files as the platform's limits need). A posting recorded after its month was exported comes in the next export; exported vouchers never
  * change. The accounting system's own voucher number is recorded once per export.
  */
 export default function JournalPage() {
@@ -280,7 +294,7 @@ export default function JournalPage() {
       cell: ({ row }) => money(row.original.creditTotal) },
     { id: 'exported', header: t('finance.journal.exportedBy'), cell: ({ row }) => (
       <span className="flex flex-col">
-        <span>{when(row.original.knownAt)}</span>
+        <span data-testid="journal-exported-at">{when(row.original.exportedAt)}</span>
         {row.original.exportedBy && <UserName id={row.original.exportedBy} />}
       </span>
     ) },
@@ -288,9 +302,18 @@ export default function JournalPage() {
       ? (
         <span className="flex flex-wrap gap-1">
           <DownloadButton fileId={row.original.fileId} name={`${row.original.voucherNo}.csv`}
-            label={t('finance.journal.voucherFile')} testId="journal-download" />
-          <DownloadButton fileId={row.original.detailFileId} name={`${row.original.voucherNo}-detail.csv`}
-            label={t('finance.journal.detailFile')} testId="journal-download-detail" />
+            label={t('finance.journal.voucherFile')}
+            ariaLabel={t('finance.journal.voucherFileOf', { voucher: row.original.voucherNo })}
+            testId="journal-download" />
+          {row.original.detailParts.map((part) => (
+            <DownloadButton key={part.fileId} fileId={part.fileId}
+              name={`${row.original.voucherNo}-detail-${part.partNo}.csv`}
+              label={row.original.detailParts.length === 1 ? t('finance.journal.detailFile')
+                : t('finance.journal.detailPart', { n: part.partNo })}
+              ariaLabel={t('finance.journal.detailPartOf', { voucher: row.original.voucherNo, n: part.partNo,
+                count: row.original.detailParts.length })}
+              testId="journal-download-detail" />
+          ))}
         </span>
       )
       : '') },
