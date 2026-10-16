@@ -29,7 +29,44 @@ export const TEMPLATE = {
   transfers: 'qb.admin.transfers',
   topUps: 'qb.admin.topups',
   payoutAccounts: 'qb.admin.payout-accounts',
+  /** Finance (Q9c): the overview's numbers, the wallets, the reconciliation and the two monthly reports (F-08). */
+  financeSummary: 'qb.admin.finance-summary',
+  wallets: 'qb.admin.wallets',
+  reconRuns: 'qb.admin.recon-runs',
+  reconItems: 'qb.admin.recon-items',
+  monthly: 'qb.admin.monthly',
+  balances: 'qb.admin.balances',
+  /** The platform's account balances (`ledger.read`). */
+  accountBalances: 'jabiz.ledger.account_balances',
 } as const
+
+/** Processes the finance pages run (Q9c); the server checks each. */
+export const PROCESS = {
+  /** Lets transfers to a taker held after a rejected or reversed transfer go on (`qb.payout.review`). */
+  holdRelease: 'QB_TRANSFER_HOLD_RELEASE',
+  /** The platform's issue of a report: archived with its content hash (`report.issue`). */
+  reportIssue: 'REPORT_ISSUE',
+} as const
+
+/** The reports of the monthly page (F-08), in the order shown. */
+export const REPORTS = [TEMPLATE.monthly, TEMPLATE.balances] as const
+export type ReportId = (typeof REPORTS)[number]
+
+/** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
+export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110'] as const
+
+/** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
+export const STALE_AFTER_MS = 60 * 60 * 1000
+
+/** What a reconciliation difference's reference names, by its check (backend `ReconChecks`). */
+export function referenceKind(check: string): 'topUp' | 'transfer' | null {
+  if (check.startsWith('TOPUP_')) return 'topUp'
+  if (check.startsWith('TRANSFER_')) return 'transfer'
+  return null
+}
+
+/** The transfer state a large transfer waits for its review in. */
+export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
@@ -42,6 +79,7 @@ export const DICTIONARY = {
   transferStatus: 'urn:jabiz:dict:quizbuks:transfer-status',
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
   payoutAccountStatus: 'urn:jabiz:dict:quizbuks:payout-account-status',
+  reconCheck: 'urn:jabiz:dict:quizbuks:recon-check',
 } as const
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
@@ -51,6 +89,11 @@ export const PERMISSION = {
   quizRead: 'qb.admin.quiz.read',
   usersRead: 'qb.admin.users.read',
   financeRead: 'qb.admin.finance.read',
+  payoutReview: 'qb.payout.review',
+  reconcile: 'qb.reconcile',
+  ledgerRead: 'ledger.read',
+  reportIssue: 'report.issue',
+  reportArchiveRead: 'report.archive.read',
 } as const
 
 /** The widths the policy `qb.content.image` keeps (a smaller image is answered with the original). */
@@ -78,4 +121,15 @@ export const PATH = {
   sponsor: (userId: string) => `/qb/reviews/sponsors/${encodeURIComponent(userId)}`,
   users: '/qb/users',
   user: (userId: string) => `/qb/users/${encodeURIComponent(userId)}`,
+  finance: '/qb/finance',
+  transfers: '/qb/finance/transfers',
+  transfersWhere: (filter: Record<string, string>) => `/qb/finance/transfers?${new URLSearchParams(filter)}`,
+  transferReview: (transferId: string) => `/qb/finance/transfers/${encodeURIComponent(transferId)}/review`,
+  topUps: '/qb/finance/topups',
+  topUpsWhere: (filter: Record<string, string>) => `/qb/finance/topups?${new URLSearchParams(filter)}`,
+  reconciliation: '/qb/finance/reconciliation',
+  reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
+  reports: '/qb/finance/reports',
+  /** The platform's own pages. */
+  tasks: '/tasks',
 } as const

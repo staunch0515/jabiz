@@ -1,7 +1,10 @@
+import { financeMenu, financeMessages } from './finance-messages'
+
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
 export const messages = {
   en: {
-    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users' },
+    menu: { group: 'QuizBuks', reviews: 'Reviews', users: 'Users', ...financeMenu.en },
+    finance: financeMessages.en,
     common: {
       notSet: 'Not set',
       failed: 'Could not load this. Try again.',
@@ -190,7 +193,8 @@ export const messages = {
     },
   },
   zh: {
-    menu: { group: 'QuizBuks', reviews: '审核', users: '用户' },
+    menu: { group: 'QuizBuks', reviews: '审核', users: '用户', ...financeMenu.zh },
+    finance: financeMessages.zh,
     common: {
       notSet: '未设置',
       failed: '无法读取，请重试。',
@@ -379,7 +383,8 @@ export const messages = {
     },
   },
   ja: {
-    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー' },
+    menu: { group: 'QuizBuks', reviews: '審査', users: 'ユーザー', ...financeMenu.ja },
+    finance: financeMessages.ja,
     common: {
       notSet: '未設定',
       failed: '読み込めませんでした。もう一度お試しください。',
