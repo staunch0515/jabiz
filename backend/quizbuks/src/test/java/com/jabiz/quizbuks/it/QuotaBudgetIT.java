@@ -50,8 +50,10 @@ class QuotaBudgetIT extends PlayItSupport {
         String c = startFor(publicationId, "t-quota-c");
         finish(b, true, true);
         assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertThat(moves(publicationId)).isZero();
         finish(c, false, true);
         assertThat(status(publicationId)).isEqualTo("ENDED");
+        assertThat(moves(publicationId)).isEqualTo(1);
         assertThat(row(publicationId)).containsEntry("end_reason", "QUOTA");
         assertThat(card(publicationId)).containsEntry("status", "ENDED");
         assertThat(counter(publicationId)).containsEntry("starts", new BigDecimal("3"))
@@ -72,13 +74,36 @@ class QuotaBudgetIT extends PlayItSupport {
         assertThat(codes(refusedStart(publicationId, "t-budget-c"))).containsExactly(PlayCodes.BUDGET_FULL);
         finish(a, true, true);
         assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertThat(moves(publicationId)).isZero();
         assertThat(codes(refusedStart(publicationId, "t-budget-d"))).containsExactly(PlayCodes.BUDGET_FULL);
         // In progress when the budget runs low, b still completes and is paid.
         assertThat(finish(b, true, true)).containsEntry("rewardStatus", "PAID");
         assertThat(status(publicationId)).isEqualTo("ENDED");
         assertThat(row(publicationId)).containsEntry("end_reason", "BUDGET");
+        assertThat(moves(publicationId)).isEqualTo(1);
         assertThat(counter(publicationId)).containsEntry("spent", new BigDecimal("200"))
             .containsEntry("reserved", BigDecimal.ZERO);
+        assertBooksBalance();
+    }
+
+    /**
+     * The move decided on the card must be the publication's: a card that has drifted from its publication (here by
+     * hand: the winners' limit of the card alone) fails the completion as a whole rather than leave the two apart.
+     */
+    @Test
+    void aCardThatDisagreesWithItsPublicationFailsTheCompletion() {
+        String sponsor = newSponsor("s-drift");
+        String publicationId = livePublication(sponsor, "Drift", Map.of("regions", List.of("GLOBAL")));
+        credit(sponsor, 1_000);
+        String a = startFor(publicationId, "t-drift-a");
+        execute("UPDATE qb_publication_card SET max_winners = 1 WHERE publication_id = ?::uuid", publicationId);
+        clock.advance(Duration.ofSeconds(1));
+        refused("QB_ATTEMPT_SUBMIT", taker((String) attempt(a).get("user_id")), body("attemptId", a, "answers",
+            answers(true, true)), 500);
+        assertThat(attempt(a)).containsEntry("status", "IN_PROGRESS");
+        assertThat(status(publicationId)).isEqualTo("LIVE");
+        assertThat(moves(publicationId)).isZero();
+        assertThat(balance(sponsor)).isEqualByComparingTo("1000");
         assertBooksBalance();
     }
 
@@ -141,6 +166,8 @@ class QuotaBudgetIT extends PlayItSupport {
         assertThat((BigDecimal) counter.get("reserved")).isZero();
         assertThat(winners).isEqualTo(winnersCap);
         assertThat(status(publicationId)).isEqualTo("ENDED");
+        // Of all the completions racing for the last places, exactly one moved the publication.
+        assertThat(moves(publicationId)).isEqualTo(1);
         assertBooksBalance();
     }
 }

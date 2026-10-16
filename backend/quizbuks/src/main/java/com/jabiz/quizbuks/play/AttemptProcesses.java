@@ -182,7 +182,12 @@ public final class AttemptProcesses {
                     return card == null ? null : card.get("versionId");
                 }))
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
-                // A new attempt only: under the publication's lock, the state, the counters and the wallet again.
+                // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
+                // read less while it is held); a reward the sponsor cannot pay at the end is pending.
+                .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
+                    QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.SPONSOR,
+                        starting(ctx) ? sponsorOf(first(ctx, CARD_BEFORE)) : null), WALLET))
+                // A new attempt only: under the publication's lock, the attempt, the state and the counters again.
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> starting(ctx) ? PublicationMoves.lockName(ctx.get(PUB_KEY)) : null))
                 .step("Load the caller's attempt again", QueryEntities.<ProcessContext>of(QbPlay.TAKER_ATTEMPTS,
@@ -190,10 +195,6 @@ public final class AttemptProcesses {
                 .steps(b -> PlaySteps.loadCard(b, "Load the card again",
                     ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD))
                 .steps(b -> PlaySteps.loadCounter(b, ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER))
-                // Without the wallet's lock (D-Q5-5): a soft check; a reward it cannot pay at the end is pending.
-                .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
-                    QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.SPONSOR,
-                        starting(ctx) ? sponsorOf(first(ctx, CARD_BEFORE)) : null), WALLET))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx)));
     }
 

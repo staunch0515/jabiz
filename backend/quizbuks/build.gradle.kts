@@ -61,3 +61,27 @@ tasks.register<Test>("perfTest") {
         showStandardStreams = true
     }
 }
+
+// Load test of one hot publication (docs/quizbuks/plans/Q10-launch.md section 3, docs/quizbuks/perf/Q10a-load-test.md):
+// drives a running jar over HTTP with real tokens, as the platform app's loadTest does. Not part of check; run it
+// against a started jar: LOAD_ADMIN_PASSWORD=... LOAD_MAILPIT_URL=... ./gradlew :quizbuks:loadTest. With LOAD_DB_URL it
+// also reads pg_stat_statements and samples pg_stat_activity of the application's database (JDBC, outside the jar).
+val loadTestSourceSet = sourceSets.create("loadTest")
+dependencies {
+    "loadTestImplementation"("org.hdrhistogram:HdrHistogram:2.2.2")
+    "loadTestImplementation"("tools.jackson.core:jackson-databind")
+    "loadTestRuntimeOnly"("org.postgresql:postgresql")
+}
+
+tasks.register<JavaExec>("loadTest") {
+    group = "verification"
+    description = "Load test of one hot publication of a running QuizBuks (LOAD_BASE_URL, LOAD_ADMIN_*, LOAD_* sizes)."
+    classpath = loadTestSourceSet.runtimeClasspath
+    mainClass.set("com.jabiz.quizbuks.load.QuizbuksLoadTest")
+    outputs.upToDateWhen { false }
+}
+
+// The load test is not run by check, but it is compiled there: it cannot break unnoticed.
+tasks.named("check") {
+    dependsOn("compileLoadTestJava")
+}

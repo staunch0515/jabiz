@@ -135,6 +135,12 @@ public class PublishingConfig {
     }
 
     @Bean
+    ProcessDefinition<PublicationMoves.MoveInput, PublicationMoves.MoveOutput, ProcessContext>
+        qbPublicationCompletionMove() {
+        return PublicationMoves.move();
+    }
+
+    @Bean
     ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext> qbPublicationFunded() {
         return PublicationFunds.funded();
     }

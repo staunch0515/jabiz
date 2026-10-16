@@ -219,6 +219,16 @@ abstract class PlayItSupport extends AccountItSupport {
         return submit(token, attemptId, answers(first, second));
     }
 
+    /**
+     * How many completions moved the publication: a completion reads the card only, and calls the move (which reads
+     * the publication) only when it ends or underfunds it (Q10a).
+     */
+    long moves(String publicationId) {
+        return ((Number) query("SELECT count(*) AS n FROM op_process WHERE process_name = ? "
+            + "AND input_summary ->> 'publicationId' = ?", "QB_PUBLICATION_COMPLETION_MOVE", publicationId).getFirst()
+            .get("n")).longValue();
+    }
+
     Map<String, Object> attempt(String attemptId) {
         return query("SELECT * FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst();
     }
