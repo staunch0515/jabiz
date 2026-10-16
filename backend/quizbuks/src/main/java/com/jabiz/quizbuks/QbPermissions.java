@@ -113,6 +113,13 @@ public final class QbPermissions {
     public static final String PAYOUT_REVIEW = "qb.payout.review";
     /** See and follow up the daily balance reconciliation. */
     public static final String RECONCILE = "qb.reconcile";
+    /**
+     * Export the next month's summary voucher of the ledger to the accounting system (Q9d, F-02 / F-03), and preview
+     * it. Finance; the export asks for a second factor.
+     */
+    public static final String JOURNAL_EXPORT = "qb.journal.export";
+    /** Record the voucher number the accounting system gave an exported voucher (Q9d, F-03). Finance. */
+    public static final String JOURNAL_CONFIRM = "qb.journal.confirm";
 
     private QbPermissions() {}
 }

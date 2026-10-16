@@ -1,4 +1,4 @@
-import { api, runProcess, runQuery, toApiError, type Sort } from '@jabiz/client'
+import { api, fileNameOf, runProcess, runQuery, sessionFetch, toApiError, type Sort } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
 import { WALLET_DATASET, WALLET_DICTIONARY, WALLET_PROCESS, WALLET_TEMPLATE } from './ids'
 
@@ -149,6 +149,42 @@ export function payableUrl(topUp: Pick<TopUp, 'status' | 'checkoutUrl' | 'expire
  */
 export const startTopUp = (amount: number, idempotencyKey: string) =>
   runProcess<StartOutput>(WALLET_PROCESS.topUpStart, { amount }, { idempotencyKey })
+
+/** `TopUpReceipts.IssueOutput`: the receipt's document, issued now or before. */
+export interface ReceiptOutput {
+  runId: string
+  documentNo: string
+  issued: boolean
+}
+
+/** The languages a receipt is issued in (the application's); another interface language falls back to English. */
+export function receiptLanguage(language: string | undefined): 'en' | 'zh' | 'ja' {
+  const base = (language ?? '').toLowerCase().split('-')[0]
+  return base === 'zh' || base === 'ja' ? base : 'en'
+}
+
+/**
+ * The receipt of a paid top-up (F-09): issued the first time in the sponsor's language (D-5), the same document
+ * every time after; then its PDF exactly as kept (`GET /api/documents/runs/{id}/pdf`), handed to the browser.
+ */
+export async function downloadReceipt(topUpId: string, language: string | undefined) {
+  const receipt = await runProcess<ReceiptOutput>(WALLET_PROCESS.receiptIssue,
+    { topUpId, language: receiptLanguage(language) })
+  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(receipt.runId)}/pdf`)
+  if (!response.ok) throw await toApiError(response)
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${receipt.documentNo}.pdf`
+    link.rel = 'noopener'
+    link.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+  return receipt
+}
 
 /** The labels of the top-up states, in the request's language. */
 export const readTopUpStatuses = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.topUpStatus)

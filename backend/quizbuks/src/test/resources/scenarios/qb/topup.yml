@@ -3,7 +3,8 @@
 # reward waits (the publication underfunded). A tops up 5,000 Kudos: the job's result (written here, without Stripe)
 # opens the checkout; Stripe's signed completion credits it once (the same event again is a duplicate), pays U2 and puts
 # the publication back on; the fee's job records Stripe's fee. A second top-up expires. The daily reconciliation finds
-# nothing; the wallets, the top-ups and October's monthly reports (Q9c) are read.
+# nothing; the wallets, the top-ups and October's monthly reports (Q9c) are read; October is exported to the accounting
+# system as a summary voucher and its voucher number there recorded (Q9d).
 name: Top-ups
 # The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
 properties:
@@ -15,9 +16,11 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
-      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]",
-      p9: "$.proposals[8]", p10: "$.proposals[9]", p11: "$.proposals[10]",
-      p12: "$.proposals[11]" }
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]" }
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p1}" }
@@ -54,6 +57,36 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
   - expect: { param: qb.topup.min, value: 1000 }
   - expect: { param: qb.topup.max, value: 1000000 }
   - note: Publications go on without a review (the controlled switch, four eyes).
@@ -312,6 +345,83 @@ steps:
       rows: 1
       values: [{ totalCount: 0, rewardCompletedAmount: 0, rewardProcessingAmount: 0, topUpCompletedAmount: 0,
         topUpRefundedAmount: 0, topUpFailedCount: 0 }]
+
+  - note: >-
+      October's journal voucher (Q9d): finance maps the accounts with four eyes, the month ends (in Japan), the
+      reconciliation after it is clean, and October is exported as one summary voucher - 2110 a line per sponsor -
+      kept as CSV; the accounting system's voucher number is recorded.
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.1110, value: "A1110" },
+      reason: Account mapping }
+    save: { map1110: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map1110}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.1120, value: "A1120" },
+      reason: Account mapping }
+    save: { map1120: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map1120}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.2110, value: "A2110" },
+      reason: Account mapping }
+    save: { map2110: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map2110}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.2120, value: "A2120" },
+      reason: Account mapping }
+    save: { map2120: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map2120}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.2130, value: "A2130" },
+      reason: Account mapping }
+    save: { map2130: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map2130}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.4110, value: "A4110" },
+      reason: Account mapping }
+    save: { map4110: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map4110}" }
+  - actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.journal.account.5110, value: "A5110" },
+      reason: Account mapping }
+    save: { map5110: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${map5110}" }
+  - setClock: 2026-11-01T00:00:00Z
+  - runJob: { job: qb.reconcile, at: 2026-10-31T18:37:00Z }
+  - actor: { id: finance, permissions: [qb.journal.export, qb.admin.finance.read], mfa: true }
+    process: QB_JOURNAL_EXPORT@latest
+    input: { month: 2026-10 }
+    expectOutput: { voucherNo: QBJ-2026-00001, periodFrom: 2026-10-01, periodTo: 2026-10-31, lineCount: 6,
+      transactionCount: 5, debitTotal: 5480, creditTotal: 5480 }
+    save: { export: $.exportId }
+  - actor: { id: finance, permissions: [qb.journal.confirm] }
+    process: QB_JOURNAL_EXPORT_CONFIRM@latest
+    input: { exportId: "${export}", externalVoucherNo: MF-2026-10 }
+  - expect:
+      query: qb.admin.journal-exports
+      rows: 1
+      values: [{ voucherNo: QBJ-2026-00001, lineCount: 6, debitTotal: 5480, externalVoucherNo: MF-2026-10 }]
 snapshot:
-  entities: [QbTopUp, QbWallet, QbAttempt, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry]
+  entities: [QbTopUp, QbWallet, QbAttempt, QbReconRun, QbReconItem, LedgerTransaction, LedgerEntry, QbJournalExport,
+    QbJournalExportConfirmation]
   asOf: end

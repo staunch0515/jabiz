@@ -169,13 +169,17 @@ class SetupIT extends QbItSupport {
         Map<Object, Object> values = new TreeMap<>(query("SELECT param_key, param_value FROM sys_param_version "
             + "WHERE param_key LIKE 'qb.%'").stream()
             .collect(Collectors.toMap(row -> row.get("param_key"), row -> row.get("param_value"))));
-        assertThat(values).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+        Map<Object, Object> expected = new TreeMap<>(Map.ofEntries(
             Map.entry(QbParams.CREATOR_FEE_RATE, "0.0000"), Map.entry(QbParams.TRANSFER_THRESHOLD, "1000"),
             Map.entry(QbParams.TRANSFER_REVIEW_ABOVE, "50000"), Map.entry(QbParams.TRANSFER_ENABLED, "false"),
             Map.entry(QbParams.REVIEW_SPONSOR_AUTO, "false"), Map.entry(QbParams.REVIEW_PUBLICATION_AUTO, "false"),
             Map.entry(QbParams.AI_MODEL, "gpt-4o-mini"), Map.entry(QbParams.APP_MIN_VERSION, "1.0.0"),
             Map.entry(QbParams.TOPUP_MIN, "1000"), Map.entry(QbParams.TOPUP_MAX, "1000000"),
             Map.entry(QbParams.TRANSFER_FEE, "0")));
+        // Q9d: the account mapping and the receipts' issuer start empty, for finance to set with four eyes.
+        QbParams.JOURNAL_ACCOUNTS.forEach(key -> expected.put(key, ""));
+        QbParams.ISSUER.forEach(key -> expected.put(key, ""));
+        assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
     /** Rows of every table QB_SETUP writes, by table. */

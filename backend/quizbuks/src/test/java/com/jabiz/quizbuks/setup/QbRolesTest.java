@@ -66,8 +66,24 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).containsExactlyInAnyOrder(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ);
-        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb."))
-            .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP);
+        // Q9d: besides their own (qb.*), the receipts they issued (the platform shows each sponsor only theirs).
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb.")
+                || "document.archive.read".equals(p))
+            .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP, "document.issue");
+    }
+
+    @Test
+    void financeExportsTheJournalAndReadsItsFiles() {
+        // Q9d (docs/quizbuks/plans/Q9d-journal-receipts.md section 4); the super administrator is built from finance.
+        for (String role : List.of(QbRoles.ADMIN_FINANCE, QbRoles.ADMIN_SUPER)) {
+            assertThat(QbRoles.of(role).permissions()).as(role).contains(QbPermissions.JOURNAL_EXPORT,
+                QbPermissions.JOURNAL_CONFIRM, "file.generated.read");
+        }
+        for (String role : List.of(QbRoles.ADMIN_CONTENT, QbRoles.SPONSOR, QbRoles.TAKER)) {
+            assertThat(QbRoles.of(role).permissions()).as(role).doesNotContain(QbPermissions.JOURNAL_EXPORT,
+                QbPermissions.JOURNAL_CONFIRM, "file.generated.read", "file.generated.archive");
+        }
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.TOPUP, "document.archive.read");
     }
 
     @Test

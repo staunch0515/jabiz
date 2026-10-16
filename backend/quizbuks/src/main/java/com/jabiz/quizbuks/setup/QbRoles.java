@@ -43,7 +43,9 @@ public final class QbRoles {
         // Q6a: the jobs that call Stripe (their state and errors, never their secrets).
         "external-job.read",
         // Q9c (C-4): finance issues the monthly reports (report.issue above) and reads what was issued.
-        "report.archive.read");
+        "report.archive.read",
+        // Q9d: the journal export, its confirmation and its archived CSV files.
+        QbPermissions.JOURNAL_EXPORT, QbPermissions.JOURNAL_CONFIRM, "file.generated.read");
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,
@@ -81,7 +83,9 @@ public final class QbRoles {
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,
-            QbPermissions.SPONSOR_AVATAR_READ));
+            QbPermissions.SPONSOR_AVATAR_READ,
+            // Q9d: the receipts of their own top-ups (the platform shows a sponsor only what they issued).
+            "document.archive.read"));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
             FINANCE_ONLY);

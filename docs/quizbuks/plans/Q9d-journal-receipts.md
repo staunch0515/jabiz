@@ -108,3 +108,62 @@
 ## 9. 预估
 
 约 4 天：映射、导出流程与 IT 2 天，收据 1 天，页面、e2e 与文档 1 天。
+
+## 实施记录（Q9d，2026-10-16）
+
+分支 `1.2/quizbuks-9d-journal-export`（计划提交 2172606 之上）。只改 `.jabiz-app-paths` 中的路径，不改平台；迁移 V9。
+
+- **后端**：
+  - 包 `journal`：`QbJournal`（实体 `QbJournalExport`、`QbJournalExportConfirmation`，只写一次 W）、`JournalPeriods`（日本日期的月、截止时刻）、`JournalLines`（汇总行、映射检查、两个 CSV，纯 Java）、
+    `JournalProcesses`（`QB_JOURNAL_PREVIEW`、`QB_JOURNAL_EXPORT`、`QB_JOURNAL_EXPORT_CONFIRM`）、`JournalCodes`、启动检查 `JournalMappingCheck`、序列 `qb.journal`（`QBJ-{年}-{n:5}`，按年）。
+  - 模板 `qb.system.journal-first`、`qb.system.journal-lines`（取数规则见 D-Q9d-3 与 CLAUDE.md）、`qb.admin.journal-exports`、`qb.admin.journal-mapping`。
+  - 收据：`wallet.TopUpReceipts`（版式 `qb.topup_receipt`、流程 `QB_TOPUP_RECEIPT_ISSUE`、实体 `QbTopUpReceipt`），模板 `qb.sponsor.topup-receipt`、`qb.sponsor.receipt-issuer`；错误码 `QB_RECEIPT_NOT_PAID`、`QB_RECEIPT_NO_ISSUER`（`WalletCodes`）。
+  - 参数：科目映射 7 个 `qb.journal.account.<科目>`、开具方 `qb.issuer.name|address|registration-no`，都受控、首个值为空，由 `QB_SETUP` 提出。
+  - 权限：`qb.journal.export`、`qb.journal.confirm`、`file.generated.read` 给财务（超级管理员随之）；`document.archive.read` 给商家。
+  - 迁移 V9：三张只追加表（`jabiz_protect_append_only`），各自只含主键的唯一索引，另有 `(period_from, granularity)`、`voucher_no`、`previous_export_id`、确认的 `export_id`、收据的 `topup_id` 唯一索引。
+  - `qb.admin.monthly` 的说明注明其月份按 UTC、分录导出按日本日期（D-1）；月报页的提示同。
+  - 字体（D-5）：`application.yml` 的 `jabiz.reports.pdf.fonts: ${JABIZ_REPORTS_PDF_FONTS:}`；镜像安装 `fonts-ipafont-gothic`（日文）与 `fonts-droid-fallback`（中文）并设置该变量。平台的 `app` 不配置它；
+    平台的 PDF 写入器只接受 TrueType 轮廓的单个字体文件（`.ttc` 与 CFF 的 Noto CJK 不行），所以选了这两个。
+  - 每日核对的时间可配置（`quizbuks.reconcile.run-cron`，环境变量 `QB_RECONCILE_RUN_CRON`，缺省不变）：只给 e2e，正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck` 一并检查）。
+- **前端**：
+  - 后台扩展：`/qb/finance/journal`（预览下一期、导出、导出列表、下载凭证与明细 CSV、记录外部凭证号）、`/qb/finance/journal/mapping`（只读，修改链到平台的受控变更），菜单"分录导出"；
+    `journal-api.ts`、文案并入 `finance-messages.ts`（三语）。
+  - 商家后台钱包页：已到账的充值行加"收据"（签发或取已有的，再下载存档 PDF），失败时显示服务端的话。
+- **测试**：
+  - IT `JournalExportIT` 2 个：三个月按顺序导出——未结束、核对在月末之前、未映射一次报告；映射代码不合格；不是下一期；预览与导出；凭证与平台 `account_balances`（截止时刻的记录）
+    及月报（同一 UTC 月）逐科目一致；2110 按商家分行、2120 汇总；借贷平衡；两个文件原样存档、哈希一致、BOM、全部单元格加引号、公式被中和（引用 `=HYPERLINK(…)`）；同一期再导出被拒；
+    迟到的分录（过账于已导出的月、导出后才记录）只出现在下一次导出；导出前 5 分钟（截止边距内）记录的分录进入再下一次；核对发现差异时拒绝、差异消除后通过；第三个月没有自己的分录也照常导出；
+    三次导出的明细合起来恰好是全部交易各一次；凭证号连续（同年 00001 起，跨年按年重新计数）；外部凭证号只记一次、未知导出 404；两张表没有 UPDATE / DELETE 且有触发器。
+    权限矩阵：内容管理员、商家对三个流程与两个模板 403；无二次验证的财务 403 `MFA_REQUIRED`；文件对内容管理员 403、对只有 `file.generated.read` 的人 404。
+  - IT `TopUpReceiptIT`：开具方未设时拒绝；未到账的拒绝；本人签发（英文 PDF 的文字含开具方、登记号与金额）；退款后再请求（另一种语言）得到同一单据、逐字节相同的 PDF；日文收据的标题与标签；
+    其他商家 404（流程与 PDF）；内容管理员 403；不支持的语言 400；每笔充值一张、只插入。
+  - 单元 `JournalLinesTest` 6 个（汇总行与顺序、映射与平衡、单元格、CSV、日本日期的期间与截止、映射的启动检查）；`TransferScheduleCheckTest` 加核对的时间；`QbRolesTest`、`MessagesTest`、`SetupIT` 随之更新。
+  - 场景：`topup.yml` 末尾由超级管理员提出、另一位管理员发布 7 个映射，月末之后核对，导出十月（`QBJ-2026-00001`，6 行、借贷各 5,480），记录外部凭证号；快照随提交。
+    `QB_SETUP` 多了 10 个提案，其余场景改为发布全部 22 个提案（快照只有生成编号的移位与由编号决定的选项顺序）。
+  - Vitest：扩展 `journal.test.tsx` 7 个；商家后台 `wallet.test.tsx` 加 3 个。
+  - e2e `journal.spec.ts` 2 项（会计导出下一期并下载凭证与明细、记录外部凭证号、映射页；商家下载收据、再下载逐字节相同）；`a11y.spec.ts` 的财务页加分录导出（带预览）与科目映射（亮、暗）。
+- **结果**：`:quizbuks:check` 457 个测试全部通过（含 `JournalExportIT` 2 个、`TopUpReceiptIT` 1 个、`JournalLinesTest` 6 个）与 `platformCheck`（0 错误）；扩展 Vitest 57 个（新增 7 个）与 `ext:check`；商家后台 lint、typecheck 与 Vitest 108 个（新增 3 个）；两个 SPA 的 `app:check` 通过；e2e 全部 41 项对打包的 jar、Mailpit 与 Stripe 桩通过（新增 `journal.spec.ts` 2 项，`a11y.spec.ts` 财务页加两页）；`tools/check-app-paths.sh origin/1.2/platform` 通过。本机以 IPA Gothic 签发一张日文收据，`pdftotext` 读出标题与标签为日文（不是 `?`）。
+- **偏离计划**：
+  - **开具方是受控参数，不是实体 `QbIssuerProfile` 与流程 `QB_ISSUER_PROFILE_SET`**：平台的受控变更只认平台的 `ControlTarget`（返回 `Mono` 的运行时接口，应用不能实现，ArchUnit 也不许），
+    应用实体无法"只经受控变更"修改。D-4 要的四眼由受控参数 `qb.issuer.*` 满足，模板 `qb.sponsor.receipt-issuer` 从参数读取（数据，随单据存档）。平台缺口：应用自定义受控变更的目标。
+  - **预览是另一个流程 `QB_JOURNAL_PREVIEW`，不是 `DRY_RUN`**：平台的流程接口不接受试运行（`ExecutionOptions.DRY_RUN` 只供导入等平台入口）。预览与导出共用同一组读取与汇总步骤，预览不取锁、不取号、不写文件与记录，
+    把问题作为数据返回（`unmapped`、`invalid`、`reconOk`、`periodEnded`、`balanced`、`ready`），页面以自己的三语文案显示；导出照常以 422 一次报告全部问题。预览不要求二次验证（不写入）。平台缺口：流程接口的试运行。
+  - **导出的输入是月份**（`month`，须为下一期），防止页面预览之后别人先导出了一期而导出了另一个月。
+  - **截止时刻**是导出时刻前 10 分钟（`JournalPeriods.SETTLE`），而不是导出时刻：分录的记录时刻是过账流程开始的时刻，导出时尚未提交的过账若记录时刻早于截止就会两次都被漏掉。
+  - **取数条件**：计划写"记录时间在上一次导出的 `knownAt` 之后"；这会漏掉过账于本期之后、而在上一次截止之前记录的分录。实际条件是"过账于期末之前、记录于截止之前，且不在以前的导出中
+    （过账于上一期末之后，或记录于上一次截止之后）"；因期末与截止都单调递增，以前的导出合起来正好是"过账于上一期末之前且记录于上一次截止之前"。
+  - **文件的对象**：`FILE_ARCHIVE` 的对象（实体、主键）留空：导出记录的主键在插入时才生成，而记录要带文件编号；文件由导出记录指向。
+  - **收据按签发时刻读取**，不是"单据日期 = 到账时间"：到账早于开具方设置时，按到账时刻读不到开具方；收据上另写到账时间（UTC）。收据号即充值编号（不另设序列）。
+  - **收据上的商家**只有公司名与联系人：商家没有地址字段（入驻只收集公司与联系人）。
+  - **收据的语言**由页面的界面语言给出（`language` 必填，en / zh / ja），只在首次签发时起作用。
+  - **收据表**是只写一次的时态实体 `QbTopUpReceipt`（计划只列三张表中的 `qb_issuer_profile`，它被受控参数代替）。
+  - **e2e 的会计**：首个管理员没有邮箱，过不了导出的 `requiresVerifiedEmail()`；测试另建一个已验证邮箱的用户，给它不要求二次验证的测试角色 `QB_E2E_FINANCE`（同 Q9c 的 `QB_E2E_PUBLISHER`，CI 的 `QB_ADMIN_ROLES` 加上它），
+    并以每分钟核对（`QB_RECONCILE_RUN_CRON`）等到一次干净的核对。e2e 先以 `LEDGER_POST` 补记一笔上个月（日本时间）的银行与 Stripe 余额之间的分录，新库的第一期因此是已结束的上个月；
+    同一数据库再次运行时已导出到本月，测试改为检查页面说明"本月未结束"并下载最近一次导出。
+- **已知限制**：
+  - 一次导出所取的分录（按交易、科目、借贷合并后）超过平台流程读取上限（`jabiz.process.max-read-rows`，缺省 10 万行）即 422 整体拒绝；明细 CSV 超过 `jabiz.files.generated.max-bytes`（缺省 10 MiB，约 8 万行）同样拒绝。
+    规模变大时需要分次导出或提高上限（记为后续）。
+  - 只有按月（`granularity` = MONTH）；按天以后加（D-2）。通用 CSV 未必能直接导入 freee / Money Forward（计划第 7 节）。
+  - 收据金额写日元（JPY）：收款凭证必须写实际收的币种，这是"不写 Kudos 以外的币种名"的例外，同一张上另写存入钱包的 Kudos。
+  - 字体只在镜像中配置；镜像外未设 `JABIZ_REPORTS_PDF_FONTS` 时中、日文字仍为 `?`。IPA Gothic 不含部分简体字，由 Droid Sans Fallback 补上。
+  - 退款不改收据（D-Q9d-7）；收据不能作废或重开。

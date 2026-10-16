@@ -7,6 +7,8 @@
 /** Processes (`wallet.TopUpProcesses`). */
 export const WALLET_PROCESS = {
   topUpStart: 'QB_TOPUP_START',
+  /** Issues the receipt of a paid top-up, or gives the one issued before (`wallet.TopUpReceipts`, Q9d). */
+  receiptIssue: 'QB_TOPUP_RECEIPT_ISSUE',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */

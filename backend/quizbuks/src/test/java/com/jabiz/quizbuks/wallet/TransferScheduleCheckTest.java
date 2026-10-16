@@ -29,4 +29,13 @@ class TransferScheduleCheckTest {
         assertThat(TransferScheduleCheck.problems(EVERY_MINUTE, true, null)).hasSize(1);
         assertThat(TransferScheduleCheck.problems("0 7 2 * * *", true, null)).hasSize(1);
     }
+
+    @Test
+    void theReconciliationIsDailyInLiveModeToo() {
+        assertThat(TransferScheduleCheck.reconcileProblems(Reconciliation.RUN_CRON, true, "sk_live_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, false, "sk_test_abc")).isEmpty();
+        assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, true, null)).singleElement()
+            .satisfies(p -> assertThat(p.toString()).contains(Reconciliation.RUN_CRON_SETTING));
+        assertThat(TransferScheduleCheck.reconcileProblems(EVERY_MINUTE, false, "sk_live_abc")).hasSize(1);
+    }
 }

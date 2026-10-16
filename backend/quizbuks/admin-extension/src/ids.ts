@@ -40,6 +40,10 @@ export const TEMPLATE = {
   balances: 'qb.admin.balances',
   /** The platform's account balances (`ledger.read`). */
   accountBalances: 'jabiz.ledger.account_balances',
+  /** The journal exports with their files and confirmations (Q9d; `qb.admin.finance.read`). */
+  journalExports: 'qb.admin.journal-exports',
+  /** The account mapping now in effect (Q9d; `qb.admin.finance.read`). */
+  journalMapping: 'qb.admin.journal-mapping',
 } as const
 
 /** Processes the finance pages run (Q9c); the server checks each. */
@@ -48,6 +52,21 @@ export const PROCESS = {
   holdRelease: 'QB_TRANSFER_HOLD_RELEASE',
   /** The platform's issue of a report: archived with its content hash (`report.issue`). */
   reportIssue: 'REPORT_ISSUE',
+  /** The next journal export as it would be now; writes nothing (`qb.journal.export`; Q9d). */
+  journalPreview: 'QB_JOURNAL_PREVIEW',
+  /** Exports the next month as a summary voucher (`qb.journal.export`, with a second factor). */
+  journalExport: 'QB_JOURNAL_EXPORT',
+  /** Records the accounting system's voucher number of an export (`qb.journal.confirm`). */
+  journalConfirm: 'QB_JOURNAL_EXPORT_CONFIRM',
+} as const
+
+/** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
+export const CONTROL = {
+  propose: 'CONTROL_CHANGE_PROPOSE',
+  publish: 'CONTROL_CHANGE_PUBLISH',
+  /** Their version in the process catalogue. */
+  version: 1,
+  changes: 'urn:jabiz:dataset:platform:SysControlChange',
 } as const
 
 /** The reports of the monthly page (F-08), in the order shown. */
@@ -97,6 +116,12 @@ export const PERMISSION = {
   reportIssue: 'report.issue',
   reportArchiveRead: 'report.archive.read',
   taskRead: 'task.read',
+  journalExport: 'qb.journal.export',
+  journalConfirm: 'qb.journal.confirm',
+  /** Downloading a generated file (the journal's CSV) also needs the permissions it was kept with. */
+  generatedFileRead: 'file.generated.read',
+  controlPropose: 'control.propose',
+  controlPublish: 'control.publish',
 } as const
 
 /** The widths the policy `qb.content.image` keeps (a smaller image is answered with the original). */
@@ -134,6 +159,8 @@ export const PATH = {
   reconRun: (runId: string) => `/qb/finance/reconciliation?${new URLSearchParams({ run: runId })}`,
   reports: '/qb/finance/reports',
   reportsOf: (month: string) => `/qb/finance/reports?${new URLSearchParams({ month })}`,
+  journal: '/qb/finance/journal',
+  journalMapping: '/qb/finance/journal/mapping',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const

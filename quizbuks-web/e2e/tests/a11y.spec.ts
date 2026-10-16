@@ -310,6 +310,14 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.locator('[data-testid="monthly-row"][data-category="REWARD"]')).toBeVisible()
     await expect(page.getByTestId('balance-row').first()).toBeVisible()
     await expectAccessible(page, at('admin finance reports'))
+    // Q9d: the journal export with the next month's preview, and the account mapping.
+    await page.goto('/admin/qb/finance/journal')
+    await page.getByTestId('journal-preview').click()
+    await expect(page.getByTestId('journal-preview-result')).toBeVisible()
+    await expectAccessible(page, at('admin finance journal'))
+    await page.goto('/admin/qb/finance/journal/mapping')
+    await expect(page.getByTestId('mapping-row').first()).toBeVisible()
+    await expectAccessible(page, at('admin finance journal mapping'))
   })
 }
 
