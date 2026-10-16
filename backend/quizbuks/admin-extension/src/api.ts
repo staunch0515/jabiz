@@ -457,6 +457,8 @@ export const readTopUps = (sponsorId: string, offset: number, limit: number) =>
 
 /** The user's payout account (finance only); only the last four characters of Stripe's account are shown. */
 export interface PayoutAccount {
+  /** Stripe's account (only compared, never shown: the last four characters are). */
+  accountId: string | null
   status: string
   payoutsEnabled: boolean
   accountLast4: string | null
@@ -471,6 +473,7 @@ export async function readPayoutAccount(userId: string): Promise<PayoutAccount |
   if (!row) return null
   const account = str(row.externalAccountId)
   return {
+    accountId: account,
     status: String(row.status ?? ''),
     payoutsEnabled: bool(row.payoutsEnabled),
     accountLast4: account ? account.slice(-4) : null,

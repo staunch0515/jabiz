@@ -24,6 +24,12 @@ public final class QbPlay {
     /** The taker's own attempts, read only. */
     public static final String TAKER_ATTEMPTS = "urn:jabiz:dataset:taker:" + ATTEMPT;
 
+    /**
+     * Every attempt with its reward and commission, read only, for finance (Q9c, C-2). A dataset cannot leave fields
+     * out, so the amounts are read here and the default dataset is read by nobody through the generic API.
+     */
+    public static final String FINANCE_ATTEMPTS = "urn:jabiz:dataset:finance:" + ATTEMPT;
+
     /** The default (administrators' read-only) dataset of an entity. */
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;

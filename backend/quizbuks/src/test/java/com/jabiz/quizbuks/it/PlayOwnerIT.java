@@ -99,6 +99,7 @@ class PlayOwnerIT extends PlayItSupport {
             QbPlay.defaultDataset(QbPlay.ATTEMPT), change(attemptId, attempt.get("version"), Map.of("answers",
                 "[[1],[1]]")),
             QbPlay.TAKER_ATTEMPTS, change(attemptId, attempt.get("version"), Map.of("currentIndex", 1)),
+            QbPlay.FINANCE_ATTEMPTS, change(attemptId, attempt.get("version"), Map.of("reward", 1_000_000)),
             QbWallets.defaultDataset(QbWallets.WALLET), change(wallet.get("wallet_id"), wallet.get("version"),
                 Map.of("balance", 1_000_000)),
             QbPublications.defaultDataset(QbPublications.CARD), change(publicationId, card.get("version"),
@@ -125,7 +126,11 @@ class PlayOwnerIT extends PlayItSupport {
         play(u1(), publicationId, true, true);
         String content = tokenOf("content", QbRoles.ADMIN_CONTENT);
         String finance = tokenOf("finance", QbRoles.ADMIN_FINANCE);
-        assertThat(rows(QbPlay.defaultDataset(QbPlay.ATTEMPT), content)).isNotEmpty();
+        // Attempts carry their amounts: finance reads them through its own dataset; nobody through the default (Q9c).
+        assertThat(rows(QbPlay.FINANCE_ATTEMPTS, finance)).isNotEmpty();
+        queryDataset(QbPlay.defaultDataset(QbPlay.ATTEMPT), content).expectStatus().isForbidden();
+        queryDataset(QbPlay.defaultDataset(QbPlay.ATTEMPT), finance).expectStatus().isForbidden();
+        queryDataset(QbPlay.FINANCE_ATTEMPTS, content).expectStatus().isForbidden();
         assertThat(rows(QbWallets.defaultDataset(QbWallets.WALLET), finance)).isNotEmpty();
         assertThat(rows(QbPublications.defaultDataset(QbPublications.CARD), content)).isNotEmpty();
         // Takers and sponsors do not.

@@ -203,6 +203,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `QB_APP_LINK` | 收款时 | App 的地址，Stripe 开通收款账户后跳回（缺省空：开通被拒） |
 | `QB_STRIPE_CONNECT_COUNTRY` | 否 | 收款账户的国家，缺省 `JP` |
 | `QB_STRIPE_CONNECT_URL_PREFIX` | 否 | 开通链接必须的前缀，缺省 `https://connect.stripe.com/`（只在开发与端到端测试中改指桩服务；正式模式只接受缺省值）；格式同上 |
+| `QB_TRANSFER_RUN_CRON` | **不设** | **只给端到端测试**：每日自动转账的时间（六段 cron，UTC），缺省 `0 7 1 * * *`。CI 的 e2e 设为每分钟，好在测试中等到大额转账进入审批。生产中不要设置：每分钟运行会每次收手续费、几分钟内就达到“连续 3 次失败”（本意是 3 天）并多次调用 Stripe；正式模式或正式密钥下设成其他值即启动失败（`TransferScheduleCheck`） |
 | `OPENAI_API_KEY` | Q8 | AI 生成题目与封面 |
 
 可观测性（OTLP）与单点登录的变量同平台：见 `docs/guide/quickstart.md`。

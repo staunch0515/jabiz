@@ -36,6 +36,13 @@ export const PAGE_SIZE = 20
 export function usePaged<Row>(key: QueryKey, read: (offset: number, limit: number) => Promise<Page<Row>>,
   enabled = true) {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
+  // Another list (a filter changed) starts at its first page.
+  const keyText = JSON.stringify(key)
+  const [listed, setListed] = useState(keyText)
+  if (listed !== keyText) {
+    setListed(keyText)
+    if (pagination.pageIndex !== 0) setPagination({ ...pagination, pageIndex: 0 })
+  }
   const query = useQuery({
     queryKey: [...key, pagination.pageIndex, pagination.pageSize],
     queryFn: () => read(pagination.pageIndex * pagination.pageSize, pagination.pageSize),

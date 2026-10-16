@@ -93,6 +93,12 @@ public final class TransferProcesses {
     public static final String DUE_TEMPLATE = "qb.system.transfers-due";
     public static final String STALE_JOB = "qb.transfer-stale";
     public static final String STALE_TEMPLATE = "qb.system.transfers-stale";
+    /**
+     * The daily run's schedule (01:07 UTC, D-Q6-12) and its setting. Only the end-to-end tests set another one
+     * (every minute); {@code TransferScheduleCheck} refuses any other next to live mode or a live key.
+     */
+    public static final String RUN_CRON = "0 7 1 * * *";
+    public static final String RUN_CRON_SETTING = "quizbuks.transfers.run-cron";
 
     /** A transfer still sending after this long is asked about; Stripe is asked again after this long. */
     public static final Duration STALE_AFTER = Duration.ofHours(1);

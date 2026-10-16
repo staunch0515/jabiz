@@ -32,7 +32,7 @@ results:
   checkReason:          { from: QbTopUp.checkReason }
   ledgerTransactionId:  { from: QbTopUp.ledgerTransactionId }
 list:
-  filters: [sponsorId, status, createdAt, paidAt, amount, checkReason, disputeStatus, paymentIntentId]
+  filters: [topUpId, sponsorId, status, createdAt, paidAt, amount, checkReason, disputeStatus, paymentIntentId]
   sorts:   [createdAt, paidAt, amount]
   defaultSort: { field: createdAt, asc: false }
   key: [topUpId]

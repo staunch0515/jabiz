@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { signInAdmin, submittedPublication } from './admin'
+import { bookingMonthOf } from './finance'
 import { completeQuiz, sponsor } from './content'
 import { approvedSponsor, livePublication } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
@@ -270,6 +271,45 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('user-attempts')).toBeVisible()
     await expect(page.getByTestId('user-payout')).toBeVisible()
     await expectAccessible(page, at('admin user summary'))
+  })
+}
+
+// Q9c: finance's pages in the administration, with a funded sponsor and a paid reward so that the lists and the
+// month's reports have rows.
+for (const appearance of ['light', 'dark'] as const) {
+  const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
+
+  test(`the administration's finance pages pass axe (${appearance})`, async ({ page, request }) => {
+    test.setTimeout(150_000)
+    await useAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const sponsor = await fundedSponsor(request, 1000)
+    const taker = await takerInJapan(request, 'Ida')
+    const { publicationId } = await rewardingPublication(request, sponsor.token, 100, taker.token)
+    const started = await startAttempt(request, taker.token, publicationId)
+    expect(await submitRight(request, taker.token, started)).toBe('PAID')
+    const month = await bookingMonthOf(request, 'QbAttempt', started.attemptId)
+    await signInAdmin(page)
+
+    await page.goto('/admin/qb/finance')
+    await expect(page.getByTestId('finance-in-review')).toBeVisible()
+    await expect(page.getByTestId('finance-account')).toHaveCount(7)
+    if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
+    await expectAccessible(page, at('admin finance overview'))
+    await page.goto('/admin/qb/finance/transfers')
+    await expect(page.getByTestId('finance-transfers')).toBeVisible()
+    await expect(page.locator('[data-slot="table"]').first()).toBeVisible()
+    await expectAccessible(page, at('admin finance transfers'))
+    await page.goto('/admin/qb/finance/topups')
+    await expect(page.getByTestId('topup-row').first()).toBeVisible()
+    await expectAccessible(page, at('admin finance top-ups'))
+    await page.goto('/admin/qb/finance/reconciliation')
+    await expect(page.getByTestId('recon-runs')).toBeVisible()
+    await expectAccessible(page, at('admin finance reconciliation'))
+    await page.goto(`/admin/qb/finance/reports?month=${month}`)
+    await expect(page.locator('[data-testid="monthly-row"][data-category="REWARD"]')).toBeVisible()
+    await expect(page.getByTestId('balance-row').first()).toBeVisible()
+    await expectAccessible(page, at('admin finance reports'))
   })
 }
 

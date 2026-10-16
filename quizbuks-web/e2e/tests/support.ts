@@ -110,6 +110,17 @@ async function publisherToken(request: APIRequestContext, admin: string): Promis
   return tokenOf(request, userName, PASSWORD)
 }
 
+/**
+ * Sets a controlled business parameter with four eyes (decision D40): the administrator proposes, the tests' second
+ * administrator publishes. The change stays (the tables only grow): only set what every later run may live with.
+ */
+export async function setControlledParam(request: APIRequestContext, paramKey: string, value: string) {
+  const admin = await adminToken(request)
+  const change = await run(request, admin, 'CONTROL_CHANGE_PROPOSE', { targetEntity: 'SysParam',
+    values: { paramKey, value }, reason: 'End-to-end test' })
+  await run(request, await publisherToken(request, admin), 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
+}
+
 let prepared = false
 
 /**

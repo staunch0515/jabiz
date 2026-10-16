@@ -251,6 +251,8 @@ jobs:
           export QB_ADMIN_ROLES=ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE,QB_E2E_PUBLISHER
           # Every test registers from the same address.
           export JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS=1000
+          # The daily transfers every minute (Q9c): finance's test waits for a large transfer to need review.
+          export QB_TRANSFER_RUN_CRON='0 * * * * *'
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true \
             -jar quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar > ../quizbuks.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done

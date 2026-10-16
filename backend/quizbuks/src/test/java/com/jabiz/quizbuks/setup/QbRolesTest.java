@@ -51,6 +51,17 @@ class QbRolesTest {
     }
 
     @Test
+    void financeIssuesAndReadsTheMonthlyReports() {
+        // Q9c (C-4): issuing a report needs the template's own permissions too (qb.admin.finance.read).
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions()).contains("report.issue", "report.archive.read",
+            QbPermissions.ADMIN_FINANCE_READ, "ledger.read");
+        // The super administrator holds them too (built from finance's list): intended (review L2).
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains("report.issue", "report.archive.read");
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).doesNotContain("report.issue",
+            "report.archive.read", QbPermissions.ADMIN_FINANCE_READ);
+    }
+
+    @Test
     void takersAndSponsorsHoldOnlyTheirOwnPermissions() {
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).containsExactlyInAnyOrder(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
