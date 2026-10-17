@@ -77,13 +77,15 @@ public final class PublicationMoves {
         PublicationEditing.loadSchedule(pb);
     }
 
-    /** Loads the card of the publication {@code publicationId} names (none when it names none). Take its lock first. */
-    public static <I, O> void loadCard(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
-        Function<ProcessContext, Object> publicationId) {
-        pb.step("Load the card", QueryEntities.<ProcessContext>of(
-            QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
-                .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(publicationId.apply(ctx))))
-                .limit(1).build(), PublicationEditing.CARD));
+    /**
+     * The read of the card of the publication {@code publicationId} names (none when it names none), as one query of a
+     * {@link QueryEntities#all} step: under the lock, with the other rereads in one statement (Q10a3). Take the lock
+     * first.
+     */
+    public static QueryEntities.Metadata<ProcessContext> cardRead(Function<ProcessContext, Object> publicationId) {
+        return QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
+            .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(publicationId.apply(ctx))))
+            .limit(1).build(), PublicationEditing.CARD);
     }
 
     /** The publication loaded by {@link #load}; null when there is none. */
@@ -91,7 +93,7 @@ public final class PublicationMoves {
         return first(ctx, FOUND);
     }
 
-    /** The card loaded by {@link #load} or {@link #loadCard}; null when the publication never went on. */
+    /** The card loaded by {@link #load} or {@link #cardRead}; null when the publication never went on. */
     public static EntityInstance card(ProcessContext ctx) {
         return first(ctx, PublicationEditing.CARD);
     }

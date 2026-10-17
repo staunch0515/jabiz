@@ -77,7 +77,15 @@ import java.util.regex.Pattern;
  * the load waits; one not answered by then is 599 {@code TIMEOUT}), {@code LOAD_RETRY_BUSY} ({@code yes}: a 503
  * {@code PROCESS_BUSY} or a timeout is tried again as the App does, with the same {@code Idempotency-Key}, after the
  * doubling back-off and never sooner than {@code Retry-After}; {@code no} gives up at once), {@code LOAD_READ_RATE}
- * (rounds a second of each reader; back to back when absent).
+ * (rounds a second of each reader; back to back when absent), {@code LOAD_METRICS} ({@code yes}: reads the
+ * application's meters before and after the load and reports per start and submission the statements sent
+ * ({@code jabiz.process.statements}) and how long an admitted run held its admission permit: the process's time less
+ * its wait in the queue; Q10a3), {@code LOAD_METRICS_URL} (http://127.0.0.1:8081: the application's management
+ * server, which must be on this machine's loopback, whatever {@code LOAD_ALLOW_REMOTE} says). The metrics are never
+ * exposed on the application's port (anonymous there): start the jar with a management server of its own bound to
+ * loopback, {@code -Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081
+ * -Dmanagement.endpoints.web.exposure.include=health,info,metrics}. The machine's CPU over the load is read from
+ * {@code /proc/stat} (Linux; the tool runs on the application's machine).
  *
  * <p>As the App, every start and submission carries an {@code Idempotency-Key} of its own (kept for its retries) and
  * the submission names its publication (the key of the queue before the publication's lock, platform decision D45).
@@ -127,6 +135,10 @@ public final class QuizbuksLoadTest {
     private final double readRate = Double.parseDouble(env("LOAD_READ_RATE", "0"));
     /** Whether a busy answer is tried again as the App does ({@code LOAD_RETRY_BUSY}, default yes). */
     private final boolean retryBusy = !"no".equals(env("LOAD_RETRY_BUSY", "yes"));
+    /** Whether to read the application's meters ({@code LOAD_METRICS=yes}), from {@link #metricsUrl}. */
+    private final boolean metrics = "yes".equals(System.getenv("LOAD_METRICS"));
+    /** The application's management server ({@code LOAD_METRICS_URL}): on loopback only (Q10a3 review M1). */
+    private final String metricsUrl = env("LOAD_METRICS_URL", "http://127.0.0.1:8081").replaceAll("/+$", "");
     private final HttpClient http = HttpClient.newBuilder()
         .executor(Executors.newVirtualThreadPerTaskExecutor())
         .connectTimeout(Duration.ofSeconds(10))
@@ -229,6 +241,9 @@ public final class QuizbuksLoadTest {
         Duration baseline = Duration.parse("PT" + env("LOAD_BASELINE", "15s").toUpperCase(Locale.ROOT));
         double rate = Double.parseDouble(env("LOAD_RATE", "0"));
         refuseRemote();
+        if (metrics) {
+            checkMetrics();
+        }
         Instant runStarted = Instant.now().truncatedTo(ChronoUnit.SECONDS).minusSeconds(1);
 
         line("## " + env("LOAD_LABEL", "QuizBuks load test") + " (run " + run + ", " + Instant.now()
@@ -271,6 +286,8 @@ public final class QuizbuksLoadTest {
         AtomicInteger next = new AtomicInteger();
         AtomicBoolean playing = new AtomicBoolean(true);
         Database.Sampler sampler = db == null ? null : db.sample();
+        Map<String, Double> metersBefore = metrics ? meters() : Map.of();
+        long[] cpuBefore = cpu();
         long began = System.nanoTime();
         Map<String, Stats> busy;
         List<Future<?>> playersDone = new ArrayList<>();
@@ -306,6 +323,8 @@ public final class QuizbuksLoadTest {
             player.get();
         }
         double seconds = (System.nanoTime() - began) / 1e9;
+        long[] cpuAfter = cpu();
+        Map<String, Double> metersAfter = metrics ? meters() : Map.of();
         if (sampler != null) {
             sampler.stop();
         }
@@ -341,6 +360,29 @@ public final class QuizbuksLoadTest {
             submits.count(TIMED_OUT + " TIMEOUT"), load.retries().sum(), load.unfinished().size(),
             load.submitsSeen().count() - load.submitsSeen().count("200 OK") - load.submitsSeen().codes.entrySet()
                 .stream().filter(e -> e.getKey().startsWith("422")).mapToLong(e -> e.getValue().sum()).sum()));
+
+        if (cpuBefore != null && cpuAfter != null) {
+            long total = cpuAfter[0] - cpuBefore[0];
+            long idle = cpuAfter[1] - cpuBefore[1];
+            line(String.format(Locale.ROOT, "CPU of the machine over the load: %.0f %% busy.",
+                total == 0 ? Double.NaN : 100.0 * (total - idle) / total));
+        }
+        if (metrics) {
+            double startHold = hold(metersBefore, metersAfter, START);
+            double submitHold = hold(metersBefore, metersAfter, SUBMIT);
+            line(String.format(Locale.ROOT, "Admission permit held (an admitted run: the process less its queueing; "
+                + "admitted / successful runs: start %.0f / %.0f, submit %.0f / %.0f): start %.1f ms + submit %.1f ms "
+                + "= **%.1f ms a completion** (2 permits: about %.1f completions/s); statements in the transaction "
+                + "before its commit: start %.1f, submit %.1f a run.",
+                delta(metersBefore, metersAfter, START + ADMITTED_COUNT),
+                delta(metersBefore, metersAfter, START + SUCCESS_COUNT),
+                delta(metersBefore, metersAfter, SUBMIT + ADMITTED_COUNT),
+                delta(metersBefore, metersAfter, SUBMIT + SUCCESS_COUNT), startHold,
+                submitHold, startHold + submitHold, 2_000 / (startHold + submitHold),
+                delta(metersBefore, metersAfter, START + STATEMENTS_TOTAL) / Math.max(1, delta(metersBefore,
+                    metersAfter, START + STATEMENTS_COUNT)), delta(metersBefore, metersAfter, SUBMIT
+                    + STATEMENTS_TOTAL) / Math.max(1, delta(metersBefore, metersAfter, SUBMIT + STATEMENTS_COUNT))));
+        }
 
         // The money: the sponsor's wallet went down by exactly the rewards paid.
         BigDecimal paid = BigDecimal.valueOf(rewards.getOrDefault("PAID", new LongAdder()).sum());
@@ -947,6 +989,122 @@ public final class QuizbuksLoadTest {
             throw new IllegalStateException("HTTP " + answer.status() + ": " + answer.body());
         }
         return answer.json();
+    }
+
+    // ---- the application's meters and the CPU (optional) ----------------------------------------------------------
+
+    private static final String START = "QB_ATTEMPT_START";
+    private static final String SUBMIT = "QB_ATTEMPT_SUBMIT";
+    private static final String SUCCESS_COUNT = ".success.count";
+    private static final String SUCCESS_TOTAL = ".success.total";
+    private static final String PROCESS_COUNT = ".process.count";
+    private static final String PROCESS_TOTAL = ".process.total";
+    private static final String ADMITTED_COUNT = ".admitted.count";
+    private static final String ADMITTED_TOTAL = ".admitted.total";
+    private static final String QUEUED_COUNT = ".queued.count";
+    private static final String QUEUED_TOTAL = ".queued.total";
+    private static final String STATEMENTS_COUNT = ".statements.count";
+    private static final String STATEMENTS_TOTAL = ".statements.total";
+
+    /**
+     * Refuses {@code LOAD_METRICS} unless {@link #metricsUrl} is this machine's loopback (even with
+     * {@code LOAD_ALLOW_REMOTE=yes}: the meters are never read from a port anybody can reach), and fails at once when
+     * its metrics endpoint does not answer, rather than reporting nothing after the load.
+     */
+    private void checkMetrics() throws Exception {
+        String host = URI.create(metricsUrl).getHost();
+        boolean loopback;
+        try {
+            loopback = host != null && java.net.InetAddress.getByName(host).isLoopbackAddress();
+        } catch (java.net.UnknownHostException e) {
+            loopback = false;
+        }
+        if (!loopback) {
+            throw new IllegalStateException("LOAD_METRICS_URL " + metricsUrl + " is not this machine's loopback: "
+                + "read the meters only from a management server bound to 127.0.0.1");
+        }
+        Answer answer;
+        try {
+            answer = send("GET", metricsUrl + "/actuator/metrics", null, null, null);
+        } catch (IOException e) {
+            throw new IllegalStateException("LOAD_METRICS: nothing answers at " + metricsUrl + " (" + e + ")", e);
+        }
+        if (answer.status() != 200) {
+            throw new IllegalStateException("LOAD_METRICS: " + metricsUrl + "/actuator/metrics answered HTTP "
+                + answer.status() + "; start the jar with -Dmanagement.server.address=127.0.0.1 "
+                + "-Dmanagement.server.port=<port> -Dmanagement.endpoints.web.exposure.include=health,info,metrics");
+        }
+    }
+
+    /**
+     * The meters of starting and submitting now: each process's runs ({@code jabiz.process}: all, and the successful
+     * ones), its waits in the queue ({@code jabiz.process.admission}: all, and the admitted ones) and its statements
+     * ({@code jabiz.process.statements}); counts and totals (times in milliseconds) by name. A meter not there yet (no
+     * run so far) is 0.
+     */
+    private Map<String, Double> meters() throws Exception {
+        Map<String, Double> values = new LinkedHashMap<>();
+        for (String process : List.of(START, SUBMIT)) {
+            read(values, process + PROCESS_COUNT, process + PROCESS_TOTAL, "jabiz.process?tag=process:" + process,
+                1_000);
+            read(values, process + SUCCESS_COUNT, process + SUCCESS_TOTAL,
+                "jabiz.process?tag=process:" + process + "&tag=outcome:success", 1_000);
+            read(values, process + QUEUED_COUNT, process + QUEUED_TOTAL,
+                "jabiz.process.admission?tag=process:" + process, 1_000);
+            read(values, process + ADMITTED_COUNT, process + ADMITTED_TOTAL,
+                "jabiz.process.admission?tag=process:" + process + "&tag=result:ADMITTED", 1_000);
+            read(values, process + STATEMENTS_COUNT, process + STATEMENTS_TOTAL,
+                "jabiz.process.statements?tag=process:" + process, 1);
+        }
+        return values;
+    }
+
+    private void read(Map<String, Double> values, String count, String total, String meter, double scale)
+        throws Exception {
+        Answer answer = send("GET", metricsUrl + "/actuator/metrics/" + meter, null, null, null);
+        values.put(count, 0.0);
+        values.put(total, 0.0);
+        if (answer.status() == 404) {
+            return;
+        }
+        for (JsonNode measurement : ok(answer).path("measurements")) {
+            String statistic = measurement.path("statistic").asString();
+            if ("COUNT".equals(statistic)) {
+                values.put(count, measurement.path("value").asDouble());
+            } else if ("TOTAL_TIME".equals(statistic) || "TOTAL".equals(statistic)) {
+                values.put(total, measurement.path("value").asDouble() * scale);
+            }
+        }
+    }
+
+    private static double delta(Map<String, Double> before, Map<String, Double> after, String name) {
+        return after.getOrDefault(name, 0.0) - before.getOrDefault(name, 0.0);
+    }
+
+    /**
+     * The average time an admitted run of {@code process} held its permit, in milliseconds: the time of all its runs
+     * less all their waits in the queue, over the admitted runs. A run the queue refused spent its time waiting, so it
+     * adds about as much to both totals; an admitted run that then failed (a 422) held its permit like any other
+     * (Q10a3 review L1). A replay of an idempotency key queues for nothing and adds its short time.
+     */
+    private static double hold(Map<String, Double> before, Map<String, Double> after, String process) {
+        double admitted = delta(before, after, process + ADMITTED_COUNT);
+        return admitted == 0 ? Double.NaN : (delta(before, after, process + PROCESS_TOTAL)
+            - delta(before, after, process + QUEUED_TOTAL)) / admitted;
+    }
+
+    /** The machine's CPU time so far (all, idle with I/O wait), from {@code /proc/stat}; null elsewhere. */
+    private static long[] cpu() {
+        try {
+            String[] fields = Files.readAllLines(Path.of("/proc/stat")).getFirst().trim().split("\\s+");
+            long total = 0;
+            for (int i = 1; i < Math.min(fields.length, 9); i++) {
+                total += Long.parseLong(fields[i]);
+            }
+            return new long[] {total, Long.parseLong(fields[4]) + Long.parseLong(fields[5])};
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     // ---- the database (optional) --------------------------------------------------------------------------------

@@ -28,6 +28,8 @@ dependencies {
     testImplementation("net.jqwik:jqwik:1.9.3")
     // Registration and mail against a local SMTP server (Q2), as the platform's own tests.
     testImplementation("com.icegreen:greenmail-junit5:2.1.3")
+    // The statement budget of answering (Q10a3) records the statements as the platform's own budget test does.
+    testImplementation("io.r2dbc:r2dbc-proxy")
 }
 
 // The throughput baseline (docs/quizbuks/plans/Q5-answering.md, D-Q5-10) is tagged "perf": not part of check, run on

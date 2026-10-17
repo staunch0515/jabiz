@@ -266,11 +266,13 @@ public final class AttemptFinishing {
                 QbParams.CREATOR_FEE_RATE))
             .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                 ctx -> PublicationMoves.lockName(publicationOf(ctx))))
-            .step("Load the attempt again", QueryEntities.<ProcessContext>of(QbPlay.defaultDataset(QbPlay.ATTEMPT),
-                ctx -> byId(active(ctx) ? ctx.get(ATTEMPT_KEY) : null), CURRENT))
-            .steps(b -> PlaySteps.loadCounter(b, AttemptFinishing::publicationOf, COUNTER))
-            // The card only: its state is the publication's, its limits the publication's frozen ones (Q10a).
-            .steps(b -> PublicationMoves.loadCard(b, AttemptFinishing::publicationOf))
+            // The card only: its state is the publication's, its limits the publication's frozen ones (Q10a). One
+            // statement for the three (platform decision D46, Q10a3): each round trip under the lock is ~0.8 ms of it.
+            .step("Load the attempt, the counters and the card again", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbPlay.defaultDataset(QbPlay.ATTEMPT),
+                    ctx -> byId(active(ctx) ? ctx.get(ATTEMPT_KEY) : null), CURRENT),
+                PlaySteps.counter(AttemptFinishing::publicationOf, COUNTER),
+                PublicationMoves.cardRead(AttemptFinishing::publicationOf)))
             .compute("Score the attempt", (metadata, ctx) -> score(ctx, expire))
             .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> {
                 Plan plan = plan(ctx);

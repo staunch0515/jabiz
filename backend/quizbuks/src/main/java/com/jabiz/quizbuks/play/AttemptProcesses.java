@@ -90,6 +90,8 @@ public final class AttemptProcesses {
     static final String MINE = "play.mine";
     static final String MINE_AGAIN = "play.mineAgain";
     static final String CARD_BEFORE = "play.cardBefore";
+    /** The publication, read only so that the new attempt's reference to it needs no lookup under the lock. */
+    static final String PUBLICATION = "play.publication";
     static final String CARD = "play.card";
     static final String COUNTER = "play.counter";
     static final String WALLET = "play.wallet";
@@ -178,9 +180,16 @@ public final class AttemptProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, StartOutput.class))
                 // Outside the lock: the caller's attempt, the frozen part of the card, the regions and the version.
-                .step("Load the caller's attempt", QueryEntities.<ProcessContext>of(QbPlay.TAKER_ATTEMPTS,
-                    ctx -> mine(ctx.get(PUB_KEY)), MINE))
-                .steps(b -> PlaySteps.loadCard(b, "Load the card", ctx -> ctx.get(PUB_KEY), CARD_BEFORE))
+                // The publication too, in the same statement: the new attempt references it, and the platform checks
+                // a reference against what this transaction read through the target's default dataset instead of
+                // looking it up again (platform decision D46 rule 3), so that lookup leaves the lock (Q10a3). Only a
+                // draft can be deleted and a draft has no card (no start), so the read before the lock answers it.
+                .step("Load the caller's attempt, the card and the publication", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbPlay.TAKER_ATTEMPTS, ctx -> mine(ctx.get(PUB_KEY)), MINE),
+                    PlaySteps.card(ctx -> ctx.get(PUB_KEY), CARD_BEFORE),
+                    QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
+                            ids(ctx.get(PUB_KEY)))).limit(1).build(), PUBLICATION)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 .steps(b -> PlaySteps.loadVersion(b, ctx -> {
                     EntityInstance card = first(ctx, CARD_BEFORE);
@@ -195,11 +204,12 @@ public final class AttemptProcesses {
                 // A new attempt only: under the publication's lock, the attempt, the state and the counters again.
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> starting(ctx) ? PublicationMoves.lockName(ctx.get(PUB_KEY)) : null))
-                .step("Load the caller's attempt again", QueryEntities.<ProcessContext>of(QbPlay.TAKER_ATTEMPTS,
-                    ctx -> mine(starting(ctx) ? ctx.get(PUB_KEY) : null), MINE_AGAIN))
-                .steps(b -> PlaySteps.loadCard(b, "Load the card again",
-                    ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD))
-                .steps(b -> PlaySteps.loadCounter(b, ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER))
+                // One statement (platform decision D46, Q10a3): each round trip under the lock is ~0.8 ms of it.
+                .step("Load the caller's attempt, the card and the counters again", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbPlay.TAKER_ATTEMPTS, ctx -> mine(starting(ctx) ? ctx.get(PUB_KEY) : null),
+                        MINE_AGAIN),
+                    PlaySteps.card(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD),
+                    PlaySteps.counter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER)))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx)));
     }
 
