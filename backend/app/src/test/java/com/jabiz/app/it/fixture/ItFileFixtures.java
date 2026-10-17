@@ -25,6 +25,8 @@ public final class ItFileFixtures extends BaseEntityDefinitions {
     public static final String PUBLIC_TITLE = "public";
     public static final String AUDIO = "it.audio";
     public static final String TINY = "it.tiny";
+    /** Images and PDFs whose uploaded names and uploaders other readers do not see (decision D47). */
+    public static final String PRIVATE = "it.private";
     /** Bytes the tiny policy accepts. */
     public static final long TINY_MAX_BYTES = 64 * FilePolicy.KB;
 
@@ -72,6 +74,13 @@ public final class ItFileFixtures extends BaseEntityDefinitions {
         FilePolicy itAudioPolicy() {
             return FilePolicy.define(AUDIO).allow(MediaTypes.MP3, MediaTypes.M4A, MediaTypes.OGG)
                 .maxBytes(FilePolicy.MB).permissions("it.audio.upload", "it.audio.read").build();
+        }
+
+        @Bean
+        FilePolicy itPrivatePolicy() {
+            return FilePolicy.define(PRIVATE).allow(MediaTypes.JPEG, MediaTypes.PDF).maxBytes(FilePolicy.MB)
+                .image(i -> i.variants(64)).permissions("it.private.upload", "it.private.read").privateMetadata()
+                .build();
         }
 
         @Bean

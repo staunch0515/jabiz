@@ -32,14 +32,16 @@ import java.util.function.Supplier;
  * ({@code WAIT_TIMEOUT}) or when its subscriber cancels; either way it holds nothing afterwards. A key with neither
  * holders nor waiters is forgotten, and keys and waiters are bounded in number, so memory stays bounded.
  *
+ * <p>Also the queue before password hashing ({@code PasswordHashingLimit}, decision D47 item 2): one family, one key.
+ *
  * <p>Non-blocking: the state changes in short {@code synchronized} sections, and permits are handed to waiters on the
  * scheduler, so that one release does not run the next waiter's work on its own stack. Times come from the monotonic
  * clock: this is throttling, not business time.
  */
-final class AdmissionGate {
+public final class AdmissionGate {
 
     /** The limits of a family's keys (resolved from {@link AdmissionSettings.Family}). */
-    record Limits(int concurrency, int maxQueue, Duration retryAfter) {}
+    public record Limits(int concurrency, int maxQueue, Duration retryAfter) {}
 
     /** The longest {@code Retry-After} of a refusal. */
     static final long MAX_RETRY_AFTER_SECONDS = 30;
@@ -62,8 +64,8 @@ final class AdmissionGate {
     /** Permits handed out so far: numbers them in the order they were given. */
     private long handedOut;
 
-    AdmissionGate(int maxActive, int maxKeys, int maxWaiting, Function<String, Limits> limits, LongSupplier nanoTime,
-        Supplier<Scheduler> scheduler) {
+    public AdmissionGate(int maxActive, int maxKeys, int maxWaiting, Function<String, Limits> limits,
+        LongSupplier nanoTime, Supplier<Scheduler> scheduler) {
         if (maxActive < 1 || maxKeys < 1 || maxWaiting < 0) {
             throw new IllegalArgumentException("maxActive and maxKeys must be positive, maxWaiting not negative");
         }
@@ -76,7 +78,7 @@ final class AdmissionGate {
     }
 
     /** A permit held: released once, by whoever ends the run (later releases do nothing). */
-    final class Permit {
+    public final class Permit {
         private final Key key;
         private final long admitted;
         private final long sequence;
@@ -97,7 +99,7 @@ final class AdmissionGate {
             return sequence;
         }
 
-        void release() {
+        public void release() {
             if (released.compareAndSet(false, true)) {
                 released(this);
             }
@@ -174,7 +176,7 @@ final class AdmissionGate {
      * the queue is full or the wait longer than {@code maxWait}. Cancelling leaves the queue; a permit received must be
      * released when the run ends.
      */
-    Mono<Permit> acquire(String family, String key, Duration maxWait) {
+    public Mono<Permit> acquire(String family, String key, Duration maxWait) {
         Objects.requireNonNull(family, "family");
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(maxWait, "maxWait");
@@ -229,11 +231,11 @@ final class AdmissionGate {
     }
 
     /** Waiters, holders and keys now: for gauges and tests. */
-    synchronized int waiting() {
+    public synchronized int waiting() {
         return waiting;
     }
 
-    synchronized int active() {
+    public synchronized int active() {
         return active;
     }
 
