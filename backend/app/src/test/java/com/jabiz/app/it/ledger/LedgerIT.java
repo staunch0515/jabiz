@@ -200,9 +200,10 @@ class LedgerIT extends LedgerItSupport {
         reverse(sale.transactionId());
 
         List<String> statements = List.copyOf(SqlStatementLog.STATEMENTS);
-        assertThat(statements).anyMatch(sql -> sql.toLowerCase(Locale.ROOT)
-            .startsWith("insert into ledger_entry_version"));
-        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find());
+        assertThat(statements).anyMatch(sql -> SqlStatementLog.insertedTables(sql).contains("ledger_entry_version"));
+        // Not even within a data-modifying WITH part of a statement.
+        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find()
+            || !SqlStatementLog.mutatedTables(sql).isEmpty());
         assertThatThrownBy(() -> execute("UPDATE ledger_entry_version SET amount = 1 WHERE transaction_id = ?::uuid",
             sale.transactionId())).hasMessageContaining("append-only table");
         assertThatThrownBy(() -> execute("DELETE FROM ledger_transaction_version WHERE transaction_id = ?::uuid",

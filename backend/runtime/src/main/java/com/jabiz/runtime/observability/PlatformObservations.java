@@ -3,6 +3,8 @@ package com.jabiz.runtime.observability;
 import com.jabiz.runtime.web.ProblemStatuses;
 import io.micrometer.common.KeyValue;
 import io.micrometer.common.KeyValues;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -32,6 +34,8 @@ import java.util.function.Supplier;
 public class PlatformObservations {
 
     public static final String PROCESS = "jabiz.process";
+    /** Statements per execution of a top-level process (ROADMAP phase 16p). */
+    public static final String PROCESS_STATEMENTS = "jabiz.process.statements";
     public static final String DATASET_COMMIT = "jabiz.dataset.commit";
     public static final String DATASET_QUERY = "jabiz.dataset.query";
     public static final String DATASET_READ = "jabiz.dataset.read";
@@ -94,14 +98,42 @@ public class PlatformObservations {
     public static final PlatformObservations NOOP = new PlatformObservations(ObservationRegistry.NOOP);
 
     private final ObservationRegistry registry;
+    private final MeterRegistry meters;
 
     @Autowired
+    public PlatformObservations(ObjectProvider<ObservationRegistry> registry, ObjectProvider<MeterRegistry> meters) {
+        this(registry.getIfAvailable(() -> ObservationRegistry.NOOP), meters.getIfAvailable());
+    }
+
     public PlatformObservations(ObjectProvider<ObservationRegistry> registry) {
-        this(registry.getIfAvailable(() -> ObservationRegistry.NOOP));
+        this(registry.getIfAvailable(() -> ObservationRegistry.NOOP), null);
     }
 
     public PlatformObservations(ObservationRegistry registry) {
+        this(registry, null);
+    }
+
+    /** @param meters where {@link #recordStatements} records; null: nowhere */
+    public PlatformObservations(ObservationRegistry registry, MeterRegistry meters) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
+        this.meters = meters;
+    }
+
+    /**
+     * Records how many statements a top-level process sent in its transaction ({@value #PROCESS_STATEMENTS}, a
+     * distribution tagged with the process's name only, decision D16): the round trips that make up most of the time a
+     * hot lock is held (ROADMAP phase 16p).
+     */
+    public void recordStatements(String process, long statements) {
+        if (meters == null) {
+            return;
+        }
+        DistributionSummary.builder(PROCESS_STATEMENTS)
+            .description("Statements a process sent in its transaction, before its commit")
+            .baseUnit("statements")
+            .tag("process", process)
+            .register(meters)
+            .record(statements);
     }
 
     /** Observes {@code source} from subscription to its end. */

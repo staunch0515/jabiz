@@ -5,6 +5,9 @@ import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.UniqueConstraint;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.storage.WriteBatching;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
@@ -42,11 +45,34 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
 
     private final DatabaseClient db;
     private final EntityDefinitionRegistry registry;
+    private final WriteBatching batching;
+    private final DatasetRegistry datasets;
 
     public MetaModelConsistencyChecker(DatabaseClient db, EntityDefinitionRegistry registry) {
+        this(db, registry, new WriteBatching(), null);
+    }
+
+    public MetaModelConsistencyChecker(DatabaseClient db, EntityDefinitionRegistry registry, WriteBatching batching) {
+        this(db, registry, batching, null);
+    }
+
+    /**
+     * @param batching learns which commits are not combined into one statement and whether transactions may rely on
+     *                 what they read (decision D46)
+     * @param datasets whose override tables are checked for triggers as well; null for none
+     */
+    @Autowired
+    public MetaModelConsistencyChecker(DatabaseClient db, EntityDefinitionRegistry registry, WriteBatching batching,
+        DatasetRegistry datasets) {
         this.db = db;
         this.registry = registry;
+        this.batching = batching;
+        this.datasets = datasets;
     }
+
+    /** Tables every combined commit writes besides the entities' own (decision D46 rule 1). */
+    static final List<String> BATCH_TABLES = List.of("entity_registry", "op_process_item", "sys_audit_record",
+        "sys_outbox_event");
 
     /** Operation tables, append-only like every temporal table (decision D4). */
     static final List<String> OPERATION_TABLES = List.of("op_process", "op_process_item", "op_process_result",
@@ -59,6 +85,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
         List<String> problems = Flux.fromIterable(OPERATION_TABLES)
             .concatMap(table -> checkAppendOnlyGuard("Operation table " + table, table))
             .concatWith(Flux.fromIterable(registry.all()).concatMap(this::checkEntity))
+            .concatWith(checkOtherTables())
             .collectList()
             .block(CHECK_TIMEOUT);
 
@@ -87,6 +114,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 .map(field -> "Entity " + def.name + ": field " + field.name()
                               + " -> missing column " + field.physicalColumn()
                               + " in table " + def.physicalTable);
+            columns = columns.concatWith(checkOtherTriggers(def));
             if (def.temporal) {
                 // Uniqueness of temporal entities is enforced by locks, not indexes (decision D6).
                 Flux<String> rowId = actual.contains(def.temporalSpec.rowIdColumn().toLowerCase(Locale.ROOT))
@@ -156,6 +184,108 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             return Flux.fromIterable(problems);
         });
         return indexes.concatWith(foreignKeys).concatWith(checkAppendOnlyGuard(label, def.physicalTable));
+    }
+
+    /**
+     * Triggers of the entity's table besides the platform's own (decision D46 rule 1): a commit of the entity then has
+     * its inserts written one statement at a time, as such a trigger may rely on, and the finding is a warning.
+     */
+    private Flux<String> checkOtherTriggers(EntityDefinition def) {
+        return db.sql("""
+                select t.tgname as tgname
+                from pg_trigger t
+                join pg_proc p on p.oid = t.tgfoid
+                where t.tgrelid = to_regclass(:tableName) and not t.tgisinternal and t.tgenabled <> 'D'
+                  and not (p.proname = any(:platform))
+                order by t.tgname
+                """)
+            .bind("tableName", def.physicalTable)
+            .bind("platform", WriteBatching.PLATFORM_TRIGGER_FUNCTIONS.toArray(String[]::new))
+            .map((row, meta) -> row.get("tgname", String.class))
+            .all()
+            .collectList()
+            .flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.empty();
+                }
+                batching.exclude(def.name);
+                batching.stopReusingReads();
+                return Flux.just(WARNING + "Entity " + def.name + ": table " + def.physicalTable + " has triggers "
+                    + names + " besides the platform's; its inserts are written one statement at a time, and no "
+                    + "transaction relies on what it read (decision D46)");
+            });
+    }
+
+    /**
+     * Triggers besides the platform's on the other tables a commit writes or a read may depend on (decision D46):
+     * a dataset's override table (its entity's commits are written one statement at a time), the tables every combined
+     * commit writes (no commit is combined), and any other table of the schema. Wherever one is, a trigger of the
+     * application may write rows the platform does not see written, so no transaction relies on what it read.
+     */
+    private Flux<String> checkOtherTables() {
+        Flux<String> overrides = datasets == null ? Flux.empty() : Flux.fromIterable(datasets.all())
+            .filter(dataset -> dataset.storage().physicalTableOverride() != null
+                && !dataset.storage().physicalTableOverride().isBlank())
+            .concatMap(dataset -> otherTriggers(dataset.storage().physicalTableOverride()).flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.<String>empty();
+                }
+                batching.exclude(dataset.targetEntityType());
+                batching.stopReusingReads();
+                return Flux.just(WARNING + "Dataset " + dataset.resourceId() + ": table "
+                    + dataset.storage().physicalTableOverride() + " has triggers " + names + " besides the platform's; "
+                    + "the inserts of " + dataset.targetEntityType() + " are written one statement at a time, and no "
+                    + "transaction relies on what it read (decision D46)");
+            }));
+        Flux<String> shared = Flux.fromIterable(BATCH_TABLES).concatMap(table -> otherTriggers(table)
+            .flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.<String>empty();
+                }
+                batching.combineNone();
+                batching.stopReusingReads();
+                return Flux.just(WARNING + "Table " + table + ": has triggers " + names + " besides the platform's; "
+                    + "no commit is written as one statement, and no transaction relies on what it read (decision D46)");
+            }));
+        Flux<String> elsewhere = db.sql("""
+                select c.relname as table_name, t.tgname as tgname
+                from pg_trigger t
+                join pg_class c on c.oid = t.tgrelid
+                join pg_proc p on p.oid = t.tgfoid
+                where c.relnamespace = current_schema()::regnamespace and not t.tgisinternal and t.tgenabled <> 'D'
+                  and not (p.proname = any(:platform))
+                order by c.relname, t.tgname
+                """)
+            .bind("platform", WriteBatching.PLATFORM_TRIGGER_FUNCTIONS.toArray(String[]::new))
+            .map((row, meta) -> row.get("table_name", String.class) + "." + row.get("tgname", String.class))
+            .all()
+            .collectList()
+            .flatMapMany(found -> {
+                if (found.isEmpty()) {
+                    return Flux.empty();
+                }
+                batching.stopReusingReads();
+                return Flux.just(WARNING + "Schema: triggers " + found + " besides the platform's; no transaction "
+                    + "relies on what it read, as such a trigger may write what the platform does not see (decision D46)");
+            });
+        return overrides.concatWith(shared).concatWith(elsewhere);
+    }
+
+    /** The enabled triggers of {@code table} whose functions are not the platform's, by name. */
+    private Mono<List<String>> otherTriggers(String table) {
+        return db.sql("""
+                select t.tgname as tgname
+                from pg_trigger t
+                join pg_proc p on p.oid = t.tgfoid
+                where t.tgrelid = to_regclass(:tableName) and not t.tgisinternal and t.tgenabled <> 'D'
+                  and not (p.proname = any(:platform))
+                order by t.tgname
+                """)
+            .bind("tableName", table)
+            .bind("platform", WriteBatching.PLATFORM_TRIGGER_FUNCTIONS.toArray(String[]::new))
+            .map((row, meta) -> row.get("tgname", String.class))
+            .all()
+            .collectList();
     }
 
     /**

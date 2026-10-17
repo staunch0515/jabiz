@@ -48,6 +48,7 @@
 | D41 | 谁能启动流程：`internal()` 只由系统身份、`entryOnly()` 只经平台入口、`subProcessOnly()` 只作子流程（补充 D15、D31，不取代） | 已确认（2026-10-11，修订为三种声明）；已实施（阶段 16l） | 06 §8 |
 | D42 | 逐项的定时任务：`JobDefinition.forEach` 每项独立的根流程与事务、每项至多一次、`HoldLock` 的最长等待（补充 D14 第 5、6 条，不取代） | 计划中（线 1.2，阶段 16k） | 11 §4 |
 | D45 | 热门命名锁的准入与流程入口限流：取锁前在进程内排队（不占连接）、队满或超时 503 `PROCESS_BUSY`、正确性只靠咨询锁、流程接口按配置限流（补充 14o 与 D42 第 3 条，不取代） | 已确认（2026-10-16）；已实施（阶段 16o） | 06 §4.2、§8、03 §1、10 §15.10、11 §4.1、13 |
+| D46 | 流程事务内的写入合并与按已知版本更新：读之前写出、时态插入不先查、引用检查复用本事务的读写、普通实体按已知版本更新、锁在读之前、不跨事务缓存、语句预算（补充 D4、D6、D11、D14、D27，不取代） | 已确认（2026-10-16）；16p-1 已实施（第 1 条限于一次提交之内），16p-2 待做 | 06 §3.1、§4.1、04 §2.2、03 §2、11 §1、21 §1、13 |
 
 ---
 
@@ -1324,3 +1325,74 @@ Google 的品牌指南要求登录按钮用四色"G"；单色"G"不易被认出�
 ⑥`HoldLock` 取到与准入键同族而不同名的锁时，每个流程记一次 warn（只有流程名与族名）。
 ⑦503 `QUERY_TIMEOUT` 的来源已由 `QueryTimeoutCauseIT` 确认：流程接口入口的职责分离规则读取（`SodService.rules`，事务外的数据视图查询，5 s + 1 s，计时包括等池中的连接）；幂等重放的查询没有时限，池耗尽时一直等（03 §1）。
 职责分离规则的缓存、重放查询的时限与 `spring.r2dbc.pool.max-acquire-time` 的缺省不在本阶段（A-12）。没有迁移，OpenAPI 不变。
+
+## D46 流程事务内的写入合并与按已知版本更新
+
+**背景**：Q10a 测得热门锁内每条语句约 0.78 ms，其中约 0.70 ms 是往返；`LEDGER_POST` 一次 27 条、`HoldLock` 4 条、普通实体的每次更新 3 条，而数据库执行只占锁内时间的约 15 %。
+写入的行本身都是必要的（数据、操作记录、审计、事件、幂等结果），多余的是逐行一个往返、写前的重复检查与重读。本条补充 D4、D6、D11、D14、D27，不取代任何决策（2026-10-16 确认，阶段 16p）。
+
+**决策**
+1. **读之前写出**：平台在一个事务中登记的插入行（时态版本、`entity_registry`、`op_process_item`、审计、事件、子流程的操作记录、幂等结果）与按已知版本的更新可以缓冲，
+   以多行插入与数据修改的 CTE 合成一条语句写出；任何读或写缓冲中的表的语句之前、保存点的边界、提交之前必须写出，所以事务中的每一次读取看到的都是逐条执行时会看到的数据。
+   冲突按约束名映射回原来的错误码。根流程的操作记录、事件消费标记与编号不缓冲（它们的唯一约束要尽早等待）。应急开关 `jabiz.storage.write-batching.enabled`。
+2. **时态插入不先查是否已有**：由 `entity_registry` 的主键与只写一次实体的唯一索引保证，冲突为同样的 409。
+3. **引用检查复用本事务的读写**：目标是本事务插入的，或本事务经目标的默认数据视图在同一范围与时间切片读到的，不再查；其余合成一条。
+4. **普通实体按已知版本更新**：本事务中经平台读到完整状态的实例，以该状态为当前、以 `version` 的 CAS 更新兜底，审计与事件只在更新成功时写入；失败时再读以区分 404 与 409。时态实体照旧读全部版本。
+   **前提与限制**（16p-1 评审 L3）：这依赖"普通表与时态表只经平台写入"。应用的数据库触发器可能写平台看不见的行，所以 schema 中、实体表、数据视图的替代表或合并写入的共享表上只要有平台之外的触发器，
+   一律不复用读到的实例（第 3、4 条都不生效，启动检查告警）；本事务挂起期间另一个事务（`inNewTransaction`）提交之后，挂起的事务忘掉它读到的一切。其他途径（运维脚本在事务中途改同一行）仍只靠版本 CAS 拒绝不一致的更新。
+5. **锁在读之前**：`HoldLock` 与科目锁照旧是单独、在相应读取之前的语句（同一语句的快照早于等锁），可以带上缓冲的写入，但不与读取合并。
+6. **不跨事务缓存可变的参考数据**（科目、维度取值的实例）。
+7. **语句预算**：平台的标准写入路径（账本过账与冲正、示范的发货与下单、按已知版本更新、`HoldLock`、带幂等键的根流程）有确切的语句数测试，改变须同时改预算。
+
+**理由**：热门锁的容量由锁内的往返次数决定；同样的行以更少的语句写入、去掉数据库约束已保证的重复检查与本事务已知的重读，吞吐约翻倍而每一项保证不变。
+"读之前写出"使缓冲对一切读取不可见，正确性不依赖于知道哪些读取需要哪些行。
+
+**放弃的方案**：①跨事务缓存科目与维度取值（多实例失效需要额外的机制，且只省一条读取）；②R2DBC 管线（错误的顺序与驱动的行为不受平台控制）；
+③把锁并进读取的语句（快照早于等锁，削弱 D24 的层级保证与 D6 的"取锁之后的新语句"）；④时态更新只按读到的版本加一（追溯更正使当前版本不一定是最大版本）；
+⑤由数据库触发器写审计（D27 已否定）。
+
+**实施分两步**（P-2）：**16p-1**（已实施）只在单个步骤或单次提交之内：第 2–7 条全部，第 1 条限于一次 `commitBatch` 之内的插入（下称"提交内的合并"）；
+**16p-2**（待做，实测之后）把第 1 条扩大到整个事务（跨步骤与提交、子流程的操作记录、`PublishEvent`、幂等结果），并带来应急开关（P-8 只适用于 16p-2）。
+
+**实现说明（16p-1）**：
+①**提交内的合并**（T6）：`StorageEngine.withWriteBatch(work)`；`DatasetEntityManager.commitBatch` 以它包住全部变更。其间 `insert` 只登记行（`R2dbcStorageEngine` 的缓冲在 Reactor 上下文中，按引擎区分）；
+`select`、`executeQuery`、`count`、`executeRawQuery`、`executeQueries`、`casUpdate`、`delete` 的语句文本（或表名）若含缓冲中的表名，先写出；保存点之前写出，保存点之内另起缓冲；
+`inNewTransaction` 的事务不带缓冲；结束时写出。写出由 `WriteBatch` 渲染：每张表一个多行 `INSERT … VALUES`（行序即登记顺序，某行没有的列写 `DEFAULT`，`StorageEngine.NULL` 写 `NULL`），
+多张表以 `WITH jabiz_w0 AS (INSERT …), … INSERT …` 连成一条；一条语句至多绑定 30 000 个值，多出的按顺序分成多条。表名与列名都经 `SqlIdentifiers.require`。
+单行的插入（缓冲之外）照旧是原来的语句文本。
+②**冲突的归属**：每行带着登记时上下文中的 `StorageEngine.InsertConflicts`（`DatasetEntityManager` 为每个变更设定：声明的唯一约束 → 400 `UNIQUE_VIOLATION`，其他 → 409；时态插入另将非声明的键冲突映射为
+"`<实体> [ID: <id>] already exists`"）。写出失败时按数据库报告的表与 `Key (…)=(…)` 找到那一行，用它的映射；找不到时用该表的第一行。错误码与响应与逐条执行时相同；错误出现的位置可能是写出的那一步。
+**一次提交有多个问题时**（16p-1 评审 L2）：一条语句中各表按其第一行登记的顺序写出（每张表一个 `WITH … RETURNING 1` 部分，由主查询依次读取，执行顺序因此确定），表内按行序，数据库遇到的第一个冲突即最早登记的写入的；
+后面的变更以规则、校验等（非数据库的）错误失败时，先写出之前收集的行，再报告——之前的写入若冲突，报告的是它（如重复的时态主键先于后面变更的违规，与逐条执行时相同）。
+数据库自己报错（事务已中止）时照旧报告该错误。**归属的局限**（I2）：按 `Key (…)=(…)` 比对行值的文本；表达式索引（`lower(…)`）、类型的文本形式不同等比对不上时，归给该表的第一行，
+此时错误码相同，但消息中的主键可能是同一张表另一行的；报告的表不属于任何收集的行时，保留原冲突，由调用方照常映射。
+**另一实体类型已用的主键**（I3）：插入新时态实例时，若主键已被另一实体类型登记，消息现为"`<实体> [ID: …] already exists`"（以前读该实体的版本找不到，在 `entity_registry` 上冲突为"conflicts with existing data"）；
+两者都是 409，区分它要在冲突之后再查一次（事务已中止，不能），所以不区分。
+③**有其他触发器的表**：启动检查 `METAMODEL` 查询实体表上平台之外的触发器（平台的是 `jabiz_reject_mutation`、`jabiz_ledger_check_balance`、`jabiz_notify_dict_changed`），有则告警，
+并记入 `WriteBatching`，该实体的提交逐条写出。数据视图的替代表（`physicalTableOverride`）同样检查（其实体逐条写出）；合并写入的共享表（`entity_registry`、`op_process_item`、`sys_audit_record`、`sys_outbox_event`）上有则一切提交逐条写出；
+schema 中任何表上有则不复用读到的实例（第 4 条的前提）。字典视图的写入触发器（`jabiz_dict_item_view_insert`）是平台的。检查被关闭时一律合并、照常复用。测试钩子 `WriteBatching.statementByStatement(context)` 使一次执行逐条写出（审计等价性测试用；不是配置项）。
+④**时态插入**（T3）：`TemporalWriter.insert` 不再读时间线，以空时间线规划；重复的主键由 `entity_registry_pkey`（只写一次实体另有主键唯一索引）在写出时拒绝，映射为原来的 409 与消息。更新、删除、取消预定照旧读时间线（P-4）。
+⑤**读集与写集**（T4、T7）：`TransactionState`（每个事务一个，在 Reactor 上下文中，`StorageEngine.transactionState`）。`findById`、`query`/`queryAll`、`queryMany` 以及引用检查找到的目标登记"读到"（数据视图、解析后的范围、实例、是否完整），
+只登记当前时点的读取（`asOf`、`knownAt` 都为空），读副本的不登记；平台插入登记"插入"（时态只登记在操作时间或之前生效的版本）。`VersionAppender.append`、普通实体的更新与删除使之失效；回滚到保存点时恢复保存点之前的状态。
+`LoadParams` 与模板的结果不登记（P-11）。一个事务至多记 10 000 个实例（读到的与插入的合计，I1；读或写很多行的流程不全部留在内存中，超出的照旧再查）。
+`inNewTransaction` 的事务结束后，挂起的事务忘掉全部（L3）。新事务中不带挂起事务的 `TransactionLockTimeout`（L4：`HoldLock` 在其中照常以函数设定自己的等待）。
+字典（`DictionaryRegistry`）读 `sys_dict_item_version` 也经存储引擎，所以同一提交中新加的字典项在写出后可见（L1）；在事务中读到的字典项只用不缓存（可能未提交、可能回滚）。
+⑥**引用检查**（T4）：目标为写集中的实例且值在目标默认视图的范围内（`withinScope`、未逻辑删除），或读集中经同一默认视图、同一解析范围读到的实例，即不再查；默认视图的范围中有经引用的数据期限时一律查。
+其余每个变更的目标一条语句（`queryMany`）；一次提交的插入有两个以上未知目标时，先以一条语句预取（只登记找到的；值或范围无法解析的不预取），各变更的检查再从读集取得——缺少的目标由其变更的检查再查一次并报告，错误码与参数不变。
+⑦**合并的读取**（T5）：`DatasetEntityManager.queryMany(List<EntityRead>)` 与 `StorageEngine.executeQueries`。计划中的 `to_jsonb(r)` 包装改为**按列对齐**：
+`SELECT … FROM (VALUES (0), (1), …) k(jabiz_q) LEFT JOIN (第 0 个读取) b0 ON k.jabiz_q = 0 LEFT JOIN …`，每个读取的列各自取别名、保留数据库的类型，由驱动按原样解码，不经 JSON 还原
+（没有数字小数位、时间、数组、`jsonb` 的还原问题）；每个读取照旧由 `QueryCompiler` 编译（范围、数据期限、逻辑删除、时间切片），参数按读取改名，各自的 `ORDER BY`/`LIMIT`/`OFFSET` 不变；读主引擎（如 `findById`），不读副本，所以流程中的读取看得到本事务的写入；只有查询时限相同的读取合成一条（各自的时限不放宽）。
+等价性由 `WriteCombiningIT.combinedReadsGiveExactlyWhatEachReadGivesAlone` 对应用的每个数据视图比较（同样的实例、每个值同样的类型、或同样的拒绝），代替计划中的 jqwik 属性测试。
+`CheckPosting` 先单独取科目锁，再以一条语句读取全部维度取值、来源单据与科目（原"读科目"步骤并入，`LEDGER_POST` 少一个步骤）；字典维度照旧取缓存；违规按原来的顺序（维度依次、再来源）报告。
+平台步骤 `QueryEntities.all(QueryEntities.query(…), …)` 开放给应用（P-12）。
+⑧**按已知版本更新**（T7）：读集中有完整实例、读取的视图解析为同一张表、值在写入视图的范围内（且未逻辑删除）时不再读；`UPDATE … WHERE pk AND version` 与审计、事件以
+`WITH jabiz_u AS (UPDATE … RETURNING 1), jabiz_d0 AS (INSERT INTO sys_audit_record (…) SELECT … FROM jabiz_u, jsonb_populate_record(NULL::sys_audit_record, :d0) r) …` 一条写出（行的值以 JSON 传入，由数据库按列类型转换）；
+更新 0 行时再读一次：已删除或在范围外 404，版本不同 409（与先读时同样的消息）。不在读集中的更新照旧先读，但更新、审计与事件同样是一条（3 → 2）。
+`AuditRecorder.row` 与 `Outbox.row`/`entityChangedRow` 产出行，`record`/`append`/`entityChanged` 照旧直接写；审计的 `changes` 照旧以紧凑的 JSON 文本绑定（列是 `text`，评审 M1：曾误以 JSON 值绑定，存成了 `jsonb` 的规范文本）；随更新写出时，`jsonb_populate_record` 收到的是 JSON 字符串，原样存入。
+⑨**`HoldLock`**（T1）：执行器把事务的 `lock_timeout` 放进上下文（`TransactionLockTimeout`）；等待上限与之相同时只发取锁语句，更短时调用迁移 `V40` 的 `jabiz_xact_lock(key, shared, timeout)`（plpgsql：读当前值、设定、取锁、恢复）。
+⑩**操作记录**（T2）：缺省的 `DatabaseProcessSequence` 时，根流程 `INSERT INTO op_process (…) VALUES ((SELECT nextval('op_process_seq') FROM (SELECT set_config('lock_timeout', :t, true)) s), …) RETURNING process_seq_id`，
+子流程 `VALUES (nextval('op_process_seq'), …)`；应用替换了 `ProcessSequence` 时照旧两条。并发的重复幂等请求在这条语句的唯一约束上等待，等待受同一语句先设的 `lock_timeout` 约束。
+⑪**恒假的条件**（T8）：`PhysicalQueryPlan.matchesNothing`（`IN` 空列表、只由这样的条件组成的 `OR`、含这样条件的 `AND`），引擎不发语句。
+⑫**观测**：`jabiz.process.statements`（每次根流程在提交前已发的语句数，分布，标签只有 `process`，D16）。
+⑬**语句预算**：`StatementBudgetIT`（确切值，失败时列出语句）；数字与实测见 `docs/perf/phase-16p-statements.md`。
+⑭只追加的保证不变：合并后的语句只有 `INSERT`；测试的语句判断（`SqlStatementLog.mutatedTables`、`insertedTables`）识别 `WITH` 中的子语句。迁移只有 `V40`，接口、错误码与 OpenAPI 不变。

@@ -5,8 +5,12 @@ import com.jabiz.query.PhysicalQueryPlan;
 import com.jabiz.query.RawQueryPlan;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
+import reactor.util.context.ContextView;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Reactive contract of a physical storage engine (R2DBC, or other backends that can
@@ -57,8 +61,44 @@ public interface StorageEngine {
      */
     Mono<Boolean> delete(String table, String pkColumn, Object id, String versionColumn, long expectedVersion);
 
+    /**
+     * Optimistic update as {@link #casUpdate}, and the given rows inserted only when it updated a row, in one statement
+     * where the engine can (ROADMAP phase 16p, T7): the audit record and the change event of the update. A row of
+     * {@code dependents} holds its values as {@link #insert} takes them; JSON values as {@link JsonText} or a map.
+     *
+     * @return true if a row was updated (and the rows inserted)
+     */
+    default Mono<Boolean> casUpdate(String table, String pkColumn, Object id, long expectedVersion,
+        String versionColumn, Map<String, Object> updates, List<Insert> dependents) {
+        return casUpdate(table, pkColumn, id, expectedVersion, versionColumn, updates)
+            .flatMap(applied -> applied
+                ? Flux.fromIterable(dependents).concatMap(row -> insert(row.table(), row.record())).then(Mono.just(true))
+                : Mono.just(false));
+    }
+
+    /** A row to insert into a table, as {@link #insert} takes it. */
+    record Insert(String table, Map<String, Object> record) {}
+
     /** Executes a compiled entity query. */
     Flux<Map<String, Object>> executeQuery(PhysicalQueryPlan plan);
+
+    /** One read of {@link #executeQueries}: a compiled plan and the columns its rows are returned with. */
+    record PlanRead(PhysicalQueryPlan plan, List<String> columns) {
+        public PlanRead {
+            columns = List.copyOf(columns);
+        }
+    }
+
+    /**
+     * Several compiled entity queries, each as {@link #executeQuery} runs it, with their rows by query; an engine that
+     * can sends them as one statement (ROADMAP phase 16p, T5). A row holds the read's {@code columns}.
+     */
+    default Mono<List<List<Map<String, Object>>>> executeQueries(List<PlanRead> reads) {
+        return Flux.fromIterable(reads)
+            .concatMap(read -> executeQuery(read.plan()).collectList())
+            .collectList()
+            .map(List::copyOf);
+    }
 
     /** Number of rows matching the plan's condition; sorting and paging of the plan are ignored. */
     Mono<Long> count(PhysicalQueryPlan plan);
@@ -95,4 +135,40 @@ public interface StorageEngine {
      * The work's error is passed on. Only valid inside {@link #inTransaction}.
      */
     <T> Mono<T> inSavepoint(Mono<T> work);
+
+    /**
+     * Runs the given work, within the current transaction, with the rows it {@linkplain #insert inserts} collected and
+     * written together, as few statements as the engine can (ROADMAP phase 16p, T6; decision D46 rule 1): before any
+     * statement of the work that reads or writes a table they go to, before a savepoint and when the work ends. Every
+     * read of the work therefore sees what statement by statement execution would have shown it. A conflict a row
+     * causes is reported as its {@link InsertConflicts} maps it, when it is written. Engines without this run the work
+     * as it is.
+     */
+    default <T> Mono<T> withWriteBatch(Mono<T> work) {
+        return work;
+    }
+
+    /**
+     * What the current transaction of this engine knows of the instances it wrote and read (decision D46); empty
+     * outside a transaction of this engine, and for engines that keep nothing.
+     */
+    default Optional<TransactionState> transactionState(ContextView context) {
+        return Optional.empty();
+    }
+
+    /**
+     * Maps a unique key violation an insert causes to the error of the write it belongs to, in place of the
+     * {@link UniqueKeyViolationException}: the declared unique constraint of an entity is a validation error, a
+     * duplicate key a conflict. Taken from the Reactor context of the insert ({@link #withInsertConflicts}), so that a
+     * row written later, together with others, is still reported as its own write would report it.
+     */
+    @FunctionalInterface
+    interface InsertConflicts {
+        Throwable map(UniqueKeyViolationException conflict, String table, Map<String, Object> record);
+    }
+
+    /** {@code context} with the mapping of the conflicts of the inserts made within it. */
+    static Context withInsertConflicts(Context context, InsertConflicts conflicts) {
+        return context.put(InsertConflicts.class, conflicts);
+    }
 }

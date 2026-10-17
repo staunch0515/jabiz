@@ -265,8 +265,10 @@ class ParamServiceIT extends PostgresIntegrationTest {
         run(ParamProcesses.SET, new ParamProcesses.SetInput(key, "0.15"));
 
         List<String> statements = List.copyOf(SqlStatementLog.STATEMENTS);
-        assertThat(statements).anyMatch(sql -> sql.toLowerCase(Locale.ROOT).startsWith("insert into sys_param_version"));
-        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find());
+        assertThat(statements).anyMatch(sql -> SqlStatementLog.insertedTables(sql).contains("sys_param_version"));
+        // Not even within a data-modifying WITH part of a statement.
+        assertThat(statements).noneMatch(sql -> MUTATION.matcher(sql).find()
+            || !SqlStatementLog.mutatedTables(sql).isEmpty());
         assertThat(query("SELECT version_no FROM sys_param_version WHERE param_key = ?", key))
             .hasSizeGreaterThanOrEqualTo(4);
         assertThat(value(key, later)).isEqualByComparingTo("0.15");

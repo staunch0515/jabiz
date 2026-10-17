@@ -17,6 +17,10 @@ import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.r2dbc.core.DatabaseClient;
+import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.storage.Rows;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -65,6 +69,8 @@ public class DictionaryRegistry {
     private final Map<String, StaticDictionary> implicit = new LinkedHashMap<>();
     private final Map<String, SqlDictionary> sqlDictionaries = new LinkedHashMap<>();
     private final DatabaseClient db;
+    private final StorageAdapterRegistry storages;
+    private final String poolRef;
     private final ObjectProvider<AdvancedQueryExecutor> queries;
     private final DatasetRegistry datasets;
     private final MessageCatalog messages;
@@ -89,6 +95,8 @@ public class DictionaryRegistry {
         EntityDefinitionRegistry entities,
         DatasetRegistry datasets,
         DatabaseClient db,
+        StorageAdapterRegistry storages,
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         ObjectProvider<AdvancedQueryExecutor> queries,
         MessageCatalog messages,
         Clock clock,
@@ -126,6 +134,8 @@ public class DictionaryRegistry {
         }
         this.datasets = datasets;
         this.db = db;
+        this.storages = storages;
+        this.poolRef = poolRef;
         this.queries = queries;
         this.messages = messages;
         this.clock = clock;
@@ -207,10 +217,15 @@ public class DictionaryRegistry {
         if (declaredSource(dictUrn).isEmpty()) {
             // Only the table can know this URN. The URN may come straight from a request, so it is cached only
             // once the table actually has entries; otherwise made-up URNs would grow the cache without bound.
-            return fromTable(dictUrn).doOnNext(loaded -> {
-                if (loaded.items().values().stream().anyMatch(items -> !items.isEmpty())) {
-                    cache.putIfAbsent(dictUrn, Mono.just(loaded));
-                }
+            return Mono.deferContextual(view -> {
+                // Read within a transaction, the entries may include what it has not committed (and may roll back):
+                // they are used, never cached.
+                boolean uncommitted = storages.getEngine(poolRef).transactionState(view).isPresent();
+                return fromTable(dictUrn).doOnNext(loaded -> {
+                    if (!uncommitted && loaded.items().values().stream().anyMatch(items -> !items.isEmpty())) {
+                        cache.putIfAbsent(dictUrn, Mono.just(loaded));
+                    }
+                });
             }).map(Loaded::items);
         }
         return cache.computeIfAbsent(dictUrn, urn -> {
@@ -286,32 +301,34 @@ public class DictionaryRegistry {
         String fallback = messages.defaultLocale().getLanguage();
         Instant now = clock.instant();
         StringBuilder sql = new StringBuilder("SELECT item_code, sort_order, enabled");
+        Map<String, BoundValue> params = new LinkedHashMap<>();
         for (int i = 0; i < locales.size(); i++) {
             sql.append(", COALESCE(labels ->> :lang").append(i).append(", labels ->> :fallback) AS label_").append(i);
+            params.put("lang" + i, BoundValue.of(locales.get(i).getLanguage()));
         }
+        params.put("urn", BoundValue.of(urn));
+        params.put("fallback", BoundValue.of(fallback));
+        params.put("asOf", BoundValue.of(now));
         // dict_urn never changes within an item, so it may restrict the versions before the current one is chosen.
         sql.append(" FROM (SELECT DISTINCT ON (dict_item_id) * FROM sys_dict_item_version")
             .append(" WHERE dict_urn = :urn AND effect_start_time <= :asOf")
             .append(" ORDER BY dict_item_id, effect_start_time DESC, version_no DESC) v")
             .append(" WHERE NOT is_deleted ORDER BY sort_order, item_code");
-        DatabaseClient.GenericExecuteSpec spec = db.sql(sql.toString())
-            .bind("urn", urn).bind("fallback", fallback).bind("asOf", now);
-        for (int i = 0; i < locales.size(); i++) {
-            spec = spec.bind("lang" + i, locales.get(i).getLanguage());
-        }
-        Mono<Map<Locale, List<DictItem>>> items = spec
-            .map((row, meta) -> {
-                String code = row.get("item_code", String.class);
-                Integer sortOrder = row.get("sort_order", Integer.class);
-                boolean enabled = Boolean.TRUE.equals(row.get("enabled", Boolean.class));
+        // Through the storage engine, in the caller's transaction: items this transaction inserted and has not yet
+        // written out (a commit's rows are written together, decision D46 rule 1) are written before this read.
+        StorageEngine engine = storages.getEngine(poolRef);
+        Mono<Map<Locale, List<DictItem>>> items = engine.select(sql.toString(), params)
+            .map(row -> {
+                String code = Rows.string(row.get("item_code"));
+                Integer sortOrder = Rows.intValue(row.get("sort_order"));
+                boolean enabled = Boolean.TRUE.equals(row.get("enabled"));
                 List<DictItem> perLocale = new ArrayList<>(locales.size());
                 for (int i = 0; i < locales.size(); i++) {
-                    perLocale.add(new DictItem(code, row.get("label_" + i, String.class),
+                    perLocale.add(new DictItem(code, Rows.string(row.get("label_" + i)),
                         sortOrder == null ? 0 : sortOrder, enabled));
                 }
                 return perLocale;
             })
-            .all()
             .collectList()
             .map(rows -> {
                 Map<Locale, List<DictItem>> all = new LinkedHashMap<>();
@@ -321,11 +338,11 @@ public class DictionaryRegistry {
                 }
                 return all;
             });
-        Mono<Optional<Instant>> nextChange = db.sql("SELECT min(effect_start_time) AS next FROM sys_dict_item_version "
-                + "WHERE dict_urn = :urn AND effect_start_time > :asOf")
-            .bind("urn", urn).bind("asOf", now)
-            .map((row, meta) -> Optional.ofNullable(row.get("next", OffsetDateTime.class)).map(OffsetDateTime::toInstant))
-            .one()
+        Mono<Optional<Instant>> nextChange = engine.select("SELECT min(effect_start_time) AS next FROM "
+                + "sys_dict_item_version WHERE dict_urn = :urn AND effect_start_time > :asOf",
+                Map.of("urn", BoundValue.of(urn), "asOf", BoundValue.of(now)))
+            .next()
+            .map(row -> Optional.ofNullable(row.get("next") == null ? null : Rows.instant(row.get("next"))))
             .defaultIfEmpty(Optional.empty());
         return items.zipWith(nextChange, (all, next) -> new Loaded(all, next.orElse(null)));
     }

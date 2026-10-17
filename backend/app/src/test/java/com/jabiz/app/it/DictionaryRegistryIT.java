@@ -136,7 +136,7 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
                 .sqlTemplate("SELECT 1")), null));
 
         assertThatThrownBy(() -> new DictionaryRegistry(beans.getBeanProvider(DictionaryProvider.class),
-            beans.getBeanProvider(SqlDictionary.class), entities, datasets, null,
+            beans.getBeanProvider(SqlDictionary.class), entities, datasets, null, null, "default",
             beans.getBeanProvider(AdvancedQueryExecutor.class), messages, clock, 100_000))
             .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unknown dataset urn:jabiz:dataset:nope")
             .hasMessageContaining("SQL dictionary urn:jabiz:dict:broken refers to unregistered entity Ghost");

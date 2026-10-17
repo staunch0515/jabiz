@@ -157,8 +157,22 @@ public class QueryCompiler {
             sorts,
             query.offset(),
             safeLimit,
-            dataset.policy().queryTimeout()
+            dataset.policy().queryTimeout(),
+            query.predicate() != null && alwaysFalse(query.predicate())
         );
+    }
+
+    /**
+     * Whether a condition is false whatever the data: an {@code IN} of no values, an {@code OR} of nothing but such
+     * conditions, an {@code AND} with one of them. Decided after compiling, so that every part is still checked.
+     */
+    static boolean alwaysFalse(QueryPredicate predicate) {
+        return switch (predicate) {
+            case QueryPredicate.In in -> in.values() == null || in.values().isEmpty();
+            case QueryPredicate.Or or -> or.predicates().stream().allMatch(QueryCompiler::alwaysFalse);
+            case QueryPredicate.And and -> and.predicates().stream().anyMatch(QueryCompiler::alwaysFalse);
+            default -> false;
+        };
     }
 
     /** Most rows a lookup returns (docs/design/16-content-authoring.md section 2). */

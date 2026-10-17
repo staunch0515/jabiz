@@ -3,13 +3,17 @@ package com.jabiz.app.it;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.check.PlatformCheckFailedException;
+import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheckRunner;
+import com.jabiz.runtime.storage.WriteBatching;
 import com.jabiz.runtime.entity.MetaModelConsistencyChecker;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.r2dbc.core.DatabaseClient;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -41,6 +45,41 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
             eb.field("amount", f -> f.physicalColumn("f_amount"));
             eb.field("note", f -> f.physicalColumn("f_note"));
         });
+    }
+
+    /**
+     * A table with a trigger besides the platform's is a warning, and its entity's commits are written one statement at
+     * a time (decision D46 rule 1); the platform's own triggers (append-only guard, ledger balance) are not.
+     */
+    @Test
+    void anEntityWhoseTableHasOtherTriggersIsNotCombined() {
+        execute("CREATE TABLE it_triggered (f_id varchar(10), f_name text)");
+        execute("CREATE FUNCTION it_touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$");
+        execute("CREATE TRIGGER it_triggered_touch BEFORE INSERT ON it_triggered FOR EACH ROW EXECUTE FUNCTION it_touch()");
+        EntityDefinition triggered = EntityDefinition.define("Triggered", eb -> {
+            eb.physicalTable("it_triggered");
+            eb.primaryKey("id");
+            eb.field("id", f -> f.physicalColumn("f_id"));
+            eb.field("name", f -> f.physicalColumn("f_name"));
+        });
+        WriteBatching batching = new WriteBatching();
+
+        List<CheckProblem> problems = new MetaModelConsistencyChecker(databaseClient,
+            registryOf(triggered, drift()), batching).check();
+
+        // Once for the entity (not combined), once for the schema (reads not relied on): warnings, not errors.
+        assertThat(problems).filteredOn(problem -> problem.message().contains("it_triggered_touch"))
+            .extracting(CheckProblem::location).containsExactly("Entity Triggered", "Schema");
+        assertThat(problems).filteredOn(problem -> problem.message().contains("it_triggered_touch"))
+            .allSatisfy(problem -> assertThat(problem.isError()).isFalse());
+        assertThat(batching.reusesReads()).isFalse();
+        assertThat(batching.combines("Triggered")).isFalse();
+        assertThat(batching.combines("Drift")).isTrue();
+
+        // The application's own tables carry only the platform's triggers: every entity is combined.
+        WriteBatching application = new WriteBatching();
+        new MetaModelConsistencyChecker(databaseClient, applicationRegistry, application).check();
+        applicationRegistry.all().forEach(def -> assertThat(application.combines(def.name)).as(def.name).isTrue());
     }
 
     @Test

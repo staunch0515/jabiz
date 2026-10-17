@@ -48,11 +48,17 @@ public class Outbox {
      */
     public Mono<Void> append(StorageEngine engine, String eventType, String entityType, String entityId,
         String payloadJson) {
+        return row(eventType, entityType, entityId, payloadJson)
+            .flatMap(row -> engine.insert(row.table(), row.record()));
+    }
+
+    /** The row {@link #append} inserts, for a statement that writes it with the change it reports (16p, T7). */
+    public Mono<StorageEngine.Insert> row(String eventType, String entityType, String entityId, String payloadJson) {
         if (eventType == null || !EventSubscription.NAME.matcher(eventType).matches()) {
             return Mono.error(new IllegalArgumentException("Event type '" + eventType + "' must match "
                 + EventSubscription.NAME.pattern()));
         }
-        return Operations.current().flatMap(operation -> {
+        return Operations.current().map(operation -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("event_id", UUID.fromString(String.valueOf(ids.next(null))));
             row.put("event_type", eventType);
@@ -62,7 +68,7 @@ public class Outbox {
             row.put("process_seq_id", operation.map(Operation::processSeqId).orElse(null));
             row.put("created_time", operation.map(Operation::opTime)
                 .orElseGet(() -> clock.instant().truncatedTo(ChronoUnit.MICROS)));
-            return engine.insert(TABLE, row);
+            return new StorageEngine.Insert(TABLE, row);
         });
     }
 
@@ -78,6 +84,13 @@ public class Outbox {
      */
     public Mono<Void> entityChanged(StorageEngine engine, EntityDefinition def, Object id, String action,
         long version, Instant effectiveTime, Collection<String> changedFields) {
+        return entityChangedRow(def, id, action, version, effectiveTime, changedFields)
+            .flatMap(row -> engine.insert(row.table(), row.record()));
+    }
+
+    /** The row {@link #entityChanged} inserts; empty for an entity that does not publish its changes. */
+    public Mono<StorageEngine.Insert> entityChangedRow(EntityDefinition def, Object id, String action,
+        long version, Instant effectiveTime, Collection<String> changedFields) {
         if (!def.publishesChanges) {
             return Mono.empty();
         }
@@ -90,7 +103,7 @@ public class Outbox {
             payload.put("effectiveTime", effectiveTime.toString());
         }
         payload.put("changedFields", changedFields.stream().sorted().toList());
-        return append(engine, EntityChangeEvents.eventType(def.name), def.name, String.valueOf(id),
+        return row(EntityChangeEvents.eventType(def.name), def.name, String.valueOf(id),
             json.writeValueAsString(payload));
     }
 }
