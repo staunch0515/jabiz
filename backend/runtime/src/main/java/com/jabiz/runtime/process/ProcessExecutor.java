@@ -27,8 +27,11 @@ import com.jabiz.runtime.security.PasswordHashingLimit;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.storage.TransactionLockTimeout;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import com.jabiz.runtime.storage.WriteBatching;
+import com.jabiz.runtime.storage.WriteOrigin;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,23 +100,34 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     private final Duration lockTimeout;
     private final ProcessAdmission admission;
     private final PasswordHashingLimit hashing;
+    private final WriteBatching batching;
+    /** How many sub-processes each process may start, by name and version (see {@link #subProcessBound}). */
+    private final Map<String, Integer> subProcessBounds = new ConcurrentHashMap<>();
     /** Readers of the registered processes' outputs, for replays, built at startup (see below). */
     private final Map<Class<?>, ObjectReader> outputReaders = new ConcurrentHashMap<>();
 
-    /** Without a limit on password hashing (tests that build an executor of their own). */
+    /**
+     * With the default write batching and without a limit on password hashing (tests that build an executor of their
+     * own).
+     */
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         String poolRef, PlatformObservations observations, Duration lockTimeout, ProcessAdmission admission) {
         this(beans, sequence, operations, committer, storages, json, masker, poolRef, observations, lockTimeout,
-            admission, PasswordHashingLimit.NONE);
+            admission, new WriteBatching(), PasswordHashingLimit.NONE);
     }
 
+    /**
+     * @param batching whether the transaction's writes are held (decision D46 rule 1), so sub-processes' too
+     * @param hashing  the queue before password hashing (decision D47 item 2), before the transaction
+     */
     @Autowired
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations,
         @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout, ProcessAdmission admission,
-        PasswordHashingLimit hashing) {
+        WriteBatching batching, PasswordHashingLimit hashing) {
+        this.batching = Objects.requireNonNull(batching, "batching must not be null");
         this.admission = Objects.requireNonNull(admission, "admission must not be null");
         this.hashing = Objects.requireNonNull(hashing, "hashing must not be null");
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
@@ -288,9 +302,10 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         Mono<Operation> begin;
         if (numberedByInsert()) {
             // One statement sets the timeout, draws the number and records the operation (16p, T2).
+            // With the numbers its sub-processes may need drawn ahead, their records are held as well (16p-2, T9).
             begin = Mono.defer(() -> operations.beginNumbered(engine, new OperationRequest(definition.name(),
                 definition.version(), null, null, null, null, idempotencyKey, null, masker.summary(input)),
-                request, lockSetting));
+                request, lockSetting, holdsSubProcesses() ? subProcessBound(definition) : 0));
         } else {
             begin = engine.select("SELECT set_config('lock_timeout', :timeout, true) AS t",
                     Map.of("timeout", BoundValue.of(lockSetting))).then(sequence.next())
@@ -300,11 +315,12 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         Mono<ProcessResult<O>> transaction = begin
             .flatMap(started -> options.beforeSteps().apply(started)
                 .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)))
-            .flatMap(result -> Mono.deferContextual(view -> {
+            // Whatever is still held is written now, before the commit, so that it is counted with the process.
+            .flatMap(result -> engine.flushWrites().then(Mono.deferContextual(view -> {
                 engine.transactionState(view).ifPresent(state -> observations.recordStatements(definition.name(),
                     state.statements()));
                 return Mono.just(result);
-            }))
+            })))
             .contextWrite(context -> context.put(TransactionLockTimeout.class, new TransactionLockTimeout(lockSetting)));
         if (options.lockWait() != null) {
             ExecutionOptions.LockWait wait = new ExecutionOptions.LockWait(options.lockWait());
@@ -343,11 +359,21 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                 }
                 return RequestContexts.current().doOnNext(request -> requireCallable(definition, request))
                     .flatMap(request -> {
-                        Mono<Operation> begin = numberedByInsert()
-                            ? operations.beginNumbered(engine(), new OperationRequest(definition.name(),
+                        StorageEngine engine = engine();
+                        // A number drawn ahead by the root: the record is held with the transaction's writes (16p-2,
+                        // T9) and written with the next statement, typically the sub-process's first lock.
+                        java.util.Optional<Long> reserved = holdsSubProcesses()
+                            ? engine.transactionState(view).flatMap(state -> state.takeReservedSequence(parent.processSeqId()))
+                            : java.util.Optional.empty();
+                        Mono<Operation> begin = reserved.isPresent()
+                            ? engine.withWriteBatch(operations.begin(engine, new OperationRequest(definition.name(),
+                                definition.version(), reserved.get(), parent.processSeqId(), null, null, null,
+                                parent.opTime(), masker.summary(input)), request))
+                            : numberedByInsert()
+                            ? operations.beginNumbered(engine, new OperationRequest(definition.name(),
                                 definition.version(), null, parent.processSeqId(), null, null, null, parent.opTime(),
                                 masker.summary(input)), request, null)
-                            : sequence.next().flatMap(seq -> operations.begin(engine(), new OperationRequest(
+                            : sequence.next().flatMap(seq -> operations.begin(engine, new OperationRequest(
                                 definition.name(), definition.version(), seq, parent.processSeqId(), null, null, null,
                                 parent.opTime(), masker.summary(input)), request));
                         return begin.flatMap(started ->
@@ -401,6 +427,43 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         return sequence instanceof DatabaseProcessSequence;
     }
 
+    /**
+     * Whether sub-processes' operation records, results and events are held with the transaction's writes (ROADMAP
+     * phase 16p-2, T9): with writes held for whole transactions, numbers drawn by the insert, and none of the tables
+     * they go to having triggers of their own.
+     */
+    private boolean holdsSubProcesses() {
+        return batching.acrossTransaction() && batching.holdsShared() && numberedByInsert();
+    }
+
+    /**
+     * How many sub-processes one execution of {@code definition} may start through its {@code CallProcess} steps, theirs
+     * included (a {@code forEach} counted once), at most {@link OperationRecorder#MAX_RESERVE}: the numbers the root
+     * draws ahead. Sub-processes beyond them (more calls of a {@code forEach}, an import's rows) draw their own.
+     */
+    int subProcessBound(ProcessDefinition<?, ?, ?> definition) {
+        return subProcessBounds.computeIfAbsent(definition.name() + "@" + definition.version(),
+            key -> Math.min(OperationRecorder.MAX_RESERVE, calls(definition, 0)));
+    }
+
+    private int calls(ProcessDefinition<?, ?, ?> definition, int depth) {
+        ProcessRegistry registry = beans.getBeanProvider(ProcessRegistry.class).getIfAvailable();
+        if (registry == null || depth > OperationRecorder.MAX_RESERVE) {
+            return 0;
+        }
+        int count = 0;
+        for (StepDefinition<?, ?> step : definition.steps()) {
+            if (step.phase() == StepPhase.IN_TX && !step.isInline() && CallProcess.class.equals(step.handlerClass())
+                && step.metadata() instanceof CallProcess.Metadata<?> call) {
+                count += 1 + CallProcess.resolve(registry, call).map(target -> calls(target, depth + 1)).orElse(0);
+            }
+            if (count >= OperationRecorder.MAX_RESERVE) {
+                return OperationRecorder.MAX_RESERVE;
+            }
+        }
+        return count;
+    }
+
     /** The storage of the operation tables, where every process transaction runs. */
     StorageEngine engine() {
         return storages.getEngine(poolRef);
@@ -431,7 +494,8 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                 // The output is kept only where a replay needs it: op_process_result cannot be purged. Secrets are
                 // left out (null), so a replay returns them as null.
                 .flatMap(output -> (keepOutput
-                        ? operations.recordResult(engine, operation.processSeqId(), masker.withoutSecrets(output))
+                        ? held(engine, operations.recordResult(engine, operation.processSeqId(),
+                            masker.withoutSecrets(output)))
                         : Mono.<Void>empty())
                     .thenReturn(new ProcessResult<>(operation.processSeqId(), output, false)))
                 .doOnSuccess(result -> definition.steps().stream()
@@ -441,12 +505,19 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         });
     }
 
+    /** {@code write} held with the transaction's writes, where they are held (16p-2, T9). */
+    private Mono<Void> held(StorageEngine engine, Mono<Void> write) {
+        return holdsSubProcesses() ? engine.withWriteBatch(write) : write;
+    }
+
     /**
      * Violations a failing step reports come together with those collected before it, each once: a step that
      * refuses to go on because of the collected violations (such as {@code SaveChanges}) reports those very ones.
      */
     private static BusinessRuleViolationException withCollected(ProcessContext ctx, BusinessRuleViolationException e) {
-        if (!ctx.hasViolations()) {
+        // A held write's conflict that surfaced in a later step is the write's alone, as its own step reported it
+        // (16p-2): the violations collected since came after it.
+        if (!ctx.hasViolations() || com.jabiz.runtime.storage.HeldWriteErrors.isHeldWriteError(e)) {
             return e;
         }
         List<Violation> all = new ArrayList<>(ctx.violations());
@@ -457,7 +528,13 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     private <M, C extends ProcessContext> Mono<Void> runStep(
         ProcessDefinition<?, ?, C> definition, StepDefinition<M, C> step, C ctx
     ) {
-        return Mono.defer(() -> dispatch(implementation(step), step, ctx))
+        StepImplementation<M, C> implementation = implementation(step);
+        // A blocking step may reach beyond the database (another system, D38): what is held is written before it, so
+        // that a write that is going to fail fails before that, as it did when every write was sent at once.
+        Mono<Void> before = implementation instanceof BlockingStep<M, C> ? engine().flushWrites() : Mono.empty();
+        return before.then(Mono.defer(() -> dispatch(implementation, step, ctx)))
+            .contextWrite(context -> context.put(WriteOrigin.class, new WriteOrigin(definition.name() + " v"
+                + definition.version() + " (seq " + ctx.processSeqId() + ") step '" + step.stepName() + "'")))
             .doOnError(error -> log.warn("Process {} v{} (seq {}) failed at step '{}': {}",
                 definition.name(), definition.version(), ctx.processSeqId(), step.stepName(), error.toString()));
     }

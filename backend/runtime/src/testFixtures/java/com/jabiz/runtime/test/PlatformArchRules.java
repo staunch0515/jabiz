@@ -54,6 +54,47 @@ public final class PlatformArchRules {
     private PlatformArchRules() {}
 
     /**
+     * The ways to send a statement to the database besides the storage engine: Spring's {@code DatabaseClient}, the
+     * R2DBC SPI's connections, statements and batches, Spring Data R2DBC's template and repositories, and the
+     * connection utilities that hand out the transaction's connection. Their subtypes count too.
+     */
+    static final List<String> DATABASE_ENTRY_POINTS = List.of("org.springframework.r2dbc.core.DatabaseClient",
+        "io.r2dbc.spi.ConnectionFactory", "io.r2dbc.spi.Connection", "io.r2dbc.spi.Statement", "io.r2dbc.spi.Batch",
+        "org.springframework.r2dbc.connection.ConnectionFactoryUtils",
+        "org.springframework.data.r2dbc.core.R2dbcEntityOperations",
+        "org.springframework.data.repository.reactive.ReactiveCrudRepository");
+
+    /** The platform's own classes that talk to the database outside every transaction. */
+    static final List<String> OUTSIDE_TRANSACTIONS = List.of(
+        // The startup check of the metamodel.
+        "com.jabiz.runtime.entity.MetaModelConsistencyChecker",
+        // The default ProcessSequence and its configuration: the platform numbers operations by the insert of their
+        // record, so it never asks it inside a transaction; an application that replaces it is asked instead.
+        "com.jabiz.runtime.process.DatabaseProcessSequence", "com.jabiz.runtime.process.ProcessConfig",
+        // Connections of their own: the job lock, the dictionary notifications.
+        "com.jabiz.runtime.job.JobConfig", "com.jabiz.runtime.dictionary.DictionaryChangeListener");
+
+    /**
+     * Statements of a transaction go through the storage engine (decision D46 rule 1): it writes the rows the
+     * transaction holds before any statement that may read them, which a statement sent past it on the same connection
+     * would not see. So no class may use a database entry point ({@link #DATABASE_ENTRY_POINTS}, subtypes included)
+     * besides the engine's package ({@code com.jabiz.runtime.storage}), the platform's classes that run outside every
+     * transaction ({@link #OUTSIDE_TRANSACTIONS}) and {@code allowed}: an application's own classes that do the same
+     * (rarely any). Applications check every class of theirs with it, whatever the package.
+     */
+    public static ArchRule transactionsReachTheDatabaseOnlyThroughTheStorageEngine(String... allowed) {
+        Set<String> exempt = new java.util.HashSet<>(OUTSIDE_TRANSACTIONS);
+        exempt.addAll(List.of(allowed));
+        DescribedPredicate<JavaClass> entryPoint = DescribedPredicate.describe("a database entry point",
+            type -> DATABASE_ENTRY_POINTS.stream().anyMatch(type::isAssignableTo));
+        return noClasses().that().resideOutsideOfPackage("com.jabiz.runtime.storage..")
+            .and(DescribedPredicate.describe("not exempt", (JavaClass type) -> !exempt.contains(type.getName())))
+            .should().dependOnClassesThat(entryPoint)
+            .because("statements of a transaction go through the storage engine, which writes held rows first "
+                + "(decision D46 rule 1)");
+    }
+
+    /**
      * Business code calls other systems only through the declared external services of a blocking step
      * ({@code ExternalServices}, decision D38), whose every request the platform checks against the service's hosts,
      * times and observes. So the business packages may use no network client: no JDK, Spring or Netty HTTP client,

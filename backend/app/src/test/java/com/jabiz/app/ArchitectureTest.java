@@ -93,6 +93,45 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /**
+     * Statements of a transaction go through the storage engine (decision D46 rule 1), checked on every class of the
+     * platform and of this application with the shared rule (application branches call it on all of theirs).
+     */
+    @Test
+    void transactionsReachTheDatabaseOnlyThroughTheStorageEngine() {
+        PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine().check(CLASSES);
+    }
+
+    /** The rule sees a class that sends a statement past the engine, through a subtype too. */
+    @Test
+    void theStorageRuleCatchesADirectStatement() {
+        JavaClasses offenders = new ClassFileImporter().importClasses(DirectStatements.WithClient.class);
+        assertThat(PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine().evaluate(offenders)
+            .hasViolation()).isTrue();
+        JavaClasses subtype = new ClassFileImporter().importClasses(DirectStatements.WithConnection.class,
+            DirectStatements.DriverConnection.class);
+        assertThat(PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine(
+            DirectStatements.DriverConnection.class.getName()).evaluate(subtype).hasViolation()).isTrue();
+    }
+
+    /** Classes that talk to the database past the storage engine: offenders of the rule above. */
+    static final class DirectStatements {
+        static final class WithClient {
+            Object run(org.springframework.r2dbc.core.DatabaseClient db) {
+                return db.sql("SELECT 1");
+            }
+        }
+
+        /** A connection type of a driver: a subtype of the SPI's. */
+        interface DriverConnection extends io.r2dbc.spi.Connection {}
+
+        static final class WithConnection {
+            Object run(DriverConnection connection) {
+                return connection.createStatement("SELECT 1");
+            }
+        }
+    }
+
     /** Extension points (RulePredicate, StepImplementation, and every later one in core) are synchronous. */
     @Test
     void coreAndBusinessMethodsNeverReturnReactiveTypes() {

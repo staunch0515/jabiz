@@ -41,7 +41,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
 | `jabiz.auth.rate_limited` | 登录类接口按地址限流的拒绝（10 §4.1，D47；只计数，不记客户端地址） | `kind`（`password` / `oidc_callback` / `second_factor` / `refresh`） |
 | `jabiz.auth.hashing.busy` | 口令哈希的并发上限拒绝了一次请求（10 §4.2，D47；只计数） | 无 |
-| `jabiz.process.statements`（分布，不是观测） | 根流程在其事务中、提交之前发出的语句数（阶段 16p，D46：热门锁的容量由锁内的往返次数决定） | `process` |
+| `jabiz.process.statements`（分布，不是观测） | 根流程在其事务中、提交之前发出的语句数（阶段 16p，D46：热门锁的容量由锁内的往返次数决定；16p-2 起含提交前写出缓冲的那一条） | `process` |
 
 另外每个都有 `outcome`（`success`、`rejected`＝映射为 4xx 的领域异常、`error`＝其他、`cancelled`）与 `status`（映射的 HTTP 状态，成功为 `none`），
 以下除外：`jabiz.external.call`、`jabiz.external.job`（只有 `outcome`，见上表）、`jabiz.process.admission`（只有 `family` `process` `result`）、
