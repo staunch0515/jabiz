@@ -3559,3 +3559,5 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
   且生产中交接在 `Schedulers.parallel()` 的多个线程上执行，收到的顺序本就不保证。闸门的行为不变：`Permit.sequence()` 记录发放顺序（锁内递增，包内可见）；
   属性测试改为断言每键许可按到达顺序发放，收到顺序只在 `concurrency = 1` 时断言（Javadoc 说明原因）；`AdmissionGateTest` 新增该序列的确定性用例（12 个）。
   06 §4.2 与 D45 第 1 条写明先进先出指发放的顺序。验证：该种子与 6 次 3000 次的新种子运行全部通过（先删 `.jqwik-database`），压力测试连续 5 次通过。
+  同一分支另修 `ObservabilityIT` 的偶发失败：许可在根流程真正结束时（结果送出之后，D45 ②）才归还，HTTP 响应可能先到，测试立即读准入仪表会读到 1；
+  改为至多等 2 秒仪表归零（生产代码不变；把归还人为推迟 200 ms 时旧断言失败、新断言通过）。`ProcessAdmissionIT`、`CommerceAdmissionIT` 已用轮询等待，无需改动。
