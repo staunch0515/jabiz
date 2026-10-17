@@ -43,6 +43,31 @@ function SentBack({ publication }: { publication: Publication }) {
   )
 }
 
+/**
+ * What an administrator did to the publication (Q10b, review M2): paused it (the sponsor cannot resume it) or ended
+ * it, with the reason they gave.
+ */
+function AdminNotice({ publication }: { publication: Publication }) {
+  const { t } = useTranslation(SPONSOR)
+  const paused = publication.status === 'PAUSED' && publication.pausedBy === 'ADMIN'
+  const ended = publication.status === 'ENDED' && publication.endReason === 'ADMIN'
+  if (!paused && !ended) return null
+  const key = paused ? 'adminPaused' : 'adminEnded'
+  return (
+    <Alert variant="warning" data-testid="publication-admin-notice">
+      <AlertTitle>{t(`publishing.detail.${key}`)}</AlertTitle>
+      <AlertDescription>
+        <p>{t(`publishing.detail.${key}Text`)}</p>
+        {publication.adminReason && (
+          <p data-testid="publication-admin-reason">
+            {t('publishing.detail.adminReason', { reason: publication.adminReason })}
+          </p>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 /** A submitted publication: frozen (D-Q4-2), shown as it is with what can still be done in its state. */
 function PublicationView({ detail, stale, onStale }: {
   detail: PublicationDetail
@@ -84,6 +109,7 @@ function PublicationView({ detail, stale, onStale }: {
       {publication.status === 'FUNDS_SHORT' && (
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
+      <AdminNotice publication={publication} />
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,

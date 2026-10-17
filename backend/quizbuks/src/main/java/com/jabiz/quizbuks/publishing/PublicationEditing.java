@@ -176,7 +176,30 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /**
+     * Loads the ban of the publication's sponsor (none when they have none) into {@link #BAN_ROWS}: an approval that
+     * comes after a ban does not put the publication on (Q10b, review M2).
+     */
+    static <I, O> void loadSponsorBan(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, EntityInstance> publication) {
+        pb.step("Load the sponsor's ban", QueryEntities.<ProcessContext>of(
+            QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                return EntityQuery.builder().where(new QueryPredicate.In("userId",
+                    userIds(found == null ? null : found.get("sponsorId")))).limit(1).build();
+            }, BAN_ROWS));
+    }
+
+    /** Whether the sponsor read by {@link #loadSponsorBan} is banned. */
+    static boolean sponsorBanned(ProcessContext ctx) {
+        EntityInstance ban = first(ctx, BAN_ROWS);
+        return ban != null && com.jabiz.quizbuks.identity.BanRules.banned(ban.attributes());
+    }
+
     private static List<Object> userIds(String actorId) {
+        if (actorId == null) {
+            return new ArrayList<>();
+        }
         List<Object> ids = new ArrayList<>();
         try {
             UUID id = UUID.fromString(actorId);

@@ -335,6 +335,7 @@ public final class PublicationLifecycle {
                 }, false))
                 .steps(PublicationEditing::loadSchedule)
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, ctx -> first(ctx, FOUND)))
+                .steps(b -> PublicationEditing.loadSponsorBan(b, ctx -> first(ctx, FOUND)))
                 .step("Load the request", QueryEntities.<ProcessContext>of(ApprovalEntities.REQUEST_DATASET,
                     ctx -> EntityQuery.builder().where(new QueryPredicate.In("requestId",
                         ownRequest(ctx) ? PublicationEditing.ids(input(ctx).requestId()) : new ArrayList<>()))
@@ -384,7 +385,12 @@ public final class PublicationLifecycle {
                 PublicationEditing.unchanged(ctx, publication);
                 return;
             }
-            if (ctx.opTime().isBefore(instant(publication.get("endAt")))) {
+            if (PublicationEditing.sponsorBanned(ctx)) {
+                // Banned while it was reviewed (Q10b, M2): a banned sponsor's publication does not go on.
+                values.put("status", DRAFT);
+                values.put("rejectCode", com.jabiz.quizbuks.identity.AccountCodes.USER_BANNED);
+                values.put("rejectReason", null);
+            } else if (ctx.opTime().isBefore(instant(publication.get("endAt")))) {
                 values.putAll(PublicationEditing.goingOn(ctx, publication, approval.requestId()));
             } else {
                 // Its time ran out while it was reviewed (question Q4-5): back to the draft, with the reason.

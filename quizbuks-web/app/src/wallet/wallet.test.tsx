@@ -35,6 +35,8 @@ interface Server {
   accounts?: (Record<string, unknown> | null)[]
   onboard?: { status: number; body: unknown }
   ledger?: Record<string, unknown>[]
+  /** The row of `qb.app.wallet`. */
+  wallet?: Record<string, unknown>
 }
 
 /** The server as the wallet pages see them, for a verified taker in Japan. Records what was posted. */
@@ -63,8 +65,8 @@ function server(options: Server = {}) {
         return json(200, [{ code: 'PENDING', label: 'Being set up' }, { code: 'ENABLED', label: 'Enabled' },
           { code: 'RESTRICTED', label: 'Restricted' }, { code: 'DEAUTHORIZED', label: 'Disconnected' }])
       case '/api/queries/qb.app.wallet':
-        return json(200, { items: [{ available: '1250', totalEarned: '1500', pendingCount: 1, pendingAmount: '300',
-          inTransfer: '250' }], offset: 0, limit: 1 })
+        return json(200, { items: [options.wallet ?? { available: '1250', totalEarned: '1500', pendingCount: 1,
+          pendingAmount: '300', inTransfer: '250', held: '0', heldOpen: '0', heldUntil: null }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.ledger':
         return json(200, { items: options.ledger ?? [
           { entryId: 'a1', type: 'REWARD', status: 'COMPLETED', amount: '1350', occurredAt: '2026-10-14T01:00:00Z',
@@ -126,6 +128,28 @@ describe('the wallet helpers', () => {
 })
 
 describe('the wallet', () => {
+  it('shows what is held back from transfers and until when (Q10b)', async () => {
+    const { queryBodies } = server({ wallet: { available: '1250', totalEarned: '1500', pendingCount: 0,
+      pendingAmount: '0', inTransfer: '0', held: '450', heldOpen: '150', heldUntil: '2026-10-21T01:00:00Z' } })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-transferable')).toHaveTextContent('800 Kudos')
+    expect(screen.getByTestId('wallet-held')).toHaveTextContent('450 Kudos')
+    expect(screen.getByTestId('wallet-held-until')).toHaveTextContent('Can be transferred from')
+    expect(screen.getByTestId('wallet-held-open')).toBeInTheDocument()
+    // The server is asked as of now: what was paid within the hold period before it is held.
+    expect(queryBodies('qb.app.wallet').at(-1)).toMatchObject({ params: { at: expect.any(String) } })
+  })
+
+  it('says nothing of holds when nothing is held', async () => {
+    server()
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-available')).toHaveTextContent('1,250 Kudos')
+    expect(screen.queryByTestId('wallet-transferable')).toBeNull()
+    expect(screen.queryByTestId('wallet-held')).toBeNull()
+  })
+
   it('shows the Kudos, what waits and the transactions, and searches them', async () => {
     const { queryBodies } = server()
     window.history.replaceState(null, '', '/wallet')

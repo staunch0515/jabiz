@@ -124,6 +124,16 @@ export const PERMISSION = {
   generatedFileRead: 'file.generated.read',
   controlPropose: 'control.propose',
   controlPublish: 'control.publish',
+  /** Taking publications down (Q10b). */
+  contentWrite: 'qb.admin.content.write',
+} as const
+
+/** The administrators' processes on a publication (Q10b, review M2), run from the platform's process page. */
+export const PUBLICATION_ADMIN = {
+  pause: 'QB_PUBLICATION_ADMIN_PAUSE',
+  resume: 'QB_PUBLICATION_ADMIN_RESUME',
+  end: 'QB_PUBLICATION_ADMIN_END',
+  version: 1,
 } as const
 
 /** The widths the policy `qb.content.image` keeps (a smaller image is answered with the original). */

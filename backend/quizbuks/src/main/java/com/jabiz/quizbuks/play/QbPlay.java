@@ -39,6 +39,8 @@ public final class QbPlay {
      * An attempt: who answers which publication (once: the pair is unique), until when, the order its options are
      * shown in and the answers so far; once finished, the result (with the correct answers, written only then), the
      * reward and how it was settled. Only {@code currentIndex} and {@code answers} change while it is in progress.
+     * Answers and the result name options by their position in the attempt (Q10b), which only the option order maps
+     * back to the version's numbers; the order is sensitive (no read interface returns it).
      */
     public static final EntityDefinition ATTEMPT_ENTITY = EntityDefinition.define(ATTEMPT, eb -> {
         eb.physicalTable("qb_attempt");

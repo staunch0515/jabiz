@@ -267,6 +267,42 @@ describe('PublicationReviewPage', () => {
     expect(reads).toBe(settled)
   }, 15_000)
 
+  it('links a content administrator to taking a running publication down (Q10b)', async () => {
+    server.permissions = new Set([...server.permissions, 'qb.admin.content.write'])
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    renderPublication()
+    const pause = await screen.findByTestId('publication-admin-pause')
+    expect(pause).toHaveAttribute('href',
+      `/processes/QB_PUBLICATION_ADMIN_PAUSE/1?publicationId=${PUBLICATION_ID}`)
+    expect(screen.getByTestId('publication-admin-end')).toHaveAttribute('href',
+      `/processes/QB_PUBLICATION_ADMIN_END/1?publicationId=${PUBLICATION_ID}`)
+    expect(screen.queryByTestId('publication-admin-resume')).not.toBeInTheDocument()
+  })
+
+  it('offers an administrator\'s pause its resume, with the reason', async () => {
+    server.permissions = new Set([...server.permissions, 'qb.admin.content.write'])
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('PAUSED'), pausedBy: 'ADMIN',
+      adminReason: 'Reported as misleading' })
+    renderPublication()
+    expect(await screen.findByTestId('publication-admin-resume')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-admin-pause')).not.toBeInTheDocument()
+    expect(screen.getByTestId('publication-admin-paused')).toBeInTheDocument()
+    expect(screen.getByTestId('publication-not-pending')).toHaveTextContent('Reported as misleading')
+  })
+
+  it('offers nothing to take down without the permission, or once ended', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    const { unmount } = renderPublication()
+    expect(await screen.findByTestId('publication-not-pending')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-admin')).not.toBeInTheDocument()
+    unmount()
+    server.permissions = new Set([...server.permissions, 'qb.admin.content.write'])
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('ENDED'))
+    renderPublication()
+    expect(await screen.findByTestId('publication-not-pending')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-admin')).not.toBeInTheDocument()
+  })
+
   it('offers no decision once the publication left the review, and shows why it was sent back', async () => {
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('DRAFT'))
     renderPublication()

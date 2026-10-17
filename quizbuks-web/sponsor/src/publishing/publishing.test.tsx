@@ -289,6 +289,26 @@ describe('a submitted publication', () => {
     expect(screen.getByTestId('publication-resume')).toBeInTheDocument()
   })
 
+  it('says an administrator paused it, with the reason, and offers no resume (Q10b)', async () => {
+    server({ publication: { ...DRAFT, status: 'PAUSED', revision: 8, pausedAt: '2026-10-14T03:00:00Z',
+      pausedBy: 'ADMIN', adminReason: 'Reported as misleading' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-admin-notice')).toHaveTextContent('Paused by QuizBuks')
+    expect(screen.getByTestId('publication-admin-reason')).toHaveTextContent('Reason: Reported as misleading')
+    expect(screen.queryByTestId('publication-resume')).toBeNull()
+    expect(screen.queryByTestId('publication-pause')).toBeNull()
+  })
+
+  it('says an administrator ended it', async () => {
+    server({ publication: { ...DRAFT, status: 'ENDED', revision: 8, endedAt: '2026-10-14T03:00:00Z',
+      endReason: 'ADMIN', adminReason: 'Fraudulent' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-admin-notice')).toHaveTextContent('Ended by QuizBuks')
+    expect(screen.getByTestId('publication-admin-reason')).toHaveTextContent('Fraudulent')
+  })
+
   it('says so when the publication is not the sponsor\'s', async () => {
     server({ publication: null })
     window.history.replaceState(null, '', '/publications/p1')

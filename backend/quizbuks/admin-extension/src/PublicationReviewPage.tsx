@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
   UserName,
+  paths,
   useAuth,
   type DescriptionItem,
 } from '@jabiz/admin'
@@ -33,7 +34,7 @@ import {
 } from './api'
 import { AfterDecision, LoadFailed, Section } from './components'
 import { forbidden, money, QUEUE, useAfterDecision, useLabels, when } from './hooks'
-import { DICTIONARY, PATH, PENDING_REVIEW, PERMISSION } from './ids'
+import { DICTIONARY, PATH, PENDING_REVIEW, PERMISSION, PUBLICATION_ADMIN } from './ids'
 import { VersionPreview } from './VersionPreview'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -263,6 +264,12 @@ export default function PublicationReviewPage() {
         {p.rejectReason && (
           <DescriptionList items={[{ key: 'reason', label: t('publication.rejectReason'), value: p.rejectReason }]} />
         )}
+        {p.status === 'PAUSED' && p.pausedBy === 'ADMIN' && (
+          <p data-testid="publication-admin-paused">{t('publication.adminPaused')}</p>
+        )}
+        {p.adminReason && (
+          <DescriptionList items={[{ key: 'adminReason', label: t('publication.adminReason'), value: p.adminReason }]} />
+        )}
       </div>
     )
   } else if (!can(PERMISSION.reviewPublication)) {
@@ -303,6 +310,42 @@ export default function PublicationReviewPage() {
       <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
       <Content versionId={versionId} version={version} />
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
+      {can(PERMISSION.contentWrite) && <AdminActions publication={p} />}
     </div>
+  )
+}
+
+/** The running states an administrator may act on (the processes' `actsOn`; the server decides all the same). */
+const RUNNING = ['SCHEDULED', 'LIVE', 'FUNDS_SHORT', 'PAUSED']
+
+/**
+ * Taking a publication down (Q10b, review M2): links to the platform's process pages with the publication filled in,
+ * where the administrator gives the reason (the sponsor reads it) and passes a second factor.
+ */
+function AdminActions({ publication }: { publication: Publication }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  if (!RUNNING.includes(publication.status)) return null
+  const adminPaused = publication.status === 'PAUSED' && publication.pausedBy === 'ADMIN'
+  const link = (name: string) =>
+    `${paths.process(name, PUBLICATION_ADMIN.version)}?${new URLSearchParams({ publicationId: publication.publicationId })}`
+  return (
+    <Section title={t('publication.admin')} testId="publication-admin">
+      <p className="text-muted-foreground text-sm">{t('publication.adminHint')}</p>
+      <div className="flex flex-wrap gap-4">
+        {!adminPaused && (
+          <Link to={link(PUBLICATION_ADMIN.pause)} className={linkClass} data-testid="publication-admin-pause">
+            {t('publication.adminPause')}
+          </Link>
+        )}
+        {adminPaused && (
+          <Link to={link(PUBLICATION_ADMIN.resume)} className={linkClass} data-testid="publication-admin-resume">
+            {t('publication.adminResume')}
+          </Link>
+        )}
+        <Link to={link(PUBLICATION_ADMIN.end)} className={linkClass} data-testid="publication-admin-end">
+          {t('publication.adminEnd')}
+        </Link>
+      </div>
+    </Section>
   )
 }

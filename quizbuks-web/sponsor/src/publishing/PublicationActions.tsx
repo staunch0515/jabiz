@@ -106,7 +106,7 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
   const { t } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const [copying, setCopying] = useState(false)
-  const can = actionsOf(publication.status)
+  const can = actionsOf(publication.status, publication.pausedBy)
   const id = publication.publicationId
 
   /** Runs a change; afterwards the lists and this page read again. A failure keeps the confirmation open. */

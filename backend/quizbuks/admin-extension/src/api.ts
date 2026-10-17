@@ -189,6 +189,9 @@ export interface Publication {
   approvalRequestId: string | null
   submittedAt: string | null
   rejectReason: string | null
+  /** Q10b: who paused it (SPONSOR or ADMIN) and the reason an administrator gave. */
+  pausedBy: string | null
+  adminReason: string | null
 }
 
 export async function readPublication(publicationId: string): Promise<Publication | null> {
@@ -214,6 +217,8 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     approvalRequestId: str(row.approvalRequestId),
     submittedAt: str(row.submittedAt),
     rejectReason: str(row.rejectReason),
+    pausedBy: str(row.pausedBy),
+    adminReason: str(row.adminReason),
   }
 }
 

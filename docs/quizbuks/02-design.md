@@ -66,9 +66,9 @@ docs/quizbuks/               本文件等
 |---|---|
 | `QB_TAKER` | `qb.play`（浏览发布、答题）、`qb.me`（本人资料、钱包、流水、消息）、`qb.payout.onboard`（开通收款账户）、`qb.account.read`（本人资料与登录记录，Q2）、`qb.sponsor.avatar.read`（发布人头像，Q2） |
 | `QB_SPONSOR` | `qb.sponsor.me`、`qb.content.write`、`qb.content.file.read`（读内容文件，Q3；Q5 再授予答题人）、`qb.ai.use`、`qb.publication.write`、`qb.topup`、`qb.sponsor.finance.read`、`qb.broadcast.write`、`qb.account.read`、`qb.sponsor.avatar.read`、`document.archive.read`（Q9d：下载本人签发的充值收据） |
-| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
+| `QB_ADMIN_CONTENT` | `qb.admin.users.read`、`qb.admin.quiz.read`（只读全部模版与版本，Q3）、`qb.content.file.read`、`qb.review.sponsor`、`qb.review.publication`、`qb.admin.content.write`（下架发布：管理员暂停、恢复、结束，Q10b；以后 FAQ、条款、公告）、`qb.sponsor.avatar.read`、`approval.decide`、`task.read` |
 | `QB_ADMIN_FINANCE` | `qb.admin.users.read`、`qb.admin.finance.read`、`qb.payout.review`、`qb.reconcile`、`qb.sponsor.avatar.read`、`ledger.read`、`report.issue`、`report.archive.read`（Q9c：读已签发的月报）、`approval.decide`、`task.read`、`control.publish`（发布受控变更，超级管理员不持有）、`qb.journal.export`、`qb.journal.confirm`、`file.generated.read`（Q9d：分录导出、记录外部凭证号、下载存档的 CSV）|
-| `QB_ADMIN_SUPER` | 上述全部 + `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
+| `QB_ADMIN_SUPER` | 上述全部（`control.publish`、`inbound.read` 与 `approval.decide` 除外：Q10b 的职责分离 `QbSodRules`）+ `qb.admin.users.ban`、`platform.param.read`、`control.propose`、平台安全管理权限（不再有 `platform.param.write`，见下） |
 
 - 另有两个公用权限（Q1）：`qb.country.read`（读国家字典，五个角色都有）、`qb.setup`（执行 `QB_SETUP`，超级管理员；平台的 `ADMIN` 角色持有全部权限）。
 - 不授予任何角色的权限：`qb.content.view.write`（数据视图的写权限，Q3、Q4）、`qb.content.system`（`QB_QUIZ_RELEASE_FILES`，只由 `QB_QUIZ_DELETE` 作为子流程运行）、`qb.publication.system`（Q4 的系统流程）、`qb.sponsor.system`（`QB_SPONSOR_APPROVAL_RESULT`，Q2）。
@@ -195,6 +195,7 @@ docs/quizbuks/               本文件等
 | `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`） | 结算、补发待支付、开发入账（Q5）、充值到账、转账发出与结果 | `QbWallet` 与该当事人的账本分录 |
 | `qb.account:<用户>` | 资料、入驻、商家资料、审批结果、封禁 / 解封（Q2）；收款账户的开通结果与 Stripe 通知（Q6b） | 该用户的 `QbProfile`、`QbSponsor`、`QbUserBan`、`QbPayoutAccount` |
 | `qb.wallet:TAKER:<用户>` | 用户钱包同步、转账的全部流程（Q6b） | 用户的 `QbWallet`（`TAKER`）、`QbTransfer` 与其 2120 / 2130 分录 |
+| `qb.topup:<商家>`（Q10b） | 只有充值开始 `QB_TOPUP_START`，单独持有、之后不取别的锁 | 新商家累计上限：同一商家的开始依次进行，未结的充值计入上限 |
 
 - Q6a 的充值流程（开始除外）、到账、过期、核实、手续费、退款与争议**都只取 `qb.wallet:SPONSOR:<充值的商家>`**（锁名取自服务端的记录，不取自 Stripe 的元数据），
   先在锁外按编号找到充值、再取锁、锁内重读；每日核对不取业务锁。所以不会与"发布锁 → 钱包锁"成环。
@@ -281,11 +282,12 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_AI_REQUEST` / `QB_AI_ACCEPT` | `qb.ai.use` | 经 G7 异步调用 OpenAI（模型来自业务参数）；结果为候选，商家选择 / 校对后才写入 |
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_DELETE` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导第一、二步保存草稿（可不完整），输出提交时会报告的全部问题与预计最大支出（第三步）；删除只限草稿；复制任意状态的本人发布为新草稿，可换版本或时间（Q4） |
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
-| `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态 |
+| `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态；管理员暂停的（`pausedBy = ADMIN`）商家不能恢复（422 `QB_PUBLICATION_ADMIN_PAUSED`，Q10b） |
+| `QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END` | `qb.admin.content.write`，总是要求二次验证（Q10b，评审 M2） | 管理员下架：必填理由（`adminReason`，商家可见），发布锁 → 开始锁；暂停后只有管理员能恢复，结束的 `endReason = ADMIN`。`actsOn(QbPublication)`：后台的行操作与扩展的发布页给出入口。封禁商家（`QB_USER_BAN`）在同一事务中以子流程逐个暂停其进行中的发布（账户锁 → 按编号升序的发布锁对） |
 | `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件；`qb.publication.system`，不授予任何角色） | 只认发布自己的请求（`approvalRequestId`）：批准且内容未变 → 上架；驳回（以存储的请求为准）→ 草稿附理由 |
 | `QB_VIEW` | `qb.play`，要求已验证 | 记第一次浏览（重复忽略）；发布须对本人可见，否则 404 |
-| `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查，余额在取锁前读，Q10a）→ 建会话（`deadline = now + 时限`，选项按会话打乱）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
-| `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（不取锁）；超过 `deadline` 拒绝；非法题号或选项一次报告全部 |
+| `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查，余额在取锁前读，Q10a）→ 建会话（`deadline = now + 时限`，选项按会话打乱，**编号为本次显示的位置 1..k**，Q10b）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
+| `QB_ATTEMPT_SAVE` | `qb.play`，要求已验证 | 保存当前题号与已选答案（按位置；不取锁）；超过 `deadline` 拒绝；非法题号或位置一次报告全部 |
 | `QB_ATTEMPT_SUBMIT` | `qb.play`，要求已验证 | 晚取锁：发布锁 → 超时（`now > deadline + 宽限 5 秒`）422 `QB_ATTEMPT_EXPIRED`（本次答案不用）；评分 → 档位 → 计数 →（奖励大于 0）钱包锁 → 无待支付且余额够则子流程 `LEDGER_POST`、`PAID`，否则 `PENDING` 并把 `LIVE` 的发布置 `FUNDS_SHORT`；名额或预算用完即 `ENDED`；发布事件 `qb.reward.settled` / `qb.reward.pending`（Q7 的站内信）。幂等键与会话状态防重复提交 |
 | `QB_ATTEMPT_EXPIRE` | 系统（`qb.play.system`） | 过了时限与宽限仍 IN_PROGRESS 的会话按已保存答案完成（`EXPIRED`），与提交同一套步骤；已完成或未到期的什么也不做。由逐项任务 `qb.attempt-expire`（每分钟，平台决策 D42）对模板 `qb.system.attempts-due` 选出的会话（`deadline + 宽限 < 计划时刻`，按截止时间，至多 2 000 个）逐个执行，各自一个事务（Q5b） |
 | `QB_TOPUP_START` | `qb.topup`，要求已验证 | 未封禁、入驻已通过；金额为受控参数 `qb.topup.min` – `max` 之间的整数 Kudos；未完成的至多 3 笔 → 插入 `OPENING`，登记作业 `qb.stripe.checkout-create`（会话的金额、引用与返回地址只来自服务端记录与配置）。页面轮询到 `OPEN` 后跳转 |
@@ -330,8 +332,10 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.app.feed` | 首页卡片：可见性（LIVE + 时间内 + 地区交集 + 名额与预算未满 + 商家可支付）、关键字、筛选（发布人国家与名称、金额、完成人数、开始日期）、排序（U-10 – U-14）。只读卡片、计数、钱包（与较小的国家、入驻）；"现在"（`at`）与国家（`country`）由调用方传，开始答题在服务端再判断 | `qb.play` |
 | `qb.app.publication` / `qb.app.publication-tiers` | 详情（U-20 – U-23）：卡片、简介与资料（版本快照中，不含题目）、发布人（入驻已通过的）、完成人数（近期窗口取统计表，累计取计数行）、本人的会话；档位取卡片 | `qb.play` |
 | `qb.app.history` | 本人的答题记录（U-40 – U-42）：已完成（合格 / 不合格）、进行中、已过时限待自动提交；关键字、日期、金额、状态筛选 | `qb.me` |
-| `qb.app.wallet` / `qb.app.ledger` | 余额概览（可用 = 本人 2120、累计收入、待支付、转账中 = 2130）与流水（奖励：已到账 / 处理中；Q6b 加转账），只读本人的分录（数据视图 `taker:LedgerEntry`，按 `dimension1` = 调用者）与会话（U-50 – U-52，Q6a） | `qb.me` |
+| `qb.app.wallet` / `qb.app.ledger` | 余额概览（可用 = 本人 2120、累计收入、待支付、转账中 = 2130；带 `at` 时另给保留中的奖励 `held`、其中争议冻结的 `heldOpen` 与预计可转时刻 `heldUntil`，规则同 `qb.wallet.taker-transferable`，Q10b）与流水（奖励：已到账 / 处理中；Q6b 加转账），只读本人的分录（数据视图 `taker:LedgerEntry`，按 `dimension1` = 调用者）与会话（U-50 – U-52，Q6a） | `qb.me` |
 | `qb.sponsor.wallet` / `qb.sponsor.topups` | 商家钱包概览（余额、待支付、累计充值与退款、累计支出）与本人充值记录（支付页地址只在 `OPEN` 且未过期时给出）（M-04，Q6a） | `qb.sponsor.finance.read` |
+| `qb.sponsor.topup-limit` | 每笔充值的范围与新商家的累计上限、剩余额度、期限（Q10b，评审 M3；判断仍在 `QB_TOPUP_START`） | `qb.sponsor.finance.read` |
+| `qb.wallet.taker-transferable` | 转账流程在用户钱包锁内读：2120 余额与保留中的奖励（最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，按 2120 贷方行的发布维度经卡片找到商家；Q10b，评审 M3） | `qb.payout.system` |
 | `qb.admin.topups` / `qb.admin.recon-runs` / `qb.admin.recon-items` | 全部充值（不含支付页地址）；核对结果与差异（F-06，Q6a） | `qb.admin.finance.read` / `qb.reconcile` |
 | `qb.app.inbox` | 个人消息 ∪ 匹配的公告，带未读 | `qb.me` |
 | `qb.sponsor.transactions` / `qb.sponsor.transaction-summary` | 商家交易明细与汇总（M-50 – M-52，Q9b，`plans/Q9b-sponsor-transactions.md`）：本人发布的奖励（已支付 = 已完成、待支付 = 处理中；完成但无奖励的不是交易）∪ 本人的充值（已支付 = 已完成、开立中 = 处理中、过期或失败 = 失败）。答题人只以资料的显示名出现，不读作答与结果、不给邮箱与用户编号（按用户筛选用 `userKey` = md5(商家编号 : 用户编号)：不是用户编号，同一答题人在每个商家处的键不同；它不是秘密，知道两个编号的人都能算出）；筛选全部是参数（类型、状态、发布、用户、期间、关键字），汇总只多一层聚合、条件相同，列表、汇总与导出因此一致。汇总按类型分开：奖励（支出）的已支付与待支付，充值（收入）的已到账（扣除退款）、退款或扣回、处理中与失败；两者的金额从不相加，只有笔数是总计 | `qb.sponsor.finance.read` |
@@ -398,7 +402,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 ## 9. 安全与反作弊
 
 - 正确答案只在提交后返回：答题人的数据视图与模板都不含 `correct`；结果页由提交流程的输出给出。
-- 选项按会话打乱（`optionOrder`），题目顺序不打乱。
+- 选项按会话打乱（`optionOrder`），题目顺序不打乱。答题人看到、保存、提交与结果中的选项编号都是本次显示的位置 1..k（Q10b，评审 M1），只在评分时经 `optionOrder` 换回版本的编号；`optionOrder` 是敏感字段，任何读接口（含答题人本人的数据视图）都不返回。
 - 一人一次：`QbAttempt (userId, publicationId)` 唯一。
 - 未激活（邮箱未验证）的用户不能写入任何 QuizBuks 数据：每个写入流程声明 `requiresVerifiedEmail()`（入口检查，403 `EMAIL_NOT_VERIFIED`）；商家入口不接受未验证的登录。
   因此预占他人邮箱注册的人留不下应用数据（平台接管时不清理应用数据）。

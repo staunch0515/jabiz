@@ -56,6 +56,10 @@ export interface Publication {
   submittedAt: string | null
   approvedAt: string | null
   pausedAt: string | null
+  /** Who paused it: 'SPONSOR' or 'ADMIN' (Q10b: only an administrator resumes what an administrator paused). */
+  pausedBy: string | null
+  /** The reason an administrator gave for pausing, resuming or ending it. */
+  adminReason: string | null
   endedAt: string | null
   endReason: string | null
   /** The number of changes; sent back as `baseRevision`. */
@@ -187,6 +191,8 @@ export function toPublication(row: Row): Publication {
     submittedAt: str(row.submittedAt),
     approvedAt: str(row.approvedAt),
     pausedAt: str(row.pausedAt),
+    pausedBy: str(row.pausedBy),
+    adminReason: str(row.adminReason),
     endedAt: str(row.endedAt),
     endReason: str(row.endReason),
     revision: num(row.revision),
@@ -338,15 +344,18 @@ export function isStale(error: unknown): boolean {
     v.ruleCode === PUBLISHING_CODE.changed || v.ruleCode === PUBLISHING_CODE.notDraft)
 }
 
-/** What can be done with a publication in a state (the processes' `actsOn`); the server decides all the same. */
-export function actionsOf(status: PublicationStatus) {
+/**
+ * What can be done with a publication in a state (the processes' `actsOn`); the server decides all the same. A
+ * publication an administrator paused is not the sponsor's to resume (Q10b).
+ */
+export function actionsOf(status: PublicationStatus, pausedBy: string | null = null) {
   return {
     edit: status === 'DRAFT',
     submit: status === 'DRAFT',
     delete: status === 'DRAFT',
     withdraw: status === 'PENDING_REVIEW',
     pause: status === 'SCHEDULED' || status === 'LIVE' || status === 'FUNDS_SHORT',
-    resume: status === 'PAUSED',
+    resume: status === 'PAUSED' && pausedBy !== 'ADMIN',
     copy: true,
   }
 }

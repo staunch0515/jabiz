@@ -15,13 +15,15 @@ steps:
   - process: QB_SETUP@latest
     input: {}
     expectOutput:
-      rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review]
+      rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review,
+        qb.sod.control-changes, qb.sod.security-administration]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
       p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
       p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
       p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
-      p22: "$.proposals[21]" }
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]" }
   - note: A second administrator publishes the parameters and the review rule.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -89,6 +91,21 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
 
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: sponsor-a, permissions: [qb.sponsor.me] }

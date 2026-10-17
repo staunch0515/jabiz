@@ -151,6 +151,29 @@ class AdminPublicationIT extends PlayItSupport {
     }
 
     @Test
+    void aBannedSponsorsPublicationInReviewDoesNotGoOnWhenApproved() {
+        String sponsor = newSponsor("s-m2-review");
+        String token = sponsorToken(sponsor);
+        autoApprove(false);
+        try {
+            String publicationId = draft(token, version(token, "M2 review quiz"), "M2 review");
+            Map<String, Object> submitted = run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+            assertThat(submitted).containsEntry("status", "PENDING_REVIEW");
+            String boss = userWithRole("m2-boss-review-" + java.util.UUID.randomUUID(), QbRoles.ADMIN_SUPER);
+            run("QB_USER_BAN", tokenOf(boss, QbRoles.ADMIN_SUPER), body("userId", sponsor, "reason", "Fraud"));
+            // Not running: the ban leaves it in review; the approval then sends it back.
+            assertThat(publication(publicationId)).containsEntry("status", "PENDING_REVIEW");
+            decide((String) submitted.get("approvalRequestId"), "APPROVE", null);
+            assertThat(publication(publicationId)).containsEntry("status", "DRAFT")
+                .containsEntry("reject_code", "QB_USER_BANNED");
+            assertThat(query("SELECT count(*) AS n FROM qb_publication_card WHERE publication_id = ?::uuid",
+                publicationId).getFirst()).containsEntry("n", 0L);
+        } finally {
+            autoApprove(true);
+        }
+    }
+
+    @Test
     void completionsRunningAlongsideAPauseAllFinish() throws Exception {
         warmUp();
         String sponsor = newSponsor("s-m2-race");
