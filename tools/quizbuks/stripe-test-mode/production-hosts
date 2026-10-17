@@ -1,0 +1,6 @@
+# Hosts that tools/quizbuks/stripe-test-mode/run.sh never drives, whatever --allow-remote says: one per line,
+# "*.example.com" for a domain and all its subdomains. Add every production (live-mode) host here as soon as it is
+# known (docs/quizbuks/launch-checklist.md); STRIPE_TM_PRODUCTION_HOSTS (comma-separated) adds more for one run.
+# No production host exists yet. For example:
+#   quizbuks.example.com
+#   *.quizbuks.example.com

@@ -1,3 +1,5 @@
 .env
 # tools/quizbuks/local-demo.sh: secrets, logs and files of the local demo
 .local-demo/
+# tools/quizbuks/stripe-test-mode/run.sh: secrets, logs, results and files of the Stripe test-mode runs
+.stripe-test-mode/
