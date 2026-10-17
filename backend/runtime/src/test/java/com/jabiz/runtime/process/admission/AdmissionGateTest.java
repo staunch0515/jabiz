@@ -220,6 +220,45 @@ class AdmissionGateTest {
         assertThat(gate.keys()).isZero();
     }
 
+    /**
+     * The shrunk sample of {@code AdmissionGatePropertyTest} (seed -4194691657679108731): first come first served is
+     * the order of giving out. A permit set free while nobody waits goes to a newcomer at once, who may then receive it
+     * before an earlier run receives the permit it was given before (06 §4.2).
+     */
+    @Test
+    void permitsAreGivenOutInOrderOfArrivalThoughANewcomerMayReceiveItsOwnFirst() {
+        AdmissionGate gate = new AdmissionGate(2, 100, 100,
+            family -> new AdmissionGate.Limits(2, 2, Duration.ofSeconds(1)), () -> time.now(TimeUnit.NANOSECONDS),
+            () -> held);
+        Run r0 = arrive(gate, "k", "r0");
+        Run r1 = arrive(gate, "k", "r1");
+        Run r2 = arrive(gate, "k", "r2");
+        Run r3 = arrive(gate, "k", "r3");
+        assertThat(order).containsExactly("r0", "r1");
+        // Both holders end: r2's and r3's permits are on their way; r2 goes away before receiving its own.
+        r0.release();
+        r1.release();
+        r2.subscription.dispose();
+        assertThat(gate.waiting()).isZero();
+        assertThat(gate.active()).as("r3's permit, on its way").isEqualTo(1);
+
+        // r2's permit came back with nobody waiting: the newcomer takes it at once.
+        Run r4 = arrive(gate, "k", "r4");
+        runHandOvers();
+        assertThat(order).as("received").containsExactly("r0", "r1", "r4", "r3");
+        assertThat(r2.admitted()).isFalse();
+        assertThat(r3.permit.get().sequence()).as("r3 was given its permit before r4")
+            .isLessThan(r4.permit.get().sequence());
+        assertThat(r0.permit.get().sequence()).isLessThan(r1.permit.get().sequence());
+        assertThat(r1.permit.get().sequence()).isLessThan(r3.permit.get().sequence());
+        assertThat(gate.active()).isEqualTo(2);
+
+        r3.release();
+        r4.release();
+        assertThat(gate.active()).isZero();
+        assertThat(gate.keys()).isZero();
+    }
+
     @Test
     void releasingTwiceFreesOnePermit() {
         AdmissionGate gate = gate(1, 10, 10);

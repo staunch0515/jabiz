@@ -23,8 +23,10 @@ import java.util.function.Supplier;
 /**
  * Fair counting gates by admission key, under one limit over all keys (decision D45). A run takes a permit of its
  * key - at most {@code concurrency} per key - and then one of the gate as a whole - at most {@code maxActive} - in
- * order of arrival at each: a permit set free goes to the first waiter, never to a newcomer. Only waiters wait, holders
- * never wait for another permit, so the two kinds of permit form no cycle.
+ * order of arrival at each: a permit set free goes to the first waiter, never to a newcomer. The order is that of giving
+ * permits out ({@link Permit#sequence()}); a waiter receives its permit on the scheduler, so with {@code concurrency}
+ * above 1 a newcomer admitted at once can start before an earlier run whose permit is still on its way. Only waiters
+ * wait, holders never wait for another permit, so the two kinds of permit form no cycle.
  *
  * <p>A full queue refuses at once ({@code QUEUE_FULL}); a waiter leaves the queue after its {@code maxWait}
  * ({@code WAIT_TIMEOUT}) or when its subscriber cancels; either way it holds nothing afterwards. A key with neither
@@ -57,6 +59,8 @@ final class AdmissionGate {
     private final ArrayDeque<Waiter> global = new ArrayDeque<>();
     private int active;
     private int waiting;
+    /** Permits handed out so far: numbers them in the order they were given. */
+    private long handedOut;
 
     AdmissionGate(int maxActive, int maxKeys, int maxWaiting, Function<String, Limits> limits, LongSupplier nanoTime,
         Supplier<Scheduler> scheduler) {
@@ -75,11 +79,22 @@ final class AdmissionGate {
     final class Permit {
         private final Key key;
         private final long admitted;
+        private final long sequence;
         private final AtomicBoolean released = new AtomicBoolean();
 
-        private Permit(Key key, long admitted) {
+        private Permit(Key key, long admitted, long sequence) {
             this.key = key;
             this.admitted = admitted;
+            this.sequence = sequence;
+        }
+
+        /**
+         * The order in which the gate gave this permit out (1, 2, ... over all keys). First come first served is an
+         * order of giving out: a permit handed over on the scheduler can reach its run after one given out later
+         * reaches a newcomer at once, so the order of receipt is not promised (06 §4.2).
+         */
+        long sequence() {
+            return sequence;
         }
 
         void release() {
@@ -258,7 +273,7 @@ final class AdmissionGate {
     private Permit admit(Key key) {
         active++;
         family(key.family).active++;
-        return new Permit(key, nanoTime.getAsLong());
+        return new Permit(key, nanoTime.getAsLong(), ++handedOut);
     }
 
     private void forgetIfIdle(Key key) {

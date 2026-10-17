@@ -209,7 +209,7 @@ ProcessDefinition.define(ORDER_CANCEL, 1, CancelInput.class, …, pb -> pb
   键函数在事务之前只从输入算出，不读数据。约定：族名与键取得和该流程最外层的 `HoldLock` 名称一致（示范 `commerce.order:<订单>`），由同一个辅助方法生成两者；
   `HoldLock` 取到与准入键同族而不同名的锁时每个流程记一次 warn（只记族名与流程名）。每个流程至多一个准入；同一族可被多个流程声明，它们共用队列。不声明即不排队。
 - **闸门**（每键、每实例）：同时持有许可（在事务中）的至多 `concurrency` 个（缺省 2：第 2 个在持锁者提交前做完锁前的工作并在咨询锁上等，持锁者一提交它就接上，锁不空转）；
-  先进先出，释放的许可直接交给队首；队列至多 `max-queue` 个（缺省 50），队满即**立即** 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`），不借连接；
+  先进先出，释放的许可直接交给队首（先进先出指**发放**许可的顺序：排队者在调度器上收到许可，`concurrency` > 1 时，无人排队时释放的许可立即发给新来者，它可能先于更早取得许可、尚在交付途中的请求开始运行；不保证收到的顺序）；队列至多 `max-queue` 个（缺省 50），队满即**立即** 503 `PROCESS_BUSY`（`reason = QUEUE_FULL`），不借连接；
   在队列中至多等 `max-wait`（缺省 2 秒，不超过 `jabiz.process.lock-timeout`），到时 503 `PROCESS_BUSY`（`WAIT_TIMEOUT`）。之后在咨询锁上的等待照旧由 `lock_timeout` 约束，且至多排在 `concurrency − 1` 个之后。
   `Retry-After` = 该键排队数 × 该族最近 50 次持有时间的平均 ÷ `concurrency`，向上取整，夹在 [`retry-after`（缺省 1 秒）, 30 秒] 之间。
 - **全局上限** `max-active`：所有键合计同时持有的许可，缺省 `spring.r2dbc.pool.max-size` 的一半（至少 1）；排队的流程合计至多用半个池，其余连接总是留给读取与不排队的流程。
