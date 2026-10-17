@@ -3,6 +3,10 @@
 一个镜像（`Dockerfile`，两段式：构建 jar 并打包三个前端，再放进 JRE 镜像）加 PostgreSQL 16（`docker-compose.yml`）。
 命令都在仓库根目录执行。
 
+**生产**：环境变量与密钥的完整清单（来源、轮换、缺少时的后果）、数据库规格与备份、恢复演练、首次启动、切换到正式模式、监控与告警、容量与常见故障的处理见
+[`docs/quizbuks/operations.md`](../../docs/quizbuks/operations.md)；上线前逐条核对 [`docs/quizbuks/launch-checklist.md`](../../docs/quizbuks/launch-checklist.md)。
+**Stripe 测试模式的全流程**（真实测试密钥：充值、答题、开户、转账、退款、争议、打款）：[`docs/quizbuks/stripe-test-mode.md`](../../docs/quizbuks/stripe-test-mode.md)（`tools/quizbuks/stripe-test-mode/run.sh`）。
+
 ```sh
 docker compose -f deploy/quizbuks/docker-compose.yml up -d --build      # 数据库 127.0.0.1:5440，应用 127.0.0.1:8080
 docker compose -f deploy/quizbuks/docker-compose.yml logs app           # 首次启动打印管理员密码
@@ -126,6 +130,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
   支付页上的按钮把签名的事件发回 `http://localhost:8080/api/inbound/stripe`。改用 Stripe 的真实测试模式：设置 `STRIPE_API_KEY`、
   `QB_STRIPE_API_URL=https://api.stripe.com`、`QB_STRIPE_API_HOSTS=api.stripe.com`、`QB_STRIPE_CHECKOUT_URL_PREFIX=https://checkout.stripe.com/`，
   并用 Stripe CLI 转发事件：`stripe listen --forward-to localhost:8080/api/inbound/stripe`（把它打印的 `whsec_…` 放进 `STRIPE_WEBHOOK_SECRET`）。
+  整个资金流程的脚本（本机启动、Connect 事件的转发与逐步核对）：`tools/quizbuks/stripe-test-mode/run.sh`，手册 `docs/quizbuks/stripe-test-mode.md`。
 - **本机的 compose** 没有 `.env` 也能启动，但 **Stripe 未配置**：compose 设 `QB_STRIPE_PLACEHOLDERS=true`，镜像的入口脚本（`deploy/quizbuks/entrypoint.sh`，
   之后交给平台的入口脚本）只为**没有设置**的值填占位：`STRIPE_API_KEY` 为明显是假的测试密钥（`sk_test_quizbuks_local_placeholder_…`，调用 Stripe 一律被拒），
   `STRIPE_WEBHOOK_SECRET` 与 `STRIPE_CONNECT_WEBHOOK_SECRET` 在首次启动时随机生成（`whsec_` + 48 位十六进制）到 secrets 卷（`stripe-webhook-secret`、
@@ -169,6 +174,7 @@ tools/quizbuks/local-demo.sh status | logs | seed
 ## 环境变量
 
 放在 `deploy/quizbuks/.env`（不提交，已在 `.gitignore` 中）或部署平台的密钥库中。密钥都是 Base64、至少 32 字节（`openssl rand -base64 48`）。
+下表是简表；生产用的完整清单（每个变量的来源、轮换方法、缺少时的后果，以及正式模式拒绝的测试开关）在 `docs/quizbuks/operations.md` §1。
 
 | 变量 | 必需 | 说明 |
 |---|---|---|
