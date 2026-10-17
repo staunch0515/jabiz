@@ -6,7 +6,7 @@ description: >-
 entities: [QbTopUp, SysParam]
 datasets:
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
-  SysParam: urn:jabiz:dataset:platform:SysParam
+  SysParam: urn:jabiz:dataset:now:SysParam
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The client's now" }
 results:
@@ -20,8 +20,10 @@ permissions: [qb.sponsor.finance.read]
 ---*/
 -- One row. The rule is QB_TOPUP_START's (wallet.NewSponsorLimit, which decides; this is for the page): from the first
 -- paid top-up for qb.topup.new-sponsor.days days, and before it, the paid top-ups (refunded or not) and the unfinished
--- ones (opening for an hour, open until the checkout expires) count against qb.topup.new-sponsor.max-total. until is
--- null before the first paid top-up (the period starts then). A parameter not set leaves its figures null.
+-- ones (opening until its checkout job has finished or failed, open until the checkout expires; review L4) count
+-- against qb.topup.new-sponsor.max-total. until is null before the first paid top-up (the period starts then). A
+-- parameter not set leaves its figures null. The parameters are read at the server's clock (the dataset without time
+-- travel, review L9), as QB_TOPUP_START reads them.
 WITH params AS (
     SELECT
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.topup.min' THEN p.{{SysParam.value}} END) AS p_min,
@@ -44,7 +46,7 @@ mine AS (
         min(u.{{QbTopUp.paidAt}}) AS first_paid,
         coalesce(sum(u.{{QbTopUp.amount}}) FILTER (WHERE u.{{QbTopUp.paidAt}} IS NOT NULL), 0) AS paid,
         coalesce(sum(u.{{QbTopUp.amount}}) FILTER (WHERE u.{{QbTopUp.paidAt}} IS NULL AND (
-            (u.{{QbTopUp.status}} = 'OPENING' AND u.{{QbTopUp.createdAt}} > CAST(:at AS timestamptz) - interval '1 hour')
+            u.{{QbTopUp.status}} = 'OPENING'
             OR (u.{{QbTopUp.status}} = 'OPEN' AND u.{{QbTopUp.expiresAt}} > CAST(:at AS timestamptz)))), 0) AS unfinished
     FROM {{QbTopUp}} u),
 standing AS (

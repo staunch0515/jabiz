@@ -165,7 +165,8 @@ public final class AttemptProcesses {
 
     // ---- start -----------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start() {
+    /** @param shuffle the order of each attempt's options, keyed by the server (Q10b, review M-a) */
+    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start(OptionShuffle shuffle) {
         return ProcessDefinition.define(START, 1, PublicationRef.class, StartOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
@@ -219,7 +220,7 @@ public final class AttemptProcesses {
                     PlaySteps.card(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, CARD),
                     PlaySteps.startCounter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, START_COUNTER),
                     PlaySteps.counter(ctx -> starting(ctx) ? ctx.get(PUB_KEY) : null, COUNTER)))
-                .compute("Start the attempt", (metadata, ctx) -> start(ctx)));
+                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
     }
 
     private static EntityQuery mine(Object publicationId) {
@@ -260,7 +261,7 @@ public final class AttemptProcesses {
         ctx.put(OUTPUT, output(ctx, attempt, PlaySteps.snapshot(ctx), true));
     }
 
-    static void start(ProcessContext ctx) {
+    static void start(ProcessContext ctx, OptionShuffle shuffle) {
         if (!starting(ctx)) {
             return;
         }
@@ -290,8 +291,7 @@ public final class AttemptProcesses {
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Object publicationId = ctx.get(PUB_KEY);
         Instant deadline = AttemptRules.deadline(ctx.opTime(), PlaySteps.integer(card.get("timeLimitSec")));
-        List<List<Integer>> order = OptionShuffle.order(OptionShuffle.seedOf(userId, publicationId),
-            snapshot.questions());
+        List<List<Integer>> order = shuffle.order(userId, publicationId, snapshot.questions());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userId);
         values.put("publicationId", publicationId);

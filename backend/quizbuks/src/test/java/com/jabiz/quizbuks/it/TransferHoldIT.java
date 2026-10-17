@@ -114,6 +114,131 @@ class TransferHoldIT extends PayoutItSupport {
         assertBooksBalance();
     }
 
+    /**
+     * Review M-b: a disputed sponsor's reward that was transferred before the dispute left with that transfer; it no
+     * longer holds back what other sponsors paid since.
+     */
+    @Test
+    void aRewardTransferredBeforeTheDisputeDoesNotHoldOtherSponsorsRewards() {
+        param(QbParams.TRANSFER_FEE, "0");
+        param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
+        param(QbParams.TRANSFER_THRESHOLD, "100");
+        param(QbParams.TRANSFER_HOLD_DAYS, "7");
+        transfersOn();
+        String disputed = newSponsor("s-hold-gone-disputed");
+        String clean = newSponsor("s-hold-gone-clean");
+        String disputedTopUp = paidTopUp(disputed, 5000);
+        paidTopUp(clean, 5000);
+        String taker = payee("t-hold-gone");
+        enabledPayee(taker);
+        assertThat(play(taker, livePublication(disputed, "Hold gone disputed"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        deliverEvents();
+        advance(Duration.ofDays(8));
+        runTransfers();
+        assertThat(transfersOf(taker)).singleElement()
+            .satisfies(t -> assertThat(money(t.get("amount"))).isEqualByComparingTo("100"));
+        runJobs();
+        assertThat(ledger("2120", taker)).isEqualByComparingTo("0");
+
+        // The other sponsor's reward, then a dispute of the first sponsor's payment (made before its reward).
+        assertThat(play(taker, livePublication(clean, "Hold gone clean"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        deliverEvents();
+        deliver(event(eventId(), "charge.dispute.created", dispute(disputedTopUp, "dp_gone", "needs_response")));
+        assertThat(topUp(disputedTopUp)).containsEntry("dispute_status", "OPEN");
+        advance(Duration.ofDays(8));
+        Map<String, Object> shown = shownWallet(taker);
+        assertThat(money(shown.get("available"))).isEqualByComparingTo("100");
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("0");
+        assertThat(money(shown.get("heldOpen"))).isEqualByComparingTo("0");
+        runTransfers();
+        List<Map<String, Object>> transfers = transfersOf(taker);
+        assertThat(transfers).hasSize(2);
+        assertThat(transfers).extracting(t -> money(t.get("amount")))
+            .usingComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+            .containsExactlyInAnyOrder(new BigDecimal("100"), new BigDecimal("100"));
+        runJobs();
+        assertTakerCacheIsTheLedger(taker);
+        assertBooksBalance();
+    }
+
+    /**
+     * Rewards held by their age and by a dispute together: each is held once, the rest leaves, and what is held is
+     * never more than the balance.
+     */
+    @Test
+    void theHoldPeriodAndADisputeTogether() {
+        param(QbParams.TRANSFER_FEE, "0");
+        param(QbParams.TRANSFER_REVIEW_ABOVE, "50000");
+        param(QbParams.TRANSFER_THRESHOLD, "100");
+        param(QbParams.TRANSFER_HOLD_DAYS, "7");
+        transfersOn();
+        String disputed = newSponsor("s-hold-mix-disputed");
+        String clean = newSponsor("s-hold-mix-clean");
+        String disputedTopUp = paidTopUp(disputed, 5000);
+        paidTopUp(clean, 5000);
+        String taker = payee("t-hold-mix");
+        enabledPayee(taker);
+        // An old reward of each sponsor.
+        assertThat(play(taker, livePublication(disputed, "Hold mix disputed"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        assertThat(play(taker, livePublication(clean, "Hold mix clean"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        advance(Duration.ofDays(8));
+        deliver(event(eventId(), "charge.dispute.created", dispute(disputedTopUp, "dp_mix", "needs_response")));
+        // The dispute holds the disputed payment in the sponsor's wallet: another top-up pays the next reward.
+        paidTopUp(disputed, 5000);
+        // A recent reward of each: the disputed sponsor's is held by the dispute, the other by its age.
+        assertThat(play(taker, livePublication(disputed, "Hold mix disputed 2"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        Instant recent = now();
+        assertThat(play(taker, livePublication(clean, "Hold mix clean 2"), true, true))
+            .containsEntry("rewardStatus", "PAID");
+        deliverEvents();
+        Map<String, Object> shown = shownWallet(taker);
+        assertThat(money(shown.get("available"))).isEqualByComparingTo("400");
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("300");
+        assertThat(money(shown.get("heldOpen"))).isEqualByComparingTo("200");
+        assertThat(Instant.parse(String.valueOf(shown.get("heldUntil"))))
+            .isBetween(recent.plus(Duration.ofDays(7)), recent.plus(Duration.ofDays(7)).plus(Duration.ofMinutes(5)));
+        runTransfers();
+        assertThat(transfersOf(taker)).singleElement()
+            .satisfies(t -> assertThat(money(t.get("amount"))).isEqualByComparingTo("100"));
+        runJobs();
+        shown = shownWallet(taker);
+        assertThat(money(shown.get("available"))).isEqualByComparingTo("300");
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("300");
+        // The recent one ages out: it leaves; the disputed ones stay.
+        advance(Duration.ofDays(8));
+        runTransfers();
+        assertThat(transfersOf(taker)).hasSize(2);
+        runJobs();
+        shown = shownWallet(taker);
+        assertThat(money(shown.get("available"))).isEqualByComparingTo("200");
+        assertThat(money(shown.get("held"))).isEqualByComparingTo("200");
+        assertThat(money(shown.get("heldOpen"))).isEqualByComparingTo("200");
+        assertThat(shown.get("heldUntil")).isNull();
+        runTransfers();
+        assertThat(transfersOf(taker)).hasSize(2);
+        assertTakerCacheIsTheLedger(taker);
+        assertBooksBalance();
+    }
+
+    /** Review L9: the taker's page reads the hold period at the server's clock; a request cannot move it. */
+    @Test
+    void theWalletPageReadsTheParametersAtTheServersClock() {
+        String taker = payee("t-hold-clock");
+        var result = client.post().uri("/api/queries/qb.app.wallet")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, taker(taker))
+            .bodyValue(Map.of("params", Map.of("at", now().toString()), "asOf", now().minus(Duration.ofDays(30))
+                .toString()))
+            .exchange().expectBody(MAP).returnResult();
+        assertThat(result.getStatus().value()).isEqualTo(400);
+        assertThat(String.valueOf(result.getResponseBody())).contains("TIME_TRAVEL_NOT_ALLOWED");
+    }
+
     @Test
     void aDisputeOnlyHoldsRewardsPaidAfterTheDisputedPayment() {
         param(QbParams.TRANSFER_FEE, "0");

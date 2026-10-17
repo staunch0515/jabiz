@@ -134,7 +134,7 @@ class ScoringTest {
     @Property(tries = 300)
     void positionsMapBackWhateverTheOrder(@ForAll("quizzes") QuizSnapshot quiz,
         @ForAll("choices") List<List<Integer>> answers, @ForAll long seed) {
-        List<List<Integer>> order = OptionShuffle.order(Long.toString(seed), quiz.questions());
+        List<List<Integer>> order = OptionShuffleTest.SHUFFLE.order("user", Long.toString(seed), quiz.questions());
         List<List<Integer>> shown = new ArrayList<>();
         for (int i = 0; i < answers.size() && i < quiz.questions().size(); i++) {
             shown.add(Answers.positions(order.get(i), answers.get(i)));

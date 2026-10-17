@@ -102,10 +102,13 @@ public final class TransferRules {
         }
     }
 
-    /** The balance less the rewards held back, never below 0 (none given: nothing held). */
+    /**
+     * The balance less the rewards held back, between 0 and the balance whatever is given (none given: nothing
+     * held). The template bounds what is held to the balance already ({@link RewardHolds}); this does not rely on it.
+     */
     public static BigDecimal transferable(BigDecimal balance, BigDecimal rewardsHeld) {
-        BigDecimal all = balance == null ? BigDecimal.ZERO : balance;
-        BigDecimal kept = rewardsHeld == null ? BigDecimal.ZERO : rewardsHeld;
+        BigDecimal all = balance == null ? BigDecimal.ZERO : balance.max(BigDecimal.ZERO);
+        BigDecimal kept = rewardsHeld == null ? BigDecimal.ZERO : rewardsHeld.max(BigDecimal.ZERO);
         return all.subtract(kept).max(BigDecimal.ZERO);
     }
 

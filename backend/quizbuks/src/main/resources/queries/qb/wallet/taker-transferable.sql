@@ -1,9 +1,9 @@
 /*---
 id: qb.wallet.taker-transferable
 description: >-
-  A taker's balance on account 2120 and the part of it held back from transfers (Q10b, review M3): the rewards
-  posted within the hold period, and those from a sponsor with an open dispute, posted after the disputed top-up was
-  paid
+  A taker's balance on account 2120 and the part of it held back from transfers (Q10b, reviews M3 and M-b): of the
+  rewards posted within the hold period, and of those from a sponsor with an open dispute posted after the disputed
+  top-up was paid, what is still in the balance
 entities: [LedgerEntry, LedgerAccount, LedgerTransaction, QbPublicationCard, QbTopUp]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -22,14 +22,21 @@ permissions: [qb.payout.system]
 -- One statement, under the taker's wallet lock: what is committed and what this transaction posted. The taker's lines
 -- only (the party, dimension 1, is indexed). A reward is a 2120 credit of a posting whose source is an attempt
 -- (QbWallets.rewardPosting); its publication is dimension 2, and the publication's card names the sponsor. A dispute is
--- open while its top-up's disputeStatus is OPEN (TopUpClawback): rewards of that sponsor posted from the disputed
--- payment on are held until it closes, whatever their age. held counts each reward once; heldOpen is the part held
--- by a dispute (no date), heldUntil when the last reward held only by its age is free. The same rule is written in
--- qb.app.wallet for the taker's page.
+-- open while its top-up's disputeStatus is OPEN (TopUpClawback).
+-- The model is wallet.RewardHolds (docs/quizbuks/02-design.md, "奖励的保留"; review M-b): each line is DISPUTED (a reward
+-- of a disputed sponsor posted from the disputed payment on), RECENT (a reward within the hold period), FREE (any other
+-- credit) or DEBIT. A debit takes free money first, then recent, then disputed, of what was credited before it (in booking
+-- order, then the order the processes ran in), so a reward that left with an earlier transfer holds nothing back, and another sponsor's
+-- reward is held only when the balance cannot keep both. The running sums give what the debits took from the held
+-- (c_held) and from the disputed (c_open); held is never below 0 nor above the balance. heldOpen is the part held by
+-- disputes (no date), heldUntil when the last reward held only by its age is free (none when nothing is so held).
+-- The same rule is written in qb.app.wallet for the taker's page.
 WITH lines AS (
     SELECT e.{{LedgerEntry.direction}} AS l_direction, e.{{LedgerEntry.amount}} AS l_amount,
            e.{{LedgerEntry.dimension2}} AS publication, t.{{LedgerTransaction.bookingTime}} AS booked,
-           t.{{LedgerTransaction.sourceEntity}} AS source
+           t.{{LedgerTransaction.sourceEntity}} AS source, t.{{LedgerTransaction.processSeqId}} AS seq,
+           t.{{LedgerTransaction.transactionId}} AS tx,
+           e.{{LedgerEntry.lineNo}} AS line_no
     FROM {{LedgerEntry}} e
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
     JOIN {{LedgerTransaction}} t ON t.{{LedgerTransaction.transactionId}} = e.{{LedgerEntry.transactionId}}
@@ -40,20 +47,45 @@ disputed AS (
     FROM {{QbTopUp}} u
     WHERE u.{{QbTopUp.disputeStatus}} = 'OPEN'
     GROUP BY u.{{QbTopUp.sponsorId}}),
-rewards AS (
-    SELECT l.l_amount, l.booked,
-           l.booked > CAST(:at AS timestamptz) - make_interval(days => CAST(:holdDays AS int)) AS recent,
-           d.since IS NOT NULL AND l.booked >= d.since AS frozen
+kinds AS (
+    SELECT l.l_amount, l.booked, l.seq, l.tx, l.line_no,
+           CASE WHEN l.l_direction <> 'CREDIT' THEN 'DEBIT'
+                WHEN l.source = 'QbAttempt' AND d.since IS NOT NULL AND l.booked >= d.since THEN 'DISPUTED'
+                WHEN l.source = 'QbAttempt'
+                     AND l.booked > CAST(:at AS timestamptz) - make_interval(days => CAST(:holdDays AS int))
+                    THEN 'RECENT'
+                ELSE 'FREE' END AS kind
     FROM lines l
     LEFT JOIN {{QbPublicationCard}} c
-        ON c.{{QbPublicationCard.publicationId}} = CASE WHEN l.publication ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ON l.l_direction = 'CREDIT' AND l.source = 'QbAttempt'
+       AND c.{{QbPublicationCard.publicationId}} = CASE WHEN l.publication ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                                                         THEN CAST(l.publication AS uuid) END
-    LEFT JOIN disputed d ON d.sponsor = c.{{QbPublicationCard.sponsorId}}
-    WHERE l.l_direction = 'CREDIT' AND l.source = 'QbAttempt')
+    LEFT JOIN disputed d ON d.sponsor = c.{{QbPublicationCard.sponsorId}}),
+running AS (
+    SELECT k.kind, k.l_amount, k.booked,
+           sum(CASE WHEN k.kind = 'DEBIT' THEN k.l_amount ELSE 0 END) OVER w
+               - sum(CASE WHEN k.kind = 'FREE' THEN k.l_amount ELSE 0 END) OVER w AS over_free,
+           sum(CASE WHEN k.kind = 'DEBIT' THEN k.l_amount ELSE 0 END) OVER w
+               - sum(CASE WHEN k.kind IN ('FREE', 'RECENT') THEN k.l_amount ELSE 0 END) OVER w AS over_recent
+    FROM kinds k
+    WINDOW w AS (ORDER BY k.booked, k.seq, CASE WHEN k.kind = 'DEBIT' THEN 1 ELSE 0 END, k.tx, k.line_no
+                 ROWS UNBOUNDED PRECEDING)),
+totals AS (
+    SELECT coalesce(sum(CASE WHEN r.kind = 'DEBIT' THEN -r.l_amount ELSE r.l_amount END), 0) AS balance,
+           coalesce(sum(r.l_amount) FILTER (WHERE r.kind IN ('RECENT', 'DISPUTED')), 0)
+               - greatest(coalesce(max(r.over_free), 0), 0) AS held_left,
+           coalesce(sum(r.l_amount) FILTER (WHERE r.kind = 'DISPUTED'), 0)
+               - greatest(coalesce(max(r.over_recent), 0), 0) AS open_left,
+           max(r.booked) FILTER (WHERE r.kind = 'RECENT') AS last_recent
+    FROM running r),
+bounded AS (
+    SELECT t.balance, t.last_recent,
+           least(greatest(t.held_left, 0), greatest(t.balance, 0)) AS held, t.open_left
+    FROM totals t)
 SELECT
-    (SELECT coalesce(sum(CASE WHEN l.l_direction = 'CREDIT' THEN l.l_amount ELSE -l.l_amount END), 0) FROM lines l)
-        AS available,
-    (SELECT coalesce(sum(r.l_amount), 0) FROM rewards r WHERE r.recent OR r.frozen) AS held,
-    (SELECT coalesce(sum(r.l_amount), 0) FROM rewards r WHERE r.frozen) AS heldOpen,
-    (SELECT max(r.booked) + make_interval(days => CAST(:holdDays AS int)) FROM rewards r
-     WHERE r.recent AND NOT r.frozen) AS heldUntil
+    b.balance AS available,
+    b.held AS held,
+    least(greatest(b.open_left, 0), b.held) AS heldOpen,
+    CASE WHEN b.held > least(greatest(b.open_left, 0), b.held)
+         THEN b.last_recent + make_interval(days => CAST(:holdDays AS int)) END AS heldUntil
+FROM bounded b

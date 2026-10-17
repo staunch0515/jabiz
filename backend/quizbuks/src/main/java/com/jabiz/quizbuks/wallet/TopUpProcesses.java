@@ -125,15 +125,15 @@ public final class TopUpProcesses {
                         new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
                         new QueryPredicate.IsNotNull("paidAt"))))
                     .orderBy("paidAt", true).limit(WalletLimits.NEW_SPONSOR_TOPUPS).build(), PAID))
-            // An opening one counts for an hour only: one whose checkout never opened (its job's result lost) does
-            // not hold a place for ever. The job type allows the sponsor three open jobs at most besides.
+            // An opening one counts until its checkout job has finished or failed (review L4): the job's completion
+            // or failure process (both delivered by the platform until they run) is what moves it on, to open or
+            // failed. One that stays opening keeps counting: refused rather than let through.
             .step("Load the unfinished top-ups", QueryEntities.<ProcessContext>of(
                 QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
                         new QueryPredicate.Or(List.of(
-                            new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", TopUpStatus.OPENING),
-                                new QueryPredicate.Gt("createdAt", ctx.opTime().minus(WalletLimits.OPENING_COUNTS)))),
+                            new QueryPredicate.Eq("status", TopUpStatus.OPENING),
                             new QueryPredicate.And(List.of(new QueryPredicate.Eq("status", TopUpStatus.OPEN),
                                 new QueryPredicate.Gt("expiresAt", ctx.opTime()))))))))
                     .limit(WalletLimits.MAX_OPEN_TOPUPS).build(), UNFINISHED))

@@ -64,6 +64,8 @@ class TopUpLimitIT extends TopUpItSupport {
         assertThat(money(shown.get("max"))).isEqualByComparingTo("1000000");
         startTopUp(sponsor, 10_000);
         assertThat(money(limit(sponsor).get("remaining"))).isEqualByComparingTo("0");
+        // Its checkout opens (an opening one counts until then, review L4).
+        runJobs();
 
         // The open checkout expires: it no longer counts.
         advance(Duration.ofDays(2));
@@ -77,6 +79,40 @@ class TopUpLimitIT extends TopUpItSupport {
         clockAt(until);
         assertThat(limit(sponsor)).containsEntry("limited", false).containsEntry("remaining", null);
         startTopUp(sponsor, 1_000_000);
+    }
+
+    /** Review L4: an opening top-up counts until its checkout job has finished or failed, not for an hour only. */
+    @Test
+    void anOpeningTopUpCountsUntilItsJobHasFinished() {
+        String sponsor = newSponsor("s-limit-opening");
+        String opening = startTopUp(sponsor, 60_000);
+        advance(Duration.ofHours(2));
+        assertThat(topUp(opening)).containsEntry("status", "OPENING");
+        assertThat(money(limit(sponsor).get("remaining"))).isEqualByComparingTo("40000");
+        assertThat(codes(refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 40_001), 422)))
+            .containsExactly(WalletCodes.TOPUP_NEW_SPONSOR_LIMIT);
+        // Its job's failure process fails it (TopUpProcesses.openFailed): it no longer counts.
+        execute("UPDATE qb_topup SET status = 'FAILED' WHERE topup_id = ?", opening);
+        assertThat(money(limit(sponsor).get("remaining"))).isEqualByComparingTo("100000");
+        startTopUp(sponsor, 100_000);
+    }
+
+    /**
+     * Review L9: the page reads the parameters at the server's clock, as {@code QB_TOPUP_START} does; a request cannot
+     * ask for another point in time.
+     */
+    @Test
+    void thePageReadsTheParametersAtTheServersClock() {
+        String sponsor = newSponsor("s-limit-clock");
+        for (String field : List.of("asOf", "knownAt")) {
+            var result = client.post().uri("/api/queries/qb.sponsor.topup-limit")
+                .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, sponsorToken(sponsor))
+                .bodyValue(Map.of("params", Map.of("at", now().toString()), field, now().minus(Duration.ofDays(400))
+                    .toString()))
+                .exchange().expectBody(MAP).returnResult();
+            assertThat(result.getStatus().value()).as(field).isEqualTo(400);
+            assertThat(String.valueOf(result.getResponseBody())).contains("TIME_TRAVEL_NOT_ALLOWED");
+        }
     }
 
     @Test

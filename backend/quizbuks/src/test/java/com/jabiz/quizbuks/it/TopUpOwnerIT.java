@@ -95,8 +95,8 @@ class TopUpOwnerIT extends TopUpItSupport {
         advance(java.time.Duration.ofMinutes(61));
         String next = startTopUp(sponsor, 1000);
         runJobs();
-        // An opening one whose checkout's result never came (its job finished, its completion lost) holds its place
-        // for an hour only.
+        // An opening one holds its place until its checkout job has finished or failed (review L4), however long:
+        // only the job's completion or failure process moves it on.
         execute("UPDATE qb_topup SET status = 'OPENING', checkout_session_id = NULL, checkout_url = NULL, "
             + "expires_at = NULL WHERE topup_id = ?", next);
         startTopUp(sponsor, 1000);
@@ -106,6 +106,10 @@ class TopUpOwnerIT extends TopUpItSupport {
         runJobs();
         advance(java.time.Duration.ofMinutes(30));
         execute("UPDATE qb_topup SET created_at = created_at - interval '2 hours' WHERE topup_id = ?", next);
+        assertThat(codes(refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 1000), 422)))
+            .containsExactly("QB_TOPUP_TOO_MANY_OPEN");
+        // Its job's failure process fails it: the place is free.
+        execute("UPDATE qb_topup SET status = 'FAILED' WHERE topup_id = ?", next);
         startTopUp(sponsor, 1000);
     }
 
