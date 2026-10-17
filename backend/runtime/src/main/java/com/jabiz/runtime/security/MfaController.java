@@ -101,8 +101,16 @@ class MfaController {
     Mono<AuthController.TokenResponse> verify(@RequestBody(required = false) ChallengeRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
-            limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http);
-            JwtService.Challenge challenge = challenge(request, JwtService.Purpose.VERIFY);
+            // Counted with the challenge's user (its signature checked, nothing read); a challenge that is not one
+            // counts with the address only.
+            JwtService.Challenge challenge;
+            try {
+                challenge = challenge(request, JwtService.Purpose.VERIFY);
+            } catch (RuntimeException invalid) {
+                limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, null);
+                throw invalid;
+            }
+            limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, challenge.userId());
             if (blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
@@ -180,8 +188,9 @@ class MfaController {
      */
     @PostMapping("/api/auth/step-up")
     Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request, ServerHttpRequest http) {
-        return Mono.fromRunnable(() -> limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http))
-            .then(RequestContexts.current()).flatMap(context -> CurrentSession.open(refreshTokens, context)
+        return RequestContexts.current()
+            .doOnNext(context -> limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, context.actorId()))
+            .flatMap(context -> CurrentSession.open(refreshTokens, context)
             .map(session -> reactor.util.function.Tuples.of(context, session))).flatMap(current -> {
             RequestContext context = current.getT1();
             UUID user = requireUser(context);

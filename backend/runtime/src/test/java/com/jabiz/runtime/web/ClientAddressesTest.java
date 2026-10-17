@@ -111,7 +111,15 @@ class ClientAddressesTest {
         assertThat(new ClientAddresses(List.of("10.0.0.1"), "native").check()).singleElement()
             .satisfies(p -> assertThat(p.message()).contains("server.forward-headers-strategy"));
         assertThat(new ClientAddresses(List.of("10.0.0.1"), "none").check()).isEmpty();
-        assertThat(new ClientAddresses(List.of(), "framework").check()).isEmpty();
+        // Spring's handling alone believes every client's headers: an error, a warning under dev (decision D47).
+        assertThat(new ClientAddresses(List.of(), "framework").check()).singleElement().satisfies(p -> {
+            assertThat(p.isError()).isTrue();
+            assertThat(p.message()).contains("jabiz.security.trusted-proxies");
+        });
+        assertThat(new ClientAddresses(List.of(), "native", true).check()).singleElement()
+            .satisfies(p -> assertThat(p.isError()).isFalse());
+        assertThat(new ClientAddresses(List.of(), "NONE").check()).isEmpty();
+        assertThat(new ClientAddresses(List.of(), null).check()).isEmpty();
         assertThatThrownBy(() -> ClientAddresses.block("::1/129")).isInstanceOf(IllegalArgumentException.class);
         assertThat(ClientAddresses.literal("not an address")).isNull();
         assertThat(ClientAddresses.literal("fe80::1%eth0")).isNull();
@@ -125,7 +133,13 @@ class ClientAddressesTest {
         assertThat(ClientAddresses.rateLimitKey("192.0.2.7")).isEqualTo("192.0.2.7");
         assertThat(ClientAddresses.rateLimitKey("::ffff:192.0.2.7")).isEqualTo("192.0.2.7");
         assertThat(ClientAddresses.rateLimitKey("unknown")).isEqualTo("unknown");
-        assertThat(ClientAddresses.rateLimitKey("fe80::1%eth0")).isEqualTo("fe80::1%eth0");
+        assertThat(ClientAddresses.rateLimitKey("fe80::1%eth0")).isEqualTo("fe80:0:0:0::/64");
+        assertThat(ClientAddresses.networkKey("2001:db8:1:2::9")).isEqualTo("2001:db8:1::/48");
+        assertThat(ClientAddresses.networkKey("2001:db8:1:ff00::9")).isEqualTo("2001:db8:1::/48");
+        assertThat(ClientAddresses.networkKey("192.0.2.7")).isNull();
+        assertThat(ClientAddresses.networkKey("::ffff:192.0.2.7")).isNull();
+        assertThat(ClientAddresses.networkKey("unknown")).isNull();
+        assertThat(ClientAddresses.networkKey(null)).isNull();
         assertThat(ClientAddresses.rateLimitKey(null)).isNull();
     }
 }

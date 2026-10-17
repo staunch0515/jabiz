@@ -166,7 +166,7 @@ class OidcController {
     Mono<AuthController.TokenResponse> callback(@RequestBody(required = false) CallbackRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
-            signInLimits.count(SignInRateLimits.Kind.OIDC_CALLBACK, http);
+            signInLimits.count(SignInRateLimits.Kind.OIDC_CALLBACK, http, null);
             if (request == null || blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }

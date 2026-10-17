@@ -143,7 +143,7 @@ class AuthController {
     Mono<TokenResponse> login(@RequestBody(required = false) LoginRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
             // Per address, before anything is read (decision D47): every attempt counts, right or wrong.
-            limits.count(SignInRateLimits.Kind.PASSWORD, http);
+            limits.count(SignInRateLimits.Kind.PASSWORD, http, request == null ? null : request.userName());
             if (request == null || blank(request.userName()) || blank(request.password())) {
                 return Mono.error(loginFailed("Missing user name or password"));
             }
@@ -205,7 +205,7 @@ class AuthController {
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request, ServerHttpRequest http) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> {
-            limits.count(SignInRateLimits.Kind.REFRESH, http);
+            limits.count(SignInRateLimits.Kind.REFRESH, http, null);
             java.util.Optional<SignInEntries.Entry> entry = entries.find(request == null ? null : request.entry());
             if (entry.isEmpty()) {
                 return Mono.error(invalidRefresh("Unknown sign-in entry"));

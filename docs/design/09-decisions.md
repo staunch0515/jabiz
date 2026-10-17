@@ -1406,15 +1406,18 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 （原名可能含个人信息）经答题页显示给答题人。本条补充 D12、D18、D36、D45，不取代任何决策（2026-10-17 确认，阶段 16q，Q10b 计划 S-1、S-2）。
 
 **决策**
-1. **登录类接口按客户端地址限流，缺省开启**：`POST /api/auth/login`、`/api/auth/challenge/verify`、`/api/auth/step-up`、`/api/auth/refresh`、`/api/auth/oidc/callback`
-   按 `ClientAddresses` 的客户端地址（转发头只在来自可信代理时采用；IPv6 按 /64）计数，令牌桶缺省每地址突发 10、每分钟补充 20
-   （`jabiz.security.sign-in.rate-limit.per-address` / `.burst` / `.period`，`.enabled` 可关闭），超出 429 `RATE_LIMITED` + `Retry-After`，在读取任何数据之前。
-   四类请求（口令登录、OIDC 回调、二次验证、刷新）各有自己的桶。按账号的锁定（10 §4）不变，二者并存：锁定挡住多地址猜一个账号，限流挡住一个地址试许多账号。
+1. **登录类接口限流，缺省开启**（独立评审 M2、M3 之后修订，2026-10-17 确认）：`POST /api/auth/login`、`/api/auth/challenge/verify`、`/api/auth/step-up`、`/api/auth/refresh`、`/api/auth/oidc/callback`
+   在读取任何数据之前计数。口令登录与二次验证按"客户端地址 + 名字"（提交的用户名去空白转小写，或挑战 / 已登录的用户，不查数据库）每分钟补充 20、突发 10；
+   每个种类还按客户端地址（`ClientAddresses`，转发头只在来自可信代理时采用；IPv6 按 /64）每分钟 300、突发 100，按 IPv6 /48 每分钟 1 000、突发 300，按实例每秒 200。
+   刷新与 OIDC 回调在验证之前不知道是谁，只有后三种桶。超出 429 `RATE_LIMITED` + `Retry-After`。配置 `jabiz.security.sign-in.rate-limit.*`（`.enabled` 可关闭）。
+   四类请求（口令登录、OIDC 回调、二次验证、刷新）各有自己的桶。限流表满时新出现的键没有突发（1 个令牌）。按账号的锁定（10 §4）不变，二者并存：锁定挡住多地址猜一个账号，限流挡住一个地址试许多账号。
 2. **口令哈希的并发上限，缺省开启**：同时计算的 BCrypt 至多 `jabiz.security.password-hashing.max-concurrent`（缺省为处理器数）个；其余按到达顺序等待，
-   至多 `.max-wait`（缺省 2 秒），之后 503 `AUTH_BUSY` + `Retry-After`。含口令步骤的根流程在**借连接、开事务之前**排队（与 D45 的准入同一种进程内队列），
-   等待中不占数据库连接、不占线程；计算本身照旧在 `BlockingStep` 的虚拟线程上，另经同样大小的信号量。被拒绝的登录没有写任何记录，不计入账号的失败次数。
+   至多 `.max-wait`（缺省 2 秒），之后 503 `AUTH_BUSY` + `Retry-After`。含口令步骤（或经 `CallProcess` 静态调用含口令步骤的流程）的根流程在**借连接、开事务之前**排队（与 D45 的准入同一种进程内队列），
+   等待中不占数据库连接、不占线程；取得许可后与调用方分离，事务真正结束才归还；计算本身照旧在 `BlockingStep` 的虚拟线程上，另经同样大小的信号量。被拒绝的登录没有写任何记录，不计入账号的失败次数。
 3. **文件元数据可按策略对非上传者隐藏**：`FilePolicy.privateMetadata()` 的文件，调用者既不是上传者、也不持有 `file.read` 时，`GET /api/files/{id}` 的 `originalName`、`uploadedBy` 为 `null`，
    `uploadedTime` 截到当天（UTC）；`/content[/{变体}]` 的 `Content-Disposition` 用中性名 `<fileId>[-<变体>].<ext>`。公开文件（15 §4）一律用中性名。元数据导出（14 §4）带上 `privateMetadata`。
+   PDF、Office 等原样提供的文件内部的元数据（作者等）不在此列。
+4. **Spring 的转发头处理不单独使用**（评审 L1）：`server.forward-headers-strategy` 不是 `none` 时启动失败（`dev` 下为警告）：它相信每个连接的转发头，客户端可以自报地址逃过按地址的限流；代理写在 `jabiz.security.trusted-proxies` 中（取代 D36 实现说明中“不配置可信代理时可用它改写的地址”的写法）。
 
 **理由**：限流与锁定针对的是不同的攻击，缺一不可；限流在读取之前，被拒绝的请求不访问数据库。哈希的等待放在事务之前，登录洪峰只拖慢登录，
 不会占满连接池而拖累其他请求；503（而不是 429）表示共享资源过载，与调用者自己请求过多不同（同 D45）。文件名与上传者是上传者自己的信息，
@@ -1435,3 +1438,11 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 观测 `jabiz.auth.hashing.busy`（无标签）。
 ③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。自查发现的局限：`fileId` 是 UUIDv7，带着毫秒级的创建时刻，所以截到日只是元数据不给出、不能真正隐藏上传时刻（原名与上传者不受影响）；记入 14 §5.1，未改主键约定。没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
 ④同一阶段把 Spring Boot 从 4.0.1 升到 4.0.8（reactor-netty 1.3.7 修复 CVE-2026-47874），见 ROADMAP 16q。
+⑤**独立评审之后的修订（2026-10-17）**：
+- M1：`PasswordHashingLimit.around` 取得许可后与调用方分离（`toFuture()` + `Mono.fromFuture(run, true)`，同 `ProcessAdmission`），断开的请求不再在 BCrypt 仍在计算时放回许可（`PasswordHashingLimitTest.aCallerGoingAwayDoesNotFreeThePermitWhileTheHashingStillRuns`）。
+- M3：限流改为上面第 1 条的"地址 + 名字"与宽松的地址桶（原为每地址突发 10、每分钟 20），一个 NAT 后的许多人不再互相挡住。
+- M2：IPv6 另按 /48 计；`TokenBucketLimiter` 表满时新键只有 1 个令牌；每个种类每实例每秒 200 的上限。
+- L1：见第 4 条。L2：经 `CallProcess` 调用含口令步骤的流程的根流程同样在事务前排队（静态解析，递归），因此不另加启动告警；运行时才知道名字的调用由计算的信号量约束。
+- L3：`PasswordHashingLimitIT` 直接占住计算的许可，登录 503 `AUTH_BUSY`、不写登录记录、不计失败。L4：见第 3 条与 14 §5.1。
+- L5：链路本地地址去掉作用域后按 /64；没有地址的请求共用键 `unknown`（10 §4.1）。
+- 端到端测试的管理员从本机登录数十次：CI 的 `e2e` 作业只放宽"地址 + 名字"的桶（`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS`、`_USER_BURST`），地址的桶照缺省。

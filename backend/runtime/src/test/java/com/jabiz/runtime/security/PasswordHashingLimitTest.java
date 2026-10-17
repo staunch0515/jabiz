@@ -194,11 +194,86 @@ class PasswordHashingLimitTest {
                 assertThat(busy.retryAfterSeconds()).isPositive());
         assertThat(started).isFalse();
 
-        // A failed or cancelled run gives its permit back as well.
+        // A cancelled run keeps its permit until the run has really ended; a failed one gives it back as well.
         held.dispose();
+        holder.tryEmitValue("done");
         assertThatThrownBy(() -> limit.around(HASHES, Mono.error(new IllegalStateException("boom")))
             .block(Duration.ofSeconds(1))).hasMessage("boom");
         assertThat(limit.around(HASHES, Mono.just("free")).block(Duration.ofSeconds(1))).isEqualTo("free");
+    }
+
+    @Test
+    void aCallerGoingAwayDoesNotFreeThePermitWhileTheHashingStillRuns() throws Exception {
+        PasswordHashingLimit limit = PasswordHashingLimit.of(1, Duration.ofSeconds(10));
+        CountDownLatch computing = new CountDownLatch(1);
+        CountDownLatch finish = new CountDownLatch(1);
+        AtomicBoolean ended = new AtomicBoolean();
+        // The run's BCrypt step, on a thread of its own as BlockingSteps run.
+        Disposable caller = limit.around(HASHES, Mono.fromCallable(() -> limit.compute(() -> {
+            computing.countDown();
+            try {
+                finish.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            ended.set(true);
+            return "hashed";
+        })).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())).subscribe();
+        assertThat(computing.await(10, TimeUnit.SECONDS)).isTrue();
+        // The client aborts right after admission.
+        caller.dispose();
+
+        AtomicBoolean nextStarted = new AtomicBoolean();
+        List<String> next = java.util.Collections.synchronizedList(new ArrayList<>());
+        Disposable waiting = limit.around(HASHES, Mono.fromCallable(() -> {
+            nextStarted.set(true);
+            return "next";
+        })).subscribe(next::add);
+        Thread.sleep(200);
+        assertThat(nextStarted).as("admitted while the computation still runs").isFalse();
+
+        finish.countDown();
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (next.isEmpty() && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        assertThat(ended).isTrue();
+        assertThat(next).containsExactly("next");
+        waiting.dispose();
+    }
+
+    @Test
+    void aProcessCallingAHashingProcessByNameQueuesToo() {
+        ProcessDefinition<In, In, ProcessContext> caller = ProcessDefinition.define("CALLER", 1, In.class, In.class,
+            ProcessContext.class, pb -> pb.permissions("p")
+                .contextFactory((start, input) -> new ProcessContext(start))
+                .outputMapper(ctx -> new In("x"))
+                .step("Call", com.jabiz.runtime.process.steps.CallProcess.<ProcessContext>latest("HASHES",
+                    ctx -> new In("y"), "out")));
+        ProcessDefinition<In, In, ProcessContext> callsPlain = ProcessDefinition.define("CALLS_PLAIN", 1, In.class,
+            In.class, ProcessContext.class, pb -> pb.permissions("p")
+                .contextFactory((start, input) -> new ProcessContext(start))
+                .outputMapper(ctx -> new In("x"))
+                .step("Call", com.jabiz.runtime.process.steps.CallProcess.<ProcessContext>latest("PLAIN",
+                    ctx -> new In("y"), "out"))
+                .step("Call nothing known", com.jabiz.runtime.process.steps.CallProcess.<ProcessContext>latest(
+                    "NO_SUCH_PROCESS", ctx -> new In("y"), "out")));
+        org.springframework.beans.factory.support.StaticListableBeanFactory beans =
+            new org.springframework.beans.factory.support.StaticListableBeanFactory();
+        beans.addBean("hashes", HASHES);
+        beans.addBean("plain", PLAIN);
+        beans.addBean("caller", caller);
+        beans.addBean("callsPlain", callsPlain);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        com.jabiz.runtime.process.ProcessRegistry registry = new com.jabiz.runtime.process.ProcessRegistry(
+            (org.springframework.beans.factory.ObjectProvider) beans.getBeanProvider(ProcessDefinition.class));
+        beans.addBean("registry", registry);
+        PasswordHashingLimit limit = new PasswordHashingLimit(1, Duration.ofSeconds(2),
+            com.jabiz.runtime.observability.PlatformObservations.NOOP,
+            beans.getBeanProvider(com.jabiz.runtime.process.ProcessRegistry.class));
+        assertThat(limit.hashesPasswords(caller)).isTrue();
+        assertThat(limit.hashesPasswords(callsPlain)).isFalse();
+        assertThat(limit.hashesPasswords(HASHES)).isTrue();
     }
 
     @Test

@@ -3899,18 +3899,20 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 |---|---|---|
 | P1 | Spring Boot 4.0.1 → 4.0.8 | `build-logic` 的插件版本（唯一固定处）；随 BOM：reactor-netty 1.3.7（CVE-2026-47874）、netty 4.2.17、Spring Framework 7.0.9、Jackson 3.1.5、logback 1.5.38、PgJDBC 42.7.13、r2dbc-postgresql 1.1.2。springdoc 仍为 3.0.1。行为与快照的差异见下 |
 | P2 | `FilePolicy.privateMetadata()` | 14 §5.1：非上传者且不持有 `file.read` 时 `originalName`、`uploadedBy` 为 `null`，`uploadedTime` 截到日，下载名为中性名；公开文件一律中性名（`FileContent.neutralName` 共用）；`FilePolicyExport` 带上 `privateMetadata`，前端 `FileFieldMeta` 加同名可选字段 |
-| P3 | 登录类接口按地址限流 | 10 §4.1：`SignInRateLimits`，登录、OIDC 回调、二次验证（登录第二步与 step-up）、刷新四类各自的桶，缺省突发 10、每分钟 20，IPv6 按 /64；429 `RATE_LIMITED` + `Retry-After`；按账号的锁定不变 |
+| P3 | 登录类接口限流 | 10 §4.1：`SignInRateLimits`，登录、OIDC 回调、二次验证（登录第二步与 step-up）、刷新四类各自的桶：地址 + 名字（登录与二次验证，每分钟 20、突发 10）、地址（IPv6 按 /64，300、突发 100）、IPv6 /48（1 000、突发 300）、实例（每秒 200）；429 `RATE_LIMITED` + `Retry-After`；按账号的锁定不变 |
 | P4 | 口令哈希的并发上限 | 10 §4.2：`PasswordHashingLimit`，含口令步骤的根流程在事务前排队（复用 D45 的 `AdmissionGate`，不占连接、不占线程），计算另经同样大小的信号量；超过 2 秒 503 `AUTH_BUSY` + `Retry-After`（三种语言） |
 
 **验收**
 - [x] `./gradlew check` 全部通过（含 `:app:platformCheck`、场景快照、覆盖率门禁）；前端 `pnpm lint`、`typecheck`、`test`、`check:api`；端到端 `pnpm e2e`。
-- [x] `SignInRateLimitIT`：同一地址超出突发即 429（对的口令同样拒绝、不写登录记录）、不同地址独立、IPv6 按 /64、可信代理之后按真实地址、四类请求各自的桶、按账号的锁定不变。
+- [x] `SignInRateLimitIT`：同一地址的同一名字超出突发即 429（对的口令同样拒绝、大小写不算另一个名字、不写登录记录）、同一地址的其他人照常、一个地址试许多名字到地址的上限、不同地址独立、IPv6 按 /64、可信代理之后按真实地址、四类请求各自的桶、按账号的锁定不变。
 - [x] `PasswordHashingLimitTest`：并发不超过上限、等待超时 503 `AUTH_BUSY`、含口令步骤的流程等到许可才开始事务（不订阅即不借连接）、失败与取消都归还许可；`PasswordHashingLimitIT`：许可全被占用时登录 503、不写记录、不开流程，空出后照常登录。
 - [x] `FilePrivateMetadataIT`：上传者、`file.read` 持有者、其他读者三种视角，原件与变体的下载名，未声明的策略照旧，公开文件的中性名。
 - [x] D47、10 §4.1–§4.2、14 §5.1、13、CLAUDE.md（文件一条）、ROADMAP 已更新。
 
 **升级（P1）带来的差异**：`./gradlew check`、场景回放与 OpenAPI 快照（`OpenApiSnapshotIT`）、公开模板目录快照在升级后不需要更新，没有行为差异。
 
-**端到端测试的配置**：e2e 的全部登录都来自本机，缺省的按地址限流（突发 10）使其在登录时收到 429（实测 2 个用例失败）；CI 的 `e2e` 作业与 CLAUDE.md §6 因此以 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_ADDRESS=6000`、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_BURST=1000` 启动应用，之后 44 个用例全部通过。
+**端到端测试的配置**：e2e 的共用管理员从本机登录数十次。修订后的缺省（地址 + 名字突发 10）下仍有 1 个用例在登录时收到 429；CI 的 `e2e` 作业与 CLAUDE.md §6 因此只放宽这一个桶（`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000`、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`），地址的桶照缺省，44 个用例全部通过。
+
+**独立评审之后的修订**（2026-10-17，M1–M3、L1–L5，见 D47 实现说明⑤）：哈希许可在运行真正结束时才归还；限流改为地址 + 名字与宽松的地址桶，另有 IPv6 /48 与实例上限，表满时新键无突发；只配置 `server.forward-headers-strategy` 即启动失败（`dev` 下警告）；经 `CallProcess` 的口令流程同样在事务前排队；PDF / Office 内部元数据不在 `privateMetadata()` 之列。
 
 **未做（登记为平台缺口）**：`sys_generated_file` / `sys_document_run` 的保留期（见阶段 16 的待办）。

@@ -7,7 +7,10 @@ import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.observability.PlatformObservations;
+import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.process.admission.AdmissionGate;
+import com.jabiz.runtime.process.steps.CallProcess;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -16,8 +19,11 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -33,12 +39,16 @@ import java.util.function.Supplier;
  * <p>Two places, each needed:
  * <ol>
  *   <li><b>Before the transaction</b> ({@link #around}): a top-level run of a process with a step that hashes
- *       ({@link HashingStep}: signing in, registering, changing or resetting a password, creating a user) waits for a
- *       permit before it borrows a connection, holding nothing and blocking no thread (the queue of decision D45, one
- *       family and one key). A flood of sign-ins therefore never holds the connection pool while it waits.</li>
+ *       ({@link HashingStep}: signing in, registering, changing or resetting a password, creating a user), or that
+ *       calls such a process as a sub-process ({@code CallProcess}, followed statically through the registry), waits
+ *       for a permit before it borrows a connection, holding nothing and blocking no thread (the queue of decision
+ *       D45, one family and one key). A flood of sign-ins therefore never holds the connection pool while it waits.
+ *       Once admitted, the run is no longer cut short by its caller going away: it ends on its own and only then gives
+ *       the permit back, so the permits always bound the hashing actually going on (as {@code ProcessAdmission}).</li>
  *   <li><b>Around the computation</b> ({@link #compute}): the hashing itself, on the virtual thread of its
  *       {@code BlockingStep}, takes a permit of a semaphore of the same size. Runs admitted above never wait here
- *       (there are no more of them than permits); it bounds hashing reached another way (a sub-process, startup).</li>
+ *       (there are no more of them than permits); it bounds hashing reached another way (a sub-process called by
+ *       name computed at run time, a test or tool calling the hasher directly).</li>
  * </ol>
  * A refused sign-in recorded nothing, so it does not count towards the lock of the account.
  */
@@ -62,6 +72,7 @@ public class PasswordHashingLimit implements PlatformCheck {
     private final AdmissionGate gate;
     private final Semaphore computing;
     private final PlatformObservations observations;
+    private final ObjectProvider<ProcessRegistry> registry;
     private final Map<String, Boolean> hashes = new ConcurrentHashMap<>();
 
     /**
@@ -72,7 +83,9 @@ public class PasswordHashingLimit implements PlatformCheck {
     public PasswordHashingLimit(
         @Value("${" + PREFIX + ".max-concurrent:#{T(java.lang.Runtime).getRuntime().availableProcessors()}}")
         int maxConcurrent,
-        @Value("${" + PREFIX + ".max-wait:PT2S}") Duration maxWait, PlatformObservations observations) {
+        @Value("${" + PREFIX + ".max-wait:PT2S}") Duration maxWait, PlatformObservations observations,
+        ObjectProvider<ProcessRegistry> registry) {
+        this.registry = registry;
         this.maxConcurrent = maxConcurrent;
         this.maxWait = maxWait;
         this.observations = observations;
@@ -88,13 +101,14 @@ public class PasswordHashingLimit implements PlatformCheck {
         this.maxConcurrent = Integer.MAX_VALUE;
         this.maxWait = DEFAULT_MAX_WAIT;
         this.observations = null;
+        this.registry = null;
         this.gate = null;
         this.computing = null;
     }
 
     /** A limit of {@code maxConcurrent} hashings at once, waiting at most {@code maxWait} (tests). */
     public static PasswordHashingLimit of(int maxConcurrent, Duration maxWait) {
-        return new PasswordHashingLimit(maxConcurrent, maxWait, PlatformObservations.NOOP);
+        return new PasswordHashingLimit(maxConcurrent, maxWait, PlatformObservations.NOOP, null);
     }
 
     /** How many may hash at once. */
@@ -113,7 +127,18 @@ public class PasswordHashingLimit implements PlatformCheck {
         }
         return gate.acquire(FAMILY, FAMILY, usableWait())
             .onErrorMap(ProcessBusyException.class, busy -> busy(busy.retryAfterSeconds()))
-            .flatMap(permit -> work.doFinally(signal -> permit.release()));
+            // Detached once admitted: a caller that goes away does not end the run (a cancelled transaction would
+            // roll back only once its BCrypt step returns), and the permit goes back when the run has really ended.
+            .flatMap(permit -> Mono.deferContextual(view -> {
+                CompletableFuture<T> run;
+                try {
+                    run = work.doFinally(signal -> permit.release()).contextWrite(view).toFuture();
+                } catch (RuntimeException e) {
+                    permit.release();
+                    return Mono.error(e);
+                }
+                return Mono.fromFuture(run, true);
+            }));
     }
 
     /**
@@ -141,16 +166,38 @@ public class PasswordHashingLimit implements PlatformCheck {
         }
     }
 
-    /** Whether a step of {@code definition} hashes or matches passwords. */
+    /**
+     * Whether a step of {@code definition} hashes or matches passwords, or a process it calls by name
+     * ({@code CallProcess}, resolved through the registry as the step would resolve it now) does.
+     */
     boolean hashesPasswords(ProcessDefinition<?, ?, ?> definition) {
-        return hashes.computeIfAbsent(definition.name() + "@" + definition.version(), k -> {
-            for (StepDefinition<?, ?> step : definition.steps()) {
-                if (HashingStep.class.isAssignableFrom(step.handlerClass())) {
+        String key = definition.name() + "@" + definition.version();
+        Boolean known = hashes.get(key);
+        if (known != null) {
+            return known;
+        }
+        boolean found = hashes(definition, new HashSet<>());
+        hashes.put(key, found);
+        return found;
+    }
+
+    private boolean hashes(ProcessDefinition<?, ?, ?> definition, Set<String> visited) {
+        if (!visited.add(definition.name() + "@" + definition.version())) {
+            return false;
+        }
+        ProcessRegistry processes = registry == null ? null : registry.getIfAvailable();
+        for (StepDefinition<?, ?> step : definition.steps()) {
+            if (HashingStep.class.isAssignableFrom(step.handlerClass())) {
+                return true;
+            }
+            if (processes != null && step.metadata() instanceof CallProcess.Metadata<?> call) {
+                ProcessDefinition<?, ?, ?> called = CallProcess.resolve(processes, call).orElse(null);
+                if (called != null && hashes(called, visited)) {
                     return true;
                 }
             }
-            return false;
-        });
+        }
+        return false;
     }
 
     private Duration usableWait() {
