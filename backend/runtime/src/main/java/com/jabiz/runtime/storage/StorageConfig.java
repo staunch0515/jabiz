@@ -21,11 +21,12 @@ class StorageConfig {
     StorageEngineBinding defaultStorageEngineBinding(
         DatabaseClient databaseClient,
         ReactiveTransactionManager transactionManager,
+        WriteBatching batching,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef
     ) {
         StorageEngine engine = new R2dbcStorageEngine(databaseClient, TransactionalOperator.create(transactionManager),
             TransactionalOperator.create(transactionManager,
-                new DefaultTransactionDefinition(TransactionDefinition.PROPAGATION_REQUIRES_NEW)));
+                new DefaultTransactionDefinition(TransactionDefinition.PROPAGATION_REQUIRES_NEW)), batching);
         return new StorageEngineBinding(poolRef, engine);
     }
 }

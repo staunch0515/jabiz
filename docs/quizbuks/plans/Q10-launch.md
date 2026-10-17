@@ -177,3 +177,30 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
   可选的后续缓解（现在不改代码）：开始一侧的背压——发布的 `qb.pub` 队列已深时拒绝新的开始，把过载挡在开始而不是提交（需要平台给出准入队列的深度，或应用自己估计）。
 - **评审修正**（同分支）：`ADVANCE` 以 `WithdrawApproval.when` 只在审核过期时取审批锁（锁序中排在发布锁与开始锁之后，文档补上 `jabiz.approval:*`）；jqwik 的"结束一次"改由生产的 `PublicationMoves.moveAfter` 驱动；
   `LockSplitIT` 每个暂停窗口内都有一个开始并断言它被 `NOT_OPEN` 拒绝，`pg_stat_database.deadlocks` 只作后备（先刷统计）；报告的百分比改为饱和时的 +16–30 %。
+
+## 实施记录（Q10c + Q10d，2026-10-17，分支 `1.2/quizbuks-10cd-stripe-ops`）
+
+两个阶段合在一个分支（都只有工具与文档，没有应用代码的改动）。按 L-3：脚本与手册由需求方用自己的 Stripe 测试密钥运行；CI 作业只在提供 secrets 后启用。
+
+**Q10c Stripe 测试模式全流程**（手册 `docs/quizbuks/stripe-test-mode.md`）：
+
+- 脚本 `tools/quizbuks/stripe-test-mode/run.sh`（`serve` / `run` / `guard` / `payout-check` / `stop`）与 `stm.py`（Python 标准库）：对运行中的 QuizBuks 依次做 setup（`QB_SETUP`，只发布本次提出的提案，打开转账须四眼）、商家、充值（Checkout，测试卡 4242）、
+  答题得奖励、Connect Express 开户、自动转账（转账任务）、退款（API）、争议（测试卡 0259，以 Stripe 的 `winning_evidence` 结束）、打款（手动打款，等 `payout.paid`，测试模式不到账即 `PENDING`）；
+  每步之后经 API 核对记录与账本（每笔分录平衡、按科目的净额与预期相同；掩码的 Stripe 账户号经平台的 `reveal` 读取并记录），最后打印汇总并把结果写进私有的状态目录。
+  `serve` 在本机以真实测试密钥启动打包的 jar，`stripe listen --forward-to … --forward-connect-to …` 转发两类事件（同一签名密钥），转账任务与每日核对每分钟运行（只在测试模式允许）；`serve --stub` / `run --stub` 以本地桩干跑。
+  可用余额不够时 `--fund-balance` 以 `pm_card_bypassPending` 补足（不进账本，手册说明）。`browser.mjs`（Playwright，尽力而为）代替人操作 Stripe 的支付页与开通页，只供无人值守的 CI。
+- **安全**：密钥必须 `sk_test_`（正式密钥、受限密钥一律拒绝）；目标缺省 localhost，只认字面的回环地址，远程须 `--allow-remote` 且 https；`production-hosts` 文件与 `STRIPE_TM_PRODUCTION_HOSTS` 中的主机永远拒绝（**正式域名尚未确定，文件为空**）；
+  本环境的正式模式开关拒绝；连上后：应用中有正式模式的充值即拒绝，付款前要求会话 `cs_test_`、地址是 Stripe 的、脚本的密钥能读到且 `livemode=false`（即应用与脚本是同一账户的测试模式）。输出一律遮蔽密钥、密码、令牌与形如密钥的文字；开通链接写进私有文件，不打印。
+- CI：`quizbuks.yml` 的 `stripe-test-mode`，只在手动触发并勾选输入 `stripe-test-mode` 时运行，没有 secret `STRIPE_TEST_SECRET_KEY` 即跳过其余步骤；装 Stripe CLI（Stripe 的 apt 源）、Playwright，`run.sh serve` 后 `run.sh run --fund-balance --browser …`；产物不含状态目录中的密钥与 `stripe listen` 的日志。
+- **验证**：`tools/quizbuks/test/stripe-test-mode.test.sh`（45 项：密钥、目标、生产主机、正式模式开关、桩、参数、`run.env` 只给 serve 自己的地址、TOTP 的 RFC 6238 向量、遮蔽；CI 的 `deploy` 作业每次运行；并运行 `stm_test.py`：13 个以假的 Stripe 与应用覆盖只有真实 Stripe 才走到的分支——付款前的测试模式检查、补足余额、争议、打款的 PASS / PENDING / SKIP）。
+  **以桩干跑整条流程通过**（打包的 jar + PostgreSQL 16 + Mailpit + 桩，`serve --stub` + `run --stub`：setup、商家、充值与手续费分录、答题、开户、转账与两笔分录、整额退款的扣回与差额全部 PASS，争议与打款 SKIP，每日核对 `OK`）。`actionlint` 通过。
+- **没有验证的**（需要真实的 Stripe 测试账户）：真实 Checkout 与 Webhook（`stripe listen` 的签名与转发）、Express 开户、真实转账、退款、争议与打款，`stripe listen --print-secret` 与 `STRIPE_API_KEY` 的用法，`browser.mjs` 对 Stripe 页面的操作（未运行过），CI 作业本身（没有 secret，未触发过）。
+  第一次真实运行的结果写进手册的"记录"。
+
+**Q10d 部署与运维**：
+
+- `docs/quizbuks/operations.md`：环境变量与密钥的完整清单（必需与否、来源、轮换、缺少时的后果；正式模式拒绝的测试开关与"不会被拒但不能设"的开关）、数据库规格、`pg_stat_statements`、WAL 归档与时间点恢复、隔离环境中的恢复演练、
+  首次启动（`QB_SETUP`、两位管理员与二次验证、发布提案、开具方与科目映射）、切换正式模式（`StripeModeCheck`、`TransferScheduleCheck`、`LiveModeDataCheck` 的含义与检查清单）、监控与告警（准入与提交 503、语句数、核对差异、转账失败、Webhook 被拒、分录导出被拒、备份）、
+  容量（2 ÷ 许可持有、`max-active` ≥ 热门数 × 4 + 1、CPU < 60–70 %、在目标硬件上以 `loadTest` 重测）、常见故障（Webhook 签名、核对差异、导出被拒、卡住的转账、退款差额、提交过载 503）。`deploy/quizbuks/README.md` 开头链到它与手册。
+- `docs/quizbuks/launch-checklist.md`：法务（Q6b 转账、收据登记号与税的措辞、隐私与条款）、性能重测、Stripe 测试模式运行、安全审查（Q10b）、二次验证、密钥轮换、备份与监控等。
+- 待需求方：正式域名（写进 `production-hosts`）；Stripe 测试账户（日本、Connect、手动打款计划与测试银行）与第一次真实运行；是否给仓库加 secret 并启用 CI 作业；法务与财务的确认项。

@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Entry point of scenario replay tests (docs/design/07-quality.md section 3):
@@ -66,15 +67,30 @@ public final class ScenarioReplay {
 
     /** Replays the scenario in a fresh context and returns what it produced. */
     public static ScenarioRunner.Result replay(Class<?> application, Scenario scenario) {
-        try (ScenarioContexts.Started started = ScenarioContexts.start(application, scenario.properties())) {
+        return replay(application, scenario, Map.of());
+    }
+
+    /**
+     * As {@link #replay(Class, Scenario)}, with configuration of the test's own besides the scenario's (which wins over
+     * it): the same scenario, its snapshot unchanged, under another setting of the platform (an emergency switch).
+     */
+    public static ScenarioRunner.Result replay(Class<?> application, Scenario scenario, Map<String, String> extra) {
+        Map<String, String> properties = new java.util.LinkedHashMap<>(extra);
+        properties.putAll(scenario.properties());
+        try (ScenarioContexts.Started started = ScenarioContexts.start(application, properties)) {
             return new ScenarioRunner(started.context()).run(scenario);
         }
     }
 
     /** Replays the scenario in the resource and compares the result with its snapshot ({@link SnapshotStore}). */
     public static void verify(Class<?> application, String resource) {
+        verify(application, resource, Map.of());
+    }
+
+    /** As {@link #verify(Class, String)}, with configuration of the test's own (the snapshot is the same). */
+    public static void verify(Class<?> application, String resource, Map<String, String> extra) {
         Scenario scenario = load(resource);
-        ScenarioRunner.Result result = replay(application, scenario);
+        ScenarioRunner.Result result = replay(application, scenario, extra);
         if (scenario.snapshot() != null) {
             SnapshotStore.verify(result);
         }

@@ -21,6 +21,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessRegistry;
+import com.jabiz.runtime.storage.WriteBatching;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +45,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * statements one execution sends in its transaction, its {@code COMMIT} included. The counts are exact, so that a
  * change in either direction is made on purpose: whoever changes a path changes its budget here, and the failure lists
  * the statements. Each case runs once before it is counted, so that caches (dictionaries) are warm as in production.
+ *
+ * <p>Every budget has two numbers: with the writes held for the whole transaction (phase 16p-2, T9, the default) and
+ * with the emergency switch {@code jabiz.storage.write-batching.enabled=false}, which goes back to phase 16p-1 exactly
+ * ({@link StatementBudgetWithoutHeldWritesIT}).
  */
 @SpringBootTest(properties = "it.sql-log.enabled=true")
 class StatementBudgetIT extends PostgresIntegrationTest {
@@ -63,45 +68,66 @@ class StatementBudgetIT extends PostgresIntegrationTest {
     @Autowired
     DatasetRegistry datasets;
 
+    @Autowired
+    WriteBatching batching;
+
+    /** A budget: with writes held for the transaction (16p-2), and within one commit only (16p-1, the switch off). */
+    record Budget(int held, int perCommit) {}
+
+    private int budget(Budget budget) {
+        return batching.acrossTransaction() ? budget.held() : budget.perCommit();
+    }
+
     // ---- budgets (before phase 16p in brackets, measured on 961b4b3) ----------------------------------------------
 
     /**
      * {@code LEDGER_POST} as the process itself, 2 entries, 1 entity and 1 dictionary dimension, a source [28]: the
      * operation (with the lock timeout and its number), the account lock, one read of the dimension values, the source
-     * and the accounts, the transaction, the entries, {@code COMMIT}.
+     * and the accounts, then held: the transaction and the entries written before {@code COMMIT} [16p-1: each its
+     * own statement, 6].
      */
-    static final int LEDGER_POST_ROOT = 6;
+    static final Budget LEDGER_POST_ROOT = new Budget(5, 6);
     /**
-     * {@code LEDGER_POST} as a sub-process, 2 entries, 2 entity dimensions, a source [31]: its own 5 (operation, account
-     * lock, one read, transaction, entries) and the root's operation and {@code COMMIT}.
+     * {@code LEDGER_POST} as a sub-process, 2 entries, 2 entity dimensions, a source [31]: its own 2 (the account lock,
+     * carrying its operation record drawn ahead by the root, and one read; its transaction and entries held), the
+     * root's operation, the held writes and {@code COMMIT} [16p-1: its own 5 (operation, account lock, one read,
+     * transaction, entries) and the root's operation and {@code COMMIT}, 7].
      */
-    static final int LEDGER_POST_CHILD = 7;
+    static final Budget LEDGER_POST_CHILD = new Budget(5, 7);
     /**
-     * [30]: operation, the three reads, the reversal's uniqueness (lock, then look), the transaction, one lookup of
-     * both accounts (not read by this process), the entries, {@code COMMIT}.
+     * [30]: operation, the three reads, the reversal's uniqueness (lock, then look), the held transaction written on
+     * its own before the lookup of both accounts (a dataset's read, bound by its timeout, never carries held writes),
+     * the lookup, the held entries, {@code COMMIT} [16p-1: the same 10].
      */
-    static final int LEDGER_REVERSE = 10;
+    static final Budget LEDGER_REVERSE = new Budget(10, 10);
     /**
-     * One line [29]: operation, three reads, the order's uniqueness (lock, look) and insert, the line's (lock, look)
-     * and insert, the stock's versions and its update, {@code COMMIT}.
+     * One line [29]: operation, three reads, the order's uniqueness (lock, look), the line's (the lock carrying the held
+     * order, look), the stock's versions (carrying the held line), the held stock update, {@code COMMIT} [16p-1: 13,
+     * each insert and update its own statement].
      */
-    static final int ORDER_PLACE = 13;
+    static final Budget ORDER_PLACE = new Budget(11, 13);
     /**
-     * One line [47]: operation, the order lock, three reads, {@code LEDGER_POST} 5, the customer (the user query of no
-     * customer is not sent), the stock's versions and update, the order's versions and update, {@code COMMIT}.
+     * One line [47]: operation, the order lock, three reads, {@code LEDGER_POST} 2 (as above), the ledger's held
+     * writes on their own before the customer (a timed read never carries them), the customer (the user query of no
+     * customer is not sent), the stock's versions, the order's versions carrying the held stock update, the held order
+     * update, {@code COMMIT} [16p-1: 16, with {@code LEDGER_POST} 5 and each update its own statement].
      */
-    static final int ORDER_SHIP = 16;
-    /** A plain entity read and updated at the version read [8]: operation, read, update, {@code COMMIT}. */
-    static final int KNOWN_VERSION_UPDATE = 4;
+    static final Budget ORDER_SHIP = new Budget(13, 16);
+    /**
+     * A plain entity read and updated at the version read [8]: operation, read, the held update with its audit record
+     * written before {@code COMMIT} [16p-1: the same 4].
+     */
+    static final Budget KNOWN_VERSION_UPDATE = new Budget(4, 4);
     /** [8]: operation, the lock, {@code COMMIT}. */
-    static final int HOLD_LOCK = 3;
+    static final Budget HOLD_LOCK = new Budget(3, 3);
     /** [8]: operation, the lock with its own wait (one function call), {@code COMMIT}. */
-    static final int HOLD_LOCK_BRIEFLY = 3;
+    static final Budget HOLD_LOCK_BRIEFLY = new Budget(3, 3);
     /**
-     * A root process with an idempotency key, in its transaction [7]: operation, the ticket with its audit record, the
-     * result, {@code COMMIT}; the replay lookup before it is outside.
+     * A root process with an idempotency key, in its transaction [7]: operation, the ticket with its audit record and
+     * the result, held and written together, {@code COMMIT} [16p-1: the result its own statement, 4]; the replay lookup
+     * before it is outside.
      */
-    static final int IDEMPOTENT_ROOT = 4;
+    static final Budget IDEMPOTENT_ROOT = new Budget(3, 4);
     static final int IDEMPOTENT_LOOKUP = 1;
 
     // ---- the cases ----------------------------------------------------------------------------------------------
@@ -202,21 +228,22 @@ class StatementBudgetIT extends PostgresIntegrationTest {
         once.get();
         List<List<String>> transactions = SqlStatementLog.transactions();
         List<String> outside = SqlStatementLog.outsideTransactions();
-        report("idempotent root", IDEMPOTENT_ROOT, transactions);
+        report("idempotent root", budget(IDEMPOTENT_ROOT), transactions);
         assertThat(transactions).hasSize(1);
         assertThat(transactions.getFirst()).as(listing("idempotent root", transactions.getFirst()))
-            .hasSize(IDEMPOTENT_ROOT);
+            .hasSize(budget(IDEMPOTENT_ROOT));
         assertThat(outside).as(String.join("\n", outside)).hasSize(IDEMPOTENT_LOOKUP);
     }
 
     // ---- counting -------------------------------------------------------------------------------------------------
 
-    private void assertBudget(String name, int budget, Supplier<Object> run) {
+    private void assertBudget(String name, Budget budget, Supplier<Object> run) {
         assertBudget(name, budget, () -> null, run);
     }
 
     /** Runs {@code prepare} and {@code run} once to warm up, then counts the statements of {@code run} alone. */
-    private void assertBudget(String name, int budget, Supplier<Object> prepare, Supplier<Object> run) {
+    private void assertBudget(String name, Budget budgets, Supplier<Object> prepare, Supplier<Object> run) {
+        int budget = budget(budgets);
         prepare.get();
         run.get();
         prepare.get();

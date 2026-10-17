@@ -16,9 +16,11 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -73,6 +75,9 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
     /** Tables every combined commit writes besides the entities' own (decision D46 rule 1). */
     static final List<String> BATCH_TABLES = List.of("entity_registry", "op_process_item", "sys_audit_record",
         "sys_outbox_event");
+
+    /** Tables whose rows only a transaction's buffer holds (phase 16p-2: a sub-process's operation record, a result). */
+    static final List<String> HELD_TABLES = List.of("op_process", "op_process_result");
 
     /** Operation tables, append-only like every temporal table (decision D4). */
     static final List<String> OPERATION_TABLES = List.of("op_process", "op_process_item", "op_process_result",
@@ -247,6 +252,15 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 return Flux.just(WARNING + "Table " + table + ": has triggers " + names + " besides the platform's; "
                     + "no commit is written as one statement, and no transaction relies on what it read (decision D46)");
             }));
+        Flux<String> held = Flux.fromIterable(HELD_TABLES).concatMap(table -> otherTriggers(table)
+            .flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.<String>empty();
+                }
+                batching.stopHoldingShared();
+                return Flux.just(WARNING + "Table " + table + ": has triggers " + names + " besides the platform's; "
+                    + "operation records and results are written as they come, not held (decision D46)");
+            }));
         Flux<String> elsewhere = db.sql("""
                 select c.relname as table_name, t.tgname as tgname
                 from pg_trigger t
@@ -268,7 +282,46 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 return Flux.just(WARNING + "Schema: triggers " + found + " besides the platform's; no transaction "
                     + "relies on what it read, as such a trigger may write what the platform does not see (decision D46)");
             });
-        return overrides.concatWith(shared).concatWith(elsewhere);
+        return overrides.concatWith(shared).concatWith(held).concatWith(elsewhere).concatWith(views());
+    }
+
+    /**
+     * Learns which views of the schema read which tables, through other views too (decision D46 rule 1): a statement
+     * that names such a view reads the rows a transaction holds for those tables, which are written before it.
+     * Reports nothing.
+     */
+    private Flux<String> views() {
+        return db.sql("""
+                select distinct v.relname as view_name, t.relname as table_name
+                from pg_depend d
+                join pg_rewrite r on r.oid = d.objid
+                join pg_class v on v.oid = r.ev_class
+                join pg_class t on t.oid = d.refobjid
+                where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_class'::regclass
+                  and v.relkind in ('v', 'm') and v.relnamespace = current_schema()::regnamespace and t.oid <> v.oid
+                """)
+            .map((row, meta) -> Map.entry(row.get("view_name", String.class), row.get("table_name", String.class)))
+            .all()
+            .collectList()
+            .flatMapMany(edges -> {
+                Map<String, Set<String>> reads = new HashMap<>();
+                edges.forEach(edge -> reads.computeIfAbsent(edge.getKey(), v -> new HashSet<>()).add(edge.getValue()));
+                reads.keySet().forEach(view -> batching.view(view, closure(view, reads)));
+                return Flux.<String>empty();
+            });
+    }
+
+    /** The relations {@code view} reads, through the views it reads. */
+    private static Set<String> closure(String view, Map<String, Set<String>> reads) {
+        Set<String> seen = new HashSet<>();
+        java.util.ArrayDeque<String> pending = new java.util.ArrayDeque<>(reads.getOrDefault(view, Set.of()));
+        while (!pending.isEmpty()) {
+            String next = pending.pop();
+            if (seen.add(next)) {
+                pending.addAll(reads.getOrDefault(next, Set.of()));
+            }
+        }
+        return seen;
     }
 
     /** The enabled triggers of {@code table} whose functions are not the platform's, by name. */

@@ -10,6 +10,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+    inputs:
+      stripe-test-mode:
+        description: Also run the money flow against Stripe's test mode (needs the STRIPE_TEST_SECRET_KEY secret; docs/quizbuks/stripe-test-mode.md)
+        type: boolean
+        default: false
 
 # A new push to a pull request cancels its run in progress; runs on the long-lived branches all complete.
 concurrency:
@@ -86,6 +91,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: tools/quizbuks/test/entrypoint.test.sh
+      # The Stripe test-mode script's guard and arguments, offline (the run itself: the stripe-test-mode job).
+      - run: tools/quizbuks/test/stripe-test-mode.test.sh
       - run: $COMPOSE config --quiet
       - name: No .env
         run: test ! -e deploy/quizbuks/.env
@@ -354,3 +361,111 @@ jobs:
           tools/quizbuks/local-demo.sh stop
       - if: failure()
         run: cat deploy/quizbuks/.local-demo/app.log
+
+  # Q10c (docs/quizbuks/stripe-test-mode.md section 6): the money flow against Stripe's TEST mode with the repository's
+  # test key: top-up, reward, Express onboarding, transfer, refund, dispute and payout, each verified through the API.
+  # Only when started by hand with the input stripe-test-mode, and only when the secret STRIPE_TEST_SECRET_KEY exists
+  # (sk_test_ of a test account kept for this job; the script refuses anything else); otherwise every step after the
+  # first is skipped. Stripe's events reach the application through the Stripe CLI (stripe listen), Stripe's pages are
+  # driven by browser.mjs (best effort: Stripe's pages are not an API).
+  stripe-test-mode:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.stripe-test-mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # One run at a time: the runs share one Stripe test account (its balance, payouts and events).
+    concurrency:
+      group: quizbuks-stripe-test-mode
+      cancel-in-progress: false
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: quizbuks_stripe_test
+          POSTGRES_USER: quizbuks
+          POSTGRES_PASSWORD: quizbuks
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U quizbuks -d quizbuks_stripe_test" --health-interval 5s --health-timeout 5s --health-retries 10
+      mailpit:
+        image: axllent/mailpit:v1.27.10
+        ports: ['1025:1025', '8025:8025']
+    # The test key is given only to the steps that use it, not to the build, the tests or the third-party actions.
+    env:
+      STRIPE_TM_DB_PORT: '5432'
+      STRIPE_TM_STATE: ${{ github.workspace }}/stripe-test-mode-state
+    steps:
+      - name: Skip without the test key
+        id: key
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: |
+          if [ -z "$STRIPE_TEST_SECRET_KEY" ]; then
+            echo "::notice::No STRIPE_TEST_SECRET_KEY secret: the Stripe test-mode run is skipped (docs/quizbuks/stripe-test-mode.md section 6)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.key.outputs.ready == 'true'
+        uses: actions/checkout@v5
+      - if: steps.key.outputs.ready == 'true'
+        run: tools/quizbuks/test/stripe-test-mode.test.sh
+      - if: steps.key.outputs.ready == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - if: steps.key.outputs.ready == 'true'
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+      - if: steps.key.outputs.ready == 'true'
+        run: ./gradlew :quizbuks:bootJar
+        working-directory: backend
+      - name: Stripe CLI (Stripe's apt repository, https://docs.stripe.com/stripe-cli)
+        if: steps.key.outputs.ready == 'true'
+        run: |
+          curl -fsSL https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] https://packages.stripe.dev/stripe-cli-debian-local stable main" \
+            | sudo tee /etc/apt/sources.list.d/stripe.list > /dev/null
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends stripe
+          stripe version
+      # Playwright for browser.mjs, from the end-to-end tests' lockfile.
+      - if: steps.key.outputs.ready == 'true'
+        uses: pnpm/action-setup@v5
+        with:
+          package_json_file: quizbuks-web/e2e/package.json
+      - if: steps.key.outputs.ready == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: quizbuks-web/e2e/pnpm-lock.yaml
+      - if: steps.key.outputs.ready == 'true'
+        working-directory: quizbuks-web/e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Start QuizBuks with the test key and stripe listen
+        if: steps.key.outputs.ready == 'true'
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: tools/quizbuks/stripe-test-mode/run.sh serve
+      - name: The money flow
+        if: steps.key.outputs.ready == 'true'
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: tools/quizbuks/stripe-test-mode/run.sh run --fund-balance --browser "node tools/quizbuks/stripe-test-mode/browser.mjs"
+      - if: always() && steps.key.outputs.ready == 'true'
+        run: tools/quizbuks/stripe-test-mode/run.sh stop
+      # The logs, results and screenshots; never the state's secrets (env, run.env) or stripe listen's log, which
+      # holds its signing secret.
+      - if: failure() && steps.key.outputs.ready == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: quizbuks-stripe-test-mode
+          path: |
+            stripe-test-mode-state/app.log
+            stripe-test-mode-state/results-*.json
+            stripe-test-mode-state/browser-*.png
+          retention-days: 7

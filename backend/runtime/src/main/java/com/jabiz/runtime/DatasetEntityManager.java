@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Reactive entity persistence driven by entity metadata and dataset policy.
@@ -520,26 +521,25 @@ public class DatasetEntityManager {
                 outbox.entityChangedRow(def, current.id(), EntityAction.UPDATE.name(), updated.version(), null,
                     changes.keySet()))
             .collectList();
+        // What an update that changed no row answers. At the version read just now: changed meanwhile. At the version
+        // read earlier: as a read now answers, gone (or out of scope), or changed meanwhile. An update held with the
+        // transaction's writes (16p-2, T9) is answered so once the transaction or savepoint is rolled back.
+        Supplier<Mono<Throwable>> notApplied = () -> !known
+            ? Mono.just(conflict(def, instance.id()))
+            : findInScope(engine, dataset, scope, def, instance.id())
+                .map(stored -> (Throwable) (stored.version() != instance.version()
+                    ? ConcurrentUpdateException.stale(String.format(
+                        "Optimistic lock conflict on %s [ID: %s]: expected version [%d], stored version [%d]",
+                        def.name, instance.id(), instance.version(), stored.version()))
+                    : conflict(def, instance.id())))
+                .switchIfEmpty(Mono.fromSupplier(() -> notFound(def, instance.id())));
         return verifyReferences(def, current.id(), changes, changes.keySet())
             .then(dependents)
             .flatMap(rows -> engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
-                versionColumn, physicalUpdates, rows))
-            .flatMap(applied -> {
-                if (applied) {
-                    return forget(engine, def, current.id()).thenReturn(updated);
-                }
-                if (!known) {
-                    return Mono.<EntityInstance>error(conflict(def, instance.id()));
-                }
-                // As a read now would have answered: gone (or out of scope), or changed meanwhile.
-                return findInScope(engine, dataset, scope, def, instance.id())
-                    .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
-                    .flatMap(stored -> Mono.<EntityInstance>error(stored.version() != instance.version()
-                        ? ConcurrentUpdateException.stale(String.format(
-                            "Optimistic lock conflict on %s [ID: %s]: expected version [%d], stored version [%d]",
-                            def.name, instance.id(), instance.version(), stored.version()))
-                        : conflict(def, instance.id())));
-            });
+                versionColumn, physicalUpdates, rows, notApplied))
+            .flatMap(applied -> applied
+                ? forget(engine, def, current.id()).thenReturn(updated)
+                : notApplied.get().flatMap(Mono::<EntityInstance>error));
     }
 
     /**

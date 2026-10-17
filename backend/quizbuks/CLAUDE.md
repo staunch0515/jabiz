@@ -218,3 +218,7 @@
   `QB_STRIPE_PLACEHOLDERS=true`（compose 缺省）时为未设置的 Stripe 密钥填占位并告警；改它时同步改 `tools/quizbuks/test/entrypoint.test.sh`（CI `deploy`）。
 - 首次启动后，管理员登录 `/admin/` 执行一次 `QB_SETUP`（流程页面）。
 - 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。
+- **生产运维**：`docs/quizbuks/operations.md`（密钥清单、备份与恢复演练、首次启动、切换正式模式、监控、容量、常见故障）与上线检查清单 `docs/quizbuks/launch-checklist.md`；
+  新增环境变量、启动检查、任务或告警时同步改 `operations.md` 的对应表格。
+- **Stripe 测试模式全流程**：`tools/quizbuks/stripe-test-mode/run.sh`（手册 `docs/quizbuks/stripe-test-mode.md`）用真实测试密钥驱动并核对整条资金流程；只接受 `sk_test_`、缺省只驱动本机、`production-hosts` 中的主机永远拒绝，从不打印密钥。
+  改了它所用的流程输入、数据视图、分录的描述或科目时同步改 `stm.py`，并以 `serve --stub` + `run --stub` 干跑；它的离线测试是 `tools/quizbuks/test/stripe-test-mode.test.sh`（CI 作业 `stripe-test-mode` 只在手动触发且有 secret 时运行）。
