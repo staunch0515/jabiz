@@ -21,9 +21,12 @@ import java.util.regex.Pattern;
  * @param image            how images are processed; null when the policy accepts no image type
  * @param uploadPermission permission to upload under this policy
  * @param readPermission   permission to read files of this policy (besides {@code file.read})
+ * @param privateMetadata  whether who uploaded a file, its uploaded name and its exact upload time are kept from readers
+ *                         other than the uploader and holders of {@code file.read} (section 5.1; decision D47): they get
+ *                         no name and no uploader, the day of the upload only, and a neutral download name
  */
 public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, ImageOptions image,
-    String uploadPermission, String readPermission) {
+    String uploadPermission, String readPermission, boolean privateMetadata) {
 
     public static final long KB = 1024;
     public static final long MB = 1024 * KB;
@@ -58,6 +61,12 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
         }
         requirePermission(name, "upload", uploadPermission);
         requirePermission(name, "read", readPermission);
+    }
+
+    /** A policy whose file metadata every reader sees (no {@link #privateMetadata()}). */
+    public FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, ImageOptions image,
+        String uploadPermission, String readPermission) {
+        this(name, allowed, maxBytes, image, uploadPermission, readPermission, false);
     }
 
     private static void requirePermission(String policy, String what, String permission) {
@@ -160,6 +169,7 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
         private ImageOptions image;
         private String uploadPermission;
         private String readPermission;
+        private boolean privateMetadata;
 
         private Builder(String name) {
             this.name = name;
@@ -191,8 +201,18 @@ public record FilePolicy(String name, Set<MediaTypes> allowed, long maxBytes, Im
             return this;
         }
 
+        /**
+         * Keeps who uploaded a file, its uploaded name and its exact upload time from readers other than the uploader
+         * and holders of {@code file.read} (decision D47): for files whose uploaded names or uploaders may be personal
+         * while other people read the content (for example a sponsor's content shown to quiz takers).
+         */
+        public Builder privateMetadata() {
+            this.privateMetadata = true;
+            return this;
+        }
+
         public FilePolicy build() {
-            return new FilePolicy(name, allowed, maxBytes, image, uploadPermission, readPermission);
+            return new FilePolicy(name, allowed, maxBytes, image, uploadPermission, readPermission, privateMetadata);
         }
     }
 }

@@ -49,6 +49,7 @@
 | D42 | 逐项的定时任务：`JobDefinition.forEach` 每项独立的根流程与事务、每项至多一次、`HoldLock` 的最长等待（补充 D14 第 5、6 条，不取代） | 计划中（线 1.2，阶段 16k） | 11 §4 |
 | D45 | 热门命名锁的准入与流程入口限流：取锁前在进程内排队（不占连接）、队满或超时 503 `PROCESS_BUSY`、正确性只靠咨询锁、流程接口按配置限流（补充 14o 与 D42 第 3 条，不取代） | 已确认（2026-10-16）；已实施（阶段 16o） | 06 §4.2、§8、03 §1、10 §15.10、11 §4.1、13 |
 | D46 | 流程事务内的写入合并与按已知版本更新：读之前写出、时态插入不先查、引用检查复用本事务的读写、普通实体按已知版本更新、锁在读之前、不跨事务缓存、语句预算（补充 D4、D6、D11、D14、D27，不取代） | 已确认（2026-10-16）；16p-1 已实施（第 1 条限于一次提交之内），16p-2 待做 | 06 §3.1、§4.1、04 §2.2、03 §2、11 §1、21 §1、13 |
+| D47 | 登录类接口按地址限流、口令哈希的并发上限、文件元数据可按策略对非上传者隐藏（补充 D12、D18、D36、D45，不取代） | 已确认（2026-10-17）；已实施（阶段 16q） | 10 §4.1、§4.2、14 §5.1、13 |
 
 ---
 
@@ -1444,3 +1445,52 @@ P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"
 新增的测试：真实的并发（缓冲的插入等另一事务的同一主键、提交后 409；等到 `lock_timeout` 409；缓冲的更新等另一事务的修改、提交后 409）、保存点与 `inNewTransaction` 中更新 0 行、
 同一事务中缓冲的写入之后封存并校验、`forEach` 与之后的 `CallProcess` 的编号顺序、计划证明为空的查询之后的缓冲更新、有时限的读取不携带；
 `LedgerIT`、`OutboxIT`、`TemporalRevertIT`、`ApprovalIT` 也在开关关时再跑一次。
+
+## D47 登录类接口按地址限流、口令哈希的并发上限、文件元数据可对非上传者隐藏
+
+**背景**：QuizBuks Q10b 的独立安全审查（中危 M4 与已登记的跟进）：①登录、二次验证、step-up、刷新与 OIDC 回调只有按账号的锁定（10 §4），
+一个地址可以对许多账号各试几次，也可以用大量登录请求把 CPU 耗在 BCrypt 上；②BCrypt 计算没有并发上限，登录洪峰时所有核都在算哈希，
+其他请求（答题）一起变慢，而且等待中的登录已借了连接、开了事务；③上传的文件名与上传者对所有有读取权限的人可见：商家上传的内容文件
+（原名可能含个人信息）经答题页显示给答题人。本条补充 D12、D18、D36、D45，不取代任何决策（2026-10-17 确认，阶段 16q，Q10b 计划 S-1、S-2）。
+
+**决策**
+1. **登录类接口限流，缺省开启**（独立评审 M2、M3 之后修订，2026-10-17 确认）：`POST /api/auth/login`、`/api/auth/challenge/verify`、`/api/auth/step-up`、`/api/auth/refresh`、`/api/auth/oidc/callback`
+   在读取任何数据之前计数。口令登录与二次验证按"客户端地址 + 名字"（提交的用户名去空白转小写，或挑战 / 已登录的用户，不查数据库）每分钟补充 20、突发 10；
+   每个种类还按客户端地址（`ClientAddresses`，转发头只在来自可信代理时采用；IPv6 按 /64）每分钟 300、突发 100，按 IPv6 /48 每分钟 1 000、突发 300，按实例每秒 200。
+   刷新与 OIDC 回调在验证之前不知道是谁，只有后三种桶。超出 429 `RATE_LIMITED` + `Retry-After`。配置 `jabiz.security.sign-in.rate-limit.*`（`.enabled` 可关闭）。
+   四类请求（口令登录、OIDC 回调、二次验证、刷新）各有自己的桶。限流表满时新出现的键没有突发（1 个令牌）。按账号的锁定（10 §4）不变，二者并存：锁定挡住多地址猜一个账号，限流挡住一个地址试许多账号。
+2. **口令哈希的并发上限，缺省开启**：同时计算的 BCrypt 至多 `jabiz.security.password-hashing.max-concurrent`（缺省为处理器数）个；其余按到达顺序等待，
+   至多 `.max-wait`（缺省 2 秒），之后 503 `AUTH_BUSY` + `Retry-After`。含口令步骤（或经 `CallProcess` 静态调用含口令步骤的流程）的根流程在**借连接、开事务之前**排队（与 D45 的准入同一种进程内队列），
+   等待中不占数据库连接、不占线程；取得许可后与调用方分离，事务真正结束才归还；计算本身照旧在 `BlockingStep` 的虚拟线程上，另经同样大小的信号量。被拒绝的登录没有写任何记录，不计入账号的失败次数。
+3. **文件元数据可按策略对非上传者隐藏**：`FilePolicy.privateMetadata()` 的文件，调用者既不是上传者、也不持有 `file.read` 时，`GET /api/files/{id}` 的 `originalName`、`uploadedBy` 为 `null`，
+   `uploadedTime` 截到当天（UTC）；`/content[/{变体}]` 的 `Content-Disposition` 用中性名 `<fileId>[-<变体>].<ext>`。公开文件（15 §4）一律用中性名。元数据导出（14 §4）带上 `privateMetadata`。
+   PDF、Office 等原样提供的文件内部的元数据（作者等）不在此列。
+4. **Spring 的转发头处理不单独使用**（评审 L1）：`server.forward-headers-strategy` 不是 `none` 时启动失败（`dev` 下为警告）：它相信每个连接的转发头，客户端可以自报地址逃过按地址的限流；代理写在 `jabiz.security.trusted-proxies` 中（取代 D36 实现说明中“不配置可信代理时可用它改写的地址”的写法）。
+
+**理由**：限流与锁定针对的是不同的攻击，缺一不可；限流在读取之前，被拒绝的请求不访问数据库。哈希的等待放在事务之前，登录洪峰只拖慢登录，
+不会占满连接池而拖累其他请求；503（而不是 429）表示共享资源过载，与调用者自己请求过多不同（同 D45）。文件名与上传者是上传者自己的信息，
+读内容的人不需要它们；按策略声明，是因为后台的管理员与上传者本人仍需要原名。
+
+**放弃的方案**：①只靠按账号的锁定（一个地址可以对很多账号各试四次，审查 M4）；②按地址限流用一个桶覆盖全部登录类请求（刷新频繁的正常用户会挡住自己的登录）；
+③在 `PasswordHasher` 内阻塞等待而不在事务前排队（等待中占着连接，登录洪峰仍会耗尽连接池）；④降低 BCrypt 强度（削弱口令存储，D12）；
+⑤文件元数据一律对非上传者隐藏（后台与审计需要原名；改变现有应用的行为）；⑥上传时就丢弃原名（上传者与管理员失去原名）。
+
+**实现说明（16q）**：
+①`SignInRateLimits`（runtime，`PlatformCheck`：数值须为正）在 `AuthController`（登录、刷新）、`MfaController`（登录第二步、step-up）、`OidcController`（回调）的最前面计数；
+共用 `TokenBucketLimiter`（新增突发与补充速率分开的构造，每桶至多 100 000 个键）。IPv6 地址的键是其 /64（`ClientAddresses.rateLimitKey`）。拒绝记观测 `jabiz.auth.rate_limited`（标签只有 `kind`）。
+集成测试的配置把上限设得很高（测试都来自同一个模拟地址），`SignInRateLimitIT` 以缺省值检查。
+②`PasswordHashingLimit`（runtime）：步骤以标记接口 `PasswordHashingLimit.HashingStep` 声明自己会计算口令哈希（`AuthenticationStep`、`HashPasswordStep`、`CurrentPasswordStep`）；
+`ProcessExecutor` 对含这样步骤的根流程以 `around` 在 D45 的准入之内、事务之前取许可（`AdmissionGate` 改为 public 复用：一个族、一个键，队列至多 1 000 个等待者，满即 503），
+事务结束（提交、回滚、失败、取消）即归还；子流程不排队。`PasswordHasher.hash` / `matches` 经 `compute` 取同样大小的公平信号量（在虚拟线程上阻塞等待至多 `max-wait`），
+约束其他途径（子流程、启动时）的计算；经过事务前队列的运行从不在这里等待。`AuthBusyException` → 503 `AUTH_BUSY`（`violations[0].params.retryAfter`，另作顶层属性 `retryAfter`），三种语言的消息；
+观测 `jabiz.auth.hashing.busy`（无标签）。
+③`FileController` 以 `seesPrivateMetadata` 判断（上传者按 `uploadedBy` 与操作人编号比较），`FileContent.neutralName` 与公开文件共用。自查发现的局限：`fileId` 是 UUIDv7，带着毫秒级的创建时刻，所以截到日只是元数据不给出、不能真正隐藏上传时刻（原名与上传者不受影响）；记入 14 §5.1，未改主键约定。没有迁移；OpenAPI 不变（`FileMeta` 的三个字段本来就可为空）。
+④同一阶段把 Spring Boot 从 4.0.1 升到 4.0.8（reactor-netty 1.3.7 修复 CVE-2026-47874），见 ROADMAP 16q。
+⑤**独立评审之后的修订（2026-10-17）**：
+- M1：`PasswordHashingLimit.around` 取得许可后与调用方分离（`toFuture()` + `Mono.fromFuture(run, true)`，同 `ProcessAdmission`），断开的请求不再在 BCrypt 仍在计算时放回许可（`PasswordHashingLimitTest.aCallerGoingAwayDoesNotFreeThePermitWhileTheHashingStillRuns`）。
+- M3：限流改为上面第 1 条的"地址 + 名字"与宽松的地址桶（原为每地址突发 10、每分钟 20），一个 NAT 后的许多人不再互相挡住。
+- M2：IPv6 另按 /48 计；`TokenBucketLimiter` 表满时新键只有 1 个令牌；每个种类每实例每秒 200 的上限。
+- L1：见第 4 条。L2：经 `CallProcess` 调用含口令步骤的流程的根流程同样在事务前排队（静态解析，递归），因此不另加启动告警；运行时才知道名字的调用由计算的信号量约束。
+- L3：`PasswordHashingLimitIT` 直接占住计算的许可，登录 503 `AUTH_BUSY`、不写登录记录、不计失败。L4：见第 3 条与 14 §5.1。
+- L5：链路本地地址去掉作用域后按 /64；没有地址的请求共用键 `unknown`（10 §4.1）。
+- 端到端测试的管理员从本机登录数十次：CI 的 `e2e` 作业只放宽"地址 + 名字"的桶（`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS`、`_USER_BURST`），地址的桶照缺省。

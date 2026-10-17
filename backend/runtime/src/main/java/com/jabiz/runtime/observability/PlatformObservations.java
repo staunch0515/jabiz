@@ -88,6 +88,10 @@ public class PlatformObservations {
     public static final String PROCESS_ADMISSION_ACTIVE = "jabiz.process.admission.active";
     /** A request of the process API refused by its rate limit (decision D45): tags {@code process} and {@code scope}. */
     public static final String PROCESS_RATE_LIMITED = "jabiz.process.rate_limited";
+    /** A sign-in request refused by the per-address limit (decision D47): tag {@code kind} only. */
+    public static final String AUTH_RATE_LIMITED = "jabiz.auth.rate_limited";
+    /** Password hashing refused because too many were waiting for it (decision D47): no tags. */
+    public static final String AUTH_HASHING_BUSY = "jabiz.auth.hashing.busy";
 
     public static final String OUTCOME = "outcome";
     public static final String STATUS = "status";

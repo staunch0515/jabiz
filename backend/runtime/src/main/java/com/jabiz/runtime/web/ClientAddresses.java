@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 
@@ -67,16 +68,23 @@ public class ClientAddresses implements PlatformCheck {
 
     private final List<String> configured;
     private final String forwardHeadersStrategy;
+    private final boolean dev;
     private final List<Block> trusted = new ArrayList<>();
     private final List<String> problems = new ArrayList<>();
 
     @Autowired
     public ClientAddresses(Environment environment) {
         this(Binder.get(environment).bind(PROPERTY, Bindable.listOf(String.class)).orElse(List.of()),
-            environment.getProperty(FORWARD_HEADERS_STRATEGY));
+            environment.getProperty(FORWARD_HEADERS_STRATEGY), environment.acceptsProfiles(Profiles.of("dev")));
     }
 
     ClientAddresses(List<String> trustedProxies, String forwardHeadersStrategy) {
+        this(trustedProxies, forwardHeadersStrategy, false);
+    }
+
+    /** @param dev whether the {@code dev} profile is active: Spring's forwarded-header handling only warns there */
+    ClientAddresses(List<String> trustedProxies, String forwardHeadersStrategy, boolean dev) {
+        this.dev = dev;
         this.configured = trustedProxies == null ? List.of() : List.copyOf(trustedProxies);
         this.forwardHeadersStrategy = forwardHeadersStrategy;
         for (String entry : configured) {
@@ -138,6 +146,50 @@ public class ClientAddresses implements PlatformCheck {
         return last;
     }
 
+    /**
+     * The network a client address stands for in per-address rate limits: an IPv6 address's /64 (one subscriber
+     * usually has a whole /64, so counting single addresses would let it rotate through them), any other text as it
+     * is. {@code 2001:db8:1:2:a:b:c:d} → {@code 2001:db8:1:2::/64}. A link-local address with a scope
+     * ({@code fe80::1%eth0}) counts without its scope, by its /64 as well. A request without an address counts as
+     * {@code unknown}: all such requests share one key (in practice only in tests and behind misconfigured proxies).
+     */
+    public static String rateLimitKey(String client) {
+        if (client == null || client.indexOf(':') < 0) {
+            return client;
+        }
+        InetAddress address = literal(withoutScope(client));
+        if (!(address instanceof java.net.Inet6Address)) {
+            return address == null ? client : address.getHostAddress();
+        }
+        return prefix(address.getAddress(), 4) + ":/64";
+    }
+
+    /**
+     * The site an IPv6 client address belongs to, its /48, for a second, looser per-network limit (decision D47); null
+     * for anything that is not an IPv6 address. {@code 2001:db8:1:2::9} → {@code 2001:db8:1::/48}.
+     */
+    public static String networkKey(String client) {
+        if (client == null || client.indexOf(':') < 0) {
+            return null;
+        }
+        InetAddress address = literal(withoutScope(client));
+        return address instanceof java.net.Inet6Address ? prefix(address.getAddress(), 3) + ":/48" : null;
+    }
+
+    private static String withoutScope(String client) {
+        int percent = client.indexOf('%');
+        return percent < 0 ? client : client.substring(0, percent);
+    }
+
+    /** The first {@code groups} 16-bit groups of an IPv6 address, each followed by a colon. */
+    private static String prefix(byte[] bytes, int groups) {
+        StringBuilder network = new StringBuilder();
+        for (int i = 0; i < groups * 2; i += 2) {
+            network.append(Integer.toHexString(((bytes[i] & 0xFF) << 8) | (bytes[i + 1] & 0xFF))).append(':');
+        }
+        return network.toString();
+    }
+
     /** Whether any proxy is trusted. */
     public boolean trustsProxies() {
         return !trusted.isEmpty();
@@ -147,11 +199,20 @@ public class ClientAddresses implements PlatformCheck {
     public List<CheckProblem> check() {
         List<CheckProblem> found = new ArrayList<>();
         problems.forEach(problem -> found.add(CheckProblem.error("SECURITY", PROPERTY, problem)));
-        if (!configured.isEmpty() && forwardHeadersStrategy != null && !forwardHeadersStrategy.isBlank()
-            && !"none".equalsIgnoreCase(forwardHeadersStrategy.trim())) {
+        boolean springForwarding = forwardHeadersStrategy != null && !forwardHeadersStrategy.isBlank()
+            && !"none".equalsIgnoreCase(forwardHeadersStrategy.trim());
+        if (springForwarding && !configured.isEmpty()) {
             found.add(CheckProblem.error("SECURITY", PROPERTY, PROPERTY + " and " + FORWARD_HEADERS_STRATEGY + "="
                 + forwardHeadersStrategy + " are both set: forwarded headers would be applied twice and could be "
                 + "forged; keep only " + PROPERTY));
+        } else if (springForwarding) {
+            // Spring believes the headers of every connection, so any client could name its own address and escape
+            // the per-address limits (decision D47); only the trusted proxies' headers may count.
+            String message = FORWARD_HEADERS_STRATEGY + "=" + forwardHeadersStrategy + " believes forwarding headers "
+                + "from every client, which could then forge its address for login records and rate limits; list the "
+                + "proxies in " + PROPERTY + " and leave " + FORWARD_HEADERS_STRATEGY + " unset (or none)";
+            found.add(dev ? CheckProblem.warning("SECURITY", FORWARD_HEADERS_STRATEGY, message)
+                : CheckProblem.error("SECURITY", FORWARD_HEADERS_STRATEGY, message));
         }
         return found;
     }

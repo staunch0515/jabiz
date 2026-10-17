@@ -15,7 +15,8 @@ import java.util.function.Predicate;
  * their own password (section 15.8; that process counts a mismatch towards the lock, this step does not).
  */
 @Component
-public class CurrentPasswordStep implements BlockingStep<CurrentPasswordStep.Metadata, ProcessContext> {
+public class CurrentPasswordStep implements BlockingStep<CurrentPasswordStep.Metadata, ProcessContext>,
+    PasswordHashingLimit.HashingStep {
 
     /**
      * @param passwordKey context key of the password; removed by the step

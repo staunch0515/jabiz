@@ -71,6 +71,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   （读接口不返回、数据视图 API 不接受写入，只有专用流程能写）；流程输入输出 record 的秘密组件标 `@Sensitive` 并在 `toString()` 中遮蔽（见 10 §6）。
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
+  登录类接口限流（地址 + 名字、地址、IPv6 站点、实例）、口令哈希有并发上限（`jabiz.security.sign-in.rate-limit.*`、`jabiz.security.password-hashing.*`，10 §4.1–§4.2、决策 D47），由平台在入口处做，不另写；客户端地址只经 `jabiz.security.trusted-proxies`，不用 `server.forward-headers-strategy`。
   会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。
@@ -96,7 +97,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
 - **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。
 - **文件**（见 14 与决策 D18）：上传只经 `/api/files?policy=…`，类型按内容判定、图片一律重新编码（去掉 EXIF/GPS）；
-  字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限。
+  字段用 `f.kind(FileKind.of("策略"))` 引用文件（列 `uuid`，不加外键），策略（`FilePolicy` Bean）必须声明上传与读取权限；原名与上传者不应让其他读者看到的策略声明 `privateMetadata()`（只有上传者与 `file.read` 看得到，下载名为中性名，14 §5.1、决策 D47）。
   `sys_file` 是可删除的普通表，只经 `FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` 写入；业务流程删除文件前先清空引用并
   `SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`。文件名不进 `input_summary`；`FileStore` 返回 `Mono`/`Flux`，不对业务开放。
   服务器生成、交给外部的文件（银行付款文件、申报文件）不进 `sys_file`：业务流程以子流程 `CallProcess.of("FILE_ARCHIVE", …)` 原样保存到只追加的 `sys_generated_file`
@@ -203,7 +204,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   （写 `frontend/openapi/public-queries.json`，路径由 `jabizApp.publicQueriesSnapshot` 配置），随变更提交
 - 前后端共享校验用例 `spec/validation-cases.json`：core `ValidationCasesTest` 与前端 `validation.cases.test.ts` 都执行；
   字段元数据变化后 `./gradlew :core:test -Dvalidation-cases.update=true` 重写其中的 `fields`
-- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
+- 端到端（Playwright）：先运行打包的应用（`./gradlew :app:bootJar`，以 `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_DEMO_AI_KEY`（示范外部服务的密钥，任意值）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`（共用的管理员没有二次验证）、`JABIZ_ADMIN_ROLES=*` 与 `JABIZ_PORTAL_SELF_REGISTRATION=false`（测试以自己的角色登录后台，示范门户因此不开放注册）、`JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false`（不发邮件，门户的客户无法验证邮箱，仍可登录）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000` 与 `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000`（共用的管理员从本机登录数十次，D47 的"地址 + 名字"限流放宽）、`JABIZ_BOOTSTRAP_ADMIN_USER/PASSWORD`、`JABIZ_FILES_LOCAL_ROOT` 与数据库环境变量
   `SPRING_R2DBC_*`、`SPRING_FLYWAY_*` 启动 `app/build/libs/*.jar`），再在 `frontend/` 下
   `E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`（`E2E_BASE_URL` 默认 `http://localhost:8080`；`E2E_CHROMIUM` 可指定已安装的 Chromium）。
   测试只增不删数据，可对同一数据库重复运行；CI 的 `e2e` 作业即如此

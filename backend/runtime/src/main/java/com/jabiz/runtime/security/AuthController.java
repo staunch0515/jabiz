@@ -37,7 +37,8 @@ import java.util.UUID;
  * {@code SIGN_IN_REFUSED}) and an address the entry requires verified (403 {@code EMAIL_NOT_VERIFIED}). A success
  * returns a short-lived access token and a single-use refresh token, both of the entry. Refreshing consumes the refresh
  * token, re-reads the user's roles and returns a new pair of the same entry; signing out ends the session of a refresh
- * token. {@code /me} and {@code /menus} describe the authenticated actor.
+ * token. {@code /me} and {@code /menus} describe the authenticated actor. Signing in and refreshing are counted per
+ * client address ({@link SignInRateLimits}; 429 {@code RATE_LIMITED}).
  */
 @RestController
 class AuthController {
@@ -120,10 +121,12 @@ class AuthController {
     private final SignInEntries entries;
     private final ClientAddresses clients;
     private final PlatformObservations observations;
+    private final SignInRateLimits limits;
 
     AuthController(ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens, RbacService rbac,
         MenuService menus, MfaSettings mfa, UserNames userNames, SignInEntries entries, ClientAddresses clients,
-        PlatformObservations observations) {
+        PlatformObservations observations, SignInRateLimits limits) {
+        this.limits = limits;
         this.processes = processes;
         this.tokens = tokens;
         this.refreshTokens = refreshTokens;
@@ -139,6 +142,8 @@ class AuthController {
     @PostMapping(LOGIN)
     Mono<TokenResponse> login(@RequestBody(required = false) LoginRequest request, ServerHttpRequest http) {
         return Mono.defer(() -> {
+            // Per address, before anything is read (decision D47): every attempt counts, right or wrong.
+            limits.count(SignInRateLimits.Kind.PASSWORD, http, request == null ? null : request.userName());
             if (request == null || blank(request.userName()) || blank(request.password())) {
                 return Mono.error(loginFailed("Missing user name or password"));
             }
@@ -200,6 +205,7 @@ class AuthController {
     Mono<TokenResponse> refresh(@RequestBody(required = false) RefreshRequest request, ServerHttpRequest http) {
         // Consuming the old token, checking the user and issuing the next token form one transaction.
         return Mono.defer(() -> {
+            limits.count(SignInRateLimits.Kind.REFRESH, http, null);
             java.util.Optional<SignInEntries.Entry> entry = entries.find(request == null ? null : request.entry());
             if (entry.isEmpty()) {
                 return Mono.error(invalidRefresh("Unknown sign-in entry"));

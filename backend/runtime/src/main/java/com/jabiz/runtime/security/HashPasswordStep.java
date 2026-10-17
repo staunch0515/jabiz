@@ -15,7 +15,8 @@ import java.util.function.Predicate;
  * BCrypt is slow on purpose). The plain password does not stay in the context.
  */
 @Component
-public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata, ProcessContext> {
+public class HashPasswordStep implements BlockingStep<HashPasswordStep.Metadata, ProcessContext>,
+    PasswordHashingLimit.HashingStep {
 
     /**
      * @param passwordKey context key of the new password; removed by the step

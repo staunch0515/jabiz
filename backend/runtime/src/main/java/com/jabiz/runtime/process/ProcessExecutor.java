@@ -23,6 +23,7 @@ import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
+import com.jabiz.runtime.security.PasswordHashingLimit;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -98,28 +99,37 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     private final PlatformObservations observations;
     private final Duration lockTimeout;
     private final ProcessAdmission admission;
+    private final PasswordHashingLimit hashing;
     private final WriteBatching batching;
     /** How many sub-processes each process may start, by name and version (see {@link #subProcessBound}). */
     private final Map<String, Integer> subProcessBounds = new ConcurrentHashMap<>();
     /** Readers of the registered processes' outputs, for replays, built at startup (see below). */
     private final Map<Class<?>, ObjectReader> outputReaders = new ConcurrentHashMap<>();
 
+    /**
+     * With the default write batching and without a limit on password hashing (tests that build an executor of their
+     * own).
+     */
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         String poolRef, PlatformObservations observations, Duration lockTimeout, ProcessAdmission admission) {
         this(beans, sequence, operations, committer, storages, json, masker, poolRef, observations, lockTimeout,
-            admission, new WriteBatching());
+            admission, new WriteBatching(), PasswordHashingLimit.NONE);
     }
 
-    /** @param batching whether the transaction's writes are held (decision D46 rule 1), so sub-processes' too */
+    /**
+     * @param batching whether the transaction's writes are held (decision D46 rule 1), so sub-processes' too
+     * @param hashing  the queue before password hashing (decision D47 item 2), before the transaction
+     */
     @Autowired
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations,
         @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout, ProcessAdmission admission,
-        WriteBatching batching) {
+        WriteBatching batching, PasswordHashingLimit hashing) {
         this.batching = Objects.requireNonNull(batching, "batching must not be null");
         this.admission = Objects.requireNonNull(admission, "admission must not be null");
+        this.hashing = Objects.requireNonNull(hashing, "hashing must not be null");
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.lockTimeout = Objects.requireNonNull(lockTimeout, "lockTimeout must not be null");
         this.masker = masker;
@@ -197,11 +207,12 @@ public class ProcessExecutor implements SmartInitializingSingleton {
 
     /**
      * {@code transaction} once the process is admitted past the queue before its hot lock, if it declares one
-     * (decision D45): before it borrows a connection, until it has ended. Only top-level runs queue.
+     * (decision D45), and past the queue before password hashing, if it hashes (decision D47): before it borrows a
+     * connection, until it has ended. Only top-level runs queue.
      */
     private <I, T> Mono<T> admitted(ProcessDefinition<I, ?, ?> definition, I input, ExecutionOptions options,
         Mono<T> transaction) {
-        return admission.admit(definition, input, options.lockWait(), transaction);
+        return admission.admit(definition, input, options.lockWait(), hashing.around(definition, transaction));
     }
 
     /**

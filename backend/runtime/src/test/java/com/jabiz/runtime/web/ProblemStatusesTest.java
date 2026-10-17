@@ -5,6 +5,7 @@ import com.jabiz.dataset.ScopeUnavailableException;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.runtime.AuthBusyException;
 import com.jabiz.runtime.AuthenticationFailedException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
@@ -101,6 +102,17 @@ class ProblemStatusesTest {
         });
         assertThat(new ProcessBusyException("qb.pub", ProcessBusyException.Reason.WAIT_TIMEOUT, 0)
             .retryAfterSeconds()).isEqualTo(1);
+        // Password hashing saturated (decision D47): 503 with Retry-After.
+        AuthBusyException hashing = new AuthBusyException(2);
+        var hashingResponse = handler.handleAuthBusy(hashing, exchange);
+        assertThat(ProblemStatuses.status(hashing)).isEqualTo(hashingResponse.getStatusCode().value()).isEqualTo(503);
+        assertThat(hashingResponse.getHeaders().getFirst("Retry-After")).isEqualTo("2");
+        assertThat(hashingResponse.getBody().getProperties()).containsEntry("retryAfter", 2L).containsKey("violations");
+        assertThat(ProblemStatuses.violations(hashing)).singleElement().satisfies(v -> {
+            assertThat(v.ruleCode()).isEqualTo("AUTH_BUSY");
+            assertThat(v.params()).isEqualTo(Map.of("retryAfter", 2L));
+        });
+        assertThat(new AuthBusyException(0).retryAfterSeconds()).isEqualTo(1);
         assertThat(ProblemStatuses.status(new IllegalStateException())).isEqualTo(500);
     }
 
