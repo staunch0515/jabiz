@@ -33,6 +33,8 @@ public final class TakerWallets {
 
     public static final String SYNC = "QB_TAKER_WALLET_SYNC";
     public static final String BALANCE_TEMPLATE = "qb.system.taker-balance";
+    /** The balance and the rewards held back from transfers (Q10b, review M3), for the transfer processes. */
+    public static final String TRANSFERABLE_TEMPLATE = "qb.wallet.taker-transferable";
     /** Event: recompute a taker's wallet ({@code {userId}}), asked for by the reconciliation. */
     public static final String RESYNC_EVENT = "qb.taker-wallet.resync";
 

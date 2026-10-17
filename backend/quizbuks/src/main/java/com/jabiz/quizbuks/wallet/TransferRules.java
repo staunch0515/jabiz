@@ -25,6 +25,11 @@ public final class TransferRules {
     /** The user's last {@value #MAX_FAILURE_STREAK} transfers failed: a person looks first. */
     public static final String FAILURE_STREAK = "FAILURE_STREAK";
     public static final String BELOW_THRESHOLD = "BELOW_THRESHOLD";
+    /**
+     * The balance reaches the threshold, but what is not held back does not (Q10b, review M3): rewards of the hold
+     * period, or of a sponsor with an open dispute, wait.
+     */
+    public static final String REWARDS_HELD = "REWARDS_HELD";
     /** The fee takes the whole amount. */
     public static final String FEE_TOO_HIGH = "FEE_TOO_HIGH";
     /**
@@ -73,17 +78,36 @@ public final class TransferRules {
         }
     }
 
-    /** The values of the parameters on the day. */
-    public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee) {}
+    /**
+     * The values of the parameters on the day.
+     *
+     * @param holdDays how long a reward is held back from transfers ({@code qb.transfer.hold-days}, Q10b)
+     */
+    public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
+        BigDecimal holdDays) {}
 
     /**
      * What the transfer process read under the user's wallet lock.
      *
      * @param accountStatus the payout account's status; null without one
      * @param balance       account 2120 for the user, from the ledger
+     * @param rewardsHeld   the rewards in it held back (Q10b, M3: {@code qb.wallet.taker-transferable})
      */
     public record Facts(boolean banned, String accountStatus, boolean openTransfer, int failureStreak,
-        boolean held, boolean reviewConfigured, BigDecimal balance) {}
+        boolean held, boolean reviewConfigured, BigDecimal balance, BigDecimal rewardsHeld) {
+
+        /** What may leave: the balance less the rewards held back, never below 0. */
+        public BigDecimal transferable() {
+            return TransferRules.transferable(balance, rewardsHeld);
+        }
+    }
+
+    /** The balance less the rewards held back, never below 0 (none given: nothing held). */
+    public static BigDecimal transferable(BigDecimal balance, BigDecimal rewardsHeld) {
+        BigDecimal all = balance == null ? BigDecimal.ZERO : balance;
+        BigDecimal kept = rewardsHeld == null ? BigDecimal.ZERO : rewardsHeld;
+        return all.subtract(kept).max(BigDecimal.ZERO);
+    }
 
     /**
      * The decision: skip (with the reason) or transfer {@code amount}, of which {@code fee} is the platform's and
@@ -100,13 +124,16 @@ public final class TransferRules {
         }
     }
 
-    /** Whether, and how much, to transfer: the whole balance, once it reaches the threshold (U-53). */
+    /**
+     * Whether, and how much, to transfer: the whole balance less the rewards held back (Q10b, M3), once that reaches
+     * the threshold (U-53).
+     */
     public static Plan plan(Params params, Facts facts) {
         if (!Boolean.TRUE.equals(params.enabled())) {
             return Plan.skip(DISABLED);
         }
         if (!wholeAndNotNegative(params.threshold()) || !wholeAndNotNegative(params.reviewAbove())
-            || !wholeAndNotNegative(params.fee())) {
+            || !wholeAndNotNegative(params.fee()) || !wholeAndNotNegative(params.holdDays())) {
             return Plan.skip(INVALID_PARAMS);
         }
         if (facts.banned()) {
@@ -127,10 +154,14 @@ public final class TransferRules {
         if (facts.failureStreak() >= MAX_FAILURE_STREAK) {
             return Plan.skip(FAILURE_STREAK);
         }
-        BigDecimal balance = facts.balance() == null ? BigDecimal.ZERO : facts.balance();
+        BigDecimal all = facts.balance() == null ? BigDecimal.ZERO : facts.balance();
+        if (all.signum() <= 0 || all.compareTo(params.threshold()) < 0 || all.stripTrailingZeros().scale() > 0) {
+            return Plan.skip(BELOW_THRESHOLD);
+        }
+        BigDecimal balance = facts.transferable();
         if (balance.signum() <= 0 || balance.compareTo(params.threshold()) < 0
             || balance.stripTrailingZeros().scale() > 0) {
-            return Plan.skip(BELOW_THRESHOLD);
+            return Plan.skip(REWARDS_HELD);
         }
         BigDecimal net = balance.subtract(params.fee());
         if (net.signum() <= 0) {

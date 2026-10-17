@@ -11,6 +11,11 @@ public final class WalletCodes {
     public static final String TOPUP_TOO_MANY_OPEN = "QB_TOPUP_TOO_MANY_OPEN";
     /** Top-ups are not configured here: the sponsor console's address, where Stripe returns, is missing. */
     public static final String TOPUP_UNAVAILABLE = "QB_TOPUP_UNAVAILABLE";
+    /**
+     * A new sponsor's top-ups in all would pass {@code qb.topup.new-sponsor.max-total} (Q10b, M3; params
+     * {@code remaining}, {@code max} and {@code until}, "-" before the first paid top-up).
+     */
+    public static final String TOPUP_NEW_SPONSOR_LIMIT = "QB_TOPUP_NEW_SPONSOR_LIMIT";
 
     /** The taker's country is not the one payout accounts are opened in (param {@code country}; Q18: no cross-border). */
     public static final String PAYOUT_COUNTRY_UNSUPPORTED = "QB_PAYOUT_COUNTRY_UNSUPPORTED";
@@ -34,6 +39,7 @@ public final class WalletCodes {
     public static final String RECEIPT_REFUNDED = "QB_RECEIPT_REFUNDED";
 
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
+        TOPUP_NEW_SPONSOR_LIMIT,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED);
 

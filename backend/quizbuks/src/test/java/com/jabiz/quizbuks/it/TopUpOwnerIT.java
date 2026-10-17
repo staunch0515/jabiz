@@ -47,7 +47,8 @@ class TopUpOwnerIT extends TopUpItSupport {
         assertThat(violations(refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 999), 422)))
             .singleElement().satisfies(v -> assertThat(v).containsEntry("ruleCode", "QB_TOPUP_AMOUNT_RANGE"));
         assertThat(codes(refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 1_000_001), 422)))
-            .containsExactly("QB_TOPUP_AMOUNT_RANGE");
+            // A new sponsor is past the new sponsors' limit too (Q10b); every problem at once.
+            .containsExactly("QB_TOPUP_AMOUNT_RANGE", "QB_TOPUP_NEW_SPONSOR_LIMIT");
         refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", "1000.5"), 400);
         refused("QB_TOPUP_START", sponsorToken(sponsor), body("amount", -5), 400);
         assertThat(count("qb_topup WHERE sponsor_id = '" + sponsor + "'")).isZero();

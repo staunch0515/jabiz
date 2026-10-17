@@ -14,3 +14,7 @@ ALTER TABLE qb_publication_version
 
 ALTER TABLE qb_topup_receipt_version
     ADD COLUMN issued_at timestamptz;
+
+-- M3: the transfers and the taker's wallet look up the sponsors with an open dispute (qb.wallet.taker-transferable,
+-- qb.app.wallet).
+CREATE INDEX qb_topup_dispute_open_idx ON qb_topup (sponsor_id) WHERE dispute_status = 'OPEN';
