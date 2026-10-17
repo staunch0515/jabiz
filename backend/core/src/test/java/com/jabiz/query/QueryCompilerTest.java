@@ -238,6 +238,24 @@ class QueryCompilerTest {
 
         assertThat(plan.whereClause()).isEqualTo("1 = 0");
         assertThat(plan.bindParams()).isEmpty();
+        assertThat(plan.matchesNothing()).isTrue();
+    }
+
+    /** A condition false whatever the data is never sent (ROADMAP 16p, T8); one that may hold is. */
+    @Test
+    void conditionsFalseWhateverTheDataAreMarked() {
+        QueryPredicate none = new QueryPredicate.In("price", List.<Object>of());
+        QueryPredicate open = new QueryPredicate.Eq("status", "OPEN");
+        assertThat(compile(new QueryPredicate.And(List.of(open, none))).matchesNothing()).isTrue();
+        assertThat(compile(new QueryPredicate.Or(List.of(none, new QueryPredicate.Or(List.of())))).matchesNothing())
+            .isTrue();
+        assertThat(compile(new QueryPredicate.Or(List.of(none, open))).matchesNothing()).isFalse();
+        assertThat(compile(new QueryPredicate.And(List.of())).matchesNothing()).isFalse();
+        assertThat(compile(open).matchesNothing()).isFalse();
+        assertThat(compile(new QueryPredicate.In("price", List.<Object>of(1))).matchesNothing()).isFalse();
+        // Every part is still checked: a mistake next to the false part is reported.
+        assertRejected(() -> compile(new QueryPredicate.And(List.of(none, new QueryPredicate.Eq("nope", 1)))),
+            "nope", "UNKNOWN_FIELD");
     }
 
     @Test
@@ -258,6 +276,7 @@ class QueryCompilerTest {
     @Test
     void emptyOrMatchesNothing() {
         assertThat(compile(new QueryPredicate.Or(List.of())).whereClause()).isEqualTo("1 = 0");
+        assertThat(compile(new QueryPredicate.Or(List.of())).matchesNothing()).isTrue();
     }
 
     @Test

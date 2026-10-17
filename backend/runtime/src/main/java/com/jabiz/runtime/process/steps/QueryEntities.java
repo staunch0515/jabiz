@@ -23,6 +23,9 @@ import java.util.function.Function;
  * the query's own limit, not a page of the dataset's {@code maxQueryBatchSize} (decision D32); more rows than {@code jabiz.process.max-read-rows} are
  * refused (422 {@code PROCESS_READ_TOO_LARGE}). Rows past the query's own limit are not read: a query that must see
  * them all asks for more than it expects.
+ *
+ * <p>{@link #all} runs several such queries as one step and, where their datasets share a storage engine, one
+ * statement (ROADMAP phase 16p, T5): each exactly as it would run alone, its result under its own key.
  */
 @Component
 public class QueryEntities<C extends ProcessContext> implements StepHandler<QueryEntities.Metadata<C>, C>,
@@ -39,6 +42,31 @@ public class QueryEntities<C extends ProcessContext> implements StepHandler<Quer
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String datasetId,
         Function<C, EntityQuery> query, String targetKey) {
         return StepSpec.of(QueryEntities.class, new Metadata<>(datasetId, query, targetKey));
+    }
+
+    /** One query of {@link #all}, as {@link #of} takes it. */
+    public static <C extends ProcessContext> Metadata<C> query(String datasetId, Function<C, EntityQuery> query,
+        String targetKey) {
+        return new Metadata<>(datasetId, query, targetKey);
+    }
+
+    /** The queries of one {@link #all} step, in order. */
+    public record AllMetadata<C>(List<Metadata<C>> queries) {
+        public AllMetadata {
+            queries = List.copyOf(queries);
+            if (queries.isEmpty()) {
+                throw new IllegalArgumentException("queries must not be empty");
+            }
+        }
+    }
+
+    /**
+     * Several queries in one step, sent as one statement where the engine can: each result under its key, as
+     * {@link #of} puts it. For reads that do not depend on each other, such as the rereads after taking a lock.
+     */
+    @SafeVarargs
+    public static <C extends ProcessContext> StepSpec<AllMetadata<C>, C> all(Metadata<C>... queries) {
+        return StepSpec.of(All.class, new AllMetadata<>(List.of(queries)));
     }
 
     private final DatasetRegistry datasets;
@@ -78,5 +106,62 @@ public class QueryEntities<C extends ProcessContext> implements StepHandler<Quer
         return datasets.findById(metadata.datasetId()).isPresent()
             ? List.of()
             : List.of("unknown dataset " + metadata.datasetId());
+    }
+
+    /** The step of {@link QueryEntities#all}. */
+    @Component
+    public static class All<C extends ProcessContext> implements StepHandler<AllMetadata<C>, C>,
+        CheckedStep<AllMetadata<C>> {
+
+        private final DatasetRegistry datasets;
+        private final EntityDefinitionRegistry entities;
+        private final DatasetEntityManager entityManager;
+        private final int maxRows;
+
+        public All(DatasetRegistry datasets, EntityDefinitionRegistry entities, DatasetEntityManager entityManager,
+            @Value("${jabiz.process.max-read-rows:100000}") int maxRows) {
+            ProcessReads.checkMaximum(maxRows);
+            this.datasets = datasets;
+            this.entities = entities;
+            this.entityManager = entityManager;
+            this.maxRows = maxRows;
+        }
+
+        @Override
+        public Mono<Void> execute(AllMetadata<C> metadata, C ctx) {
+            return Mono.defer(() -> {
+                List<DatasetEntityManager.EntityRead> reads = new java.util.ArrayList<>();
+                List<Boolean> bounded = new java.util.ArrayList<>();
+                for (Metadata<C> query : metadata.queries()) {
+                    DatasetDefinition dataset = datasets.findById(query.datasetId()).orElseThrow();
+                    EntityQuery asked = Objects.requireNonNull(query.query().apply(ctx), "query must not be null");
+                    boolean tooMany = asked.limit() > maxRows;
+                    bounded.add(tooMany);
+                    reads.add(new DatasetEntityManager.EntityRead(dataset,
+                        entities.getOrThrow(dataset.targetEntityType()), tooMany
+                            ? new EntityQuery(asked.predicate(), asked.sorts(), asked.offset(), maxRows + 1) : asked));
+                }
+                return entityManager.queryMany(reads).flatMap(results -> {
+                    for (int i = 0; i < results.size(); i++) {
+                        if (bounded.get(i) && results.get(i).size() > maxRows) {
+                            return Mono.<Void>error(ProcessReads.tooLarge(
+                                "dataset " + metadata.queries().get(i).datasetId(), maxRows));
+                        }
+                    }
+                    for (int i = 0; i < results.size(); i++) {
+                        ctx.put(metadata.queries().get(i).targetKey(), List.copyOf(results.get(i)));
+                    }
+                    return Mono.<Void>empty();
+                });
+            });
+        }
+
+        @Override
+        public List<String> problems(AllMetadata<C> metadata) {
+            return metadata.queries().stream()
+                .filter(query -> datasets.findById(query.datasetId()).isEmpty())
+                .map(query -> "unknown dataset " + query.datasetId())
+                .toList();
+        }
     }
 }

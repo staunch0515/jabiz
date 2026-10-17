@@ -117,13 +117,11 @@ class CommerceIT extends PostgresIntegrationTest {
         assertThat(summary).extracting(r -> r.get("orderno") + "/" + r.get("status") + "/" + r.get("linecount"))
             .containsExactlyInAnyOrder(code + "-1/CANCELLED/2", code + "-2/SHIPPED/1");
 
-        List<String> writes = SqlStatementLog.STATEMENTS.stream()
-            .map(s -> s.strip().toUpperCase(Locale.ROOT))
-            .filter(s -> TABLES.stream().anyMatch(s::contains))
-            .filter(s -> s.startsWith("UPDATE") || s.startsWith("DELETE") || s.startsWith("INSERT")
-                || s.startsWith("TRUNCATE"))
-            .toList();
-        assertThat(writes).isNotEmpty().allSatisfy(s -> assertThat(s).startsWith("INSERT"));
+        // Wherever in a statement (several tables are written in one since phase 16p): only inserts.
+        List<String> tables = TABLES.stream().map(table -> table.toLowerCase(Locale.ROOT)).toList();
+        List<String> writes = tables.stream().flatMap(table -> SqlStatementLog.writing(table).stream()).toList();
+        assertThat(writes).isNotEmpty().allSatisfy(s -> assertThat(SqlStatementLog.mutatedTables(s))
+            .doesNotContainAnyElementsOf(tables));
     }
 
     @Test

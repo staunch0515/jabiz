@@ -259,6 +259,32 @@ class IntegrityIT extends SecurityItSupport {
         assertThat(checks.check()).isEmpty();
     }
 
+    /**
+     * Rows a commit writes in one statement (versions, their registry entries, operation items and audit records,
+     * ROADMAP phase 16p, decision D46) are sealed and verified as any others, and a row changed past the guard is found.
+     */
+    @Test
+    void rowsWrittenTogetherAreSealedAndAChangedOneIsFound() {
+        String sku = unique("SKU");
+        List<Map<String, Object>> changes = List.of(
+            Map.of("action", "INSERT", "attributes", Map.of("sku", sku + "-1", "region", "JP", "amount", 1,
+                "status", "DRAFT")),
+            Map.of("action", "INSERT", "attributes", Map.of("sku", sku + "-2", "region", "JP", "amount", 2,
+                "status", "DRAFT")));
+        post("/api/datasets/urn:jabiz:dataset:it:ItPrice/commit", admin(), Map.of("changes", changes))
+            .expectStatus().isOk();
+        long sealNo = sealNo(seal());
+        assertThat(verify(sealNo)).containsEntry("intact", true);
+        long rowId = ((Number) query("SELECT row_id FROM it_price WHERE sku = ?", sku + "-2").getFirst()
+            .get("row_id")).longValue();
+        assertThat(sealedKeys("it_price")).contains("[" + rowId + "]");
+
+        bypassingTheGuard("UPDATE it_price SET amount = 99 WHERE row_id = " + rowId);
+
+        assertThat(problems(verify(sealNo))).extracting(p -> p.get("kind"), p -> p.get("table"), p -> p.get("key"))
+            .contains(tuple("MODIFIED", "it_price", "[" + rowId + "]"));
+    }
+
     // ================= helpers =================
 
     /** Writes a ticket through the dataset API, which leaves audit records; returns its id. */

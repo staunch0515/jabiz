@@ -34,7 +34,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 2. **运行时层（`jabiz-runtime`）很薄**：只负责执行（存储、事务、流程执行、Web 接入）。
 3. **业务扩展点全部同步**：字段规则（`RulePredicate`）、迁移守卫、流程计算步骤（`ComputeStep`）、阻塞步骤（`BlockingStep`）。
    平台内部的 `StepHandler`（返回 `Mono`）只供平台自己的 I/O 步骤使用，不对业务开放。
-   业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`；不能重叠的流程以 `HoldLock.shared/exclusive` 取命名锁，见 06 §4.1）
+   业务流程用平台步骤的工厂（`LoadEntity.by`、`QueryEntities.of`（几个互不依赖的查询一条语句：`QueryEntities.all`）、`RunTemplate.of`、`SaveChanges.now`、`CallProcess.of`、`PublishEvent.of`；不能重叠的流程以 `HoldLock.shared/exclusive` 取命名锁，见 06 §4.1）
    做 I/O（业务参数用 `LoadParams.of`，以业务发生时间读取，见 04 §9），用 `ctx.changes()` 登记变更、`ctx.reject(...)` 累积违规，由平台在流程结束时统一提交（见 06 与决策 D11）。每个流程必须声明权限。
    热门的命名锁在流程上以 `admission(族, 输入 -> 键)` 声明取锁前的排队（族名与键同该流程最外层 `HoldLock` 的名称，由同一辅助方法生成；06 §4.2、决策 D45），正确性仍由 `HoldLock` 保证；
    子流程从不排队；过载即 503 `PROCESS_BUSY`。流程入口的限流只在 `jabiz.process.rate-limits` 配置，不在业务代码中自己计数。
@@ -138,12 +138,15 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   导入与字段的显示名在消息 `import.<id>`、`import.<id>.<字段>`。预览是试运行（`ExecutionOptions.DRY_RUN`），不自己做"先校验后写入"的两套逻辑；
   提交有任何问题即整体拒收（只留下 `sys_import_run` 的记录），同一文件、同一外部引用只导入一次。场景中用步骤 `import` 导入文件（07 §3.1）。
 - **审计**（见 21 §1 与决策 D27）：实体写入的前后值由平台在 `DatasetEntityManager` / `VersionAppender` 中记入只追加的 `sys_audit_record`（敏感字段只存 `***`），
-  业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一。可读但不应留在审计中的值（如文件名）用 `f.auditMasked()`。查询只经 `GET /api/audit/records`（`audit.read`）。
+  业务代码不自己写审计表或"修改日志"；新的写入路径必须经过这两处之一（普通表只经 `DatasetEntityManager` 写入：按已知版本的更新依赖于此，D46）。可读但不应留在审计中的值（如文件名）用 `f.auditMasked()`。查询只经 `GET /api/audit/records`（`audit.read`）。
   只追加表由平台逐行封存（21 §2：`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`，HMAC 链，密钥只来自 `JABIZ_INTEGRITY_KEY`，非 dev 缺少即启动失败）；
   新的只追加表必须有主键（启动检查 `INTEGRITY`），不需要另外声明。
 - **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算），法律保全只经
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
+- **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：一次提交的插入由平台合成一条语句写出（读之前写出），引用检查复用本事务的读写，普通实体按本事务读到的版本更新；
+  这些都在平台的写入路径中，业务代码不自己合并语句或缓存读到的实例，也不跨事务缓存科目、维度取值等可变数据。平台的标准写入路径（账本过账与冲正、示范的下单与发货、按已知版本更新、
+  `HoldLock`、带幂等键的根流程）的语句数由 `StatementBudgetIT` 断言确切值，改变写入路径须同时改预算并说明原因。
 - **注释**：解释"为什么"，不复述代码。公开类型写简洁 Javadoc。
 - **不做的事**：不引入微服务、Kafka、GraphQL、事件溯源框架、Kubernetes；MVP 阶段不引入 Redis。
   URN 资源寻址、多存储引擎、读写分离、H3 空间编码保持现状，不扩展（H3 与物理量将移出核心，见路线图）。
