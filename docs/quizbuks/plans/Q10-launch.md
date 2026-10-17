@@ -157,7 +157,7 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
   - 没做的：开始锁外的其他读取（资料、国家、版本、钱包）也能合并，但不减少锁内语句，不在本阶段的范围；钱包的读取必须在钱包锁之后（D46 第 5 条），不与重读合并；`LEDGER_POST` 的合并读取由平台决定。
 - **语句预算** `AttemptStatementBudgetIT`（照平台 `StatementBudgetIT`；`SqlStatementLog` 抄入应用的测试，`r2dbc-proxy` 只在测试依赖中）：经 HTTP、带 `Idempotency-Key`，断言流程自身事务（记录其操作的那个）的确切语句数（含 `COMMIT`）与锁内的条数（自取发布锁的下一条到 `COMMIT`），
   失败时列出语句。开始共 12、锁内 5（Q10a 锁内 12；合并后未改应用时共 16、锁内 8）；付奖的提交共 20、锁内 14（Q10a 锁内 48；合并后共 22、锁内 16）；各自事务外的重放查询 1 条。
-- **压测工具**：`LOAD_METRICS=yes` 在压力前后读取应用的指标（jar 以 `-Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动），报告开始与提交的许可持有时间（`jabiz.process` 减去 `jabiz.process.admission` 的排队等待，Q10a2 中手工计算的同一个量）
+- **压测工具**：`LOAD_METRICS=yes` 在压力前后读取应用的指标：只从绑定回环地址的独立管理端口读（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动；工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，即使 `LOAD_ALLOW_REMOTE=yes`；启动时先探测，不通即失败；评审 M1、L1a：应用端口上的指标端点是匿名的，不能用），报告开始与提交的许可持有时间（全部运行的 `jabiz.process` 减去全部排队等待 `jabiz.process.admission`，除以准入的运行数，并分列准入与成功的运行数，评审 L1b；Q10a2 中手工计算的同一个量）
   与每次运行的语句数（`jabiz.process.statements`）；压力期间本机的 CPU 由 `/proc/stat` 读出。
 - **重测**（报告 `perf/Q10a-load-test.md` §9）：读者每秒 24 次首页时稳定约 37–40 次完成 / 秒（Q10a2 同设置 20–22.5），每秒 30 人时提交 p95 44 ms、40 人时 0.7 秒，每秒 50 人时过载（稳定 36 次 / 秒，答题人看到的提交 p95 8.6 秒）；
   连续读者（CPU 约 85 %）时约 22 次 / 秒（Q10a2 约 9.5–10）。准入许可 3 个时吞吐不变：瓶颈仍是发布锁（每次完成锁内约 26 ms），不是许可或 CPU。**本机未达到每秒 50 次**；建议见报告 §9.4。
