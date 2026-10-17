@@ -112,6 +112,45 @@ class ScoringTest {
         });
     }
 
+    @Test
+    void scoresAnswersByPositionAndReportsPositions() {
+        // Question 1 shows option 2 then 1; question 2 shows 3, 1, 2.
+        List<List<Integer>> order = List.of(List.of(2, 1), List.of(3, 1, 2));
+        // Position 2 of question 1 is option 1 (correct); positions 1 and 2 of question 2 are options 3 and 1.
+        Scoring.Result result = Scoring.scoreShown(quiz(), order, List.of(List.of(2), List.of(1, 2)));
+        assertThat(result.score()).isEqualTo(5);
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::selected)
+            .containsExactly(List.of(2), List.of(1, 2));
+        assertThat(result.questions()).extracting(Scoring.QuestionResult::correct)
+            .containsExactly(List.of(2), List.of(1, 2));
+        // The version's numbers would be wrong answers here.
+        assertThat(Scoring.scoreShown(quiz(), order, List.of(List.of(1), List.of(1, 3))).score()).isZero();
+    }
+
+    /**
+     * Whatever order the options are shown in, choosing the positions of the correct options scores the same as
+     * choosing the version's numbers, and the result's positions name exactly the options chosen (M1).
+     */
+    @Property(tries = 300)
+    void positionsMapBackWhateverTheOrder(@ForAll("quizzes") QuizSnapshot quiz,
+        @ForAll("choices") List<List<Integer>> answers, @ForAll long seed) {
+        List<List<Integer>> order = OptionShuffle.order(Long.toString(seed), quiz.questions());
+        List<List<Integer>> shown = new ArrayList<>();
+        for (int i = 0; i < answers.size() && i < quiz.questions().size(); i++) {
+            shown.add(Answers.positions(order.get(i), answers.get(i)));
+        }
+        List<List<Integer>> inVersion = Answers.inVersion(order, shown);
+        Scoring.Result byPosition = Scoring.scoreShown(quiz, order, shown);
+        Scoring.Result byNumber = Scoring.score(quiz, inVersion);
+        assertThat(byPosition.score()).isEqualTo(byNumber.score()).isEqualTo(reference(quiz, inVersion));
+        for (int i = 0; i < quiz.questions().size(); i++) {
+            Scoring.QuestionResult question = byPosition.questions().get(i);
+            assertThat(question.selected()).isEqualTo(i < shown.size() ? shown.get(i) : List.of());
+            assertThat(Answers.inVersion(List.of(order.get(i)), List.of(question.correct())).get(0))
+                .isEqualTo(byNumber.questions().get(i).correct());
+        }
+    }
+
     @Provide
     Arbitrary<List<List<Integer>>> choices() {
         return Arbitraries.integers().between(1, 6).list().ofMaxSize(4).list().ofMaxSize(7);

@@ -104,6 +104,11 @@ public final class QbPublications {
         eb.field("approvedAt", f -> f.physicalColumn("approved_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("pausedAt", f -> f.physicalColumn("paused_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // Q10b (M2): who paused it (PublicationStatus.BY_SPONSOR / BY_ADMIN), and the reason an administrator gave for
+        // pausing, resuming or ending it (the sponsor reads it).
+        eb.field("pausedBy", f -> f.physicalColumn("paused_by").processOnly().asText(16));
+        eb.field("adminReason", f -> f.physicalColumn("admin_reason").processOnly()
+            .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
         eb.field("endedAt", f -> f.physicalColumn("ended_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("endReason", f -> f.physicalColumn("end_reason").processOnly()
             .asCode(END_REASON_DICTIONARY, PublicationStatus.END_REASONS.toArray(String[]::new)));

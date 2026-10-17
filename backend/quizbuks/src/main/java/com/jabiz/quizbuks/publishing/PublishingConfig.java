@@ -192,7 +192,9 @@ public class PublishingConfig {
         return StaticDictionary.define(QbPublications.END_REASON_DICTIONARY, d -> d
             .item(PublicationStatus.EXPIRED, "en", "End time reached", "zh", "到达结束时间", "ja", "終了時刻に到達")
             .item(PublicationStatus.QUOTA, "en", "All winners rewarded", "zh", "名额已满", "ja", "当選枠に到達")
-            .item(PublicationStatus.BUDGET, "en", "Budget spent", "zh", "预算已用完", "ja", "予算を使い切り"));
+            .item(PublicationStatus.BUDGET, "en", "Budget spent", "zh", "预算已用完", "ja", "予算を使い切り")
+            .item(PublicationStatus.ADMIN, "en", "Ended by an administrator", "zh", "已被管理员结束",
+                "ja", "管理者が終了"));
     }
 
     @Bean
@@ -235,6 +237,21 @@ public class PublishingConfig {
     @Bean
     ProcessDefinition<PublicationLifecycle.PublicationRef, PublicationOutput, ProcessContext> qbPublicationResume() {
         return PublicationLifecycle.resume();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationAdmin.AdminInput, PublicationOutput, ProcessContext> qbPublicationAdminPause() {
+        return PublicationAdmin.pause();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationAdmin.AdminInput, PublicationOutput, ProcessContext> qbPublicationAdminResume() {
+        return PublicationAdmin.resume();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationAdmin.AdminInput, PublicationOutput, ProcessContext> qbPublicationAdminEnd() {
+        return PublicationAdmin.end();
     }
 
     @Bean

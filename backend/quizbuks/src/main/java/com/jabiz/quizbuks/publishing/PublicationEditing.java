@@ -112,13 +112,25 @@ final class PublicationEditing {
         lockAndLoad(pb, true);
     }
 
+    /**
+     * As {@link #lockStatesAndLoad}, for an administrator's process (Q10b, M2): the publication is read through the
+     * default dataset, whoever's it is (404 when there is none).
+     */
+    static <I, O> void lockStatesAndLoadAny(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        lockAndLoad(pb, true, QbPublications.defaultDataset(QbPublications.PUBLICATION));
+    }
+
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts) {
+        lockAndLoad(pb, starts, QbPublications.sponsorDataset(QbPublications.PUBLICATION));
+    }
+
+    private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts,
+        String dataset) {
         pb.step("Lock the publication", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(PUB_ID))));
         if (starts) {
             lockStarts(pb);
         }
-        pb.step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
-            PUB_ID, PUBLICATION));
+        pb.step("Load the publication", LoadEntity.by(dataset, PUB_ID, PUBLICATION));
         loadSchedule(pb);
     }
 

@@ -6,6 +6,10 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.publishing.PublicationAdmin;
+import com.jabiz.quizbuks.publishing.PublicationStatus;
+import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -31,7 +35,9 @@ import static com.jabiz.quizbuks.identity.AccountEditing.list;
  * Banning and unbanning users (P-02, 5.3-11; docs/quizbuks/plans/Q2-accounts.md, D-Q2-4). A banned user cannot sign
  * in at any entry ({@link QbSignInGuard}) and loses their session at its next refresh; an access token already issued
  * still works until it expires, so valuable actions check the ban again. Administrators are not banned (they are
- * disabled through the platform), and nobody bans themselves. The history of {@code QbUserBan} is the record of bans
+ * disabled through the platform), and nobody bans themselves. Banning a sponsor pauses their running publications in
+ * the same transaction ({@code QB_PUBLICATION_ADMIN_PAUSE}, Q10b): only an administrator resumes them, also after an
+ * unban. The history of {@code QbUserBan} is the record of bans
  * and lifts.
  */
 public final class BanProcesses {
@@ -41,6 +47,10 @@ public final class BanProcesses {
 
     static final String ASSIGNMENTS = "assignments";
     static final String ROLES = "roles";
+    static final String PUBLICATIONS = "publications";
+
+    private static final Set<String> PAUSABLE = Set.of(PublicationStatus.SCHEDULED, PublicationStatus.LIVE,
+        PublicationStatus.FUNDS_SHORT, PublicationStatus.PAUSED);
 
     public record BanInput(@NotBlank String userId, @NotBlank @Size(max = AccountLimits.REASON_LENGTH) String reason) {}
 
@@ -79,8 +89,35 @@ public final class BanProcesses {
                     .build();
             }, ROLES));
             loadBan(pb);
+            // A banned sponsor's running publications stop at once (Q10b, S-4), in this transaction: each is paused
+            // as an administrator's, so the sponsor cannot resume it. Read by the immutable sponsor, filtered here.
+            pb.step("Load the sponsor's publications", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("sponsorId", AccountEditing.userId(ctx)))
+                    .limit(Integer.MAX_VALUE).build(), PUBLICATIONS));
             pb.compute("Ban", (metadata, ctx) -> ban(ctx, admins));
+            // Lock order: the account's lock (held) before the publications' pairs, in the order of their ids.
+            pb.step("Pause the sponsor's publications", CallProcess.forEach(PublicationAdmin.PAUSE, 1,
+                BanProcesses::pauses, null));
         });
+    }
+
+    /**
+     * The inputs of {@code QB_PUBLICATION_ADMIN_PAUSE} for the banned sponsor's running publications (scheduled,
+     * live, underfunded, or paused by themselves), in the order of their ids; none when the ban was refused.
+     */
+    static List<PublicationAdmin.AdminInput> pauses(ProcessContext ctx) {
+        if (ctx.hasViolations() || !ctx.contains(OUTPUT)) {
+            return List.of();
+        }
+        BanInput input = ctx.get(INPUT, BanInput.class);
+        return list(ctx, PUBLICATIONS).stream()
+            .filter(publication -> PAUSABLE.contains(String.valueOf((Object) publication.get("status")))
+                && !PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy")))
+            .map(publication -> String.valueOf(publication.id()))
+            .sorted()
+            .map(id -> new PublicationAdmin.AdminInput(java.util.UUID.fromString(id), input.reason()))
+            .toList();
     }
 
     static void ban(ProcessContext ctx, Set<String> adminRoles) {

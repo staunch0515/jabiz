@@ -325,7 +325,8 @@ class PlayAdmissionIT extends PlayItSupport {
         credit(sponsor, 10_000);
         String token = taker(newTaker("t-admit-late", null));
         String attemptId = (String) start(token, hot).get("attemptId");
-        run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1, "answers", answers(true, true)));
+        run("QB_ATTEMPT_SAVE", token, body("attemptId", attemptId, "currentIndex", 1, "answers",
+            shown(attemptId, answers(true, true))));
         clock.advance(Duration.ofMinutes(2));
         // The expiry queues with the submissions (qb.pub; the starts queue apart since Q10a4): the queue is filled by
         // submissions of eight attempts of the hot publication started now, in time.
@@ -371,7 +372,7 @@ class PlayAdmissionIT extends PlayItSupport {
 
     private EntityExchangeResult<Map<String, Object>> submission(String token, String attemptId, String publicationId,
         String key) {
-        Map<String, Object> body = body("attemptId", attemptId, "answers", answers(true, true));
+        Map<String, Object> body = body("attemptId", attemptId, "answers", shown(attemptId, answers(true, true)));
         if (publicationId != null) {
             body.put("publicationId", publicationId);
         }

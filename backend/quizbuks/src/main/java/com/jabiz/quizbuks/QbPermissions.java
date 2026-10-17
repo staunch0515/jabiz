@@ -105,7 +105,10 @@ public final class QbPermissions {
     public static final String REVIEW_SPONSOR = "qb.review.sponsor";
     /** Review publications: the permission of the review level of the rule {@code qb.publication.review}. */
     public static final String REVIEW_PUBLICATION = "qb.review.publication";
-    /** FAQ, terms, privacy policy and platform announcements. */
+    /**
+     * Taking publications down ({@code QB_PUBLICATION_ADMIN_PAUSE / _RESUME / _END}, Q10b, review M2; with a second
+     * factor always); later the FAQ, terms, privacy policy and platform announcements.
+     */
     public static final String ADMIN_CONTENT_WRITE = "qb.admin.content.write";
     /** Read wallets, transfers and the finance reports. */
     public static final String ADMIN_FINANCE_READ = "qb.admin.finance.read";

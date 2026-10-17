@@ -51,11 +51,17 @@ public final class PublishingCodes {
     public static final String TIER_NO_REWARD = "QB_TIER_NO_REWARD";
 
     /** Every code above that is publishing's own (not the shared review and account codes). */
+    /** The sponsor tries to resume a publication an administrator paused (Q10b, M2). */
+    public static final String ADMIN_PAUSED = "QB_PUBLICATION_ADMIN_PAUSED";
+    /** An administrator tries to resume a publication that no administrator paused (Q10b, M2). */
+    public static final String NOT_ADMIN_PAUSED = "QB_PUBLICATION_NOT_ADMIN_PAUSED";
+
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, TIME_LIMIT_RANGE, SCORE_RANGE,
         BUDGET_RANGE, MAX_WINNERS_RANGE, TIER_REWARD_RANGE, TIME_ORDER, NOT_DRAFT, CHANGED, QUIZ_REMOVED,
         TIER_NOT_IN_PUBLICATION, EXPIRED_IN_REVIEW, NO_VERSION,
         FIELD_REQUIRED, END_PASSED, TOO_LONG, PASS_SCORE_RANGE, BUDGET_BELOW_MAX_REWARD, SPEND_RANGE, TIER_NOT_FROM_ZERO,
-        TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD);
+        TIER_RANGE, TIER_GAP, TIER_OVERLAP, TIER_NOT_TO_FULL, TIER_NO_REWARD,
+        ADMIN_PAUSED, NOT_ADMIN_PAUSED);
 
     private PublishingCodes() {}
 }

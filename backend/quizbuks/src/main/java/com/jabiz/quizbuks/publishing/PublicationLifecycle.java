@@ -243,6 +243,7 @@ public final class PublicationLifecycle {
                         Map<String, Object> values = new LinkedHashMap<>();
                         values.put("status", PAUSED);
                         values.put("pausedAt", ctx.opTime());
+                        values.put("pausedBy", PublicationStatus.BY_SPONSOR);
                         PublicationEditing.write(ctx, publication, values);
                     }
                 }));
@@ -262,20 +263,39 @@ public final class PublicationLifecycle {
                 .steps(PublicationEditing::lockStatesAndLoad)
                 .compute("Resume", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
-                    String to = PublicationRules.resumeTo(instant(publication.get("startAt")),
-                        instant(publication.get("endAt")), ctx.opTime());
-                    if (PublicationEditing.in(ctx, publication, to, PAUSED)) {
-                        Map<String, Object> values = new LinkedHashMap<>();
-                        values.put("status", to);
-                        values.put("pausedAt", null);
-                        ended(ctx, values, to);
-                        PublicationEditing.write(ctx, publication, values);
+                    // What an administrator paused only an administrator resumes (Q10b, M2).
+                    if (PAUSED.equals(publication.get("status"))
+                        && PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy"))) {
+                        ctx.reject(new Violation("publicationId", PublishingCodes.ADMIN_PAUSED, "An administrator "
+                            + "paused this publication; only an administrator can resume it", Map.of()));
+                        return;
                     }
+                    resumed(ctx, publication, null);
                 }));
     }
 
+    /**
+     * Resumes a paused publication to where its times say ({@link PublicationRules#resumeTo}); an administrator's
+     * resumption records the reason ({@code adminReason} not null).
+     */
+    static void resumed(ProcessContext ctx, EntityInstance publication, String adminReason) {
+        String to = PublicationRules.resumeTo(instant(publication.get("startAt")),
+            instant(publication.get("endAt")), ctx.opTime());
+        if (PublicationEditing.in(ctx, publication, to, PAUSED)) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("status", to);
+            values.put("pausedAt", null);
+            values.put("pausedBy", null);
+            if (adminReason != null) {
+                values.put("adminReason", adminReason);
+            }
+            ended(ctx, values, to);
+            PublicationEditing.write(ctx, publication, values);
+        }
+    }
+
     /** A publication that ends with its time: when, and why. */
-    private static void ended(ProcessContext ctx, Map<String, Object> values, String to) {
+    static void ended(ProcessContext ctx, Map<String, Object> values, String to) {
         if (ENDED.equals(to)) {
             values.put("endedAt", ctx.opTime());
             values.put("endReason", PublicationStatus.EXPIRED);
