@@ -17,17 +17,23 @@
 |---|---|
 | 密钥 | `STRIPE_TEST_SECRET_KEY` 必须是 `sk_test_…`；`sk_live_` / `rk_live_` 一律拒绝，受限密钥 `rk_test_` 也拒绝（脚本要退款、提交争议证据、打款，需要完整的测试密钥） |
 | 目标 | 缺省 `http://localhost:8080`；只有字面的回环地址（`localhost`、`127.x`、`::1`，不查 DNS）算本机。其他主机须 `--allow-remote`（或 `STRIPE_TM_ALLOW_REMOTE=yes`）且必须是 `https`；地址不得带用户信息、查询或片段 |
-| 生产主机 | `tools/quizbuks/stripe-test-mode/production-hosts`（每行一个，`*.域名` 含域名本身与子域）与 `STRIPE_TM_PRODUCTION_HOSTS` 中的主机**永远拒绝**，`--allow-remote` 也不放行。**正式域名一确定就写进该文件**（上线检查清单） |
+| 生产主机 | `tools/quizbuks/stripe-test-mode/production-hosts`（每行一个，`*.域名` 含域名本身与子域；`STRIPE_TM_PRODUCTION_HOSTS_FILE` 可换一个文件，读不到即拒绝）与 `STRIPE_TM_PRODUCTION_HOSTS` 中的主机**永远拒绝**，`--allow-remote` 也不放行。**只比较名字**：生产主机的 IP 地址或别名（CNAME）认不出，用目标的正式名字，不要绕过。**正式域名一确定就写进该文件**（上线检查清单） |
 | 正式模式开关 | 本环境中 `QB_STRIPE_LIVEMODE` / `QUIZBUKS_STRIPE_LIVEMODE` 不是 `false` 即拒绝 |
 
-连上之后再确认应用是测试模式（应用没有公开"当前模式"的接口，所以从它的行为判断）：
+连上之后、**写入任何东西之前**（汇总中的 `preflight`，只读：健康检查、Stripe 的余额与账户、管理员登录与以下两项），确认应用是测试模式（应用没有公开"当前模式"的接口，所以从它的行为判断），不成立即拒绝（退出码 2），什么也不写：
 
+- **测试模式的正面信号**：`GET /api/jobs` 中转账任务 `qb.transfer-run` 存在、且不是每日的计划（`0 7 1 * * *`）。应用在正式模式或正式密钥下以其他计划启动即失败（`TransferScheduleCheck`），所以运行中的应用有其他计划就是测试模式。serve 的实例与测试服务器都设 `QB_TRANSFER_RUN_CRON='0 * * * * *'`（步骤 6 本来也需要）。只有关掉启动检查（`jabiz.platform-check.on-startup=false`，任何部署都不应这样做）时这个信号才不成立；
 - 应用中**有任何正式模式的充值**（`qb.admin.topups` 的 `livemode`）即拒绝；
+
+之后在步骤中：
+
 - 充值发起后、付款之前：支付页的会话必须是 `cs_test_…`、地址以 `https://checkout.stripe.com/` 开头，并且**用脚本的密钥能读到这个会话、`livemode` 为 false**——即应用与脚本用的是同一个 Stripe 账户的测试模式。读不到就拒绝（应用用的是另一个账户，事件也不会转发给它）；
 - Stripe 回答余额时 `livemode` 必须为 false。
 
 **不打印密钥**：每一行输出都经过遮蔽（已知的密钥、密码、令牌、TOTP 种子，以及任何形如 `sk_…`、`rk_…`、`whsec_…`、JWT 的文字）。开通链接（能登录到该账户的开通页）不打印，写进私有文件（见步骤 5）。
-`run.sh serve` 的密钥、日志（`stripe listen` 的日志含签名密钥）与结果都在 `deploy/quizbuks/.stripe-test-mode/`（权限 700，已在 `.gitignore` 中）。
+密钥与链接也不放在命令行上（本机的其他用户看得到）：开通与支付页的地址以环境变量 `STRIPE_TM_BROWSER_URL` 交给 `browser.mjs`，桩的签名密钥以 `STRIPE_STUB_WEBHOOK_SECRET` / `STRIPE_STUB_CONNECT_WEBHOOK_SECRET` 交给桩。
+脚本的请求一律不跟随重定向（否则令牌与 Stripe 密钥会随 `Authorization` 头被带到重定向的目标）。
+`run.sh serve` 的密钥、日志（`stripe listen` 的日志含签名密钥）与结果都在 `deploy/quizbuks/.stripe-test-mode/`（已在 `.gitignore` 中）：`serve`、`run`、`payout-check` 与脚本自己每次都以权限 700 建立或收紧它。
 
 ## 2. 前提
 
@@ -50,9 +56,10 @@
 | `STRIPE_TM_BASE_URL` | run | 应用的地址，缺省 `http://localhost:8080` |
 | `STRIPE_TM_ALLOW_REMOTE` | run | `yes` 等同 `--allow-remote` |
 | `STRIPE_TM_PRODUCTION_HOSTS` | run | 再加几个永远拒绝的主机（逗号分隔） |
+| `STRIPE_TM_PRODUCTION_HOSTS_FILE` | run | 代替脚本旁的 `production-hosts`；文件不存在即拒绝 |
 | `STRIPE_TM_ADMIN_USER` / `STRIPE_TM_ADMIN_PASSWORD` | run | 管理员（缺省 `admin`）；serve 启动的实例自动提供 |
 | `STRIPE_TM_ADMIN_TOTP` | run | 管理员有二次验证时其 TOTP 种子（Base32，绑定时的 `secret`）；脚本按 RFC 6238 计算验证码 |
-| `STRIPE_TM_PUBLISHER_USER` / `_PASSWORD` / `_TOTP` | run | 第二位管理员（持 `control.publish`）：发布 `QB_SETUP` 的提案与"开启转账"。本机 serve 的实例由脚本自建（`QB_STM_PUBLISHER`，只有 `control.publish`，只在回环地址上） |
+| `STRIPE_TM_PUBLISHER_USER` / `_PASSWORD` / `_TOTP` | run | 第二位管理员（持 `control.publish`）：发布 `QB_SETUP` 的提案与"开启转账"。本机 serve 的实例由脚本自建（`QB_STM_PUBLISHER`，只有 `control.publish`）：**只在**目标正是 serve 写在状态目录 `run.env` 中的地址、且 serve 的 `app.pid` 进程还在运行时；其他回环地址上的安装不自建，需要这两个变量 |
 | `STRIPE_TM_MAILPIT_URL` | run | 有它时每次运行注册新的商家与答题人并经 Mailpit 验证邮箱（serve 自动提供） |
 | `STRIPE_TM_SPONSOR_EMAIL` / `_PASSWORD`、`STRIPE_TM_TAKER_EMAIL` / `_PASSWORD` | run | 没有 Mailpit 时（测试服务器发真实邮件）用事先准备的、已验证邮箱的账号 |
 | `STRIPE_TM_FUND_BALANCE` | run | `yes` 等同 `--fund-balance`（见步骤 6） |
@@ -111,11 +118,12 @@ tools/quizbuks/stripe-test-mode/run.sh stop
 
 ## 5. 步骤、在 Stripe 后台看什么、预期结果
 
-每一步打印 `-> PASS / FAIL / SKIP / PENDING` 与细节；一步失败即停止（后面的都依赖它），汇总中其余为 `NOT RUN`。
+每一步打印 `-> PASS / FAIL / SKIP / PENDING / REFUSED` 与细节；第 1 步之前是只读的 `preflight`（第 1 节"连上之后"）。一步失败即停止（后面的都依赖它），汇总中其余为 `NOT RUN`。
+任何错误（连不上、超时、意外的回答）都记为该步的 `FAIL`，汇总与结果文件照样写出。
 
 | # | 步骤 | 脚本做什么 | 你做什么 | Stripe 后台（测试模式）中看 | 应用中核对（经 API） |
 |---|---|---|---|---|---|
-| 1 | setup | `QB_SETUP`，由第二位管理员发布**本次**提出的变更；检查没有正式模式的充值；若 `qb.transfer.enabled` 不是 true，提出并发布 true（四眼） | — | — | 参数：门槛、审核线、抽成、转账手续费 |
+| 1 | setup | （`preflight` 已确认测试模式。）serve 的实例上自建发布人；`QB_SETUP`，由第二位管理员只发布**本次**调用返回的提案；若 `qb.transfer.enabled` 不是 true，提出并发布 true（四眼） | — | — | 参数：门槛、审核线、抽成、转账手续费 |
 | 2 | sponsor | 注册并验证商家（或用给定账号），申请入驻，管理员批准 | — | — | 入驻 `APPROVED` |
 | 3 | topup | `QB_TOPUP_START`（10 000）；核对会话 `cs_test_`、本账户可读、`livemode=false`；等到账 | 打开打印的支付页地址，用 **4242 4242 4242 4242**、任意未来有效期、任意 CVC 与姓名付款 | 支付 → 一笔 ¥10,000 成功；开发者 → 事件（或 `stripe listen` 的输出）中 `checkout.session.completed` 投递 200 | 充值 `PAID`、`livemode=false`、有 `pi_`；钱包 +10 000；分录"Top-up"借 1110 / 贷 2110；手续费记下后分录"Stripe fee"借 5110 / 贷 1110；Stripe 上 PaymentIntent `succeeded`、金额相同 |
 | 4 | quiz | 建一题的 Quiz 与发布（及格档奖励 2 000）、管理员批准上架；答题人（JP）答对并提交 | — | — | 提交 `rewardStatus=PAID`；分录（来源 `QbAttempt`）借 2110 2 000 / 贷 2120（扣抽成）/ 贷 4110（抽成）；答题人余额增加，且不低于转账门槛 |
@@ -134,6 +142,7 @@ tools/quizbuks/stripe-test-mode/run.sh stop
 
 ```
 Summary of run 20261017-101500
+  preflight   PASS     healthy, test mode, Stripe test key
   setup       PASS     QB_SETUP (3 proposal(s) published), transfers on (published qb.transfer.enabled=true); threshold 1000, …
   sponsor     PASS     sponsor approved
   topup       PASS     10,000 paid (PI pi_…), wallet +10,000, posted 1110/2110, Stripe fee 360 posted 5110/1110
@@ -154,7 +163,8 @@ Summary of run 20261017-101500
 `.github/workflows/quizbuks.yml` 的 `stripe-test-mode`：**只在手动触发**（Actions → QuizBuks → Run workflow，勾选 `stripe-test-mode`）时运行；仓库没有 secret `STRIPE_TEST_SECRET_KEY` 时第一步说明并跳过其余步骤。
 作业装 Stripe CLI、构建 jar，以 `run.sh serve`（PostgreSQL 与 Mailpit 是作业的服务）启动，再以 `run.sh run --fund-balance --browser "node tools/quizbuks/stripe-test-mode/browser.mjs"` 运行，失败时上传状态目录中的日志、结果与截图（不含 `env` 与 `run.env`）。
 
-- secrets：`STRIPE_TEST_SECRET_KEY`（必需，`sk_test_…`，只给这个作业用的测试账户）。
+- secrets：`STRIPE_TEST_SECRET_KEY`（必需，`sk_test_…`，只给这个作业用的测试账户）。只给用它的步骤（检查有无密钥、`run.sh serve`、`run.sh run`），不给构建、测试与第三方 action。
+- 作业自带并发组 `quizbuks-stripe-test-mode`（不取消进行中的）：同一时间只有一次运行使用这个测试账户。
 - **无人值守的部分是尽力而为，未经验证**：`browser.mjs` 用 Playwright 在 Stripe 的支付页上填测试卡、在 Express 开通页上逐页点"使用测试数据"类按钮；Stripe 改页面时它会失败（截图在产物中）。人工运行（不带 `--browser`）始终可用。
   第一次启用时请看着它跑一次，并在下面的记录中写明。
 
@@ -171,6 +181,8 @@ Summary of run 20261017-101500
 | 步骤 3 支付后跳回的页面显示"处理中"很久 | 页面只等服务端的记录；记录要等 Webhook。看 `stripe listen` 是否在运行、投递是否 200 |
 | 步骤 5 开通页说链接已过期或已使用 | Stripe 的开通链接几分钟有效、只能用一次：脚本过期即换新，重新打开文件中的链接；若跳回 `?onboarding=refresh`，同样重新打开文件 |
 | 步骤 5 一直不是 `ENABLED` | Connect 端点（或 `--forward-connect-to`）没有收到 `account.updated`；或开通还缺资料（Connect → 账户 → 该账户的"需要的信息"）；或答题人的国家与 `QB_STRIPE_CONNECT_COUNTRY` 不同（开通被拒） |
+| `preflight` `REFUSED: the application does not show test mode` | 转账任务是每日的计划（或没有）：测试安装设 `QB_TRANSFER_RUN_CRON='0 * * * * *'` 后重启（serve 已设）。脚本在此之前什么也没写 |
+| `preflight` `FAIL: GET …/actuator/health: URLError …` | 应用没有在该地址运行（或还在启动）：`run.sh status`、`run.sh logs` |
 | 步骤 6 `the next transfer run is at …` | 转账任务按日运行：测试安装设 `QB_TRANSFER_RUN_CRON='0 * * * * *'`（正式模式下启动即失败） |
 | 步骤 6 转账 `REVERSED`，`failureCode` 为 `balance_insufficient` | 平台可用余额不够：用 `--fund-balance`，或等卡付款变为可用。该答题人次日自动重试，不计连续失败 |
 | 步骤 6 转账 `CHECK` | 结果不明（超时、5xx）：每小时的 `qb.transfer-stale` 向 Stripe 核实后定论；或看 `operations.md`"卡住的转账" |

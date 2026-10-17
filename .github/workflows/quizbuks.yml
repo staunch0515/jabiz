@@ -372,6 +372,10 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.stripe-test-mode }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # One run at a time: the runs share one Stripe test account (its balance, payouts and events).
+    concurrency:
+      group: quizbuks-stripe-test-mode
+      cancel-in-progress: false
     services:
       postgres:
         image: postgres:16
@@ -385,13 +389,15 @@ jobs:
       mailpit:
         image: axllent/mailpit:v1.27.10
         ports: ['1025:1025', '8025:8025']
+    # The test key is given only to the steps that use it, not to the build, the tests or the third-party actions.
     env:
-      STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
       STRIPE_TM_DB_PORT: '5432'
       STRIPE_TM_STATE: ${{ github.workspace }}/stripe-test-mode-state
     steps:
       - name: Skip without the test key
         id: key
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
         run: |
           if [ -z "$STRIPE_TEST_SECRET_KEY" ]; then
             echo "::notice::No STRIPE_TEST_SECRET_KEY secret: the Stripe test-mode run is skipped (docs/quizbuks/stripe-test-mode.md section 6)"
@@ -442,9 +448,13 @@ jobs:
           pnpm exec playwright install --with-deps chromium
       - name: Start QuizBuks with the test key and stripe listen
         if: steps.key.outputs.ready == 'true'
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
         run: tools/quizbuks/stripe-test-mode/run.sh serve
       - name: The money flow
         if: steps.key.outputs.ready == 'true'
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
         run: tools/quizbuks/stripe-test-mode/run.sh run --fund-balance --browser "node tools/quizbuks/stripe-test-mode/browser.mjs"
       - if: always() && steps.key.outputs.ready == 'true'
         run: tools/quizbuks/stripe-test-mode/run.sh stop

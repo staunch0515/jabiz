@@ -1,8 +1,14 @@
 // The browser half of an unattended Stripe test-mode run (tools/quizbuks/stripe-test-mode/run.sh run --browser …;
 // docs/quizbuks/stripe-test-mode.md, "CI"): what a person otherwise does on Stripe's hosted pages.
 //
-//   node browser.mjs checkout <url> <card>   pay a Checkout page with a test card, wait to be sent back
-//   node browser.mjs onboard <url>           complete a Connect Express onboarding with Stripe's test data
+//   STRIPE_TM_BROWSER_URL=<url> node browser.mjs checkout <card>   pay a Checkout page with a test card, wait to be
+//                                                                  sent back
+//   STRIPE_TM_BROWSER_URL=<url> node browser.mjs onboard           complete a Connect Express onboarding with Stripe's
+//                                                                  test data
+//
+// The page's address comes in the environment, never on the command line: an onboarding link signs in to the account,
+// and command lines are visible to every user of the machine. It is removed from the environment before the browser
+// starts.
 //
 // Best effort: Stripe's pages are not an API and change without notice. When a step is not recognised the helper
 // stops with a screenshot in STRIPE_TM_STATE (or the current directory) and the run fails; the person-driven run
@@ -11,9 +17,11 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
-const [action, url, card] = process.argv.slice(2)
+const [action, card] = process.argv.slice(2)
+const url = process.env.STRIPE_TM_BROWSER_URL
+delete process.env.STRIPE_TM_BROWSER_URL
 if (!['checkout', 'onboard'].includes(action) || !url?.startsWith('https://') || (action === 'checkout' && !card)) {
-  console.error('usage: browser.mjs checkout <https url> <card> | onboard <https url>')
+  console.error('usage: STRIPE_TM_BROWSER_URL=<https url> browser.mjs checkout <card> | onboard')
   process.exit(2)
 }
 

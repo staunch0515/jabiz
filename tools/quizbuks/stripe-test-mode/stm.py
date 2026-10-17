@@ -18,10 +18,12 @@ this machine): the dispute and the payout are skipped, since the stub has neithe
 
 Safety (guard, before anything else): the key must be a secret test key (sk_test_); the target must be this machine
 unless --allow-remote, never a host listed as production (production-hosts beside this file, or
-STRIPE_TM_PRODUCTION_HOSTS), and https when remote; the live-mode switch must not be on here. Once connected, the
-application must report test mode: its checkout is a cs_test_ session that this key can read, with livemode false,
-and none of its top-ups is a live one. Secrets (keys, passwords, tokens, TOTP seeds, links that sign in) are never
-printed: every line goes through redact().
+STRIPE_TM_PRODUCTION_HOSTS; names only), and https when remote; the live-mode switch must not be on here. Once
+connected and before anything is written, the application must show test mode (preflight): its transfer run is not on
+the daily schedule (TransferScheduleCheck refuses any other next to live mode or a live key) and none of its top-ups
+is a live one. Later its checkout must be a cs_test_ session that this key can read, with livemode false. Secrets
+(keys, passwords, tokens, TOTP seeds, links that sign in) are never printed: every line goes through redact(), and
+none is passed on a command line.
 """
 
 import argparse
@@ -39,10 +41,12 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from http.client import HTTPException
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STRIPE_API = "https://api.stripe.com"
@@ -75,7 +79,14 @@ LEDGER_ACCOUNTS = "urn:jabiz:dataset:platform:LedgerAccount"
 LEDGER_TRANSACTIONS = "urn:jabiz:dataset:platform:LedgerTransaction"
 LEDGER_ENTRIES = "urn:jabiz:dataset:platform:LedgerEntry"
 
-# The local publisher that run.sh serve lets the administration accept (loopback targets only; never elsewhere).
+# The test-mode signal (preflight): the transfer run's job and its daily schedule (TransferProcesses.RUN_JOB and
+# RUN_CRON). TransferScheduleCheck stops the application at startup when the run has any other schedule next to live
+# mode or a live key, so a running application with another schedule is in test mode.
+TRANSFER_JOB = "qb.transfer-run"
+DAILY_TRANSFER_CRON = "0 7 1 * * *"
+
+# The local publisher that run.sh serve lets the administration accept (only the instance serve started and still
+# runs: serve_target).
 LOCAL_PUBLISHER_ROLE = "QB_STM_PUBLISHER"
 LOCAL_PUBLISHER_USER = "stm-publisher"
 
@@ -131,15 +142,19 @@ def truthy(value):
 
 
 def production_hosts():
-    """Hosts this script never drives: the production-hosts file beside it and STRIPE_TM_PRODUCTION_HOSTS."""
+    """Hosts this script never drives: the production-hosts file beside it (or STRIPE_TM_PRODUCTION_HOSTS_FILE) and
+    STRIPE_TM_PRODUCTION_HOSTS. Names are compared as written: an IP address or another name (a CNAME) of a production
+    host is not caught. Raises Refused when the file cannot be read: a missing list must not pass for an empty one."""
     hosts = []
     path = env("STRIPE_TM_PRODUCTION_HOSTS_FILE", os.path.join(HERE, "production-hosts"))
-    if os.path.exists(path):
+    try:
         with open(path, encoding="utf-8") as lines:
             for line in lines:
                 line = line.split("#", 1)[0].strip()
                 if line:
                     hosts.append(line.lower())
+    except OSError as error:
+        raise Refused(f"the production hosts file {path} cannot be read ({error.strerror or error})") from None
     hosts += [h.strip().lower() for h in env("STRIPE_TM_PRODUCTION_HOSTS", "").split(",") if h.strip()]
     return hosts
 
@@ -177,8 +192,11 @@ def guard(args):
     elif parsed.username or parsed.password or parsed.query or parsed.fragment:
         problems.append("the base URL must not carry credentials, a query or a fragment")
     else:
-        if is_production(host, production_hosts()):
-            problems.append(f"{host} is listed as a production host: this script never drives production")
+        try:
+            if is_production(host, production_hosts()):
+                problems.append(f"{host} is listed as a production host: this script never drives production")
+        except Refused as refusal:
+            problems.append(str(refusal))
         if not is_loopback(host):
             if not args.allow_remote:
                 problems.append(f"{host} is not this machine: pass --allow-remote (or STRIPE_TM_ALLOW_REMOTE=yes) "
@@ -215,7 +233,26 @@ def guard(args):
 
 # ---- HTTP ------------------------------------------------------------------------------------------------------------
 
-def http(method, url, body=None, token=None, headers=None, raw=None, content_type="application/json", timeout=60):
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows no redirect: urllib's default handler would send the Authorization header (a bearer token, Stripe's
+    key) on to wherever a redirect points. A redirect then answers as an HTTPError with its 3xx status."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def address(url):
+    """A URL without its query and fragment, for messages."""
+    return urllib.parse.urlsplit(url)._replace(query="", fragment="").geturl()
+
+
+def http(method, url, body=None, token=None, headers=None, raw=None, content_type="application/json", timeout=60,
+         redirect_ok=False):
+    """One request that follows no redirect: an answer of 300 or more is an ApiError (a redirect answers None when
+    redirect_ok); a failure to connect, a timeout or an unreadable answer is Failed."""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     request = urllib.request.Request(url, data=data, method=method)
     if data is not None:
@@ -225,28 +262,23 @@ def http(method, url, body=None, token=None, headers=None, raw=None, content_typ
     for name, value in (headers or {}).items():
         request.add_header(name, value)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _OPENER.open(request, timeout=timeout) as response:
             text = response.read().decode()
             if "json" not in (response.headers.get("Content-Type") or ""):
                 return text
             return json.loads(text) if text else {}
     except urllib.error.HTTPError as error:
+        if redirect_ok and 300 <= error.code < 400:
+            return None
         raise ApiError(error.code, error.read().decode(errors="replace")) from None
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):
-        return None
+    except (urllib.error.URLError, OSError, HTTPException, ValueError) as error:
+        reason = getattr(error, "reason", None) or error
+        raise Failed(f"{method} {address(url)}: {type(error).__name__}: {reason}") from None
 
 
 def post_no_redirect(url):
     """A form button of the stub: it answers 303 to the browser's next page, which is not followed."""
-    opener = urllib.request.build_opener(NoRedirect)
-    try:
-        opener.open(urllib.request.Request(url, data=b"", method="POST"), timeout=60)
-    except urllib.error.HTTPError as error:
-        if error.code >= 400:
-            raise ApiError(error.code, error.read().decode(errors="replace")) from None
+    http("POST", url, raw=b"", content_type="application/x-www-form-urlencoded", redirect_ok=True)
 
 
 def totp(seed, at=None):
@@ -376,6 +408,36 @@ def money(value):
     return int(round(float(value or 0)))
 
 
+def state_dir(args):
+    """The private state directory (results, onboarding links): made with mode 0700 and tightened on every use."""
+    os.makedirs(args.state, mode=0o700, exist_ok=True)
+    os.chmod(args.state, 0o700)
+    return args.state
+
+
+def serve_target(args):
+    """Whether the target is the instance run.sh serve started and still runs: serve's run.env in the state directory
+    names this address (on this machine) and serve's app.pid is a live process. Only then does the script make its own
+    publisher; another installation on a loopback address is not the script's to add users to."""
+    try:
+        with open(os.path.join(args.state, "run.env"), encoding="utf-8") as lines:
+            values = dict(line.rstrip("\n").split("=", 1) for line in lines if "=" in line)
+        with open(os.path.join(args.state, "app.pid"), encoding="utf-8") as text:
+            pid = int(text.read().strip())
+    except (OSError, ValueError):
+        return False
+    base = values.get("STRIPE_TM_BASE_URL", "").rstrip("/")
+    if not base or base != args.base_url.rstrip("/") or not is_loopback(urllib.parse.urlsplit(base).hostname or ""):
+        return False
+    if pid <= 0:  # 0 and negative numbers would signal process groups
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 # ---- the run ---------------------------------------------------------------------------------------------------------
 
 class Run:
@@ -410,12 +472,14 @@ class Run:
         say(prompt)
 
     def browser(self, action, url, extra=None):
-        """Runs the browser helper (unattended runs); False when there is none."""
+        """Runs the browser helper (unattended runs); False when there is none. The page's address reaches it in
+        STRIPE_TM_BROWSER_URL, not on its command line: an onboarding link signs in, and command lines are visible to
+        every user of the machine."""
         if not self.args.browser:
             return False
-        command = self.args.browser.split() + [action, url] + ([extra] if extra else [])
+        command = self.args.browser.split() + [action] + ([extra] if extra else [])
         say(f"  (browser helper: {action})")
-        done = subprocess.run(command, timeout=600)
+        done = subprocess.run(command, timeout=600, env=dict(os.environ, STRIPE_TM_BROWSER_URL=url))
         if done.returncode != 0:
             raise Failed(f"the browser helper failed at {action} (exit {done.returncode})")
         return True
@@ -481,8 +545,9 @@ class Run:
     def topup(self, topup_id):
         return self.app.entity(self.admin, TOPUPS, topup_id)
 
-    def publish_proposals(self, ids, started):
-        """Publishes only the given proposals, proposed by this run's administrator since the run began."""
+    def publish_proposals(self, ids):
+        """Publishes only the given proposals (the ids this run's own calls answered), each still pending from this
+        run's administrator; whatever else is pending is left alone."""
         if not ids:
             return 0
         if not self.publisher:
@@ -500,14 +565,15 @@ class Run:
             self.app.run(self.publisher, "CONTROL_CHANGE_PUBLISH", {"changeId": change_id})
         return len(ids)
 
-    def set_param(self, key, value, started):
+    def set_param(self, key, value):
         change = self.app.run(self.admin, "CONTROL_CHANGE_PROPOSE", {
             "targetEntity": "SysParam", "values": {"paramKey": key, "value": value},
             "reason": f"Stripe test-mode run {self.id}"})
-        self.publish_proposals([change["changeId"]], started)
+        self.publish_proposals([change["changeId"]])
 
     def local_publisher(self):
-        """run.sh serve's second administrator (loopback only): control.publish alone, made once."""
+        """run.sh serve's second administrator (only for the instance serve started, serve_target): control.publish
+        alone, made once."""
         password = env("STRIPE_TM_PUBLISHER_PASSWORD")
         if not password:
             return None
@@ -564,21 +630,52 @@ class Run:
 
     # -- steps --
 
+    def require_test_installation(self):
+        """The positive test-mode signal, read only: the transfer run is not on the daily schedule, which the
+        application refuses at startup next to live mode or a live key (TransferScheduleCheck); and none of the
+        application's top-ups is a live one. Raises Refused otherwise; answers the schedule."""
+        jobs = self.app.call("GET", "/api/jobs", token=self.admin.token())
+        if not isinstance(jobs, list):
+            raise Failed(f"GET /api/jobs did not answer a list of jobs: {str(jobs)[:200]}")
+        job = next((j for j in jobs if isinstance(j, dict) and j.get("name") == TRANSFER_JOB), None)
+        cron = str((job or {}).get("cron") or "").strip()
+        if not cron or cron == DAILY_TRANSFER_CRON:
+            raise Refused(f"the application does not show test mode: its transfer run {TRANSFER_JOB} is "
+                          + (f"on the daily schedule ({cron})" if cron else "missing")
+                          + "; a test installation runs it on another schedule (QB_TRANSFER_RUN_CRON='0 * * * * *', "
+                          "which the application refuses next to live mode or a live key; run.sh serve sets it)")
+        live = [r for r in self.app.query(self.admin, "qb.admin.topups", limit=500) if r.get("livemode")]
+        if live:
+            raise Refused(f"the application has {len(live)} live top-up(s): this is not a test installation")
+        return cron
+
+    def preflight(self):
+        """Every read-only probe, before the first write: the application's health, Stripe's balance and account (the
+        key is a test-mode key) and the application's test-mode signal."""
+        health = self.app.call("GET", "/actuator/health")
+        if not (isinstance(health, dict) and health.get("status") == "UP"):
+            raise Failed(f"{self.args.base_url} is not healthy: {health}")
+        if self.stripe:
+            available = self.stripe.available()  # also: Stripe confirms the key is a test-mode key
+            account = self.stripe.call("GET", "/v1/account")
+            say(f"Stripe account {account.get('id')} ({account.get('country')}), test mode, available "
+                f"{available:,} JPY")
+        cron = self.require_test_installation()
+        say(f"QuizBuks at {self.args.base_url}, run {self.id}" + (" (local Stripe stub)" if self.args.stub else "")
+            + f": test mode (transfer run on {cron!r}, no live top-up)")
+        self.record("preflight", "PASS", "healthy, test mode" + (", Stripe test key" if self.stripe else ""))
+
     def step_setup(self):
-        started = time.time()
-        if self.args.stub or is_loopback(urllib.parse.urlsplit(self.args.base_url).hostname or ""):
+        if serve_target(self.args):
             self.publisher = self.local_publisher()
         if not self.publisher and env("STRIPE_TM_PUBLISHER_USER"):
             self.publisher = Session(self.app, env("STRIPE_TM_PUBLISHER_USER"), env("STRIPE_TM_PUBLISHER_PASSWORD"),
                                      seed=env("STRIPE_TM_PUBLISHER_TOTP"))
         made = self.app.run(self.admin, "QB_SETUP", {})
-        published = self.publish_proposals(made.get("proposals") or [], started)
-        live = [r for r in self.app.query(self.admin, "qb.admin.topups", limit=500) if r.get("livemode")]
-        if live:
-            raise Refused(f"the application has {len(live)} live top-up(s): this is not a test installation")
+        published = self.publish_proposals(made.get("proposals") or [])
         changed = []
         if str(self.param("qb.transfer.enabled")).lower() != "true":
-            self.set_param("qb.transfer.enabled", "true", started)
+            self.set_param("qb.transfer.enabled", "true")
             changed.append("qb.transfer.enabled=true")
         threshold = money(self.param("qb.transfer.threshold"))
         review_above = money(self.param("qb.transfer.review-above"))
@@ -770,8 +867,7 @@ class Run:
         elif not self.browser("onboard", url):
             # An account link signs the person in to the account's onboarding: it goes to a private file, not to the
             # terminal, and a new one replaces it when it expires (Stripe's links last minutes and work once).
-            os.makedirs(self.args.state, exist_ok=True)
-            path = os.path.join(self.args.state, f"onboarding-{self.id}.url")
+            path = os.path.join(state_dir(self.args), f"onboarding-{self.id}.url")
             say("\n  >>> Open the payout onboarding link in the private file below in a browser and complete "
                 "Stripe's test onboarding (runbook, step 5: test phone, code 000000, test identity and bank data):"
                 f"\n      {path}\n      (waiting for account.updated to enable the account; the file is renewed "
@@ -960,34 +1056,43 @@ class Run:
             runs = self.app.query(self.admin, "qb.admin.recon-runs", limit=1)
         except ApiError as error:
             return f"not readable ({error.status})"
+        except Exception as error:  # noqa: BLE001 - the summary is written whatever happened
+            return f"not readable ({error})"
         if not runs:
             return "no run yet"
         r = runs[0]
         return f"latest run {r.get('scheduledTime')}: {r.get('status')} ({r.get('itemCount')} item(s) noted)"
 
+    def attempt(self, step, action):
+        """Runs one step and records REFUSED or FAIL for whatever it raises, so that the summary is always written.
+        Answers the exit code: 0, 1 (failed) or 2 (refused)."""
+        try:
+            action()
+            return 0
+        except Refused as refusal:
+            self.record(step, "REFUSED", str(refusal))
+            return 2
+        except (Failed, ApiError) as failure:
+            self.record(step, "FAIL", str(failure))
+            return 1
+        except Exception as error:  # noqa: BLE001 - a bug or an unexpected answer is a FAIL with a summary too
+            print(redact(traceback.format_exc()), file=sys.stderr, flush=True)
+            self.record(step, "FAIL", f"{type(error).__name__}: {error}")
+            return 1
+
     def execute(self):
         guard(self.args)
-        health = self.app.call("GET", "/actuator/health")
-        if not (isinstance(health, dict) and health.get("status") == "UP"):
-            raise Failed(f"{self.args.base_url} is not healthy: {health}")
-        if self.stripe:
-            available = self.stripe.available()  # also: Stripe confirms the key is a test-mode key
-            account = self.stripe.call("GET", "/v1/account")
-            say(f"Stripe account {account.get('id')} ({account.get('country')}), test mode, available "
-                f"{available:,} JPY")
-        say(f"QuizBuks at {self.args.base_url}, run {self.id}" + (" (local Stripe stub)" if self.args.stub else ""))
-        failed = False
-        for step in STEPS:  # each step needs the ones before it
-            say(f"\n[{step}]")
-            try:
-                getattr(self, f"step_{step}")()
-            except (Failed, ApiError) as failure:
-                self.record(step, "FAIL", str(failure))
-                failed = True
-                break
-        self.facts["reconciliation"] = self.reconciliation()
+        say("[preflight]")
+        status = self.attempt("preflight", self.preflight)
+        if status == 0:
+            for step in STEPS:  # each step needs the ones before it
+                say(f"\n[{step}]")
+                status = self.attempt(step, getattr(self, f"step_{step}"))
+                if status:
+                    break
+            self.facts["reconciliation"] = self.reconciliation()
         self.summary()
-        return 1 if failed else 0
+        return status
 
     def summary(self):
         say("\nSummary of run", self.id)
@@ -997,9 +1102,8 @@ class Run:
         for step in STEPS:
             if step not in done:
                 say(f"  {step:<11} {'NOT RUN':<8}")
-        say("  reconciliation:", self.facts.get("reconciliation"))
-        os.makedirs(self.args.state, exist_ok=True)
-        path = os.path.join(self.args.state, f"results-{self.id}.json")
+        say("  reconciliation:", self.facts.get("reconciliation", "not checked"))
+        path = os.path.join(state_dir(self.args), f"results-{self.id}.json")
         with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as out:
             json.dump({"run": self.id, "base": self.args.base_url, "stub": self.args.stub,
                        "results": self.results, "facts": self.facts}, out, indent=2)
