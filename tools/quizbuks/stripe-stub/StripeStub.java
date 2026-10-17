@@ -31,6 +31,9 @@ import java.util.concurrent.Executors;
  * <pre>java tools/quizbuks/stripe-stub/StripeStub.java [port] [webhook URL] [webhook secret] [Connect webhook URL]
  *     [Connect webhook secret]</pre>
  *
+ * An empty or missing secret argument is read from {@code STRIPE_STUB_WEBHOOK_SECRET} /
+ * {@code STRIPE_STUB_CONNECT_WEBHOOK_SECRET} (so that it is not on the command line), or is the development secret.
+ *
  * <ul>
  *   <li>{@code POST /v1/checkout/sessions} creates a checkout from the form QuizBuks sends (one per idempotency key) and
  *       answers it as Stripe would; its address is this stub's page {@code /pay/<id>};</li>
@@ -66,9 +69,10 @@ public final class StripeStub {
     public static void main(String[] args) throws IOException {
         port = args.length > 0 ? Integer.parseInt(args[0]) : 8093;
         webhook = args.length > 1 ? args[1] : "http://localhost:8080/api/inbound/stripe";
-        secret = args.length > 2 ? args[2] : "whsec_development_only_quizbuks_stripe_0000";
+        secret = secret(args, 2, "STRIPE_STUB_WEBHOOK_SECRET", "whsec_development_only_quizbuks_stripe_0000");
         connectWebhook = args.length > 3 ? args[3] : "http://localhost:8080/api/inbound/stripe-connect";
-        connectSecret = args.length > 4 ? args[4] : "whsec_development_only_quizbuks_connect_0000";
+        connectSecret = secret(args, 4, "STRIPE_STUB_CONNECT_WEBHOOK_SECRET",
+            "whsec_development_only_quizbuks_connect_0000");
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.createContext("/v1/checkout/sessions", StripeStub::sessions);
@@ -82,6 +86,18 @@ public final class StripeStub {
             "{\"error\":{\"type\":\"invalid_request_error\",\"code\":\"resource_missing\"}}"));
         server.start();
         System.out.println("Stripe stub on http://localhost:" + port + ", events to " + webhook + " (Ctrl+C to stop)");
+    }
+
+    /**
+     * A signing secret: the argument when given and not empty, otherwise the environment variable (which keeps it off
+     * the command line, visible to every user of the machine), otherwise the development secret.
+     */
+    private static String secret(String[] args, int index, String variable, String development) {
+        if (args.length > index && !args[index].isEmpty()) {
+            return args[index];
+        }
+        String fromEnvironment = System.getenv(variable);
+        return fromEnvironment == null || fromEnvironment.isEmpty() ? development : fromEnvironment;
     }
 
     private static void sessions(HttpExchange exchange) throws IOException {

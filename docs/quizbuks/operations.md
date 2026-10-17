@@ -22,7 +22,7 @@
 | `JABIZ_REPORTS_PDF_FONTS` | 镜像已设 | 镜像中的 IPA Gothic、Droid Sans Fallback | — | 镜像外运行时收据与月报的中日文为 `?`；设了读不到的文件即启动失败 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
 | `JABIZ_STORAGE_WRITE_BATCHING_ENABLED` | **不设** | — | — | 缺省 `true`：平台在事务中缓冲写入（决策 D46，16p-2）。应急开关：只在怀疑写缓冲有缺陷时设 `false` 并重启，行为与保证不变，热门发布的容量约降 30 %（`perf/Q10a-load-test.md` §11） |
-| `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE` | — | 用缺省。**不得**含 `*`、`QB_TAKER`、`QB_SPONSOR`（启动失败），也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
+| `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE` | — | 用缺省。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入管理后台）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或商家任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在商家开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
 
 ### 1.2 邮件与登录
@@ -47,7 +47,8 @@
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | 是 | Connect 端点 `/api/inbound/stripe-connect` 的签名密钥 | 同上，但提供方的名字带连字符（`stripe-connect`），环境变量写不出这个键：滚动期间以 `SPRING_APPLICATION_JSON='{"jabiz":{"inbound-webhooks":{"providers":{"stripe-connect":{"secrets":["<新>","<旧>"]}}}}}'` 配两个（同样只放在密钥库），过期后删去 | 启动失败 |
 | `QB_STRIPE_LIVEMODE` | 正式时 `true` | — | — | 测试模式 |
 | `QB_STRIPE_API_VERSION` | 否 | 缺省 `2025-03-31.basil`，**与两个端点的 API 版本相同** | 升级版本是代码改动（字段可能变化），不是运维操作 | — |
-| `QB_SPONSOR_LINK` / `QB_APP_LINK` | 是 | `https://<主机>/sponsor/`、`https://<主机>/` | 换域名时 | 充值 / 开通一律被拒（启动告警） |
+| `QB_SPONSOR_LINK` | 否（建议设） | `https://<主机>/sponsor/`；不设时取 `JABIZ_MAIL_BASE_URL` 的 `/sponsor/`（§1.2） | 换域名时 | 用 `JABIZ_MAIL_BASE_URL` + `/sponsor/`；两者都没有时充值一律被拒（启动告警） |
+| `QB_APP_LINK` | 是 | `https://<主机>/`（没有缺省来源） | 换域名时 | 开通收款账户一律被拒（启动告警） |
 | `QB_STRIPE_CONNECT_COUNTRY` | 否 | 缺省 `JP` | — | — |
 | `QB_STRIPE_SETTLEMENT_CURRENCY` | 否 | 缺省 `jpy`，与 Stripe 账户的结算币种相同 | — | — |
 | `QB_STRIPE_CHECKOUT_TTL` | 否 | 缺省 `PT1H` | — | — |
@@ -170,7 +171,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 答题过载（准入） | `jabiz.process.admission{family="qb.pub"|"qb.pub-start", result}`；仪表 `jabiz.process.admission.waiting` / `.active` | `result` 为 `QUEUE_FULL` 或 `WAIT_TIMEOUT` 的比率 5 分钟内 > 1 %；`waiting` 持续 > 25（队列 50 的一半）；`active` 持续等于 `max-active` |
 | 提交被拒（已知的上线风险，§7.6） | `jabiz.process{process="QB_ATTEMPT_SUBMIT", status="503"}` 与 `QB_ATTEMPT_EXPIRE` 的数量 | 提交的 503 比率 > 1 %；超时结束的会话数突然上升 |
 | 每次运行的语句数 | `jabiz.process.statements{process}`（分布） | 新版本后 `QB_ATTEMPT_START` / `QB_ATTEMPT_SUBMIT` 的平均超过语句预算（`AttemptStatementBudgetIT`：开始共 10、付奖的提交共 13，指标不含 `COMMIT`，即 9 与 12；写缓冲的应急开关关时为 11 与 19）的 1.2 倍——锁内语句变多会直接降低热门发布的容量 |
-| 流程错误 | `jabiz.process{outcome="error"}` | 任何流程 5 分钟内 > 0（错误不是业务拒绝） |
+| 流程错误 | `jabiz.process{outcome="error", status!="503"}` | 任何流程 5 分钟内 > 0（错误不是业务拒绝）。`outcome="error"` 包括全部 5xx（`PlatformObservations`），其中 503 是过载而不是缺陷，这里除去：排队未获准入（`PROCESS_BUSY`）由"答题过载""提交被拒"两行告警；查询超时（`QUERY_TIMEOUT`）另以 `jabiz.process{status="503"}` 的比率告警（如 5 分钟内 > 1 %） |
 | 核对差异 | 每日核对 `qb.reconcile`：`jabiz.job.run{job="qb.reconcile"}` 的结果；差异本身在 `qb.admin.recon-runs`（`DIFF`）与待办（权限 `qb.reconcile`） | 任务 `FAILED`；核对状态 `DIFF`（用只读账号查询 `qb_recon_run_version` 最新一行的状态，或后台待办的数量）；连续 26 小时没有新的核对 |
 | 转账失败 | `jabiz.external.job{job_type="qb.stripe.transfer"|"qb.stripe.transfer-check", outcome}`；`jabiz.job.item{job="qb.transfer-run"|"qb.transfer-stale", result}` | `outcome` 为 `FAILED` / `DISCARDED` > 0；`qb.transfer-stale` 的项连续失败；处于 `CHECK` 的转账超过 2 小时（后台财务页"转账"按状态筛选） |
 | Webhook 被拒 | `jabiz.inbound.receive{provider="stripe"|"stripe-connect", result, reason}`；`jabiz.inbound.rate_limited` | `REJECTED`（`no_match` 签名不符、`too_old`、`malformed` 等）5 分钟内 > 0；`FAILED` > 0；限流 > 0。Stripe 后台的端点"失败的投递"同时会发邮件 |
@@ -228,7 +229,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 - **现象**：转账停在 `SENDING` 或 `CHECK`；待办"转账结果不明"；`jabiz.external.job{job_type="qb.stripe.transfer"}` 失败。
 - **机制**：结果不明（超时、429、5xx、租约丢失）时进入 `CHECK`、**不冲回**，每小时的 `qb.transfer-stale` 按 `transfer_group = qb-<转账号>` 向 Stripe 查询定论（只有晚于发送结束至少 10 分钟的"没有"才冲正）。
-- **处理**：等下一次 `qb.transfer-stale`（每小时 47 分）；在 Stripe 后台按转账组 `qb-<转账号>` 搜索确认；看 `GET /api/external-jobs`（`external-job.read`）中该作业的尝试与错误。
+- **处理**：等下一次 `qb.transfer-stale`（每小时 47 分）；在 Stripe 后台按转账组 `qb-<转账号>` 搜索确认；看 `GET /api/external-jobs/{作业号}`（`external-job.read`；没有列表接口）中该作业的状态、尝试次数与最后的错误码。作业号以只读账号按转账号查：`SELECT job_id, job_type, created_time FROM sys_external_job WHERE reference = '<转账号>' ORDER BY job_seq`（发送 `qb.stripe.transfer` 与核实 `qb.stripe.transfer-check` 各有作业）。
   **不要**在 Stripe 后台手工再转一笔或在库中改状态：重复转账只能事后追回。用户因 3 次失败或被撤回而暂停时，财务确认原因后 `QB_TRANSFER_HOLD_RELEASE` 放行。
 - 余额不足（`balance_insufficient`）不是卡住：该笔立即冲正，次日以新转账重试；持续出现说明资金调度不够（§4 最后两条）。
 

@@ -19,7 +19,7 @@
 #
 # Settings for serve: STRIPE_TM_DB_HOST/PORT/NAME/USER/PASSWORD (default localhost:5440, database
 # quizbuks_stripe_test, quizbuks/quizbuks: the compose database), STRIPE_TM_PORT (8080), STRIPE_TM_STUB_PORT (8093),
-# STRIPE_TM_SMTP_PORT / STRIPE_TM_MAILPIT_PORT (1025 / 8025). State, secrets and logs: deploy/quizbuks/.stripe-test-mode.
+# STRIPE_TM_SMTP_PORT / STRIPE_TM_MAILPIT_PORT (1025 / 8025). State, secrets and logs: deploy/quizbuks/.stripe-test-mode (700).
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -47,6 +47,8 @@ listening() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 running() { [[ -f $STATE/$1.pid ]] && kill -0 "$(cat "$STATE/$1.pid")" 2>/dev/null; }
 need() { command -v "$1" >/dev/null || die "$1 is needed ($2)"; }
 stm() { python3 "$HERE/stm.py" "$@"; }
+# The state directory holds secrets, links that sign in and results: this user only, whichever command made it.
+private_state() { (umask 077 && mkdir -p "$STATE"); chmod 700 "$STATE"; }
 
 # Settings that run reads when it drives what serve started (only for that address, never over set values).
 load_run_env() {
@@ -64,8 +66,7 @@ load_run_env() {
 # Secrets made once and kept: the integrity and MFA keys belong to the database they were used with.
 environment() {
   local stub=$1
-  mkdir -p "$STATE"
-  chmod 700 "$STATE"
+  private_state
   if [[ ! -f $STATE/env ]]; then
     (umask 077 && cat > "$STATE/env" <<EOF
 JABIZ_JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
@@ -178,9 +179,11 @@ serve() {
   if [[ $stub == true ]]; then
     # Another process on the port would sign with other secrets, and every event would be refused (runbook).
     listening "$STUB_PORT" && die "port $STUB_PORT is in use: a stale Stripe stub? (stop it or set STRIPE_TM_STUB_PORT)"
-    nohup java "$ROOT/tools/quizbuks/stripe-stub/StripeStub.java" "$STUB_PORT" \
-      "http://localhost:$PORT/api/inbound/stripe" "$STRIPE_WEBHOOK_SECRET" \
-      "http://localhost:$PORT/api/inbound/stripe-connect" "$STRIPE_CONNECT_WEBHOOK_SECRET" > "$STATE/stub.log" 2>&1 &
+    # The signing secrets go in the environment, not on the command line (visible to every user of the machine).
+    STRIPE_STUB_WEBHOOK_SECRET=$STRIPE_WEBHOOK_SECRET STRIPE_STUB_CONNECT_WEBHOOK_SECRET=$STRIPE_CONNECT_WEBHOOK_SECRET \
+      nohup java "$ROOT/tools/quizbuks/stripe-stub/StripeStub.java" "$STUB_PORT" \
+      "http://localhost:$PORT/api/inbound/stripe" "" "http://localhost:$PORT/api/inbound/stripe-connect" "" \
+      > "$STATE/stub.log" 2>&1 &
     echo $! > "$STATE/stub.pid"
   else
     listen
@@ -203,7 +206,6 @@ STRIPE_TM_MAILPIT_URL=http://localhost:$MAILPIT_PORT
 STRIPE_TM_STUB_URL=http://localhost:$STUB_PORT
 EOF
   )
-  echo "$stub" > "$STATE/mode"
   say "QuizBuks on http://localhost:$PORT ($([[ $stub == true ]] && echo "Stripe stub" || echo "Stripe test mode, events via stripe listen")); next: run.sh run$([[ $stub == true ]] && echo " --stub")"
 }
 
@@ -224,7 +226,8 @@ status() {
 
 case ${1:-} in
   serve) shift; serve "$@" ;;
-  run|guard|payout-check) need python3 "the run"; load_run_env "$@"; stm "$@" ;;
+  run|payout-check) need python3 "the run"; private_state; load_run_env "$@"; stm "$@" ;;
+  guard) need python3 "the run"; load_run_env "$@"; stm "$@" ;;
   stop) stop ;;
   status) status ;;
   logs) tail -n 100 -f "$STATE/app.log" ;;
