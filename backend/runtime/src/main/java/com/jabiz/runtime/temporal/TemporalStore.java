@@ -111,7 +111,10 @@ public class TemporalStore {
             + " AND i.version_no = t." + versionColumn
             + (extraColumns.isEmpty() ? "" : " LEFT JOIN op_process p ON p.process_seq_id = i.process_seq_id")
             + " WHERE t." + idColumn + " = :id ORDER BY t." + versionColumn;
-        return engine.select(sql, Map.of("entityType", BoundValue.of(def.name), "id", BoundValue.of(id)));
+        Map<String, BoundValue> params = Map.of("entityType", BoundValue.of(def.name), "id", BoundValue.of(id));
+        // An item is written together with its version, so only held versions of this table can change the result,
+        // not items held for other entities (decision D46 rule 1); the history reads the operations as well.
+        return extraColumns.isEmpty() ? engine.select(sql, params, Set.of(table)) : engine.select(sql, params);
     }
 
     /**

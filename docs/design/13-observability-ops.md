@@ -39,7 +39,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.process.admission` | 根流程在热门命名锁之前的排队（06 §4.2，D45；`ProcessAdmission`，嵌在 `jabiz.process` 之内，计时即排队的时间） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`），没有 `outcome` 与 `status`；不放准入键、主键、操作人 |
 | `jabiz.process.admission.waiting` / `.active`（仪表，不是观测） | 当前在队列中等待的、已取得许可的根流程数，按族合计 | `family` |
 | `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
-| `jabiz.process.statements`（分布，不是观测） | 根流程在其事务中、提交之前发出的语句数（阶段 16p，D46：热门锁的容量由锁内的往返次数决定） | `process` |
+| `jabiz.process.statements`（分布，不是观测） | 根流程在其事务中、提交之前发出的语句数（阶段 16p，D46：热门锁的容量由锁内的往返次数决定；16p-2 起含提交前写出缓冲的那一条） | `process` |
 
 另外每个都有 `outcome`（`success`、`rejected`＝映射为 4xx 的领域异常、`error`＝其他、`cancelled`）与 `status`（映射的 HTTP 状态，成功为 `none`），
 以下除外：`jabiz.external.call`、`jabiz.external.job`（只有 `outcome`，见上表）、`jabiz.process.admission`（只有 `family` `process` `result`）、

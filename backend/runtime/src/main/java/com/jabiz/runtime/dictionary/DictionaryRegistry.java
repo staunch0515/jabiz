@@ -16,7 +16,6 @@ import com.jabiz.runtime.process.steps.ProcessReads;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.r2dbc.core.DatabaseClient;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
@@ -68,7 +67,6 @@ public class DictionaryRegistry {
     private final List<DictionaryProvider> providers;
     private final Map<String, StaticDictionary> implicit = new LinkedHashMap<>();
     private final Map<String, SqlDictionary> sqlDictionaries = new LinkedHashMap<>();
-    private final DatabaseClient db;
     private final StorageAdapterRegistry storages;
     private final String poolRef;
     private final ObjectProvider<AdvancedQueryExecutor> queries;
@@ -94,7 +92,6 @@ public class DictionaryRegistry {
         ObjectProvider<SqlDictionary> sqlDictionaries,
         EntityDefinitionRegistry entities,
         DatasetRegistry datasets,
-        DatabaseClient db,
         StorageAdapterRegistry storages,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
         ObjectProvider<AdvancedQueryExecutor> queries,
@@ -133,7 +130,6 @@ public class DictionaryRegistry {
             throw new IllegalStateException("Invalid SQL dictionaries:\n - " + String.join("\n - ", problems));
         }
         this.datasets = datasets;
-        this.db = db;
         this.storages = storages;
         this.poolRef = poolRef;
         this.queries = queries;
@@ -197,9 +193,9 @@ public class DictionaryRegistry {
 
     /** Dictionaries that have items in {@code sys_dict_item_version}. */
     public Flux<String> databaseDictionaries() {
-        return db.sql("SELECT DISTINCT dict_urn FROM sys_dict_item_version")
-            .map((row, meta) -> row.get("dict_urn", String.class))
-            .all();
+        // Through the storage engine, which writes what a transaction holds for the table before reading it (D46).
+        return storages.getEngine(poolRef).select("SELECT DISTINCT dict_urn FROM sys_dict_item_version", Map.of())
+            .map(row -> String.valueOf(row.get("dict_urn")));
     }
 
     private Mono<Map<Locale, List<DictItem>>> load(String dictUrn) {
