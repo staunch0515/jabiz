@@ -34,6 +34,16 @@ class ArchitectureTest {
         PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.quizbuks..").check(CLASSES);
     }
 
+    /**
+     * Statements of a transaction go through the platform's storage engine, which writes the rows the transaction holds
+     * before any statement that may read them (decision D46, implementation note ⑧ of 16p-2: application branches
+     * check all of their classes with the shared rule).
+     */
+    @Test
+    void quizbuksReachesTheDatabaseOnlyThroughTheStorageEngine() {
+        PlatformArchRules.transactionsReachTheDatabaseOnlyThroughTheStorageEngine().check(CLASSES);
+    }
+
     /** QuizBuks starts no process and passes for nobody: the platform does, by the declarations (decision D41). */
     @Test
     void quizbuksStaysOutOfTheProcessMachinery() {
