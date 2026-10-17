@@ -91,7 +91,7 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
 - 写入检查（运行时 `FileFieldCheck`，平台内部的 `FieldWriteCheck`，与引用检查在同一位置运行，覆盖数据视图 API、通用实体流程与 `ChangeSet`、
   普通与时态实体）：文件存在 → 否则 400 `FILE_NOT_FOUND`；
   文件的 `policy` 等于字段声明的策略 → 否则 400 `FILE_POLICY_MISMATCH`。只检查本次**改变**的值。
-- 导出（02 §8）：`{type: custom, kindId: jabiz.file, policy, accept: [...], maxBytes, image: true|false, variants: [...]}`，
+- 导出（02 §8）：`{type: custom, kindId: jabiz.file, policy, accept: [...], maxBytes, image: true|false, variants: [...], privateMetadata: true|false}`，
   后台据此渲染上传控件（12 §5 增加一行：`jabiz.file` → 上传 + 预览）。`FileKindSupport` 没有状态、拿不到 Spring 中的策略，
   自身只导出 `policy`；其余几项由 runtime 在元数据接口（`/api/meta/entities/{name}`）中按已注册的策略补全。
 - 启动自检（`FILE` 类别，一次报告全部）：字段引用的策略存在；策略名不重复；策略的 `maxBytes` 不超过 `jabiz.files.max-request-bytes`；
@@ -116,7 +116,27 @@ f.kind(FileKind.of("culture.image"))        // 参数 {policy: "culture.image"}
   元数据中的 `variants` 仍只列实际生成的变体。策略未声明的宽度、非图片、以及策略在上传后新增而图片比它宽的变体（变体只在上传时生成）→ 404。
   权限、公开判定与缓存头与请求原件时完全相同（判定在选对象之前；同一 URL 的内容不变，可照常缓存）。
 - 上传按操作人限流（`jabiz.files.upload-rate-per-minute`，默认 30，进程内令牌桶）→ 429 `RATE_LIMITED`，带 `Retry-After`。
+- 不在后台的读者（应用页面）见不到上传者与原名的策略，见 §5.1。
 - 后台前端的图片预览：访问令牌只在内存中（D15），`<img>` 不能带 `Authorization`，因此预览以 `fetch` 取得 blob 再用 `URL.createObjectURL` 显示。
+
+### 5.1 不公开的文件元数据【决策 D47 第 3 条，阶段 16q】
+
+上传的文件名与上传者是上传者自己的信息（原名可能含姓名，上传者编号指向一个人），读内容的人未必需要。策略声明 `privateMetadata()` 时：
+
+```java
+FilePolicy.define("qb.content")
+    .allow(MediaTypes.JPEG, MediaTypes.PNG, MediaTypes.MP3)
+    .maxBytes(10 * MB)
+    .permissions("qb.content.upload", "qb.content.read")
+    .privateMetadata()          // 答题人读得到内容，读不到商家上传时的文件名
+    .build();
+```
+
+- 调用者是上传者本人（`uploadedBy` 等于其用户编号）或持有 `file.read` 时，一切照旧。
+- 其他持有读取权限的调用者：`GET /api/files/{fileId}` 的 `originalName`、`uploadedBy` 为 `null`，`uploadedTime` 截到当天（UTC 零点）；其余字段（类型、大小、宽高、变体）照旧。
+  `/content[/{变体}]` 的 `Content-Disposition` 用中性名 `<fileId>[-<变体>].<ext>`（扩展名按判定的类型），与公开文件（15 §4）相同。
+- 没有声明的策略照旧对所有读者显示原名与上传者（兼容已有应用）。公开文件不论策略一律用中性名。
+- 元数据导出（§4）带上 `privateMetadata: true|false`。`SysFile` 数据视图本来只对 `file.read` 开放，不受影响。
 
 ## 6. 存储、清扫与删除
 

@@ -111,6 +111,34 @@
 - **并发猜密码不能绕过计数**：登录记录对 `(userId, attemptNo)` 声明唯一约束（时态实体，D6 咨询锁 + 检查）。并发的两次尝试基于同一条最新记录时，
   后者在唯一性上失败，事务回滚，同样返回 401——记录下来的尝试总是一条连续的序列。
 
+### 4.1 登录类接口按地址限流【决策 D47 第 1 条，阶段 16q】
+
+按账号的锁定挡不住一个地址对许多账号各试几次。登录类接口因此另按客户端地址限流，缺省开启：
+
+| 种类 | 接口 |
+|---|---|
+| 口令登录 | `POST /api/auth/login` |
+| OIDC 回调 | `POST /api/auth/oidc/callback` |
+| 二次验证 | `POST /api/auth/challenge/verify`（登录第二步）、`POST /api/auth/step-up` |
+| 刷新 | `POST /api/auth/refresh` |
+
+- 地址来自 `ClientAddresses`（转发头只在来自可信代理时采用，§15.5）；IPv6 地址按其 /64 计数（一个用户通常有整个 /64）。
+- 每个地址、每个种类一个令牌桶：至多突发 `jabiz.security.sign-in.rate-limit.burst`（缺省 10）次，以每 `.period`（缺省 1 分钟）`.per-address`（缺省 20）次的速率补充；
+  `.enabled=false` 关闭（例如前面的网关已经限流）。数值不为正是启动错误（`SECURITY`）。
+- 超出 429 `RATE_LIMITED` + `Retry-After`，在读取任何数据之前：不写登录记录、不计入账号的失败次数，对存在与不存在的账号、对的与错的口令一样。
+- 进程内、按实例计数（同 §15.6 的已知限制）；拒绝记观测 `jabiz.auth.rate_limited`（标签只有 `kind`，13）。
+- 与按账号的锁定并存，锁定的规则不变（`SignInRateLimitIT` 确认）。
+
+### 4.2 口令哈希的并发上限【决策 D47 第 2 条，阶段 16q】
+
+BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不设上限，所有核都在算哈希，其他请求一起变慢；等待中的登录又各占着一个连接。
+
+- 同时计算的哈希至多 `jabiz.security.password-hashing.max-concurrent`（缺省为处理器数）个，其余按到达顺序等待，至多 `.max-wait`（缺省 2 秒），之后 503 `AUTH_BUSY` + `Retry-After`（三种语言的消息）。
+- **在事务之前排队**：含口令步骤（`AuthenticationStep`、`HashPasswordStep`、`CurrentPasswordStep`，以 `PasswordHashingLimit.HashingStep` 标记）的根流程——登录、注册、改密码、重设密码、建用户——
+  在借连接、开事务之前取许可（与 06 §4.2 的准入同一种进程内队列），等待中不占连接、不占线程；事务结束即归还。
+- 计算本身照旧在 `BlockingStep` 的虚拟线程上，另经同样大小的信号量（约束子流程、启动时等其他途径的计算）；经过事务前队列的运行不会在这里等待。
+- 被拒绝的请求没有写任何记录：登录不计入失败次数，可以稍后重试。拒绝记观测 `jabiz.auth.hashing.busy`（13）。
+
 ## 5. 权限检查的位置（要求 4）
 
 | 入口 | 检查 |
@@ -695,5 +723,5 @@ jabiz:
   被限流的请求不读数据库、不借连接（`ProcessAdmissionIT` 在连接全被占用时确认）。
 - 只作用于流程接口：子流程、定时任务、事件消费者与平台自己的入口（登录、实体接口、上传等）不经它。启动检查（`PROCESS`）：配置的流程须已注册且进目录（不是 `internal()` / `entryOnly()` / `subProcessOnly()`），
   数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
-- 与 `SignUpRateLimits`（§15.7）的关系：后者限的是平台自己的匿名账户接口与本人账户操作（种类写死在代码中），不变；两者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
+- 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
