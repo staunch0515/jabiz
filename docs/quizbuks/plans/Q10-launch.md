@@ -178,6 +178,17 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
 - **评审修正**（同分支）：`ADVANCE` 以 `WithdrawApproval.when` 只在审核过期时取审批锁（锁序中排在发布锁与开始锁之后，文档补上 `jabiz.approval:*`）；jqwik 的"结束一次"改由生产的 `PublicationMoves.moveAfter` 驱动；
   `LockSplitIT` 每个暂停窗口内都有一个开始并断言它被 `NOT_OPEN` 拒绝，`pg_stat_database.deadlocks` 只作后备（先刷统计）；报告的百分比改为饱和时的 +16–30 %。
 
+## 实施记录（Q10a5 写缓冲，2026-10-17，分支 `1.2/quizbuks-10a5-write-buffer`）
+
+平台 16p-2（事务内写缓冲，PR #168，决策 D46；应急开关 `jabiz.storage.write-batching.enabled`，缺省开）合入 `1.2/platform` 后合并进来并重测（P-10 的第二步）。
+- **合并**：合并 `origin/1.2/platform`（合并提交，无冲突；平台没有改 OpenAPI 与公开模板快照，不需要重新生成）。应用代码不变。
+- **语句预算** `AttemptStatementBudgetIT` 每项两个数（开 / 关）：开始锁内 3 / 5、合计 10 / 12；付奖的提交在发布锁内 7 / 14、合计 13 / 20；使发布结束的完成 12 / 23、18 / 29；暂停 7 / 9、10 / 12。与预估（约 3 与约 7）相同；
+  新增 `AttemptStatementBudgetWithoutHeldWritesIT`（开关关）。`ArchitectureTest` 照 D46 实现说明⑧加上 `transactionsReachTheDatabaseOnlyThroughTheStorageEngine`（QuizBuks 的类不直接发语句）。
+- 验证：`./gradlew :quizbuks:check`（486 个测试、7 个场景，快照不变，`platformCheck` 0 错误）。
+- **重测**（报告 §11，同一个 jar 开 / 关的同场 A/B，各 2–4 次）：本机安静时饱和吞吐 34–39 → 45–54 次 / 秒；每秒 50 人时 4 次中 3 次提交 p95 158–579 ms、第 4 次 1048 ms，**目标达到但没有余量**（约 1.0 倍，要求 1.3 倍）。
+  提交锁内 26.0 → 21.5 ms（开日志时），其中数据库 3.7 ms：瓶颈仍是提交在发布锁内的一段，主要是锁内的 Java 工作与本机 CPU，不再是语句条数。本机被其他会话的测试占用时（load average 6–17）的一轮不用于比较。
+- **下一步**（需求方决定）：上线前在目标规格上重测（必需）；剖析锁内的 Java 工作；备选为平台把"取锁 + 读取"合成一条（锁内 7 → 5）、开始一侧的背压（过载仍落在提交上，已知问题不变）与 R4。
+
 ## 实施记录（Q10c + Q10d，2026-10-17，分支 `1.2/quizbuks-10cd-stripe-ops`）
 
 两个阶段合在一个分支（都只有工具与文档，没有应用代码的改动）。按 L-3：脚本与手册由需求方用自己的 Stripe 测试密钥运行；CI 作业只在提供 secrets 后启用。

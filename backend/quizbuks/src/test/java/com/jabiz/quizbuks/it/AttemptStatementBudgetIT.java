@@ -2,7 +2,9 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.wallet.QbWallets;
+import com.jabiz.runtime.storage.WriteBatching;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code StatementBudgetIT}): how many statements a start and a paid submission send, in their transaction and under the
  * publication's lock. A hot publication's capacity is set by the round trips under its lock (Q10a §4.2: about 0.8 ms
  * each), so the counts are exact: a change in either direction is made on purpose, together with the numbers here and
- * in docs/quizbuks/perf/Q10a-load-test.md §9. The failure lists the statements.
+ * in docs/quizbuks/perf/Q10a-load-test.md §9 (§11 since platform phase 16p-2). The failure lists the statements.
  *
  * <p>Counted as the App calls: over HTTP, each call with its own {@code Idempotency-Key} (the lookup for a replay is
  * outside the transaction). "Under the lock" is from the statement after the one taking the transaction's first lock
@@ -33,56 +35,73 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AttemptStatementBudgetIT extends PlayItSupport {
 
     // ---- budgets: [Q10a, before platform phase 16p-1 / with 16p-1 merged, before Q10a3's changes] ------------------
+    // Each has two numbers (as the platform's StatementBudgetIT): with the transaction's writes held (platform phase
+    // 16p-2, decision D46, the default) and with the emergency switch jabiz.storage.write-batching.enabled=false, when
+    // each commit writes its rows as it ends (16p-1: Q10a3 and Q10a4's numbers;
+    // AttemptStatementBudgetWithoutHeldWritesIT). Held, the platform writes the inserts, the updates at a known version
+    // with their audit records, the sub-processes' operation records, the events and the idempotency result with the
+    // next platform statement that may read them (a lock carries inserts) or in one statement before the COMMIT.
+
+    /** A budget: with the transaction's writes held (16p-2), and within one commit only (16p-1, the switch off). */
+    record Budget(int held, int perCommit) {}
 
     /**
      * {@code QB_ATTEMPT_START}, a new attempt, in its transaction [— / 16]: the operation (with the lock timeout and
      * its number), banned?, one read of the caller's attempt, the card and the publication, the profile, the version
-     * (no country without a profile: no statement), the sponsor's wallet, the start lock, then under it. Unchanged by
-     * the lock split (Q10a4).
+     * (no country without a profile: no statement), the sponsor's wallet, the start lock, then under it.
      */
-    static final int START_TOTAL = 12;
+    static final Budget START_TOTAL = new Budget(10, 12);
     /**
      * Under the start lock [12 / 8]: the caller's attempt, the card and both sides of the counters again (one
-     * statement), the attempt with its audit record (its references to the publication and the version answered by
-     * this transaction's reads), the starts' side at the version read with its audit record, the idempotency result,
-     * {@code COMMIT}. Unchanged by the lock split (Q10a4): the read gained a query, not a statement.
+     * statement); the attempt with its audit record (its references to the publication and the version answered by
+     * this transaction's reads), the starts' side at the version read with its audit record, the idempotency result
+     * (held: one statement; per commit: three); {@code COMMIT}.
      */
-    static final int START_LOCKED = 5;
+    static final Budget START_LOCKED = new Budget(3, 5);
     /**
      * {@code QB_ATTEMPT_SUBMIT}, a paid reward, in its transaction [— / 22]: the operation, banned?, the attempt, the
      * version, the commission rate, the publication's lock, then under it.
      */
-    static final int SUBMIT_TOTAL = 20;
+    static final Budget SUBMIT_TOTAL = new Budget(13, 20);
     /**
      * Under the lock [48 / 16]: the attempt, the counters and the card again (one statement), the sponsor's wallet lock
-     * and the wallet, {@code LEDGER_POST} as a sub-process (its operation, the account lock, one read, the transaction,
-     * the entries), the event, the wallet, attempt and counters each updated at the version read with its audit record,
-     * the idempotency result, {@code COMMIT}.
+     * and the wallet, {@code LEDGER_POST} as a sub-process (held: its operation record carried by its account lock, one
+     * read; per commit: its operation, the account lock, one read, the transaction, the entries), the event, the
+     * wallet, attempt and counters each updated at the version read with its audit record, the idempotency result
+     * (held: the ledger's rows and all these in one statement), {@code COMMIT}.
      */
-    static final int SUBMIT_LOCKED = 14;
+    static final Budget SUBMIT_LOCKED = new Budget(7, 14);
     /** Outside the transaction, each call: the lookup of a replay of its {@code Idempotency-Key}. */
     static final int OUTSIDE = 1;
     /**
      * {@code QB_ATTEMPT_SUBMIT} of the paid reward that ends the publication (its last winner's place), in its
-     * transaction (not asserted before Q10a4): the paid submission's {@link #SUBMIT_TOTAL} and then the move, a
-     * sub-process ({@code QB_PUBLICATION_COMPLETION_MOVE}): its operation, the publication's lock again (at once: held),
-     * the publication, its schedule row, the card (three reads), the publication's version written on (its current
-     * version read, the new one with its audit record), the schedule row and the card. The move takes no start lock
-     * (Q10-lock-split.md 2.3, LS-5).
+     * transaction (asserted since Q10a4): the paid submission's {@link #SUBMIT_TOTAL} and then the move, a sub-process
+     * ({@code QB_PUBLICATION_COMPLETION_MOVE}): its operation (held: carried by the next statement), the publication's
+     * lock again (at once: held; with the writes held it carries the ledger's rows), the publication, its schedule row,
+     * the card (three reads), the publication's version written on (its current version read, the new one with its
+     * audit record), the schedule row and the card (held: the new version and these with the submission's own writes
+     * in one statement). The move takes no start lock (Q10-lock-split.md 2.3, LS-5).
      */
-    static final int ENDING_TOTAL = 29;
-    /** Under the lock: {@link #SUBMIT_LOCKED} and the move's nine. */
-    static final int ENDING_LOCKED = 23;
+    static final Budget ENDING_TOTAL = new Budget(18, 29);
+    /** Under the lock: {@link #SUBMIT_LOCKED} and the move's five (per commit: nine). */
+    static final Budget ENDING_LOCKED = new Budget(12, 23);
     /**
      * {@code QB_PUBLICATION_PAUSE} of a live publication, in its transaction: the operation, banned?, the publication's
      * lock, then under it the start lock (Q10a4: one statement more than before), the publication, the schedule row,
      * the card (three reads), the publication's version written on (its current version read, the new one with its
-     * audit record), the card (a paused publication has no due time: the schedule row stays), the idempotency result,
-     * {@code COMMIT}.
+     * audit record), the card (a paused publication has no due time: the schedule row stays), the idempotency result
+     * (held: the new version, the card and the result in one statement), {@code COMMIT}.
      */
-    static final int PAUSE_TOTAL = 12;
+    static final Budget PAUSE_TOTAL = new Budget(10, 12);
     /** Under the publication's lock (the start lock included). */
-    static final int PAUSE_LOCKED = 9;
+    static final Budget PAUSE_LOCKED = new Budget(7, 9);
+
+    @Autowired
+    WriteBatching batching;
+
+    private int budget(Budget budget) {
+        return batching.acrossTransaction() ? budget.held() : budget.perCommit();
+    }
 
     @Test
     void aStartAndAPaidSubmission() {
@@ -99,8 +118,8 @@ class AttemptStatementBudgetIT extends PlayItSupport {
 
         report("QB_ATTEMPT_START", counted.start);
         report("QB_ATTEMPT_SUBMIT (paid)", counted.submit);
-        assertBudget("QB_ATTEMPT_START", counted.start, START_TOTAL, START_LOCKED);
-        assertBudget("QB_ATTEMPT_SUBMIT (paid)", counted.submit, SUBMIT_TOTAL, SUBMIT_LOCKED);
+        assertBudget("QB_ATTEMPT_START", counted.start, budget(START_TOTAL), budget(START_LOCKED));
+        assertBudget("QB_ATTEMPT_SUBMIT (paid)", counted.submit, budget(SUBMIT_TOTAL), budget(SUBMIT_LOCKED));
         assertThat(counted.startOutside).as(String.join("\n", counted.startOutside)).hasSize(OUTSIDE);
         assertThat(counted.submitOutside).as(String.join("\n", counted.submitOutside)).hasSize(OUTSIDE);
         assertThat(counted.rewardStatus).isEqualTo("PAID");
@@ -129,7 +148,7 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         assertThat(status(ending)).isEqualTo("ENDED");
         assertThat(moves(ending)).isEqualTo(1);
         report("QB_ATTEMPT_SUBMIT (paid, ends the publication)", counted.submit);
-        assertBudget("QB_ATTEMPT_SUBMIT (ends)", counted.submit, ENDING_TOTAL, ENDING_LOCKED);
+        assertBudget("QB_ATTEMPT_SUBMIT (ends)", counted.submit, budget(ENDING_TOTAL), budget(ENDING_LOCKED));
         // The move takes the publication's lock again (at once), never the start lock.
         assertThat(counted.submitLocks).containsExactly(PublicationMoves.lockName(ending),
             QbWallets.lockName(QbWallets.SPONSOR, sponsor), PublicationMoves.lockName(ending));
@@ -143,7 +162,7 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         List<List<String>> pause = SqlStatementLog.transactions();
         List<String> pauseLocks = SqlStatementLog.locks();
         report("QB_PUBLICATION_PAUSE", pause);
-        assertBudget("QB_PUBLICATION_PAUSE", pause, PAUSE_TOTAL, PAUSE_LOCKED);
+        assertBudget("QB_PUBLICATION_PAUSE", pause, budget(PAUSE_TOTAL), budget(PAUSE_LOCKED));
         // The lock order of design 4.3: the publication's, then its start lock.
         assertThat(pauseLocks).containsExactly(PublicationMoves.lockName(paused),
             PublicationMoves.startLockName(paused));
