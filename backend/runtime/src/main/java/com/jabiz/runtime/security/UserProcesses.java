@@ -6,6 +6,9 @@ import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.sponsor.SponsorSignInProcess;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.security.protect.ProtectedChangeEntities;
+import com.jabiz.runtime.security.protect.ProtectedChangeProcesses;
+import com.jabiz.runtime.security.protect.ProtectedGrants;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
 import com.jabiz.security.MfaRequirement;
@@ -96,10 +99,28 @@ public class UserProcesses {
                     ctx.put(USER_ID, ctx.changes().insert(SecurityEntities.USER, user));
                 }));
 
-    public static final ProcessDefinition<SetPasswordInput, UserIdOutput, ProcessContext> SET_PASSWORD =
-        ProcessDefinition.define("SEC_USER_SET_PASSWORD", 1, SetPasswordInput.class, UserIdOutput.class,
+    /**
+     * The answer of {@code SEC_USER_SET_PASSWORD} and {@code SEC_MFA_RESET}: done now ({@code APPLIED}), or, for a
+     * holder of a protected permission, waiting for another administrator's approval ({@code PENDING}, decision D48).
+     */
+    public record CredentialResetOutput(String userId, String status, String changeId, String approval,
+        String approvalRequestId) {
+
+        static CredentialResetOutput of(ProcessContext ctx, Object userId) {
+            ProtectedChangeProcesses.ProtectedChangeOutput change = ProtectedChangeProcesses.output(ctx, userId);
+            return new CredentialResetOutput(String.valueOf(userId), change.status(), change.changeId(),
+                change.approval(), change.approvalRequestId());
+        }
+    }
+
+    /** Set while the new password waits for approval: the hash is not written, the sessions stay. */
+    static final String DEFERRED = "credential_deferred";
+
+    public static final ProcessDefinition<SetPasswordInput, CredentialResetOutput, ProcessContext> SET_PASSWORD =
+        ProcessDefinition.define("SEC_USER_SET_PASSWORD", 1, SetPasswordInput.class, CredentialResetOutput.class,
             ProcessContext.class, pb -> pb
-                .description("Sets the password of a user.")
+                .description("Sets the password of a user; for a holder of a protected permission it waits for"
+                    + " another administrator's approval.")
                 .permissions(SecurityPermissions.USER_PASSWORD)
                 .requiresMfa(MfaRequirement.ADMINISTRATION)
                 .contextFactory((start, input) -> {
@@ -108,16 +129,29 @@ public class UserProcesses {
                     ctx.put(PASSWORD, input.password());
                     return ctx;
                 })
-                .outputMapper(ctx -> new UserIdOutput(String.valueOf(ctx.get(USER_ID))))
+                .outputMapper(ctx -> CredentialResetOutput.of(ctx, ctx.get(USER_ID)))
                 .step("Load the user", LoadEntity.by(SecurityEntities.USER_DATASET, USER_ID, USER))
                 .step("Hash the password", HashPasswordStep.class, HASH_PASSWORD)
+                .step("Assess the reset", ProtectedChangeProcesses.assess(ctx -> new ProtectedGrants.Draft(
+                    ProtectedChangeEntities.PASSWORD, java.util.UUID.fromString(String.valueOf(
+                        ctx.get(USER, EntityInstance.class).id())), null, null)))
                 .compute("Register the new hash", (metadata, ctx) -> {
                     EntityInstance user = ctx.get(USER, EntityInstance.class);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("kind", ProtectedChangeEntities.PASSWORD);
+                    values.put("userId", user.id());
+                    values.put("passwordHash", ctx.get(HASH, String.class));
+                    if (ProtectedChangeProcesses.defer(ctx, values, "Password reset by an administrator")) {
+                        ctx.put(DEFERRED, true);
+                        return;
+                    }
                     ctx.changes().update(SecurityEntities.USER, user.id(), user.version(),
                         Map.of("passwordHash", ctx.get(HASH, String.class)));
                 })
+                .step("Ask for approval", ProtectedChangeProcesses.requireApproval())
                 .step("End the user's sessions", RevokeSessionsStep.class,
-                    new RevokeSessionsStep.Metadata(USER, RefreshTokenStore.REASON_PASSWORD)));
+                    new RevokeSessionsStep.Metadata(USER, RefreshTokenStore.REASON_PASSWORD,
+                        ctx -> !ctx.contains(DEFERRED))));
 
     public static final ProcessDefinition<UserIdInput, UserIdOutput, ProcessContext> UNLOCK =
         ProcessDefinition.define("SEC_USER_UNLOCK", 1, UserIdInput.class, UserIdOutput.class,
@@ -188,7 +222,7 @@ public class UserProcesses {
     }
 
     @Bean
-    ProcessDefinition<SetPasswordInput, UserIdOutput, ProcessContext> secUserSetPasswordProcess() {
+    ProcessDefinition<SetPasswordInput, CredentialResetOutput, ProcessContext> secUserSetPasswordProcess() {
         return SET_PASSWORD;
     }
 
