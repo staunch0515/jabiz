@@ -11,7 +11,8 @@ import java.util.Map;
 
 /**
  * Adds what an upload control needs to the exported {@code jabiz.file} fields (docs/design/14-files.md section 4):
- * {@code accept} (content types and extensions), {@code maxBytes}, {@code image} and the image {@code variants}.
+ * {@code accept} (content types and extensions), {@code maxBytes}, {@code image}, the image {@code variants} and
+ * {@code privateMetadata} (whether readers other than the uploader see no uploaded name, decision D47).
  * The kind itself only knows the policy's name.
  */
 @Component
@@ -49,5 +50,6 @@ public class FilePolicyExport {
         field.put("variants", policy.acceptsImages()
             ? policy.image().variants().stream().map(FilePolicy.ImageOptions::variantName).toList()
             : List.of());
+        field.put("privateMetadata", policy.privateMetadata());
     }
 }

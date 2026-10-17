@@ -105,6 +105,10 @@ class FileChecksTest {
         Map<String, Object> field = new java.util.LinkedHashMap<>();
         FilePolicyExport.describe(field, photos);
         assertThat(field).containsEntry("accept", List.of("image/jpeg", ".jpg", ".jpeg"))
-            .containsEntry("maxBytes", 5L).containsEntry("image", true).containsEntry("variants", List.of("w320"));
+            .containsEntry("maxBytes", 5L).containsEntry("image", true).containsEntry("variants", List.of("w320"))
+            .containsEntry("privateMetadata", false);
+        FilePolicyExport.describe(field, FilePolicy.define("content").allow(MediaTypes.PDF).maxBytes(5)
+            .permissions("u", "r").privateMetadata().build());
+        assertThat(field).containsEntry("privateMetadata", true);
     }
 }

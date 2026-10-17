@@ -58,6 +58,11 @@ export type FileFieldMeta = FieldBase & {
   image?: boolean
   /** Names of the image variants, narrowest first (for example w160). */
   variants?: string[]
+  /**
+   * Readers other than the uploader (and holders of `file.read`) get no uploaded name, no uploader and the day of
+   * the upload only (decision D47).
+   */
+  privateMetadata?: boolean
 }
 
 export function isFileField(field: FieldMeta): field is FieldMeta & FileFieldMeta {

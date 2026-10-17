@@ -7,6 +7,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.resource.InvalidResourceIdException;
 import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.AuthBusyException;
 import com.jabiz.runtime.AuthenticationFailedException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
@@ -61,6 +62,8 @@ public final class ProblemStatuses {
             case QueryTimeoutException e -> 503;
             // The queue before a hot lock is full (decision D45): try again later.
             case ProcessBusyException e -> 503;
+            // Password hashing is saturated (decision D47): try again later.
+            case AuthBusyException e -> 503;
             // Another system did not answer usably (decision D38).
             case ExternalCallException e -> 502;
             default -> 500;
@@ -98,6 +101,7 @@ public final class ProblemStatuses {
             case InboundRejectedException e -> e.violations();
             case RateLimitedException e -> e.violations();
             case ProcessBusyException e -> e.violations();
+            case AuthBusyException e -> e.violations();
             case ExternalCallException e -> List.of(new Violation(null, PlatformErrorCodes.EXTERNAL_CALL_FAILED,
                 e.getMessage(), Map.of("service", e.service(), "kind", e.kind().name())));
             case QueryTimeoutException e -> List.of(new Violation(null, PlatformErrorCodes.QUERY_TIMEOUT,

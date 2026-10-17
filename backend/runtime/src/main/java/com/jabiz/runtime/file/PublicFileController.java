@@ -94,7 +94,7 @@ class PublicFileController {
                     String contentType = file.get(FileEntities.CONTENT_TYPE);
                     String stored = FileVariants.stored(file, variant, policies).orElseThrow();
                     return FileContent.serve(store, FileKeys.key(id, stored), contentType,
-                            downloadName(id, variant, contentType),
+                            FileContent.neutralName(id, variant, contentType),
                             range, "public, max-age=" + properties.fileCacheSeconds())
                         .switchIfEmpty(Mono.defer(() -> {
                             log.warn("File {} has a row but no stored object {}", id, variant);
@@ -106,12 +106,6 @@ class PublicFileController {
     private static boolean importOnly(String contentType) {
         return Arrays.stream(MediaTypes.values())
             .anyMatch(type -> type.isImportOnly() && type.contentType().equals(contentType));
-    }
-
-    private static String downloadName(UUID id, String variant, String contentType) {
-        String extension = Arrays.stream(MediaTypes.values()).filter(t -> t.contentType().equals(contentType))
-            .map(MediaTypes::extension).findFirst().orElse("bin");
-        return id + (FileKeys.ORIGINAL.equals(variant) ? "" : "-" + variant) + "." + extension;
     }
 
     private static UUID parseId(String raw) {

@@ -184,8 +184,8 @@ public class SecurityConfig {
 
     @Bean
     PasswordHasher passwordHasher(@Value("${jabiz.security.password.bcrypt-strength:12}") int strength,
-        @Value("${jabiz.security.password.min-length:10}") int minLength) {
-        return new PasswordHasher(strength, minLength);
+        @Value("${jabiz.security.password.min-length:10}") int minLength, PasswordHashingLimit limit) {
+        return new PasswordHasher(strength, minLength, limit);
     }
 
     @Bean

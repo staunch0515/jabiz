@@ -138,6 +138,27 @@ public class ClientAddresses implements PlatformCheck {
         return last;
     }
 
+    /**
+     * The network a client address stands for in per-address rate limits: an IPv6 address's /64 (one subscriber
+     * usually has a whole /64, so counting single addresses would let it rotate through them), any other text as it
+     * is. {@code 2001:db8:1:2:a:b:c:d} → {@code 2001:db8:1:2::/64}.
+     */
+    public static String rateLimitKey(String client) {
+        if (client == null || client.indexOf(':') < 0) {
+            return client;
+        }
+        InetAddress address = literal(client);
+        if (!(address instanceof java.net.Inet6Address)) {
+            return address == null ? client : address.getHostAddress();
+        }
+        byte[] bytes = address.getAddress();
+        StringBuilder network = new StringBuilder();
+        for (int i = 0; i < 8; i += 2) {
+            network.append(Integer.toHexString(((bytes[i] & 0xFF) << 8) | (bytes[i + 1] & 0xFF))).append(':');
+        }
+        return network.append(":/64").toString();
+    }
+
     /** Whether any proxy is trusted. */
     public boolean trustsProxies() {
         return !trusted.isEmpty();

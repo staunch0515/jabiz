@@ -116,4 +116,16 @@ class ClientAddressesTest {
         assertThat(ClientAddresses.literal("not an address")).isNull();
         assertThat(ClientAddresses.literal("fe80::1%eth0")).isNull();
     }
+
+    @Test
+    void rateLimitKeysCountIpv6ByItsSlash64() {
+        assertThat(ClientAddresses.rateLimitKey("2001:db8:1:2:a:b:c:d")).isEqualTo("2001:db8:1:2::/64");
+        assertThat(ClientAddresses.rateLimitKey("2001:DB8:1:2::1")).isEqualTo("2001:db8:1:2::/64");
+        assertThat(ClientAddresses.rateLimitKey("::1")).isEqualTo("0:0:0:0::/64");
+        assertThat(ClientAddresses.rateLimitKey("192.0.2.7")).isEqualTo("192.0.2.7");
+        assertThat(ClientAddresses.rateLimitKey("::ffff:192.0.2.7")).isEqualTo("192.0.2.7");
+        assertThat(ClientAddresses.rateLimitKey("unknown")).isEqualTo("unknown");
+        assertThat(ClientAddresses.rateLimitKey("fe80::1%eth0")).isEqualTo("fe80::1%eth0");
+        assertThat(ClientAddresses.rateLimitKey(null)).isNull();
+    }
 }

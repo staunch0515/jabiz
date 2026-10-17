@@ -4,6 +4,7 @@ import com.jabiz.process.BlockingStep;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.security.PasswordHasher;
+import com.jabiz.runtime.security.PasswordHashingLimit;
 import com.jabiz.runtime.security.Rbac;
 import com.jabiz.security.LoginAttemptPolicy;
 import com.jabiz.security.LoginOutcome;
@@ -19,7 +20,7 @@ import java.util.Optional;
  * that the response time tells nothing. A locked account is refused whatever the password.
  */
 @Component
-public class AuthenticationStep implements BlockingStep<NoMetadata, LoginContext> {
+public class AuthenticationStep implements BlockingStep<NoMetadata, LoginContext>, PasswordHashingLimit.HashingStep {
 
     private final PasswordHasher hasher;
     private final LoginAttemptPolicy policy;

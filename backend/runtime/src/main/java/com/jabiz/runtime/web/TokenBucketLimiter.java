@@ -29,11 +29,19 @@ public final class TokenBucketLimiter {
 
     /** As above, timed by {@code nanoTime} (tests). */
     public TokenBucketLimiter(int capacity, Duration period, int maxKeys, LongSupplier nanoTime) {
-        if (capacity <= 0 || maxKeys <= 0 || period.isNegative() || period.isZero()) {
-            throw new IllegalArgumentException("capacity, period and maxKeys must be positive");
+        this(capacity, capacity, period, maxKeys, nanoTime);
+    }
+
+    /**
+     * Buckets holding at most {@code capacity} tokens (the burst) that refill at {@code rate} tokens per
+     * {@code period}, independently of the burst (for example 20 a minute with a burst of 10).
+     */
+    public TokenBucketLimiter(int capacity, int rate, Duration period, int maxKeys, LongSupplier nanoTime) {
+        if (capacity <= 0 || rate <= 0 || maxKeys <= 0 || period.isNegative() || period.isZero()) {
+            throw new IllegalArgumentException("capacity, rate, period and maxKeys must be positive");
         }
         this.capacity = capacity;
-        this.tokensPerNano = capacity / (double) period.toNanos();
+        this.tokensPerNano = rate / (double) period.toNanos();
         this.nanoTime = Objects.requireNonNull(nanoTime);
         this.buckets = new LinkedHashMap<>(16, 0.75f, true) {
             @Override

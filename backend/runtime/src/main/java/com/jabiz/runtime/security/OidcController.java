@@ -88,13 +88,15 @@ class OidcController {
     private final SignInEntries entries;
     private final ClientAddresses clients;
     private final SignUpRateLimits limits;
+    private final SignInRateLimits signInLimits;
     private final ProcessDefinition<OidcSignUpProcess.Input, OidcSignUpProcess.Output, AccountContext> signUp;
 
     OidcController(OidcProviders providers, OidcClient client, OidcExchange exchange, OidcStateStore states,
         ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens, MfaSettings mfa,
         PlatformObservations observations, Clock clock, SignInEntries entries, ClientAddresses clients,
-        SignUpRateLimits limits,
+        SignUpRateLimits limits, SignInRateLimits signInLimits,
         ProcessDefinition<OidcSignUpProcess.Input, OidcSignUpProcess.Output, AccountContext> signUp) {
+        this.signInLimits = signInLimits;
         this.providers = providers;
         this.client = client;
         this.exchange = exchange;
@@ -164,6 +166,7 @@ class OidcController {
     Mono<AuthController.TokenResponse> callback(@RequestBody(required = false) CallbackRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
+            signInLimits.count(SignInRateLimits.Kind.OIDC_CALLBACK, http);
             if (request == null || blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }

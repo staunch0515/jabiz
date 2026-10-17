@@ -8,6 +8,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.resource.InvalidResourceIdException;
 import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.AuthBusyException;
 import com.jabiz.runtime.AuthenticationFailedException;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.ConcurrentUpdateException;
@@ -211,6 +212,16 @@ public class GlobalExceptionHandler {
     ResponseEntity<ProblemDetail> handleProcessBusy(ProcessBusyException ex, ServerWebExchange exchange) {
         ProblemDetail problem = withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
         problem.setProperty("reason", ex.reason().name());
+        problem.setProperty("retryAfter", ex.retryAfterSeconds());
+        return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.RETRY_AFTER,
+                String.valueOf(ex.retryAfterSeconds()))
+            .body(problem);
+    }
+
+    /** Password hashing is saturated (decision D47): 503 with {@code Retry-After}; nothing logged as an error. */
+    @ExceptionHandler(AuthBusyException.class)
+    ResponseEntity<ProblemDetail> handleAuthBusy(AuthBusyException ex, ServerWebExchange exchange) {
+        ProblemDetail problem = withViolations(statusOf(ex), ex.getMessage(), ProblemStatuses.violations(ex), exchange);
         problem.setProperty("retryAfter", ex.retryAfterSeconds());
         return ResponseEntity.status(statusOf(ex)).header(HttpHeaders.RETRY_AFTER,
                 String.valueOf(ex.retryAfterSeconds()))

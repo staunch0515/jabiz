@@ -43,6 +43,18 @@ class FilePolicyTest {
     }
 
     @Test
+    void metadataIsPublicToReadersUnlessDeclaredPrivate() {
+        FilePolicy open = FilePolicy.define("commerce.document").allow(MediaTypes.PDF).maxBytes(FilePolicy.MB)
+            .permissions("u", "r").build();
+        assertThat(open.privateMetadata()).isFalse();
+        assertThat(new FilePolicy("a", java.util.Set.of(MediaTypes.PDF), 1, null, "u", "r").privateMetadata())
+            .isFalse();
+        FilePolicy kept = FilePolicy.define("commerce.document").allow(MediaTypes.PDF).maxBytes(FilePolicy.MB)
+            .permissions("u", "r").privateMetadata().build();
+        assertThat(kept.privateMetadata()).isTrue();
+    }
+
+    @Test
     void rejectsInvalidDeclarations() {
         assertThatThrownBy(() -> FilePolicy.define("Bad Name").allow(MediaTypes.PDF).maxBytes(1)
             .permissions("u", "r").build()).hasMessageContaining("must match");

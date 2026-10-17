@@ -23,6 +23,7 @@ import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.operation.OperationRequest;
 import com.jabiz.runtime.operation.Operations;
+import com.jabiz.runtime.security.PasswordHashingLimit;
 import com.jabiz.runtime.security.SensitiveDataMasker;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -32,6 +33,7 @@ import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
@@ -94,14 +96,26 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     private final PlatformObservations observations;
     private final Duration lockTimeout;
     private final ProcessAdmission admission;
+    private final PasswordHashingLimit hashing;
     /** Readers of the registered processes' outputs, for replays, built at startup (see below). */
     private final Map<Class<?>, ObjectReader> outputReaders = new ConcurrentHashMap<>();
 
+    /** Without a limit on password hashing (tests that build an executor of their own). */
+    public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
+        ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
+        String poolRef, PlatformObservations observations, Duration lockTimeout, ProcessAdmission admission) {
+        this(beans, sequence, operations, committer, storages, json, masker, poolRef, observations, lockTimeout,
+            admission, PasswordHashingLimit.NONE);
+    }
+
+    @Autowired
     public ProcessExecutor(ApplicationContext beans, ProcessSequence sequence, OperationRecorder operations,
         ChangeSetCommitter committer, StorageAdapterRegistry storages, JsonMapper json, SensitiveDataMasker masker,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, PlatformObservations observations,
-        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout, ProcessAdmission admission) {
+        @Value("${jabiz.process.lock-timeout:30s}") Duration lockTimeout, ProcessAdmission admission,
+        PasswordHashingLimit hashing) {
         this.admission = Objects.requireNonNull(admission, "admission must not be null");
+        this.hashing = Objects.requireNonNull(hashing, "hashing must not be null");
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
         this.lockTimeout = Objects.requireNonNull(lockTimeout, "lockTimeout must not be null");
         this.masker = masker;
@@ -179,11 +193,12 @@ public class ProcessExecutor implements SmartInitializingSingleton {
 
     /**
      * {@code transaction} once the process is admitted past the queue before its hot lock, if it declares one
-     * (decision D45): before it borrows a connection, until it has ended. Only top-level runs queue.
+     * (decision D45), and past the queue before password hashing, if it hashes (decision D47): before it borrows a
+     * connection, until it has ended. Only top-level runs queue.
      */
     private <I, T> Mono<T> admitted(ProcessDefinition<I, ?, ?> definition, I input, ExecutionOptions options,
         Mono<T> transaction) {
-        return admission.admit(definition, input, options.lockWait(), transaction);
+        return admission.admit(definition, input, options.lockWait(), hashing.around(definition, transaction));
     }
 
     /**
