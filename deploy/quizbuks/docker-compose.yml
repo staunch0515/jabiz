@@ -3,10 +3,11 @@
 #   docker compose -f deploy/quizbuks/docker-compose.yml up -d --build
 #
 # then open http://localhost:8080/ (the app), /sponsor/ (the sponsor console) or /admin/ (the administration); the
-# first administrator's password is printed by
-# `docker compose -f deploy/quizbuks/docker-compose.yml logs app`. The application's service is named "app", as the
-# platform's entrypoint (docker/app-entrypoint.sh) names it in its hint for reading the password again. Settings come
-# from deploy/quizbuks/.env (never committed); the variables are listed in README.md beside this file.
+# first administrator's password is never printed (Q10b, M5): read it with
+# `docker compose -f deploy/quizbuks/docker-compose.yml exec app cat /var/lib/jabiz/secrets/admin-password`. The
+# application's service is named "app", as the platform's entrypoint (docker/app-entrypoint.sh) names it. Settings come
+# from deploy/quizbuks/.env (never committed); the variables are listed in README.md beside this file. This compose is
+# for this machine: on a server set QB_LOCAL_SECRETS=false and QB_STRIPE_PLACEHOLDERS=false and give every secret.
 name: quizbuks
 
 services:
@@ -46,6 +47,9 @@ services:
       # STRIPE_CONNECT_WEBHOOK_SECRET in .env, the image's entrypoint fills placeholders in test mode (loud warnings;
       # top-ups and payouts do not work). false on a server, so that a missing value fails the startup check.
       QB_STRIPE_PLACEHOLDERS: ${QB_STRIPE_PLACEHOLDERS:-true}
+      # The platform's keys and the first administrator's password (README.md, "密钥与部署"): made once into the
+      # secrets volume for this machine only; false on a server, where a missing one refuses the start.
+      QB_LOCAL_SECRETS: ${QB_LOCAL_SECRETS:-true}
       # Sign-in entries and mail (README.md, "账户"): registration is on at the app and the sponsor console; mail is
       # off unless switched on, and then registered users cannot verify their address. The mail server (SPRING_MAIL_*)
       # comes from .env as it is.

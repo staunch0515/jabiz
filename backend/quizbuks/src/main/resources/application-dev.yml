@@ -1,4 +1,13 @@
-# Development only: lets requests name their actor through X-Jabiz-* headers (docs/design/01 section 5).
+# Development only: lets requests name their actor through X-Jabiz-* headers (docs/design/01 section 5). So it listens
+# on this machine only and mails links to it (Q10b, review L5: a startup check refuses anything else), and has the
+# local compose database's password (application.yml has none).
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+spring:
+  r2dbc:
+    password: ${DB_PASSWORD:quizbuks}
+  flyway:
+    password: ${DB_PASSWORD:quizbuks}
 jabiz:
   dev:
     actor-headers: true

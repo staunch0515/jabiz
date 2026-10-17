@@ -6,6 +6,7 @@ import com.jabiz.quizbuks.publishing.PublicationApprovals;
 import com.jabiz.quizbuks.setup.QbApprovalRules;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.quizbuks.setup.QbSodRules;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.test.TestTokens;
@@ -41,9 +42,12 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("paramsProposed")).isEqualTo(QbParams.CONTROLLED);
         // Approval rules change only through controlled changes as well: the publication review (Q4) and the
         // sponsor onboarding review (Q2) are proposed.
+        // Q10b (L3): the separation of duties too.
         assertThat(first.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE, SponsorApprovals.RULE,
-            com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE));
-        assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size());
+            com.jabiz.quizbuks.wallet.QbPayouts.REVIEW_RULE, QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
+        assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
+            + QbSodRules.ALL.size());
+        assertThat(query("SELECT count(*) AS n FROM sys_sod_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
             QbParams.TRANSFER_THRESHOLD).getFirst()).containsEntry("n", 0L);
@@ -52,7 +56,16 @@ class SetupIT extends QbItSupport {
         Map<String, Long> before = rowCounts();
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
-            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size());
+            + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size() + QbSodRules.ALL.size());
+        assertThat(query("SELECT rule_code, left_permissions, right_permissions, enabled FROM sys_sod_rule_version "
+            + "ORDER BY rule_code")).satisfiesExactly(
+                rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())
+                    .containsEntry("left_permissions", "control.propose")
+                    .containsEntry("right_permissions", "control.publish").containsEntry("enabled", true),
+                rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.SECURITY.code())
+                    .containsEntry("left_permissions", "security.role.write,security.user-role.write")
+                    .containsEntry("right_permissions", "control.publish,approval.decide")
+                    .containsEntry("enabled", true));
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
             + "FROM sys_approval_rule_version ORDER BY rule_code"))
             .satisfiesExactly(
@@ -101,10 +114,12 @@ class SetupIT extends QbItSupport {
         publishProposals(setup());
         for (String key : QbParams.CONTROLLED) {
             // A valid value of the parameter's kind: refused for being controlled, not for its value.
-            Object type = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
-                .valueKind().get("type");
-            // The commission rate is a fraction below 1.
-            String value = "bool".equals(type) ? "true" : "numeric".equals(type) ? "0.1" : "1";
+            Map<String, Object> kind = QbParams.ALL.stream().filter(p -> p.key().equals(key)).findFirst().orElseThrow()
+                .valueKind();
+            Object type = kind.get("type");
+            // The commission rate is a fraction below 1; the days (Q10b) are whole.
+            String value = "bool".equals(type) ? "true"
+                : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale")) ? "0.1" : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
@@ -175,7 +190,10 @@ class SetupIT extends QbItSupport {
             Map.entry(QbParams.REVIEW_SPONSOR_AUTO, "false"), Map.entry(QbParams.REVIEW_PUBLICATION_AUTO, "false"),
             Map.entry(QbParams.AI_MODEL, "gpt-4o-mini"), Map.entry(QbParams.APP_MIN_VERSION, "1.0.0"),
             Map.entry(QbParams.TOPUP_MIN, "1000"), Map.entry(QbParams.TOPUP_MAX, "1000000"),
-            Map.entry(QbParams.TRANSFER_FEE, "0")));
+            Map.entry(QbParams.TRANSFER_FEE, "0"),
+            // Q10b (M3): the hold period and the new sponsors' limit.
+            Map.entry(QbParams.TRANSFER_HOLD_DAYS, "7"), Map.entry(QbParams.TOPUP_NEW_SPONSOR_DAYS, "30"),
+            Map.entry(QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL, "100000")));
         // Q9d: the account mapping and the receipts' issuer start empty, for finance to set with four eyes.
         QbParams.JOURNAL_ACCOUNTS.forEach(key -> expected.put(key, ""));
         QbParams.ISSUER.forEach(key -> expected.put(key, ""));
