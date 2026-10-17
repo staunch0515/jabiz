@@ -418,15 +418,14 @@ public final class PublicationLifecycle {
                 .step("Load the publication", LoadEntity.by(
                     QbPublications.defaultDataset(QbPublications.PUBLICATION), PUB_ID, PUBLICATION))
                 .steps(PublicationEditing::loadSchedule)
-                // Only a publication still in review has a pending request: one past its end loses it.
-                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>of(
-                    PublicationApprovals.SUBJECT, ctx -> expiredInReview(ctx)
-                        ? PublicationEditing.publication(ctx).id() : NO_REQUEST))
+                // Only a publication still in review has a pending request: one past its end loses it. Only then is
+                // the approval's case lock (jabiz.approval:<subject>:<publication>) taken: the lock order puts it
+                // after the publication's pair, and every other run of the tick takes no lock after the start lock.
+                .step("Withdraw a review that came too late", WithdrawApproval.<ProcessContext>when(
+                    PublicationLifecycle::expiredInReview, PublicationApprovals.SUBJECT,
+                    ctx -> PublicationEditing.publication(ctx).id()))
                 .compute("Move on", (metadata, ctx) -> advance(ctx)));
     }
-
-    /** An entity id no publication has (WithdrawApproval has no condition): the withdrawal then finds nothing. */
-    private static final String NO_REQUEST = "none";
 
     private static boolean expiredInReview(ProcessContext ctx) {
         EntityInstance publication = PublicationEditing.publication(ctx);

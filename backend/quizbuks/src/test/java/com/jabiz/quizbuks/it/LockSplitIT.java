@@ -328,6 +328,11 @@ class LockSplitIT extends PlayItSupport {
         for (int i = 0; i < 80; i++) {
             tokens.add(taker(newTaker("t-split-states-" + i, null)));
         }
+        List<String> probeTokens = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            probeTokens.add(taker(newTaker("t-split-states-probe-" + i, null)));
+        }
+        ConcurrentLinkedQueue<List<Object>> probes = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<long[]> pausedWindows = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<long[]> admittedStarts = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<String> unexpected = new ConcurrentLinkedQueue<>();
@@ -365,6 +370,11 @@ class LockSplitIT extends PlayItSupport {
                     body("publicationId", publication));
                 long pausedAt = System.nanoTime();
                 record(unexpected, "pause", paused);
+                if (paused.getStatus().value() == 200) {
+                    // A start of a taker of its own, sent and answered inside the paused window: the window check
+                    // below cannot pass for want of starts in it.
+                    probes.add(startCodes(probeTokens.get(i), publication));
+                }
                 Thread.sleep(40);
                 long resuming = System.nanoTime();
                 if (paused.getStatus().value() == 200) {
@@ -399,8 +409,8 @@ class LockSplitIT extends PlayItSupport {
         } finally {
             running.set(false);
         }
+        // The real signal of a deadlock or a lock timeout: a 409 (or a 500) of any call, collected as it happened.
         assertThat(unexpected).as("no deadlock, conflict or failure").isEmpty();
-        assertThat(deadlocks()).as("deadlocks in the database").isEqualTo(deadlocksBefore);
         // A start sent after a pause returned and answered before its resume began would have got in while paused.
         for (long[] window : pausedWindows) {
             for (long[] start : admittedStarts) {
@@ -408,6 +418,11 @@ class LockSplitIT extends PlayItSupport {
             }
         }
         assertThat(pausedWindows).as("some pauses went through").isNotEmpty();
+        // Not vacuous: every paused window had a start in it, and the pause turned it away.
+        assertThat(probes).hasSameSizeAs(pausedWindows)
+            .allSatisfy(codes -> assertThat(codes).as("a start inside a paused window").contains(PlayCodes.NOT_OPEN));
+        // Only a backup of the above (late and for the whole database): the statistics are flushed first.
+        assertThat(deadlocksAfterFlush()).as("deadlocks in the database").isEqualTo(deadlocksBefore);
         for (String process : List.of("QB_PUBLICATION_ADVANCE", "QB_PUBLICATION_FUNDED")) {
             assertThat(((Number) query("SELECT count(*) AS n FROM op_process WHERE process_name = ? "
                 + "AND input_summary ->> 'publicationId' = ?", process, publication).getFirst().get("n")).longValue())
@@ -428,9 +443,36 @@ class LockSplitIT extends PlayItSupport {
         }
     }
 
+    /**
+     * The database's deadlocks so far (pg_stat_database: the whole database, not only this test's schema). A backup
+     * check only: the calls' own 409 / 500 are the signal.
+     */
     private static long deadlocks() {
         return ((Number) query("SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()")
             .getFirst().get("deadlocks")).longValue();
+    }
+
+    /** {@link #deadlocks()} once the backends' pending statistics are flushed (they reach the view late). */
+    private static long deadlocksAfterFlush() throws InterruptedException {
+        query("SELECT pg_stat_force_next_flush()");
+        query("SELECT pg_stat_clear_snapshot()");
+        Thread.sleep(1_000);
+        return deadlocks();
+    }
+
+    /** One start, retried while busy as the App does: its HTTP status and rule codes. */
+    private List<Object> startCodes(String token, String publication) throws InterruptedException {
+        String key = UUID.randomUUID().toString();
+        for (int i = 0; i < 400; i++) {
+            EntityExchangeResult<Map<String, Object>> result = startCall(token, publication, key);
+            if (busy(result)) {
+                continue;
+            }
+            List<Object> codes = new ArrayList<>(codes(result.getResponseBody()));
+            codes.add(0, result.getStatus().value());
+            return codes;
+        }
+        throw new AssertionError("a start stayed busy");
     }
 
     // ---- 6. a start while the last place is being completed ---------------------------------------------------------

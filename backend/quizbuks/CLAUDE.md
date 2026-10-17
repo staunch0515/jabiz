@@ -52,7 +52,7 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
-  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → Q5 的 `qb.wallet:<种类>:<所有者>`；
+  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
   到期上下架只由逐项任务 `qb.publication-tick` 做（模板 `qb.system.publications-due` 按普通表 `qb_publication_schedule` 的 `next_due_at` 选出全部到期的，可补跑；每项 `QB_PUBLICATION_ADVANCE` 一个事务（平台决策 D42）；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
@@ -66,7 +66,8 @@
   完成（提交、超时与完成时的移动子流程）只取发布锁 `qb.pub:<发布>`、只写完成一侧（`completions`、`passes`、`winners`、`released`、`spent`），**不取开始锁、不读开始一侧**。
   进行中 = `starts − completions`、预占 = `reservedTotal − released`，凡是读这两个派生量的地方都**在一条语句中读两侧**（开始的锁内重读、四个模板），不要分两条语句读。
   完成移动不取开始锁依赖两点（设计 4.3）：限额的代数（读到较旧的完成一侧只会更严格）与"预算不足是软检查"；改变其中任何一点都要重新论证。
-  **锁的顺序**：`qb.pub:<发布>` →（只有状态流程）`qb.pub-start:<发布>` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；开始锁是叶子；持钱包锁的流程（补发、开发入账）从不再取发布锁或开始锁，
+  **锁的顺序**：`qb.pub:<发布>` →（只有状态流程）`qb.pub-start:<发布>` →（只有 `ADVANCE` 撤回过期的审核时）平台审批的 `jabiz.approval:*` → `qb.wallet:<种类>:<所有者>`（如 `qb.wallet:SPONSOR:<用户>`）；
+  开始只持开始锁，状态流程在开始锁之后只可能再取审批锁（`ADVANCE` 以 `WithdrawApproval.when` 只在审核过期时取；那时发布还没上架，没有开始在等）；持钱包锁的流程（补发、开发入账）从不再取发布锁或开始锁，
   恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）只取发布锁与开始锁、不取钱包锁。**晚取锁**：版本、参数在锁外读，锁内只重读会话、计数、发布与钱包再写入；继续答题与保存进度不取锁。
   **取锁前排队**（平台决策 D45，Q10a2；Q10a4 两族）：开始以 `.admission(PublicationMoves.START_LOCK_FAMILY, 输入 -> 发布编号)`、提交与超时的逐项任务以 `.admission(PublicationMoves.LOCK_FAMILY, …)` 声明准入，
   族名与键只经 `PublicationMoves`（与 `startLockName` / `lockName` 同一段文字，否则平台告警；新族名不要写成 `qb.pub:…`，平台按 `族名:` 前缀归族）；

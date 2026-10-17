@@ -82,8 +82,10 @@ final class PublicationEditing {
     /**
      * Takes the publication's start lock, after its lock and before the reads (platform decision D46 rule 5): for a
      * process that changes the state of a publication that went on, so that no start gets in after the change commits
-     * and every start before it is counted. Lock order: {@code qb.pub:<p>} → {@code qb.pub-start:<p>}; nothing is
-     * locked after it but a later publication's locks (design section 4.3).
+     * and every start before it is counted. Lock order (design section 4.3): {@code qb.pub:<p>} →
+     * {@code qb.pub-start:<p>} → the platform's approval case lock {@code jabiz.approval:*} → {@code qb.wallet:*}.
+     * After it a process takes only a later publication's pair or, withdrawing a review that ran out
+     * ({@code QB_PUBLICATION_ADVANCE}, only then), the approval lock; never the wallet's.
      */
     static <I, O> void lockStarts(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Lock the publication's starts", HoldLock.<ProcessContext>exclusive(

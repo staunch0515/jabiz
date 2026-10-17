@@ -1,6 +1,9 @@
 package com.jabiz.quizbuks.play;
 
+import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationRules;
+import com.jabiz.quizbuks.publishing.PublicationStatus;
+import com.jabiz.runtime.EntityInstance;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -11,7 +14,9 @@ import net.jqwik.api.constraints.LongRange;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -99,7 +104,9 @@ class CounterSplitProperties {
         history.add(new Completions(0, 0, BigDecimal.ZERO, BigDecimal.ZERO));
         int inProgress = 0;
         int ends = 0;
-        boolean ended = false;
+        // The publication's state as the completions move it, through the production rule (PublicationMoves.moveAfter
+        // on a card with this state and limits): ENDED counted every time it says so.
+        String status = PublicationStatus.LIVE;
         for (int step : script) {
             Completions now = history.getLast();
             int kind = Math.floorMod(step, 3);
@@ -109,7 +116,9 @@ class CounterSplitProperties {
                 Completions seen = history.get(arg % history.size());
                 String refusal = AttemptRules.limitRefusal(limits, counts(starts, seen));
                 if (refusal == null) {
-                    assertThat(ended).as("a start let in after the publication ended").isFalse();
+                    // The card a start reads may still be live: only the limits keep it out (plan 2.3).
+                    assertThat(status).as("a start let in after the publication ended")
+                        .isNotEqualTo(PublicationStatus.ENDED);
                     starts = new Starts(starts.s() + 1, starts.reservedTotal().add(m));
                     inProgress++;
                 }
@@ -122,9 +131,15 @@ class CounterSplitProperties {
                 Completions next = new Completions(now.c() + 1, now.w() + (r.signum() > 0 ? 1 : 0),
                     now.released().add(m), now.spent().add(r));
                 history.add(next);
-                if (!ended && PublicationRules.endsBy(budgetCap, winnersCap, m, next.w(), next.spent()) != null) {
-                    ended = true;
+                String move = PublicationMoves.moveAfter(card(status, budgetCap, winnersCap, m), next.w(),
+                    next.spent(), false);
+                boolean running = PublicationStatus.RUNNING.contains(status);
+                boolean usedUp = PublicationRules.endsBy(budgetCap, winnersCap, m, next.w(), next.spent()) != null;
+                assertThat(PublicationStatus.ENDED.equals(move)).as("ends exactly when running and used up")
+                    .isEqualTo(running && usedUp);
+                if (PublicationStatus.ENDED.equals(move)) {
                     ends++;
+                    status = move;
                 }
             }
             Completions c = history.getLast();
@@ -143,6 +158,16 @@ class CounterSplitProperties {
             }
             assertThat(ends).as("ENDED once").isLessThanOrEqualTo(1);
         }
+    }
+
+    /** A card with the state and limits the completions' move looks at. */
+    static EntityInstance card(String status, BigDecimal budgetCap, Integer maxWinners, BigDecimal maxReward) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("status", status);
+        values.put("budgetCap", budgetCap);
+        values.put("maxWinners", maxWinners);
+        values.put("maxReward", maxReward);
+        return new EntityInstance("card", "QbPublicationCard", 1, null, values);
     }
 
     @Provide

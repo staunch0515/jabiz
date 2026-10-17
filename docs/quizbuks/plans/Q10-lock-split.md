@@ -105,7 +105,7 @@
 新的锁序（全局的全序）：
 
 ```
-qb.account:<用户> → qb.quiz:<模版>（共享）→ 按发布编号升序：[ qb.pub:<发布> → qb.pub-start:<发布> ] → qb.wallet:SPONSOR:<商家>
+qb.account:<用户> → qb.quiz:<模版>（共享）→ 按发布编号升序：[ qb.pub:<发布> → qb.pub-start:<发布> ] → jabiz.approval:* → qb.wallet:SPONSOR:<商家>
 qb.wallet:TAKER:<用户>、qb.journal、qb.receipt:…、payout 锁：照旧独立（不与以上任何一把同时持有）
 ```
 
@@ -117,7 +117,7 @@ qb.wallet:TAKER:<用户>、qb.journal、qb.receipt:…、payout 锁：照旧独�
 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` | `qb.pub:p` →（奖励 > 0）`qb.wallet:SPONSOR:s` →（结束或预算不足）`qb.pub:p`（重入，不等待） | 是；**不取开始锁** |
 | `QB_PUBLICATION_COMPLETION_MOVE` | `qb.pub:p`（重入） | 是 |
 | `QB_PUBLICATION_PAUSE` / `RESUME` | `qb.pub:p` → `qb.pub-start:p` | 是 |
-| `QB_PUBLICATION_ADVANCE`（逐项任务，每项一个事务） | `qb.pub:p` → `qb.pub-start:p` | 是 |
+| `QB_PUBLICATION_ADVANCE`（逐项任务，每项一个事务） | `qb.pub:p` → `qb.pub-start:p` →（只在审核过期时，`WithdrawApproval.when`）`jabiz.approval:qb.publication:p` | 是（评审后补：实施时 `WithdrawApproval.of` 每项都取审批锁，已改为只在需要时取） |
 | `QB_PUBLICATION_FUNDS_RESTORED`（一个事务，按编号升序逐个 `FUNDED`） | `qb.pub:p₁` → `qb.pub-start:p₁` → `qb.pub:p₂` → `qb.pub-start:p₂` → … | 是（编号升序） |
 | `QB_PUBLICATION_SUBMIT` | `qb.quiz:q`（共享）→ `qb.pub:p` | 是 |
 | `QB_PUBLICATION_SAVE` / `DELETE` / `WITHDRAW` / `APPROVAL_RESULT` | `qb.pub:p` | 是 |
@@ -127,7 +127,7 @@ qb.wallet:TAKER:<用户>、qb.journal、qb.receipt:…、payout 锁：照旧独�
 
 **无死锁的论证**：
 1. 所有取多把锁的流程都按上面的全序取（表中逐个核对）；按全序取锁的事务之间不会成环（经典的有序加锁）。
-2. 开始锁是**叶子**：持它的流程要么只持它（开始），要么在它之后不再取任何锁（状态流程在 `qb.pub-start:p` 之后只读写；`FUNDS_RESTORED` 之后取的是编号更大的发布的锁，仍在全序上升）。
+2. 开始锁之后只可能再取全序中更后的锁：开始只持它；状态流程在 `qb.pub-start:p` 之后只读写，唯一的例外是 `ADVANCE` 撤回过期的审核时取平台审批的案件锁 `jabiz.approval:*`（在全序上它排在这一对之后；那时发布仍待审核、没有卡片，也就没有开始在等开始锁；持审批锁的流程——提交审核、撤回、审批结果——从不再取开始锁）；`FUNDS_RESTORED` 之后取的是编号更大的发布的锁，仍在全序上升。
 3. 持钱包锁之后再取的只有同一发布的发布锁（完成移动），而那把锁本事务已经持有（重入，不等待）；没有流程持钱包锁去等开始锁——这正是完成移动不取开始锁的另一个好处（若要取，就违反 `qb.pub-start → qb.wallet` 的顺序）。
 4. 行锁：开始只更新 `S` 行与插入会话，完成只更新 `C` 行、自己的会话、钱包与（移动时）发布、卡片、排程行；状态流程更新发布、卡片、排程行（都在发布锁内，与完成串行）；保存答案只按版本更新自己的会话、不等任何咨询锁。
    没有事务持着行锁去等一把被"等这行的事务"持有的咨询锁，所以行锁与咨询锁也不成环。账本的平台锁（`LEDGER_POST` 的共享锁、科目锁）照旧在钱包锁之后，与开始锁无关。
@@ -344,3 +344,13 @@ Q9c 的 `qb.admin.monthly`、`balances`、`finance-summary`、`publication-funds
 - 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部（41 个）、`tools/check-app-paths.sh origin/1.2/platform`。
 - 与计划不同之处：结束的完成的语句数（见上）；6.2 第 5 条的"暂停之后没有放行的开始"以客户端的时间窗判断（测试时钟固定，`startedAt` 都相同），并直接运行 `FUNDED`（恢复可能先把发布放回 `LIVE`，事件的 `FUNDS_RESTORED` 就不再运行它）；6.2 第 6 条分成两个用例（排在锁上的开始在重读时已看到 `ENDED`，以 `NOT_OPEN` 被拒；看到 `LIVE` 卡片被限额拒绝的情形由持钱包锁的用例确定地复现）。
 - 已知问题：本机未达每秒 50 次（下一步平台 16p-2）；数字来自共用一台 4 vCPU 的测量，上线前在目标规格上重测。
+  **过载时 503 从开始移到了提交**（报告 §10.3 第 3 条）：每秒 50–60 人时提交 503 有 150–1345 次、答题人看到的提交 p95 3.3–18.8 秒，截止前不久的提交可能以 EXPIRED 结束；记为上线风险（Q10 计划）。
+  可选的后续缓解：开始一侧的背压（`qb.pub` 队列已深时拒绝新的开始），现在不改代码。
+- **评审修正**（2026-10-17）：
+  - `ADVANCE` 的撤回审核原以 `WithdrawApproval.of`（对不在审核中的发布传一个不存在的编号）每项都取平台审批的案件锁 `jabiz.approval:*`，即开始锁之后还会再取一把锁、开始锁不是叶子；
+    改为 `WithdrawApproval.when(过期的审核, …)`，只在审核过期时取（那时发布还在待审核，没有卡片、没有开始在等），锁序（2.5、设计 4.3、`CLAUDE.md`、`PublicationEditing.lockStarts` 的 Javadoc）补上 `… → [qb.pub → qb.pub-start] → jabiz.approval:* → qb.wallet`。
+  - `CounterSplitProperties` 的"结束一次"原由模型自己的标志守住、不可能失败；改为每次完成都以生产的 `PublicationMoves.moveAfter`（桩卡片带模型的状态与上限）决定是否结束，并断言"结束 ⇔ 仍在进行中且用满"、结束至多一次。
+  - `LockSplitIT` 的"暂停之后没有放行的开始"原可能没有开始落在窗口内而空过：现在每次暂停成功后、恢复之前另由一个答题人开始一次，断言每个窗口都有这样的开始且以 `NOT_OPEN` 被拒；
+    `pg_stat_database.deadlocks`（整个库、到得晚）只作后备，先 `pg_stat_force_next_flush()` 并稍等，真正的信号是调用的 409 / 500。
+  - 报告 §1 与 §10.3 第 1 条的提高幅度改为饱和的各行 +16–30 %；§10.3 第 3 条与 Q10 计划写明过载落在提交上的风险与可选的缓解。
+  - LS-7 的"开始族 `concurrency` 1"另测一次，见报告 §10.3 第 4 条。
