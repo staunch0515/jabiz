@@ -6,8 +6,9 @@
 -- A wait that runs out fails the statement with SQLSTATE 55P03 (409 busy() in the application): the transaction is
 -- aborted then, so the transaction's own timeout need not be put back. A lock that HoldLock takes with the
 -- transaction's own timeout (the usual case) needs no function: it is the one statement of the lock itself.
+-- It names built-in functions only, resolved in pg_catalog whatever the caller's search_path holds.
 CREATE FUNCTION jabiz_xact_lock(p_key text, p_shared boolean, p_timeout text) RETURNS boolean
-    LANGUAGE plpgsql VOLATILE AS $$
+    LANGUAGE plpgsql VOLATILE SET search_path = pg_catalog AS $$
 DECLARE
     previous text := current_setting('lock_timeout');
 BEGIN

@@ -20,9 +20,29 @@ public class WriteBatching {
 
     /** Trigger functions of the platform's migrations, which are indifferent to how many rows a statement inserts. */
     public static final Set<String> PLATFORM_TRIGGER_FUNCTIONS = Set.of("jabiz_reject_mutation",
-        "jabiz_ledger_check_balance", "jabiz_notify_dict_changed");
+        "jabiz_ledger_check_balance", "jabiz_notify_dict_changed", "jabiz_dict_item_view_insert");
 
     private final Set<String> excluded = ConcurrentHashMap.newKeySet();
+    private volatile boolean combinesAny = true;
+    private volatile boolean reusesReads = true;
+
+    /** Commits write every row one statement at a time: a table they all write has a trigger of its own. */
+    public void combineNone() {
+        combinesAny = false;
+    }
+
+    /**
+     * Transactions do not rely on what they read (decision D46 rules 3 and 4): a trigger of the application may write
+     * rows the platform does not see written, so a read may be out of date without the platform knowing.
+     */
+    public void stopReusingReads() {
+        reusesReads = false;
+    }
+
+    /** Whether a transaction may rely on what it read and inserted (references, updates at a known version). */
+    public boolean reusesReads() {
+        return reusesReads;
+    }
 
     /** Context key of {@link #statementByStatement}. */
     private static final Object STATEMENT_BY_STATEMENT = new Object();
@@ -47,6 +67,6 @@ public class WriteBatching {
 
     /** Whether the commits of {@code entityType} have their inserts combined. */
     public boolean combines(String entityType) {
-        return entityType != null && !excluded.contains(entityType.toLowerCase(Locale.ROOT));
+        return combinesAny && entityType != null && !excluded.contains(entityType.toLowerCase(Locale.ROOT));
     }
 }

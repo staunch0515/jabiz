@@ -31,9 +31,44 @@ import java.util.Map;
  * this transaction read, also while another transaction changes or deletes it; a reference to an instance read or
  * deleted earlier in the same transaction.
  */
-public final class ItBudgetFixtures {
+public final class ItBudgetFixtures extends com.jabiz.entity.BaseEntityDefinitions {
 
     public static final String PERMISSION = "it.budget";
+
+    /** The database dictionary of {@link #AUDITED}'s kind (items in {@code sys_dict_item_version}). */
+    public static final String KINDS = "urn:jabiz:dict:it_audited_kind";
+    public static final String AUDITED_DATASET = "urn:jabiz:dataset:it:ItAudited";
+
+    /**
+     * A plain entity with a secret, an audit-masked and a database-dictionary field, publishing its changes: what an
+     * update writes besides itself (audit record, event) is compared between one statement and one at a time.
+     */
+    public static final com.jabiz.entity.EntityDefinition AUDITED = com.jabiz.entity.EntityDefinition.define(
+        "ItAudited", eb -> {
+            eb.physicalTable("it_audited");
+            eb.primaryKey("auditedId");
+            eb.field("auditedId", semanticIdentity("f_id", "urn:jabiz:entity:it:audited"));
+            eb.field("note", f -> f.physicalColumn("f_note").asText(200));
+            eb.field("secret", f -> f.physicalColumn("f_secret").asText(200).sensitive());
+            eb.field("fileName", f -> f.physicalColumn("f_file").asText(200).auditMasked());
+            eb.field("kind", f -> f.physicalColumn("f_kind").asCode(KINDS));
+            eb.field("rowVersion", rowVersion("f_version"));
+            eb.publishChanges();
+        });
+
+    /** Loads an audited instance and changes it at the version read. */
+    public static final ProcessDefinition<TouchInput, TouchOutput, ProcessContext> TOUCH_AUDITED =
+        ProcessDefinition.define("IT_BUDGET_TOUCH_AUDITED", 1, TouchInput.class, TouchOutput.class,
+            ProcessContext.class, pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory(ItBudgetFixtures::touchContext)
+                .outputMapper(ItBudgetFixtures::touched)
+                .step("Load it", LoadEntity.by(AUDITED_DATASET, "id", "audited"))
+                .compute("Change it", (metadata, ctx) -> {
+                    EntityInstance audited = ctx.get("audited", EntityInstance.class);
+                    ctx.changes().update("ItAudited", audited.id(), audited.version(),
+                        ctx.get("input", TouchInput.class).changes());
+                }));
 
     /** Posts {@code input} through {@code LEDGER_POST} as its sub-process (the shape of a business process's posting). */
     public static final ProcessDefinition<LedgerProcesses.PostInput, LedgerProcesses.PostOutput, ProcessContext>
@@ -111,10 +146,13 @@ public final class ItBudgetFixtures {
     public static class Meanwhile implements StepHandler<NoMetadata, ProcessContext> {
         private final DatasetEntityManager entities;
         private final DatasetRegistry datasets;
+        private final com.jabiz.runtime.storage.StorageAdapterRegistry storages;
 
-        public Meanwhile(DatasetEntityManager entities, DatasetRegistry datasets) {
+        public Meanwhile(DatasetEntityManager entities, DatasetRegistry datasets,
+            com.jabiz.runtime.storage.StorageAdapterRegistry storages) {
             this.entities = entities;
             this.datasets = datasets;
+            this.storages = storages;
         }
 
         @Override
@@ -124,6 +162,15 @@ public final class ItBudgetFixtures {
                 return Mono.empty();
             }
             EntityInstance ticket = ctx.get("ticket", EntityInstance.class);
+            if ("update-new-tx".equals(meanwhile)) {
+                // A transaction of the platform's own, suspending this one (as a mail attempt is recorded).
+                EntityChange change = new EntityChange(EntityAction.UPDATE, new EntityInstance(ticket.id(), "ItTicket",
+                    ticket.version(), null, Map.of("title", "changed meanwhile")));
+                // Outside this operation, which the other transaction cannot see.
+                return storages.getEngine("default").inNewTransaction(entities.commitBatch(
+                        datasets.findById(ItFixtures.TICKET_DATASET).orElseThrow(), List.of(change))
+                    .contextWrite(context -> context.delete(com.jabiz.runtime.operation.Operation.class))).then();
+            }
             EntityChange change = "delete".equals(meanwhile)
                 ? new EntityChange(EntityAction.DELETE, new EntityInstance(ticket.id(), "ItTicket", ticket.version(),
                     null, Map.of()))
@@ -202,6 +249,24 @@ public final class ItBudgetFixtures {
         @Bean
         ProcessDefinition<NoteInput, NoteOutput, ProcessContext> itBudgetNoteJp() {
             return NOTE_AFTER_SCOPED_READ;
+        }
+
+        @Bean
+        ProcessDefinition<TouchInput, TouchOutput, ProcessContext> itBudgetTouchAudited() {
+            return TOUCH_AUDITED;
+        }
+
+        @Bean
+        com.jabiz.entity.EntityDefinition itAuditedEntity() {
+            return AUDITED;
+        }
+
+        @Bean
+        com.jabiz.dataset.DatasetDefinition itAuditedDataset(
+            @org.springframework.beans.factory.annotation.Value("${jabiz.storage.default-pool-ref:default}")
+            String pool) {
+            return com.jabiz.dataset.DatasetDefinition.define(AUDITED_DATASET, d -> d.targetEntityType("ItAudited")
+                .asDefault().permissions("it.read", "it.write").storage(st -> st.connectionPoolRef(pool)));
         }
     }
 }

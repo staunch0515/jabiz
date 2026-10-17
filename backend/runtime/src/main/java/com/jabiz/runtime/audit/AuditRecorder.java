@@ -4,7 +4,6 @@ import com.jabiz.audit.AuditDiff;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.operation.Operations;
-import com.jabiz.runtime.storage.JsonText;
 import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -82,7 +81,8 @@ public class AuditRecorder {
             row.put("action", action);
             row.put("version_no", version);
             row.put("effect_start_time", effective);
-            row.put("changes", new JsonText(json.writeValueAsString(values)));
+            // Bound as text, as always: the column is text, and the compact form is what readers and exports show.
+            row.put("changes", json.writeValueAsString(values));
             row.put("changed_fields", changes.keySet().toArray(String[]::new));
             row.put("actor_id", actor);
             row.put("recorded_time", operation.map(o -> o.opTime()).orElseGet(clock::instant));

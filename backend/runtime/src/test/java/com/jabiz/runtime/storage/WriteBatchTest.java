@@ -58,9 +58,12 @@ class WriteBatchTest {
             row("sys_audit_record", "entity_id", "e2")));
 
         assertThat(statements).singleElement().satisfies(statement -> {
+            // Each table a part the main query reads in turn, so that they are written in this order.
             assertThat(statement.sql()).isEqualTo("WITH jabiz_w0 AS (INSERT INTO entity_registry (entity_id) VALUES "
-                + "(:v0), (:v1)), jabiz_w1 AS (INSERT INTO item_version (item_id) VALUES (:v2), (:v3)) "
-                + "INSERT INTO sys_audit_record (entity_id) VALUES (:v4), (:v5)");
+                + "(:v0), (:v1) RETURNING 1), jabiz_w1 AS (INSERT INTO item_version (item_id) VALUES (:v2), (:v3) "
+                + "RETURNING 1), jabiz_w2 AS (INSERT INTO sys_audit_record (entity_id) VALUES (:v4), (:v5) RETURNING 1)"
+                + " SELECT (SELECT count(*) FROM jabiz_w0) AS jabiz_n0, (SELECT count(*) FROM jabiz_w1) AS jabiz_n1,"
+                + " (SELECT count(*) FROM jabiz_w2) AS jabiz_n2");
             // The rows of each table in the order they were registered.
             assertThat(statement.values()).containsExactly("e1", "e2", "e1", "e2", "e1", "e2");
         });

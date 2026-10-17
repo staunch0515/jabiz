@@ -69,7 +69,10 @@ public final class TransactionState {
 
     /** Records an insertion; what was known of the instance before is replaced. */
     public synchronized void inserted(String entityType, Object id, Map<String, Object> state) {
-        known.put(new Key(entityType, id), new Inserted(state));
+        Key key = new Key(entityType, id);
+        if (known.size() < MAX_KNOWN || known.containsKey(key)) {
+            known.put(key, new Inserted(state));
+        }
     }
 
     /**
@@ -84,10 +87,18 @@ public final class TransactionState {
     }
 
     /**
-     * Most instances a transaction keeps as read: a process that reads very many rows does not hold them all; those
-     * past the bound are looked up again when needed, as before phase 16p.
+     * Most instances a transaction keeps, read or inserted: a process that reads or writes very many rows does not hold
+     * them all in memory; those past the bound are looked up again when needed, as before phase 16p.
      */
     public static final int MAX_KNOWN = 10_000;
+
+    /**
+     * Forgets everything: another transaction committed meanwhile, writing what this one cannot tell
+     * ({@link StorageEngine#inNewTransaction}).
+     */
+    public synchronized void forgetAll() {
+        known.clear();
+    }
 
     /** Forgets the instance: the platform wrote it (updated, deleted, cancelled, reverted). */
     public synchronized void written(String entityType, Object id) {

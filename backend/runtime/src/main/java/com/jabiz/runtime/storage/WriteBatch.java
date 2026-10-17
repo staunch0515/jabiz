@@ -18,7 +18,8 @@ import java.util.Set;
  * deferred constraint triggers (the ledger balance) still run at {@code COMMIT}, row by row.
  *
  * <p>A statement binds at most {@link #MAX_BINDS} values (PostgreSQL takes 65,535); more rows go into further
- * statements, still in their order. Values are rendered as {@link StorageEngine#insert} renders one row: a null value
+ * statements, still in their order. Several tables are written in the order of their first rows (each a {@code WITH} part
+ * the main query reads in turn), the rows of a table in their order. Values are rendered as {@link StorageEngine#insert} renders one row: a null value
  * leaves the column to its default ({@code DEFAULT}), {@link StorageEngine#NULL} is an explicit {@code NULL}, everything
  * else is bound. Table and column names come from metadata and are checked by {@link SqlIdentifiers#require}.
  */
@@ -85,17 +86,23 @@ final class WriteBatch {
         List<String> inserts = new ArrayList<>();
         byTable.forEach((table, tableRows) -> inserts.add(insert(table, tableRows, values)));
         StringBuilder sql = new StringBuilder();
-        if (inserts.size() > 1) {
+        if (inserts.size() == 1) {
+            sql.append(inserts.getFirst());
+        } else {
+            // Every table as a WITH part that the main query reads in turn: a part runs when it is read, so the
+            // tables are written in the order their first rows were registered, and the first conflict the database
+            // meets is that of the earliest write, as when the rows were sent one by one.
             sql.append("WITH ");
-            for (int i = 0; i < inserts.size() - 1; i++) {
+            List<String> reads = new ArrayList<>();
+            for (int i = 0; i < inserts.size(); i++) {
                 if (i > 0) {
                     sql.append(", ");
                 }
-                sql.append("jabiz_w").append(i).append(" AS (").append(inserts.get(i)).append(')');
+                sql.append("jabiz_w").append(i).append(" AS (").append(inserts.get(i)).append(" RETURNING 1)");
+                reads.add("(SELECT count(*) FROM jabiz_w" + i + ") AS jabiz_n" + i);
             }
-            sql.append(' ');
+            sql.append(" SELECT ").append(String.join(", ", reads));
         }
-        sql.append(inserts.getLast());
         return new Statement(sql.toString(), List.copyOf(values), List.copyOf(rows));
     }
 

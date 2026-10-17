@@ -5,7 +5,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.StepHandler;
-import com.jabiz.runtime.process.TransactionLockTimeout;
+import com.jabiz.runtime.storage.TransactionLockTimeout;
 import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import org.springframework.beans.factory.annotation.Value;

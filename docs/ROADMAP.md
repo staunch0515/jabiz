@@ -3576,6 +3576,12 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
   `HoldLockIT` 新增 2（短上限之后事务的上限照旧、并发的重复幂等键受同一语句先设的上限约束）、`MetaModelConsistencyCheckerIT` 新增 1（其他触发器 → 告警且不合并）、`ObservabilityIT`（新指标）、
   runtime 单元测试 `WriteBatchTest`、`R2dbcStorageEngineStatementsTest`、`TransactionStateTest`、core `QueryCompilerTest`（恒假条件）；断言语句文本的 IT 改用 `SqlStatementLog.writing / mutatedTables / insertedTables`（识别 `WITH` 中的子语句）。
   封存与校验（`IntegrityIT`）、Outbox、幂等（`ProcessEngineIT`）、唯一性（`TemporalUniqueAndScopeIT`）、导入的保存点（`ImportIT`）与全部场景回放照旧通过（写入现在都经合并），场景快照不变。
+- **独立评审的修正**（无严重或高的问题）：M1 审计的 `changes` 恢复以紧凑文本绑定（列是 `text`；曾误存为 `jsonb` 的规范文本），两条路径都断言确切文本；
+  L1 字典读取经存储引擎（同一提交中新加的字典项可用），事务中读到的字典项不缓存；L2 一条语句中各表按登记顺序写出（`WITH … RETURNING 1` 由主查询依次读取），
+  后面变更以非数据库错误失败时先写出之前的行，最早的冲突优先；L3 有平台之外的触发器（schema、替代表、共享表）时不复用读到的实例，`inNewTransaction` 结束后挂起的事务忘掉全部；
+  L4 新事务中不带 `TransactionLockTimeout`；L5 触发器检查覆盖替代表与共享表；L6 新增并发的普通唯一索引与 D6 竞争、合并写入后的封存与篡改发现、按已知版本更新的审计与事件与逐条写出逐字段相同（含敏感与 `auditMasked`）、
+  保存点回滚后的引用 `REFERENCE_NOT_FOUND`（引擎层的保存点，导入所用的同一机制）；I1 插入也计入 10 000 的上限；I2、I3 的局限写入 D46；I4 `jabiz_xact_lock` 设 `search_path = pg_catalog`（V40 尚未合并，原地修改）。
+  `AdmissionGatePropertyTest` 的偶发失败属 16o，另由 `1.2/fix-admission-gate-order` 修正。
 - 已知限制：按已知版本更新以变更中的主键原样查读集（主键以另一种形式给出时照旧先读，只是不省语句）；一个事务至多记 10 000 个读到的实例；合并的读取只在各读取的查询时限相同时合成一条。
 
 **目标**：每次流程执行的**往返语句数**大幅减少，而每一项保证不变。Q10a 测得锁内每条语句约 0.78 ms，其中约 0.70 ms 是客户端往返（数据库执行合计只占锁内时间的约 15 %），

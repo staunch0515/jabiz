@@ -1,4 +1,4 @@
-package com.jabiz.runtime.process;
+package com.jabiz.runtime.storage;
 
 import java.util.Objects;
 
@@ -10,6 +10,7 @@ import java.util.Objects;
  * @param setting the value as set, such as {@code 30000ms}
  */
 public record TransactionLockTimeout(String setting) {
+    // A transaction of its own (StorageEngine#inNewTransaction) runs without it: its timeout is not this one.
     public TransactionLockTimeout {
         Objects.requireNonNull(setting, "setting must not be null");
     }

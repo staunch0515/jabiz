@@ -122,6 +122,11 @@ public final class R2dbcStorageEngine implements StorageEngine {
     public Mono<Boolean> casUpdate(String table, String pkColumn, Object id, long expectedVersion,
         String versionColumn, Map<String, Object> updates, List<Insert> dependents) {
         return Mono.deferContextual(view -> {
+            if (!dependents.isEmpty() && WriteBatching.isStatementByStatement(view)) {
+                // One statement at a time, as before phase 16p (the test hook): the update, then its rows.
+                return StorageEngine.super.casUpdate(table, pkColumn, id, expectedVersion, versionColumn, updates,
+                    dependents);
+            }
             String versionCol = SqlIdentifiers.require(versionColumn);
             List<String> assignments = new ArrayList<>();
             List<Object> values = new ArrayList<>();
@@ -387,9 +392,14 @@ public final class R2dbcStorageEngine implements StorageEngine {
         if (newTx == null) {
             return Mono.error(new UnsupportedOperationException("This engine has no independent transactions"));
         }
-        // A transaction of its own knows nothing of the suspended one, and writes nothing of its buffer.
-        return newTx.transactional(work.contextWrite(context -> context.delete(bufferKey)
-            .put(stateKey, new TransactionState())));
+        // A transaction of its own knows nothing of the suspended one, writes nothing of its buffer, and has its own
+        // lock_timeout (none set: HoldLock bounds its wait itself). Once it has committed, the suspended transaction
+        // forgets what it had read: the other may have changed it, without its writes passing through it.
+        return Mono.deferContextual(view -> newTx.transactional(work.contextWrite(context -> context
+                .delete(bufferKey).delete(TransactionLockTimeout.class).put(stateKey, new TransactionState())))
+            // Before the next step of the suspended transaction goes on (doFinally would run after it).
+            .doOnTerminate(() -> transactionState(view).ifPresent(TransactionState::forgetAll))
+            .doOnCancel(() -> transactionState(view).ifPresent(TransactionState::forgetAll)));
     }
 
     @Override
@@ -438,6 +448,11 @@ public final class R2dbcStorageEngine implements StorageEngine {
             return work
                 .flatMap(result -> flush(buffer).thenReturn(result))
                 .switchIfEmpty(Mono.defer(() -> flush(buffer).then(Mono.<T>empty())))
+                // A later write failed: the rows collected before it are written first, so that a conflict of an
+                // earlier write is what is reported, as when every write was sent at once (the transaction rolls
+                // back either way).
+                .onErrorResume(error -> fromDatabase(error) ? Mono.<T>error(error)
+                    : flush(buffer).then(Mono.<T>error(error)))
                 .contextWrite(context -> context.put(bufferKey, buffer));
         });
     }
@@ -505,6 +520,20 @@ public final class R2dbcStorageEngine implements StorageEngine {
         });
     }
 
+    /**
+     * Whether the database refused a statement: the transaction is aborted then, and nothing more can be written in it.
+     */
+    private static boolean fromDatabase(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof io.r2dbc.spi.R2dbcException || cause instanceof org.springframework.dao.DataAccessException
+                || cause instanceof UniqueKeyViolationException || cause instanceof AppendOnlyViolationException
+                || cause instanceof LockNotAvailableException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Executes rendered inserts one after another; a conflict is mapped back to the write of the row that caused it. */
     private Mono<Void> execute(ContextView view, List<WriteBatch.Statement> statements) {
         return Flux.fromIterable(statements).concatMap(statement -> Mono.defer(() -> {
@@ -513,7 +542,7 @@ public final class R2dbcStorageEngine implements StorageEngine {
             for (int i = 0; i < statement.values().size(); i++) {
                 spec = spec.bind("v" + i, toStorage(statement.values().get(i)));
             }
-            return spec.fetch().rowsUpdated()
+            return spec.then()
                 .onErrorMap(R2dbcStorageEngine::translate)
                 .onErrorMap(UniqueKeyViolationException.class, conflict -> mapped(conflict, statement.rows()));
         })).then();

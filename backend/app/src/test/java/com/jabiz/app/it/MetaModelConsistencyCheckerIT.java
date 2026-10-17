@@ -67,8 +67,12 @@ class MetaModelConsistencyCheckerIT extends PostgresIntegrationTest {
         List<CheckProblem> problems = new MetaModelConsistencyChecker(databaseClient,
             registryOf(triggered, drift()), batching).check();
 
-        assertThat(problems).filteredOn(problem -> problem.message().contains("it_triggered_touch")).singleElement()
-            .satisfies(problem -> assertThat(problem.isError()).isFalse());
+        // Once for the entity (not combined), once for the schema (reads not relied on): warnings, not errors.
+        assertThat(problems).filteredOn(problem -> problem.message().contains("it_triggered_touch"))
+            .extracting(CheckProblem::location).containsExactly("Entity Triggered", "Schema");
+        assertThat(problems).filteredOn(problem -> problem.message().contains("it_triggered_touch"))
+            .allSatisfy(problem -> assertThat(problem.isError()).isFalse());
+        assertThat(batching.reusesReads()).isFalse();
         assertThat(batching.combines("Triggered")).isFalse();
         assertThat(batching.combines("Drift")).isTrue();
 

@@ -413,7 +413,7 @@ public class DatasetEntityManager {
      */
     private Optional<EntityInstance> knownCurrent(StorageEngine engine, ContextView view, DatasetDefinition dataset,
         Map<String, Object> scope, EntityDefinition def, Object id) {
-        if (def.temporal || id == null) {
+        if (def.temporal || id == null || !batching.reusesReads()) {
             return Optional.empty();
         }
         String table = queryCompiler.resolveTable(dataset, def);
@@ -1118,6 +1118,9 @@ public class DatasetEntityManager {
      */
     private boolean knownToExist(StorageEngine engine, ContextView view, DatasetDefinition dataset,
         EntityDefinition def, Map<String, Object> scope, Object target) {
+        if (!batching.reusesReads()) {
+            return false;
+        }
         for (Object value : scope.values()) {
             // A period judged through a reference is not in the values: looked up, as a read would (default deny).
             if (value instanceof DatasetScope.PeriodCondition period && period.referencedField() != null) {
