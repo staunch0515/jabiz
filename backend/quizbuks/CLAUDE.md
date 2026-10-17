@@ -75,7 +75,7 @@
   队列的参数在 `application.yml` 的 `jabiz.process.admission.families[qb.pub]` 与 `[qb.pub-start]`，开始与提交的限流在 `jabiz.process.rate-limits`（每人每分钟 60 次）。新的取这两把锁的热门流程照此声明；正确性只靠锁。
   **锁内的语句数**（Q10a3，平台决策 D46）：锁内的每次往返约 0.8 ms，热门发布的容量由较长的一段（提交在发布锁内）决定。锁内互不依赖的重读写成一个 `QueryEntities.all`（一条语句：开始为本人会话、卡片与计数的两侧，提交为会话、完成一侧与卡片）；
   开始在锁外与会话、卡片同一条语句读发布（默认数据视图），新会话对发布的引用检查因此复用本事务的读取、不在锁内再查；普通实体的更新照平台按已知版本写出（重读即为此）。
-  语句数由 `AttemptStatementBudgetIT` 断言确切值与所取的锁（开始共 12、开始锁内 5；付奖的提交共 20、发布锁内 14；使发布结束的完成共 29、锁内 23；暂停共 12、锁内 9；锁内自事务的第一把锁之后的一条起到 `COMMIT`），改答题流程须同时改预算并在压测报告中说明；不在锁内增加读取。
+  语句数由 `AttemptStatementBudgetIT` 断言确切值与所取的锁（平台 16p-2 的事务内写缓冲之后：开始共 10、开始锁内 3；付奖的提交共 13、发布锁内 7；使发布结束的完成共 18、锁内 12；暂停共 10、锁内 7；锁内自事务的第一把锁之后的一条起到 `COMMIT`；应急开关 `jabiz.storage.write-batching.enabled=false` 时为 16p-1 的 12 / 5、20 / 14、29 / 23、12 / 9，`AttemptStatementBudgetWithoutHeldWritesIT`），改答题流程须同时改预算并在压测报告中说明；不在锁内增加读取。
   **超时自动提交**只由逐项任务 `qb.attempt-expire`（每分钟，模板 `qb.system.attempts-due`）对每个会话运行 `QB_ATTEMPT_EXPIRE`。**逐项取锁或可能逐项失败的批量系统工作写成逐项任务**
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
@@ -195,7 +195,7 @@
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
-- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
+- 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
   `LOAD_METRICS=yes` 时从只绑定回环地址的独立管理端口读取指标（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动，工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，`LOAD_ALLOW_REMOTE` 也不放行；指标绝不在应用端口上暴露：那里不要认证，根 CLAUDE.md 与设计 13 不允许匿名的指标端点；也不写进仓库的配置），报告每次完成的许可持有时间与每次运行的语句数（`jabiz.process.statements`），并报告压测期间本机的 CPU；16p-1 之后的重测在报告 §9。
 
 ## 7. 运行

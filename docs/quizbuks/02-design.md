@@ -219,7 +219,8 @@ docs/quizbuks/               本文件等
   开始只取开始锁（Q10a4；不取钱包锁：商家余额是软检查，并发多出的人完成后记为待支付）；继续答题与保存进度不取锁（会话行的乐观版本）。
   **锁内的语句**（Q10a3，平台 16p-1、决策 D46）：锁内互不依赖的重读合成一条（`QueryEntities.all`：开始为本人会话、卡片与计数的两侧，提交为会话、完成一侧与卡片）；
   开始在锁外与会话、卡片同一条语句读发布，新会话对发布与版本的引用检查复用本事务的读取（只有草稿可删，草稿没有卡片）；会话、计数与钱包按本事务读到的版本更新（版本 CAS 兜底），审计随更新同一条语句写出。
-  开始锁内 5 条、付奖的提交在发布锁内 14 条（Q10a 为 12 与 48；锁拆分不变）、使发布结束的那次完成 23 条、暂停在发布锁内 9 条（含开始锁 1 条），由 `AttemptStatementBudgetIT` 断言（并断言各自取哪几把锁）；实测见 `perf/Q10a-load-test.md` §9、§10。
+  平台 16p-2（事务内写缓冲，决策 D46）之后锁内的写入在 `COMMIT` 之前合成一条（子流程的操作记录由下一条取锁的语句带出）：开始锁内 3 条、付奖的提交在发布锁内 7 条、使发布结束的那次完成 12 条、暂停在发布锁内 7 条（含开始锁 1 条）；
+  应急开关 `jabiz.storage.write-batching.enabled=false` 时为 16p-1 的 5、14、23、9 条（Q10a 为 12 与 48；锁拆分不变）。由 `AttemptStatementBudgetIT` 与 `AttemptStatementBudgetWithoutHeldWritesIT` 断言（并断言各自取哪几把锁）；实测见 `perf/Q10a-load-test.md` §9、§10、§11。
   恢复预算不足的发布（`QB_PUBLICATION_FUNDS_RESTORED`）由补发清空后发布的事件在另一事务中进行，只取发布锁与开始锁（不取钱包锁），因此锁序不成环。
 - **取锁前排队**（Q10a2，平台 16o、决策 D45；Q10a4 分为两族）：`QB_ATTEMPT_START`（键为输入的发布）声明准入 `admission("qb.pub-start", …)`（`PublicationMoves.START_LOCK_FAMILY`，键 = 开始锁名 `qb.pub-start:<发布>`）；
   `QB_ATTEMPT_SUBMIT`（键为 App 带上的 `publicationId`）与逐项任务的 `QB_ATTEMPT_EXPIRE`（键为选取模板 `qb.system.attempts-due` 给出的发布）声明 `admission("qb.pub", …)`（`PublicationMoves.LOCK_FAMILY`，键 = 发布锁名）。
