@@ -255,6 +255,11 @@ public class PublishingConfig {
     }
 
     @Bean
+    ProcessDefinition<PublicationAdmin.BanPauseInput, PublicationOutput, ProcessContext> qbPublicationBanPause() {
+        return PublicationAdmin.banPause();
+    }
+
+    @Bean
     ProcessDefinition<PublicationLifecycle.ApprovalResultInput, PublicationOutput, ProcessContext>
         qbPublicationApprovalResult() {
         return APPROVAL_RESULT;

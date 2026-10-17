@@ -36,9 +36,9 @@ import static com.jabiz.quizbuks.identity.AccountEditing.list;
  * in at any entry ({@link QbSignInGuard}) and loses their session at its next refresh; an access token already issued
  * still works until it expires, so valuable actions check the ban again. Administrators are not banned (they are
  * disabled through the platform), and nobody bans themselves. Banning a sponsor pauses their running publications in
- * the same transaction ({@code QB_PUBLICATION_ADMIN_PAUSE}, Q10b): only an administrator resumes them, also after an
- * unban. The history of {@code QbUserBan} is the record of bans
- * and lifts.
+ * the same transaction ({@code QB_PUBLICATION_BAN_PAUSE}, Q10b): only an administrator resumes them, after the unban.
+ * The sponsor reads a fixed reason ("account suspended"), not the ban's, which is internal (review L3). The history of
+ * {@code QbUserBan} is the record of bans and lifts.
  */
 public final class BanProcesses {
 
@@ -97,26 +97,26 @@ public final class BanProcesses {
                     .limit(Integer.MAX_VALUE).build(), PUBLICATIONS));
             pb.compute("Ban", (metadata, ctx) -> ban(ctx, admins));
             // Lock order: the account's lock (held) before the publications' pairs, in the order of their ids.
-            pb.step("Pause the sponsor's publications", CallProcess.forEach(PublicationAdmin.PAUSE, 1,
+            pb.step("Pause the sponsor's publications", CallProcess.forEach(PublicationAdmin.BAN_PAUSE, 1,
                 BanProcesses::pauses, null));
         });
     }
 
     /**
-     * The inputs of {@code QB_PUBLICATION_ADMIN_PAUSE} for the banned sponsor's running publications (scheduled,
-     * live, underfunded, or paused by themselves), in the order of their ids; none when the ban was refused.
+     * The inputs of {@code QB_PUBLICATION_BAN_PAUSE} for the banned sponsor's running publications (scheduled, live,
+     * underfunded, or paused by themselves), in the order of their ids; none when the ban was refused. One that ends
+     * or goes back to its draft before the pause takes its lock is left as it is (review L2).
      */
-    static List<PublicationAdmin.AdminInput> pauses(ProcessContext ctx) {
+    static List<PublicationAdmin.BanPauseInput> pauses(ProcessContext ctx) {
         if (ctx.hasViolations() || !ctx.contains(OUTPUT)) {
             return List.of();
         }
-        BanInput input = ctx.get(INPUT, BanInput.class);
         return list(ctx, PUBLICATIONS).stream()
             .filter(publication -> PAUSABLE.contains(String.valueOf((Object) publication.get("status")))
                 && !PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy")))
             .map(publication -> String.valueOf(publication.id()))
             .sorted()
-            .map(id -> new PublicationAdmin.AdminInput(java.util.UUID.fromString(id), input.reason()))
+            .map(id -> new PublicationAdmin.BanPauseInput(java.util.UUID.fromString(id)))
             .toList();
     }
 

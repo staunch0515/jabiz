@@ -52,10 +52,14 @@
   新放入内容的文件必须由模版所有者上传（`QuizEditing.requireOwnFile`，经平台文件数据视图读 `uploadedBy`）。子项列表（选项、图片）给出即完整列表，不给（null）即不动。
   版本与版本文件没有商家数据视图（版本含正确答案）：商家只经连接本人未移除模版的模板读取。商家视图的写权限 `qb.content.view.write` 不授予任何角色。
 - **发布**（`publishing`，`docs/quizbuks/plans/Q4-publishing.md`）：写入只经 `QB_PUBLICATION_*` 流程（默认数据视图 `processOnlyWrites`，商家视图只读，
-  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：`qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
+  写权限同样是不授予任何角色的 `qb.content.view.write`）。**锁的顺序固定**：（`qb.account:<商家>`，封禁与发布的审批结果取，Q10b 评审 L1）→ `qb.quiz:<quizId>`（只有提交时取，共享）→ 按发布编号升序 [`qb.pub:<publicationId>`（独占）→ `qb.pub-start:<publicationId>`（开始锁，Q10a4）] → 平台审批的 `jabiz.approval:*` → Q5 的 `qb.wallet:<种类>:<所有者>`；
   写一个发布的流程先取发布锁再读取；**改变已上架发布状态的流程**（暂停、恢复、`ADVANCE`、`FUNDED`）在发布锁之后、读取之前再取开始锁（`PublicationEditing.lockStarts` / `lockStatesAndLoad`），其他发布流程不取。**提交即冻结**：只有 `DRAFT` 可改（`QB_PUBLICATION_NOT_DRAFT`），要改就复制。
   **管理员下架**（Q10b，评审 M2）：`QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END`（`publishing.PublicationAdmin`，`qb.admin.content.write`，总是要求二次验证，必填理由 `adminReason`，商家可见）照状态流程取发布锁与开始锁、经缺省数据视图读取；
-  暂停记 `pausedBy`（`SPONSOR` / `ADMIN`），管理员暂停的商家不能恢复（`QB_PUBLICATION_ADMIN_PAUSED`）。封禁商家时 `QB_USER_BAN` 在同一事务中按发布编号升序以子流程逐个暂停其进行中的发布（账户锁在前），解封不恢复。
+  暂停记 `pausedBy`（`SPONSOR` / `ADMIN`），管理员暂停的商家不能恢复（`QB_PUBLICATION_ADMIN_PAUSED`）。封禁商家时 `QB_USER_BAN` 在同一事务中按发布编号升序以子流程 `QB_PUBLICATION_BAN_PAUSE`（`subProcessOnly`）逐个暂停其进行中的发布（账户锁在前），
+  理由记固定的代码 `QB_ACCOUNT_SUSPENDED`（前端按语言显示；封禁的理由是内部的，评审 L3），其间已结束或回到草稿的什么也不做（评审 L2）；解封不恢复，封禁期间管理员也不能恢复（`QB_PUBLICATION_SPONSOR_BANNED`，评审 L9）。
+  发布的审批结果先在锁外读发布、取商家的账户锁再取发布锁，封禁与获批因此依次进行。**下架之后**（评审 M-d，`PublicationAdmin.takenDown`：管理员暂停中或管理员结束）：
+  不能复制（`QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的发布一律人工审核（案件事实 `autoApprove = false`、`takenDown = true`，不要求审核或沿用旧批准时拒绝 `QB_PUBLICATION_REVIEW_REQUIRED`），
+  后台扩展的审核页经 `qb.admin.quiz-takedowns` 显示下架与理由，读好之前不给出决定面板。
   **"接受新的答题"只由 `PublicationRules.acceptsNewAttempts` 判断**（`LIVE` 且 `startAt ≤ now < endAt`），模板写同样的条件；状态只表达人与钱的开关，时间由时间字段表达。
   到期上下架只由逐项任务 `qb.publication-tick` 做（模板 `qb.system.publications-due` 按普通表 `qb_publication_schedule` 的 `next_due_at` 选出全部到期的，可补跑；每项 `QB_PUBLICATION_ADVANCE` 一个事务（平台决策 D42）；各流程在发布锁内随状态维护该行）。系统流程（定时任务、审批结果）声明 `internal()`（平台决策 D41：只允许系统身份运行，其他人一律 403 `PROCESS_INTERNAL`），权限 `qb.publication.system` 照常声明、不授予任何角色；审批结果只认发布自己的请求。时态表上只按不可变字段查找（可变字段的条件用不到索引）。档位、提交检查、审批内容是纯 Java 的 `TierCoverage`、`PublicationReadiness`、`PublicationApprovals`；
   上限在 `PublishingLimits`，错误码在 `PublishingCodes`。**审批规则只经 `QB_SETUP` 以受控变更提出**（`setup.QbApprovalRules`，与 `QbParams` 并列），由另一位管理员发布；
@@ -82,7 +86,7 @@
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
   **选项按位置编号**（Q10b，评审 M1）：开始、保存、提交、`answers` 与 `result` 中的选项编号都是本次显示的位置 1..k，只有评分经 `optionOrder` 换回版本的编号（`Scoring.scoreShown`、`Answers.inVersion`）；
-  `optionOrder` 是敏感字段，任何读接口都不返回。测试中答案按版本的编号写（巴黎是 1），由 `PlayItSupport.submission` / `shown` 换成本次的位置（`AttemptOptionIdsIT`）。
+  `optionOrder` 是敏感字段，任何读接口都不返回。打乱的种子是服务端密钥下的 HMAC（`OptionShuffle.of(IntegrityKey)`：HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`) 再对用户 | 发布 | 题号，评审 M-a），测试的固定密钥使场景的顺序不变。测试中答案按版本的编号写（巴黎是 1），由 `PlayItSupport.submission` / `shown` 换成本次的位置（`AttemptOptionIdsIT`）。
   **钱包余额只在钱包锁内改**（`wallet.QbWallets.change`），与同一事务中的 `LEDGER_POST` 一起；判断可支付一律经 `QbWallets.pays`（无待支付且可用余额 `QbWallets.available` = 余额 − 争议冻结 `held` 足够；SQL 模板同样用 `balance - held`，核对仍比较 `balance`）：待支付不入账、按提交顺序补发、不插队；
   `qb_wallet.balance >= 0` 由检查约束兜底。评分、档位、抽成、打乱、时限与开始条件是纯 Java 的 `Scoring`、`TierPick`、`RewardSplit`、`OptionShuffle`、`AttemptRules`；
   上限在 `PlayLimits`，错误码在 `PlayCodes`。系统流程的权限 `qb.play.system` 不授予任何角色。**开发入账** `QB_WALLET_DEV_CREDIT` 只在
@@ -110,8 +114,8 @@
   - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.pub-start:<发布>`（Q10a4，只有状态流程）→ `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q6b：只由同步与转账持有，
     持有它的流程不取其他锁；重算多人时按用户编号排序依次取）。
     充值、到账、过期、核实、手续费、退款与争议只取商家钱包锁（先在锁外按编号或付款找到充值，锁内重读）；每日核对不取业务锁。
-    充值开始（Q10b）单独取 `qb.topup:<商家>`：**新商家上限**（`wallet.NewSponsorLimit`）在首次充值成功前与之后 `qb.topup.new-sponsor.days` 天内，把已付（含退款的）与未结的充值连同本次限制在
-    `qb.topup.new-sponsor.max-total` 之内（422 `QB_TOPUP_NEW_SPONSOR_LIMIT`）；商家页经 `qb.sponsor.topup-limit` 提前显示。保留期与上限的三个参数都是受控参数，未发布时转账 `INVALID_PARAMS`、充值 `QB_TOPUP_UNAVAILABLE`。
+    充值开始（Q10b）单独取 `qb.topup:<商家>`：**新商家上限**（`wallet.NewSponsorLimit`）在首次充值成功前与之后 `qb.topup.new-sponsor.days` 天内，把已付（含退款的）与未结的充值（创建中的直到其作业结束或失败，评审 L4；开立的直到过期）连同本次限制在
+    `qb.topup.new-sponsor.max-total` 之内（422 `QB_TOPUP_NEW_SPONSOR_LIMIT`）；商家页经 `qb.sponsor.topup-limit` 提前显示（它与 `qb.app.wallet` 经不允许时间旅行的参数视图 `now:SysParam` 读参数，按服务端时钟，评审 L9）。保留期与上限的三个参数都是受控参数，未发布时转账 `INVALID_PARAMS`、充值 `QB_TOPUP_UNAVAILABLE`。
   - **模式**：`quizbuks.stripe.livemode`（缺省 false）、密钥前缀、开发入账由 `StripeModeCheck` 一起检查；事件模式不同即待办。
     支付页与开通页的地址前缀（`checkout-url-prefix` / `connect-url-prefix`）在正式模式只能是 Stripe 自己的地址；测试模式只经 `wallet.StripeUrls.prefixProblem`：
     以 `/` 结尾的 `https://主机[:端口]/…/`，`http` 只给本机桩（`localhost`、`127.0.0.1`、`[::1]`），不含用户信息、查询与片段（否则 `https://checkout.stripe.com`
@@ -123,7 +127,8 @@
     `stripe-connect` 提供方（密钥只来自 `STRIPE_CONNECT_WEBHOOK_SECRET`）的通知写入，在 `qb.account:<用户>` 锁内、只取更新的报告。
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。
     转账的一切流程只持 `qb.wallet:TAKER:<用户>`，锁内从账本读余额；金额只取自账本与记录。**只转未保留的部分**（Q10b，评审 M3）：模板 `qb.wallet.taker-transferable` 给出保留中的奖励
-    （最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，奖励即来源为 `QbAttempt` 的 2120 贷方行，商家经发布维度与卡片找到），`TransferRules` 按 `余额 − 保留` 判断门槛与金额，
+    （最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，奖励即来源为 `QbAttempt` 的 2120 贷方行，商家经发布维度与卡片找到；
+    只计尚在余额中的部分：转出先取自由的、再取按时间保留的、最后取争议冻结的，只取此前入账的，保留不超过余额，模型 `wallet.RewardHolds`、设计 4.4，评审 M-b），`TransferRules` 按 `余额 − 保留` 判断门槛与金额，
     审核通过后同样再查；App 的 `qb.app.wallet` 按同一规则给出保留中与预计可转时刻（改规则时两处一起改，`TransferHoldIT` 比较两者）。每人至多一笔未结束的转账（部分唯一索引）；
     发出作业先按 `transfer_group` 查询再以转账自己的幂等键创建；**只有 Stripe 拒绝创建（`TransferRules.certainFailure`）才冲正**，其他结果进入 `CHECK`、
     向 Stripe 核实后定论：查询"没有"只有在晚于发送结束（`sendEndedAt`）至少 10 分钟时才是定论。Stripe 把执行过的请求的回答（含错误）保存在幂等键下，
@@ -147,8 +152,8 @@
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
   - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）与入站 Stripe 事件都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
 - **外部密钥**（`STRIPE_*`、`OPENAI_API_KEY`）只来自环境变量（`deploy/quizbuks/README.md`）；测试与 `dev` 用固定的假值，仓库中没有真实密钥。
-- **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，正式模式一律不生成，管理员密码不打印）；
-  启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、含前缀 0 的网段一律报错，正式模式下关闭管理二次验证报错，`dev` 只在回环地址与本机邮件地址下启动；
+- **部署的安全设置**（Q10b，`deploy/quizbuks/README.md`"密钥与部署"）：镜像入口脚本在平台密钥或首个管理员密码缺少时拒绝启动（只有 `QB_LOCAL_SECRETS=true` 的本机才生成，compose 缺省 `false`，正式模式一律不生成，管理员密码不打印；生成时导出 `QB_SECRETS_GENERATED=true`，评审 L5）；
+  启动检查 `wallet.DeploySafetyCheck`（类别 `QUIZBUKS`）：可信代理为空时正式模式报错（除非 `quizbuks.deploy.direct-exposure=true`）、过宽的网段一律报错（IPv4 短于 /8、IPv6 短于 /32、整个 IPv4 的映射，前缀照平台读法，评审 L6），正式模式下关闭管理二次验证或 `QB_SECRETS_GENERATED=true` 报错，`dev` 只在回环地址与本机邮件地址下启动；
   数据库密码没有缺省值。职责分离规则由 `QB_SETUP` 提出（`setup.QbSodRules`），`QbRoles` 的角色不得违反它们（`QbRolesTest`）；超级管理员不做审批。
 
 ## 5. 前端（`quizbuks-web/`，`docs/quizbuks/plans/QP-pages.md`）

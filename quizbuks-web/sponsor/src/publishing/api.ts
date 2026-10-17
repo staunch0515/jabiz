@@ -346,9 +346,12 @@ export function isStale(error: unknown): boolean {
 
 /**
  * What can be done with a publication in a state (the processes' `actsOn`); the server decides all the same. A
- * publication an administrator paused is not the sponsor's to resume (Q10b).
+ * publication an administrator paused is not the sponsor's to resume, and one an administrator paused or ended is not
+ * copied (Q10b, review M-d).
  */
-export function actionsOf(status: PublicationStatus, pausedBy: string | null = null) {
+export function actionsOf(status: PublicationStatus, pausedBy: string | null = null,
+  endReason: string | null = null) {
+  const takenDown = (status === 'PAUSED' && pausedBy === 'ADMIN') || endReason === 'ADMIN'
   return {
     edit: status === 'DRAFT',
     submit: status === 'DRAFT',
@@ -356,7 +359,7 @@ export function actionsOf(status: PublicationStatus, pausedBy: string | null = n
     withdraw: status === 'PENDING_REVIEW',
     pause: status === 'SCHEDULED' || status === 'LIVE' || status === 'FUNDS_SHORT',
     resume: status === 'PAUSED' && pausedBy !== 'ADMIN',
-    copy: true,
+    copy: !takenDown,
   }
 }
 

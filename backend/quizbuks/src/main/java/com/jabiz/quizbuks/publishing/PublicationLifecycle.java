@@ -67,8 +67,14 @@ import static com.jabiz.quizbuks.publishing.PublicationStatus.SCHEDULED;
  *   <li>{@code QB_PUBLICATION_ADVANCE}, run for each item of the minute's job {@value #TICK_JOB}: the publications
  *       whose start or end has come move on, those missed while the system was down included.</li>
  * </ul>
- * Locks, always in this order (D-Q4-5): the quiz's ({@code qb.quiz:<quizId>}, shared, by submission only), then the
- * publication's ({@code qb.pub:<publicationId>}); Q5 takes the wallet's after them.
+ * Locks, always in this order (D-Q4-5): the sponsor's account ({@code qb.account:<sponsor>}, by the approval result
+ * only: a ban and an approval take turns, Q10b review L1), the quiz's ({@code qb.quiz:<quizId>}, shared, by submission
+ * only), then the publication's ({@code qb.pub:<publicationId>}); Q5 takes the wallet's after them.
+ *
+ * <p>A publication of a quiz one of whose publications an administrator took down (Q10b, review M-d) goes on only
+ * after a person's review: its case says {@code autoApprove = false} and {@code takenDown = true} whatever the
+ * parameter says, and when no review is asked for all the same (a rule exempts it, or an earlier approval of the same
+ * content would be reused) the submission is refused ({@code QB_PUBLICATION_REVIEW_REQUIRED}).
  */
 public final class PublicationLifecycle {
 
@@ -99,6 +105,10 @@ public final class PublicationLifecycle {
         String requestId, String preparerId, String contentHash, String reason) {}
 
     static final String FIRST = "first";
+    /** Whether an administrator took down another publication of the submitted one's quiz (Q10b, M-d). */
+    static final String TAKEN_DOWN = "takenDown";
+    /** The publication as read before the locks, for its (immutable) sponsor (Q10b, L1). */
+    static final String BEFORE = "before";
     static final String PARAMS = "params";
     static final String REQUEST = "request";
 
@@ -121,6 +131,7 @@ public final class PublicationLifecycle {
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadSponsor)
+                .steps(b -> PublicationEditing.loadSponsorPublications(b, PublicationEditing::publication))
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, PublicationEditing::publication))
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.REVIEW_PUBLICATION_AUTO))
@@ -160,7 +171,10 @@ public final class PublicationLifecycle {
             .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
         if (!ctx.hasViolations()) {
-            ctx.put(CASE, PublicationEditing.approvalCase(publication, list(ctx, TIERS), version, autoApprove(ctx)));
+            boolean takenDown = !PublicationEditing.takenDownOfQuiz(ctx, publication).isEmpty();
+            ctx.put(TAKEN_DOWN, takenDown);
+            ctx.put(CASE, PublicationEditing.approvalCase(publication, list(ctx, TIERS), version, autoApprove(ctx),
+                takenDown));
         }
     }
 
@@ -170,6 +184,13 @@ public final class PublicationLifecycle {
         }
         EntityInstance publication = PublicationEditing.publication(ctx);
         ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
+        if (approval.status() != ApprovalOutcome.Status.PENDING && Boolean.TRUE.equals(ctx.get(TAKEN_DOWN))) {
+            // Review M-d: after a takedown of the quiz only a person's review lets a publication of it go on.
+            ctx.reject(new Violation(null, PublishingCodes.REVIEW_REQUIRED, "An administrator took down a "
+                + "publication of this quiz: this one goes on only after a review by a person, which none asks for",
+                Map.of("rule", PublicationApprovals.RULE)));
+            return;
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("submittedAt", ctx.opTime());
         switch (approval.status()) {
@@ -321,7 +342,18 @@ public final class PublicationLifecycle {
                     PublicationApprovals.SUBJECT.equals(input.subject()) ? uuidOrNull(input.entityId()) : null))
                 .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, PublicationOutput.class)
                     : new PublicationOutput(ctx.get(PUB_ID, UUID.class), null, 0, null, null))
-                // Events of other subjects lock and find nothing.
+                // Events of other subjects lock and find nothing. The sponsor's account first (review L1): a ban
+                // reads the sponsor's publications under it, so a ban and an approval take turns, and the approval
+                // sees the ban or the ban the publication on. The sponsor never changes: read before the locks.
+                .step("Find the sponsor", QueryEntities.<ProcessContext>of(
+                    QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
+                        .limit(1).build(), BEFORE))
+                .step("Lock the sponsor's account", HoldLock.<ProcessContext>exclusive(ctx -> {
+                    EntityInstance before = first(ctx, BEFORE);
+                    return before == null ? null : com.jabiz.quizbuks.identity.QbAccounts.lockName(
+                        before.get("sponsorId"));
+                }))
                 .step("Lock the publication", HoldLock.<ProcessContext>exclusive(
                     ctx -> PublicationEditing.lockName(ctx.get(PUB_ID))))
                 .step("Find the publication", QueryEntities.<ProcessContext>of(

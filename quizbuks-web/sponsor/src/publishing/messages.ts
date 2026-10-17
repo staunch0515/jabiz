@@ -143,6 +143,8 @@ export const publishingEn = {
       adminEnded: 'Ended by QuizBuks',
       adminEndedText: 'Our team ended this publication. It takes no new attempts.',
       adminReason: 'Reason: {{reason}}',
+      accountSuspended: 'Your account was suspended.',
+      sentBackBanned: 'Your account was suspended while it was in review, so it did not go live.',
     },
     actions: {
       label: 'Actions',
@@ -317,6 +319,8 @@ export const publishingZh: typeof publishingEn = {
       adminEnded: '已被管理员结束',
       adminEndedText: '平台管理员结束了此发布，不再接受新的答题。',
       adminReason: '原因：{{reason}}',
+      accountSuspended: '您的账户已被停用。',
+      sentBackBanned: '审核期间您的账户被停用，因此未能上架。',
     },
     actions: {
       label: '操作',
@@ -491,6 +495,8 @@ export const publishingJa: typeof publishingEn = {
       adminEnded: '管理者が終了しました',
       adminEndedText: '運営チームがこの公開を終了しました。新しい回答は受け付けません。',
       adminReason: '理由：{{reason}}',
+      accountSuspended: 'アカウントが利用停止されました。',
+      sentBackBanned: '審査中にアカウントが利用停止されたため、公開されませんでした。',
     },
     actions: {
       label: '操作',

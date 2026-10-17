@@ -176,6 +176,39 @@ final class PublicationEditing {
                 BAN_ROWS));
     }
 
+    /** The sponsor's publications, for the publications of a quiz an administrator took down (Q10b, M-d). */
+    static final String SPONSOR_PUBLICATIONS = "sponsorPublications";
+
+    /**
+     * Loads the publications of the publication's sponsor (by the immutable sponsor, through the default dataset) into
+     * {@link #SPONSOR_PUBLICATIONS}, for {@link #takenDownOfQuiz}.
+     */
+    static <I, O> void loadSponsorPublications(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, EntityInstance> publication) {
+        pb.step("Load the sponsor's publications", QueryEntities.<ProcessContext>of(
+            QbPublications.defaultDataset(QbPublications.PUBLICATION), ctx -> {
+                EntityInstance found = publication.apply(ctx);
+                Object sponsor = found == null ? null : found.get("sponsorId");
+                return EntityQuery.builder().where(new QueryPredicate.Eq("sponsorId", sponsor == null ? ""
+                    : String.valueOf(sponsor))).limit(Integer.MAX_VALUE).build();
+            }, SPONSOR_PUBLICATIONS));
+    }
+
+    /**
+     * The other publications of the publication's quiz that an administrator took down
+     * ({@link PublicationAdmin#takenDown}), from {@link #SPONSOR_PUBLICATIONS}: a quiz's publications are its owner's,
+     * the publication's sponsor.
+     */
+    static List<EntityInstance> takenDownOfQuiz(ProcessContext ctx, EntityInstance publication) {
+        Object quizId = publication.get("quizId");
+        return list(ctx, SPONSOR_PUBLICATIONS).stream()
+            .filter(other -> !String.valueOf(other.id()).equals(String.valueOf(publication.id())))
+            .filter(other -> quizId != null
+                && String.valueOf(quizId).equals(String.valueOf((Object) other.get("quizId"))))
+            .filter(PublicationAdmin::takenDown)
+            .toList();
+    }
+
     /**
      * Loads the ban of the publication's sponsor (none when they have none) into {@link #BAN_ROWS}: an approval that
      * comes after a ban does not put the publication on (Q10b, review M2).
@@ -497,9 +530,19 @@ final class PublicationEditing {
      */
     static ApprovalCase approvalCase(EntityInstance publication, List<EntityInstance> tiers, EntityInstance version,
         boolean autoApprove) {
+        return approvalCase(publication, tiers, version, autoApprove, false);
+    }
+
+    /**
+     * @param takenDown whether an administrator took down another publication of its quiz (Q10b, review M-d): then
+     *                  the fact {@code autoApprove} is false whatever the parameter says, and {@code takenDown} true
+     */
+    static ApprovalCase approvalCase(EntityInstance publication, List<EntityInstance> tiers, EntityInstance version,
+        boolean autoApprove, boolean takenDown) {
         List<TierCoverage.Tier> ranges = tiersOf(tiers);
-        Map<String, Object> facts = PublicationApprovals.facts(autoApprove, money(publication.get("maxReward")),
-            money(publication.get("maxSpend")), publication.get("sponsorId"), publication.get("regions"));
+        Map<String, Object> facts = PublicationApprovals.facts(autoApprove && !takenDown,
+            money(publication.get("maxReward")), money(publication.get("maxSpend")), publication.get("sponsorId"),
+            publication.get("regions"), takenDown);
         Map<String, Object> content = PublicationApprovals.content(draftOf(publication),
             version == null ? null : version.get("contentHash"), ranges);
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));

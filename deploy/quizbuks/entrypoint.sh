@@ -11,7 +11,10 @@
 # a random value nobody sees, so the platform's entrypoint does not make and print one). In live mode
 # (QB_STRIPE_LIVEMODE or QUIZBUKS_STRIPE_LIVEMODE other than false, or a live Stripe key) nothing is ever generated,
 # QB_LOCAL_SECRETS or not. A generated administrator password is never printed: it goes into a read-only file in the
-# secrets volume, and its path is printed.
+# secrets volume, and its path is printed. Whenever a key or the password is generated (or read back from the volume
+# where it was generated), QB_SECRETS_GENERATED=true is exported: the application's startup check refuses that next to
+# live mode however live mode is set (review L5). docker-compose.yml leaves QB_LOCAL_SECRETS false: a local
+# demonstration sets it itself.
 #
 # Stripe placeholders only with QB_STRIPE_PLACEHOLDERS=true (docker-compose.yml sets it by default; the image alone
 # does not), only in test mode, and only for values that are not set:
@@ -67,6 +70,7 @@ if [ "${QB_LOCAL_SECRETS:-false}" = true ]; then
     fi
 fi
 
+generated=false
 missing=""
 if [ -z "${JABIZ_JWT_SECRET:-}" ]; then missing="$missing JABIZ_JWT_SECRET"; fi
 if [ -z "${JABIZ_INTEGRITY_KEY:-}" ]; then missing="$missing JABIZ_INTEGRITY_KEY"; fi
@@ -82,6 +86,7 @@ if [ -z "${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
         fi
         JABIZ_BOOTSTRAP_ADMIN_PASSWORD=$(cat "$SECRETS/admin-password")
         export JABIZ_BOOTSTRAP_ADMIN_PASSWORD
+        generated=true
     elif [ "${QB_BOOTSTRAP_ADMIN_DONE:-false}" = true ]; then
         JABIZ_BOOTSTRAP_ADMIN_PASSWORD=$(random_text)
         export JABIZ_BOOTSTRAP_ADMIN_PASSWORD
@@ -94,6 +99,12 @@ if [ -n "$missing" ] && ! $local_secrets; then
         "(QB_LOCAL_SECRETS=true generates them for a local demonstration only, never in live mode;" \
         "QB_BOOTSTRAP_ADMIN_DONE=true once the first administrator exists) ($SECRETS_README)" >&2
     exit 1
+fi
+# The platform's entrypoint makes the missing keys (local only, as checked above).
+if [ -n "$missing" ]; then generated=true; fi
+if $generated; then
+    QB_SECRETS_GENERATED=true
+    export QB_SECRETS_GENERATED
 fi
 
 placeholders=false

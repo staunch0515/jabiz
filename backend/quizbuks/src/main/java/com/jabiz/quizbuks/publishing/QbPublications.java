@@ -330,6 +330,7 @@ public final class QbPublications {
      */
     public static ApprovalSubject approvalSubject() {
         return ApprovalSubject.define(PublicationApprovals.SUBJECT, s -> s.entity(PUBLICATION).bool("autoApprove")
+            .bool("takenDown")
             .number("maxReward").number("maxSpend").text("sponsorId").text("regions"));
     }
 

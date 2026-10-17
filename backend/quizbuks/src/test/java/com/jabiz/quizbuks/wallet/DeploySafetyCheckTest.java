@@ -36,8 +36,37 @@ class DeploySafetyCheckTest {
                 }
             }
         }
-        assertThat(DeploySafetyCheck.everyAddress("0.0.0.0/8")).isFalse();
-        assertThat(DeploySafetyCheck.everyAddress("0.0.0.0")).isFalse();
+        assertThat(DeploySafetyCheck.tooWide("0.0.0.0/8")).isFalse();
+        assertThat(DeploySafetyCheck.tooWide("0.0.0.0")).isFalse();
+    }
+
+    /** Review L6: the prefix is read as the platform reads it, and ranges wider than any proxy's are refused. */
+    @Test
+    void rangesWiderThanAProxysAreNeverTrusted() {
+        for (String wide : List.of("0.0.0.0/+0", "0.0.0.0/-0", "10.0.0.0/+00", "::/+0", "10.0.0.0/7", "1.0.0.0/1",
+            "2001:db8::/31", "2000::/3", "::ffff:0:0/96", "::ffff:0.0.0.0/96", "::ffff:10.0.0.0/100", "::/96",
+            "::/32", "64:ff9b::/96", "64:ff9b::/64", "64:ff9b:1::/48", "[::ffff:0:0]/96", "10.0.0.0/33", "::/129",
+            "10.0.0.0/x", "10.0.0.0/", "proxy.example", "10.0.0.256", "10.0.0.0/-8")) {
+            assertThat(DeploySafetyCheck.tooWide(wide)).as(wide).isTrue();
+            assertThat(DeploySafetyCheck.proxyProblems(List.of(wide), false, false)).as(wide).singleElement()
+                .satisfies(p -> assertThat(p.severity()).isEqualTo(CheckProblem.Severity.ERROR));
+        }
+        for (String narrow : List.of("10.0.0.5", "10.0.0.0/8", "10.0.0.0/+16", " 192.168.1.0/24 ", "2001:db8::/32",
+            "2001:db8::1", "fd00::/48", "::1", "[::1]", "::ffff:10.0.0.0/104", "::ffff:10.0.0.1", "10.0.0.0/32",
+            "64:ff9b::a00:1/128")) {
+            assertThat(DeploySafetyCheck.tooWide(narrow)).as(narrow).isFalse();
+        }
+    }
+
+    /** Review L5: secrets the entrypoint generated are for a local demonstration, never next to live mode. */
+    @Test
+    void generatedSecretsAreForTestModeOnly() {
+        assertThat(DeploySafetyCheck.secretProblems(true, false)).isEmpty();
+        assertThat(DeploySafetyCheck.secretProblems(false, true)).isEmpty();
+        assertThat(DeploySafetyCheck.secretProblems(true, true)).singleElement().satisfies(p -> {
+            assertThat(p.severity()).isEqualTo(CheckProblem.Severity.ERROR);
+            assertThat(p.toString()).contains(DeploySafetyCheck.SECRETS_GENERATED);
+        });
     }
 
     @Test

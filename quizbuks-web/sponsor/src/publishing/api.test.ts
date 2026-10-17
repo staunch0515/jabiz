@@ -93,7 +93,9 @@ describe('what the pages say about a publication', () => {
     expect(actionsOf('PAUSED')).toMatchObject({ pause: false, resume: true })
     expect(actionsOf('PAUSED', 'SPONSOR')).toMatchObject({ resume: true })
     // Q10b: what an administrator paused only an administrator resumes.
-    expect(actionsOf('PAUSED', 'ADMIN')).toMatchObject({ pause: false, resume: false, copy: true })
+    expect(actionsOf('PAUSED', 'ADMIN')).toMatchObject({ pause: false, resume: false, copy: false })
+    expect(actionsOf('ENDED', null, 'ADMIN')).toMatchObject({ copy: false })
+    expect(actionsOf('ENDED', null, 'EXPIRED')).toMatchObject({ copy: true })
     expect(actionsOf('ENDED')).toMatchObject({ pause: false, resume: false, withdraw: false, copy: true })
   })
 

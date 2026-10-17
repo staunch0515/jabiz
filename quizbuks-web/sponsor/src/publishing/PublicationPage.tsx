@@ -34,7 +34,9 @@ function SentBack({ publication }: { publication: Publication }) {
     ? t('publishing.detail.sentBackReason', { reason: publication.rejectReason })
     : publication.rejectCode === 'QB_PUBLICATION_EXPIRED_IN_REVIEW'
       ? t('publishing.detail.expiredInReview')
-      : publication.rejectCode
+      : publication.rejectCode === 'QB_USER_BANNED'
+        ? t('publishing.detail.sentBackBanned')
+        : publication.rejectCode
   return (
     <Alert variant="warning" data-testid="publication-sent-back-reason">
       <AlertTitle>{t('publishing.detail.sentBack')}</AlertTitle>
@@ -60,7 +62,12 @@ function AdminNotice({ publication }: { publication: Publication }) {
         <p>{t(`publishing.detail.${key}Text`)}</p>
         {publication.adminReason && (
           <p data-testid="publication-admin-reason">
-            {t('publishing.detail.adminReason', { reason: publication.adminReason })}
+            {t('publishing.detail.adminReason', {
+              // A ban's pause records a code, not the ban's own reason (Q10b, review L3).
+              reason: publication.adminReason === 'QB_ACCOUNT_SUSPENDED'
+                ? t('publishing.detail.accountSuspended')
+                : publication.adminReason,
+            })}
           </p>
         )}
       </AlertDescription>

@@ -17,6 +17,7 @@ echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-<unset>}"
 echo "STRIPE_CONNECT_WEBHOOK_SECRET=${STRIPE_CONNECT_WEBHOOK_SECRET:-<unset>}"
 echo "JABIZ_JWT_SECRET=${JABIZ_JWT_SECRET:-<unset>}"
 echo "JABIZ_BOOTSTRAP_ADMIN_PASSWORD=${JABIZ_BOOTSTRAP_ADMIN_PASSWORD:-<unset>}"
+echo "QB_SECRETS_GENERATED=${QB_SECRETS_GENERATED:-<unset>}"
 NEXT
 chmod +x "$work/next.sh"
 
@@ -144,9 +145,15 @@ check "local: the password is not printed, its path is" '[[ "$out" == *"$work/s6
 bare "$work/s6" QB_LOCAL_SECRETS=true
 check "local, second start: the same password, nothing announced" '[[ "$(value JABIZ_BOOTSTRAP_ADMIN_PASSWORD)" == "$password" &&
   "$out" != *"first start"* ]]'
+check "local: the generated secrets are marked (review L5)" '[[ "$(value QB_SECRETS_GENERATED)" == true ]]'
 bare "$work/s6b" QB_LOCAL_SECRETS=true JABIZ_BOOTSTRAP_ADMIN_PASSWORD=given
 check "local: a given password wins" '[[ "$(value JABIZ_BOOTSTRAP_ADMIN_PASSWORD)" == given &&
   ! -e "$work/s6b/admin-password" ]]'
+check "local, keys missing: marked" '[[ "$(value QB_SECRETS_GENERATED)" == true ]]'
+run "$work/s6c" QB_LOCAL_SECRETS=true
+check "local, every secret given: not marked" '[[ $status == 0 && "$(value QB_SECRETS_GENERATED)" == "<unset>" ]]'
+run "$work/s6d"
+check "server, every secret given: not marked" '[[ $status == 0 && "$(value QB_SECRETS_GENERATED)" == "<unset>" ]]'
 for live in QB_STRIPE_LIVEMODE=true QUIZBUKS_STRIPE_LIVEMODE=TRUE STRIPE_API_KEY=sk_live_x STRIPE_API_KEY=rk_live_x; do
   bare "$work/s7-$live" QB_LOCAL_SECRETS=true "$live"
   check "live mode ($live): nothing generated, refused" '[[ $status != 0 && "$out" == *"refusing to start"* &&

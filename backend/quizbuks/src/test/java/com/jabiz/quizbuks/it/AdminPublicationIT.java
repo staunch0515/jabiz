@@ -132,14 +132,15 @@ class AdminPublicationIT extends PlayItSupport {
 
         run("QB_USER_BAN", bossToken, body("userId", sponsor, "reason", "Fraud"));
         for (String publicationId : List.of(live, byThemselves)) {
+            // The sponsor reads a fixed reason, not the ban's (review L3).
             assertThat(publication(publicationId)).as(publicationId).containsEntry("status", "PAUSED")
-                .containsEntry("paused_by", "ADMIN").containsEntry("admin_reason", "Fraud");
+                .containsEntry("paused_by", "ADMIN").containsEntry("admin_reason", PublicationAdmin.ACCOUNT_SUSPENDED);
             assertThat(card(publicationId)).containsEntry("status", "PAUSED");
         }
         assertThat(publication(other)).containsEntry("status", "LIVE");
         // The pauses ran inside the ban: one root process, with the pauses as its sub-processes.
         assertThat(query("SELECT count(*) AS n FROM op_process c JOIN op_process p ON p.process_seq_id = "
-            + "c.parent_seq_id WHERE p.process_name = 'QB_USER_BAN' AND c.process_name = ?", PublicationAdmin.PAUSE)
+            + "c.parent_seq_id WHERE p.process_name = 'QB_USER_BAN' AND c.process_name = ?", PublicationAdmin.BAN_PAUSE)
             .getFirst().get("n")).isEqualTo(2L);
 
         // Lifted, the ban leaves them paused: only an administrator resumes them.

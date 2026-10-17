@@ -50,8 +50,9 @@ public final class QbAccounts {
 
     /**
      * The name of a user's account lock ({@code HoldLock}): every process that writes a user's profile, onboarding or
-     * ban takes it exclusively before reading them (D-Q2-10). Never held with a publication's or a wallet's lock; if
-     * it ever is, it comes first. Null without a user.
+     * ban takes it exclusively before reading them (D-Q2-10). It comes before every other lock: a ban holds it while
+     * it pauses the sponsor's publications (their locks after it, Q10b), and the approval result of a publication
+     * takes the sponsor's before the publication's (review L1). Null without a user.
      */
     public static String lockName(Object userId) {
         return userId == null ? null : "qb.account:" + userId;

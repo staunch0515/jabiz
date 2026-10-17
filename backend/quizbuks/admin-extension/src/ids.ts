@@ -18,6 +18,8 @@ export const DATASET = {
 export const TEMPLATE = {
   /** The review queue: no money (the content administrators read it). */
   publications: 'qb.admin.publications',
+  /** The publications of a quiz an administrator took down, with the reasons (Q10b, review M-d). */
+  quizTakedowns: 'qb.admin.quiz-takedowns',
   /** A publication's sponsor's funds; `qb.admin.finance.read`. */
   publicationFunds: 'qb.admin.publication-funds',
   sponsors: 'qb.admin.sponsors',
@@ -73,6 +75,9 @@ export const CONTROL = {
 
 /** The reports of the monthly page (F-08), in the order shown. */
 export const REPORTS = [TEMPLATE.monthly, TEMPLATE.balances] as const
+
+/** The reason a ban's pause records instead of the ban's own (Q10b, review L3): shown in the reader's language. */
+export const ACCOUNT_SUSPENDED = 'QB_ACCOUNT_SUSPENDED'
 export type ReportId = (typeof REPORTS)[number]
 
 /** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
