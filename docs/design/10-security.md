@@ -2,7 +2,7 @@
 
 认证、授权、菜单与敏感数据遮蔽（ROADMAP 阶段 7）。原则只有一条：**默认拒绝**——没有认证就是匿名，没有声明的权限就是没有权限，
 没有配置的密钥就不启动。约束性细则见【决策 D12】；二次验证、按操作要求二次验证、闲置锁定、单点登录、明文显示、数据期限与访问审查见【决策 D28】（第 9–13 节）；
-登录入口、登录前的应用检查、邮箱验证与登录来源见【决策 D36】（第 15 节）。
+登录入口、登录前的应用检查、邮箱验证与登录来源见【决策 D36】（第 15 节）；受保护授权的四眼见【决策 D48】（第 16 节）。
 
 ## 1. 总体结构
 
@@ -81,7 +81,8 @@
 |---|---|---|
 | `SPONSOR_SIGN_IN` | `auth.sign-in` | 登录（第 4 节）；只经公开的 `POST /api/auth/login` 执行，权限码使它不能经流程 API 调用 |
 | `SEC_USER_CREATE` | `security.user.create` | 建用户并设置密码 |
-| `SEC_USER_SET_PASSWORD` | `security.user.password` | 重设密码 |
+| `SEC_USER_SET_PASSWORD` | `security.user.password` | 重设密码；持有受保护权限的用户须另一位管理员审批（§16） |
+| `SEC_USER_ROLE_ASSIGN` / `SEC_ROLE_PERMISSION_ADD` / `SEC_USER_IDENTITY_LINK` | `security.user-role.write` / `security.role.write` / `security.user.identity.write` | 分配角色、角色增加权限、关联外部账号；受保护的须另一位管理员审批，其余当即写入（§16） |
 | `SEC_USER_UNLOCK` | `security.user.unlock` | 解除锁定 |
 | `SEC_BOOTSTRAP_ADMIN` | `security.bootstrap` | 只由平台在启动时执行（第 7 节） |
 | `SEC_USER_SET_LOCALE` | `auth.account`（不授予角色） | 本人设置邮件语言；只经 `POST /api/auth/account/locale` 执行（18 §5.6） |
@@ -174,6 +175,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
 | 职责分离规则的数据视图、冲突报告 `GET /api/sod/conflicts` | `sod.read`（18 §4） |
 | 我的待办 `GET /api/tasks/mine` / 待办与通知的数据视图 / `TASK_NOTIFY` | 只要求已认证（只列本人与本人所持权限的待办）/ `task.read`（写入只经流程）/ `task.notify`（由系统身份的事件消费者运行）（18 §5） |
+| 受保护的授权（另加，§16） | 造成获得受保护权限的分配与授权、对受保护持有人的重设密码 / 二次验证 / 关联外部账号须另一位管理员审批（422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`；首个管理员退役后 403 `BOOTSTRAP_ADMIN_RETIRED`） |
 | 职责分离（另加） | 授予角色或权限造成冲突即拒绝（422 `SOD_CONFLICT`）；流程 API 入口拒绝同时持有互斥两组权限的操作人使用其中任一组（403 `SOD_CONFLICT`，`*` 除外）（18 §4） |
 | 字典、元模型导出、`/api/auth/me`、`/api/auth/menus`、OpenAPI 文档 `/api/meta/openapi` | 只要求已认证 |
 | 用户显示名 `GET /api/users/names`（§14） | 只要求已认证：只返回显示名（不返回登录名等其他字段），不判断调用方能否读到该编号；多租户时只含本租户与无租户的用户 |
@@ -209,6 +211,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 设置了 `jabiz.security.bootstrap-admin.user-name` 与 `.password`（环境变量 `JABIZ_BOOTSTRAP_ADMIN_USER` / `…_PASSWORD`，不写入仓库）、
 库中还没有任何用户、也没有 `ADMIN` 角色时，启动后以系统身份执行 `SEC_BOOTSTRAP_ADMIN`：建角色 `ADMIN`（权限 `*`）、该用户与角色分配。
 否则什么也不做。多个实例同时启动时，后来者在唯一约束上失败，记 info 日志后照常启动。
+有了另一位管理员之后，这个账号不能再提出、写入或审批受保护的变更（§16.3）。
 
 ## 8. 测试
 
@@ -740,3 +743,94 @@ jabiz:
   数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
 - 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
+
+## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
+
+一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。
+这类变更先登记为待审批，由**另一位管理员**审批后才生效；待审批的变更没有任何效果（默认拒绝）。
+
+### 16.1 受保护的权限与受保护的变更
+
+**受保护的权限**（`jabiz.security.protected-grants.permissions`，逗号分隔；缺省如下；`*` 无论怎样配置都受保护）：
+
+| 权限 | 为什么 |
+|---|---|
+| `*` | 持有全部权限 |
+| `security.user-role.write`、`security.role.write` | 改权限的权限：持有者能把任何权限给任何人（包括自己） |
+| `approval.decide`、`control.publish` | 别的四眼的另一双眼：审批单据、发布审批规则、限额、职责分离规则与受控参数（18 §3） |
+| `ledger.post`、`ledger.reverse` | 写账（冲正即反向过账，11 §1） |
+| `platform.param.write` | 独自修改未受控的业务参数（04 §9） |
+
+不在缺省中的：`security.user.password` / `security.user.mfa-reset` / `security.user.identity.write`（对受保护持有人使用时本身就要审批，对其他人是日常的账号支持）、
+`temporal.revert` / `temporal.backdate`（写入仍经过本节的检查，`processOnlyWrites` 的数据视图不能撤销）、只读权限、`security.user.write`（不改权限；管理员设置的邮箱从不可信，§15.7）。
+应用可以在配置中改写这份清单（例如加上自己的付款权限）。
+
+**受保护的变更**（`ProtectedGrants`）：
+
+| 种类 | 什么时候受保护 | 请求的流程 | 审批人须持有 |
+|---|---|---|---|
+| `USER_ROLE` 分配角色 | 角色授予用户尚未持有的受保护权限 | `SEC_USER_ROLE_ASSIGN {userId, roleId, dataFrom?, dataTo?, effectiveTime?, reason}` | `security.user-role.write` |
+| `ROLE_PERMISSION` 角色增加权限 | 权限受保护，且角色有用户尚未持有它 | `SEC_ROLE_PERMISSION_ADD {roleId, permission, effectiveTime?, reason}` | `security.role.write` |
+| `PASSWORD` 重设密码 | 用户持有受保护权限 | `SEC_USER_SET_PASSWORD`（不变） | `security.user.password` |
+| `MFA_RESET` 重置二次验证 | 同上 | `SEC_MFA_RESET`（不变） | `security.user.mfa-reset` |
+| `IDENTITY_LINK` 关联外部账号 | 同上，且不是用户本人关联（§12 的本人关联不受影响） | `SEC_USER_IDENTITY_LINK {userId, provider, subject, reason}` | `security.user.identity.write` |
+
+- **持有**按"可能持有"计：每个分配、角色与授权的最新版本未删除即算，不论角色、用户是否启用、分配是否预定（同职责分离 18 §4.2）。所以启用一个停用的角色或用户
+  从不带来检查没有看见的权限，启用不必另查；已持有 `*` 的用户再得到什么都不算获得。
+- 修改分配的数据期限（`dataFrom` / `dataTo`）不是获得权限（期限只限数据，§13.2）。
+- 三个请求流程都要求管理级二次验证；不受保护的变更（或在 §16.3 的建立期内）当即写入，与经数据视图相同，回答 `status: APPLIED`；
+  受保护时回答 `status: PENDING`、`changeId`、`approval: PENDING`、`approvalRequestId`，什么也没有写入。`SEC_USER_SET_PASSWORD` 与 `SEC_MFA_RESET` 的输出
+  增加同样的字段（`CredentialResetOutput`，兼容）。
+
+### 16.2 流程
+
+```
+请求（管理员甲）──► SecProtectedChange（PENDING，内容不可变）+ 审批请求（对象 jabiz.security.protected-change，一层）+ 待办
+审批（管理员乙，/tasks 的 ApprovalPanel 或 APPROVAL_DECIDE）──► jabiz.approval.approved / rejected
+SEC_PROTECTED_CHANGE_APPLY（internal，事件消费者）──► 再经 RequireApproval 确认内容哈希相同 ──► 带许可写入 ──► APPLIED
+```
+
+- **待审批的变更** `SecProtectedChange`（时态，`sec_protected_change_version`，`V41`）：种类、用户、角色、权限、数据期限、生效时间、提供方与外部账号、新密码的哈希（**敏感**，
+  与 `SecUser.passwordHash` 同等保存，读接口不返回）、原因、申请人；状态（`PENDING` → `APPLIED` / `REJECTED` / `FAILED`）、审批人、结果编号、失败原因只由流程写。
+  数据视图 `processOnlyWrites`，读权限 `approval.read`。
+- **审批对象** `jabiz.security.protected-change`（实体 `SecProtectedChange`，事实 `kind`、`user`、`role`、`permission`）：**层级由平台固定**（`RequireApproval.fixed`，18 §3.3），
+  一层，权限见上表，不读任何审批规则——规则是数据，不能让这类变更"不需要审批"。审批内容（`ContentHash`）是变更的全部内容（含新密码的哈希），
+  单据标识（待办标题）如 `alice ← ADMIN`、`ADMIN + ledger.post`、`alice: PASSWORD`。
+- **职责分离**（`APPROVAL_DECIDE`，18 §3.4）：申请人不能审批（`APPROVAL_OWN_REQUEST`）；**变更所针对的用户**不能批准（422 `APPROVAL_TARGET_USER`，按审批时的情况判断：
+  角色增加权限时为该角色中因此获得它的每个用户）；审批需要近期二次验证（`ADMINISTRATION`）；首个管理员见 §16.3。这些检查经 18 §3.4 的 `ApprovalDecisionCheck`。
+- **生效**：消费者以系统身份运行 `SEC_PROTECTED_CHANGE_APPLY`：变更仍是 `PENDING`、`RequireApproval` 对同一内容答 `APPROVED`、审批人仍不是申请人与所针对的用户、
+  也不是已退役的首个管理员，才以 `ProtectedChangeGrant`（只有本包能生成，绑定实体与操作）写入；目标已存在（分配已有、权限已有、外部账号已被关联）、用户或二次验证已不在时记 `FAILED`，
+  不写入。生效时间已过的按批准时生效。重设密码同时吊销该用户的全部会话（同 §2）。驳回（内容哈希相同）记 `REJECTED`。事件重复投递时第二次什么也不做。
+- **其他写入途径一律拒绝**（`ProtectedGrantWriteCheck`，在 `VersionAppender` 中，即一切时态写入的必经之处，18 §3.5 的受控参数同理）：使 `SecUserRole`、`SecRolePermission`、
+  他人的 `SecUserIdentity` "活过来"的写入——插入（含预定）、撤销其删除、取消其预定的删除——若造成上述获得，没有许可即 422 `PROTECTED_CHANGE_REQUIRES_APPROVAL`
+  （参数 `process`：应当使用的请求流程）。数据视图 API、实体 API、通用实体流程、导入、业务流程的 `ChangeSet`、撤销都经过这里。
+  密码哈希与二次验证只有平台流程能写（敏感字段、只读数据视图），所以那两种在 `SEC_USER_SET_PASSWORD` / `SEC_MFA_RESET` 中检查；应用自己的流程写这两者属于应用代码的责任（同 D11）。
+
+### 16.3 建立期、首个管理员与开关
+
+- **管理员**（本节所说）：经启用的角色持有 `*` 的启用用户。**首个管理员**：`SEC_BOOTSTRAP_ADMIN`（§7）建立的那个用户（与角色 `ADMIN` 同一操作建立；按数据判断，与配置是否仍在无关）。
+- **建立期**：新装的系统只有首个管理员，没有第二个人可以审批。在**首个管理员之外有两位管理员**之前，受保护的变更当即生效（`APPLIED`），开发、端到端测试、示范与快速开始照旧可用。
+  首次出现这种情况时（在之后第一次写安全实体或检查受保护的变更时）平台在只追加表 `sec_protected_grants_armed` 中记一行，**从此不再回到建立期**：之后停用或撤下管理员也不能重新打开它。
+  `jabiz.security.protected-grants.always=true` 则没有建立期（适合用细分权限而不是 `*` 管理的部署，见已知限制）。
+- **首个管理员退役**：存在**另一位管理员**时，首个管理员不能再提出、直接写入或审批受保护的变更（403 `BOOTSTRAP_ADMIN_RETIRED`），其他操作照旧。
+  建立的顺序因此是：首个管理员建第二位管理员 → 第二位建第三位（仍在建立期）→ 此后的受保护变更由一位申请、另一位审批。
+- **开关**：`jabiz.security.protected-grants.enabled`（缺省 `true`）。`false` 时与 16r 之前完全相同（仅用于明确不需要四眼的部署）。
+  只剩一位管理员又需要授权时（其他管理员离职），这是唯一的出路：由运维修改配置并重新部署（改配置本身留在部署的审计中），之后改回。
+- 缺省开启的理由：没有建立期的方案会使单管理员的安装无法建出第二位管理员；缺省关闭则多管理员的生产部署在不知情时没有保护。建立期只在只有一个人能做事的时候存在，
+  一旦有了两个人就关上，而且关上后不会因为数据变化重新打开。
+
+### 16.4 已知限制
+
+- 管理员只按 `*` 计：完全用细分权限管理（没有两位 `*` 管理员）的部署不会自动结束建立期，应设 `always=true`。
+- 建立期内第二、第三位管理员由前一位独自建立：谁是最初的管理员需要在访问审查（§13.3）中确认。
+- 审批人的权限按访问令牌判断（D12）：被收回权限的审批人在其访问令牌到期前（最长 15 分钟）仍可审批。
+- 申请人不能撤回请求（由审批人驳回）；以后需要时加撤回流程。
+- 可预占的账号（§15.7）被接管时删除其二次验证与外部关联不经审批：接管者证明了邮箱，这是自助注册的规则；管理员不应给可预占的账号受保护的权限。
+- 自助注册与 OIDC 开户授予的注册角色若含受保护权限，建立期结束后注册会被拒绝（422）：注册角色不应含这类权限。
+
+### 16.5 测试
+
+`ProtectedGrantIT`（分配、角色增加权限、重设密码、重置二次验证、关联外部账号各自待审批直到批准；申请人与所针对的用户不能批准；审批需要二次验证；驳回无效果；
+数据视图、实体 API、通用实体流程、预定的分配、撤销删除都被拒绝；变更只经流程；应用流程是内部的；不受保护的授权与之前相同；已持有不算获得）、
+`ProtectedGrantSetupIT`（首个管理员在建立期内直接授权、有了另一位管理员后退役（直接写入、请求、审批都 403）而其他操作照旧、第三位之后需要审批、停用管理员不重开建立期）、
+`ProtectedGrantsOffIT`（关闭时与之前相同）；core `ProtectedPermissionsTest`。
