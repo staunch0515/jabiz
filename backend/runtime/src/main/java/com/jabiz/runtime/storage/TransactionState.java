@@ -1,5 +1,8 @@
 package com.jabiz.runtime.storage;
 
+import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -118,6 +121,23 @@ public final class TransactionState {
     public synchronized void restore(TransactionState snapshot) {
         known.clear();
         known.putAll(snapshot.known);
+    }
+
+    /**
+     * Operation numbers drawn ahead for the sub-processes of the transaction (ROADMAP phase 16p-2, T9): with a number at
+     * hand, a sub-process's {@code op_process} row is held and written with the next statement instead of on its own.
+     * A rollback to a savepoint does not give them back; a number not used is a gap, as of any rolled back operation.
+     */
+    private final Deque<Long> reservedSequence = new ArrayDeque<>();
+
+    /** Adds operation numbers drawn ahead, in the order they are to be used. */
+    public synchronized void reserveSequence(Collection<Long> numbers) {
+        reservedSequence.addAll(numbers);
+    }
+
+    /** The next operation number drawn ahead, if one is left. */
+    public synchronized Optional<Long> takeReservedSequence() {
+        return Optional.ofNullable(reservedSequence.pollFirst());
     }
 
     public synchronized void countStatement() {

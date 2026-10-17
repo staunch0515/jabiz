@@ -1462,7 +1462,7 @@ e2e 对打包的应用（同 CI 的 `e2e` 作业，新的数据库）44 个用�
 | 16l | 内部流程只允许系统身份（D41，0.5 天）：`internal()` / `entryOnly()` / `subProcessOnly()`；✅ 已完成 | D41 | 0.5 天 | — |
 | 16n | 内容显示积木进入 @jabiz/ui（QuizBuks 页面阶段 PG-1；2026-10-14 确认）：`MarkdownView`、`FilePreview` 移入 `@jabiz/ui`，`@jabiz/admin` 照旧导出；✅ 已完成（PR 待建） | D20、D22、D34 | 1 天 | 15d |
 | 16o | 取锁前在进程内排队（准入）与流程入口限流（QuizBuks Q10a 的 R3；Q5 平台缺口 13、15）：热门命名锁的等待者不占数据库连接，过载时快速失败；2026-10-16 确认（A-1–A-12 全按建议）；✅ 已完成（PR 待建） | D45 | 3.5–4.5 天 | 14o、16k |
-| 16p | 降低 `LEDGER_POST` 与每个流程的平台开销（QuizBuks Q10a 的 R2，Q5 平台缺口 14 与"平台通用开销"）：同样的保证、更少的语句（`HoldLock` 一条语句、合并校验读取、时态插入不先读、引用检查复用本事务的读写、一次提交的写入合成一条、按已知版本更新、事务内写缓冲）；分 16p-1 / 16p-2；16p-1 ✅ 已实施（待合并，`1.2/phase-16p1-ledger-post-local`），16p-2 待做（实测之后） | D46（已确认 2026-10-16） | 10–12 天（16p-1 6.5–7.5、16p-2 3.5–4.5） | 16o |
+| 16p | 降低 `LEDGER_POST` 与每个流程的平台开销（QuizBuks Q10a 的 R2，Q5 平台缺口 14 与"平台通用开销"）：同样的保证、更少的语句（`HoldLock` 一条语句、合并校验读取、时态插入不先读、引用检查复用本事务的读写、一次提交的写入合成一条、按已知版本更新、事务内写缓冲）；分 16p-1 / 16p-2；16p-1 ✅ 已合并（#165），16p-2 ✅ 已实施（待合并，`1.2/phase-16p2-write-buffer`） | D46（已确认 2026-10-16） | 10–12 天（16p-1 6.5–7.5、16p-2 3.5–4.5） | 16o |
 
 **其余工作的顺序**（2026-10-13 确认）：
 - 前端线：15c-1 → 15c-2 → 15d。
@@ -3570,7 +3570,22 @@ r2dbc-pool 自己的指标（`r2dbc.pool.acquired`、`.pending`）在文档中�
 线 1.2 内兼容：接口、错误码与表结构不变，只加一个平台迁移（`V40`，一个函数），不开新线。
 分支 `1.2/phase-16p-ledger-post-cost`，从 `1.2/platform`（`961b4b3`，16o 已合入）拉出。
 
-**16p 状态**：计划已确认（2026-10-16，P-1–P-12 按缺省；P-8 只适用于 16p-2）。**16p-1 ✅ 已实施**（分支 `1.2/phase-16p1-ledger-post-local`，待合并）；16p-2 待做（16p-1 合入并由 QuizBuks 重测之后）。
+**16p 状态**：计划已确认（2026-10-16，P-1–P-12 按缺省；P-8 只适用于 16p-2）。**16p-1 ✅ 已合并**（#165，分支 `1.2/phase-16p1-ledger-post-local`）；
+QuizBuks 重测后先做了锁拆分（#167），再做 16p-2。**16p-2 ✅ 已实施**（分支 `1.2/phase-16p2-write-buffer`，待合并；2026-10-16 确认 P-2、P-8）。
+
+**16p-2 实施说明**（详见 D46 的"实现说明（16p-2）"与 `docs/perf/phase-16p-statements.md`）：
+- 实测（`StatementBudgetIT`，开 / 关）：`LEDGER_POST` 子流程自身 5 → 2（含根流程的事务 7 → 5）、根流程 6 → 5、`LEDGER_REVERSE` 10 → 9、`ORDER_PLACE` 13 → 11、`ORDER_SHIP` 16 → 12、
+  带幂等键的根流程 4 → 3、按已知版本更新 4 → 4、`HoldLock` 3 → 3；开关关时与 16p-1 逐项相同（`StatementBudgetWithoutHeldWritesIT`）。
+- 做法：缓冲随事务（`R2dbcStorageEngine` 的最外层事务）；携带的写入以 `WITH … SELECT * FROM (<查询>) jabiz_m WHERE (<各部分计数之和>) >= 0` 发出（一次性的门，先于查询执行）；
+  缓冲的更新 0 行时在其位置以 `jabiz_stale_<n>` 的转换失败中止语句，回滚后再读给出原来的 404 / 409；子流程的操作号由根流程的插入预取（至多 8 个，按 `CallProcess` 步骤数）。
+- 与计划不同之处：①应急开关关时回到 16p-1（验收标准），不是 P-8 所写的逐条执行（逐条执行仍是测试钩子）。②子流程的 `op_process` 能缓冲靠根流程预取操作号（计划未写如何在不发语句时取得号码）；
+  未调用的子流程留下空号。③时态实体的时间线读取按声明的表判断（明细总与版本同时写出），不按文本中的 `op_process_item`。④阻塞步骤与 `inNewTransaction` 之前也写出（计划未列）：
+  阻塞步骤可能调用外部系统，不应在一个注定失败的写入之后执行。⑤有时限的查询携带缓冲时，时限加上事务的 `lock_timeout`。⑥模板一律先写出（计划只写按表名判断）。
+  ⑦启动检查记下 schema 中视图读的表，并把 `op_process`、`op_process_result` 加入查找其他触发器的共享表。⑧`DictionaryRegistry.databaseDictionaries` 改经存储引擎，新增 ArchUnit 规则。
+- 示范压测（同一 jar，开关关 / 开交替各两轮）：发货约 67.4 → 71.4 次 / 秒（+6 %）、p50 147 → 139 ms，下单 71.7 → 75.4 次 / 秒（本机 CPU 饱和、发货不在热门锁上）；
+  QuizBuks 提交的发布锁内 14 → 7 条（预估），每个热门发布约 50 次 / 秒很可能达到、1.3 倍余量不确定，以 Q10 应用分支上的重测为准（`docs/perf/phase-16p-statements.md`）。
+- 测试：`HeldWritesIT`（12）与开关关时的同一组；`WriteCombiningIT`、`IntegrityIT`、`ForeignTriggersIT`、`DictionaryRegistryIT`、`HoldLockIT`、`ProcessEngineIT`、`ImportIT`、`StatementBudgetIT` 各在开关关时再跑一次
+  （`…WithoutHeldWritesIT`）；`ScenarioWithoutHeldWritesTest` 在开关关时回放全部场景并与同一快照比较；runtime 单元测试 `WriteBatchTest`（更新的部分、门、分块）、`R2dbcStorageEngineStatementsTest`、`TransactionStateTest`。
 
 **16p-1 实施说明**（详见 D46 的"实现说明（16p-1）"与 `docs/perf/phase-16p-statements.md`）：
 - 实测：`LEDGER_POST` 子流程 27 → 5、根流程 28 → 6、`LEDGER_REVERSE` 30 → 10、`ORDER_SHIP` 47 → 16、`ORDER_PLACE` 29 → 13、按已知版本更新 8 → 4（更新本身 3 → 1）、`HoldLock` 4 → 1、带幂等键的根流程 7 → 4（`StatementBudgetIT`，确切值）；
@@ -3816,8 +3831,8 @@ QB 提交锁内 48 → 16（16p-1）的明细：恢复超时 1 → 0（T1）、�
 **验收标准**
 
 - [x] 16p-1：`LEDGER_POST` 子流程（2 条分录、2 个实体维度、来源）≤ 5 条语句，根流程（同上，含设超时与 `COMMIT`）≤ 6 条；`ORDER_SHIP` ≤ 16 条；`HoldLock` 1 条；普通实体按已知版本更新 1 条（`StatementBudgetIT`）。
-- [ ] 16p-2：同上分别 ≤ 2、≤ 5、≤ 12；开关关时回到 16p-1 的数字。
-- [x] （16p-1 部分：1–11）"测试"中的 1–13 全部通过：借贷平衡、科目与维度与来源的校验、层级竞态、只写一次、只追加、审计内容逐行相同、封存与校验、Outbox、幂等、唯一性、已知版本更新、保存点、场景等价。
+- [x] 16p-2：同上分别 ≤ 2、≤ 5、≤ 12；开关关时回到 16p-1 的数字（实测 2、5、12；关时 5、6、16）。
+- [x] （16p-1 部分：1–11；16p-2：12、13 与开关关时的同一组）"测试"中的 1–13 全部通过：借贷平衡、科目与维度与来源的校验、层级竞态、只写一次、只追加、审计内容逐行相同、封存与校验、Outbox、幂等、唯一性、已知版本更新、保存点、场景等价。
 - [x] 错误码、接口、OpenAPI 不变；只有迁移 `V40`；`./gradlew check` 通过（16p-1）。
 - [x] （16p-1 前后）示范压测报告 `docs/perf/phase-16p-statements.md`：`ORDER_SHIP` 每个事务的语句数与吞吐的前后对照。
 - [x] 文档（D46、06、04、03、11、21、13、CLAUDE.md、ROADMAP）已更新（16p-1）。

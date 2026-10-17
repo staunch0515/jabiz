@@ -5,6 +5,7 @@ import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.storage.JsonText;
 import com.jabiz.runtime.storage.Rows;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.storage.TransactionState;
 import com.jabiz.temporal.VersionAction;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -65,6 +66,22 @@ public class OperationRecorder {
      */
     public Mono<Operation> beginNumbered(StorageEngine engine, OperationRequest request, RequestContext context,
         String lockTimeout) {
+        return beginNumbered(engine, request, context, lockTimeout, 0);
+    }
+
+    /**
+     * As {@link #beginNumbered(StorageEngine, OperationRequest, RequestContext, String)}, drawing in the same statement
+     * {@code reserve} further numbers for the sub-processes the operation may start (ROADMAP phase 16p-2, T9): they
+     * are kept in the transaction's state ({@link TransactionState#reserveSequence}), and a sub-process that takes one
+     * has its {@code op_process} row held and written with a later statement. The numbers are drawn after the
+     * operation's own, in order, so a sub-process still numbers after its parent and its earlier siblings; one not used
+     * is a gap, as the number of a rolled back operation is.
+     */
+    public Mono<Operation> beginNumbered(StorageEngine engine, OperationRequest request, RequestContext context,
+        String lockTimeout, int reserve) {
+        if (reserve < 0 || reserve > MAX_RESERVE) {
+            throw new IllegalArgumentException("reserve must be 0 to " + MAX_RESERVE + ", not " + reserve);
+        }
         return Mono.defer(() -> {
             Map<String, Object> row = columns(request, context);
             List<String> names = new ArrayList<>(List.of("process_seq_id"));
@@ -85,10 +102,35 @@ public class OperationRecorder {
                 }
             });
             String sql = "INSERT INTO op_process (" + String.join(", ", names) + ") VALUES ("
-                + String.join(", ", markers) + ") RETURNING process_seq_id";
-            return engine.select(sql, params).next()
-                .map(inserted -> operation(Rows.longValue(inserted.get("process_seq_id")), request, context, row));
+                + String.join(", ", markers) + ") RETURNING process_seq_id"
+                // Evaluated once the row is inserted, so after its own number; the count is the caller's, not input.
+                + (reserve == 0 ? "" : ", ARRAY(SELECT nextval('op_process_seq') FROM generate_series(1, " + reserve
+                    + ") ORDER BY 1) AS jabiz_reserved");
+            return Mono.deferContextual(view -> engine.select(sql, params).next().map(inserted -> {
+                if (reserve > 0) {
+                    List<Long> reserved = reservedNumbers(inserted.get("jabiz_reserved"));
+                    engine.transactionState(view).ifPresent(state -> state.reserveSequence(reserved));
+                }
+                return operation(Rows.longValue(inserted.get("process_seq_id")), request, context, row);
+            }));
         });
+    }
+
+    /** Most numbers {@link #beginNumbered(StorageEngine, OperationRequest, RequestContext, String, int)} draws ahead. */
+    public static final int MAX_RESERVE = 8;
+
+    private static List<Long> reservedNumbers(Object value) {
+        List<Long> numbers = new ArrayList<>();
+        if (value instanceof Object[] array) {
+            for (Object number : array) {
+                numbers.add(((Number) number).longValue());
+            }
+        } else if (value instanceof long[] array) {
+            for (long number : array) {
+                numbers.add(number);
+            }
+        }
+        return numbers;
     }
 
     /** The columns of an operation's row besides its number; null where nothing is recorded. */

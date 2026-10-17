@@ -93,6 +93,30 @@ class ArchitectureTest {
             .check(CLASSES);
     }
 
+    /**
+     * Statements of a transaction go through the storage engine (decision D46 rule 1): it writes the rows the
+     * transaction holds before any statement that may read them, which a statement sent past it on the same
+     * connection would not see. Besides the engine's own package, only code that runs outside every transaction
+     * talks to the database itself: the startup check of the metamodel, the sequence an application may replace
+     * (with its configuration), and the connections of their own of the job lock, the dictionary notifications and
+     * the schema migrations.
+     */
+    @Test
+    void transactionsReachTheDatabaseOnlyThroughTheStorageEngine() {
+        noClasses().that().resideInAPackage("com.jabiz..")
+            .and().resideOutsideOfPackage("com.jabiz.runtime.storage..")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.entity.MetaModelConsistencyChecker")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.process.DatabaseProcessSequence")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.process.ProcessConfig")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.job.JobConfig")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.dictionary.DictionaryChangeListener")
+            .and().doNotHaveFullyQualifiedName("com.jabiz.runtime.config.PlatformSchemaMigration")
+            .should().dependOnClassesThat().haveFullyQualifiedName("org.springframework.r2dbc.core.DatabaseClient")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("io.r2dbc.spi.ConnectionFactory")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("io.r2dbc.spi.Connection")
+            .check(CLASSES);
+    }
+
     /** Extension points (RulePredicate, StepImplementation, and every later one in core) are synchronous. */
     @Test
     void coreAndBusinessMethodsNeverReturnReactiveTypes() {

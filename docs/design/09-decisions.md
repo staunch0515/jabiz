@@ -1352,7 +1352,7 @@ Google 的品牌指南要求登录按钮用四色"G"；单色"G"不易被认出�
 ⑤由数据库触发器写审计（D27 已否定）。
 
 **实施分两步**（P-2）：**16p-1**（已实施）只在单个步骤或单次提交之内：第 2–7 条全部，第 1 条限于一次 `commitBatch` 之内的插入（下称"提交内的合并"）；
-**16p-2**（待做，实测之后）把第 1 条扩大到整个事务（跨步骤与提交、子流程的操作记录、`PublishEvent`、幂等结果），并带来应急开关（P-8 只适用于 16p-2）。
+**16p-2**（已实施，见"实现说明（16p-2）"）把第 1 条扩大到整个事务（跨步骤与提交、子流程的操作记录、`PublishEvent`、幂等结果、按已知版本的更新），并带来应急开关（P-8 只适用于 16p-2）。
 
 **实现说明（16p-1）**：
 ①**提交内的合并**（T6）：`StorageEngine.withWriteBatch(work)`；`DatasetEntityManager.commitBatch` 以它包住全部变更。其间 `insert` 只登记行（`R2dbcStorageEngine` 的缓冲在 Reactor 上下文中，按引擎区分）；
@@ -1396,3 +1396,40 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 ⑫**观测**：`jabiz.process.statements`（每次根流程在提交前已发的语句数，分布，标签只有 `process`，D16）。
 ⑬**语句预算**：`StatementBudgetIT`（确切值，失败时列出语句）；数字与实测见 `docs/perf/phase-16p-statements.md`。
 ⑭只追加的保证不变：合并后的语句只有 `INSERT`；测试的语句判断（`SqlStatementLog.mutatedTables`、`insertedTables`）识别 `WITH` 中的子语句。迁移只有 `V40`，接口、错误码与 OpenAPI 不变。
+
+**实现说明（16p-2，T9 事务内写缓冲）**：
+①**缓冲的范围**：`jabiz.storage.write-batching.enabled`（缺省 `true`，`WriteBatching.acrossTransaction()`）时，`R2dbcStorageEngine` 的最外层 `inTransaction`（以及 `inNewTransaction` 自己的事务）各有一个缓冲，
+随事务存在；`withWriteBatch` 不再自己收集与写出，只标明"其中的写入可以缓冲"。可缓冲的：`commitBatch` 中的全部插入（T6 的各表）、普通实体按已知版本与先读后的更新连同其审计与事件（T7，更新、审计、事件同在缓冲中）、
+子流程的 `op_process`（见④）、`PublishEvent` 的事件（`OutboxEventPublisher`）、幂等结果（`op_process_result`）。其余写入（根流程的 `op_process`、`sys_event_consumption`、编号、平台的其他记录、
+不在可缓冲范围内的插入、更新与删除、`select` 中不以 `SELECT` 开头的语句）发出前先把缓冲全部写出，自身照旧单独一条——它们的错误处理（重复投递、令牌重用等依赖唯一约束的即时冲突）因此不变。
+②**写出规则**（"读之前写出"）：下一条语句读或写缓冲中的表时（按语句文本中的表名，或 `select(sql, params, tables)` 声明的表；表名包括启动检查记下的视图，见⑥），缓冲先单独写出；
+模板（`executeRawQuery`）一律先写出（模板可能经函数与视图读取）；否则缓冲随这条语句写出（"携带"）：`WITH <缓冲的各部分> SELECT * FROM (<语句>) jabiz_m WHERE (<各部分的计数之和>) >= 0`。
+这个条件与任何行无关，PostgreSQL 把它作为一次性的门（one-time filter）在语句执行之前求值，各部分因此在语句之前、按登记顺序执行（标量子查询从左到右），
+语句自己的快照与它在这些写入之后单独发出时对它所读的表看到的相同（它不读缓冲中的表）。只携带于查询（以 `SELECT` 开头的平台语句、编译出的计划、合并的读取）；有时限的查询携带时，
+客户端的时限加上事务的 `lock_timeout`（缓冲的写入可能等锁，逐条执行时也等这么久），事务没有已知的 `lock_timeout` 时不携带。保存点建立前、释放前、阻塞步骤（`BlockingStep`）之前、
+`inNewTransaction` 之前、根流程记录语句数之前与提交之前一定写出；事务因非数据库的错误失败时先写出（之前的写入若冲突，报告的是它）。
+③**更新与登记顺序**：一条语句中，更新把前后的插入分开（更新之前的行、更新与它的审计和事件、更新之后的行各为部分），所以每张表仍按登记顺序收到它的行（`record_no` 的顺序不变）；
+同一张表的插入与更新不在同一条语句中（先写出）。更新的计数项是 `CAST(CASE WHEN (SELECT count(*) FROM jabiz_wN) > 0 THEN '0' ELSE 'jabiz_stale_N' END AS bigint)`：
+更新了 0 行时在读到它的位置失败（SQLSTATE 22P02，文本中有部分编号），之后的部分不再执行——所以最早的问题被报告，即使后面的行也会冲突（`HeldWritesIT`）。
+失败的事务（或保存点）回滚之后，由该更新登记的回答给出错误：按已知版本的更新再读一次（已删除或在范围外 404，版本不同 409，与 16p-1 相同的消息），先读后更新的照旧 409。
+最外层事务在回滚之后、事务之外再读；保存点在 `ROLLBACK TO` 之后、事务之内再读。
+④**子流程的操作号**：缺省的 `DatabaseProcessSequence` 时，根流程的 `op_process` 插入同时取 N 个号（`RETURNING …, ARRAY(SELECT nextval('op_process_seq') FROM generate_series(1, N) ORDER BY 1)`），
+N 为该流程的 `CallProcess` 步骤（连同被调流程的，`forEach` 计一次）之数，至多 8；号码在根流程的号之后、按顺序，存在事务状态中。子流程有号可取时，其 `op_process` 行进入缓冲
+（`LEDGER_POST` 中由取科目锁的语句携带）；号用完（`forEach` 的更多调用、导入的行）则照旧一条。条件不成立未调用的子流程留下空号，与回滚的操作留下的空号一样（`op_process_seq` 本来不连续）。
+号码仍来自数据库序列、子流程仍在父流程之后编号；保存点回滚不归还已取的号。
+⑤**错误与日志**（P-7）：冲突照旧按约束名与 `Key (…)=(…)` 映射回该行登记时的错误（16p-1 的 `InsertConflicts`）；每行带着登记它的流程与步骤（`WriteOrigin`），写出失败时日志写明。
+执行过语句失败之后（事务已中止）不再尝试写出（缓冲标记为失败，回滚到保存点后清除）。
+⑥**视图**：启动检查 `METAMODEL` 记下 schema 中每个视图（含物化视图）经其他视图读到的表（`WriteBatching.viewsOver`），语句文本中出现这样的视图名即视为读该表；平台自己的 `sys_dict_item` 照旧固定记下。
+检查被关闭时只认平台的视图（模板照旧一律先写出）。启动检查查找平台之外触发器的共享表增加 `op_process`、`op_process_result`（有则一切不合并，子流程、事件、结果也不缓冲）。
+⑦**时态实体的时间线**：读版本的语句连接 `op_process_item`，但一行明细总与它的版本同时登记、同时写出，所以只看该实体表在缓冲中有没有行（`TemporalStore` 以声明的表读取）；历史（另连 `op_process`）照旧按文本判断。
+⑧**`DatabaseClient` 的使用者**：事务中的语句只经存储引擎（ArchUnit `transactionsReachTheDatabaseOnlyThroughTheStorageEngine`）；例外只有事务之外的启动检查、可替换的序列与其配置、
+任务锁、字典通知与迁移各自的连接。`DictionaryRegistry.databaseDictionaries` 改经存储引擎。
+⑨**应急开关**：`false` 时回到 16p-1（每次 `commitBatch` 结束写出、按已知版本的更新单独一条、子流程的操作记录、事件与结果各自一条），语句预算回到 16p-1 的数字（`StatementBudgetWithoutHeldWritesIT`）。
+P-8 原写"`false` 即逐条执行（16p-1 的局部合并同样受它控制）"，与验收标准"开关关时回到 16p-1 的数字"不一致；按验收标准实施：开关只控制 T9，逐条执行仍只是测试钩子 `WriteBatching.statementByStatement`。
+⑩**等价性与保证**：`HeldWritesIT`（携带的写入先于取锁、之后的失败报告之前的冲突、阻塞步骤之前写出、事件随缓冲且回滚时没有、子流程的预取号、缓冲的更新与同一语句中之后的冲突、
+视图与模板与声明的表、新事务之前写出、保存点中失败的行连同其审计不留下）；`WriteCombiningIT`、`IntegrityIT`、`ForeignTriggersIT`、`DictionaryRegistryIT`、`HoldLockIT`、`ProcessEngineIT`、`ImportIT`、
+`HeldWritesIT`、`StatementBudgetIT` 各在开关开与关时各跑一次（`…WithoutHeldWritesIT`）；全部场景在开关关时回放到同样的快照（`ScenarioWithoutHeldWritesTest`）。
+语句预算（开 / 关）：`LEDGER_POST` 子流程自身 2 / 5（含根流程的事务 5 / 7）、根流程 5 / 6、`LEDGER_REVERSE` 9 / 10、`ORDER_PLACE` 11 / 13、`ORDER_SHIP` 12 / 16、带幂等键的根流程 3 / 4、
+按已知版本更新 4 / 4、`HoldLock` 3 / 3；实测见 `docs/perf/phase-16p-statements.md`。
+⑪**局限**：有时限的查询携带缓冲时，查询自己的时限放宽了事务的 `lock_timeout`（否则缓冲的写入等锁时会以 503 而不是逐条执行时的 409 结束）；应用的 SQL 函数在编译出的计划或平台语句中读缓冲的表时看不到它们
+（模板一律先写出，计划只由元数据编译，平台的函数不读表）；启动检查关闭时应用的视图不被识别。迁移照旧只有 `V40`，接口、错误码与 OpenAPI 不变。

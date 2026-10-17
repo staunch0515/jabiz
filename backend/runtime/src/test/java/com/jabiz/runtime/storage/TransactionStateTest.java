@@ -3,6 +3,7 @@ package com.jabiz.runtime.storage;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,6 +68,20 @@ class TransactionStateTest {
         assertThat(state.find("Account", "a1")).contains(read("accounts"));
         assertThat(state.find("Order", "o1")).isEmpty();
         assertThat(state.statements()).isEqualTo(2);
+    }
+
+    @Test
+    void numbersDrawnAheadAreTakenInOrderAndARollbackDoesNotGiveThemBack() {
+        TransactionState state = new TransactionState();
+        state.reserveSequence(List.of(11L, 12L));
+        TransactionState saved = state.snapshot();
+
+        assertThat(state.takeReservedSequence()).contains(11L);
+        state.restore(saved);
+
+        // A number once taken may have been written and rolled back: it is a gap, never used twice.
+        assertThat(state.takeReservedSequence()).contains(12L);
+        assertThat(state.takeReservedSequence()).isEmpty();
     }
 
     @Test

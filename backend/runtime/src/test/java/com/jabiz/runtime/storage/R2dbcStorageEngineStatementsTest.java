@@ -73,6 +73,40 @@ class R2dbcStorageEngineStatementsTest {
     }
 
     @Test
+    void onlyAStatementThatSelectsCanCarryHeldWrites() {
+        assertThat(R2dbcStorageEngine.isQuery("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(:k)) l")).isTrue();
+        assertThat(R2dbcStorageEngine.isQuery("  select\n* from t")).isTrue();
+        // A WITH may hold a data-modifying part; anything else may write, set or lock: never carried.
+        assertThat(R2dbcStorageEngine.isQuery("WITH c AS (SELECT 1) SELECT * FROM c")).isFalse();
+        assertThat(R2dbcStorageEngine.isQuery("INSERT INTO op_process (a) VALUES (1) RETURNING a")).isFalse();
+        assertThat(R2dbcStorageEngine.isQuery("UPDATE t SET a = 1 RETURNING a")).isFalse();
+        assertThat(R2dbcStorageEngine.isQuery("SET TRANSACTION READ ONLY")).isFalse();
+        assertThat(R2dbcStorageEngine.isQuery("SELECTED")).isFalse();
+    }
+
+    @Test
+    void aCarryingQueryWaitsAlsoAsLongAsTheTransactionsLocks() {
+        assertThat(R2dbcStorageEngine.lockTimeout(new TransactionLockTimeout("30000ms")))
+            .contains(java.time.Duration.ofSeconds(30));
+        assertThat(R2dbcStorageEngine.lockTimeout(new TransactionLockTimeout("30s"))).isEmpty();
+    }
+
+    @Test
+    void aConflictOfAHeldRowIsItsWritesAndOtherErrorsStayAsTheyAre() {
+        UUID key = UUID.randomUUID();
+        List<WriteBatch.Row> rows = List.of(row("entity_registry", "entity_id", key, "held"));
+        UniqueKeyViolationException conflict = new UniqueKeyViolationException("entity_registry_pkey",
+            "entity_registry", "Key (entity_id)=(" + key + ") already exists.", null);
+
+        assertThat(R2dbcStorageEngine.heldError(conflict, rows, Map.of(), true)).hasMessage("held:entity_registry");
+        IllegalStateException other = new IllegalStateException("no");
+        assertThat(R2dbcStorageEngine.heldError(other, rows, Map.of(), true)).isSameAs(other);
+        // A conflict of the statement itself (another table): its own.
+        UniqueKeyViolationException own = new UniqueKeyViolationException("x_pkey", "x", null, null);
+        assertThat(R2dbcStorageEngine.heldError(own, rows, Map.of(), true)).isSameAs(own);
+    }
+
+    @Test
     void aRowIsPassedAsJsonOfItsColumns() {
         Map<String, Object> record = new LinkedHashMap<>();
         record.put("process_seq_id", 7L);
