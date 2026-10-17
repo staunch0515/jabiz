@@ -90,6 +90,8 @@ run "${ok_env[@]}" -- guard --base-url ftp://localhost
 check "not http(s): refused" '[[ $code == 2 && $out == *"not an http(s) address"* ]]'
 run "${ok_env[@]}" -- guard --base-url https://prod.quizbuks.test
 check "every problem at once" '[[ $code == 2 && $out == *"production host"* && $out == *"--allow-remote"* ]]'
+run "${ok_env[@]}" STRIPE_TM_PRODUCTION_HOSTS_FILE="$work/no-such-hosts" -- guard
+check "a missing production hosts file: refused" '[[ $code == 2 && $out == *"production hosts file"*"no-such-hosts"* ]]'
 
 # 3. Live mode in this environment.
 run "${ok_env[@]}" QB_STRIPE_LIVEMODE=true -- guard
@@ -126,6 +128,17 @@ run --
 check "no command: usage" '[[ $code == 2 && $out == *"run.sh serve"* ]]'
 run "${ok_env[@]}" -- serve --nonsense
 check "serve: unknown option" '[[ $code == 1 && $out == *"unknown option"* ]]'
+
+# 5b. Nothing listening: a FAIL in the summary and a results file (no traceback), in a private state directory.
+rm -rf "$work/state"
+run STRIPE_TM_ADMIN_PASSWORD=$ADMIN -- run --stub --base-url http://localhost:1
+check "connection error: FAIL with a summary" '[[ $code == 1 && $out == *"preflight   FAIL"*"Connection refused"* && $out == *"results:"* && $out != *Traceback* ]]'
+check "connection error: results file written" '[[ -n $(ls "$work/state"/results-*.json 2>/dev/null) ]]'
+check "run makes the state directory private" '[[ $(python3 -I -c "import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777))" "$work/state") == 0o700 ]]'
+chmod 755 "$work/state"
+run STRIPE_TM_ADMIN_PASSWORD=$ADMIN -- run --stub --base-url http://localhost:1
+check "run tightens an existing state directory" '[[ $(python3 -I -c "import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777))" "$work/state") == 0o700 ]]'
+rm -rf "$work/state"
 
 # 6. serve's settings reach run only for serve's own address, and never over a set value.
 mkdir -p "$work/state"
