@@ -41,7 +41,10 @@ import java.util.function.Supplier;
  * {@code LOAD_CONCURRENCY} (32), {@code LOAD_DURATION} (60s), {@code LOAD_WARMUP} (10s), {@code LOAD_REPORT}
  * (a Markdown file to write), {@code LOAD_SCENARIOS} (comma-separated subset), {@code LOAD_TIMEOUT} (60s; a request
  * not answered by then counts as 599, its client gone), {@code LOAD_HOT_ORDER} ({@code yes}:
- * also the hot-order mode of phase 16o, decision D45 - many requests crowding one order's lock while others read).
+ * also the hot-order mode of phase 16o, decision D45 - many requests crowding one order's lock while others read),
+ * {@code LOAD_SHIP} ({@code yes}: also the shipping mode of phase 16p, decision D46 - every worker places an order and
+ * ships it, which posts the sale to the ledger; {@code ORDER_PLACE} and {@code ORDER_SHIP} are measured apart; with
+ * {@code LOAD_SCENARIOS=ship} the shipping mode alone, after the seeding).
  */
 public final class LoadTest {
 
@@ -158,6 +161,9 @@ public final class LoadTest {
         }
         if ("yes".equalsIgnoreCase(env("LOAD_HOT_ORDER", "no"))) {
             hotOrder(concurrency, duration);
+        }
+        if ("yes".equalsIgnoreCase(env("LOAD_SHIP", "no"))) {
+            ship(concurrency, warmup, duration);
         }
         String path = System.getenv("LOAD_REPORT");
         if (path != null && !path.isBlank()) {
@@ -318,6 +324,62 @@ public final class LoadTest {
             duration, () -> post("/api/datasets/" + PRODUCTS + "/query", Map.of("limit", 20)));
         line(writers.join().row());
         line(readers.row());
+    }
+
+    /**
+     * The shipping mode (phase 16p, decision D46): each of {@code concurrency} workers places an order of one to three
+     * lines and ships it, over and over; shipping takes the order's lock, takes the goods out and posts the sale
+     * ({@code LEDGER_POST} as its sub-process: receivables to sales revenue, the order as the source document). Placing
+     * and shipping are measured apart. The two accounts are opened first when the ledger lacks them.
+     */
+    private void ship(int concurrency, Duration warmup, Duration duration) {
+        for (String[] account : List.of(new String[] {"1130", "ASSET"}, new String[] {"4120", "REVENUE"})) {
+            // 400 when it exists already (the code is unique): fine.
+            post("/api/processes/LEDGER_ACCOUNT_OPEN/latest", Map.of("accountCode", account[0],
+                "accountName", "Account " + account[0], "accountType", account[1]));
+        }
+        Stats placing = new Stats("ship mode: process ORDER_PLACE (1-3 lines)", concurrency);
+        Stats shipping = new Stats("ship mode: process ORDER_SHIP (posts the sale)", concurrency);
+        AtomicLong no = new AtomicLong();
+        long warmupEnd = System.nanoTime() + warmup.toNanos();
+        long end = warmupEnd + duration.toNanos();
+        try (ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < concurrency; i++) {
+                workers.submit(() -> {
+                    while (System.nanoTime() < end) {
+                        long started = System.nanoTime();
+                        String orderId;
+                        int status;
+                        try {
+                            HttpResponse<String> placed = send("POST", "/api/processes/ORDER_PLACE/latest",
+                                orderInput("X" + run + "-" + no.incrementAndGet()));
+                            status = placed.statusCode();
+                            orderId = status == 200
+                                ? JSON.readTree(placed.body()).get("output").get("orderId").asString() : null;
+                        } catch (Exception e) {
+                            status = 599;
+                            orderId = null;
+                        }
+                        boolean counted = started >= warmupEnd;
+                        if (counted) {
+                            placing.record(System.nanoTime() - started, status);
+                        }
+                        if (orderId == null) {
+                            continue;
+                        }
+                        long shipStarted = System.nanoTime();
+                        int shipped = post("/api/processes/ORDER_SHIP/latest", Map.of("orderId", orderId));
+                        if (counted) {
+                            shipping.record(System.nanoTime() - shipStarted, shipped);
+                        }
+                    }
+                });
+            }
+        }
+        placing.elapsedNanos = duration.toNanos();
+        shipping.elapsedNanos = duration.toNanos();
+        line(placing.row());
+        line(shipping.row());
     }
 
     /** Runs {@code call} on {@code concurrency} virtual threads; records only after the warm-up. */

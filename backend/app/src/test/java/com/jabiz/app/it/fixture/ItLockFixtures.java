@@ -116,6 +116,26 @@ public final class ItLockFixtures {
                     ctx -> ctx.get("input", LockInput.class).name(), BRIEF_WAIT))
                 .step("Read the lock timeout", ReadLockTimeout.class, NoMetadata.INSTANCE));
 
+    /**
+     * Takes a free lock with a brief wait of its own (the platform function, one statement), then the lock of the
+     * input's name with the transaction's wait: after the first, the second still waits as long as the transaction
+     * allows (ROADMAP phase 16p, T1).
+     */
+    public static final ProcessDefinition<LockInput, LockOutput, ProcessContext> BRIEFLY_THEN_HELD =
+        ProcessDefinition.define("IT_LOCK_BRIEFLY_THEN_HELD", 1, LockInput.class, LockOutput.class,
+            ProcessContext.class, pb -> pb
+                .permissions(PERMISSION)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put("input", input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> new LockOutput(ctx.get("input", LockInput.class).gate()))
+                .step("Take a free lock briefly", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get("input", LockInput.class).name() + ":free", BRIEF_WAIT))
+                .step("Take the held lock", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get("input", LockInput.class).name())));
+
     /** Puts the transaction's {@code lock_timeout} into the context (a platform-style step, for the test only). */
     @Component
     public static class ReadLockTimeout implements StepHandler<NoMetadata, ProcessContext> {
@@ -172,6 +192,11 @@ public final class ItLockFixtures {
         @Bean
         ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockTimeoutProbe() {
             return LOCK_TIMEOUT_PROBE;
+        }
+
+        @Bean
+        ProcessDefinition<LockInput, LockOutput, ProcessContext> itLockBrieflyThenHeld() {
+            return BRIEFLY_THEN_HELD;
         }
     }
 }

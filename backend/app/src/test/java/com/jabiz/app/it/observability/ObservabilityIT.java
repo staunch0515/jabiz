@@ -6,6 +6,7 @@ import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.test.PostgresIntegrationTest;
 import com.jabiz.runtime.test.TestTokens;
 import io.micrometer.common.KeyValue;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.observation.Observation;
@@ -143,6 +144,15 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .tags("process", "ORDER_PLACE", "outcome", "rejected", "status", "422").timer();
         assertThat(rejected).isNotNull();
         assertThat(rejected.count()).isPositive();
+
+        // The statements of a process's transaction, by the process's name only (ROADMAP phase 16p, decision D46).
+        DistributionSummary statements = meters.find(PlatformObservations.PROCESS_STATEMENTS)
+            .tags("process", "ORDER_PLACE").summary();
+        assertThat(statements).isNotNull();
+        assertThat(statements.getId().getTags()).extracting(io.micrometer.core.instrument.Tag::getKey)
+            .containsExactly("process");
+        assertThat(statements.count()).isPositive();
+        assertThat(statements.max()).isGreaterThanOrEqualTo(5);
     }
 
     /** Public reads (docs/design/15-public-access.md section 8): the template's name and the result, nothing else. */

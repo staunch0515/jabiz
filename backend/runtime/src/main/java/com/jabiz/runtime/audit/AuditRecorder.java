@@ -4,6 +4,7 @@ import com.jabiz.audit.AuditDiff;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.operation.Operations;
+import com.jabiz.runtime.storage.JsonText;
 import com.jabiz.runtime.storage.StorageEngine;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -54,6 +55,16 @@ public class AuditRecorder {
 
     public Mono<Void> record(StorageEngine engine, EntityDefinition def, Object id, String action, Long version,
         Instant effective, Map<String, ?> before, Map<String, ?> after) {
+        return row(def, id, action, version, effective, before, after)
+            .flatMap(row -> engine.insert(row.table(), row.record()));
+    }
+
+    /**
+     * The row {@link #record} inserts, for a statement that writes it together with the change it records (an update
+     * at a known version, ROADMAP phase 16p, T7); empty when nothing changed.
+     */
+    public Mono<StorageEngine.Insert> row(EntityDefinition def, Object id, String action, Long version,
+        Instant effective, Map<String, ?> before, Map<String, ?> after) {
         Map<String, AuditDiff.Change> changes = AuditDiff.of(def, before, after);
         // Nothing changed: an update to the same values, or a rebased tombstone (nothing before, nothing after).
         if (changes.isEmpty() && (before == null) == (after == null)) {
@@ -61,7 +72,7 @@ public class AuditRecorder {
         }
         return Mono.deferContextual(view -> Operations.current().flatMap(operation -> (operation.isPresent()
                 ? Mono.just(operation.get().actorId()) : RequestContexts.current().map(r -> r.actorId()))
-            .flatMap(actor -> {
+            .map(actor -> {
             Map<String, Object> values = new LinkedHashMap<>();
             changes.forEach((field, change) -> values.put(field, new Object[] {change.before(), change.after()}));
             Map<String, Object> row = new LinkedHashMap<>();
@@ -71,13 +82,13 @@ public class AuditRecorder {
             row.put("action", action);
             row.put("version_no", version);
             row.put("effect_start_time", effective);
-            row.put("changes", json.writeValueAsString(values));
+            row.put("changes", new JsonText(json.writeValueAsString(values)));
             row.put("changed_fields", changes.keySet().toArray(String[]::new));
             row.put("actor_id", actor);
             row.put("recorded_time", operation.map(o -> o.opTime()).orElseGet(clock::instant));
             row.put("reason", operation.map(o -> o.reason())
                 .orElseGet(() -> view.<String>getOrEmpty(REASON_KEY).orElse(null)));
-            return engine.insert(TABLE, row);
+            return new StorageEngine.Insert(TABLE, row);
         })));
     }
 }

@@ -84,9 +84,7 @@ class SupplierIT extends PostgresIntegrationTest {
         post(COMMIT, TestTokens.bearer(tokens, "it-reader", "commerce.supplier.read"), Map.of("changes", List.of()))
             .expectStatus().isForbidden();
 
-        assertThat(SqlStatementLog.STATEMENTS.stream().map(s -> s.strip().toUpperCase(Locale.ROOT))
-            .filter(s -> s.contains("SUPPLIER_VERSION"))
-            .filter(s -> s.startsWith("UPDATE") || s.startsWith("DELETE") || s.startsWith("INSERT")))
-            .isNotEmpty().allSatisfy(s -> assertThat(s).startsWith("INSERT"));
+        assertThat(SqlStatementLog.writing("supplier_version"))
+            .isNotEmpty().allSatisfy(s -> assertThat(SqlStatementLog.mutatedTables(s)).doesNotContain("supplier_version"));
     }
 }

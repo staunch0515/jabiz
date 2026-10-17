@@ -5,6 +5,8 @@ import com.jabiz.entity.TemporalSpec;
 import com.jabiz.entity.UniqueConstraint;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.storage.WriteBatching;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
@@ -42,10 +44,18 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
 
     private final DatabaseClient db;
     private final EntityDefinitionRegistry registry;
+    private final WriteBatching batching;
 
     public MetaModelConsistencyChecker(DatabaseClient db, EntityDefinitionRegistry registry) {
+        this(db, registry, new WriteBatching());
+    }
+
+    /** @param batching learns which entities' commits are not combined into one statement (decision D46) */
+    @Autowired
+    public MetaModelConsistencyChecker(DatabaseClient db, EntityDefinitionRegistry registry, WriteBatching batching) {
         this.db = db;
         this.registry = registry;
+        this.batching = batching;
     }
 
     /** Operation tables, append-only like every temporal table (decision D4). */
@@ -87,6 +97,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                 .map(field -> "Entity " + def.name + ": field " + field.name()
                               + " -> missing column " + field.physicalColumn()
                               + " in table " + def.physicalTable);
+            columns = columns.concatWith(checkOtherTriggers(def));
             if (def.temporal) {
                 // Uniqueness of temporal entities is enforced by locks, not indexes (decision D6).
                 Flux<String> rowId = actual.contains(def.temporalSpec.rowIdColumn().toLowerCase(Locale.ROOT))
@@ -156,6 +167,35 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
             return Flux.fromIterable(problems);
         });
         return indexes.concatWith(foreignKeys).concatWith(checkAppendOnlyGuard(label, def.physicalTable));
+    }
+
+    /**
+     * Triggers of the entity's table besides the platform's own (decision D46 rule 1): a commit of the entity then has
+     * its inserts written one statement at a time, as such a trigger may rely on, and the finding is a warning.
+     */
+    private Flux<String> checkOtherTriggers(EntityDefinition def) {
+        return db.sql("""
+                select t.tgname as tgname
+                from pg_trigger t
+                join pg_proc p on p.oid = t.tgfoid
+                where t.tgrelid = to_regclass(:tableName) and not t.tgisinternal and t.tgenabled <> 'D'
+                  and not (p.proname = any(:platform))
+                order by t.tgname
+                """)
+            .bind("tableName", def.physicalTable)
+            .bind("platform", WriteBatching.PLATFORM_TRIGGER_FUNCTIONS.toArray(String[]::new))
+            .map((row, meta) -> row.get("tgname", String.class))
+            .all()
+            .collectList()
+            .flatMapMany(names -> {
+                if (names.isEmpty()) {
+                    return Flux.empty();
+                }
+                batching.exclude(def.name);
+                return Flux.just(WARNING + "Entity " + def.name + ": table " + def.physicalTable + " has triggers "
+                    + names + " besides the platform's; its inserts are written one statement at a time "
+                    + "(decision D46)");
+            });
     }
 
     /**

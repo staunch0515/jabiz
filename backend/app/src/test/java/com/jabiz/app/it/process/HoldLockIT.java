@@ -222,6 +222,50 @@ class HoldLockIT extends PostgresIntegrationTest {
             .isEqualTo(new LockOutput("2s"));
     }
 
+    /**
+     * The shorter wait of one lock (one statement, the function of V40) is put back: a later wait of the same
+     * transaction waits as long as the transaction allows (4 s here), not 300 ms (ROADMAP phase 16p, T1).
+     */
+    @Test
+    void afterALockWithItsOwnWaitTheTransactionWaitsAsLongAsBefore() throws Exception {
+        String name = unique("period");
+        String held = unique("held");
+        CountDownLatch release = close(held);
+        CompletableFuture<LockOutput> holder = start(name, false, held, false);
+        awaitArrived(held, 1);
+
+        assertThat(timeToGiveUp(() -> start(ItLockFixtures.BRIEFLY_THEN_HELD, name, false, unique("late"), false)))
+            .isGreaterThanOrEqualTo(Duration.ofSeconds(3)).isLessThan(Duration.ofSeconds(12));
+        release.countDown();
+        holder.get(10, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A concurrent duplicate of an idempotency key waits on the key in the very statement that records its operation
+     * (ROADMAP phase 16p, T2): the transaction's wait, set by that same statement, still bounds it - here a job item's
+     * 300 ms rather than the global 4 s.
+     */
+    @Test
+    void aDuplicateOfARunningKeyWaitsNoLongerThanTheTransactionAllows() throws Exception {
+        String name = unique("keyed");
+        String held = unique("held");
+        String key = "dup-" + UUID.randomUUID();
+        CountDownLatch release = close(held);
+        CompletableFuture<ProcessResult<LockOutput>> first = asTestRequest(executor.run(ItLockFixtures.LOCKED,
+            new LockInput(name, false, held, false), ExecutionOptions.idempotent(key))).toFuture();
+        awaitArrived(held, 1);
+
+        assertThat(timeToGiveUp(() -> asTestRequest(executor.run(ItLockFixtures.LOCKED,
+                new LockInput(name, false, held, false),
+                ExecutionOptions.idempotent(key).withLockWait(Duration.ofMillis(300))))
+            .map(ProcessResult::output).toFuture())).isLessThan(Duration.ofSeconds(3));
+        release.countDown();
+        assertThat(first.get(10, TimeUnit.SECONDS).replayed()).isFalse();
+        // Once the first has committed, the duplicate replays it.
+        assertThat(asTestRequest(executor.run(ItLockFixtures.LOCKED, new LockInput(name, false, held, false),
+            ExecutionOptions.idempotent(key))).block().replayed()).isTrue();
+    }
+
     @Test
     void waitingLongerThanTheTimeoutIsAConflict() throws Exception {
         String name = unique("period");

@@ -226,8 +226,8 @@ class ImportIT extends PostgresIntegrationTest {
             "SKU", "quantity", "Qty"));
 
         // Everything ran - rows 1 and 5 were received - and nothing stayed.
-        assertThat(SqlStatementLog.STATEMENTS.stream().filter(s -> s.contains("stock_level_version")
-            && s.strip().toUpperCase(Locale.ROOT).startsWith("INSERT"))).isNotEmpty();
+        assertThat(SqlStatementLog.STATEMENTS.stream()
+            .filter(s -> SqlStatementLog.insertedTables(s).contains("stock_level_version"))).isNotEmpty();
         assertThat(count("SELECT count(*) AS n FROM op_process")).isEqualTo(operations);
         assertThat(count("SELECT count(*) AS n FROM stock_level_version")).isEqualTo(stock);
     }

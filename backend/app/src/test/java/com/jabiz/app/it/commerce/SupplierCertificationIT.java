@@ -135,10 +135,9 @@ class SupplierCertificationIT extends PostgresIntegrationTest {
             Map.of("ids", List.of(supplier))));
         assertThat(labels).containsExactly(Map.entry(String.valueOf(supplier), name));
 
-        assertThat(SqlStatementLog.STATEMENTS.stream().map(s -> s.strip().toUpperCase(Locale.ROOT))
-            .filter(s -> s.contains("SUPPLIER_CERTIFICATION_VERSION"))
-            .filter(s -> s.startsWith("UPDATE") || s.startsWith("DELETE") || s.startsWith("INSERT")))
-            .isNotEmpty().allSatisfy(s -> assertThat(s).startsWith("INSERT"));
+        assertThat(SqlStatementLog.writing("supplier_certification_version"))
+            .isNotEmpty().allSatisfy(s -> assertThat(SqlStatementLog.mutatedTables(s))
+                .doesNotContain("supplier_certification_version"));
     }
 
     @Test

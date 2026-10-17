@@ -40,7 +40,9 @@ import com.jabiz.temporal.EntityVersion;
 import com.jabiz.temporal.Timeline;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.storage.TransactionState;
 import com.jabiz.runtime.storage.UniqueKeyViolationException;
+import com.jabiz.runtime.storage.WriteBatching;
 import com.jabiz.runtime.observability.PlatformObservations;
 import io.micrometer.common.KeyValues;
 import org.slf4j.Logger;
@@ -49,6 +51,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
@@ -98,6 +101,7 @@ public class DatasetEntityManager {
     private final ObjectProvider<FieldWriteCheck> writeChecks;
     private final AuditRecorder audit;
     private final DeletionGuard deletions;
+    private final WriteBatching batching;
 
     public DatasetEntityManager(
         StorageAdapterRegistry storageRegistry,
@@ -114,8 +118,10 @@ public class DatasetEntityManager {
         PlatformObservations observations,
         ObjectProvider<FieldWriteCheck> writeChecks,
         AuditRecorder audit,
-        DeletionGuard deletions
+        DeletionGuard deletions,
+        WriteBatching batching
     ) {
+        this.batching = Objects.requireNonNull(batching, "WriteBatching cannot be null");
         this.audit = Objects.requireNonNull(audit, "AuditRecorder cannot be null");
         this.deletions = Objects.requireNonNull(deletions, "DeletionGuard cannot be null");
         this.writeChecks = Objects.requireNonNull(writeChecks, "FieldWriteCheck provider cannot be null");
@@ -190,10 +196,16 @@ public class DatasetEntityManager {
             Map<String, Object> scope = queryCompiler.scopeValues(dataset,
                 entityRegistry.getOrThrow(dataset.targetEntityType()), dataset.scope().resolve(request));
 
-            Mono<List<EntityInstance>> apply = Flux.fromIterable(ordered)
-                .concatMap(change -> applyChange(engine, dataset, scope, change, validation))
+            Mono<List<EntityInstance>> changed = prefetchReferences(ordered)
+                .thenMany(Flux.fromIterable(ordered)
+                    .concatMap(change -> applyChange(engine, dataset, scope, change, validation)))
                 .collectList()
                 .map(Collections::unmodifiableList);
+            // The rows of the changes are written together, before any read of their tables and at the end (decision
+            // D46 rule 1), unless a table has triggers of its own.
+            Mono<List<EntityInstance>> apply = ordered.stream()
+                .allMatch(change -> batching.combines(change.instance().entityType()))
+                ? engine.withWriteBatch(changed) : changed;
 
             Mono<List<EntityInstance>> work = Operations.current().flatMap(existing -> {
                 if (existing.isPresent()) {
@@ -288,7 +300,10 @@ public class DatasetEntityManager {
             EntityDefinition def = entityRegistry.getOrThrow(entityType);
             if (def.temporal) {
                 return temporalWriter.apply(engine, dataset, scope, def, change, validation)
-                    .onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e));
+                    .onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e))
+                    // A row written later, with others, reports its conflict as this change would have.
+                    .contextWrite(context -> StorageEngine.withInsertConflicts(context,
+                        (conflict, table, record) -> uniqueViolation(def, conflict)));
             }
             if (change.effectiveTime() != null || change.action() == EntityAction.CANCEL_SCHEDULED) {
                 throw notTemporal(def);
@@ -300,7 +315,9 @@ public class DatasetEntityManager {
                 case DELETE -> delete(engine, dataset, scope, def, instance).then(Mono.<EntityInstance>empty());
                 case CANCEL_SCHEDULED -> throw notTemporal(def);
             };
-            return result.onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e));
+            return result.onErrorMap(UniqueKeyViolationException.class, e -> uniqueViolation(def, e))
+                .contextWrite(context -> StorageEngine.withInsertConflicts(context,
+                    (conflict, table, record) -> uniqueViolation(def, conflict)));
         });
     }
 
@@ -353,6 +370,10 @@ public class DatasetEntityManager {
                     (long) INITIAL_VERSION, null, null, snapshot)))
                 .then(Mono.defer(() -> outbox.entityChanged(engine, def, created.id(), EntityAction.INSERT.name(),
                     INITIAL_VERSION, null, attrs.keySet().stream().filter(def.changeableFields()::contains).toList())))
+                .then(Mono.deferContextual(view -> {
+                    engine.transactionState(view).ifPresent(known -> known.inserted(def.name, created.id(), snapshot));
+                    return Mono.<Void>empty();
+                }))
                 .thenReturn(created);
         }));
     }
@@ -371,11 +392,53 @@ public class DatasetEntityManager {
             enforceScope(dataset, def, scope, incoming, false, scopeViolations);
 
             String table = queryCompiler.resolveTable(dataset, def);
-            return findInScope(engine, dataset, scope, def, instance.id())
-                .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
-                .flatMap(current -> verifyChangedCodes(def, incoming, current, validation)
-                    .then(Mono.defer(() -> applyUpdate(engine, dataset, def, table, versionColumn, instance,
-                        current, incoming, scopeViolations, validation))));
+            return Mono.deferContextual(view -> {
+                // Read in full earlier in this transaction: that state is the current one (decision D46 rule 4).
+                Optional<EntityInstance> known = knownCurrent(engine, view, dataset, scope, def, instance.id());
+                Mono<EntityInstance> current = known.map(Mono::just).orElseGet(() ->
+                    findInScope(engine, dataset, scope, def, instance.id())
+                        .switchIfEmpty(Mono.error(() -> notFound(def, instance.id()))));
+                return current.flatMap(found -> verifyChangedCodes(def, incoming, found, validation)
+                    .then(Mono.defer(() -> applyUpdate(engine, dataset, scope, def, table, versionColumn, instance,
+                        found, known.isPresent(), incoming, scopeViolations, validation))));
+            });
+        });
+    }
+
+    /**
+     * The current state of a plain instance this transaction read in full through a dataset of the same table, if it
+     * lies within the write's scope as far as the values show (ROADMAP phase 16p, T7): every platform write raises
+     * the version and forgets the read, and plain tables are written by this class only, so the version read is the
+     * stored one unless another transaction changed it, which the update's version check then refuses.
+     */
+    private Optional<EntityInstance> knownCurrent(StorageEngine engine, ContextView view, DatasetDefinition dataset,
+        Map<String, Object> scope, EntityDefinition def, Object id) {
+        if (def.temporal || id == null) {
+            return Optional.empty();
+        }
+        String table = queryCompiler.resolveTable(dataset, def);
+        return engine.transactionState(view)
+            .flatMap(state -> state.find(def.name, id))
+            .filter(TransactionState.Read.class::isInstance)
+            .map(TransactionState.Read.class::cast)
+            .filter(TransactionState.Read::full)
+            .filter(read -> datasetRegistry.findById(read.datasetId())
+                .map(readThrough -> queryCompiler.resolveTable(readThrough, def).equals(table)).orElse(false))
+            .map(read -> (EntityInstance) read.instance())
+            .filter(instance -> withinScope(dataset, def, scope, instance.attributes())
+                && !softDeleted(dataset, def, instance.attributes()));
+    }
+
+    /** Whether the values are those of a row the dataset deleted softly (such rows are not read through it). */
+    private boolean softDeleted(DatasetDefinition dataset, EntityDefinition def, Map<String, Object> values) {
+        return usesSoftDelete(dataset, def) && Boolean.TRUE.equals(values.get(dataset.policy().softDeleteField()));
+    }
+
+    /** Forgets what the transaction knew of the instance: the platform wrote it. */
+    private static Mono<Void> forget(StorageEngine engine, EntityDefinition def, Object id) {
+        return Mono.deferContextual(view -> {
+            engine.transactionState(view).ifPresent(state -> state.written(def.name, id));
+            return Mono.empty();
         });
     }
 
@@ -401,14 +464,20 @@ public class DatasetEntityManager {
         });
     }
 
+    /**
+     * @param known whether {@code current} is what this transaction read earlier rather than read now: an update that
+     *              then changes no row reads once more, to answer as a read before it would have (404 or 409)
+     */
     private Mono<EntityInstance> applyUpdate(
         StorageEngine engine,
         DatasetDefinition dataset,
+        Map<String, Object> scope,
         EntityDefinition def,
         String table,
         String versionColumn,
         EntityInstance instance,
         EntityInstance current,
+        boolean known,
         Map<String, Object> incoming,
         List<Violation> scopeViolations,
         ValidationContext validation
@@ -443,16 +512,34 @@ public class DatasetEntityManager {
         EntityInstance updated = new EntityInstance(
             current.id(), def.name, current.version() + 1, nextState, merged);
 
+        // The update, its audit record and its event in one statement; the record and the event exist only when it
+        // updated the row (16p, T7).
+        Mono<List<StorageEngine.Insert>> dependents = Flux.concat(
+                audit.row(def, current.id(), EntityAction.UPDATE.name(), updated.version(), null, current.attributes(),
+                    merged),
+                outbox.entityChangedRow(def, current.id(), EntityAction.UPDATE.name(), updated.version(), null,
+                    changes.keySet()))
+            .collectList();
         return verifyReferences(def, current.id(), changes, changes.keySet())
-            .then(Mono.defer(() -> engine
-                .casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(), versionColumn, physicalUpdates)
-                .flatMap(applied -> applied
-                    ? audit.record(engine, def, current.id(), EntityAction.UPDATE.name(), updated.version(), null,
-                            current.attributes(), merged)
-                        .then(outbox.entityChanged(engine, def, current.id(), EntityAction.UPDATE.name(),
-                            updated.version(), null, changes.keySet()))
-                        .thenReturn(updated)
-                    : Mono.<EntityInstance>error(conflict(def, instance.id())))));
+            .then(dependents)
+            .flatMap(rows -> engine.casUpdate(table, def.primaryKeyColumn(), current.id(), current.version(),
+                versionColumn, physicalUpdates, rows))
+            .flatMap(applied -> {
+                if (applied) {
+                    return forget(engine, def, current.id()).thenReturn(updated);
+                }
+                if (!known) {
+                    return Mono.<EntityInstance>error(conflict(def, instance.id()));
+                }
+                // As a read now would have answered: gone (or out of scope), or changed meanwhile.
+                return findInScope(engine, dataset, scope, def, instance.id())
+                    .switchIfEmpty(Mono.error(() -> notFound(def, instance.id())))
+                    .flatMap(stored -> Mono.<EntityInstance>error(stored.version() != instance.version()
+                        ? ConcurrentUpdateException.stale(String.format(
+                            "Optimistic lock conflict on %s [ID: %s]: expected version [%d], stored version [%d]",
+                            def.name, instance.id(), instance.version(), stored.version()))
+                        : conflict(def, instance.id())));
+            });
     }
 
     /**
@@ -531,8 +618,9 @@ public class DatasetEntityManager {
                             // A soft delete is an update and raises the version; a hard delete leaves the last one.
                             long versionAfter = usesSoftDelete(dataset, def) ? current.version() + 1 : current.version();
                             return removed.flatMap(done -> done
-                                ? audit.record(engine, def, current.id(), EntityAction.DELETE.name(), versionAfter, null,
-                                        current.attributes(), null)
+                                ? forget(engine, def, current.id())
+                                    .then(audit.record(engine, def, current.id(), EntityAction.DELETE.name(),
+                                        versionAfter, null, current.attributes(), null))
                                     .then(outbox.entityChanged(engine, def, current.id(), EntityAction.DELETE.name(),
                                         versionAfter, null, def.changeableFields()))
                                 : Mono.<Void>error(conflict(def, instance.id())));
@@ -555,9 +643,39 @@ public class DatasetEntityManager {
     public Mono<EntityInstance> findById(DatasetDefinition dataset, EntityDefinition def, Object id, Instant asOf,
         Instant knownAt) {
         return observations.mono(PlatformObservations.DATASET_READ, "read " + def.name, tags(dataset),
-            RequestContexts.current().flatMap(request -> findInScope(
-                storageRegistry.getEngine(dataset.storage().connectionPoolRef()), dataset,
-                dataset.scope().resolve(request), def, id, timeSlice(dataset, def, asOf, knownAt))));
+            RequestContexts.current().flatMap(request -> {
+                StorageEngine engine = storageRegistry.getEngine(dataset.storage().connectionPoolRef());
+                Map<String, Object> scope = dataset.scope().resolve(request);
+                return findInScope(engine, dataset, scope, def, id, timeSlice(dataset, def, asOf, knownAt))
+                    .flatMap(found -> remembered(engine, dataset, scope, def, found, asOf == null && knownAt == null));
+            }));
+    }
+
+    /**
+     * Records an instance read in full through {@code dataset} in the read set of the transaction (decision D46 rules 3
+     * and 4), when it was read as it is now; reads at another time, of a replica, or outside a transaction leave none.
+     */
+    private Mono<EntityInstance> remembered(StorageEngine engine, DatasetDefinition dataset, Map<String, Object> scope,
+        EntityDefinition def, EntityInstance instance, boolean current) {
+        if (!current || instance.id() == null) {
+            return Mono.just(instance);
+        }
+        return Mono.deferContextual(view -> {
+            engine.transactionState(view).ifPresent(state -> state.read(def.name, instance.id(),
+                new TransactionState.Read(dataset.resourceId(), scope, instance, instance.version(),
+                    readInFull(def, instance))));
+            return Mono.just(instance);
+        });
+    }
+
+    /** Whether the read gave every field of the instance (the version aside), so it is its whole state. */
+    private static boolean readInFull(EntityDefinition def, EntityInstance instance) {
+        for (FieldDefinition field : def.fields.values()) {
+            if (!(field.kind() instanceof SemanticKind.Version) && !instance.attributes().containsKey(field.name())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Runs a query within the dataset scope, reading from the read replica when one is configured. */
@@ -590,10 +708,79 @@ public class DatasetEntityManager {
         Instant asOf, Instant knownAt, boolean capped) {
         return observations.flux(PlatformObservations.DATASET_QUERY, "query " + def.name, tags(dataset),
             RequestContexts.current().flatMapMany(request -> {
-                PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, dataset.scope().resolve(request),
+                Map<String, Object> scope = dataset.scope().resolve(request);
+                PhysicalQueryPlan plan = queryCompiler.compile(dataset, def, query, scope,
                     timeSlice(dataset, def, asOf, knownAt), capped);
-                return readEngine(dataset).executeQuery(plan).map(row -> hydrate(def, row));
+                StorageEngine engine = readEngine(dataset);
+                return engine.executeQuery(plan).map(row -> hydrate(def, row))
+                    .concatMap(found -> remembered(engine, dataset, scope, def, found, asOf == null && knownAt == null));
             }));
+    }
+
+    /**
+     * One read of {@link #queryMany}: a query of the current instances of {@code def} through {@code dataset}, up to its
+     * own limit as {@link #queryAll} reads.
+     */
+    public record EntityRead(DatasetDefinition dataset, EntityDefinition def, EntityQuery query) {
+        public EntityRead {
+            Objects.requireNonNull(dataset, "dataset must not be null");
+            Objects.requireNonNull(def, "def must not be null");
+            Objects.requireNonNull(query, "query must not be null");
+        }
+    }
+
+    /**
+     * Several reads, each exactly as {@link #queryAll} reads it (its dataset's scope, data period, soft delete and the
+     * current versions of a temporal entity), sent as one statement where their datasets share a storage engine
+     * (ROADMAP phase 16p, T5): their results in the order of the reads. Each dataset is read on its primary engine,
+     * as {@link #findById} reads, never on a read replica: a process's reads see what its transaction wrote.
+     */
+    public Mono<List<List<EntityInstance>>> queryMany(List<EntityRead> reads) {
+        if (reads.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return observations.mono(PlatformObservations.DATASET_QUERY, "query " + reads.size() + " reads",
+            KeyValues.of("dataset", "many", "entity", "many"),
+            RequestContexts.current().flatMap(request -> {
+                Map<StorageEngine, List<Integer>> byEngine = new LinkedHashMap<>();
+                List<StorageEngine.PlanRead> plans = new ArrayList<>();
+                List<Map<String, Object>> scopes = new ArrayList<>();
+                for (int i = 0; i < reads.size(); i++) {
+                    EntityRead read = reads.get(i);
+                    Map<String, Object> scope = read.dataset().scope().resolve(request);
+                    scopes.add(scope);
+                    plans.add(new StorageEngine.PlanRead(queryCompiler.compile(read.dataset(), read.def(),
+                        read.query(), scope, currentSlice(read.def(), null, null), false), columnsOf(read.def())));
+                    // The primary, as findById reads: within a process, the reads see what its transaction wrote.
+                    byEngine.computeIfAbsent(storageRegistry.getEngine(read.dataset().storage().connectionPoolRef()),
+                        engine -> new ArrayList<>()).add(i);
+                }
+                List<List<EntityInstance>> results = new ArrayList<>(Collections.nCopies(reads.size(),
+                    List.<EntityInstance>of()));
+                return Flux.fromIterable(byEngine.entrySet())
+                    .concatMap(group -> group.getKey()
+                        .executeQueries(group.getValue().stream().map(plans::get).toList())
+                        .flatMap(rows -> Flux.range(0, rows.size()).concatMap(n -> {
+                            int i = group.getValue().get(n);
+                            EntityRead read = reads.get(i);
+                            return Flux.fromIterable(rows.get(n)).map(row -> hydrate(read.def(), row))
+                                .concatMap(found -> remembered(group.getKey(), read.dataset(), scopes.get(i),
+                                    read.def(), found, true))
+                                .collectList()
+                                .doOnNext(found -> results.set(i, List.copyOf(found)));
+                        }).then()))
+                    .then(Mono.fromSupplier(() -> List.copyOf(results)));
+            }));
+    }
+
+    /** The columns a read returns to {@link #hydrate} an instance of {@code def}: its fields' and its version's. */
+    private static List<String> columnsOf(EntityDefinition def) {
+        java.util.Set<String> columns = new java.util.LinkedHashSet<>();
+        for (FieldDefinition field : def.fields.values()) {
+            columns.add(field.physicalColumn().toLowerCase(java.util.Locale.ROOT));
+        }
+        def.versionColumn().ifPresent(column -> columns.add(column.toLowerCase(java.util.Locale.ROOT)));
+        return List.copyOf(columns);
     }
 
     /**
@@ -800,39 +987,166 @@ public class DatasetEntityManager {
         return verifyReferences(def, values.get(def.primaryKey), values, changedFields);
     }
 
-    /** As {@link #verifyReferences(EntityDefinition, Map, Collection)} for the instance {@code id}. */
+    /**
+     * As {@link #verifyReferences(EntityDefinition, Map, Collection)} for the instance {@code id}. A target this
+     * transaction inserted, or read as it is now through the target's default dataset within the same scope, is not
+     * looked up again (decision D46 rule 3): the lookup would see it in a statement of this transaction, within the
+     * scope, and locks nothing either. The other targets are looked up in one statement. A target's dataset whose data
+     * period is judged through a reference is always looked up.
+     */
     Mono<Void> verifyReferences(
         EntityDefinition def, Object id, Map<String, Object> values, Collection<String> changedFields
     ) {
-        return Flux.fromIterable(def.references)
-            .filter(ref -> changedFields.contains(ref.sourceField()) && values.get(ref.sourceField()) != null)
-            .concatMap(ref -> {
+        return RequestContexts.current().flatMap(request -> Mono.deferContextual(view -> {
+            List<ReferenceLookup> lookups = new ArrayList<>();
+            for (ReferenceDefinition ref : def.references) {
                 Object target = values.get(ref.sourceField());
-                return referenceExists(ref, target)
-                    .filter(exists -> !exists)
-                    .map(missing -> new Violation(ref.sourceField(), PlatformErrorCodes.REFERENCE_NOT_FOUND,
-                        String.format("%s [ID: %s] referenced by field '%s' does not exist",
-                            ref.targetEntity(), target, ref.sourceField()),
-                        Map.of("target", ref.targetEntity(), "id", String.valueOf(target))));
-            })
-            .collectList()
-            .flatMap(violations -> violations.isEmpty()
-                ? Mono.<Void>empty()
-                : Mono.<Void>error(new ValidationException(violations)))
-            .then(Flux.fromStream(writeChecks::orderedStream)
-                .concatMap(check -> check.verify(def, id, values, changedFields))
-                .then());
+                if (!changedFields.contains(ref.sourceField()) || target == null) {
+                    continue;
+                }
+                EntityDefinition targetDef = entityRegistry.getOrThrow(ref.targetEntity());
+                DatasetDefinition targetDataset = datasetFor(targetDef);
+                StorageEngine engine = storageRegistry.getEngine(targetDataset.storage().connectionPoolRef());
+                Map<String, Object> scope = targetDataset.scope().resolve(request);
+                if (!knownToExist(engine, view, targetDataset, targetDef, scope, target)) {
+                    lookups.add(new ReferenceLookup(ref, target, targetDataset, targetDef, engine, scope));
+                }
+            }
+            return missing(lookups)
+                .flatMap(violations -> violations.isEmpty()
+                    ? Mono.<Void>empty()
+                    : Mono.<Void>error(new ValidationException(violations)));
+        })).then(Flux.fromStream(writeChecks::orderedStream)
+            .concatMap(check -> check.verify(def, id, values, changedFields))
+            .then());
     }
 
-    /** Looks the target up in its default dataset, so its scope and soft delete apply: hidden targets do not count. */
-    private Mono<Boolean> referenceExists(ReferenceDefinition ref, Object targetId) {
-        return RequestContexts.current().flatMap(request -> {
-            EntityDefinition target = entityRegistry.getOrThrow(ref.targetEntity());
-            DatasetDefinition targetDataset = datasetFor(target);
-            StorageEngine engine = storageRegistry.getEngine(targetDataset.storage().connectionPoolRef());
-            return findInScope(engine, targetDataset, targetDataset.scope().resolve(request), target, targetId)
-                .hasElement();
-        });
+    /**
+     * Looks up, in one statement, the reference targets the changes of a commit name that the transaction does not
+     * know yet, so that each change's own check finds them in the read set (decision D46 rule 3: the reference checks of
+     * one commit together). Only targets found are remembered; a missing one is looked up again, and reported, by the
+     * check of its change. Nothing is read for fewer than two targets, where it would save nothing.
+     */
+    private Mono<Void> prefetchReferences(List<EntityChange> changes) {
+        if (changes.size() < 2) {
+            return Mono.empty();
+        }
+        return RequestContexts.current().flatMap(request -> Mono.deferContextual(view -> {
+            Map<List<Object>, ReferenceLookup> lookups = new LinkedHashMap<>();
+            for (EntityChange change : changes) {
+                // Inserts only: an update checks only the references it changes, unknown before it is applied.
+                if (change.action() != EntityAction.INSERT) {
+                    continue;
+                }
+                EntityDefinition def = change.instance().entityType() == null ? null
+                    : entityRegistry.find(change.instance().entityType()).orElse(null);
+                if (def == null) {
+                    continue;
+                }
+                for (ReferenceDefinition ref : def.references) {
+                    Object value = change.instance().attributes().get(ref.sourceField());
+                    EntityDefinition targetDef = value == null ? null
+                        : entityRegistry.find(ref.targetEntity()).orElse(null);
+                    DatasetDefinition targetDataset = targetDef == null ? null
+                        : datasetRegistry.findForEntity(targetDef.name).orElse(null);
+                    if (targetDataset == null) {
+                        continue;
+                    }
+                    Object target;
+                    Map<String, Object> scope;
+                    try {
+                        target = targetDef.normalizeId(value);
+                        queryCompiler.fieldValue(targetDef, targetDef.field(targetDef.primaryKey), target);
+                        scope = targetDataset.scope().resolve(request);
+                    } catch (RuntimeException e) {
+                        // Not looked up ahead: the change's own check reports it, in the order it always did.
+                        continue;
+                    }
+                    StorageEngine engine = storageRegistry.getEngine(targetDataset.storage().connectionPoolRef());
+                    if (!knownToExist(engine, view, targetDataset, targetDef, scope, target)) {
+                        lookups.putIfAbsent(List.of(targetDef.name, target),
+                            new ReferenceLookup(ref, target, targetDataset, targetDef, engine, scope));
+                    }
+                }
+            }
+            return lookups.size() < 2 ? Mono.<Void>empty() : missing(List.copyOf(lookups.values())).then()
+                // A lookup the compiler refuses is the change's own check's to report.
+                .onErrorResume(ValidationException.class, refused -> Mono.empty());
+        }));
+    }
+
+    /** A reference target to look up in its default dataset. */
+    private record ReferenceLookup(ReferenceDefinition ref, Object target, DatasetDefinition dataset,
+        EntityDefinition def, StorageEngine engine, Map<String, Object> scope) {}
+
+    /**
+     * The violations of the targets that do not exist within their default dataset's scope (soft-deleted targets
+     * included), looked up together, each as {@link #findInScope} looks it up; the targets found join the read set.
+     */
+    private Mono<List<Violation>> missing(List<ReferenceLookup> lookups) {
+        if (lookups.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        Map<StorageEngine, List<ReferenceLookup>> byEngine = new LinkedHashMap<>();
+        lookups.forEach(lookup -> byEngine.computeIfAbsent(lookup.engine(), engine -> new ArrayList<>()).add(lookup));
+        return Flux.fromIterable(byEngine.entrySet()).concatMap(group -> {
+            List<StorageEngine.PlanRead> plans = new ArrayList<>();
+            for (ReferenceLookup lookup : group.getValue()) {
+                EntityQuery query = EntityQuery.builder()
+                    .where(new QueryPredicate.Eq(lookup.def().primaryKey, lookup.target())).limit(1).build();
+                plans.add(new StorageEngine.PlanRead(queryCompiler.compile(lookup.dataset(), lookup.def(), query,
+                    lookup.scope(), currentSlice(lookup.def(), null, null)), columnsOf(lookup.def())));
+            }
+            return group.getKey().executeQueries(plans).flatMapMany(results -> Flux.range(0, results.size())
+                .concatMap(n -> {
+                    ReferenceLookup lookup = group.getValue().get(n);
+                    if (!results.get(n).isEmpty()) {
+                        return remembered(group.getKey(), lookup.dataset(), lookup.scope(), lookup.def(),
+                            hydrate(lookup.def(), results.get(n).getFirst()), true).then(Mono.<Violation>empty());
+                    }
+                    return Mono.just(new Violation(lookup.ref().sourceField(), PlatformErrorCodes.REFERENCE_NOT_FOUND,
+                        String.format("%s [ID: %s] referenced by field '%s' does not exist",
+                            lookup.ref().targetEntity(), lookup.target(), lookup.ref().sourceField()),
+                        Map.of("target", lookup.ref().targetEntity(), "id", String.valueOf(lookup.target()))));
+                }));
+        }).collectList();
+    }
+
+    /**
+     * Whether this transaction knows the target exists within its default dataset's scope now (decision D46 rule 3):
+     * inserted by it with values within the scope, or read by it through that dataset within the same scope.
+     */
+    private boolean knownToExist(StorageEngine engine, ContextView view, DatasetDefinition dataset,
+        EntityDefinition def, Map<String, Object> scope, Object target) {
+        for (Object value : scope.values()) {
+            // A period judged through a reference is not in the values: looked up, as a read would (default deny).
+            if (value instanceof DatasetScope.PeriodCondition period && period.referencedField() != null) {
+                return false;
+            }
+        }
+        Object key;
+        try {
+            key = def.normalizeId(target);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        Optional<TransactionState.Known> known = engine.transactionState(view)
+            .flatMap(state -> state.find(def.name, key));
+        if (known.isEmpty()) {
+            return false;
+        }
+        return switch (known.get()) {
+            case TransactionState.Inserted inserted -> {
+                try {
+                    yield withinScope(dataset, def, queryCompiler.scopeValues(dataset, def, scope), inserted.state())
+                        && !softDeleted(dataset, def, inserted.state());
+                } catch (ValidationException e) {
+                    yield false;
+                }
+            }
+            case TransactionState.Read read -> read.datasetId().equals(dataset.resourceId())
+                && read.scope().equals(scope);
+        };
     }
 
     /**

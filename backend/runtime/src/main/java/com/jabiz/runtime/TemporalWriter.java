@@ -15,6 +15,7 @@ import com.jabiz.query.QueryCompiler;
 import com.jabiz.runtime.operation.Operation;
 import com.jabiz.runtime.operation.Operations;
 import com.jabiz.runtime.storage.StorageEngine;
+import com.jabiz.runtime.storage.UniqueKeyViolationException;
 import com.jabiz.runtime.temporal.TemporalPermissions;
 import com.jabiz.runtime.temporal.VersionAppender;
 import com.jabiz.temporal.EntityVersion;
@@ -138,18 +139,37 @@ final class TemporalWriter {
             for (String field : def.stateFields()) {
                 newState.put(field, attrs.get(field));
             }
+            // A new instance has no versions to read (16p, T3): an id that exists already is refused by the database,
+            // by the key of entity_registry (and the key index of a write-once entity), with the same 409 as before.
+            Timeline none = Timeline.of(List.of());
+            VersionPlanner.Write write = VersionPlanner.Write.insert(w.effective(), newState,
+                Set.copyOf(def.changeableFields()));
             return rules.verifyReferences(def, id, attrs, attrs.keySet())
-                .then(timeline(w, id))
-                .flatMap(timeline -> {
-                    if (!timeline.versions().isEmpty()) {
-                        return Mono.error(new ConcurrentUpdateException(
-                            def.name + " [ID: " + id + "] already exists"));
+                .then(Mono.defer(() -> append(w, id, none, write, true)))
+                .contextWrite(context -> StorageEngine.withInsertConflicts(context,
+                    (conflict, table, record) -> insertConflict(def, id, conflict)))
+                .flatMap(written -> Mono.deferContextual(view -> {
+                    // Known to exist from now on, for the references of later writes (decision D46 rule 3).
+                    if (!w.effective().isAfter(w.operation().opTime())) {
+                        w.engine().transactionState(view).ifPresent(known -> known.inserted(def.name, id,
+                            written.attributes()));
                     }
-                    VersionPlanner.Write write = VersionPlanner.Write.insert(w.effective(), newState,
-                        Set.copyOf(def.changeableFields()));
-                    return append(w, id, timeline, write, true);
-                });
+                    return Mono.just(written);
+                }));
         }));
+    }
+
+    /**
+     * A unique key an insertion breaks: a declared unique constraint is a validation error, any other key (the
+     * instance's, its first version's) means the instance exists already (409).
+     */
+    private static Throwable insertConflict(EntityDefinition def, UUID id, UniqueKeyViolationException conflict) {
+        for (UniqueConstraint unique : def.uniqueConstraints) {
+            if (unique.name().equalsIgnoreCase(conflict.constraintName())) {
+                return DatasetEntityManager.uniqueViolation(def, conflict);
+            }
+        }
+        return new ConcurrentUpdateException(def.name + " [ID: " + id + "] already exists", conflict);
     }
 
     private Mono<EntityInstance> update(Write w, EntityInstance instance) {

@@ -5,6 +5,7 @@ import com.jabiz.process.StepSpec;
 import com.jabiz.query.BoundValue;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.StepHandler;
+import com.jabiz.runtime.process.TransactionLockTimeout;
 import com.jabiz.runtime.process.admission.ProcessAdmission;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +30,10 @@ import java.util.function.Function;
  * deadlock or a wait that long fails it with {@link com.jabiz.runtime.LockNotAvailableException} (409; a busy item of
  * a job). The bound applies to the lock statement only: the transaction's own {@code lock_timeout} is put back after
  * it. In-transaction steps only: after the commit there is no transaction to hold it.
+ *
+ * <p>One statement either way (ROADMAP phase 16p, T1): the lock alone when the wait is the transaction's own (the
+ * executor sets that when the transaction starts, {@link TransactionLockTimeout}), otherwise the platform function
+ * {@code jabiz_xact_lock}, which sets the shorter wait, takes the lock and puts the transaction's wait back.
  */
 @Component
 public class HoldLock<C extends ProcessContext> implements StepHandler<HoldLock.Metadata<C>, C> {
@@ -113,16 +118,19 @@ public class HoldLock<C extends ProcessContext> implements StepHandler<HoldLock.
             ProcessAdmission.checkLock(view, name);
             ExecutionOptions.LockWait execution = view.getOrDefault(ExecutionOptions.LockWait.class, null);
             String wait = timeout(timeout, metadata.waitAtMost(), execution == null ? null : execution.atMost());
-            // The wait is bounded for this statement only: the transaction's own lock_timeout is put back after it.
             var engine = storages.getEngine(poolRef);
-            return engine.select("SELECT current_setting('lock_timeout') AS previous", Map.of()).single()
-                .flatMap(row -> engine.select("SELECT set_config('lock_timeout', :timeout, true) AS t",
-                        Map.of("timeout", BoundValue.of(wait))).then()
-                    .then(engine.select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock"
-                        + (metadata.shared() ? "_shared" : "") + "(hashtextextended(:key, 0))) l",
-                        Map.of("key", BoundValue.of(NAMESPACE + name))).then())
-                    .then(engine.select("SELECT set_config('lock_timeout', :previous, true) AS t",
-                        Map.of("previous", BoundValue.of((String) row.get("previous")))).then()));
+            TransactionLockTimeout transaction = view.getOrDefault(TransactionLockTimeout.class, null);
+            if (transaction != null && transaction.setting().equals(wait)) {
+                // The transaction already waits this long: the lock is the one statement (16p, T1).
+                return engine.select("SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock"
+                    + (metadata.shared() ? "_shared" : "") + "(hashtextextended(:key, 0))) l",
+                    Map.of("key", BoundValue.of(NAMESPACE + name))).then();
+            }
+            // A shorter wait bounds this statement only: the function puts the transaction's lock_timeout back after
+            // taking the lock (migration V40).
+            return engine.select("SELECT jabiz_xact_lock(:key, :shared, :timeout) AS locked",
+                Map.of("key", BoundValue.of(NAMESPACE + name), "shared", BoundValue.of(metadata.shared()),
+                    "timeout", BoundValue.of(wait))).then();
         });
     }
 }

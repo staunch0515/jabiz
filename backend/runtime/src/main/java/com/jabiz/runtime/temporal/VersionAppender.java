@@ -67,7 +67,9 @@ public class VersionAppender {
      */
     public Mono<List<PlannedVersion>> append(StorageEngine engine, String table, EntityDefinition def, UUID id,
         Timeline timeline, VersionPlanner.Write write, Operation operation, Object grant, boolean checkUnique) {
-        return RequestContexts.current().flatMap(request -> {
+        return RequestContexts.current().flatMap(request -> Mono.deferContextual(view -> {
+            // Whatever the transaction knew of the instance no longer holds (decision D46 rules 3 and 4).
+            engine.transactionState(view).ifPresent(state -> state.written(def.name, id));
             VersionPlanner.Plan plan = VersionPlanner.plan(timeline, write);
             // A write that may not happen at all is refused as such, before any conflict with later versions.
             List<Violation> refused = new ArrayList<>();
@@ -104,7 +106,7 @@ public class VersionAppender {
                     ? Mono.<Void>empty()
                     : published(engine, def, id, plan.versions().getFirst())))
                 .then(Mono.just(plan.versions()));
-        });
+        }));
     }
 
     /**

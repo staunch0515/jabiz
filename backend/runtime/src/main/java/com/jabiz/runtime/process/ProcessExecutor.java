@@ -268,15 +268,28 @@ public class ProcessExecutor implements SmartInitializingSingleton {
         List<PendingStep<?>> afterCommit = Collections.synchronizedList(new ArrayList<>());
         // Every lock the transaction waits for - row locks, the platform's own, an idempotency key taken by a
         // concurrent duplicate - waits at most this long (06 section 4.1): the global timeout, or a job item's wait.
-        Mono<Void> boundLockWaits = engine.select("SELECT set_config('lock_timeout', :timeout, true) AS t",
-            Map.of("timeout", BoundValue.of(lockTimeoutSetting(lockTimeout, options.lockWait())))).then();
-        Mono<ProcessResult<O>> transaction = boundLockWaits.then(sequence.next()).flatMap(seq -> {
-            OperationRequest operation = new OperationRequest(definition.name(), definition.version(), seq, null,
-                null, null, idempotencyKey, null, masker.summary(input));
-            return operations.begin(engine, operation, request)
-                .flatMap(started -> options.beforeSteps().apply(started)
-                    .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)));
-        });
+        String lockSetting = lockTimeoutSetting(lockTimeout, options.lockWait());
+        Mono<Operation> begin;
+        if (numberedByInsert()) {
+            // One statement sets the timeout, draws the number and records the operation (16p, T2).
+            begin = Mono.defer(() -> operations.beginNumbered(engine, new OperationRequest(definition.name(),
+                definition.version(), null, null, null, null, idempotencyKey, null, masker.summary(input)),
+                request, lockSetting));
+        } else {
+            begin = engine.select("SELECT set_config('lock_timeout', :timeout, true) AS t",
+                    Map.of("timeout", BoundValue.of(lockSetting))).then(sequence.next())
+                .flatMap(seq -> operations.begin(engine, new OperationRequest(definition.name(), definition.version(),
+                    seq, null, null, null, idempotencyKey, null, masker.summary(input)), request));
+        }
+        Mono<ProcessResult<O>> transaction = begin
+            .flatMap(started -> options.beforeSteps().apply(started)
+                .then(runProcess(definition, input, started, request, afterCommit, idempotencyKey != null)))
+            .flatMap(result -> Mono.deferContextual(view -> {
+                engine.transactionState(view).ifPresent(state -> observations.recordStatements(definition.name(),
+                    state.statements()));
+                return Mono.just(result);
+            }))
+            .contextWrite(context -> context.put(TransactionLockTimeout.class, new TransactionLockTimeout(lockSetting)));
         if (options.lockWait() != null) {
             ExecutionOptions.LockWait wait = new ExecutionOptions.LockWait(options.lockWait());
             transaction = transaction.contextWrite(context -> context.put(ExecutionOptions.LockWait.class, wait));
@@ -313,12 +326,17 @@ public class ProcessExecutor implements SmartInitializingSingleton {
                         + " can only be called as a sub-process from a step of a running process"));
                 }
                 return RequestContexts.current().doOnNext(request -> requireCallable(definition, request))
-                    .flatMap(request -> sequence.next().flatMap(seq -> {
-                        OperationRequest operation = new OperationRequest(definition.name(), definition.version(),
-                            seq, parent.processSeqId(), null, null, null, parent.opTime(), masker.summary(input));
-                        return operations.begin(engine(), operation, request).flatMap(started ->
+                    .flatMap(request -> {
+                        Mono<Operation> begin = numberedByInsert()
+                            ? operations.beginNumbered(engine(), new OperationRequest(definition.name(),
+                                definition.version(), null, parent.processSeqId(), null, null, null, parent.opTime(),
+                                masker.summary(input)), request, null)
+                            : sequence.next().flatMap(seq -> operations.begin(engine(), new OperationRequest(
+                                definition.name(), definition.version(), seq, parent.processSeqId(), null, null, null,
+                                parent.opTime(), masker.summary(input)), request));
+                        return begin.flatMap(started ->
                             runProcess(definition, input, started, request, frame.afterCommit(), false));
-                    })).map(ProcessResult::output);
+                    }).map(ProcessResult::output);
             }));
     }
 
@@ -357,6 +375,14 @@ public class ProcessExecutor implements SmartInitializingSingleton {
     @SuppressWarnings("unchecked")
     private static <O> ProcessResult<O> cast(ProcessResult<?> result) {
         return (ProcessResult<O>) result;
+    }
+
+    /**
+     * Whether the operation's number is drawn by the insert of its record: with the default sequence, which is
+     * {@code op_process_seq}; an application's own {@link ProcessSequence} is asked as before.
+     */
+    private boolean numberedByInsert() {
+        return sequence instanceof DatabaseProcessSequence;
     }
 
     /** The storage of the operation tables, where every process transaction runs. */
