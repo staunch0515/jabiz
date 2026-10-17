@@ -162,3 +162,7 @@ R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46
 - **重测**（报告 `perf/Q10a-load-test.md` §9）：读者每秒 24 次首页时稳定约 37–40 次完成 / 秒（Q10a2 同设置 20–22.5），每秒 30 人时提交 p95 44 ms、40 人时 0.7 秒，每秒 50 人时过载（稳定 36 次 / 秒，答题人看到的提交 p95 8.6 秒）；
   连续读者（CPU 约 85 %）时约 22 次 / 秒（Q10a2 约 9.5–10）。准入许可 3 个时吞吐不变：瓶颈仍是发布锁（每次完成锁内约 26 ms），不是许可或 CPU。**本机未达到每秒 50 次**；建议见报告 §9.4。
 - 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部、`tools/check-app-paths.sh origin/1.2/platform`。
+
+## 锁拆分（Q10a4，计划待确认，2026-10-17）
+
+需求方 2026-10-17 决定先做锁拆分、再做平台 16p-2，每一步之后重测。计划：`plans/Q10-lock-split.md`（分支 `1.2/quizbuks-10a4-lock-split`；开始取新的 `qb.pub-start:<发布>`，完成照旧取 `qb.pub:<发布>`，计数拆成两张表）。
