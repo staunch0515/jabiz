@@ -142,3 +142,23 @@ R3 的应用部分：合并 `1.2/platform`（平台 16o，PR #162，决策 D45�
   队满使超时任务的项 `BUSY`，其间迟到的提交 422 `EXPIRED`，下一次任务以已保存的答案结束。`busy.test.ts` 增加 `Retry-After` 的上限、`shouldRetry`、中止；
   `Play.test.tsx` 增加答题页继续时的忙、历史页的忙与离开、429 的显示。
 - **Info**：详情页忙的 `role="status"` 加 `empty:hidden`。
+
+## 实施记录（Q10a3，2026-10-17，分支 `1.2/quizbuks-10a3-ledger-cost`）
+
+R2 的应用部分：合并 `1.2/platform`（平台 16p-1，PR #165，决策 D46；连同 #164 的准入测试修正），按 16p-1 调整答题流程并重测，供需求方按 P-10 决定 16p-2（事务内写缓冲）与锁拆分是否仍要做。
+
+- **合并**：`git merge origin/1.2/platform`（合并提交，无冲突，平台目录不变）。未改应用时 `:quizbuks:test` 全部通过（470），场景快照不变：平台改了语句的写法（合并的插入、按已知版本更新、`HoldLock` 一条），
+  QuizBuks 的测试不断言语句文本，审计内容逐行相同（平台 `WriteCombiningIT`）。合并后、未改应用时锁内开始 12 → 8 条、提交 48 → 16 条（与平台的预估相同）。
+- **应用的调整**（只改减少锁内语句的地方，保证不变）：
+  - 锁内的三次重读合成一个 `QueryEntities.all`（一条语句）：开始为本人会话、卡片、计数，提交为会话、计数、卡片（`PlaySteps.card` / `counter`、`PublicationMoves.cardRead` 给出单个查询）。各自的条件、上限与"不开始新会话即不读"（恒假条件不发语句）不变。锁内各少 2 条。
+  - 开始在锁外把会话、卡片与发布（默认数据视图）合成一条读取：新会话对发布的引用检查因此复用本事务的读取（D46 第 3 条），不在锁内再查。锁外的语句数不变，锁内少 1 条。
+    只有草稿能被删除，草稿没有卡片也就开始不了，所以锁前读到的发布同样回答"引用存在"。
+  - 按已知版本更新与 `jabiz.process.statements` 不需要应用改动：会话、计数、钱包都在锁内经默认数据视图读到，平台已按读到的版本更新（版本 CAS 兜底，审计随更新一条写出）；指标由压测工具读取（下文）。
+  - 没做的：开始锁外的其他读取（资料、国家、版本、钱包）也能合并，但不减少锁内语句，不在本阶段的范围；钱包的读取必须在钱包锁之后（D46 第 5 条），不与重读合并；`LEDGER_POST` 的合并读取由平台决定。
+- **语句预算** `AttemptStatementBudgetIT`（照平台 `StatementBudgetIT`；`SqlStatementLog` 抄入应用的测试，`r2dbc-proxy` 只在测试依赖中）：经 HTTP、带 `Idempotency-Key`，断言流程自身事务（记录其操作的那个）的确切语句数（含 `COMMIT`）与锁内的条数（自取发布锁的下一条到 `COMMIT`），
+  失败时列出语句。开始共 12、锁内 5（Q10a 锁内 12；合并后未改应用时共 16、锁内 8）；付奖的提交共 20、锁内 14（Q10a 锁内 48；合并后共 22、锁内 16）；各自事务外的重放查询 1 条。
+- **压测工具**：`LOAD_METRICS=yes` 在压力前后读取应用的指标（jar 以 `-Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动），报告开始与提交的许可持有时间（`jabiz.process` 减去 `jabiz.process.admission` 的排队等待，Q10a2 中手工计算的同一个量）
+  与每次运行的语句数（`jabiz.process.statements`）；压力期间本机的 CPU 由 `/proc/stat` 读出。
+- **重测**（报告 `perf/Q10a-load-test.md` §9）：读者每秒 24 次首页时稳定约 37–40 次完成 / 秒（Q10a2 同设置 20–22.5），每秒 30 人时提交 p95 44 ms、40 人时 0.7 秒，每秒 50 人时过载（稳定 36 次 / 秒，答题人看到的提交 p95 8.6 秒）；
+  连续读者（CPU 约 85 %）时约 22 次 / 秒（Q10a2 约 9.5–10）。准入许可 3 个时吞吐不变：瓶颈仍是发布锁（每次完成锁内约 26 ms），不是许可或 CPU。**本机未达到每秒 50 次**；建议见报告 §9.4。
+- 验证：`./gradlew :quizbuks:check`（含 `platformCheck`）、两个 SPA 的 lint / typecheck / Vitest 与 `pnpm app:check`、`ext:check`、对 jar 的 e2e 全部、`tools/check-app-paths.sh origin/1.2/platform`。
