@@ -1,5 +1,6 @@
 package com.jabiz.runtime.file;
 
+import com.jabiz.file.MediaTypes;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -10,7 +11,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +31,17 @@ public final class FileContent {
     private static final Pattern SINGLE_RANGE = Pattern.compile("bytes=(\\d*)-(\\d*)");
 
     private FileContent() {}
+
+    /**
+     * The download name that tells nothing about the file but its id, variant and type:
+     * {@code <fileId>[-<variant>].<ext>}. Public files always have it (docs/design/15-public-access.md section 4), as
+     * do files whose policy keeps the uploaded name from the caller (docs/design/14-files.md section 5.1).
+     */
+    static String neutralName(UUID id, String variant, String contentType) {
+        String extension = Arrays.stream(MediaTypes.values()).filter(t -> t.contentType().equals(contentType))
+            .map(MediaTypes::extension).findFirst().orElse("bin");
+        return id + (FileKeys.ORIGINAL.equals(variant) ? "" : "-" + variant) + "." + extension;
+    }
 
     /** A single byte range, inclusive; {@code length} bytes from {@code start}. */
     record Range(long start, long length) {}

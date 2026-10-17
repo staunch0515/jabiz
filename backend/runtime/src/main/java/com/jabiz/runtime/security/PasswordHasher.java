@@ -7,10 +7,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * BCrypt hashing of passwords (docs/design/10-security.md section 4). Hashing and matching take tens to hundreds of
- * milliseconds of CPU and draw random salt, so callers run them off the event loop (in a {@code BlockingStep}).
+ * milliseconds of CPU and draw random salt, so callers run them off the event loop (in a {@code BlockingStep}); at
+ * most as many at once as the {@link PasswordHashingLimit} allows (decision D47), whose wait may end in
+ * {@link com.jabiz.runtime.AuthBusyException}.
  */
 public class PasswordHasher {
 
@@ -21,8 +24,15 @@ public class PasswordHasher {
     private final int minLength;
     /** Compared against when there is no user, so that unknown names take as long as wrong passwords. */
     private final String dummyHash;
+    private final PasswordHashingLimit limit;
 
+    /** Without a limit on concurrent hashing (tests, tools). */
     public PasswordHasher(int strength, int minLength) {
+        this(strength, minLength, PasswordHashingLimit.NONE);
+    }
+
+    public PasswordHasher(int strength, int minLength, PasswordHashingLimit limit) {
+        this.limit = Objects.requireNonNull(limit, "limit");
         if (minLength < 1) {
             throw new IllegalArgumentException("The minimum password length must be positive");
         }
@@ -44,21 +54,26 @@ public class PasswordHasher {
         return List.of();
     }
 
-    /** Blocking. */
+    /** Blocking, and waits for its turn ({@link PasswordHashingLimit}). */
     public String hash(String password) {
-        return encoder.encode(password);
+        return limit.compute(() -> encoder.encode(password));
     }
 
-    /** Blocking. False for a missing hash, after the same amount of work as a real comparison. */
+    /**
+     * Blocking, and waits for its turn ({@link PasswordHashingLimit}). False for a missing hash, after the same amount
+     * of work as a real comparison.
+     */
     public boolean matches(String password, String hash) {
-        if (password == null || password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) {
-            encoder.matches("", dummyHash);
-            return false;
-        }
-        if (hash == null || hash.isBlank()) {
-            encoder.matches(password, dummyHash);
-            return false;
-        }
-        return encoder.matches(password, hash);
+        return limit.compute(() -> {
+            if (password == null || password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) {
+                encoder.matches("", dummyHash);
+                return false;
+            }
+            if (hash == null || hash.isBlank()) {
+                encoder.matches(password, dummyHash);
+                return false;
+            }
+            return encoder.matches(password, hash);
+        });
     }
 }

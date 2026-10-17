@@ -170,6 +170,10 @@ jobs:
           # No mail is sent here, so nobody could verify an address: the portal lets customers sign in without
           # (ordering itself still requires one, PORTAL_ORDER_PLACE).
           export JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL=false
+          # The shared administrator signs in dozens of times from this machine: the limit of one name from one
+          # address (decision D47, a burst of 10 by default) is raised; the per-address limits keep their defaults.
+          export JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS=6000
+          export JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST=1000
           nohup java -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true -jar app/build/libs/app-0.0.1-SNAPSHOT.jar \
             > ../app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && exit 0; sleep 2; done

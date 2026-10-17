@@ -38,4 +38,39 @@ class TokenBucketLimiterTest {
         assertThatThrownBy(() -> new TokenBucketLimiter(0, Duration.ofMinutes(1), 1))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void theBurstAndTheRateAreApart() {
+        AtomicLong now = new AtomicLong();
+        TokenBucketLimiter limiter = new TokenBucketLimiter(2, 6, Duration.ofMinutes(1), 10, now::get);
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        TokenBucketLimiter.Decision refused = limiter.tryAcquire("a");
+        assertThat(refused.allowed()).isFalse();
+        assertThat(refused.retryAfterSeconds()).isEqualTo(10);
+        now.addAndGet(Duration.ofSeconds(10).toNanos());
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        now.addAndGet(Duration.ofHours(1).toNanos());
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        assertThat(limiter.tryAcquire("a").allowed()).isFalse();
+        assertThatThrownBy(() -> new TokenBucketLimiter(2, 0, Duration.ofMinutes(1), 10, now::get))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aFullTableGivesNewKeysNoBurst() {
+        AtomicLong now = new AtomicLong();
+        TokenBucketLimiter limiter = new TokenBucketLimiter(5, 5, Duration.ofMinutes(1), 2, now::get);
+        for (int i = 0; i < 5; i++) {
+            assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        }
+        assertThat(limiter.tryAcquire("a").allowed()).isFalse();
+        assertThat(limiter.tryAcquire("b").allowed()).isTrue();
+        // Two keys held: a third (or "a" again, once dropped) starts with one token, not five.
+        assertThat(limiter.tryAcquire("c").allowed()).isTrue();
+        assertThat(limiter.tryAcquire("c").allowed()).isFalse();
+        assertThat(limiter.tryAcquire("a").allowed()).isTrue();
+        assertThat(limiter.tryAcquire("a").allowed()).isFalse();
+    }
 }

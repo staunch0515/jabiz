@@ -267,6 +267,12 @@ public final class PlatformErrorCodes {
      */
     public static final String PROCESS_BUSY = "PROCESS_BUSY";
 
+    /**
+     * 503: too many sign-ins, registrations or password changes are waiting for password hashing (decision D47);
+     * param {@code retryAfter} (seconds).
+     */
+    public static final String AUTH_BUSY = "AUTH_BUSY";
+
     public static final List<String> ALL = List.of(
         UNKNOWN_FIELD, INVALID_VALUE, REQUIRED, RULE_EVALUATION_FAILED, REFERENCE_NOT_FOUND, ID_MISMATCH,
         TOO_LONG, NUMERIC_PRECISION, MONETARY_SCALE, NOT_IN_DICTIONARY, UNIQUE_VIOLATION, OPERATOR_NOT_ALLOWED, FILTER_NOT_ALLOWED,
@@ -297,7 +303,7 @@ public final class PlatformErrorCodes {
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
-        INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY);
+        INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
 
     private PlatformErrorCodes() {}
 }

@@ -35,7 +35,8 @@ import java.util.UUID;
 /**
  * The second factor (docs/design/10-security.md sections 9 and 10; decision D28): the second step of a sign-in and
  * enrolment under a challenge ({@value #CHALLENGE}/**, public: the challenge is the credential), and for signed-in
- * users their own status, enrolment and step-up.
+ * users their own status, enrolment and step-up. Codes (at sign-in and step-up) are counted per client address
+ * ({@link SignInRateLimits}).
  */
 @RestController
 class MfaController {
@@ -80,10 +81,13 @@ class MfaController {
     private final DatasetRegistry datasets;
     private final Clock clock;
     private final ClientAddresses clients;
+    private final SignInRateLimits limits;
 
     MfaController(ProcessExecutor processes, JwtService tokens, RefreshTokenStore refreshTokens,
-        DatasetEntityManager entities, DatasetRegistry datasets, Clock clock, ClientAddresses clients) {
+        DatasetEntityManager entities, DatasetRegistry datasets, Clock clock, ClientAddresses clients,
+        SignInRateLimits limits) {
         this.clients = clients;
+        this.limits = limits;
         this.processes = processes;
         this.tokens = tokens;
         this.refreshTokens = refreshTokens;
@@ -97,7 +101,16 @@ class MfaController {
     Mono<AuthController.TokenResponse> verify(@RequestBody(required = false) ChallengeRequest request,
         ServerHttpRequest http) {
         return Mono.defer(() -> {
-            JwtService.Challenge challenge = challenge(request, JwtService.Purpose.VERIFY);
+            // Counted with the challenge's user (its signature checked, nothing read); a challenge that is not one
+            // counts with the address only.
+            JwtService.Challenge challenge;
+            try {
+                challenge = challenge(request, JwtService.Purpose.VERIFY);
+            } catch (RuntimeException invalid) {
+                limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, null);
+                throw invalid;
+            }
+            limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, challenge.userId());
             if (blank(request.code())) {
                 return Mono.error(AuthController.loginFailed("Missing code"));
             }
@@ -175,7 +188,9 @@ class MfaController {
      */
     @PostMapping("/api/auth/step-up")
     Mono<StepUpResponse> stepUp(@RequestBody(required = false) CodeRequest request, ServerHttpRequest http) {
-        return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
+        return RequestContexts.current()
+            .doOnNext(context -> limits.count(SignInRateLimits.Kind.SECOND_FACTOR, http, context.actorId()))
+            .flatMap(context -> CurrentSession.open(refreshTokens, context)
             .map(session -> reactor.util.function.Tuples.of(context, session))).flatMap(current -> {
             RequestContext context = current.getT1();
             UUID user = requireUser(context);
